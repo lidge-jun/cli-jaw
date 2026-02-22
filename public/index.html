@@ -894,6 +894,9 @@
                     document.getElementById('chatMessages').innerHTML = '';
                 } else if (msg.type === 'agent_added' || msg.type === 'agent_updated' || msg.type === 'agent_deleted') {
                     loadEmployees();
+                } else if (msg.type === 'new_message' && msg.source === 'telegram') {
+                    // 6.2: Telegram messages sync to Web UI
+                    addMessage(msg.role === 'assistant' ? 'agent' : msg.role, msg.content);
                 }
             };
             ws.onclose = () => setTimeout(connect, 2000);

@@ -1096,7 +1096,11 @@ async function initTelegram() {
 
         console.log(`[tg:in] ${ctx.chat.id}: ${text.slice(0, 80)}`);
 
-        await ctx.replyWithChatAction('typing').catch(() => { });
+        // Save user message to DB + sync to Web UI (6.2)
+        insertMessage.run('user', text, 'telegram', '');
+        broadcast('new_message', { role: 'user', content: text, source: 'telegram' });
+
+        await ctx.replyWithChatAction('typing').catch(e => console.log('[tg:typing]', e.message));
         const typingInterval = setInterval(() => {
             ctx.replyWithChatAction('typing').catch(() => { });
         }, 4000);
@@ -1115,6 +1119,9 @@ async function initTelegram() {
                 }
             }
 
+            // Save assistant response to DB + sync to Web UI (6.2)
+            insertMessage.run('assistant', result, 'telegram', '');
+            broadcast('new_message', { role: 'assistant', content: result, source: 'telegram' });
             console.log(`[tg:out] ${ctx.chat.id}: ${result.slice(0, 80)}`);
         } catch (err) {
             clearInterval(typingInterval);
