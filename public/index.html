@@ -636,15 +636,7 @@
             <button class="btn-clear" style="width:100%;margin:0;padding:8px;font-size:12px"
                 onclick="openPromptModal()">✏️ 시스템 프롬프트 편집</button>
 
-            <!-- CLI Status + Quota -->
-            <div>
-                <div class="section-title">CLI Status</div>
-                <div id="cliStatusList" style="margin-top:4px">
-                    <div style="color:var(--text-dim);font-size:11px">Loading...</div>
-                </div>
-                <button class="btn-clear" style="margin-top:8px;width:100%" onclick="loadCliStatus()">🔄 Refresh
-                    Quota</button>
-            </div>
+            <!-- CLI Status moved to bottom (5.8) -->
 
             <!-- Per-CLI Models -->
             <div class="settings-group">
@@ -723,6 +715,26 @@
                         <option value="low">🟡 low</option>
                         <option value="high">🟠 high</option>
                         <option value="max">🔴 max</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- CLI Status (5.8: at bottom for load priority) -->
+            <div style="margin-top:12px">
+                <div class="section-title">CLI STATUS</div>
+                <div id="cliStatusList" style="margin-top:4px">
+                    <div style="color:var(--text-dim);font-size:11px">탭 진입 시 로드됨</div>
+                </div>
+                <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+                    <button class="btn-clear" style="margin:0;flex:1;padding:6px" onclick="loadCliStatus(true)">🔄
+                        Refresh</button>
+                    <select id="cliStatusInterval"
+                        style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px"
+                        onchange="localStorage.setItem('cliStatusInterval', this.value)">
+                        <option value="60">1분</option>
+                        <option value="300" selected>5분</option>
+                        <option value="600">10분</option>
+                        <option value="0">수동</option>
                     </select>
                 </div>
             </div>
@@ -1037,8 +1049,18 @@
             });
         }
 
-        // ── CLI Status + Quota ──
-        async function loadCliStatus() {
+        // ── CLI Status + Quota (5.8: cached with interval) ──
+        let cliStatusCache = null;
+        let cliStatusTs = 0;
+        const CLI_STATUS_INTERVALS = { 60: '1분', 300: '5분', 600: '10분', 0: '수동만' };
+
+        async function loadCliStatus(force = false) {
+            const interval = Number(localStorage.getItem('cliStatusInterval') || 300);
+            if (!force && cliStatusCache && interval > 0 && (Date.now() - cliStatusTs) < interval * 1000) {
+                renderCliStatus(cliStatusCache);
+                return;
+            }
+
             const el = document.getElementById('cliStatusList');
             el.innerHTML = '<div style="color:var(--text-dim);font-size:11px">Loading...</div>';
 
@@ -1047,6 +1069,14 @@
                 (await fetch('/api/quota')).json(),
             ]);
 
+            cliStatusCache = { cliStatus, quota };
+            cliStatusTs = Date.now();
+            renderCliStatus(cliStatusCache);
+        }
+
+        function renderCliStatus(data) {
+            const { cliStatus, quota } = data;
+            const el = document.getElementById('cliStatusList');
             const colors = { claude: '🟣', codex: '🟢', gemini: '🔵', opencode: '🟠' };
             let html = '';
 

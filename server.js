@@ -794,6 +794,8 @@ app.post('/api/clear', (_, res) => {
 // Settings
 app.get('/api/settings', (_, res) => res.json(settings));
 app.put('/api/settings', (req, res) => {
+    const prevCli = settings.cli;
+
     // Deep merge for nested objects
     for (const key of ['perCli', 'heartbeat', 'telegram']) {
         if (req.body[key] && typeof req.body[key] === 'object') {
@@ -803,11 +805,19 @@ app.put('/api/settings', (req, res) => {
     }
     settings = { ...settings, ...req.body };
     saveSettings(settings);
+
     const session = getSession();
     const activeModel = settings.perCli?.[settings.cli]?.model || 'default';
     const activeEffort = settings.perCli?.[settings.cli]?.effort || 'medium';
+
+    // 5.9: CLI changed → invalidate session (can't resume cross-CLI)
+    const sessionId = (settings.cli !== prevCli) ? null : session.session_id;
+    if (settings.cli !== prevCli && session.session_id) {
+        console.log(`[claw:session] invalidated — CLI changed ${prevCli} → ${settings.cli}`);
+    }
+
     updateSession.run(
-        settings.cli, session.session_id, activeModel,
+        settings.cli, sessionId, activeModel,
         settings.permissions, settings.workingDir, activeEffort
     );
     res.json(settings);
