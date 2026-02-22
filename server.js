@@ -10,7 +10,6 @@ import os from 'os';
 import Database from 'better-sqlite3';
 import { Bot } from 'grammy';
 import { sequentialize } from '@grammyjs/runner';
-import { apiThrottler } from '@grammyjs/transformer-throttler';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -899,7 +898,7 @@ app.put('/api/settings', (req, res) => {
     );
 
     // 6.6: Reinit telegram if settings changed
-    if (hasTelegramUpdate) initTelegram().catch(err => console.error('[tg] reinit crashed:', err));
+    if (hasTelegramUpdate) initTelegram();
 
     res.json(settings);
 });
@@ -1045,8 +1044,9 @@ let telegramBot = null;
 
 function initTelegram() {
     if (telegramBot) {
-        try { telegramBot.stop(); } catch { }
+        const old = telegramBot;
         telegramBot = null;
+        try { old.stop(); } catch { }
     }
     if (!settings.telegram?.enabled || !settings.telegram?.token) {
         console.log('[tg] Telegram disabled or no token');
