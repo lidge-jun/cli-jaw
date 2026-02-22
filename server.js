@@ -899,7 +899,7 @@ app.put('/api/settings', (req, res) => {
     );
 
     // 6.6: Reinit telegram if settings changed
-    if (hasTelegramUpdate) initTelegram();
+    if (hasTelegramUpdate) initTelegram().catch(err => console.error('[tg] reinit crashed:', err));
 
     res.json(settings);
 });
@@ -1145,5 +1145,5 @@ server.listen(PORT, () => {
     console.log(`  CWD:    ${settings.workingDir}`);
     console.log(`  DB:     ${DB_PATH}`);
     console.log(`  Prompts: ${PROMPTS_DIR}\n`);
-    initTelegram();
+    initTelegram().catch(err => console.error('[tg] initTelegram crashed:', err));
 });
