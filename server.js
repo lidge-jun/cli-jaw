@@ -1044,6 +1044,7 @@ function orchestrateAndCollect(prompt) {
 let telegramBot = null;
 
 async function initTelegram() {
+    console.log('[tg] initTelegram() called');
     if (telegramBot) {
         try { telegramBot.stop(); } catch { }
         telegramBot = null;
@@ -1054,10 +1055,10 @@ async function initTelegram() {
     }
 
     const bot = new Bot(settings.telegram.token);
-    bot.api.config.use(apiThrottler());
 
-    // 1. Validate token first (getMe)
+    // 1. Validate token first (getMe) — NO throttler yet
     try {
+        console.log('[tg] Validating token...');
         await bot.init();
         console.log(`[tg] ✅ Token valid — @${bot.botInfo.username}`);
     } catch (err) {
@@ -1065,7 +1066,8 @@ async function initTelegram() {
         return;
     }
 
-    // 2. Error handler (only for middleware errors, AFTER init)
+    // 2. Throttler + error handler AFTER successful init
+    bot.api.config.use(apiThrottler());
     bot.catch((err) => console.error('[tg:middleware]', err.message || err));
 
     // 3. Sequentialize per chat
