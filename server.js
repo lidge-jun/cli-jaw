@@ -476,8 +476,8 @@ function spawnAgent(prompt, opts = {}) {
     });
     if (!forceNew) activeProcess = child;
 
-    // User message — only for main agent
-    if (!forceNew) {
+    // User message — only for main agent (not forceNew, not internal)
+    if (!forceNew && !opts.internal) {
         insertMessage.run('user', prompt, cli, model);
     }
 
@@ -551,7 +551,7 @@ function spawnAgent(prompt, opts = {}) {
             const displayText = stripped || ctx.fullText.trim();
             const finalContent = displayText + costLine;
 
-            if (!forceNew) {
+            if (!forceNew && !opts.internal) {
                 insertMessage.run('assistant', finalContent, cli, model);
                 broadcast('agent_done', { text: finalContent, toolLog: ctx.toolLog });
             }
@@ -778,14 +778,14 @@ async function orchestrate(prompt) {
         const results = await distributeAndWait(subtasks);
         lastResults = results;
 
-        // Report results back to Planning Agent (forceNew=true → internal, not saved as user msg)
+        // Report results to Planning Agent via resume session (5.11: keeps context for follow-up)
         const report = results.map(r =>
             `- ${r.name}: ${r.status === 'done' ? '✅ 완료' : '❌ 실패'}\n  응답: ${r.text.slice(0, 300)}`
         ).join('\n');
         const reportPrompt = `## 결과 보고 (라운드 ${round})\n${report}\n\n## 평가 기준\n- sub-agent가 응답을 보고했으면 → 완료로 판정\n- 단순 질문/인사 작업은 응답 자체가 성공적 결과입니다\n- 코드 작업은 실행 결과가 있으면 완료\n\n## 판정\n- **완료**: 사용자에게 보여줄 자연어 요약을 작성하세요. JSON 출력 절대 금지.\n- **미완료**: 구체적 사유를 밝히고 JSON subtasks를 다시 출력하세요.`;
 
         broadcast('agent_status', { agentId: 'planning', agentName: '🎯 기획', status: 'evaluating' });
-        const { promise: evalP } = spawnAgent(reportPrompt, { agentId: 'planning', forceNew: true });
+        const { promise: evalP } = spawnAgent(reportPrompt, { agentId: 'planning', internal: true });
         const evalR = await evalP;
 
         subtasks = parseSubtasks(evalR.text);
