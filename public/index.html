@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🦞 Claw Agent</title>
+    <style>
+        :root {
+            --bg: #0a0a0f;
+            --surface: #12121a;
+            --border: #1e1e2e;
+            --text: #e4e4ef;
+            --text-dim: #6e6e8a;
+            --accent: #ff6b6b;
+            --accent2: #ffa07a;
+            --green: #4ade80;
+            --user-bg: #1a1a2e;
+            --agent-bg: #0f0f1a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'SF Mono', 'JetBrains Mono', monospace;
+            background: var(--bg);
+            color: var(--text);
+            height: 100vh;
+            display: grid;
+            grid-template-columns: 220px 1fr 260px;
+        }
+
+        /* ── Left Sidebar ── */
+        .sidebar-left {
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow-y: auto;
+        }
+
+        .logo {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .section-title {
+            font-size: 11px;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+
+        .memory-list {
+            list-style: none;
+            font-size: 12px;
+        }
+
+        .memory-list li {
+            padding: 4px 0;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .memory-key {
+            color: var(--accent2);
+        }
+
+        .stat {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin: 2px 0;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .status-idle {
+            background: #1a2e1a;
+            color: var(--green);
+        }
+
+        .status-running {
+            background: #2e2a1a;
+            color: #fbbf24;
+        }
+
+        .btn-clear {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            padding: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-family: inherit;
+            margin-top: auto;
+        }
+
+        .btn-clear:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        /* ── Chat Area ── */
+        .chat-area {
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border);
+        }
+
+        .chat-header {
+            padding: 12px 20px;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .msg {
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            line-height: 1.6;
+            max-width: 85%;
+            white-space: pre-wrap;
+        }
+
+        .msg-user {
+            background: var(--user-bg);
+            align-self: flex-end;
+            border: 1px solid var(--border);
+        }
+
+        .msg-agent {
+            background: var(--agent-bg);
+            align-self: flex-start;
+            border: 1px solid var(--border);
+        }
+
+        .msg-label {
+            font-size: 10px;
+            color: var(--text-dim);
+            margin-bottom: 4px;
+        }
+
+        .chat-input-area {
+            padding: 12px 20px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            gap: 8px;
+        }
+
+        .chat-input {
+            flex: 1;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-family: inherit;
+            resize: none;
+        }
+
+        .chat-input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .btn-send {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            font-family: inherit;
+        }
+
+        .btn-send:hover {
+            background: var(--accent2);
+        }
+
+        .btn-send:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* ── Loading / Typing ── */
+        .typing-indicator {
+            display: none;
+            padding: 8px 14px;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .typing-indicator.active {
+            display: flex;
+        }
+
+        .typing-indicator .label {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-right: 6px;
+        }
+
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: bounce 1.2s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.15s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.3s;
+        }
+
+        @keyframes bounce {
+
+            0%,
+            60%,
+            100% {
+                transform: translateY(0);
+                opacity: 0.4;
+            }
+
+            30% {
+                transform: translateY(-6px);
+                opacity: 1;
+            }
+        }
+
+        .status-badge.status-running {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .chat-input:disabled {
+            opacity: 0.5;
+        }
+
+        /* ── Right Sidebar ── */
+        .sidebar-right {
+            background: var(--surface);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tab-bar {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 10px 8px;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-dim);
+            font-size: 11px;
+            font-family: inherit;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .tab-btn.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        .tab-content {
+            display: none;
+            padding: 16px;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .tab-content.active {
+            display: flex;
+        }
+
+        label {
+            font-size: 11px;
+            color: var(--text-dim);
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        select,
+        input[type="text"] {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-family: inherit;
+        }
+
+        .perm-toggle {
+            display: flex;
+            gap: 8px;
+        }
+
+        .perm-btn {
+            flex: 1;
+            padding: 6px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            font-size: 11px;
+            font-family: inherit;
+            text-align: center;
+        }
+
+        .perm-btn.active {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: #1a0a0a;
+        }
+
+        textarea.prompt-editor {
+            width: 100%;
+            height: 120px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-family: inherit;
+            resize: vertical;
+        }
+
+        /* ── Settings Tab styles ── */
+        .cli-status-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 0;
+            font-size: 12px;
+        }
+
+        .cli-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .cli-dot.ok {
+            background: var(--green);
+        }
+
+        .cli-dot.missing {
+            background: #ef4444;
+        }
+
+        .cli-name {
+            flex: 1;
+        }
+
+        .cli-path {
+            font-size: 10px;
+            color: var(--text-dim);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 120px;
+        }
+
+        .settings-group {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px;
+        }
+
+        .settings-group h4 {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+        }
+
+        .settings-row {
+            margin-bottom: 6px;
+        }
+
+        .settings-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .sub-row {
+            padding-left: 8px;
+            border-left: 2px solid var(--border);
+        }
+
+        /* ── Save Bar ── */
+        .sidebar-save-bar {
+            padding: 6px 16px;
+            border-bottom: 1px solid var(--border);
+            flex-shrink: 0;
+        }
+
+        .btn-save {
+            width: 100%;
+            padding: 6px;
+            background: var(--accent);
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 11px;
+            font-family: inherit;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .btn-save:hover {
+            opacity: 0.9;
+        }
+
+        /* ── Modal ── */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.open {
+            display: flex;
+        }
+
+        .modal-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            width: 500px;
+            max-width: 90vw;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .modal-textarea {
+            flex: 1;
+            min-height: 250px;
+            background: var(--bg);
+            border: none;
+            color: var(--text);
+            padding: 12px 16px;
+            font-size: 12px;
+            font-family: inherit;
+            resize: none;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 10px 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .modal-footer .btn-save {
+            width: auto;
+            padding: 6px 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Left Sidebar -->
+    <div class="sidebar-left">
+        <div class="logo">🦞 CLAW</div>
+
+        <div>
+            <div class="section-title">Status</div>
+            <span class="status-badge status-idle" id="statusBadge">⚡ idle</span>
+        </div>
+
+        <div>
+            <div class="section-title">Memory</div>
+            <ul class="memory-list" id="memoryList">
+                <li style="color:var(--text-dim)">No memory yet</li>
+            </ul>
+        </div>
+
+        <div>
+            <div class="section-title">Stats</div>
+            <p class="stat" id="statMsgs">Messages: 0</p>
+        </div>
+
+        <button class="btn-clear" onclick="clearChat()">/clear</button>
+    </div>
+
+    <!-- Chat Area -->
+    <div class="chat-area">
+        <div class="chat-header">🦞 Claw Agent ● <span id="headerCli">claude</span></div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="typing-indicator" id="typingIndicator">
+            <span class="label">🦞 응답 중</span>
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+            <span class="typing-dot"></span>
+        </div>
+        <div class="chat-input-area">
+            <textarea class="chat-input" id="chatInput" rows="1" placeholder="메시지 입력..."
+                onkeydown="handleKey(event)"></textarea>
+            <button class="btn-send" id="btnSend" onclick="sendMessage()">➤</button>
+        </div>
+    </div>
+
+    <!-- Right Sidebar (Tabbed) -->
+    <div class="sidebar-right">
+        <div class="tab-bar">
+            <button class="tab-btn active" onclick="switchTab('agents')">🤖 Agents</button>
+            <button class="tab-btn" onclick="switchTab('settings')">🔧 Settings</button>
+        </div>
+        <div class="sidebar-save-bar">
+            <button class="btn-save" onclick="handleSave()">Save</button>
+        </div>
+
+        <!-- Agents Tab (active CLI config + sub-agents) -->
+        <div id="tabAgents" class="tab-content active">
+            <div>
+                <label>Active CLI</label>
+                <select id="selCli" onchange="updateSettings()">
+                    <option value="claude">Claude</option>
+                    <option value="codex">Codex</option>
+                    <option value="gemini">Gemini</option>
+                    <option value="opencode">OpenCode</option>
+                </select>
+            </div>
+
+            <div>
+                <label>Permissions</label>
+                <div class="perm-toggle">
+                    <button class="perm-btn" id="permSafe" onclick="setPerm('safe')">🔒 Safe</button>
+                    <button class="perm-btn active" id="permAuto" onclick="setPerm('auto')">⚡ Auto</button>
+                </div>
+            </div>
+
+            <div>
+                <label>Working Directory</label>
+                <input type="text" id="inpCwd" value="~/" onchange="updateSettings()">
+            </div>
+
+            <hr style="border:none;border-top:1px solid var(--border);margin:4px 0">
+
+            <div style="display:flex;justify-content:space-between;align-items:center">
+                <div class="section-title">Sub Agents</div>
+                <button class="btn-clear" style="margin:0;padding:4px 10px;font-size:11px" onclick="addEmployee()">+
+                    Add</button>
+            </div>
+            <div id="employeesList">
+                <div style="color:var(--text-dim);font-size:11px">No agents yet</div>
+            </div>
+        </div>
+
+        <!-- Settings Tab (prompt button + CLI status + per-CLI models) -->
+        <div id="tabSettings" class="tab-content">
+            <button class="btn-clear" style="width:100%;margin:0;padding:8px;font-size:12px"
+                onclick="openPromptModal()">✏️ 시스템 프롬프트 편집</button>
+
+            <!-- CLI Status + Quota -->
+            <div>
+                <div class="section-title">CLI Status</div>
+                <div id="cliStatusList" style="margin-top:4px">
+                    <div style="color:var(--text-dim);font-size:11px">Loading...</div>
+                </div>
+                <button class="btn-clear" style="margin-top:8px;width:100%" onclick="loadCliStatus()">🔄 Refresh
+                    Quota</button>
+            </div>
+
+            <!-- Per-CLI Models -->
+            <div class="settings-group">
+                <h4>🟣 Claude</h4>
+                <div class="settings-row">
+                    <label>Model</label>
+                    <select id="modelClaude" onchange="savePerCli()">
+                        <option selected>claude-sonnet-4-5-20250929</option>
+                        <option>claude-opus-4-6</option>
+                        <option>claude-haiku-4-5-20251001</option>
+                    </select>
+                </div>
+                <div class="settings-row sub-row">
+                    <label>Effort</label>
+                    <select id="effortClaude" onchange="savePerCli()">
+                        <option value="low">🟢 low</option>
+                        <option value="medium" selected>🟡 medium</option>
+                        <option value="high">🔴 high</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <h4>🟢 Codex</h4>
+                <div class="settings-row">
+                    <label>Model</label>
+                    <select id="modelCodex" onchange="savePerCli()">
+                        <option selected>gpt-5.3-codex</option>
+                        <option>gpt-5.3-codex-spark</option>
+                        <option>gpt-5.2-codex</option>
+                        <option>gpt-5.1-codex-max</option>
+                        <option>gpt-5.1-codex-mini</option>
+                    </select>
+                </div>
+                <div class="settings-row sub-row">
+                    <label>Effort</label>
+                    <select id="effortCodex" onchange="savePerCli()">
+                        <option value="low">🟢 low</option>
+                        <option value="medium" selected>🟡 medium</option>
+                        <option value="high">🟠 high</option>
+                        <option value="xhigh">🔴 xhigh</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <h4>🔵 Gemini</h4>
+                <div class="settings-row">
+                    <label>Model</label>
+                    <select id="modelGemini" onchange="savePerCli()">
+                        <option selected>gemini-2.5-pro</option>
+                        <option>gemini-3.1-pro-preview</option>
+                        <option>gemini-3-flash-preview</option>
+                        <option>gemini-2.5-flash</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <h4>🟠 OpenCode</h4>
+                <div class="settings-row">
+                    <label>Model</label>
+                    <select id="modelOpencode" onchange="savePerCli()">
+                        <option>github-copilot/claude-sonnet-4.5</option>
+                        <option>github-copilot/claude-opus-4.6</option>
+                        <option>github-copilot/gpt-5</option>
+                        <option>github-copilot/gemini-2.5-pro</option>
+                        <option>opencode/big-pickle</option>
+                    </select>
+                </div>
+                <div class="settings-row sub-row">
+                    <label>Effort</label>
+                    <select id="effortOpencode" onchange="savePerCli()">
+                        <option value="">— none</option>
+                        <option value="minimal">🟢 minimal</option>
+                        <option value="low">🟡 low</option>
+                        <option value="high">🟠 high</option>
+                        <option value="max">🔴 max</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Prompt Modal -->
+    <div class="modal-overlay" id="promptModal" onclick="closePromptModal(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <span>System Prompt (A-2)</span>
+                <button onclick="closePromptModal()"
+                    style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px">✕</button>
+            </div>
+            <textarea class="modal-textarea" id="modalPromptEditor"></textarea>
+            <div class="modal-footer">
+                <button class="btn-clear" style="margin:0;padding:6px 16px" onclick="closePromptModal()">취소</button>
+                <button class="btn-save" onclick="savePromptFromModal()">저장</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ── Constants (ported from claw-lite) ──
+        const MODEL_MAP = {
+            claude: ['claude-opus-4-6', 'claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001'],
+            codex: ['gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini'],
+            gemini: ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+            opencode: [
+                'github-copilot/claude-sonnet-4.5', 'github-copilot/claude-opus-4.6',
+                'github-copilot/gpt-5', 'github-copilot/gemini-2.5-pro', 'opencode/big-pickle',
+            ],
+        };
+        const ROLE_PRESETS = [
+            { value: 'frontend', label: '🎨 프론트엔드', prompt: 'React/Vue 기반 UI 컴포넌트 개발, 스타일링' },
+            { value: 'backend', label: '⚙️ 백엔드', prompt: 'API 서버, DB 스키마, 비즈니스 로직 구현' },
+            { value: 'fullstack', label: '🔄 풀스택', prompt: '프론트엔드와 백엔드 모두 담당' },
+            { value: 'devops', label: '🚀 DevOps', prompt: 'CI/CD, Docker, 인프라 자동화' },
+            { value: 'qa', label: '🧪 QA', prompt: '테스트 작성, 버그 재현, 품질 관리' },
+            { value: 'data', label: '📊 데이터', prompt: '데이터 파이프라인, ETL, 분석 쿼리' },
+            { value: 'docs', label: '📝 테크라이터', prompt: 'API 문서화, README, 가이드 작성' },
+            { value: 'custom', label: '✏️ 커스텀...', prompt: '' },
+        ];
+
+        // ── State ──
+        let ws;
+        let agentBusy = false;
+        let employees = [];
+
+        // ── WebSocket ──
+        function connect() {
+            ws = new WebSocket(`ws://${location.host}`);
+            ws.onmessage = (e) => {
+                const msg = JSON.parse(e.data);
+                if (msg.type === 'agent_status') {
+                    setStatus(msg.status);
+                } else if (msg.type === 'agent_output') {
+                    appendAgentText(msg.text);
+                } else if (msg.type === 'agent_done') {
+                    finalizeAgent(msg.text);
+                } else if (msg.type === 'clear') {
+                    document.getElementById('chatMessages').innerHTML = '';
+                } else if (msg.type === 'agent_added' || msg.type === 'agent_updated' || msg.type === 'agent_deleted') {
+                    loadEmployees();
+                }
+            };
+            ws.onclose = () => setTimeout(connect, 2000);
+        }
+        connect();
+
+        // ── Tab switching ──
+        function switchTab(name) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            const tabMap = { agents: 'tabAgents', settings: 'tabSettings' };
+            document.getElementById(tabMap[name]).classList.add('active');
+            event.target.classList.add('active');
+            if (name === 'settings') loadCliStatus();
+            if (name === 'agents') loadEmployees();
+        }
+
+        // ── Save (tab-aware) ──
+        function handleSave() {
+            const isSettings = document.getElementById('tabSettings').classList.contains('active');
+            if (isSettings) {
+                savePerCli();
+            } else {
+                updateSettings();
+            }
+        }
+
+        // ── Prompt Modal ──
+        function openPromptModal() {
+            fetch('/api/prompt').then(r => r.json()).then(({ content }) => {
+                document.getElementById('modalPromptEditor').value = content;
+                document.getElementById('promptModal').classList.add('open');
+            });
+        }
+        function closePromptModal(e) {
+            if (e && e.target !== e.currentTarget) return;
+            document.getElementById('promptModal').classList.remove('open');
+        }
+        async function savePromptFromModal() {
+            const content = document.getElementById('modalPromptEditor').value;
+            await fetch('/api/prompt', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content }),
+            });
+            document.getElementById('promptModal').classList.remove('open');
+        }
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closePromptModal();
+        });
+
+        // ── UI Functions ──
+        function setStatus(s) {
+            const badge = document.getElementById('statusBadge');
+            agentBusy = s === 'running';
+            document.getElementById('btnSend').disabled = agentBusy;
+            document.getElementById('chatInput').disabled = agentBusy;
+            document.getElementById('typingIndicator').classList.toggle('active', agentBusy);
+            if (s === 'running') {
+                badge.className = 'status-badge status-running';
+                badge.textContent = '⏳ running';
+            } else {
+                badge.className = 'status-badge status-idle';
+                badge.textContent = '⚡ idle';
+            }
+        }
+
+        let currentAgentDiv = null;
+        function appendAgentText(text) {
+            if (!text) return;
+            if (!currentAgentDiv) {
+                currentAgentDiv = addMessage('agent', '');
+            }
+            const content = currentAgentDiv.querySelector('.msg-content');
+            content.textContent += text;
+            scrollToBottom();
+        }
+        function finalizeAgent(text) {
+            if (text) {
+                // If we had streaming partial content, replace it; otherwise create new
+                if (!currentAgentDiv) {
+                    currentAgentDiv = addMessage('agent', '');
+                }
+                const content = currentAgentDiv.querySelector('.msg-content');
+                content.innerHTML = renderMarkdown(text);
+            }
+            currentAgentDiv = null;
+            setStatus('idle');
+            loadStats();
+        }
+
+        // Simple markdown rendering
+        function renderMarkdown(text) {
+            return escapeHtml(text)
+                .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
+                .replace(/`([^`]+)`/g, '<code style="background:var(--border);padding:1px 4px;border-radius:3px">$1</code>')
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/^### (.+)$/gm, '<div style="font-weight:700;margin:8px 0 4px">$1</div>')
+                .replace(/^## (.+)$/gm, '<div style="font-weight:700;font-size:14px;margin:10px 0 4px">$1</div>')
+                .replace(/^# (.+)$/gm, '<div style="font-weight:700;font-size:16px;margin:12px 0 4px">$1</div>')
+                .replace(/\n/g, '<br>');
+        }
+
+        function addMessage(role, text) {
+            const container = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            div.className = `msg msg-${role}`;
+            const rendered = role === 'agent' ? renderMarkdown(text) : escapeHtml(text);
+            div.innerHTML = `<div class="msg-label">${role === 'user' ? 'You' : '🦞 Claw'}</div><div class="msg-content">${rendered}</div>`;
+            container.appendChild(div);
+            scrollToBottom();
+            return div;
+        }
+
+        function scrollToBottom() {
+            const c = document.getElementById('chatMessages');
+            c.scrollTop = c.scrollHeight;
+        }
+
+        function escapeHtml(t) {
+            return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // ── Actions ──
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const text = input.value.trim();
+            if (!text || agentBusy) return;
+
+            if (text === '/clear') { clearChat(); input.value = ''; return; }
+
+            addMessage('user', text);
+            input.value = '';
+            await fetch('/api/message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: text }),
+            });
+        }
+
+        function handleKey(e) {
+            if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); }
+        }
+
+        async function clearChat() {
+            await fetch('/api/clear', { method: 'POST' });
+            document.getElementById('chatMessages').innerHTML = '';
+        }
+
+        // ── Settings (Config tab) ──
+        async function loadSettings() {
+            const s = await (await fetch('/api/settings')).json();
+            document.getElementById('selCli').value = s.cli;
+            document.getElementById('inpCwd').value = s.workingDir;
+            document.getElementById('headerCli').textContent = s.cli;
+            setPerm(s.permissions, false);
+
+            // Load per-CLI settings
+            if (s.perCli) {
+                for (const [cli, cfg] of Object.entries(s.perCli)) {
+                    const capCli = cli.charAt(0).toUpperCase() + cli.slice(1);
+                    const modelEl = document.getElementById('model' + capCli);
+                    const effortEl = document.getElementById('effort' + capCli);
+                    if (modelEl && cfg.model) modelEl.value = cfg.model;
+                    if (effortEl && cfg.effort) effortEl.value = cfg.effort;
+                }
+            }
+        }
+
+        async function updateSettings() {
+            const s = {
+                cli: document.getElementById('selCli').value,
+                workingDir: document.getElementById('inpCwd').value,
+            };
+            document.getElementById('headerCli').textContent = s.cli;
+            await fetch('/api/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(s),
+            });
+        }
+
+        function setPerm(p, save = true) {
+            document.getElementById('permSafe').classList.toggle('active', p === 'safe');
+            document.getElementById('permAuto').classList.toggle('active', p === 'auto');
+            if (save) fetch('/api/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ permissions: p }),
+            });
+        }
+
+        // ── Per-CLI settings ──
+        async function savePerCli() {
+            const perCli = {
+                claude: {
+                    model: document.getElementById('modelClaude').value,
+                    effort: document.getElementById('effortClaude').value,
+                },
+                codex: {
+                    model: document.getElementById('modelCodex').value,
+                    effort: document.getElementById('effortCodex').value,
+                },
+                gemini: {
+                    model: document.getElementById('modelGemini').value,
+                },
+                opencode: {
+                    model: document.getElementById('modelOpencode').value,
+                    effort: document.getElementById('effortOpencode').value,
+                },
+            };
+            await fetch('/api/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ perCli }),
+            });
+        }
+
+        // ── CLI Status + Quota ──
+        async function loadCliStatus() {
+            const el = document.getElementById('cliStatusList');
+            el.innerHTML = '<div style="color:var(--text-dim);font-size:11px">Loading...</div>';
+
+            const [cliStatus, quota] = await Promise.all([
+                (await fetch('/api/cli-status')).json(),
+                (await fetch('/api/quota')).json(),
+            ]);
+
+            const colors = { claude: '🟣', codex: '🟢', gemini: '🔵', opencode: '🟠' };
+            let html = '';
+
+            for (const [name, info] of Object.entries(cliStatus)) {
+                const q = quota[name];
+                const dotClass = info.available ? 'ok' : 'missing';
+
+                let accountLine = '';
+                if (q?.account) {
+                    const parts = [];
+                    if (q.account.email) parts.push(q.account.email);
+                    if (q.account.type) parts.push(q.account.type);
+                    if (q.account.plan) parts.push(q.account.plan);
+                    if (q.account.tier) parts.push(q.account.tier);
+                    if (parts.length) accountLine = `<div style="font-size:10px;color:var(--text-dim);margin:2px 0 4px 16px">${escapeHtml(parts.join(' · '))}</div>`;
+                }
+
+                let windowsHtml = '';
+                if (q?.windows?.length) {
+                    windowsHtml = q.windows.map(w => {
+                        const pct = Math.round(w.percent);
+                        const barColor = pct > 80 ? '#ef4444' : pct > 50 ? '#fbbf24' : '#38bdf8';
+                        return `
+                            <div style="display:flex;align-items:center;gap:6px;margin-left:16px;font-size:10px;color:var(--text-dim)">
+                                <span style="width:42px">${w.label}</span>
+                                <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
+                                    <div style="width:${pct}%;height:100%;background:${barColor};border-radius:2px"></div>
+                                </div>
+                                <span style="width:28px;text-align:right">${pct}%</span>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                html += `
+                    <div class="settings-group" style="margin-bottom:6px;padding:8px 10px">
+                        <div class="cli-status-row">
+                            <span class="cli-dot ${dotClass}"></span>
+                            <span class="cli-name" style="font-weight:600">${name}</span>
+                        </div>
+                        ${accountLine}
+                        ${windowsHtml}
+                    </div>
+                `;
+            }
+
+            el.innerHTML = html;
+        }
+
+        // ── Prompt (now via modal, keep savePrompt for backward compat) ──
+        async function savePrompt() {
+            const content = document.getElementById('modalPromptEditor').value;
+            await fetch('/api/prompt', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content }),
+            });
+        }
+
+        // ── Memory ──
+        async function loadMemory() {
+            const items = await (await fetch('/api/memory')).json();
+            const list = document.getElementById('memoryList');
+            if (items.length === 0) {
+                list.innerHTML = '<li style="color:var(--text-dim)">No memory yet</li>';
+                return;
+            }
+            list.innerHTML = items.map(m =>
+                `<li><span class="memory-key">${escapeHtml(m.key)}</span>: ${escapeHtml(m.value)}</li>`
+            ).join('');
+        }
+
+        // ── Stats ──
+        async function loadStats() {
+            const msgs = await (await fetch('/api/messages')).json();
+            document.getElementById('statMsgs').textContent = `Messages: ${msgs.length}`;
+        }
+
+        // ── Messages (on load) ──
+        async function loadMessages() {
+            const msgs = await (await fetch('/api/messages')).json();
+            msgs.forEach(m => addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content));
+        }
+
+        // ── Init ──
+        loadSettings();
+        loadMemory();
+        loadMessages();
+        loadEmployees();
+
+        // ── Employees (sub-agents) ──
+        async function loadEmployees() {
+            employees = await (await fetch('/api/employees')).json();
+            renderEmployees();
+        }
+
+        function renderEmployees() {
+            const el = document.getElementById('employeesList');
+            if (employees.length === 0) {
+                el.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:4px 0">에이전트를 추가하세요</div>';
+                return;
+            }
+            el.innerHTML = employees.map(a => {
+                const models = MODEL_MAP[a.cli] || [];
+                const matched = ROLE_PRESETS.find(r => r.prompt === a.role);
+                const presetVal = matched ? matched.value : (a.role ? 'custom' : 'frontend');
+                const isCustom = presetVal === 'custom';
+
+                return `
+                <div class="settings-group" style="margin-bottom:8px;padding:8px 10px">
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                        <span>🤖</span>
+                        <input style="flex:1;background:none;border:none;color:var(--text);font-size:12px;font-weight:600;font-family:inherit;outline:none"
+                               value="${escapeHtml(a.name || 'Agent')}"
+                               onchange="updateEmployee('${a.id}',{name:this.value})">
+                        <button style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px" onclick="deleteEmployee('${a.id}')" title="삭제">✕</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px">
+                        <div>
+                            <label>CLI</label>
+                            <select onchange="onEmpCliChange('${a.id}',this.value)">
+                                ${['claude', 'codex', 'gemini', 'opencode'].map(c => `<option${a.cli === c ? ' selected' : ''}>${c}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div>
+                            <label>Model</label>
+                            <select id="emp-model-${a.id}" onchange="updateEmployee('${a.id}',{model:this.value})">
+                                <option value="default"${(!a.model || a.model === 'default') ? ' selected' : ''}>default</option>
+                                ${models.map(m => `<option${a.model === m ? ' selected' : ''}>${m}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label>Role</label>
+                        <select onchange="onEmpRoleChange('${a.id}',this.value)">
+                            ${ROLE_PRESETS.map(r => `<option value="${r.value}"${presetVal === r.value ? ' selected' : ''}>${r.label}</option>`).join('')}
+                        </select>
+                        <textarea id="emp-custom-${a.id}" style="display:${isCustom ? 'block' : 'none'};margin-top:4px;width:100%;height:40px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:10px;font-family:inherit;resize:vertical"
+                                  onchange="updateEmployee('${a.id}',{role:this.value})" placeholder="커스텀 역할...">${isCustom ? escapeHtml(a.role) : ''}</textarea>
+                    </div>
+                    <div style="margin-top:4px;font-size:10px;color:${a.status === 'running' ? '#fbbf24' : 'var(--green)'}">
+                        ● ${a.status || 'idle'}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        async function addEmployee() {
+            await fetch('/api/employees', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+        }
+        async function updateEmployee(id, data) {
+            await fetch(`/api/employees/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        }
+        async function deleteEmployee(id) {
+            await fetch(`/api/employees/${id}`, { method: 'DELETE' });
+        }
+        function onEmpCliChange(id, cli) {
+            const models = MODEL_MAP[cli] || [];
+            const sel = document.getElementById(`emp-model-${id}`);
+            sel.innerHTML = `<option value="default" selected>default</option>` + models.map(m => `<option>${m}</option>`).join('');
+            updateEmployee(id, { cli, model: 'default' });
+        }
+        function onEmpRoleChange(id, presetVal) {
+            const preset = ROLE_PRESETS.find(r => r.value === presetVal);
+            const customEl = document.getElementById(`emp-custom-${id}`);
+            if (presetVal === 'custom') {
+                customEl.style.display = 'block';
+                customEl.focus();
+            } else {
+                customEl.style.display = 'none';
+                customEl.value = '';
+                updateEmployee(id, { role: preset?.prompt || '' });
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,13 @@
+{
+    "name": "cli-claw",
+    "version": "0.1.0",
+    "type": "module",
+    "scripts": {
+        "dev": "node server.js"
+    },
+    "dependencies": {
+        "express": "^4.21.0",
+        "ws": "^8.18.0",
+        "better-sqlite3": "^11.7.0"
+    }
+}
