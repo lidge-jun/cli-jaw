@@ -173,6 +173,28 @@
             max-width: 95%;
         }
 
+        .tool-summary {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+            border: 1px dashed var(--border);
+            border-radius: 6px;
+            padding: 4px 10px;
+        }
+
+        .tool-summary summary {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .tool-summary .tool-log {
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px dashed var(--border);
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+
         .msg-label {
             font-size: 10px;
             color: var(--text-dim);
@@ -810,10 +832,12 @@
                     } else {
                         addSystemMsg(`↩️ 라운드 ${msg.round} → 재시도`);
                     }
+                } else if (msg.type === 'agent_tool') {
+                    addSystemMsg(`${msg.icon} ${msg.label}`, 'tool-activity');
                 } else if (msg.type === 'agent_output') {
                     appendAgentText(msg.text);
                 } else if (msg.type === 'agent_done') {
-                    finalizeAgent(msg.text);
+                    finalizeAgent(msg.text, msg.toolLog);
                 } else if (msg.type === 'clear') {
                     document.getElementById('chatMessages').innerHTML = '';
                 } else if (msg.type === 'agent_added' || msg.type === 'agent_updated' || msg.type === 'agent_deleted') {
@@ -885,10 +909,10 @@
             }
         }
 
-        function addSystemMsg(text) {
+        function addSystemMsg(text, extraClass) {
             const container = document.getElementById('chatMessages');
             const div = document.createElement('div');
-            div.className = 'msg msg-system';
+            div.className = 'msg msg-system' + (extraClass ? ' ' + extraClass : '');
             div.textContent = text;
             container.appendChild(div);
             container.scrollTop = container.scrollHeight;
@@ -904,14 +928,27 @@
             content.textContent += text;
             scrollToBottom();
         }
-        function finalizeAgent(text) {
+        function finalizeAgent(text, toolLog) {
+            // Remove real-time tool system messages (will be replaced by collapsible)
+            document.querySelectorAll('.msg-system.tool-activity').forEach(el => el.remove());
+
             if (text) {
-                // If we had streaming partial content, replace it; otherwise create new
                 if (!currentAgentDiv) {
                     currentAgentDiv = addMessage('agent', '');
                 }
                 const content = currentAgentDiv.querySelector('.msg-content');
-                content.innerHTML = renderMarkdown(text);
+
+                // Collapsible tool summary above answer
+                let toolHtml = '';
+                if (toolLog && toolLog.length > 0) {
+                    const counts = {};
+                    toolLog.forEach(t => { counts[t.icon] = (counts[t.icon] || 0) + 1; });
+                    const summaryParts = Object.entries(counts).map(([icon, n]) => `${icon}×${n}`).join(' ');
+                    const logLines = toolLog.map(t => `${t.icon} ${escapeHtml(t.label)}`).join('\n');
+                    toolHtml = `<details class="tool-summary"><summary>${summaryParts}</summary><div class="tool-log">${logLines}</div></details>`;
+                }
+
+                content.innerHTML = toolHtml + renderMarkdown(text);
             }
             currentAgentDiv = null;
             setStatus('idle');

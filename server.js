@@ -520,7 +520,7 @@ function spawnAgent(prompt, opts = {}) {
                 console.log(`[claw:event:${agentLabel}] ${cli} type=${event.type}`);
                 console.log(`[claw:raw:${agentLabel}] ${line.slice(0, 300)}`);
                 if (!ctx.sessionId) ctx.sessionId = extractSessionId(cli, event);
-                extractFromEvent(cli, event, ctx);
+                extractFromEvent(cli, event, ctx, agentLabel);
             } catch { /* non-JSON line */ }
         }
     });
@@ -553,7 +553,7 @@ function spawnAgent(prompt, opts = {}) {
 
             if (!forceNew) {
                 insertMessage.run('assistant', finalContent, cli, model);
-                broadcast('agent_done', { text: finalContent });
+                broadcast('agent_done', { text: finalContent, toolLog: ctx.toolLog });
             }
         } else if (!forceNew && code !== 0) {
             let errMsg = `CLI 실행 실패 (exit ${code})`;
@@ -588,16 +588,22 @@ function extractSessionId(cli, event) {
     }
 }
 
-function extractFromEvent(cli, event, ctx) {
+function extractFromEvent(cli, event, ctx, agentLabel) {
+    // Generic tool/reasoning label extraction + broadcast
+    const toolLabel = extractToolLabel(cli, event);
+    if (toolLabel) {
+        ctx.toolLog.push(toolLabel);
+        broadcast('agent_tool', { agentId: agentLabel, ...toolLabel });
+    }
+
     switch (cli) {
         case 'claude':
             if (event.type === 'assistant' && event.message?.content) {
                 for (const block of event.message.content) {
-                    if (block.type === 'tool_use') {
-                        ctx.toolLog.push({ name: block.name, input: JSON.stringify(block.input).slice(0, 200) });
-                    } else if (block.type === 'text') {
+                    if (block.type === 'text') {
                         ctx.fullText += block.text;
                     }
+                    // tool_use already handled by extractToolLabel
                 }
             } else if (event.type === 'result') {
                 ctx.cost = event.total_cost_usd;
@@ -610,9 +616,8 @@ function extractFromEvent(cli, event, ctx) {
             if (event.type === 'item.completed') {
                 if (event.item?.type === 'agent_message') {
                     ctx.fullText += event.item.text || '';
-                } else if (event.item?.type === 'command_execution') {
-                    ctx.toolLog.push({ name: event.item.command || 'exec', input: (event.item.aggregated_output || '').slice(0, 200) });
                 }
+                // command_execution, web_search, reasoning handled by extractToolLabel
             } else if (event.type === 'turn.completed' && event.usage) {
                 ctx.tokens = event.usage;
             }
@@ -624,6 +629,7 @@ function extractFromEvent(cli, event, ctx) {
                 ctx.duration = event.stats?.duration_ms;
                 ctx.turns = event.stats?.tool_calls;
             }
+            // tool_use/tool_result handled by extractToolLabel
             break;
         case 'opencode':
             if (event.type === 'text' && event.part?.text) {
@@ -635,8 +641,47 @@ function extractFromEvent(cli, event, ctx) {
                 }
                 if (event.part.cost) ctx.cost = event.part.cost;
             }
+            // tool_use handled by extractToolLabel
             break;
     }
+}
+
+function extractToolLabel(cli, event) {
+    const item = event.item || event.part || event;
+    const type = item?.type || event.type;
+
+    // Codex events
+    if (cli === 'codex' && event.type === 'item.completed' && item) {
+        if (item.type === 'web_search') {
+            const action = item.action?.type || '';
+            if (action === 'search') return { icon: '🔍', label: (item.query || item.action?.query || 'search').slice(0, 60) };
+            if (action === 'open_page') { try { return { icon: '🌐', label: new URL(item.action.url).hostname }; } catch { return { icon: '🌐', label: 'page' }; } }
+            return { icon: '🔍', label: (item.query || 'web').slice(0, 60) };
+        }
+        if (item.type === 'reasoning') return { icon: '💭', label: (item.text || '').replace(/\*+/g, '').trim().slice(0, 60) };
+        if (item.type === 'command_execution') return { icon: '⚡', label: (item.command || 'exec').slice(0, 40) };
+    }
+
+    // Claude events
+    if (cli === 'claude' && event.type === 'assistant' && event.message?.content) {
+        for (const block of event.message.content) {
+            if (block.type === 'tool_use') return { icon: '🔧', label: block.name };
+            if (block.type === 'thinking') return { icon: '💭', label: (block.thinking || '').slice(0, 60) };
+        }
+    }
+
+    // Gemini events
+    if (cli === 'gemini') {
+        if (event.type === 'tool_use') return { icon: '🔧', label: `${event.tool_name || 'tool'}${event.parameters?.command ? ': ' + event.parameters.command.slice(0, 40) : ''}` };
+        if (event.type === 'tool_result') return { icon: event.status === 'success' ? '✅' : '❌', label: `${event.status || 'done'}` };
+    }
+
+    // OpenCode events
+    if (cli === 'opencode') {
+        if (event.type === 'tool_use' && event.part) return { icon: '🔧', label: event.part.tool || 'tool' };
+    }
+
+    return null;
 }
 
 // ─── Orchestration (Phase 5) ─────────────────────────
