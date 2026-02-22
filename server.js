@@ -1043,8 +1043,7 @@ function orchestrateAndCollect(prompt) {
 
 let telegramBot = null;
 
-async function initTelegram() {
-    console.log('[tg] initTelegram() called');
+function initTelegram() {
     if (telegramBot) {
         try { telegramBot.stop(); } catch { }
         telegramBot = null;
@@ -1055,31 +1054,16 @@ async function initTelegram() {
     }
 
     const bot = new Bot(settings.telegram.token);
-
-    // 1. Validate token first (getMe) — NO throttler yet
-    try {
-        console.log('[tg] Validating token...');
-        await bot.init();
-        console.log(`[tg] ✅ Token valid — @${bot.botInfo.username}`);
-    } catch (err) {
-        console.error(`[tg] ❌ Invalid token:`, err.message);
-        return;
-    }
-
-    // 2. Throttler + error handler AFTER successful init
-    bot.api.config.use(apiThrottler());
-    bot.catch((err) => console.error('[tg:middleware]', err.message || err));
-
-    // 3. Sequentialize per chat
+    bot.catch((err) => console.error('[tg:error]', err.message || err));
     bot.use(sequentialize((ctx) => `tg:${ctx.chat?.id || 'unknown'}`));
 
-    // 4. Debug: log all incoming updates
+    // Debug: log all incoming updates
     bot.use(async (ctx, next) => {
-        console.log(`[tg:update] type=${ctx.updateType} chat=${ctx.chat?.id} text=${(ctx.message?.text || '').slice(0, 40)}`);
+        console.log(`[tg:update] chat=${ctx.chat?.id} text=${(ctx.message?.text || '').slice(0, 40)}`);
         await next();
     });
 
-    // 5. Allowlist
+    // Allowlist
     bot.use(async (ctx, next) => {
         const allowed = settings.telegram.allowedChatIds;
         if (allowed?.length > 0 && !allowed.includes(ctx.chat?.id)) {
@@ -1132,10 +1116,13 @@ async function initTelegram() {
         }
     });
 
-    // 6. Start polling
-    bot.start({ drop_pending_updates: true });
+    // bot.start() handles init internally — don't call bot.init() separately
+    bot.start({
+        drop_pending_updates: true,
+        onStart: (info) => console.log(`[tg] ✅ @${info.username} polling active`),
+    });
     telegramBot = bot;
-    console.log(`[tg] 🦞 Polling started (allowlist: ${settings.telegram.allowedChatIds?.length || 'all'})`);
+    console.log('[tg] Bot starting...');
 }
 
 // ─── Start ───────────────────────────────────────────
@@ -1147,5 +1134,5 @@ server.listen(PORT, () => {
     console.log(`  CWD:    ${settings.workingDir}`);
     console.log(`  DB:     ${DB_PATH}`);
     console.log(`  Prompts: ${PROMPTS_DIR}\n`);
-    initTelegram().catch(err => console.error('[tg] initTelegram crashed:', err));
+    initTelegram();
 });
