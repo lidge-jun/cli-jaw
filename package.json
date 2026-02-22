@@ -6,8 +6,11 @@
         "dev": "node server.js"
     },
     "dependencies": {
+        "@grammyjs/runner": "^2.0.3",
+        "@grammyjs/transformer-throttler": "^1.2.1",
+        "better-sqlite3": "^11.7.0",
         "express": "^4.21.0",
-        "ws": "^8.18.0",
-        "better-sqlite3": "^11.7.0"
+        "grammy": "^1.40.0",
+        "ws": "^8.18.0"
     }
 }

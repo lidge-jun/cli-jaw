@@ -8,6 +8,9 @@ import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import Database from 'better-sqlite3';
+import { Bot } from 'grammy';
+import { sequentialize } from '@grammyjs/runner';
+import { apiThrottler } from '@grammyjs/transformer-throttler';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -827,10 +830,15 @@ const wss = new WebSocketServer({ server });
 app.use(express.json());
 app.use(express.static(join(__dirname, 'public')));
 
-// WebSocket broadcast
+// WebSocket + internal broadcast
+const broadcastListeners = new Set();
+function addBroadcastListener(fn) { broadcastListeners.add(fn); }
+function removeBroadcastListener(fn) { broadcastListeners.delete(fn); }
+
 function broadcast(type, data) {
     const msg = JSON.stringify({ type, ...data, ts: Date.now() });
     wss.clients.forEach(c => { if (c.readyState === 1) c.send(msg); });
+    for (const fn of broadcastListeners) fn(type, data);
 }
 
 // ─── API Routes ──────────────────────────────────────
@@ -888,6 +896,10 @@ app.put('/api/settings', (req, res) => {
         settings.cli, sessionId, activeModel,
         settings.permissions, settings.workingDir, activeEffort
     );
+
+    // 6.6: Reinit telegram if settings changed
+    if (req.body.telegram) initTelegram();
+
     res.json(settings);
 });
 
@@ -972,6 +984,132 @@ app.delete('/api/employees/:id', (req, res) => {
     res.json({ ok: true });
 });
 
+// ─── Telegram Bot (Phase 6) ──────────────────────────
+
+function escapeHtmlTg(text) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function markdownToTelegramHtml(md) {
+    if (!md) return '';
+    let html = escapeHtmlTg(md);
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+    html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    html = html.replace(/(?<![*])\*(?![*])(.+?)(?<![*])\*(?![*])/g, '<i>$1</i>');
+    html = html.replace(/~~(.+?)~~/g, '<s>$1</s>');
+    return html;
+}
+
+function chunkTelegramMessage(text, limit = 4096) {
+    if (text.length <= limit) return [text];
+    const chunks = [];
+    let remaining = text;
+    while (remaining.length > 0) {
+        if (remaining.length <= limit) { chunks.push(remaining); break; }
+        let splitAt = remaining.lastIndexOf('\n', limit);
+        if (splitAt < limit * 0.3) splitAt = limit;
+        chunks.push(remaining.slice(0, splitAt));
+        remaining = remaining.slice(splitAt);
+    }
+    return chunks;
+}
+
+function orchestrateAndCollect(prompt) {
+    return new Promise((resolve) => {
+        let collected = '';
+        let timeout;
+        const handler = (type, data) => {
+            if (type === 'agent_output') collected += data.text || '';
+            if (type === 'agent_done') {
+                clearTimeout(timeout);
+                removeBroadcastListener(handler);
+                resolve(data.text || collected || '응답 없음');
+            }
+        };
+        addBroadcastListener(handler);
+        orchestrate(prompt).catch(err => {
+            clearTimeout(timeout);
+            removeBroadcastListener(handler);
+            resolve(`❌ ${err.message}`);
+        });
+        timeout = setTimeout(() => {
+            removeBroadcastListener(handler);
+            resolve(collected || '⏰ 시간 초과 (2분)');
+        }, 120000);
+    });
+}
+
+let telegramBot = null;
+
+function initTelegram() {
+    if (telegramBot) {
+        telegramBot.stop();
+        telegramBot = null;
+    }
+    if (!settings.telegram?.enabled || !settings.telegram?.token) {
+        console.log('[tg] Telegram disabled or no token');
+        return;
+    }
+
+    const bot = new Bot(settings.telegram.token);
+    bot.api.config.use(apiThrottler());
+    bot.catch((err) => console.error('[tg:error]', err.message || err));
+    bot.use(sequentialize((ctx) => `tg:${ctx.chat?.id || 'unknown'}`));
+
+    // Allowlist
+    bot.use(async (ctx, next) => {
+        const allowed = settings.telegram.allowedChatIds;
+        if (allowed?.length > 0 && !allowed.includes(ctx.chat?.id)) {
+            console.log(`[tg:blocked] chatId=${ctx.chat?.id}`);
+            return;
+        }
+        await next();
+    });
+
+    bot.command('start', (ctx) => ctx.reply('🦞 Claw Agent 연결됨! 메시지를 보내면 AI 에이전트가 응답합니다.'));
+    bot.command('id', (ctx) => ctx.reply(`Chat ID: <code>${ctx.chat.id}</code>`, { parse_mode: 'HTML' }));
+
+    bot.on('message:text', async (ctx) => {
+        const text = ctx.message.text;
+        if (text.startsWith('/')) return;
+
+        console.log(`[tg:in] ${ctx.chat.id}: ${text.slice(0, 80)}`);
+        insertMessage.run('user', text, 'telegram', '');
+
+        await ctx.replyWithChatAction('typing').catch(() => { });
+        const typingInterval = setInterval(() => {
+            ctx.replyWithChatAction('typing').catch(() => { });
+        }, 4000);
+
+        try {
+            const result = await orchestrateAndCollect(text);
+            clearInterval(typingInterval);
+
+            const html = markdownToTelegramHtml(result);
+            const chunks = chunkTelegramMessage(html);
+            for (const chunk of chunks) {
+                try {
+                    await ctx.reply(chunk, { parse_mode: 'HTML' });
+                } catch {
+                    await ctx.reply(chunk.replace(/<[^>]+>/g, ''));
+                }
+            }
+
+            insertMessage.run('assistant', result, 'telegram', '');
+            console.log(`[tg:out] ${ctx.chat.id}: ${result.slice(0, 80)}`);
+        } catch (err) {
+            clearInterval(typingInterval);
+            console.error('[tg:error]', err);
+            await ctx.reply(`❌ Error: ${err.message}`);
+        }
+    });
+
+    bot.start();
+    telegramBot = bot;
+    console.log(`[tg] Bot started (allowlist: ${settings.telegram.allowedChatIds?.length || 'all'})`);
+}
+
 // ─── Start ───────────────────────────────────────────
 
 server.listen(PORT, () => {
@@ -981,4 +1119,5 @@ server.listen(PORT, () => {
     console.log(`  CWD:    ${settings.workingDir}`);
     console.log(`  DB:     ${DB_PATH}`);
     console.log(`  Prompts: ${PROMPTS_DIR}\n`);
+    initTelegram();
 });

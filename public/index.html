@@ -688,6 +688,27 @@
         <div id="tabSettings" class="tab-content">
             <button class="btn-clear" style="width:100%;margin:0;padding:8px;font-size:12px"
                 onclick="openPromptModal()">✏️ 시스템 프롬프트 편집</button>
+            <!-- Telegram Bot (6.5) -->
+            <div class="settings-group">
+                <h4>📬 Telegram</h4>
+                <div class="settings-row">
+                    <label>Enabled</label>
+                    <div>
+                        <button id="tgOff" class="perm-btn active" onclick="setTelegram(false)">Off</button>
+                        <button id="tgOn" class="perm-btn" onclick="setTelegram(true)">On</button>
+                    </div>
+                </div>
+                <div class="settings-row sub-row">
+                    <label>Bot Token</label>
+                    <input type="password" id="tgToken" placeholder="123456:ABC-DEF..."
+                        style="width:100%;font-size:11px;padding:4px" onchange="saveTelegramSettings()">
+                </div>
+                <div class="settings-row sub-row">
+                    <label>Allowed Chat IDs</label>
+                    <input type="text" id="tgChatIds" placeholder="콤마 구분 (비워두면 전체 허용)"
+                        style="width:100%;font-size:11px;padding:4px" onchange="saveTelegramSettings()">
+                </div>
+            </div>
 
             <!-- CLI Status moved to bottom (5.8) -->
 
@@ -1069,6 +1090,8 @@
 
             // Load planning agent settings (5.12)
             loadPlanningSettings(s);
+            // Load telegram settings (6.5)
+            loadTelegramSettings(s);
         }
 
         async function updateSettings() {
@@ -1144,6 +1167,39 @@
             }
             if (s.planning?.effort) {
                 document.getElementById('planningEffort').value = s.planning.effort;
+            }
+        }
+
+        // ── Telegram settings (6.5) ──
+        async function saveTelegramSettings() {
+            const token = document.getElementById('tgToken').value.trim();
+            const chatIdsRaw = document.getElementById('tgChatIds').value.trim();
+            const allowedChatIds = chatIdsRaw
+                ? chatIdsRaw.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n))
+                : [];
+            await fetch('/api/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telegram: { token, allowedChatIds } }),
+            });
+        }
+        async function setTelegram(enabled) {
+            document.getElementById('tgOn').classList.toggle('active', enabled);
+            document.getElementById('tgOff').classList.toggle('active', !enabled);
+            await fetch('/api/settings', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ telegram: { enabled } }),
+            });
+        }
+        function loadTelegramSettings(s) {
+            if (!s.telegram) return;
+            const tg = s.telegram;
+            document.getElementById('tgOn').classList.toggle('active', !!tg.enabled);
+            document.getElementById('tgOff').classList.toggle('active', !tg.enabled);
+            if (tg.token) document.getElementById('tgToken').value = tg.token;
+            if (tg.allowedChatIds?.length) {
+                document.getElementById('tgChatIds').value = tg.allowedChatIds.join(', ');
             }
         }
 
