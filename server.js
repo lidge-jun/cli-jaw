@@ -10,7 +10,7 @@ import os from 'os';
 import Database from 'better-sqlite3';
 import { Bot } from 'grammy';
 import { sequentialize } from '@grammyjs/runner';
-import net from 'node:net';
+import https from 'node:https';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1054,13 +1054,37 @@ function initTelegram() {
         return;
     }
 
-    // Node 22 workaround: autoSelectFamily allows IPv4 fallback on broken IPv6 networks
+    // Node 22: native fetch (undici) ignores autoSelectFamily and fails on IPv6-broken networks
+    // Only https.get({family:4}) works. Build a minimal fetch wrapper for grammy.
     // Ref: openclaw-ref/src/telegram/fetch.ts, nodejs/node#54359
-    if (typeof net.setDefaultAutoSelectFamily === 'function') {
-        net.setDefaultAutoSelectFamily(true);
-    }
+    const ipv4Agent = new https.Agent({ family: 4 });
+    const ipv4Fetch = (url, init = {}) => {
+        return new Promise((resolve, reject) => {
+            const u = new URL(url);
+            const opts = {
+                hostname: u.hostname, port: u.port || 443, path: u.pathname + u.search,
+                method: init.method || 'GET', agent: ipv4Agent,
+                headers: init.headers instanceof Headers ? Object.fromEntries(init.headers) : (init.headers || {}),
+            };
+            const req = https.request(opts, (res) => {
+                let data = '';
+                res.on('data', c => data += c);
+                res.on('end', () => resolve({
+                    ok: res.statusCode >= 200 && res.statusCode < 300,
+                    status: res.statusCode,
+                    json: () => Promise.resolve(JSON.parse(data)),
+                    text: () => Promise.resolve(data),
+                }));
+            });
+            req.on('error', reject);
+            if (init.body) req.write(typeof init.body === 'string' ? init.body : JSON.stringify(init.body));
+            req.end();
+        });
+    };
 
-    const bot = new Bot(settings.telegram.token);
+    const bot = new Bot(settings.telegram.token, {
+        client: { fetch: ipv4Fetch },
+    });
     bot.catch((err) => console.error('[tg:error]', err.message || err));
     bot.use(sequentialize((ctx) => `tg:${ctx.chat?.id || 'unknown'}`));
 
