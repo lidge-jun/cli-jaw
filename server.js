@@ -1043,6 +1043,7 @@ function orchestrateAndCollect(prompt) {
 }
 
 let telegramBot = null;
+const telegramActiveChatIds = new Set();  // auto-tracked from incoming messages
 
 function initTelegram() {
     if (telegramBot) {
@@ -1113,6 +1114,7 @@ function initTelegram() {
         if (text.startsWith('/')) return;
 
         console.log(`[tg:in] ${ctx.chat.id}: ${text.slice(0, 80)}`);
+        telegramActiveChatIds.add(ctx.chat.id);  // auto-track
 
         // Save user message to DB + sync to Web UI (6.2)
         insertMessage.run('user', text, 'telegram', '');
@@ -1212,7 +1214,12 @@ async function runHeartbeatJob(job) {
 
         // Telegram 전달
         if (telegramBot && settings.telegram?.enabled) {
-            const chatIds = settings.telegram.allowedChatIds || [];
+            const chatIds = settings.telegram.allowedChatIds?.length
+                ? settings.telegram.allowedChatIds
+                : [...telegramActiveChatIds];
+            if (chatIds.length === 0) {
+                console.log(`[heartbeat:${job.name}] no telegram chatIds — send a message to the bot first`);
+            }
             const html = markdownToTelegramHtml(result);
             const chunks = chunkTelegramMessage(html);
             for (const chatId of chatIds) {
