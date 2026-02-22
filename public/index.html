@@ -162,6 +162,17 @@
             border: 1px solid var(--border);
         }
 
+        .msg-system {
+            background: transparent;
+            border: 1px dashed var(--border);
+            align-self: center;
+            text-align: center;
+            font-size: 11px;
+            color: var(--text-dim);
+            padding: 4px 14px;
+            max-width: 95%;
+        }
+
         .msg-label {
             font-size: 10px;
             color: var(--text-dim);
@@ -768,6 +779,25 @@
                 const msg = JSON.parse(e.data);
                 if (msg.type === 'agent_status') {
                     setStatus(msg.status);
+                    // Show sub-agent activity in chat
+                    if (msg.agentName && msg.status === 'running') {
+                        addSystemMsg(`👷 ${msg.agentName} 작업 시작`);
+                    } else if (msg.agentName && msg.status === 'done') {
+                        addSystemMsg(`✅ ${msg.agentName} 완료`);
+                    } else if (msg.agentName && msg.status === 'error') {
+                        addSystemMsg(`❌ ${msg.agentName} 실패`);
+                    } else if (msg.agentName && msg.status === 'evaluating') {
+                        addSystemMsg(`🔍 ${msg.agentName} 평가 중...`);
+                    }
+                } else if (msg.type === 'round_start') {
+                    const names = (msg.subtasks || []).map(s => s.agent).join(', ');
+                    addSystemMsg(`🔄 라운드 ${msg.round} — ${(msg.subtasks || []).length}개 작업 [${names}]`);
+                } else if (msg.type === 'round_done') {
+                    if (msg.action === 'complete') {
+                        addSystemMsg(`🏁 라운드 ${msg.round} 완료`);
+                    } else {
+                        addSystemMsg(`↩️ 라운드 ${msg.round} → 재시도`);
+                    }
                 } else if (msg.type === 'agent_output') {
                     appendAgentText(msg.text);
                 } else if (msg.type === 'agent_done') {
@@ -841,6 +871,15 @@
                 badge.className = 'status-badge status-idle';
                 badge.textContent = '⚡ idle';
             }
+        }
+
+        function addSystemMsg(text) {
+            const container = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            div.className = 'msg msg-system';
+            div.textContent = text;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
         }
 
         let currentAgentDiv = null;
