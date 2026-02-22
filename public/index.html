@@ -119,6 +119,8 @@
             display: flex;
             flex-direction: column;
             border-right: 1px solid var(--border);
+            overflow: hidden;
+            min-height: 0;
         }
 
         .chat-header {
@@ -143,6 +145,8 @@
             font-size: 13px;
             line-height: 1.6;
             max-width: 85%;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
             white-space: pre-wrap;
         }
 
@@ -865,7 +869,11 @@
 
         // Simple markdown rendering
         function renderMarkdown(text) {
-            return escapeHtml(text)
+            // Strip orchestration JSON blocks (subtasks) from display
+            let cleaned = text.replace(/```json\n[\s\S]*?\n```/g, '');  // fenced
+            cleaned = cleaned.replace(/\{[\s\S]*"subtasks"\s*:\s*\[[\s\S]*?\]\s*\}/g, '').trim();  // raw
+            if (!cleaned) return '<em style="color:var(--text-dim)">🎯 작업 분배 중...</em>';
+            return escapeHtml(cleaned)
                 .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
                 .replace(/`([^`]+)`/g, '<code style="background:var(--border);padding:1px 4px;border-radius:3px">$1</code>')
                 .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')

@@ -85,20 +85,56 @@ if (!fs.existsSync(HEARTBEAT_PATH)) {
     fs.writeFileSync(HEARTBEAT_PATH, HEARTBEAT_DEFAULT);
 }
 
-// ─── B.md (auto-generated: A-1 + A-2) ───────────────
-
-function regenerateB() {
-    const a1 = fs.readFileSync(A1_PATH, 'utf8');
-    const a2 = fs.existsSync(A2_PATH) ? fs.readFileSync(A2_PATH, 'utf8') : '';
-    fs.writeFileSync(join(PROMPTS_DIR, 'B.md'), `${a1}\n---\n\n${a2}`);
-}
-regenerateB();
+// ─── B.md (auto-generated: A-1 + A-2 + Employees) ───
 
 function getSystemPrompt() {
     const a1 = fs.readFileSync(A1_PATH, 'utf8');
     const a2 = fs.existsSync(A2_PATH) ? fs.readFileSync(A2_PATH, 'utf8') : '';
-    return `${a1}\n\n${a2}`;
+    let prompt = `${a1}\n\n${a2}`;
+
+    // Phase 5.0: Employee orchestration injection
+    try {
+        const emps = getEmployees.all();
+        if (emps.length > 0) {
+            const list = emps.map(e =>
+                `- "${e.name}" (CLI: ${e.cli}) — ${e.role || '범용 개발자'}`
+            ).join('\n');
+            const example = emps[0].name;
+            prompt += '\n\n---\n';
+            prompt += '\n## Orchestration System';
+            prompt += '\nYou have external employees (separate CLI processes).';
+            prompt += '\nThe middleware detects your JSON output and AUTOMATICALLY spawns employees.';
+            prompt += `\n\n### Available Employees\n${list}`;
+            prompt += '\n\n### Dispatch Format';
+            prompt += '\nTo assign work, output EXACTLY this format (triple-backtick fenced JSON block):';
+            prompt += `\n\n\`\`\`json\n{\n  "subtasks": [\n    {\n      "agent": "${example}",\n      "task": "구체적인 작업 지시",\n      "priority": 1\n    }\n  ]\n}\n\`\`\``;
+            prompt += '\n\n### CRITICAL RULES';
+            prompt += '\n1. JSON은 반드시 \`\`\`json ... \`\`\` 코드블럭으로 감싸야 함 (필수)';
+            prompt += '\n2. 코드블럭 없는 raw JSON 출력 금지';
+            prompt += '\n3. agent 이름은 위 목록과 정확히 일치해야 함';
+            prompt += '\n4. 실행 가능한 요청이면 반드시 subtask JSON 출력';
+            prompt += '\n5. "결과 보고"를 받으면 사용자에게 자연어로 요약';
+            prompt += '\n6. 직접 답변할 수 있는 질문이면 JSON 없이 자연어로 응답';
+        }
+    } catch { /* DB not ready yet */ }
+
+    return prompt;
 }
+
+function regenerateB() {
+    fs.writeFileSync(join(PROMPTS_DIR, 'B.md'), getSystemPrompt());
+
+    // Invalidate session — next spawn starts fresh with updated prompt
+    try {
+        const session = getSession();
+        if (session.session_id) {
+            updateSession.run(session.active_cli, null, session.model,
+                session.permissions, session.working_dir, session.effort);
+            console.log('[claw:session] invalidated — B.md changed');
+        }
+    } catch { /* DB not ready yet */ }
+}
+// NOTE: regenerateB() called after DB init (see below)
 
 // ─── Settings ────────────────────────────────────────
 
@@ -208,6 +244,9 @@ const deleteMemory = db.prepare('DELETE FROM memory WHERE key = ?');
 const getEmployees = db.prepare('SELECT * FROM employees ORDER BY created_at ASC');
 const insertEmployee = db.prepare('INSERT INTO employees (id, name, cli, model, role) VALUES (?, ?, ?, ?, ?)');
 const deleteEmployee = db.prepare('DELETE FROM employees WHERE id = ?');
+
+// Now that DB is ready, generate B.md with employees
+regenerateB();
 
 // ─── CLI Detection ───────────────────────────────────
 
@@ -327,8 +366,7 @@ function makeCleanEnv() {
     return env;
 }
 
-function buildArgs(cli, model, effort, prompt) {
-    const sysPrompt = getSystemPrompt();
+function buildArgs(cli, model, effort, prompt, sysPrompt) {
     switch (cli) {
         case 'claude':
             return ['--print', '--verbose', '--output-format', 'stream-json',
@@ -336,7 +374,7 @@ function buildArgs(cli, model, effort, prompt) {
                 '--max-turns', '50',
                 ...(model && model !== 'default' ? ['--model', model] : []),
                 ...(effort && effort !== 'medium' ? ['--effort', effort] : []),
-                '--append-system-prompt', sysPrompt];
+                ...(sysPrompt ? ['--append-system-prompt', sysPrompt] : [])];
         case 'codex':
             return ['exec',
                 ...(model && model !== 'default' ? ['-m', model] : []),
@@ -346,7 +384,7 @@ function buildArgs(cli, model, effort, prompt) {
             return ['-p', prompt || '',
                 ...(model && model !== 'default' ? ['-m', model] : []),
                 '-y', '-o', 'stream-json',
-                '--system-instruction', sysPrompt];
+                ...(sysPrompt ? ['--system-instruction', sysPrompt] : [])];
         case 'opencode':
             return ['run',
                 ...(model && model !== 'default' ? ['-m', model] : []),
@@ -358,7 +396,6 @@ function buildArgs(cli, model, effort, prompt) {
 }
 
 function buildResumeArgs(cli, model, effort, sessionId, prompt) {
-    const sysPrompt = getSystemPrompt();
     switch (cli) {
         case 'claude':
             return ['--print', '--verbose', '--output-format', 'stream-json',
@@ -387,51 +424,73 @@ function buildResumeArgs(cli, model, effort, sessionId, prompt) {
     }
 }
 
-function spawnAgent(prompt) {
-    if (activeProcess) {
+function spawnAgent(prompt, opts = {}) {
+    const { forceNew = false, agentId, sysPrompt: customSysPrompt } = opts;
+
+    if (activeProcess && !forceNew) {
         console.log('[claw] Agent already running, skipping');
-        return;
+        return { child: null, promise: Promise.resolve({ text: '', code: -1 }) };
     }
 
-    const session = getSession();
-    const cli = session.active_cli || settings.cli;
-    const cfg = settings.perCli?.[cli] || {};
-    const model = cfg.model || 'default';
-    const effort = cfg.effort || '';
+    let resolve;
+    const resultPromise = new Promise(r => { resolve = r; });
 
-    // Resume or new session
-    const isResume = session.session_id;
+    const session = getSession();
+    const cli = opts.cli || session.active_cli || settings.cli;
+    const cfg = settings.perCli?.[cli] || {};
+    const model = opts.model || cfg.model || 'default';
+    const effort = opts.effort || cfg.effort || '';
+
+    // Resolve system prompt — sub-agents get only their own role prompt
+    const sysPrompt = customSysPrompt || getSystemPrompt();
+
+    // Resume: only for main agent (not forceNew)
+    const isResume = !forceNew && session.session_id && session.active_cli === cli;
     let args;
     if (isResume) {
         console.log(`[claw:resume] ${cli} session=${session.session_id.slice(0, 12)}...`);
         args = buildResumeArgs(cli, model, effort, session.session_id, prompt);
     } else {
-        args = buildArgs(cli, model, effort, prompt);
+        args = buildArgs(cli, model, effort, prompt, sysPrompt);
     }
 
-    console.log(`[claw] Spawning: ${cli} ${args.join(' ').slice(0, 150)}...`);
+    const agentLabel = agentId || 'main';
+    console.log(`[claw:${agentLabel}] Spawning: ${cli} ${args.join(' ').slice(0, 120)}...`);
 
     const child = spawn(cli, args, {
         cwd: settings.workingDir,
         env: makeCleanEnv(),
         stdio: ['pipe', 'pipe', 'pipe'],
     });
-    activeProcess = child;
+    if (!forceNew) activeProcess = child;
 
-    // Insert user message
-    insertMessage.run('user', prompt, cli, model);
+    // User message — only for main agent
+    if (!forceNew) {
+        insertMessage.run('user', prompt, cli, model);
+    }
 
-    // Send prompt via stdin (skip for gemini which uses -p flag, and codex resume)
+    // Stdin: system prompt + recent messages + user message
     const skipStdin = cli === 'gemini' || (cli === 'codex' && isResume);
     if (!skipStdin) {
-        const sysPrompt = getSystemPrompt();
-        const stdinContent = `[Claw Platform Context]\n${sysPrompt}\n\n[User Message]\n${prompt}`;
+        const sysPrompt = customSysPrompt || getSystemPrompt();
+        let stdinContent = `[Claw Platform Context]\n${sysPrompt}`;
+
+        // Include recent message history for context (non-resume, non-forceNew)
+        if (!isResume && !forceNew) {
+            const recent = getRecentMessages.all(5).reverse();
+            if (recent.length > 0) {
+                const history = recent.map(m => `[${m.role}] ${m.content}`).join('\n\n');
+                stdinContent += `\n\n[Recent History]\n${history}`;
+            }
+        }
+
+        stdinContent += `\n\n[User Message]\n${prompt}`;
         child.stdin.write(stdinContent);
     }
     child.stdin.end();
 
-    // Broadcast agent status
-    broadcast('agent_status', { status: 'running', cli });
+    // Broadcast
+    broadcast('agent_status', { status: 'running', cli, agentId: agentLabel });
 
     const ctx = { fullText: '', toolLog: [], sessionId: null, cost: null, turns: null, duration: null, tokens: null, stderrBuf: '' };
     let buffer = '';
@@ -445,7 +504,8 @@ function spawnAgent(prompt) {
             if (!line.trim()) continue;
             try {
                 const event = JSON.parse(line);
-                console.log(`[claw:event] ${cli} type=${event.type} keys=${Object.keys(event).join(',')}`);
+                console.log(`[claw:event:${agentLabel}] ${cli} type=${event.type}`);
+                console.log(`[claw:raw:${agentLabel}] ${line.slice(0, 300)}`);
                 if (!ctx.sessionId) ctx.sessionId = extractSessionId(cli, event);
                 extractFromEvent(cli, event, ctx);
             } catch { /* non-JSON line */ }
@@ -454,15 +514,15 @@ function spawnAgent(prompt) {
 
     child.stderr.on('data', (chunk) => {
         const text = chunk.toString().trim();
-        console.error(`[claw:stderr] ${text}`);
+        console.error(`[claw:stderr:${agentLabel}] ${text}`);
         ctx.stderrBuf += text + '\n';
     });
 
     child.on('close', (code) => {
-        activeProcess = null;
+        if (!forceNew) activeProcess = null;
 
-        // Save session for resume
-        if (ctx.sessionId && code === 0) {
+        // Save session for resume — only main agent
+        if (!forceNew && ctx.sessionId && code === 0) {
             updateSession.run(cli, ctx.sessionId, model, settings.permissions, settings.workingDir, cfg.effort || 'medium');
             console.log(`[claw:session] saved ${cli} session=${ctx.sessionId.slice(0, 12)}...`);
         }
@@ -473,11 +533,16 @@ function spawnAgent(prompt) {
             if (ctx.turns) costParts.push(`${ctx.turns}턴`);
             if (ctx.duration) costParts.push(`${(ctx.duration / 1000).toFixed(1)}s`);
             const costLine = costParts.length ? `\n\n✅ ${costParts.join(' · ')}` : '';
-            const finalContent = ctx.fullText.trim() + costLine;
+            // Strip JSON subtask blocks from display/storage
+            const stripped = stripSubtaskJSON(ctx.fullText);
+            const displayText = stripped || ctx.fullText.trim();
+            const finalContent = displayText + costLine;
 
-            insertMessage.run('assistant', finalContent, cli, model);
-            broadcast('agent_done', { text: finalContent });
-        } else {
+            if (!forceNew) {
+                insertMessage.run('assistant', finalContent, cli, model);
+                broadcast('agent_done', { text: finalContent });
+            }
+        } else if (!forceNew) {
             let errMsg = `CLI 실행 실패 (exit ${code})`;
             if (ctx.stderrBuf.includes('429') || ctx.stderrBuf.includes('RESOURCE_EXHAUSTED')) {
                 errMsg = '⚡ API 용량 초과 (429) — 잠시 후 다시 시도해주세요';
@@ -489,9 +554,13 @@ function spawnAgent(prompt) {
             broadcast('agent_done', { text: `❌ ${errMsg}`, error: true });
         }
 
-        broadcast('agent_status', { status: code === 0 ? 'done' : 'error' });
-        console.log(`[claw] Agent exited with code ${code}, text=${ctx.fullText.length} chars`);
+        broadcast('agent_status', { status: code === 0 ? 'done' : 'error', agentId: agentLabel });
+        console.log(`[claw:${agentLabel}] exited code=${code}, text=${ctx.fullText.length} chars`);
+
+        resolve({ text: ctx.fullText, code, sessionId: ctx.sessionId, cost: ctx.cost, tools: ctx.toolLog });
     });
+
+    return { child, promise: resultPromise };
 }
 
 // ─── Event Extraction (ported from claw-lite) ────────
@@ -553,7 +622,123 @@ function extractFromEvent(cli, event, ctx) {
     }
 }
 
-// ─── Express + WebSocket ─────────────────────────────
+// ─── Orchestration (Phase 5) ─────────────────────────
+
+const MAX_ROUNDS = 3;
+
+function parseSubtasks(text) {
+    if (!text) return null;
+    // Try fenced code block first
+    const fenced = text.match(/```json\n([\s\S]*?)\n```/);
+    if (fenced) {
+        try { return JSON.parse(fenced[1]).subtasks || null; } catch { }
+    }
+    // Fallback: raw JSON object with "subtasks" key
+    const raw = text.match(/(\{[\s\S]*"subtasks"\s*:\s*\[[\s\S]*\]\s*\})/);
+    if (raw) {
+        try { return JSON.parse(raw[1]).subtasks || null; } catch { }
+    }
+    return null;
+}
+
+function stripSubtaskJSON(text) {
+    return text
+        .replace(/```json\n[\s\S]*?\n```/g, '')  // fenced
+        .replace(/\{[\s\S]*"subtasks"\s*:\s*\[[\s\S]*?\]\s*\}/g, '')  // raw
+        .trim();
+}
+
+async function distributeAndWait(subtasks) {
+    const emps = getEmployees.all();
+    const results = [];
+
+    const promises = subtasks.map(st => {
+        const target = (st.agent || '').trim();
+        const emp = emps.find(e =>
+            e.name === target || e.name?.includes(target) || target.includes(e.name)
+        );
+        console.log(`[distribute] matching "${target}" → ${emp ? emp.name : 'NOT FOUND'}`);
+
+        if (!emp) {
+            results.push({ name: target, status: 'skipped', text: 'Agent not found' });
+            return Promise.resolve();
+        }
+
+        const sysPrompt = `당신은 "${emp.name}" 입니다.
+역할: ${emp.role || '범용 개발자'}
+
+## 규칙
+- 주어진 작업을 직접 실행하고 결과를 보고하세요
+- JSON subtask 출력 금지 (당신은 실행자이지 기획자가 아닙니다)
+- 작업 결과를 자연어로 간결하게 보고하세요
+- 사용자 언어로 응답하세요`;
+        broadcast('agent_status', { agentId: emp.id, agentName: emp.name, status: 'running', cli: emp.cli });
+
+        const { promise } = spawnAgent(`## 작업 지시\n${st.task}`, {
+            agentId: emp.id, cli: emp.cli, model: emp.model,
+            forceNew: true, sysPrompt,
+        });
+
+        return promise.then(r => {
+            results.push({ name: emp.name, id: emp.id, status: r.code === 0 ? 'done' : 'error', text: r.text || '' });
+            broadcast('agent_status', { agentId: emp.id, agentName: emp.name, status: r.code === 0 ? 'done' : 'error' });
+        });
+    });
+
+    await Promise.all(promises);
+    return results;
+}
+
+async function orchestrate(prompt) {
+    const employees = getEmployees.all();
+
+    // No employees → simple single-agent mode
+    if (employees.length === 0) {
+        spawnAgent(prompt);
+        return;
+    }
+
+    // Round 1: Planning Agent
+    broadcast('agent_status', { agentId: 'planning', agentName: '🎯 기획', status: 'running' });
+    const { promise: p1 } = spawnAgent(prompt, { agentId: 'planning' });
+    const r1 = await p1;
+
+    let subtasks = parseSubtasks(r1.text);
+    if (!subtasks?.length) return;  // Direct answer, no subtasks
+
+    let round = 1;
+    while (round <= MAX_ROUNDS) {
+        console.log(`[orchestrate] round ${round}, ${subtasks.length} subtasks`);
+        broadcast('round_start', { round, subtasks });
+
+        // Distribute to sub-agents
+        const results = await distributeAndWait(subtasks);
+
+        // Report results back to Planning Agent (forceNew=true → internal, not saved as user msg)
+        const report = results.map(r =>
+            `- ${r.name}: ${r.status === 'done' ? '✅' : '❌'} ${r.text.slice(0, 300)}`
+        ).join('\n');
+        const reportPrompt = `## 결과 보고 (라운드 ${round})\n${report}\n\n결과를 평가하세요.\n- 완료되었으면: 사용자에게 보여줄 요약을 작성\n- 추가 작업 필요: JSON subtasks 출력`;
+
+        broadcast('agent_status', { agentId: 'planning', agentName: '🎯 기획', status: 'evaluating' });
+        const { promise: evalP } = spawnAgent(reportPrompt, { agentId: 'planning', forceNew: true });
+        const evalR = await evalP;
+
+        subtasks = parseSubtasks(evalR.text);
+        if (!subtasks?.length) {
+            // Final evaluation — save as assistant message and broadcast
+            const stripped = stripSubtaskJSON(evalR.text);
+            if (stripped) {
+                insertMessage.run('assistant', stripped, 'orchestrator', '');
+                broadcast('agent_done', { text: stripped });
+            }
+            broadcast('round_done', { round, action: 'complete' });
+            break;
+        }
+        broadcast('round_done', { round, action: 'retry' });
+        round++;
+    }
+}
 
 const app = express();
 const server = createServer(app);
@@ -581,7 +766,7 @@ app.post('/api/message', (req, res) => {
     const { prompt } = req.body;
     if (!prompt?.trim()) return res.status(400).json({ error: 'prompt required' });
     if (activeProcess) return res.status(409).json({ error: 'agent is busy' });
-    spawnAgent(prompt.trim());
+    orchestrate(prompt.trim());  // Phase 5: orchestrate if employees exist
     res.json({ ok: true });
 });
 
@@ -675,6 +860,7 @@ app.post('/api/employees', (req, res) => {
     insertEmployee.run(id, name, cli, model, role);
     const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(id);
     broadcast('agent_added', emp);
+    regenerateB();  // Update B.md with new employee
     res.json(emp);
 });
 app.put('/api/employees/:id', (req, res) => {
@@ -686,11 +872,13 @@ app.put('/api/employees/:id', (req, res) => {
     db.prepare(`UPDATE employees SET ${sets.join(', ')} WHERE id = ?`).run(...vals, req.params.id);
     const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);
     broadcast('agent_updated', emp);
+    regenerateB();  // Update B.md with modified employee
     res.json(emp);
 });
 app.delete('/api/employees/:id', (req, res) => {
     deleteEmployee.run(req.params.id);
     broadcast('agent_deleted', { id: req.params.id });
+    regenerateB();  // Update B.md without deleted employee
     res.json({ ok: true });
 });
 
