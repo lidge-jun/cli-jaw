@@ -324,7 +324,8 @@ app.put('/api/memory-files/settings', (req, res) => {
 
 // File upload
 app.post('/api/upload', express.raw({ type: '*/*', limit: '20mb' }), (req, res) => {
-    const filename = req.headers['x-filename'] || 'upload.bin';
+    const rawHeader = req.headers['x-filename'] || 'upload.bin';
+    const filename = decodeURIComponent(rawHeader);
     const filePath = saveUpload(req.body, filename);
     res.json({ path: filePath, filename: basename(filePath) });
 });

@@ -44,7 +44,7 @@ export function handleKey(e) {
 async function uploadFile(file) {
     const res = await fetch('/api/upload', {
         method: 'POST',
-        headers: { 'X-Filename': file.name },
+        headers: { 'X-Filename': encodeURIComponent(file.name) },
         body: file,
     });
     if (!res.ok) throw new Error('upload failed');
