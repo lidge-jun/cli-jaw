@@ -1,6 +1,6 @@
 /**
- * cli-claw chat — Phase 9.5 (polished v2)
- * Interactive REPL or --raw ndjson mode via WebSocket.
+ * cli-claw chat — Phase 9.5 (polished v3)
+ * Claude Code style: clean lines above/below input area.
  */
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
@@ -20,7 +20,6 @@ const c = {
     reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m',
     red: '\x1b[31m', green: '\x1b[32m', yellow: '\x1b[33m',
     blue: '\x1b[34m', magenta: '\x1b[35m', cyan: '\x1b[36m', gray: '\x1b[90m',
-    white: '\x1b[97m',
 };
 
 // ─── Connect ─────────────────────────────────
@@ -53,6 +52,10 @@ const accent = cliColor[info.cli] || c.red;
 const label = cliLabel[info.cli] || info.cli;
 const dir = info.workingDir.replace(process.env.HOME, '~');
 
+// ─── Width helper ────────────────────────────
+const W = () => Math.min(process.stdout.columns || 60, 72);
+const hr = () => '\u2500'.repeat(W());
+
 // ─── Raw mode ────────────────────────────────
 if (values.raw) {
     process.stdin.setEncoding('utf8');
@@ -64,44 +67,30 @@ if (values.raw) {
     process.stdin.on('end', () => { ws.close(); process.exit(0); });
 
 } else {
-    // ─── Banner (fixed width, no emoji in padding calc) ──
-    const W = 48;
-    const hr = '\u2500'.repeat(W);
+    // ─── Banner ──────────────────────────────
+    console.log('');
+    console.log(`  ${c.bold}cli-claw${c.reset} ${c.dim}v0.1.0${c.reset}`);
+    console.log('');
+    console.log(`  ${c.dim}engine:${c.reset}    ${accent}${label}${c.reset}`);
+    console.log(`  ${c.dim}directory:${c.reset}  ${c.cyan}${dir}${c.reset}`);
+    console.log(`  ${c.dim}server:${c.reset}    ${c.green}\u25CF${c.reset} localhost:${values.port}`);
+    console.log('');
+    console.log(`  ${c.dim}/quit to exit, /clear to reset${c.reset}`);
 
-    function row(left, right) {
-        // plain padding — no ANSI in length calc
-        const plain = left.replace(/\x1b\[[0-9;]*m/g, '') + right.replace(/\x1b\[[0-9;]*m/g, '');
-        const gap = Math.max(1, W - plain.length);
-        return `  \u2502 ${left}${' '.repeat(gap)}${right} \u2502`;
+    // ─── Input prompt (Claude Code style) ────
+    function showInput() {
+        console.log('');
+        console.log(`  ${c.dim}${hr()}${c.reset}`);
+        process.stdout.write(`  ${accent}\u276F${c.reset} `);
     }
 
-    console.log('');
-    console.log(`  \u250C\u2500${hr}\u2500\u2510`);
-    console.log(row(`${c.bold}cli-claw${c.reset} ${c.dim}v0.1.0${c.reset}`, ''));
-    console.log(row('', ''));
-    console.log(row(`${c.dim}engine${c.reset}`, `${accent}${label}${c.reset}`));
-    console.log(row(`${c.dim}directory${c.reset}`, `${c.cyan}${dir}${c.reset}`));
-    console.log(row(`${c.dim}server${c.reset}`, `${c.green}\u25CF${c.reset} :${values.port}`));
-    console.log(`  \u2514\u2500${hr}\u2500\u2518`);
-    console.log('');
-
-    // ─── Input box ───────────────────────────
-    function drawInputBox() {
-        process.stdout.write(`  ${c.dim}\u250C\u2500 message \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510${c.reset}\n`);
-        process.stdout.write(`  ${c.dim}\u2502${c.reset} `);
-    }
-
-    function closeInputBox() {
-        process.stdout.write(`\n  ${c.dim}\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518${c.reset}\n`);
+    function showInputBottom() {
+        console.log(`  ${c.dim}${hr()}${c.reset}`);
     }
 
     // ─── REPL ────────────────────────────────
     const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: '' });
     let streaming = false;
-
-    function showPrompt() {
-        drawInputBox();
-    }
 
     ws.on('message', (data) => {
         try {
@@ -110,31 +99,38 @@ if (values.raw) {
                 case 'agent_chunk':
                     if (!streaming) {
                         streaming = true;
-                        process.stdout.write(`\n  ${c.dim}\u250C\u2500 ${accent}${label}${c.reset}${c.dim} \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510${c.reset}\n  ${c.dim}\u2502${c.reset} `);
+                        console.log('');
+                        process.stdout.write(`  `);
                     }
-                    process.stdout.write((msg.text || '').replace(/\n/g, `\n  ${c.dim}\u2502${c.reset} `));
+                    process.stdout.write((msg.text || '').replace(/\n/g, '\n  '));
                     break;
+
                 case 'agent_done':
                     if (streaming) {
-                        process.stdout.write(`\n  ${c.dim}\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518${c.reset}\n\n`);
+                        console.log('');
                         streaming = false;
                     } else if (msg.text) {
-                        console.log(`\n  ${c.dim}\u250C\u2500 ${accent}${label}${c.reset}${c.dim} \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510${c.reset}`);
-                        console.log(`  ${c.dim}\u2502${c.reset} ${msg.text.replace(/\n/g, `\n  ${c.dim}\u2502${c.reset} `)}`);
-                        console.log(`  ${c.dim}\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518${c.reset}\n`);
+                        console.log('');
+                        console.log(`  ${msg.text.replace(/\n/g, '\n  ')}`);
                     }
-                    showPrompt();
+                    showInput();
                     break;
+
                 case 'agent_status':
                     if (msg.status === 'running') {
                         const name = msg.agentName || msg.agentId || 'agent';
                         process.stdout.write(`\r  ${c.yellow}\u25CF${c.reset} ${c.dim}${name} working...${c.reset}          \r`);
                     }
                     break;
+
                 case 'new_message':
                     if (msg.source && msg.source !== 'cli') {
-                        console.log(`  ${c.dim}[${msg.source}]${c.reset} ${(msg.content || '').slice(0, 60)}`);
+                        console.log(`\n  ${c.dim}[${msg.source}]${c.reset} ${(msg.content || '').slice(0, 60)}`);
                     }
+                    break;
+
+                case 'round_start':
+                    console.log(`\n  ${c.cyan}\u25C6${c.reset} ${c.dim}Round ${msg.round}${c.reset}`);
                     break;
             }
         } catch { }
@@ -142,18 +138,18 @@ if (values.raw) {
 
     rl.on('line', (line) => {
         const text = line.trim();
-        closeInputBox();
-        if (!text) { showPrompt(); return; }
+        showInputBottom();
+        if (!text) { showInput(); return; }
         if (text === '/quit' || text === '/exit' || text === '/q') {
             console.log(`\n  ${c.dim}Bye! \uD83E\uDD9E${c.reset}\n`);
             ws.close(); rl.close(); process.exit(0);
         }
-        if (text === '/clear') { console.clear(); showPrompt(); return; }
+        if (text === '/clear') { console.clear(); showInput(); return; }
         ws.send(JSON.stringify({ type: 'send_message', text }));
     });
 
     rl.on('close', () => { ws.close(); process.exit(0); });
-    ws.on('close', () => { console.log(`\n  ${c.dim}Connection closed${c.reset}\n`); process.exit(0); });
+    ws.on('close', () => { console.log(`\n  ${c.dim}Disconnected${c.reset}\n`); process.exit(0); });
 
-    showPrompt();
+    showInput();
 }
