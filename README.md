@@ -137,7 +137,7 @@ src/telegram.js      Telegram bot bridge
 src/memory.js        Memory: MEMORY.md(시스템레벨 1500자) + session(10000자, x2 cycle 주입)
 src/browser/         Chrome CDP control
 lib/mcp-sync.js      MCP config sync (4 CLI targets)
-public/              Web UI (ES Modules)
+public/              Web UI (ES Modules, stop/queue/drag-drop)
 ├── index.html       HTML skeleton (no inline JS/CSS)
 ├── css/             5 stylesheets (variables, layout, chat, sidebar, modals)
 └── js/              12 modules (state, ws, ui, render + features/)
