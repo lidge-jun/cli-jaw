@@ -5,3 +5,4 @@ node_modules/
 settings.json
 devlog/
 .DS_Store
+.env

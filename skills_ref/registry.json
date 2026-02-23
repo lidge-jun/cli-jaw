@@ -1,0 +1,289 @@
+{
+    "skills": {
+        "notion": {
+            "name": "Notion",
+            "emoji": "📝",
+            "category": "productivity",
+            "description": "Notion 페이지/DB CRUD. curl로 API 호출. Codex notion-* 스킬과 보완.",
+            "requires": {
+                "env": [
+                    "NOTION_API_KEY"
+                ]
+            },
+            "install": null
+        },
+        "trello": {
+            "name": "Trello",
+            "emoji": "📋",
+            "category": "productivity",
+            "description": "Trello 보드·리스트·카드 관리. curl로 REST API 호출.",
+            "requires": {
+                "env": [
+                    "TRELLO_API_KEY",
+                    "TRELLO_TOKEN"
+                ]
+            },
+            "install": null
+        },
+        "obsidian": {
+            "name": "Obsidian",
+            "emoji": "🗃️",
+            "category": "productivity",
+            "description": "Obsidian 볼트 노트 생성·검색·태그 관리.",
+            "requires": {
+                "bins": [
+                    "obsidian-cli"
+                ]
+            },
+            "install": "brew install obsidian-cli"
+        },
+        "things-mac": {
+            "name": "Things 3 (macOS)",
+            "emoji": "✅",
+            "category": "productivity",
+            "description": "Things 3 할일 추가·완료·검색. AppleScript + URL scheme.",
+            "requires": null,
+            "install": null
+        },
+        "apple-notes": {
+            "name": "Apple Notes",
+            "emoji": "🍎",
+            "category": "productivity",
+            "description": "Apple Notes 메모 생성·검색. AppleScript 기반.",
+            "requires": null,
+            "install": null
+        },
+        "apple-reminders": {
+            "name": "Apple Reminders",
+            "emoji": "🔔",
+            "category": "productivity",
+            "description": "Apple 미리알림 추가·완료·목록 관리. AppleScript 기반.",
+            "requires": null,
+            "install": null
+        },
+        "himalaya": {
+            "name": "이메일 (Himalaya)",
+            "emoji": "📧",
+            "category": "communication",
+            "description": "터미널 이메일 읽기·쓰기·답장·검색. Gmail/Outlook 지원.",
+            "requires": {
+                "bins": [
+                    "himalaya"
+                ]
+            },
+            "install": "brew install himalaya"
+        },
+        "gog": {
+            "name": "Google Workspace",
+            "emoji": "🌐",
+            "category": "communication",
+            "description": "Gmail·Calendar·Drive·Sheets·Docs 통합 관리.",
+            "requires": {
+                "bins": [
+                    "gog"
+                ]
+            },
+            "install": null
+        },
+        "xurl": {
+            "name": "X (Twitter)",
+            "emoji": "🐦",
+            "category": "communication",
+            "description": "트윗 게시·검색·답글·DM·미디어 업로드.",
+            "requires": {
+                "bins": [
+                    "xurl"
+                ]
+            },
+            "install": null
+        },
+        "github": {
+            "name": "GitHub (범용)",
+            "emoji": "🐙",
+            "category": "devtools",
+            "description": "이슈·PR·CI·코드리뷰를 gh CLI로 관리. Codex gh-* 보다 범용.",
+            "requires": {
+                "bins": [
+                    "gh"
+                ]
+            },
+            "install": "brew install gh"
+        },
+        "gh-issues": {
+            "name": "GitHub Issues Auto-Fix",
+            "emoji": "🔧",
+            "category": "devtools",
+            "description": "이슈를 자동으로 수정하고 PR 오픈. 서브에이전트 스폰.",
+            "requires": {
+                "bins": [
+                    "gh"
+                ],
+                "env": [
+                    "GH_TOKEN"
+                ]
+            },
+            "install": "brew install gh"
+        },
+        "tmux": {
+            "name": "tmux",
+            "emoji": "🧵",
+            "category": "devtools",
+            "description": "tmux 세션 원격 제어. 키 입력 전송 + 출력 읽기.",
+            "requires": {
+                "bins": [
+                    "tmux"
+                ]
+            },
+            "install": "brew install tmux"
+        },
+        "skill-creator": {
+            "name": "스킬 생성기",
+            "emoji": "🏗️",
+            "category": "devtools",
+            "description": "새 SKILL.md 자동 생성. 템플릿 + 가이드라인 제공.",
+            "requires": null,
+            "install": null
+        },
+        "weather": {
+            "name": "날씨",
+            "emoji": "🌤️",
+            "category": "utility",
+            "description": "wttr.in 날씨·예보 조회. API 키 불필요.",
+            "requires": null,
+            "install": null
+        },
+        "video-frames": {
+            "name": "영상 프레임 추출",
+            "emoji": "🎬",
+            "category": "utility",
+            "description": "ffmpeg로 영상 프레임·구간 추출.",
+            "requires": {
+                "bins": [
+                    "ffmpeg"
+                ]
+            },
+            "install": "brew install ffmpeg"
+        },
+        "summarize": {
+            "name": "URL 요약",
+            "emoji": "📑",
+            "category": "utility",
+            "description": "URL·유튜브·파일을 텍스트로 요약.",
+            "requires": {
+                "bins": [
+                    "summarize"
+                ]
+            },
+            "install": null
+        },
+        "goplaces": {
+            "name": "장소 검색",
+            "emoji": "📍",
+            "category": "utility",
+            "description": "Google Places API로 장소·리뷰·영업시간 검색.",
+            "requires": {
+                "bins": [
+                    "goplaces"
+                ],
+                "env": [
+                    "GOOGLE_PLACES_API_KEY"
+                ]
+            },
+            "install": null
+        },
+        "1password": {
+            "name": "1Password",
+            "emoji": "🔐",
+            "category": "utility",
+            "description": "1Password CLI로 비밀번호·문서·OTP 조회.",
+            "requires": {
+                "bins": [
+                    "op"
+                ]
+            },
+            "install": "brew install 1password-cli"
+        },
+        "nano-pdf": {
+            "name": "PDF 생성/편집",
+            "emoji": "📄",
+            "category": "utility",
+            "description": "PDF 생성·편집·텍스트 추출. Codex pdf 스킬과 보완.",
+            "requires": {
+                "bins": [
+                    "python3"
+                ]
+            },
+            "install": null
+        },
+        "nano-banana-pro": {
+            "name": "이미지 생성 (Gemini)",
+            "emoji": "🖼️",
+            "category": "ai-media",
+            "description": "Gemini 3 Pro로 이미지 생성·편집. Codex imagegen과 다른 모델.",
+            "requires": {
+                "env": [
+                    "GEMINI_API_KEY"
+                ],
+                "bins": [
+                    "uv"
+                ]
+            },
+            "install": null
+        },
+        "spotify-player": {
+            "name": "Spotify",
+            "emoji": "🎵",
+            "category": "smarthome",
+            "description": "Spotify 재생·일시정지·곡 검색·플레이리스트 관리.",
+            "requires": {
+                "bins": [
+                    "spotify_player"
+                ]
+            },
+            "install": "brew install spotify_player"
+        },
+        "openhue": {
+            "name": "Philips Hue",
+            "emoji": "💡",
+            "category": "smarthome",
+            "description": "Hue 조명·씬 제어. \"거실 50%로 낮춰\"",
+            "requires": {
+                "bins": [
+                    "openhue"
+                ]
+            },
+            "install": "brew install openhue"
+        },
+        "browser": {
+            "name": "브라우저 조작",
+            "emoji": "🌐",
+            "category": "automation",
+            "description": "Chrome 브라우저 조작. ref 스냅샷으로 페이지 요소 식별 → 클릭/입력. cli-claw 서버 필요.",
+            "requires": {
+                "system": [
+                    "Google Chrome"
+                ],
+                "bins": [
+                    "cli-claw"
+                ]
+            },
+            "install": null
+        },
+        "tts": {
+            "name": "Text-to-Speech",
+            "emoji": "🔊",
+            "category": "utility",
+            "description": "macOS say 명령으로 텍스트 음성 변환. 다국어 지원, 파일 저장.",
+            "requires": null,
+            "install": null
+        },
+        "screen-capture": {
+            "name": "Screen Capture",
+            "emoji": "📸",
+            "category": "utility",
+            "description": "macOS screencapture로 스크린샷/영역/윈도우 캡처. 웹캠(imagesnap).",
+            "requires": null,
+            "install": null
+        }
+    }
+}

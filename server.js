@@ -1,416 +1,81 @@
+// ─── CLI-Claw Server (glue + routes) ─────────────────
+// All business logic lives in src/ modules.
+
 import express from 'express';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { fileURLToPath } from 'url';
-import { dirname, join, extname, basename } from 'path';
-import { execSync, spawn } from 'child_process';
+import { dirname, join, basename } from 'path';
 import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
-import Database from 'better-sqlite3';
-import { Bot } from 'grammy';
-import { sequentialize } from '@grammyjs/runner';
-import https from 'node:https';
-import {
-    saveUpload as _saveUpload,
-    buildMediaPrompt,
-    downloadTelegramFile,
-} from './lib/upload.js';
 import {
     loadUnifiedMcp, saveUnifiedMcp, syncToAll,
     ensureSkillsSymlinks, initMcpConfig, copyDefaultSkills,
 } from './lib/mcp-sync.js';
 
+// ─── src/ modules ────────────────────────────────────
+
+import { setWss, broadcast } from './src/bus.js';
+import {
+    CLAW_HOME, PROMPTS_DIR, DB_PATH, UPLOADS_DIR,
+    SKILLS_DIR, SKILLS_REF_DIR,
+    settings, loadSettings, saveSettings, replaceSettings,
+    ensureDirs, runMigration,
+    loadHeartbeatFile, saveHeartbeatFile,
+    detectAllCli,
+} from './src/config.js';
+import {
+    db, getSession, updateSession, insertMessage, getMessages,
+    getRecentMessages, clearMessages,
+    getMemory, upsertMemory, deleteMemory,
+    getEmployees, insertEmployee, deleteEmployee,
+} from './src/db.js';
+import {
+    initPromptFiles, getMemoryDir, getSystemPrompt, regenerateB,
+    A2_PATH, HEARTBEAT_PATH,
+    getMergedSkills,
+} from './src/prompt.js';
+import {
+    activeProcess, killActiveAgent, waitForProcessEnd,
+    steerAgent, enqueueMessage, processQueue, messageQueue,
+    saveUpload, memoryFlushCounter,
+} from './src/agent.js';
+import { orchestrate } from './src/orchestrator.js';
+import { initTelegram } from './src/telegram.js';
+import { startHeartbeat, stopHeartbeat, watchHeartbeatFile } from './src/heartbeat.js';
+
+// ─── Resolve paths ───────────────────────────────────
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// ─── Config ──────────────────────────────────────────
+// ─── .env loader (no dependency) ─────────────────────
+
+try {
+    const envPath = join(__dirname, '.env');
+    if (fs.existsSync(envPath)) {
+        for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
+            const m = line.match(/^([A-Z_]+)=(.*)$/);
+            if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
+        }
+    }
+} catch { /* no .env, that's fine */ }
+
+// ─── Init ────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3457;
-const CLAW_HOME = join(os.homedir(), '.cli-claw');
-const PROMPTS_DIR = join(CLAW_HOME, 'prompts');
-const DB_PATH = join(CLAW_HOME, 'claw.db');
-const SETTINGS_PATH = join(CLAW_HOME, 'settings.json');
-const HEARTBEAT_JOBS_PATH = join(CLAW_HOME, 'heartbeat.json');
-const UPLOADS_DIR = join(CLAW_HOME, 'uploads');
-const MIGRATION_MARKER = join(CLAW_HOME, '.migrated-v1');
 
-// ─── Ensure directories ─────────────────────────────
-
-fs.mkdirSync(PROMPTS_DIR, { recursive: true });
-fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+ensureDirs();
 fs.mkdirSync(join(__dirname, 'public'), { recursive: true });
-
-// ─── Phase 12.1: MCP + Skills init ──────────────────
-// Deferred to after settings load (needs workingDir)
-
-// ─── 1-time migration (Phase 9.2) ───────────────────
-if (!fs.existsSync(MIGRATION_MARKER)) {
-    const legacySettings = join(__dirname, 'settings.json');
-    const legacyDb = join(__dirname, 'claw.db');
-    if (fs.existsSync(legacySettings) && !fs.existsSync(SETTINGS_PATH)) {
-        fs.copyFileSync(legacySettings, SETTINGS_PATH);
-        console.log('[migrate] settings.json → ~/.cli-claw/');
-    }
-    if (fs.existsSync(legacyDb) && !fs.existsSync(DB_PATH)) {
-        fs.copyFileSync(legacyDb, DB_PATH);
-        for (const ext of ['-wal', '-shm']) {
-            const src = legacyDb + ext;
-            if (fs.existsSync(src)) fs.copyFileSync(src, DB_PATH + ext);
-        }
-        console.log('[migrate] claw.db → ~/.cli-claw/');
-    }
-    fs.writeFileSync(MIGRATION_MARKER, JSON.stringify({ migratedAt: new Date().toISOString() }));
-}
-
-// ─── A-1 Core System Prompt (immutable) ──────────────
-
-const A1_CONTENT = `# Claw Agent
-
-You are Claw Agent, a system-level AI assistant.
-Execute tasks on the user's computer via CLI tools.
-
-## Rules
-- Follow the user's instructions precisely
-- Respond in the user's language
-- Report results clearly with file paths and outputs
-- Ask for clarification when ambiguous
-
-## Heartbeat System
-You can register recurring scheduled tasks via ~/.cli-claw/heartbeat.json.
-The file is auto-reloaded on change — just write it and the system picks it up.
-
-### JSON Format
-\`\`\`json
-{
-  "jobs": [
-    {
-      "id": "hb_<timestamp>",
-      "name": "작업 이름",
-      "enabled": true,
-      "schedule": { "kind": "every", "minutes": 5 },
-      "prompt": "매 실행마다 보낼 프롬프트"
-    }
-  ]
-}
-\`\`\`
-
-### Rules
-- id는 "hb_" + Date.now() 형식
-- enabled: true이면 자동 실행, false면 일시정지
-- schedule.minutes: 실행 간격 (분)
-- prompt: 실행 시 에이전트에게 전달되는 프롬프트
-- 결과는 자동으로 Telegram에 전송됨
-- 할 일이 없는 heartbeat에는 [SILENT]로 응답
-`;
-
-// Ensure A-1.md exists
-const A1_PATH = join(PROMPTS_DIR, 'A-1.md');
-if (!fs.existsSync(A1_PATH)) {
-    fs.writeFileSync(A1_PATH, A1_CONTENT);
-}
-
-// ─── A-2 User Prompt (mutable, default) ──────────────
-
-const A2_DEFAULT = `# User Configuration
-
-## Identity
-- Name: Claw
-- Emoji: 🦞
-
-## User
-- Name: (your name)
-- Language: English
-- Timezone: UTC
-
-## Vibe
-- Friendly, warm
-- Technically accurate
-
-## Working Directory
-- ~/
-`;
-
-const A2_PATH = join(PROMPTS_DIR, 'A-2.md');
-if (!fs.existsSync(A2_PATH)) {
-    fs.writeFileSync(A2_PATH, A2_DEFAULT);
-}
-
-// ─── HEARTBEAT.md (separate) ─────────────────────────
-
-const HEARTBEAT_DEFAULT = `# Heartbeat checklist
-
-<!-- Keep this empty to skip heartbeat API calls -->
-<!-- Add tasks below when you want periodic checks -->
-`;
-
-const HEARTBEAT_PATH = join(PROMPTS_DIR, 'HEARTBEAT.md');
-if (!fs.existsSync(HEARTBEAT_PATH)) {
-    fs.writeFileSync(HEARTBEAT_PATH, HEARTBEAT_DEFAULT);
-}
-
-// ─── B.md (auto-generated: A-1 + A-2 + Employees) ───
-
-function getMemoryDir() {
-    const wd = (settings.workingDir || os.homedir()).replace(/^~/, os.homedir());
-    const hash = wd.replace(/\//g, '-');
-    return join(os.homedir(), '.claude', 'projects', hash, 'memory');
-}
-
-function loadRecentMemories() {
-    try {
-        const CHAR_BUDGET = 33000; // ~10000 tokens
-        const memDir = getMemoryDir();
-        if (!fs.existsSync(memDir)) return '';
-        const files = fs.readdirSync(memDir).filter(f => f.endsWith('.md')).sort().reverse();
-        const entries = [];
-        let charCount = 0;
-        for (const f of files) {
-            const sections = fs.readFileSync(join(memDir, f), 'utf8').split(/^## /m).filter(Boolean);
-            for (const s of sections.reverse()) {
-                const entry = s.trim();
-                if (charCount + entry.length > CHAR_BUDGET) break;
-                entries.push(entry);
-                charCount += entry.length;
-            }
-            if (charCount >= CHAR_BUDGET) break;
-        }
-        return entries.length
-            ? '\n\n---\n## Previous Memories\n' + entries.map(e => '## ' + e).join('\n\n')
-            : '';
-    } catch { return ''; }
-}
-
-function getSystemPrompt() {
-    const a1 = fs.readFileSync(A1_PATH, 'utf8');
-    const a2 = fs.existsSync(A2_PATH) ? fs.readFileSync(A2_PATH, 'utf8') : '';
-    let prompt = `${a1}\n\n${a2}`;
-
-    // Phase 11: Memory injection (new sessions only)
-    const memories = loadRecentMemories();
-    if (memories) prompt += memories;
-
-    // Phase 5.0: Employee orchestration injection
-    try {
-        const emps = getEmployees.all();
-        if (emps.length > 0) {
-            const list = emps.map(e =>
-                `- "${e.name}" (CLI: ${e.cli}) — ${e.role || '범용 개발자'}`
-            ).join('\n');
-            const example = emps[0].name;
-            prompt += '\n\n---\n';
-            prompt += '\n## Orchestration System';
-            prompt += '\nYou have external employees (separate CLI processes).';
-            prompt += '\nThe middleware detects your JSON output and AUTOMATICALLY spawns employees.';
-            prompt += `\n\n### Available Employees\n${list}`;
-            prompt += '\n\n### Dispatch Format';
-            prompt += '\nTo assign work, output EXACTLY this format (triple-backtick fenced JSON block):';
-            prompt += `\n\n\`\`\`json\n{\n  "subtasks": [\n    {\n      "agent": "${example}",\n      "task": "구체적인 작업 지시",\n      "priority": 1\n    }\n  ]\n}\n\`\`\``;
-            prompt += '\n\n### CRITICAL RULES';
-            prompt += '\n1. JSON은 반드시 \`\`\`json ... \`\`\` 코드블럭으로 감싸야 함 (필수)';
-            prompt += '\n2. 코드블럭 없는 raw JSON 출력 금지';
-            prompt += '\n3. agent 이름은 위 목록과 정확히 일치해야 함';
-            prompt += '\n4. 실행 가능한 요청이면 반드시 subtask JSON 출력';
-            prompt += '\n5. "결과 보고"를 받으면 사용자에게 자연어로 요약';
-            prompt += '\n6. 직접 답변할 수 있는 질문이면 JSON 없이 자연어로 응답';
-        }
-    } catch { /* DB not ready yet */ }
-
-    // Phase 1.1: Heartbeat state injection
-    try {
-        const hbData = loadHeartbeatFile();
-        if (hbData.jobs.length > 0) {
-            const activeJobs = hbData.jobs.filter(j => j.enabled);
-            prompt += '\n\n---\n## Current Heartbeat Jobs\n';
-            for (const job of hbData.jobs) {
-                const status = job.enabled ? '✅' : '⏸️';
-                const mins = job.schedule?.minutes || '?';
-                prompt += `- ${status} "${job.name}" — every ${mins}min: ${(job.prompt || '').slice(0, 50)}\n`;
-            }
-            prompt += `\nActive: ${activeJobs.length}, Total: ${hbData.jobs.length}`;
-            prompt += '\nTo modify: edit ~/.cli-claw/heartbeat.json (auto-reloads on save)';
-        }
-    } catch { /* heartbeat.json not ready */ }
-
-    return prompt;
-}
-
-function regenerateB() {
-    fs.writeFileSync(join(PROMPTS_DIR, 'B.md'), getSystemPrompt());
-
-    // Invalidate session — next spawn starts fresh with updated prompt
-    try {
-        const session = getSession();
-        if (session.session_id) {
-            updateSession.run(session.active_cli, null, session.model,
-                session.permissions, session.working_dir, session.effort);
-            console.log('[claw:session] invalidated — B.md changed');
-        }
-    } catch { /* DB not ready yet */ }
-}
-// NOTE: regenerateB() called after DB init (see below)
-
-// ─── Settings ────────────────────────────────────────
-
-const DEFAULT_SETTINGS = {
-    cli: 'claude',
-    permissions: 'auto',      // safe | auto
-    workingDir: os.homedir(),
-    perCli: {
-        claude: { model: 'claude-sonnet-4-5-20250929', effort: 'medium' },
-        codex: { model: 'gpt-5.3-codex', effort: 'medium' },
-        gemini: { model: 'gemini-2.5-pro', effort: '' },
-        opencode: { model: 'github-copilot/claude-sonnet-4.5', effort: '' },
-    },
-    heartbeat: {
-        enabled: false,
-        every: '30m',
-        activeHours: { start: '08:00', end: '22:00' },
-        target: 'all',
-    },
-    telegram: {
-        enabled: false,
-        token: '',
-        allowedChatIds: [],
-    },
-    memory: {
-        enabled: true,
-        flushEvery: 10,       // 10 QA turns (counter increments per response)
-        cli: '',              // empty = use active CLI
-        model: '',            // empty = use CLI default model
-        retentionDays: 30,
-    },
-    employees: [],
-};
-
-function migrateSettings(s) {
-    // Phase 12: planning → 삭제 (Active CLI = Planning CLI)
-    if (s.planning) {
-        if (s.planning.cli && s.planning.cli !== s.cli) {
-            s.cli = s.planning.cli;
-        }
-        if (s.planning.model && s.planning.model !== 'default') {
-            const target = s.perCli?.[s.cli];
-            if (target) target.model = s.planning.model;
-        }
-        if (s.planning.effort) {
-            const target = s.perCli?.[s.cli];
-            if (target) target.effort = s.planning.effort;
-        }
-        delete s.planning;
-    }
-    return s;
-}
-
-function loadSettings() {
-    try {
-        const raw = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
-        const merged = migrateSettings({ ...DEFAULT_SETTINGS, ...raw });
-        // Persist migration
-        if (raw.planning) saveSettings(merged);
-        return merged;
-    } catch { return { ...DEFAULT_SETTINGS }; }
-}
-
-function saveSettings(s) {
-    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(s, null, 2));
-}
-
-let settings = loadSettings();
-
-// ─── Database ────────────────────────────────────────
-
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-
-db.exec(`
-    CREATE TABLE IF NOT EXISTS session (
-        id          TEXT PRIMARY KEY DEFAULT 'default',
-        active_cli  TEXT DEFAULT 'claude',
-        session_id  TEXT,
-        model       TEXT DEFAULT 'default',
-        permissions TEXT DEFAULT 'auto',
-        working_dir TEXT DEFAULT '~',
-        effort      TEXT DEFAULT 'medium',
-        updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    INSERT OR IGNORE INTO session (id) VALUES ('default');
-
-    CREATE TABLE IF NOT EXISTS messages (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        role        TEXT NOT NULL,
-        content     TEXT NOT NULL,
-        cli         TEXT,
-        model       TEXT,
-        cost_usd    REAL,
-        duration_ms INTEGER,
-        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
-
-    CREATE TABLE IF NOT EXISTS memory (
-        id          INTEGER PRIMARY KEY AUTOINCREMENT,
-        key         TEXT NOT NULL UNIQUE,
-        value       TEXT NOT NULL,
-        source      TEXT DEFAULT 'manual',
-        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS employees (
-        id          TEXT PRIMARY KEY,
-        name        TEXT DEFAULT 'New Agent',
-        cli         TEXT DEFAULT 'claude',
-        model       TEXT DEFAULT 'default',
-        role        TEXT DEFAULT '',
-        status      TEXT DEFAULT 'idle',
-        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-`);
-
-// ─── DB Helpers ──────────────────────────────────────
-
-const getSession = () => db.prepare('SELECT * FROM session WHERE id = ?').get('default');
-const updateSession = db.prepare(`
-    UPDATE session SET active_cli=?, session_id=?, model=?, permissions=?, working_dir=?, effort=?, updated_at=CURRENT_TIMESTAMP
-    WHERE id='default'
-`);
-const insertMessage = db.prepare('INSERT INTO messages (role, content, cli, model) VALUES (?, ?, ?, ?)');
-const getMessages = db.prepare('SELECT * FROM messages ORDER BY id ASC');
-const getRecentMessages = db.prepare('SELECT * FROM messages ORDER BY id DESC LIMIT ?');
-const clearMessages = db.prepare('DELETE FROM messages');
-const getMemory = db.prepare('SELECT key, value, source FROM memory ORDER BY updated_at DESC');
-const upsertMemory = db.prepare(`
-    INSERT INTO memory (key, value, source) VALUES (?, ?, ?)
-    ON CONFLICT(key) DO UPDATE SET value=excluded.value, source=excluded.source, updated_at=CURRENT_TIMESTAMP
-`);
-const deleteMemory = db.prepare('DELETE FROM memory WHERE key = ?');
-const getEmployees = db.prepare('SELECT * FROM employees ORDER BY created_at ASC');
-const insertEmployee = db.prepare('INSERT INTO employees (id, name, cli, model, role) VALUES (?, ?, ?, ?, ?)');
-const deleteEmployee = db.prepare('DELETE FROM employees WHERE id = ?');
-
-// Now that DB is ready, generate B.md with employees
+runMigration(__dirname);
+loadSettings();
+initPromptFiles();
 regenerateB();
 
-// ─── CLI Detection ───────────────────────────────────
+// ─── Quota (stays here — only used by one route) ─────
 
-function detectCli(name) {
-    try {
-        const p = execSync(`which ${name}`, { encoding: 'utf8', timeout: 3000 }).trim();
-        return { available: true, path: p };
-    } catch { return { available: false, path: null }; }
-}
-
-function detectAllCli() {
-    return {
-        claude: detectCli('claude'),
-        codex: detectCli('codex'),
-        gemini: detectCli('gemini'),
-        opencode: detectCli('opencode'),
-    };
-}
-
-// ─── Quota (ported from claw-lite) ───────────────────
+import { execSync } from 'child_process';
 
 function readClaudeCreds() {
     try {
@@ -422,10 +87,7 @@ function readClaudeCreds() {
         if (!oauth?.accessToken) return null;
         return {
             token: oauth.accessToken,
-            account: {
-                type: oauth.subscriptionType ?? 'unknown',
-                tier: oauth.rateLimitTier ?? null,
-            },
+            account: { type: oauth.subscriptionType ?? 'unknown', tier: oauth.rateLimitTier ?? null },
         };
     } catch { return null; }
 }
@@ -434,9 +96,7 @@ function readCodexTokens() {
     try {
         const authPath = join(os.homedir(), '.codex', 'auth.json');
         const j = JSON.parse(fs.readFileSync(authPath, 'utf8'));
-        if (j?.tokens?.access_token) {
-            return { access_token: j.tokens.access_token, account_id: j.tokens.account_id ?? '' };
-        }
+        if (j?.tokens?.access_token) return { access_token: j.tokens.access_token, account_id: j.tokens.account_id ?? '' };
     } catch { }
     return null;
 }
@@ -445,10 +105,7 @@ async function fetchClaudeUsage(creds) {
     if (!creds?.token) return null;
     try {
         const resp = await fetch('https://api.anthropic.com/api/oauth/usage', {
-            headers: {
-                'Authorization': `Bearer ${creds.token}`,
-                'anthropic-beta': 'oauth-2025-04-20',
-            },
+            headers: { 'Authorization': `Bearer ${creds.token}`, 'anthropic-beta': 'oauth-2025-04-20' },
             signal: AbortSignal.timeout(8000),
         });
         if (!resp.ok) return null;
@@ -468,10 +125,7 @@ async function fetchCodexUsage(tokens) {
     if (!tokens) return null;
     try {
         const resp = await fetch('https://chatgpt.com/backend-api/wham/usage', {
-            headers: {
-                'Authorization': `Bearer ${tokens.access_token}`,
-                'ChatGPT-Account-Id': tokens.account_id ?? '',
-            },
+            headers: { 'Authorization': `Bearer ${tokens.access_token}`, 'ChatGPT-Account-Id': tokens.account_id ?? '' },
             signal: AbortSignal.timeout(8000),
         });
         if (!resp.ok) return null;
@@ -500,632 +154,18 @@ function readGeminiAccount() {
     return null;
 }
 
-// ─── Agent Spawn ─────────────────────────────────────
-
-let activeProcess = null;
-let memoryFlushCounter = 0;
-
-// Phase 12.1.2: Kill + Steer
-function killActiveAgent(reason = 'user') {
-    if (!activeProcess) return false;
-    console.log(`[claw:kill] reason=${reason}`);
-    try { activeProcess.kill('SIGTERM'); } catch { }
-    const proc = activeProcess;
-    setTimeout(() => {
-        try { if (proc && !proc.killed) proc.kill('SIGKILL'); } catch { }
-    }, 2000);
-    return true;
-}
-
-function waitForProcessEnd(timeoutMs = 3000) {
-    if (!activeProcess) return Promise.resolve();
-    return new Promise(resolve => {
-        const check = setInterval(() => {
-            if (!activeProcess) { clearInterval(check); resolve(); }
-        }, 100);
-        setTimeout(() => { clearInterval(check); resolve(); }, timeoutMs);
-    });
-}
-
-async function steerAgent(newPrompt, source) {
-    const wasRunning = killActiveAgent('steer');
-    if (wasRunning) await waitForProcessEnd(3000);
-    insertMessage.run('user', newPrompt, source, '');
-    broadcast('new_message', { role: 'user', content: newPrompt, source });
-    orchestrate(newPrompt);
-}
-
-// Phase 12.1.5: Message Queue
-const messageQueue = [];
-
-function enqueueMessage(prompt, source) {
-    messageQueue.push({ prompt, source, ts: Date.now() });
-    console.log(`[queue] +1 (${messageQueue.length} pending)`);
-    broadcast('queue_update', { pending: messageQueue.length });
-}
-
-function processQueue() {
-    if (activeProcess || messageQueue.length === 0) return;
-    const batched = messageQueue.splice(0);
-    const combined = batched.length === 1
-        ? batched[0].prompt
-        : batched.map(m => m.prompt).join('\n\n---\n\n');
-    const source = batched[batched.length - 1].source;
-    console.log(`[queue] processing ${batched.length} queued message(s)`);
-    insertMessage.run('user', combined, source, '');
-    broadcast('new_message', { role: 'user', content: combined, source });
-    broadcast('queue_update', { pending: 0 });
-    orchestrate(combined);
-}
-
-function makeCleanEnv() {
-    const env = { ...process.env };
-    delete env.CLAUDE_CODE_SSE_PORT;
-    delete env.GEMINI_SYSTEM_MD;  // Clean slate, set per-spawn
-    return env;
-}
-
-function buildArgs(cli, model, effort, prompt, sysPrompt) {
-    switch (cli) {
-        case 'claude':
-            return ['--print', '--verbose', '--output-format', 'stream-json',
-                '--dangerously-skip-permissions',
-                '--max-turns', '50',
-                ...(model && model !== 'default' ? ['--model', model] : []),
-                ...(effort && effort !== 'medium' ? ['--effort', effort] : []),
-                ...(sysPrompt ? ['--append-system-prompt', sysPrompt] : [])];
-        case 'codex':
-            return ['exec',
-                ...(model && model !== 'default' ? ['-m', model] : []),
-                ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []),
-                '--dangerously-bypass-approvals-and-sandbox', '--skip-git-repo-check', '--json'];
-        case 'gemini': {
-            return ['-p', prompt || '',
-                ...(model && model !== 'default' ? ['-m', model] : []),
-                '-y', '-o', 'stream-json'];
-        }
-        case 'opencode':
-            return ['run',
-                ...(model && model !== 'default' ? ['-m', model] : []),
-                ...(effort ? ['--variant', effort] : []),
-                '--format', 'json',
-                prompt || ''];
-        default:
-            return [];
-    }
-}
-
-function buildResumeArgs(cli, model, effort, sessionId, prompt) {
-    switch (cli) {
-        case 'claude':
-            return ['--print', '--verbose', '--output-format', 'stream-json',
-                '--dangerously-skip-permissions',
-                '--resume', sessionId,
-                '--max-turns', '50',
-                ...(model && model !== 'default' ? ['--model', model] : []),
-                ...(effort && effort !== 'medium' ? ['--effort', effort] : [])];
-        case 'codex':
-            return ['exec', 'resume',
-                ...(model && model !== 'default' ? ['--model', model] : []),
-                '--dangerously-bypass-approvals-and-sandbox', '--skip-git-repo-check',
-                sessionId, prompt || '', '--json'];
-        case 'gemini':
-            return ['--resume', sessionId,
-                '-p', prompt || '',
-                ...(model && model !== 'default' ? ['-m', model] : []),
-                '-y', '-o', 'stream-json'];
-        case 'opencode':
-            return ['run', '-s', sessionId,
-                ...(model && model !== 'default' ? ['-m', model] : []),
-                ...(effort ? ['--variant', effort] : []),
-                '--format', 'json',
-                prompt || ''];
-        default:
-            return [];
-    }
-}
-
-function spawnAgent(prompt, opts = {}) {
-    const { forceNew = false, agentId, sysPrompt: customSysPrompt } = opts;
-
-    if (activeProcess && !forceNew) {
-        console.log('[claw] Agent already running, skipping');
-        return { child: null, promise: Promise.resolve({ text: '', code: -1 }) };
-    }
-
-    let resolve;
-    const resultPromise = new Promise(r => { resolve = r; });
-
-    const session = getSession();
-    const cli = opts.cli || session.active_cli || settings.cli;
-    const cfg = settings.perCli?.[cli] || {};
-    const model = opts.model || cfg.model || 'default';
-    const effort = opts.effort || cfg.effort || '';
-
-    // Resolve system prompt — sub-agents get only their own role prompt
-    const sysPrompt = customSysPrompt || getSystemPrompt();
-
-    // Resume: only for main agent (not forceNew)
-    const isResume = !forceNew && session.session_id && session.active_cli === cli;
-    let args;
-    if (isResume) {
-        console.log(`[claw:resume] ${cli} session=${session.session_id.slice(0, 12)}...`);
-        args = buildResumeArgs(cli, model, effort, session.session_id, prompt);
-    } else {
-        args = buildArgs(cli, model, effort, prompt, sysPrompt);
-    }
-
-    const agentLabel = agentId || 'main';
-    console.log(`[claw:${agentLabel}] Spawning: ${cli} ${args.join(' ').slice(0, 120)}...`);
-
-    const spawnEnv = makeCleanEnv();
-
-    // Gemini: system prompt via GEMINI_SYSTEM_MD env var (file path)
-    if (cli === 'gemini' && sysPrompt) {
-        const tmpSysFile = join(os.tmpdir(), `claw-gemini-sys-${agentLabel}.md`);
-        fs.writeFileSync(tmpSysFile, sysPrompt);
-        spawnEnv.GEMINI_SYSTEM_MD = tmpSysFile;
-    }
-
-    const child = spawn(cli, args, {
-        cwd: settings.workingDir,
-        env: spawnEnv,
-        stdio: ['pipe', 'pipe', 'pipe'],
-    });
-    if (!forceNew) activeProcess = child;
-    broadcast('agent_status', { running: true, agentId: agentLabel, cli });
-
-    // User message — only for main agent (not forceNew, not internal)
-    if (!forceNew && !opts.internal) {
-        insertMessage.run('user', prompt, cli, model);
-    }
-
-    // Stdin: system prompt + recent messages + user message
-    // Skip for: gemini (stdin = visible user msg), codex resume (already has context), opencode (prompt in args)
-    const skipStdin = cli === 'gemini' || cli === 'opencode' || (cli === 'codex' && isResume);
-    if (!skipStdin) {
-        const sysPrompt = customSysPrompt || getSystemPrompt();
-        let stdinContent = `[Claw Platform Context]\n${sysPrompt}`;
-
-        // Include recent message history for context (non-resume, non-forceNew)
-        if (!isResume && !forceNew) {
-            const recent = getRecentMessages.all(5).reverse();
-            if (recent.length > 0) {
-                const history = recent.map(m => `[${m.role}] ${m.content}`).join('\n\n');
-                stdinContent += `\n\n[Recent History]\n${history}`;
-            }
-        }
-
-        stdinContent += `\n\n[User Message]\n${prompt}`;
-        child.stdin.write(stdinContent);
-    }
-    child.stdin.end();
-
-    // Broadcast
-    broadcast('agent_status', { status: 'running', cli, agentId: agentLabel });
-
-    const ctx = { fullText: '', toolLog: [], sessionId: null, cost: null, turns: null, duration: null, tokens: null, stderrBuf: '' };
-    let buffer = '';
-
-    child.stdout.on('data', (chunk) => {
-        buffer += chunk.toString();
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-
-        for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-                const event = JSON.parse(line);
-                console.log(`[claw:event:${agentLabel}] ${cli} type=${event.type}`);
-                console.log(`[claw:raw:${agentLabel}] ${line.slice(0, 300)}`);
-                if (!ctx.sessionId) ctx.sessionId = extractSessionId(cli, event);
-                extractFromEvent(cli, event, ctx, agentLabel);
-            } catch { /* non-JSON line */ }
-        }
-    });
-
-    child.stderr.on('data', (chunk) => {
-        const text = chunk.toString().trim();
-        console.error(`[claw:stderr:${agentLabel}] ${text}`);
-        ctx.stderrBuf += text + '\n';
-    });
-
-    child.on('close', (code) => {
-        if (!forceNew) {
-            activeProcess = null;
-            broadcast('agent_status', { running: false, agentId: agentLabel });
-        }
-
-        // Save session for resume — only main agent
-        if (!forceNew && ctx.sessionId && code === 0) {
-            updateSession.run(cli, ctx.sessionId, model, settings.permissions, settings.workingDir, cfg.effort || 'medium');
-            console.log(`[claw:session] saved ${cli} session=${ctx.sessionId.slice(0, 12)}...`);
-        }
-
-        if (ctx.fullText.trim()) {
-            const costParts = [];
-            if (ctx.cost != null) costParts.push(`$${Number(ctx.cost).toFixed(4)}`);
-            if (ctx.turns) costParts.push(`${ctx.turns}턴`);
-            if (ctx.duration) costParts.push(`${(ctx.duration / 1000).toFixed(1)}s`);
-            const costLine = costParts.length ? `\n\n✅ ${costParts.join(' · ')}` : '';
-            // Strip JSON subtask blocks from display/storage
-            const stripped = stripSubtaskJSON(ctx.fullText);
-            const displayText = stripped || ctx.fullText.trim();
-            const finalContent = displayText + costLine;
-
-            if (!forceNew && !opts.internal) {
-                insertMessage.run('assistant', finalContent, cli, model);
-                broadcast('agent_done', { text: finalContent, toolLog: ctx.toolLog });
-
-                // Phase 11: Memory flush counter
-                memoryFlushCounter++;
-                const threshold = settings.memory?.flushEvery ?? 20;
-                if (settings.memory?.enabled !== false && memoryFlushCounter >= threshold) {
-                    memoryFlushCounter = 0;
-                    triggerMemoryFlush();
-                }
-            }
-        } else if (!forceNew && code !== 0) {
-            let errMsg = `CLI 실행 실패 (exit ${code})`;
-            if (ctx.stderrBuf.includes('429') || ctx.stderrBuf.includes('RESOURCE_EXHAUSTED')) {
-                errMsg = '⚡ API 용량 초과 (429) — 잠시 후 다시 시도해주세요';
-            } else if (ctx.stderrBuf.includes('auth') || ctx.stderrBuf.includes('credentials')) {
-                errMsg = '🔐 인증 오류 — CLI 로그인 상태를 확인해주세요';
-            } else if (ctx.stderrBuf.trim()) {
-                errMsg = ctx.stderrBuf.trim().slice(0, 200);
-            }
-            broadcast('agent_done', { text: `❌ ${errMsg}`, error: true });
-        }
-
-        broadcast('agent_status', { status: code === 0 ? 'done' : 'error', agentId: agentLabel });
-        console.log(`[claw:${agentLabel}] exited code=${code}, text=${ctx.fullText.length} chars`);
-
-        resolve({ text: ctx.fullText, code, sessionId: ctx.sessionId, cost: ctx.cost, tools: ctx.toolLog });
-
-        // Phase 12.1.5: Process queued messages after agent finishes
-        if (!forceNew) processQueue();
-    });
-
-    return { child, promise: resultPromise };
-}
-
-// ─── Phase 11: Memory Flush ─────────────────────────
-
-function triggerMemoryFlush() {
-    const memDir = getMemoryDir();
-    const recent = getRecentMessages.all(40).reverse(); // fetch extra, will trim by budget
-    if (recent.length < 4) return; // too few messages to summarize
-
-    // Build conversation with ~5000 token budget (~16000 chars)
-    const CHAR_BUDGET = 16000;
-    let charCount = 0;
-    const lines = [];
-    for (const m of recent) {
-        const line = `[${m.role}] ${m.content.slice(0, 800)}`;
-        if (charCount + line.length > CHAR_BUDGET) break;
-        lines.push(line);
-        charCount += line.length;
-    }
-    const convo = lines.join('\n\n');
-    const date = new Date().toISOString().slice(0, 10);
-    const time = new Date().toTimeString().slice(0, 5);
-    const memFile = join(memDir, `${date}.md`);
-
-    const flushPrompt = `You are a conversation memory extractor.
-Summarize the conversation below into ENGLISH structured memory entries.
-Save by APPENDING to this file: ${memFile}
-Create the file and any parent directories if they don't exist.
-
-Rules:
-- Output 2-5 bullet points, each 1 English sentence
-- Skip greetings, small talk, errors — only decisions, facts, preferences, project info
-- If nothing worth remembering, do NOT write any file and reply "SKIP"
-- Use this EXACT format when writing:
-
-## ${time} — Memory Flush
-
-- [topic]: fact or decision
-- [topic]: fact or decision
-
-Conversation to summarize:
----
-${convo}`;
-
-    fs.mkdirSync(memDir, { recursive: true });
-
-    const flushCli = settings.memory?.cli || settings.cli;
-    const flushModel = settings.memory?.model || (settings.perCli?.[flushCli]?.model) || 'default';
-
-    spawnAgent(flushPrompt, {
-        forceNew: true,
-        internal: true,
-        agentId: 'memory-flush',
-        cli: flushCli,
-        model: flushModel,
-        sysPrompt: '',  // system prompt independent
-    });
-    console.log(`[memory] flush triggered (${recent.length} msgs → ${flushCli}/${flushModel})`);
-}
-
-// ─── Phase 10: Media Upload (lib/upload.js) ─────────
-// Bind UPLOADS_DIR so callers don't need to pass it
-const saveUpload = (buffer, originalName) => _saveUpload(UPLOADS_DIR, buffer, originalName);
-
-// ─── Event Extraction (ported from claw-lite) ────────
-
-function extractSessionId(cli, event) {
-    switch (cli) {
-        case 'claude': return event.type === 'system' ? event.session_id : null;
-        case 'codex': return event.type === 'thread.started' ? event.thread_id : null;
-        case 'gemini': return event.type === 'init' ? event.session_id : null;
-        case 'opencode': return event.sessionID || null;
-        default: return null;
-    }
-}
-
-function extractFromEvent(cli, event, ctx, agentLabel) {
-    // Generic tool/reasoning label extraction + broadcast
-    const toolLabel = extractToolLabel(cli, event);
-    if (toolLabel) {
-        ctx.toolLog.push(toolLabel);
-        broadcast('agent_tool', { agentId: agentLabel, ...toolLabel });
-    }
-
-    switch (cli) {
-        case 'claude':
-            if (event.type === 'assistant' && event.message?.content) {
-                for (const block of event.message.content) {
-                    if (block.type === 'text') {
-                        ctx.fullText += block.text;
-                    }
-                    // tool_use already handled by extractToolLabel
-                }
-            } else if (event.type === 'result') {
-                ctx.cost = event.total_cost_usd;
-                ctx.turns = event.num_turns;
-                ctx.duration = event.duration_ms;
-                if (event.session_id) ctx.sessionId = event.session_id;
-            }
-            break;
-        case 'codex':
-            if (event.type === 'item.completed') {
-                if (event.item?.type === 'agent_message') {
-                    ctx.fullText += event.item.text || '';
-                }
-                // command_execution, web_search, reasoning handled by extractToolLabel
-            } else if (event.type === 'turn.completed' && event.usage) {
-                ctx.tokens = event.usage;
-            }
-            break;
-        case 'gemini':
-            if (event.type === 'message' && event.role === 'assistant') {
-                ctx.fullText += event.content || '';
-            } else if (event.type === 'result') {
-                ctx.duration = event.stats?.duration_ms;
-                ctx.turns = event.stats?.tool_calls;
-            }
-            // tool_use/tool_result handled by extractToolLabel
-            break;
-        case 'opencode':
-            if (event.type === 'text' && event.part?.text) {
-                ctx.fullText += event.part.text;
-            } else if (event.type === 'step_finish' && event.part) {
-                ctx.sessionId = event.sessionID;
-                if (event.part.tokens) {
-                    ctx.tokens = { input_tokens: event.part.tokens.input, output_tokens: event.part.tokens.output };
-                }
-                if (event.part.cost) ctx.cost = event.part.cost;
-            }
-            // tool_use handled by extractToolLabel
-            break;
-    }
-}
-
-function extractToolLabel(cli, event) {
-    const item = event.item || event.part || event;
-    const type = item?.type || event.type;
-
-    // Codex events
-    if (cli === 'codex' && event.type === 'item.completed' && item) {
-        if (item.type === 'web_search') {
-            const action = item.action?.type || '';
-            if (action === 'search') return { icon: '🔍', label: (item.query || item.action?.query || 'search').slice(0, 60) };
-            if (action === 'open_page') { try { return { icon: '🌐', label: new URL(item.action.url).hostname }; } catch { return { icon: '🌐', label: 'page' }; } }
-            return { icon: '🔍', label: (item.query || 'web').slice(0, 60) };
-        }
-        if (item.type === 'reasoning') return { icon: '💭', label: (item.text || '').replace(/\*+/g, '').trim().slice(0, 60) };
-        if (item.type === 'command_execution') return { icon: '⚡', label: (item.command || 'exec').slice(0, 40) };
-    }
-
-    // Claude events
-    if (cli === 'claude' && event.type === 'assistant' && event.message?.content) {
-        for (const block of event.message.content) {
-            if (block.type === 'tool_use') return { icon: '🔧', label: block.name };
-            if (block.type === 'thinking') return { icon: '💭', label: (block.thinking || '').slice(0, 60) };
-        }
-    }
-
-    // Gemini events
-    if (cli === 'gemini') {
-        if (event.type === 'tool_use') return { icon: '🔧', label: `${event.tool_name || 'tool'}${event.parameters?.command ? ': ' + event.parameters.command.slice(0, 40) : ''}` };
-        if (event.type === 'tool_result') return { icon: event.status === 'success' ? '✅' : '❌', label: `${event.status || 'done'}` };
-    }
-
-    // OpenCode events
-    if (cli === 'opencode') {
-        if (event.type === 'tool_use' && event.part) return { icon: '🔧', label: event.part.tool || 'tool' };
-    }
-
-    return null;
-}
-
-// ─── Orchestration (Phase 5) ─────────────────────────
-
-const MAX_ROUNDS = 3;
-
-function parseSubtasks(text) {
-    if (!text) return null;
-    // Try fenced code block first
-    const fenced = text.match(/```json\n([\s\S]*?)\n```/);
-    if (fenced) {
-        try { return JSON.parse(fenced[1]).subtasks || null; } catch { }
-    }
-    // Fallback: raw JSON object with "subtasks" key
-    const raw = text.match(/(\{[\s\S]*"subtasks"\s*:\s*\[[\s\S]*\]\s*\})/);
-    if (raw) {
-        try { return JSON.parse(raw[1]).subtasks || null; } catch { }
-    }
-    return null;
-}
-
-function stripSubtaskJSON(text) {
-    return text
-        .replace(/```json\n[\s\S]*?\n```/g, '')  // fenced
-        .replace(/\{[\s\S]*"subtasks"\s*:\s*\[[\s\S]*?\]\s*\}/g, '')  // raw
-        .trim();
-}
-
-async function distributeAndWait(subtasks) {
-    const emps = getEmployees.all();
-    const results = [];
-
-    const promises = subtasks.map(st => {
-        const target = (st.agent || '').trim();
-        const emp = emps.find(e =>
-            e.name === target || e.name?.includes(target) || target.includes(e.name)
-        );
-        console.log(`[distribute] matching "${target}" → ${emp ? emp.name : 'NOT FOUND'}`);
-
-        if (!emp) {
-            results.push({ name: target, status: 'skipped', text: 'Agent not found' });
-            return Promise.resolve();
-        }
-
-        const sysPrompt = `당신은 "${emp.name}" 입니다.
-역할: ${emp.role || '범용 개발자'}
-
-## 규칙
-- 주어진 작업을 직접 실행하고 결과를 보고하세요
-- JSON subtask 출력 금지 (당신은 실행자이지 기획자가 아닙니다)
-- 작업 결과를 자연어로 간결하게 보고하세요
-- 사용자 언어로 응답하세요`;
-        broadcast('agent_status', { agentId: emp.id, agentName: emp.name, status: 'running', cli: emp.cli });
-
-        const { promise } = spawnAgent(`## 작업 지시\n${st.task}`, {
-            agentId: emp.id, cli: emp.cli, model: emp.model,
-            forceNew: true, sysPrompt,
-        });
-
-        return promise.then(r => {
-            results.push({ name: emp.name, id: emp.id, status: r.code === 0 ? 'done' : 'error', text: r.text || '' });
-            broadcast('agent_status', { agentId: emp.id, agentName: emp.name, status: r.code === 0 ? 'done' : 'error' });
-        });
-    });
-
-    await Promise.all(promises);
-    return results;
-}
-
-async function orchestrate(prompt) {
-    const employees = getEmployees.all();
-
-    // No employees → simple single-agent mode
-    if (employees.length === 0) {
-        const { promise } = spawnAgent(prompt);
-        const result = await promise;
-        // Phase 3: broadcast orchestrate_done for Telegram
-        const stripped = stripSubtaskJSON(result.text);
-        broadcast('orchestrate_done', { text: stripped || result.text || '' });
-        return;
-    }
-
-    // Phase 12: Active CLI = Planning CLI (perCli defaults)
-    const planOpts = { agentId: 'planning' };
-
-    // Round 1: Planning Agent
-    broadcast('agent_status', { agentId: 'planning', agentName: '🎯 기획', status: 'running' });
-    const { promise: p1 } = spawnAgent(prompt, planOpts);
-    const r1 = await p1;
-
-    let subtasks = parseSubtasks(r1.text);
-    if (!subtasks?.length) {
-        // Direct answer, no subtasks — broadcast for Telegram
-        const stripped = stripSubtaskJSON(r1.text);
-        broadcast('orchestrate_done', { text: stripped || r1.text || '' });
-        return;
-    }
-
-    let round = 1;
-    let lastResults = [];
-    while (round <= MAX_ROUNDS) {
-        console.log(`[orchestrate] round ${round}, ${subtasks.length} subtasks`);
-        broadcast('round_start', { round, subtasks });
-
-        // Distribute to sub-agents
-        const results = await distributeAndWait(subtasks);
-        lastResults = results;
-
-        // Report results to Planning Agent via resume session (5.11: keeps context for follow-up)
-        const report = results.map(r =>
-            `- ${r.name}: ${r.status === 'done' ? '✅ 완료' : '❌ 실패'}\n  응답: ${r.text.slice(0, 300)}`
-        ).join('\n');
-        const reportPrompt = `## 결과 보고 (라운드 ${round})\n${report}\n\n## 평가 기준\n- sub-agent가 응답을 보고했으면 → 완료로 판정\n- 단순 질문/인사 작업은 응답 자체가 성공적 결과입니다\n- 코드 작업은 실행 결과가 있으면 완료\n\n## 판정\n- **완료**: 사용자에게 보여줄 자연어 요약을 작성하세요. JSON 출력 절대 금지.\n- **미완료**: 구체적 사유를 밝히고 JSON subtasks를 다시 출력하세요.`;
-
-        broadcast('agent_status', { agentId: 'planning', agentName: '🎯 기획', status: 'evaluating' });
-        const { promise: evalP } = spawnAgent(reportPrompt, { ...planOpts, internal: true });
-        const evalR = await evalP;
-
-        subtasks = parseSubtasks(evalR.text);
-        if (!subtasks?.length) {
-            // Final evaluation — save as assistant message and broadcast
-            const stripped = stripSubtaskJSON(evalR.text);
-            if (stripped) {
-                insertMessage.run('assistant', stripped, 'orchestrator', '');
-                broadcast('agent_done', { text: stripped });
-            }
-            broadcast('round_done', { round, action: 'complete' });
-            broadcast('agent_status', { agentId: 'planning', status: 'idle' });
-            // Phase 3: orchestrate_done for Telegram
-            broadcast('orchestrate_done', { text: stripped || '' });
-            break;
-        }
-        broadcast('round_done', { round, action: 'retry' });
-        round++;
-    }
-
-    // Fallback: MAX_ROUNDS exceeded — show last results
-    if (round > MAX_ROUNDS) {
-        const fallback = '⚠️ 최대 라운드(' + MAX_ROUNDS + ')에 도달했습니다.\n\n' +
-            lastResults.map(r => `**${r.name}**: ${r.text.slice(0, 300)}`).join('\n\n');
-        insertMessage.run('assistant', fallback, 'orchestrator', '');
-        broadcast('agent_done', { text: fallback });
-        broadcast('agent_status', { agentId: 'planning', status: 'idle' });
-        // Phase 3: orchestrate_done for Telegram
-        broadcast('orchestrate_done', { text: fallback });
-    }
-}
+// ─── Express + WebSocket ─────────────────────────────
 
 const app = express();
 const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
+setWss(wss);
 app.use(express.json());
 app.use(express.static(join(__dirname, 'public')));
 
-// WebSocket + internal broadcast
-const broadcastListeners = new Set();
-function addBroadcastListener(fn) { broadcastListeners.add(fn); }
-function removeBroadcastListener(fn) { broadcastListeners.delete(fn); }
-
-function broadcast(type, data) {
-    const msg = JSON.stringify({ type, ...data, ts: Date.now() });
-    wss.clients.forEach(c => { if (c.readyState === 1) c.send(msg); });
-    for (const fn of broadcastListeners) fn(type, data);
-}
-
-// WebSocket incoming messages (for CLI chat)
+// WebSocket incoming messages
 wss.on('connection', (ws) => {
-    // Phase 12.1.8: Send current state on connect (page refresh support)
     if (activeProcess) {
         ws.send(JSON.stringify({ type: 'agent_status', status: 'running', agentId: 'active' }));
     }
@@ -1139,7 +179,6 @@ wss.on('connection', (ws) => {
             if (msg.type === 'send_message' && msg.text) {
                 console.log(`[ws:in] ${msg.text.slice(0, 80)}`);
                 if (activeProcess) {
-                    // Phase 12.1.5: Queue instead of blocking
                     enqueueMessage(msg.text, 'cli');
                 } else {
                     insertMessage.run('user', msg.text, 'cli', '');
@@ -1147,27 +186,20 @@ wss.on('connection', (ws) => {
                     orchestrate(msg.text);
                 }
             }
-            if (msg.type === 'stop') {
-                killActiveAgent('ws');
-            }
+            if (msg.type === 'stop') killActiveAgent('ws');
         } catch { }
     });
 });
 
 // ─── API Routes ──────────────────────────────────────
 
-// Session
 app.get('/api/session', (_, res) => res.json(getSession()));
-
-// Messages
 app.get('/api/messages', (_, res) => res.json(getMessages.all()));
 
-// Send message
 app.post('/api/message', (req, res) => {
     const { prompt } = req.body;
     if (!prompt?.trim()) return res.status(400).json({ error: 'prompt required' });
     if (activeProcess) {
-        // Phase 12.1.5: Queue instead of 409
         enqueueMessage(prompt.trim(), 'web');
         return res.json({ ok: true, queued: true, pending: messageQueue.length });
     }
@@ -1175,13 +207,11 @@ app.post('/api/message', (req, res) => {
     res.json({ ok: true });
 });
 
-// Phase 12.1.2: Stop agent
 app.post('/api/stop', (req, res) => {
     const killed = killActiveAgent('api');
     res.json({ ok: true, killed });
 });
 
-// Clear (messages only, memory preserved)
 app.post('/api/clear', (_, res) => {
     clearMessages.run();
     const session = getSession();
@@ -1194,36 +224,24 @@ app.post('/api/clear', (_, res) => {
 app.get('/api/settings', (_, res) => res.json(settings));
 app.put('/api/settings', (req, res) => {
     const prevCli = settings.cli;
-    const hasTelegramUpdate = !!req.body.telegram; // 6.6: capture before deep merge deletes it
-
-    // Deep merge for nested objects
+    const hasTelegramUpdate = !!req.body.telegram;
     for (const key of ['perCli', 'heartbeat', 'telegram', 'memory']) {
         if (req.body[key] && typeof req.body[key] === 'object') {
             settings[key] = { ...settings[key], ...req.body[key] };
             delete req.body[key];
         }
     }
-    settings = { ...settings, ...req.body };
+    replaceSettings({ ...settings, ...req.body });
     saveSettings(settings);
-
     const session = getSession();
     const activeModel = settings.perCli?.[settings.cli]?.model || 'default';
     const activeEffort = settings.perCli?.[settings.cli]?.effort || 'medium';
-
-    // 5.9: CLI changed → invalidate session (can't resume cross-CLI)
     const sessionId = (settings.cli !== prevCli) ? null : session.session_id;
     if (settings.cli !== prevCli && session.session_id) {
         console.log(`[claw:session] invalidated — CLI changed ${prevCli} → ${settings.cli}`);
     }
-
-    updateSession.run(
-        settings.cli, sessionId, activeModel,
-        settings.permissions, settings.workingDir, activeEffort
-    );
-
-    // 6.6: Reinit telegram if settings changed
+    updateSession.run(settings.cli, sessionId, activeModel, settings.permissions, settings.workingDir, activeEffort);
     if (hasTelegramUpdate) initTelegram();
-
     res.json(settings);
 });
 
@@ -1252,7 +270,7 @@ app.put('/api/heartbeat-md', (req, res) => {
     res.json({ ok: true });
 });
 
-// Memory (legacy key-value)
+// Memory (key-value)
 app.get('/api/memory', (_, res) => res.json(getMemory.all()));
 app.post('/api/memory', (req, res) => {
     const { key, value, source = 'manual' } = req.body;
@@ -1265,7 +283,7 @@ app.delete('/api/memory/:key', (req, res) => {
     res.json({ ok: true });
 });
 
-// Phase 11: Memory files (Claude native memory path)
+// Memory files (Claude native)
 app.get('/api/memory-files', (_, res) => {
     const memDir = getMemoryDir();
     let files = [];
@@ -1282,56 +300,46 @@ app.get('/api/memory-files', (_, res) => {
         cli: settings.memory?.cli || '',
         model: settings.memory?.model || '',
         retentionDays: settings.memory?.retentionDays ?? 30,
-        path: memDir,
-        files,
+        path: memDir, files,
         counter: memoryFlushCounter,
     });
 });
-
 app.get('/api/memory-files/:filename', (req, res) => {
     const fp = join(getMemoryDir(), req.params.filename);
     if (!fp.endsWith('.md') || !fs.existsSync(fp)) return res.status(404).json({ error: 'not found' });
     res.json({ name: req.params.filename, content: fs.readFileSync(fp, 'utf8') });
 });
-
 app.delete('/api/memory-files/:filename', (req, res) => {
     const fp = join(getMemoryDir(), req.params.filename);
     if (fp.endsWith('.md') && fs.existsSync(fp)) fs.unlinkSync(fp);
     res.json({ ok: true });
 });
-
 app.put('/api/memory-files/settings', (req, res) => {
     settings.memory = { ...settings.memory, ...req.body };
     saveSettings(settings);
     res.json({ ok: true });
 });
 
-// Phase 10: File upload
+// File upload
 app.post('/api/upload', express.raw({ type: '*/*', limit: '20mb' }), (req, res) => {
     const filename = req.headers['x-filename'] || 'upload.bin';
     const filePath = saveUpload(req.body, filename);
     res.json({ path: filePath, filename: basename(filePath) });
 });
 
-// Phase 12.1: MCP config API
-app.get('/api/mcp', (req, res) => {
-    res.json(loadUnifiedMcp());
-});
-
+// MCP
+app.get('/api/mcp', (req, res) => res.json(loadUnifiedMcp()));
 app.put('/api/mcp', (req, res) => {
     const config = req.body;
     if (!config || !config.servers) return res.status(400).json({ error: 'servers object required' });
     saveUnifiedMcp(config);
     res.json({ ok: true, servers: Object.keys(config.servers) });
 });
-
 app.post('/api/mcp/sync', (req, res) => {
     const config = loadUnifiedMcp();
     const results = syncToAll(config, settings.workingDir);
     res.json({ ok: true, results });
 });
-
-// Phase 12.1.3: Install MCP servers globally
 app.post('/api/mcp/install', async (req, res) => {
     try {
         const config = loadUnifiedMcp();
@@ -1346,10 +354,8 @@ app.post('/api/mcp/install', async (req, res) => {
     }
 });
 
-// CLI detection
+// CLI & Quota
 app.get('/api/cli-status', (_, res) => res.json(detectAllCli()));
-
-// Quota (ported from claw-lite)
 app.get('/api/quota', async (_, res) => {
     const [claude, codex] = await Promise.all([
         fetchClaudeUsage(readClaudeCreds()),
@@ -1359,7 +365,7 @@ app.get('/api/quota', async (_, res) => {
     res.json({ claude, codex, gemini, opencode: null });
 });
 
-// Employees (sub-agents)
+// Employees
 app.get('/api/employees', (_, res) => res.json(getEmployees.all()));
 app.post('/api/employees', (req, res) => {
     const id = crypto.randomUUID();
@@ -1367,7 +373,7 @@ app.post('/api/employees', (req, res) => {
     insertEmployee.run(id, name, cli, model, role);
     const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(id);
     broadcast('agent_added', emp);
-    regenerateB();  // Update B.md with new employee
+    regenerateB();
     res.json(emp);
 });
 app.put('/api/employees/:id', (req, res) => {
@@ -1379,388 +385,71 @@ app.put('/api/employees/:id', (req, res) => {
     db.prepare(`UPDATE employees SET ${sets.join(', ')} WHERE id = ?`).run(...vals, req.params.id);
     const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);
     broadcast('agent_updated', emp);
-    regenerateB();  // Update B.md with modified employee
+    regenerateB();
     res.json(emp);
 });
 app.delete('/api/employees/:id', (req, res) => {
     deleteEmployee.run(req.params.id);
     broadcast('agent_deleted', { id: req.params.id });
-    regenerateB();  // Update B.md without deleted employee
+    regenerateB();
     res.json({ ok: true });
 });
 
-// ─── Telegram Bot (Phase 6) ──────────────────────────
-
-function escapeHtmlTg(text) {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function markdownToTelegramHtml(md) {
-    if (!md) return '';
-    let html = escapeHtmlTg(md);
-    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
-    html = html.replace(/(?<![*])\*(?![*])(.+?)(?<![*])\*(?![*])/g, '<i>$1</i>');
-    html = html.replace(/~~(.+?)~~/g, '<s>$1</s>');
-    return html;
-}
-
-function chunkTelegramMessage(text, limit = 4096) {
-    if (text.length <= limit) return [text];
-    const chunks = [];
-    let remaining = text;
-    while (remaining.length > 0) {
-        if (remaining.length <= limit) { chunks.push(remaining); break; }
-        let splitAt = remaining.lastIndexOf('\n', limit);
-        if (splitAt < limit * 0.3) splitAt = limit;
-        chunks.push(remaining.slice(0, splitAt));
-        remaining = remaining.slice(splitAt);
-    }
-    return chunks;
-}
-
-function orchestrateAndCollect(prompt) {
-    return new Promise((resolve) => {
-        let collected = '';
-        let timeout;
-        const IDLE_TIMEOUT = 120000;  // 2분 *무응답* 타임아웃
-
-        function resetTimeout() {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => {
-                removeBroadcastListener(handler);
-                resolve(collected || '⏰ 시간 초과 (2분 무응답)');
-            }, IDLE_TIMEOUT);
-        }
-
-        const handler = (type, data) => {
-            // JSON 이벤트 수신 → 타임아웃 리셋 (에이전트가 살아있음)
-            if (type === 'agent_chunk' || type === 'agent_tool' ||
-                type === 'agent_output' || type === 'agent_status' ||
-                type === 'agent_done' || type === 'round_start' || type === 'round_done') {
-                resetTimeout();
-            }
-            if (type === 'agent_output') collected += data.text || '';
-            // Phase 3: orchestrate_done = 전체 orchestration 완료 (최종 응답만 수신)
-            if (type === 'orchestrate_done') {
-                clearTimeout(timeout);
-                removeBroadcastListener(handler);
-                resolve(data.text || collected || '응답 없음');
-            }
-        };
-        addBroadcastListener(handler);
-        orchestrate(prompt).catch(err => {
-            clearTimeout(timeout);
-            removeBroadcastListener(handler);
-            resolve(`❌ ${err.message}`);
-        });
-        resetTimeout();
-    });
-}
-
-let telegramBot = null;
-const telegramActiveChatIds = new Set();  // auto-tracked from incoming messages
-
-function initTelegram() {
-    if (telegramBot) {
-        const old = telegramBot;
-        telegramBot = null;
-        try { old.stop(); } catch { }
-    }
-    if (!settings.telegram?.enabled || !settings.telegram?.token) {
-        console.log('[tg] Telegram disabled or no token');
-        return;
-    }
-
-    // Node 22: native fetch (undici) ignores autoSelectFamily and fails on IPv6-broken networks
-    // Only https.get({family:4}) works. Build a minimal fetch wrapper for grammy.
-    // Ref: openclaw-ref/src/telegram/fetch.ts, nodejs/node#54359
-    const ipv4Agent = new https.Agent({ family: 4 });
-    const ipv4Fetch = (url, init = {}) => {
-        return new Promise((resolve, reject) => {
-            const u = new URL(url);
-            const opts = {
-                hostname: u.hostname, port: u.port || 443, path: u.pathname + u.search,
-                method: init.method || 'GET', agent: ipv4Agent,
-                headers: init.headers instanceof Headers ? Object.fromEntries(init.headers) : (init.headers || {}),
-            };
-            const req = https.request(opts, (res) => {
-                let data = '';
-                res.on('data', c => data += c);
-                res.on('end', () => resolve({
-                    ok: res.statusCode >= 200 && res.statusCode < 300,
-                    status: res.statusCode,
-                    json: () => Promise.resolve(JSON.parse(data)),
-                    text: () => Promise.resolve(data),
-                }));
-            });
-            req.on('error', reject);
-            if (init.body) req.write(typeof init.body === 'string' ? init.body : JSON.stringify(init.body));
-            req.end();
-        });
-    };
-
-    const bot = new Bot(settings.telegram.token, {
-        client: { fetch: ipv4Fetch },
-    });
-    bot.catch((err) => console.error('[tg:error]', err.message || err));
-    bot.use(sequentialize((ctx) => `tg:${ctx.chat?.id || 'unknown'}`));
-
-    // Debug: log all incoming updates
-    bot.use(async (ctx, next) => {
-        console.log(`[tg:update] chat=${ctx.chat?.id} text=${(ctx.message?.text || '').slice(0, 40)}`);
-        await next();
-    });
-
-    // Allowlist
-    bot.use(async (ctx, next) => {
-        const allowed = settings.telegram.allowedChatIds;
-        if (allowed?.length > 0 && !allowed.includes(ctx.chat?.id)) {
-            console.log(`[tg:blocked] chatId=${ctx.chat?.id}`);
-            return;
-        }
-        await next();
-    });
-
-    bot.command('start', (ctx) => ctx.reply('🦞 Claw Agent 연결됨! 메시지를 보내면 AI 에이전트가 응답합니다.'));
-    bot.command('id', (ctx) => ctx.reply(`Chat ID: <code>${ctx.chat.id}</code>`, { parse_mode: 'HTML' }));
-
-    // Shared Telegram typing + orchestrate + reply helper (Phase 10 refactor)
-    async function tgOrchestrate(ctx, prompt, displayMsg) {
-        // Phase 12.1.2: Auto-steer — kill running agent before starting new
-        if (activeProcess) {
-            console.log('[tg:steer] killing active agent for new message');
-            killActiveAgent('telegram-steer');
-            await waitForProcessEnd(3000);
-        }
-
-        telegramActiveChatIds.add(ctx.chat.id);
-        insertMessage.run('user', displayMsg, 'telegram', '');
-        broadcast('new_message', { role: 'user', content: displayMsg, source: 'telegram' });
-
-        await ctx.replyWithChatAction('typing')
-            .then(() => console.log('[tg:typing] ✅ sent'))
-            .catch(e => console.log('[tg:typing] ❌', e.message));
-        const typingInterval = setInterval(() => {
-            ctx.replyWithChatAction('typing')
-                .then(() => console.log('[tg:typing] ✅ refresh'))
-                .catch(e => console.log('[tg:typing] ❌ refresh', e.message));
-        }, 4000);
-
-        // Phase 260223: Tool use display via editMessage
-        const showTools = settings.telegram?.showToolUse !== false;
-        let statusMsgId = null;
-        let toolLines = [];
-
-        const toolHandler = showTools ? (type, data) => {
-            if (type !== 'agent_tool' || !data.icon || !data.label) return;
-            const line = `${data.icon} ${data.label}`;
-            toolLines.push(line);
-            // Keep last 5 tools
-            const display = toolLines.slice(-5).join('\n');
-            if (!statusMsgId) {
-                ctx.reply(`🔄 ${display}`)
-                    .then(m => { statusMsgId = m.message_id; })
-                    .catch(() => { });
-            } else {
-                ctx.api.editMessageText(ctx.chat.id, statusMsgId, `🔄 ${display}`)
-                    .catch(() => { });
-            }
-        } : null;
-
-        if (toolHandler) addBroadcastListener(toolHandler);
-
-        try {
-            const result = await orchestrateAndCollect(prompt);
-            clearInterval(typingInterval);
-            if (toolHandler) removeBroadcastListener(toolHandler);
-
-            // Delete tool status message
-            if (statusMsgId) {
-                ctx.api.deleteMessage(ctx.chat.id, statusMsgId).catch(() => { });
-            }
-
-            const html = markdownToTelegramHtml(result);
-            const chunks = chunkTelegramMessage(html);
-            for (const chunk of chunks) {
-                try {
-                    await ctx.reply(chunk, { parse_mode: 'HTML' });
-                } catch {
-                    await ctx.reply(chunk.replace(/<[^>]+>/g, ''));
-                }
-            }
-            console.log(`[tg:out] ${ctx.chat.id}: ${result.slice(0, 80)}`);
-        } catch (err) {
-            clearInterval(typingInterval);
-            if (toolHandler) removeBroadcastListener(toolHandler);
-            if (statusMsgId) {
-                ctx.api.deleteMessage(ctx.chat.id, statusMsgId).catch(() => { });
-            }
-            console.error('[tg:error]', err);
-            await ctx.reply(`❌ Error: ${err.message}`);
-        }
-    }
-
-    bot.on('message:text', async (ctx) => {
-        const text = ctx.message.text;
-        if (text.startsWith('/')) return;
-        console.log(`[tg:in] ${ctx.chat.id}: ${text.slice(0, 80)}`);
-        tgOrchestrate(ctx, text, text);  // fire-and-forget (12.1.4)
-    });
-
-    // Phase 10: Telegram photo handler
-    bot.on('message:photo', async (ctx) => {
-        const photos = ctx.message.photo;
-        const largest = photos[photos.length - 1];
-        const caption = ctx.message.caption || '';
-        console.log(`[tg:photo] ${ctx.chat.id}: fileId=${largest.file_id.slice(0, 20)}... caption=${caption.slice(0, 40)}`);
-        try {
-            const { buffer, ext } = await downloadTelegramFile(largest.file_id, settings.telegram.token);
-            const filePath = saveUpload(buffer, `photo${ext}`);
-            const prompt = buildMediaPrompt(filePath, caption);
-            tgOrchestrate(ctx, prompt, `[📷 이미지] ${caption}`);  // fire-and-forget (12.1.4)
-        } catch (err) {
-            console.error('[tg:photo:error]', err);
-            await ctx.reply(`❌ 이미지 처리 실패: ${err.message}`);
-        }
-    });
-
-    // Phase 10: Telegram document handler
-    bot.on('message:document', async (ctx) => {
-        const doc = ctx.message.document;
-        const caption = ctx.message.caption || '';
-        console.log(`[tg:doc] ${ctx.chat.id}: ${doc.file_name} (${doc.file_size} bytes)`);
-        try {
-            const { buffer } = await downloadTelegramFile(doc.file_id, settings.telegram.token);
-            const filePath = saveUpload(buffer, doc.file_name || 'document');
-            const prompt = buildMediaPrompt(filePath, caption);
-            tgOrchestrate(ctx, prompt, `[📎 ${doc.file_name || 'file'}] ${caption}`);  // fire-and-forget (12.1.4)
-        } catch (err) {
-            console.error('[tg:doc:error]', err);
-            await ctx.reply(`❌ 파일 처리 실패: ${err.message}`);
-        }
-    });
-
-    // bot.start() handles init internally — don't call bot.init() separately
-    bot.start({
-        drop_pending_updates: true,
-        onStart: (info) => console.log(`[tg] ✅ @${info.username} polling active`),
-    });
-    telegramBot = bot;
-    console.log('[tg] Bot starting...');
-}
-
-// ─── Heartbeat (Phase 8.2) ───────────────────────────
-
-const heartbeatTimers = new Map();
-let heartbeatBusy = false;
-
-function loadHeartbeatFile() {
-    try {
-        return JSON.parse(fs.readFileSync(HEARTBEAT_JOBS_PATH, 'utf8'));
-    } catch {
-        return { jobs: [] };
-    }
-}
-
-function saveHeartbeatFile(data) {
-    fs.writeFileSync(HEARTBEAT_JOBS_PATH, JSON.stringify(data, null, 2));
-}
-
-function startHeartbeat() {
-    stopHeartbeat();
-    const { jobs } = loadHeartbeatFile();
-    for (const job of jobs) {
-        if (!job.enabled || job.schedule?.kind !== 'every') continue;
-        const ms = (job.schedule.minutes || 5) * 60_000;
-        const timer = setInterval(() => runHeartbeatJob(job), ms);
-        timer.unref?.();
-        heartbeatTimers.set(job.id, timer);
-    }
-    const n = heartbeatTimers.size;
-    console.log(`[heartbeat] ${n} job${n !== 1 ? 's' : ''} active`);
-}
-
-function stopHeartbeat() {
-    for (const timer of heartbeatTimers.values()) clearInterval(timer);
-    heartbeatTimers.clear();
-}
-
-async function runHeartbeatJob(job) {
-    if (heartbeatBusy) {
-        console.log(`[heartbeat:${job.name}] skipped — busy`);
-        return;
-    }
-    heartbeatBusy = true;
-    try {
-        const now = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-        const prompt = `[heartbeat:${job.name}] 현재 시간: ${now}\n\n${job.prompt || '정기 점검입니다. 할 일 없으면 [SILENT]로 응답.'}`;
-        console.log(`[heartbeat:${job.name}] tick`);
-        const result = await orchestrateAndCollect(prompt);
-
-        if (result.includes('[SILENT]')) {
-            console.log(`[heartbeat:${job.name}] silent`);
-            return;
-        }
-
-        console.log(`[heartbeat:${job.name}] response: ${result.slice(0, 80)}`);
-
-        // Telegram 전달
-        if (telegramBot && settings.telegram?.enabled) {
-            const chatIds = settings.telegram.allowedChatIds?.length
-                ? settings.telegram.allowedChatIds
-                : [...telegramActiveChatIds];
-            if (chatIds.length === 0) {
-                console.log(`[heartbeat:${job.name}] no telegram chatIds — send a message to the bot first`);
-            }
-            const html = markdownToTelegramHtml(result);
-            const chunks = chunkTelegramMessage(html);
-            for (const chatId of chatIds) {
-                for (const chunk of chunks) {
-                    try {
-                        await telegramBot.api.sendMessage(chatId, chunk, { parse_mode: 'HTML' });
-                    } catch {
-                        await telegramBot.api.sendMessage(chatId, chunk.replace(/<[^>]+>/g, ''));
-                    }
-                }
-            }
-        }
-    } catch (err) {
-        console.error(`[heartbeat:${job.name}] error:`, err.message);
-    } finally {
-        heartbeatBusy = false;
-    }
-}
-
-// fs.watch — AI나 사용자가 파일 직접 편집 시 자동 리로드
-try {
-    let watchDebounce = null;
-    fs.watch(HEARTBEAT_JOBS_PATH, () => {
-        clearTimeout(watchDebounce);
-        watchDebounce = setTimeout(() => {
-            console.log('[heartbeat] file changed — reloading');
-            startHeartbeat();
-        }, 500);
-    });
-} catch { /* 파일 없으면 무시 — 첫 저장 시 생성 */ }
-
-// API endpoints
-app.get('/api/heartbeat', (req, res) => {
-    res.json(loadHeartbeatFile());
-});
-
+// Heartbeat API
+app.get('/api/heartbeat', (req, res) => res.json(loadHeartbeatFile()));
 app.put('/api/heartbeat', (req, res) => {
     const data = req.body;
-    if (!data || !Array.isArray(data.jobs)) {
-        return res.status(400).json({ error: 'jobs array required' });
-    }
+    if (!data || !Array.isArray(data.jobs)) return res.status(400).json({ error: 'jobs array required' });
     saveHeartbeatFile(data);
     startHeartbeat();
     res.json(data);
 });
 
+// ─── Skills API (Phase 6) ────────────────────────────
+
+app.get('/api/skills', (_, res) => res.json(getMergedSkills()));
+
+app.post('/api/skills/enable', (req, res) => {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: 'id required' });
+    const refPath = join(SKILLS_REF_DIR, id, 'SKILL.md');
+    const dstDir = join(SKILLS_DIR, id);
+    const dstPath = join(dstDir, 'SKILL.md');
+    if (fs.existsSync(dstPath)) return res.json({ ok: true, msg: 'already enabled' });
+    if (!fs.existsSync(refPath)) return res.status(404).json({ error: 'skill not found in ref' });
+    fs.mkdirSync(dstDir, { recursive: true });
+    // Copy all files from ref skill dir
+    const refDir = join(SKILLS_REF_DIR, id);
+    for (const f of fs.readdirSync(refDir)) {
+        fs.copyFileSync(join(refDir, f), join(dstDir, f));
+    }
+    regenerateB();
+    res.json({ ok: true });
+});
+
+app.post('/api/skills/disable', (req, res) => {
+    const { id } = req.body;
+    if (!id) return res.status(400).json({ error: 'id required' });
+    const dstDir = join(SKILLS_DIR, id);
+    if (!fs.existsSync(dstDir)) return res.json({ ok: true, msg: 'already disabled' });
+    fs.rmSync(dstDir, { recursive: true });
+    regenerateB();
+    res.json({ ok: true });
+});
+
+app.get('/api/skills/:id', (req, res) => {
+    const { id } = req.params;
+    // Try active first, then ref
+    const activePath = join(SKILLS_DIR, id, 'SKILL.md');
+    const refPath = join(SKILLS_REF_DIR, id, 'SKILL.md');
+    const path = fs.existsSync(activePath) ? activePath : refPath;
+    if (!fs.existsSync(path)) return res.status(404).json({ error: 'not found' });
+    res.type('text/markdown').send(fs.readFileSync(path, 'utf8'));
+});
+
 // ─── Start ───────────────────────────────────────────
+
+watchHeartbeatFile();
 
 server.listen(PORT, () => {
     console.log(`\n  🦞 Claw Agent — http://localhost:${PORT}\n`);
@@ -1770,7 +459,6 @@ server.listen(PORT, () => {
     console.log(`  DB:     ${DB_PATH}`);
     console.log(`  Prompts: ${PROMPTS_DIR}\n`);
 
-    // Phase 12.1: Ensure MCP config + skills symlinks for workingDir
     try {
         initMcpConfig(settings.workingDir);
         ensureSkillsSymlinks(settings.workingDir);
