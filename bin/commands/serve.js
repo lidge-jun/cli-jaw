@@ -19,7 +19,7 @@ const { values } = parseArgs({
     strict: false,
 });
 
-const serverPath = join(__dirname, '..', 'server.js');
+const serverPath = join(__dirname, '..', '..', 'server.js');
 
 console.log(`\n  🦞 cli-claw serve — port ${values.port}\n`);
 
