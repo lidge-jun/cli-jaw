@@ -578,7 +578,7 @@ function buildArgs(cli, model, effort, prompt, sysPrompt) {
             return ['exec',
                 ...(model && model !== 'default' ? ['-m', model] : []),
                 ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []),
-                '--full-auto', '--skip-git-repo-check', '--json'];
+                '--dangerously-bypass-approvals-and-sandbox', '--skip-git-repo-check', '--json'];
         case 'gemini': {
             return ['-p', prompt || '',
                 ...(model && model !== 'default' ? ['-m', model] : []),
@@ -607,7 +607,7 @@ function buildResumeArgs(cli, model, effort, sessionId, prompt) {
         case 'codex':
             return ['exec', 'resume',
                 ...(model && model !== 'default' ? ['--model', model] : []),
-                '--full-auto', '--skip-git-repo-check',
+                '--dangerously-bypass-approvals-and-sandbox', '--skip-git-repo-check',
                 sessionId, prompt || '', '--json'];
         case 'gemini':
             return ['--resume', sessionId,
