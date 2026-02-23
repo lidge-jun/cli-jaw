@@ -161,15 +161,16 @@ CLI 매핑: claude(`system/assistant/result`) · codex(`thread.started/item.comp
 
 ### agent.js — CLI Spawn & Queue
 
-| Function                                   | 역할                                 |
-| ------------------------------------------ | ------------------------------------ |
-| `killActiveAgent(reason)`                  | SIGTERM → SIGKILL 종료               |
-| `steerAgent(newPrompt, source)`            | kill → 대기 → 새 프롬프트로 restart  |
-| `enqueueMessage(prompt, source)`           | 큐에 메시지 추가                     |
-| `buildArgs(cli, model, effort, prompt, …)` | 신규 세션용 CLI args                 |
-| `buildResumeArgs(…)`                       | resume용 args                        |
-| `spawnAgent(prompt, opts)`                 | **핵심** — spawn/stream/DB/broadcast |
-| `triggerMemoryFlush()`                     | 대화 요약 → 메모리 파일 flush        |
+| Function                                   | 역할                                                 |
+| ------------------------------------------ | ---------------------------------------------------- |
+| `killActiveAgent(reason)`                  | SIGTERM → SIGKILL 종료                               |
+| `steerAgent(newPrompt, source)`            | kill → 대기 → 새 프롬프트로 restart                  |
+| `enqueueMessage(prompt, source)`           | 큐에 메시지 추가                                     |
+| `buildArgs(cli, model, effort, prompt, …)` | 신규 세션용 CLI args                                 |
+| `buildResumeArgs(…)`                       | resume용 args                                        |
+| `spawnAgent(prompt, opts)`                 | **핵심** — spawn/stream/DB/broadcast                 |
+| `triggerMemoryFlush()`                     | threshold개 메시지 요약 → 메모리 파일 (줄글 1-3문장) |
+| `flushCycleCount`                          | flush 사이클 카운터 (x2 주입용)                      |
 
 **spawnAgent 흐름**: 실행 중 체크 → cli/model/effort 결정 → resume or new args → child spawn → stdin 주입 (context + prompt + history) → stdout NDJSON 파싱 → 종료: session 저장 / agent_done / processQueue
 
@@ -194,11 +195,16 @@ Flow: 직원 0명→단일 agent / planning 먼저 실행 / distribute→보고�
 
 ### prompt.js — System Prompt & Skills
 
-`loadActiveSkills()` · `loadSkillRegistry()` · `getMergedSkills()` · `initPromptFiles()` · `getSystemPrompt()` — A-1 + A-2 + skills + memory + employees + heartbeat · `getSubAgentPrompt(emp)` — 실행자용 경량 프롬프트 (오케스트레이션 규칙 제외, 스킬/브라우저/메모리 명령어 포함) · `regenerateB()`
+`loadActiveSkills()` · `loadSkillRegistry()` · `getMergedSkills()` · `initPromptFiles()` · `getSystemPrompt()` — A-1 + A-2 + MEMORY.md(시스템레벨) + session memory(threshold x2 주입, 10000자) + skills + employees + heartbeat · `loadRecentMemories()` — flush 메모리 최신순 로드 (10000자 제한) · `getSubAgentPrompt(emp)` — 실행자용 경량 프롬프트 · `regenerateB()`
 
 ### memory.js — Persistent Memory
 
-`search(query)` — grep -rni · `read(filename)` · `save(filename, content)` — append · `list()` · `appendDaily(content)` · `loadMemoryForPrompt(maxChars=1500)`
+`search(query)` — grep -rni · `read(filename)` · `save(filename, content)` — append · `list()` · `appendDaily(content)` · `loadMemoryForPrompt(maxChars=1500)` · `MEMORY_DIR` = `~/.cli-claw/memory/`
+
+**메모리 2-tier 구조:**
+- **시스템 레벨**: `MEMORY.md` → `getSystemPrompt()`에서 1500자 자동 주입 (매 메시지)
+- **세션 레벨**: flush 결과 → `loadRecentMemories()` 10000자, `settings.memory.injectEvery` (기본 2) 사이클마다 주입
+- **온디맨드**: `cli-claw memory search/read` → AI가 필요시 호출
 
 ### Browser Module (`src/browser/`)
 
@@ -288,10 +294,11 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 1. **큐**: busy 시 queue → agent 종료 후 자동 처리
 2. **세션 무효화**: CLI 변경 시 session_id 제거
 3. **직원 dispatch**: B 프롬프트에 JSON subtask 포맷
-4. **메모리 flush**: `forceNew` spawn → 메인 세션 분리
-5. **에러 처리**: 429/auth 커스텀 메시지
-6. **IPv4 강제**: `--dns-result-order=ipv4first` + Telegram
-7. **MCP 동기화**: mcp.json → 4개 CLI 포맷 자동 변환
+4. **메모리 flush**: `forceNew` spawn → 메인 세션 분리, threshold개 메시지만 요약 (줄글 1-3문장)
+5. **메모리 주입**: MEMORY.md = 매번, session memory = `injectEvery` cycle마다 (기본 x2)
+6. **에러 처리**: 429/auth 커스텀 메시지
+7. **IPv4 강제**: `--dns-result-order=ipv4first` + Telegram
+8. **MCP 동기화**: mcp.json → 4개 CLI 포맷 자동 변환
 
 ---
 
@@ -301,14 +308,14 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
 **Post-MVP** (`devlog/260223_*/`):
 
-| 폴더                              | 주제                                    | 상태 |
-| --------------------------------- | --------------------------------------- | ---- |
-| `260223_권한/`                    | 권한 + 모듈화 + 스킬 + 브라우저 (P1~11) | ✅    |
-| `260223_메모리 개선/`             | 메모리 고도화 (embedding 계획)          | 📋    |
-| `260223_모델/`                    | 모델 목록 + custom input                | ✅    |
-| `260223_프론트엔드/`              | Web UI ES Modules 모듈화 (Phase 10)     | ✅    |
-| `260223_11_서브에이전트프롬프트/` | 서브에이전트 프롬프트 구조화 (Phase 11) | ✅    |
-| `260224_cmd/`                     | 슬래시 커맨드 통합 시스템               | 📋    |
+| 폴더                              | 주제                                     | 상태 |
+| --------------------------------- | ---------------------------------------- | ---- |
+| `260223_권한/`                    | 권한 + 모듈화 + 스킬 + 브라우저 (P1~11)  | ✅    |
+| `260223_메모리 개선/`             | 메모리 고도화 (flush 개선 + 신규 메모리) | ✅    |
+| `260223_모델/`                    | 모델 목록 + custom input                 | ✅    |
+| `260223_프론트엔드/`              | Web UI ES Modules 모듈화 (Phase 10)      | ✅    |
+| `260223_11_서브에이전트프롬프트/` | 서브에이전트 프롬프트 구조화 (Phase 11)  | ✅    |
+| `260224_cmd/`                     | 슬래시 커맨드 통합 시스템                | 📋    |
 
 ---
 
