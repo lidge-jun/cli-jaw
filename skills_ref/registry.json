@@ -511,6 +511,122 @@
             "description": "세션 간 장기 기억. 마크다운 파일에 저장, grep 검색.",
             "requires": null,
             "install": null
+        },
+        "doc": {
+            "name": "Document (docx)",
+            "emoji": "📝",
+            "category": "utility",
+            "description": ".docx 문서 읽기·생성·편집. python-docx 기반.",
+            "requires": {
+                "bins": [
+                    "python3"
+                ]
+            },
+            "install": null
+        },
+        "gh-address-comments": {
+            "name": "GitHub PR 코멘트 처리",
+            "emoji": "💬",
+            "category": "devtools",
+            "description": "GitHub PR 리뷰 코멘트 자동 반영. gh CLI.",
+            "requires": {
+                "bins": [
+                    "gh"
+                ]
+            },
+            "install": "brew install gh"
+        },
+        "gh-fix-ci": {
+            "name": "GitHub CI 수정",
+            "emoji": "🔧",
+            "category": "devtools",
+            "description": "실패한 GitHub PR CI 자동 디버깅·수정. gh CLI.",
+            "requires": {
+                "bins": [
+                    "gh"
+                ]
+            },
+            "install": "brew install gh"
+        },
+        "imagegen": {
+            "name": "이미지 생성 (OpenAI)",
+            "emoji": "🖼️",
+            "category": "ai-media",
+            "description": "OpenAI Images API로 이미지 생성·편집.",
+            "requires": {
+                "env": [
+                    "OPENAI_API_KEY"
+                ],
+                "bins": [
+                    "python3"
+                ]
+            },
+            "install": null
+        },
+        "openai-docs": {
+            "name": "OpenAI Docs",
+            "emoji": "📖",
+            "category": "devtools",
+            "description": "OpenAI 제품/API 공식 문서 참조. 빌드 가이드.",
+            "requires": null,
+            "install": null
+        },
+        "pdf": {
+            "name": "PDF 읽기/리뷰",
+            "emoji": "📄",
+            "category": "utility",
+            "description": "PDF 파일 읽기·리뷰·분석. python3 기반.",
+            "requires": {
+                "bins": [
+                    "python3"
+                ]
+            },
+            "install": null
+        },
+        "playwright": {
+            "name": "Playwright 브라우저",
+            "emoji": "🎭",
+            "category": "devtools",
+            "description": "Playwright로 브라우저 자동화·테스트. npx.",
+            "requires": {
+                "bins": [
+                    "npx"
+                ]
+            },
+            "install": null
+        },
+        "screenshot": {
+            "name": "Desktop Screenshot",
+            "emoji": "🖥️",
+            "category": "utility",
+            "description": "데스크탑/시스템 스크린샷 촬영. macOS screencapture.",
+            "requires": null,
+            "install": null
+        },
+        "spreadsheet": {
+            "name": "Spreadsheet (xlsx)",
+            "emoji": "📊",
+            "category": "utility",
+            "description": ".xlsx 스프레드시트 생성·편집·분석. python3 기반.",
+            "requires": {
+                "bins": [
+                    "python3"
+                ]
+            },
+            "install": null
+        },
+        "yeet": {
+            "name": "Git Yeet",
+            "emoji": "🚀",
+            "category": "devtools",
+            "description": "Stage → Commit → Push → PR 자동화. git + gh.",
+            "requires": {
+                "bins": [
+                    "git",
+                    "gh"
+                ]
+            },
+            "install": null
         }
     }
 }

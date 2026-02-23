@@ -12,12 +12,16 @@ export async function loadSkills() {
     }
 }
 
+const KNOWN_CATS = ['productivity', 'communication', 'devtools', 'ai-media', 'utility', 'smarthome', 'automation'];
+
 export function renderSkills() {
     const list = document.getElementById('skillsList');
     const count = document.getElementById('skillsCount');
     let filtered = state.allSkills;
     if (state.currentSkillFilter === 'installed') {
         filtered = state.allSkills.filter(s => s.enabled);
+    } else if (state.currentSkillFilter === 'other') {
+        filtered = state.allSkills.filter(s => !KNOWN_CATS.includes(s.category));
     } else if (state.currentSkillFilter !== 'all') {
         filtered = state.allSkills.filter(s => s.category === state.currentSkillFilter);
     }
