@@ -138,8 +138,44 @@ cli-claw serve  [--port 3457] [--open]    # 서버 시작 (포그라운드)
 cli-claw init   [--non-interactive]        # 초기 설정 마법사
 cli-claw doctor [--json]                   # 설치/설정 진단
 cli-claw chat   [--raw]                    # 터미널 채팅 (REPL / ndjson)
+cli-claw mcp    [install|sync|list]        # MCP 서버 관리
 cli-claw status                            # 서버 상태 확인
 ```
+
+## 🔌 MCP Servers
+
+`npm i -g cli-claw` 시 자동으로 전역 설치되는 기본 MCP 서버:
+
+| 서버          | 패키지                                   | 기능                                   |
+| ------------- | ---------------------------------------- | -------------------------------------- |
+| **puppeteer** | `@modelcontextprotocol/server-puppeteer` | 브라우저 자동화 (스크린샷, 클릭, 입력) |
+| **context7**  | `@upstash/context7-mcp`                  | 라이브러리 최신 문서 RAG 검색          |
+
+### MCP CLI 명령어
+
+```bash
+# 터미널에서
+cli-claw mcp                      # 현재 서버 목록
+cli-claw mcp install <pkg>        # 새 MCP 서버 설치 (npm)
+cli-claw mcp install <pkg> --pypi # PyPI 서버 설치 (uv tool install)
+cli-claw mcp sync                 # 4개 CLI에 config 동기화
+
+# 채팅(REPL) 안에서
+/mcp                              # 서버 목록
+/mcp install                      # 기존 npx/uv 서버를 전역 변환
+/mcp sync                         # 4개 CLI에 동기화
+```
+
+### MCP 동기화 대상
+
+| CLI         | Config 파일                        | 포맷                     |
+| ----------- | ---------------------------------- | ------------------------ |
+| Claude Code | `{workingDir}/.mcp.json`           | JSON (`mcpServers`)      |
+| Codex       | `~/.codex/config.toml`             | TOML (`[mcp_servers.*]`) |
+| Gemini CLI  | `~/.gemini/settings.json`          | JSON (`mcpServers`)      |
+| OpenCode    | `~/.config/opencode/opencode.json` | JSON (`mcp`)             |
+
+> 💡 **권장**: `npm i -g cli-claw` 후 전역 설치 완료. `cli-claw mcp install` 로 추가 서버 설치 가능.
 
 ## Data Paths
 
@@ -162,19 +198,20 @@ cli-claw status                            # 서버 상태 확인
 
 ## Features
 
-| 기능                 | 설명                                        |
-| -------------------- | ------------------------------------------- |
-| 🤖 **Multi-CLI**      | Claude, Codex, Gemini, OpenCode 동적 전환   |
-| 🎯 **Orchestration**  | Planning agent → Sub-agent 배분 → 평가 루프 |
-| 📱 **Telegram**       | 양방향 봇 연동 + typing indicator           |
-| 💓 **Heartbeat**      | 다중 예약 작업, fs.watch 자동 리로드        |
-| 🌐 **Web UI**         | 실시간 채팅 + 설정 + 에이전트 관리          |
-| 📟 **CLI Chat**       | 터미널 REPL + `--raw` ndjson 파이프         |
-| 🔗 **Symlink Infra**  | `.agents/skills/` 자동 연결 (postinstall)   |
-| 🔄 **Session Resume** | CLI 세션 유지 + 컨텍스트 이어가기           |
-| 📷 **Photo Input**    | Web/Telegram/CLI 사진 업로드 + 분석         |
-| 🧠 **Memory**         | 10 QA 비동기 flush → Claude 메모리 저장     |
-| 🩺 **Doctor**         | 설치 상태 자가 진단                         |
+| 기능                 | 설명                                         |
+| -------------------- | -------------------------------------------- |
+| 🤖 **Multi-CLI**      | Claude, Codex, Gemini, OpenCode 동적 전환    |
+| 🎯 **Orchestration**  | Planning agent → Sub-agent 배분 → 평가 루프  |
+| 📱 **Telegram**       | 양방향 봇 연동 + typing indicator            |
+| 💓 **Heartbeat**      | 다중 예약 작업, fs.watch 자동 리로드         |
+| 🌐 **Web UI**         | 실시간 채팅 + 설정 + 에이전트 관리           |
+| 📟 **CLI Chat**       | 터미널 REPL + `--raw` ndjson 파이프          |
+| 🔌 **MCP**            | Puppeteer + Context7 내장, 4 CLI 자동 동기화 |
+| 🔗 **Symlink Infra**  | `.agents/skills/` 자동 연결 (postinstall)    |
+| 🔄 **Session Resume** | CLI 세션 유지 + 컨텍스트 이어가기            |
+| 📷 **Photo Input**    | Web/Telegram/CLI 사진 업로드 + 분석          |
+| 🧠 **Memory**         | 10 QA 비동기 flush → Claude 메모리 저장      |
+| 🩺 **Doctor**         | 설치 상태 자가 진단                          |
 
 ## API
 
@@ -192,12 +229,18 @@ cli-claw status                            # 서버 상태 확인
 | `GET/DEL` | `/api/memory-files/:file`    | 파일 열람/삭제            |
 | `PUT`     | `/api/memory-files/settings` | 메모리 설정 변경          |
 | `POST`    | `/api/upload`                | 파일 업로드 (20MB)        |
+| `GET`     | `/api/mcp`                   | MCP 서버 목록             |
+| `PUT`     | `/api/mcp`                   | MCP config 수정           |
+| `POST`    | `/api/mcp/sync`              | 4 CLI 동기화              |
+| `POST`    | `/api/mcp/install`           | MCP 서버 전역 설치        |
+| `POST`    | `/api/stop`                  | 실행 중인 에이전트 중지   |
 
 ## Requirements
 
 - **Node.js 22+**
 - Claude Code / Codex / Gemini CLI 중 1개 이상 + 인증
 - (선택) Telegram Bot Token — [@BotFather](https://t.me/BotFather)
+- (자동설치) `@modelcontextprotocol/server-puppeteer`, `@upstash/context7-mcp`
 
 ## Roadmap
 

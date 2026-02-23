@@ -979,6 +979,19 @@
                 </div>
             </div>
 
+            <!-- Phase 12.1: MCP Servers -->
+            <div class="settings-group">
+                <h4>🔌 MCP Servers</h4>
+                <div id="mcpServerList" style="font-size:11px;color:var(--text-dim);padding:4px 0">
+                    Loading...
+                </div>
+                <button class="btn-clear" style="width:100%;margin:4px 0;padding:6px;font-size:11px"
+                    onclick="syncMcpServers()">🔄 Sync to all CLIs</button>
+                <button class="btn-clear" style="width:100%;margin:0 0 4px;padding:6px;font-size:11px"
+                    onclick="installMcpGlobal()">📦 Install Globally (npm i -g)</button>
+                <div id="mcpSyncResult" style="font-size:10px;color:var(--text-dim);padding:2px 0;display:none"></div>
+            </div>
+
             <!-- CLI Status (5.8: at bottom for load priority) -->
             <div style="margin-top:12px">
                 <div class="section-title">CLI STATUS</div>
@@ -1142,16 +1155,11 @@
             ws.onmessage = (e) => {
                 const msg = JSON.parse(e.data);
                 if (msg.type === 'agent_status') {
-                    setStatus(msg.status);
-                    // Show sub-agent activity in chat
-                    if (msg.agentName && msg.status === 'running') {
-                        addSystemMsg(`👷 ${msg.agentName} 작업 시작`);
-                    } else if (msg.agentName && msg.status === 'done') {
-                        addSystemMsg(`✅ ${msg.agentName} 완료`);
-                    } else if (msg.agentName && msg.status === 'error') {
-                        addSystemMsg(`❌ ${msg.agentName} 실패`);
-                    } else if (msg.agentName && msg.status === 'evaluating') {
-                        addSystemMsg(`🔍 ${msg.agentName} 평가 중...`);
+                    // Phase 12.1.2: handle both formats
+                    if (msg.running !== undefined) {
+                        setStatus(msg.running ? 'running' : 'idle');
+                    } else {
+                        setStatus(msg.status);
                     }
                 } else if (msg.type === 'round_start') {
                     const names = (msg.subtasks || []).map(s => s.agent).join(', ');
@@ -1229,9 +1237,20 @@
         // ── UI Functions ──
         function setStatus(s) {
             const badge = document.getElementById('statusBadge');
+            const btn = document.getElementById('btnSend');
             agentBusy = s === 'running';
-            document.getElementById('btnSend').disabled = agentBusy;
-            document.getElementById('chatInput').disabled = agentBusy;
+            // Phase 12.1.4: Single button toggles Send ↔ Stop
+            if (agentBusy) {
+                btn.textContent = '■';
+                btn.title = '중단';
+                btn.style.background = '#e55';
+                btn.onclick = stopAgent;
+            } else {
+                btn.textContent = '➤';
+                btn.title = 'Send';
+                btn.style.background = '';
+                btn.onclick = sendMessage;
+            }
             document.getElementById('typingIndicator').classList.toggle('active', agentBusy);
             if (s === 'running') {
                 badge.className = 'status-badge status-running';
@@ -1240,6 +1259,10 @@
                 badge.className = 'status-badge status-idle';
                 badge.textContent = '⚡ idle';
             }
+        }
+
+        async function stopAgent() {
+            await fetch('/api/stop', { method: 'POST' });
         }
 
         function addSystemMsg(text, extraClass) {
@@ -1467,6 +1490,48 @@
 
             // Load telegram settings (6.5)
             loadTelegramSettings(s);
+
+            // Phase 12.1: Load MCP servers
+            loadMcpServers();
+        }
+
+        async function loadMcpServers() {
+            try {
+                const d = await (await fetch('/api/mcp')).json();
+                const el = document.getElementById('mcpServerList');
+                const names = Object.entries(d.servers || {});
+                if (!names.length) { el.textContent = '(no servers configured)'; return; }
+                el.innerHTML = names.map(([n, s]) =>
+                    `<div style="padding:2px 0">• <b>${n}</b> <span style="opacity:.6">${s.command} ${(s.args || []).slice(0, 2).join(' ')}</span></div>`
+                ).join('');
+            } catch { }
+        }
+
+        async function syncMcpServers() {
+            const resultEl = document.getElementById('mcpSyncResult');
+            resultEl.style.display = 'block';
+            resultEl.textContent = '동기화 중...';
+            try {
+                const d = await (await fetch('/api/mcp/sync', { method: 'POST' })).json();
+                const r = d.results || {};
+                resultEl.innerHTML = Object.entries(r).map(([k, v]) =>
+                    `${v ? '✅' : '⏭️'} ${k}`
+                ).join(' &nbsp; ');
+            } catch (e) { resultEl.textContent = '❌ ' + e.message; }
+        }
+
+        async function installMcpGlobal() {
+            const resultEl = document.getElementById('mcpSyncResult');
+            resultEl.style.display = 'block';
+            resultEl.textContent = '📦 npm i -g 설치 중... (최대 2분 소요)';
+            try {
+                const d = await (await fetch('/api/mcp/install', { method: 'POST' })).json();
+                resultEl.innerHTML = Object.entries(d.results || {}).map(([k, v]) => {
+                    const icon = v.status === 'installed' ? '✅' : v.status === 'skip' ? '⏭️' : '❌';
+                    return `${icon} <b>${k}</b>: ${v.status}${v.bin ? ' → ' + v.bin : ''}`;
+                }).join('<br>');
+                loadMcpServers(); // refresh list
+            } catch (e) { resultEl.textContent = '❌ ' + e.message; }
         }
 
         async function updateSettings() {

@@ -24,6 +24,7 @@ function printHelp() {
     init       초기 설정 마법사
     doctor     설치/설정 진단
     chat       터미널 채팅 (REPL)
+    mcp        MCP 서버 관리 (install/sync/list)
     status     서버 상태 확인
 
   Options:
@@ -50,6 +51,9 @@ switch (command) {
         break;
     case 'chat':
         await import('./commands/chat.js');
+        break;
+    case 'mcp':
+        await import('./commands/mcp.js');
         break;
     case 'status':
         await import('./commands/status.js');

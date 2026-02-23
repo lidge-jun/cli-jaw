@@ -16,6 +16,10 @@ import {
     buildMediaPrompt,
     downloadTelegramFile,
 } from './lib/upload.js';
+import {
+    loadUnifiedMcp, saveUnifiedMcp, syncToAll,
+    ensureSkillsSymlinks, initMcpConfig, copyDefaultSkills,
+} from './lib/mcp-sync.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -36,6 +40,9 @@ const MIGRATION_MARKER = join(CLAW_HOME, '.migrated-v1');
 fs.mkdirSync(PROMPTS_DIR, { recursive: true });
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 fs.mkdirSync(join(__dirname, 'public'), { recursive: true });
+
+// ─── Phase 12.1: MCP + Skills init ──────────────────
+// Deferred to after settings load (needs workingDir)
 
 // ─── 1-time migration (Phase 9.2) ───────────────────
 if (!fs.existsSync(MIGRATION_MARKER)) {
@@ -456,6 +463,36 @@ function readGeminiAccount() {
 let activeProcess = null;
 let memoryFlushCounter = 0;
 
+// Phase 12.1.2: Kill + Steer
+function killActiveAgent(reason = 'user') {
+    if (!activeProcess) return false;
+    console.log(`[claw:kill] reason=${reason}`);
+    try { activeProcess.kill('SIGTERM'); } catch { }
+    const proc = activeProcess;
+    setTimeout(() => {
+        try { if (proc && !proc.killed) proc.kill('SIGKILL'); } catch { }
+    }, 2000);
+    return true;
+}
+
+function waitForProcessEnd(timeoutMs = 3000) {
+    if (!activeProcess) return Promise.resolve();
+    return new Promise(resolve => {
+        const check = setInterval(() => {
+            if (!activeProcess) { clearInterval(check); resolve(); }
+        }, 100);
+        setTimeout(() => { clearInterval(check); resolve(); }, timeoutMs);
+    });
+}
+
+async function steerAgent(newPrompt, source) {
+    const wasRunning = killActiveAgent('steer');
+    if (wasRunning) await waitForProcessEnd(3000);
+    insertMessage.run('user', newPrompt, source, '');
+    broadcast('new_message', { role: 'user', content: newPrompt, source });
+    orchestrate(newPrompt);
+}
+
 function makeCleanEnv() {
     const env = { ...process.env };
     delete env.CLAUDE_CODE_SSE_PORT;
@@ -571,6 +608,7 @@ function spawnAgent(prompt, opts = {}) {
         stdio: ['pipe', 'pipe', 'pipe'],
     });
     if (!forceNew) activeProcess = child;
+    broadcast('agent_status', { running: true, agentId: agentLabel, cli });
 
     // User message — only for main agent (not forceNew, not internal)
     if (!forceNew && !opts.internal) {
@@ -628,7 +666,10 @@ function spawnAgent(prompt, opts = {}) {
     });
 
     child.on('close', (code) => {
-        if (!forceNew) activeProcess = null;
+        if (!forceNew) {
+            activeProcess = null;
+            broadcast('agent_status', { running: false, agentId: agentLabel });
+        }
 
         // Save session for resume — only main agent
         if (!forceNew && ctx.sessionId && code === 0) {
@@ -1008,9 +1049,17 @@ wss.on('connection', (ws) => {
             const msg = JSON.parse(raw.toString());
             if (msg.type === 'send_message' && msg.text) {
                 console.log(`[ws:in] ${msg.text.slice(0, 80)}`);
-                insertMessage.run('user', msg.text, 'cli', '');
-                broadcast('new_message', { role: 'user', content: msg.text, source: 'cli' });
-                orchestrate(msg.text);
+                if (activeProcess) {
+                    // Steer: kill current + start new
+                    steerAgent(msg.text, 'cli');
+                } else {
+                    insertMessage.run('user', msg.text, 'cli', '');
+                    broadcast('new_message', { role: 'user', content: msg.text, source: 'cli' });
+                    orchestrate(msg.text);
+                }
+            }
+            if (msg.type === 'stop') {
+                killActiveAgent('ws');
             }
         } catch { }
     });
@@ -1028,9 +1077,19 @@ app.get('/api/messages', (_, res) => res.json(getMessages.all()));
 app.post('/api/message', (req, res) => {
     const { prompt } = req.body;
     if (!prompt?.trim()) return res.status(400).json({ error: 'prompt required' });
-    if (activeProcess) return res.status(409).json({ error: 'agent is busy' });
-    orchestrate(prompt.trim());  // Phase 5: orchestrate if employees exist
+    if (activeProcess) {
+        // Phase 12.1.2: Steer instead of 409
+        steerAgent(prompt.trim(), 'web');
+        return res.json({ ok: true, steered: true });
+    }
+    orchestrate(prompt.trim());
     res.json({ ok: true });
+});
+
+// Phase 12.1.2: Stop agent
+app.post('/api/stop', (req, res) => {
+    const killed = killActiveAgent('api');
+    res.json({ ok: true, killed });
 });
 
 // Clear (messages only, memory preserved)
@@ -1163,6 +1222,39 @@ app.post('/api/upload', express.raw({ type: '*/*', limit: '20mb' }), (req, res) 
     const filename = req.headers['x-filename'] || 'upload.bin';
     const filePath = saveUpload(req.body, filename);
     res.json({ path: filePath, filename: basename(filePath) });
+});
+
+// Phase 12.1: MCP config API
+app.get('/api/mcp', (req, res) => {
+    res.json(loadUnifiedMcp());
+});
+
+app.put('/api/mcp', (req, res) => {
+    const config = req.body;
+    if (!config || !config.servers) return res.status(400).json({ error: 'servers object required' });
+    saveUnifiedMcp(config);
+    res.json({ ok: true, servers: Object.keys(config.servers) });
+});
+
+app.post('/api/mcp/sync', (req, res) => {
+    const config = loadUnifiedMcp();
+    const results = syncToAll(config, settings.workingDir);
+    res.json({ ok: true, results });
+});
+
+// Phase 12.1.3: Install MCP servers globally
+app.post('/api/mcp/install', async (req, res) => {
+    try {
+        const config = loadUnifiedMcp();
+        const { installMcpServers } = await import('./lib/mcp-sync.js');
+        const results = await installMcpServers(config);
+        saveUnifiedMcp(config);
+        const syncResults = syncToAll(config, settings.workingDir);
+        res.json({ ok: true, results, synced: syncResults });
+    } catch (e) {
+        console.error('[mcp:install]', e);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // CLI detection
@@ -1333,6 +1425,13 @@ function initTelegram() {
 
     // Shared Telegram typing + orchestrate + reply helper (Phase 10 refactor)
     async function tgOrchestrate(ctx, prompt, displayMsg) {
+        // Phase 12.1.2: Auto-steer — kill running agent before starting new
+        if (activeProcess) {
+            console.log('[tg:steer] killing active agent for new message');
+            killActiveAgent('telegram-steer');
+            await waitForProcessEnd(3000);
+        }
+
         telegramActiveChatIds.add(ctx.chat.id);
         insertMessage.run('user', displayMsg, 'telegram', '');
         broadcast('new_message', { role: 'user', content: displayMsg, source: 'telegram' });
@@ -1371,7 +1470,7 @@ function initTelegram() {
         const text = ctx.message.text;
         if (text.startsWith('/')) return;
         console.log(`[tg:in] ${ctx.chat.id}: ${text.slice(0, 80)}`);
-        await tgOrchestrate(ctx, text, text);
+        tgOrchestrate(ctx, text, text);  // fire-and-forget (12.1.4)
     });
 
     // Phase 10: Telegram photo handler
@@ -1384,7 +1483,7 @@ function initTelegram() {
             const { buffer, ext } = await downloadTelegramFile(largest.file_id, settings.telegram.token);
             const filePath = saveUpload(buffer, `photo${ext}`);
             const prompt = buildMediaPrompt(filePath, caption);
-            await tgOrchestrate(ctx, prompt, `[📷 이미지] ${caption}`);
+            tgOrchestrate(ctx, prompt, `[📷 이미지] ${caption}`);  // fire-and-forget (12.1.4)
         } catch (err) {
             console.error('[tg:photo:error]', err);
             await ctx.reply(`❌ 이미지 처리 실패: ${err.message}`);
@@ -1400,7 +1499,7 @@ function initTelegram() {
             const { buffer } = await downloadTelegramFile(doc.file_id, settings.telegram.token);
             const filePath = saveUpload(buffer, doc.file_name || 'document');
             const prompt = buildMediaPrompt(filePath, caption);
-            await tgOrchestrate(ctx, prompt, `[📎 ${doc.file_name || 'file'}] ${caption}`);
+            tgOrchestrate(ctx, prompt, `[📎 ${doc.file_name || 'file'}] ${caption}`);  // fire-and-forget (12.1.4)
         } catch (err) {
             console.error('[tg:doc:error]', err);
             await ctx.reply(`❌ 파일 처리 실패: ${err.message}`);
@@ -1534,6 +1633,15 @@ server.listen(PORT, () => {
     console.log(`  CWD:    ${settings.workingDir}`);
     console.log(`  DB:     ${DB_PATH}`);
     console.log(`  Prompts: ${PROMPTS_DIR}\n`);
+
+    // Phase 12.1: Ensure MCP config + skills symlinks for workingDir
+    try {
+        initMcpConfig(settings.workingDir);
+        ensureSkillsSymlinks(settings.workingDir);
+        copyDefaultSkills();
+        console.log(`  MCP:    ~/.cli-claw/mcp.json`);
+    } catch (e) { console.error('[mcp-init]', e.message); }
+
     initTelegram();
     startHeartbeat();
 });

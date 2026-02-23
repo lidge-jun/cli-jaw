@@ -92,6 +92,40 @@ if (values.simple) {
             ws.send(JSON.stringify({ type: 'send_message', text: prompt }));
             return;
         }
+        // Phase 12.1: /mcp command
+        if (t === '/mcp' || t.startsWith('/mcp ')) {
+            const sub = t.slice(4).trim();
+            if (sub === 'sync') {
+                fetch(`${apiUrl}/api/mcp/sync`, { method: 'POST' })
+                    .then(r => r.json())
+                    .then(d => { console.log(`  ${c.green}MCP synced:${c.reset}`, JSON.stringify(d.results)); rl.prompt(); })
+                    .catch(e => { console.log(`  ${c.red}${e.message}${c.reset}`); rl.prompt(); });
+            } else if (sub === 'install') {
+                console.log(`  ${c.yellow}📦 Installing MCP servers globally...${c.reset}`);
+                fetch(`${apiUrl}/api/mcp/install`, { method: 'POST' })
+                    .then(r => r.json())
+                    .then(d => {
+                        for (const [n, v] of Object.entries(d.results || {})) {
+                            const icon = v.status === 'installed' ? '✅' : v.status === 'skip' ? '⏭️' : '❌';
+                            console.log(`  ${icon} ${n}: ${v.status}${v.bin ? ` → ${v.bin}` : ''}${v.reason || ''}`);
+                        }
+                        rl.prompt();
+                    })
+                    .catch(e => { console.log(`  ${c.red}${e.message}${c.reset}`); rl.prompt(); });
+            } else {
+                fetch(`${apiUrl}/api/mcp`)
+                    .then(r => r.json())
+                    .then(d => {
+                        const names = Object.keys(d.servers || {});
+                        console.log(`  ${c.cyan}MCP servers (${names.length}):${c.reset} ${names.join(', ') || '(none)'}`);
+                        console.log(`  ${c.dim}/mcp sync    — 모든 CLI에 동기화${c.reset}`);
+                        console.log(`  ${c.dim}/mcp install — 전역 설치 (npm i -g)${c.reset}`);
+                        rl.prompt();
+                    })
+                    .catch(e => { console.log(`  ${c.red}${e.message}${c.reset}`); rl.prompt(); });
+            }
+            return;
+        }
         ws.send(JSON.stringify({ type: 'send_message', text: t }));
     });
     rl.on('close', () => { ws.close(); process.exit(0); });
@@ -189,12 +223,47 @@ if (values.simple) {
                 const fp = resolvePath(parts[0]);
                 const caption = parts.slice(1).join(' ');
                 if (!fs.existsSync(fp)) {
-                    scrollPrint(`  ${c.red}파일 없음: ${fp}${c.reset}`);
+                    console.log(`  ${c.red}파일 없음: ${fp}${c.reset}`);
                     showPrompt();
                     return;
                 }
                 const prompt = `[사용자가 파일을 보냈습니다: ${fp}]\n이 파일을 Read 도구로 읽고 분석해주세요.${caption ? `\n\n사용자 메시지: ${caption}` : ''}`;
                 ws.send(JSON.stringify({ type: 'send_message', text: prompt }));
+                inputActive = false;
+                return;
+            }
+            // Phase 12.1: /mcp command
+            if (text === '/mcp' || text.startsWith('/mcp ')) {
+                const sub = text.slice(4).trim();
+                if (sub === 'sync') {
+                    fetch(`${apiUrl}/api/mcp/sync`, { method: 'POST' })
+                        .then(r => r.json())
+                        .then(d => { console.log(`  ${c.green}MCP synced:${c.reset} ${JSON.stringify(d.results)}`); inputActive = true; showPrompt(); })
+                        .catch(e => { console.log(`  ${c.red}${e.message}${c.reset}`); inputActive = true; showPrompt(); });
+                } else if (sub === 'install') {
+                    console.log(`  ${c.yellow}📦 Installing MCP servers globally...${c.reset}`);
+                    fetch(`${apiUrl}/api/mcp/install`, { method: 'POST' })
+                        .then(r => r.json())
+                        .then(d => {
+                            for (const [n, v] of Object.entries(d.results || {})) {
+                                const icon = v.status === 'installed' ? '✅' : v.status === 'skip' ? '⏭️' : '❌';
+                                console.log(`  ${icon} ${n}: ${v.status}${v.bin ? ` → ${v.bin}` : ''}${v.reason || ''}`);
+                            }
+                            inputActive = true; showPrompt();
+                        })
+                        .catch(e => { console.log(`  ${c.red}${e.message}${c.reset}`); inputActive = true; showPrompt(); });
+                } else {
+                    fetch(`${apiUrl}/api/mcp`)
+                        .then(r => r.json())
+                        .then(d => {
+                            const names = Object.keys(d.servers || {});
+                            console.log(`  ${c.cyan}MCP servers (${names.length}):${c.reset} ${names.join(', ') || '(none)'}`);
+                            console.log(`  ${c.dim}/mcp sync    — 모든 CLI에 동기화${c.reset}`);
+                            console.log(`  ${c.dim}/mcp install — 전역 설치 (npm i -g)${c.reset}`);
+                            inputActive = true; showPrompt();
+                        })
+                        .catch(e => { console.log(`  ${c.red}${e.message}${c.reset}`); inputActive = true; showPrompt(); });
+                }
                 inputActive = false;
                 return;
             }
@@ -207,18 +276,35 @@ if (values.simple) {
                 redrawPromptLine();
             }
         } else if (key === '\x03') {
-            // Ctrl+C
-            cleanupScrollRegion();
-            console.log(`\n  ${c.dim}Bye! \uD83E\uDD9E${c.reset}\n`);
-            ws.close();
-            process.stdin.setRawMode(false);
-            process.exit(0);
+            // Ctrl+C — stop agent if running, otherwise exit
+            if (!inputActive) {
+                ws.send(JSON.stringify({ type: 'stop' }));
+                console.log(`\n  ${c.yellow}■ stopped${c.reset}`);
+                inputActive = true;
+                showPrompt();
+            } else {
+                cleanupScrollRegion();
+                console.log(`\n  ${c.dim}Bye! \uD83E\uDD9E${c.reset}\n`);
+                ws.close();
+                process.stdin.setRawMode(false);
+                process.exit(0);
+            }
         } else if (key === '\x15') {
             // Ctrl+U — clear line
             inputBuf = '';
             redrawPromptLine();
+        } else if (key === '\x1b') {
+            // ESC — stop agent if running
+            if (!inputActive) {
+                ws.send(JSON.stringify({ type: 'stop' }));
+                console.log(`\n  ${c.yellow}■ stopped${c.reset}`);
+                inputActive = true;
+                showPrompt();
+            }
         } else if (key.charCodeAt(0) >= 32 || key.charCodeAt(0) > 127) {
             // Printable chars (including multibyte/Korean)
+            // Phase 12.1.2: allow input even when agent is running (for steer)
+            if (!inputActive) inputActive = true;
             inputBuf += key;
             redrawPromptLine();
         }

@@ -1,23 +1,27 @@
 #!/usr/bin/env node
 /**
- * postinstall.js — Phase 8.3
- * Sets up symlink structure in workingDir for agent tool compatibility.
+ * postinstall.js — Phase 12.1
+ * Sets up symlink structure and MCP config for agent tool compatibility.
  *
  * Created structure:
  *   ~/.cli-claw/           (config dir)
  *   ~/.cli-claw/skills/    (default skills source)
- *   ~/.agents/skills/ → ~/.cli-claw/skills/   (agent compat)
- *   ~/.agent/skills  → ~/.agents/skills       (agent compat)
- *   ~/CLAUDE.md      → ~/AGENTS.md            (if AGENTS.md exists)
+ *   ~/.cli-claw/uploads/   (media uploads)
+ *   ~/.cli-claw/mcp.json   (unified MCP config)
+ *   {workingDir}/.agents/skills/ → ~/.cli-claw/skills/
+ *   ~/.agents/skills/ → ~/.cli-claw/skills/
+ *   ~/.agent/skills → ~/.agents/skills
+ *   ~/CLAUDE.md → ~/AGENTS.md (if AGENTS.md exists)
  */
 
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { execSync } from 'child_process';
+import { ensureSkillsSymlinks, initMcpConfig, copyDefaultSkills, loadUnifiedMcp, saveUnifiedMcp } from '../lib/mcp-sync.js';
 
 const home = os.homedir();
 const clawHome = path.join(home, '.cli-claw');
-const defaultSkillsDir = path.join(clawHome, 'skills');
 
 function ensureDir(dir) {
     if (!fs.existsSync(dir)) {
@@ -27,10 +31,7 @@ function ensureDir(dir) {
 }
 
 function ensureSymlink(target, linkPath) {
-    if (fs.existsSync(linkPath)) {
-        // Already exists (file, dir, or symlink) — skip
-        return false;
-    }
+    if (fs.existsSync(linkPath)) return false;
     fs.mkdirSync(path.dirname(linkPath), { recursive: true });
     fs.symlinkSync(target, linkPath);
     console.log(`[claw:init] symlink: ${linkPath} → ${target}`);
@@ -39,30 +40,67 @@ function ensureSymlink(target, linkPath) {
 
 // 1. Ensure ~/.cli-claw/ directories
 ensureDir(clawHome);
-ensureDir(defaultSkillsDir);
+ensureDir(path.join(clawHome, 'skills'));
+ensureDir(path.join(clawHome, 'uploads'));
 
-// 2. ~/.agents/skills/ → default skills source (if not already present)
-const agentsSkillsDir = path.join(home, '.agents', 'skills');
-if (!fs.existsSync(agentsSkillsDir)) {
-    ensureSymlink(defaultSkillsDir, agentsSkillsDir);
-}
+// 2. Skills symlinks (home-based default)
+ensureSkillsSymlinks(home);
 
-// 3. ~/.agent/skills → ~/.agents/skills (compat symlink)
-const agentSkillsLink = path.join(home, '.agent', 'skills');
-ensureSymlink(agentsSkillsDir, agentSkillsLink);
-
-// 4. ~/CLAUDE.md → ~/AGENTS.md (if AGENTS.md exists and CLAUDE.md doesn't)
+// 3. ~/CLAUDE.md → ~/AGENTS.md (if AGENTS.md exists and CLAUDE.md doesn't)
 const agentsMd = path.join(home, 'AGENTS.md');
 const claudeMd = path.join(home, 'CLAUDE.md');
 if (fs.existsSync(agentsMd) && !fs.existsSync(claudeMd)) {
     ensureSymlink(agentsMd, claudeMd);
 }
 
-// 5. Ensure default heartbeat.json if missing
+// 4. Ensure default heartbeat.json if missing
 const heartbeatPath = path.join(clawHome, 'heartbeat.json');
 if (!fs.existsSync(heartbeatPath)) {
     fs.writeFileSync(heartbeatPath, JSON.stringify({ jobs: [] }, null, 2));
     console.log(`[claw:init] created ${heartbeatPath}`);
 }
+
+// 5. Initialize unified MCP config (import from existing .mcp.json if found)
+initMcpConfig(home);
+
+// 6. Copy default skills (Codex → ~/.cli-claw/skills)
+copyDefaultSkills();
+
+// 7. Install default MCP servers globally (Phase 12.1.3)
+const MCP_PACKAGES = [
+    { pkg: '@modelcontextprotocol/server-puppeteer', bin: 'mcp-server-puppeteer' },
+    { pkg: '@upstash/context7-mcp', bin: 'context7-mcp' },
+];
+
+console.log('[claw:init] installing MCP servers globally...');
+const config = loadUnifiedMcp();
+let updated = false;
+
+for (const { pkg, bin } of MCP_PACKAGES) {
+    try {
+        // Check if already installed
+        try { execSync(`which ${bin}`, { stdio: 'pipe' }); console.log(`[claw:init] ⏭️  ${bin} (already installed)`); continue; }
+        catch { /* not installed, proceed */ }
+
+        console.log(`[claw:init] 📦 npm i -g ${pkg} ...`);
+        execSync(`npm i -g ${pkg}`, { stdio: 'pipe', timeout: 120000 });
+
+        const binPath = execSync(`which ${bin}`, { encoding: 'utf8', stdio: 'pipe' }).trim();
+        console.log(`[claw:init] ✅ ${bin} → ${binPath}`);
+
+        // Update mcp.json: npx → direct binary
+        for (const [name, srv] of Object.entries(config.servers || {})) {
+            if (srv.command === 'npx' && (srv.args || []).includes(pkg)) {
+                srv.command = bin;
+                srv.args = [];
+                updated = true;
+            }
+        }
+    } catch (e) {
+        console.error(`[claw:init] ⚠️  ${pkg}: ${e.message?.slice(0, 80)}`);
+    }
+}
+
+if (updated) saveUnifiedMcp(config);
 
 console.log('[claw:init] setup complete ✅');
