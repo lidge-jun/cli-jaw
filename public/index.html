@@ -984,9 +984,11 @@
             </div>
             <div style="display:flex;border-bottom:1px solid var(--border);padding:0 12px">
                 <button class="mem-tab active" id="memTabBtnSettings" onclick="switchMemTab('settings')"
-                    style="padding:6px 12px;border:none;background:none;color:var(--text);cursor:pointer;font-size:12px;border-bottom:2px solid transparent">⚙️ Settings</button>
+                    style="padding:6px 12px;border:none;background:none;color:var(--text);cursor:pointer;font-size:12px;border-bottom:2px solid transparent">⚙️
+                    Settings</button>
                 <button class="mem-tab" id="memTabBtnFiles" onclick="switchMemTab('files')"
-                    style="padding:6px 12px;border:none;background:none;color:var(--text-dim);cursor:pointer;font-size:12px;border-bottom:2px solid transparent">📂 Files</button>
+                    style="padding:6px 12px;border:none;background:none;color:var(--text-dim);cursor:pointer;font-size:12px;border-bottom:2px solid transparent">📂
+                    Files</button>
             </div>
             <div id="memTabSettings" style="padding:12px">
                 <div class="settings-row"><label>Enabled</label>
@@ -996,20 +998,27 @@
                     </div>
                 </div>
                 <div class="settings-row"><label>Flush Every</label>
-                    <select id="memFlushEvery" onchange="saveMemSettings()" style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
-                        <option value="10">5 QA</option>
-                        <option value="20" selected>10 QA</option>
-                        <option value="40">20 QA</option>
+                    <select id="memFlushEvery" onchange="saveMemSettings()"
+                        style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                        <option value="5">5 QA</option>
+                        <option value="10" selected>10 QA</option>
+                        <option value="20">20 QA</option>
+                        <option value="50">50 QA</option>
                     </select>
                 </div>
                 <div class="settings-row"><label>CLI</label>
-                    <select id="memCli" onchange="saveMemSettings()" style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                    <select id="memCli" onchange="saveMemSettings()"
+                        style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
                         <option value="">(active CLI)</option>
-                        <option>claude</option><option>codex</option><option>gemini</option><option>opencode</option>
+                        <option>claude</option>
+                        <option>codex</option>
+                        <option>gemini</option>
+                        <option>opencode</option>
                     </select>
                 </div>
                 <div class="settings-row"><label>Model</label>
-                    <select id="memModel" onchange="saveMemSettings()" style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                    <select id="memModel" onchange="saveMemSettings()"
+                        style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
                         <option value="">(CLI default)</option>
                         <option>claude-haiku-4-5-20251001</option>
                         <option>claude-sonnet-4-5-20250929</option>
@@ -1018,18 +1027,22 @@
                     </select>
                 </div>
                 <div class="settings-row"><label>Save Path</label>
-                    <span id="memPath" style="font-size:10px;color:var(--text-dim);font-family:monospace;word-break:break-all"></span>
+                    <span id="memPath"
+                        style="font-size:10px;color:var(--text-dim);font-family:monospace;word-break:break-all"></span>
                 </div>
                 <div class="settings-row"><label>Retention</label>
-                    <select id="memRetention" onchange="saveMemSettings()" style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                    <select id="memRetention" onchange="saveMemSettings()"
+                        style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
                         <option value="7">7 days</option>
                         <option value="30" selected>30 days</option>
                         <option value="90">90 days</option>
                         <option value="0">forever</option>
                     </select>
                 </div>
-                <div style="margin-top:8px;padding:6px;background:var(--bg);border-radius:4px;font-size:11px;color:var(--text-dim)">
-                    💡 Counter: <span id="memCounter">0</span> / <span id="memThreshold">20</span> messages until next flush
+                <div
+                    style="margin-top:8px;padding:6px;background:var(--bg);border-radius:4px;font-size:11px;color:var(--text-dim)">
+                    💡 Counter: <span id="memCounter">0</span> / <span id="memThreshold">10</span> responses until next
+                    flush
                 </div>
             </div>
             <div id="memTabFiles" style="padding:12px;display:none">

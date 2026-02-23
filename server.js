@@ -117,19 +117,23 @@ function getMemoryDir() {
     return join(os.homedir(), '.claude', 'projects', hash, 'memory');
 }
 
-function loadRecentMemories(max = 5) {
+function loadRecentMemories() {
     try {
+        const CHAR_BUDGET = 33000; // ~10000 tokens
         const memDir = getMemoryDir();
         if (!fs.existsSync(memDir)) return '';
         const files = fs.readdirSync(memDir).filter(f => f.endsWith('.md')).sort().reverse();
         const entries = [];
+        let charCount = 0;
         for (const f of files) {
             const sections = fs.readFileSync(join(memDir, f), 'utf8').split(/^## /m).filter(Boolean);
             for (const s of sections.reverse()) {
-                entries.push(s.trim());
-                if (entries.length >= max) break;
+                const entry = s.trim();
+                if (charCount + entry.length > CHAR_BUDGET) break;
+                entries.push(entry);
+                charCount += entry.length;
             }
-            if (entries.length >= max) break;
+            if (charCount >= CHAR_BUDGET) break;
         }
         return entries.length
             ? '\n\n---\n## Previous Memories\n' + entries.map(e => '## ' + e).join('\n\n')
@@ -143,7 +147,7 @@ function getSystemPrompt() {
     let prompt = `${a1}\n\n${a2}`;
 
     // Phase 11: Memory injection (new sessions only)
-    const memories = loadRecentMemories(5);
+    const memories = loadRecentMemories();
     if (memories) prompt += memories;
 
     // Phase 5.0: Employee orchestration injection
@@ -215,7 +219,7 @@ const DEFAULT_SETTINGS = {
     },
     memory: {
         enabled: true,
-        flushEvery: 20,       // 10 QA turns = 20 messages
+        flushEvery: 10,       // 10 QA turns (counter increments per response)
         cli: '',              // empty = use active CLI
         model: '',            // empty = use CLI default model
         retentionDays: 30,
@@ -650,10 +654,20 @@ function spawnAgent(prompt, opts = {}) {
 
 function triggerMemoryFlush() {
     const memDir = getMemoryDir();
-    const recent = getRecentMessages.all(20).reverse();
+    const recent = getRecentMessages.all(40).reverse(); // fetch extra, will trim by budget
     if (recent.length < 4) return; // too few messages to summarize
 
-    const convo = recent.map(m => `[${m.role}] ${m.content.slice(0, 400)}`).join('\n\n');
+    // Build conversation with ~5000 token budget (~16000 chars)
+    const CHAR_BUDGET = 16000;
+    let charCount = 0;
+    const lines = [];
+    for (const m of recent) {
+        const line = `[${m.role}] ${m.content.slice(0, 800)}`;
+        if (charCount + line.length > CHAR_BUDGET) break;
+        lines.push(line);
+        charCount += line.length;
+    }
+    const convo = lines.join('\n\n');
     const date = new Date().toISOString().slice(0, 10);
     const time = new Date().toTimeString().slice(0, 5);
     const memFile = join(memDir, `${date}.md`);
