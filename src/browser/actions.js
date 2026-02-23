@@ -1,4 +1,4 @@
-import { getActivePage } from './connection.js';
+import { getActivePage, getCdpSession } from './connection.js';
 import { CLAW_HOME } from '../config.js';
 import { join } from 'path';
 import fs from 'fs';
@@ -11,32 +11,82 @@ const INTERACTIVE_ROLES = ['button', 'link', 'textbox', 'checkbox',
     'radio', 'combobox', 'menuitem', 'tab', 'slider', 'searchbox',
     'option', 'switch', 'spinbutton'];
 
+/**
+ * Parse Playwright ariaSnapshot YAML into flat node list.
+ * Format: "- role \"name\":" or "- role \"name\""
+ */
+function parseAriaYaml(yaml) {
+    const nodes = [];
+    let counter = 0;
+    for (const line of yaml.split('\n')) {
+        if (!line.trim() || !line.includes('-')) continue;
+        const indent = line.search(/\S/);
+        const depth = Math.floor(indent / 2);
+        // Match: - role "name" or - role "name": or - text: content
+        const m = line.match(/-\s+(\w+)(?:\s+"([^"]*)")?/);
+        if (!m) continue;
+        counter++;
+        const role = m[1];
+        const name = m[2] || '';
+        nodes.push({ ref: `e${counter}`, role, name, depth });
+    }
+    return nodes;
+}
+
+/**
+ * Parse CDP Accessibility.getFullAXTree response into flat node list.
+ */
+function parseCdpAxTree(axNodes) {
+    const nodes = [];
+    let counter = 0;
+    // CDP returns flat list with parentId references; build depth map
+    const depthMap = {};
+    for (const n of axNodes) {
+        const parentDepth = n.parentId ? (depthMap[n.parentId] ?? 0) : -1;
+        const depth = parentDepth + 1;
+        depthMap[n.nodeId] = depth;
+        const role = n.role?.value || 'unknown';
+        const name = n.name?.value || '';
+        const value = n.value?.value || '';
+        if (n.ignored) continue;
+        counter++;
+        nodes.push({
+            ref: `e${counter}`, role, name,
+            ...(value ? { value } : {}),
+            depth,
+        });
+    }
+    return nodes;
+}
+
 export async function snapshot(port, opts = {}) {
     const page = await getActivePage(port);
     if (!page) throw new Error('No active page');
-    if (!page.accessibility) {
-        throw new Error('Accessibility API unavailable — try reconnecting (browser stop → start)');
-    }
-    const tree = await page.accessibility.snapshot();
-    if (!tree) throw new Error('Accessibility snapshot returned empty — page may still be loading');
-    const nodes = [];
-    let counter = 0;
 
-    function walk(node, depth = 0) {
-        if (!node) return;
-        counter++;
-        const ref = `e${counter}`;
-        if (!opts.interactive || INTERACTIVE_ROLES.includes(node.role)) {
-            nodes.push({
-                ref, role: node.role || 'unknown',
-                name: node.name || '',
-                ...(node.value ? { value: node.value } : {}),
-                depth,
-            });
+    let nodes;
+
+    // Strategy 1: locator.ariaSnapshot() — works on CDP connections (v1.49+)
+    try {
+        const yaml = await page.locator('body').ariaSnapshot({ timeout: 10000 });
+        nodes = parseAriaYaml(yaml);
+    } catch (e1) {
+        // Strategy 2: direct CDP Accessibility.getFullAXTree
+        try {
+            const cdp = await getCdpSession(port);
+            const { nodes: axNodes } = await cdp.send('Accessibility.getFullAXTree');
+            nodes = parseCdpAxTree(axNodes);
+            await cdp.detach().catch(() => { });
+        } catch (e2) {
+            throw new Error(
+                `Snapshot failed.\n  ariaSnapshot: ${e1.message}\n  CDP fallback: ${e2.message}`
+            );
         }
-        for (const child of node.children || []) walk(child, depth + 1);
     }
-    walk(tree);
+
+    if (opts.interactive) {
+        nodes = nodes.filter(n => INTERACTIVE_ROLES.includes(n.role));
+    }
+
     return nodes;
 }
 

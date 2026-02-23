@@ -1,11 +1,12 @@
 /**
- * cli-claw mcp — Phase 12.1.3.1
- * MCP server management: list, install, sync.
+ * cli-claw mcp — Phase 10
+ * MCP server management: list, install, sync, reset.
  *
  * Usage:
  *   cli-claw mcp                       # list servers
  *   cli-claw mcp install <pkg>         # install npm/pypi package + add to mcp.json + sync
  *   cli-claw mcp sync                  # sync mcp.json → 4 CLI configs
+ *   cli-claw mcp reset [--force]       # reset mcp.json to defaults + re-sync
  *
  * Package detection:
  *   npm:  @scope/name or name          → npm i -g <pkg>
@@ -13,12 +14,19 @@
  *         or auto-detect by known prefixes (mcp-server-*)
  */
 import { execSync } from 'node:child_process';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
+// ─── lib imports (Single Source of Truth) ────
+import {
+    loadUnifiedMcp,
+    saveUnifiedMcp,
+    syncToAll,
+    initMcpConfig,
+} from '../../lib/mcp-sync.js';
+
 const CLAW_HOME = join(homedir(), '.cli-claw');
-const MCP_PATH = join(CLAW_HOME, 'mcp.json');
 
 // ─── ANSI ────────────────────────────────────
 const c = {
@@ -28,18 +36,17 @@ const c = {
 };
 
 // ─── Helpers ─────────────────────────────────
-function loadMcp() {
-    try { return JSON.parse(readFileSync(MCP_PATH, 'utf8')); }
-    catch { return { servers: {} }; }
-}
-
-function saveMcp(config) {
-    mkdirSync(CLAW_HOME, { recursive: true });
-    writeFileSync(MCP_PATH, JSON.stringify(config, null, 4) + '\n');
-}
 
 function exec(cmd) {
     return execSync(cmd, { encoding: 'utf8', stdio: 'pipe', timeout: 120000 }).trim();
+}
+
+/** Read workingDir from settings.json for syncToAll() */
+function getWorkingDir() {
+    try {
+        const settingsPath = join(CLAW_HOME, 'settings.json');
+        return JSON.parse(readFileSync(settingsPath, 'utf8')).workingDir || homedir();
+    } catch { return homedir(); }
 }
 
 // Known PyPI MCP packages (auto-detect without --pypi flag)
@@ -89,66 +96,6 @@ function installPypi(pkg) {
     return { command: binPath || binName, args: [], bin: binPath };
 }
 
-function syncAll(config) {
-    try {
-        // Dynamic import of mcp-sync for syncToAll
-        const settingsPath = join(CLAW_HOME, 'settings.json');
-        let workingDir = homedir();
-        try {
-            const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
-            workingDir = settings.workingDir || workingDir;
-        } catch { }
-
-        // Inline sync to Claude (most critical target)
-        const claudePath = join(workingDir, '.mcp.json');
-        const mcpServers = {};
-        for (const [name, srv] of Object.entries(config.servers || {})) {
-            mcpServers[name] = { command: srv.command, args: srv.args || [] };
-            if (srv.env && Object.keys(srv.env).length) mcpServers[name].env = srv.env;
-        }
-        let existing = {};
-        try { existing = JSON.parse(readFileSync(claudePath, 'utf8')); } catch { }
-        existing.mcpServers = mcpServers;
-        writeFileSync(claudePath, JSON.stringify(existing, null, 4) + '\n');
-        console.log(`  ${c.green}✅ Claude:${c.reset} ${claudePath}`);
-
-        // Codex TOML patch
-        const codexPath = join(homedir(), '.codex', 'config.toml');
-        if (existsSync(codexPath)) {
-            const toml = readFileSync(codexPath, 'utf8');
-            let mcpToml = '';
-            for (const [name, srv] of Object.entries(config.servers || {})) {
-                mcpToml += `[mcp_servers.${name}]\n`;
-                mcpToml += `command = "${srv.command}"\n`;
-                mcpToml += `args = ${JSON.stringify(srv.args || [])}\n`;
-                if (srv.env && Object.keys(srv.env).length) {
-                    mcpToml += `[mcp_servers.${name}.env]\n`;
-                    for (const [k, v] of Object.entries(srv.env)) {
-                        mcpToml += `${k} = "${v}"\n`;
-                    }
-                }
-                mcpToml += '\n';
-            }
-            // Patch: remove existing mcp_servers sections, append new
-            const lines = toml.split('\n');
-            const out = [];
-            let inMcp = false;
-            for (const line of lines) {
-                if (/^\[mcp_servers\./.test(line)) { inMcp = true; continue; }
-                if (inMcp && /^\[/.test(line) && !/^\[mcp_servers\./.test(line)) inMcp = false;
-                if (!inMcp) out.push(line);
-            }
-            while (out.length && out[out.length - 1].trim() === '') out.pop();
-            writeFileSync(codexPath, out.join('\n') + '\n\n' + mcpToml);
-            console.log(`  ${c.green}✅ Codex:${c.reset} ${codexPath}`);
-        }
-
-        console.log(`  ${c.green}✅ Synced${c.reset}`);
-    } catch (e) {
-        console.error(`  ${c.red}❌ Sync error: ${e.message}${c.reset}`);
-    }
-}
-
 // ─── CLI Routing ─────────────────────────────
 const sub = process.argv[3];
 const arg = process.argv[4];
@@ -167,7 +114,7 @@ switch (sub) {
         const forceFlag = process.argv.includes('--pypi') ? 'pypi'
             : process.argv.includes('--npm') ? 'npm' : null;
         const eco = detectEcosystem(arg, forceFlag);
-        const config = loadMcp();
+        const config = loadUnifiedMcp();
         const serverName = arg.split('/').pop().replace(/^@/, '');
 
         console.log(`\n  ${c.bold}Installing ${arg}${c.reset} (${eco})\n`);
@@ -180,11 +127,11 @@ switch (sub) {
                 command: result.command,
                 args: result.args,
             };
-            saveMcp(config);
+            saveUnifiedMcp(config);
             console.log(`  ${c.green}✅ Added to mcp.json:${c.reset} ${serverName}`);
 
-            // Sync
-            syncAll(config);
+            // Sync to all 4 CLIs
+            syncToAll(config, getWorkingDir());
             console.log(`\n  ${c.green}Done!${c.reset} Server "${serverName}" ready for all CLIs.\n`);
         } catch (e) {
             console.error(`\n  ${c.red}❌ Install failed: ${e.message}${c.reset}\n`);
@@ -194,16 +141,60 @@ switch (sub) {
     }
 
     case 'sync': {
-        const config = loadMcp();
+        const config = loadUnifiedMcp();
         console.log(`\n  ${c.bold}Syncing MCP config → all CLIs${c.reset}\n`);
-        syncAll(config);
+        syncToAll(config, getWorkingDir());
+        console.log('');
+        break;
+    }
+
+    case 'reset': {
+        const force = process.argv.includes('--force');
+        if (!force) {
+            const { createInterface } = await import('node:readline');
+            const rl = createInterface({ input: process.stdin, output: process.stdout });
+            const answer = await new Promise(r => {
+                rl.question(
+                    `\n  ${c.yellow}⚠️  MCP 설정을 초기화합니다.${c.reset}\n` +
+                    `  ~/.cli-claw/mcp.json이 재생성되고 4개 CLI에 재동기화됩니다.\n` +
+                    `  계속하시겠습니까? (y/N): `, r
+                );
+            });
+            rl.close();
+            if (answer.toLowerCase() !== 'y') {
+                console.log('  취소됨.\n');
+                break;
+            }
+        }
+
+        console.log(`\n  ${c.bold}🔄 MCP 설정 초기화 중...${c.reset}\n`);
+
+        // 1. Delete existing mcp.json
+        const mcpPath = join(CLAW_HOME, 'mcp.json');
+        if (existsSync(mcpPath)) {
+            unlinkSync(mcpPath);
+            console.log(`  ${c.dim}✓ deleted ${mcpPath}${c.reset}`);
+        }
+
+        // 2. Re-init (import from workingDir/.mcp.json + DEFAULT_MCP_SERVERS merge)
+        const workingDir = getWorkingDir();
+        const config = initMcpConfig(workingDir);
+
+        // 3. Re-sync to all CLIs
+        const results = syncToAll(config, workingDir);
+
+        const count = Object.keys(config.servers || {}).length;
+        console.log(`\n  ${c.green}✅ 초기화 완료!${c.reset} (${count}개 서버)`);
+        for (const [target, ok] of Object.entries(results)) {
+            console.log(`  ${ok ? c.green + '✅' : c.dim + '⏭️ '} ${target}${c.reset}`);
+        }
         console.log('');
         break;
     }
 
     case 'list':
     case undefined: {
-        const config = loadMcp();
+        const config = loadUnifiedMcp();
         const entries = Object.entries(config.servers || {});
         console.log(`\n  ${c.bold}🔌 MCP Servers${c.reset} (${entries.length})\n`);
         if (!entries.length) {
@@ -217,7 +208,8 @@ switch (sub) {
             }
         }
         console.log(`\n  ${c.dim}cli-claw mcp install <pkg>  — 새 MCP 서버 설치${c.reset}`);
-        console.log(`  ${c.dim}cli-claw mcp sync           — 4개 CLI에 동기화${c.reset}\n`);
+        console.log(`  ${c.dim}cli-claw mcp sync           — 4개 CLI에 동기화${c.reset}`);
+        console.log(`  ${c.dim}cli-claw mcp reset          — 설정 초기화 + 재동기화${c.reset}\n`);
         break;
     }
 

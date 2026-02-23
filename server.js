@@ -355,6 +355,23 @@ app.post('/api/mcp/install', async (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
+app.post('/api/mcp/reset', (req, res) => {
+    try {
+        const mcpPath = join(CLAW_HOME, 'mcp.json');
+        if (fs.existsSync(mcpPath)) fs.unlinkSync(mcpPath);
+        const config = initMcpConfig(settings.workingDir);
+        const results = syncToAll(config, settings.workingDir);
+        res.json({
+            ok: true,
+            servers: Object.keys(config.servers),
+            count: Object.keys(config.servers).length,
+            synced: results,
+        });
+    } catch (e) {
+        console.error('[mcp:reset]', e);
+        res.status(500).json({ error: e.message });
+    }
+});
 
 // CLI & Quota
 app.get('/api/cli-status', (_, res) => res.json(detectAllCli()));

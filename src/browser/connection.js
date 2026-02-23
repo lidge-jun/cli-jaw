@@ -59,6 +59,12 @@ export async function getBrowserStatus(port = DEFAULT_CDP_PORT) {
     } catch { return { running: false, tabs: 0 }; }
 }
 
+export async function getCdpSession(port = DEFAULT_CDP_PORT) {
+    const page = await getActivePage(port);
+    if (!page) return null;
+    return page.context().newCDPSession(page);
+}
+
 export async function closeBrowser() {
     if (cached?.browser) { await cached.browser.close().catch(() => { }); cached = null; }
     if (chromeProc && !chromeProc.killed) { chromeProc.kill('SIGTERM'); chromeProc = null; }
