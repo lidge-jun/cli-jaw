@@ -17,6 +17,7 @@ import { saveUpload as _saveUpload, buildMediaPrompt } from '../lib/upload.js';
 
 export let activeProcess = null;
 export let memoryFlushCounter = 0;
+export let flushCycleCount = 0;
 export const messageQueue = [];
 
 // ─── Kill / Steer ────────────────────────────────────
@@ -274,6 +275,7 @@ export function spawnAgent(prompt, opts = {}) {
                 const threshold = settings.memory?.flushEvery ?? 20;
                 if (settings.memory?.enabled !== false && memoryFlushCounter >= threshold) {
                     memoryFlushCounter = 0;
+                    flushCycleCount++;
                     triggerMemoryFlush();
                 }
             }

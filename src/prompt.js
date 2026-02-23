@@ -1,8 +1,9 @@
 import fs from 'fs';
 import os from 'os';
 import { join } from 'path';
-import { settings, PROMPTS_DIR, SKILLS_DIR, SKILLS_REF_DIR, loadHeartbeatFile } from './config.js';
+import { settings, CLAW_HOME, PROMPTS_DIR, SKILLS_DIR, SKILLS_REF_DIR, loadHeartbeatFile } from './config.js';
 import { getSession, updateSession, getEmployees } from './db.js';
+import { memoryFlushCounter, flushCycleCount } from './agent.js';
 
 // ─── Skill Loading ───────────────────────────────────
 
@@ -180,7 +181,7 @@ export function getMemoryDir() {
 
 export function loadRecentMemories() {
     try {
-        const CHAR_BUDGET = 4000;
+        const CHAR_BUDGET = 10000;
         const memDir = getMemoryDir();
         if (!fs.existsSync(memDir)) return '';
         const files = fs.readdirSync(memDir).filter(f => f.endsWith('.md')).sort().reverse();
@@ -212,9 +213,23 @@ export function getSystemPrompt() {
     const a2 = fs.existsSync(A2_PATH) ? fs.readFileSync(A2_PATH, 'utf8') : '';
     let prompt = `${a1}\n\n${a2}`;
 
-    // Auto-flush memories (4000자 제한)
-    const memories = loadRecentMemories();
-    if (memories) prompt += memories;
+    // Auto-flush memories (threshold-based injection)
+    // Only inject at first message and every Nth flush cycle to save tokens
+    try {
+        const injectEvery = settings.memory?.injectEvery ?? 2;
+        const shouldInject = memoryFlushCounter === 0 && (flushCycleCount % injectEvery === 0);
+        if (shouldInject) {
+            const memories = loadRecentMemories();
+            if (memories) {
+                prompt += memories;
+                console.log(`[memory] injected session memory (cycle ${flushCycleCount}, every ${injectEvery})`);
+            }
+        }
+    } catch {
+        // Fallback: always inject if counter unavailable
+        const memories = loadRecentMemories();
+        if (memories) prompt += memories;
+    }
 
     // Core memory (MEMORY.md, 시스템 레벨 주입)
     try {
