@@ -627,6 +627,78 @@
                 ]
             },
             "install": null
+        },
+        "frontend-design": {
+            "name": "Frontend Design",
+            "emoji": "🎨",
+            "category": "ai-media",
+            "description": "독창적이고 프로덕션급 프론트엔드 UI/페이지 디자인 및 구현.",
+            "requires": null,
+            "install": null
+        },
+        "docx": {
+            "name": "DOCX",
+            "emoji": "📄",
+            "category": "productivity",
+            "description": "Word 문서(.docx) 생성/수정/파싱 전용 스킬.",
+            "requires": null,
+            "install": null
+        },
+        "xlsx": {
+            "name": "XLSX",
+            "emoji": "📊",
+            "category": "utility",
+            "description": "스프레드시트(.xlsx/.csv/.tsv) 읽기/수정/생성 전용 스킬.",
+            "requires": null,
+            "install": null
+        },
+        "webapp-testing": {
+            "name": "Webapp Testing",
+            "emoji": "🧪",
+            "category": "devtools",
+            "description": "Playwright 기반 웹앱 상호작용/검증/디버깅 테스트 스킬.",
+            "requires": null,
+            "install": null
+        },
+        "mcp-builder": {
+            "name": "MCP Builder",
+            "emoji": "🔌",
+            "category": "devtools",
+            "description": "외부 API 연동용 MCP 서버를 설계/구현하는 스킬.",
+            "requires": null,
+            "install": null
+        },
+        "pptx": {
+            "name": "PPTX",
+            "emoji": "📽️",
+            "category": "productivity",
+            "description": "프레젠테이션(.pptx) 생성/수정/분석 전용 스킬.",
+            "requires": null,
+            "install": null
+        },
+        "doc-coauthoring": {
+            "name": "Doc Coauthoring",
+            "emoji": "✍️",
+            "category": "productivity",
+            "description": "기획/스펙/문서 공동작성 워크플로우를 구조화하는 스킬.",
+            "requires": null,
+            "install": null
+        },
+        "web-artifacts-builder": {
+            "name": "Web Artifacts Builder",
+            "emoji": "🧱",
+            "category": "devtools",
+            "description": "React/Tailwind 기반 복합 웹 아티팩트 제작 스킬.",
+            "requires": null,
+            "install": null
+        },
+        "theme-factory": {
+            "name": "Theme Factory",
+            "emoji": "🎭",
+            "category": "ai-media",
+            "description": "문서/슬라이드/HTML 산출물에 재사용 가능한 테마를 적용하는 스킬.",
+            "requires": null,
+            "install": null
         }
     }
 }
