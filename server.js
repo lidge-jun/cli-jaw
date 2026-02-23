@@ -1031,7 +1031,11 @@ async function orchestrate(prompt) {
 
     // No employees → simple single-agent mode
     if (employees.length === 0) {
-        spawnAgent(prompt);
+        const { promise } = spawnAgent(prompt);
+        const result = await promise;
+        // Phase 3: broadcast orchestrate_done for Telegram
+        const stripped = stripSubtaskJSON(result.text);
+        broadcast('orchestrate_done', { text: stripped || result.text || '' });
         return;
     }
 
@@ -1044,7 +1048,12 @@ async function orchestrate(prompt) {
     const r1 = await p1;
 
     let subtasks = parseSubtasks(r1.text);
-    if (!subtasks?.length) return;  // Direct answer, no subtasks
+    if (!subtasks?.length) {
+        // Direct answer, no subtasks — broadcast for Telegram
+        const stripped = stripSubtaskJSON(r1.text);
+        broadcast('orchestrate_done', { text: stripped || r1.text || '' });
+        return;
+    }
 
     let round = 1;
     let lastResults = [];
@@ -1076,6 +1085,8 @@ async function orchestrate(prompt) {
             }
             broadcast('round_done', { round, action: 'complete' });
             broadcast('agent_status', { agentId: 'planning', status: 'idle' });
+            // Phase 3: orchestrate_done for Telegram
+            broadcast('orchestrate_done', { text: stripped || '' });
             break;
         }
         broadcast('round_done', { round, action: 'retry' });
@@ -1089,6 +1100,8 @@ async function orchestrate(prompt) {
         insertMessage.run('assistant', fallback, 'orchestrator', '');
         broadcast('agent_done', { text: fallback });
         broadcast('agent_status', { agentId: 'planning', status: 'idle' });
+        // Phase 3: orchestrate_done for Telegram
+        broadcast('orchestrate_done', { text: fallback });
     }
 }
 
@@ -1424,11 +1437,13 @@ function orchestrateAndCollect(prompt) {
         const handler = (type, data) => {
             // JSON 이벤트 수신 → 타임아웃 리셋 (에이전트가 살아있음)
             if (type === 'agent_chunk' || type === 'agent_tool' ||
-                type === 'agent_output' || type === 'agent_status') {
+                type === 'agent_output' || type === 'agent_status' ||
+                type === 'agent_done' || type === 'round_start' || type === 'round_done') {
                 resetTimeout();
             }
             if (type === 'agent_output') collected += data.text || '';
-            if (type === 'agent_done') {
+            // Phase 3: orchestrate_done = 전체 orchestration 완료 (최종 응답만 수신)
+            if (type === 'orchestrate_done') {
                 clearTimeout(timeout);
                 removeBroadcastListener(handler);
                 resolve(data.text || collected || '응답 없음');
