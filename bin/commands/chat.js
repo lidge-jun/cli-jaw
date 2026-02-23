@@ -115,25 +115,24 @@ if (values.simple) {
     function drawInputBox() {
         console.log('');
         console.log(`  ${c.dim}${hrLine()}${c.reset}`);
-        process.stdout.write(promptPrefix);
-        // Save cursor, draw below, restore
-        process.stdout.write('\x1b[s');
-        process.stdout.write(`\n  ${c.dim}${hrLine()}${c.reset}`);
-        process.stdout.write(`\n${footer}`);
-        process.stdout.write('\x1b[u');
+        // Print prompt line (empty for now), bottom hr, footer — 3 lines total
+        console.log(promptPrefix);
+        console.log(`  ${c.dim}${hrLine()}${c.reset}`);
+        process.stdout.write(footer);
+        // Move cursor up 3 lines to prompt position, place at end of prefix
+        process.stdout.write('\x1b[3A\r' + promptPrefix);
     }
 
     function redrawPromptLine() {
-        // Move to column 0 of current line, clear it, redraw prompt + buffer
         process.stdout.write('\r\x1b[2K');
         process.stdout.write(promptPrefix + inputBuf);
     }
 
     function clearBelowAndPrint() {
-        // Move down 2 lines (bottom hr + footer), clear them, move back, then go down
-        process.stdout.write('\x1b[s');
-        process.stdout.write('\n\x1b[2K\n\x1b[2K');
-        process.stdout.write('\x1b[u\n');
+        // From prompt line, move down 1 (bottom hr), clear, down 1 (footer), clear
+        process.stdout.write('\x1b[1B\x1b[2K');
+        process.stdout.write('\x1b[1B\x1b[2K');
+        // Cursor is now on cleared footer line, ready for output
     }
 
     // ─── Raw stdin input ─────────────────────
