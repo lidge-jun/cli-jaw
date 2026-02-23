@@ -53,8 +53,8 @@ const label = cliLabel[info.cli] || info.cli;
 const dir = info.workingDir.replace(process.env.HOME, '~');
 
 // ─── Width helper ────────────────────────────
-const W = () => Math.min(process.stdout.columns || 60, 72);
-const hr = () => '\u2500'.repeat(W());
+const W = () => Math.max(20, Math.min((process.stdout.columns || 60) - 4, 60));
+const hr = () => '-'.repeat(W());
 
 // ─── Raw mode ────────────────────────────────
 if (values.raw) {
