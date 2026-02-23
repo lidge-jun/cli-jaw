@@ -77,15 +77,19 @@ if (values.raw) {
     console.log('');
     console.log(`  ${c.dim}/quit to exit, /clear to reset${c.reset}`);
 
-    // ─── Input prompt (Claude Code style) ────
+    // ─── Input prompt ────────────────────────
     function showInput() {
         console.log('');
         console.log(`  ${c.dim}${hr()}${c.reset}`);
-        process.stdout.write(`  ${accent}\u276F${c.reset} `);
+        // Footer line below prompt — ANSI trick: print footer, move cursor up
+        const footer = `  ${c.dim}${accent}${label}${c.dim}  |  /quit  |  /clear${c.reset}`;
+        // Print prompt line, then footer, then move cursor back up to prompt
+        process.stdout.write(`  ${accent}\u276F${c.reset} \n${footer}\x1b[1A\x1b[4C`);
     }
 
-    function showInputBottom() {
-        console.log(`  ${c.dim}${hr()}${c.reset}`);
+    function clearFooter() {
+        // Move down to footer line, clear it, move back up
+        process.stdout.write(`\n\x1b[2K\x1b[1A`);
     }
 
     // ─── REPL ────────────────────────────────
@@ -138,7 +142,7 @@ if (values.raw) {
 
     rl.on('line', (line) => {
         const text = line.trim();
-        showInputBottom();
+        clearFooter();
         if (!text) { showInput(); return; }
         if (text === '/quit' || text === '/exit' || text === '/q') {
             console.log(`\n  ${c.dim}Bye! \uD83E\uDD9E${c.reset}\n`);
