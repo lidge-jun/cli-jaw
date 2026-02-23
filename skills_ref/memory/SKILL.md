@@ -23,6 +23,12 @@ Persistent memory system using structured markdown files in `~/.cli-claw/memory/
 3. **After learning user preferences or making important decisions**: Save immediately.
 4. **Never guess**: If memory search returns nothing, say "I don't have a record of that."
 5. **Session memory is periodic**: Auto-flush summaries are injected every Nth cycle (configurable). Don't rely on them being in every response.
+6. **Auto-route saves**: When the user mentions preferences, decisions, people, or project info — save to the correct file automatically without being asked:
+   - Preferences/habits → `preferences.md`
+   - Decisions with reasoning → `decisions.md`
+   - People/teams → `people.md`
+   - Project-specific info → `projects/<name>.md`
+   - Core knowledge updates → `MEMORY.md`
 
 ## Commands
 
