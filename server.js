@@ -111,10 +111,40 @@ if (!fs.existsSync(HEARTBEAT_PATH)) {
 
 // ─── B.md (auto-generated: A-1 + A-2 + Employees) ───
 
+function getMemoryDir() {
+    const wd = (settings.workingDir || os.homedir()).replace(/^~/, os.homedir());
+    const hash = wd.replace(/\//g, '-');
+    return join(os.homedir(), '.claude', 'projects', hash, 'memory');
+}
+
+function loadRecentMemories(max = 5) {
+    try {
+        const memDir = getMemoryDir();
+        if (!fs.existsSync(memDir)) return '';
+        const files = fs.readdirSync(memDir).filter(f => f.endsWith('.md')).sort().reverse();
+        const entries = [];
+        for (const f of files) {
+            const sections = fs.readFileSync(join(memDir, f), 'utf8').split(/^## /m).filter(Boolean);
+            for (const s of sections.reverse()) {
+                entries.push(s.trim());
+                if (entries.length >= max) break;
+            }
+            if (entries.length >= max) break;
+        }
+        return entries.length
+            ? '\n\n---\n## Previous Memories\n' + entries.map(e => '## ' + e).join('\n\n')
+            : '';
+    } catch { return ''; }
+}
+
 function getSystemPrompt() {
     const a1 = fs.readFileSync(A1_PATH, 'utf8');
     const a2 = fs.existsSync(A2_PATH) ? fs.readFileSync(A2_PATH, 'utf8') : '';
     let prompt = `${a1}\n\n${a2}`;
+
+    // Phase 11: Memory injection (new sessions only)
+    const memories = loadRecentMemories(5);
+    if (memories) prompt += memories;
 
     // Phase 5.0: Employee orchestration injection
     try {
@@ -182,6 +212,13 @@ const DEFAULT_SETTINGS = {
         enabled: false,
         token: '',
         allowedChatIds: [],
+    },
+    memory: {
+        enabled: true,
+        flushEvery: 20,       // 10 QA turns = 20 messages
+        cli: '',              // empty = use active CLI
+        model: '',            // empty = use CLI default model
+        retentionDays: 30,
     },
     employees: [],
 };
@@ -383,6 +420,7 @@ function readGeminiAccount() {
 // ─── Agent Spawn ─────────────────────────────────────
 
 let activeProcess = null;
+let memoryFlushCounter = 0;
 
 function makeCleanEnv() {
     const env = { ...process.env };
@@ -578,6 +616,14 @@ function spawnAgent(prompt, opts = {}) {
             if (!forceNew && !opts.internal) {
                 insertMessage.run('assistant', finalContent, cli, model);
                 broadcast('agent_done', { text: finalContent, toolLog: ctx.toolLog });
+
+                // Phase 11: Memory flush counter
+                memoryFlushCounter++;
+                const threshold = settings.memory?.flushEvery ?? 20;
+                if (settings.memory?.enabled !== false && memoryFlushCounter >= threshold) {
+                    memoryFlushCounter = 0;
+                    triggerMemoryFlush();
+                }
             }
         } else if (!forceNew && code !== 0) {
             let errMsg = `CLI 실행 실패 (exit ${code})`;
@@ -598,6 +644,54 @@ function spawnAgent(prompt, opts = {}) {
     });
 
     return { child, promise: resultPromise };
+}
+
+// ─── Phase 11: Memory Flush ─────────────────────────
+
+function triggerMemoryFlush() {
+    const memDir = getMemoryDir();
+    const recent = getRecentMessages.all(20).reverse();
+    if (recent.length < 4) return; // too few messages to summarize
+
+    const convo = recent.map(m => `[${m.role}] ${m.content.slice(0, 400)}`).join('\n\n');
+    const date = new Date().toISOString().slice(0, 10);
+    const time = new Date().toTimeString().slice(0, 5);
+    const memFile = join(memDir, `${date}.md`);
+
+    const flushPrompt = `You are a conversation memory extractor.
+Summarize the conversation below into ENGLISH structured memory entries.
+Save by APPENDING to this file: ${memFile}
+Create the file and any parent directories if they don't exist.
+
+Rules:
+- Output 2-5 bullet points, each 1 English sentence
+- Skip greetings, small talk, errors — only decisions, facts, preferences, project info
+- If nothing worth remembering, do NOT write any file and reply "SKIP"
+- Use this EXACT format when writing:
+
+## ${time} — Memory Flush
+
+- [topic]: fact or decision
+- [topic]: fact or decision
+
+Conversation to summarize:
+---
+${convo}`;
+
+    fs.mkdirSync(memDir, { recursive: true });
+
+    const flushCli = settings.memory?.cli || settings.cli;
+    const flushModel = settings.memory?.model || (settings.perCli?.[flushCli]?.model) || 'default';
+
+    spawnAgent(flushPrompt, {
+        forceNew: true,
+        internal: true,
+        agentId: 'memory-flush',
+        cli: flushCli,
+        model: flushModel,
+        sysPrompt: '',  // system prompt independent
+    });
+    console.log(`[memory] flush triggered (${recent.length} msgs → ${flushCli}/${flushModel})`);
 }
 
 // ─── Event Extraction (ported from claw-lite) ────────
@@ -965,7 +1059,7 @@ app.put('/api/heartbeat-md', (req, res) => {
     res.json({ ok: true });
 });
 
-// Memory
+// Memory (legacy key-value)
 app.get('/api/memory', (_, res) => res.json(getMemory.all()));
 app.post('/api/memory', (req, res) => {
     const { key, value, source = 'manual' } = req.body;
@@ -975,6 +1069,47 @@ app.post('/api/memory', (req, res) => {
 });
 app.delete('/api/memory/:key', (req, res) => {
     deleteMemory.run(req.params.key);
+    res.json({ ok: true });
+});
+
+// Phase 11: Memory files (Claude native memory path)
+app.get('/api/memory-files', (_, res) => {
+    const memDir = getMemoryDir();
+    let files = [];
+    if (fs.existsSync(memDir)) {
+        files = fs.readdirSync(memDir).filter(f => f.endsWith('.md')).sort().reverse().map(f => {
+            const content = fs.readFileSync(join(memDir, f), 'utf8');
+            const entries = content.split(/^## /m).filter(Boolean).length;
+            return { name: f, entries, size: content.length };
+        });
+    }
+    res.json({
+        enabled: settings.memory?.enabled !== false,
+        flushEvery: settings.memory?.flushEvery ?? 20,
+        cli: settings.memory?.cli || '',
+        model: settings.memory?.model || '',
+        retentionDays: settings.memory?.retentionDays ?? 30,
+        path: memDir,
+        files,
+        counter: memoryFlushCounter,
+    });
+});
+
+app.get('/api/memory-files/:filename', (req, res) => {
+    const fp = join(getMemoryDir(), req.params.filename);
+    if (!fp.endsWith('.md') || !fs.existsSync(fp)) return res.status(404).json({ error: 'not found' });
+    res.json({ name: req.params.filename, content: fs.readFileSync(fp, 'utf8') });
+});
+
+app.delete('/api/memory-files/:filename', (req, res) => {
+    const fp = join(getMemoryDir(), req.params.filename);
+    if (fp.endsWith('.md') && fs.existsSync(fp)) fs.unlinkSync(fp);
+    res.json({ ok: true });
+});
+
+app.put('/api/memory-files/settings', (req, res) => {
+    settings.memory = { ...settings.memory, ...req.body };
+    saveSettings(settings);
     res.json({ ok: true });
 });
 
