@@ -120,7 +120,7 @@ if (values.simple) {
         console.log(`  ${c.dim}${hrLine()}${c.reset}`);
         process.stdout.write(footer);
         // Move cursor up 3 lines to prompt position, place at end of prefix
-        process.stdout.write('\x1b[3A\r' + promptPrefix);
+        process.stdout.write('\x1b[2A\r' + promptPrefix);
     }
 
     function redrawPromptLine() {
