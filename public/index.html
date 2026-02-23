@@ -856,6 +856,23 @@
             font-size: 10px;
             color: var(--accent2);
         }
+
+        .custom-model-input {
+            width: 100%;
+            font-size: 11px;
+            padding: 4px 6px;
+            margin-top: 4px;
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--accent);
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        .custom-model-input:focus {
+            outline: none;
+            border-color: var(--accent2);
+        }
     </style>
 </head>
 
@@ -1021,11 +1038,16 @@
                 <h4>🟣 Claude</h4>
                 <div class="settings-row">
                     <label>Model</label>
-                    <select id="modelClaude" onchange="savePerCli()">
-                        <option selected>claude-sonnet-4-5-20250929</option>
+                    <select id="modelClaude" onchange="handleModelSelect('claude', this)">
+                        <option selected>claude-sonnet-4-6</option>
                         <option>claude-opus-4-6</option>
+                        <option>claude-sonnet-4-6[1m]</option>
+                        <option>claude-opus-4-6[1m]</option>
                         <option>claude-haiku-4-5-20251001</option>
+                        <option value="__custom__">✏️ 직접 입력...</option>
                     </select>
+                    <input type="text" id="customModelClaude" class="custom-model-input" placeholder="model ID 입력"
+                        style="display:none" onchange="applyCustomModel('claude', this)">
                 </div>
                 <div class="settings-row sub-row">
                     <label>Effort</label>
@@ -1041,13 +1063,16 @@
                 <h4>🟢 Codex</h4>
                 <div class="settings-row">
                     <label>Model</label>
-                    <select id="modelCodex" onchange="savePerCli()">
+                    <select id="modelCodex" onchange="handleModelSelect('codex', this)">
                         <option selected>gpt-5.3-codex</option>
                         <option>gpt-5.3-codex-spark</option>
                         <option>gpt-5.2-codex</option>
                         <option>gpt-5.1-codex-max</option>
                         <option>gpt-5.1-codex-mini</option>
+                        <option value="__custom__">✏️ 직접 입력...</option>
                     </select>
+                    <input type="text" id="customModelCodex" class="custom-model-input" placeholder="model ID 입력"
+                        style="display:none" onchange="applyCustomModel('codex', this)">
                 </div>
                 <div class="settings-row sub-row">
                     <label>Effort</label>
@@ -1064,12 +1089,16 @@
                 <h4>🔵 Gemini</h4>
                 <div class="settings-row">
                     <label>Model</label>
-                    <select id="modelGemini" onchange="savePerCli()">
+                    <select id="modelGemini" onchange="handleModelSelect('gemini', this)">
+                        <option>gemini-3.0-pro-preview</option>
                         <option selected>gemini-2.5-pro</option>
                         <option>gemini-3.1-pro-preview</option>
                         <option>gemini-3-flash-preview</option>
                         <option>gemini-2.5-flash</option>
+                        <option value="__custom__">✏️ 직접 입력...</option>
                     </select>
+                    <input type="text" id="customModelGemini" class="custom-model-input" placeholder="model ID 입력"
+                        style="display:none" onchange="applyCustomModel('gemini', this)">
                 </div>
             </div>
 
@@ -1077,13 +1106,21 @@
                 <h4>🟠 OpenCode</h4>
                 <div class="settings-row">
                     <label>Model</label>
-                    <select id="modelOpencode" onchange="savePerCli()">
+                    <select id="modelOpencode" onchange="handleModelSelect('opencode', this)">
                         <option>github-copilot/claude-sonnet-4.5</option>
                         <option>github-copilot/claude-opus-4.6</option>
                         <option>github-copilot/gpt-5</option>
                         <option>github-copilot/gemini-2.5-pro</option>
                         <option>opencode/big-pickle</option>
+                        <option>opencode/GLM-5 Free</option>
+                        <option>opencode/MiniMax M2.5 Free</option>
+                        <option>opencode/Kimi K2.5 Free</option>
+                        <option>opencode/GPT 5 Nano Free</option>
+                        <option>opencode/Grok Code Fast 1 Free</option>
+                        <option value="__custom__">✏️ 직접 입력...</option>
                     </select>
+                    <input type="text" id="customModelOpencode" class="custom-model-input" placeholder="model ID 입력"
+                        style="display:none" onchange="applyCustomModel('opencode', this)">
                 </div>
                 <div class="settings-row sub-row">
                     <label>Effort</label>
@@ -1243,12 +1280,14 @@
     <script>
         // ── Constants (ported from claw-lite) ──
         const MODEL_MAP = {
-            claude: ['claude-opus-4-6', 'claude-sonnet-4-5-20250929', 'claude-haiku-4-5-20251001'],
+            claude: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-sonnet-4-6[1m]', 'claude-opus-4-6[1m]', 'claude-haiku-4-5-20251001'],
             codex: ['gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini'],
-            gemini: ['gemini-3.1-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-pro', 'gemini-2.5-flash'],
+            gemini: ['gemini-3.0-pro-preview', 'gemini-3.1-pro-preview', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-2.5-flash'],
             opencode: [
                 'github-copilot/claude-sonnet-4.5', 'github-copilot/claude-opus-4.6',
-                'github-copilot/gpt-5', 'github-copilot/gemini-2.5-pro', 'opencode/big-pickle',
+                'github-copilot/gpt-5', 'github-copilot/gemini-2.5-pro',
+                'opencode/big-pickle', 'opencode/GLM-5 Free', 'opencode/MiniMax M2.5 Free',
+                'opencode/Kimi K2.5 Free', 'opencode/GPT 5 Nano Free', 'opencode/Grok Code Fast 1 Free',
             ],
         };
         const ROLE_PRESETS = [
@@ -1673,7 +1712,17 @@
                     const capCli = cli.charAt(0).toUpperCase() + cli.slice(1);
                     const modelEl = document.getElementById('model' + capCli);
                     const effortEl = document.getElementById('effort' + capCli);
-                    if (modelEl && cfg.model) modelEl.value = cfg.model;
+                    if (modelEl && cfg.model) {
+                        // If saved model not in preset options, add it dynamically
+                        if (cfg.model !== '__custom__' && !Array.from(modelEl.options).some(o => o.value === cfg.model)) {
+                            const opt = document.createElement('option');
+                            opt.value = cfg.model; opt.textContent = cfg.model;
+                            const customOpt = modelEl.querySelector('option[value="__custom__"]');
+                            if (customOpt) modelEl.insertBefore(opt, customOpt);
+                            else modelEl.appendChild(opt);
+                        }
+                        modelEl.value = cfg.model;
+                    }
                     if (effortEl && cfg.effort) effortEl.value = cfg.effort;
                 }
             }
@@ -1754,22 +1803,60 @@
             });
         }
 
+        // ── Custom model input helpers ──
+        function getModelValue(cli) {
+            const cap = cli[0].toUpperCase() + cli.slice(1);
+            const sel = document.getElementById('model' + cap);
+            if (sel.value === '__custom__') {
+                const inp = document.getElementById('customModel' + cap);
+                return inp?.value?.trim() || sel.options[0]?.value || 'default';
+            }
+            return sel.value;
+        }
+
+        function handleModelSelect(cli, selectEl) {
+            const cap = cli[0].toUpperCase() + cli.slice(1);
+            const customInput = document.getElementById('customModel' + cap);
+            if (selectEl.value === '__custom__') {
+                customInput.style.display = 'block';
+                customInput.focus();
+            } else {
+                customInput.style.display = 'none';
+                savePerCli();
+            }
+        }
+
+        function applyCustomModel(cli, inputEl) {
+            const cap = cli[0].toUpperCase() + cli.slice(1);
+            const val = inputEl.value.trim();
+            if (!val) return;
+            const select = document.getElementById('model' + cap);
+            // Add as a temporary option before __custom__
+            const opt = document.createElement('option');
+            opt.value = val; opt.textContent = val;
+            const customOpt = select.querySelector('option[value="__custom__"]');
+            select.insertBefore(opt, customOpt);
+            select.value = val;
+            inputEl.style.display = 'none';
+            savePerCli();
+        }
+
         // ── Per-CLI settings ──
         async function savePerCli() {
             const perCli = {
                 claude: {
-                    model: document.getElementById('modelClaude').value,
+                    model: getModelValue('claude'),
                     effort: document.getElementById('effortClaude').value,
                 },
                 codex: {
-                    model: document.getElementById('modelCodex').value,
+                    model: getModelValue('codex'),
                     effort: document.getElementById('effortCodex').value,
                 },
                 gemini: {
-                    model: document.getElementById('modelGemini').value,
+                    model: getModelValue('gemini'),
                 },
                 opencode: {
-                    model: document.getElementById('modelOpencode').value,
+                    model: getModelValue('opencode'),
                     effort: document.getElementById('effortOpencode').value,
                 },
             };
@@ -1787,13 +1874,53 @@
             const modelSel = document.getElementById('selModel');
             modelSel.innerHTML = models.map(m =>
                 `<option value="${m}">${m}</option>`
-            ).join('');
+            ).join('') + '<option value="__custom__">✏️ 직접 입력...</option>';
             document.getElementById('headerCli').textContent = cli;
+
+            // Remove old custom input if present
+            const oldInput = document.getElementById('selModelCustom');
+            if (oldInput) oldInput.remove();
+            // Add custom input after selModel
+            const inp = document.createElement('input');
+            inp.type = 'text'; inp.id = 'selModelCustom';
+            inp.className = 'custom-model-input';
+            inp.placeholder = 'model ID 입력';
+            inp.style.display = 'none';
+            inp.onchange = function () {
+                const val = this.value.trim();
+                if (!val) return;
+                const opt = document.createElement('option');
+                opt.value = val; opt.textContent = val;
+                const customOpt = modelSel.querySelector('option[value="__custom__"]');
+                modelSel.insertBefore(opt, customOpt);
+                modelSel.value = val;
+                this.style.display = 'none';
+                saveActiveCliSettings();
+            };
+            modelSel.parentElement.appendChild(inp);
+            modelSel.onchange = function () {
+                if (this.value === '__custom__') {
+                    inp.style.display = 'block';
+                    inp.focus();
+                } else {
+                    inp.style.display = 'none';
+                    saveActiveCliSettings();
+                }
+            };
 
             // Load perCli defaults for this CLI
             fetch('/api/settings').then(r => r.json()).then(s => {
                 const cfg = s.perCli?.[cli] || {};
-                if (cfg.model) modelSel.value = cfg.model;
+                if (cfg.model) {
+                    // If model is not in MODEL_MAP, add it as option
+                    if (!models.includes(cfg.model)) {
+                        const opt = document.createElement('option');
+                        opt.value = cfg.model; opt.textContent = cfg.model;
+                        const customOpt = modelSel.querySelector('option[value="__custom__"]');
+                        modelSel.insertBefore(opt, customOpt);
+                    }
+                    modelSel.value = cfg.model;
+                }
                 if (cfg.effort) document.getElementById('selEffort').value = cfg.effort;
             });
 
@@ -2210,7 +2337,24 @@
         function onEmpCliChange(id, cli) {
             const models = MODEL_MAP[cli] || [];
             const sel = document.getElementById(`emp-model-${id}`);
-            sel.innerHTML = `<option value="default" selected>default</option>` + models.map(m => `<option>${m}</option>`).join('');
+            sel.innerHTML = `<option value="default" selected>default</option>` + models.map(m => `<option>${m}</option>`).join('') + `<option value="__custom__">✏️ 직접 입력...</option>`;
+            sel.onchange = function () {
+                if (this.value === '__custom__') {
+                    const val = prompt('모델 ID를 입력하세요:');
+                    if (val?.trim()) {
+                        const opt = document.createElement('option');
+                        opt.value = val.trim(); opt.textContent = val.trim();
+                        const customOpt = this.querySelector('option[value="__custom__"]');
+                        this.insertBefore(opt, customOpt);
+                        this.value = val.trim();
+                        updateEmployee(id, { model: val.trim() });
+                    } else {
+                        this.value = 'default';
+                    }
+                } else {
+                    updateEmployee(id, { model: this.value });
+                }
+            };
             updateEmployee(id, { cli, model: 'default' });
         }
         function onEmpRoleChange(id, presetVal) {

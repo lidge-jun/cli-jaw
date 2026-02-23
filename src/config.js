@@ -59,7 +59,7 @@ export const DEFAULT_SETTINGS = {
     permissions: 'auto',
     workingDir: os.homedir(),
     perCli: {
-        claude: { model: 'claude-sonnet-4-5-20250929', effort: 'medium' },
+        claude: { model: 'claude-sonnet-4-6', effort: 'medium' },
         codex: { model: 'gpt-5.3-codex', effort: 'medium' },
         gemini: { model: 'gemini-2.5-pro', effort: '' },
         opencode: { model: 'github-copilot/claude-sonnet-4.5', effort: '' },
