@@ -65,12 +65,15 @@ cli-claw memory save <file>       # 파일 저장
 
 ```
 cli-claw browser start            # Chrome 시작 (CDP)
-cli-claw browser snapshot         # Accessibility tree
+cli-claw browser snapshot         # Accessibility tree (ariaSnapshot 기반)
 cli-claw browser screenshot       # 스크린샷
 cli-claw browser navigate <url>   # URL 이동
-cli-claw browser click <ref>      # 클릭
+cli-claw browser click <ref>      # 클릭 (snapshot ref ID)
 cli-claw browser type <ref> <text># 텍스트 입력
+cli-claw browser reset [--force]  # 프로필 + 스크린샷 초기화
 ```
+
+> 💡 snapshot은 `locator.ariaSnapshot()` 기반으로 CDP 연결에서도 안정 동작합니다.
 
 ## Supported Models
 
