@@ -6,16 +6,19 @@ export function setStatus(s) {
     const badge = document.getElementById('statusBadge');
     const btn = document.getElementById('btnSend');
     state.agentBusy = s === 'running';
-    btn.textContent = '➤';
-    btn.title = state.agentBusy ? '큐에 추가' : 'Send';
-    btn.style.background = '';
     document.getElementById('typingIndicator').classList.toggle('active', state.agentBusy);
     if (s === 'running') {
         badge.className = 'status-badge status-running';
         badge.textContent = '⏳ running';
+        btn.textContent = '■';
+        btn.title = '멈춤 (Stop)';
+        btn.classList.add('stop-mode');
     } else {
         badge.className = 'status-badge status-idle';
         badge.textContent = '⚡ idle';
+        btn.textContent = '➤';
+        btn.title = 'Send';
+        btn.classList.remove('stop-mode');
         updateQueueBadge(0);
     }
 }

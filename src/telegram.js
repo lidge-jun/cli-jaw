@@ -98,7 +98,7 @@ export function initTelegram() {
     if (envToken) settings.telegram.token = envToken;
 
     if (!settings.telegram?.enabled || !settings.telegram?.token) {
-        console.log('[tg] Telegram disabled or no token');
+        console.log('[tg] ⏸️  Telegram pending (disabled or no token)');
         return;
     }
 

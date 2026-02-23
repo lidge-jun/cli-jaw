@@ -4,8 +4,16 @@ import { addMessage, addSystemMsg, scrollToBottom } from '../ui.js';
 
 export async function sendMessage() {
     const input = document.getElementById('chatInput');
+    const btn = document.getElementById('btnSend');
+
+    // Stop mode: clicking ■ stops the agent
+    if (btn.classList.contains('stop-mode') && !input.value.trim() && !state.attachedFile) {
+        await fetch('/api/stop', { method: 'POST' });
+        return;
+    }
+
     const text = input.value.trim();
-    if ((!text && !state.attachedFile) || state.agentBusy) return;
+    if (!text && !state.attachedFile) return;
 
     if (text === '/clear') { clearChat(); input.value = ''; return; }
 
@@ -29,11 +37,16 @@ export async function sendMessage() {
     } else {
         addMessage('user', text);
         input.value = '';
-        await fetch('/api/message', {
+        const res = await fetch('/api/message', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ prompt: text }),
         });
+        const data = await res.json();
+        if (data.queued) {
+            const { updateQueueBadge } = await import('../ui.js');
+            updateQueueBadge(data.pending || 1);
+        }
     }
 }
 

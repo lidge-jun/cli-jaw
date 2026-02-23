@@ -129,6 +129,16 @@
     background: var(--accent2);
 }
 
+.btn-send.stop-mode {
+    background: #ef4444;
+    font-size: 16px;
+    transition: background .2s;
+}
+
+.btn-send.stop-mode:hover {
+    background: #dc2626;
+}
+
 .btn-send:disabled {
     opacity: 0.4;
     cursor: not-allowed;
