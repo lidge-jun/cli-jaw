@@ -103,24 +103,34 @@ if (values.simple) {
     const footer = `  ${c.dim}${accent}${label}${c.reset}${c.dim}  |  /quit  |  /clear${c.reset}`;
     const promptPrefix = `  ${accent}\u276F${c.reset} `;
 
-    // ─── State ───────────────────────────────
-    let inputBuf = '';
-    let inputActive = true;
-    let streaming = false;
+    // ─── Scroll region: fixed footer at bottom ──
+    const getRows = () => process.stdout.rows || 24;
 
-    // Track which "row" the prompt is on (for cursor movement)
-    // We draw: [blank] [top hr] [prompt] [bottom hr] [footer]
-    // Prompt row = current cursor, bottom hr = +1, footer = +2
+    function setupScrollRegion() {
+        const rows = getRows();
+        // Set scroll region to rows 1..(rows-2), leaving bottom 2 for footer
+        process.stdout.write(`\x1b[1;${rows - 2}r`);
+        // Draw fixed footer at absolute positions
+        process.stdout.write(`\x1b[${rows - 1};1H\x1b[2K  ${c.dim}${hrLine()}${c.reset}`);
+        process.stdout.write(`\x1b[${rows};1H\x1b[2K${footer}`);
+        // Move cursor back into scroll region
+        process.stdout.write(`\x1b[${rows - 2};1H`);
+    }
 
-    function drawInputBox() {
+    function cleanupScrollRegion() {
+        const rows = getRows();
+        // Reset scroll region to full terminal
+        process.stdout.write(`\x1b[1;${rows}r`);
+        process.stdout.write(`\x1b[${rows};1H\n`);
+    }
+
+    // Redraw footer on terminal resize
+    process.stdout.on('resize', () => setupScrollRegion());
+
+    function showPrompt() {
         console.log('');
         console.log(`  ${c.dim}${hrLine()}${c.reset}`);
-        // Print prompt line (empty for now), bottom hr, footer — 3 lines total
-        console.log(promptPrefix);
-        console.log(`  ${c.dim}${hrLine()}${c.reset}`);
-        process.stdout.write(footer);
-        // Move cursor up 3 lines to prompt position, place at end of prefix
-        process.stdout.write('\x1b[2A\r' + promptPrefix);
+        process.stdout.write(promptPrefix);
     }
 
     function redrawPromptLine() {
@@ -128,12 +138,10 @@ if (values.simple) {
         process.stdout.write(promptPrefix + inputBuf);
     }
 
-    function clearBelowAndPrint() {
-        // From prompt line, move down 1 (bottom hr), clear, down 1 (footer), clear
-        process.stdout.write('\x1b[1B\x1b[2K');
-        process.stdout.write('\x1b[1B\x1b[2K');
-        // Cursor is now on cleared footer line, ready for output
-    }
+    // ─── State ───────────────────────────────
+    let inputBuf = '';
+    let inputActive = true;
+    let streaming = false;
 
     // ─── Raw stdin input ─────────────────────
     process.stdin.setRawMode(true);
@@ -147,10 +155,11 @@ if (values.simple) {
             // Enter
             const text = inputBuf.trim();
             inputBuf = '';
-            clearBelowAndPrint();
+            console.log('');  // newline after input
 
-            if (!text) { drawInputBox(); return; }
+            if (!text) { showPrompt(); return; }
             if (text === '/quit' || text === '/exit' || text === '/q') {
+                cleanupScrollRegion();
                 console.log(`  ${c.dim}Bye! \uD83E\uDD9E${c.reset}\n`);
                 ws.close();
                 process.stdin.setRawMode(false);
@@ -158,7 +167,8 @@ if (values.simple) {
             }
             if (text === '/clear') {
                 console.clear();
-                drawInputBox();
+                setupScrollRegion();
+                showPrompt();
                 return;
             }
             ws.send(JSON.stringify({ type: 'send_message', text }));
@@ -171,6 +181,7 @@ if (values.simple) {
             }
         } else if (key === '\x03') {
             // Ctrl+C
+            cleanupScrollRegion();
             console.log(`\n  ${c.dim}Bye! \uD83E\uDD9E${c.reset}\n`);
             ws.close();
             process.stdin.setRawMode(false);
@@ -216,7 +227,7 @@ if (values.simple) {
                     }
                     streaming = false;
                     inputActive = true;
-                    drawInputBox();
+                    showPrompt();
                     break;
 
                 case 'agent_status':
@@ -248,10 +259,12 @@ if (values.simple) {
     });
 
     ws.on('close', () => {
+        cleanupScrollRegion();
         console.log(`\n  ${c.dim}Disconnected${c.reset}\n`);
         process.stdin.setRawMode(false);
         process.exit(0);
     });
 
-    drawInputBox();
+    setupScrollRegion();
+    showPrompt();
 }
