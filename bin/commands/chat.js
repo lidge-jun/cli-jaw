@@ -174,14 +174,66 @@ if (values.simple) {
     process.stdout.on('resize', () => setupScrollRegion());
 
     function showPrompt() {
+        prevLineCount = 1;  // reset for fresh prompt
         console.log('');
         console.log(`  ${c.dim}${hrLine()}${c.reset}`);
         process.stdout.write(promptPrefix);
     }
 
+    // Phase 12.1.7: Calculate visual width (Korean/CJK = 2 columns, ANSI codes = 0)
+    function visualWidth(str) {
+        // Strip ANSI escape codes first
+        const stripped = str.replace(/\x1b\[[0-9;]*m/g, '');
+        let w = 0;
+        for (const ch of stripped) {
+            const cp = ch.codePointAt(0);
+            // CJK ranges: Hangul, CJK Unified, Fullwidth, etc
+            if ((cp >= 0x1100 && cp <= 0x115F) || (cp >= 0x2E80 && cp <= 0x303E) ||
+                (cp >= 0x3040 && cp <= 0x33BF) || (cp >= 0x3400 && cp <= 0x4DBF) ||
+                (cp >= 0x4E00 && cp <= 0xA4CF) || (cp >= 0xA960 && cp <= 0xA97C) ||
+                (cp >= 0xAC00 && cp <= 0xD7AF) || (cp >= 0xD7B0 && cp <= 0xD7FF) ||
+                (cp >= 0xF900 && cp <= 0xFAFF) || (cp >= 0xFE30 && cp <= 0xFE6F) ||
+                (cp >= 0xFF01 && cp <= 0xFF60) || (cp >= 0xFFE0 && cp <= 0xFFE6) ||
+                (cp >= 0x20000 && cp <= 0x2FA1F)) {
+                w += 2;
+            } else {
+                w += 1;
+            }
+        }
+        return w;
+    }
+
+    let prevLineCount = 1;  // track how many terminal rows input occupied
+
     function redrawPromptLine() {
-        process.stdout.write('\r\x1b[2K');
-        process.stdout.write(promptPrefix + inputBuf);
+        const cols = process.stdout.columns || 80;
+        // Move cursor up to the start of previous render, clear all lines
+        if (prevLineCount > 1) {
+            process.stdout.write(`\x1b[${prevLineCount - 1}A`);  // move up
+        }
+        for (let i = 0; i < prevLineCount; i++) {
+            process.stdout.write('\r\x1b[2K');  // clear line
+            if (i < prevLineCount - 1) process.stdout.write('\x1b[1B');  // move down
+        }
+        // Move back to top
+        if (prevLineCount > 1) {
+            process.stdout.write(`\x1b[${prevLineCount - 1}A`);
+        }
+        process.stdout.write('\r');
+
+        // Write the prompt + input (handle embedded newlines)
+        const lines = inputBuf.split('\n');
+        const contPrefix = `  ${c.dim}· ${c.reset}`;  // continuation line prefix
+        let totalRows = 0;
+        for (let i = 0; i < lines.length; i++) {
+            const prefix = i === 0 ? promptPrefix : contPrefix;
+            const rendered = prefix + lines[i];
+            process.stdout.write(rendered);
+            if (i < lines.length - 1) process.stdout.write('\n');
+            // Each line may wrap across multiple terminal rows
+            totalRows += Math.max(1, Math.ceil(visualWidth(rendered) / cols));
+        }
+        prevLineCount = totalRows;
     }
 
     // ─── State ───────────────────────────────
@@ -197,10 +249,24 @@ if (values.simple) {
     process.stdin.on('data', (key) => {
         if (!inputActive) return;
 
+        // Phase 12.1.7: Option+Enter (ESC+CR/LF) → insert newline
+        if (key === '\x1b\r' || key === '\x1b\n') {
+            inputBuf += '\n';
+            redrawPromptLine();
+            return;
+        }
+
         if (key === '\r' || key === '\n') {
-            // Enter
+            // Backslash continuation: \ at end → newline instead of submit
+            if (inputBuf.endsWith('\\')) {
+                inputBuf = inputBuf.slice(0, -1) + '\n';
+                redrawPromptLine();
+                return;
+            }
+            // Enter — submit
             const text = inputBuf.trim();
             inputBuf = '';
+            prevLineCount = 1;
             console.log('');  // newline after input
 
             if (!text) { showPrompt(); return; }
@@ -303,7 +369,7 @@ if (values.simple) {
             }
         } else if (key.charCodeAt(0) >= 32 || key.charCodeAt(0) > 127) {
             // Printable chars (including multibyte/Korean)
-            // Phase 12.1.2: allow input even when agent is running (for steer)
+            // Phase 12.1.5: allow typing during agent run for queue
             if (!inputActive) inputActive = true;
             inputBuf += key;
             redrawPromptLine();
@@ -351,6 +417,12 @@ if (values.simple) {
                     } else if (msg.status === 'running') {
                         const name = msg.agentName || msg.agentId || 'agent';
                         process.stdout.write(`\r  ${c.yellow}\u25CF${c.reset} ${c.dim}${name} working...${c.reset}          \r`);
+                    }
+                    break;
+
+                case 'queue_update':
+                    if (msg.pending > 0) {
+                        process.stdout.write(`\r  ${c.yellow}⏳ ${msg.pending}개 대기 중${c.reset}          \r`);
                     }
                     break;
 

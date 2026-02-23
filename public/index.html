@@ -1161,6 +1161,8 @@
                     } else {
                         setStatus(msg.status);
                     }
+                } else if (msg.type === 'queue_update') {
+                    updateQueueBadge(msg.pending || 0);
                 } else if (msg.type === 'round_start') {
                     const names = (msg.subtasks || []).map(s => s.agent).join(', ');
                     addSystemMsg(`🔄 라운드 ${msg.round} — ${(msg.subtasks || []).length}개 작업 [${names}]`);
@@ -1239,18 +1241,12 @@
             const badge = document.getElementById('statusBadge');
             const btn = document.getElementById('btnSend');
             agentBusy = s === 'running';
-            // Phase 12.1.4: Single button toggles Send ↔ Stop
-            if (agentBusy) {
-                btn.textContent = '■';
-                btn.title = '중단';
-                btn.style.background = '#e55';
-                btn.onclick = stopAgent;
-            } else {
-                btn.textContent = '➤';
-                btn.title = 'Send';
-                btn.style.background = '';
-                btn.onclick = sendMessage;
-            }
+            // Phase 12.1.5: keep input enabled for queuing
+            // btn always sends — server handles queue if busy
+            btn.textContent = '➤';
+            btn.title = agentBusy ? '큐에 추가' : 'Send';
+            btn.style.background = '';
+            btn.onclick = sendMessage;
             document.getElementById('typingIndicator').classList.toggle('active', agentBusy);
             if (s === 'running') {
                 badge.className = 'status-badge status-running';
@@ -1258,7 +1254,22 @@
             } else {
                 badge.className = 'status-badge status-idle';
                 badge.textContent = '⚡ idle';
+                updateQueueBadge(0);
             }
+        }
+
+        function updateQueueBadge(count) {
+            let el = document.getElementById('queueBadge');
+            if (!el) {
+                el = document.createElement('span');
+                el.id = 'queueBadge';
+                el.style.cssText = 'position:absolute;top:-6px;right:-6px;background:#f80;color:#fff;border-radius:50%;font-size:11px;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-weight:bold';
+                document.getElementById('btnSend').parentElement.style.position = 'relative';
+                document.getElementById('btnSend').style.position = 'relative';
+                document.getElementById('btnSend').appendChild(el);
+            }
+            el.textContent = count > 0 ? count : '';
+            el.style.display = count > 0 ? 'flex' : 'none';
         }
 
         async function stopAgent() {

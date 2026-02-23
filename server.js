@@ -493,6 +493,29 @@ async function steerAgent(newPrompt, source) {
     orchestrate(newPrompt);
 }
 
+// Phase 12.1.5: Message Queue
+const messageQueue = [];
+
+function enqueueMessage(prompt, source) {
+    messageQueue.push({ prompt, source, ts: Date.now() });
+    console.log(`[queue] +1 (${messageQueue.length} pending)`);
+    broadcast('queue_update', { pending: messageQueue.length });
+}
+
+function processQueue() {
+    if (activeProcess || messageQueue.length === 0) return;
+    const batched = messageQueue.splice(0);
+    const combined = batched.length === 1
+        ? batched[0].prompt
+        : batched.map(m => m.prompt).join('\n\n---\n\n');
+    const source = batched[batched.length - 1].source;
+    console.log(`[queue] processing ${batched.length} queued message(s)`);
+    insertMessage.run('user', combined, source, '');
+    broadcast('new_message', { role: 'user', content: combined, source });
+    broadcast('queue_update', { pending: 0 });
+    orchestrate(combined);
+}
+
 function makeCleanEnv() {
     const env = { ...process.env };
     delete env.CLAUDE_CODE_SSE_PORT;
@@ -716,6 +739,9 @@ function spawnAgent(prompt, opts = {}) {
         console.log(`[claw:${agentLabel}] exited code=${code}, text=${ctx.fullText.length} chars`);
 
         resolve({ text: ctx.fullText, code, sessionId: ctx.sessionId, cost: ctx.cost, tools: ctx.toolLog });
+
+        // Phase 12.1.5: Process queued messages after agent finishes
+        if (!forceNew) processQueue();
     });
 
     return { child, promise: resultPromise };
@@ -1050,8 +1076,8 @@ wss.on('connection', (ws) => {
             if (msg.type === 'send_message' && msg.text) {
                 console.log(`[ws:in] ${msg.text.slice(0, 80)}`);
                 if (activeProcess) {
-                    // Steer: kill current + start new
-                    steerAgent(msg.text, 'cli');
+                    // Phase 12.1.5: Queue instead of blocking
+                    enqueueMessage(msg.text, 'cli');
                 } else {
                     insertMessage.run('user', msg.text, 'cli', '');
                     broadcast('new_message', { role: 'user', content: msg.text, source: 'cli' });
@@ -1078,9 +1104,9 @@ app.post('/api/message', (req, res) => {
     const { prompt } = req.body;
     if (!prompt?.trim()) return res.status(400).json({ error: 'prompt required' });
     if (activeProcess) {
-        // Phase 12.1.2: Steer instead of 409
-        steerAgent(prompt.trim(), 'web');
-        return res.json({ ok: true, steered: true });
+        // Phase 12.1.5: Queue instead of 409
+        enqueueMessage(prompt.trim(), 'web');
+        return res.json({ ok: true, queued: true, pending: messageQueue.length });
     }
     orchestrate(prompt.trim());
     res.json({ ok: true });
