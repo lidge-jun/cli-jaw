@@ -65,6 +65,9 @@ switch (command) {
     case 'browser':
         await import('./commands/browser.js');
         break;
+    case 'memory':
+        await import('./commands/memory.js');
+        break;
     case '--version':
     case '-v':
         console.log(`cli-claw v${pkg.version}`);

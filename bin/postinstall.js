@@ -68,7 +68,6 @@ copyDefaultSkills();
 
 // 7. Install default MCP servers globally (Phase 12.1.3)
 const MCP_PACKAGES = [
-    { pkg: '@modelcontextprotocol/server-puppeteer', bin: 'mcp-server-puppeteer' },
     { pkg: '@upstash/context7-mcp', bin: 'context7-mcp' },
 ];
 

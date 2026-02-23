@@ -18,6 +18,7 @@ import {
 
 import { setWss, broadcast } from './src/bus.js';
 import * as browser from './src/browser/index.js';
+import * as memory from './src/memory.js';
 import {
     CLAW_HOME, PROMPTS_DIR, DB_PATH, UPLOADS_DIR,
     SKILLS_DIR, SKILLS_REF_DIR,
@@ -446,6 +447,37 @@ app.get('/api/skills/:id', (req, res) => {
     const path = fs.existsSync(activePath) ? activePath : refPath;
     if (!fs.existsSync(path)) return res.status(404).json({ error: 'not found' });
     res.type('text/markdown').send(fs.readFileSync(path, 'utf8'));
+});
+
+// ─── Memory API (Phase A) ────────────────────────────
+
+app.get('/api/claw-memory/search', (req, res) => {
+    try { res.json({ result: memory.search(req.query.q || '') }); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/claw-memory/read', (req, res) => {
+    try {
+        const content = memory.read(req.query.file, { lines: req.query.lines });
+        res.json({ content });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/claw-memory/save', (req, res) => {
+    try {
+        const path = memory.save(req.body.file, req.body.content);
+        res.json({ ok: true, path });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/claw-memory/list', (_, res) => {
+    try { res.json({ files: memory.list() }); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/claw-memory/init', (_, res) => {
+    try { memory.ensureMemoryDir(); res.json({ ok: true }); }
+    catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ─── Browser API (Phase 7) ───────────────────────────

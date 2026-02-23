@@ -14,7 +14,11 @@ const INTERACTIVE_ROLES = ['button', 'link', 'textbox', 'checkbox',
 export async function snapshot(port, opts = {}) {
     const page = await getActivePage(port);
     if (!page) throw new Error('No active page');
+    if (!page.accessibility) {
+        throw new Error('Accessibility API unavailable — try reconnecting (browser stop → start)');
+    }
     const tree = await page.accessibility.snapshot();
+    if (!tree) throw new Error('Accessibility snapshot returned empty — page may still be loading');
     const nodes = [];
     let counter = 0;
 

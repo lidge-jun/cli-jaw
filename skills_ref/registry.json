@@ -503,6 +503,14 @@
                 ]
             },
             "install": "npm i -g vercel"
+        },
+        "memory": {
+            "name": "Long-term Memory",
+            "emoji": "🧠",
+            "category": "utility",
+            "description": "세션 간 장기 기억. 마크다운 파일에 저장, grep 검색.",
+            "requires": null,
+            "install": null
         }
     }
 }

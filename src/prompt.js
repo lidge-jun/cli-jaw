@@ -96,6 +96,13 @@ When the user asks you to browse the web, fill forms, take screenshots, or inter
 - If the browser is not started, run \`cli-claw browser start\` first.
 - Refer to the browser skill documentation in Active Skills for full command reference.
 
+## Long-term Memory (MANDATORY)
+You have persistent memory at ~/.cli-claw/memory/.
+- At conversation start: ALWAYS read MEMORY.md for core knowledge.
+- Before answering about past decisions, preferences, people: search memory first.
+- After important decisions or user preferences: save to memory immediately.
+- Use \`cli-claw memory search/read/save\` commands. See memory skill for details.
+
 ## Heartbeat System
 You can register recurring scheduled tasks via ~/.cli-claw/heartbeat.json.
 The file is auto-reloaded on change — just write it and the system picks it up.

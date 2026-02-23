@@ -158,7 +158,7 @@ switch (sub) {
         if (!arg) {
             console.log(`\n  Usage: cli-claw mcp install <package> [--pypi|--npm]\n`);
             console.log(`  Examples:`);
-            console.log(`    cli-claw mcp install @modelcontextprotocol/server-puppeteer`);
+            console.log(`    cli-claw mcp install @modelcontextprotocol/server-filesystem`);
             console.log(`    cli-claw mcp install mcp-server-fetch --pypi`);
             console.log(`    cli-claw mcp install @upstash/context7-mcp\n`);
             process.exit(1);
