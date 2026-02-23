@@ -58,6 +58,7 @@ graph TB
     ORCH -->|spawn + NDJSON| OPEN
     HB -->|setInterval| ORCH
     ORCH --> DB
+    ORCH -->|10 QA flush| MEM["🧠 Memory\n~/.claude/.../memory/"]
 ```
 
 ## Orchestration Flow
@@ -154,6 +155,8 @@ cli-claw status                            # 서버 상태 확인
     ├── A-2.md           ← 유저 프롬프트 (UI 편집)
     ├── B.md             ← 합성 프롬프트 (자동)
     └── HEARTBEAT.md     ← 하트비트 체크리스트
+
+~/.claude/projects/<hash>/memory/  ← Claude 네이티브 메모리 (자동 flush)
 ```
 
 ## Features
@@ -168,20 +171,24 @@ cli-claw status                            # 서버 상태 확인
 | 📟 **CLI Chat**       | 터미널 REPL + `--raw` ndjson 파이프         |
 | 🔗 **Symlink Infra**  | `.agents/skills/` 자동 연결 (postinstall)   |
 | 🔄 **Session Resume** | CLI 세션 유지 + 컨텍스트 이어가기           |
+| 🧠 **Memory**         | 10 QA 비동기 flush → Claude 메모리 저장     |
 | 🩺 **Doctor**         | 설치 상태 자가 진단                         |
 
 ## API
 
-| Method    | Path              | Description               |
-| --------- | ----------------- | ------------------------- |
-| `GET`     | `/api/session`    | 세션 상태                 |
-| `GET`     | `/api/messages`   | 메시지 히스토리           |
-| `POST`    | `/api/message`    | 메시지 전송 → agent spawn |
-| `POST`    | `/api/clear`      | 메시지 초기화             |
-| `GET/PUT` | `/api/settings`   | 설정 CRUD                 |
-| `GET/PUT` | `/api/heartbeat`  | 하트비트 jobs CRUD        |
-| `GET/PUT` | `/api/prompt`     | A-2 프롬프트              |
-| `GET`     | `/api/cli-status` | CLI 설치/인증 상태        |
+| Method    | Path                         | Description               |
+| --------- | ---------------------------- | ------------------------- |
+| `GET`     | `/api/session`               | 세션 상태                 |
+| `GET`     | `/api/messages`              | 메시지 히스토리           |
+| `POST`    | `/api/message`               | 메시지 전송 → agent spawn |
+| `POST`    | `/api/clear`                 | 메시지 초기화             |
+| `GET/PUT` | `/api/settings`              | 설정 CRUD                 |
+| `GET/PUT` | `/api/heartbeat`             | 하트비트 jobs CRUD        |
+| `GET/PUT` | `/api/prompt`                | A-2 프롬프트              |
+| `GET`     | `/api/cli-status`            | CLI 설치/인증 상태        |
+| `GET`     | `/api/memory-files`          | 메모리 설정 + 파일 목록   |
+| `GET/DEL` | `/api/memory-files/:file`    | 파일 열람/삭제            |
+| `PUT`     | `/api/memory-files/settings` | 메모리 설정 변경          |
 
 ## Requirements
 
@@ -201,7 +208,7 @@ graph LR
     P8["✅ Phase 8<br/>Heartbeat"]
     P9["✅ Phase 9<br/>CLI Package"]
     P10["⬜ Phase 10<br/>Photo Input"]
-    P11["⬜ Phase 11<br/>Memory"]
+    P11["✅ Phase 11<br/>Memory"]
 
     P1 --> P4 --> P5 --> P6 --> P7 --> P8 --> P9 --> P10 --> P11
 
@@ -213,7 +220,7 @@ graph LR
     style P8 fill:#2d6a4f
     style P9 fill:#2d6a4f
     style P10 fill:#555
-    style P11 fill:#555
+    style P11 fill:#2d6a4f
 ```
 
 ---
