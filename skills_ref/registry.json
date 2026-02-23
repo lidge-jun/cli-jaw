@@ -279,7 +279,14 @@
                     "cli-claw"
                 ]
             },
-            "install": null
+            "install": null,
+            "canonical_id": "browser",
+            "aliases": [
+                "playwright"
+            ],
+            "workflow": "interactive",
+            "provider": "n/a",
+            "status": "active"
         },
         "tts": {
             "name": "Text-to-Speech",
@@ -583,18 +590,6 @@
             },
             "install": null
         },
-        "playwright": {
-            "name": "Playwright 브라우저",
-            "emoji": "🎭",
-            "category": "devtools",
-            "description": "Playwright로 브라우저 자동화·테스트. npx.",
-            "requires": {
-                "bins": [
-                    "npx"
-                ]
-            },
-            "install": null
-        },
         "screenshot": {
             "name": "Desktop Screenshot",
             "emoji": "🖥️",
@@ -658,7 +653,12 @@
             "category": "devtools",
             "description": "Playwright 기반 웹앱 상호작용/검증/디버깅 테스트 스킬.",
             "requires": null,
-            "install": null
+            "install": null,
+            "canonical_id": "webapp-testing",
+            "aliases": [],
+            "workflow": "e2e_test",
+            "provider": "n/a",
+            "status": "active"
         },
         "mcp-builder": {
             "name": "MCP Builder",
@@ -699,6 +699,22 @@
             "description": "문서/슬라이드/HTML 산출물에 재사용 가능한 테마를 적용하는 스킬.",
             "requires": null,
             "install": null
+        },
+        "web-routing": {
+            "name": "Web Routing",
+            "emoji": "🧭",
+            "category": "automation",
+            "description": "브라우저 요청을 browser/webapp-testing으로 단순 분기하는 가이드 스킬.",
+            "requires": null,
+            "install": null,
+            "canonical_id": "web-routing",
+            "aliases": [
+                "playwright-routing",
+                "browser-routing"
+            ],
+            "workflow": "routing_guide",
+            "provider": "n/a",
+            "status": "active"
         }
     }
 }
