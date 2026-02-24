@@ -266,3 +266,16 @@ node -e "import('./src/agent.js').then(m => console.log(Object.keys(m)))"
 - [x] `npm test` 222/235 pass (2 pre-existing Phase 17, 11 skip)
 - [x] 모든 `import` 정상 resolve (런타임 에러 0)
 
+---
+
+## 20.6-HF1: better-sqlite3 경로 오류 핫픽스 (CI/테스트 안정화)
+
+- 원인: `new Database(DB_PATH)` 호출 시점에 상위 디렉토리(`~/.cli-claw`)가 없으면 `TypeError: Cannot open database because the directory does not exist` 발생
+- 수정: `src/core/db.js`에서 DB 오픈 전에 `fs.mkdirSync(dirname(DB_PATH), { recursive: true })` 보장
+- 범위: `agent-args`, `employee-prompt`, `orchestrator-parsing`, `orchestrator-triage`를 포함해 DB 초기화 경로를 사용하는 전체 단위테스트
+- CI 보조조치: 워크플로우 사전 생성 없이 애플리케이션 레벨에서 원인 차단 유지
+- 검증:
+  - `HOME=$(mktemp -d) node --test tests/unit/agent-args.test.js tests/unit/employee-prompt.test.js tests/unit/orchestrator-parsing.test.js tests/unit/orchestrator-triage.test.js` → pass 53 / fail 0
+  - `HOME=$(mktemp -d) node --test tests/unit/help-renderer.test.js tests/unit/http-response.test.js` → pass 11 / fail 0 (`not ok` 문자열 포함 정상 케이스 확인)
+  - `HOME=$(mktemp -d) npm test` → pass 244 / fail 0 / skipped 1
+  - Phase 5 통합검증 재확인(2026-02-25): 동일 명령 재실행 결과 유지 (`pass 244 / fail 0 / skipped 1`)

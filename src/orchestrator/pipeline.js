@@ -3,7 +3,7 @@
 import { broadcast } from '../core/bus.js';
 import {
     insertMessage, getEmployees,
-    getEmployeeSession, upsertEmployeeSession, clearEmployeeSessions,
+    getEmployeeSession, upsertEmployeeSession, clearAllEmployeeSessions,
 } from '../core/db.js';
 import { getEmployeePromptV2, clearPromptCache } from '../prompt/builder.js';
 import { spawnAgent } from '../agent/spawn.js';
@@ -227,8 +227,12 @@ ${instruction}
 
 ## 남은 Phase: ${remainingPhases}
 
-## Phase 유연성
-현재 Phase의 작업을 수행하되, **자신있다면 다음 Phase까지 한 번에 처리해도 됩니다.**
+## Phase 합치기 (적극 권장 ⚡)
+**가능한 한 여러 Phase를 한 번에 완료하세요.** 1 Phase만 하는 것은 작업이 불확실할 때만 허용됩니다.
+- 간단한 수정/버그픽스 → Phase 3~5 전부 한 번에
+- 명확한 기능 추가 → Phase 1~3 한 번에
+- 코드 수정 + 테스트 → Phase 3~4 한 번에
+
 예: 기획과 개발을 동시에 → 기획 분석 + 코드 작성까지 한 번에 완료.
 이 경우 응답 마지막에 아래 JSON을 추가하세요:
 
@@ -255,18 +259,18 @@ ${priorSummary}
         });
 
         const empSession = getEmployeeSession.get(emp.id);
-        const hasSession = !!(empSession?.session_id && empSession?.cli === emp.cli);
+        const canResume = !!(empSession?.session_id && empSession?.cli === emp.cli);
         const { promise } = spawnAgent(taskPrompt, {
             agentId: emp.id, cli: emp.cli, model: emp.model,
-            forceNew: !hasSession,
-            sessionId: hasSession ? empSession.session_id : undefined,
-            sysPrompt: hasSession ? undefined : sysPrompt,
+            forceNew: !canResume,
+            employeeSessionId: canResume ? empSession.session_id : undefined,
+            sysPrompt: canResume ? undefined : sysPrompt,
             origin: meta.origin || 'web',
         });
 
         const r = await promise;
         if (r.code === 0 && r.sessionId) {
-            upsertEmployeeSession.run(emp.id, r.sessionId, emp.cli, worklog.path);
+            upsertEmployeeSession.run(emp.id, r.sessionId, emp.cli);
         }
         const result = {
             agent: ap.agent, role: ap.role, id: emp.id,
@@ -372,6 +376,7 @@ JSON으로 출력:
 // ─── Main Orchestrate v2 ─────────────────────────────
 
 export async function orchestrate(prompt, meta = {}) {
+    clearAllEmployeeSessions.run();
     clearPromptCache();
 
     const origin = meta.origin || 'web';
@@ -389,7 +394,7 @@ export async function orchestrate(prompt, meta = {}) {
             console.log(`[claw:triage] agent chose to dispatch (${lateSubtasks.length} subtasks)`);
             const worklog = createWorklog(prompt);
             broadcast('worklog_created', { path: worklog.path });
-            clearEmployeeSessions.run(worklog.path);
+            clearAllEmployeeSessions.run();
             const planText = stripSubtaskJSON(result.text);
             appendToWorklog(worklog.path, 'Plan', planText || '(Agent-initiated dispatch)');
             const agentPhases = initAgentPhases(lateSubtasks);
@@ -416,7 +421,7 @@ export async function orchestrate(prompt, meta = {}) {
                     const summary = stripSubtaskJSON(rawText) || '모든 작업 완료';
                     appendToWorklog(worklog.path, 'Final Summary', summary);
                     updateWorklogStatus(worklog.path, 'done', round);
-                    clearEmployeeSessions.run(worklog.path);
+                    clearAllEmployeeSessions.run();
                     insertMessage.run('assistant', summary, 'orchestrator', '');
                     broadcast('orchestrate_done', { text: summary, worklog: worklog.path, origin });
                     return;
@@ -453,7 +458,7 @@ export async function orchestrate(prompt, meta = {}) {
 
     const worklog = createWorklog(prompt);
     broadcast('worklog_created', { path: worklog.path });
-    clearEmployeeSessions.run(worklog.path);
+    clearAllEmployeeSessions.run();
 
     // 1. 기획 (planning agent가 직접 응답할 수도 있음)
     const { planText, subtasks, directAnswer } = await phasePlan(prompt, worklog, { origin });
@@ -502,7 +507,7 @@ export async function orchestrate(prompt, meta = {}) {
             const summary = stripSubtaskJSON(rawText) || '모든 작업 완료';
             appendToWorklog(worklog.path, 'Final Summary', summary);
             updateWorklogStatus(worklog.path, 'done', round);
-            clearEmployeeSessions.run(worklog.path);
+            clearAllEmployeeSessions.run();
             insertMessage.run('assistant', summary, 'orchestrator', '');
             broadcast('orchestrate_done', { text: summary, worklog: worklog.path, origin });
             break;

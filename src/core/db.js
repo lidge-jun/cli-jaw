@@ -1,8 +1,17 @@
 // ─── Database: schema + prepared statements ──────────
 
 import Database from 'better-sqlite3';
+import fs from 'fs';
+import { dirname } from 'path';
 import { DB_PATH } from './config.js';
 
+function ensureDbDirExists(dbPath) {
+    const dbDir = dirname(dbPath);
+    if (!dbDir) return;
+    fs.mkdirSync(dbDir, { recursive: true });
+}
+
+ensureDbDirExists(DB_PATH);
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 
@@ -55,7 +64,6 @@ db.exec(`
         employee_id TEXT PRIMARY KEY,
         session_id  TEXT,
         cli         TEXT,
-        worklog_id  TEXT,
         created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 `);
@@ -90,8 +98,8 @@ export const insertEmployee = db.prepare('INSERT INTO employees (id, name, cli, 
 export const deleteEmployee = db.prepare('DELETE FROM employees WHERE id = ?');
 export const getEmployeeSession = db.prepare('SELECT * FROM employee_sessions WHERE employee_id = ?');
 export const upsertEmployeeSession = db.prepare(
-    'INSERT OR REPLACE INTO employee_sessions (employee_id, session_id, cli, worklog_id) VALUES (?, ?, ?, ?)'
+    'INSERT OR REPLACE INTO employee_sessions (employee_id, session_id, cli) VALUES (?, ?, ?)'
 );
-export const clearEmployeeSessions = db.prepare('DELETE FROM employee_sessions WHERE worklog_id = ?');
+export const clearAllEmployeeSessions = db.prepare('DELETE FROM employee_sessions');
 
 export { db };

@@ -144,8 +144,8 @@ import { AcpClient } from '../cli/acp-client.js';
 export function spawnAgent(prompt, opts = {}) {
     const { forceNew = false, agentId, sysPrompt: customSysPrompt } = opts;
     const origin = opts.origin || 'web';
-    const employeeSessionId = opts.sessionId || null;
-    const mainManaged = !forceNew && !employeeSessionId;
+    const empSid = opts.employeeSessionId || null;
+    const mainManaged = !forceNew && !empSid;
 
     if (activeProcess && mainManaged) {
         console.log('[claw] Agent already running, skipping');
@@ -165,8 +165,10 @@ export function spawnAgent(prompt, opts = {}) {
 
     const sysPrompt = customSysPrompt || getSystemPrompt();
 
-    const isResume = !forceNew && (employeeSessionId || (session.session_id && session.active_cli === cli));
-    const resumeSessionId = employeeSessionId || session.session_id;
+    const isResume = empSid
+        ? true
+        : (!forceNew && session.session_id && session.active_cli === cli);
+    const resumeSessionId = empSid || session.session_id;
     const historyBlock = !isResume ? buildHistoryBlock(prompt) : '';
     const promptForArgs = (cli === 'gemini' || cli === 'opencode')
         ? withHistoryPrompt(prompt, historyBlock)
@@ -321,7 +323,7 @@ export function spawnAgent(prompt, opts = {}) {
                 broadcast('agent_status', { running: false, agentId: agentLabel });
             }
 
-            if (mainManaged && ctx.sessionId && code === 0) {
+            if (!forceNew && !empSid && ctx.sessionId && code === 0) {
                 updateSession.run(cli, ctx.sessionId, model, settings.permissions, settings.workingDir, cfg.effort || '');
             }
 
@@ -439,7 +441,7 @@ export function spawnAgent(prompt, opts = {}) {
             broadcast('agent_status', { running: false, agentId: agentLabel });
         }
 
-        if (mainManaged && ctx.sessionId && code === 0) {
+        if (!forceNew && !empSid && ctx.sessionId && code === 0) {
             updateSession.run(cli, ctx.sessionId, model, settings.permissions, settings.workingDir, cfg.effort || 'medium');
             console.log(`[claw:session] saved ${cli} session=${ctx.sessionId.slice(0, 12)}...`);
         }

@@ -6,7 +6,7 @@
 
 *One interface. Five CLIs. Zero API bans.*
 
-[![Tests](https://img.shields.io/badge/tests-216%20pass-brightgreen)](#-tests)
+[![Tests](https://img.shields.io/badge/tests-244%20pass-brightgreen)](#-tests)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
 
@@ -268,8 +268,10 @@ Each CLI comes with preconfigured presets, but you can type **any model ID** dir
 ## 🧪 Tests
 
 ```bash
-npm test    # 216 tests, ~260ms, zero external dependencies
+npm test    # 244 pass, 1 skipped, zero external dependencies
 ```
+
+- CI hardening note: `src/core/db.js` now creates the parent directory of `DB_PATH` before opening SQLite, preventing `better-sqlite3` path errors in clean test/CI environments.
 
 ---
 
