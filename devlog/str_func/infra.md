@@ -68,7 +68,7 @@ employees (id PK, name, cli, model, role, status, created_at)
 
 Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
-| connection.js (71L)      | actions.js (169L)        |
+| connection.js (71L)      | actions.js (178L)        |
 | ------------------------ | ------------------------ |
 | `findChrome()`           | `snapshot(port, opts)`   |
 | `launchChrome(port)`     | `screenshot(port, opts)` |
@@ -78,8 +78,12 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 | `listTabs(port)`         | `hover(port, ref)`       |
 | `getBrowserStatus(port)` | `navigate(port, url)`    |
 | `closeBrowser()`         | `evaluate(port, expr)`   |
+|                          | `getPageText(port, fmt)` |
+|                          | `mouseClick(port, x, y)` |
 
-`index.js` (10L) — re-export hub
+`index.js` (12L) — re-export hub (mouseClick 포함)
+
+> 👁️ `mouseClick()` — vision-click Phase 1 추가. 픽셀 좌표 기반 클릭. `page.mouse.click(x, y)` + `dblclick` 지원.
 
 ---
 
@@ -87,15 +91,15 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
 소스: `~/.cli-claw/mcp.json`
 
-| Function                     | 역할                           |
-| ---------------------------- | ------------------------------ |
-| `loadUnifiedMcp()`           | 통합 MCP 설정 로드             |
-| `toClaudeMcp(config)`        | Claude/Gemini `.mcp.json` 변환 |
-| `toCodexToml(config)`        | Codex `config.toml` 변환       |
-| `toOpenCodeMcp(config)`      | OpenCode `opencode.json` 변환  |
-| `syncToAll(config, workDir)` | 통합 → 4개 CLI 설정 동기화     |
-| `copyDefaultSkills()`        | 2×3 분류 + Codex 폴백 자동활성 |
-| `installMcpServers(config)`  | npm -g / uv tool install       |
+| Function                     | 역할                                              |
+| ---------------------------- | ------------------------------------------------- |
+| `loadUnifiedMcp()`           | 통합 MCP 설정 로드                                |
+| `toClaudeMcp(config)`        | Claude/Gemini `.mcp.json` 변환                    |
+| `toCodexToml(config)`        | Codex `config.toml` 변환                          |
+| `toOpenCodeMcp(config)`      | OpenCode `opencode.json` 변환                     |
+| `syncToAll(config, workDir)` | 통합 → 4개 CLI 설정 동기화                        |
+| `copyDefaultSkills()`        | 2×3 분류 + Codex 폴백 + registry.json 항상 동기화 |
+| `installMcpServers(config)`  | npm -g / uv tool install                          |
 
 ## lib/upload.js (70L)
 

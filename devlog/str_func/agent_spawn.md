@@ -73,15 +73,15 @@
 
 ---
 
-## prompt.js — System Prompt & Skills (400L)
+## prompt.js — System Prompt & Skills (414L)
 
-| Function                 | 역할                                                                    |
-| ------------------------ | ----------------------------------------------------------------------- |
-| `loadActiveSkills()`     | 활성 스킬 로드                                                          |
-| `loadSkillRegistry()`    | 스킬 레지스트리 로드                                                    |
-| `getMergedSkills()`      | 번들 + 사용자 스킬 병합                                                 |
-| `initPromptFiles()`      | A-1, A-2, HEARTBEAT 프롬프트 초기화                                     |
-| `getSystemPrompt()`      | A-1 + A-2 + MEMORY.md + session memory + skills + employees + heartbeat |
-| `loadRecentMemories()`   | flush 메모리 최신순 로드 (10000자 제한)                                 |
-| `getSubAgentPrompt(emp)` | 실행자용 경량 프롬프트                                                  |
-| `regenerateB()`          | B 프롬프트 재생성                                                       |
+| Function                 | 역할                                                                                       |
+| ------------------------ | ------------------------------------------------------------------------------------------ |
+| `loadActiveSkills()`     | 활성 스킬 로드                                                                             |
+| `loadSkillRegistry()`    | 스킬 레지스트리 로드                                                                       |
+| `getMergedSkills()`      | 번들 + 사용자 스킬 병합                                                                    |
+| `initPromptFiles()`      | A-1, A-2, HEARTBEAT 프롬프트 초기화                                                        |
+| `getSystemPrompt()`      | A-1 + A-2 + MEMORY.md + session memory + skills + employees + heartbeat + vision-click힌트 |
+| `loadRecentMemories()`   | flush 메모리 최신순 로드 (10000자 제한)                                                    |
+| `getSubAgentPrompt(emp)` | 실행자용 경량 프롬프트                                                                     |
+| `regenerateB()`          | B 프롬프트 재생성                                                                          |
