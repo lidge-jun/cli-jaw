@@ -388,9 +388,9 @@ export function getSystemPrompt() {
     return prompt;
 }
 
-// ─── Sub-Agent Prompt (orchestration-free) ───────────
+// ─── Employee Prompt (orchestration-free) ────────────
 
-export function getSubAgentPrompt(emp) {
+export function getEmployeePrompt(emp) {
     let prompt = `# ${emp.name}\nRole: ${emp.role || 'general developer'}\n`;
 
     // ─── Core rules (orchestration rules intentionally excluded → prevent recursion)
@@ -435,10 +435,10 @@ export function getSubAgentPrompt(emp) {
     return prompt;
 }
 
-// ─── Sub-Agent Prompt v2 (orchestration phase-aware) ─
+// ─── Employee Prompt v2 (orchestration phase-aware) ──
 
-export function getSubAgentPromptV2(emp, role, currentPhase) {
-    let prompt = getSubAgentPrompt(emp);
+export function getEmployeePromptV2(emp, role, currentPhase) {
+    let prompt = getEmployeePrompt(emp);
 
     // ─── 1. 공통 Dev 스킬 (항상 주입)
     const devCommonPath = join(SKILLS_DIR, 'dev', 'SKILL.md');

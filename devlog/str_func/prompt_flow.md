@@ -267,12 +267,12 @@ if (cli === 'gemini' && sysPrompt) {
 
 ---
 
-## Layer 4 — 직원(Sub-Agent) 프롬프트
+## Layer 4 — 직원(Employee) 프롬프트
 
 ```mermaid
 graph TD
     MAIN["메인 에이전트<br/>getSystemPrompt() 풀 버전"] -->|"subtask JSON 감지"| ORC["orchestrator.js"]
-    ORC -->|"직원별 spawn"| SUB["getSubAgentPrompt(emp)"]
+    ORC -->|"직원별 spawn"| SUB["getEmployeePrompt(emp)"]
     
     SUB --> S1["# 직원이름<br/>역할: 범용 개발자"]
     SUB --> S2["## 규칙<br/>직접 실행 + 보고<br/>❌ JSON subtask 출력 금지"]
@@ -283,7 +283,7 @@ graph TD
 
 ### 메인 vs 직원 프롬프트 비교
 
-| 항목               | 메인 에이전트   | 직원 (Sub-Agent)  |
+| 항목               | 메인 에이전트   | 직원 (Employee)  |
 | ------------------ | --------------- | ----------------- |
 | A-1 (시스템 규칙)  | ✅ 전체          | ❌ 경량 규칙만     |
 | A-2 (사용자 설정)  | ✅               | ❌                 |
@@ -310,7 +310,7 @@ graph TD
      cli: emp.cli,          ← 직원별 CLI (copilot 포함 가능)
      model: emp.model,      ← 직원별 모델
      origin: meta.origin,   ← origin 전달
-     sysPrompt: getSubAgentPrompt(emp)  ← 경량 프롬프트
+     sysPrompt: getEmployeePrompt(emp)  ← 경량 프롬프트
    })
 4. 모든 직원 완료 대기 → 보고 수집 → 메인에 재주입
 5. 최대 3라운드 반복

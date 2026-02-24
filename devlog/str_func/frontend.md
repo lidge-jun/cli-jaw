@@ -29,7 +29,7 @@ public/
         ├── chat.js       ← 전송, 첨부, 드래그앤드롭, 멈춤, 큐, auto-expand (176L)
         ├── settings.js   ← 설정 + CLI 상태 + perCli (5개 CLI) (524L)
         ├── skills.js     ← 로드, 토글, 필터 (69L)
-        ├── employees.js  ← 서브에이전트 CRUD (CSS dot, 이모지 없음) (106L)
+        ├── employees.js  ← 직원(employee) CRUD (CSS dot, 이모지 없음) (106L)
         ├── heartbeat.js  ← 하트비트 모달/작업 (83L)
         ├── memory.js     ← 메모리 모달/설정 (90L)
         ├── sidebar.js    ← [NEW] 사이드바 접기 (이중 모드: wide=collapsed, narrow=expanded) (88L)
@@ -65,7 +65,7 @@ public/
 | `chat.js` | 전송, 첨부, 드래그앤드롭, auto-expand | 176 |
 | `settings.js` | 설정 패널 + perCli (5개 CLI) | 524 |
 | `skills.js` | 스킬 카드 UI | 69 |
-| `employees.js` | 서브에이전트 CRUD (CSS dot) | 106 |
+| `employees.js` | 직원(employee) CRUD (CSS dot) | 106 |
 | `heartbeat.js` | 하트비트 모달 | 83 |
 | `memory.js` | 메모리 모달 | 90 |
 | `sidebar.js` | 사이드바 접기 (이중 모드 responsive) | 88 |
@@ -113,7 +113,7 @@ public/
 | Phase | 내용 |
 |-------|------|
 | 6 | 사이드바 접기 + 테마 시스템 + 시맨틱 변수 |
-| 6.1 | 레이아웃 리팩터 + 이모지 정리 (탭, 서브에이전트, ROLE_PRESETS) |
+| 6.1 | 레이아웃 리팩터 + 이모지 정리 (탭, 직원, ROLE_PRESETS) |
 | 6.2 | 토글 absolute 통일 + 반응형 이중 모드 + collapsed/expanded 충돌 수정 |
 | 7.2 | 채팅 입력창 auto-expand (최대 8줄, 전송 후 리셋) |
 | 16 | orchestrate_done WS 핸들러 추가 + finalizeAgent 이중 호출 방지 (debounce 500ms) |

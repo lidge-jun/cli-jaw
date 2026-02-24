@@ -30,7 +30,7 @@ cli-claw/
 │   ├── telegram.js           ← Telegram 봇 + forwarder lifecycle + origin 필터링 + chatId auto-persist + 디바운스 tool 업데이트 (493L)
 │   ├── telegram-forwarder.js ← [NEW] Telegram 포워딩 헬퍼 추출 (escape, chunk, createForwarder) (105L)
 │   ├── heartbeat.js          ← Heartbeat 잡 스케줄 + pending queue + fs.watch (107L)
-│   ├── prompt.js             ← 프롬프트 + 스킬 + getMergedSkills i18n 필드 통과 + 서브에이전트 v2 + phase skip + EN defaults + 브라우저 커맨드 인라인 + Telegram bot-first + dispatch 정책 교정 (515L)
+│   ├── prompt.js             ← 프롬프트 + 스킬 + getMergedSkills i18n 필드 통과 + 직원(employee) 프롬프트 v2 + phase skip + EN defaults + 브라우저 커맨드 인라인 + Telegram bot-first + dispatch 정책 교정 (515L)
 │   ├── memory.js             ← Persistent Memory grep 기반 (129L)
 │   ├── settings-merge.js     ← [P9.4] perCli/activeOverrides deep merge 추출 (46L)
 │   ├── security/             ← [P9.1] 보안 입력 검증
@@ -213,7 +213,7 @@ graph LR
 19. **마크다운 렌더링**: CDN defer (marked v14, hljs v11, KaTeX 0.16, Mermaid v11), CDN 실패 시 regex fallback
 20. **marked v14 주의**: 커스텀 렌더러 API 토큰 기반 변경 — `renderer.table({header, body})` 불가, regex 후처리로 대안
 21. **Copilot model sync**: `~/.copilot/config.json`에 model + effort 모두 동기화 (spawn 시 자동)
-22. **activeOverrides**: Active CLI 모델/effort 변경은 `activeOverrides[cli]`에 저장, Sub-Agent는 `perCli`만 참조 → 상호 간섭 없음
+22. **activeOverrides**: Active CLI 모델/effort 변경은 `activeOverrides[cli]`에 저장, Employee는 `perCli`만 참조 → 상호 간섭 없음
 23. **Copilot spawn 로그**: `[claw:main] Spawning: copilot --acp --model {model} [{permissions}]` 형태로 실제 ACP args 표시
 24. **Telegram chatId auto-persist**: `markChatActive()` → `allowedChatIds` 자동 저장, 서버 재시작 시 pre-seed → web/cli 포워딩 즉시 동작
 25. **Skills dedup**: `frontend-design`/`webapp-testing` 중복 제거, `kreuzberg` phantom 정리 (107→104)
@@ -245,7 +245,7 @@ graph LR
 | [🧠 prompt_flow.md](str_func/prompt_flow.md) | 프롬프트 조립 · CLI별 삽입 · 직원 프롬프트                      | **핵심** — 정적/동적 + Copilot ACP    |
 | [📄 prompt_basic_A1.md](str_func/prompt_basic_A1.md) | A-1 기본 프롬프트 원문 (오케스트레이션 규칙, 브라우저 커맨드, Telegram) | EN 기본 프롬프트 레퍼런스 |
 | [📄 prompt_basic_A2.md](str_func/prompt_basic_A2.md) | A-2 프롬프트 템플릿 (heartbeat, 익스텐션)                 | 사용자 편집 가능 테플릿 |
-| [📄 prompt_basic_B.md](str_func/prompt_basic_B.md) | B 프롬프트 원문 (서브에이전트 규칙, 직원 프롬프트, 위임 정책) | 서브에이전트 레퍼런스 |
+| [📄 prompt_basic_B.md](str_func/prompt_basic_B.md) | B 프롬프트 원문 (직원(employee) 규칙, 직원 프롬프트, 위임 정책) | 직원(employee) 레퍼런스 |
 
 ---
 

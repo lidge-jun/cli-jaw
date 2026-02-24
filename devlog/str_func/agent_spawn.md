@@ -54,8 +54,8 @@ opts.model → activeOverrides[cli].model → perCli[cli].model → 'default'
 opts.effort → activeOverrides[cli].effort → perCli[cli].effort → ''
 
 - activeOverrides: Active CLI UI에서 변경 시 저장 (main agent만)
-- perCli: 사이드바 CLI별 설정 (sub-agent도 참조)
-- Sub-Agent(opts.agentId || opts.internal): activeOverrides 무시 → perCli만
+- perCli: 사이드바 CLI별 설정 (employee도 참조)
+- Employee(opts.agentId || opts.internal): activeOverrides 무시 → perCli만
 ```
 
 ### ~/.copilot/config.json 동기화
@@ -215,6 +215,6 @@ orchestrate(prompt, meta)
 | `initPromptFiles()`                     | A-1, A-2, HEARTBEAT 프롬프트 초기화                                   |
 | `getSystemPrompt()`                     | A-1 + A-2 + MEMORY.md + skills + employees + heartbeat + vision-click |
 | `loadRecentMemories()`                  | flush 메모리 최신순 로드 (10000자 제한)                               |
-| `getSubAgentPrompt(emp)`                | 실행자용 경량 프롬프트                                                |
-| `getSubAgentPromptV2(emp, role, phase)` | **v2** — dev 스킬 + role 스킬 + phase gate + 순차실행 인식            |
+| `getEmployeePrompt(emp)`                | 실행자용 경량 프롬프트                                                |
+| `getEmployeePromptV2(emp, role, phase)` | **v2** — dev 스킬 + role 스킬 + phase gate + 순차실행 인식            |
 | `regenerateB()`                         | B 프롬프트 + CODEX AGENTS.md 재생성                                   |

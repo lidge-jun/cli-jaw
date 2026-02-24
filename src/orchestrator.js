@@ -2,7 +2,7 @@
 
 import { broadcast } from './bus.js';
 import { insertMessage, getEmployees } from './db.js';
-import { getSubAgentPromptV2 } from './prompt.js';
+import { getEmployeePromptV2 } from './prompt.js';
 import { spawnAgent } from './agent.js';
 import { createWorklog, readLatestWorklog, appendToWorklog, updateMatrix, updateWorklogStatus, parseWorklogPending } from './worklog.js';
 
@@ -306,7 +306,7 @@ async function distributeByPhase(agentPhases, worklog, round, meta = {}) {
 
         const instruction = PHASE_INSTRUCTIONS[ap.currentPhase];
         const phaseLabel = PHASES[ap.currentPhase];
-        const sysPrompt = getSubAgentPromptV2(emp, ap.role, ap.currentPhase);
+        const sysPrompt = getEmployeePromptV2(emp, ap.role, ap.currentPhase);
 
         // 이전 에이전트 결과 요약 (순차 실행이므로 이미 완료된 것들)
         const priorSummary = results.length > 0
