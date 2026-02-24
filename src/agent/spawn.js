@@ -517,7 +517,7 @@ export function spawnAgent(prompt, opts = {}) {
 // ─── Memory Flush ────────────────────────────────────
 
 async function triggerMemoryFlush() {
-    const { getMemoryDir } = await import('./prompt.js');
+    const { getMemoryDir } = await import('../prompt/builder.js');
     const memDir = getMemoryDir();
     const threshold = settings.memory?.flushEvery ?? 20;
     const recent = getRecentMessages.all(threshold).reverse();
