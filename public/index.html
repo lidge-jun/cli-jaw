@@ -62,10 +62,10 @@
                     Refresh</button>
                 <select id="cliStatusInterval"
                     style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
-                    <option value="60">1분</option>
-                    <option value="300" selected>5분</option>
-                    <option value="600">10분</option>
-                    <option value="0">수동</option>
+                    <option value="60" data-i18n="time.1m">1분</option>
+                    <option value="300" selected data-i18n="time.5m">5분</option>
+                    <option value="600" data-i18n="time.10m">10분</option>
+                    <option value="0" data-i18n="time.manual">수동</option>
                 </select>
             </div>
         </div>
@@ -80,19 +80,20 @@
             </div>
             <button class="sidebar-hb-btn" id="btnClearChat">/clear</button>
             <button class="sidebar-hb-btn" id="hbSidebarBtn">💓 Heartbeat (0)</button>
+            <button class="sidebar-hb-btn" id="langToggle" title="한국어 ⇄ English">🌐 한국어</button>
         </div>
     </div>
 
     <!-- Chat Area -->
     <div class="chat-area" style="position:relative">
-        <div class="drag-overlay" id="dragOverlay">📎 파일을 여기에 드랍하세요</div>
+        <div class="drag-overlay" id="dragOverlay" data-i18n="drag.drop">📎 파일을 여기에 드랍하세요</div>
         <div class="chat-header">
             <span>CLI-CLAW ● <span id="headerCli">claude</span></span>
             <button class="sidebar-toggle" id="toggleTheme" title="Toggle Theme">☀️</button>
         </div>
         <div class="chat-messages" id="chatMessages"></div>
         <div class="typing-indicator" id="typingIndicator">
-            <span class="label">응답 중</span>
+            <span class="label" data-i18n="status.responding">응답 중</span>
             <span class="typing-dot"></span>
             <span class="typing-dot"></span>
             <span class="typing-dot"></span>
@@ -103,13 +104,14 @@
             <button class="remove">✕</button>
         </div>
         <div class="chat-input-area">
-            <div id="cmdDropdown" class="cmd-dropdown" role="listbox" aria-label="커맨드 목록" style="display:none"></div>
-            <button class="btn-attach" title="파일 첨부">📎</button>
+            <div id="cmdDropdown" class="cmd-dropdown" role="listbox" data-i18n-aria="aria.cmdList" aria-label="커맨드 목록"
+                style="display:none"></div>
+            <button class="btn-attach" data-i18n-title="btn.attach" title="파일 첨부">📎</button>
             <input type="file" id="fileInput" hidden
                 accept="image/*,.pdf,.txt,.md,.js,.py,.json,.csv,.html,.css,.ts,.tsx,.jsx">
-            <textarea class="chat-input" id="chatInput" rows="1" placeholder="메시지 입력..." aria-haspopup="listbox"
-                aria-expanded="false" aria-controls="cmdDropdown" aria-autocomplete="list"
-                aria-activedescendant=""></textarea>
+            <textarea class="chat-input" id="chatInput" rows="1" data-i18n-placeholder="input.placeholder"
+                placeholder="메시지 입력..." aria-haspopup="listbox" aria-expanded="false" aria-controls="cmdDropdown"
+                aria-autocomplete="list" aria-activedescendant=""></textarea>
             <button class="btn-send" id="btnSend">➤</button>
         </div>
     </div>
@@ -181,23 +183,26 @@
         <!-- Skills Tab -->
         <div id="tabSkills" class="tab-content">
             <div style="display:flex;gap:6px;flex-wrap:wrap">
-                <button class="skill-filter active" data-filter="all">전체</button>
-                <button class="skill-filter" data-filter="installed">📦 설치됨</button>
-                <button class="skill-filter" data-filter="productivity">📝 생산성</button>
-                <button class="skill-filter" data-filter="communication">📧 커뮤</button>
-                <button class="skill-filter" data-filter="devtools">🔧 개발</button>
-                <button class="skill-filter" data-filter="ai-media">🤖 AI</button>
-                <button class="skill-filter" data-filter="utility">🌐 유틸</button>
-                <button class="skill-filter" data-filter="smarthome">🏠 홈</button>
-                <button class="skill-filter" data-filter="other">📂 기타</button>
+                <button class="skill-filter active" data-filter="all" data-i18n="skill.filter.all">전체</button>
+                <button class="skill-filter" data-filter="installed" data-i18n="skill.filter.installed">📦 설치됨</button>
+                <button class="skill-filter" data-filter="productivity" data-i18n="skill.filter.productivity">📝
+                    생산성</button>
+                <button class="skill-filter" data-filter="communication" data-i18n="skill.filter.communication">📧
+                    커뮤</button>
+                <button class="skill-filter" data-filter="devtools" data-i18n="skill.filter.devtools">🔧 개발</button>
+                <button class="skill-filter" data-filter="ai-media" data-i18n="skill.filter.ai">🤖 AI</button>
+                <button class="skill-filter" data-filter="utility" data-i18n="skill.filter.utility">🌐 유틸</button>
+                <button class="skill-filter" data-filter="smarthome" data-i18n="skill.filter.smarthome">🏠 홈</button>
+                <button class="skill-filter" data-filter="other" data-i18n="skill.filter.other">📂 기타</button>
             </div>
-            <div style="font-size:10px;color:var(--text-dim)" id="skillsCount">로딩 중...</div>
+            <div style="font-size:10px;color:var(--text-dim)" id="skillsCount" data-i18n="loading">로딩 중...</div>
             <div id="skillsList"></div>
         </div>
 
         <!-- Settings Tab -->
         <div id="tabSettings" class="tab-content">
-            <button class="btn-clear" style="width:100%;margin:0;padding:8px;font-size:12px" data-action="openPrompt">✏️
+            <button class="btn-clear" style="width:100%;margin:0;padding:8px;font-size:12px" data-action="openPrompt"
+                data-i18n="btn.editPrompt">✏️
                 시스템 프롬프트 편집</button>
             <!-- Telegram Bot -->
             <div class="settings-group">
@@ -216,8 +221,8 @@
                 </div>
                 <div class="settings-row sub-row">
                     <label>Allowed Chat IDs</label>
-                    <input type="text" id="tgChatIds" placeholder="콤마 구분 (비워두면 전체 허용)"
-                        style="width:100%;font-size:11px;padding:4px">
+                    <input type="text" id="tgChatIds" data-i18n-placeholder="tg.chatIds.placeholder"
+                        placeholder="콤마 구분 (비워두면 전체 허용)" style="width:100%;font-size:11px;padding:4px">
                 </div>
             </div>
 
@@ -227,8 +232,8 @@
                 <div class="settings-row">
                     <label>Model</label>
                     <select id="modelClaude"></select>
-                    <input type="text" id="customModelClaude" class="custom-model-input" placeholder="model ID 입력"
-                        style="display:none">
+                    <input type="text" id="customModelClaude" class="custom-model-input"
+                        data-i18n-placeholder="model.placeholder" placeholder="model ID 입력" style="display:none">
                 </div>
                 <div class="settings-row sub-row">
                     <label>Effort</label>
@@ -245,8 +250,8 @@
                 <div class="settings-row">
                     <label>Model</label>
                     <select id="modelCodex"></select>
-                    <input type="text" id="customModelCodex" class="custom-model-input" placeholder="model ID 입력"
-                        style="display:none">
+                    <input type="text" id="customModelCodex" class="custom-model-input"
+                        data-i18n-placeholder="model.placeholder" placeholder="model ID 입력" style="display:none">
                 </div>
                 <div class="settings-row sub-row">
                     <label>Effort</label>
@@ -264,8 +269,8 @@
                 <div class="settings-row">
                     <label>Model</label>
                     <select id="modelGemini"></select>
-                    <input type="text" id="customModelGemini" class="custom-model-input" placeholder="model ID 입력"
-                        style="display:none">
+                    <input type="text" id="customModelGemini" class="custom-model-input"
+                        data-i18n-placeholder="model.placeholder" placeholder="model ID 입력" style="display:none">
                 </div>
             </div>
 
@@ -274,8 +279,8 @@
                 <div class="settings-row">
                     <label>Model</label>
                     <select id="modelOpencode"></select>
-                    <input type="text" id="customModelOpencode" class="custom-model-input" placeholder="model ID 입력"
-                        style="display:none">
+                    <input type="text" id="customModelOpencode" class="custom-model-input"
+                        data-i18n-placeholder="model.placeholder" placeholder="model ID 입력" style="display:none">
                 </div>
                 <div class="settings-row sub-row">
                     <label>Effort</label>
@@ -294,8 +299,8 @@
                 <div class="settings-row">
                     <label>Model</label>
                     <select id="modelCopilot"></select>
-                    <input type="text" id="customModelCopilot" class="custom-model-input" placeholder="model ID 입력"
-                        style="display:none">
+                    <input type="text" id="customModelCopilot" class="custom-model-input"
+                        data-i18n-placeholder="model.placeholder" placeholder="model ID 입력" style="display:none">
                 </div>
                 <div class="settings-row sub-row">
                     <label>Effort</label>
@@ -308,7 +313,8 @@
             <!-- Fallback Order -->
             <div class="settings-group">
                 <h4>⚡ Fallback</h4>
-                <p style="font-size:10px;color:var(--text-dim);margin:2px 0 6px">CLI 실패 시 자동 재시도 순서</p>
+                <p style="font-size:10px;color:var(--text-dim);margin:2px 0 6px" data-i18n="fallback.desc">CLI 실패 시 자동
+                    재시도 순서</p>
                 <div id="fallbackOrderList"></div>
             </div>
 
@@ -339,8 +345,9 @@
             </div>
             <textarea class="modal-textarea" id="modalPromptEditor"></textarea>
             <div class="modal-footer">
-                <button class="btn-clear" style="margin:0;padding:6px 16px" data-action="cancelPrompt">취소</button>
-                <button class="btn-save" data-action="savePrompt">저장</button>
+                <button class="btn-clear" style="margin:0;padding:6px 16px" data-action="cancelPrompt"
+                    data-i18n="btn.cancel">취소</button>
+                <button class="btn-save" data-action="savePrompt" data-i18n="btn.save">저장</button>
             </div>
         </div>
     </div>
@@ -355,7 +362,7 @@
             </div>
             <div id="hbJobsList" style="padding:12px"></div>
             <div style="padding:0 12px 12px">
-                <button class="hb-add" data-action="addHeartbeat">+ 새 하트비트 추가</button>
+                <button class="hb-add" data-action="addHeartbeat" data-i18n="hb.add">+ 새 하트비트 추가</button>
             </div>
         </div>
     </div>

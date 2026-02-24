@@ -1,12 +1,13 @@
 // ── WebSocket Connection ──
 import { state } from './state.js';
 import { setStatus, updateQueueBadge, addSystemMsg, appendAgentText, finalizeAgent, addMessage } from './ui.js';
+import { t, getLang } from './features/i18n.js';
 
 // Agent phase state (populated by agent_status events from orchestrator)
 const agentPhaseState = {};
 
 export function connect() {
-    state.ws = new WebSocket(`ws://${location.host}`);
+    state.ws = new WebSocket(`ws://${location.host}?lang=${getLang()}`);
     state.ws.onmessage = (e) => {
         const msg = JSON.parse(e.data);
         if (msg.type === 'agent_status') {
@@ -27,21 +28,21 @@ export function connect() {
         } else if (msg.type === 'round_start') {
             const agents = (msg.agentPhases || msg.subtasks || []);
             const names = agents.map(a => a.agent || a.name).join(', ');
-            addSystemMsg(`🔄 라운드 ${msg.round} — ${agents.length}개 작업 [${names}]`);
+            addSystemMsg(t('ws.roundStart', { round: msg.round, count: agents.length, names }));
         } else if (msg.type === 'round_done') {
             if (msg.action === 'complete') {
-                addSystemMsg(`🏁 라운드 ${msg.round} 완료`);
+                addSystemMsg(t('ws.roundDone', { round: msg.round }));
             } else if (msg.action === 'next') {
-                addSystemMsg(`➡️ 라운드 ${msg.round} → 다음 라운드`);
+                addSystemMsg(t('ws.roundNext', { round: msg.round }));
             } else {
-                addSystemMsg(`↩️ 라운드 ${msg.round} → 재시도`);
+                addSystemMsg(t('ws.roundRetry', { round: msg.round }));
             }
         } else if (msg.type === 'agent_tool') {
             addSystemMsg(`${msg.icon} ${msg.label}`, 'tool-activity');
         } else if (msg.type === 'agent_output') {
             appendAgentText(msg.text);
         } else if (msg.type === 'agent_fallback') {
-            addSystemMsg(`⚡ ${msg.from} 실패 → ${msg.to}로 재시도`, 'tool-activity');
+            addSystemMsg(t('ws.fallback', { from: msg.from, to: msg.to }), 'tool-activity');
         } else if (msg.type === 'agent_done') {
             finalizeAgent(msg.text, msg.toolLog);
         } else if (msg.type === 'clear') {

@@ -3,6 +3,7 @@ import { state } from '../state.js';
 import { MODEL_MAP, ROLE_PRESETS, getCliKeys } from '../constants.js';
 import { escapeHtml } from '../render.js';
 import { getAgentPhase } from '../ws.js';
+import { t } from './i18n.js';
 
 export async function loadEmployees() {
     state.employees = await (await fetch('/api/employees')).json();
@@ -12,7 +13,7 @@ export async function loadEmployees() {
 export function renderEmployees() {
     const el = document.getElementById('employeesList');
     if (state.employees.length === 0) {
-        el.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:4px 0">에이전트를 추가하세요</div>';
+        el.innerHTML = `<div style="color:var(--text-dim);font-size:11px;padding:4px 0">${t('emp.addPrompt')}</div>`;
         return;
     }
     const cliKeys = getCliKeys();
@@ -20,13 +21,24 @@ export function renderEmployees() {
         const models = MODEL_MAP[a.cli] || [];
         // Legacy role prompt → new preset migration
         const LEGACY_MAP = {
+            // Legacy Korean roles (backward compat with old DB data)
             'React/Vue 기반 UI 컴포넌트 개발, 스타일링': 'frontend',
             'API 서버, DB 스키마, 비즈니스 로직 구현': 'backend',
-            '프론트엔드와 백엔드 모두 담당': 'frontend',       // fullstack → frontend
-            'CI/CD, Docker, 인프라 자동화': 'backend',         // devops → backend
-            '테스트 작성, 버그 재현, 품질 관리': 'custom',      // qa → custom
+            '프론트엔드와 백엔드 모두 담당': 'frontend',
+            'CI/CD, Docker, 인프라 자동화': 'backend',
+            '테스트 작성, 버그 재현, 품질 관리': 'custom',
             '데이터 파이프라인, ETL, 분석 쿼리': 'data',
             'API 문서화, README, 가이드 작성': 'docs',
+            // Previous default Korean preset prompts
+            'UI/UX 구현, CSS, 컴포넌트 개발': 'frontend',
+            'API, DB, 서버 로직 구현': 'backend',
+            '데이터 파이프라인, 분석, ML': 'data',
+            '문서화, README, API docs': 'docs',
+            // Phase 6.9: new English preset prompts
+            'UI/UX, CSS, components': 'frontend',
+            'API, DB, server logic': 'backend',
+            'Data pipeline, analysis, ML': 'data',
+            'Documentation, README, API docs': 'docs',
         };
         const legacyVal = LEGACY_MAP[a.role];
         const matched = legacyVal ? ROLE_PRESETS.find(r => r.value === legacyVal) : ROLE_PRESETS.find(r => r.prompt === a.role);
@@ -40,7 +52,7 @@ export function renderEmployees() {
                 <input style="flex:1;background:none;border:none;color:var(--text);font-size:12px;font-weight:600;font-family:inherit;outline:none"
                        value="${escapeHtml(a.name || 'Agent')}"
                        data-emp-name="${a.id}">
-                <button style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px" data-emp-delete="${a.id}" title="삭제">✕</button>
+                <button style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px" data-emp-delete="${a.id}" title="${t('emp.delete')}">✕</button>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px">
                 <div>
@@ -63,7 +75,7 @@ export function renderEmployees() {
                     ${ROLE_PRESETS.map(r => `<option value="${r.value}"${presetVal === r.value ? ' selected' : ''}>${r.label}</option>`).join('')}
                 </select>
                 <textarea data-emp-custom="${a.id}" style="display:${isCustom ? 'block' : 'none'};margin-top:4px;width:100%;height:40px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:10px;font-family:inherit;resize:vertical"
-                          placeholder="커스텀 역할...">${isCustom ? escapeHtml(a.role) : ''}</textarea>
+                          placeholder="${t('emp.customRole')}">${isCustom ? escapeHtml(a.role) : ''}</textarea>
             </div>
             <div style="margin-top:4px;font-size:10px;display:flex;align-items:center;gap:6px">
                 <span style="color:${a.status === 'running' ? '#fbbf24' : 'var(--green)'}">● ${a.status || 'idle'}</span>
@@ -88,7 +100,7 @@ export async function deleteEmployee(id) {
 export function onEmpCliChange(id, cli) {
     const models = MODEL_MAP[cli] || [];
     const sel = document.querySelector(`[data-emp-model="${id}"]`);
-    sel.innerHTML = `<option value="default" selected>default</option>` + models.map(m => `<option>${m}</option>`).join('') + `<option value="__custom__">직접 입력...</option>`;
+    sel.innerHTML = `<option value="default" selected>default</option>` + models.map(m => `<option>${m}</option>`).join('') + `<option value="__custom__">${t('emp.customModel')}</option>`;
     updateEmployee(id, { cli, model: 'default' });
 }
 

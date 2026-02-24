@@ -1,5 +1,6 @@
 // ── Skills Feature ──
 import { state } from '../state.js';
+import { t } from './i18n.js';
 
 export async function loadSkills() {
     try {
@@ -8,7 +9,7 @@ export async function loadSkills() {
         renderSkills();
     } catch (e) {
         document.getElementById('skillsList').innerHTML =
-            `<div style="color:var(--text-dim);font-size:11px">스킬 로드 실패</div>`;
+            `<div style="color:var(--text-dim);font-size:11px">${t('skill.loadFail')}</div>`;
     }
 }
 
@@ -26,7 +27,7 @@ export function renderSkills() {
         filtered = state.allSkills.filter(s => s.category === state.currentSkillFilter);
     }
     const enabledCount = state.allSkills.filter(s => s.enabled).length;
-    count.textContent = `활성 ${enabledCount}개 / 전체 ${state.allSkills.length}개`;
+    count.textContent = t('skill.count', { active: enabledCount, total: state.allSkills.length });
 
     list.innerHTML = filtered.map(s => {
         const reqParts = [];

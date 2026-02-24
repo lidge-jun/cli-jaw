@@ -1,4 +1,6 @@
 // ── Slash Command Dropdown ──
+import { getPreferredLocale } from '../locale.js';
+import { t } from './i18n.js';
 
 let cmdList = [];       // { name, desc, args, category }[]
 let filtered = [];      // currently filtered list
@@ -49,7 +51,7 @@ function render() {
 
         el.innerHTML = `
             <div class="cmd-item cmd-empty" role="option" aria-disabled="true">
-                일치하는 커맨드가 없습니다
+                ${t('cmd.noMatch')}
             </div>
         `;
         showDropdown();
@@ -96,7 +98,9 @@ function applySelection(execute) {
 
 export async function loadCommands() {
     try {
-        const res = await fetch('/api/commands?interface=web');
+        const locale = getPreferredLocale();
+        const url = `/api/commands?interface=web&locale=${encodeURIComponent(locale)}`;
+        const res = await fetch(url, { headers: { 'Accept-Language': locale } });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         cmdList = await res.json();
     } catch (err) {

@@ -33,6 +33,7 @@ import { loadCliRegistry, getCliKeys } from './constants.js';
 import { initAppName } from './features/appname.js';
 import { initSidebar } from './features/sidebar.js';
 import { initTheme } from './features/theme.js';
+import { initI18n, setLang, getLang, t } from './features/i18n.js';
 
 // ── Chat Actions ──
 document.getElementById('btnSend').addEventListener('click', sendMessage);
@@ -64,6 +65,16 @@ document.querySelector('.btn-attach').addEventListener('click', () => {
 document.getElementById('memorySidebarBtn').addEventListener('click', openMemoryModal);
 document.getElementById('btnClearChat').addEventListener('click', clearChat);
 document.getElementById('hbSidebarBtn').addEventListener('click', openHeartbeatModal);
+
+// Language toggle
+document.getElementById('langToggle')?.addEventListener('click', async () => {
+    const next = getLang() === 'ko' ? 'en' : 'ko';
+    await setLang(next);
+    const btn = document.getElementById('langToggle');
+    if (btn) btn.textContent = `🌐 ${t('lang.' + next)}`;
+    // Reconnect WS with new locale
+    if (state.ws) { state.ws.close(); }
+});
 
 // ── Tab Bar (event delegation) ──
 document.querySelector('.tab-bar').addEventListener('click', (e) => {
@@ -100,7 +111,7 @@ document.getElementById('employeesList').addEventListener('change', (e) => {
     const model = e.target.closest('[data-emp-model]');
     if (model) {
         if (e.target.value === '__custom__') {
-            const val = prompt('모델 ID를 입력하세요:');
+            const val = prompt(t('model.promptInput'));
             if (val?.trim()) {
                 const opt = document.createElement('option');
                 opt.value = val.trim(); opt.textContent = val.trim();
@@ -218,6 +229,9 @@ document.getElementById('memFilesList').addEventListener('click', (e) => {
 
 // ── Init ──
 async function bootstrap() {
+    await initI18n();
+    const langBtn = document.getElementById('langToggle');
+    if (langBtn) langBtn.textContent = `🌐 ${t('lang.' + getLang())}`;
     await loadCliRegistry();
     bindPerCliControlEvents();
     connect();

@@ -1,6 +1,8 @@
 // ── Chat Feature ──
 import { state } from '../state.js';
 import { addMessage, addSystemMsg, scrollToBottom } from '../ui.js';
+import { getPreferredLocale } from '../locale.js';
+import { t } from './i18n.js';
 import * as slashCmd from './slash-commands.js';
 
 export async function sendMessage() {
@@ -28,10 +30,14 @@ export async function sendMessage() {
                 signal = ac.signal;
                 timer = setTimeout(() => ac.abort(), 10000);
             }
+            const locale = getPreferredLocale();
             const res = await fetch('/api/command', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text }),
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept-Language': locale,
+                },
+                body: JSON.stringify({ text, locale }),
                 signal,
             });
             if (timer) clearTimeout(timer);
@@ -42,7 +48,7 @@ export async function sendMessage() {
             }
             if (result?.text) addSystemMsg(result.text, '', result.type);
         } catch (err) {
-            addSystemMsg(`❌ 커맨드 실행 실패: ${err.message}`, '', 'error');
+            addSystemMsg(t('chat.cmd.fail', { msg: err.message }), '', 'error');
         }
         return;
     }
@@ -53,7 +59,8 @@ export async function sendMessage() {
         input.value = '';
         try {
             const filePath = await uploadFile(state.attachedFile);
-            const prompt = `[사용자가 파일을 보냈습니다: ${filePath}]\n이 파일을 Read 도구로 읽고 분석해주세요.${text ? `\n\n사용자 메시지: ${text}` : ''}`;
+            let prompt = t('chat.file.sent', { path: filePath });
+            if (text) prompt += t('chat.file.sentWithMsg', { text });
             clearAttachedFile();
             await fetch('/api/message', {
                 method: 'POST',
@@ -61,7 +68,7 @@ export async function sendMessage() {
                 body: JSON.stringify({ prompt }),
             });
         } catch (err) {
-            addSystemMsg(`❌ 파일 업로드 실패: ${err.message}`);
+            addSystemMsg(t('chat.file.uploadFail', { msg: err.message }));
             clearAttachedFile();
         }
     } else {
@@ -74,14 +81,14 @@ export async function sendMessage() {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-            addSystemMsg(`❌ ${data.error || `요청 실패 (${res.status})`}`, '', 'error');
+            addSystemMsg(`❌ ${data.error || t('chat.requestFail', { status: res.status })}`, '', 'error');
             return;
         }
         if (data.queued) {
             const { updateQueueBadge } = await import('../ui.js');
             updateQueueBadge(data.pending || 1);
         } else if (data.continued) {
-            addSystemMsg('↪️ 이전 worklog 기준으로 이어서 진행합니다.');
+            addSystemMsg(t('chat.continue'));
         }
     }
 }

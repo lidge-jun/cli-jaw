@@ -1,5 +1,6 @@
 // ── Heartbeat Feature ──
 import { state } from '../state.js';
+import { t } from './i18n.js';
 
 export async function openHeartbeatModal() {
     const r = await fetch('/api/heartbeat');
@@ -17,12 +18,12 @@ export function closeHeartbeatModal(e) {
 export function renderHeartbeatJobs() {
     const container = document.getElementById('hbJobsList');
     if (state.heartbeatJobs.length === 0) {
-        container.innerHTML = '<p style="color:var(--text-dim);font-size:12px;text-align:center">하트비트가 없습니다</p>';
+        container.innerHTML = `<p style="color:var(--text-dim);font-size:12px;text-align:center">${t('hb.empty')}</p>`;
     } else {
         container.innerHTML = state.heartbeatJobs.map((job, i) => `
             <div class="hb-job-card">
                 <div class="hb-job-header">
-                    <input type="text" value="${job.name || ''}" placeholder="이름"
+                    <input type="text" value="${job.name || ''}" placeholder="${t('hb.name')}"
                         data-hb-name="${i}">
                     <span style="font-size:11px;color:var(--text-dim)">every</span>
                     <input type="number" value="${job.schedule?.minutes || 5}" min="1"
@@ -32,7 +33,7 @@ export function renderHeartbeatJobs() {
                         data-hb-toggle="${i}"></button>
                     <button class="hb-del" data-hb-remove="${i}">✕</button>
                 </div>
-                <textarea class="hb-prompt" rows="2" placeholder="프롬프트..."
+                <textarea class="hb-prompt" rows="2" placeholder="${t('hb.prompt')}"
                     data-hb-prompt="${i}">${job.prompt || ''}</textarea>
             </div>
         `).join('');

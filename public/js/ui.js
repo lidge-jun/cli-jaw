@@ -2,6 +2,7 @@
 import { state } from './state.js';
 import { renderMarkdown, escapeHtml } from './render.js';
 import { getAppName } from './features/appname.js';
+import { t } from './features/i18n.js';
 
 export function setStatus(s) {
     const badge = document.getElementById('statusBadge');
@@ -12,7 +13,7 @@ export function setStatus(s) {
         badge.className = 'status-badge status-running';
         badge.textContent = '⏳ running';
         btn.textContent = '■';
-        btn.title = '멈춤 (Stop)';
+        btn.title = t('btn.stop');
         btn.classList.add('stop-mode');
     } else {
         badge.className = 'status-badge status-idle';
@@ -85,7 +86,7 @@ export function addMessage(role, text) {
     const div = document.createElement('div');
     div.className = `msg msg-${role}`;
     const rendered = role === 'agent' ? renderMarkdown(text) : escapeHtml(text);
-    div.innerHTML = `<div class="msg-label">${role === 'user' ? 'You' : getAppName()}</div><div class="msg-content">${rendered}</div>`;
+    div.innerHTML = `<div class="msg-label">${role === 'user' ? t('msg.you') : getAppName()}</div><div class="msg-content">${rendered}</div>`;
     container.appendChild(div);
     scrollToBottom();
     return div;
@@ -119,7 +120,7 @@ export function handleSave() {
 
 export async function loadStats() {
     const msgs = await (await fetch('/api/messages')).json();
-    document.getElementById('statMsgs').textContent = `Messages: ${msgs.length}`;
+    document.getElementById('statMsgs').textContent = t('stat.messages', { count: msgs.length });
 }
 
 export async function loadMessages() {
@@ -133,7 +134,7 @@ export async function loadMemory() {
         const list = document.getElementById('memoryList');
         if (!list) return;
         if (items.length === 0) {
-            list.innerHTML = '<li style="color:var(--text-dim)">No memory yet</li>';
+            list.innerHTML = `<li style="color:var(--text-dim)">${t('mem.empty')}</li>`;
             return;
         }
         list.innerHTML = items.map(m =>

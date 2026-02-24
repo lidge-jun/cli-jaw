@@ -1,6 +1,8 @@
 // ── Settings Feature ──
 import { MODEL_MAP, loadCliRegistry, getCliKeys, getCliMeta } from '../constants.js';
 import { escapeHtml } from '../render.js';
+import { syncStoredLocale } from '../locale.js';
+import { t } from './i18n.js';
 
 function toCap(cli) {
     return cli.charAt(0).toUpperCase() + cli.slice(1);
@@ -21,7 +23,7 @@ function getEffortSelect(cli) {
 function setSelectOptions(selectEl, values, { includeCustom = false, includeDefault = false, selected = '' } = {}) {
     if (!selectEl) return;
     const defaultHtml = includeDefault ? '<option value="default">default</option>' : '';
-    const customHtml = includeCustom ? '<option value="__custom__">✏️ 직접 입력...</option>' : '';
+    const customHtml = includeCustom ? `<option value="__custom__">${t('model.customOption')}</option>` : '';
     const opts = (values || []).map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
     selectEl.innerHTML = defaultHtml + opts + customHtml;
 
@@ -118,6 +120,7 @@ function syncActiveEffortOptions(cli, selected = '') {
 export async function loadSettings() {
     await loadCliRegistry();
     const s = await (await fetch('/api/settings')).json();
+    syncStoredLocale(s.locale);
     syncCliOptionSelects(s);
     syncPerCliModelAndEffortControls(s);
 
@@ -166,7 +169,7 @@ export async function loadMcpServers() {
 export async function syncMcpServers() {
     const resultEl = document.getElementById('mcpSyncResult');
     resultEl.style.display = 'block';
-    resultEl.textContent = '동기화 중...';
+    resultEl.textContent = t('mcp.syncing');
     try {
         const d = await (await fetch('/api/mcp/sync', { method: 'POST' })).json();
         const r = d.results || {};
@@ -179,7 +182,7 @@ export async function syncMcpServers() {
 export async function installMcpGlobal() {
     const resultEl = document.getElementById('mcpSyncResult');
     resultEl.style.display = 'block';
-    resultEl.textContent = '📦 npm i -g 설치 중... (최대 2분 소요)';
+    resultEl.textContent = t('mcp.installing');
     try {
         const d = await (await fetch('/api/mcp/install', { method: 'POST' })).json();
         resultEl.innerHTML = Object.entries(d.results || {}).map(([k, v]) => {
@@ -277,7 +280,7 @@ export function onCliChange(save = true) {
     const inp = document.createElement('input');
     inp.type = 'text'; inp.id = 'selModelCustom';
     inp.className = 'custom-model-input';
-    inp.placeholder = 'model ID 입력';
+    inp.placeholder = t('model.placeholder');
     inp.style.display = 'none';
     inp.onchange = function () {
         const val = this.value.trim();
@@ -383,7 +386,7 @@ export function loadFallbackOrder(s) {
                 <label style="min-width:60px">Fallback ${i + 1}</label>
                 <select id="fallback${i}"
                     style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;flex:1">
-                    <option value="">(없음)</option>
+                    <option value="">${t('settings.none')}</option>
                     ${opts}
                 </select>
             </div>`;
@@ -431,7 +434,7 @@ function renderCliStatus(data) {
     const AUTH_HINTS = {
         claude: { install: 'npm i -g @anthropic-ai/claude-code', auth: 'claude auth' },
         codex: { install: 'npm i -g @openai/codex', auth: 'codex login' },
-        gemini: { install: 'npm i -g @google/gemini-cli', auth: 'gemini  (첫 실행 시 브라우저 인증)' },
+        gemini: { install: 'npm i -g @google/gemini-cli', auth: `gemini  (${t('cli.gemini.auth')})` },
         opencode: { install: 'npm i -g opencode-ai', auth: 'opencode auth' },
         copilot: { install: 'gh copilot --help', auth: '1) gh auth login → 2) gh copilot --help → 3) copilot login' },
     };
@@ -459,7 +462,7 @@ function renderCliStatus(data) {
             if (hint) {
                 authHint = `
                     <div style="font-size:10px;margin:4px 0 2px 16px;padding:6px 8px;background:var(--bg-dim, #1e1e2e);border-radius:4px;border-left:2px solid #fbbf24">
-                        <div style="color:#fbbf24;margin-bottom:3px">⚠️ 설치 / 인증 필요</div>
+                        <div style="color:#fbbf24;margin-bottom:3px">${t('cli.authRequired')}</div>
                         <div style="color:var(--text-dim)"><code style="font-size:10px;background:var(--border);padding:1px 4px;border-radius:2px">${escapeHtml(hint.install)}</code></div>
                         <div style="color:var(--text-dim);margin-top:2px"><code style="font-size:10px;background:var(--border);padding:1px 4px;border-radius:2px">${escapeHtml(hint.auth)}</code></div>
                     </div>
