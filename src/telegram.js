@@ -295,24 +295,70 @@ export function initTelegram() {
 
         const showTools = settings.telegram?.showToolUse !== false;
         let statusMsgId = null;
+        let statusMsgCreatePromise = null;
+        let statusUpdateTimer = null;
+        let statusUpdateRunning = false;
+        let pendingStatusText = '';
         let toolLines = [];
+
+        const flushStatusUpdate = async () => {
+            const display = pendingStatusText;
+            if (!display) return;
+
+            if (!statusMsgId) {
+                if (!statusMsgCreatePromise) {
+                    statusMsgCreatePromise = ctx.reply(`🔄 ${display}`)
+                        .then((m) => {
+                            statusMsgId = m.message_id;
+                            return statusMsgId;
+                        })
+                        .catch(() => null)
+                        .finally(() => {
+                            statusMsgCreatePromise = null;
+                        });
+                }
+                await statusMsgCreatePromise;
+                return;
+            }
+
+            await ctx.api.editMessageText(ctx.chat.id, statusMsgId, `🔄 ${display}`)
+                .catch(() => { });
+        };
+
+        const scheduleStatusUpdate = () => {
+            if (statusUpdateTimer) return;
+            statusUpdateTimer = setTimeout(async () => {
+                statusUpdateTimer = null;
+                if (statusUpdateRunning) return;
+                statusUpdateRunning = true;
+                try {
+                    await flushStatusUpdate();
+                } finally {
+                    statusUpdateRunning = false;
+                    // If pending text changed while updating, flush once more.
+                    if (pendingStatusText && !statusUpdateTimer) scheduleStatusUpdate();
+                }
+            }, 180);
+        };
+
+        const pushToolLine = (line) => {
+            if (!line) return;
+            if (toolLines[toolLines.length - 1] === line) return;
+            toolLines.push(line);
+            if (toolLines.length > 24) toolLines = toolLines.slice(-24);
+            pendingStatusText = toolLines.slice(-5).join('\n');
+            scheduleStatusUpdate();
+        };
 
         const toolHandler = showTools ? (type, data) => {
             if (type === 'agent_fallback') {
-                toolLines.push(`⚡ ${data.from} → ${data.to}`);
+                pushToolLine(`⚡ ${data.from} → ${data.to}`);
             } else if (type === 'agent_tool' && data.icon && data.label) {
-                toolLines.push(`${data.icon} ${data.label}`);
+                // Copilot ACP emits many thought chunks; hide them on Telegram to avoid message storms.
+                if (data.icon === '💭') return;
+                pushToolLine(`${data.icon} ${data.label}`);
             } else {
                 return;
-            }
-            const display = toolLines.slice(-5).join('\n');
-            if (!statusMsgId) {
-                ctx.reply(`🔄 ${display}`)
-                    .then(m => { statusMsgId = m.message_id; })
-                    .catch(() => { });
-            } else {
-                ctx.api.editMessageText(ctx.chat.id, statusMsgId, `🔄 ${display}`)
-                    .catch(() => { });
             }
         } : null;
 
@@ -321,6 +367,10 @@ export function initTelegram() {
         try {
             const result = await orchestrateAndCollect(prompt, { origin: 'telegram', chatId: ctx.chat.id });
             clearInterval(typingInterval);
+            if (statusUpdateTimer) {
+                clearTimeout(statusUpdateTimer);
+                statusUpdateTimer = null;
+            }
             if (toolHandler) removeBroadcastListener(toolHandler);
             if (statusMsgId) {
                 ctx.api.deleteMessage(ctx.chat.id, statusMsgId).catch(() => { });
@@ -337,6 +387,10 @@ export function initTelegram() {
             console.log(`[tg:out] ${ctx.chat.id}: ${result.slice(0, 80)}`);
         } catch (err) {
             clearInterval(typingInterval);
+            if (statusUpdateTimer) {
+                clearTimeout(statusUpdateTimer);
+                statusUpdateTimer = null;
+            }
             if (toolHandler) removeBroadcastListener(toolHandler);
             if (statusMsgId) {
                 ctx.api.deleteMessage(ctx.chat.id, statusMsgId).catch(() => { });
