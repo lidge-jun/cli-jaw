@@ -24,6 +24,37 @@ export function isContinueIntent(text) {
     return CONTINUE_PATTERNS.some(re => re.test(t));
 }
 
+// ─── Message Triage: 복잡한 작업만 orchestrate ───────
+
+const CODE_KEYWORDS = /\.(js|ts|jsx|tsx|py|md|json|css|html|sql|yml|yaml|sh|go|rs|swift)|구현|작성|만들어|수정|코딩|리팩|버그|에러|디버그|테스트|빌드|설치|배포|삭제|추가|변경|생성|개발|엔드포인트|서버|라우트|스키마|컴포넌트|모듈|함수|클래스|\bAPI\b|\bDB\b/i;
+const FILE_PATH_PATTERN = /(?:src|bin|public|lib|devlog|config|components?|pages?|api)\//i;
+const MULTI_TASK_PATTERN = /(?:그리고|다음에|먼저|또한|추가로|\n\n|\d+\.\s)/;
+
+export function needsOrchestration(text) {
+    const t = String(text || '').trim();
+    if (!t) return false;
+
+    let signals = 0;
+
+    // Signal 1: 길이 (80자 이상)
+    if (t.length >= 80) signals++;
+
+    // Signal 2: 코드 키워드 카운트
+    const codeMatches = t.match(CODE_KEYWORDS);
+    if (codeMatches) signals++;
+    // 2개 이상의 서로 다른 코드 키워드 → 추가 signal
+    const allCodeMatches = [...new Set((t.match(new RegExp(CODE_KEYWORDS.source, 'gi')) || []))];
+    if (allCodeMatches.length >= 2) signals++;
+
+    // Signal 3: 파일 경로 패턴
+    if (FILE_PATH_PATTERN.test(t)) signals++;
+
+    // Signal 4: 멀티 태스크 신호
+    if (MULTI_TASK_PATTERN.test(t)) signals++;
+
+    return signals >= 2;
+}
+
 const PHASE_PROFILES = {
     frontend: [1, 2, 3, 4, 5],
     backend: [1, 2, 3, 4, 5],
@@ -71,6 +102,31 @@ export function parseSubtasks(text) {
     const raw = text.match(/(\{[\s\S]*"subtasks"\s*:\s*\[[\s\S]*\]\s*\})/);
     if (raw) {
         try { return JSON.parse(raw[1]).subtasks || null; } catch { }
+    }
+    return null;
+}
+
+export function parseDirectAnswer(text) {
+    if (!text) return null;
+    // Fenced JSON block
+    const fenced = text.match(/```json\n([\s\S]*?)\n```/);
+    if (fenced) {
+        try {
+            const obj = JSON.parse(fenced[1]);
+            if (obj.direct_answer && (!obj.subtasks || obj.subtasks.length === 0)) {
+                return obj.direct_answer;
+            }
+        } catch { }
+    }
+    // Raw JSON
+    const raw = text.match(/(\{[\s\S]*"direct_answer"\s*:[\s\S]*\})/);
+    if (raw) {
+        try {
+            const obj = JSON.parse(raw[1]);
+            if (obj.direct_answer && (!obj.subtasks || obj.subtasks.length === 0)) {
+                return obj.direct_answer;
+            }
+        } catch { }
     }
     return null;
 }
@@ -135,6 +191,31 @@ async function phasePlan(prompt, worklog) {
     const planPrompt = `## 작업 요청
 ${prompt}
 
+## 판단 기준
+먼저 이 요청이 **여러 직원에게 분배할 복잡한 개발 작업인지** 판단하세요.
+
+### 직접 응답 (subtasks 불필요):
+- 인사, 잡담, 간단한 질문
+- 한 줄 대답으로 충분한 요청
+- 정보 확인, 상태 질문
+- 짧은 설명이나 의견 요청
+
+이 경우 subtasks를 빈 배열로 하고 direct_answer에 응답을 넣으세요:
+
+\`\`\`json
+{
+  "direct_answer": "여기에 직접 응답",
+  "subtasks": []
+}
+\`\`\`
+
+### 분배 필요 (subtasks 생성):
+- 코드 작성/수정/리팩토링
+- 여러 파일에 걸친 변경
+- 테스트 + 구현이 동시에 필요한 경우
+
+이 경우 아래 형식으로 계획을 세우세요:
+
 ## 출력 형식 (반드시 준수)
 1. 자연어로 계획을 설명하세요.
 2. **검증 기준을 반드시 포함**하세요. 각 subtask별로:
@@ -165,6 +246,12 @@ worklog 경로: ${worklog.path}
 
     const { promise } = spawnAgent(planPrompt, { agentId: 'planning' });
     const result = await promise;
+
+    // Agent 자율 판단: direct_answer가 있으면 subtask 생략
+    const directAnswer = parseDirectAnswer(result.text);
+    if (directAnswer) {
+        return { planText: directAnswer, subtasks: [], directAnswer };
+    }
 
     const planText = stripSubtaskJSON(result.text);
     appendToWorklog(worklog.path, 'Plan', planText || '(Plan Agent 응답 없음)');
@@ -306,6 +393,16 @@ JSON으로 출력:
 export async function orchestrate(prompt) {
     const employees = getEmployees.all();
 
+    // Triage: 간단한 메시지는 직접 응답
+    if (employees.length > 0 && !needsOrchestration(prompt)) {
+        console.log(`[claw:triage] direct response (no orchestration needed)`);
+        const { promise } = spawnAgent(prompt);
+        const result = await promise;
+        const stripped = stripSubtaskJSON(result.text);
+        broadcast('orchestrate_done', { text: stripped || result.text || '' });
+        return;
+    }
+
     // 직원 없으면 단일 에이전트 모드
     if (employees.length === 0) {
         const { promise } = spawnAgent(prompt);
@@ -318,8 +415,17 @@ export async function orchestrate(prompt) {
     const worklog = createWorklog(prompt);
     broadcast('worklog_created', { path: worklog.path });
 
-    // 1. 기획
-    const { planText, subtasks } = await phasePlan(prompt, worklog);
+    // 1. 기획 (planning agent가 직접 응답할 수도 있음)
+    const { planText, subtasks, directAnswer } = await phasePlan(prompt, worklog);
+
+    // Agent 자율 판단: subtask 불필요 → 직접 응답
+    if (directAnswer) {
+        console.log('[claw:triage] planning agent chose direct response');
+        broadcast('agent_done', { text: directAnswer });
+        broadcast('orchestrate_done', { text: directAnswer });
+        return;
+    }
+
     if (!subtasks?.length) {
         broadcast('orchestrate_done', { text: planText || '' });
         return;
