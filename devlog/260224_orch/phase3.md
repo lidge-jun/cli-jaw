@@ -134,10 +134,17 @@ if (!getEmployees().length) seedDefaultEmployees();
 
 | 파일                              | 작업                                                      |
 | --------------------------------- | --------------------------------------------------------- |
-| `public/js/features/employees.js` | [MODIFY] phase 뱃지 (`getAgentPhase` import)              |
-| `public/js/ws.js`                 | [MODIFY] 이벤트 핸들링 + `agentPhaseState` 추적           |
 | `src/orchestrator.js`             | [MODIFY] `orchestrateContinue` + `isContinueIntent` 추가  |
-| `server.js` (루트)                | [MODIFY] continue 라우팅 + `seedDefaultEmployees` + reset |
+| `server.js`                       | [MODIFY] continue 라우팅 + `seedDefaultEmployees` + reset |
+| `src/agent.js`                    | [MODIFY] processQueue에서 `isContinueIntent` 분기         |
+| `src/telegram.js`                 | [MODIFY] `isContinueIntent` → `orchestrateContinue` 분기  |
+| `src/commands.js`                 | [MODIFY] `/employee reset` 슬래시 커맨드 추가             |
+| `bin/commands/employee.js`        | [NEW] CLI `cli-claw employee reset` 명령                  |
+| `bin/cli-claw.js`                 | [MODIFY] employee 서브커맨드 등록                         |
+| `bin/commands/chat.js`            | [MODIFY] `resetEmployees` ctx + continued 메시지          |
+| `public/js/features/employees.js` | [MODIFY] phase 뱃지 (`getAgentPhase` import)              |
+| `public/js/features/chat.js`      | [MODIFY] 에러 핸들링 + `continued` 응답 표시              |
+| `public/js/ws.js`                 | [MODIFY] 이벤트 핸들링 + `agentPhaseState` 추적           |
 
 ---
 
@@ -159,20 +166,25 @@ export function isContinueIntent(text) { ... }
 
 ### ✅ Continue-before-Queue 라우팅
 
-WS 핸들러와 `/api/message`에서 `isContinueIntent()` 체크를 **큐 진입 전**에 배치.
-에이전트 실행 중 "이어서 해줘" 입력 시 큐에 넣지 않고 즉시 안내 메시지 반환.
+모든 진입점에서 `isContinueIntent()` 체크를 **큐 진입 전**에 배치:
+- `server.js`: WS 핸들러 + `/api/message` (실행 중이면 안내 메시지)
+- `src/agent.js`: `processQueue`에서 dequeue된 메시지도 분기
+- `src/telegram.js`: 텔레그램 메시지 경로도 분기
 
 ### ✅ seedDefaultEmployees 헬퍼
 
-`server.js`에 `seedDefaultEmployees({ reset })` 함수 추출:
+`server.js`에 `seedDefaultEmployees({ reset, notify })` 함수 추출:
 - `reset=false` (기본): employees 비어있을 때만 seed
-- `reset=true`: 전체 삭제 후 재생성 (`POST /api/employees/reset`)
+- `reset=true`: 전체 삭제 후 재생성
+- `notify=true`: WebSocket `agent_updated` broadcast
 - `DEFAULT_EMPLOYEES` 모듈 레벨 상수로 통합 (중복 제거)
+- 호출 경로: startup seed, `POST /api/employees/reset`, `/employee reset`, `makeWebCommandCtx`
 
-### ✅ agentPhaseState 실시간 추적
+### ✅ `/employee reset` 명령
 
-`ws.js`에서 `agent_status` 이벤트의 `phase/phaseLabel`을 `agentPhaseState` 맵에 저장.
-`getAgentPhase(agentId)` export → `employees.js`가 badge 렌더 시 참조.
+- 슬래시 커맨드: `commands.js`에 `employeeHandler` + `employeeArgumentCompletions` 등록
+- CLI 명령: `bin/commands/employee.js` (REST API 호출), `bin/cli-claw.js`에 등록
+- 웹 chat.js: `resetEmployees` ctx 연결
 
 ---
 
