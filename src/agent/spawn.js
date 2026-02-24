@@ -48,7 +48,7 @@ export async function steerAgent(newPrompt, source) {
     if (wasRunning) await waitForProcessEnd(3000);
     insertMessage.run('user', newPrompt, source, '');
     broadcast('new_message', { role: 'user', content: newPrompt, source });
-    const { orchestrate, orchestrateContinue, isContinueIntent } = await import('./orchestrator.js');
+    const { orchestrate, orchestrateContinue, isContinueIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
     if (isContinueIntent(newPrompt)) orchestrateContinue({ origin });
     else orchestrate(newPrompt, { origin });
@@ -73,7 +73,7 @@ export async function processQueue() {
     insertMessage.run('user', combined, source, '');
     broadcast('new_message', { role: 'user', content: combined, source });
     broadcast('queue_update', { pending: 0 });
-    const { orchestrate, orchestrateContinue, isContinueIntent } = await import('./orchestrator.js');
+    const { orchestrate, orchestrateContinue, isContinueIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
     if (isContinueIntent(combined)) orchestrateContinue({ origin });
     else orchestrate(combined, { origin });
