@@ -52,8 +52,18 @@ if (values.help) {
 }
 
 const baseUrl = `http://localhost:${values.port}`;
+const hasConfirm = values.yes || process.argv.slice(3).includes('confirm');
 
-if (!values.yes) {
+// Check server is running
+try {
+    await fetch(`${baseUrl}/api/session`, { signal: AbortSignal.timeout(2000) });
+} catch {
+    console.error(`  ❌ 서버에 연결할 수 없습니다 (localhost:${values.port})`);
+    console.error(`  cli-claw serve 를 먼저 실행하세요.`);
+    process.exit(1);
+}
+
+if (!hasConfirm) {
     const ok = await confirm('  ⚠️  MCP, 스킬, 직원, 세션을 기본값으로 초기화합니다. 계속? (y/N) ');
     if (!ok) {
         console.log('  취소됨.');
