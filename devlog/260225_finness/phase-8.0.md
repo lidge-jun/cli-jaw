@@ -247,7 +247,9 @@ test('perCli and activeOverrides are independent', () => {
 
 ## 완료 기준
 
-- [ ] Copilot Active 모델 변경 시 사이드바 effort가 `''`로 덮이지 않음 (hotfix)
-- [ ] Active CLI와 사이드바 perCli 패널의 상태가 독립적으로 동작 (Option A 적용)
-- [ ] Sub-Agent `default`의 해석이 명확히 문서화됨
-- [ ] 기존 `npm test` 통과 (회귀 없음)
+- [x] Copilot Active 모델 변경 시 사이드바 effort가 `''`로 덮이지 않음 (hotfix)
+- [x] Active CLI와 사이드바 perCli 패널의 상태가 독립적으로 동작 (Option A 적용)
+- [x] Sub-Agent `default`의 해석이 명확히 문서화됨
+- [x] 기존 `npm test` 통과 (회귀 없음)
+
+> ✅ **완료됨** — `activeOverrides` 분리가 `settings.js`, `server.js`, `agent.js`에 반영됨 (2026-02-25 확인).

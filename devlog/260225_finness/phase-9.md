@@ -803,6 +803,151 @@ semgrep ci --sarif --sarif-output .artifacts/semgrep.sarif
 
 ---
 
+## 33) WS7 — catch 정책 + 예외 처리 일관화 (Phase 8.4 실행)
+
+> Phase 8.4 설계 기반. 빈 `catch {}` 블록에 로깅/주석을 추가하여 운영 관측성 확보.
+
+### 33.1 현재 상태
+
+`catch {}` 전수 조사 결과 약 **60건** (server.js 8, agent.js 4, orchestrator.js 7, telegram.js 5, prompt.js 12, 기타).
+
+### 33.2 3-tier 정책
+
+| Tier | 대상 | 조치 |
+|---|---|---|
+| 상 (즉시) | 프로세스 kill, 봇 정지, WS parse, 브라우저 탭 | `console.warn` + 컨텍스트 |
+| 중 (Phase 9 내) | JSON 파싱, fetch, 외부 서비스 | `console.debug` + preview |
+| 낮 (보류) | 초기화 fallback, 파일 부재 | `/* expected: ... */` 주석 |
+
+### 33.3 구현 범위
+
+**상 등급 10건:**
+
+| # | 파일 | 패턴 | 조치 |
+|---|---|---|---|
+| 1 | `server.js` | browser tabs → empty | warn + fallback |
+| 2 | `server.js` | WS message parse | warn with preview |
+| 3 | `src/agent.js` L28 | kill SIGTERM | warn with pid |
+| 4 | `src/agent.js` L31 | kill SIGKILL | warn with pid |
+| 5 | `src/orchestrator.js` L100 | subtask JSON #1 | debug with preview |
+| 6 | `src/orchestrator.js` L104 | subtask JSON #2 | debug with preview |
+| 7 | `src/orchestrator.js` L383 | phases_completed JSON | debug |
+| 8 | `src/telegram.js` L190 | bot stop | warn with reason |
+| 9 | `src/telegram.js` L384 | parse error | warn with msg id |
+| 10 | `src/telegram.js` L415 | media error | warn with msg id |
+
+**중 등급 8건** (선별 처리):
+
+| # | 파일 | 조치 |
+|---|---|---|
+| 1 | `server.js` quota/codex | warn once / debug |
+| 2 | `src/memory.js` grep | warn on proc error |
+| 3 | `lib/mcp-sync.js` | warn + skip reason |
+| 4 | `src/heartbeat.js` file parse | debug |
+| 5 | `src/acp-client.js` JSON | debug |
+| 6 | `src/config.js` loadSettings | debug + path |
+
+### 33.4 충돌 분석
+
+| 대상 | 충돌 |
+|---|---|
+| Phase 9.3 (라우트 분리) | 병행 가능 — catch 수정은 라우트 이동과 겹치지 않음 |
+| Phase 9.1 (보안 가드) | 없음 |
+| Phase 9.4 (테스트) | 없음 — 행동 변경 없는 리팩터링 |
+
+### 33.5 검증
+
+```bash
+# 기존 테스트 회귀
+npm test
+
+# 주석/로깅 없는 빈 catch 잔량 확인
+rg -n "catch \{" server.js src lib -g'*.js' | \
+  rg -v "console\.(warn|error|debug|log|info)" | \
+  rg -v "/\*" | \
+  rg -v "expected|ok|fine|ignore|skip|first run"
+```
+
+목표: **상 등급 0건, 주석/로깅 없는 catch 5건 이하**.
+
+### 33.6 완료 기준
+
+- [ ] 상 등급 10건 모두 warn/debug 추가
+- [ ] 중 등급 최소 5건 처리
+- [ ] 주석 없는 빈 catch 5건 이하
+- [ ] 기존 `npm test` 통과
+
+---
+
+## 34) WS8 — 의존성 검증 게이트 (Phase 8.5 실행)
+
+> Phase 8.5 설계 기반. 오프라인/온라인 이중 게이트로 의존성 보안 검증 체계 구축.
+
+### 34.1 파일 구조
+
+```text
+scripts/
+  check-deps-offline.mjs    # NEW — package-lock.json 기반 오프라인 체크
+  check-deps-online.sh       # NEW — npm audit + outdated + semgrep
+tests/unit/
+  deps-check.test.js         # NEW — semver helper 단위 테스트
+.artifacts/                   # NEW dir — 온라인 체크 결과 저장
+```
+
+### 34.2 오프라인 게이트 (`check-deps-offline.mjs`)
+
+`package-lock.json`에서 resolved 버전을 읽고 알려진 취약 범위와 비교:
+
+| 패키지 | Advisory | 취약 범위 | 현재 버전 |
+|---|---|---|---|
+| `ws` | GHSA-3h5v-q93c-6h6q | `>=8.0.0 <8.17.1` | `8.19.0` ✅ |
+| `node-fetch` | GHSA-r683-j2x4-v87g | `<2.6.7` or `>=3.0.0 <3.1.1` | `3.3.2` ✅ |
+
+### 34.3 온라인 게이트 (`check-deps-online.sh`)
+
+```bash
+npm audit --json > .artifacts/npm-audit.json
+npm outdated --json > .artifacts/npm-outdated.json
+semgrep ci --json --json-output .artifacts/semgrep.json  # optional
+```
+
+### 34.4 package.json 스크립트
+
+```json
+{
+  "check:deps": "node scripts/check-deps-offline.mjs",
+  "check:deps:online": "bash scripts/check-deps-online.sh",
+  "pretest": "node scripts/check-deps-offline.mjs"
+}
+```
+
+### 34.5 충돌 분석
+
+| 대상 | 충돌 |
+|---|---|
+| `package.json` | 낮음 — scripts 키 추가만 |
+| Phase 9.1~9.6 | 완전 독립 — 스크립트 추가만 |
+
+### 34.6 검증
+
+```bash
+# 정상: 현재 lock으로 all PASS
+node scripts/check-deps-offline.mjs
+
+# 이상: lock 조작 후 FAIL 확인
+node --test tests/unit/deps-check.test.js
+```
+
+### 34.7 완료 기준
+
+- [ ] 오프라인 스크립트 exit 0 (현재 환경)
+- [ ] 취약 버전 강제 시 exit 1 확인
+- [ ] `package.json`에 `check:deps` 스크립트 추가
+- [ ] `tests/unit/deps-check.test.js` 4/4 통과
+- [ ] `.artifacts/` `.gitignore`에 추가
+
+---
+
 ## 22) 부록 A: TDD 실행 흐름
 
 1. 실패 테스트 작성
