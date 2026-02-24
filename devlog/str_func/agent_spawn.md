@@ -4,7 +4,7 @@
 
 ---
 
-## agent.js — CLI Spawn & Queue + ACP 분기 (575L)
+## agent.js — CLI Spawn & Queue + ACP 분기 (585L)
 
 | Function                                   | 역할                                                 |
 | ------------------------------------------ | ---------------------------------------------------- |
@@ -26,8 +26,9 @@
 → cli === 'copilot' ?
     [YES] AcpClient 경로:
       → new AcpClient(model, workingDir, permissions)
-      → acp.initialize() → acp.createSession(workDir)
+      → acp.initialize() → acp.createSession(workDir) or loadSession()
       → acp.on('session/update') → extractFromAcpUpdate → broadcast
+      → **ctx reset** (fullText='', toolLog=[], seenToolKeys.clear()) ← loadSession 히스토리 리플레이 방지
       → acp.prompt(sessionId, text) → child = acp.proc
     [NO] 기존 spawn 경로:
       → resume or new args
@@ -52,7 +53,7 @@
 
 ---
 
-## acp-client.js — Copilot ACP JSON-RPC 클라이언트 (243L) `[NEW]`
+## acp-client.js — Copilot ACP JSON-RPC 클라이언트 (253L) `[NEW]`
 
 | Class / Method               | 역할                                              |
 | ---------------------------- | ------------------------------------------------- |
@@ -93,7 +94,7 @@ Client (cli-claw)               Agent (copilot --acp)
 
 ---
 
-## events.js — NDJSON Event Parsing + Dedupe + ACP (309L)
+## events.js — NDJSON Event Parsing + Dedupe + ACP (318L)
 
 | Function                                        | 역할                                              |
 | ----------------------------------------------- | ------------------------------------------------- |

@@ -1,7 +1,8 @@
 /* ── Left Sidebar ── */
 .sidebar-left {
-    background: var(--surface);
+    background: linear-gradient(180deg, var(--surface) 0%, color-mix(in srgb, var(--surface) 95%, #000) 100%);
     border-right: 1px solid var(--border);
+    box-shadow: inset -1px 0 0 var(--border);
     padding: 16px;
     display: flex;
     flex-direction: column;
@@ -49,16 +50,20 @@
     border-radius: 10px;
     font-size: 11px;
     font-weight: 600;
+    transition: background 0.3s, color 0.3s;
+    letter-spacing: 0.5px;
 }
 
 .status-idle {
     background: #1a2e1a;
     color: var(--green);
+    box-shadow: 0 0 6px rgba(74, 222, 128, 0.2);
 }
 
 .status-running {
     background: #2e2a1a;
     color: #fbbf24;
+    box-shadow: 0 0 6px rgba(251, 191, 36, 0.3);
 }
 
 .btn-clear {
@@ -71,16 +76,23 @@
     font-size: 12px;
     font-family: inherit;
     margin-top: auto;
+    transition: border-color 0.15s, color 0.15s, transform 0.1s;
 }
 
 .btn-clear:hover {
     border-color: var(--accent);
     color: var(--accent);
+    transform: translateY(-1px);
+}
+
+.btn-clear:active {
+    transform: translateY(0);
 }
 
 /* ── Right Sidebar ── */
 .sidebar-right {
-    background: var(--surface);
+    background: linear-gradient(180deg, var(--surface) 0%, color-mix(in srgb, var(--surface) 95%, #000) 100%);
+    box-shadow: inset 1px 0 0 var(--border);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -104,6 +116,7 @@
     cursor: pointer;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    transition: color 0.15s, border-bottom-color 0.15s;
 }
 
 .tab-btn.active {
@@ -156,8 +169,10 @@
     cursor: pointer;
     font-size: 12px;
     text-align: left;
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .sidebar-hb-btn:hover {
     border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
 }

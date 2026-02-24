@@ -1,6 +1,6 @@
 # CLI-CLAW — Source Structure & Function Reference
 
-> 마지막 검증: 2026-02-25T00:42 (server.js 856L / agent.js 578L / orchestrator.js 584L / prompt.js 502L / telegram.js 470L / acp-client.js 253L / cli-registry.js 88L)
+> 마지막 검증: 2026-02-25T01:29 (server.js 856L / agent.js 585L / orchestrator.js 584L / prompt.js 502L / telegram.js 470L / acp-client.js 253L / cli-registry.js 88L)
 >
 > 상세 모듈 문서는 [서브 문서](#서브-문서)를 참조하세요.
 
@@ -10,7 +10,7 @@
 
 ```text
 cli-claw/
-├── server.js                 ← 라우트 + 글루 + 슬래시커맨드 ctx + /api/cli-registry (854L)
+├── server.js                 ← 라우트 + 글루 + 슬래시커맨드 ctx + /api/cli-registry (856L)
 ├── lib/
 │   ├── mcp-sync.js           ← MCP 통합 + 스킬 복사 + DEDUP_EXCLUDED + 글로벌 설치 + symlink 보호 (645L)
 │   ├── upload.js             ← 파일 업로드 + Telegram 다운로드 (70L)
@@ -20,14 +20,14 @@ cli-claw/
 │   ├── acp-client.js         ← [NEW] Copilot ACP JSON-RPC 클라이언트 + optionId 폴백 (253L)
 │   ├── config.js             ← CLAW_HOME, settings, CLI 탐지 (cli-registry 기반), APP_VERSION (177L)
 │   ├── db.js                 ← SQLite 스키마 + prepared statements + trace (84L)
-│   ├── bus.js                ← WS + 내부 리스너 broadcast + removeBroadcastListener(fn) (20L)
+│   ├── bus.js                ← WS + 내부 리스너 broadcast + removeBroadcastListener(fn) (18L)
 │   ├── events.js             ← NDJSON 파싱 + dedupe key + ACP update 파싱 + logEventSummary + test helpers (318L)
 │   ├── commands.js           ← 슬래시 커맨드 레지스트리 + 디스패쳐 (cli-registry import) (639L)
-│   ├── agent.js              ← CLI spawn + ACP 분기 + effort config.json 쓰기 + origin 전달 + 히스토리빌더 + 스트림 + 큐 + 메모리 flush (578L)
+│   ├── agent.js              ← CLI spawn + ACP 분기 + effort config.json 쓰기 + origin 전달 + ctx reset + 스트림 + 큐 + 메모리 flush (585L)
 │   ├── orchestrator.js       ← Orchestration v2 + triage + 순차실행 + origin 전달 + phase skip (584L)
 │   ├── worklog.js            ← Worklog CRUD + phase matrix + PHASES (153L)
 │   ├── telegram.js           ← Telegram 봇 + forwarder lifecycle + origin 필터링 + 디바운스 tool 업데이트 (470L)
-│   ├── telegram-forwarder.js ← [NEW] Telegram 포워딩 헬퍼 추출 (escape, chunk, createForwarder) (73L)
+│   ├── telegram-forwarder.js ← [NEW] Telegram 포워딩 헬퍼 추출 (escape, chunk, createForwarder) (105L)
 │   ├── heartbeat.js          ← Heartbeat 잡 스케줄 + fs.watch (90L)
 │   ├── prompt.js             ← 프롬프트 + 스킬 + 서브에이전트 v2 + phase skip + git금지 (502L)
 │   ├── memory.js             ← Persistent Memory grep 기반 (128L)
@@ -36,17 +36,19 @@ cli-claw/
 │       ├── actions.js        ← snapshot/click/type/navigate/screenshot/mouseClick (179L)
 │       ├── vision.js         ← vision-click 파이프라인 + Codex provider (138L)
 │       └── index.js          ← re-export hub (13L)
-├── public/                   ← Web UI (ES Modules, 19 files, ~3000L)
-│   ├── index.html            ← HTML 뼈대 (412L, inline JS/CSS 없음, 🦞 CLI-CLAW 브랜딩)
-│   ├── css/                  ← 5 files (964L)
-│   └── js/                   ← 13 files (1600L)
-│       └── constants.js      ← loadCliRegistry() 동적 로딩 + FALLBACK_CLI_REGISTRY (114L)
+├── public/                   ← Web UI (ES Modules, 20 files, ~3500L)
+│   ├── index.html            ← HTML 뼈대 (422L, CDN defer 4개, 🦞 CLI-CLAW 브랜딩)
+│   ├── css/                  ← 6 files (1113L)
+│   │   └── markdown.css      ← [NEW] 마크다운 렌더링 스타일 (테이블·코드·KaTeX·Mermaid) (149L)
+│   └── js/                   ← 13 files (~1960L)
+│       ├── render.js          ← [REWRITE] marked+hljs+KaTeX+Mermaid 렌더러 (21L→141L)
+│       └── constants.js      ← loadCliRegistry() 동적 로딩 + FALLBACK_CLI_REGISTRY (119L)
 ├── bin/
 │   ├── cli-claw.js           ← 11개 서브커맨드 라우팅
-│   ├── postinstall.js        ← npm install 후 5-CLI 자동설치(bun→npm 폴백) + MCP + 스킬 + Copilot (200L)
+│   ├── postinstall.js        ← npm install 후 5-CLI 자동설치(bun→npm 폴백) + MCP + 스킬 + Copilot (212L)
 │   └── commands/
 │       ├── serve.js          ← 서버 시작 (--port/--host/--open, .env 자동감지)
-│       ├── chat.js           ← 터미널 채팅 TUI (3모드, 슬래시커맨드, 자동완성, 843L)
+│       ├── chat.js           ← 터미널 채팅 TUI (3모드, 슬래시커맨드, 자동완성, 844L)
 │       ├── init.js           ← 초기화 마법사
 │       ├── doctor.js         ← 진단 (12개 체크 — 5 CLI 포함, --json)
 │       ├── status.js         ← 서버 상태 (--json)
@@ -72,7 +74,7 @@ cli-claw/
 ├── TESTS.md                  ← 테스트 상세 (README에서 분리)
 ├── scripts/                  ← [NEW] 도구 스크립트
 │   └── check-copilot-gap.js  ← 문서-코드 갭 검사
-├── skills_ref/               ← 번들 스킬 (101개, registry.json 102항목)
+├── skills_ref/               ← 번들 스킬 (101개, registry.json 107항목)
 │   └── registry.json
 └── devlog/                   ← MVP 12 Phase + Post-MVP 11개 폴더
 ```
@@ -162,6 +164,9 @@ graph LR
 14. **Copilot ACP**: JSON-RPC 2.0 over stdio, `session/update` 이벤트로 실시간 스트리밍
 15. **Copilot effort**: `--reasoning-effort` 미지원 → `~/.copilot/config.json` `reasoning_effort` 직접 수정
 16. **Copilot quota**: macOS keychain `copilot-cli` → `copilot_internal/user` API (캐싱, 서버당 1회 팝업)
+17. **ACP ctx reset**: `loadSession()` 히스토리 리플레이 → `prompt()` 전 `ctx.fullText/toolLog/seenToolKeys` 초기화 필수
+18. **마크다운 렌더링**: CDN defer (marked v14, hljs v11, KaTeX 0.16, Mermaid v11), CDN 실패 시 regex fallback
+19. **marked v14 주의**: 커스텀 렌더러 API 토큰 기반 변경 — `renderer.table({header, body})` 불가, regex 후처리로 대안
 
 ---
 
@@ -190,7 +195,7 @@ graph LR
 | `260224_skill/`               | 스킬 큐레이션 + Telegram Send + Voice STT (P0~P2)           | 🟡    |
 | `260224_vision/`              | Vision Click P1✅ P2✅ — P3 멀티프로바이더 미구현              | 🟡    |
 | `260224_orch/`                | 오케스트레이션 v2 P0✅ P1✅ P2✅ P3✅ P4✅ P5✅                   | ✅    |
-| `260225_finness/`             | 안정화(P0✅) + 안전성(P1✅) + 회귀 테스트(P2✅) + CLI 자동설치+README(P3✅) | ✅    |
+| `260225_finness/`             | P0~P3✅ + P4 ACP응답누적fix✅ + P5 마크다운렌더링(marked+hljs+KaTeX+Mermaid)✅ | ✅    |
 | `260225_copilot-cli-integration/` | Copilot ACP 통합 Phase 1~6 완료 (할당량+effort+브랜딩)  | ✅    |
 | `269999_메모리 개선/`          | 메모리 고도화 (flush✅ + vector DB 📋 후순위)                 | 🔜    |
 

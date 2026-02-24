@@ -10,6 +10,8 @@
     --green: #4ade80;
     --user-bg: #1a1a2e;
     --agent-bg: #0f0f1a;
+    --font-ui: 'Outfit', -apple-system, system-ui, sans-serif;
+    --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
 }
 
 * {
@@ -19,7 +21,7 @@
 }
 
 body {
-    font-family: 'SF Mono', 'JetBrains Mono', monospace;
+    font-family: var(--font-ui);
     background: var(--bg);
     color: var(--text);
     height: 100vh;
@@ -44,4 +46,29 @@ input[type="text"] {
     border-radius: 6px;
     font-size: 12px;
     font-family: inherit;
+}
+
+/* ── Custom Scrollbar ── */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-dim);
+}
+
+/* Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
 }
