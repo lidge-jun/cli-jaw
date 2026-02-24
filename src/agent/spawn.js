@@ -20,6 +20,20 @@ export let memoryFlushCounter = 0;
 export let flushCycleCount = 0;
 export const messageQueue = [];
 
+// ─── Fallback Retry State ────────────────────────────
+// key: originalCli, value: { fallbackCli, retriesLeft }
+const FALLBACK_MAX_RETRIES = 3;
+const fallbackState = new Map();
+
+export function resetFallbackState() {
+    fallbackState.clear();
+    console.log('[claw:fallback] state reset');
+}
+
+export function getFallbackState() {
+    return Object.fromEntries(fallbackState);
+}
+
 // ─── Kill / Steer ────────────────────────────────────
 
 export function killActiveAgent(reason = 'user') {
@@ -156,7 +170,23 @@ export function spawnAgent(prompt, opts = {}) {
     const resultPromise = new Promise(r => { resolve = r; });
 
     const session = getSession();
-    const cli = opts.cli || session.active_cli || settings.cli;
+    let cli = opts.cli || session.active_cli || settings.cli;
+
+    // ─── Fallback retry: skip to fallback if retries exhausted ───
+    if (!opts._isFallback && !opts.internal) {
+        const st = fallbackState.get(cli);
+        if (st && st.retriesLeft <= 0) {
+            const fbAvail = detectCli(st.fallbackCli)?.available;
+            if (fbAvail) {
+                console.log(`[claw:fallback] ${cli} retries exhausted → direct ${st.fallbackCli}`);
+                broadcast('agent_fallback', { from: cli, to: st.fallbackCli, reason: 'retries exhausted' });
+                return spawnAgent(prompt, {
+                    ...opts, cli: st.fallbackCli, _isFallback: true, _skipInsert: true,
+                });
+            }
+        }
+    }
+
     const permissions = opts.permissions || settings.permissions || session.permissions || 'auto';
     const cfg = settings.perCli?.[cli] || {};
     const ao = (!opts.internal && !opts.agentId) ? (settings.activeOverrides?.[cli] || {}) : {};
@@ -327,6 +357,12 @@ export function spawnAgent(prompt, opts = {}) {
                 updateSession.run(cli, ctx.sessionId, model, settings.permissions, settings.workingDir, cfg.effort || '');
             }
 
+            // ─── Success: clear fallback state (auto-recovery) ───
+            if (code === 0 && fallbackState.has(cli)) {
+                console.log(`[claw:fallback] ${cli} recovered — clearing fallback state`);
+                fallbackState.delete(cli);
+            }
+
             if (ctx.fullText.trim()) {
                 const stripped = stripSubtaskJSON(ctx.fullText);
                 const cleaned = (stripped || ctx.fullText.trim())
@@ -351,6 +387,15 @@ export function spawnAgent(prompt, opts = {}) {
                     const fallbackCli = (settings.fallbackOrder || [])
                         .find(fc => fc !== cli && detectCli(fc).available);
                     if (fallbackCli) {
+                        // Record fallback state for retry tracking
+                        const st = fallbackState.get(cli);
+                        if (st) {
+                            st.retriesLeft = Math.max(0, st.retriesLeft - 1);
+                            console.log(`[claw:fallback] ${cli} retry consumed, ${st.retriesLeft} left`);
+                        } else {
+                            fallbackState.set(cli, { fallbackCli, retriesLeft: FALLBACK_MAX_RETRIES });
+                            console.log(`[claw:fallback] ${cli} → ${fallbackCli}, ${FALLBACK_MAX_RETRIES} retries queued`);
+                        }
                         broadcast('agent_fallback', { from: cli, to: fallbackCli, reason: errMsg });
                         const { promise: retryP } = spawnAgent(prompt, {
                             ...opts, cli: fallbackCli, _isFallback: true, _skipInsert: true,
@@ -446,6 +491,12 @@ export function spawnAgent(prompt, opts = {}) {
             console.log(`[claw:session] saved ${cli} session=${ctx.sessionId.slice(0, 12)}...`);
         }
 
+        // ─── Success: clear fallback state (auto-recovery) ───
+        if (code === 0 && fallbackState.has(cli)) {
+            console.log(`[claw:fallback] ${cli} recovered — clearing fallback state`);
+            fallbackState.delete(cli);
+        }
+
         if (ctx.fullText.trim()) {
             const costParts = [];
             if (ctx.cost != null) costParts.push(`$${Number(ctx.cost).toFixed(4)}`);
@@ -485,12 +536,19 @@ export function spawnAgent(prompt, opts = {}) {
                 errMsg = ctx.stderrBuf.trim().slice(0, 200);
             }
 
-            // ─── Fallback: 1회 재시도 ─────────────────────
+            // ─── Fallback with retry tracking ─────────────
             if (!opts.internal && !opts._isFallback) {
                 const fallbackCli = (settings.fallbackOrder || [])
                     .find(fc => fc !== cli && detectCli(fc).available);
                 if (fallbackCli) {
-                    console.log(`[claw:fallback] ${cli} failed (exit ${code}) → ${fallbackCli}`);
+                    const st = fallbackState.get(cli);
+                    if (st) {
+                        st.retriesLeft = Math.max(0, st.retriesLeft - 1);
+                        console.log(`[claw:fallback] ${cli} retry consumed, ${st.retriesLeft} left`);
+                    } else {
+                        fallbackState.set(cli, { fallbackCli, retriesLeft: FALLBACK_MAX_RETRIES });
+                        console.log(`[claw:fallback] ${cli} → ${fallbackCli}, ${FALLBACK_MAX_RETRIES} retries queued`);
+                    }
                     broadcast('agent_fallback', { from: cli, to: fallbackCli, reason: errMsg });
                     const { promise: retryP } = spawnAgent(prompt, {
                         ...opts, cli: fallbackCli, _isFallback: true, _skipInsert: true,

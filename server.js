@@ -51,7 +51,7 @@ import {
 import {
     activeProcess, killActiveAgent, waitForProcessEnd,
     steerAgent, enqueueMessage, processQueue, messageQueue,
-    saveUpload, memoryFlushCounter,
+    saveUpload, memoryFlushCounter, resetFallbackState,
 } from './src/agent/spawn.js';
 import { parseCommand, executeCommand, COMMANDS } from './src/cli/commands.js';
 import { orchestrate, orchestrateContinue, isContinueIntent } from './src/orchestrator/pipeline.js';
@@ -245,7 +245,7 @@ function applySettingsPatch(rawPatch = {}, { restartTelegram = false } = {}) {
     const merged = mergeSettingsPatch(settings, rawPatch);
     replaceSettings(merged);
     saveSettings(settings);
-
+    resetFallbackState();
     const session = getSession();
     const ao = settings.activeOverrides?.[settings.cli] || {};
     const pc = settings.perCli?.[settings.cli] || {};
