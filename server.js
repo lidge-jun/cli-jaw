@@ -45,7 +45,7 @@ import {
     saveUpload, memoryFlushCounter,
 } from './src/agent.js';
 import { parseCommand, executeCommand, COMMANDS } from './src/commands.js';
-import { orchestrate, orchestrateContinue } from './src/orchestrator.js';
+import { orchestrate, orchestrateContinue, isContinueIntent } from './src/orchestrator.js';
 import { initTelegram, telegramBot, telegramActiveChatIds } from './src/telegram.js';
 import { startHeartbeat, stopHeartbeat, watchHeartbeatFile } from './src/heartbeat.js';
 
@@ -69,6 +69,13 @@ try {
 // ─── Init ────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3457;
+const DEFAULT_EMPLOYEES = [
+    { name: '프런트', role: 'UI/UX 구현, CSS, 컴포넌트 개발' },
+    { name: '백엔드', role: 'API, DB, 서버 로직 구현' },
+    { name: '데이터', role: '데이터 파이프라인, 분석, ML' },
+    { name: '문서', role: '문서화, README, API docs' },
+    { name: '검수', role: '코드 리뷰, 테스트 검증, QA' },
+];
 
 ensureDirs();
 fs.mkdirSync(join(__dirname, 'public'), { recursive: true });
@@ -249,6 +256,22 @@ function applySettingsPatch(rawPatch = {}, { restartTelegram = false } = {}) {
     return settings;
 }
 
+function seedDefaultEmployees({ reset = false } = {}) {
+    const existing = getEmployees.all();
+    if (reset) {
+        for (const emp of existing) deleteEmployee.run(emp.id);
+    } else if (existing.length > 0) {
+        return { seeded: 0, cli: settings.cli, skipped: true };
+    }
+
+    const cli = settings.cli;
+    for (const emp of DEFAULT_EMPLOYEES) {
+        insertEmployee.run(crypto.randomUUID(), emp.name, cli, 'default', emp.role);
+    }
+    regenerateB();
+    return { seeded: DEFAULT_EMPLOYEES.length, cli, skipped: false };
+}
+
 function makeWebCommandCtx() {
     return {
         interface: 'web',
@@ -274,6 +297,7 @@ function makeWebCommandCtx() {
         searchMemory: (q) => memory.search(q),
         getBrowserStatus: async () => browser.getBrowserStatus(settings.browser?.cdpPort || 9240),
         getBrowserTabs: async () => ({ tabs: await browser.listTabs(settings.browser?.cdpPort || 9240) }),
+        resetEmployees: async () => seedDefaultEmployees({ reset: true }),
         getPrompt: () => {
             const a2 = fs.existsSync(A2_PATH) ? fs.readFileSync(A2_PATH, 'utf8') : '';
             return { content: a2 };
@@ -586,13 +610,6 @@ app.delete('/api/employees/:id', (req, res) => {
 app.post('/api/employees/reset', (req, res) => {
     const all = getEmployees.all();
     for (const emp of all) deleteEmployee.run(emp.id);
-    const DEFAULT_EMPLOYEES = [
-        { name: '프런트', role: 'UI/UX 구현, CSS, 컴포넌트 개발' },
-        { name: '백엔드', role: 'API, DB, 서버 로직 구현' },
-        { name: '데이터', role: '데이터 파이프라인, 분석, ML' },
-        { name: '문서', role: '문서화, README, API docs' },
-        { name: '검수', role: '코드 리뷰, 테스트 검증, QA' },
-    ];
     const cli = settings.cli;
     for (const emp of DEFAULT_EMPLOYEES) {
         insertEmployee.run(crypto.randomUUID(), emp.name, cli, 'default', emp.role);
@@ -793,13 +810,6 @@ server.listen(PORT, () => {
 
     // ─── Seed default employees if none exist ────────
     if (getEmployees.all().length === 0) {
-        const DEFAULT_EMPLOYEES = [
-            { name: '프런트', role: 'UI/UX 구현, CSS, 컴포넌트 개발' },
-            { name: '백엔드', role: 'API, DB, 서버 로직 구현' },
-            { name: '데이터', role: '데이터 파이프라인, 분석, ML' },
-            { name: '문서', role: '문서화, README, API docs' },
-            { name: '검수', role: '코드 리뷰, 테스트 검증, QA' },
-        ];
         const cli = settings.cli;
         for (const emp of DEFAULT_EMPLOYEES) {
             insertEmployee.run(crypto.randomUUID(), emp.name, cli, 'default', emp.role);
