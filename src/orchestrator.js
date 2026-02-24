@@ -283,11 +283,25 @@ async function distributeByPhase(agentPhases, worklog, round) {
         const phaseLabel = PHASES[ap.currentPhase];
         const sysPrompt = getSubAgentPromptV2(emp, ap.role, ap.currentPhase);
 
+        // 이전 에이전트 결과 요약 (순차 실행이므로 이미 완료된 것들)
+        const priorSummary = results.length > 0
+            ? results.map(r => `- ${r.agent} (${r.role}): ${r.status} — ${r.text.slice(0, 150)}`).join('\n')
+            : '(첫 번째 에이전트입니다)';
+
         const taskPrompt = `## 작업 지시 [${phaseLabel}]
 ${ap.task}
 
 ## 현재 Phase: ${ap.currentPhase} (${phaseLabel})
 ${instruction}
+
+## 순차 실행 규칙
+에이전트는 순서대로 하나씩 실행됩니다.
+- **이전 에이전트가 이미 수정한 파일은 건드리지 마세요** (충돌 방지)
+- 이전 에이전트의 결과를 참고하되 **중복 작업을 하지 마세요**
+- 당신의 담당 영역(${ap.role})에만 집중하세요
+
+### 이전 에이전트 결과
+${priorSummary}
 
 ## Worklog
 이 파일을 먼저 읽으세요: ${worklog.path}
