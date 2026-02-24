@@ -307,16 +307,29 @@ async function distributeByPhase(agentPhases, worklog, round) {
             ? results.map(r => `- ${r.agent} (${r.role}): ${r.status} — ${r.text.slice(0, 150)}`).join('\n')
             : '(첫 번째 에이전트입니다)';
 
+        const remainingPhases = ap.phaseProfile.slice(ap.currentPhaseIdx).map(p => `${p}(${PHASES[p]})`).join('→');
+
         const taskPrompt = `## 작업 지시 [${phaseLabel}]
 ${ap.task}
 
 ## 현재 Phase: ${ap.currentPhase} (${phaseLabel})
 ${instruction}
 
+## 남은 Phase: ${remainingPhases}
+
+## Phase 유연성
+현재 Phase의 작업을 수행하되, **자신있다면 다음 Phase까지 한 번에 처리해도 됩니다.**
+예: 기획과 개발을 동시에 → 기획 분석 + 코드 작성까지 한 번에 완료.
+이 경우 응답 마지막에 아래 JSON을 추가하세요:
+
+\`\`\`json
+{ "phases_completed": [${ap.phaseProfile.slice(ap.currentPhaseIdx).join(', ')}] }
+\`\`\`
+
+한 Phase만 완료한 경우에는 이 JSON을 넣지 않아도 됩니다.
+
 ## 순차 실행 규칙
-에이전트는 순서대로 하나씩 실행됩니다.
-- **이전 에이전트가 이미 수정한 파일은 건드리지 마세요** (충돌 방지)
-- 이전 에이전트의 결과를 참고하되 **중복 작업을 하지 마세요**
+- **이전 에이전트가 이미 수정한 파일은 건드리지 마세요**
 - 당신의 담당 영역(${ap.role})에만 집중하세요
 
 ### 이전 에이전트 결과
@@ -343,6 +356,27 @@ ${priorSummary}
             status: r.code === 0 ? 'done' : 'error',
             text: r.text || '',
         };
+
+        // phases_completed 파싱: 에이전트가 여러 phase를 한 번에 완료 선언
+        const pcMatch = (r.text || '').match(/\{[\s\S]*"phases_completed"\s*:\s*\[[\d,\s]+\][\s\S]*\}/);
+        if (pcMatch) {
+            try {
+                const pc = JSON.parse(pcMatch[0]);
+                if (Array.isArray(pc.phases_completed) && pc.phases_completed.length > 1) {
+                    const maxCompleted = Math.max(...pc.phases_completed);
+                    const newIdx = ap.phaseProfile.findIndex(p => p > maxCompleted);
+                    if (newIdx === -1) {
+                        ap.completed = true;
+                        console.log(`[claw:phase-skip] ${ap.agent} completed ALL phases in one pass`);
+                    } else if (newIdx > ap.currentPhaseIdx + 1) {
+                        ap.currentPhaseIdx = newIdx;
+                        ap.currentPhase = ap.phaseProfile[newIdx];
+                        console.log(`[claw:phase-skip] ${ap.agent} jumped to phase ${ap.currentPhase} (completed: ${pc.phases_completed})`);
+                    }
+                }
+            } catch { }
+        }
+
         results.push(result);
         broadcast('agent_status', { agentId: emp.id, agentName: emp.name, status: result.status, phase: ap.currentPhase });
 
