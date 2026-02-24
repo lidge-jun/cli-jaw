@@ -390,18 +390,33 @@ export async function orchestrate(prompt) {
 export function getSubAgentPromptV2(emp, role, currentPhase) {
   let prompt = getSubAgentPrompt(emp);
 
-  // ─── Role 기반 Dev 스킬 주입 (개별 스킬 방식)
+  // ─── 1. 공통 Dev 스킬 (항상 주입)
+  const devCommonPath = join(SKILLS_DIR, 'dev', 'SKILL.md');
+  if (fs.existsSync(devCommonPath)) {
+    prompt += `\n\n## Development Guide (Common)\n${fs.readFileSync(devCommonPath, 'utf8')}`;
+  }
+
+  // ─── 2. Role 기반 Dev 스킬 주입 (개별 스킬 방식)
   const ROLE_SKILL_MAP = {
     frontend: join(SKILLS_DIR, 'dev-frontend', 'SKILL.md'),
     backend:  join(SKILLS_DIR, 'dev-backend', 'SKILL.md'),
     data:     join(SKILLS_DIR, 'dev-data', 'SKILL.md'),
-    docs:     null, // documentation 스킬은 별도 로딩
+    docs:     join(SKILLS_DIR, 'documentation', 'SKILL.md'),  // documentation 스킬
+    custom:   null,  // 커스텀 역할은 공통 가이드만 사용
   };
 
   const skillPath = ROLE_SKILL_MAP[role];
   if (skillPath && fs.existsSync(skillPath)) {
     const skillContent = fs.readFileSync(skillPath, 'utf8');
     prompt += `\n\n## Development Guide (${role})\n${skillContent}`;
+  }
+
+  // ─── 3. 디버깅 phase(4)에서 dev-testing 추가 주입 (전 역할)
+  if (currentPhase === 4) {
+    const testingPath = join(SKILLS_DIR, 'dev-testing', 'SKILL.md');
+    if (fs.existsSync(testingPath)) {
+      prompt += `\n\n## Testing Guide (Phase 4)\n${fs.readFileSync(testingPath, 'utf8')}`;
+    }
   }
 
   // ─── Phase 컨텍스트 + Quality Gate 기대치

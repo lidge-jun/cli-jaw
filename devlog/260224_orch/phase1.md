@@ -2,7 +2,7 @@
 
 > **의존**: 없음 (독립 작업)
 > **검증일**: 2026-02-24
-> **산출물**: `src/worklog.js`, `dev-frontend`/`dev-backend`/`dev-data`/`dev-testing` 스킬, `constants.js` 수정
+> **산출물**: `src/worklog.js`, `dev`/`dev-frontend`/`dev-backend`/`dev-data`/`dev-testing` 스킬, `public/js/constants.js` 수정, `lib/mcp-sync.js` 수정
 
 ---
 
@@ -123,38 +123,84 @@ export function updateWorklogStatus(path, status, round) {
 
 ---
 
-## 1-B: Dev 스킬 생성 (개별 스킬 방식)
+## 1-B: Dev 스킬 생성 (계층 구조)
 
 [개발스킬-설계안.md](file:///Users/jun/Developer/new/_INBOX/개발스킬-설계안.md) §3 기반.
 
-> [!IMPORTANT]
-> Hub-and-Spoke (`dev/SKILL.md` → `dev/reference/`) 구조 **폐기**.
-> `loadActiveSkills()`가 `SKILL.md`만 읽으므로 `reference/` 하위 파일은 자동 로딩 안 됨.
-> → 역할별 **개별 스킬**로 분리.
+### 구조
 
 ```
 ~/.cli-claw/skills/
+├── dev/
+│   └── SKILL.md              ← 🔑 공통 개발 가이드 (모든 sub-agent에 주입)
 ├── dev-frontend/
-│   └── SKILL.md              ← 프런트엔드 가이드 (전부 여기에)
+│   └── SKILL.md              ← frontend 역할 전용 (frontend-design 복사+수정)
 ├── dev-backend/
-│   └── SKILL.md              ← 백엔드 가이드
+│   └── SKILL.md              ← backend 역할 전용 (웹 검색 기반 작성)
 ├── dev-data/
-│   └── SKILL.md              ← 데이터/사이언스 가이드
+│   └── SKILL.md              ← data 역할 전용 (웹 검색 기반 작성)
 └── dev-testing/
-    └── SKILL.md              ← 테스팅 가이드
+    └── SKILL.md              ← phase 4(디버깅) 전용 (webapp-testing 복사+수정)
 ```
 
-**장점**:
-- `loadActiveSkills()` 기존 로직 그대로 동작 (코드 변경 없음)
-- Orchestration 없이도 독립 사용 가능
-- Orchestrator는 role에 맞는 `SKILL.md`를 직접 읽어 주입
+### `dev/SKILL.md` — 공통 개발 가이드 (핵심)
 
-**핵심**: `ROLE_PRESETS.skill` 값이 스킬 디렉토리 ID (`dev-frontend`)를 가리킴.
+**모든 sub-agent에게 주입되는 공통 규칙**:
+
+1. **모듈화 개발 필수**: 코드를 반드시 모듈 단위로 작성. 단일 파일 500줄 초과 금지.
+2. **Self-reference**: cli-claw 프로젝트 자체 구조를 참고 패턴으로 사용:
+   - Browser 스킬 패턴: `browser/SKILL.md` → API 엔드포인트 → CLI 명령어
+   - HTML 모듈화 패턴: `public/js/features/*.js` (ES Module 구조)
+   - Config 패턴: `src/config.js` (경로, 설정, 감지)
+3. **스킬 레퍼런스**: 필요한 기술이 dev 스킬에 없으면 `~/.cli-claw/skills_ref/`에서 관련 스킬 탐색:
+   - React 관련 → `react-best-practices/`
+   - DB 관련 → `postgres/`
+   - 보안 → `security-best-practices/`
+   - 정적분석 → `static-analysis/`
+4. **변경 로그**: 모든 변경사항을 worklog에 기록 (파일명, 변경 이유, 영향 범위)
+
+### 소스 매핑
+
+| 스킬           | 소스                                              | 작업                  |
+| -------------- | ------------------------------------------------- | --------------------- |
+| `dev`          | **새로 작성**                                     | 위 공통 규칙 기반     |
+| `dev-frontend` | `~/.cli-claw/skills/frontend-design/` **복사**    | name/description 수정 |
+| `dev-backend`  | 웹 검색 (Express REST API best practice)          | 새로 작성             |
+| `dev-data`     | 웹 검색 + `skills_ref/postgres/` 참고             | 새로 작성             |
+| `dev-testing`  | `~/.cli-claw/skills_ref/webapp-testing/` **복사** | name/description 수정 |
+
+### Orchestrator 주입 규칙
+
+```
+getSubAgentPromptV2(emp, role, currentPhase):
+  1. dev/SKILL.md → 항상 주입 (공통)
+  2. dev-{role}/SKILL.md → 역할별 주입 (frontend/backend/data)
+  3. dev-testing/SKILL.md → currentPhase === 4일 때 추가 주입 (전 역할)
+```
 
 > [!NOTE]
-> **`dev-testing`은 역할(role)이 아닌 과정(phase) 스킬.**
-> ROLE_PRESETS에 매핑하지 않고, **디버깅 phase (4)에서** orchestrator가 모든 역할에게 자동 주입.
-> `getSubAgentPromptV2`에서 `currentPhase === 4`일 때 `dev-testing/SKILL.md`를 추가로 로딩.
+> `dev-testing`은 ROLE_PRESETS에 매핑 안됨. **디버깅 phase(4)에서** 모든 역할에게 자동 주입.
+> `dev`는 loadActiveSkills()로 목록에 보이지만, orchestrator가 **명시적으로** 주입하는 용도.
+
+### 구현 기록
+
+**배포 흐름**: `skills_ref/` (프로젝트 소스) → `skill reset` → `~/.cli-claw/skills/` (런타임)
+
+| 스킬           | 실제 작업                                                      | 파일 크기                       |
+| -------------- | -------------------------------------------------------------- | ------------------------------- |
+| `dev`          | 새로 작성 — 모듈화, self-ref, skill_ref 탐색, 변경로그 규칙    | ~60줄                           |
+| `dev-frontend` | `skills/frontend-design/` 복사 → frontmatter name/desc 변경    | 43줄 (원본 유지)                |
+| `dev-backend`  | 새로 작성 — Express.js 패턴, better-sqlite3, 에러핸들링, 보안  | ~60줄                           |
+| `dev-data`     | 새로 작성 — ETL 패턴, CSV/JSON/SQLite, 분석 출력               | ~60줄                           |
+| `dev-testing`  | `skills_ref/webapp-testing/` 복사 → frontmatter name/desc 변경 | 96줄 (scripts/, examples/ 포함) |
+
+**변경된 프로젝트 파일**:
+- `skills_ref/dev/SKILL.md` [NEW]
+- `skills_ref/dev-frontend/SKILL.md` [NEW] (frontend-design 복사+수정)
+- `skills_ref/dev-backend/SKILL.md` [NEW]
+- `skills_ref/dev-data/SKILL.md` [NEW]
+- `skills_ref/dev-testing/SKILL.md` [NEW] (webapp-testing 복사+수정)
+- `skills_ref/registry.json` [MODIFY] `orchestration` 카테고리로 5개 등록
 
 ---
 

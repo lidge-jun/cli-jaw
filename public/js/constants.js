@@ -12,12 +12,9 @@ export const MODEL_MAP = {
 };
 
 export const ROLE_PRESETS = [
-    { value: 'frontend', label: '🎨 프론트엔드', prompt: 'React/Vue 기반 UI 컴포넌트 개발, 스타일링' },
-    { value: 'backend', label: '⚙️ 백엔드', prompt: 'API 서버, DB 스키마, 비즈니스 로직 구현' },
-    { value: 'fullstack', label: '🔄 풀스택', prompt: '프론트엔드와 백엔드 모두 담당' },
-    { value: 'devops', label: '🚀 DevOps', prompt: 'CI/CD, Docker, 인프라 자동화' },
-    { value: 'qa', label: '🧪 QA', prompt: '테스트 작성, 버그 재현, 품질 관리' },
-    { value: 'data', label: '📊 데이터', prompt: '데이터 파이프라인, ETL, 분석 쿼리' },
-    { value: 'docs', label: '📝 테크라이터', prompt: 'API 문서화, README, 가이드 작성' },
-    { value: 'custom', label: '✏️ 커스텀...', prompt: '' },
+    { value: 'frontend', label: '🎨 프런트엔드', prompt: 'UI/UX 구현, CSS, 컴포넌트 개발', skill: 'dev-frontend' },
+    { value: 'backend', label: '⚙️ 백엔드', prompt: 'API, DB, 서버 로직 구현', skill: 'dev-backend' },
+    { value: 'data', label: '📊 데이터', prompt: '데이터 파이프라인, 분석, ML', skill: 'dev-data' },
+    { value: 'docs', label: '📝 문서작성', prompt: '문서화, README, API docs', skill: 'documentation' },
+    { value: 'custom', label: '✏️ 커스텀...', prompt: '', skill: null },
 ];

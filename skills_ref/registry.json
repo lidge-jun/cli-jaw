@@ -1061,6 +1061,46 @@
             "description": "62+ 포맷 텍스트 추출 (PDF/DOCX/PPTX/이미지 등).",
             "requires": {},
             "install": null
+        },
+        "dev": {
+            "name": "Dev Common",
+            "emoji": "🔧",
+            "category": "orchestration",
+            "description": "공통 개발 가이드. 모듈화 개발, self-reference 패턴, skills_ref 탐색, 변경 로그 기록.",
+            "requires": null,
+            "install": null
+        },
+        "dev-frontend": {
+            "name": "Dev Frontend",
+            "emoji": "🎨",
+            "category": "orchestration",
+            "description": "프런트엔드 역할 가이드. 독창적 UI/UX 구현, 컴포넌트 설계, 미적 기준.",
+            "requires": null,
+            "install": null
+        },
+        "dev-backend": {
+            "name": "Dev Backend",
+            "emoji": "⚙️",
+            "category": "orchestration",
+            "description": "백엔드 역할 가이드. Express.js 패턴, SQLite, 에러 핸들링, 보안 기본.",
+            "requires": null,
+            "install": null
+        },
+        "dev-data": {
+            "name": "Dev Data",
+            "emoji": "📊",
+            "category": "orchestration",
+            "description": "데이터 역할 가이드. ETL 파이프라인, CSV/JSON 처리, SQL 쿼리, 분석.",
+            "requires": null,
+            "install": null
+        },
+        "dev-testing": {
+            "name": "Dev Testing",
+            "emoji": "🧪",
+            "category": "orchestration",
+            "description": "디버깅 phase 전용. Playwright 웹앱 테스팅, 정찰-행동 패턴.",
+            "requires": null,
+            "install": null
         }
     }
 }
