@@ -116,7 +116,9 @@ export async function screenshot(port, opts = {}) {
     } else {
         await page.screenshot({ path: filepath, fullPage: opts.fullPage, type });
     }
-    return { path: filepath };
+    const dpr = await page.evaluate(() => window.devicePixelRatio);
+    const viewport = page.viewportSize();
+    return { path: filepath, dpr, viewport };
 }
 
 // ─── actions ───────────────────────────────────

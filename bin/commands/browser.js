@@ -111,6 +111,28 @@ try {
             console.log(`🖱️ clicked at (${x}, ${y})`);
             break;
         }
+        case 'vision-click': {
+            const target = process.argv.slice(4).filter(a => !a.startsWith('--')).join(' ');
+            if (!target) {
+                console.error('Usage: cli-claw browser vision-click "<target>" [--provider codex] [--double]');
+                process.exit(1);
+            }
+            const opts = {};
+            if (process.argv.includes('--double')) opts.doubleClick = true;
+            const providerIdx = process.argv.indexOf('--provider');
+            if (providerIdx !== -1) opts.provider = process.argv[providerIdx + 1];
+
+            console.log(`${c.dim}👁️ vision-click: "${target}"...${c.reset}`);
+            const r = await api('POST', '/vision-click', { target, ...opts });
+
+            if (r.success) {
+                console.log(`${c.green}🖱️ vision-clicked "${target}" at (${r.clicked.x}, ${r.clicked.y}) via ${r.provider}${c.reset}`);
+                if (r.dpr !== 1) console.log(`${c.dim}   DPR=${r.dpr}, raw=(${r.raw.x}, ${r.raw.y})${c.reset}`);
+            } else {
+                console.log(`${c.red}❌ "${target}" not found: ${r.reason}${c.reset}`);
+            }
+            break;
+        }
         case 'navigate': {
             const r = await api('POST', '/navigate', { url: process.argv[4] });
             console.log(`navigated → ${r.url}`);
@@ -199,6 +221,7 @@ try {
       --ref <ref>          Specific element only
     click <ref>            Click element [--double]
     mouse-click <x> <y>   Click at pixel coordinates [--double] (vision-click)
+    vision-click <target>  Vision AI click [--provider codex] [--double]
     type <ref> <text>      Type text [--submit]
     press <key>            Press key (Enter, Tab, Escape...)
     hover <ref>            Hover element

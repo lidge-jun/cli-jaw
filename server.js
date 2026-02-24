@@ -642,6 +642,18 @@ app.post('/api/browser/act', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Vision Click (Phase 2) ──────────────────────────
+app.post('/api/browser/vision-click', async (req, res) => {
+    try {
+        const { target, provider, doubleClick } = req.body;
+        if (!target) return res.status(400).json({ error: 'target required' });
+        const result = await browser.visionClick(cdpPort(), target, { provider, doubleClick });
+        res.json(result);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.post('/api/browser/navigate', async (req, res) => {
     try { res.json(await browser.navigate(cdpPort(), req.body.url)); }
     catch (e) { res.status(500).json({ error: e.message }); }

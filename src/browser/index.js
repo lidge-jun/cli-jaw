@@ -9,3 +9,5 @@ export {
     hover, navigate, evaluate, getPageText,
     mouseClick,
 } from './actions.js';
+
+export { visionClick, extractCoordinates } from './vision.js';

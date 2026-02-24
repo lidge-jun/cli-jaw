@@ -14,6 +14,20 @@ metadata:
 Click non-DOM elements by screenshot analysis.
 Uses `codex exec -i` for vision-based coordinate extraction.
 
+## Quick Start (One Command — Phase 2)
+
+```bash
+cli-claw browser vision-click "Submit button"
+# → screenshot → codex vision → DPR correction → click → verify
+# 🖱️ vision-clicked "Submit button" at (400, 276) via codex
+```
+
+With options:
+```bash
+cli-claw browser vision-click "Login" --double          # double-click
+cli-claw browser vision-click "Menu" --provider codex   # explicit provider
+```
+
 ## Prerequisites
 
 - **Codex CLI** installed and authenticated
@@ -29,7 +43,7 @@ Use when `cli-claw browser snapshot` returns **NO ref** for target:
 
 > **Always try `snapshot` first.** Only fall back to vision-click if no ref exists.
 
-## Workflow
+## Manual Workflow (Phase 1)
 
 ```
 1. cli-claw browser snapshot        → Check if target has a ref ID
@@ -106,8 +120,9 @@ Verified via smoke test (2026-02-24):
 
 ## Limitations
 
-- **Codex CLI only** — Gemini/Claude CLI cannot pass images
+- **Codex CLI only** — Gemini/Claude REST planned for Phase 3
 - Latency: 2-5 seconds per vision call
 - Cost: ~$0.005-0.01 per call (~18K input tokens)
 - Complex UIs may need confidence check + retry
-- DPR (device pixel ratio) scaling not handled in Phase 1
+- DPR auto-correction included (Phase 2)
+
