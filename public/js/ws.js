@@ -45,6 +45,8 @@ export function connect() {
             addSystemMsg(t('ws.fallback', { from: msg.from, to: msg.to }), 'tool-activity');
         } else if (msg.type === 'agent_done') {
             finalizeAgent(msg.text, msg.toolLog);
+        } else if (msg.type === 'orchestrate_done') {
+            finalizeAgent(msg.text);
         } else if (msg.type === 'clear') {
             document.getElementById('chatMessages').innerHTML = '';
         } else if (msg.type === 'agent_added' || msg.type === 'agent_updated' || msg.type === 'agent_deleted') {

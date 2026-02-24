@@ -59,7 +59,13 @@ export function appendAgentText(text) {
     scrollToBottom();
 }
 
+let lastFinalizeTs = 0;
+
 export function finalizeAgent(text, toolLog) {
+    // Guard: prevent double-render when both agent_done + orchestrate_done fire
+    const now = Date.now();
+    if (!state.currentAgentDiv && now - lastFinalizeTs < 500) return;
+
     document.querySelectorAll('.msg-system.tool-activity').forEach(el => el.remove());
     if (text) {
         if (!state.currentAgentDiv) {
@@ -77,6 +83,7 @@ export function finalizeAgent(text, toolLog) {
         content.innerHTML = toolHtml + renderMarkdown(text);
     }
     state.currentAgentDiv = null;
+    lastFinalizeTs = Date.now();
     setStatus('idle');
     loadStats();
 }
