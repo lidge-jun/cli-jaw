@@ -324,7 +324,13 @@ export function spawnAgent(prompt, opts = {}) {
             if (ctx.duration) costParts.push(`${(ctx.duration / 1000).toFixed(1)}s`);
             const costLine = costParts.length ? `\n\n✅ ${costParts.join(' · ')}` : '';
             const stripped = stripSubtaskJSON(ctx.fullText);
-            const displayText = stripped || ctx.fullText.trim();
+            // Strip raw XML tool tags (Claude sometimes includes these in output)
+            const cleaned = (stripped || ctx.fullText.trim())
+                .replace(/<\/?tool_call>/g, '')
+                .replace(/<\/?tool_result>[\s\S]*?(?:<\/tool_result>|$)/g, '')
+                .replace(/\n{3,}/g, '\n\n')
+                .trim();
+            const displayText = cleaned || ctx.fullText.trim();
             const finalContent = displayText + costLine;
             const traceText = ctx.traceLog.join('\n');
 

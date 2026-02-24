@@ -34,8 +34,8 @@ export function extractSessionId(cli, event) {
 }
 
 export function extractFromEvent(cli, event, ctx, agentLabel) {
-    const toolLabel = extractToolLabel(cli, event);
-    if (toolLabel) {
+    const toolLabels = extractToolLabels(cli, event);
+    for (const toolLabel of toolLabels) {
         ctx.toolLog.push(toolLabel);
         broadcast('agent_tool', { agentId: agentLabel, ...toolLabel });
     }
@@ -150,36 +150,44 @@ export function logEventSummary(agentLabel, cli, event, ctx = null) {
     }
 }
 
-export function extractToolLabel(cli, event) {
+// Returns array of tool labels (supports multiple blocks per event)
+function extractToolLabels(cli, event) {
     const item = event.item || event.part || event;
-    const type = item?.type || event.type;
+    const labels = [];
 
     if (cli === 'codex' && event.type === 'item.completed' && item) {
         if (item.type === 'web_search') {
             const action = item.action?.type || '';
-            if (action === 'search') return { icon: '🔍', label: (item.query || item.action?.query || 'search').slice(0, 60) };
-            if (action === 'open_page') { try { return { icon: '🌐', label: new URL(item.action.url).hostname }; } catch { return { icon: '🌐', label: 'page' }; } }
-            return { icon: '🔍', label: (item.query || 'web').slice(0, 60) };
+            if (action === 'search') labels.push({ icon: '🔍', label: (item.query || item.action?.query || 'search').slice(0, 60) });
+            else if (action === 'open_page') { try { labels.push({ icon: '🌐', label: new URL(item.action.url).hostname }); } catch { labels.push({ icon: '🌐', label: 'page' }); } }
+            else labels.push({ icon: '🔍', label: (item.query || 'web').slice(0, 60) });
         }
-        if (item.type === 'reasoning') return { icon: '💭', label: (item.text || '').replace(/\*+/g, '').trim().slice(0, 60) };
-        if (item.type === 'command_execution') return { icon: '⚡', label: (item.command || 'exec').slice(0, 40) };
+        if (item.type === 'reasoning') labels.push({ icon: '💭', label: (item.text || '').replace(/\*+/g, '').trim().slice(0, 60) });
+        if (item.type === 'command_execution') labels.push({ icon: '⚡', label: (item.command || 'exec').slice(0, 40) });
     }
 
     if (cli === 'claude' && event.type === 'assistant' && event.message?.content) {
         for (const block of event.message.content) {
-            if (block.type === 'tool_use') return { icon: '🔧', label: block.name };
-            if (block.type === 'thinking') return { icon: '💭', label: (block.thinking || '').slice(0, 60) };
+            if (block.type === 'tool_use') labels.push({ icon: '🔧', label: block.name });
+            if (block.type === 'thinking') labels.push({ icon: '💭', label: (block.thinking || '').slice(0, 60) });
         }
     }
 
     if (cli === 'gemini') {
-        if (event.type === 'tool_use') return { icon: '🔧', label: `${event.tool_name || 'tool'}${event.parameters?.command ? ': ' + event.parameters.command.slice(0, 40) : ''}` };
-        if (event.type === 'tool_result') return { icon: event.status === 'success' ? '✅' : '❌', label: `${event.status || 'done'}` };
+        if (event.type === 'tool_use') labels.push({ icon: '🔧', label: `${event.tool_name || 'tool'}${event.parameters?.command ? ': ' + event.parameters.command.slice(0, 40) : ''}` });
+        if (event.type === 'tool_result') labels.push({ icon: event.status === 'success' ? '✅' : '❌', label: `${event.status || 'done'}` });
     }
 
     if (cli === 'opencode') {
-        if (event.type === 'tool_use' && event.part) return { icon: '🔧', label: event.part.tool || 'tool' };
+        if (event.type === 'tool_use' && event.part) labels.push({ icon: '🔧', label: event.part.tool || 'tool' });
+        if (event.type === 'tool_result' && event.part) labels.push({ icon: '✅', label: event.part.tool || 'done' });
     }
 
-    return null;
+    return labels;
+}
+
+// Backward-compat: return first label or null
+export function extractToolLabel(cli, event) {
+    const labels = extractToolLabels(cli, event);
+    return labels.length ? labels[0] : null;
 }
