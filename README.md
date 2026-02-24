@@ -132,11 +132,11 @@ This single command automatically:
 
 | CLI | Auth Command | Notes |
 |-----|-------------|-------|
-| Claude | `claude` (first run) | Opens browser for Anthropic login |
-| Codex | `codex --login` | OpenAI account |
-| Copilot | `gh auth login` | GitHub account (needs `gh` CLI) |
-| Gemini | `gemini` (first run) | Google Cloud login |
-| OpenCode | API key in config | See [opencode docs](https://opencode.ai) |
+| Claude | `claude auth` | Opens browser for Anthropic login |
+| Codex | `codex login` | OpenAI account |
+| Copilot | `copilot login` | OAuth device flow (needs `gh` CLI) |
+| Gemini | `gemini` (first run) | Google Cloud browser auth |
+| OpenCode | `opencode auth` | Manage credentials |
 
 > 💡 **You don't need all 5** — even one CLI is enough to start.
 

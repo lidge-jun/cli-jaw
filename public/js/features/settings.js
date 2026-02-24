@@ -427,6 +427,15 @@ export async function loadCliStatus(force = false) {
 function renderCliStatus(data) {
     const { cliStatus, quota } = data;
     const el = document.getElementById('cliStatusList');
+
+    const AUTH_HINTS = {
+        claude: { install: 'npm i -g @anthropic-ai/claude-code', auth: 'claude auth' },
+        codex: { install: 'npm i -g @openai/codex', auth: 'codex login' },
+        gemini: { install: 'npm i -g @google/gemini-cli', auth: 'gemini  (첫 실행 시 브라우저 인증)' },
+        opencode: { install: 'npm i -g opencode-ai', auth: 'opencode auth' },
+        copilot: { install: 'gh copilot --help', auth: 'copilot login' },
+    };
+
     let html = '';
 
     for (const [name, info] of Object.entries(cliStatus)) {
@@ -441,6 +450,21 @@ function renderCliStatus(data) {
             if (q.account.plan) parts.push(q.account.plan);
             if (q.account.tier) parts.push(q.account.tier);
             if (parts.length) accountLine = `<div style="font-size:10px;color:var(--text-dim);margin:2px 0 4px 16px">${escapeHtml(parts.join(' · '))}</div>`;
+        }
+
+        // Auth hint when CLI is not available
+        let authHint = '';
+        if (!info.available) {
+            const hint = AUTH_HINTS[name];
+            if (hint) {
+                authHint = `
+                    <div style="font-size:10px;margin:4px 0 2px 16px;padding:6px 8px;background:var(--bg-dim, #1e1e2e);border-radius:4px;border-left:2px solid #fbbf24">
+                        <div style="color:#fbbf24;margin-bottom:3px">⚠️ 설치 / 인증 필요</div>
+                        <div style="color:var(--text-dim)"><code style="font-size:10px;background:var(--border);padding:1px 4px;border-radius:2px">${escapeHtml(hint.install)}</code></div>
+                        <div style="color:var(--text-dim);margin-top:2px"><code style="font-size:10px;background:var(--border);padding:1px 4px;border-radius:2px">${escapeHtml(hint.auth)}</code></div>
+                    </div>
+                `;
+            }
         }
 
         let windowsHtml = '';
@@ -467,6 +491,7 @@ function renderCliStatus(data) {
                     <span class="cli-name" style="font-weight:600">${name}</span>
                 </div>
                 ${accountLine}
+                ${authHint}
                 ${windowsHtml}
             </div>
         `;

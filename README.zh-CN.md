@@ -129,11 +129,11 @@ npm install -g cli-claw
 
 | CLI | 认证命令 | 备注 |
 |-----|----------|------|
-| Claude | `claude`（首次运行） | Anthropic 登录 |
-| Codex | `codex --login` | OpenAI 账号 |
-| Copilot | `gh auth login` | GitHub 账号（需要 `gh` CLI） |
-| Gemini | `gemini`（首次运行） | Google Cloud 登录 |
-| OpenCode | 配置文件中 API key | 参见 [opencode docs](https://opencode.ai) |
+| Claude | `claude auth` | Anthropic 登录 |
+| Codex | `codex login` | OpenAI 账号 |
+| Copilot | `copilot login` | OAuth 设备流程（需要 `gh` CLI） |
+| Gemini | `gemini`（首次运行） | Google Cloud 浏览器认证 |
+| OpenCode | `opencode auth` | 管理凭据 |
 
 > 💡 **不需要全部 5 个** — 哪怕只有一个 CLI 也能用。
 

@@ -129,11 +129,11 @@ npm install -g cli-claw
 
 | CLI | 인증 명령어 | 비고 |
 |-----|-----------|------|
-| Claude | `claude` (최초 실행) | Anthropic 로그인 |
-| Codex | `codex --login` | OpenAI 계정 |
-| Copilot | `gh auth login` | GitHub 계정 (`gh` CLI 필요) |
-| Gemini | `gemini` (최초 실행) | Google Cloud 로그인 |
-| OpenCode | 설정파일에 API key | [opencode docs](https://opencode.ai) |
+| Claude | `claude auth` | Anthropic 로그인 |
+| Codex | `codex login` | OpenAI 계정 |
+| Copilot | `copilot login` | OAuth 디바이스 플로우 (`gh` CLI 필요) |
+| Gemini | `gemini` (최초 실행) | Google Cloud 브라우저 인증 |
+| OpenCode | `opencode auth` | 인증 정보 관리 |
 
 > 💡 **5개 다 필요 없습니다** — 하나만 있어도 동작합니다.
 
