@@ -51,7 +51,7 @@ export function orchestrateAndCollect(prompt) {
     return new Promise((resolve) => {
         let collected = '';
         let timeout;
-        const IDLE_TIMEOUT = 120000;
+        const IDLE_TIMEOUT = 240000;
 
         function resetTimeout() {
             clearTimeout(timeout);
