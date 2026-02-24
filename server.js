@@ -312,7 +312,16 @@ function makeWebCommandCtx() {
         getBrowserStatus: async () => browser.getBrowserStatus(settings.browser?.cdpPort || 9240),
         getBrowserTabs: async () => ({ tabs: await browser.listTabs(settings.browser?.cdpPort || 9240) }),
         resetEmployees: async () => seedDefaultEmployees({ reset: true, notify: true }),
-        resetSkills: async () => { copyDefaultSkills(); ensureSkillsSymlinks(settings.workingDir); regenerateB(); },
+        resetSkills: async () => {
+            copyDefaultSkills();
+            ensureSkillsSymlinks(settings.workingDir);
+            // Claude Code CLI: .claude/skills/ symlink
+            const clawSkills = join(CLAW_HOME, 'skills');
+            const claudeSkills = join(settings.workingDir || os.homedir(), '.claude', 'skills');
+            fs.mkdirSync(join(settings.workingDir || os.homedir(), '.claude'), { recursive: true });
+            if (!fs.existsSync(claudeSkills)) { try { fs.symlinkSync(clawSkills, claudeSkills); } catch { } }
+            regenerateB();
+        },
         getPrompt: () => {
             const a2 = fs.existsSync(A2_PATH) ? fs.readFileSync(A2_PATH, 'utf8') : '';
             return { content: a2 };
@@ -691,6 +700,11 @@ app.post('/api/skills/reset', (req, res) => {
     try {
         copyDefaultSkills();
         ensureSkillsSymlinks(settings.workingDir);
+        // Claude Code CLI: .claude/skills/ symlink
+        const clawSkills = join(CLAW_HOME, 'skills');
+        const claudeSkills = join(settings.workingDir || os.homedir(), '.claude', 'skills');
+        fs.mkdirSync(join(settings.workingDir || os.homedir(), '.claude'), { recursive: true });
+        if (!fs.existsSync(claudeSkills)) { try { fs.symlinkSync(clawSkills, claudeSkills); } catch { } }
         regenerateB();
         res.json({ ok: true });
     } catch (e) {

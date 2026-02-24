@@ -46,6 +46,23 @@ ensureDir(path.join(clawHome, 'uploads'));
 // 2. Skills symlinks (home-based default)
 ensureSkillsSymlinks(home);
 
+// 2b. Claude Code skills symlink: .claude/skills/ → ~/.cli-claw/skills/
+const clawSkills = path.join(clawHome, 'skills');
+const claudeSkillsHome = path.join(home, '.claude', 'skills');
+ensureDir(path.join(home, '.claude'));
+ensureSymlink(clawSkills, claudeSkillsHome);
+
+// 2c. Project-level .claude/skills/ for working dirs
+try {
+    const settings = JSON.parse(fs.readFileSync(path.join(clawHome, 'settings.json'), 'utf8'));
+    const workDir = settings.workingDir;
+    if (workDir && fs.existsSync(workDir)) {
+        const projClaudeSkills = path.join(workDir, '.claude', 'skills');
+        ensureDir(path.join(workDir, '.claude'));
+        ensureSymlink(clawSkills, projClaudeSkills);
+    }
+} catch { /* no settings yet */ }
+
 // 3. ~/CLAUDE.md → ~/AGENTS.md (if AGENTS.md exists and CLAUDE.md doesn't)
 const agentsMd = path.join(home, 'AGENTS.md');
 const claudeMd = path.join(home, 'CLAUDE.md');
