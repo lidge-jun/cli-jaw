@@ -87,6 +87,7 @@ function createDefaultSettings() {
             retentionDays: 30,
         },
         employees: [],
+        locale: 'ko',
     };
 }
 

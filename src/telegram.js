@@ -5,6 +5,7 @@ import { Bot } from 'grammy';
 import { sequentialize } from '@grammyjs/runner';
 import { broadcast, addBroadcastListener, removeBroadcastListener } from './bus.js';
 import { settings, detectAllCli, APP_VERSION } from './config.js';
+import { t, normalizeLocale } from './i18n.js';
 import { insertMessage, getSession, updateSession, clearMessages } from './db.js';
 import { orchestrate, orchestrateContinue, isContinueIntent } from './orchestrator.js';
 import {
@@ -41,7 +42,7 @@ export function orchestrateAndCollect(prompt, meta = {}) {
             clearTimeout(timeout);
             timeout = setTimeout(() => {
                 removeBroadcastListener(handler);
-                resolve(collected || '⏰ 시간 초과 (20분 무응답)');
+                resolve(collected || t('tg.timeout', {}, currentLocale()));
             }, IDLE_TIMEOUT);
         }
 
@@ -60,7 +61,7 @@ export function orchestrateAndCollect(prompt, meta = {}) {
                 if (meta?.origin && data?.origin && data.origin !== meta.origin) return;
                 clearTimeout(timeout);
                 removeBroadcastListener(handler);
-                resolve(data.text || collected || '응답 없음');
+                resolve(data.text || collected || t('tg.noResponse', {}, currentLocale()));
             }
         };
         addBroadcastListener(handler);
@@ -96,6 +97,10 @@ const telegramForwarderLifecycle = createForwarderLifecycle({
 const RESERVED_CMDS = new Set(['start', 'id', 'help', 'settings']);
 const TG_EXCLUDED_CMDS = new Set(['model', 'cli']);  // read-only on Telegram
 
+function currentLocale() {
+    return normalizeLocale(settings.locale, 'ko');
+}
+
 function markChatActive(chatId) {
     // Refresh insertion order so Array.from(set).at(-1) points to latest active chat.
     telegramActiveChatIds.delete(chatId);
@@ -116,19 +121,25 @@ function toTelegramCommandDescription(desc) {
 }
 
 function syncTelegramCommands(bot) {
-    return bot.api.setMyCommands(
-        COMMANDS
-            .filter(c => c.interfaces.includes('telegram') && !RESERVED_CMDS.has(c.name) && !TG_EXCLUDED_CMDS.has(c.name))
-            .map(c => ({
-                command: c.name,
-                description: toTelegramCommandDescription(c.desc),
-            }))
-    );
+    const locale = currentLocale();
+    const cmds = COMMANDS
+        .filter(c => c.interfaces.includes('telegram') && !RESERVED_CMDS.has(c.name) && !TG_EXCLUDED_CMDS.has(c.name))
+        .map(c => ({
+            command: c.name,
+            description: toTelegramCommandDescription(c.descKey ? t(c.descKey, {}, locale) : c.desc),
+        }));
+    // Set commands with language_code per Telegram Bot API
+    // Also set default (no language_code) for users without language preference
+    return Promise.all([
+        bot.api.setMyCommands(cmds),
+        bot.api.setMyCommands(cmds, { language_code: locale }),
+    ]);
 }
 
 function makeTelegramCommandCtx() {
     return {
         interface: 'telegram',
+        locale: currentLocale(),
         version: APP_VERSION,
         getSession,
         getSettings: () => settings,
@@ -140,7 +151,7 @@ function makeTelegramCommandCtx() {
                 _save(settings);
                 return { ok: true };
             }
-            return { ok: false, text: '❌ Telegram에서 설정 변경은 지원하지 않습니다.' };
+            return { ok: false, text: t('tg.settingsUnsupported', {}, currentLocale()) };
         },
         getRuntime: () => ({
             uptimeSec: Math.floor(process.uptime()),
@@ -176,7 +187,7 @@ function makeTelegramCommandCtx() {
                 return { tabs: [] };
             }
         },
-        getPrompt: () => ({ content: '(Telegram에서 미지원)' }),
+        getPrompt: () => ({ content: t('tg.promptUnsupported', {}, currentLocale()) }),
     };
 }
 
@@ -250,7 +261,7 @@ export function initTelegram() {
         await next();
     });
 
-    bot.command('start', (ctx) => ctx.reply('🦞 Claw Agent 연결됨! 메시지를 보내면 AI 에이전트가 응답합니다.'));
+    bot.command('start', (ctx) => ctx.reply(t('tg.connected', {}, currentLocale())));
     bot.command('id', (ctx) => ctx.reply(`Chat ID: <code>${ctx.chat.id}</code>`, { parse_mode: 'HTML' }));
 
     async function tgOrchestrate(ctx, prompt, displayMsg) {
@@ -261,7 +272,7 @@ export function initTelegram() {
             enqueueMessage(prompt, 'telegram');
             insertMessage.run('user', displayMsg, 'telegram', '');
             broadcast('new_message', { role: 'user', content: displayMsg, source: 'telegram' });
-            await ctx.reply(`📥 대기열에 추가됨 (${messageQueue.length}번째)`);
+            await ctx.reply(t('tg.queued', { count: messageQueue.length }, currentLocale()));
 
             // 큐 처리 후 응답을 이 채팅으로 전달
             const queueHandler = (type, data) => {
@@ -431,10 +442,10 @@ export function initTelegram() {
             const { buffer, ext } = await downloadTelegramFile(largest.file_id, settings.telegram.token);
             const filePath = saveUpload(buffer, `photo${ext}`);
             const prompt = buildMediaPrompt(filePath, caption);
-            tgOrchestrate(ctx, prompt, `[📷 이미지] ${caption}`);
+            tgOrchestrate(ctx, prompt, `${t('tg.imageCaption', { caption }, currentLocale())}`);
         } catch (err) {
             console.error('[tg:photo:error]', err);
-            await ctx.reply(`❌ 이미지 처리 실패: ${err.message}`);
+            await ctx.reply(t('tg.imageFail', { msg: err.message }, currentLocale()));
         }
     });
 
@@ -449,7 +460,7 @@ export function initTelegram() {
             tgOrchestrate(ctx, prompt, `[📎 ${doc.file_name || 'file'}] ${caption}`);
         } catch (err) {
             console.error('[tg:doc:error]', err);
-            await ctx.reply(`❌ 파일 처리 실패: ${err.message}`);
+            await ctx.reply(t('tg.fileFail', { msg: err.message }, currentLocale()));
         }
     });
     // ─── Global Forwarding: non-Telegram responses → Telegram ───

@@ -7,6 +7,20 @@ import { join } from 'path';
 const locales = {};
 
 /**
+ * Normalize a BCP47 locale string to a supported locale code.
+ * Handles: 'en-US' → 'en', 'ko-KR' → 'ko', 'EN' → 'en', etc.
+ * Falls back to defaultLocale if not supported.
+ * @param {string} raw - Raw locale string
+ * @param {string} defaultLocale - Fallback locale
+ * @returns {string}
+ */
+export function normalizeLocale(raw, defaultLocale = 'ko') {
+    if (!raw || typeof raw !== 'string') return defaultLocale;
+    const base = raw.trim().toLowerCase().split(/[-_]/)[0];
+    return locales[base] ? base : defaultLocale;
+}
+
+/**
  * Load all locale JSON files from the given directory.
  * Ignores files prefixed with 'skills-' (handled separately).
  */

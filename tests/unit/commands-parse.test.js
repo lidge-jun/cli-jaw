@@ -80,7 +80,7 @@ test('executeCommand: /clear returns info for telegram', async () => {
     const parsed = parseCommand('/clear');
     const r = await executeCommand(parsed, { interface: 'telegram' });
     assert.equal(r.ok, true);
-    assert.ok(r.text.includes('Telegram'));
+    assert.ok(r.text.toLowerCase().includes('telegram'));
 });
 
 test('executeCommand: unsupported interface returns error', async () => {

@@ -20,6 +20,7 @@ import {
 import { setWss, broadcast } from './src/bus.js';
 import * as browser from './src/browser/index.js';
 import * as memory from './src/memory.js';
+import { loadLocales, t, normalizeLocale } from './src/i18n.js';
 import {
     CLAW_HOME, PROMPTS_DIR, DB_PATH, UPLOADS_DIR,
     SKILLS_DIR, SKILLS_REF_DIR,
@@ -72,10 +73,10 @@ try {
 
 const PORT = process.env.PORT || 3457;
 const DEFAULT_EMPLOYEES = [
-    { name: '프런트', role: 'UI/UX 구현, CSS, 컴포넌트 개발' },
-    { name: '백엔드', role: 'API, DB, 서버 로직 구현' },
-    { name: '데이터', role: '데이터 파이프라인, 분석, ML' },
-    { name: '문서', role: '문서화, README, API docs' },
+    { name: 'Frontend', role: 'UI/UX, CSS, components' },
+    { name: 'Backend', role: 'API, DB, server logic' },
+    { name: 'Data', role: 'Data pipeline, analysis, ML' },
+    { name: 'Docs', role: 'Documentation, README, API docs' },
 ];
 
 ensureDirs();
@@ -197,7 +198,7 @@ wss.on('connection', (ws) => {
                 if (isContinueIntent(text)) {
                     if (activeProcess) {
                         broadcast('agent_done', {
-                            text: '⚠️ 현재 작업이 진행 중입니다. 완료 후 "이어서 해줘"를 다시 요청하세요.',
+                            text: t('ws.agentBusy', {}, resolveRequestLocale(null, settings.locale)),
                             error: true,
                         });
                     } else {
@@ -238,6 +239,28 @@ function clearSessionState() {
     broadcast('clear', {});
 }
 
+function resolveRequestLocale(req, preferred = null) {
+    const fallback = settings.locale || 'ko';
+    const direct = typeof preferred === 'string' ? preferred.trim() : '';
+    if (direct) return normalizeLocale(direct, fallback);
+
+    const bodyLocale = typeof req?.body?.locale === 'string' ? req.body.locale.trim() : '';
+    if (bodyLocale) return normalizeLocale(bodyLocale, fallback);
+
+    const queryLocale = typeof req?.query?.locale === 'string' ? req.query.locale.trim() : '';
+    if (queryLocale) return normalizeLocale(queryLocale, fallback);
+
+    const acceptLanguage = typeof req?.headers?.['accept-language'] === 'string'
+        ? req.headers['accept-language']
+        : '';
+    if (acceptLanguage) {
+        const primary = acceptLanguage.split(',')[0]?.trim() || '';
+        if (primary) return normalizeLocale(primary, fallback);
+    }
+
+    return normalizeLocale(fallback, 'ko');
+}
+
 function getLatestTelegramChatId() {
     const ids = Array.from(telegramActiveChatIds);
     return ids.at(-1) || null;
@@ -246,7 +269,7 @@ function getLatestTelegramChatId() {
 function applySettingsPatch(rawPatch = {}, { restartTelegram = false } = {}) {
     const patch = { ...(rawPatch || {}) };
     const prevCli = settings.cli;
-    const hasTelegramUpdate = !!patch.telegram;
+    const hasTelegramUpdate = !!patch.telegram || patch.locale !== undefined;
 
     for (const key of ['perCli', 'heartbeat', 'telegram', 'memory']) {
         if (patch[key] && typeof patch[key] === 'object') {
@@ -288,9 +311,10 @@ function seedDefaultEmployees({ reset = false, notify = false } = {}) {
     return { seeded: DEFAULT_EMPLOYEES.length, cli, skipped: false };
 }
 
-function makeWebCommandCtx() {
+function makeWebCommandCtx(req, localeOverride = null) {
     return {
         interface: 'web',
+        locale: resolveRequestLocale(req, localeOverride),
         version: APP_VERSION,
         getSession,
         getSettings: () => settings,
@@ -339,32 +363,39 @@ app.post('/api/command', async (req, res) => {
     try {
         const text = String(req.body?.text || '').trim().slice(0, 500);
         const parsed = parseCommand(text);
+        const locale = resolveRequestLocale(req, req.body?.locale);
+        res.vary('Accept-Language');
+        res.set('Content-Language', locale);
         if (!parsed) {
             return res.status(400).json({
                 ok: false,
                 code: 'not_command',
-                text: '슬래시 커맨드가 아닙니다.',
+                text: t('api.notCommand', {}, locale),
             });
         }
-        const result = await executeCommand(parsed, makeWebCommandCtx());
+        const result = await executeCommand(parsed, makeWebCommandCtx(req, locale));
         res.json(result);
     } catch (err) {
         console.error('[cmd:error]', err);
+        const locale = resolveRequestLocale(req, req.body?.locale);
         res.status(500).json({
             ok: false,
             code: 'internal_error',
-            text: `서버 오류: ${err.message}`,
+            text: t('api.serverError', { msg: err.message }, locale),
         });
     }
 });
 
 app.get('/api/commands', (req, res) => {
     const iface = String(req.query.interface || 'web');
+    const locale = resolveRequestLocale(req, req.query.locale);
+    res.vary('Accept-Language');
+    res.set('Content-Language', locale);
     res.json(COMMANDS
         .filter(c => c.interfaces.includes(iface) && !c.hidden)
         .map(c => ({
             name: c.name,
-            desc: c.desc,
+            desc: c.descKey ? t(c.descKey, {}, locale) : c.desc,
             args: c.args || null,
             category: c.category || 'tools',
             aliases: c.aliases || [],
@@ -822,11 +853,33 @@ app.get('/api/browser/text', async (req, res) => {
     catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── i18n API ────────────────────────────────────────
+
+app.get('/api/i18n/languages', (_, res) => {
+    const localeDir = join(__dirname, 'public', 'locales');
+    if (!fs.existsSync(localeDir)) return res.json({ languages: ['ko'], default: 'ko' });
+    const langs = fs.readdirSync(localeDir)
+        .filter(f => f.endsWith('.json') && !f.startsWith('skills-'))
+        .map(f => f.replace('.json', ''));
+    res.json({ languages: langs, default: normalizeLocale(settings.locale, 'ko') });
+});
+
+app.get('/api/i18n/:lang', (req, res) => {
+    const raw = req.params.lang.replace(/[^a-z-]/gi, '');
+    const lang = normalizeLocale(raw, '');
+    if (!lang) return res.status(404).json({ error: 'locale not found' });
+    const filePath = join(__dirname, 'public', 'locales', `${lang}.json`);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'locale not found' });
+    res.json(JSON.parse(fs.readFileSync(filePath, 'utf8')));
+});
+
 // ─── Start ───────────────────────────────────────────
 
 watchHeartbeatFile();
 
 server.listen(PORT, () => {
+    // Bootstrap i18n locale dictionaries
+    loadLocales(join(__dirname, 'public', 'locales'));
     console.log(`\n  🦞 Claw Agent — http://localhost:${PORT}\n`);
     console.log(`  CLI:    ${settings.cli}`);
     console.log(`  Perms:  ${settings.permissions}`);
