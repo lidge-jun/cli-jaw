@@ -1,7 +1,8 @@
 # Phase 2: Server API + Telegram Integration
 
-> 상태: 📋 계획 | 날짜: 2026-02-24
-> 범위: `server.js`, `src/telegram.js`
+> 상태: ✅ 구현 완료 | 날짜: 2026-02-24
+> 범위: `server.js`, `src/telegram.js`, `src/commands.js`
+> 커밋: `37f88ca`
 
 Phase 1에서 `src/commands.js` 레지스트리와 CLI 디스패치가 완성되었다.
 Phase 2는 같은 레지스트리를 **서버 API**와 **Telegram**에 연결한다.
@@ -335,6 +336,35 @@ Phase 3 이후(선택): COMMANDS 이관 검토
 | setMyCommands 등록                 | 🟢      | 10m       |
 | 테스트                             | 🟡      | 30m       |
 | **합계**                           |        | **~2.5h** |
+
+---
+
+## 구현 결과 (계획 외 추가 사항)
+
+계획에 없었지만 구현 과정에서 추가된 개선:
+
+| 추가 항목                                   | 파일           | 효과                                                                                  |
+| ------------------------------------------- | -------------- | ------------------------------------------------------------------------------------- |
+| `applySettingsPatch()` 함수 추출            | `server.js`    | `PUT /api/settings`와 `makeWebCommandCtx.updateSettings`가 같은 로직 공유 → 중복 제거 |
+| `clearSessionState()` 함수 추출             | `server.js`    | `POST /api/clear`와 ctx `clearSession`이 동일 로직 사용                               |
+| `TELEGRAM_ALLOWED_CHAT_IDS` 환경변수        | `telegram.js`  | `.env`에서 허용 채팅 ID 설정 가능 → 보안 강화                                         |
+| `serve.js` `--env-file=.env` 자동 감지      | `serve.js`     | `.env` 파일 존재 시 자동 로드                                                         |
+| TG ctx `getBrowserStatus/Tabs` try/catch    | `telegram.js`  | dynamic import 실패 시 안전 처리                                                      |
+| `commands.js` `updateSettings` 반환값 검증  | `commands.js`  | `modelHandler`, `cliHandler`에서 `ok: false` 시 에러 전파                             |
+| `package.json` npm dev 스크립트 `.env` 로드 | `package.json` | `npm run dev` 시 자동 환경변수 로드                                                   |
+
+---
+
+## 향후 개선 (Phase 2+)
+
+| 항목                    | 설명                                                                                                   | 우선순위 |
+| ----------------------- | ------------------------------------------------------------------------------------------------------ | -------- |
+| `APP_VERSION` 통합      | `server.js`와 `telegram.js`에 중복 선언됨. `package.json` version에서 읽거나 `config.js`에서 export    | 🟡        |
+| `TG_EXCLUDED_CMDS`      | `/model`, `/cli`를 TG 메뉴에서 제외 (기능은 에러 반환으로 동작하나, 메뉴에 안 보이는 게 UX적으로 깔끔) | 🟡        |
+| 응답 `type` 필드        | `{ type: 'success' \| 'error' \| 'info' }` 추가 → Web UI에서 결과 색상 분기 가능 (U1)                  | 🟠        |
+| TG description 그룹핑   | `setMyCommands`의 description에 `[카테고리]` prefix (U3)                                               | 🟢        |
+| TG `parse_mode: 'HTML'` | `@grammyjs/parse-mode` 플러그인으로 리치 포매팅 (U4)                                                   | 🟢        |
+| TG `InlineKeyboard`     | `/status` 등의 결과에 "더 보기" 버튼 제공                                                              | 🟢        |
 
 ## 리스크
 
