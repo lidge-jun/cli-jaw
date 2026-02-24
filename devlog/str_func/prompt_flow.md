@@ -41,6 +41,7 @@ graph TD
     INJECT --> CODEX["Codex"]
     INJECT --> GEMINI["Gemini"]
     INJECT --> OPENCODE["OpenCode"]
+    INJECT --> COPILOT["Copilot (ACP)"]
 ```
 
 ---
@@ -193,11 +194,13 @@ graph TD
     SYS --> X_FILE["Codex:<br/>.codex/AGENTS.md 파일"]
     SYS --> G_ENV["Gemini:<br/>GEMINI_SYSTEM_MD 환경변수"]
     SYS --> O_SKIP["OpenCode:<br/>별도 메커니즘 없음"]
+    SYS --> CP_ACP["Copilot:<br/>AGENTS.md 자동 로딩 + ACP session/prompt"]
 
     USER["User Message"] --> C_STDIN["Claude:<br/>stdin = 프롬프트만"]
     USER --> X_STDIN["Codex:<br/>stdin = 시스템(중복!) + 히스토리 + 프롬프트"]
     USER --> G_ARG["Gemini:<br/>-p 인자"]
     USER --> O_ARG["OpenCode:<br/>위치 인자"]
+    USER --> CP_MSG["Copilot:<br/>ACP session/prompt messages"]
 ```
 
 | CLI          | 시스템 프롬프트 전달                 | role        | 매 턴 포함 | 압축 보호                  |
@@ -206,12 +209,10 @@ graph TD
 | **Codex**    | `.codex/AGENTS.md` 자동 로딩         | `developer` | ✅          | ✅ 매 call 파일 재로딩      |
 | **Gemini**   | `GEMINI_SYSTEM_MD` env (tmpfile)     | `system`    | ✅          | ✅ system_instruction 분리  |
 | **OpenCode** | `AGENTS.md` + custom agent + per-msg | 혼합        | ✅          | ⚠️ 구현 의존                |
+| **Copilot**  | `{workDir}/AGENTS.md` 자동 로딩 + ACP `session/prompt` | `system` | ✅ | ✅ ACP 세션 단위 |
 
-> **전체 검증 완료** (2026-02-24):
-> - **Claude**: `--append-system-prompt`는 system role에 추가. compaction 시 `cache_control` breakpoint으로 보호.
-> - **Codex**: AGENTS.md는 매 API call마다 `developer` role로 포함 (`codex-rs/core/prompt.md` 확인). stdin 중복 불필요.
-> - **Gemini**: `GEMINI_SYSTEM_MD`는 Gemini API의 `system_instruction` 파라미터로 전달. 별도 파일이라 대화와 분리.
-> - **OpenCode**: `AGENTS.md`를 LLM 컨텍스트에 포함 + `input.user.system`으로 per-message 커스텀 지시 가능.
+> **Copilot 시스템 프롬프트**: `{workDir}/AGENTS.md`에 B 프롬프트를 쓰므로 Copilot도 자동으로 읽음. 추가 작업 불필요.
+> `COPILOT_CUSTOM_INSTRUCTIONS_DIRS` 환경변수로 `.cli-claw/prompts/` 지정도 가능.
 
 ### Claude — 중복 방지 핵심
 
@@ -239,9 +240,19 @@ if (cli === 'claude') {
 {현재 프롬프트}
 ```
 
-> **AGENTS.md 동작 방식** (검증): Codex는 매 API call 시 `.codex/AGENTS.md`를
-> `developer` role로 conversation에 포함. compact 후에도 파일에서 재로딩하여
-> 항상 전체 내용이 유지됨. 따라서 stdin에서 시스템 프롬프트를 중복 전송할 이유 없음.
+### Copilot — ACP JSON-RPC
+
+```js
+// agent.js — copilot 분기
+if (cli === 'copilot') {
+    const acp = new AcpClient(model, workingDir, permissions);
+    await acp.initialize();
+    const session = await acp.createSession(workingDir);
+    // AGENTS.md는 workDir에 이미 존재 → 자동 로딩
+    // session/prompt로 사용자 메시지 전달
+    acp.prompt(session.sessionId, userMessage);
+}
+```
 
 ### Gemini — tmpfile 환경변수
 
@@ -253,10 +264,6 @@ if (cli === 'gemini' && sysPrompt) {
     spawnEnv.GEMINI_SYSTEM_MD = tmpSysFile;
 }
 ```
-
-- stdin/args로 시스템 프롬프트 전달 불가 → tmpfile + 환경변수
-- 사용자 메시지는 `-p` 인자로 전달
-- stdin 사용 안함 (`skipStdin = true`)
 
 ---
 
@@ -300,8 +307,9 @@ graph TD
    spawnAgent(task, {
      forceNew: true,        ← 메인 세션과 분리
      agentId: emp.name,     ← 로그 식별
-     cli: emp.cli,          ← 직원별 CLI
+     cli: emp.cli,          ← 직원별 CLI (copilot 포함 가능)
      model: emp.model,      ← 직원별 모델
+     origin: meta.origin,   ← origin 전달
      sysPrompt: getSubAgentPrompt(emp)  ← 경량 프롬프트
    })
 4. 모든 직원 완료 대기 → 보고 수집 → 메인에 재주입
@@ -330,7 +338,7 @@ graph TD
 │    └ 스킬 1+ 개일 때만                               │
 ├──────────────────────────────────────────────────────┤
 │ → B.md 캐시 저장                                     │
-│ → .codex/AGENTS.md 저장 (Codex용)                    │
-│ → CLI별 삽입 방식으로 전달                            │
+│ → .codex/AGENTS.md 저장 (Codex + Copilot 공용)       │
+│ → CLI별 삽입 방식으로 전달 (5개 CLI)                  │
 └──────────────────────────────────────────────────────┘
 ```

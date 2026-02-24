@@ -1,47 +1,66 @@
 # Telegram & Heartbeat — telegram.js · heartbeat.js
 
-> 외부 인터페이스 (Telegram Bot) + 주기적 작업 스케줄
+> 외부 인터페이스 (Telegram Bot) + 주기적 작업 스케줄 + forwarder lifecycle + origin 필터링
 
 ---
 
-## telegram.js — Telegram Bot + Queue-First (403L)
+## telegram.js — Telegram Bot + Forwarder Lifecycle (439L)
 
-| Function                     | 역할                                                           |
-| ---------------------------- | -------------------------------------------------------------- |
-| `initTelegram()`             | Bot 생성, allowlist, 핸들러 (텍스트/사진/문서), 슬래시디스패치 |
-| `orchestrateAndCollect()`    | agent_done까지 수집 (idle timeout, agent_fallback 포함)        |
-| `tgOrchestrate(ctx, prompt)` | TG → orchestrate → 응답 전송 (폴백 알림 표시)                  |
-| `syncTelegramCommands(bot)`  | `setMyCommands` 등록 (TG_EXCLUDED_CMDS 필터)                   |
-| `makeTelegramCommandCtx()`   | TG용 ctx 생성 (fallbackOrder만 변경 허용)                      |
-| `ipv4Fetch(url, init)`       | IPv4 강제 fetch                                                |
-| `escapeHtmlTg(text)`         | Telegram HTML 이스케이프                                       |
-| `markdownToTelegramHtml(md)` | Markdown → Telegram HTML 변환                                  |
-| `chunkTelegramMessage(text)` | 4096자 단위 메시지 분할                                        |
-| `markChatActive(chatId)`     | 활성 chatId Set 관리                                           |
+| Function                                              | 역할                                                            |
+| ----------------------------------------------------- | --------------------------------------------------------------- |
+| `initTelegram()`                                      | Bot 생성, allowlist, 핸들러, forwarder lifecycle 관리            |
+| `attachTelegramForwarder(bot)`                        | **named handler** 등록 (1회만 허용)                             |
+| `detachTelegramForwarder()`                           | 기존 forwarder 해제                                             |
+| `createTelegramForwarder({ bot, getLastChatId, shouldSkip })` | **팩토리** — 테스트 가능한 forwarder 생성              |
+| `orchestrateAndCollect()`                             | agent_done까지 수집 (idle timeout, agent_fallback 포함)         |
+| `tgOrchestrate(ctx, prompt)`                          | TG → orchestrate → 응답 전송 (폴백 알림, origin 전달)          |
+| `syncTelegramCommands(bot)`                           | `setMyCommands` 등록 (TG_EXCLUDED_CMDS 필터)                    |
+| `makeTelegramCommandCtx()`                            | TG용 ctx 생성 (fallbackOrder만 변경 허용)                       |
+| `ipv4Fetch(url, init)`                                | IPv4 강제 fetch                                                 |
+| `escapeHtmlTg(text)`                                  | Telegram HTML 이스케이프                                        |
+| `markdownToTelegramHtml(md)`                          | Markdown → Telegram HTML 변환                                   |
+| `chunkTelegramMessage(text)`                          | 4096자 단위 메시지 분할                                         |
+| `markChatActive(chatId)`                              | 활성 chatId Set 관리                                            |
 
 ### 의존 모듈
 
 `bus` · `config` · `db` · `agent` · `orchestrator` · `commands` · `upload`
 
-### 초기화 흐름
+### 초기화 흐름 (lifecycle 포함)
 
 ```text
 initTelegram():
-  1. Grammy Bot 인스턴스 생성
-  2. TELEGRAM_ALLOWLIST로 사용자 필터
-  3. 핸들러 등록:
+  1. detachTelegramForwarder()          ← 기존 forwarder 해제
+  2. telegramBot 존재 시 stop() + null
+  3. Grammy Bot 인스턴스 생성
+  4. TELEGRAM_ALLOWLIST로 사용자 필터
+  5. 핸들러 등록:
      - on("message:text") → 슬래시 커맨드 or 일반 메시지
      - on("message:photo") → 사진 다운로드 → agent
      - on("message:document") → 파일 다운로드 → agent
-  4. syncTelegramCommands() → setMyCommands 등록
-  5. bot.start()
+  6. syncTelegramCommands() → setMyCommands 등록
+  7. forwardAll !== false → attachTelegramForwarder(bot)
+  8. bot.start()
 ```
 
-### 슬래시 커맨드 통합
+### Forwarder Lifecycle
 
-- `commands.js`의 `COMMANDS` 중 `interfaces`에 `telegram` 포함된 것만 등록
-- `TG_EXCLUDED_CMDS`로 추가 제외 가능
-- `makeTelegramCommandCtx()`로 TG 전용 ctx 생성 → `executeCommand()` 호출
+- **문제**: `initTelegram()` 재호출 시 익명 listener 중복 등록
+- **해결**: `telegramForwarder` 모듈 전역 변수 + `detach → attach` 순서 보장
+
+```text
+initTelegram()
+  → detachTelegramForwarder()  // removeBroadcastListener(fn)
+  → ... bot 생성 ...
+  → attachTelegramForwarder(bot)  // if (telegramForwarder) return (이미 등록)
+```
+
+### origin 기반 필터링 (tgProcessing 제거)
+
+- `tgProcessing` 전역 bool **제거**
+- `orchestrate(prompt, { origin: 'telegram', chatId })` → origin 메타 전달
+- forwarder에서 `data.origin === 'telegram'` 제외
+- 동시 다중 채팅에서도 정확한 필터링
 
 ---
 

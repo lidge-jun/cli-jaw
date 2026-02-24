@@ -1,6 +1,6 @@
-# server.js — Glue + API Routes (844L)
+# server.js — Glue + API Routes (860L)
 
-> 라우트 + 초기화 + 커맨드 ctx 구성 + Quota 조회
+> 라우트 + 초기화 + 커맨드 ctx 구성 + Quota 조회 + CLI Registry API
 
 ---
 
@@ -42,6 +42,7 @@ ensureDirs() → runMigration() → loadSettings() → initPromptFiles()
 | Core           | `GET /api/session` `GET /api/messages` `POST /api/message` `POST /api/stop` `POST /api/clear`                 |
 | Commands       | `POST /api/command` `GET /api/commands?interface=`                                                            |
 | Settings       | `GET/PUT /api/settings` `GET/PUT /api/prompt` `GET/PUT /api/heartbeat-md`                                     |
+| **Registry**   | **`GET /api/cli-registry`** — CLI/모델 단일 소스 (cli-registry.js 반환)                                       |
 | Memory (DB)    | `GET/POST /api/memory` `DELETE /api/memory/:key`                                                              |
 | Memory Files   | `GET /api/memory-files` `GET/DELETE /api/memory-files/:fn` `PUT /api/memory-files/settings`                   |
 | Claw Memory    | `GET /api/claw-memory/search,read,list` `POST /api/claw-memory/save,init`                                     |
@@ -60,7 +61,7 @@ ensureDirs() → runMigration() → loadSettings() → initPromptFiles()
 | Type                          | 설명                          |
 | ----------------------------- | ----------------------------- |
 | `agent_status`                | running/done/error/evaluating |
-| `agent_tool` / `agent_done`   | 툴 사용 / 완료 + 결과         |
+| `agent_tool` / `agent_done`   | 툴 사용 / 완료 + 결과 + **origin** |
 | `round_start` / `round_done`  | 오케스트레이션 라운드         |
 | `new_message` / `clear`       | 메시지 추가 / 전체 삭제       |
 | `queue_update`                | 큐 상태 변경                  |
@@ -80,4 +81,4 @@ ensureDirs() → runMigration() → loadSettings() → initPromptFiles()
 | `skill`       | `install` (Codex→Ref→GitHub) · `remove` · `info` · `list` · `reset`                    |
 | `browser`     | 17개 서브커맨드 (start/stop/snapshot/screenshot/click/mouse-click/vision-click/type/…) |
 | `memory`      | `search` · `read` · `save` · `list` · `init`                                           |
-| `postinstall` | 8단계: dirs → symlinks → heartbeat → MCP → skills → deps                               |
+| `postinstall` | 8단계: dirs → symlinks → heartbeat → MCP → skills → deps → **Copilot PATH 심링크**    |

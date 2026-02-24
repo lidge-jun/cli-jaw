@@ -1,36 +1,48 @@
-# Agent Spawn — agent.js · events.js · orchestrator.js
+# Agent Spawn — agent.js · events.js · orchestrator.js · acp-client.js
 
-> CLI spawn + 스트림 + 큐 + 메모리 flush + 멀티에이전트 오케스트레이션
+> CLI spawn + ACP 분기 + 스트림 + 큐 + 메모리 flush + 멀티에이전트 오케스트레이션
 
 ---
 
-## agent.js — CLI Spawn & Queue (432L)
+## agent.js — CLI Spawn & Queue + ACP 분기 (563L)
 
 | Function                                   | 역할                                                 |
 | ------------------------------------------ | ---------------------------------------------------- |
 | `killActiveAgent(reason)`                  | SIGTERM → SIGKILL 종료                               |
 | `steerAgent(newPrompt, source)`            | kill → 대기 → 새 프롬프트로 restart                  |
 | `enqueueMessage(prompt, source)`           | 큐에 메시지 추가                                     |
-| `buildHistoryBlock(currentPrompt, ...)`    | **Phase 6** — DB에서 최신 trace 기반 히스토리 8000자 |
-| `withHistoryPrompt(prompt, historyBlock)`  | **Phase 6** — 히스토리 + 프롬프트 조합               |
+| `buildHistoryBlock(currentPrompt, ...)`    | DB에서 최신 trace 기반 히스토리 8000자               |
+| `withHistoryPrompt(prompt, historyBlock)`  | 히스토리 + 프롬프트 조합                             |
 | `buildArgs(cli, model, effort, prompt, …)` | 신규 세션용 CLI args                                 |
 | `buildResumeArgs(…)`                       | resume용 args                                        |
-| `spawnAgent(prompt, opts)`                 | **핵심** — spawn/stream/DB/broadcast                 |
+| `spawnAgent(prompt, opts)`                 | **핵심** — spawn/ACP/stream/DB/broadcast + origin    |
 | `triggerMemoryFlush()`                     | threshold개 메시지 요약 → 메모리 파일 (줄글 1-3문장) |
 | `flushCycleCount`                          | flush 사이클 카운터 (x2 주입용)                      |
 
-### spawnAgent 흐름 (Phase 6 업데이트)
+### spawnAgent 흐름 (ACP 분기 포함)
 
 ```text
-실행 중 체크 → cli/model/effort 결정 → resume or new args
-→ buildHistoryBlock(prompt) ← 신규 세션만, resume 제외
-→ child spawn → CLI별 stdin 주입:
-  - Claude: withHistoryPrompt (system은 --append-system-prompt)
-  - Codex: 히스토리 + [User Message] (system은 AGENTS.md)
-  - Gemini/OpenCode: args에 히스토리 포함
+실행 중 체크 → cli/model/effort 결정 → origin 설정 (opts.origin || 'web')
+→ cli === 'copilot' ?
+    [YES] AcpClient 경로:
+      → new AcpClient(model, workingDir, permissions)
+      → acp.initialize() → acp.createSession(workDir)
+      → acp.on('session/update') → extractFromAcpUpdate → broadcast
+      → acp.prompt(sessionId, text) → child = acp.proc
+    [NO] 기존 spawn 경로:
+      → resume or new args
+      → buildHistoryBlock(prompt) ← 신규 세션만
+      → child spawn → CLI별 stdin 주입
 → stdout NDJSON 파싱 + logEventSummary → ctx.traceLog 누적
 → 종료: insertMessageWithTrace / session 저장 / processQueue
+→ broadcast('agent_done', { text, toolLog, origin })
 ```
+
+### origin 전달
+
+- `spawnAgent(prompt, { origin: 'telegram' })` — 텔레그램 기원
+- `spawnAgent(prompt, { origin: 'web' })` — 웹/CLI 기원 (기본)
+- `broadcast('agent_done', { ..., origin })` — 포워딩 판단에 사용
 
 ### 메모리 flush 상세
 
@@ -40,40 +52,98 @@
 
 ---
 
-## events.js — NDJSON Event Parsing + Trace (185L)
+## acp-client.js — Copilot ACP JSON-RPC 클라이언트 (243L) `[NEW]`
+
+| Class / Method               | 역할                                              |
+| ---------------------------- | ------------------------------------------------- |
+| `AcpClient({ model, workDir, permissions })` | spawn copilot --acp + NDJSON over stdio |
+| `spawn()`                    | 프로세스 생성 + readline NDJSON 파싱              |
+| `kill()`                     | SIGTERM 종료                                      |
+| `request(method, params, timeout)` | JSON-RPC request (응답 대기, Promise, 30s 기본) |
+| `notify(method, params)`     | JSON-RPC notification (응답 없음)                 |
+| `_handleLine(line)`          | NDJSON 라인 파싱 + response/notification 분기     |
+| `_handleAgentRequest(msg)`   | 에이전트→클라이언트 요청 자동 처리 (permission 자동 승인) |
+| `initialize()`               | ACP 핸드셰이크 (protocolVersion + clientInfo)     |
+| `createSession(workDir)`     | `session/new` → sessionId 반환 + 자동 저장        |
+| `prompt(text, sessionId)`    | `session/prompt` → messages 전송 (5분 timeout)    |
+| `loadSession(sessionId)`     | `session/load` → 이전 세션 이어하기               |
+| `cancel(sessionId)`          | `session/cancel` notification                     |
+| `shutdown()`                 | `shutdown` → proc kill                            |
+| `hasCapability(name)`        | 에이전트 capability 지원 여부 확인                |
+
+### ACP 이벤트 플로우
+
+```text
+Client (cli-claw)               Agent (copilot --acp)
+  ├─→ initialize ──────────────→  capabilities 교환
+  ├─→ session/new ─────────────→  세션 생성
+  ├─→ session/prompt ──────────→  질의
+  │←── session/update           │  agent_thought_chunk / tool_call /
+  │                             │  tool_call_update / agent_message_chunk
+  │←── session/prompt result ──│  완료 (stopReason)
+  ├─→ session/load ────────────→  이어하기 (선택적)
+```
+
+### 권한 모드
+
+| cli-claw 설정          | Copilot 플래그                                |
+| ---------------------- | --------------------------------------------- |
+| `permissions: 'auto'`  | `--allow-all-tools`                           |
+| `permissions: 'yolo'`  | `--yolo` (== `--allow-all-tools --allow-all-paths --allow-all-urls`) |
+
+---
+
+## events.js — NDJSON Event Parsing + Dedupe + ACP (309L)
 
 | Function                                        | 역할                                              |
 | ----------------------------------------------- | ------------------------------------------------- |
 | `extractSessionId(cli, event)`                  | CLI별 세션 ID 추출                                |
 | `extractFromEvent(cli, event, ctx, agentLabel)` | 이벤트 → UI 데이터 변환                           |
-| `extractToolLabel(cli, event)`                  | 툴 사용 라벨 추출                                 |
-| `logEventSummary(agentLabel, cli, event, ctx)`  | **Phase 6** — 이벤트별 한 줄 로그 + traceLog 누적 |
+| `extractToolLabels(cli, event, ctx)`            | 툴 사용 라벨 추출 (**dedupe key 기반**)           |
+| `makeClaudeToolKey(event, label)`               | Claude dedupe 키 생성 (claude:idx/msg/type:icon:label) |
+| `pushToolLabel(labels, label, cli, event, ctx)` | dedupe 검사 후 라벨 추가                          |
+| `extractToolLabel(cli, event)`                  | Backward-compat: 첨 라벨 반환 (or null)          |
+| `extractFromAcpUpdate(params)`                  | **ACP `session/update`** → cli-claw broadcast 변환 |
+| `logEventSummary(agentLabel, cli, event, ctx)`  | 이벤트별 한 줄 로그 + traceLog 누적               |
 | `pushTrace(ctx, line)`                          | ctx.traceLog에 라인 추가                          |
 | `logLine(line, ctx)`                            | console.log + pushTrace 동시                      |
 | `toSingleLine(text)` / `toIndentedPreview()`    | 포맷팅 헬퍼                                       |
 
-### CLI별 이벤트 매핑
-
-| CLI      | 이벤트 타입                         |
-| -------- | ----------------------------------- |
-| claude   | `system` / `assistant` / `result`   |
-| codex    | `thread.started` / `item.completed` |
-| gemini   | `init` / `message` / `result`       |
-| opencode | `text` / `step_finish`              |
-
-### logEventSummary 출력 예시
+### 이벤트 dedupe 로직
 
 ```text
-[main] cmd: /bin/zsh -lc 'cli-claw memory list' → exit 0
-  MEMORY.md  0.1 KB  2026-02-23
-[main] reasoning: Planning detailed procedure saving
-[main] agent: 프로젝트 구조를 분석하고...
-[main] tokens: in=1,515,404 (cached=1,200,000) out=12,555
+1. extractToolLabels(cli, event, ctx) 호출
+2. Claude stream_event 수신 → ctx.hasClaudeStreamEvents = true 세팅
+3. makeClaudeToolKey() → claude:idx/msg/type:icon:label 형태 키 생성
+4. ctx.seenToolKeys Set에서 중복 체크
+5. 이미 수신된 키면 스킵, 새 키면 추가
+6. hasClaudeStreamEvents === true일 때 assistant tool block 전체 스킵
+```
+
+### CLI별 이벤트 매핑
+
+| CLI      | 이벤트 타입                              |
+| -------- | ---------------------------------------- |
+| claude   | `system` / `assistant` / `result` + `stream_event` |
+| codex    | `thread.started` / `item.completed`      |
+| gemini   | `init` / `message` / `result`            |
+| opencode | `text` / `step_finish`                   |
+| **copilot** | **ACP `session/update`** (별도 파서)  |
+
+### ACP session/update 파싱
+
+```js
+extractFromAcpUpdate(params):
+  agent_thought_chunk → { tool: { icon: '💭', label: ... } }
+  tool_call           → { tool: { icon: '🔧', label: name } }
+  tool_call_update    → { tool: { icon: '✅', label: name } }
+  agent_message_chunk → { text: extractText(content) }
+  plan                → { tool: { icon: '📝', label: 'planning...' } }
 ```
 
 ---
 
-## orchestrator.js — Orchestration v2 + Triage + 순차실행 + Phase Skip + Self-Skip (582L)
+## orchestrator.js — Orchestration v2 + Triage + 순차실행 + origin 전달 (584L)
 
 | Function                     | 역할                                           |
 | ---------------------------- | ---------------------------------------------- |
@@ -87,20 +157,27 @@
 | `phasePlan(prompt, worklog)` | planning agent 호출 (트리아지 판단 포함)       |
 | `distributeByPhase(...)`     | **순차 실행** — for-of 루프, 이전 결과 주입    |
 | `phaseReview(...)`           | per-agent verdict 판정                         |
-| `orchestrate(prompt)`        | **메인** — triage → plan → distribute → review |
-| `orchestrateContinue()`      | 이전 worklog 이어서 실행                       |
+| `orchestrate(prompt, meta)`  | **메인** — triage → plan → distribute → review |
+| `orchestrateContinue(meta)`  | 이전 worklog 이어서 실행                       |
+
+### origin 전달
+
+```js
+orchestrate(prompt, { origin: 'telegram' })  // meta.origin → spawnAgent에 전달
+orchestrateContinue({ origin: 'telegram' })  // 이어하기에도 origin 전달
+```
 
 ### 오케스트레이션 플로우 (v2)
 
 ```text
-orchestrate(prompt)
-  ├─ Tier 1: needsOrchestration(prompt) false → direct agent
-  ├─ employees === 0 → direct agent
+orchestrate(prompt, meta)
+  ├─ Tier 1: needsOrchestration(prompt) false → direct agent (origin 전달)
+  ├─ employees === 0 → direct agent (origin 전달)
   └─ pipeline:
       1. phasePlan → direct_answer? → 즉시 응답 (Tier 2)
       2. initAgentPhases → phase profile
       3. round loop (max 3):
-         distributeByPhase (순차, 이전 결과 주입)
+         distributeByPhase (순차, 이전 결과 주입, origin 전달)
          → phaseReview → verdict → phase advance
 ```
 

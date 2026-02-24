@@ -22,11 +22,19 @@
 | 5   | `bin/cli-claw.js`        | switch case + printHelp 등록 |
 | 6   | `bin/commands/<name>.js` | 실제 구현 파일               |
 
+### CLI/모델 변경 시 (cli-registry 단일 소스)
+
+| #   | 파일                  | 확인 사항                          |
+| --- | --------------------- | ---------------------------------- |
+| 1   | `src/cli-registry.js` | **유일한 수정 지점** — label, binary, defaultModel, efforts, models |
+| 2   | `server.js`           | `/api/cli-registry` 자동 반영 (수정 불필요) |
+| 3   | Frontend              | `fetchCliRegistry()` 자동 반영 (수정 불필요) |
+
 ### 문서 (4곳)
 
 | #   | 파일                            | 확인 사항                     |
 | --- | ------------------------------- | ----------------------------- |
-| 1   | `README.md`                     | CLI Commands, REST API 테이블 |
+| 1   | `README.md`                     | CLI Commands, REST API, Models |
 | 2   | `devlog/str_func.md`            | 파일 트리 + 라인 카운트       |
 | 3   | `devlog/str_func/commands.md`   | 슬래시 커맨드 상세            |
 | 4   | `devlog/str_func/server_api.md` | API 엔드포인트 목록           |

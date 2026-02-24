@@ -1,6 +1,6 @@
-# commands.js — Slash Command Registry & Dispatcher (647L)
+# commands.js — Slash Command Registry & Dispatcher (639L)
 
-> 커맨드 레지스트리 + 디스패쳐 엔진. 15개 커맨드, 3개 인터페이스 (cli/web/telegram).
+> 커맨드 레지스트리 + 디스패쳐 엔진. 15개 커맨드, 3개 인터페이스 (cli/web/telegram). cli-registry 기반 동적 모델 매핑.
 
 ---
 
@@ -13,6 +13,19 @@
 | `getCompletions(partial, iface)`     | CLI/Web 자동완성용 명령 필터링                        |
 | `getCompletionItems(partial, iface)` | 자동완성 항목 (name+desc+args)                        |
 | `COMMANDS` (export)                  | 커맨드 배열 (name, desc, args, interfaces, handler)   |
+
+### cli-registry 통합
+
+```js
+import { CLI_KEYS, buildModelChoicesByCli } from './cli-registry.js';
+
+const DEFAULT_CLI_CHOICES = [...CLI_KEYS];
+const MODEL_CHOICES_BY_CLI = buildModelChoicesByCli();
+```
+
+- `/cli` 커맨드: `CLI_KEYS`에서 선택지 동적 생성
+- `/model` 커맨드: `MODEL_CHOICES_BY_CLI[currentCli]`에서 모델 목록
+- 새 CLI 추가 시 `cli-registry.js`만 수정하면 커맨드에 자동 반영
 
 ### 응답 type 필드
 
