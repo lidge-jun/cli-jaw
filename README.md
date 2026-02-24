@@ -17,9 +17,10 @@ cli-claw serve
 - 📦 **Skills**: 플러그인 스킬 시스템 (2×3 분류: Active / Reference, Codex 폴백 번들)
 - 🧠 **Memory**: 자동 대화 요약 + 장기 기억
 - 💓 **Heartbeat**: 주기적 자동 실행
-- 📬 **Telegram**: 텔레그램 봇 연동
+- 📨 **Telegram**: 텔레그램 봇 연동 + 슬래시 커맨드 디스패치
 - 🌐 **Browser**: Chrome CDP 기반 브라우저 제어
 - 🔌 **MCP**: 글로벌 MCP 서버 관리 + 4개 CLI 자동 동기화
+- ⌨️ **Slash Commands**: CLI + Web + Telegram 통합 슬래시 커맨드 (자동완성, 드롭다운)
 
 ## CLI Commands
 
@@ -160,6 +161,7 @@ public/              Web UI (ES Modules, stop/queue/drag-drop)
 | Category  | Endpoints                                                  |
 | --------- | ---------------------------------------------------------- |
 | Core      | `GET /api/session`, `POST /api/message`, `POST /api/stop`  |
+| Commands  | `POST /api/command`, `GET /api/commands?interface=`        |
 | Settings  | `GET/PUT /api/settings`, `GET/PUT /api/prompt`             |
 | Memory    | `GET/POST /api/memory`, `GET /api/claw-memory/search`      |
 | MCP       | `GET/PUT /api/mcp`, `POST /api/mcp/sync,install,reset`     |

@@ -1,6 +1,6 @@
 # CLI-Claw — Source Structure & Function Reference
 
-> 마지막 검증: 2026-02-24 (server.js 594L / agent.js 360L / chat.js 468L / mcp-sync.js 461L / prompt.js 348L / public/ 18파일 2504L)
+> 마지막 검증: 2026-02-24 (server.js 685L / agent.js 355L / chat.js 720L / commands.js 411L / mcp-sync.js 461L / prompt.js 348L / public/ 19파일)
 
 ---
 
@@ -8,18 +8,19 @@
 
 ```text
 cli-claw/
-├── server.js                 ← 라우트 + 글루 (src/ import, 594L)
+├── server.js                 ← 라우트 + 글루 + 슬래시커맨드 ctx (685L)
 ├── lib/
 │   ├── mcp-sync.js           ← MCP 통합 + 스킬 복사 + 글로벌 설치 (461L)
 │   └── upload.js             ← 파일 업로드 + Telegram 다운로드 (71L)
 ├── src/
-│   ├── config.js             ← CLAW_HOME, settings, CLI 탐지 (162L)
+│   ├── config.js             ← CLAW_HOME, settings, CLI 탐지, APP_VERSION (167L)
 │   ├── db.js                 ← SQLite 스키마 + prepared statements (76L)
 │   ├── bus.js                ← WS + 내부 리스너 broadcast (19L)
 │   ├── events.js             ← NDJSON 이벤트 파싱 (97L)
+│   ├── commands.js           ← 슬래시 커맨드 레지스트리 + 디스패쳐 (411L) [NEW]
 │   ├── agent.js              ← CLI spawn + 스트림 + 큐 + 메모리 flush (355L)
 │   ├── orchestrator.js       ← Planning → Sub-agent 오케스트레이션 (131L)
-│   ├── telegram.js           ← Telegram 봇 + orchestrateAndCollect (267L)
+│   ├── telegram.js           ← Telegram 봇 + 슬래시디스패치 + setMyCommands (358L)
 │   ├── heartbeat.js          ← Heartbeat 잡 스케줄 + fs.watch (91L)
 │   ├── prompt.js             ← 프롬프트 생성 + 스킬 + 서브에이전트 주입 (348L)
 │   ├── memory.js             ← Persistent Memory grep 기반 (122L)
@@ -31,11 +32,11 @@ cli-claw/
 │   ├── css/
 │   │   ├── variables.css     ← CSS 커스텀 프로퍼티, 리셋 (47L)
 │   │   ├── layout.css        ← 사이드바, 탭, 세이브바 (162L)
-│   │   ├── chat.css          ← 채팅, 메시지, 타이핑, 첨부, 멈춤 버튼 (275L)
+│   ├── chat.css          ← 채팅, 메시지, 타이핑, 첨부, 드롭다운, 먈춤 버튼 (355L)
 │   │   ├── sidebar.css       ← 설정, 스킬 카드, 토글 (215L)
 │   │   └── modals.css        ← 모달, 하트비트 카드 (171L)
 │   └── js/
-│       ├── main.js           ← 앱 진입점 + 이벤트 바인딩 (198L)
+│       ├── main.js           ← 앱 진입점 + 이벤트 바인딩 (221L)
 │       ├── state.js          ← 공유 상태 모듈 (16L)
 │       ├── constants.js      ← MODEL_MAP, ROLE_PRESETS (23L)
 │       ├── render.js         ← renderMarkdown, escapeHtml (20L)
@@ -47,13 +48,14 @@ cli-claw/
 │           ├── skills.js     ← 로드, 토글, 필터, 기타 카테고리 (69L)
 │           ├── employees.js  ← 서브에이전트 CRUD (92L)
 │           ├── heartbeat.js  ← 하트비트 모달/작업 (83L)
-│           └── memory.js     ← 메모리 모달/설정 (90L)
+│           ├── memory.js     ← 메모리 모달/설정 (90L)
+│           └── slash-commands.js ← 슬래시 커맨드 드롭다운 (219L) [NEW]
 ├── bin/
 │   ├── cli-claw.js           ← 9개 서브커맨드 라우팅
 │   ├── postinstall.js        ← npm install 후 8단계 자동 설정 (139L)
 │   └── commands/
-│       ├── serve.js          ← 서버 시작 (--port/--host/--open)
-│       ├── chat.js           ← 터미널 채팅 TUI (3모드, 468L)
+│       ├── serve.js          ← 서버 시작 (--port/--host/--open, .env 자동감지)
+│       ├── chat.js           ← 터미널 채팅 TUI (3모드, 슬래시커맨드, 자동완성, 720L)
 │       ├── init.js           ← 초기화 마법사
 │       ├── doctor.js         ← 진단 (11개 체크, --json)
 │       ├── status.js         ← 서버 상태 (--json)
@@ -99,6 +101,8 @@ graph LR
     SRV --> HB["heartbeat.js"]
     SRV --> BR["browser/*"]
     SRV --> MCP["lib/mcp-sync.js"]
+    SRV --> CMD["commands.js"]
+    CMD --> CFG
     AGT --> EVT["events.js"]
     AGT --> BUS["bus.js"]
     ORC --> AGT
@@ -108,19 +112,20 @@ graph LR
 
 ### 모듈 의존 규칙
 
-| 모듈              | 의존 대상                                     | 비고                   |
-| ----------------- | --------------------------------------------- | ---------------------- |
-| `bus.js`          | —                                             | 의존 0, broadcast 허브 |
-| `config.js`       | —                                             | 의존 0, 경로/설정만    |
-| `db.js`           | config                                        | DB_PATH만 사용         |
-| `events.js`       | bus                                           | broadcast만 사용       |
-| `memory.js`       | config                                        | CLAW_HOME만, 독립 모듈 |
-| `agent.js`        | bus, config, db, events, prompt, orchestrator | 핵심 허브              |
-| `orchestrator.js` | bus, db, prompt, agent                        | planning ↔ agent 상호  |
-| `telegram.js`     | bus, config, db, agent, orchestrator, upload  | 외부 인터페이스        |
-| `heartbeat.js`    | config, telegram                              | telegram re-export     |
-| `prompt.js`       | config, db                                    | A-1/A-2 + 스킬         |
-| `browser/*`       | —                                             | 독립 모듈              |
+| 모듈              | 의존 대상                                              | 비고                         |
+| ----------------- | ------------------------------------------------------ | ---------------------------- |
+| `bus.js`          | —                                                      | 의존 0, broadcast 허브       |
+| `config.js`       | —                                                      | 의존 0, 경로/설정만          |
+| `db.js`           | config                                                 | DB_PATH만 사용               |
+| `events.js`       | bus                                                    | broadcast만 사용             |
+| `memory.js`       | config                                                 | CLAW_HOME만, 독립 모듈       |
+| `agent.js`        | bus, config, db, events, prompt, orchestrator          | 핵심 허브                    |
+| `orchestrator.js` | bus, db, prompt, agent                                 | planning ↔ agent 상호        |
+| `telegram.js`     | bus, config, db, agent, orchestrator, commands, upload | 외부 인터페이스              |
+| `heartbeat.js`    | config, telegram                                       | telegram re-export           |
+| `prompt.js`       | config, db                                             | A-1/A-2 + 스킬               |
+| `commands.js`     | config                                                 | 커맨드 레지스트리 + 디스패쳐 |
+| `browser/*`       | —                                                      | 독립 모듈                    |
 
 ---
 
@@ -128,7 +133,7 @@ graph LR
 
 ### config.js — 경로, 설정, CLI 탐지
 
-**상수**: `CLAW_HOME` · `PROMPTS_DIR` · `DB_PATH` · `SETTINGS_PATH` · `HEARTBEAT_JOBS_PATH` · `UPLOADS_DIR` · `SKILLS_DIR` · `SKILLS_REF_DIR`
+**상수**: `CLAW_HOME` · `PROMPTS_DIR` · `DB_PATH` · `SETTINGS_PATH` · `HEARTBEAT_JOBS_PATH` · `UPLOADS_DIR` · `SKILLS_DIR` · `SKILLS_REF_DIR` · `APP_VERSION` (← package.json)
 
 | Function             | 역할                              |
 | -------------------- | --------------------------------- |
@@ -139,6 +144,20 @@ graph LR
 | `replaceSettings(s)` | ESM live binding 대체 (API PUT용) |
 | `detectCli(name)`    | `which` 기반 바이너리 존재 확인   |
 | `detectAllCli()`     | 4개 CLI 상태 반환                 |
+
+### commands.js — Slash Command Registry & Dispatcher [NEW]
+
+커맨드 레지스트리 (`COMMANDS[]`) + 디스패쳐 엔진. 14개 커맨드, 3개 인터페이스 (cli/web/telegram).
+
+| Function                             | 역할                                                  |
+| ------------------------------------ | ----------------------------------------------------- |
+| `parseCommand(text)`                 | `/cmd args` 파싱 → `{ name, args[] }`                 |
+| `executeCommand(parsed, ctx)`        | 커맨드 실행 + `normalizeResult` (응답 type 자동 추론) |
+| `getCompletions(partial, iface)`     | CLI/Web 자동완성용 명령 필터링                        |
+| `getCompletionItems(partial, iface)` | 자동완성 항목 (name+desc+args)                        |
+| `COMMANDS` (export)                  | 커맨드 배열 (name, desc, args, interfaces, handler)   |
+
+응답 `type` 필드: `normalizeResult()`에서 `ok` 기반 자동 추론 (`success`/`error`/`info`). 핸들러에서 명시 가능.
 
 ### db.js — Database
 
@@ -182,12 +201,14 @@ Flow: 직원 0명→단일 agent / planning 먼저 실행 / distribute→보고�
 
 ### telegram.js — Telegram Bot
 
-| Function                     | 역할                                           |
-| ---------------------------- | ---------------------------------------------- |
-| `initTelegram()`             | Bot 생성, allowlist, 핸들러 (텍스트/사진/문서) |
-| `orchestrateAndCollect()`    | agent_done까지 수집 (idle timeout)             |
-| `tgOrchestrate(ctx, prompt)` | TG → orchestrate → 응답 전송                   |
-| `ipv4Fetch(url, init)`       | IPv4 강제 fetch                                |
+| Function                     | 역할                                                           |
+| ---------------------------- | -------------------------------------------------------------- |
+| `initTelegram()`             | Bot 생성, allowlist, 핸들러 (텍스트/사진/문서), 슬래시디스패치 |
+| `orchestrateAndCollect()`    | agent_done까지 수집 (idle timeout)                             |
+| `tgOrchestrate(ctx, prompt)` | TG → orchestrate → 응답 전송                                   |
+| `syncTelegramCommands(bot)`  | `setMyCommands` 등록 (TG_EXCLUDED_CMDS 필터) [NEW]             |
+| `makeTelegramCommandCtx()`   | TG용 read-only ctx 생성 [NEW]                                  |
+| `ipv4Fetch(url, init)`       | IPv4 강제 fetch                                                |
 
 ### heartbeat.js — Scheduled Jobs
 
@@ -255,9 +276,11 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
 ---
 
-## server.js — Glue + API Routes (593L)
+## server.js — Glue + API Routes (685L)
 
-라우트 + 초기화만 담당. Quota 함수: `readClaudeCreds()` · `fetchClaudeUsage()` · `readCodexTokens()` · `fetchCodexUsage()` · `readGeminiAccount()`
+라우트 + 초기화 + 커맨드 ctx 구성. Quota 함수: `readClaudeCreds()` · `fetchClaudeUsage()` · `readCodexTokens()` · `fetchCodexUsage()` · `readGeminiAccount()`
+
+함수 추출: `getRuntimeSnapshot()` · `clearSessionState()` · `applySettingsPatch(rawPatch, opts)` · `makeWebCommandCtx()`
 
 초기화: `ensureDirs() → runMigration() → loadSettings() → initPromptFiles() → regenerateB() → listen() → mcp-sync → initTelegram() → startHeartbeat()`
 
@@ -266,6 +289,7 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 | Category       | Endpoints                                                                                     |
 | -------------- | --------------------------------------------------------------------------------------------- |
 | Core           | `GET /api/session` `GET /api/messages` `POST /api/message` `POST /api/stop` `POST /api/clear` |
+| Commands       | `POST /api/command` `GET /api/commands?interface=` [NEW]                                      |
 | Settings       | `GET/PUT /api/settings` `GET/PUT /api/prompt` `GET/PUT /api/heartbeat-md`                     |
 | Memory (DB)    | `GET/POST /api/memory` `DELETE /api/memory/:key`                                              |
 | Memory Files   | `GET /api/memory-files` `GET/DELETE /api/memory-files/:fn` `PUT /api/memory-files/settings`   |
@@ -308,14 +332,14 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
 **Post-MVP** (`devlog/260223_*/`):
 
-| 폴더                              | 주제                                     | 상태 |
-| --------------------------------- | ---------------------------------------- | ---- |
-| `260223_권한/`                    | 권한 + 모듈화 + 스킬 + 브라우저 (P1~13)  | ✅    |
-| `260223_메모리 개선/`             | 메모리 고도화 (flush 개선 + 신규 메모리) | ✅    |
-| `260223_모델/`                    | 모델 목록 + custom input                 | ✅    |
-| `260223_프론트엔드/`              | Web UI ES Modules 모듈화 (Phase 10)      | ✅    |
-| `260223_11_서브에이전트프롬프트/` | 서브에이전트 프롬프트 구조화 (Phase 11)  | ✅    |
-| `260224_cmd/`                     | 슬래시 커맨드 통합 시스템                | 📋    |
+| 폴더                              | 주제                                        | 상태 |
+| --------------------------------- | ------------------------------------------- | ---- |
+| `260223_권한/`                    | 권한 + 모듈화 + 스킬 + 브라우저 (P1~13)     | ✅    |
+| `260223_메모리 개선/`             | 메모리 고도화 (flush 개선 + 신규 메모리)    | ✅    |
+| `260223_모델/`                    | 모델 목록 + custom input                    | ✅    |
+| `260223_프론트엔드/`              | Web UI ES Modules 모듈화 (Phase 10)         | ✅    |
+| `260223_11_서브에이전트프롬프트/` | 서브에이전트 프롬프트 구조화 (Phase 11)     | ✅    |
+| `260224_cmd/`                     | 슬래시 커맨드 통합 시스템 (P1✅ P2✅ P3✅ P4📋) | 🟡    |
 
 ---
 
