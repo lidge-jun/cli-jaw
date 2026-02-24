@@ -68,7 +68,7 @@ function syncPerCliModelAndEffortControls(settings = null) {
         const modelSel = getModelSelect(cli);
         if (modelSel) {
             const selected = settings?.perCli?.[cli]?.model || modelSel.value || '';
-            setSelectOptions(modelSel, MODEL_MAP[cli] || [], { includeCustom: true, includeDefault: true, selected });
+            setSelectOptions(modelSel, MODEL_MAP[cli] || [], { includeCustom: true, selected });
             if (selected && !Array.from(modelSel.options).some(o => o.value === selected)) {
                 appendCustomOption(modelSel, selected);
                 modelSel.value = selected;
