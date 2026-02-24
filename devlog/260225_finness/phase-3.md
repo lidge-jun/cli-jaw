@@ -43,3 +43,13 @@
 - `TESTS.md` — 신규 (테스트 상세 분리)
 - `tests/unit/*.test.js` — 4개 신규 테스트 파일
 - `tests/plan.md` — 검증 결과 업데이트
+
+## 후속 버그픽스 (같은 날)
+
+| 우선순위 | 이슈 | 수정 |
+|:--------:|------|------|
+| **P0** | opencode 패키지 `opencode-antigravity-auth`는 bin 필드 없음 → `which opencode` 실패 | `opencode-ai`로 교체 (bin: `bin/opencode` 확인) |
+| **P1** | bun 실패 시 npm 폴백 없음 — 설치 실패로 종료 | per-package `npm i -g` 재시도 로직 추가 |
+| **P1** | `doctor.js`가 4개 CLI만 검사 (copilot 누락) | `['claude','codex','gemini','opencode','copilot']` 5개로 확장 |
+| **P2** | 문서 테스트 수 65로 남아있음 (실제 70) | README×3 + TESTS.md 전부 70으로 동기화 |
+

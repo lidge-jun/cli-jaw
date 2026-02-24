@@ -43,12 +43,12 @@ cli-claw/
 │       └── constants.js      ← loadCliRegistry() 동적 로딩 + FALLBACK_CLI_REGISTRY (114L)
 ├── bin/
 │   ├── cli-claw.js           ← 11개 서브커맨드 라우팅
-│   ├── postinstall.js        ← npm install 후 8단계 자동 설정 + Copilot PATH 심링크 (150L)
+│   ├── postinstall.js        ← npm install 후 5-CLI 자동설치(bun→npm 폴백) + MCP + 스킬 + Copilot (200L)
 │   └── commands/
 │       ├── serve.js          ← 서버 시작 (--port/--host/--open, .env 자동감지)
 │       ├── chat.js           ← 터미널 채팅 TUI (3모드, 슬래시커맨드, 자동완성, 843L)
 │       ├── init.js           ← 초기화 마법사
-│       ├── doctor.js         ← 진단 (11개 체크, --json)
+│       ├── doctor.js         ← 진단 (12개 체크 — 5 CLI 포함, --json)
 │       ├── status.js         ← 서버 상태 (--json)
 │       ├── mcp.js            ← MCP 관리 (install/sync/list/reset)
 │       ├── skill.js          ← 스킬 관리 (install/remove/info/list/reset + installFromRef)
@@ -56,10 +56,20 @@ cli-claw/
 │       ├── reset.js          ← 전체 초기화 (MCP/스킬/직원/세션, y/N 확인)
 │       ├── memory.js         ← 메모리 CLI (search/read/save/list/init)
 │       └── browser.js        ← 브라우저 CLI (17개 서브커맨드, +vision-click, 239L)
-├── tests/                    ← [NEW] 회귀 방지 테스트
+├── tests/                    ← 회귀 방지 테스트 (70 tests)
 │   ├── events.test.js        ← 이벤트 파서 단위 테스트 (dedupe, fallback 등)
-│   ├── telegram-forwarding.test.js ← Telegram 포워딩 동작 테스트 (origin, 에러 스킵)
+│   ├── events-acp.test.js    ← ACP session/update 이벤트 테스트
+│   ├── telegram-forwarding.test.js ← Telegram 포워딩 동작 테스트
+│   ├── unit/                 ← Tier 1-2 단위 테스트
+│   │   ├── cli-registry.test.js
+│   │   ├── bus.test.js
+│   │   ├── commands-parse.test.js
+│   │   └── worklog.test.js
 │   └── fixtures/             ← CLI별 이벤트 fixture JSON
+├── README.md                 ← 영문 (기본, 언어 스위처)
+├── README.ko.md              ← 한국어 번역
+├── README.zh-CN.md           ← 중국어 번역
+├── TESTS.md                  ← 테스트 상세 (README에서 분리)
 ├── scripts/                  ← [NEW] 도구 스크립트
 │   └── check-copilot-gap.js  ← 문서-코드 갭 검사
 ├── skills_ref/               ← 번들 스킬 (101개, registry.json 102항목)
@@ -180,7 +190,7 @@ graph LR
 | `260224_skill/`               | 스킬 큐레이션 + Telegram Send + Voice STT (P0~P2)           | 🟡    |
 | `260224_vision/`              | Vision Click P1✅ P2✅ — P3 멀티프로바이더 미구현              | 🟡    |
 | `260224_orch/`                | 오케스트레이션 v2 P0✅ P1✅ P2✅ P3✅ P4✅ P5✅                   | ✅    |
-| `260225_finness/`             | 안정화(P0✅) + 안전성/정합성(P1✅) + 회귀 테스트(P2✅)          | ✅    |
+| `260225_finness/`             | 안정화(P0✅) + 안전성(P1✅) + 회귀 테스트(P2✅) + CLI 자동설치+README(P3✅) | ✅    |
 | `260225_copilot-cli-integration/` | Copilot ACP 통합 Phase 1~6 완료 (할당량+effort+브랜딩)  | ✅    |
 | `269999_메모리 개선/`          | 메모리 고도화 (flush✅ + vector DB 📋 후순위)                 | 🔜    |
 
