@@ -1,4 +1,4 @@
-# 메모리 개선 — cli-claw 장기 기억 시스템
+# (fin) 메모리 개선 — cli-claw 장기 기억 시스템
 
 > Phase A: grep 기반 → Phase B: 임베딩 업그레이드
 

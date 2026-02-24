@@ -1,4 +1,4 @@
-# Phase 0: 텔레그램 환경변수 전환
+# (fin) Phase 0: 텔레그램 환경변수 전환
 
 > 날짜: 2026-02-24  
 > 범위: `settings.json`, `src/telegram.js`, `.env`, `.env.example`

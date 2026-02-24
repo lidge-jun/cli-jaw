@@ -1,4 +1,4 @@
-# Phase 8 — 스킬 확장 (OpenClaw 내장 도구 → cli-claw 스킬 변환)
+# (fin) Phase 8 — 스킬 확장 (OpenClaw 내장 도구 → cli-claw 스킬 변환)
 
 ## 개요
 

@@ -1,6 +1,8 @@
 # Phase 2: Orchestrator v2 (핵심 리팩터링)
 
 > **의존**: Phase 1 (`worklog.js`, dev 스킬, 역할 정리)
+> **검증일**: 2026-02-24
+> **위험도**: 🔴 HIGH — 핵심 오케스트레이터 리팩터링
 > **산출물**: `src/orchestrator.js` v2, `src/prompt.js` 확장
 
 ---
@@ -357,4 +359,51 @@ export function getSubAgentPromptV2(emp, role, currentPhase) {
 
   return prompt;
 }
+```
+
+---
+
+## 검증된 리스크
+
+### 🔴 CRITICAL: `stripSubtaskJSON` / `parseSubtasks` export 유지 필수
+
+`agent.js`가 orchestrator에서 이 함수들을 import:
+
+```javascript
+// src/agent.js:193 (현재 코드)
+import { stripSubtaskJSON } from './orchestrator.js';
+
+// src/agent.js:319
+const stripped = stripSubtaskJSON(ctx.fullText);
+```
+
+**v2 리팩터링 시 반드시 export 유지.** 누락하면 `agent.js`가 즉시 깨짐.
+
+**해결**: v2 코드에도 `export function stripSubtaskJSON` / `export function parseSubtasks` 반드시 포함.
+위의 v2 코드 스케치에서 이 export가 빠져 있으므로 구현 시 추가 필요.
+
+### 🔴 HIGH: Worklog 동시 쓰기 레이스
+
+`distributeByPhase()`에서:
+1. Sub-agents가 병렬 실행되며 각자 worklog에 기록 지시받음
+2. Orchestrator도 `await Promise.all` 후 순차적으로 append
+
+`appendToWorklog`는 `read → modify → write` 패턴이라 sub-agent 동시 쓰기 시 데이터 손실 가능.
+
+**해결**:
+- Orchestrator의 append는 `await` 후 순차 → 안전
+- Sub-agent의 worklog 직접 쓰기는 **bonus** 취급 (없어도 orchestrator가 보장)
+- 향후 고도화: `fs.appendFileSync` 사용 또는 lock file 도입
+
+### 🟡 MEDIUM: `SKILLS_DIR` 경로 주의
+
+`getSubAgentPromptV2`에서 `SKILLS_DIR`을 사용할 때 경로 확인 필요:
+
+```javascript
+// src/config.js
+export const SKILLS_DIR = join(CLAW_HOME, 'skills');  // ~/.cli-claw/skills
+```
+
+`dev/reference/frontend.md` 등은 `SKILLS_DIR` 하위에 있어야 런타임에서 로딩 가능.
+Phase 1에서 스킬을 `.agents/skills/dev/`에 만들면, 기존 번들 메커니즘으로 `~/.cli-claw/skills/dev/`에 복사되는지 확인 필요.
 ```

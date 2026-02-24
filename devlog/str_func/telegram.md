@@ -4,15 +4,15 @@
 
 ---
 
-## telegram.js — Telegram Bot (365L)
+## telegram.js — Telegram Bot (377L)
 
 | Function                     | 역할                                                           |
 | ---------------------------- | -------------------------------------------------------------- |
 | `initTelegram()`             | Bot 생성, allowlist, 핸들러 (텍스트/사진/문서), 슬래시디스패치 |
-| `orchestrateAndCollect()`    | agent_done까지 수집 (idle timeout)                             |
-| `tgOrchestrate(ctx, prompt)` | TG → orchestrate → 응답 전송                                   |
+| `orchestrateAndCollect()`    | agent_done까지 수집 (idle timeout, agent_fallback 포함)        |
+| `tgOrchestrate(ctx, prompt)` | TG → orchestrate → 응답 전송 (폴백 알림 표시)                  |
 | `syncTelegramCommands(bot)`  | `setMyCommands` 등록 (TG_EXCLUDED_CMDS 필터)                   |
-| `makeTelegramCommandCtx()`   | TG용 read-only ctx 생성                                        |
+| `makeTelegramCommandCtx()`   | TG용 ctx 생성 (fallbackOrder만 변경 허용)                      |
 | `ipv4Fetch(url, init)`       | IPv4 강제 fetch                                                |
 | `escapeHtmlTg(text)`         | Telegram HTML 이스케이프                                       |
 | `markdownToTelegramHtml(md)` | Markdown → Telegram HTML 변환                                  |

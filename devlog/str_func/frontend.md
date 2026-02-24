@@ -1,4 +1,4 @@
-# Frontend — public/ (19 files, ~2907L)
+# Frontend — public/ (19 files, ~2982L)
 
 > Web UI — Vanilla HTML + CSS + ES Modules. 인라인 JS/CSS 없음.
 
@@ -8,7 +8,7 @@
 
 ```text
 public/
-├── index.html            ← HTML 뼈대 (421L, inline JS/CSS 없음)
+├── index.html            ← HTML 뼈대 (427L, inline JS/CSS 없음)
 ├── css/
 │   ├── variables.css     ← CSS 커스텀 프로퍼티, 리셋 (47L)
 │   ├── layout.css        ← 사이드바, 탭, 세이브바 (162L)
@@ -16,15 +16,15 @@ public/
 │   ├── sidebar.css       ← 설정, 스킬 카드, 토글 (215L)
 │   └── modals.css        ← 모달, 하트비트 카드 (171L)
 └── js/
-    ├── main.js           ← 앱 진입점 + 이벤트 바인딩 (221L)
+    ├── main.js           ← 앱 진입점 + 이벤트 바인딩 (222L)
     ├── state.js          ← 공유 상태 모듈 (16L)
     ├── constants.js      ← MODEL_MAP, ROLE_PRESETS (23L)
     ├── render.js         ← renderMarkdown, escapeHtml (20L)
     ├── ui.js             ← DOM 조작 유틸 + stop-mode 토글 (142L)
-    ├── ws.js             ← WebSocket 연결 + 메시지 라우팅 (41L)
+    ├── ws.js             ← WebSocket 연결 + 메시지 라우팅 (43L)
     └── features/
         ├── chat.js       ← 전송, 첨부, 드래그앤드롭, 멈춤, 큐 (154L)
-        ├── settings.js   ← 설정, CLI 상태, MCP, 프롬프트 (351L)
+        ├── settings.js   ← 설정, CLI 상태, MCP, 프롬프트, 폴백 (389L)
         ├── skills.js     ← 로드, 토글, 필터, 기타 카테고리 (69L)
         ├── employees.js  ← 서브에이전트 CRUD (92L)
         ├── heartbeat.js  ← 하트비트 모달/작업 (83L)

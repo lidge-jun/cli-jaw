@@ -1,4 +1,4 @@
-# Phase 13 — 기타(Other) 스킬 필터 + Registry 보완
+# (fin) Phase 13 — 기타(Other) 스킬 필터 + Registry 보완
 
 ## 개요
 

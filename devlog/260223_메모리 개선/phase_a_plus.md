@@ -1,4 +1,4 @@
-# Phase A+ — Memory Flush 개선
+# (fin) Phase A+ — Memory Flush 개선
 
 > 상태: ✅ 구현 완료
 

@@ -1,6 +1,6 @@
-# commands.js — Slash Command Registry & Dispatcher (573L)
+# commands.js — Slash Command Registry & Dispatcher (616L)
 
-> 커맨드 레지스트리 + 디스패쳐 엔진. 14개 커맨드, 3개 인터페이스 (cli/web/telegram).
+> 커맨드 레지스트리 + 디스패쳐 엔진. 15개 커맨드, 3개 인터페이스 (cli/web/telegram).
 
 ---
 
@@ -29,7 +29,7 @@
 ```js
 {
   name: '/help',
-  description: '사용 가능한 명령어 목록',
+  desc: '사용 가능한 명령어 목록',
   args: [],
   interfaces: ['cli', 'web', 'telegram'],
   handler: async (args, ctx) => { ... }

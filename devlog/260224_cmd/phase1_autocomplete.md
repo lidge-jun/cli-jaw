@@ -1,4 +1,4 @@
-# Phase 1: Interactive Slash Autocomplete (Revised)
+# (fin) Phase 1: Interactive Slash Autocomplete (Revised)
 
 > 상태: ✅ 구현 완료 (v3)
 > 날짜: 2026-02-24
@@ -155,26 +155,26 @@ const ac = {
 
 ## 난이도 / 공수
 
-| 항목 | 난이도 | 공수 |
-| --- | --- | --- |
-| keypress 전환 | 🟡 | 35m |
-| 상태/필터 분리 | 🟢 | 20m |
-| popup render/clear | 🟡 | 45m |
-| 키 바인딩(↑↓ Tab Enter ESC) | 🟡 | 35m |
-| resize/scroll-region 안정화 | 🟠 | 35m |
-| 수동 테스트 | 🟡 | 25m |
-| 합계 |  | 약 3.0h |
+| 항목                        | 난이도 | 공수    |
+| --------------------------- | ------ | ------- |
+| keypress 전환               | 🟡      | 35m     |
+| 상태/필터 분리              | 🟢      | 20m     |
+| popup render/clear          | 🟡      | 45m     |
+| 키 바인딩(↑↓ Tab Enter ESC) | 🟡      | 35m     |
+| resize/scroll-region 안정화 | 🟠      | 35m     |
+| 수동 테스트                 | 🟡      | 25m     |
+| 합계                        |        | 약 3.0h |
 
 ---
 
 ## 리스크와 대응
 
-| 리스크 | 확률 | 영향 | 대응 |
-| --- | --- | --- | --- |
+| 리스크                      | 확률 | 영향 | 대응                          |
+| --------------------------- | ---- | ---- | ----------------------------- |
 | ESC 단독 vs ESC 시퀀스 충돌 | 보통 | 보통 | `keypress` 이벤트로 구분 처리 |
-| footer 침범/잔상 | 보통 | 높음 | clear→redraw→render 순서 고정 |
-| 한글 폭 정렬 깨짐 | 보통 | 낮음 | 기존 `visualWidth` 재사용 |
-| resize 중 깜박임 | 보통 | 낮음 | 재렌더 debounce 50~80ms |
+| footer 침범/잔상            | 보통 | 높음 | clear→redraw→render 순서 고정 |
+| 한글 폭 정렬 깨짐           | 보통 | 낮음 | 기존 `visualWidth` 재사용     |
+| resize 중 깜박임            | 보통 | 낮음 | 재렌더 debounce 50~80ms       |
 
 ---
 

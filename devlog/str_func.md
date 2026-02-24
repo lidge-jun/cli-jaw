@@ -1,6 +1,6 @@
 # CLI-Claw — Source Structure & Function Reference
 
-> 마지막 검증: 2026-02-24T15 (server.js 757L / agent.js 409L / commands.js 573L / prompt.js 443L / public/ 19파일 ~2907L)
+> 마지막 검증: 2026-02-24T15:20 (server.js 757L / agent.js 425L / commands.js 616L / prompt.js 443L / public/ 19파일 ~2982L)
 >
 > 상세 모듈 문서는 [서브 문서](#서브-문서)를 참조하세요.
 
@@ -15,14 +15,14 @@ cli-claw/
 │   ├── mcp-sync.js           ← MCP 통합 + 스킬 복사 + DEDUP_EXCLUDED + 글로벌 설치 (481L)
 │   └── upload.js             ← 파일 업로드 + Telegram 다운로드 (70L)
 ├── src/
-│   ├── config.js             ← CLAW_HOME, settings, CLI 탐지, APP_VERSION (168L)
+│   ├── config.js             ← CLAW_HOME, settings, CLI 탐지, APP_VERSION (169L)
 │   ├── db.js                 ← SQLite 스키마 + prepared statements + trace (84L)
 │   ├── bus.js                ← WS + 내부 리스너 broadcast (18L)
 │   ├── events.js             ← NDJSON 파싱 + logEventSummary + traceLog + pushTrace (185L)
-│   ├── commands.js           ← 슬래시 커맨드 레지스트리 + 디스패쳐 (573L)
-│   ├── agent.js              ← CLI spawn + 히스토리빌더 + 스트림 + 큐 + 메모리 flush (409L)
+│   ├── commands.js           ← 슬래시 커맨드 레지스트리 + 디스패쳐 (616L)
+│   ├── agent.js              ← CLI spawn + 히스토리빌더 + 스트림 + 큐 + 메모리 flush + 폴백 (425L)
 │   ├── orchestrator.js       ← Planning → Sub-agent 오케스트레이션 (131L)
-│   ├── telegram.js           ← Telegram 봇 + 슬래시디스패치 + setMyCommands (365L)
+│   ├── telegram.js           ← Telegram 봇 + 슬래시디스패치 + setMyCommands (377L)
 │   ├── heartbeat.js          ← Heartbeat 잡 스케줄 + fs.watch (90L)
 │   ├── prompt.js             ← 프롬프트 생성 + 스킬 + 서브에이전트 + vision-click + telegram-send 주입 (443L)
 │   ├── memory.js             ← Persistent Memory grep 기반 (128L)
@@ -31,10 +31,10 @@ cli-claw/
 │       ├── actions.js        ← snapshot/click/type/navigate/screenshot/mouseClick (179L)
 │       ├── vision.js         ← vision-click 파이프라인 + Codex provider (138L)
 │       └── index.js          ← re-export hub (13L)
-├── public/                   ← Web UI (ES Modules, 19 files, ~2907L)
-│   ├── index.html            ← HTML 뼈대 (421L, inline JS/CSS 없음)
+├── public/                   ← Web UI (ES Modules, 19 files, ~2982L)
+│   ├── index.html            ← HTML 뼈대 (427L, inline JS/CSS 없음)
 │   ├── css/                  ← 5 files (964L)
-│   └── js/                   ← 13 files (1522L)
+│   └── js/                   ← 13 files (1597L)
 ├── bin/
 │   ├── cli-claw.js           ← 9개 서브커맨드 라우팅
 │   ├── postinstall.js        ← npm install 후 8단계 자동 설정 (138L)
@@ -157,7 +157,7 @@ graph LR
 | `260224_cmd/`                     | 슬래시 커맨드 + 프롬프트 정규화 (P1✅ P2✅ P3✅ P4✅ P5✅ P6📋) | 🟡    |
 | `260224_skill/`                   | 스킬 큐레이션 + Telegram Send + Voice STT (P0~P2)         | 🟡    |
 | `260224_vision/`                  | Vision Click P1✅ P2✅ — 원커맨드 + DPR 자동 보정           | ✅    |
-| `260224_orch/`                    | 오케스트레이션 워크플로우 v2 + Fallback 설계 (P0~)        | 🟡    |
+| `260224_orch/`                    | 오케스트레이션 워크플로우 v2 + Fallback 구현 (P0✅)        | 🟡    |
 
 ---
 

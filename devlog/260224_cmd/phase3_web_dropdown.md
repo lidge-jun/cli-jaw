@@ -1,4 +1,4 @@
-# Phase 3: Web UI Command Dropdown
+# (fin) Phase 3: Web UI Command Dropdown
 
 > 상태: ✅ 구현 완료 | 날짜: 2026-02-24
 > 범위: `public/index.html`, `public/js/features/slash-commands.js`, `public/js/main.js`, `public/css/chat.css`

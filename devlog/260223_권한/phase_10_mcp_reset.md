@@ -1,4 +1,4 @@
-# Phase 10 — MCP Reset + 코드 중복 제거
+# (fin) Phase 10 — MCP Reset + 코드 중복 제거
 
 ## 개요
 

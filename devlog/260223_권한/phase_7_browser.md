@@ -1,4 +1,4 @@
-# Phase 7 — 브라우저 조작
+# (fin) Phase 7 — 브라우저 조작
 
 ## OpenClaw 패턴 요약
 

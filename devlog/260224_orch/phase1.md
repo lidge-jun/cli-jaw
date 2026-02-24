@@ -1,6 +1,7 @@
 # Phase 1: 기반 모듈 (worklog + dev 스킬 + 역할 정리)
 
 > **의존**: 없음 (독립 작업)
+> **검증일**: 2026-02-24
 > **산출물**: `src/worklog.js`, `.agents/skills/dev/`, `constants.js` 수정
 
 ---
@@ -164,3 +165,58 @@ export function updateWorklogStatus(path, status, round) {
 - `skill` 필드 추가 → orchestrator가 role에서 주입할 스킬 자동 결정
 - fullstack/devops/qa 제거 → 과정(phase)으로 흡수
 - DB `role` 컬럼은 기존과 호환 (prompt 텍스트 저장)
+
+---
+
+## 검증된 리스크
+
+### 🔴 HIGH: Dev 스킬 경로 불일치
+
+설계 문서에서 `.agents/skills/dev/` 경로를 사용하지만, 런타임은 다른 경로:
+
+```javascript
+// src/config.js (실제 코드)
+export const SKILLS_DIR = join(CLAW_HOME, 'skills');  // ~/.cli-claw/skills
+export const SKILLS_REF_DIR = join(CLAW_HOME, 'skills_ref');
+```
+
+**해결**: dev 스킬을 `~/.cli-claw/skills/dev/`에 위치시키거나, 별도로 `SKILLS_DIR`에서 로딩하도록 `prompt.js`가 이미 처리. `.agents/skills/dev/`에 원본을 두고 `skills_ref` 번들 메커니즘으로 복사하는 기존 패턴을 따를 것.
+
+### 🔴 HIGH: ROLE_PRESETS 변경 시 기존 데이터 깨짐
+
+현재 UI(`employees.js`)는 `ROLE_PRESETS.find(r => r.prompt === a.role)`로 **prompt 텍스트 exact match**:
+
+```javascript
+// employees.js:19 (현재 코드)
+const matched = ROLE_PRESETS.find(r => r.prompt === a.role);
+const presetVal = matched ? matched.value : (a.role ? 'custom' : 'frontend');
+```
+
+preset을 삭제/변경하면 → 기존 DB에 저장된 `role` 텍스트가 매치 안 됨 → `custom`으로 폴백.
+
+**해결**:
+1. DB 마이그레이션은 불필요 (폴백이 `custom`으로 안전하게 동작)
+2. 하지만 기존 직원의 역할이 "풀스택" 등이면 UI에서 `custom`으로 보임
+3. **Phase 1에서 UI 업데이트 시 레거시 매핑 추가**:
+
+```javascript
+const LEGACY_ROLE_MAP = {
+  'React/Vue 기반 UI 컴포넌트 개발, 스타일링': 'frontend',
+  'API 서버, DB 스키마, 비즈니스 로직 구현': 'backend',
+  '프론트엔드와 백엔드 모두 담당': 'frontend',  // fullstack → frontend
+  'CI/CD, Docker, 인프라 자동화': 'custom',
+  '테스트 작성, 버그 재현, 품질 관리': 'custom',
+  '데이터 파이프라인, ETL, 분석 쿼리': 'data',
+  'API 문서화, README, 가이드 작성': 'docs',
+};
+```
+
+### 🟡 MEDIUM: Worklog 동시 쓰기 레이스
+
+Phase 1에서는 worklog.js만 만드는 단계이므로 직접적 위험 없음.
+하지만 Phase 2에서 병렬 sub-agent가 동시에 worklog에 쓸 때 `read-modify-write` 레이스 발생 가능.
+
+**해결 (Phase 2에서 처리)**:
+- Sub-agent의 worklog 쓰기는 **장려하되 의존하지 않음** (하이브리드 방식)
+- Orchestrator의 append는 **순차적** (await 후 append)
+- Sub-agent 동시 쓰기는 **conflict 가능성 인정**, orchestrator append가 canonical source

@@ -1,4 +1,4 @@
-# Phase 2: Server API + Telegram Integration
+# (fin) Phase 2: Server API + Telegram Integration
 
 > 상태: ✅ 구현 완료 | 날짜: 2026-02-24
 > 범위: `server.js`, `src/telegram.js`, `src/commands.js`

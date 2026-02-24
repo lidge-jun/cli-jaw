@@ -1,4 +1,4 @@
-# Phase 7.1 — 브라우저 버그 수정 + MCP Puppeteer 제거 + reset 커맨드
+# (fin) Phase 7.1 — 브라우저 버그 수정 + MCP Puppeteer 제거 + reset 커맨드
 
 > 260223 다른 컴퓨터 테스트에서 발견된 이슈 + 정리
 

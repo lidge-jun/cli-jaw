@@ -1,4 +1,4 @@
-# Phase 12 — Web UI 멈춤/큐 + Telegram Pending
+# (fin) Phase 12 — Web UI 멈춤/큐 + Telegram Pending
 
 ## 개요
 
