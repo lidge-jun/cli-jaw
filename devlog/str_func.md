@@ -1,6 +1,7 @@
 # CLI-CLAW — Source Structure & Function Reference
 
-> 마지막 검증: 2026-02-25T05:09 (server.js 947L / agent.js 619L / orchestrator.js 584L / prompt.js 501L / telegram.js 493L / acp-client.js 315L / cli-registry.js 88L)
+> 마지막 검증: 2026-02-25T05:56 (server.js 949L / agent.js 619L / orchestrator.js 584L / prompt.js 501L / telegram.js 493L / acp-client.js 315L / cli-registry.js 88L)
+> Phase 9 구현 완료: 보안 가드, HTTP 유틸, settings-merge, catch 정책, deps gate, command-contract
 >
 > 상세 모듈 문서는 [서브 문서](#서브-문서)를 참조하세요.
 
@@ -10,7 +11,7 @@
 
 ```text
 cli-claw/
-├── server.js                 ← 라우트 + 글루 + perCli deep merge + activeOverrides + /api/cli-registry (947L)
+├── server.js                 ← 라우트 + 글루 + ok/fail + security guards + activeOverrides (949L)
 ├── lib/
 │   ├── mcp-sync.js           ← MCP 통합 + 스킬 복사 + DEDUP_EXCLUDED + 글로벌 설치 + symlink 보호 (645L)
 │   ├── upload.js             ← 파일 업로드 + Telegram 다운로드 (70L)
@@ -31,6 +32,18 @@ cli-claw/
 │   ├── heartbeat.js          ← Heartbeat 잡 스케줄 + pending queue + fs.watch (107L)
 │   ├── prompt.js             ← 프롬프트 + 스킬 + getMergedSkills i18n 필드 통과 + 서브에이전트 v2 + phase skip + EN defaults (501L)
 │   ├── memory.js             ← Persistent Memory grep 기반 (128L)
+│   ├── settings-merge.js     ← [P9.4] perCli/activeOverrides deep merge 추출 (46L)
+│   ├── security/             ← [P9.1] 보안 입력 검증
+│   │   ├── path-guards.js    ← assertSkillId, assertFilename, safeResolveUnder (67L)
+│   │   └── decode.js         ← decodeFilenameSafe (22L)
+│   ├── http/                 ← [P9.2] 응답 계약
+│   │   ├── response.js       ← ok(), fail() 표준 응답 (25L)
+│   │   ├── async-handler.js  ← asyncHandler 래퍼 (12L)
+│   │   └── error-middleware.js ← notFoundHandler, errorHandler (27L)
+│   ├── command-contract/     ← [P9.5] 커맨드 인터페이스 통합
+│   │   ├── catalog.js        ← COMMANDS → capability map 확장 (39L)
+│   │   ├── policy.js         ← getVisibleCommands, getTelegramMenuCommands (40L)
+│   │   └── help-renderer.js  ← renderHelp list/detail mode (46L)
 │   └── browser/              ← Chrome CDP 제어
 │       ├── connection.js     ← Chrome 탐지/launch/CDP 연결 (71L)
 │       ├── actions.js        ← snapshot/click/type/navigate/screenshot/mouseClick (179L)
@@ -65,7 +78,7 @@ cli-claw/
 │       ├── reset.js          ← 전체 초기화 (MCP/스킬/직원/세션, y/N 확인)
 │       ├── memory.js         ← 메모리 CLI (search/read/save/list/init)
 │       └── browser.js        ← 브라우저 CLI (17개 서브커맨드, +vision-click, 239L)
-├── tests/                    ← 회귀 방지 테스트 (89 tests)
+├── tests/                    ← 회귀 방지 테스트 (216 tests)
 │   ├── events.test.js        ← 이벤트 파서 단위 테스트 (dedupe, fallback 등)
 │   ├── events-acp.test.js    ← ACP session/update 이벤트 테스트
 │   ├── telegram-forwarding.test.js ← Telegram 포워딩 동작 테스트
@@ -73,15 +86,30 @@ cli-claw/
 │   │   ├── cli-registry.test.js
 │   │   ├── bus.test.js
 │   │   ├── commands-parse.test.js
-│   │   ├── render-sanitize.test.js ← [NEW] XSS sanitize 11 cases
+│   │   ├── commands-policy.test.js   ← [P9.5] capability 정책 5건
+│   │   ├── help-renderer.test.js     ← [P9.5] 렌더러 5건
+│   │   ├── path-guards.test.js       ← [P9.1] 입력 검증 16건
+│   │   ├── decode.test.js            ← [P9.1] 디코딩 5건
+│   │   ├── http-response.test.js     ← [P9.2] ok/fail 6건
+│   │   ├── async-handler.test.js     ← [P9.2] 래퍼 4건
+│   │   ├── orchestrator-parsing.test.js ← [P9.4] subtask 파싱 13건
+│   │   ├── orchestrator-triage.test.js  ← [P9.4] triage 판단 10건
+│   │   ├── agent-args.test.js        ← [P9.4] CLI args 빌드 16건
+│   │   ├── settings-merge.test.js    ← [P9.4] deep merge 5건
+│   │   ├── deps-check.test.js        ← [P9.7] semver 검증 10건
+│   │   ├── render-sanitize.test.js   ← XSS sanitize 11건
 │   │   └── worklog.test.js
+│   ├── integration/
+│   │   └── route-registration.test.js ← [P9.3] 라우트 등록 스모크
 │   └── fixtures/             ← CLI별 이벤트 fixture JSON
 ├── README.md                 ← 영문 (기본, 언어 스위처)
 ├── README.ko.md              ← 한국어 번역
 ├── README.zh-CN.md           ← 중국어 번역
 ├── TESTS.md                  ← 테스트 상세 (README에서 분리)
-├── scripts/                  ← [NEW] 도구 스크립트
-│   └── check-copilot-gap.js  ← 문서-코드 갭 검사
+├── scripts/                  ← 도구 스크립트
+│   ├── check-copilot-gap.js  ← 문서-코드 갭 검사
+│   ├── check-deps-offline.mjs ← [P9.7] 오프라인 취약 버전 체크
+│   └── check-deps-online.sh  ← [P9.7] npm audit + semgrep
 └── skills_ref/               ← 번들 스킬 (104개, registry.json 104항목)
 │   └── registry.json
 └── devlog/                   ← MVP 12 Phase + Post-MVP 11개 폴더
@@ -123,7 +151,11 @@ graph LR
     SRV --> MCP["lib/mcp-sync.js"]
     SRV --> CMD["commands.js"]
     SRV --> REG["cli-registry.js"]
+    SRV --> SEC["security/*"]
+    SRV --> HTTP["http/*"]
+    SRV --> SM["settings-merge.js"]
     CMD --> REG
+    CMD --> CC["command-contract/*"]
     CFG --> REG
     AGT --> EVT["events.js"]
     AGT --> BUS["bus.js"]
@@ -150,6 +182,10 @@ graph LR
 | `heartbeat.js`    | config, telegram                                       | telegram re-export             |
 | `prompt.js`       | config, db                                             | A-1/A-2 + 스킬                 |
 | `commands.js`     | config, cli-registry                                   | 커맨드 레지스트리 + 동적 모델  |
+| `command-contract/*` | commands                                             | capability map + policy + help |
+| `security/*`      | —                                                      | 입력 검증 (path, id, filename) |
+| `http/*`          | —                                                      | 응답 표준화 + 에러 미들웨어    |
+| `settings-merge`  | —                                                      | perCli/activeOverrides merge   |
 | `browser/*`       | —                                                      | 독립 모듈                      |
 
 ---
@@ -182,6 +218,12 @@ graph LR
 24. **Telegram chatId auto-persist**: `markChatActive()` → `allowedChatIds` 자동 저장, 서버 재시작 시 pre-seed → web/cli 포워딩 즉시 동작
 25. **Skills dedup**: `frontend-design`/`webapp-testing` 중복 제거, `kreuzberg` phantom 정리 (107→104)
 26. **Skills i18n pass-through**: `getMergedSkills()` active 스킬에 `name_en`/`desc_en` 필드 통과 → locale 전환 시 영어 표시
+27. **[P9.1] 보안 가드**: `assertSkillId`/`assertFilename`/`safeResolveUnder`/`decodeFilenameSafe`로 path traversal, id injection, filename abuse 차단. 4개 라우트 (memory-files, upload, skills, claw-memory) 적용
+28. **[P9.2] 응답 계약**: `ok(res, data)` / `fail(res, status, error)` 표준 응답. 13개 라우트 적용. `asyncHandler` 래퍼로 async 에러 전달
+29. **[P9.4] settings merge 추출**: `applySettingsPatch` 내 perCli/activeOverrides deep merge → `mergeSettingsPatch()` 함수로 분리
+30. **[P9.5] command-contract**: `COMMANDS` 배열을 capability map으로 확장 (full/readonly/hidden/blocked per interface). `getTelegramMenuCommands()`로 Telegram 메뉴 통합
+31. **[P9.6] catch 정책**: 상 12건 warn/debug, 중 5건 warn, 낮 5건 `/* expected */` 주석. 총 22건 처리
+32. **[P9.7] deps gate**: `check-deps-offline.mjs` (ws/node-fetch advisory 대조, exit 0/1), `check-deps-online.sh` (npm audit + semgrep). `npm run check:deps`
 
 ---
 
@@ -210,7 +252,7 @@ graph LR
 | `260224_skill/`               | 스킬 큐레이션 + Telegram Send + Voice STT (P0~P2)           | 🟡    |
 | `260224_vision/`              | Vision Click P1✅ P2✅ — P3 멀티프로바이더 미구현              | 🟡    |
 | `260224_orch/`                | 오케스트레이션 v2 P0✅ P1✅ P2✅ P3✅ P4✅ P5✅                   | ✅    |
-| `260225_finness/`             | P0~P6.2✅ + P7.9✅ (XSS+Auth) + P12✅ (AGENTS.md) + P13✅ (TG chatId) + P14✅ (스킬 dedup) + P7.1 fix✅ + **P16✅ (orchestrate_done UI)** | 🟡    |
+| `260225_finness/`             | P0~P6.2✅ + P7.9✅ (XSS+Auth) + P12✅ (AGENTS.md) + P13✅ (TG chatId) + P14✅ (스킬 dedup) + P7.1 fix✅ + P16✅ (orchestrate_done UI) + **P8✅ (감사) + P9✅ (하드닝 실행)** | ✅    |
 | `260225_copilot-cli-integration/` | Copilot ACP 통합 Phase 1~6 완료 (할당량+effort+브랜딩)  | ✅    |
 | `269999_메모리 개선/`          | 메모리 고도화 (flush✅ + vector DB 📋 후순위)                 | 🔜    |
 

@@ -1,6 +1,6 @@
-# 인프라 모듈 — config · db · bus · memory · browser · mcp-sync · cli-registry
+# 인프라 모듈 — config · db · bus · memory · browser · mcp-sync · cli-registry · security · http · settings-merge
 
-> 의존 0 모듈 + 데이터 레이어 + 외부 도구 통합
+> 의존 0 모듈 + 데이터 레이어 + 외부 도구 통합 + Phase 9 보안/응답 유틸
 
 ---
 
@@ -157,3 +157,70 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 ## lib/upload.js (70L)
 
 파일 업로드 처리 + Telegram 다운로드.
+
+---
+
+## [P9.1] src/security/ — 보안 입력 검증
+
+**의존 없음** — server.js에서 라우트 핸들러 진입 시 호출.
+
+### path-guards.js (67L)
+
+| Function            | 역할                                                  |
+| ------------------- | ----------------------------------------------------- |
+| `assertSkillId(id)` | `/^[a-z0-9_-]+$/i` 검증 + 길이 제한 (256)            |
+| `assertFilename(f, opts)` | 확장자 화이트리스트 + path separator 차단 + 길이 제한 |
+| `safeResolveUnder(base, rel)` | `path.resolve` 후 base 디렉토리 탈출 검증         |
+
+### decode.js (22L)
+
+| Function                | 역할                                                  |
+| ----------------------- | ----------------------------------------------------- |
+| `decodeFilenameSafe(s)` | `decodeURIComponent` + 길이 제한 (512) + 에러 시 원본 반환 |
+
+#### 적용 라우트
+
+| 라우트                       | 적용 guard                          |
+| ---------------------------- | ----------------------------------- |
+| `/api/memory-files/:filename` | `assertFilename` + `safeResolveUnder` |
+| `/api/upload`                 | `decodeFilenameSafe`                |
+| `/api/skills/enable`, `disable` | `assertSkillId`                  |
+| `/api/claw-memory/read`, `save` | `assertFilename` + `safeResolveUnder` |
+
+---
+
+## [P9.2] src/http/ — 응답 계약
+
+**의존 없음** — Express 라우트에서 직접 사용.
+
+### response.js (25L)
+
+| Function          | 역할                                          |
+| ----------------- | --------------------------------------------- |
+| `ok(res, data)`   | `{ ok: true, ...data }` 200 응답              |
+| `fail(res, status, error, extra)` | `{ ok: false, error, ...extra }` 에러 응답 |
+
+### async-handler.js (12L)
+
+| Function             | 역할                                     |
+| -------------------- | ---------------------------------------- |
+| `asyncHandler(fn)`   | `Promise.catch(next)` 래퍼 — async 에러 전달 |
+
+### error-middleware.js (27L)
+
+| Function            | 역할                                     |
+| ------------------- | ---------------------------------------- |
+| `notFoundHandler`   | 404 → `fail(res, 404, 'not_found')`     |
+| `errorHandler`      | 글로벌 에러 → 500 + 로깅                |
+
+---
+
+## [P9.4] src/settings-merge.js — 설정 deep merge (46L)
+
+**의존 없음** — server.js `applySettingsPatch()`에서 호출.
+
+| Function                       | 역할                                           |
+| ------------------------------ | ---------------------------------------------- |
+| `mergeSettingsPatch(settings, rawPatch)` | perCli/activeOverrides/heartbeat/telegram/memory deep merge |
+
+기존 `applySettingsPatch` 내 30줄 인라인 merge 로직을 추출. 개별 CLI 설정을 덮어쓰지 않고 필드 단위로 병합.

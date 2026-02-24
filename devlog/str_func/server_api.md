@@ -1,6 +1,7 @@
-# server.js — Glue + API Routes (860L)
+# server.js — Glue + API Routes (949L)
 
 > 라우트 + 초기화 + 커맨드 ctx 구성 + Quota 조회 + CLI Registry API
+> Phase 9: `ok()`/`fail()` 표준 응답 13라우트 적용, 보안 가드 4라우트 적용, `mergeSettingsPatch` 호출
 
 ---
 
@@ -11,7 +12,7 @@
 | `getRuntimeSnapshot()`            | 세션/설정/큐/에이전트 상태 스냅샷       |
 | `clearSessionState()`             | 세션/메시지/큐 초기화                   |
 | `getLatestTelegramChatId()`       | Telegram 최신 활성 chatId 반환          |
-| `applySettingsPatch(rawPatch, o)` | 설정 패치 + 검증 + 저장 + B 재생성      |
+| `applySettingsPatch(rawPatch, o)` | 설정 패치 + `mergeSettingsPatch()` 호출 + 저장 + B 재생성 |
 | `makeWebCommandCtx()`             | Web 인터페이스용 슬래시 커맨드 ctx 생성 |
 
 ### Quota 함수
@@ -52,7 +53,11 @@ ensureDirs() → runMigration() → loadSettings() → initPromptFiles()
 | Employees      | `GET/POST /api/employees` `PUT/DELETE /api/employees/:id` `POST /api/employees/reset`                         |
 | Browser        | `POST start,stop,act(+mouse-click),vision-click,navigate,screenshot,evaluate` `GET status,tabs,snapshot,text` |
 
-> 총 40+ 엔드포인트. 모든 응답은 JSON.
+> 총 40+ 엔드포인트. 13개 라우트에 `ok()`/`fail()` 표준 응답 적용 (Phase 9.2). 4개 라우트에 보안 가드 적용 (Phase 9.1).
+>
+> **보안 가드 적용 라우트**: memory-files (`assertFilename` + `safeResolveUnder`), upload (`decodeFilenameSafe`), skills (`assertSkillId`), claw-memory (`assertFilename` + `safeResolveUnder`)
+>
+> **새 import**: `ok`/`fail` (← src/http/response.js), `mergeSettingsPatch` (← src/settings-merge.js), `assertSkillId`/`assertFilename`/`safeResolveUnder` (← src/security/path-guards.js), `decodeFilenameSafe` (← src/security/decode.js)
 
 ---
 

@@ -1,6 +1,7 @@
-# commands.js — Slash Command Registry & Dispatcher (639L)
+# commands.js — Slash Command Registry & Dispatcher (659L)
 
-> 커맨드 레지스트리 + 디스패쳐 엔진. 15개 커맨드, 3개 인터페이스 (cli/web/telegram). cli-registry 기반 동적 모델 매핑.
+> 커맨드 레지스트리 + 디스패쳐 엔진. 16개 커맨드, 3개 인터페이스 (cli/web/telegram). cli-registry 기반 동적 모델 매핑.
+> Phase 9.5: `command-contract/` 모듈로 capability 정책 + help 렌더링 통합.
 
 ---
 
@@ -72,3 +73,37 @@ Web UI의 슬래시 커맨드 드롭다운 UI 구현:
 - `GET /api/commands?interface=web` 에서 사용 가능 커맨드 로드
 - 키보드 탐색 (↑↓ Enter Esc)
 - 선택 시 `POST /api/command`로 실행
+
+---
+
+## [P9.5] command-contract/ — 인터페이스 통합 (3파일, 125L)
+
+`src/command-contract/` — COMMANDS 배열을 capability map으로 확장하여 인터페이스별 정책 통합.
+
+### catalog.js (39L)
+
+| Export                | 역할                                                    |
+| --------------------- | ------------------------------------------------------- |
+| `CAPABILITY`          | `{ full, readonly, hidden, blocked }` enum              |
+| `getCommandCatalog()` | COMMANDS + 인터페이스별 capability map 반환              |
+
+Telegram에서 `model`/`cli`는 `readonly`, 나머지는 `full`. Web에서 `hidden` 커맨드 제외.
+
+### policy.js (40L)
+
+| Function                     | 역할                                     |
+| ---------------------------- | ---------------------------------------- |
+| `getVisibleCommands(iface)`  | hidden/blocked 제외 커맨드 목록          |
+| `getExecutableCommands(iface)` | full capability만 필터                 |
+| `getTelegramMenuCommands()`  | Telegram `setMyCommands`용 (reserved 제외) |
+
+### help-renderer.js (46L)
+
+| Function            | 역할                                             |
+| ------------------- | ------------------------------------------------ |
+| `renderHelp(opts)`  | list mode (전체) 또는 detail mode (특정 커맨드)  |
+
+```js
+renderHelp({ iface: 'web' })                    // → 전체 목록
+renderHelp({ iface: 'web', commandName: 'help' }) // → 상세
+```
