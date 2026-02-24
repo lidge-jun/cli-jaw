@@ -250,7 +250,7 @@ async function bootstrap() {
     await loadSettings();
     loadCliStatus();
     loadMemory();
-    loadMessages();
+    // loadMessages() is handled by ws.js onopen (clear + reload)
     loadEmployees();
     initHeartbeatBadge();
     initAppName();

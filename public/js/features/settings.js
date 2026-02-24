@@ -424,6 +424,11 @@ function renderCliStatus(data) {
 
     let html = '';
 
+    if (!cliStatus || typeof cliStatus !== 'object') {
+        if (el) el.innerHTML = '<div style="color:var(--text-dim);font-size:11px">Failed to load CLI status</div>';
+        return;
+    }
+
     for (const [name, info] of Object.entries(cliStatus)) {
         const q = quota[name];
         const dotClass = info.available ? 'ok' : 'missing';

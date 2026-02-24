@@ -67,7 +67,7 @@ function renderMemFiles(files) {
 
 export async function deleteMemFile(name) {
     if (!confirm('Delete ' + name + '?')) return;
-    apiFire('/api/memory-files/' + name, 'DELETE');
+    await apiJson('/api/memory-files/' + name, 'DELETE');
     openMemoryModal();
 }
 

@@ -8,150 +8,15 @@ import { createWorklog, readLatestWorklog, appendToWorklog, updateMatrix, update
 
 const MAX_ROUNDS = 3;
 
+// ─── Parsing/Triage (extracted to orchestrator-parser.js) ──
+import {
+    isContinueIntent, needsOrchestration,
+    parseSubtasks, parseDirectAnswer, stripSubtaskJSON, parseVerdicts,
+} from './orchestrator-parser.js';
+export { isContinueIntent, needsOrchestration, parseSubtasks, parseDirectAnswer, stripSubtaskJSON };
+
 // ─── Phase 정의 ──────────────────────────────────────
 const PHASES = { 1: '기획', 2: '기획검증', 3: '개발', 4: '디버깅', 5: '통합검증' };
-
-// "이어서 해줘" 계열은 명시적인 짧은 명령만 continue intent로 취급
-const CONTINUE_PATTERNS = [
-    /^\/?continue$/i,
-    /^이어서(?:\s*해줘)?$/i,
-    /^계속(?:\s*해줘)?$/i,
-];
-
-export function isContinueIntent(text) {
-    const t = String(text || '').trim();
-    if (!t) return false;
-    return CONTINUE_PATTERNS.some(re => re.test(t));
-}
-
-// ─── Message Triage: 복잡한 작업만 orchestrate ───────
-
-const CODE_KEYWORDS = /\.(js|ts|jsx|tsx|py|md|json|css|html|sql|yml|yaml|sh|go|rs|swift)|구현|작성|만들어|수정|코딩|리팩|버그|에러|디버그|테스트|빌드|설치|배포|삭제|추가|변경|생성|개발|엔드포인트|서버|라우트|스키마|컴포넌트|모듈|함수|클래스|\bAPI\b|\bDB\b/i;
-const FILE_PATH_PATTERN = /(?:src|bin|public|lib|devlog|config|components?|pages?|api)\//i;
-const MULTI_TASK_PATTERN = /(?:그리고|다음에|먼저|또한|추가로|\n\n|\d+\.\s)/;
-
-export function needsOrchestration(text) {
-    const t = String(text || '').trim();
-    if (!t) return false;
-
-    let signals = 0;
-
-    // Signal 1: 길이 (80자 이상)
-    if (t.length >= 80) signals++;
-
-    // Signal 2: 코드 키워드 카운트
-    const codeMatches = t.match(CODE_KEYWORDS);
-    if (codeMatches) signals++;
-    // 2개 이상의 서로 다른 코드 키워드 → 추가 signal
-    const allCodeMatches = [...new Set((t.match(new RegExp(CODE_KEYWORDS.source, 'gi')) || []))];
-    if (allCodeMatches.length >= 2) signals++;
-
-    // Signal 3: 파일 경로 패턴
-    if (FILE_PATH_PATTERN.test(t)) signals++;
-
-    // Signal 4: 멀티 태스크 신호
-    if (MULTI_TASK_PATTERN.test(t)) signals++;
-
-    return signals >= 2;
-}
-
-const PHASE_PROFILES = {
-    frontend: [1, 2, 3, 4, 5],
-    backend: [1, 2, 3, 4, 5],
-    data: [1, 2, 3, 4, 5],
-    docs: [1, 3, 5],
-    custom: [3],
-};
-
-const PHASE_INSTRUCTIONS = {
-    1: `[기획] 이 계획의 실현 가능성을 검증하세요. 코드 작성 금지.
-     - 필수: 영향 범위 분석 (어떤 파일들이 변경되는가)
-     - 필수: 의존성 확인 (import/export 충돌 없는가)
-     - 필수: 엣지 케이스 목록 (null/empty/error 처리)
-     - worklog에 분석 결과를 기록하세요.`,
-    2: `[기획검증] 설계 문서를 검증하고 누락된 부분을 보완하세요.
-     - 필수: 파일 변경 목록과 실제 코드 대조 (함수명, 라인 번호)
-     - 필수: 충돌 검사 (다른 agent 작업과 같은 파일 수정하는가)
-     - 필수: 테스트 전략 수립 (verifyable 기준 정의)
-     - worklog에 검증 결과를 기록하세요.`,
-    3: `[개발] 문서를 참조하여 코드를 작성하세요.
-     - 필수: 변경된 파일 목록과 단위 당 핵심 변경 설명
-     - 필수: 기존 export/import 깨뜨리지 않았는지 확인
-     - 필수: 코드가 lint/build 에러 없이 동작하는지 검증
-     - worklog Execution Log에 변경 로그를 기록하세요.`,
-    4: `[디버깅] 코드를 실행/테스트하고 버그를 수정하세요.
-     - 필수: 실행 결과 스크린샷/로그 첨부
-     - 필수: 발견된 버그 목록과 수정 내역
-     - 필수: 엣지 케이스 테스트 결과 (null/empty/error)
-     - worklog에 디버그 로그를 기록하세요.`,
-    5: `[통합검증] 다른 영역과의 통합을 검증하세요.
-     - 필수: 다른 agent 산출물과의 통합 테스트
-     - 필수: 최종 문서 업데이트 (README, 변경로그)
-     - 필수: 전체 워크플로우 동작 확인
-     - worklog에 최종 검증 결과를 기록하세요.`,
-};
-
-// ─── JSON Parsing (export 유지 — agent.js가 import) ──
-
-export function parseSubtasks(text) {
-    if (!text) return null;
-    const fenced = text.match(/```json\n([\s\S]*?)\n```/);
-    if (fenced) {
-        try { return JSON.parse(fenced[1]).subtasks || null; } catch (e) { console.debug('[orchestrator:subtask] fenced JSON parse failed', { preview: String(fenced[1]).slice(0, 80) }); }
-    }
-    const raw = text.match(/(\{[\s\S]*"subtasks"\s*:\s*\[[\s\S]*\]\s*\})/);
-    if (raw) {
-        try { return JSON.parse(raw[1]).subtasks || null; } catch (e) { console.debug('[orchestrator:subtask] raw JSON parse failed', { preview: String(raw[1]).slice(0, 80) }); }
-    }
-    return null;
-}
-
-export function parseDirectAnswer(text) {
-    if (!text) return null;
-    // Fenced JSON block
-    const fenced = text.match(/```json\n([\s\S]*?)\n```/);
-    if (fenced) {
-        try {
-            const obj = JSON.parse(fenced[1]);
-            if (obj.direct_answer && (!obj.subtasks || obj.subtasks.length === 0)) {
-                return obj.direct_answer;
-            }
-        } catch { /* expected: fenced JSON may not contain direct_answer */ }
-    }
-    // Raw JSON
-    const raw = text.match(/(\{[\s\S]*"direct_answer"\s*:[\s\S]*\})/);
-    if (raw) {
-        try {
-            const obj = JSON.parse(raw[1]);
-            if (obj.direct_answer && (!obj.subtasks || obj.subtasks.length === 0)) {
-                return obj.direct_answer;
-            }
-        } catch { /* expected: raw JSON may not contain direct_answer */ }
-    }
-    return null;
-}
-
-export function stripSubtaskJSON(text) {
-    return text
-        .replace(/```json\n[\s\S]*?\n```/g, '')
-        .replace(/\{[\s\S]*"subtasks"\s*:\s*\[[\s\S]*?\]\s*\}/g, '')
-        .trim();
-}
-
-// ─── Verdict JSON Parsing (이중 전략) ────────────────
-
-function parseVerdicts(text) {
-    if (!text) return null;
-    try {
-        const fenced = text.match(/```(?:json)?\n([\s\S]*?)\n```/);
-        if (fenced) return JSON.parse(fenced[1]);
-    } catch { /* expected: fenced JSON may not exist or be malformed */ }
-    try {
-        const raw = text.match(/\{[\s\S]*"verdicts"[\s\S]*\}/);
-        if (raw) return JSON.parse(raw[0]);
-    } catch { /* expected: raw JSON may not exist or be malformed */ }
-    return null;
-}
 
 // ─── Per-Agent Phase Tracking ────────────────────────
 

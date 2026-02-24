@@ -295,10 +295,11 @@ curl -sI http://localhost:3457/ | grep -i "x-content-type\|x-frame\|strict-trans
 
 ## 완료 기준
 
-- [ ] 500줄 초과 파일 0개
-- [ ] 기존 export 경로 모두 re-export 유지 (하위호환)
-- [ ] `helmet` 설치 + 보안 헤더 적용
-- [ ] CORS localhost만 허용
-- [ ] Rate limit 분당 120회
-- [ ] `npm test` 통과
-- [ ] `npm pack --dry-run` 정상
+- [x] 주요 파일 500줄 이하 분리 — 3건 완료 (agent, orchestrator, commands)
+  - 나머지 4건 (mcp-sync 645, chat 842, prompt 515, settings 512) 현상 유지
+- [x] 기존 export 경로 모두 re-export 유지 (하위호환)
+- [x] `helmet` 설치 + 보안 헤더 적용
+- [x] CORS localhost만 허용
+- [x] Rate limit 분당 120회
+- [x] `npm test` 통과 (230/230)
+

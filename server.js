@@ -2,6 +2,7 @@
 // All business logic lives in src/ modules.
 
 import express from 'express';
+import helmet from 'helmet';
 import { log } from './src/logger.js';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
@@ -179,7 +180,51 @@ const server = createServer(app);
 const wss = new WebSocketServer({ server });
 
 setWss(wss);
-app.use(express.json());
+
+// ─── Security Headers ───────────────────────────────
+app.use(helmet({
+    contentSecurityPolicy: false, // CDN 사용 중이므로 비활성
+    crossOriginEmbedderPolicy: false,
+}));
+
+// ─── CORS (localhost only) ──────────────────────────
+const ALLOWED_ORIGINS = new Set([
+    'http://localhost:3457',
+    'http://127.0.0.1:3457',
+    `http://localhost:${process.env.PORT || 3457}`,
+    `http://127.0.0.1:${process.env.PORT || 3457}`,
+]);
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (!origin || ALLOWED_ORIGINS.has(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin || '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type,X-Filename');
+    }
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    next();
+});
+
+// ─── Rate Limiting (in-memory, 120/min) ─────────────
+const rateLimitMap = new Map();
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, w] of rateLimitMap) {
+        if (now - w.start > 120_000) rateLimitMap.delete(ip);
+    }
+}, 600_000);
+app.use((req, res, next) => {
+    const ip = req.ip;
+    const now = Date.now();
+    const window = rateLimitMap.get(ip) || { count: 0, start: now };
+    if (now - window.start > 60_000) { window.count = 0; window.start = now; }
+    window.count++;
+    rateLimitMap.set(ip, window);
+    if (window.count > 120) return res.status(429).json({ error: 'rate_limit' });
+    next();
+});
+
+app.use(express.json({ limit: '1mb' }));
 app.use(express.static(join(__dirname, 'public')));
 
 // WebSocket incoming messages
