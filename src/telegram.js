@@ -105,6 +105,12 @@ function markChatActive(chatId) {
     // Refresh insertion order so Array.from(set).at(-1) points to latest active chat.
     telegramActiveChatIds.delete(chatId);
     telegramActiveChatIds.add(chatId);
+    // Auto-persist to settings.json so forwarding survives server restart
+    const allowed = settings.telegram?.allowedChatIds || [];
+    if (!allowed.includes(chatId)) {
+        settings.telegram.allowedChatIds = [...allowed, chatId];
+        import('./config.js').then(m => m.saveSettings(settings)).catch(() => { });
+    }
 }
 
 function detachTelegramForwarder() {
@@ -212,8 +218,14 @@ export function initTelegram() {
     }
 
     if (!settings.telegram?.enabled || !settings.telegram?.token) {
-        console.log('[tg] ⏸️  Telegram pending (disabled or no token)');
+        console.log('[tg] ⏭️  Telegram pending (disabled or no token)');
         return;
+    }
+
+    // Pre-seed telegramActiveChatIds from persisted allowedChatIds
+    if (settings.telegram.allowedChatIds?.length) {
+        for (const id of settings.telegram.allowedChatIds) telegramActiveChatIds.add(id);
+        console.log(`[tg] Pre-seeded ${settings.telegram.allowedChatIds.length} chat(s) from allowedChatIds`);
     }
 
     const ipv4Agent = new https.Agent({ family: 4 });

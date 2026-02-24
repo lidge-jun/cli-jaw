@@ -32,10 +32,10 @@ Keep your normal text response in stdout.
 
 ```bash
 TOKEN=$(jq -r '.telegram.token' ~/.cli-claw/settings.json)
-CHAT_ID=8231528245   # user-provided or previously known
+CHAT_ID=$(jq -r '.telegram.allowedChatIds[-1]' ~/.cli-claw/settings.json)
 ```
 
-If `CHAT_ID` is unknown, recover latest active chat via local endpoint text ping:
+If `CHAT_ID` is `null` (no previous Telegram message), recover via local endpoint:
 
 ```bash
 CHAT_ID=$(curl -sS -X POST http://localhost:3457/api/telegram/send \
