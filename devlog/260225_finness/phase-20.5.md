@@ -111,6 +111,9 @@
 
 ### 파일: `public/index.html`
 
+> ⚠️ `<div>` → `<nav>`/`<aside>` 변경 시: CSS selector는 `.sidebar-left` 클래스 기반이라 OK.
+> JS에서 `querySelector('.sidebar-left')` 등도 클래스 기반이라 태그 변경 영향 없음 확인됨.
+
 ```diff
  <!-- Left Sidebar -->
 -<div class="sidebar-left">
@@ -181,19 +184,29 @@
 
 ### 파일: `public/css/layout.css`
 
-> ⚠️ 기존 @media (max-width: 900px)에서 `body.left-expanded` / `body.right-expanded` 클래스 시스템을 이미 사용 중.
-> 새 모바일 룰은 이 시스템과 통합해야 함. `.sidebar-left.open` 같은 별도 클래스 사용 금지.
+> ⚠️ **900px ↔ 768px 충돌 주의**:
+> - 기존 `@media (max-width: 900px)`는 `body:not(.left-expanded)` 패턴으로 사이드바 **축소** (grid 유지)
+> - 새 768px 규칙은 `transform: translateX(-100%)` 로 사이드바 **완전 숨김** (grid → 1fr)
+> - **769~900px 구간에서 두 규칙 동시 적용 방지**: 900px 규칙 안에 768px 이하 분기 추가
+> - `.sidebar-left.open` 같은 별도 클래스 사용 금지 — `body.left-expanded` 패턴 통합
 
 ```diff
--/* 기존 900px 규칙은 유지하되, 768px 이하 추가 강화 */
-+/* ─── Mobile: ≤ 768px 추가 강화 (기존 900px 규칙과 통합) ─── */
+ /* Responsive — auto-collapse under 900px */
+ @media (max-width: 900px) {
++    /* 769~900px: 기존 축소 규칙 유지 (변경 없음) */
+     body:not(.left-expanded) {
+         --sidebar-left-w: var(--sidebar-collapsed-w);
+     }
+     /* ... 기존 규칙 그대로 ... */
+ }
+
++/* ─── Mobile: ≤ 768px — 사이드바 완전 숨김 + 슬라이드 오버레이 ─── */
  @media (max-width: 768px) {
      body {
          grid-template-columns: 1fr;
          grid-template-areas: "main";
      }
 
-+    /* 기존 body.left-expanded / body.right-expanded 클래스와 통합 */
      .sidebar-left,
      .sidebar-right {
          position: fixed;
@@ -203,6 +216,8 @@
          width: 280px;
          transform: translateX(-100%);
          transition: transform 0.2s ease;
++        /* 900px 규칙의 --sidebar-collapsed-w 오버라이드 */
++        min-width: 280px !important;
      }
 
      .sidebar-right {
@@ -211,14 +226,19 @@
          transform: translateX(100%);
      }
 
-+    /* 기존 토글 시스템과 동일한 body 클래스 사용 */
-+    body.left-expanded .sidebar-left {
++    /* 기존 body 클래스 시스템 재사용 */
+     body.left-expanded .sidebar-left {
          transform: translateX(0);
      }
 
-+    body.right-expanded .sidebar-right {
+     body.right-expanded .sidebar-right {
          transform: translateX(0);
      }
+
++    /* 768px 이하에서 900px 축소 규칙 무효화 */
++    body:not(.left-expanded) .sidebar-left > *:not(.sidebar-toggle) {
++        display: block;  /* 900px 규칙의 display:none 오버라이드 */
++    }
 
      /* Mobile toggle buttons */
      .mobile-nav {
@@ -234,6 +254,12 @@
          gap: 8px;
          justify-content: space-around;
      }
+
++    /* 모바일에서 데스크탑 토글 버튼 숨김 */
++    .sidebar-toggle { display: none; }
++
++    /* chat input 하단 네비 공간 확보 */
++    .chat-footer { padding-bottom: 56px; }
  }
 +
 +@media (min-width: 769px) {
@@ -253,17 +279,18 @@
 
 ### 파일: `public/js/main.js` (모바일 토글 바인딩)
 
+> ⚠️ `sidebar.js`에 이미 `toggleLeft()`/`toggleRight()` + `body.classList.toggle('left-expanded')` 로직 있음.
+> 새 모바일 버튼은 **기존 sidebar.js 함수를 재사용** — 중복 바인딩 금지.
+
 ```diff
-+// ── Mobile sidebar toggle (기존 body 클래스 시스템 재사용) ──
-+document.getElementById('mobileMenuLeft')?.addEventListener('click', () => {
-+    document.body.classList.toggle('left-expanded');
-+    document.body.classList.remove('right-expanded');
-+});
-+document.getElementById('mobileMenuRight')?.addEventListener('click', () => {
-+    document.body.classList.toggle('right-expanded');
-+    document.body.classList.remove('left-expanded');
-+});
++// ── Mobile sidebar toggle (sidebar.js 함수 재사용) ──
++import { toggleLeft, toggleRight } from './features/sidebar.js';
++document.getElementById('mobileMenuLeft')?.addEventListener('click', toggleLeft);
++document.getElementById('mobileMenuRight')?.addEventListener('click', toggleRight);
 ```
+
+> 기존 문서의 인라인 `classList.toggle` 코드 대신 sidebar.js export 재사용.
+> sidebar.js에서 `toggleLeft`/`toggleRight`를 export하지 않는 경우 먼저 export 추가 필요.
 
 ---
 
