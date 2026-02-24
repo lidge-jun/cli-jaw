@@ -11,7 +11,7 @@
 
 ```text
 cli-claw/
-├── server.js                 ← 라우트 + 글루 + ok/fail + security guards + activeOverrides (949L)
+├── server.js                 ← 라우트 + 글루 + ok/fail + security guards + activeOverrides (962L)
 ├── lib/
 │   ├── mcp-sync.js           ← MCP 통합 + 스킬 복사 + DEDUP_EXCLUDED + 글로벌 설치 + symlink 보호 (645L)
 │   ├── upload.js             ← 파일 업로드 + Telegram 다운로드 (70L)
@@ -19,19 +19,19 @@ cli-claw/
 ├── src/
 │   ├── cli-registry.js       ← [NEW] 5개 CLI/모델 단일 소스 레지스트리 + effortNote (88L)
 │   ├── acp-client.js         ← [NEW] Copilot ACP JSON-RPC 클라이언트 + optionId 폴백 + activityTimeout + _handleLine heartbeat (315L)
-│   ├── config.js             ← CLAW_HOME, settings, CLI 탐지 (cli-registry 기반), APP_VERSION (177L)
+│   ├── config.js             ← CLAW_HOME, settings, CLI 탐지 (cli-registry 기반), APP_VERSION (187L)
 │   ├── db.js                 ← SQLite 스키마 + prepared statements + trace (84L)
 │   ├── bus.js                ← WS + 내부 리스너 broadcast + removeBroadcastListener(fn) (18L)
 │   ├── events.js             ← NDJSON 파싱 + dedupe key + ACP update 파싱 + logEventSummary + test helpers (322L)
-│   ├── commands.js           ← 슬래시 커맨드 레지스트리 + 디스패쳐 (cli-registry import) (639L)
-│   ├── agent.js              ← CLI spawn + ACP 분기 + model+effort config.json 동기화 + activeOverrides + origin 전달 + ctx reset + 스트림 + 큐 + 메모리 flush (619L)
+│   ├── commands.js           ← 슬래시 커맨드 레지스트리 + 디스패쳐 (cli-registry import) (658L)
+│   ├── agent.js              ← CLI spawn + ACP 분기 + model+effort config.json 동기화 + activeOverrides + origin 전달 + ctx reset + 스트림 + 큐 + 메모리 flush (624L)
 │   ├── orchestrator.js       ← Orchestration v2 + triage + 순차실행 + origin 전달 + phase skip + AI dispatch 재진입 (637L)
 │   ├── worklog.js            ← Worklog CRUD + phase matrix + PHASES (153L)
 │   ├── telegram.js           ← Telegram 봇 + forwarder lifecycle + origin 필터링 + chatId auto-persist + 디바운스 tool 업데이트 (493L)
 │   ├── telegram-forwarder.js ← [NEW] Telegram 포워딩 헬퍼 추출 (escape, chunk, createForwarder) (105L)
 │   ├── heartbeat.js          ← Heartbeat 잡 스케줄 + pending queue + fs.watch (107L)
 │   ├── prompt.js             ← 프롬프트 + 스킬 + getMergedSkills i18n 필드 통과 + 서브에이전트 v2 + phase skip + EN defaults + 브라우저 커맨드 인라인 + Telegram bot-first + dispatch 정책 교정 (515L)
-│   ├── memory.js             ← Persistent Memory grep 기반 (128L)
+│   ├── memory.js             ← Persistent Memory grep 기반 (129L)
 │   ├── settings-merge.js     ← [P9.4] perCli/activeOverrides deep merge 추출 (46L)
 │   ├── security/             ← [P9.1] 보안 입력 검증
 │   │   ├── path-guards.js    ← assertSkillId, assertFilename, safeResolveUnder (67L)
@@ -49,7 +49,7 @@ cli-claw/
 │       ├── actions.js        ← snapshot/click/type/navigate/screenshot/mouseClick (179L)
 │       ├── vision.js         ← vision-click 파이프라인 + Codex provider (138L)
 │       └── index.js          ← re-export hub (13L)
-├── public/                   ← Web UI (ES Modules, 23 files, ~3957L)
+├── public/                   ← Web UI (ES Modules, 25 files, ~4272L)
 │   ├── index.html            ← 뼈대 (443L, CDN 4개 + data-theme + ◀/▶ 토글)
 │   ├── css/                  ← 6 files (1355L)
 │   │   ├── variables.css     ← 커스텀 프로퍼티 + 3단 폰트 + 라이트 팔레트 + 사이드바 변수 (126L)
@@ -68,7 +68,7 @@ cli-claw/
 │   ├── postinstall.js        ← npm install 후 5-CLI 자동설치(bun→npm 폴백) + MCP + 스킬 + Copilot (212L)
 │   └── commands/
 │       ├── serve.js          ← 서버 시작 (--port/--host/--open, .env 자동감지)
-│       ├── chat.js           ← 터미널 채팅 TUI (3모드, 슬래시커맨드, 자동완성, 844L)
+│       ├── chat.js           ← 터미널 채팅 TUI (3모드, 슬래시커맨드, 자동완성, 842L)
 │       ├── init.js           ← 초기화 마법사
 │       ├── doctor.js         ← 진단 (12개 체크 — 5 CLI 포함, --json)
 │       ├── status.js         ← 서버 상태 (--json)
@@ -77,7 +77,7 @@ cli-claw/
 │       ├── employee.js       ← 직원 관리 (reset, REST API 호출, 67L)
 │       ├── reset.js          ← 전체 초기화 (MCP/스킬/직원/세션, y/N 확인)
 │       ├── memory.js         ← 메모리 CLI (search/read/save/list/init)
-│       └── browser.js        ← 브라우저 CLI (17개 서브커맨드, +vision-click, 239L)
+│       └── browser.js        ← 브라우저 CLI (17개 서브커맨드, +vision-click, 240L)
 ├── tests/                    ← 회귀 방지 테스트 (216 tests)
 │   ├── events.test.js        ← 이벤트 파서 단위 테스트 (dedupe, fallback 등)
 │   ├── events-acp.test.js    ← ACP session/update 이벤트 테스트
