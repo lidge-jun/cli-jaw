@@ -1,6 +1,6 @@
 # CLI-CLAW — Source Structure & Function Reference
 
-> 마지막 검증: 2026-02-25T04:40 (server.js 947L / agent.js 619L / orchestrator.js 584L / prompt.js 502L / telegram.js 470L / acp-client.js 315L / cli-registry.js 88L)
+> 마지막 검증: 2026-02-25T05:09 (server.js 947L / agent.js 619L / orchestrator.js 584L / prompt.js 501L / telegram.js 493L / acp-client.js 315L / cli-registry.js 88L)
 >
 > 상세 모듈 문서는 [서브 문서](#서브-문서)를 참조하세요.
 
@@ -26,10 +26,10 @@ cli-claw/
 │   ├── agent.js              ← CLI spawn + ACP 분기 + model+effort config.json 동기화 + activeOverrides + origin 전달 + ctx reset + 스트림 + 큐 + 메모리 flush (619L)
 │   ├── orchestrator.js       ← Orchestration v2 + triage + 순차실행 + origin 전달 + phase skip (584L)
 │   ├── worklog.js            ← Worklog CRUD + phase matrix + PHASES (153L)
-│   ├── telegram.js           ← Telegram 봇 + forwarder lifecycle + origin 필터링 + 디바운스 tool 업데이트 (470L)
+│   ├── telegram.js           ← Telegram 봇 + forwarder lifecycle + origin 필터링 + chatId auto-persist + 디바운스 tool 업데이트 (493L)
 │   ├── telegram-forwarder.js ← [NEW] Telegram 포워딩 헬퍼 추출 (escape, chunk, createForwarder) (105L)
 │   ├── heartbeat.js          ← Heartbeat 잡 스케줄 + pending queue + fs.watch (107L)
-│   ├── prompt.js             ← 프롬프트 + 스킬 + 서브에이전트 v2 + phase skip + EN defaults (497L)
+│   ├── prompt.js             ← 프롬프트 + 스킬 + getMergedSkills i18n 필드 통과 + 서브에이전트 v2 + phase skip + EN defaults (501L)
 │   ├── memory.js             ← Persistent Memory grep 기반 (128L)
 │   └── browser/              ← Chrome CDP 제어
 │       ├── connection.js     ← Chrome 탐지/launch/CDP 연결 (71L)
@@ -82,7 +82,7 @@ cli-claw/
 ├── TESTS.md                  ← 테스트 상세 (README에서 분리)
 ├── scripts/                  ← [NEW] 도구 스크립트
 │   └── check-copilot-gap.js  ← 문서-코드 갭 검사
-├── skills_ref/               ← 번들 스킬 (101개, registry.json 107항목)
+└── skills_ref/               ← 번들 스킬 (104개, registry.json 104항목)
 │   └── registry.json
 └── devlog/                   ← MVP 12 Phase + Post-MVP 11개 폴더
 ```
@@ -156,15 +156,15 @@ graph LR
 
 ## 핵심 주의 포인트
 
-1. **큐**: busy 시 queue → agent 종료 후 자동 처리
-2. **세션 무효화**: CLI 변경 시 session_id 제거
-3. **직원 dispatch**: B 프롬프트에 JSON subtask 포맷
-4. **메모리 flush**: `forceNew` spawn → 메인 세션 분리, threshold개 메시지만 요약 (줄글 1-3문장)
-5. **메모리 주입**: MEMORY.md = 매번, session memory = `injectEvery` cycle마다 (기본 x2)
-6. **에러 처리**: 429/auth 커스텀 메시지
-7. **IPv4 강제**: `--dns-result-order=ipv4first` + Telegram
-8. **MCP 동기화**: mcp.json → 5개 CLI 포맷 자동 변환 (Claude, Codex, Gemini, OpenCode, Copilot)
-9. **이벤트 dedupe**: Claude `stream_event`/`assistant` 중복 방지 (dedupe key + `hasClaudeStreamEvents` 플래그)
+1.  **큐**: busy 시 queue → agent 종료 후 자동 처리
+2.  **세션 무효화**: CLI 변경 시 session_id 제거
+3.  **직원 dispatch**: B 프롬프트에 JSON subtask 포맷
+4.  **메모리 flush**: `forceNew` spawn → 메인 세션 분리, threshold개 메시지만 요약 (줄글 1-3문장)
+5.  **메모리 주입**: MEMORY.md = 매번, session memory = `injectEvery` cycle마다 (기본 x2)
+6.  **에러 처리**: 429/auth 커스텀 메시지
+7.  **IPv4 강제**: `--dns-result-order=ipv4first` + Telegram
+8.  **MCP 동기화**: mcp.json → 5개 CLI 포맷 자동 변환 (Claude, Codex, Gemini, OpenCode, Copilot)
+9.  **이벤트 dedupe**: Claude `stream_event`/`assistant` 중복 방지 (dedupe key + `hasClaudeStreamEvents` 플래그)
 10. **Telegram origin**: `tgProcessing` 전역 bool 제거, `origin` 메타 기반으로 포워딩 판단
 11. **Forwarder lifecycle**: named handler attach/detach로 `initTelegram()` 재호출 시 중복 등록 방지
 12. **symlink 보호**: 실디렉토리 충돌 시 backup 우선 (무조건 삭제 금지)
@@ -179,6 +179,9 @@ graph LR
 21. **Copilot model sync**: `~/.copilot/config.json`에 model + effort 모두 동기화 (spawn 시 자동)
 22. **activeOverrides**: Active CLI 모델/effort 변경은 `activeOverrides[cli]`에 저장, Sub-Agent는 `perCli`만 참조 → 상호 간섭 없음
 23. **Copilot spawn 로그**: `[claw:main] Spawning: copilot --acp --model {model} [{permissions}]` 형태로 실제 ACP args 표시
+24. **Telegram chatId auto-persist**: `markChatActive()` → `allowedChatIds` 자동 저장, 서버 재시작 시 pre-seed → web/cli 포워딩 즉시 동작
+25. **Skills dedup**: `frontend-design`/`webapp-testing` 중복 제거, `kreuzberg` phantom 정리 (107→104)
+26. **Skills i18n pass-through**: `getMergedSkills()` active 스킬에 `name_en`/`desc_en` 필드 통과 → locale 전환 시 영어 표시
 
 ---
 
@@ -207,7 +210,7 @@ graph LR
 | `260224_skill/`               | 스킬 큐레이션 + Telegram Send + Voice STT (P0~P2)           | 🟡    |
 | `260224_vision/`              | Vision Click P1✅ P2✅ — P3 멀티프로바이더 미구현              | 🟡    |
 | `260224_orch/`                | 오케스트레이션 v2 P0✅ P1✅ P2✅ P3✅ P4✅ P5✅                   | ✅    |
-| `260225_finness/`             | P0~P6.2✅ + P7.2✅ (textarea auto-expand) + P7.9✅ (XSS+Auth) + P12✅ (AGENTS.md 통합) + P6.9/P7 (i18n 📋) | 🟡    |
+| `260225_finness/`             | P0~P6.2✅ + P7.9✅ (XSS+Auth) + P12✅ (AGENTS.md) + P13✅ (TG chatId) + P14✅ (스킬 dedup) + P7.1 fix✅ | 🟡    |
 | `260225_copilot-cli-integration/` | Copilot ACP 통합 Phase 1~6 완료 (할당량+effort+브랜딩)  | ✅    |
 | `269999_메모리 개선/`          | 메모리 고도화 (flush✅ + vector DB 📋 후순위)                 | 🔜    |
 

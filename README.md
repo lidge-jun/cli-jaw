@@ -6,7 +6,7 @@
 
 *One interface. Five CLIs. Zero API bans.*
 
-[![Tests](https://img.shields.io/badge/tests-70%20pass-brightgreen)](#-tests)
+[![Tests](https://img.shields.io/badge/tests-116%20pass-brightgreen)](#-tests)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
 
@@ -172,7 +172,7 @@ cli-claw chat       # Or use terminal TUI
 | **Event Deduplication** | Claude `stream_event`/`assistant` overlap prevention | ⭐⭐⭐ |
 | **Dark/Light Theme** | ☀️/🌙 toggle, 13 semantic CSS vars, highlight.js sync | ⭐⭐ |
 | **Responsive Sidebar** | Collapsible ◀/▶, auto-collapse <900px, localStorage persist | ⭐⭐ |
-| **89 Unit Tests** | `node:test` — zero deps, events + telegram + registry + commands + sanitize | ⭐⭐ |
+| **89 Unit Tests** | `node:test` — zero deps, events + telegram + registry + commands + sanitize + i18n | ⭐⭐ |
 | **Unified AGENTS.md** | `{workDir}/AGENTS.md` — Codex + Copilot + OpenCode unified system prompt | ⭐⭐⭐ |
 | **XSS Hardening** | DOMPurify + regex fallback + Mermaid strict mode | ⭐⭐ |
 | **Auto-Expand Input** | Chat textarea grows up to 8 lines, resets on send | ⭐ |
@@ -376,7 +376,7 @@ cli-claw reset                      # Full reset (MCP/skills/employees/session)
 ## 🧪 Tests
 
 ```bash
-npm test    # 70 tests, ~90ms, zero external dependencies
+npm test    # 116 tests, ~160ms, zero external dependencies
 ```
 
 See [TESTS.md](TESTS.md) for full test coverage details.

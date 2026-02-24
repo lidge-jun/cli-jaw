@@ -4,7 +4,7 @@
 
 ---
 
-## telegram.js — Telegram Bot + Forwarder Lifecycle (439L)
+## telegram.js — Telegram Bot + Forwarder Lifecycle (493L)
 
 | Function                                              | 역할                                                            |
 | ----------------------------------------------------- | --------------------------------------------------------------- |
@@ -20,7 +20,7 @@
 | `escapeHtmlTg(text)`                                  | Telegram HTML 이스케이프                                        |
 | `markdownToTelegramHtml(md)`                          | Markdown → Telegram HTML 변환                                   |
 | `chunkTelegramMessage(text)`                          | 4096자 단위 메시지 분할                                         |
-| `markChatActive(chatId)`                              | 활성 chatId Set 관리                                            |
+| `markChatActive(chatId)`                              | 활성 chatId Set 관리 + `allowedChatIds` 자동 저장 (persist)      |
 
 ### 의존 모듈
 
@@ -34,6 +34,7 @@ initTelegram():
   2. telegramBot 존재 시 stop() + null
   3. Grammy Bot 인스턴스 생성
   4. TELEGRAM_ALLOWLIST로 사용자 필터
+  4.5. allowedChatIds 로드 (persist)
   5. 핸들러 등록:
      - on("message:text") → 슬래시 커맨드 or 일반 메시지
      - on("message:photo") → 사진 다운로드 → agent
