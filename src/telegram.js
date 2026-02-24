@@ -51,13 +51,13 @@ export function orchestrateAndCollect(prompt) {
     return new Promise((resolve) => {
         let collected = '';
         let timeout;
-        const IDLE_TIMEOUT = 240000;
+        const IDLE_TIMEOUT = 1200000;
 
         function resetTimeout() {
             clearTimeout(timeout);
             timeout = setTimeout(() => {
                 removeBroadcastListener(handler);
-                resolve(collected || '⏰ 시간 초과 (4분 무응답)');
+                resolve(collected || '⏰ 시간 초과 (20분 무응답)');
             }, IDLE_TIMEOUT);
         }
 
