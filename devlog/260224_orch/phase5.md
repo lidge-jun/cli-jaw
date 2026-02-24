@@ -95,7 +95,7 @@ export function isContinueIntent(text) { ... }
 
 | 파일                         | 작업                                                                      | L    |
 | ---------------------------- | ------------------------------------------------------------------------- | ---- |
-| `src/orchestrator.js`        | [MODIFY] `isContinueIntent` 공용 함수                                     | 407L |
+| `src/orchestrator.js`        | [MODIFY] `isContinueIntent` 공용 함수, needsOrchestration, 순차 실행      | 583L |
 | `server.js`                  | [MODIFY] `seedDefaultEmployees`, `resetSkills` ctx, continue-before-queue | 832L |
 | `src/agent.js`               | [MODIFY] `processQueue` continue 분기                                     | 427L |
 | `src/telegram.js`            | [MODIFY] `isContinueIntent` 분기                                          | 382L |

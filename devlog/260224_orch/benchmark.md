@@ -48,7 +48,7 @@
 20. /tmp/bench/quiz.py에 퀴즈 게임 만들어줘 (5문제, 점수 계산)
 ```
 
-**확인**: orchestrate pipeline 실행, 순차 실행 로그, 파일 생성 확인
+**확인**: orchestrate pipeline 실행, **순차 실행** 로그, 파일 생성 확인
 
 ---
 
@@ -62,7 +62,7 @@
 25. /tmp/bench/api/ 폴더에 REST API 서버 만들어줘 (CRUD, SQLite, 에러 핸들링, 테스트 포함)
 ```
 
-**확인**: 멀티 에이전트 순차 실행, 파일 충돌 없음, worklog 기록
+**확인**: 멀티 에이전트 **순차 실행** (agent 1 done → agent 2 start), 파일 충돌 없음, worklog 기록
 
 ---
 
@@ -76,7 +76,7 @@
 30. README.md 업데이트하고, str_func.md 라인 카운트 갱신하고, phase6.md에 벤치마크 결과 섹션 추가하고, devlog 테이블도 갱신해줘
 ```
 
-**확인**: 전체 파이프라인 + 순차 실행 + 이전 에이전트 참조 + Quality Gate
+**확인**: 전체 파이프라인 + 순차 실행 + 이전 에이전트 참조 (priorSummary) + Quality Gate
 
 ---
 
@@ -96,12 +96,12 @@ node bin/cli-claw.js chat
 
 ## 확인 포인트
 
-| 체크 | 항목                                                    |
-| ---- | ------------------------------------------------------- |
-| ☐    | Tier 1: `[claw:triage] direct response` 로그            |
-| ☐    | Tier 2: planning agent → `direct_answer` 반환           |
-| ☐    | Tier 3: pipeline 실행, 파일 생성 확인                   |
-| ☐    | Tier 4: 순차 실행 로그 (`agent 1 done → agent 2 start`) |
-| ☐    | Tier 4: 파일 충돌 없음 (같은 파일 동시 수정 X)          |
-| ☐    | Tier 5: worklog에 모든 에이전트 결과 기록               |
-| ☐    | Tier 5: Quality Gate verdict 정상                       |
+| 체크 | 항목                                                                   |
+| ---- | ---------------------------------------------------------------------- |
+| ☐    | Tier 1: `[claw:triage] direct response` 로그                           |
+| ☐    | Tier 2: planning agent → `direct_answer` 반환                          |
+| ☐    | Tier 3: pipeline 실행, 파일 생성 확인                                  |
+| ☐    | Tier 4: 순차 실행 로그 (`agent 1 done → agent 2 start`) + priorSummary |
+| ☐    | Tier 4: 파일 충돌 없음 (같은 파일 동시 수정 X)                         |
+| ☐    | Tier 5: worklog에 모든 에이전트 결과 기록                              |
+| ☐    | Tier 5: Quality Gate verdict 정상                                      |

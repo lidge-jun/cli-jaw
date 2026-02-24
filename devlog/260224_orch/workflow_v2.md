@@ -1,7 +1,7 @@
 # Orchestration v2: Progressive Refinement Loop
 
 > **날짜**: 2026-02-24
-> **상태**: 설계 중
+> **상태**: 구현 완료
 > **관련**: [개발스킬-설계안](file:///Users/jun/Developer/new/_INBOX/개발스킬-설계안.md), [orchestrator.js](file:///Users/jun/Developer/new/700_projects/cli-claw/src/orchestrator.js)
 
 ---
@@ -46,7 +46,7 @@ graph TD
     PA --> R["Round Loop (max 3)"]
 
     R --> DIST["🎯 Plan Agent<br/>각 agent에게 현재 phase에 맞는 지시 분배"]
-    DIST --> SA["👷 Sub-agents 병렬 실행"]
+    DIST --> SA["👷 Sub-agents 순차 실행<br/>(for...of + priorSummary)"]
     SA --> REVIEW["🎯 Plan Agent: 각 결과 개별 리뷰"]
 
     REVIEW --> GATE{"Quality Gate<br/>(per agent)"}
@@ -261,11 +261,16 @@ const PHASES = {
 
 상세 설계는 Phase별 별도 문서 참조:
 
-| Phase       | 문서                                                                                            | 핵심 산출물                                 |
-| ----------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| **1: 기반** | [phase1.md](file:///Users/jun/Developer/new/700_projects/cli-claw/devlog/260224_orch/phase1.md) | `worklog.js`, dev 스킬, `constants.js` 정리 |
-| **2: 코어** | [phase2.md](file:///Users/jun/Developer/new/700_projects/cli-claw/devlog/260224_orch/phase2.md) | `orchestrator.js` v2, `prompt.js` 확장      |
-| **3: UX**   | [phase3.md](file:///Users/jun/Developer/new/700_projects/cli-claw/devlog/260224_orch/phase3.md) | 프런트엔드 행렬 표시, "이어서 해줘" 연속성  |
+| Phase       | 문서                                                                                            | 핵심 산출물                                      |
+| ----------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| **1: 기반** | [phase1.md](file:///Users/jun/Developer/new/700_projects/cli-claw/devlog/260224_orch/phase1.md) | `worklog.js`, dev 스킬, `constants.js` 정리      |
+| **2: 코어** | [phase2.md](file:///Users/jun/Developer/new/700_projects/cli-claw/devlog/260224_orch/phase2.md) | `orchestrator.js` v2, `prompt.js` 확장           |
+| **3: UX**   | [phase3.md](file:///Users/jun/Developer/new/700_projects/cli-claw/devlog/260224_orch/phase3.md) | 프런트엔드 행렬 표시, "이어서 해줘" 연속성       |
+| **4: 검증** | [phase4.md](file:///Users/jun/Developer/new/700_projects/cli-claw/devlog/260224_orch/phase4.md) | Phase 1-3 정적 검증                              |
+| **5: 안정** | [phase5.md](file:///Users/jun/Developer/new/700_projects/cli-claw/devlog/260224_orch/phase5.md) | isContinueIntent, seedDefault, /employee, /reset |
+| **6: 분류** | [phase6.md](file:///Users/jun/Developer/new/700_projects/cli-claw/devlog/260224_orch/phase6.md) | needsOrchestration, 순차 실행, 프롬프트 조정     |
+| **7: 최적** | [phase7.md](file:///Users/jun/Developer/new/700_projects/cli-claw/devlog/260224_orch/phase7.md) | Smart Agent Allocation, start_phase skip         |
+| **8: TG**   | [phase8.md](file:///Users/jun/Developer/new/700_projects/cli-claw/devlog/260224_orch/phase8.md) | Telegram Queue-First, Timeout 확장               |
 
 ```mermaid
 graph LR
@@ -285,26 +290,30 @@ graph LR
         R["이어서 연속성"]
     end
 
+    subgraph "Phase 4-5: 검증+안정"
+        V["정적 검증"]
+        S["커맨드 정비"]
+    end
+
+    subgraph "Phase 6-8: 최적화"
+        T["Message Triage"]
+        SEQ["순차 실행"]
+        SK["Phase Skip"]
+        TG["TG Queue-First"]
+    end
+
     W --> O
     D --> P
     C --> O
     O --> F
     P --> O
     O --> R
+    F --> V
+    R --> S
+    S --> T
+    T --> SEQ
+    SEQ --> SK
+    SK --> TG
 ```
-
-### 파일 변경 요약
-
-| Phase | 파일                                | 작업                                                   |
-| ----- | ----------------------------------- | ------------------------------------------------------ |
-| **1** | `src/worklog.js`                    | [NEW] worklog CRUD + symlink                           |
-| **1** | `~/.cli-claw/skills/dev-*/SKILL.md` | [NEW] dev-frontend, dev-backend, dev-data, dev-testing |
-| **1** | `public/js/constants.js`            | [MODIFY] ROLE_PRESETS v2 (skill 필드 추가)             |
-| **2** | `src/orchestrator.js`               | [MODIFY] v2 전체 리팩터링                              |
-| **2** | `src/prompt.js`                     | [MODIFY] getSubAgentPromptV2 추가                      |
-| **3** | `public/js/features/employees.js`   | [MODIFY] phase 뱃지 표시                               |
-| **3** | `public/js/ws.js`                   | [MODIFY] 새 이벤트 핸들링                              |
-| **3** | `src/orchestrator.js`               | [MODIFY] orchestrateContinue 추가                      |
-| **3** | `server.js` (루트)                  | [MODIFY] "이어서" API 엔드포인트                       |
 
 

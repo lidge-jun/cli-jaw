@@ -83,3 +83,6 @@
 
 > **Phase 1-3 코드 정적 검증 통과.**
 > 구조적 결함 없음. LOW 3건은 코드 품질 개선 사항 (기능 영향 없음).
+>
+> **후속 변경**: Phase 6에서 `distributeByPhase`가 `Promise.all` 병렬에서 `for...of` 순차 실행으로 변경됨.
+> Phase 7에서 `start_phase` skip 기능 추가. Phase 8에서 Telegram queue-first 적용.

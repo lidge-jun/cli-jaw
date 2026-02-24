@@ -175,7 +175,7 @@ worklog 경로: ${worklog.path}
   return { planText, subtasks };
 }
 
-// ─── Distribute Phase (per-agent phase-aware) ────────
+// ─── Distribute Phase (순차 실행, per-agent phase-aware) ──
 async function distributeByPhase(agentPhases, worklog, round) {
   const emps = getEmployees.all();
   const results = [];
@@ -183,24 +183,37 @@ async function distributeByPhase(agentPhases, worklog, round) {
   const active = agentPhases.filter(ap => !ap.completed);
   if (active.length === 0) return results;
 
-  const promises = active.map(ap => {
+  // 순차 실행: 각 에이전트가 이전 에이전트의 변경을 볼 수 있도록
+  for (const ap of active) {
     const emp = emps.find(e =>
       e.name === ap.agent || e.name?.includes(ap.agent) || ap.agent.includes(e.name)
     );
     if (!emp) {
       results.push({ agent: ap.agent, role: ap.role, status: 'skipped', text: 'Agent not found' });
-      return Promise.resolve();
+      continue;
     }
 
     const instruction = PHASE_INSTRUCTIONS[ap.currentPhase];
     const phaseLabel = PHASES[ap.currentPhase];
     const sysPrompt = getSubAgentPromptV2(emp, ap.role, ap.currentPhase);
 
+    // 이전 에이전트 결과 요약 (순차 실행이므로 이미 완료된 것들)
+    const priorSummary = results.length > 0
+        ? results.map(r => `- ${r.agent} (${r.role}): ${r.status} — ${r.text.slice(0, 150)}`).join('\n')
+        : '(첫 번째 에이전트입니다)';
+
     const taskPrompt = `## 작업 지시 [${phaseLabel}]
 ${ap.task}
 
 ## 현재 Phase: ${ap.currentPhase} (${phaseLabel})
 ${instruction}
+
+## 순차 실행 규칙
+- **이전 에이전트가 이미 수정한 파일은 건드리지 마세요**
+- 당신의 담당 영역(${ap.role})에만 집중하세요
+
+### 이전 에이전트 결과
+${priorSummary}
 
 ## Worklog
 이 파일을 먼저 읽으세요: ${worklog.path}
@@ -216,26 +229,19 @@ ${instruction}
       forceNew: true, sysPrompt,
     });
 
-    return promise.then(r => {
-      const result = {
-        agent: ap.agent, role: ap.role, id: emp.id,
-        phase: ap.currentPhase, phaseLabel,
-        status: r.code === 0 ? 'done' : 'error',
-        text: r.text || '',
-      };
-      results.push(result);
-      broadcast('agent_status', { agentId: emp.id, agentName: emp.name, status: result.status, phase: ap.currentPhase });
-    });
-  });
+    const r = await promise;
+    const result = {
+      agent: ap.agent, role: ap.role, id: emp.id,
+      phase: ap.currentPhase, phaseLabel,
+      status: r.code === 0 ? 'done' : 'error',
+      text: r.text || '',
+    };
+    results.push(result);
+    broadcast('agent_status', { agentId: emp.id, agentName: emp.name, status: result.status, phase: ap.currentPhase });
 
-  await Promise.all(promises);
-
-  // 하이브리드 기록: orchestrator가 결과를 worklog에 append
-  for (const r of results) {
+    // 즉시 worklog에 기록
     appendToWorklog(worklog.path, 'Execution Log',
-      `### Round ${round} — ${r.agent} (${r.role}, ${r.phaseLabel})
-- Status: ${r.status}
-- Result: ${r.text.slice(0, 500)}`
+      `### Round ${round} — ${result.agent} (${result.role}, ${result.phaseLabel})\n- Status: ${result.status}\n- Result: ${result.text.slice(0, 500)}`
     );
   }
 
@@ -431,6 +437,12 @@ export function getSubAgentPromptV2(emp, role, currentPhase) {
   prompt += `\n\n## Current Phase: ${currentPhase} (${PHASES[currentPhase]})`;
   prompt += `\n당신은 지금 "${PHASES[currentPhase]}" 단계를 수행 중입니다.`;
   prompt += `\n${PHASE_GATES[currentPhase]}`;
+  prompt += `\n\n## 순차 실행 + Phase Skip`;
+  prompt += `\n에이전트는 한 명씩 순서대로 실행됩니다. 이전 에이전트의 작업 결과가 이미 파일에 반영되어 있습니다.`;
+  prompt += `\n- worklog를 먼저 읽고 이전 에이전트가 뭘 했는지 파악하세요`;
+  prompt += `\n- 이미 수정된 파일은 건드리지 마세요`;
+  prompt += `\n- 당신의 담당 영역에만 집중하세요`;
+  prompt += `\n- 현재 Phase가 1이 아니라면, 이전 Phase는 이미 완료된 것입니다. 기획/검증을 다시 하지 마세요.`;
   prompt += `\n\n주의: Quality Gate를 통과하려면 위 조건을 모두 충족해야 합니다. 부족한 부분이 있으면 재시도됩니다.`;
 
   return prompt;
@@ -458,18 +470,12 @@ const stripped = stripSubtaskJSON(ctx.fullText);
 **해결**: v2 코드에도 `export function stripSubtaskJSON` / `export function parseSubtasks` 반드시 포함.
 위의 v2 코드 스케치에서 이 export가 빠져 있으므로 구현 시 추가 필요.
 
-### 🔴 HIGH: Worklog 동시 쓰기 레이스
+### ✅ RESOLVED: Worklog 동시 쓰기 레이스
 
-`distributeByPhase()`에서:
-1. Sub-agents가 병렬 실행되며 각자 worklog에 기록 지시받음
-2. Orchestrator도 `await Promise.all` 후 순차적으로 append
+~~`distributeByPhase()`에서 Sub-agents가 병렬 실행되며 각자 worklog에 기록 → 데이터 손실 가능.~~
 
-`appendToWorklog`는 `read → modify → write` 패턴이라 sub-agent 동시 쓰기 시 데이터 손실 가능.
-
-**해결**:
-- Orchestrator의 append는 `await` 후 순차 → 안전
-- Sub-agent의 worklog 직접 쓰기는 **bonus** 취급 (없어도 orchestrator가 보장)
-- 향후 고도화: `fs.appendFileSync` 사용 또는 lock file 도입
+**해결**: Phase 6에서 `distributeByPhase`를 `for...of` **순차 실행**으로 변경.
+각 에이전트가 완료된 후 즉시 worklog에 기록하므로 동시 쓰기 문제가 원천 제거됨.
 
 ### ✅ RESOLVED: `SKILLS_DIR` 경로 문제
 

@@ -269,12 +269,9 @@ const LEGACY_ROLE_MAP = {
 };
 ```
 
-### 🟡 MEDIUM: Worklog 동시 쓰기 레이스
+### ✅ RESOLVED: Worklog 동시 쓰기 레이스
 
-Phase 1에서는 worklog.js만 만드는 단계이므로 직접적 위험 없음.
-하지만 Phase 2에서 병렬 sub-agent가 동시에 worklog에 쓸 때 `read-modify-write` 레이스 발생 가능.
+~~Phase 2에서 병렬 sub-agent가 동시에 worklog에 쓸 때 `read-modify-write` 레이스 발생 가능.~~
 
-**해결 (Phase 2에서 처리)**:
-- Sub-agent의 worklog 쓰기는 **장려하되 의존하지 않음** (하이브리드 방식)
-- Orchestrator의 append는 **순차적** (await 후 append)
-- Sub-agent 동시 쓰기는 **conflict 가능성 인정**, orchestrator append가 canonical source
+**해결**: Phase 6에서 `distributeByPhase`를 `for...of` 순차 실행으로 변경.
+에이전트가 하나씩 완료 후 즉시 worklog에 기록하므로 동시 쓰기 문제 제거됨.

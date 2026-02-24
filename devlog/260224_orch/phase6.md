@@ -70,8 +70,8 @@ prompt.js `getSubAgentPromptV2`에도 순차 인식 추가:
 
 | 파일                  | 작업                                                                | L    |
 | --------------------- | ------------------------------------------------------------------- | ---- |
-| `src/orchestrator.js` | [MODIFY] needsOrchestration, parseDirectAnswer, 순차 실행, 프롬프트 | 523L |
-| `src/prompt.js`       | [MODIFY] getSubAgentPromptV2 순차 실행 인식                         | 498L |
+| `src/orchestrator.js` | [MODIFY] needsOrchestration, parseDirectAnswer, 순차 실행, 프롬프트 | 583L |
+| `src/prompt.js`       | [MODIFY] getSubAgentPromptV2 순차 실행 인식                         | 503L |
 
 ---
 
