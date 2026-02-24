@@ -416,6 +416,56 @@ export function getSubAgentPrompt(emp) {
     return prompt;
 }
 
+// ─── Sub-Agent Prompt v2 (orchestration phase-aware) ─
+
+export function getSubAgentPromptV2(emp, role, currentPhase) {
+    let prompt = getSubAgentPrompt(emp);
+
+    // ─── 1. 공통 Dev 스킬 (항상 주입)
+    const devCommonPath = join(SKILLS_DIR, 'dev', 'SKILL.md');
+    if (fs.existsSync(devCommonPath)) {
+        prompt += `\n\n## Development Guide (Common)\n${fs.readFileSync(devCommonPath, 'utf8')}`;
+    }
+
+    // ─── 2. Role 기반 Dev 스킬 주입
+    const ROLE_SKILL_MAP = {
+        frontend: join(SKILLS_DIR, 'dev-frontend', 'SKILL.md'),
+        backend: join(SKILLS_DIR, 'dev-backend', 'SKILL.md'),
+        data: join(SKILLS_DIR, 'dev-data', 'SKILL.md'),
+        docs: join(SKILLS_DIR, 'documentation', 'SKILL.md'),
+        custom: null,
+    };
+
+    const skillPath = ROLE_SKILL_MAP[role];
+    if (skillPath && fs.existsSync(skillPath)) {
+        prompt += `\n\n## Development Guide (${role})\n${fs.readFileSync(skillPath, 'utf8')}`;
+    }
+
+    // ─── 3. 디버깅 phase(4) → dev-testing 추가 주입
+    if (currentPhase === 4) {
+        const testingPath = join(SKILLS_DIR, 'dev-testing', 'SKILL.md');
+        if (fs.existsSync(testingPath)) {
+            prompt += `\n\n## Testing Guide (Phase 4)\n${fs.readFileSync(testingPath, 'utf8')}`;
+        }
+    }
+
+    // ─── 4. Phase 컨텍스트 + Quality Gate
+    const PHASES = { 1: '기획', 2: '기획검증', 3: '개발', 4: '디버깅', 5: '통합검증' };
+    const PHASE_GATES = {
+        1: '통과 조건: 영향범위 분석 + 의존성 확인 + 엣지케이스 목록 완성',
+        2: '통과 조건: 코드 대조 확인 + 충돌검사 + 테스트전략 수립',
+        3: '통과 조건: 변경파일목록 + export/import 무결성 + 빌드에러 없음',
+        4: '통과 조건: 실행결과 증거 + 버그수정내역 + 엣지케이스 테스트 결과',
+        5: '통과 조건: 통합테스트 + 문서업데이트 + 워크플로우 동작확인',
+    };
+    prompt += `\n\n## Current Phase: ${currentPhase} (${PHASES[currentPhase]})`;
+    prompt += `\n당신은 지금 "${PHASES[currentPhase]}" 단계를 수행 중입니다.`;
+    prompt += `\n${PHASE_GATES[currentPhase]}`;
+    prompt += `\n\n주의: Quality Gate를 통과하려면 위 조건을 모두 충족해야 합니다. 부족한 부분이 있으면 재시도됩니다.`;
+
+    return prompt;
+}
+
 export function regenerateB() {
     const fullPrompt = getSystemPrompt();
     fs.writeFileSync(join(PROMPTS_DIR, 'B.md'), fullPrompt);
