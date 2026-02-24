@@ -53,7 +53,7 @@ Use when `cli-claw browser snapshot` returns **NO ref** for target:
 ```bash
 # 1. Take screenshot
 cli-claw browser screenshot
-# Output: { path: "/path/to/screenshot.png", ... }
+# Output: /Users/you/.cli-claw/screenshots/screenshot-20260224-1200.png
 
 # 2. Extract coordinates with Codex vision
 codex exec -i /path/to/screenshot.png --json \
