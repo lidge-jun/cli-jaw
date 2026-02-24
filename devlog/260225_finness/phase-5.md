@@ -1,49 +1,69 @@
-# Phase 5 (finness): Web UI 개선 — CLI 인증 가이드 + 사이드바 CLI STATUS
+# Phase 5 (finness): Web UI 마크다운 렌더링 개선
 
-> 작성일: 2026-02-25
-> 상태: ✅ 완료
+> 완료: 2026-02-25T01:01
 
-## 배경
-- CLI 상태(`cliStatusList`)가 Settings 탭 안에 숨어있어 접근성 떨어짐
-- CLI가 미설치/미인증일 때 사용자가 어떤 명령어를 실행해야 하는지 안내 없음
-- README의 인증 명령어가 `--help`로 검증 안 된 부정확한 값
+---
 
-## 변경 내역
+## 변경 전
 
-### 1. Web UI — CLI 인증 가이드 (`renderCliStatus`)
-- `AUTH_HINTS` 맵 추가 — CLI별 설치 + 인증 명령어 정의
-- 빨간 점(미설치) CLI에 노란 박스로 install/auth 힌트 표시:
-  ```
-  ⚠️ 설치 / 인증 필요
-    npm i -g @anthropic-ai/claude-code
-    claude auth
-  ```
-- `--help`로 검증된 정확한 명령어 사용
+`render.js` 21줄 regex 파서:
+- 코드블록 (언어 무시), 인라인코드, 볼드, 헤딩만 지원
+- 테이블, 리스트, 링크, 인용, 수학식, 다이어그램 ❌
 
-### 2. Web UI — CLI STATUS 사이드바 이동
-- Settings 탭에서 CLI STATUS 섹션 전체 제거
-- 왼쪽 사이드바(`sidebar-left`)에 그대로 이동
-- 포함 요소: `cliStatusList`, 🔄 Refresh 버튼, 갱신 간격 select
-- 페이지 로드 시 `loadCliStatus()` 자동 호출 (bootstrap)
-- 불필요한 compact 렌더러(`renderCliStatusSidebar`, `loadCliStatusSidebar`, `AUTH_CMDS`) 삭제 → -98줄
+---
 
-### 3. README 인증 명령어 수정 (EN/KR/CN 3개 파일)
+## 도입 라이브러리 (CDN)
 
-| CLI | 이전 | 수정 |
-|-----|------|------|
-| Claude | `claude` (첫 실행) | `claude auth` |
-| Codex | `codex --login` | `codex login` |
-| Copilot | `gh auth login` | `copilot login` |
-| OpenCode | API key in config | `opencode auth` |
-| Gemini | 변동 없음 | `gemini` (첫 실행) |
+| 라이브러리 | 버전 | 용도 | 크기 (gzip) |
+|-----------|------|------|------------|
+| **marked** | v14 | GFM 마크다운 → HTML | ~35KB |
+| **highlight.js** | v11 | 코드블록 구문 강조 | ~30KB |
+| **KaTeX** | v0.16 | 수학식 렌더링 ($, $$) | ~100KB |
+| **Mermaid** | v11 | 다이어그램 렌더링 | ~200KB |
 
-## 수정 파일
-- `public/index.html` — CLI STATUS를 sidebar-left로 이동, settings에서 제거
-- `public/js/features/settings.js` — AUTH_HINTS 추가, compact 렌더러 제거
-- `public/js/main.js` — import 정리, bootstrap에 loadCliStatus() 추가
-- `README.md` / `README.ko.md` / `README.zh-CN.md` — 인증 명령어 수정
+> 모두 `defer`로 로드 — 페이지 렌더링 차단 없음. CDN 실패 시 기존 regex fallback 자동.
 
-## 커밋 히스토리
-- `f9b3eed` feat: Web UI auth hints + fix auth commands
-- `c0af86b` feat: CLI status widget in left sidebar (wiring)
-- `f3a7407` refactor: move full CLI STATUS to left sidebar, remove compact duplicate
+---
+
+## 파일 변경
+
+### [MODIFY] `public/index.html`
+- CDN `<script defer>` 4개 + `<link>` CSS 2개 추가
+
+### [NEW] `public/css/markdown.css` (120L)
+- 테이블 스타일 (border, hover, stripe)
+- 코드블록 (`#0d1117` 배경, 언어 라벨)
+- blockquote (accent 좌측 border)
+- 리스트, 링크, 수평선, 헤딩
+- KaTeX display/inline
+- Mermaid 컨테이너
+
+### [REWRITE] `public/js/render.js` (130L)
+모듈별 역할:
+| 함수 | 역할 |
+|------|------|
+| `stripOrchestration()` | subtask JSON 제거 |
+| `ensureMarked()` | marked.js 설정 + highlight.js/mermaid 연동 |
+| `renderer.code()` | 언어별 분기 (mermaid→div, 나머지→hljs) |
+| `renderMath()` | KaTeX `$$...$$` block + `$...$` inline |
+| `renderMermaidBlocks()` | DOM 삽입 후 mermaid.render() 호출 |
+| `renderFallback()` | CDN 실패 시 기존 regex |
+| `renderMarkdown()` | 메인 export — 위 함수 조합 |
+
+---
+
+## 지원 요소
+
+| 요소 | 렌더러 | 예시 |
+|------|--------|------|
+| **테이블** | marked GFM | `\| col \| col \|` |
+| **코드블록** | highlight.js | ` ```js ... ``` ` |
+| **인라인코드** | marked | `` `code` `` |
+| **수학식** | KaTeX | `$E=mc^2$`, `$$\int$$` |
+| **다이어그램** | Mermaid | ` ```mermaid ... ``` ` |
+| **리스트** | marked | `- item`, `1. item` |
+| **링크** | marked | `[text](url)` |
+| **인용** | marked | `> quote` |
+| **수평선** | marked | `---` |
+| **이탈릭/볼드** | marked | `*i*`, `**b**` |
+| **헤딩** | marked | `# H1`, `## H2` |

@@ -1,20 +1,133 @@
 // ── Render Helpers ──
+// Modular markdown rendering: marked.js + highlight.js + KaTeX + Mermaid
+// All libs loaded via CDN (defer), graceful fallback if unavailable
 
 export function escapeHtml(t) {
     return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-export function renderMarkdown(text) {
-    // Strip orchestration JSON blocks (subtasks) from display
-    let cleaned = text.replace(/```json\n[\s\S]*?\n```/g, '');  // fenced
-    cleaned = cleaned.replace(/\{[\s\S]*"subtasks"\s*:\s*\[[\s\S]*?\]\s*\}/g, '').trim();  // raw
-    if (!cleaned) return '<em style="color:var(--text-dim)">🎯 작업 분배 중...</em>';
-    return escapeHtml(cleaned)
+// ── Orchestration JSON stripping ──
+function stripOrchestration(text) {
+    let cleaned = text.replace(/```json\n[\s\S]*?\n```/g, '');
+    cleaned = cleaned.replace(/\{[\s\S]*"subtasks"\s*:\s*\[[\s\S]*?\]\s*\}/g, '').trim();
+    return cleaned;
+}
+
+// ── KaTeX inline/block math ──
+function renderMath(html) {
+    if (typeof katex === 'undefined') return html;
+    // Block math: $$...$$
+    html = html.replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => {
+        try {
+            return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false });
+        } catch { return `<code>${escapeHtml(tex)}</code>`; }
+    });
+    // Inline math: $...$  (avoid matching currency like $10)
+    html = html.replace(/(?<!\$)\$(?!\$)([^\n$]+?)\$(?!\$)/g, (_, tex) => {
+        try {
+            return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false });
+        } catch { return `<code>${escapeHtml(tex)}</code>`; }
+    });
+    return html;
+}
+
+// ── Mermaid deferred rendering ──
+let mermaidId = 0;
+
+function renderMermaidBlocks() {
+    if (typeof mermaid === 'undefined') return;
+    document.querySelectorAll('.mermaid-pending').forEach(async (el) => {
+        el.classList.remove('mermaid-pending');
+        const code = el.textContent;
+        const id = `mermaid-${++mermaidId}`;
+        try {
+            const { svg } = await mermaid.render(id, code);
+            el.innerHTML = svg;
+            el.classList.add('mermaid-rendered');
+        } catch {
+            el.innerHTML = `<pre style="color:#ef4444">Mermaid error</pre><pre><code>${escapeHtml(code)}</code></pre>`;
+        }
+    });
+}
+
+// ── marked.js configuration ──
+let markedReady = false;
+
+function ensureMarked() {
+    if (markedReady) return true;
+    if (typeof marked === 'undefined') return false;
+
+    const renderer = new marked.Renderer();
+
+    // Code blocks: highlight.js + mermaid detection
+    renderer.code = function ({ text, lang }) {
+        // Mermaid
+        if (lang === 'mermaid') {
+            return `<div class="mermaid-container mermaid-pending">${escapeHtml(text)}</div>`;
+        }
+        // Highlight.js
+        let highlighted = escapeHtml(text);
+        if (typeof hljs !== 'undefined' && lang && hljs.getLanguage(lang)) {
+            try {
+                highlighted = hljs.highlight(text, { language: lang }).value;
+            } catch { /* fallback to escaped */ }
+        } else if (typeof hljs !== 'undefined') {
+            try {
+                highlighted = hljs.highlightAuto(text).value;
+            } catch { /* fallback */ }
+        }
+        const label = lang ? `<span class="code-lang-label">${escapeHtml(lang)}</span>` : '';
+        return `<div class="code-block-wrapper">${label}<pre><code class="hljs${lang ? ` language-${escapeHtml(lang)}` : ''}">${highlighted}</code></pre></div>`;
+    };
+
+    marked.setOptions({
+        renderer,
+        gfm: true,
+        breaks: true,
+    });
+
+    // Init mermaid
+    if (typeof window.mermaid !== 'undefined') {
+        window.mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            securityLevel: 'loose',
+        });
+    }
+
+    markedReady = true;
+    return true;
+}
+
+// ── Fallback regex renderer (CDN 실패 시) ──
+function renderFallback(text) {
+    return escapeHtml(text)
         .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>')
-        .replace(/`([^`]+)`/g, '<code style="background:var(--border);padding:1px 4px;border-radius:3px">$1</code>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
         .replace(/^### (.+)$/gm, '<div style="font-weight:700;margin:8px 0 4px">$1</div>')
         .replace(/^## (.+)$/gm, '<div style="font-weight:700;font-size:14px;margin:10px 0 4px">$1</div>')
         .replace(/^# (.+)$/gm, '<div style="font-weight:700;font-size:16px;margin:12px 0 4px">$1</div>')
         .replace(/\n/g, '<br>');
+}
+
+// ── Main export ──
+export function renderMarkdown(text) {
+    const cleaned = stripOrchestration(text);
+    if (!cleaned) return '<em style="color:var(--text-dim)">🎯 작업 분배 중...</em>';
+
+    let html;
+    if (ensureMarked()) {
+        html = marked.parse(cleaned);
+    } else {
+        html = renderFallback(cleaned);
+    }
+
+    // KaTeX math
+    html = renderMath(html);
+
+    // Schedule mermaid rendering (needs DOM)
+    requestAnimationFrame(renderMermaidBlocks);
+
+    return html;
 }
