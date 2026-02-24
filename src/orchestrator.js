@@ -269,13 +269,14 @@ async function distributeByPhase(agentPhases, worklog, round) {
     const active = agentPhases.filter(ap => !ap.completed);
     if (active.length === 0) return results;
 
-    const promises = active.map(ap => {
+    // 순차 실행: 각 에이전트가 이전 에이전트의 변경을 볼 수 있도록
+    for (const ap of active) {
         const emp = emps.find(e =>
             e.name === ap.agent || e.name?.includes(ap.agent) || ap.agent.includes(e.name)
         );
         if (!emp) {
             results.push({ agent: ap.agent, role: ap.role, status: 'skipped', text: 'Agent not found' });
-            return Promise.resolve();
+            continue;
         }
 
         const instruction = PHASE_INSTRUCTIONS[ap.currentPhase];
@@ -302,24 +303,19 @@ ${instruction}
             forceNew: true, sysPrompt,
         });
 
-        return promise.then(r => {
-            const result = {
-                agent: ap.agent, role: ap.role, id: emp.id,
-                phase: ap.currentPhase, phaseLabel,
-                status: r.code === 0 ? 'done' : 'error',
-                text: r.text || '',
-            };
-            results.push(result);
-            broadcast('agent_status', { agentId: emp.id, agentName: emp.name, status: result.status, phase: ap.currentPhase });
-        });
-    });
+        const r = await promise;
+        const result = {
+            agent: ap.agent, role: ap.role, id: emp.id,
+            phase: ap.currentPhase, phaseLabel,
+            status: r.code === 0 ? 'done' : 'error',
+            text: r.text || '',
+        };
+        results.push(result);
+        broadcast('agent_status', { agentId: emp.id, agentName: emp.name, status: result.status, phase: ap.currentPhase });
 
-    await Promise.all(promises);
-
-    // Orchestrator가 순차적으로 worklog에 기록 (안전)
-    for (const r of results) {
+        // 즉시 worklog에 기록
         appendToWorklog(worklog.path, 'Execution Log',
-            `### Round ${round} — ${r.agent} (${r.role}, ${r.phaseLabel})\n- Status: ${r.status}\n- Result: ${r.text.slice(0, 500)}`
+            `### Round ${round} — ${result.agent} (${result.role}, ${result.phaseLabel})\n- Status: ${result.status}\n- Result: ${result.text.slice(0, 500)}`
         );
     }
 
