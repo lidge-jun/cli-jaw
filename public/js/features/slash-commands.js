@@ -1,6 +1,7 @@
 // ── Slash Command Dropdown ──
 import { getPreferredLocale } from '../locale.js';
 import { t } from './i18n.js';
+import { api } from '../api.js';
 
 let cmdList = [];       // { name, desc, args, category }[]
 let filtered = [];      // currently filtered list
@@ -100,9 +101,8 @@ export async function loadCommands() {
     try {
         const locale = getPreferredLocale();
         const url = `/api/commands?interface=web&locale=${encodeURIComponent(locale)}`;
-        const res = await fetch(url, { headers: { 'Accept-Language': locale } });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        cmdList = await res.json();
+        const data = await api(url, { headers: { 'Accept-Language': locale } });
+        cmdList = data || [];
     } catch (err) {
         console.warn('[slash-commands] loadCommands failed:', err.message);
         cmdList = [];

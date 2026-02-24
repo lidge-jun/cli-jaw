@@ -34,9 +34,8 @@ export async function initI18n() {
  */
 async function fetchLocale(lang) {
     try {
-        const res = await fetch(`/api/i18n/${lang}`);
-        if (!res.ok) return {};
-        return await res.json();
+        const { api } = await import('../api.js');
+        return await api(`/api/i18n/${lang}`) || {};
     } catch { return {}; }
 }
 

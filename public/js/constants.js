@@ -1,4 +1,5 @@
 // ── Shared constants (frontend) ──
+import { api } from './api.js';
 
 const FALLBACK_CLI_REGISTRY = {
     claude: {
@@ -92,10 +93,8 @@ function applyRegistry(registry) {
 
 export async function loadCliRegistry() {
     try {
-        const response = await fetch('/api/cli-registry');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        if (!applyRegistry(data)) throw new Error('invalid registry');
+        const data = await api('/api/cli-registry');
+        if (!data || !applyRegistry(data)) throw new Error('invalid registry');
     } catch (e) {
         console.warn('[cli-registry] fallback:', e.message);
         applyRegistry(FALLBACK_CLI_REGISTRY);

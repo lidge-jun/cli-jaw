@@ -1,6 +1,7 @@
 // ── Skills Feature ──
 import { state } from '../state.js';
 import { t, fetchWithLocale } from './i18n.js';
+import { apiJson } from '../api.js';
 
 export async function loadSkills() {
     try {
@@ -51,11 +52,7 @@ export function renderSkills() {
 export async function toggleSkill(id, currentlyEnabled) {
     const endpoint = currentlyEnabled ? '/api/skills/disable' : '/api/skills/enable';
     try {
-        await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id })
-        });
+        await apiJson(endpoint, 'POST', { id });
         await loadSkills();
     } catch (e) {
         console.error('toggleSkill error:', e);

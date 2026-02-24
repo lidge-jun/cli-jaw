@@ -4,6 +4,7 @@ import { addMessage, addSystemMsg, scrollToBottom } from '../ui.js';
 import { getPreferredLocale } from '../locale.js';
 import { t } from './i18n.js';
 import * as slashCmd from './slash-commands.js';
+import { api, apiJson, apiFire } from '../api.js';
 
 export async function sendMessage() {
     const input = document.getElementById('chatInput');
@@ -11,7 +12,7 @@ export async function sendMessage() {
 
     // Stop mode: clicking ■ stops the agent
     if (btn.classList.contains('stop-mode') && !input.value.trim() && !state.attachedFile) {
-        await fetch('/api/stop', { method: 'POST' });
+        apiFire('/api/stop', 'POST');
         return;
     }
 
@@ -64,11 +65,7 @@ export async function sendMessage() {
             let prompt = t('chat.file.sent', { path: filePath });
             if (text) prompt += t('chat.file.sentWithMsg', { text });
             clearAttachedFile();
-            await fetch('/api/message', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt }),
-            });
+            await apiJson('/api/message', 'POST', { prompt });
         } catch (err) {
             addSystemMsg(t('chat.file.uploadFail', { msg: err.message }));
             clearAttachedFile();
@@ -136,7 +133,7 @@ export function clearAttachedFile() {
 }
 
 export async function clearChat() {
-    await fetch('/api/clear', { method: 'POST' });
+    apiFire('/api/clear', 'POST');
     document.getElementById('chatMessages').innerHTML = '';
 }
 

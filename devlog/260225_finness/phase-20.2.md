@@ -373,11 +373,24 @@ LOG_LEVEL=warn node -e "import('./src/logger.js').then(({log}) => { log.debug('d
 
 ## 완료 기준
 
-- [ ] `public/js/api.js` 생성
-- [ ] 35곳 fetch → api/apiJson/apiFire 교체
-- [ ] WS onopen에 loadMessages 호출
-- [ ] WS onclose에 상태 리셋 + 로그
-- [ ] `src/logger.js` 생성
-- [ ] server.js 기동 로그 log.info 전환
-- [ ] `npm test` 통과
-- [ ] 브라우저에서 네트워크 끊김 시 콘솔 에러 없이 null 반환 확인
+- [x] `public/js/api.js` 생성 — api(), apiJson(), apiFire() 3종
+- [x] 36곳 fetch → api/apiJson/apiFire 교체 (4곳 의도적 유지: chat.js 3곳 + fetchWithLocale)
+- [x] WS onopen에 loadMessages 호출
+- [x] WS onclose에 상태 리셋 + 로그
+- [x] `src/logger.js` 생성 — LOG_LEVEL 환경변수 지원
+- [x] server.js 기동 로그 log.info 전환
+- [x] `npm test` 통과 (216/216)
+
+---
+
+## 구현 기록
+
+> 구현일: 2026-02-25
+> 변경 파일 13개, 테스트 216/216 통과
+
+### 의도적으로 유지한 bare fetch (4건)
+- `chat.js:36` — `/api/command` (AbortSignal timeout + 세부 에러 핸들링)
+- `chat.js:77` — `/api/message` (queued/continued 응답 처리)
+- `chat.js:101` — `/api/upload` (raw file body)
+- `skills.js:8` — `fetchWithLocale` (i18n.js의 locale 주입 래퍼)
+

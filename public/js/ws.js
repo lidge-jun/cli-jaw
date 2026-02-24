@@ -55,7 +55,20 @@ export function connect() {
             addMessage(msg.role === 'assistant' ? 'agent' : msg.role, msg.content);
         }
     };
-    state.ws.onclose = () => setTimeout(connect, 2000);
+    state.ws.onopen = () => {
+        console.log('[ws] connected');
+        // Restore state: reload messages to stay in sync after reconnect
+        import('./ui.js').then(m => {
+            document.getElementById('chatMessages').innerHTML = '';
+            m.loadMessages();
+            m.setStatus('idle');
+        });
+    };
+    state.ws.onclose = () => {
+        console.log('[ws] disconnected, reconnecting in 2s...');
+        setStatus('idle');
+        setTimeout(connect, 2000);
+    };
 }
 
 export function getAgentPhase(agentId) {

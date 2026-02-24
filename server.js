@@ -2,6 +2,7 @@
 // All business logic lives in src/ modules.
 
 import express from 'express';
+import { log } from './src/logger.js';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { fileURLToPath } from 'url';
@@ -923,12 +924,12 @@ watchHeartbeatFile();
 server.listen(PORT, () => {
     // Bootstrap i18n locale dictionaries
     loadLocales(join(__dirname, 'public', 'locales'));
-    console.log(`\n  🦞 Claw Agent — http://localhost:${PORT}\n`);
-    console.log(`  CLI:    ${settings.cli}`);
-    console.log(`  Perms:  ${settings.permissions}`);
-    console.log(`  CWD:    ${settings.workingDir}`);
-    console.log(`  DB:     ${DB_PATH}`);
-    console.log(`  Prompts: ${PROMPTS_DIR}\n`);
+    log.info(`\n  🦞 Claw Agent — http://localhost:${PORT}\n`);
+    log.info(`  CLI:    ${settings.cli}`);
+    log.info(`  Perms:  ${settings.permissions}`);
+    log.info(`  CWD:    ${settings.workingDir}`);
+    log.info(`  DB:     ${DB_PATH}`);
+    log.info(`  Prompts: ${PROMPTS_DIR}\n`);
 
     try {
         initMcpConfig(settings.workingDir);

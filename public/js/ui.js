@@ -3,6 +3,7 @@ import { state } from './state.js';
 import { renderMarkdown, escapeHtml } from './render.js';
 import { getAppName } from './features/appname.js';
 import { t } from './features/i18n.js';
+import { api } from './api.js';
 
 export function setStatus(s) {
     const badge = document.getElementById('statusBadge');
@@ -126,18 +127,20 @@ export function handleSave() {
 }
 
 export async function loadStats() {
-    const msgs = await (await fetch('/api/messages')).json();
+    const msgs = await api('/api/messages');
+    if (!msgs) return;
     document.getElementById('statMsgs').textContent = t('stat.messages', { count: msgs.length });
 }
 
 export async function loadMessages() {
-    const msgs = await (await fetch('/api/messages')).json();
+    const msgs = await api('/api/messages');
+    if (!msgs) return;
     msgs.forEach(m => addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content));
 }
 
 export async function loadMemory() {
     try {
-        const items = await (await fetch('/api/memory')).json();
+        const items = await api('/api/memory');
         const list = document.getElementById('memoryList');
         if (!list) return;
         if (items.length === 0) {

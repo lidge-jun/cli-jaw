@@ -4,9 +4,11 @@ import { MODEL_MAP, ROLE_PRESETS, getCliKeys } from '../constants.js';
 import { escapeHtml } from '../render.js';
 import { getAgentPhase } from '../ws.js';
 import { t } from './i18n.js';
+import { api, apiJson, apiFire } from '../api.js';
 
 export async function loadEmployees() {
-    state.employees = await (await fetch('/api/employees')).json();
+    const data = await api('/api/employees');
+    state.employees = data || [];
     renderEmployees();
 }
 
@@ -86,15 +88,15 @@ export function renderEmployees() {
 }
 
 export async function addEmployee() {
-    await fetch('/api/employees', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    await apiJson('/api/employees', 'POST', {});
 }
 
 export async function updateEmployee(id, data) {
-    await fetch(`/api/employees/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    await apiJson(`/api/employees/${id}`, 'PUT', data);
 }
 
 export async function deleteEmployee(id) {
-    await fetch(`/api/employees/${id}`, { method: 'DELETE' });
+    apiFire(`/api/employees/${id}`, 'DELETE');
 }
 
 export function onEmpCliChange(id, cli) {

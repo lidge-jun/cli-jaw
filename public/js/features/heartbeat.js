@@ -1,11 +1,11 @@
 // ── Heartbeat Feature ──
 import { state } from '../state.js';
 import { t } from './i18n.js';
+import { api, apiJson } from '../api.js';
 
 export async function openHeartbeatModal() {
-    const r = await fetch('/api/heartbeat');
-    const data = await r.json();
-    state.heartbeatJobs = data.jobs || [];
+    const data = await api('/api/heartbeat');
+    state.heartbeatJobs = data?.jobs || [];
     renderHeartbeatJobs();
     document.getElementById('heartbeatModal').classList.add('open');
 }
@@ -67,18 +67,13 @@ export function toggleHeartbeatJob(i) {
 }
 
 export async function saveHeartbeatJobs() {
-    await fetch('/api/heartbeat', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jobs: state.heartbeatJobs }),
-    });
+    await apiJson('/api/heartbeat', 'PUT', { jobs: state.heartbeatJobs });
 }
 
 export async function initHeartbeatBadge() {
     try {
-        const r = await fetch('/api/heartbeat');
-        const d = await r.json();
-        const active = (d.jobs || []).filter(j => j.enabled).length;
+        const d = await api('/api/heartbeat');
+        const active = (d?.jobs || []).filter(j => j.enabled).length;
         document.getElementById('hbSidebarBtn').textContent = `💓 Heartbeat (${active})`;
     } catch { }
 }

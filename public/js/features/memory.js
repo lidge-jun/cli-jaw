@@ -1,9 +1,10 @@
 // ── Memory Feature ──
 import { escapeHtml } from '../render.js';
+import { api, apiJson, apiFire } from '../api.js';
 
 export async function openMemoryModal() {
-    const r = await fetch('/api/memory-files');
-    const data = await r.json();
+    const data = await api('/api/memory-files');
+    if (!data) return;
     document.getElementById('memOn').classList.toggle('active', data.enabled);
     document.getElementById('memOff').classList.toggle('active', !data.enabled);
     document.getElementById('memFlushEvery').value = data.flushEvery;
@@ -33,21 +34,15 @@ export function switchMemTab(tab) {
 export async function setMemEnabled(v) {
     document.getElementById('memOn').classList.toggle('active', v);
     document.getElementById('memOff').classList.toggle('active', !v);
-    await fetch('/api/memory-files/settings', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: v }),
-    });
+    await apiJson('/api/memory-files/settings', 'PUT', { enabled: v });
 }
 
 export async function saveMemSettings() {
-    await fetch('/api/memory-files/settings', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            flushEvery: +document.getElementById('memFlushEvery').value,
-            cli: document.getElementById('memCli').value,
-            model: document.getElementById('memModel').value,
-            retentionDays: +document.getElementById('memRetention').value,
-        }),
+    await apiJson('/api/memory-files/settings', 'PUT', {
+        flushEvery: +document.getElementById('memFlushEvery').value,
+        cli: document.getElementById('memCli').value,
+        model: document.getElementById('memModel').value,
+        retentionDays: +document.getElementById('memRetention').value,
     });
     document.getElementById('memThreshold').textContent = document.getElementById('memFlushEvery').value;
 }
@@ -72,13 +67,13 @@ function renderMemFiles(files) {
 
 export async function deleteMemFile(name) {
     if (!confirm('Delete ' + name + '?')) return;
-    await fetch('/api/memory-files/' + name, { method: 'DELETE' });
+    apiFire('/api/memory-files/' + name, 'DELETE');
     openMemoryModal();
 }
 
 export async function viewMemFile(name) {
-    const r = await fetch('/api/memory-files/' + name);
-    const data = await r.json();
+    const data = await api('/api/memory-files/' + name);
+    if (!data) return;
     const container = document.getElementById('memFilesList');
     container.innerHTML = `
         <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">

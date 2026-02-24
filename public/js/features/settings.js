@@ -3,6 +3,7 @@ import { MODEL_MAP, loadCliRegistry, getCliKeys, getCliMeta } from '../constants
 import { escapeHtml } from '../render.js';
 import { syncStoredLocale } from '../locale.js';
 import { t } from './i18n.js';
+import { api, apiJson, apiFire } from '../api.js';
 
 function toCap(cli) {
     return cli.charAt(0).toUpperCase() + cli.slice(1);
@@ -119,7 +120,8 @@ function syncActiveEffortOptions(cli, selected = '') {
 
 export async function loadSettings() {
     await loadCliRegistry();
-    const s = await (await fetch('/api/settings')).json();
+    const s = await api('/api/settings');
+    if (!s) return;
     syncStoredLocale(s.locale);
     syncCliOptionSelects(s);
     syncPerCliModelAndEffortControls(s);
@@ -159,7 +161,8 @@ export async function loadSettings() {
 
 export async function loadMcpServers() {
     try {
-        const d = await (await fetch('/api/mcp')).json();
+        const d = await api('/api/mcp');
+        if (!d) return;
         const el = document.getElementById('mcpServerList');
         const names = Object.entries(d.servers || {});
         if (!names.length) { el.textContent = '(no servers configured)'; return; }
@@ -174,7 +177,8 @@ export async function syncMcpServers() {
     resultEl.style.display = 'block';
     resultEl.textContent = t('mcp.syncing');
     try {
-        const d = await (await fetch('/api/mcp/sync', { method: 'POST' })).json();
+        const d = await apiJson('/api/mcp/sync', 'POST', {});
+        if (!d) { resultEl.textContent = '❌ sync failed'; return; }
         const r = d.results || {};
         resultEl.innerHTML = Object.entries(r).map(([k, v]) =>
             `${v ? '✅' : '⏭️'} ${k}`
@@ -187,7 +191,8 @@ export async function installMcpGlobal() {
     resultEl.style.display = 'block';
     resultEl.textContent = t('mcp.installing');
     try {
-        const d = await (await fetch('/api/mcp/install', { method: 'POST' })).json();
+        const d = await apiJson('/api/mcp/install', 'POST', {});
+        if (!d) { resultEl.textContent = '❌ install failed'; return; }
         resultEl.innerHTML = Object.entries(d.results || {}).map(([k, v]) => {
             const icon = v.status === 'installed' ? '✅' : v.status === 'skip' ? '⏭️' : '❌';
             return `${icon} <b>${k}</b>: ${v.status}${v.bin ? ' → ' + v.bin : ''}`;
@@ -202,21 +207,13 @@ export async function updateSettings() {
         workingDir: document.getElementById('inpCwd').value,
     };
     document.getElementById('headerCli').textContent = s.cli;
-    await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(s),
-    });
+    await apiJson('/api/settings', 'PUT', s);
 }
 
 export function setPerm(p, save = true) {
     document.getElementById('permSafe').classList.toggle('active', p === 'safe');
     document.getElementById('permAuto').classList.toggle('active', p === 'auto');
-    if (save) fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ permissions: p }),
-    });
+    if (save) apiFire('/api/settings', 'PUT', { permissions: p });
 }
 
 export function getModelValue(cli) {
@@ -263,11 +260,7 @@ export async function savePerCli() {
             effort: effortEl ? effortEl.value : '',
         };
     }
-    await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ perCli }),
-    });
+    await apiJson('/api/settings', 'PUT', { perCli });
 }
 
 export function onCliChange(save = true) {
@@ -304,7 +297,8 @@ export function onCliChange(save = true) {
         }
     };
 
-    fetch('/api/settings').then(r => r.json()).then(s => {
+    api('/api/settings').then(s => {
+        if (!s) return;
         const ao = s.activeOverrides?.[cli] || {};
         const pc = s.perCli?.[cli] || {};
         const model = ao.model || pc.model;
@@ -330,11 +324,7 @@ export async function saveActiveCliSettings() {
     const overrides = {};
     overrides[cli] = { model };
     if (!effortEl?.disabled) overrides[cli].effort = effortEl?.value || '';
-    await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ activeOverrides: overrides }),
-    });
+    await apiJson('/api/settings', 'PUT', { activeOverrides: overrides });
 }
 
 // ── Telegram ──
@@ -344,21 +334,13 @@ export async function saveTelegramSettings() {
     const allowedChatIds = chatIdsRaw
         ? chatIdsRaw.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n))
         : [];
-    await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegram: { token, allowedChatIds } }),
-    });
+    await apiJson('/api/settings', 'PUT', { telegram: { token, allowedChatIds } });
 }
 
 export async function setTelegram(enabled) {
     document.getElementById('tgOn').classList.toggle('active', enabled);
     document.getElementById('tgOff').classList.toggle('active', !enabled);
-    await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ telegram: { enabled } }),
-    });
+    await apiJson('/api/settings', 'PUT', { telegram: { enabled } });
 }
 
 function loadTelegramSettings(s) {
@@ -402,11 +384,7 @@ export function loadFallbackOrder(s) {
 export async function saveFallbackOrder() {
     const selects = document.querySelectorAll('#fallbackOrderList select');
     const fallbackOrder = [...selects].map(s => s.value).filter(Boolean);
-    await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fallbackOrder }),
-    });
+    await apiJson('/api/settings', 'PUT', { fallbackOrder });
 }
 
 // ── CLI Status ──
@@ -423,8 +401,8 @@ export async function loadCliStatus(force = false) {
     if (el) el.innerHTML = '<div style="color:var(--text-dim);font-size:11px">Loading...</div>';
 
     const [cliStatus, quota] = await Promise.all([
-        (await fetch('/api/cli-status')).json(),
-        (await fetch('/api/quota')).json(),
+        api('/api/cli-status'),
+        api('/api/quota'),
     ]);
 
     state.cliStatusCache = { cliStatus, quota };
@@ -510,8 +488,9 @@ function renderCliStatus(data) {
 
 // ── Prompt Modal ──
 export function openPromptModal() {
-    fetch('/api/prompt').then(r => r.json()).then(({ content }) => {
-        document.getElementById('modalPromptEditor').value = content;
+    api('/api/prompt').then(data => {
+        if (!data) return;
+        document.getElementById('modalPromptEditor').value = data.content || '';
         document.getElementById('promptModal').classList.add('open');
     });
 }
@@ -523,10 +502,6 @@ export function closePromptModal(e) {
 
 export async function savePromptFromModal() {
     const content = document.getElementById('modalPromptEditor').value;
-    await fetch('/api/prompt', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-    });
+    await apiJson('/api/prompt', 'PUT', { content });
     document.getElementById('promptModal').classList.remove('open');
 }
