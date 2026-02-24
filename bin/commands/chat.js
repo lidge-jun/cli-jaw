@@ -2,12 +2,14 @@
  * cli-claw chat — Phase 9.5
  * Three modes: default (raw stdin, persistent footer), --raw (JSON in UI), --simple (plain readline)
  */
-import * as readline from 'node:readline';
 import { createInterface } from 'node:readline';
 import { parseArgs } from 'node:util';
 import WebSocket from 'ws';
 import fs from 'node:fs';
-import { resolve as resolvePath } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { resolve as resolvePath, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseCommand, executeCommand, getCompletionItems } from '../../src/commands.js';
 
 const { values } = parseArgs({
     args: process.argv.slice(3),
@@ -29,6 +31,10 @@ const c = {
 // ─── Connect ─────────────────────────────────
 const wsUrl = `ws://localhost:${values.port}`;
 const apiUrl = `http://localhost:${values.port}`;
+const APP_VERSION = '0.1.0';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const SKILL_SCRIPT = resolvePath(__dirname, 'skill.js');
 
 let ws;
 try {
@@ -50,8 +56,8 @@ try {
     if (r.ok) { const s = await r.json(); info = { cli: s.cli || 'codex', workingDir: s.workingDir || '~' }; }
 } catch { }
 
-const cliLabel = { claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI' };
-const cliColor = { claude: c.magenta, codex: c.red, gemini: c.blue };
+const cliLabel = { claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI', opencode: 'OpenCode' };
+const cliColor = { claude: c.magenta, codex: c.red, gemini: c.blue, opencode: c.yellow };
 const accent = cliColor[info.cli] || c.red;
 const label = cliLabel[info.cli] || info.cli;
 const dir = info.workingDir.replace(process.env.HOME, '~');
@@ -60,11 +66,83 @@ const dir = info.workingDir.replace(process.env.HOME, '~');
 const W = () => Math.max(20, Math.min((process.stdout.columns || 60) - 4, 60));
 const hrLine = () => '-'.repeat(W());
 
+function renderCommandText(text) {
+    return String(text || '').replace(/\n/g, '\n  ');
+}
+
+async function apiJson(path, init = {}, timeoutMs = 10000) {
+    const headers = { ...(init.headers || {}) };
+    const req = { ...init, headers, signal: AbortSignal.timeout(timeoutMs) };
+    if (req.body && typeof req.body !== 'string') {
+        req.body = JSON.stringify(req.body);
+        if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
+    }
+    const resp = await fetch(`${apiUrl}${path}`, req);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+        const msg = data?.error || data?.message || `${resp.status} ${resp.statusText}`;
+        throw new Error(msg);
+    }
+    return data;
+}
+
+function runSkillResetLocal() {
+    const proc = spawnSync(
+        process.execPath,
+        [SKILL_SCRIPT, 'reset', '--force'],
+        { encoding: 'utf8', timeout: 120000 }
+    );
+    if (proc.error) throw proc.error;
+    if (proc.status !== 0) {
+        const msg = (proc.stderr || proc.stdout || `exit ${proc.status}`).trim();
+        throw new Error(msg);
+    }
+}
+
+function makeCliCommandCtx() {
+    return {
+        interface: 'cli',
+        version: APP_VERSION,
+        getSession: () => apiJson('/api/session'),
+        getSettings: () => apiJson('/api/settings'),
+        updateSettings: (patch) => apiJson('/api/settings', { method: 'PUT', body: patch }),
+        getRuntime: () => apiJson('/api/runtime').catch(() => null),
+        getSkills: () => apiJson('/api/skills').catch(() => []),
+        clearSession: () => apiJson('/api/clear', { method: 'POST' }),
+        getCliStatus: () => apiJson('/api/cli-status').catch(() => null),
+        getMcp: () => apiJson('/api/mcp'),
+        syncMcp: () => apiJson('/api/mcp/sync', { method: 'POST' }),
+        installMcp: () => apiJson('/api/mcp/install', { method: 'POST' }, 120000),
+        listMemory: () => apiJson('/api/claw-memory/list').then(d => d.files || []),
+        searchMemory: (q) => apiJson(`/api/claw-memory/search?q=${encodeURIComponent(q)}`).then(d => d.result || '(no results)'),
+        getBrowserStatus: () => apiJson('/api/browser/status'),
+        getBrowserTabs: () => apiJson('/api/browser/tabs'),
+        getPrompt: () => apiJson('/api/prompt'),
+        resetSkills: async () => runSkillResetLocal(),
+    };
+}
+
 // ─── Simple mode (plain readline, no tricks) ──
 if (values.simple) {
-    console.log(`\n  cli-claw v0.1.0 · ${label} · :${values.port}\n`);
+    console.log(`\n  cli-claw v${APP_VERSION} · ${label} · :${values.port}\n`);
     const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: `${label} > ` });
     let streaming = false;
+    async function runSlashCommand(parsed) {
+        try {
+            const result = await executeCommand(parsed, makeCliCommandCtx());
+            if (result?.code === 'clear_screen') console.clear();
+            if (result?.text) console.log(`  ${renderCommandText(result.text)}`);
+            if (result?.code === 'exit') {
+                ws.close();
+                rl.close();
+                process.exit(0);
+                return;
+            }
+        } catch (err) {
+            console.log(`  ${c.red}${err.message}${c.reset}`);
+        }
+        rl.prompt();
+    }
     ws.on('message', (data) => {
         try {
             const msg = JSON.parse(data.toString());
@@ -81,7 +159,6 @@ if (values.simple) {
     rl.on('line', (line) => {
         const t = line.trim();
         if (!t) { rl.prompt(); return; }
-        if (t === '/quit' || t === '/q') { ws.close(); rl.close(); process.exit(0); }
         // Phase 10: /file command
         if (t.startsWith('/file ')) {
             const parts = t.slice(6).trim().split(/\s+/);
@@ -92,40 +169,8 @@ if (values.simple) {
             ws.send(JSON.stringify({ type: 'send_message', text: prompt }));
             return;
         }
-        // Phase 12.1: /mcp command
-        if (t === '/mcp' || t.startsWith('/mcp ')) {
-            const sub = t.slice(4).trim();
-            if (sub === 'sync') {
-                fetch(`${apiUrl}/api/mcp/sync`, { method: 'POST' })
-                    .then(r => r.json())
-                    .then(d => { console.log(`  ${c.green}MCP synced:${c.reset}`, JSON.stringify(d.results)); rl.prompt(); })
-                    .catch(e => { console.log(`  ${c.red}${e.message}${c.reset}`); rl.prompt(); });
-            } else if (sub === 'install') {
-                console.log(`  ${c.yellow}📦 Installing MCP servers globally...${c.reset}`);
-                fetch(`${apiUrl}/api/mcp/install`, { method: 'POST' })
-                    .then(r => r.json())
-                    .then(d => {
-                        for (const [n, v] of Object.entries(d.results || {})) {
-                            const icon = v.status === 'installed' ? '✅' : v.status === 'skip' ? '⏭️' : '❌';
-                            console.log(`  ${icon} ${n}: ${v.status}${v.bin ? ` → ${v.bin}` : ''}${v.reason || ''}`);
-                        }
-                        rl.prompt();
-                    })
-                    .catch(e => { console.log(`  ${c.red}${e.message}${c.reset}`); rl.prompt(); });
-            } else {
-                fetch(`${apiUrl}/api/mcp`)
-                    .then(r => r.json())
-                    .then(d => {
-                        const names = Object.keys(d.servers || {});
-                        console.log(`  ${c.cyan}MCP servers (${names.length}):${c.reset} ${names.join(', ') || '(none)'}`);
-                        console.log(`  ${c.dim}/mcp sync    — 모든 CLI에 동기화${c.reset}`);
-                        console.log(`  ${c.dim}/mcp install — 전역 설치 (npm i -g)${c.reset}`);
-                        rl.prompt();
-                    })
-                    .catch(e => { console.log(`  ${c.red}${e.message}${c.reset}`); rl.prompt(); });
-            }
-            return;
-        }
+        const parsed = parseCommand(t);
+        if (parsed) { void runSlashCommand(parsed); return; }
         ws.send(JSON.stringify({ type: 'send_message', text: t }));
     });
     rl.on('close', () => { ws.close(); process.exit(0); });
@@ -138,15 +183,16 @@ if (values.simple) {
 
     // Banner
     console.log('');
-    console.log(`  ${c.bold}cli-claw${c.reset} ${c.dim}v0.1.0${c.reset}${isRaw ? `  ${c.dim}(raw json)${c.reset}` : ''}`);
+    console.log(`  ${c.bold}cli-claw${c.reset} ${c.dim}v${APP_VERSION}${c.reset}${isRaw ? `  ${c.dim}(raw json)${c.reset}` : ''}`);
     console.log('');
     console.log(`  ${c.dim}engine:${c.reset}    ${accent}${label}${c.reset}`);
     console.log(`  ${c.dim}directory:${c.reset}  ${c.cyan}${dir}${c.reset}`);
     console.log(`  ${c.dim}server:${c.reset}    ${c.green}\u25CF${c.reset} localhost:${values.port}`);
     console.log('');
-    console.log(`  ${c.dim}/quit to exit, /clear to reset, /file <path> to attach${c.reset}`);
+    console.log(`  ${c.dim}/quit to exit, /clear to clear screen, /reset confirm to wipe${c.reset}`);
+    console.log(`  ${c.dim}/file <path> to attach${c.reset}`);
 
-    const footer = `  ${c.dim}${accent}${label}${c.reset}${c.dim}  |  /quit  |  /clear${c.reset}`;
+    const footer = `  ${c.dim}${accent}${label}${c.reset}${c.dim}  |  /quit  |  /clear  |  /reset${c.reset}`;
     const promptPrefix = `  ${accent}\u276F${c.reset} `;
 
     // ─── Scroll region: fixed footer at bottom ──
@@ -170,10 +216,8 @@ if (values.simple) {
         process.stdout.write(`\x1b[${rows};1H\n`);
     }
 
-    // Redraw footer on terminal resize
-    process.stdout.on('resize', () => setupScrollRegion());
-
     function showPrompt() {
+        if (typeof closeAutocomplete === 'function') closeAutocomplete();
         prevLineCount = 1;  // reset for fresh prompt
         console.log('');
         console.log(`  ${c.dim}${hrLine()}${c.reset}`);
@@ -201,6 +245,19 @@ if (values.simple) {
             }
         }
         return w;
+    }
+
+    function clipTextToCols(str, maxCols) {
+        if (maxCols <= 0) return '';
+        let out = '';
+        let w = 0;
+        for (const ch of str) {
+            const cw = visualWidth(ch);
+            if (w + cw > maxCols) break;
+            out += ch;
+            w += cw;
+        }
+        return out;
     }
 
     let prevLineCount = 1;  // track how many terminal rows input occupied
@@ -240,50 +297,278 @@ if (values.simple) {
     let inputBuf = '';
     let inputActive = true;
     let streaming = false;
+    let commandRunning = false;
+    const ESC_WAIT_MS = 70;
+    let escPending = false;
+    let escTimer = null;
+    const ac = {
+        open: false,
+        items: [],
+        selected: 0,
+        windowStart: 0,
+        visibleRows: 0,
+        renderedRows: 0,
+        maxRows: 6,
+    };
 
-    // ─── Raw stdin input ─────────────────────
-    process.stdin.setRawMode(true);
-    process.stdin.resume();
-    process.stdin.setEncoding('utf8');
+    function getMaxPopupRows() {
+        // Scroll region ends at rows-2 (rows-1/rows are fixed footer).
+        // Prompt baseline at rows-2 can be lifted up to rows-3 lines.
+        return Math.max(0, getRows() - 3);
+    }
 
-    process.stdin.on('data', (key) => {
-        // ESC and Ctrl+C always work, even when agent is running
-        // Typing always works (for queue). Only Enter submission checks inputActive.
+    // ─ Phase 1c: use terminal natural scrolling to create space below ─
+    // Prints \n within scroll region to push content up if needed,
+    // then CSI A back to prompt row. No content is overwritten.
+    function ensureSpaceBelow(n) {
+        if (n <= 0) return;
+        for (let i = 0; i < n; i++) process.stdout.write('\n');
+        process.stdout.write(`\x1b[${n}A`);
+    }
 
-        // Phase 12.1.7: Option+Enter (ESC+CR/LF) → insert newline
-        if (key === '\x1b\r' || key === '\x1b\n') {
-            inputBuf += '\n';
-            redrawPromptLine();
+    function syncAutocompleteWindow() {
+        if (!ac.items.length || ac.visibleRows <= 0) {
+            ac.windowStart = 0;
             return;
         }
+        ac.selected = Math.max(0, Math.min(ac.selected, ac.items.length - 1));
+        const maxStart = Math.max(0, ac.items.length - ac.visibleRows);
+        ac.windowStart = Math.max(0, Math.min(ac.windowStart, maxStart));
+        if (ac.selected < ac.windowStart) ac.windowStart = ac.selected;
+        if (ac.selected >= ac.windowStart + ac.visibleRows) {
+            ac.windowStart = ac.selected - ac.visibleRows + 1;
+        }
+    }
 
-        if (key === '\r' || key === '\n') {
-            // Backslash continuation: \ at end → newline instead of submit
-            if (inputBuf.endsWith('\\')) {
-                inputBuf = inputBuf.slice(0, -1) + '\n';
-                redrawPromptLine();
-                return;
+    function resolveAutocompleteState(prevName) {
+        if (!inputBuf.startsWith('/') || inputBuf.includes(' ')) {
+            return { open: false, items: [], selected: 0, visibleRows: 0 };
+        }
+        const items = getCompletionItems(inputBuf, 'cli');
+        if (!items.length) {
+            return { open: false, items: [], selected: 0, visibleRows: 0 };
+        }
+        const selected = (() => {
+            if (!prevName) return 0;
+            const idx = items.findIndex(i => i.name === prevName);
+            return idx >= 0 ? idx : 0;
+        })();
+        const visibleRows = Math.min(ac.maxRows, items.length, getMaxPopupRows());
+        if (visibleRows <= 0) {
+            return { open: false, items: [], selected: 0, visibleRows: 0 };
+        }
+        return { open: true, items, selected, visibleRows };
+    }
+
+    function clearAutocomplete() {
+        if (ac.renderedRows <= 0) return;
+        process.stdout.write('\x1b[s');
+        for (let row = 1; row <= ac.renderedRows; row++) {
+            process.stdout.write(`\x1b[${row}B\r\x1b[2K\x1b[${row}A`);
+        }
+        process.stdout.write('\x1b[u');
+        ac.renderedRows = 0;
+    }
+
+    function closeAutocomplete() {
+        clearAutocomplete();
+        ac.open = false;
+        ac.items = [];
+        ac.selected = 0;
+        ac.windowStart = 0;
+        ac.visibleRows = 0;
+    }
+
+    function formatAutocompleteLine(item, selected) {
+        const cmd = `/${item.name}`;
+        const cmdCol = 14;
+        const cmdText = cmd.length >= cmdCol ? cmd.slice(0, cmdCol) : cmd.padEnd(cmdCol, ' ');
+        const desc = item.desc || '';
+        const raw = `  ${cmdText}  ${desc}`;
+        const line = clipTextToCols(raw, (process.stdout.columns || 80) - 2);
+        return selected ? `\x1b[7m${line}${c.reset}` : `${c.dim}${line}${c.reset}`;
+    }
+
+    function renderAutocomplete() {
+        clearAutocomplete();
+        if (!ac.open || ac.items.length === 0 || ac.visibleRows <= 0) return;
+        syncAutocompleteWindow();
+        const start = ac.windowStart;
+        const end = Math.min(ac.items.length, start + ac.visibleRows);
+        process.stdout.write('\x1b[s');
+        for (let i = start; i < end; i++) {
+            const row = (i - start) + 1;
+            process.stdout.write(`\x1b[${row}B\r\x1b[2K`);
+            process.stdout.write(formatAutocompleteLine(ac.items[i], i === ac.selected));
+            process.stdout.write(`\x1b[${row}A`);
+        }
+        ac.renderedRows = end - start;
+        process.stdout.write('\x1b[u');
+    }
+
+    function redrawInputWithAutocomplete() {
+        const prevName = ac.items[ac.selected]?.name;
+        const next = resolveAutocompleteState(prevName);
+        clearAutocomplete();
+        // ─ Phase 1c: scroll to create space BELOW prompt (not above) ─
+        if (next.open) ensureSpaceBelow(next.visibleRows);
+        redrawPromptLine();
+        if (!next.open) {
+            ac.open = false;
+            ac.items = [];
+            ac.selected = 0;
+            ac.windowStart = 0;
+            ac.visibleRows = 0;
+            return;
+        }
+        ac.open = true;
+        ac.items = next.items;
+        ac.selected = next.selected;
+        ac.visibleRows = next.visibleRows;
+        syncAutocompleteWindow();
+        renderAutocomplete();
+    }
+
+    function handleResize() {
+        setupScrollRegion();
+        if (!inputActive || commandRunning) return;
+        redrawInputWithAutocomplete();
+    }
+
+    // Redraw footer + input/autocomplete on terminal resize
+    process.stdout.on('resize', handleResize);
+
+    async function runSlashCommand(parsed) {
+        let exiting = false;
+        try {
+            const result = await executeCommand(parsed, makeCliCommandCtx());
+            if (result?.code === 'clear_screen') {
+                console.clear();
+                setupScrollRegion();
             }
-            // Enter — submit
-            const text = inputBuf.trim();
-            inputBuf = '';
-            prevLineCount = 1;
-            console.log('');  // newline after input
-
-            if (!text) { showPrompt(); return; }
-            if (text === '/quit' || text === '/exit' || text === '/q') {
+            if (result?.text) console.log(`  ${renderCommandText(result.text)}`);
+            if (result?.code === 'exit') {
+                exiting = true;
                 cleanupScrollRegion();
                 console.log(`  ${c.dim}Bye! \uD83E\uDD9E${c.reset}\n`);
                 ws.close();
                 process.stdin.setRawMode(false);
                 process.exit(0);
             }
-            if (text === '/clear') {
-                console.clear();
-                setupScrollRegion();
+        } catch (err) {
+            console.log(`  ${c.red}${err.message}${c.reset}`);
+        } finally {
+            if (!exiting) {
+                commandRunning = false;
+                inputActive = true;
+                closeAutocomplete();
                 showPrompt();
+            }
+        }
+    }
+
+    // ─── Raw stdin input ─────────────────────
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.setEncoding('utf8');
+
+    function flushPendingEscape() {
+        escPending = false;
+        escTimer = null;
+        if (ac.open) {
+            closeAutocomplete();
+            redrawPromptLine();
+            return;
+        }
+        if (!inputActive) {
+            if (commandRunning) return;
+            ws.send(JSON.stringify({ type: 'stop' }));
+            console.log(`\n  ${c.yellow}■ stopped${c.reset}`);
+            inputActive = true;
+            showPrompt();
+        }
+    }
+
+    process.stdin.on('data', (key) => {
+        if (escPending) {
+            if (escTimer) clearTimeout(escTimer);
+            escTimer = null;
+            escPending = false;
+            if (!key.startsWith('\x1b')) key = `\x1b${key}`;
+        }
+
+        // Delay ESC standalone handling to distinguish it from ESC sequences.
+        if (key === '\x1b') {
+            escPending = true;
+            escTimer = setTimeout(flushPendingEscape, ESC_WAIT_MS);
+            return;
+        }
+
+        // ESC and Ctrl+C always work, even when agent is running
+        // Typing always works (for queue). Only Enter submission checks inputActive.
+
+        // Phase 12.1.7: Option+Enter (ESC+CR/LF) → insert newline
+        if (key === '\x1b\r' || key === '\x1b\n') {
+            if (commandRunning) return;
+            inputBuf += '\n';
+            redrawInputWithAutocomplete();
+            return;
+        }
+
+        // Autocomplete navigation (raw ESC sequences)
+        const isUpKey = key === '\x1b[A' || key === '\x1bOA';
+        const isDownKey = key === '\x1b[B' || key === '\x1bOB';
+        if (ac.open && isUpKey) { // Up
+            ac.selected = Math.max(0, ac.selected - 1);
+            if (ac.selected < ac.windowStart) ac.windowStart = ac.selected;
+            renderAutocomplete();
+            return;
+        }
+        if (ac.open && isDownKey) { // Down
+            const maxIdx = ac.items.length - 1;
+            ac.selected = Math.min(maxIdx, ac.selected + 1);
+            if (ac.selected >= ac.windowStart + ac.visibleRows) {
+                ac.windowStart = ac.selected - ac.visibleRows + 1;
+            }
+            renderAutocomplete();
+            return;
+        }
+        if (ac.open && key === '\t') { // Tab accept (no execute)
+            const picked = ac.items[ac.selected];
+            if (picked) {
+                inputBuf = `/${picked.name}${picked.args ? ' ' : ''}`;
+                closeAutocomplete();
+                redrawPromptLine();
+            }
+            return;
+        }
+        if (key === '\r' || key === '\n') {
+            if (ac.open) {
+                const picked = ac.items[ac.selected];
+                closeAutocomplete();
+                if (picked) {
+                    if (picked.args) {
+                        inputBuf = `/${picked.name} `;
+                        redrawPromptLine();
+                        return;
+                    }
+                    inputBuf = `/${picked.name}`;
+                }
+            }
+            // Backslash continuation: \ at end → newline instead of submit
+            if (inputBuf.endsWith('\\')) {
+                inputBuf = inputBuf.slice(0, -1) + '\n';
+                redrawInputWithAutocomplete();
                 return;
             }
+            // Enter — submit
+            const text = inputBuf.trim();
+            inputBuf = '';
+            closeAutocomplete();
+            prevLineCount = 1;
+            console.log('');  // newline after input
+
+            if (!text) { showPrompt(); return; }
             // Phase 10: /file command
             if (text.startsWith('/file ')) {
                 const parts = text.slice(6).trim().split(/\s+/);
@@ -299,39 +584,11 @@ if (values.simple) {
                 inputActive = false;
                 return;
             }
-            // Phase 12.1: /mcp command
-            if (text === '/mcp' || text.startsWith('/mcp ')) {
-                const sub = text.slice(4).trim();
-                if (sub === 'sync') {
-                    fetch(`${apiUrl}/api/mcp/sync`, { method: 'POST' })
-                        .then(r => r.json())
-                        .then(d => { console.log(`  ${c.green}MCP synced:${c.reset} ${JSON.stringify(d.results)}`); inputActive = true; showPrompt(); })
-                        .catch(e => { console.log(`  ${c.red}${e.message}${c.reset}`); inputActive = true; showPrompt(); });
-                } else if (sub === 'install') {
-                    console.log(`  ${c.yellow}📦 Installing MCP servers globally...${c.reset}`);
-                    fetch(`${apiUrl}/api/mcp/install`, { method: 'POST' })
-                        .then(r => r.json())
-                        .then(d => {
-                            for (const [n, v] of Object.entries(d.results || {})) {
-                                const icon = v.status === 'installed' ? '✅' : v.status === 'skip' ? '⏭️' : '❌';
-                                console.log(`  ${icon} ${n}: ${v.status}${v.bin ? ` → ${v.bin}` : ''}${v.reason || ''}`);
-                            }
-                            inputActive = true; showPrompt();
-                        })
-                        .catch(e => { console.log(`  ${c.red}${e.message}${c.reset}`); inputActive = true; showPrompt(); });
-                } else {
-                    fetch(`${apiUrl}/api/mcp`)
-                        .then(r => r.json())
-                        .then(d => {
-                            const names = Object.keys(d.servers || {});
-                            console.log(`  ${c.cyan}MCP servers (${names.length}):${c.reset} ${names.join(', ') || '(none)'}`);
-                            console.log(`  ${c.dim}/mcp sync    — 모든 CLI에 동기화${c.reset}`);
-                            console.log(`  ${c.dim}/mcp install — 전역 설치 (npm i -g)${c.reset}`);
-                            inputActive = true; showPrompt();
-                        })
-                        .catch(e => { console.log(`  ${c.red}${e.message}${c.reset}`); inputActive = true; showPrompt(); });
-                }
+            const parsed = parseCommand(text);
+            if (parsed) {
                 inputActive = false;
+                commandRunning = true;
+                void runSlashCommand(parsed);
                 return;
             }
             ws.send(JSON.stringify({ type: 'send_message', text }));
@@ -340,11 +597,12 @@ if (values.simple) {
             // Backspace
             if (inputBuf.length > 0) {
                 inputBuf = inputBuf.slice(0, -1);
-                redrawPromptLine();
+                redrawInputWithAutocomplete();
             }
         } else if (key === '\x03') {
             // Ctrl+C — stop agent if running, otherwise exit
             if (!inputActive) {
+                if (commandRunning) return;
                 ws.send(JSON.stringify({ type: 'stop' }));
                 console.log(`\n  ${c.yellow}■ stopped${c.reset}`);
                 inputActive = true;
@@ -359,24 +617,17 @@ if (values.simple) {
         } else if (key === '\x15') {
             // Ctrl+U — clear line
             inputBuf = '';
-            redrawPromptLine();
-        } else if (key === '\x1b') {
-            // ESC — stop agent if running
-            if (!inputActive) {
-                ws.send(JSON.stringify({ type: 'stop' }));
-                console.log(`\n  ${c.yellow}■ stopped${c.reset}`);
-                inputActive = true;
-                showPrompt();
-            }
+            redrawInputWithAutocomplete();
         } else if (key.charCodeAt(0) >= 32 || key.charCodeAt(0) > 127) {
             // Printable chars (including multibyte/Korean)
             // Phase 12.1.5: allow typing during agent run for queue
             if (!inputActive) {
+                if (commandRunning) return;
                 inputActive = true;
                 showPrompt();  // new separator + prompt before queue input
             }
             inputBuf += key;
-            redrawPromptLine();
+            redrawInputWithAutocomplete();
         }
     });
 

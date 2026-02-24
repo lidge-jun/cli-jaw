@@ -1,0 +1,402 @@
+// ─── Slash Commands Registry + Dispatcher ───────────────────────────────
+
+const CATEGORY_ORDER = ['session', 'model', 'tools', 'cli'];
+const CATEGORY_LABEL = {
+    session: 'Session',
+    model: 'Model',
+    tools: 'Tools',
+    cli: 'CLI',
+};
+
+function sortCommands(list) {
+    return [...list].sort((a, b) => {
+        const ai = CATEGORY_ORDER.indexOf(a.category || 'tools');
+        const bi = CATEGORY_ORDER.indexOf(b.category || 'tools');
+        if (ai !== bi) return ai - bi;
+        return a.name.localeCompare(b.name);
+    });
+}
+
+function displayUsage(cmd) {
+    return `/${cmd.name}${cmd.args ? ` ${cmd.args}` : ''}`;
+}
+
+function findCommand(name) {
+    const key = (name || '').toLowerCase();
+    return COMMANDS.find(c => c.name === key || (c.aliases || []).includes(key));
+}
+
+async function safeCall(fn, fallback = null) {
+    if (typeof fn !== 'function') return fallback;
+    try {
+        return await fn();
+    } catch {
+        return fallback;
+    }
+}
+
+function formatDuration(seconds) {
+    if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0) return '-';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+}
+
+function normalizeResult(result) {
+    if (!result) return { ok: true, text: '' };
+    if (typeof result === 'string') return { ok: true, text: result };
+    if (typeof result === 'object') return { ok: result.ok !== false, ...result };
+    return { ok: true, text: String(result) };
+}
+
+function unknownCommand(name) {
+    return {
+        ok: false,
+        code: 'unknown_command',
+        text: `알 수 없는 커맨드: /${name}\n/help로 사용 가능한 커맨드를 확인하세요.`,
+    };
+}
+
+function unsupportedCommand(cmd, iface) {
+    return {
+        ok: false,
+        code: 'unsupported_interface',
+        text: `❌ /${cmd.name}은(는) ${iface}에서 사용할 수 없습니다.`,
+    };
+}
+
+async function helpHandler(args, ctx) {
+    const iface = ctx.interface || 'cli';
+    if (args[0]) {
+        const targetName = String(args[0]).replace(/^\//, '');
+        const target = findCommand(targetName);
+        if (!target) return unknownCommand(targetName);
+        const lines = [
+            `${displayUsage(target)} — ${target.desc}`,
+            `interfaces: ${target.interfaces.join(', ')}`,
+        ];
+        return { ok: true, text: lines.join('\n') };
+    }
+
+    const available = sortCommands(COMMANDS.filter(c =>
+        c.interfaces.includes(iface) && !c.hidden
+    ));
+    const byCategory = new Map();
+    for (const cmd of available) {
+        const cat = cmd.category || 'tools';
+        if (!byCategory.has(cat)) byCategory.set(cat, []);
+        byCategory.get(cat).push(cmd);
+    }
+
+    const lines = ['사용 가능한 커맨드'];
+    for (const cat of CATEGORY_ORDER) {
+        const cmds = byCategory.get(cat);
+        if (!cmds?.length) continue;
+        lines.push(`\n[${CATEGORY_LABEL[cat] || cat}]`);
+        for (const cmd of cmds) {
+            lines.push(`- ${displayUsage(cmd)} — ${cmd.desc}`);
+        }
+    }
+    lines.push('\n상세 도움말: /help <command>');
+    return { ok: true, text: lines.join('\n') };
+}
+
+async function statusHandler(_args, ctx) {
+    const [settings, session, runtime, skills] = await Promise.all([
+        safeCall(ctx.getSettings, null),
+        safeCall(ctx.getSession, null),
+        safeCall(ctx.getRuntime, null),
+        safeCall(ctx.getSkills, []),
+    ]);
+
+    const cli = settings?.cli || session?.active_cli || 'unknown';
+    const model = settings?.perCli?.[cli]?.model || session?.model || 'default';
+    const effort = settings?.perCli?.[cli]?.effort || session?.effort || '-';
+    const agent = runtime?.activeAgent === true
+        ? '● running'
+        : runtime?.activeAgent === false ? '○ idle' : '-';
+    const queuePending = runtime?.queuePending ?? '-';
+    const uptime = formatDuration(runtime?.uptimeSec);
+    const activeSkills = Array.isArray(skills) ? skills.filter(s => s.enabled).length : '-';
+    const refSkills = Array.isArray(skills) ? skills.filter(s => !s.enabled).length : '-';
+
+    return {
+        ok: true,
+        text: [
+            `🦞 cli-claw v${ctx.version || 'unknown'}`,
+            `CLI:     ${cli}`,
+            `Model:   ${model}`,
+            `Effort:  ${effort || '-'}`,
+            `Uptime:  ${uptime}`,
+            `Agent:   ${agent}`,
+            `Queue:   ${queuePending}`,
+            `Skills:  ${activeSkills} active, ${refSkills} ref`,
+        ].join('\n'),
+    };
+}
+
+async function modelHandler(args, ctx) {
+    const settings = await safeCall(ctx.getSettings, null);
+    if (!settings) return { ok: false, text: '❌ 설정을 불러올 수 없습니다.' };
+
+    const activeCli = settings.cli || 'claude';
+    const current = settings.perCli?.[activeCli]?.model || 'default';
+
+    if (!args.length) {
+        return { ok: true, text: `현재 모델(${activeCli}): ${current}` };
+    }
+
+    const nextModel = args.join(' ').trim();
+    if (!nextModel || nextModel.length > 200 || /[\r\n]/.test(nextModel)) {
+        return { ok: false, text: '❌ 유효하지 않은 모델 이름입니다.' };
+    }
+
+    const nextPerCli = {
+        ...(settings.perCli || {}),
+        [activeCli]: {
+            ...(settings.perCli?.[activeCli] || {}),
+            model: nextModel,
+        },
+    };
+    await ctx.updateSettings({ perCli: nextPerCli });
+    return {
+        ok: true,
+        text: `✅ 모델 변경: ${nextModel}\n다음 메시지부터 적용됩니다.`,
+    };
+}
+
+async function cliHandler(args, ctx) {
+    const settings = await safeCall(ctx.getSettings, null);
+    if (!settings) return { ok: false, text: '❌ 설정을 불러올 수 없습니다.' };
+
+    const allowed = Object.keys(settings.perCli || {});
+    const fallbackAllowed = allowed.length ? allowed : ['claude', 'codex', 'gemini', 'opencode'];
+    const current = settings.cli || 'claude';
+
+    if (!args.length) {
+        return {
+            ok: true,
+            text: `현재 CLI: ${current}\n사용 가능: ${fallbackAllowed.join(', ')}`,
+        };
+    }
+
+    const nextCli = args[0].toLowerCase();
+    if (!fallbackAllowed.includes(nextCli)) {
+        return {
+            ok: false,
+            text: `❌ 알 수 없는 CLI: ${nextCli}\n사용 가능: ${fallbackAllowed.join(', ')}`,
+        };
+    }
+
+    if (nextCli === current) {
+        return { ok: true, text: `이미 ${nextCli}가 활성화되어 있습니다.` };
+    }
+
+    await ctx.updateSettings({ cli: nextCli });
+    return { ok: true, text: `✅ CLI 변경: ${current} → ${nextCli}` };
+}
+
+async function skillHandler(args, ctx) {
+    const sub = (args[0] || 'list').toLowerCase();
+    if (sub === 'list') {
+        const skills = await safeCall(ctx.getSkills, []);
+        if (!Array.isArray(skills)) return { ok: false, text: '❌ 스킬 정보를 불러올 수 없습니다.' };
+        const active = skills.filter(s => s.enabled).length;
+        const ref = skills.filter(s => !s.enabled).length;
+        return { ok: true, text: `🧰 Skills: ${active} active, ${ref} ref` };
+    }
+    if (sub === 'reset') {
+        if ((ctx.interface || 'cli') !== 'cli') {
+            return { ok: false, text: '❌ /skill reset은 CLI에서만 사용할 수 있습니다.' };
+        }
+        if (typeof ctx.resetSkills !== 'function') {
+            return { ok: false, text: '❌ 이 환경에서는 /skill reset을 사용할 수 없습니다.' };
+        }
+        await ctx.resetSkills();
+        return { ok: true, text: '✅ 스킬 초기화를 실행했습니다.' };
+    }
+    return { ok: false, text: 'Usage: /skill [list|reset]' };
+}
+
+async function clearHandler(_args, ctx) {
+    if ((ctx.interface || 'cli') === 'telegram') {
+        return { ok: true, text: 'ℹ️ Telegram에서는 /clear가 화면 정리 없이 안내만 합니다.' };
+    }
+    return {
+        ok: true,
+        code: 'clear_screen',
+        text: '✅ 화면을 정리했습니다. (대화 기록은 유지됨)',
+    };
+}
+
+async function resetHandler(args, ctx) {
+    if ((args[0] || '').toLowerCase() !== 'confirm') {
+        return {
+            ok: false,
+            text: '⚠️ 세션/대화 초기화 명령입니다.\n실행하려면 /reset confirm 을 입력하세요.',
+        };
+    }
+    if (typeof ctx.clearSession !== 'function') {
+        return { ok: false, text: '❌ 이 환경에서는 세션 초기화를 지원하지 않습니다.' };
+    }
+    await ctx.clearSession();
+    return { ok: true, text: '✅ 세션/대화가 초기화되었습니다.' };
+}
+
+async function versionHandler(_args, ctx) {
+    const status = await safeCall(ctx.getCliStatus, null);
+    const lines = [`cli-claw v${ctx.version || 'unknown'}`];
+    if (status && typeof status === 'object') {
+        for (const key of ['claude', 'codex', 'gemini', 'opencode']) {
+            if (!status[key]) continue;
+            const entry = status[key];
+            const icon = entry.available ? '✅' : '❌';
+            lines.push(`${key}: ${icon}${entry.path ? ` ${entry.path}` : ''}`);
+        }
+    }
+    return { ok: true, text: lines.join('\n') };
+}
+
+async function mcpHandler(args, ctx) {
+    const sub = (args[0] || '').toLowerCase();
+    if (sub === 'sync') {
+        const d = await ctx.syncMcp();
+        const keys = Object.keys(d?.results || {});
+        return { ok: true, text: `✅ MCP sync 완료 (${keys.length} target)` };
+    }
+    if (sub === 'install') {
+        const d = await ctx.installMcp();
+        const keys = Object.keys(d?.results || {});
+        return { ok: true, text: `✅ MCP install 완료 (${keys.length} server)` };
+    }
+    const d = await ctx.getMcp();
+    const names = Object.keys(d?.servers || {});
+    return {
+        ok: true,
+        text: `MCP servers (${names.length}): ${names.join(', ') || '(none)'}\n/mcp sync\n/mcp install`,
+    };
+}
+
+async function memoryHandler(args, ctx) {
+    if (!args.length || (args.length === 1 && args[0].toLowerCase() === 'list')) {
+        const files = await ctx.listMemory();
+        if (!files?.length) return { ok: true, text: '🧠 memory 파일이 없습니다.' };
+        const lines = files.slice(0, 20).map(f => `- ${f.path} (${f.size}b)`);
+        return { ok: true, text: `🧠 memory files (${files.length})\n${lines.join('\n')}` };
+    }
+    const query = args.join(' ').trim();
+    const result = await ctx.searchMemory(query);
+    const text = String(result || '(no results)');
+    const MAX = 3000;
+    return { ok: true, text: text.length > MAX ? text.slice(0, MAX) + '\n...(truncated)' : text };
+}
+
+async function browserHandler(args, ctx) {
+    const sub = (args[0] || 'status').toLowerCase();
+    if (sub === 'tabs') {
+        const d = await ctx.getBrowserTabs();
+        const tabs = d?.tabs || [];
+        if (!tabs.length) return { ok: true, text: '🌐 열린 탭이 없습니다.' };
+        const lines = tabs.slice(0, 10).map((t, i) => `${i + 1}. ${t.title || '(untitled)'}\n   ${t.url || ''}`);
+        return { ok: true, text: lines.join('\n') };
+    }
+    if (sub !== 'status') return { ok: false, text: 'Usage: /browser [status|tabs]' };
+    const d = await ctx.getBrowserStatus();
+    const running = d?.running ? 'running' : 'stopped';
+    const tabCount = d?.tabs?.length ?? d?.tabCount ?? '-';
+    return { ok: true, text: `🌐 Browser: ${running}\nTabs: ${tabCount}\nCDP: ${d?.cdpUrl || '-'}` };
+}
+
+async function promptHandler(_args, ctx) {
+    const d = await ctx.getPrompt();
+    const content = d?.content || '';
+    if (!content.trim()) return { ok: true, text: '(empty prompt)' };
+    const lines = content.trim().split('\n');
+    const preview = lines.slice(0, 20).join('\n');
+    const suffix = lines.length > 20 ? '\n...(truncated)' : '';
+    return { ok: true, text: `${preview}${suffix}` };
+}
+
+async function quitHandler() {
+    return { ok: true, code: 'exit', text: 'Bye!' };
+}
+
+async function fileHandler() {
+    return { ok: false, text: 'Usage: /file <path> [caption]' };
+}
+
+export const COMMANDS = [
+    { name: 'help', aliases: ['h'], desc: '커맨드 목록', args: '[command]', category: 'session', interfaces: ['cli', 'web', 'telegram'], handler: helpHandler },
+    { name: 'status', desc: '현재 상태', category: 'session', interfaces: ['cli', 'web', 'telegram'], handler: statusHandler },
+    { name: 'clear', desc: '화면 정리 (비파괴)', category: 'session', interfaces: ['cli', 'web', 'telegram'], handler: clearHandler },
+    { name: 'reset', desc: '세션/대화 초기화', args: '[confirm]', category: 'session', interfaces: ['cli', 'web', 'telegram'], handler: resetHandler },
+    { name: 'model', desc: '모델 확인/변경', args: '[name]', category: 'model', interfaces: ['cli', 'web', 'telegram'], handler: modelHandler },
+    { name: 'cli', desc: '활성 CLI 확인/변경', args: '[name]', category: 'model', interfaces: ['cli', 'web', 'telegram'], handler: cliHandler },
+    { name: 'version', desc: '버전/CLI 설치 상태', category: 'cli', interfaces: ['cli', 'web', 'telegram'], handler: versionHandler },
+    { name: 'skill', desc: '스킬 목록/초기화', args: '[list|reset]', category: 'tools', interfaces: ['cli', 'web', 'telegram'], handler: skillHandler },
+    { name: 'mcp', desc: 'MCP 목록/동기화/설치', args: '[sync|install]', category: 'tools', interfaces: ['cli', 'web'], handler: mcpHandler },
+    { name: 'memory', desc: '메모리 검색/목록', args: '[query]', category: 'tools', interfaces: ['cli'], handler: memoryHandler },
+    { name: 'browser', desc: '브라우저 상태/탭', args: '[status|tabs]', category: 'tools', interfaces: ['cli', 'web', 'telegram'], handler: browserHandler },
+    { name: 'prompt', desc: '시스템 프롬프트 확인', category: 'tools', interfaces: ['cli', 'web'], handler: promptHandler },
+    { name: 'quit', aliases: ['q', 'exit'], desc: '프로세스 종료', category: 'cli', interfaces: ['cli'], handler: quitHandler },
+    { name: 'file', desc: '파일 첨부', args: '<path> [caption]', category: 'cli', interfaces: ['cli'], hidden: true, handler: fileHandler },
+];
+
+export function parseCommand(text) {
+    if (typeof text !== 'string' || !text.startsWith('/')) return null;
+    const body = text.slice(1).trim();
+    if (!body) {
+        const help = findCommand('help');
+        return { type: 'known', cmd: help, args: [], name: 'help' };
+    }
+    const parts = body.split(/\s+/);
+    const name = (parts.shift() || '').toLowerCase();
+    const cmd = findCommand(name);
+    if (!cmd) return { type: 'unknown', name, args: parts };
+    return { type: 'known', cmd, args: parts, name };
+}
+
+export async function executeCommand(parsed, ctx) {
+    if (!parsed) return null;
+    if (parsed.type === 'unknown') return unknownCommand(parsed.name);
+    if (!parsed.cmd.interfaces.includes(ctx.interface || 'cli')) {
+        return unsupportedCommand(parsed.cmd, ctx.interface || 'cli');
+    }
+    try {
+        return normalizeResult(await parsed.cmd.handler(parsed.args || [], ctx));
+    } catch (err) {
+        const msg = err?.message || String(err);
+        return {
+            ok: false,
+            code: 'command_error',
+            text: `❌ /${parsed.cmd.name} 실행 오류: ${msg}`,
+        };
+    }
+}
+
+export function getCompletions(partial, iface = 'cli') {
+    const prefix = (partial || '').startsWith('/')
+        ? (partial || '').toLowerCase()
+        : '/' + String(partial || '').toLowerCase();
+    return getCompletionItems(prefix, iface)
+        .map(c => `/${c.name}`);
+}
+
+export function getCompletionItems(partial, iface = 'cli') {
+    const prefix = (partial || '').startsWith('/')
+        ? (partial || '').toLowerCase()
+        : '/' + String(partial || '').toLowerCase();
+    return sortCommands(COMMANDS.filter(c =>
+        c.interfaces.includes(iface) && !c.hidden
+    ))
+        .filter(c => (`/${c.name}`).startsWith(prefix))
+        .map(c => ({
+            name: c.name,
+            desc: c.desc,
+            args: c.args || '',
+            category: c.category || 'tools',
+        }));
+}

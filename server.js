@@ -197,6 +197,13 @@ wss.on('connection', (ws) => {
 
 app.get('/api/session', (_, res) => res.json(getSession()));
 app.get('/api/messages', (_, res) => res.json(getMessages.all()));
+app.get('/api/runtime', (_, res) => {
+    res.json({
+        uptimeSec: Math.floor(process.uptime()),
+        activeAgent: !!activeProcess,
+        queuePending: messageQueue.length,
+    });
+});
 
 app.post('/api/message', (req, res) => {
     const { prompt } = req.body;

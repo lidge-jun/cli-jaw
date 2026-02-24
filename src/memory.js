@@ -4,7 +4,7 @@
 import { CLAW_HOME } from './config.js';
 import { join } from 'path';
 import fs from 'fs';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 
 export const MEMORY_DIR = join(CLAW_HOME, 'memory');
 
@@ -35,14 +35,21 @@ export function ensureMemoryDir() {
 
 export function search(query) {
     ensureMemoryDir();
+    if (!query || !query.trim()) return '(query required)';
     try {
-        const escaped = query.replace(/"/g, '\\"');
-        const result = execSync(
-            `grep -rni --include="*.md" -C 3 "${escaped}" "${MEMORY_DIR}"`,
+        const proc = spawnSync(
+            'grep',
+            ['-rni', '--include=*.md', '-C', '3', '--', query, MEMORY_DIR],
             { encoding: 'utf8', timeout: 5000, maxBuffer: 1024 * 1024 }
         );
+        if (proc.error) throw proc.error;
+        if (proc.status === 1) return '(no results)';
+        if (proc.status !== 0) {
+            const msg = (proc.stderr || '').trim() || `grep exited with code ${proc.status}`;
+            return `(search error: ${msg})`;
+        }
         // Trim paths to relative
-        return result.replace(new RegExp(MEMORY_DIR + '/', 'g'), '');
+        return (proc.stdout || '').split(MEMORY_DIR + '/').join('');
     } catch {
         return '(no results)';
     }
