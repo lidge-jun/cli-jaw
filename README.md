@@ -6,7 +6,7 @@
 
 *One interface. Five CLIs. Zero API bans.*
 
-[![Tests](https://img.shields.io/badge/tests-65%20pass-brightgreen)](#-tests)
+[![Tests](https://img.shields.io/badge/tests-70%20pass-brightgreen)](#-tests)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
 
@@ -170,7 +170,7 @@ cli-claw chat       # Or use terminal TUI
 | **Heartbeat** | Scheduled auto-execution with active hours + quiet hours | ⭐⭐ |
 | **Fallback Chains** | `claude → codex → gemini` automatic retry on failure | ⭐⭐⭐ |
 | **Event Deduplication** | Claude `stream_event`/`assistant` overlap prevention | ⭐⭐⭐ |
-| **65 Unit Tests** | `node:test` — zero deps, events + telegram + registry + commands | ⭐⭐ |
+| **70 Unit Tests** | `node:test` — zero deps, events + telegram + registry + commands | ⭐⭐ |
 
 ### 🔜 Planned
 
@@ -369,7 +369,7 @@ cli-claw reset                      # Full reset (MCP/skills/employees/session)
 ## 🧪 Tests
 
 ```bash
-npm test    # 65 tests, ~90ms, zero external dependencies
+npm test    # 70 tests, ~90ms, zero external dependencies
 ```
 
 See [TESTS.md](TESTS.md) for full test coverage details.

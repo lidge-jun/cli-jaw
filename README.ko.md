@@ -6,7 +6,7 @@
 
 *인터페이스 하나. CLI 다섯 개. 차단? 그런 건 없다.*
 
-[![Tests](https://img.shields.io/badge/tests-65%20pass-brightgreen)](#-테스트)
+[![Tests](https://img.shields.io/badge/tests-70%20pass-brightgreen)](#-테스트)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
 
@@ -167,7 +167,7 @@ cli-claw chat       # 또는 터미널 TUI
 | **하트비트** | 주기적 자동 실행 + 활성 시간 + 조용한 시간 | ⭐⭐ |
 | **폴백 체인** | `claude → codex → gemini` 실패 시 자동 재시도 | ⭐⭐⭐ |
 | **이벤트 중복 제거** | Claude `stream_event`/`assistant` 오버랩 방지 | ⭐⭐⭐ |
-| **65개 단위 테스트** | `node:test` — 외부 의존성 0, events + telegram + registry + commands | ⭐⭐ |
+| **70개 단위 테스트** | `node:test` — 외부 의존성 0, events + telegram + registry + commands | ⭐⭐ |
 
 ### 🔜 구현 예정
 
@@ -366,7 +366,7 @@ cli-claw reset                      # 전체 초기화 (MCP/스킬/직원/세션
 ## 🧪 테스트
 
 ```bash
-npm test    # 65개 테스트, ~90ms, 외부 의존성 0
+npm test    # 70개 테스트, ~90ms, 외부 의존성 0
 ```
 
 상세는 [TESTS.md](TESTS.md) 참조.

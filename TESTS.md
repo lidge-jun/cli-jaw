@@ -1,13 +1,13 @@
 # 🧪 CLI-CLAW Tests
 
-[![Tests](https://img.shields.io/badge/tests-65%20pass-brightgreen)](#)
+[![Tests](https://img.shields.io/badge/tests-70%20pass-brightgreen)](#)
 
 > `node:test` + `node:assert` — zero external dependencies.
 
 ## Run
 
 ```bash
-npm test                            # All 65 tests (~90ms)
+npm test                            # All 70 tests (~90ms)
 node --test tests/unit/*.test.js    # Unit tests only
 npm run test:watch                  # Watch mode
 ```

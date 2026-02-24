@@ -6,7 +6,7 @@
 
 *一个界面，五个 CLI，封号？不存在的。*
 
-[![Tests](https://img.shields.io/badge/tests-65%20pass-brightgreen)](#-测试)
+[![Tests](https://img.shields.io/badge/tests-70%20pass-brightgreen)](#-测试)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
 
@@ -167,7 +167,7 @@ cli-claw chat       # 或使用终端 TUI
 | **心跳** | 定时自动执行 + 活跃时间 + 安静时间 | ⭐⭐ |
 | **回退链** | `claude → codex → gemini` 失败自动重试 | ⭐⭐⭐ |
 | **事件去重** | Claude `stream_event`/`assistant` 重叠防止 | ⭐⭐⭐ |
-| **65 单元测试** | `node:test` — 零外部依赖 | ⭐⭐ |
+| **70 单元测试** | `node:test` — 零外部依赖 | ⭐⭐ |
 
 ### 🔜 计划中
 
@@ -366,7 +366,7 @@ cli-claw reset                      # 全面重置（MCP/技能/员工/会话）
 ## 🧪 测试
 
 ```bash
-npm test    # 65 个测试，~90ms，零外部依赖
+npm test    # 70 个测试，~90ms，零外部依赖
 ```
 
 详情参见 [TESTS.md](TESTS.md)。
