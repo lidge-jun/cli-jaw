@@ -55,7 +55,6 @@ cli-claw/
 │   ├── postinstall.js        ← npm install 후 5-CLI 자동설치(bun→npm 폴백) + MCP + 스킬 + Copilot (212L)
 │   └── commands/
 │       ├── serve.js          ← 서버 시작 (--port/--host/--open, .env 자동감지)
-│       ├── chat.css          ← 채팅 버블/애니메이션 + flex 헤더 + stop-btn var + auto-expand (408L)
 │       ├── chat.js           ← 터미널 채팅 TUI (3모드, 슬래시커맨드, 자동완성, 844L)
 │       ├── init.js           ← 초기화 마법사
 │       ├── doctor.js         ← 진단 (12개 체크 — 5 CLI 포함, --json)
