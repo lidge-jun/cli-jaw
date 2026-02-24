@@ -1,13 +1,13 @@
 # 🧪 CLI-CLAW Tests
 
-[![Tests](https://img.shields.io/badge/tests-216%20pass-brightgreen)](#)
+[![Tests](https://img.shields.io/badge/tests-246%20pass-brightgreen)](#)
 
 > `node:test` + `node:assert` — zero external dependencies.
 
 ## Run
 
 ```bash
-npm test                            # All 216 tests (~260ms)
+npm test                            # All 246 tests (~500ms)
 node --test tests/unit/*.test.js    # Unit tests only
 node --test tests/integration/*.test.js  # Integration tests only
 npm run test:watch                  # Watch mode
@@ -51,6 +51,8 @@ npm run check:deps                  # Dependency vulnerability check
 | `path-guards.test.js` | 16 | `assertSkillId`, `assertFilename`, `safeResolveUnder` — traversal/injection/overlong |
 | `render-sanitize.test.js` | 11 | XSS regex fallback — script/event/javascript: stripping, content preservation |
 | `settings-merge.test.js` | 5 | `mergeSettingsPatch` — perCli/activeOverrides deep merge |
+| `employee-prompt.test.js` | 14 | `getEmployeePrompt`, `getEmployeePromptV2`, old name exclusion |
+| `import-resolve.test.js` | 1 | **전체 src/ import 경로 존재 검증** — 리팩토링 후 깨진 경로 탐지 |
 | `worklog.test.js` | 6 | PHASES mapping, `parseWorklogPending` extraction |
 
 ### Integration (Tier 2-3 — Express routes, CLI)
@@ -58,6 +60,8 @@ npm run check:deps                  # Dependency vulnerability check
 | File | Tests | Coverage |
 |------|:-----:|----------|
 | `route-registration.test.js` | 5 | Baseline route list, core/memory/browser route groups, dedup check |
+| `cli-basic.test.js` | 4 | CLI --help, --version, unknown command, doctor |
+| `api-smoke.test.js` | 12 | API endpoint smoke tests (server startup required) |
 
 ---
 
@@ -118,9 +122,9 @@ npm run test:coverage    # Node --experimental-test-coverage
 
 | Tier | Description | Count | Status |
 |:----:|-------------|:-----:|:------:|
-| 1 | Pure functions (zero deps) | 168 | ✅ |
-| 2 | Light I/O (tmp dir, fixture) | 43 | ✅ |
-| 3 | Integration (server/Express) | 5 | ✅ (route-registration) |
+| 1 | Pure functions (zero deps) | 183 | ✅ |
+| 2 | Light I/O (tmp dir, fixture) | 47 | ✅ |
+| 3 | Integration (server/Express) | 16 | ✅ (route + smoke + CLI) |
 | 3+ | API smoke + CLI basic | — | 📋 Phase 20.4 |
 | 4 | E2E (browser + full stack) | — | 💭 |
 
@@ -153,6 +157,7 @@ test('MY-001: descriptive test name', () => {
 Naming convention: `<PREFIX>-NNN: description`
 - `PG-*` Path Guards, `AG-*` Agent Args, `SM-*` Settings Merge
 - `ORP-*` Orchestrator Parsing, `ORT-*` Orchestrator Triage
+- `EMP-*` Employee Prompt, `IMP-*` Import Resolve
 - `SMOKE-*` API Smoke, `CLI-*` CLI Basic
 
 Tests use Node's built-in test runner — **zero configuration, zero dependencies.**

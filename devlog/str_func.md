@@ -65,10 +65,10 @@ cli-claw/
 │       ├── catalog.js        ← COMMANDS → capability map 확장 (39L)
 │       ├── policy.js         ← getVisibleCommands, getTelegramMenuCommands (37L)
 │       └── help-renderer.js  ← renderHelp list/detail mode (44L)
-├── public/                   ← Web UI (ES Modules, ~25 files, ~4500L)
-│   ├── index.html            ← 뼈대 (457L, data-i18n 완전 한글화)
+├── public/                   ← Web UI (ES Modules, ~26 files, ~4420L)
+│   ├── index.html            ← 뼈대 (456L, data-i18n 완전 한글화)
 │   ├── css/                  ← 6 files (1355L)
-│   │   ├── variables.css     ← 커스텀 프로퍼티 + 3단 폰트 + 라이트/다크 (126L)
+│   │   ├── variables.css     ← 커스텀 프로퍼티 + 3단 폰트 + 라이트/다크 (140L)
 │   │   ├── layout.css        ← 사이드바 + 토글 + 반응형 768px (281L)
 │   │   └── markdown.css      ← 렌더링 (테이블·코드·KaTeX·Mermaid) + copy 버튼 (161L)
 │   ├── locales/              ← i18n 로케일

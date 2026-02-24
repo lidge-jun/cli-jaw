@@ -6,7 +6,7 @@
 
 *인터페이스 하나. CLI 다섯 개. 차단? 그런 건 없다.*
 
-[![Tests](https://img.shields.io/badge/tests-216%20pass-brightgreen)](#-테스트)
+[![Tests](https://img.shields.io/badge/tests-246%20pass-brightgreen)](#-테스트)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
 
@@ -261,14 +261,14 @@ cli-claw reset                         # 전체 초기화
 
 </details>
 
-> 🔧 프리셋에 모델 추가: `src/cli-registry.js` 하나만 수정 — 전체 자동 반영.
+> 🔧 프리셋에 모델 추가: `src/cli/registry.js` 하나만 수정 — 전체 자동 반영.
 
 ---
 
 ## 🧪 테스트
 
 ```bash
-npm test    # 216개 테스트, ~260ms, 외부 의존성 0
+npm test    # 246개 테스트, ~500ms, 외부 의존성 0
 ```
 
 ---
