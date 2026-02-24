@@ -3,6 +3,5 @@ node_modules/
 *.db-shm
 *.db-wal
 settings.json
-devlog/
 .DS_Store
 .env
