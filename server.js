@@ -25,7 +25,7 @@ import { ok, fail } from './src/http/response.js';
 import { mergeSettingsPatch } from './src/core/settings-merge.js';
 import { setWss, broadcast } from './src/core/bus.js';
 import * as browser from './src/browser/index.js';
-import * as memory from './src/memory.js';
+import * as memory from './src/memory/memory.js';
 import { loadLocales, t, normalizeLocale } from './src/core/i18n.js';
 import {
     CLAW_HOME, PROMPTS_DIR, DB_PATH, UPLOADS_DIR,
@@ -45,18 +45,18 @@ import {
     initPromptFiles, getMemoryDir, getSystemPrompt, regenerateB,
     A2_PATH, HEARTBEAT_PATH,
     getMergedSkills,
-} from './src/prompt.js';
+} from './src/prompt/builder.js';
 import {
     activeProcess, killActiveAgent, waitForProcessEnd,
     steerAgent, enqueueMessage, processQueue, messageQueue,
     saveUpload, memoryFlushCounter,
 } from './src/agent/spawn.js';
-import { parseCommand, executeCommand, COMMANDS } from './src/commands.js';
+import { parseCommand, executeCommand, COMMANDS } from './src/cli/commands.js';
 import { orchestrate, orchestrateContinue, isContinueIntent } from './src/orchestrator/pipeline.js';
-import { initTelegram, telegramBot, telegramActiveChatIds } from './src/telegram.js';
-import { startHeartbeat, stopHeartbeat, watchHeartbeatFile } from './src/heartbeat.js';
+import { initTelegram, telegramBot, telegramActiveChatIds } from './src/telegram/bot.js';
+import { startHeartbeat, stopHeartbeat, watchHeartbeatFile } from './src/memory/heartbeat.js';
 import { fetchCopilotQuota } from './lib/quota-copilot.js';
-import { CLI_REGISTRY } from './src/cli-registry.js';
+import { CLI_REGISTRY } from './src/cli/registry.js';
 
 // ─── Resolve paths ───────────────────────────────────
 

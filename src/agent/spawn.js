@@ -9,7 +9,7 @@ import { settings, UPLOADS_DIR, detectCli } from '../core/config.js';
 import {
     getSession, updateSession, insertMessage, insertMessageWithTrace, getRecentMessages, getEmployees,
 } from '../core/db.js';
-import { getSystemPrompt } from '../prompt.js';
+import { getSystemPrompt } from '../prompt/builder.js';
 import { extractSessionId, extractFromEvent, extractFromAcpUpdate, logEventSummary } from './events.js';
 import { saveUpload as _saveUpload, buildMediaPrompt } from '../../lib/upload.js';
 
@@ -139,7 +139,7 @@ export { buildMediaPrompt };
 // ─── Spawn Agent ─────────────────────────────────────
 
 import { stripSubtaskJSON } from '../orchestrator/pipeline.js';
-import { AcpClient } from '../acp-client.js';
+import { AcpClient } from '../cli/acp-client.js';
 
 export function spawnAgent(prompt, opts = {}) {
     const { forceNew = false, agentId, sysPrompt: customSysPrompt } = opts;

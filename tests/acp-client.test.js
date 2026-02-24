@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AcpClient } from '../src/acp-client.js';
+import { AcpClient } from '../src/cli/acp-client.js';
 
 test('AcpClient handles agent requests (id + method) before notifications', () => {
     const acp = new AcpClient();

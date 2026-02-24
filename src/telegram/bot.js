@@ -3,26 +3,26 @@
 import https from 'node:https';
 import { Bot } from 'grammy';
 import { sequentialize } from '@grammyjs/runner';
-import { broadcast, addBroadcastListener, removeBroadcastListener } from './core/bus.js';
-import { settings, detectAllCli, APP_VERSION } from './core/config.js';
-import { t, normalizeLocale } from './core/i18n.js';
-import { insertMessage, getSession, updateSession, clearMessages } from './core/db.js';
+import { broadcast, addBroadcastListener, removeBroadcastListener } from '../core/bus.js';
+import { settings, detectAllCli, APP_VERSION } from '../core/config.js';
+import { t, normalizeLocale } from '../core/i18n.js';
+import { insertMessage, getSession, updateSession, clearMessages } from '../core/db.js';
 import { orchestrate, orchestrateContinue, isContinueIntent } from './orchestrator/pipeline.js';
 import {
     activeProcess, killActiveAgent, waitForProcessEnd,
     saveUpload, buildMediaPrompt, messageQueue,
 } from './agent/spawn.js';
-import { parseCommand, executeCommand, COMMANDS } from './commands.js';
-import { getMergedSkills } from './prompt.js';
-import * as memory from './memory.js';
-import { downloadTelegramFile } from '../lib/upload.js';
+import { parseCommand, executeCommand, COMMANDS } from '../cli/commands.js';
+import { getMergedSkills } from '../prompt/builder.js';
+import * as memory from '../memory/memory.js';
+import { downloadTelegramFile } from '../../lib/upload.js';
 import {
     escapeHtmlTg,
     markdownToTelegramHtml,
     chunkTelegramMessage,
     createForwarderLifecycle,
     createTelegramForwarder,
-} from './telegram-forwarder.js';
+} from './forwarder.js';
 
 export {
     escapeHtmlTg,
@@ -30,7 +30,7 @@ export {
     chunkTelegramMessage,
     createForwarderLifecycle,
     createTelegramForwarder,
-} from './telegram-forwarder.js';
+} from './forwarder.js';
 
 export function orchestrateAndCollect(prompt, meta = {}) {
     return new Promise((resolve) => {

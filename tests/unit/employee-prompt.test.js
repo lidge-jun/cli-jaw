@@ -1,7 +1,7 @@
 // Phase 17.3: employee prompt 명칭 통일 + 내용 검증
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getEmployeePrompt, getEmployeePromptV2 } from '../../src/prompt.js';
+import { getEmployeePrompt, getEmployeePromptV2 } from '../../src/prompt/builder.js';
 import { needsOrchestration, parseSubtasks } from '../../src/orchestrator/pipeline.js';
 
 // ─── getEmployeePrompt: export + 기본 구조 ─────────

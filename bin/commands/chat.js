@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { resolve as resolvePath, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseCommand, executeCommand, getCompletionItems, getArgumentCompletionItems } from '../../src/commands.js';
+import { parseCommand, executeCommand, getCompletionItems, getArgumentCompletionItems } from '../../src/cli/commands.js';
 
 const { values } = parseArgs({
     args: process.argv.slice(3),

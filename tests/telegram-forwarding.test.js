@@ -6,7 +6,7 @@ import {
     createTelegramForwarder,
     escapeHtmlTg,
     markdownToTelegramHtml,
-} from '../src/telegram-forwarder.js';
+} from '../src/telegram/forwarder.js';
 
 function createBotSpy({ failHtmlOnce = false } = {}) {
     const sent = [];

@@ -16,7 +16,7 @@ import fs from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { t, loadLocales, getPromptLocale, getAvailableLocales, normalizeLocale } from '../../src/core/i18n.js';
-import { COMMANDS } from '../../src/commands.js';
+import { COMMANDS } from '../../src/cli/commands.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOCALES_DIR = join(__dirname, '../../public/locales');

@@ -2,9 +2,9 @@
 
 import { broadcast } from '../core/bus.js';
 import { insertMessage, getEmployees } from '../core/db.js';
-import { getEmployeePromptV2, clearPromptCache } from '../prompt.js';
+import { getEmployeePromptV2, clearPromptCache } from '../prompt/builder.js';
 import { spawnAgent } from '../agent/spawn.js';
-import { createWorklog, readLatestWorklog, appendToWorklog, updateMatrix, updateWorklogStatus, parseWorklogPending } from '../worklog.js';
+import { createWorklog, readLatestWorklog, appendToWorklog, updateMatrix, updateWorklogStatus, parseWorklogPending } from '../memory/worklog.js';
 
 const MAX_ROUNDS = 3;
 
