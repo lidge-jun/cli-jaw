@@ -29,30 +29,22 @@
 - 8개 스킬 삭제 (62 → 54개)
 - 보존 스킬 5개 description 갱신 (`xlsx`, `docx`, `screen-capture`, `pdf`, `github`)
 
----
+## 4. 유사 스킬 유지 결정
 
-## 향후 고려 (미구현)
+### TTS: `tts` + `speech` → 유지 ✅
+- `tts`: macOS `say` (로컬, 무료, 오프라인, 39줄)
+- `speech`: OpenAI TTS API (클라우드, 유료, 고품질, 180줄+, 배치/톤/감정 제어)
+- 용도가 완전히 다름 → **각각 유지**
 
-### TTS 통합 (`tts` + `speech`)
-- `tts`: macOS `say` 명령 (로컬, 무료, 오프라인)
-- `speech`: OpenAI TTS API (클라우드, 유료, 고품질)
-- **구상**: `tts` 하나로 통합, provider 선택 (`--provider local|openai`) 또는 description에 둘 다 명시
-
-### 이미지 생성 통합 (`imagegen` + `nano-banana-pro`)
-- `imagegen`: OpenAI Images API (DALL-E)
-- `nano-banana-pro`: Gemini 3 Pro 이미지 생성
-- **구상**: `imagegen` 하나로 통합, provider 선택 (`--provider openai|gemini`) 또는 각각 유지 (API 키 분리)
+### 이미지 생성: `imagegen` + `nano-banana-pro` → 유지 ✅
+- `imagegen`: OpenAI DALL-E / `nano-banana-pro`: Gemini 3 Pro
+- API 키·모델 다름 → **각각 유지**
 
 ---
 
 ## 체크리스트
 
-- [x] `xlsx/SKILL.md` — pandas, csv/tsv 트리거 흡수
-- [x] `docx/SKILL.md` — 시각 검증, python-docx 흡수
-- [x] `screen-capture/SKILL.md` — 도구 우선순위 흡수
-- [x] `pdf/SKILL.md` — nano-pdf, DOCX→PDF 변환 흡수
-- [x] `github/SKILL.md` — 4개 서브스킬 워크플로우 통합
-- [x] `registry.json` — 8개 삭제, 5개 description 갱신
-- [x] 8개 중복 폴더 삭제
-- [ ] TTS 통합 (향후)
-- [ ] 이미지 생성 통합 (향후)
+- [x] 4쌍 중복 제거 + 장점 흡수
+- [x] GitHub 4개 서브스킬 통합
+- [x] registry.json 갱신 (62→54)
+- [x] TTS/이미지생성 유지 결정
