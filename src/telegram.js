@@ -57,7 +57,7 @@ export function orchestrateAndCollect(prompt) {
             clearTimeout(timeout);
             timeout = setTimeout(() => {
                 removeBroadcastListener(handler);
-                resolve(collected || '⏰ 시간 초과 (2분 무응답)');
+                resolve(collected || '⏰ 시간 초과 (4분 무응답)');
             }, IDLE_TIMEOUT);
         }
 
@@ -246,9 +246,30 @@ export function initTelegram() {
 
     async function tgOrchestrate(ctx, prompt, displayMsg) {
         if (activeProcess) {
-            console.log('[tg:steer] killing active agent for new message');
-            killActiveAgent('telegram-steer');
-            await waitForProcessEnd(3000);
+            // 큐에 추가 — steer 대신 대기
+            console.log('[tg:queue] agent busy, queueing message');
+            const { enqueueMessage } = await import('./agent.js');
+            enqueueMessage(prompt, 'telegram');
+            insertMessage.run('user', displayMsg, 'telegram', '');
+            broadcast('new_message', { role: 'user', content: displayMsg, source: 'telegram' });
+            await ctx.reply(`📥 대기열에 추가됨 (${messageQueue.length}번째)`);
+
+            // 큐 처리 후 응답을 이 채팅으로 전달
+            const queueHandler = (type, data) => {
+                if (type === 'orchestrate_done' && data.text) {
+                    removeBroadcastListener(queueHandler);
+                    const html = markdownToTelegramHtml(data.text);
+                    const chunks = chunkTelegramMessage(html);
+                    for (const chunk of chunks) {
+                        ctx.reply(chunk, { parse_mode: 'HTML' })
+                            .catch(() => ctx.reply(chunk.replace(/<[^>]+>/g, '')).catch(() => { }));
+                    }
+                }
+            };
+            addBroadcastListener(queueHandler);
+            // 5분 후 자동 정리
+            setTimeout(() => removeBroadcastListener(queueHandler), 300000);
+            return;
         }
 
         markChatActive(ctx.chat.id);
