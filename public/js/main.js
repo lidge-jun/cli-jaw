@@ -59,7 +59,7 @@ document.querySelector('.btn-attach').addEventListener('click', () => {
 
 // ── Left Sidebar ──
 document.getElementById('memorySidebarBtn').addEventListener('click', openMemoryModal);
-document.querySelector('.btn-clear').addEventListener('click', clearChat);
+document.getElementById('btnClearChat').addEventListener('click', clearChat);
 document.getElementById('hbSidebarBtn').addEventListener('click', openHeartbeatModal);
 
 // ── Tab Bar (event delegation) ──
