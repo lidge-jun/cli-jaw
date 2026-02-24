@@ -408,7 +408,6 @@ export async function loadCliStatus(force = false) {
     const interval = Number(localStorage.getItem('cliStatusInterval') || 300);
     if (!force && state.cliStatusCache && interval > 0 && (Date.now() - state.cliStatusTs) < interval * 1000) {
         renderCliStatus(state.cliStatusCache);
-        renderCliStatusSidebar(state.cliStatusCache);
         return;
     }
 
@@ -423,24 +422,6 @@ export async function loadCliStatus(force = false) {
     state.cliStatusCache = { cliStatus, quota };
     state.cliStatusTs = Date.now();
     renderCliStatus(state.cliStatusCache);
-    renderCliStatusSidebar(state.cliStatusCache);
-}
-
-// Sidebar-only load (auto-called on page init)
-export async function loadCliStatusSidebar() {
-    try {
-        if (state.cliStatusCache) {
-            renderCliStatusSidebar(state.cliStatusCache);
-            return;
-        }
-        const [cliStatus, quota] = await Promise.all([
-            (await fetch('/api/cli-status')).json(),
-            (await fetch('/api/quota')).json(),
-        ]);
-        state.cliStatusCache = { cliStatus, quota };
-        state.cliStatusTs = Date.now();
-        renderCliStatusSidebar(state.cliStatusCache);
-    } catch { /* silent on init */ }
 }
 
 function renderCliStatus(data) {
@@ -514,57 +495,6 @@ function renderCliStatus(data) {
                 ${windowsHtml}
             </div>
         `;
-    }
-
-    el.innerHTML = html;
-}
-
-// ── Compact sidebar renderer ──
-const AUTH_CMDS = {
-    claude: 'claude auth', codex: 'codex login', gemini: 'gemini',
-    opencode: 'opencode auth', copilot: 'copilot login',
-};
-
-function renderCliStatusSidebar(data) {
-    const el = document.getElementById('cliStatusSidebar');
-    if (!el) return;
-    const { cliStatus, quota } = data;
-    let html = '';
-
-    for (const [name, info] of Object.entries(cliStatus)) {
-        const q = quota[name];
-        const dot = info.available ? '🟢' : '🔴';
-
-        // Quota bar (most recent window)
-        let barHtml = '';
-        if (q?.windows?.length) {
-            const w = q.windows[0];
-            const pct = Math.round(w.percent);
-            const color = pct > 80 ? '#ef4444' : pct > 50 ? '#fbbf24' : '#38bdf8';
-            barHtml = `
-                <div style="display:flex;align-items:center;gap:4px;margin-left:18px;margin-top:1px">
-                    <div style="flex:1;height:3px;background:var(--border);border-radius:2px;overflow:hidden">
-                        <div style="width:${pct}%;height:100%;background:${color};border-radius:2px"></div>
-                    </div>
-                    <span style="font-size:9px;color:var(--text-dim);width:24px;text-align:right">${pct}%</span>
-                </div>`;
-        }
-
-        // Auth hint for unavailable CLI
-        let hint = '';
-        if (!info.available) {
-            hint = `<div style="margin-left:18px;font-size:9px;color:#fbbf24">→ ${escapeHtml(AUTH_CMDS[name] || '')}</div>`;
-        }
-
-        html += `
-            <div style="margin-bottom:4px">
-                <div style="display:flex;align-items:center;gap:4px;font-size:11px">
-                    <span style="font-size:8px">${dot}</span>
-                    <span style="font-weight:500">${escapeHtml(name)}</span>
-                </div>
-                ${barHtml}
-                ${hint}
-            </div>`;
     }
 
     el.innerHTML = html;

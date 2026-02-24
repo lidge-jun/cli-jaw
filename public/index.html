@@ -35,14 +35,22 @@
             <p class="stat" id="statMsgs">Messages: 0</p>
         </div>
 
+        <!-- CLI Status (moved from Settings tab) -->
         <div>
-            <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
-                CLI Status
-                <button class="btn-clear" style="margin:0;padding:2px 6px;font-size:9px"
-                    data-action="refreshCliSidebar">🔄</button>
+            <div class="section-title">CLI STATUS</div>
+            <div id="cliStatusList" style="margin-top:4px">
+                <div style="color:var(--text-dim);font-size:11px">Loading...</div>
             </div>
-            <div id="cliStatusSidebar" style="margin-top:4px;font-size:11px">
-                <div style="color:var(--text-dim);font-size:10px">Loading...</div>
+            <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
+                <button class="btn-clear" style="margin:0;flex:1;padding:6px" data-action="refreshCli">🔄
+                    Refresh</button>
+                <select id="cliStatusInterval"
+                    style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                    <option value="60">1분</option>
+                    <option value="300" selected>5분</option>
+                    <option value="600">10분</option>
+                    <option value="0">수동</option>
+                </select>
             </div>
         </div>
 
@@ -288,24 +296,7 @@
                 <div id="mcpSyncResult" style="font-size:10px;color:var(--text-dim);padding:2px 0;display:none"></div>
             </div>
 
-            <!-- CLI Status -->
-            <div style="margin-top:12px">
-                <div class="section-title">CLI STATUS</div>
-                <div id="cliStatusList" style="margin-top:4px">
-                    <div style="color:var(--text-dim);font-size:11px">탭 진입 시 로드됨</div>
-                </div>
-                <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
-                    <button class="btn-clear" style="margin:0;flex:1;padding:6px" data-action="refreshCli">🔄
-                        Refresh</button>
-                    <select id="cliStatusInterval"
-                        style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
-                        <option value="60">1분</option>
-                        <option value="300" selected>5분</option>
-                        <option value="600">10분</option>
-                        <option value="0">수동</option>
-                    </select>
-                </div>
-            </div>
+
         </div>
     </div>
 
