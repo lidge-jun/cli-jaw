@@ -9,7 +9,7 @@ import { settings, UPLOADS_DIR, detectCli } from '../core/config.js';
 import {
     getSession, updateSession, insertMessage, insertMessageWithTrace, getRecentMessages, getEmployees,
 } from '../core/db.js';
-import { getSystemPrompt } from '../prompt/builder.js';
+import { getSystemPrompt, regenerateB } from '../prompt/builder.js';
 import { extractSessionId, extractFromEvent, extractFromAcpUpdate, logEventSummary } from './events.js';
 import { saveUpload as _saveUpload, buildMediaPrompt } from '../../lib/upload.js';
 
@@ -156,6 +156,9 @@ import { stripSubtaskJSON } from '../orchestrator/pipeline.js';
 import { AcpClient } from '../cli/acp-client.js';
 
 export function spawnAgent(prompt, opts = {}) {
+    // Ensure AGENTS.md on disk is fresh before CLI reads it
+    if (!opts.internal && !opts._isFallback) regenerateB();
+
     const { forceNew = false, agentId, sysPrompt: customSysPrompt } = opts;
     const origin = opts.origin || 'web';
     const empSid = opts.employeeSessionId || null;

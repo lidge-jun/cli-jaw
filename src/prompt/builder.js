@@ -155,6 +155,14 @@ Rules:
 - After important decisions or user preferences: save immediately
 - Commands: \`cli-claw memory search/read/save\`
 
+### What to Save (IMPORTANT)
+- ✅ User preferences, key decisions, project facts
+- ✅ Config changes, tool choices, architectural decisions
+- ✅ Short 1-2 line entries (e.g., "User prefers ES Module only")
+- ❌ Do NOT save development checklists or task lists
+- ❌ Do NOT save commit hashes, phase logs, or progress tracking
+- ❌ Do NOT dump raw conversation history into memory
+
 ## Heartbeat System
 Recurring tasks via \`~/.cli-claw/heartbeat.json\` (auto-reloads on save):
 \`\`\`json
