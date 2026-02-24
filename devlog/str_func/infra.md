@@ -78,7 +78,7 @@ employees (id PK, name, cli, model, role, status, created_at)
 
 Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
-| connection.js (71L)      | actions.js (182L)                |
+| connection.js (71L)      | actions.js (179L)                |
 | ------------------------ | -------------------------------- |
 | `findChrome()`           | `snapshot(port, opts)`           |
 | `launchChrome(port)`     | `screenshot(port, opts)` +dpr    |
@@ -105,7 +105,7 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
 ---
 
-## lib/mcp-sync.js — MCP 통합 관리 (482L)
+## lib/mcp-sync.js — MCP 통합 관리 (481L)
 
 소스: `~/.cli-claw/mcp.json`
 

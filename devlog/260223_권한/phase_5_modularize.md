@@ -1,4 +1,4 @@
-# Phase 5 — server.js 모듈 분리
+# (fin) Phase 5 — server.js 모듈 분리
 
 ## 현재 상태
 

@@ -1,4 +1,4 @@
-# Frontend — public/ (19 files, ~2685L)
+# Frontend — public/ (19 files, ~2907L)
 
 > Web UI — Vanilla HTML + CSS + ES Modules. 인라인 JS/CSS 없음.
 
@@ -76,7 +76,7 @@ public/
 | `sidebar.css`   | 설정, 스킬 카드, 토글       | 215  |
 | `modals.css`    | 모달, 하트비트 카드         | 171  |
 
-**총 CSS**: 964L · **총 JS**: 1300L · **HTML**: 421L
+**총 CSS**: 964L · **총 JS**: 1522L · **HTML**: 421L
 
 ---
 

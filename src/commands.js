@@ -249,18 +249,21 @@ async function statusHandler(_args, ctx) {
     const activeSkills = Array.isArray(skills) ? skills.filter(s => s.enabled).length : '-';
     const refSkills = Array.isArray(skills) ? skills.filter(s => !s.enabled).length : '-';
 
+    const fb = settings?.fallbackOrder || [];
+
     return {
         ok: true,
         type: 'info',
         text: [
             `🦞 cli-claw v${ctx.version || 'unknown'}`,
-            `CLI:     ${cli}`,
-            `Model:   ${model}`,
-            `Effort:  ${effort || '-'}`,
-            `Uptime:  ${uptime}`,
-            `Agent:   ${agent}`,
-            `Queue:   ${queuePending}`,
-            `Skills:  ${activeSkills} active, ${refSkills} ref`,
+            `CLI:      ${cli}`,
+            `Model:    ${model}`,
+            `Effort:   ${effort || '-'}`,
+            ...(fb.length ? [`Fallback: ${fb.join(' → ')}`] : []),
+            `Uptime:   ${uptime}`,
+            `Agent:    ${agent}`,
+            `Queue:    ${queuePending}`,
+            `Skills:   ${activeSkills} active, ${refSkills} ref`,
         ].join('\n'),
     };
 }
@@ -457,6 +460,45 @@ async function fileHandler() {
     return { ok: false, text: 'Usage: /file <path> [caption]' };
 }
 
+async function fallbackHandler(args, ctx) {
+    const settings = await safeCall(ctx.getSettings, null);
+    if (!settings) return { ok: false, text: '❌ 설정을 불러올 수 없습니다.' };
+    const available = Object.keys(settings.perCli || {});
+
+    if (!args.length) {
+        const fb = settings.fallbackOrder || [];
+        return {
+            ok: true, type: 'info',
+            text: fb.length
+                ? `⚡ Fallback: ${fb.join(' → ')}`
+                : `⚡ Fallback: 비활성화\n사용 가능: ${available.join(', ')}`,
+        };
+    }
+
+    if (args[0] === 'off' || args[0] === 'none') {
+        const r = await ctx.updateSettings({ fallbackOrder: [] });
+        if (r?.ok === false) return r;
+        return { ok: true, text: '⚡ Fallback 비활성화됨' };
+    }
+
+    const order = args.filter(a => available.includes(a.toLowerCase())).map(a => a.toLowerCase());
+    if (!order.length) {
+        return { ok: false, text: `❌ 유효한 CLI 없음\n사용 가능: ${available.join(', ')}` };
+    }
+
+    const r = await ctx.updateSettings({ fallbackOrder: order });
+    if (r?.ok === false) return r;
+    return { ok: true, text: `⚡ Fallback 설정: ${order.join(' → ')}` };
+}
+
+function fallbackArgumentCompletions(ctx) {
+    const clis = Object.keys(ctx?.settings?.perCli || {});
+    return [
+        ...clis.map(c => ({ value: c, label: 'cli' })),
+        { value: 'off', label: '비활성화' },
+    ];
+}
+
 export const COMMANDS = [
     { name: 'help', aliases: ['h'], desc: '커맨드 목록', args: '[command]', category: 'session', interfaces: ['cli', 'web', 'telegram'], handler: helpHandler },
     { name: 'status', desc: '현재 상태', category: 'session', interfaces: ['cli', 'web', 'telegram'], handler: statusHandler },
@@ -464,6 +506,7 @@ export const COMMANDS = [
     { name: 'reset', desc: '세션/대화 초기화', args: '[confirm]', category: 'session', interfaces: ['cli', 'web', 'telegram'], handler: resetHandler },
     { name: 'model', desc: '모델 확인/변경', args: '[name]', category: 'model', interfaces: ['cli', 'web', 'telegram'], getArgumentCompletions: modelArgumentCompletions, handler: modelHandler },
     { name: 'cli', desc: '활성 CLI 확인/변경', args: '[name]', category: 'model', interfaces: ['cli', 'web', 'telegram'], getArgumentCompletions: cliArgumentCompletions, handler: cliHandler },
+    { name: 'fallback', desc: '폴백 CLI 순서 설정', args: '[cli1 cli2...|off]', category: 'model', interfaces: ['cli', 'web', 'telegram'], getArgumentCompletions: fallbackArgumentCompletions, handler: fallbackHandler },
     { name: 'version', desc: '버전/CLI 설치 상태', category: 'cli', interfaces: ['cli', 'web', 'telegram'], handler: versionHandler },
     { name: 'skill', desc: '스킬 목록/초기화', args: '[list|reset]', category: 'tools', interfaces: ['cli', 'web', 'telegram'], getArgumentCompletions: skillArgumentCompletions, handler: skillHandler },
     { name: 'mcp', desc: 'MCP 목록/동기화/설치', args: '[sync|install]', category: 'tools', interfaces: ['cli', 'web'], handler: mcpHandler },

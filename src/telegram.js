@@ -64,7 +64,8 @@ export function orchestrateAndCollect(prompt) {
         const handler = (type, data) => {
             if (type === 'agent_chunk' || type === 'agent_tool' ||
                 type === 'agent_output' || type === 'agent_status' ||
-                type === 'agent_done' || type === 'round_start' || type === 'round_done') {
+                type === 'agent_done' || type === 'agent_fallback' ||
+                type === 'round_start' || type === 'round_done') {
                 resetTimeout();
             }
             if (type === 'agent_output') collected += data.text || '';
@@ -119,8 +120,16 @@ function makeTelegramCommandCtx() {
         version: APP_VERSION,
         getSession,
         getSettings: () => settings,
-        // Telegram side-effects are intentionally restricted in Phase 2.
-        updateSettings: async () => ({ ok: false, text: '❌ Telegram에서 설정 변경은 지원하지 않습니다.' }),
+        // Telegram settings changes: only fallbackOrder allowed
+        updateSettings: async (patch) => {
+            if (patch.fallbackOrder !== undefined && Object.keys(patch).length === 1) {
+                const { replaceSettings: _replace, saveSettings: _save } = await import('./config.js');
+                _replace({ ...settings, ...patch });
+                _save(settings);
+                return { ok: true };
+            }
+            return { ok: false, text: '❌ Telegram에서 설정 변경은 지원하지 않습니다.' };
+        },
         getRuntime: () => ({
             uptimeSec: Math.floor(process.uptime()),
             activeAgent: !!activeProcess,
@@ -256,6 +265,9 @@ export function initTelegram() {
         let toolLines = [];
 
         const toolHandler = showTools ? (type, data) => {
+            if (type === 'agent_fallback') {
+                toolLines.push(`⚡ ${data.from} → ${data.to}`);
+            }
             if (type !== 'agent_tool' || !data.icon || !data.label) return;
             const line = `${data.icon} ${data.label}`;
             toolLines.push(line);

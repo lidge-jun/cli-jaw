@@ -1,4 +1,4 @@
-# Phase 6.2 — 스킬 확장 + Codex 선별
+# (fin) Phase 6.2 — 스킬 확장 + Codex 선별
 
 > 상태: 📋 계획
 

@@ -5,7 +5,7 @@ import os from 'os';
 import { join } from 'path';
 import { spawn } from 'child_process';
 import { broadcast } from './bus.js';
-import { settings, UPLOADS_DIR } from './config.js';
+import { settings, UPLOADS_DIR, detectCli } from './config.js';
 import {
     getSession, updateSession, insertMessage, insertMessageWithTrace, getRecentMessages, getEmployees,
 } from './db.js';
@@ -243,7 +243,7 @@ export function spawnAgent(prompt, opts = {}) {
     if (!forceNew) activeProcess = child;
     broadcast('agent_status', { running: true, agentId: agentLabel, cli });
 
-    if (!forceNew && !opts.internal) {
+    if (!forceNew && !opts.internal && !opts._skipInsert) {
         insertMessage.run('user', prompt, cli, model);
     }
 
@@ -342,6 +342,22 @@ export function spawnAgent(prompt, opts = {}) {
             } else if (ctx.stderrBuf.trim()) {
                 errMsg = ctx.stderrBuf.trim().slice(0, 200);
             }
+
+            // ─── Fallback: 1회 재시도 ─────────────────────
+            if (!opts.internal && !opts._isFallback) {
+                const fallbackCli = (settings.fallbackOrder || [])
+                    .find(fc => fc !== cli && detectCli(fc).available);
+                if (fallbackCli) {
+                    console.log(`[claw:fallback] ${cli} failed (exit ${code}) → ${fallbackCli}`);
+                    broadcast('agent_fallback', { from: cli, to: fallbackCli, reason: errMsg });
+                    const { promise: retryP } = spawnAgent(prompt, {
+                        ...opts, cli: fallbackCli, _isFallback: true, _skipInsert: true,
+                    });
+                    retryP.then(r => resolve(r));
+                    return;
+                }
+            }
+
             broadcast('agent_done', { text: `❌ ${errMsg}`, error: true });
         }
 

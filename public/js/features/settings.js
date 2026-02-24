@@ -34,6 +34,7 @@ export async function loadSettings() {
     if (activeCfg.effort) document.getElementById('selEffort').value = activeCfg.effort;
 
     loadTelegramSettings(s);
+    loadFallbackOrder(s);
     loadMcpServers();
 }
 
@@ -251,6 +252,43 @@ function loadTelegramSettings(s) {
     if (tg.allowedChatIds?.length) {
         document.getElementById('tgChatIds').value = tg.allowedChatIds.join(', ');
     }
+}
+
+// ── Fallback Order ──
+export function loadFallbackOrder(s) {
+    const container = document.getElementById('fallbackOrderList');
+    if (!container) return;
+    const allClis = Object.keys(s.perCli || {});
+    const active = s.fallbackOrder || [];
+
+    let html = '';
+    for (let i = 0; i < 2; i++) {
+        const current = active[i] || '';
+        const opts = allClis.map(cli =>
+            `<option value="${cli}" ${cli === current ? 'selected' : ''}>${cli}</option>`
+        ).join('');
+        html += `
+            <div class="settings-row sub-row">
+                <label style="min-width:60px">Fallback ${i + 1}</label>
+                <select id="fallback${i}"
+                    style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px;flex:1">
+                    <option value="">(없음)</option>
+                    ${opts}
+                </select>
+            </div>`;
+    }
+    container.innerHTML = html;
+}
+
+export async function saveFallbackOrder() {
+    const fb1 = document.getElementById('fallback0')?.value;
+    const fb2 = document.getElementById('fallback1')?.value;
+    const fallbackOrder = [fb1, fb2].filter(Boolean);
+    await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fallbackOrder }),
+    });
 }
 
 // ── CLI Status ──

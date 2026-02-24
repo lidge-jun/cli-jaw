@@ -60,9 +60,9 @@
             <button class="btn-attach" title="파일 첨부">📎</button>
             <input type="file" id="fileInput" hidden
                 accept="image/*,.pdf,.txt,.md,.js,.py,.json,.csv,.html,.css,.ts,.tsx,.jsx">
-            <textarea class="chat-input" id="chatInput" rows="1" placeholder="메시지 입력..."
-                aria-haspopup="listbox" aria-expanded="false" aria-controls="cmdDropdown"
-                aria-autocomplete="list" aria-activedescendant=""></textarea>
+            <textarea class="chat-input" id="chatInput" rows="1" placeholder="메시지 입력..." aria-haspopup="listbox"
+                aria-expanded="false" aria-controls="cmdDropdown" aria-autocomplete="list"
+                aria-activedescendant=""></textarea>
             <button class="btn-send" id="btnSend">➤</button>
         </div>
     </div>
@@ -271,6 +271,13 @@
                         <option value="max">🔴 max</option>
                     </select>
                 </div>
+            </div>
+
+            <!-- Fallback Order -->
+            <div class="settings-group">
+                <h4>⚡ Fallback</h4>
+                <p style="font-size:10px;color:var(--text-dim);margin:2px 0 6px">CLI 실패 시 자동 재시도 순서</p>
+                <div id="fallbackOrderList"></div>
             </div>
 
             <!-- MCP Servers -->

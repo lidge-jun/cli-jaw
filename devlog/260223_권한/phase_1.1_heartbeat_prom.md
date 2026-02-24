@@ -1,4 +1,4 @@
-# Phase 1.1: Heartbeat 프롬프트 주입
+# (fin) Phase 1.1: Heartbeat 프롬프트 주입
 
 ## 문제
 

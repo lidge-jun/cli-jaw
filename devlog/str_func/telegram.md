@@ -4,7 +4,7 @@
 
 ---
 
-## telegram.js — Telegram Bot (358L)
+## telegram.js — Telegram Bot (365L)
 
 | Function                     | 역할                                                           |
 | ---------------------------- | -------------------------------------------------------------- |
@@ -14,6 +14,10 @@
 | `syncTelegramCommands(bot)`  | `setMyCommands` 등록 (TG_EXCLUDED_CMDS 필터)                   |
 | `makeTelegramCommandCtx()`   | TG용 read-only ctx 생성                                        |
 | `ipv4Fetch(url, init)`       | IPv4 강제 fetch                                                |
+| `escapeHtmlTg(text)`         | Telegram HTML 이스케이프                                       |
+| `markdownToTelegramHtml(md)` | Markdown → Telegram HTML 변환                                  |
+| `chunkTelegramMessage(text)` | 4096자 단위 메시지 분할                                        |
+| `markChatActive(chatId)`     | 활성 chatId Set 관리                                           |
 
 ### 의존 모듈
 

@@ -13,7 +13,7 @@ import {
     loadSettings, setPerm, handleModelSelect, applyCustomModel, onCliChange,
     saveActiveCliSettings, savePerCli, updateSettings, openPromptModal,
     closePromptModal, savePromptFromModal, syncMcpServers, installMcpGlobal,
-    loadCliStatus, setTelegram, saveTelegramSettings
+    loadCliStatus, setTelegram, saveTelegramSettings, saveFallbackOrder
 } from './features/settings.js';
 import {
     loadEmployees, addEmployee, deleteEmployee, updateEmployee,
@@ -136,6 +136,7 @@ document.getElementById('tgOff').addEventListener('click', () => setTelegram(fal
 document.getElementById('tgOn').addEventListener('click', () => setTelegram(true));
 document.getElementById('tgToken').addEventListener('change', saveTelegramSettings);
 document.getElementById('tgChatIds').addEventListener('change', saveTelegramSettings);
+document.getElementById('fallbackOrderList').addEventListener('change', saveFallbackOrder);
 
 // Per-CLI model selects
 ['Claude', 'Codex', 'Gemini', 'Opencode'].forEach(cap => {

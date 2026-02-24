@@ -1,4 +1,4 @@
-# Phase 6.3 — 스킬 의존성 분석
+# (fin) Phase 6.3 — 스킬 의존성 분석
 
 > Phase 9 `auto_deps` 참고 형식
 

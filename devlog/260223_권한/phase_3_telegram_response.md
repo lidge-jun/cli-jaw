@@ -1,4 +1,4 @@
-# Phase 3: Telegram 응답 버그 분석
+# (fin) Phase 3: Telegram 응답 버그 분석
 
 ## 증상
 

@@ -1,4 +1,4 @@
-# 260223 — 권한 + 타임아웃 + Telegram Tool Use
+# (fin) 260223 — 권한 + 타임아웃 + Telegram Tool Use
 
 ## 개요
 

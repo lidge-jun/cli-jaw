@@ -1,4 +1,4 @@
-# Phase 2: 샌드박스 해제 + LaunchD GUI Spawn
+# (fin) Phase 2: 샌드박스 해제 + LaunchD GUI Spawn
 
 ## 문제
 

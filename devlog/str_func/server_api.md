@@ -1,4 +1,4 @@
-# server.js — Glue + API Routes (699L)
+# server.js — Glue + API Routes (757L)
 
 > 라우트 + 초기화 + 커맨드 ctx 구성 + Quota 조회
 
@@ -10,6 +10,7 @@
 | --------------------------------- | --------------------------------------- |
 | `getRuntimeSnapshot()`            | 세션/설정/큐/에이전트 상태 스냅샷       |
 | `clearSessionState()`             | 세션/메시지/큐 초기화                   |
+| `getLatestTelegramChatId()`       | Telegram 최신 활성 chatId 반환          |
 | `applySettingsPatch(rawPatch, o)` | 설정 패치 + 검증 + 저장 + B 재생성      |
 | `makeWebCommandCtx()`             | Web 인터페이스용 슬래시 커맨드 ctx 생성 |
 

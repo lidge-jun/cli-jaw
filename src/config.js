@@ -62,6 +62,7 @@ export function runMigration(projectDir) {
 
 export const DEFAULT_SETTINGS = {
     cli: 'claude',
+    fallbackOrder: [],
     permissions: 'auto',
     workingDir: os.homedir(),
     perCli: {

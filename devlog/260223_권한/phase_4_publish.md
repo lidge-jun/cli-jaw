@@ -1,4 +1,4 @@
-# Phase 4 — GitHub 퍼블리시 준비
+# (fin) Phase 4 — GitHub 퍼블리시 준비
 
 ## 배경: OpenClaw 밴 사태
 

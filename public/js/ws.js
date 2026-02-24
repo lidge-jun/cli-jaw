@@ -27,6 +27,8 @@ export function connect() {
             addSystemMsg(`${msg.icon} ${msg.label}`, 'tool-activity');
         } else if (msg.type === 'agent_output') {
             appendAgentText(msg.text);
+        } else if (msg.type === 'agent_fallback') {
+            addSystemMsg(`⚡ ${msg.from} 실패 → ${msg.to}로 재시도`, 'tool-activity');
         } else if (msg.type === 'agent_done') {
             finalizeAgent(msg.text, msg.toolLog);
         } else if (msg.type === 'clear') {
