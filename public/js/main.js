@@ -13,7 +13,7 @@ import {
     loadSettings, setPerm, handleModelSelect, applyCustomModel, onCliChange,
     saveActiveCliSettings, savePerCli, updateSettings, openPromptModal,
     closePromptModal, savePromptFromModal, syncMcpServers, installMcpGlobal,
-    loadCliStatus, setTelegram, saveTelegramSettings, saveFallbackOrder
+    loadCliStatus, loadCliStatusSidebar, setTelegram, saveTelegramSettings, saveFallbackOrder
 } from './features/settings.js';
 import {
     loadEmployees, addEmployee, deleteEmployee, updateEmployee,
@@ -61,6 +61,8 @@ document.querySelector('.btn-attach').addEventListener('click', () => {
 document.getElementById('memorySidebarBtn').addEventListener('click', openMemoryModal);
 document.querySelector('.btn-clear').addEventListener('click', clearChat);
 document.getElementById('hbSidebarBtn').addEventListener('click', openHeartbeatModal);
+const refreshCliSidebarBtn = document.querySelector('[data-action="refreshCliSidebar"]');
+if (refreshCliSidebarBtn) refreshCliSidebarBtn.addEventListener('click', () => loadCliStatus(true));
 
 // ── Tab Bar (event delegation) ──
 document.querySelector('.tab-bar').addEventListener('click', (e) => {
@@ -221,6 +223,7 @@ async function bootstrap() {
     initDragDrop();
     await loadCommands();
     await loadSettings();
+    loadCliStatusSidebar();
     loadMemory();
     loadMessages();
     loadEmployees();
