@@ -127,3 +127,5 @@ Editor-Version: vscode/1.95.0
 | `7f24869` | fix: effortNote hint, telegram origin, ACP optionId |
 | `2b00f0c` | fix: remove 'default' from per-CLI model |
 | `04d88be` | fix: re-enable copilot effort (per-CLI settable, config.json) |
+| `420dcce` | fix: Active CLI effort disabled for copilot, normalizeRegistry effortNote |
+| `2397e2d` | fix: suppress 💭 thought chunk broadcasts (Web UI + Telegram + CLI) |
