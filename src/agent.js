@@ -288,6 +288,8 @@ export function spawnAgent(prompt, opts = {}) {
             if (!parsed) return;
 
             if (parsed.tool) {
+                // Skip broadcasting 💭 thought chunks (floods Web UI + Telegram)
+                if (parsed.tool.icon === '💭') return;
                 const key = `${parsed.tool.icon}:${parsed.tool.label}`;
                 if (!ctx.seenToolKeys.has(key)) {
                     ctx.seenToolKeys.add(key);
