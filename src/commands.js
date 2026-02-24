@@ -7,7 +7,7 @@ const CATEGORY_LABEL = {
     tools: 'Tools',
     cli: 'CLI',
 };
-const DEFAULT_CLI_CHOICES = ['claude', 'codex', 'gemini', 'opencode'];
+const DEFAULT_CLI_CHOICES = ['claude', 'codex', 'gemini', 'opencode', 'copilot'];
 const MODEL_CHOICES_BY_CLI = {
     claude: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-sonnet-4-6[1m]', 'claude-opus-4-6[1m]', 'claude-haiku-4-5-20251001'],
     codex: ['gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini'],
@@ -18,6 +18,12 @@ const MODEL_CHOICES_BY_CLI = {
         'openai/gpt-5.3-codex-high',
         'opencode/big-pickle', 'opencode/GLM-5 Free', 'opencode/MiniMax M2.5 Free',
         'opencode/Kimi K2.5 Free', 'opencode/GPT 5 Nano Free', 'opencode/Grok Code Fast 1 Free',
+    ],
+    copilot: [
+        'claude-sonnet-4.6', 'claude-opus-4.6', 'claude-haiku-4.5',
+        'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex',
+        'gpt-4.1', 'gpt-5-mini',
+        'gemini-3-pro-preview',
     ],
 };
 
@@ -309,7 +315,7 @@ async function cliHandler(args, ctx) {
     if (!settings) return { ok: false, text: '❌ 설정을 불러올 수 없습니다.' };
 
     const allowed = Object.keys(settings.perCli || {});
-    const fallbackAllowed = allowed.length ? allowed : ['claude', 'codex', 'gemini', 'opencode'];
+    const fallbackAllowed = allowed.length ? allowed : DEFAULT_CLI_CHOICES;
     const current = settings.cli || 'claude';
 
     if (!args.length) {
@@ -413,7 +419,7 @@ async function versionHandler(_args, ctx) {
     const status = await safeCall(ctx.getCliStatus, null);
     const lines = [`cli-claw v${ctx.version || 'unknown'}`];
     if (status && typeof status === 'object') {
-        for (const key of ['claude', 'codex', 'gemini', 'opencode']) {
+        for (const key of DEFAULT_CLI_CHOICES) {
             if (!status[key]) continue;
             const entry = status[key];
             const icon = entry.available ? '✅' : '❌';

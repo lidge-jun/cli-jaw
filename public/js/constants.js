@@ -9,6 +9,12 @@ export const MODEL_MAP = {
         'opencode/big-pickle', 'opencode/GLM-5 Free', 'opencode/MiniMax M2.5 Free',
         'opencode/Kimi K2.5 Free', 'opencode/GPT 5 Nano Free', 'opencode/Grok Code Fast 1 Free',
     ],
+    copilot: [
+        'claude-sonnet-4.6', 'claude-opus-4.6', 'claude-haiku-4.5',
+        'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex',
+        'gpt-4.1', 'gpt-5-mini',
+        'gemini-3-pro-preview',
+    ],
 };
 
 export const ROLE_PRESETS = [

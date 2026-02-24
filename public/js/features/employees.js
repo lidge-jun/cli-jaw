@@ -45,7 +45,7 @@ export function renderEmployees() {
                 <div>
                     <label>CLI</label>
                     <select data-emp-cli="${a.id}">
-                        ${['claude', 'codex', 'gemini', 'opencode'].map(c => `<option${a.cli === c ? ' selected' : ''}>${c}</option>`).join('')}
+                        ${['claude', 'codex', 'gemini', 'opencode', 'copilot'].map(c => `<option${a.cli === c ? ' selected' : ''}>${c}</option>`).join('')}
                     </select>
                 </div>
                 <div>

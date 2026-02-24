@@ -70,6 +70,7 @@ export const DEFAULT_SETTINGS = {
         codex: { model: 'gpt-5.3-codex', effort: 'medium' },
         gemini: { model: 'gemini-2.5-pro', effort: '' },
         opencode: { model: 'anthropic/claude-opus-4-6-thinking', effort: '' },
+        copilot: { model: 'claude-sonnet-4.6', effort: '' },
     },
     heartbeat: {
         enabled: false,
@@ -165,5 +166,6 @@ export function detectAllCli() {
         codex: detectCli('codex'),
         gemini: detectCli('gemini'),
         opencode: detectCli('opencode'),
+        copilot: detectCli('copilot'),
     };
 }

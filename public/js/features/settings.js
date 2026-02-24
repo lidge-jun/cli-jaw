@@ -142,6 +142,7 @@ export async function savePerCli() {
         codex: { model: getModelValue('codex'), effort: document.getElementById('effortCodex').value },
         gemini: { model: getModelValue('gemini') },
         opencode: { model: getModelValue('opencode'), effort: document.getElementById('effortOpencode').value },
+        copilot: { model: getModelValue('copilot'), effort: document.getElementById('effortCopilot')?.value || '' },
     };
     await fetch('/api/settings', {
         method: 'PUT',
