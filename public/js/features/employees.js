@@ -1,4 +1,4 @@
-// ── Employees (Sub-Agents) Feature ──
+// ── Employees Feature ──
 import { state } from '../state.js';
 import { MODEL_MAP, ROLE_PRESETS, getCliKeys } from '../constants.js';
 import { escapeHtml } from '../render.js';
