@@ -625,6 +625,7 @@ export function globalErrorHandler(err, req, res, _next) {
 ### 9.3 테스트
 
 - [ ] `tests/unit/path-guards.test.js`
+- [ ] `tests/unit/decode.test.js`
 - [ ] `tests/unit/http-response.test.js`
 - [ ] `tests/unit/async-handler.test.js`
 - [ ] `tests/unit/orchestrator-parsing.test.js`

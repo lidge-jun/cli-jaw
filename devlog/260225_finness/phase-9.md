@@ -348,6 +348,7 @@ export function registerCoreRoutes(app, deps) {
 ### 8.1 신규 테스트 파일
 
 - `tests/unit/path-guards.test.js`
+- `tests/unit/decode.test.js`
 - `tests/unit/http-response.test.js`
 - `tests/unit/async-handler.test.js`
 - `tests/unit/orchestrator-parsing.test.js`
@@ -518,6 +519,7 @@ semgrep --baseline-commit origin/main --json --json-output .artifacts/semgrep-ba
 - `scripts/check-deps-offline.mjs`
 - `scripts/check-deps-online.sh`
 - `tests/unit/path-guards.test.js`
+- `tests/unit/decode.test.js`
 - `tests/unit/http-response.test.js`
 - `tests/unit/async-handler.test.js`
 - `tests/unit/orchestrator-parsing.test.js`
