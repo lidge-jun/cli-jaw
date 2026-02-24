@@ -205,16 +205,24 @@ export function spawnAgent(prompt, opts = {}) {
 
     const skipStdin = cli === 'gemini' || cli === 'opencode' || (cli === 'codex' && isResume);
     if (!skipStdin) {
-        const sp = customSysPrompt || getSystemPrompt();
-        let stdinContent = `[Claw Platform Context]\n${sp}`;
-        if (!isResume && !forceNew) {
-            const recent = getRecentMessages.all(5).reverse();
-            if (recent.length > 0) {
-                const history = recent.map(m => `[${m.role}] ${m.content}`).join('\n\n');
-                stdinContent += `\n\n[Recent History]\n${history}`;
+        let stdinContent;
+        if (cli === 'claude') {
+            // Claude: sysPrompt already in --append-system-prompt (compact-protected)
+            // Only send user message via stdin to avoid duplication
+            stdinContent = prompt;
+        } else {
+            // Codex/others: system prompt via stdin (only delivery method)
+            const sp = customSysPrompt || getSystemPrompt();
+            stdinContent = `[Claw Platform Context]\n${sp}`;
+            if (!isResume && !forceNew) {
+                const recent = getRecentMessages.all(5).reverse();
+                if (recent.length > 0) {
+                    const history = recent.map(m => `[${m.role}] ${m.content}`).join('\n\n');
+                    stdinContent += `\n\n[Recent History]\n${history}`;
+                }
             }
+            stdinContent += `\n\n[User Message]\n${prompt}`;
         }
-        stdinContent += `\n\n[User Message]\n${prompt}`;
         child.stdin.write(stdinContent);
     }
     child.stdin.end();

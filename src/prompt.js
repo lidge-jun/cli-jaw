@@ -374,7 +374,21 @@ export function getSubAgentPrompt(emp) {
 }
 
 export function regenerateB() {
-    fs.writeFileSync(join(PROMPTS_DIR, 'B.md'), getSystemPrompt());
+    const fullPrompt = getSystemPrompt();
+    fs.writeFileSync(join(PROMPTS_DIR, 'B.md'), fullPrompt);
+
+    // Generate CODEX.md in workingDir for compact-protected system prompt
+    // Codex reads .codex/AGENTS.md or CODEX.md automatically
+    try {
+        const wd = settings.workingDir || os.homedir();
+        const codexDir = join(wd, '.codex');
+        fs.mkdirSync(codexDir, { recursive: true });
+        fs.writeFileSync(join(codexDir, 'AGENTS.md'), fullPrompt);
+        console.log(`[prompt] CODEX AGENTS.md generated at ${codexDir}`);
+    } catch (e) {
+        console.error(`[prompt] CODEX AGENTS.md generation failed:`, e.message);
+    }
+
     try {
         const session = getSession();
         if (session.session_id) {
