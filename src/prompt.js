@@ -309,9 +309,10 @@ export function getSystemPrompt() {
             prompt += '\n1. JSON MUST be wrapped in ```json ... ``` code blocks (mandatory)';
             prompt += '\n2. Never output raw JSON without code blocks';
             prompt += '\n3. Agent name must exactly match the list above';
-            prompt += '\n4. If the request is actionable, always output subtask JSON';
-            prompt += '\n5. When receiving a "result report", summarize it in natural language for the user';
-            prompt += '\n6. If you can answer directly, respond in natural language without JSON';
+            prompt += '\n4. Dispatch employees ONLY when the task genuinely needs multiple specialists or parallel work';
+            prompt += '\n5. If you can handle the task yourself, respond directly WITHOUT JSON dispatch';
+            prompt += '\n6. When receiving a "result report", summarize it in natural language for the user';
+            prompt += '\n7. Simple questions, single-file edits, or tasks in your expertise → handle directly';
         }
     } catch { /* DB not ready yet */ }
 
@@ -345,7 +346,9 @@ export function getSystemPrompt() {
             // 1. Active skills — name list only (CLI handles trigger/execution)
             if (activeSkills.length > 0) {
                 prompt += `\n### Active Skills (${activeSkills.length})\n`;
-                prompt += 'These skills are installed and triggered automatically by the CLI.\n';
+                prompt += 'These skills are installed and available for reference.\n';
+                prompt += '**Development tasks**: Before writing code, ALWAYS read `~/.cli-claw/skills/dev/SKILL.md` for project conventions.\n';
+                prompt += 'For role-specific tasks, also read the relevant skill (dev-frontend, dev-backend, dev-data, dev-testing).\n';
                 for (const s of activeSkills) {
                     prompt += `- ${s.name} (${s.id})\n`;
                 }

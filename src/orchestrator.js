@@ -468,6 +468,59 @@ export async function orchestrate(prompt, meta = {}) {
         console.log(`[claw:triage] direct response (no orchestration needed)`);
         const { promise } = spawnAgent(prompt, { origin });
         const result = await promise;
+
+        // Phase 17: AI가 subtask JSON을 출력했으면 → orchestration 재진입
+        const lateSubtasks = parseSubtasks(result.text);
+        if (lateSubtasks?.length) {
+            console.log(`[claw:triage] agent chose to dispatch (${lateSubtasks.length} subtasks)`);
+            const worklog = createWorklog(prompt);
+            broadcast('worklog_created', { path: worklog.path });
+            const planText = stripSubtaskJSON(result.text);
+            appendToWorklog(worklog.path, 'Plan', planText || '(Agent-initiated dispatch)');
+            const agentPhases = initAgentPhases(lateSubtasks);
+            updateMatrix(worklog.path, agentPhases);
+            // Round loop (same as L508-553)
+            for (let round = 1; round <= MAX_ROUNDS; round++) {
+                updateWorklogStatus(worklog.path, 'round_' + round, round);
+                broadcast('round_start', { round, agentPhases });
+                const results = await distributeByPhase(agentPhases, worklog, round, { origin });
+                const { verdicts, rawText } = await phaseReview(results, agentPhases, worklog, round, { origin });
+                if (verdicts?.verdicts) {
+                    for (const v of verdicts.verdicts) {
+                        const ap = agentPhases.find(a => a.agent === v.agent);
+                        if (ap) {
+                            const judgedPhase = ap.currentPhase;
+                            advancePhase(ap, v.pass);
+                            ap.history.push({ round, phase: judgedPhase, pass: v.pass, feedback: v.feedback });
+                        }
+                    }
+                }
+                updateMatrix(worklog.path, agentPhases);
+                const allDone = agentPhases.every(ap => ap.completed);
+                if (allDone) {
+                    const summary = stripSubtaskJSON(rawText) || '모든 작업 완료';
+                    appendToWorklog(worklog.path, 'Final Summary', summary);
+                    updateWorklogStatus(worklog.path, 'done', round);
+                    insertMessage.run('assistant', summary, 'orchestrator', '');
+                    broadcast('orchestrate_done', { text: summary, worklog: worklog.path, origin });
+                    return;
+                }
+                broadcast('round_done', { round, action: 'next', agentPhases });
+                if (round === MAX_ROUNDS) {
+                    const done = agentPhases.filter(ap => ap.completed);
+                    const pending = agentPhases.filter(ap => !ap.completed);
+                    const partial = `## 완료 (${done.length})\n${done.map(a => `- ✅ ${a.agent} (${a.role})`).join('\n')}\n\n` +
+                        `## 미완료 (${pending.length})\n${pending.map(a => `- ⏳ ${a.agent} (${a.role}) — Phase ${a.currentPhase}: ${PHASES[a.currentPhase]}`).join('\n')}\n\n` +
+                        `이어서 진행하려면 "이어서 해줘"라고 말씀하세요.\nWorklog: ${worklog.path}`;
+                    appendToWorklog(worklog.path, 'Final Summary', partial);
+                    updateWorklogStatus(worklog.path, 'partial', round);
+                    insertMessage.run('assistant', partial, 'orchestrator', '');
+                    broadcast('orchestrate_done', { text: partial, worklog: worklog.path, origin });
+                }
+            }
+            return;
+        }
+
         const stripped = stripSubtaskJSON(result.text);
         broadcast('orchestrate_done', { text: stripped || result.text || '', origin });
         return;
