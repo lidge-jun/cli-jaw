@@ -3,27 +3,43 @@
 /* Tables */
 .msg-body table {
     border-collapse: collapse;
-    width: auto;
+    max-width: 100%;
     margin: 8px 0;
     font-size: 12px;
-    border: 1px solid #3b3f47;
+    border: 1px solid #4ade80;
+    display: block;
+    overflow-x: auto;
+}
+
+.msg-body thead,
+.msg-body tbody,
+.msg-body tr {
+    display: table;
+    width: 100%;
+    table-layout: auto;
 }
 
 .msg-body th,
 .msg-body td {
-    border: 1px solid #3b3f47;
+    border: 1px solid rgba(74, 222, 128, 0.25);
     padding: 6px 12px;
     text-align: left;
+    word-break: break-word;
+    max-width: 320px;
 }
 
 .msg-body th {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(74, 222, 128, 0.08);
     font-weight: 600;
-    white-space: nowrap;
+    border-bottom: 2px solid #4ade80;
 }
 
 .msg-body tr:nth-child(even) {
     background: rgba(255, 255, 255, 0.03);
+}
+
+.msg-body tr:hover {
+    background: rgba(74, 222, 128, 0.04);
 }
 
 /* Code blocks */
@@ -119,6 +135,17 @@
 .msg-body .katex-display {
     margin: 8px 0;
     overflow-x: auto;
+    overflow-y: hidden;
+    padding: 4px 0;
+}
+
+.msg-body .katex-display>.katex {
+    white-space: normal;
+    word-break: break-word;
+}
+
+.msg-body .katex {
+    font-size: 1.05em;
 }
 
 /* Mermaid */
