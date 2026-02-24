@@ -38,13 +38,33 @@ function ensureSymlink(target, linkPath) {
     return true;
 }
 
+function logSkillsSymlinkReport(report) {
+    if (!report?.links) return;
+
+    const moved = report.links.filter(x => x.action === 'backup_replace');
+    if (moved.length) {
+        console.log(`[claw:init] skills conflicts moved to backup: ${moved.length}`);
+        for (const item of moved) {
+            if (item.backupPath) {
+                console.log(`[claw:init]   - ${item.linkPath} -> ${item.backupPath}`);
+            }
+        }
+    }
+
+    const errors = report.links.filter(x => x.status === 'error');
+    for (const item of errors) {
+        console.log(`[claw:init] ⚠️ symlink error: ${item.linkPath} (${item.message || 'unknown'})`);
+    }
+}
+
 // 1. Ensure ~/.cli-claw/ directories
 ensureDir(clawHome);
 ensureDir(path.join(clawHome, 'skills'));
 ensureDir(path.join(clawHome, 'uploads'));
 
 // 2. Skills symlinks (home-based default)
-ensureSkillsSymlinks(home);
+const skillsSymlinkReport = ensureSkillsSymlinks(home, { onConflict: 'backup' });
+logSkillsSymlinkReport(skillsSymlinkReport);
 
 // 2b. Copilot CLI: auto-install + PATH symlink
 try {

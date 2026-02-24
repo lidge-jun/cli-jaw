@@ -29,6 +29,7 @@ import {
     saveMemSettings, deleteMemFile, viewMemFile
 } from './features/memory.js';
 import { state } from './state.js';
+import { loadCliRegistry, getCliKeys } from './constants.js';
 
 // ── Chat Actions ──
 document.getElementById('btnSend').addEventListener('click', sendMessage);
@@ -139,16 +140,17 @@ document.getElementById('tgChatIds').addEventListener('change', saveTelegramSett
 document.getElementById('fallbackOrderList').addEventListener('change', saveFallbackOrder);
 
 // Per-CLI model selects
-['Claude', 'Codex', 'Gemini', 'Opencode'].forEach(cap => {
-    const sel = document.getElementById('model' + cap);
-    if (sel) sel.addEventListener('change', function () { handleModelSelect(cap.toLowerCase(), this); });
-    const custom = document.getElementById('customModel' + cap);
-    if (custom) custom.addEventListener('change', function () { applyCustomModel(cap.toLowerCase(), this); });
-});
-['Claude', 'Codex', 'Opencode'].forEach(cap => {
-    const el = document.getElementById('effort' + cap);
-    if (el) el.addEventListener('change', savePerCli);
-});
+function bindPerCliControlEvents() {
+    for (const cli of getCliKeys()) {
+        const cap = cli.charAt(0).toUpperCase() + cli.slice(1);
+        const sel = document.getElementById('model' + cap);
+        if (sel) sel.addEventListener('change', function () { handleModelSelect(cli, this); });
+        const custom = document.getElementById('customModel' + cap);
+        if (custom) custom.addEventListener('change', function () { applyCustomModel(cli, this); });
+        const effort = document.getElementById('effort' + cap);
+        if (effort) effort.addEventListener('change', savePerCli);
+    }
+}
 
 // MCP
 document.querySelector('[data-action="syncMcp"]').addEventListener('click', syncMcpServers);
@@ -212,11 +214,19 @@ document.getElementById('memFilesList').addEventListener('click', (e) => {
 });
 
 // ── Init ──
-connect();
-initDragDrop();
-void loadCommands();
-loadSettings();
-loadMemory();
-loadMessages();
-loadEmployees();
-initHeartbeatBadge();
+async function bootstrap() {
+    await loadCliRegistry();
+    bindPerCliControlEvents();
+    connect();
+    initDragDrop();
+    await loadCommands();
+    await loadSettings();
+    loadMemory();
+    loadMessages();
+    loadEmployees();
+    initHeartbeatBadge();
+}
+
+void bootstrap().catch((err) => {
+    console.error('[bootstrap]', err);
+});

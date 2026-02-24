@@ -1,37 +1,136 @@
 // ── Settings Feature ──
-import { MODEL_MAP } from '../constants.js';
+import { MODEL_MAP, loadCliRegistry, getCliKeys, getCliMeta } from '../constants.js';
 import { escapeHtml } from '../render.js';
 
+function toCap(cli) {
+    return cli.charAt(0).toUpperCase() + cli.slice(1);
+}
+
+function getModelSelect(cli) {
+    return document.getElementById('model' + toCap(cli));
+}
+
+function getCustomModelInput(cli) {
+    return document.getElementById('customModel' + toCap(cli));
+}
+
+function getEffortSelect(cli) {
+    return document.getElementById('effort' + toCap(cli));
+}
+
+function setSelectOptions(selectEl, values, { includeCustom = false, selected = '' } = {}) {
+    if (!selectEl) return;
+    const customHtml = includeCustom ? '<option value="__custom__">✏️ 직접 입력...</option>' : '';
+    const opts = (values || []).map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+    selectEl.innerHTML = opts + customHtml;
+
+    if (selected && Array.from(selectEl.options).some(o => o.value === selected)) {
+        selectEl.value = selected;
+    }
+}
+
+function appendCustomOption(selectEl, value) {
+    if (!selectEl || !value) return;
+    if (Array.from(selectEl.options).some(o => o.value === value)) return;
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = value;
+    const customOpt = selectEl.querySelector('option[value="__custom__"]');
+    if (customOpt) selectEl.insertBefore(opt, customOpt);
+    else selectEl.appendChild(opt);
+}
+
+function syncCliOptionSelects(settings = null) {
+    const cliKeys = getCliKeys();
+
+    const selCli = document.getElementById('selCli');
+    if (selCli) {
+        const current = settings?.cli || selCli.value || cliKeys[0] || 'claude';
+        selCli.innerHTML = cliKeys.map(cli => {
+            const label = getCliMeta(cli)?.label || cli;
+            return `<option value="${escapeHtml(cli)}">${escapeHtml(label)}</option>`;
+        }).join('');
+        if (Array.from(selCli.options).some(o => o.value === current)) selCli.value = current;
+    }
+
+    const memCli = document.getElementById('memCli');
+    if (memCli) {
+        const current = settings?.memory?.cli || memCli.value || '';
+        memCli.innerHTML = '<option value="">(active CLI)</option>' +
+            cliKeys.map(cli => `<option value="${escapeHtml(cli)}">${escapeHtml(cli)}</option>`).join('');
+        if (Array.from(memCli.options).some(o => o.value === current)) memCli.value = current;
+    }
+}
+
+function syncPerCliModelAndEffortControls(settings = null) {
+    for (const cli of getCliKeys()) {
+        const modelSel = getModelSelect(cli);
+        if (modelSel) {
+            const selected = settings?.perCli?.[cli]?.model || modelSel.value || '';
+            setSelectOptions(modelSel, MODEL_MAP[cli] || [], { includeCustom: true, selected });
+            if (selected && !Array.from(modelSel.options).some(o => o.value === selected)) {
+                appendCustomOption(modelSel, selected);
+                modelSel.value = selected;
+            }
+        }
+
+        const effortSel = getEffortSelect(cli);
+        if (effortSel) {
+            const meta = getCliMeta(cli);
+            const options = [''].concat(meta?.efforts || []);
+            const selected = settings?.perCli?.[cli]?.effort || effortSel.value || '';
+            const unique = [...new Set(options)];
+            effortSel.innerHTML = unique.map(v => {
+                if (!v) return '<option value="">— none</option>';
+                return `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
+            }).join('');
+            if (Array.from(effortSel.options).some(o => o.value === selected)) effortSel.value = selected;
+        }
+    }
+}
+
+function syncActiveEffortOptions(cli, selected = '') {
+    const selEffort = document.getElementById('selEffort');
+    if (!selEffort) return;
+    const efforts = [''].concat(getCliMeta(cli)?.efforts || []);
+    const unique = [...new Set(efforts)];
+    selEffort.innerHTML = unique.map(v => {
+        if (!v) return '<option value="">— none</option>';
+        return `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
+    }).join('');
+    if (Array.from(selEffort.options).some(o => o.value === selected)) selEffort.value = selected;
+}
+
 export async function loadSettings() {
+    await loadCliRegistry();
     const s = await (await fetch('/api/settings')).json();
-    document.getElementById('selCli').value = s.cli;
+    syncCliOptionSelects(s);
+    syncPerCliModelAndEffortControls(s);
+
+    const selCli = document.getElementById('selCli');
+    if (Array.from(selCli.options).some(o => o.value === s.cli)) {
+        selCli.value = s.cli;
+    }
     document.getElementById('inpCwd').value = s.workingDir;
     document.getElementById('headerCli').textContent = s.cli;
     setPerm(s.permissions, false);
 
     if (s.perCli) {
         for (const [cli, cfg] of Object.entries(s.perCli)) {
-            const capCli = cli.charAt(0).toUpperCase() + cli.slice(1);
-            const modelEl = document.getElementById('model' + capCli);
-            const effortEl = document.getElementById('effort' + capCli);
+            const modelEl = getModelSelect(cli);
+            const effortEl = getEffortSelect(cli);
             if (modelEl && cfg.model) {
-                if (cfg.model !== '__custom__' && !Array.from(modelEl.options).some(o => o.value === cfg.model)) {
-                    const opt = document.createElement('option');
-                    opt.value = cfg.model; opt.textContent = cfg.model;
-                    const customOpt = modelEl.querySelector('option[value="__custom__"]');
-                    if (customOpt) modelEl.insertBefore(opt, customOpt);
-                    else modelEl.appendChild(opt);
-                }
+                appendCustomOption(modelEl, cfg.model);
                 modelEl.value = cfg.model;
             }
-            if (effortEl && cfg.effort) effortEl.value = cfg.effort;
+            if (effortEl) effortEl.value = cfg.effort || '';
         }
     }
 
     onCliChange(false);
     const activeCfg = s.perCli?.[s.cli] || {};
     if (activeCfg.model) document.getElementById('selModel').value = activeCfg.model;
-    if (activeCfg.effort) document.getElementById('selEffort').value = activeCfg.effort;
+    syncActiveEffortOptions(s.cli, activeCfg.effort || '');
 
     loadTelegramSettings(s);
     loadFallbackOrder(s);
@@ -101,18 +200,18 @@ export function setPerm(p, save = true) {
 }
 
 export function getModelValue(cli) {
-    const cap = cli[0].toUpperCase() + cli.slice(1);
-    const sel = document.getElementById('model' + cap);
+    const sel = getModelSelect(cli);
+    if (!sel) return 'default';
     if (sel.value === '__custom__') {
-        const inp = document.getElementById('customModel' + cap);
+        const inp = getCustomModelInput(cli);
         return inp?.value?.trim() || sel.options[0]?.value || 'default';
     }
     return sel.value;
 }
 
 export function handleModelSelect(cli, selectEl) {
-    const cap = cli[0].toUpperCase() + cli.slice(1);
-    const customInput = document.getElementById('customModel' + cap);
+    const customInput = getCustomModelInput(cli);
+    if (!customInput) return;
     if (selectEl.value === '__custom__') {
         customInput.style.display = 'block';
         customInput.focus();
@@ -123,27 +222,27 @@ export function handleModelSelect(cli, selectEl) {
 }
 
 export function applyCustomModel(cli, inputEl) {
-    const cap = cli[0].toUpperCase() + cli.slice(1);
     const val = inputEl.value.trim();
     if (!val) return;
-    const select = document.getElementById('model' + cap);
-    const opt = document.createElement('option');
-    opt.value = val; opt.textContent = val;
-    const customOpt = select.querySelector('option[value="__custom__"]');
-    select.insertBefore(opt, customOpt);
+    const select = getModelSelect(cli);
+    if (!select) return;
+    appendCustomOption(select, val);
     select.value = val;
     inputEl.style.display = 'none';
     savePerCli();
 }
 
 export async function savePerCli() {
-    const perCli = {
-        claude: { model: getModelValue('claude'), effort: document.getElementById('effortClaude').value },
-        codex: { model: getModelValue('codex'), effort: document.getElementById('effortCodex').value },
-        gemini: { model: getModelValue('gemini') },
-        opencode: { model: getModelValue('opencode'), effort: document.getElementById('effortOpencode').value },
-        copilot: { model: getModelValue('copilot'), effort: document.getElementById('effortCopilot')?.value || '' },
-    };
+    const perCli = {};
+    for (const cli of getCliKeys()) {
+        const modelEl = getModelSelect(cli);
+        if (!modelEl) continue;
+        const effortEl = getEffortSelect(cli);
+        perCli[cli] = {
+            model: getModelValue(cli),
+            effort: effortEl ? effortEl.value : '',
+        };
+    }
     await fetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -155,10 +254,9 @@ export function onCliChange(save = true) {
     const cli = document.getElementById('selCli').value;
     const models = MODEL_MAP[cli] || [];
     const modelSel = document.getElementById('selModel');
-    modelSel.innerHTML = models.map(m =>
-        `<option value="${m}">${m}</option>`
-    ).join('') + '<option value="__custom__">✏️ 직접 입력...</option>';
+    setSelectOptions(modelSel, models, { includeCustom: true });
     document.getElementById('headerCli').textContent = cli;
+    syncActiveEffortOptions(cli);
 
     const oldInput = document.getElementById('selModelCustom');
     if (oldInput) oldInput.remove();
@@ -170,10 +268,7 @@ export function onCliChange(save = true) {
     inp.onchange = function () {
         const val = this.value.trim();
         if (!val) return;
-        const opt = document.createElement('option');
-        opt.value = val; opt.textContent = val;
-        const customOpt = modelSel.querySelector('option[value="__custom__"]');
-        modelSel.insertBefore(opt, customOpt);
+        appendCustomOption(modelSel, val);
         modelSel.value = val;
         this.style.display = 'none';
         saveActiveCliSettings();
@@ -192,15 +287,10 @@ export function onCliChange(save = true) {
     fetch('/api/settings').then(r => r.json()).then(s => {
         const cfg = s.perCli?.[cli] || {};
         if (cfg.model) {
-            if (!models.includes(cfg.model)) {
-                const opt = document.createElement('option');
-                opt.value = cfg.model; opt.textContent = cfg.model;
-                const customOpt = modelSel.querySelector('option[value="__custom__"]');
-                modelSel.insertBefore(opt, customOpt);
-            }
+            appendCustomOption(modelSel, cfg.model);
             modelSel.value = cfg.model;
         }
-        if (cfg.effort) document.getElementById('selEffort').value = cfg.effort;
+        syncActiveEffortOptions(cli, cfg.effort || '');
     });
 
     if (save) updateSettings();
@@ -208,9 +298,14 @@ export function onCliChange(save = true) {
 
 export async function saveActiveCliSettings() {
     const cli = document.getElementById('selCli').value;
+    const modelSel = document.getElementById('selModel');
+    let model = modelSel?.value || 'default';
+    if (model === '__custom__') {
+        model = document.getElementById('selModelCustom')?.value?.trim() || 'default';
+    }
     const perCli = {};
     perCli[cli] = {
-        model: document.getElementById('selModel').value,
+        model,
         effort: document.getElementById('selEffort').value,
     };
     await fetch('/api/settings', {

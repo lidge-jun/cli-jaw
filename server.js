@@ -48,6 +48,7 @@ import { parseCommand, executeCommand, COMMANDS } from './src/commands.js';
 import { orchestrate, orchestrateContinue, isContinueIntent } from './src/orchestrator.js';
 import { initTelegram, telegramBot, telegramActiveChatIds } from './src/telegram.js';
 import { startHeartbeat, stopHeartbeat, watchHeartbeatFile } from './src/heartbeat.js';
+import { CLI_REGISTRY } from './src/cli-registry.js';
 
 // ─── Resolve paths ───────────────────────────────────
 
@@ -312,7 +313,12 @@ function makeWebCommandCtx() {
         getBrowserStatus: async () => browser.getBrowserStatus(settings.browser?.cdpPort || 9240),
         getBrowserTabs: async () => ({ tabs: await browser.listTabs(settings.browser?.cdpPort || 9240) }),
         resetEmployees: async () => seedDefaultEmployees({ reset: true, notify: true }),
-        resetSkills: async () => { copyDefaultSkills(); ensureSkillsSymlinks(settings.workingDir); regenerateB(); },
+        resetSkills: async () => {
+            copyDefaultSkills();
+            const symlinks = ensureSkillsSymlinks(settings.workingDir, { onConflict: 'backup' });
+            regenerateB();
+            return { symlinks };
+        },
         getPrompt: () => {
             const a2 = fs.existsSync(A2_PATH) ? fs.readFileSync(A2_PATH, 'utf8') : '';
             return { content: a2 };
@@ -588,6 +594,7 @@ app.post('/api/mcp/reset', (req, res) => {
 });
 
 // CLI & Quota
+app.get('/api/cli-registry', (_, res) => res.json(CLI_REGISTRY));
 app.get('/api/cli-status', (_, res) => res.json(detectAllCli()));
 app.get('/api/quota', async (_, res) => {
     const [claude, codex] = await Promise.all([
@@ -595,7 +602,7 @@ app.get('/api/quota', async (_, res) => {
         fetchCodexUsage(readCodexTokens()),
     ]);
     const gemini = readGeminiAccount();
-    res.json({ claude, codex, gemini, opencode: null });
+    res.json({ claude, codex, gemini, opencode: null, copilot: null });
 });
 
 // Employees
@@ -690,9 +697,9 @@ app.get('/api/skills/:id', (req, res) => {
 app.post('/api/skills/reset', (req, res) => {
     try {
         copyDefaultSkills();
-        ensureSkillsSymlinks(settings.workingDir);
+        const symlinks = ensureSkillsSymlinks(settings.workingDir, { onConflict: 'backup' });
         regenerateB();
-        res.json({ ok: true });
+        res.json({ ok: true, symlinks });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
@@ -827,8 +834,12 @@ server.listen(PORT, () => {
 
     try {
         initMcpConfig(settings.workingDir);
-        ensureSkillsSymlinks(settings.workingDir);
+        const symlinks = ensureSkillsSymlinks(settings.workingDir, { onConflict: 'backup' });
         copyDefaultSkills();
+        const moved = (symlinks?.links || []).filter(x => x.action === 'backup_replace');
+        if (moved.length) {
+            console.log(`  Skills: moved ${moved.length} conflict path(s) to ~/.cli-claw/backups/skills-conflicts`);
+        }
         console.log(`  MCP:    ~/.cli-claw/mcp.json`);
     } catch (e) { console.error('[mcp-init]', e.message); }
 

@@ -5,6 +5,32 @@
 - CLI/모델 정의 단일 소스화
 - Copilot 문서-코드 상태 불일치 제거
 
+## 구현 결과 (2026-02-24)
+
+- [x] `lib/mcp-sync.js`: `ensureSymlinkForce` 제거, `ensureSymlinkSafe` + conflict backup 모드 도입
+- [x] `bin/postinstall.js`: skills 심링크 결과 리포트 출력, 충돌 경로 백업 로그 추가
+- [x] `src/cli-registry.js` 신설: CLI/모델/effort 단일 소스화
+- [x] `src/config.js`, `src/commands.js`, `server.js`: registry 기반으로 동작 변경 (`/api/cli-registry` 추가)
+- [x] `public/js/constants.js`, `public/js/features/settings.js`, `public/js/features/employees.js`, `public/js/main.js`, `public/index.html`: 하드코딩 배열 제거 및 동적 동기화
+- [x] `scripts/check-copilot-gap.js`, `devlog/260225_copilot-cli-integration/status.md`: 문서-코드 갭 자동 점검 + 상태 매트릭스 추가
+
+### 검증
+
+```bash
+cd ~/Documents/BlogProject/cli-claw
+node --check src/cli-registry.js
+node --check src/config.js
+node --check src/commands.js
+node --check lib/mcp-sync.js
+node --check bin/postinstall.js
+node --check server.js
+node --check public/js/constants.js
+node --check public/js/features/settings.js
+node --check public/js/features/employees.js
+node --check public/js/main.js
+npm run check:copilot-gap
+```
+
 ## 재검토 근거 (Context7 + Web)
 - Node fs API:
   - `lstatSync`는 symlink 대상이 아니라 링크 자체를 검사함.

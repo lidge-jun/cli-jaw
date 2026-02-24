@@ -1,5 +1,7 @@
 // ─── Slash Commands Registry + Dispatcher ───────────────────────────────
 
+import { CLI_KEYS, buildModelChoicesByCli } from './cli-registry.js';
+
 const CATEGORY_ORDER = ['session', 'model', 'tools', 'cli'];
 const CATEGORY_LABEL = {
     session: 'Session',
@@ -7,25 +9,8 @@ const CATEGORY_LABEL = {
     tools: 'Tools',
     cli: 'CLI',
 };
-const DEFAULT_CLI_CHOICES = ['claude', 'codex', 'gemini', 'opencode', 'copilot'];
-const MODEL_CHOICES_BY_CLI = {
-    claude: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-sonnet-4-6[1m]', 'claude-opus-4-6[1m]', 'claude-haiku-4-5-20251001'],
-    codex: ['gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini'],
-    gemini: ['gemini-3.0-pro-preview', 'gemini-3.1-pro-preview', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-2.5-flash'],
-    opencode: [
-        'anthropic/claude-opus-4-6-thinking', 'anthropic/claude-sonnet-4-6-thinking',
-        'anthropic/claude-sonnet-4-6', 'openai/gpt-5.3-codex-xhigh',
-        'openai/gpt-5.3-codex-high',
-        'opencode/big-pickle', 'opencode/GLM-5 Free', 'opencode/MiniMax M2.5 Free',
-        'opencode/Kimi K2.5 Free', 'opencode/GPT 5 Nano Free', 'opencode/Grok Code Fast 1 Free',
-    ],
-    copilot: [
-        'claude-sonnet-4.6', 'claude-opus-4.6', 'claude-haiku-4.5',
-        'gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex',
-        'gpt-4.1', 'gpt-5-mini',
-        'gemini-3-pro-preview',
-    ],
-};
+const DEFAULT_CLI_CHOICES = [...CLI_KEYS];
+const MODEL_CHOICES_BY_CLI = buildModelChoicesByCli();
 
 function sortCommands(list) {
     return [...list].sort((a, b) => {

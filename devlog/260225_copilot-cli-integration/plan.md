@@ -128,6 +128,8 @@ Client                          Agent (copilot --acp)
 
 ### Phase 1: CLI 감지 + 설정 체계 + 자동 설치 (20분)
 
+> 진행 상태(2026-02-24): ✅ 완료 (`status.md` 참조)
+
 #### `bin/postinstall.js` — npm install 시 자동 설치
 ```js
 // 1. Copilot 바이너리 다운로드 (없을 시, 실패해도 npm install 차단 안 함)

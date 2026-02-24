@@ -1,6 +1,6 @@
 // ── Employees (Sub-Agents) Feature ──
 import { state } from '../state.js';
-import { MODEL_MAP, ROLE_PRESETS } from '../constants.js';
+import { MODEL_MAP, ROLE_PRESETS, getCliKeys } from '../constants.js';
 import { escapeHtml } from '../render.js';
 import { getAgentPhase } from '../ws.js';
 
@@ -15,6 +15,7 @@ export function renderEmployees() {
         el.innerHTML = '<div style="color:var(--text-dim);font-size:11px;padding:4px 0">에이전트를 추가하세요</div>';
         return;
     }
+    const cliKeys = getCliKeys();
     el.innerHTML = state.employees.map(a => {
         const models = MODEL_MAP[a.cli] || [];
         // Legacy role prompt → new preset migration
@@ -45,7 +46,7 @@ export function renderEmployees() {
                 <div>
                     <label>CLI</label>
                     <select data-emp-cli="${a.id}">
-                        ${['claude', 'codex', 'gemini', 'opencode', 'copilot'].map(c => `<option${a.cli === c ? ' selected' : ''}>${c}</option>`).join('')}
+                        ${cliKeys.map(c => `<option${a.cli === c ? ' selected' : ''}>${c}</option>`).join('')}
                     </select>
                 </div>
                 <div>

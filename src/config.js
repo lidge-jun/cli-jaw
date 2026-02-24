@@ -3,8 +3,9 @@
 import os from 'os';
 import fs from 'fs';
 import { join } from 'path';
-import { execFileSync, execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { createRequire } from 'module';
+import { CLI_REGISTRY, CLI_KEYS, DEFAULT_CLI, buildDefaultPerCli } from './cli-registry.js';
 
 // ─── Version (single source of truth: package.json) ──
 const require = createRequire(import.meta.url);
@@ -60,38 +61,36 @@ export function runMigration(projectDir) {
 
 // ─── Settings ────────────────────────────────────────
 
-export const DEFAULT_SETTINGS = {
-    cli: 'claude',
-    fallbackOrder: [],
-    permissions: 'safe',
-    workingDir: os.homedir(),
-    perCli: {
-        claude: { model: 'claude-sonnet-4-6', effort: 'medium' },
-        codex: { model: 'gpt-5.3-codex', effort: 'medium' },
-        gemini: { model: 'gemini-2.5-pro', effort: '' },
-        opencode: { model: 'anthropic/claude-opus-4-6-thinking', effort: '' },
-        copilot: { model: 'claude-sonnet-4.6', effort: '' },
-    },
-    heartbeat: {
-        enabled: false,
-        every: '30m',
-        activeHours: { start: '08:00', end: '22:00' },
-        target: 'all',
-    },
-    telegram: {
-        enabled: false,
-        token: '',
-        allowedChatIds: [],
-    },
-    memory: {
-        enabled: true,
-        flushEvery: 10,
-        cli: '',
-        model: '',
-        retentionDays: 30,
-    },
-    employees: [],
-};
+function createDefaultSettings() {
+    return {
+        cli: DEFAULT_CLI,
+        fallbackOrder: [],
+        permissions: 'safe',
+        workingDir: os.homedir(),
+        perCli: buildDefaultPerCli(),
+        heartbeat: {
+            enabled: false,
+            every: '30m',
+            activeHours: { start: '08:00', end: '22:00' },
+            target: 'all',
+        },
+        telegram: {
+            enabled: false,
+            token: '',
+            allowedChatIds: [],
+        },
+        memory: {
+            enabled: true,
+            flushEvery: 10,
+            cli: '',
+            model: '',
+            retentionDays: 30,
+        },
+        employees: [],
+    };
+}
+
+export const DEFAULT_SETTINGS = createDefaultSettings();
 
 function migrateSettings(s) {
     if (s.planning) {
@@ -110,24 +109,25 @@ function migrateSettings(s) {
 }
 
 /** Mutable settings object — shared across all modules via ESM live binding */
-export let settings = { ...DEFAULT_SETTINGS };
+export let settings = createDefaultSettings();
 
 export function loadSettings() {
     try {
         const raw = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+        const defaults = createDefaultSettings();
         // Deep merge perCli so new CLI defaults (e.g. copilot) are preserved
-        const mergedPerCli = { ...DEFAULT_SETTINGS.perCli };
+        const mergedPerCli = buildDefaultPerCli();
         if (raw.perCli) {
             for (const [cli, cfg] of Object.entries(raw.perCli)) {
                 mergedPerCli[cli] = { ...(mergedPerCli[cli] || {}), ...cfg };
             }
         }
-        const merged = migrateSettings({ ...DEFAULT_SETTINGS, ...raw, perCli: mergedPerCli });
+        const merged = migrateSettings({ ...defaults, ...raw, perCli: mergedPerCli });
         if (raw.planning) saveSettings(merged);
         settings = merged;
         return merged;
     } catch {
-        settings = { ...DEFAULT_SETTINGS };
+        settings = createDefaultSettings();
         return settings;
     }
 }
@@ -168,11 +168,10 @@ export function detectCli(name) {
 }
 
 export function detectAllCli() {
-    return {
-        claude: detectCli('claude'),
-        codex: detectCli('codex'),
-        gemini: detectCli('gemini'),
-        opencode: detectCli('opencode'),
-        copilot: detectCli('copilot'),
-    };
+    const out = {};
+    for (const key of CLI_KEYS) {
+        const binary = CLI_REGISTRY[key]?.binary || key;
+        out[key] = detectCli(binary);
+    }
+    return out;
 }

@@ -1,6 +1,15 @@
 # Phase 1: CLI 감지 + 설정 체계 + 자동 설치 + UI
 
 > 예상 시간: 20분
+> 상태 업데이트(2026-02-24): 완료
+
+## 구현 반영 요약 (2026-02-24)
+
+- `src/cli-registry.js`를 단일 소스로 추가하고 `src/config.js`, `src/commands.js`, `server.js`가 이 레지스트리를 사용하도록 전환함
+- `public/js/constants.js`는 `/api/cli-registry`에서 모델/CLI 정보를 받아 UI와 백엔드를 동기화함
+- `public/js/features/settings.js`, `public/js/features/employees.js`, `public/js/main.js`의 하드코딩 CLI 배열을 제거하고 동적 목록으로 교체함
+- `lib/mcp-sync.js`는 심링크 충돌 시 백업(`~/.cli-claw/backups/skills-conflicts/*`) 후 연결하는 안전 모드로 변경함
+- 상세 매트릭스는 `status.md` 참고
 
 ---
 
