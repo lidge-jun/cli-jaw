@@ -94,3 +94,45 @@ test('AcpClient permission response accepts id-based options', () => {
         'approve_this'
     );
 });
+
+test('requestWithHeartbeat resolves and cleans up timers on response', async () => {
+    const acp = new AcpClient();
+    const writes = [];
+    acp.proc = {
+        stdin: {
+            writable: true,
+            write: (line) => writes.push(line),
+        },
+    };
+
+    const { promise, activityPing } = acp.requestWithActivityTimeout('session/prompt', { text: 'hi' }, 500, 2000);
+
+    // Simulate activity pings (like session/update events)
+    activityPing();
+    activityPing();
+
+    // Respond with a result
+    const sent = JSON.parse(String(writes[0] || '').trim());
+    acp._handleLine(JSON.stringify({
+        jsonrpc: '2.0',
+        id: sent.id,
+        result: { ok: true },
+    }));
+
+    const out = await promise;
+    assert.deepEqual(out, { ok: true });
+});
+
+test('requestWithHeartbeat rejects on idle timeout when no heartbeat', async () => {
+    const acp = new AcpClient();
+    acp.proc = {
+        stdin: {
+            writable: true,
+            write: () => { },
+        },
+    };
+
+    const { promise } = acp.requestWithActivityTimeout('session/prompt', {}, 100, 5000);
+
+    await assert.rejects(promise, /idle 0.1s/);
+});

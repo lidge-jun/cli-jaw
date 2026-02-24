@@ -97,6 +97,64 @@ export class AcpClient extends EventEmitter {
         });
     }
 
+    /**
+     * Send a request with activity-based idle timeout.
+     * Returns { promise, activityPing } — call activityPing() on every activity
+     * event (tool_call, thought, message) to reset the idle timer. Two timers:
+     *   - idle timer (idleMs): resets on each activityPing() call
+     *   - absolute timer (maxMs): hard cap, never resets
+     */
+    requestWithActivityTimeout(method, params = {}, idleMs = 120000, maxMs = 1200000) {
+        let idleTimer, absTimer, settled = false;
+
+        const promise = new Promise((resolve, reject) => {
+            if (!this.proc?.stdin?.writable) {
+                reject(new Error(`ACP stdin is not writable: ${method}`));
+                return;
+            }
+            const id = ++this._reqId;
+            const msg = { jsonrpc: '2.0', method, id, params };
+
+            const cleanup = () => {
+                settled = true;
+                clearTimeout(idleTimer);
+                clearTimeout(absTimer);
+            };
+
+            const onTimeout = (reason) => {
+                cleanup();
+                this._pending.delete(id);
+                reject(new Error(`ACP request timeout (${reason}): ${method} (id=${id})`));
+            };
+
+            // Idle timer — resets on activity
+            const resetIdle = () => {
+                if (settled) return;
+                clearTimeout(idleTimer);
+                idleTimer = setTimeout(() => onTimeout(`idle ${idleMs / 1000}s`), idleMs);
+            };
+
+            // Absolute timer — never resets
+            absTimer = setTimeout(() => onTimeout(`max ${maxMs / 1000}s`), maxMs);
+
+            // Wrap resolve/reject to cleanup timers
+            this._pending.set(id, {
+                resolve: (val) => { cleanup(); resolve(val); },
+                reject: (err) => { cleanup(); reject(err); },
+                timer: idleTimer, // for process exit cleanup
+            });
+
+            resetIdle();
+            this._activityPing = resetIdle;
+            this._write(msg);
+        });
+
+        return {
+            promise,
+            activityPing: () => { if (!settled && this._activityPing) this._activityPing(); },
+        };
+    }
+
     /** Send a JSON-RPC notification (no response expected) */
     notify(method, params = {}) {
         this._write({ jsonrpc: '2.0', method, params });
@@ -213,14 +271,14 @@ export class AcpClient extends EventEmitter {
         return result;
     }
 
-    /** Send a prompt to the agent */
-    async prompt(text, sessionId = null) {
+    /** Send a prompt to the agent (activity-based timeout) */
+    prompt(text, sessionId = null) {
         const sid = sessionId || this.sessionId;
         if (!sid) throw new Error('No session. Call createSession first.');
-        return this.request('session/prompt', {
+        return this.requestWithActivityTimeout('session/prompt', {
             sessionId: sid,
             prompt: [{ type: 'text', text }],
-        }, 300000); // 5 min timeout for prompts
+        }, 120000, 1200000); // idle 2min, max 20min
     }
 
     /** Resume a previous session (if agent supports loadSession capability) */

@@ -297,8 +297,9 @@ export function spawnAgent(prompt, opts = {}) {
             ctx.thinkingBuf = '';
         }
 
-        // session/update → broadcast mapping
+        // session/update → broadcast mapping + activity ping
         acp.on('session/update', (params) => {
+            if (promptActivityPing) promptActivityPing();  // reset idle timer
             const parsed = extractFromAcpUpdate(params);
             if (!parsed) return;
 
@@ -324,6 +325,7 @@ export function spawnAgent(prompt, opts = {}) {
         });
 
         // Run ACP flow
+        let promptActivityPing = null;
         (async () => {
             try {
                 const initResult = await acp.initialize();
@@ -345,7 +347,9 @@ export function spawnAgent(prompt, opts = {}) {
                 ctx.toolLog = [];
                 ctx.seenToolKeys.clear();
 
-                const promptResult = await acp.prompt(prompt);
+                const { promise: promptPromise, activityPing } = acp.prompt(prompt);
+                promptActivityPing = activityPing;
+                const promptResult = await promptPromise;
                 if (process.env.DEBUG) console.log('[acp:prompt:result]', JSON.stringify(promptResult).slice(0, 200));
 
                 await acp.shutdown();
