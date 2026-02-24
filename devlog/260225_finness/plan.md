@@ -46,9 +46,9 @@
 - 징후: 테스트 스크립트/`*.test.*` 없음, `package.json`에 test script 없음
 - 리스크: 이벤트/텔레그램/설정 관련 버그 재발
 
-## 수정 계획 (우선순위)
+## 수정 계획 (우선순위 재배치, 2026-02-24 반영)
 
-### P0. 안정화 (당일)
+### P0. 안정화 + 데이터 보호 (당일)
 1. 이벤트 정규화 레이어 추가
 - 대상: `src/events.js`, `src/agent.js`
 - 작업: `stream_event`/`assistant`를 공통 이벤트 스키마로 변환 후 dedupe key 기반 브로드캐스트
@@ -64,39 +64,47 @@
 - 작업: `requestId`/`source` 기반으로 현재 처리 중 요청만 제외하고 나머지는 정상 포워딩
 - 완료 기준: 동시 2개 채팅 요청에서 서로의 응답 누락/중복 없음
 
-### P1. 안전성/정합성 (1~2일)
-1. symlink 생성 보호 모드 도입
+4. symlink 생성 보호 모드 도입 (P1 → P0 상향)
 - 대상: `lib/mcp-sync.js`, `bin/postinstall.js`
 - 작업: 실디렉토리 발견 시 `backup + 안내` 또는 `skip + 경고` 정책 적용 (무조건 삭제 금지)
 - 완료 기준: 기존 사용자 스킬 디렉토리 보존, 로그에 명확한 액션 기록
 
-2. CLI/모델 단일 소스화
+### P1. 정합성 + 최소 회귀 테스트 (1~2일)
+1. CLI/모델 단일 소스화
 - 대상: `src/config.js`, `src/commands.js`, `public/js/constants.js`, `public/js/features/settings.js`, `public/js/features/employees.js`, `public/index.html`
 - 작업: `cliRegistry`(이름/모델/effort/표시명)를 한 군데서 관리하고 프론트/백엔드 공유
 - 완료 기준: 모델 목록 diff 0건, 새 CLI 추가 시 수정 파일 1~2개로 제한
 
-3. Copilot 문서와 실제 코드 간 갭 정리
+2. Copilot 문서와 실제 코드 간 갭 정리
 - 대상: `devlog/260225_copilot-cli-integration/*`, 실제 구현 파일
 - 작업: 완료/미완료 항목 체크리스트화, 미구현은 TODO로 명시
 - 완료 기준: 문서 상태와 코드 상태 불일치 항목 0건
 
-### P2. 회귀 방지 (2~3일)
-1. 이벤트 파서 단위 테스트 추가
+3. 최소 회귀 테스트 2개 선반영 (P2 → P1 상향)
 - 대상: `src/events.js` + 신규 `tests/events.test.js`
-- 작업: Claude/Codex/Gemini/OpenCode fixture 기반 파싱 테스트
-- 완료 기준: 중복/누락 회귀 케이스 자동 검증
-
-2. Telegram 동작 통합 테스트(핵심 시나리오)
 - 대상: 신규 `tests/telegram-forwarding.test.js` (mock bus 기반)
 - 작업: 일반 응답 포워딩, tg 요청 중복 방지, 재초기화 후 listener 중복 방지 검증
-- 완료 기준: 재현 시나리오 자동 통과
-
-3. npm script 정비
 - 대상: `package.json`
-- 작업: `test`, `test:watch`, `lint:check`(최소한 node --test 기반) 추가
-- 완료 기준: PR 전 자동 검증 루틴 1회 실행 가능
+- 작업: `test:events`, `test:telegram` 최소 스크립트 추가
+- 완료 기준: 핵심 회귀 2개가 `npm run test:events`, `npm run test:telegram`으로 즉시 재현 가능
 
-## 바로 실행할 첫 작업 세트 (추천)
-1. `src/telegram.js` listener lifecycle + `tgProcessing` 구조 수정
-2. `src/events.js` dedupe key 도입
-3. `public/js/constants.js`와 `src/commands.js` 모델 목록 동기화
+### P2. 테스트 확장/자동화 (2~3일)
+1. 이벤트 파서 fixture 확장
+- 대상: `tests/events.test.js`, `tests/fixtures/*`
+- 작업: Claude/Codex/Gemini/OpenCode 공통 fixture 세트 확대
+- 완료 기준: 신규 CLI/이벤트 타입 추가 시 fixture 기반 회귀 검증 가능
+
+2. Telegram 동작 시나리오 확장
+- 대상: `tests/telegram-forwarding.test.js`
+- 작업: 다중 init, listener detach, chunk fallback, 동시 요청 경합 케이스 추가
+- 완료 기준: lifecycle/경합 회귀를 자동 테스트로 차단
+
+3. 자동화 루프 정비
+- 대상: `package.json` (+ 필요 시 CI)
+- 작업: `npm test` 집계 스크립트 및 pre-push/CI 훅 연동
+- 완료 기준: PR 전 1회 실행으로 핵심+확장 테스트 검증
+
+## 바로 실행할 첫 작업 세트 (추천, 재배치 반영)
+1. `tests/events.test.js` 최소 3케이스 작성 (`stream_event`, `assistant fallback`, `stream 이후 assistant 무시`)
+2. `tests/telegram-forwarding.test.js` 최소 2케이스 작성 (`origin=telegram skip`, `error skip`)
+3. `package.json`에 `test:events`, `test:telegram` 추가 후 수동 실행 루프 고정

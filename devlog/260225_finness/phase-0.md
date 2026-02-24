@@ -4,6 +4,7 @@
 - Claude 이벤트 중복/누락 회귀 차단
 - Telegram 포워딩 중복 등록 차단
 - Telegram 요청 처리 상태를 요청 단위로 분리
+- skills symlink 충돌 시 데이터 유실 방지(삭제 금지)
 
 ## 재검토 기준 (2026-02-24, 최근 15개 커밋)
 - 회귀 체인: `1878eaf -> 6f28e64 -> 708b718 -> 70b46c8`
@@ -26,6 +27,8 @@
 - `src/agent.js`
 - `src/telegram.js`
 - `src/orchestrator.js` (옵션 전달 최소 확장)
+- `lib/mcp-sync.js`
+- `bin/postinstall.js`
 
 ## 구현 반영 결과 (2026-02-24)
 - [완료] Claude 이벤트 dedupe + assistant fallback 복구
@@ -43,10 +46,13 @@
   - `src/agent.js`: `broadcast('agent_done', ...)` payload에 `origin` 포함
   - `src/orchestrator.js`: `orchestrate(prompt, meta)`, `orchestrateContinue(meta)`로 확장
   - `server.js`: WS/API 엔트리에서 `origin`(`cli`/`web`) 전달
+- [완료] symlink 보호 모드 상향(P1 → P0)
+  - `lib/mcp-sync.js`: `ensureSymlinkForce` 제거, `ensureSymlinkSafe` + backup/skip 정책 도입
+  - `bin/postinstall.js`: symlink 충돌 백업 결과를 설치 로그로 노출
 
 ## 구현 검증 결과 (2026-02-24)
 - 문법 검증: `node --check`로 아래 파일 통과
-  - `src/events.js`, `src/agent.js`, `src/orchestrator.js`, `src/telegram.js`, `server.js`
+  - `src/events.js`, `src/agent.js`, `src/orchestrator.js`, `src/telegram.js`, `server.js`, `lib/mcp-sync.js`, `bin/postinstall.js`
 - 동작 스모크 테스트(스크립트 실행):
   - `stream_event` + `assistant` 연속 입력 시 tool 라벨 1회만 기록 확인
   - `assistant`만 있는 입력에서도 fallback tool 라벨 기록 확인
@@ -254,6 +260,38 @@ broadcast('agent_done', {
 ### 완료 기준
 - 동시 다중 채팅에서도 Telegram 자체 요청 응답은 global forward 대상에서 정확히 제외
 - 웹/CLI 요청 결과는 Telegram으로 정상 포워딩
+
+---
+
+## 0-4. symlink 보호 모드(P0 상향)
+
+### 문제
+- 기존 `ensureSymlinkForce()`는 실디렉토리 충돌 시 `rmSync(..., { recursive: true })`로 삭제해 데이터 유실 위험이 있었음
+
+### 설계
+- 충돌 경로를 기본 `backup` 정책으로 이동 후 symlink 재생성
+- 선택적으로 `skip` 정책을 허용
+- 백업 위치: `~/.cli-claw/backups/skills-conflicts/<timestamp>/...`
+
+### 코드 스니펫
+```js
+// lib/mcp-sync.js
+export function ensureSkillsSymlinks(workingDir, opts = {}) {
+  const onConflict = opts.onConflict === 'skip' ? 'skip' : 'backup';
+  // ...
+  links.push(ensureSymlinkSafe(skillsSource, wdClaudeSkills, { onConflict, backupContext }));
+}
+
+function ensureSymlinkSafe(target, linkPath, opts = {}) {
+  const stat = fs.lstatSync(linkPath);
+  // 올바른 symlink면 noop
+  // 충돌 경로면 backup 이동 후 symlink 재생성
+}
+```
+
+### 완료 기준
+- 충돌 경로 삭제 없이 백업됨
+- postinstall 로그에서 백업 경로 추적 가능
 
 ---
 
