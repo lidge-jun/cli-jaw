@@ -10,7 +10,7 @@ import {
     getSession, updateSession, insertMessage, insertMessageWithTrace, getRecentMessages, getEmployees,
 } from './db.js';
 import { getSystemPrompt } from './prompt.js';
-import { extractSessionId, extractFromEvent, logEventSummary } from './events.js';
+import { extractSessionId, extractFromEvent, extractFromAcpUpdate, logEventSummary } from './events.js';
 import { saveUpload as _saveUpload, buildMediaPrompt } from '../lib/upload.js';
 
 // ─── State ───────────────────────────────────────────
@@ -49,8 +49,9 @@ export async function steerAgent(newPrompt, source) {
     insertMessage.run('user', newPrompt, source, '');
     broadcast('new_message', { role: 'user', content: newPrompt, source });
     const { orchestrate, orchestrateContinue, isContinueIntent } = await import('./orchestrator.js');
-    if (isContinueIntent(newPrompt)) orchestrateContinue();
-    else orchestrate(newPrompt);
+    const origin = source || 'web';
+    if (isContinueIntent(newPrompt)) orchestrateContinue({ origin });
+    else orchestrate(newPrompt, { origin });
 }
 
 // ─── Message Queue ───────────────────────────────────
@@ -73,8 +74,9 @@ export async function processQueue() {
     broadcast('new_message', { role: 'user', content: combined, source });
     broadcast('queue_update', { pending: 0 });
     const { orchestrate, orchestrateContinue, isContinueIntent } = await import('./orchestrator.js');
-    if (isContinueIntent(combined)) orchestrateContinue();
-    else orchestrate(combined);
+    const origin = source || 'web';
+    if (isContinueIntent(combined)) orchestrateContinue({ origin });
+    else orchestrate(combined, { origin });
 }
 
 // ─── Helpers ─────────────────────────────────────────
@@ -199,9 +201,11 @@ export { buildMediaPrompt };
 // ─── Spawn Agent ─────────────────────────────────────
 
 import { stripSubtaskJSON } from './orchestrator.js';
+import { AcpClient } from './acp-client.js';
 
 export function spawnAgent(prompt, opts = {}) {
     const { forceNew = false, agentId, sysPrompt: customSysPrompt } = opts;
+    const origin = opts.origin || 'web';
 
     if (activeProcess && !forceNew) {
         console.log('[claw] Agent already running, skipping');
@@ -244,6 +248,125 @@ export function spawnAgent(prompt, opts = {}) {
         spawnEnv.GEMINI_SYSTEM_MD = tmpSysFile;
     }
 
+    // ─── Copilot ACP branch ──────────────────────
+    if (cli === 'copilot') {
+        const acp = new AcpClient({ model, workDir: settings.workingDir, permissions });
+        acp.spawn();
+        const child = acp.proc;
+        if (!forceNew) activeProcess = child;
+        broadcast('agent_status', { running: true, agentId: agentLabel, cli });
+
+        if (!forceNew && !opts.internal && !opts._skipInsert) {
+            insertMessage.run('user', prompt, cli, model);
+        }
+        broadcast('agent_status', { status: 'running', cli, agentId: agentLabel });
+
+        const ctx = {
+            fullText: '', traceLog: [], toolLog: [], seenToolKeys: new Set(),
+            hasClaudeStreamEvents: false, sessionId: null, cost: null,
+            turns: null, duration: null, tokens: null, stderrBuf: '',
+        };
+
+        // session/update → broadcast mapping
+        acp.on('session/update', (params) => {
+            const parsed = extractFromAcpUpdate(params);
+            if (!parsed) return;
+
+            if (parsed.tool) {
+                const key = `${parsed.tool.icon}:${parsed.tool.label}`;
+                if (!ctx.seenToolKeys.has(key)) {
+                    ctx.seenToolKeys.add(key);
+                    ctx.toolLog.push(parsed.tool);
+                    broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool });
+                }
+            }
+            if (parsed.text) {
+                ctx.fullText += parsed.text;
+            }
+        });
+
+        // Run ACP flow
+        (async () => {
+            try {
+                const initResult = await acp.initialize();
+                if (process.env.DEBUG) console.log('[acp:init]', JSON.stringify(initResult).slice(0, 200));
+
+                if (isResume && session.session_id) {
+                    try {
+                        await acp.loadSession(session.session_id);
+                    } catch {
+                        await acp.createSession(settings.workingDir);
+                    }
+                } else {
+                    await acp.createSession(settings.workingDir);
+                }
+                ctx.sessionId = acp.sessionId;
+
+                const promptResult = await acp.prompt(prompt);
+                if (process.env.DEBUG) console.log('[acp:prompt:result]', JSON.stringify(promptResult).slice(0, 200));
+
+                await acp.shutdown();
+            } catch (err) {
+                console.error(`[acp:error] ${err.message}`);
+                ctx.stderrBuf += err.message;
+                acp.kill();
+            }
+        })();
+
+        acp.on('exit', ({ code, signal }) => {
+            if (!forceNew) {
+                activeProcess = null;
+                broadcast('agent_status', { running: false, agentId: agentLabel });
+            }
+
+            if (!forceNew && ctx.sessionId && code === 0) {
+                updateSession.run(cli, ctx.sessionId, model, settings.permissions, settings.workingDir, cfg.effort || '');
+            }
+
+            if (ctx.fullText.trim()) {
+                const stripped = stripSubtaskJSON(ctx.fullText);
+                const cleaned = (stripped || ctx.fullText.trim())
+                    .replace(/<\/?tool_call>/g, '')
+                    .replace(/<\/?tool_result>[\s\S]*?(?:<\/tool_result>|$)/g, '')
+                    .replace(/\n{3,}/g, '\n\n')
+                    .trim();
+                const finalContent = cleaned || ctx.fullText.trim();
+                const traceText = ctx.traceLog.join('\n');
+
+                if (!forceNew && !opts.internal) {
+                    insertMessageWithTrace.run('assistant', finalContent, cli, model, traceText || null);
+                    broadcast('agent_done', { text: finalContent, toolLog: ctx.toolLog, origin });
+                    memoryFlushCounter++;
+                }
+            } else if (!forceNew && code !== 0) {
+                let errMsg = `Copilot CLI 실행 실패 (exit ${code})`;
+                if (ctx.stderrBuf.includes('auth')) errMsg = '🔐 인증 오류 — gh auth login이 필요합니다';
+                else if (ctx.stderrBuf.trim()) errMsg = ctx.stderrBuf.trim().slice(0, 200);
+
+                if (!opts.internal && !opts._isFallback) {
+                    const fallbackCli = (settings.fallbackOrder || [])
+                        .find(fc => fc !== cli && detectCli(fc).available);
+                    if (fallbackCli) {
+                        broadcast('agent_fallback', { from: cli, to: fallbackCli, reason: errMsg });
+                        const { promise: retryP } = spawnAgent(prompt, {
+                            ...opts, cli: fallbackCli, _isFallback: true, _skipInsert: true,
+                        });
+                        retryP.then(r => resolve(r));
+                        return;
+                    }
+                }
+                broadcast('agent_done', { text: `❌ ${errMsg}`, error: true, origin });
+            }
+
+            broadcast('agent_status', { status: code === 0 ? 'done' : 'error', agentId: agentLabel });
+            resolve({ text: ctx.fullText, code: code ?? 1, sessionId: ctx.sessionId, tools: ctx.toolLog });
+            if (!forceNew) processQueue();
+        });
+
+        return { child, promise: resultPromise };
+    }
+
+    // ─── Standard CLI branch (claude/codex/gemini/opencode) ──────
     const child = spawn(cli, args, {
         cwd: settings.workingDir,
         env: spawnEnv,
@@ -257,10 +380,8 @@ export function spawnAgent(prompt, opts = {}) {
     }
 
     if (cli === 'claude') {
-        // Claude system prompt is provided via --append-system-prompt.
         child.stdin.write(withHistoryPrompt(prompt, historyBlock));
     } else if (cli === 'codex' && !isResume) {
-        // Codex system prompt is loaded from .codex/AGENTS.md.
         const codexStdin = historyBlock
             ? `${historyBlock}\n\n[User Message]\n${prompt}`
             : `[User Message]\n${prompt}`;
@@ -274,6 +395,8 @@ export function spawnAgent(prompt, opts = {}) {
         fullText: '',
         traceLog: [],
         toolLog: [],
+        seenToolKeys: new Set(),
+        hasClaudeStreamEvents: false,
         sessionId: null,
         cost: null,
         turns: null,
@@ -338,7 +461,7 @@ export function spawnAgent(prompt, opts = {}) {
 
             if (!forceNew && !opts.internal) {
                 insertMessageWithTrace.run('assistant', finalContent, cli, model, traceText || null);
-                broadcast('agent_done', { text: finalContent, toolLog: ctx.toolLog });
+                broadcast('agent_done', { text: finalContent, toolLog: ctx.toolLog, origin });
 
                 memoryFlushCounter++;
                 const threshold = settings.memory?.flushEvery ?? 20;
@@ -373,7 +496,7 @@ export function spawnAgent(prompt, opts = {}) {
                 }
             }
 
-            broadcast('agent_done', { text: `❌ ${errMsg}`, error: true });
+            broadcast('agent_done', { text: `❌ ${errMsg}`, error: true, origin });
         }
 
         broadcast('agent_status', { status: code === 0 ? 'done' : 'error', agentId: agentLabel });

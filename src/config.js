@@ -115,7 +115,14 @@ export let settings = { ...DEFAULT_SETTINGS };
 export function loadSettings() {
     try {
         const raw = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
-        const merged = migrateSettings({ ...DEFAULT_SETTINGS, ...raw });
+        // Deep merge perCli so new CLI defaults (e.g. copilot) are preserved
+        const mergedPerCli = { ...DEFAULT_SETTINGS.perCli };
+        if (raw.perCli) {
+            for (const [cli, cfg] of Object.entries(raw.perCli)) {
+                mergedPerCli[cli] = { ...(mergedPerCli[cli] || {}), ...cfg };
+            }
+        }
+        const merged = migrateSettings({ ...DEFAULT_SETTINGS, ...raw, perCli: mergedPerCli });
         if (raw.planning) saveSettings(merged);
         settings = merged;
         return merged;

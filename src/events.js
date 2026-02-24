@@ -34,7 +34,7 @@ export function extractSessionId(cli, event) {
 }
 
 export function extractFromEvent(cli, event, ctx, agentLabel) {
-    const toolLabels = extractToolLabels(cli, event);
+    const toolLabels = extractToolLabels(cli, event, ctx);
     for (const toolLabel of toolLabels) {
         ctx.toolLog.push(toolLabel);
         broadcast('agent_tool', { agentId: agentLabel, ...toolLabel });
@@ -140,6 +140,7 @@ export function logEventSummary(agentLabel, cli, event, ctx = null) {
             return;
         }
         if (event.type === 'assistant' && event.message?.content) {
+            if (ctx?.hasClaudeStreamEvents) return;
             for (const block of event.message.content) {
                 if (block.type === 'tool_use') {
                     logLine(`[${agentLabel}] tool: ${block.name}`, ctx);
@@ -163,8 +164,27 @@ export function logEventSummary(agentLabel, cli, event, ctx = null) {
     }
 }
 
+function makeClaudeToolKey(event, label) {
+    const idx = event.event?.index;
+    if (idx !== undefined && idx !== null) return `claude:idx:${idx}:${label.icon}:${label.label}`;
+    const msgId = event.message?.id || '';
+    if (msgId) return `claude:msg:${msgId}:${label.icon}:${label.label}`;
+    return `claude:type:${event.type}:${label.icon}:${label.label}`;
+}
+
+function pushToolLabel(labels, label, cli, event, ctx) {
+    if (cli !== 'claude' || !ctx?.seenToolKeys) {
+        labels.push(label);
+        return;
+    }
+    const key = makeClaudeToolKey(event, label);
+    if (ctx.seenToolKeys.has(key)) return;
+    ctx.seenToolKeys.add(key);
+    labels.push(label);
+}
+
 // Returns array of tool labels (supports multiple blocks per event)
-function extractToolLabels(cli, event) {
+function extractToolLabels(cli, event, ctx) {
     const item = event.item || event.part || event;
     const labels = [];
 
@@ -180,12 +200,19 @@ function extractToolLabels(cli, event) {
     }
 
     if (cli === 'claude') {
-        // Real-time streaming only (--include-partial-messages)
-        // assistant bulk event is skipped to avoid duplicate broadcasts
+        // Real-time streaming first (--include-partial-messages)
         if (event.type === 'stream_event' && event.event?.type === 'content_block_start') {
+            if (ctx) ctx.hasClaudeStreamEvents = true;
             const cb = event.event.content_block;
-            if (cb?.type === 'tool_use') labels.push({ icon: '🔧', label: cb.name || 'tool' });
-            if (cb?.type === 'thinking') labels.push({ icon: '💭', label: 'thinking...' });
+            if (cb?.type === 'tool_use') pushToolLabel(labels, { icon: '🔧', label: cb.name || 'tool' }, cli, event, ctx);
+            if (cb?.type === 'thinking') pushToolLabel(labels, { icon: '💭', label: 'thinking...' }, cli, event, ctx);
+        }
+        // Fallback path: if no partial stream received, parse assistant bulk blocks.
+        if (event.type === 'assistant' && event.message?.content && !ctx?.hasClaudeStreamEvents) {
+            for (const block of event.message.content) {
+                if (block.type === 'tool_use') pushToolLabel(labels, { icon: '🔧', label: block.name || 'tool' }, cli, event, ctx);
+                if (block.type === 'thinking') pushToolLabel(labels, { icon: '💭', label: 'thinking...' }, cli, event, ctx);
+            }
         }
     }
 
@@ -206,4 +233,73 @@ function extractToolLabels(cli, event) {
 export function extractToolLabel(cli, event) {
     const labels = extractToolLabels(cli, event);
     return labels.length ? labels[0] : null;
+}
+
+// ─── ACP session/update → cli-claw internal event ────────────────
+// Official ACP schema: update.sessionUpdate is the discriminator field.
+// Types: agent_message_chunk, agent_thought_chunk, tool_call, tool_call_update, plan
+
+function extractText(content) {
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+        return content
+            .filter(c => c.type === 'text')
+            .map(c => c.text || '')
+            .join('');
+    }
+    return '';
+}
+
+export function extractFromAcpUpdate(params) {
+    const update = params?.update;
+    if (!update) return null;
+
+    const type = update.sessionUpdate;
+
+    switch (type) {
+        case 'agent_thought_chunk': {
+            const text = extractText(update.content);
+            return {
+                tool: {
+                    icon: '💭',
+                    label: text.slice(0, 60) + (text.length > 60 ? '...' : '') || 'thinking...',
+                },
+            };
+        }
+
+        case 'tool_call':
+            return {
+                tool: {
+                    icon: '🔧',
+                    label: update.name || 'tool',
+                },
+            };
+
+        case 'tool_call_update':
+            return {
+                tool: {
+                    icon: '✅',
+                    label: update.name || update.id || 'done',
+                },
+            };
+
+        case 'agent_message_chunk': {
+            const text = extractText(update.content);
+            return { text };
+        }
+
+        case 'plan':
+            return {
+                tool: {
+                    icon: '📝',
+                    label: 'planning...',
+                },
+            };
+
+        default:
+            if (process.env.DEBUG) {
+                console.log(`[acp] unknown sessionUpdate: ${type}`, JSON.stringify(update).slice(0, 100));
+            }
+            return null;
+    }
 }
