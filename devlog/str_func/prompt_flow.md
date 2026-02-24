@@ -1,6 +1,7 @@
 # 프롬프트 삽입 흐름 — Prompt Injection Flow
 
 > CLI-Claw의 프롬프트 조립 + 주입 전체 흐름. 에이전트 빌딩의 핵심 레퍼런스.
+> Phase 20.6: prompt.js → prompt/builder.js (523L) + promptCache 추가
 
 ---
 
@@ -75,7 +76,7 @@ graph TD
 ### 조립 순서
 
 ```js
-// prompt.js:214-217
+// prompt/builder.js
 const a1 = fs.readFileSync(A1_PATH, 'utf8');
 const a2 = fs.readFileSync(A2_PATH, 'utf8');
 let prompt = `${a1}\n\n${a2}`;
@@ -117,7 +118,7 @@ graph LR
 경로: `~/.cli-claw/memory/MEMORY.md`
 
 ```js
-// prompt.js:243-256 — 항상 주입, 조건 없음
+// prompt/builder.js — 항상 주입, 조건 없음
 const coreMem = fs.readFileSync(memPath, 'utf8').trim();
 if (coreMem && coreMem.length > 50) {
     const truncated = coreMem.length > 1500

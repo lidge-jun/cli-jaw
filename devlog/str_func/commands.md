@@ -1,7 +1,9 @@
-# commands.js — Slash Command Registry & Dispatcher (659L)
+# src/cli/ — Slash Command Registry & Dispatcher
 
-> 커맨드 레지스트리 + 디스패쳐 엔진. 16개 커맨드, 3개 인터페이스 (cli/web/telegram). cli-registry 기반 동적 모델 매핑.
+> cli/commands.js (268L) + cli/handlers.js (432L) + cli/registry.js (89L) + cli/acp-client.js (315L)
+> 16개 커맨드, 3개 인터페이스 (cli/web/telegram). cli-registry 기반 동적 모델 매핑.
 > Phase 9.5: `command-contract/` 모듈로 capability 정책 + help 렌더링 통합.
+> Phase 20.6: commands.js 658줄 → commands.js (268L, 레지스트리) + handlers.js (432L, 핸들러) 분리
 
 ---
 
@@ -18,7 +20,7 @@
 ### cli-registry 통합
 
 ```js
-import { CLI_KEYS, buildModelChoicesByCli } from './cli-registry.js';
+import { CLI_KEYS, buildModelChoicesByCli } from './registry.js';
 
 const DEFAULT_CLI_CHOICES = [...CLI_KEYS];
 const MODEL_CHOICES_BY_CLI = buildModelChoicesByCli();
@@ -58,7 +60,7 @@ const MODEL_CHOICES_BY_CLI = buildModelChoicesByCli();
 | ---------- | -------------------------- | ---------------------- |
 | **Web**    | `makeWebCommandCtx()`      | `server.js`            |
 | **CLI**    | inline ctx                 | `bin/commands/chat.js` |
-| **TG**     | `makeTelegramCommandCtx()` | `src/telegram.js`      |
+| **TG**     | `makeTelegramCommandCtx()` | `src/telegram/bot.js`  |
 
 공통 ctx 필드: `reply(msg)` · `getSession()` · `getSettings()` · `getAgentStatus()` · `interface`
 
@@ -76,9 +78,9 @@ Web UI의 슬래시 커맨드 드롭다운 UI 구현:
 
 ---
 
-## [P9.5] command-contract/ — 인터페이스 통합 (3파일, 125L)
+## src/command-contract/ — 인터페이스 통합 (3파일, 120L) [P9.5]
 
-`src/command-contract/` — COMMANDS 배열을 capability map으로 확장하여 인터페이스별 정책 통합.
+COMMANDS 배열을 capability map으로 확장하여 인터페이스별 정책 통합.
 
 ### catalog.js (39L)
 

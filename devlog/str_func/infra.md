@@ -1,12 +1,13 @@
-# 인프라 모듈 — config · db · bus · memory · browser · mcp-sync · cli-registry · security · http · settings-merge
+# 인프라 모듈 — core/ · memory/ · browser/ · security/ · http/ · lib/mcp-sync
 
 > 의존 0 모듈 + 데이터 레이어 + 외부 도구 통합 + Phase 9 보안/응답 유틸
+> Phase 20.6: flat src/ → src/core/, src/memory/ 등 서브디렉토리 분리
 
 ---
 
-## cli-registry.js — CLI/모델 단일 소스 (87L) `[NEW]`
+## src/cli/registry.js — CLI/모델 단일 소스 (89L)
 
-**의존 없음** — config.js, commands.js, server.js, 프론트엔드가 모두 이 레지스트리를 참조.
+**의존 없음** — core/config.js, cli/commands.js, server.js, 프론트엔드가 모두 이 레지스트리를 참조.
 
 | Export                   | 역할                                                     |
 | ------------------------ | -------------------------------------------------------- |
@@ -28,7 +29,7 @@ CLI_REGISTRY = {
 
 ---
 
-## config.js — 경로, 설정, CLI 탐지 (177L)
+## src/core/config.js — 경로, 설정, CLI 탐지 (187L)
 
 **상수**: `CLAW_HOME` · `PROMPTS_DIR` · `DB_PATH` · `SETTINGS_PATH` · `HEARTBEAT_JOBS_PATH` · `UPLOADS_DIR` · `SKILLS_DIR` · `SKILLS_REF_DIR` · `APP_VERSION` (← package.json)
 
@@ -45,7 +46,7 @@ CLI_REGISTRY = {
 
 ---
 
-## db.js — Database (84L)
+## src/core/db.js — Database (105L)
 
 ```sql
 session   (id='default', active_cli, session_id, model, permissions, working_dir, effort)
@@ -66,7 +67,7 @@ employees (id PK, name, cli, model, role, status, created_at)
 
 ---
 
-## bus.js — Broadcast Bus (20L)
+## src/core/bus.js — Broadcast Bus (18L)
 
 순환 의존 방지 허브. 의존 0.
 
@@ -81,7 +82,7 @@ employees (id PK, name, cli, model, role, status, created_at)
 
 ---
 
-## memory.js — Persistent Memory (128L)
+## src/memory/memory.js — Persistent Memory (129L)
 
 | Function                        | 역할                           |
 | ------------------------------- | ------------------------------ |
@@ -101,7 +102,7 @@ employees (id PK, name, cli, model, role, status, created_at)
 
 ---
 
-## Browser Module (`src/browser/`) — Chrome CDP 제어
+## src/browser/ — Chrome CDP 제어
 
 Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
@@ -160,7 +161,7 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
 ---
 
-## [P9.1] src/security/ — 보안 입력 검증
+## src/security/ — 보안 입력 검증 [P9.1]
 
 **의존 없음** — server.js에서 라우트 핸들러 진입 시 호출.
 
@@ -189,7 +190,7 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
 ---
 
-## [P9.2] src/http/ — 응답 계약
+## src/http/ — 응답 계약 [P9.2]
 
 **의존 없음** — Express 라우트에서 직접 사용.
 
@@ -215,7 +216,7 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
 ---
 
-## [P9.4] src/settings-merge.js — 설정 deep merge (46L)
+## src/core/settings-merge.js — 설정 deep merge (45L)
 
 **의존 없음** — server.js `applySettingsPatch()`에서 호출.
 

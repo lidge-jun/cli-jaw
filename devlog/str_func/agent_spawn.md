@@ -1,10 +1,11 @@
-# Agent Spawn — agent.js · events.js · orchestrator.js · acp-client.js
+# Agent Spawn — agent/ · orchestrator/ · cli/acp-client
 
 > CLI spawn + ACP 분기 + 스트림 + 큐 + 메모리 flush + 멀티에이전트 오케스트레이션
+> Phase 20.6: agent.js → agent/spawn.js+args.js+events.js, orchestrator.js → orchestrator/pipeline.js+parser.js
 
 ---
 
-## agent.js — CLI Spawn & Queue + ACP 분기 (619L)
+## agent/spawn.js — CLI Spawn & Queue + ACP 분기 (567L) + args.js (67L) + events.js (322L)
 
 | Function                                   | 역할                                                 |
 | ------------------------------------------ | ---------------------------------------------------- |
@@ -164,7 +165,7 @@ extractFromAcpUpdate(params):
 
 ---
 
-## orchestrator.js — Orchestration v2 + Triage + 순차실행 + origin 전달 + AI dispatch (637L)
+## orchestrator/pipeline.js (560L) + parser.js (108L) — Orchestration v2 + Phase + AI dispatch
 
 | Function                     | 역할                                           |
 | ---------------------------- | ---------------------------------------------- |
