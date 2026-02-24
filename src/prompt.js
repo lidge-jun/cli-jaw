@@ -53,9 +53,13 @@ export function getMergedSkills() {
         merged.push({
             id: s.id,
             name: refInfo?.name || s.name,
+            name_ko: refInfo?.name_ko || undefined,
+            name_en: refInfo?.name_en || undefined,
             emoji: refInfo?.emoji || '🔧',
             category: refInfo?.category || 'installed',
             description: refInfo?.description || s.description,
+            desc_ko: refInfo?.desc_ko || undefined,
+            desc_en: refInfo?.desc_en || undefined,
             requires: refInfo?.requires || null,
             install: refInfo?.install || null,
             enabled: true,
