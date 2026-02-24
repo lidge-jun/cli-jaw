@@ -74,7 +74,6 @@ const DEFAULT_EMPLOYEES = [
     { name: '백엔드', role: 'API, DB, 서버 로직 구현' },
     { name: '데이터', role: '데이터 파이프라인, 분석, ML' },
     { name: '문서', role: '문서화, README, API docs' },
-    { name: '검수', role: '코드 리뷰, 테스트 검증, QA' },
 ];
 
 ensureDirs();

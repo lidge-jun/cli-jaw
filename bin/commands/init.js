@@ -47,7 +47,7 @@ const workingDir = values['working-dir'] ||
 const cli = values.cli ||
     await ask('CLI (claude/codex/gemini)', settings.cli || 'claude');
 const permissions = values.permissions ||
-    await ask('Permissions (safe/auto)', settings.permissions || 'auto');
+    await ask('Permissions (safe/auto)', settings.permissions || 'safe');
 
 // Telegram
 let tgEnabled = false, tgToken = '', tgChatIds = [];

@@ -126,11 +126,12 @@ function withHistoryPrompt(prompt, historyBlock) {
     return `${historyBlock}\n\n---\n[Current Message]\n${body}`;
 }
 
-export function buildArgs(cli, model, effort, prompt, sysPrompt) {
+export function buildArgs(cli, model, effort, prompt, sysPrompt, permissions = 'auto') {
+    const autoPerm = permissions === 'auto';
     switch (cli) {
         case 'claude':
             return ['--print', '--verbose', '--output-format', 'stream-json',
-                '--dangerously-skip-permissions',
+                ...(autoPerm ? ['--dangerously-skip-permissions'] : []),
                 '--max-turns', '50',
                 ...(model && model !== 'default' ? ['--model', model] : []),
                 ...(effort && effort !== 'medium' ? ['--effort', effort] : []),
@@ -139,7 +140,8 @@ export function buildArgs(cli, model, effort, prompt, sysPrompt) {
             return ['exec',
                 ...(model && model !== 'default' ? ['-m', model] : []),
                 ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []),
-                '--dangerously-bypass-approvals-and-sandbox', '--skip-git-repo-check', '--json'];
+                ...(autoPerm ? ['--dangerously-bypass-approvals-and-sandbox'] : []),
+                '--skip-git-repo-check', '--json'];
         case 'gemini':
             return ['-p', prompt || '',
                 ...(model && model !== 'default' ? ['-m', model] : []),
@@ -155,11 +157,12 @@ export function buildArgs(cli, model, effort, prompt, sysPrompt) {
     }
 }
 
-export function buildResumeArgs(cli, model, effort, sessionId, prompt) {
+export function buildResumeArgs(cli, model, effort, sessionId, prompt, permissions = 'auto') {
+    const autoPerm = permissions === 'auto';
     switch (cli) {
         case 'claude':
             return ['--print', '--verbose', '--output-format', 'stream-json',
-                '--dangerously-skip-permissions',
+                ...(autoPerm ? ['--dangerously-skip-permissions'] : []),
                 '--resume', sessionId,
                 '--max-turns', '50',
                 ...(model && model !== 'default' ? ['--model', model] : []),
@@ -167,7 +170,8 @@ export function buildResumeArgs(cli, model, effort, sessionId, prompt) {
         case 'codex':
             return ['exec', 'resume',
                 ...(model && model !== 'default' ? ['--model', model] : []),
-                '--dangerously-bypass-approvals-and-sandbox', '--skip-git-repo-check',
+                ...(autoPerm ? ['--dangerously-bypass-approvals-and-sandbox'] : []),
+                '--skip-git-repo-check',
                 sessionId, prompt || '', '--json'];
         case 'gemini':
             return ['--resume', sessionId,
@@ -207,6 +211,7 @@ export function spawnAgent(prompt, opts = {}) {
 
     const session = getSession();
     const cli = opts.cli || session.active_cli || settings.cli;
+    const permissions = opts.permissions || settings.permissions || session.permissions || 'auto';
     const cfg = settings.perCli?.[cli] || {};
     const model = opts.model || cfg.model || 'default';
     const effort = opts.effort || cfg.effort || '';
@@ -221,9 +226,9 @@ export function spawnAgent(prompt, opts = {}) {
     let args;
     if (isResume) {
         console.log(`[claw:resume] ${cli} session=${session.session_id.slice(0, 12)}...`);
-        args = buildResumeArgs(cli, model, effort, session.session_id, prompt);
+        args = buildResumeArgs(cli, model, effort, session.session_id, prompt, permissions);
     } else {
-        args = buildArgs(cli, model, effort, promptForArgs, sysPrompt);
+        args = buildArgs(cli, model, effort, promptForArgs, sysPrompt, permissions);
     }
 
     const agentLabel = agentId || 'main';

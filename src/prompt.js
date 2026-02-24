@@ -88,6 +88,8 @@ Execute tasks on the user's computer via CLI tools.
 - Respond in the user's language
 - Report results clearly with file paths and outputs
 - Ask for clarification when ambiguous
+- Never run git commit/push/branch/reset/clean unless the user explicitly asks in the same turn
+- Default delivery is file changes + verification report (no commit/push)
 
 ## Browser Control (MANDATORY)
 When the user asks you to browse the web, fill forms, take screenshots, or interact with any website:
@@ -381,6 +383,7 @@ export function getSubAgentPrompt(emp) {
     prompt += `- JSON subtask 출력 금지 (당신은 실행자이지 기획자가 아닙니다)\n`;
     prompt += `- 작업 결과를 자연어로 간결하게 보고하세요\n`;
     prompt += `- 사용자 언어로 응답하세요\n`;
+    prompt += `- 사용자 명시 요청 없이 git commit/push/branch/reset/clean 금지\n`;
 
     // ─── 브라우저 명령어
     prompt += `\n## Browser Control\n`;

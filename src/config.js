@@ -63,7 +63,7 @@ export function runMigration(projectDir) {
 export const DEFAULT_SETTINGS = {
     cli: 'claude',
     fallbackOrder: [],
-    permissions: 'auto',
+    permissions: 'safe',
     workingDir: os.homedir(),
     perCli: {
         claude: { model: 'claude-sonnet-4-6', effort: 'medium' },
