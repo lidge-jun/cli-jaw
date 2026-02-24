@@ -99,7 +99,8 @@ function ensureMarked() {
                 highlighted = hljs.highlightAuto(text).value;
             } catch { /* fallback */ }
         }
-        const label = lang ? `<span class="code-lang-label">${escapeHtml(lang)}</span>` : '';
+        const labelText = lang ? escapeHtml(lang) : '복사';
+        const label = `<span class="code-lang-label" data-lang="${lang ? escapeHtml(lang) : ''}">${labelText}</span>`;
         return `<div class="code-block-wrapper">${label}<pre><code class="hljs${lang ? ` language-${escapeHtml(lang)}` : ''}">${highlighted}</code></pre></div>`;
     };
 
@@ -134,6 +135,55 @@ function renderFallback(text) {
         .replace(/\n/g, '<br>');
 }
 
+// ── Rehighlight all code blocks (call after hljs loads) ──
+export function rehighlightAll() {
+    if (typeof hljs === 'undefined') return;
+    document.querySelectorAll('.code-block-wrapper pre code').forEach(el => {
+        if (el.dataset.highlighted === 'yes') return;
+        const lang = [...el.classList].find(c => c.startsWith('language-'))?.replace('language-', '');
+        const raw = el.textContent;
+        try {
+            if (lang && hljs.getLanguage(lang)) {
+                el.innerHTML = hljs.highlight(raw, { language: lang }).value;
+            } else {
+                el.innerHTML = hljs.highlightAuto(raw).value;
+            }
+            el.dataset.highlighted = 'yes';
+        } catch { /* ignore */ }
+    });
+}
+
+// Poll for hljs load and auto-rehighlight
+(function waitForHljs() {
+    if (typeof hljs !== 'undefined') { rehighlightAll(); return; }
+    setTimeout(waitForHljs, 200);
+})();
+
+// ── Copy button event delegation (one-time setup) ──
+let copyDelegationReady = false;
+
+function ensureCopyDelegation() {
+    if (copyDelegationReady) return;
+    copyDelegationReady = true;
+    document.addEventListener('click', (e) => {
+        const label = e.target.closest('.code-lang-label');
+        if (!label) return;
+        const wrapper = label.closest('.code-block-wrapper');
+        if (!wrapper) return;
+        const codeEl = wrapper.querySelector('pre code');
+        if (!codeEl) return;
+        navigator.clipboard.writeText(codeEl.textContent).then(() => {
+            const orig = label.textContent;
+            label.textContent = '복사됨 ✓';
+            label.classList.add('copied');
+            setTimeout(() => {
+                label.textContent = orig;
+                label.classList.remove('copied');
+            }, 1500);
+        }).catch(() => { /* clipboard API fail silently */ });
+    });
+}
+
 // ── Main export ──
 export function renderMarkdown(text) {
     const cleaned = stripOrchestration(text);
@@ -155,7 +205,13 @@ export function renderMarkdown(text) {
     html = sanitizeHtml(html);
 
     // Schedule mermaid rendering (needs DOM)
-    requestAnimationFrame(renderMermaidBlocks);
+    requestAnimationFrame(() => {
+        renderMermaidBlocks();
+        rehighlightAll();
+    });
+
+    // Ensure copy delegation is set up
+    ensureCopyDelegation();
 
     return html;
 }

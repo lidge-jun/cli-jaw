@@ -147,4 +147,16 @@
     background: rgba(255, 255, 255, 0.05);
     border-radius: 0 6px 0 4px;
     font-family: 'SF Mono', monospace;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s, transform 0.15s, color 0.15s;
+}
+
+.msg-content .code-lang-label:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: scale(1.05);
+}
+
+.msg-content .code-lang-label.copied {
+    color: #4ade80;
 }

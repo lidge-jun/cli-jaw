@@ -68,32 +68,60 @@ render.js:   renderer.code = function({ text, lang }) { if (typeof hljs !== 'und
              rehighlightAll() → document.querySelectorAll('.code-block-wrapper pre code')
 ```
 
-### 가능한 원인 (조사 결과)
+### 근본 원인 ✅ 확정
 
-1. **CDN 로딩 실패/타임아웃**: `defer` + CDN → 네트워크 느리면 `hljs === undefined`
-2. **`hljs.getLanguage(lang)` false 반환**: highlight.min.js 기본 번들은 ~40개 언어만 포함. `sql`, `bash` 등은 포함이지만, 일부 언어는 미포함
-3. **`rehighlightAll()` 호출 시 DOM에 코드블럭 없음**: 이미 loaded 기존 메시지(`loadMessages()`)는 `hljs` 앞서 렌더돼서 `escapeHtml` 폴백 → `rehighlightAll`이 보정해야 하는데 `el.dataset.highlighted` 체크가 문제?
+**jsdelivr CDN에서 `highlight.js@11` 패키지가 404 반환.**
 
-### 수정 방안
+```bash
+$ curl -sI "https://cdn.jsdelivr.net/npm/highlight.js@11/highlight.min.js"
+HTTP/2 404
+```
 
-1. **CDN 폴백 강화**: `onload` + `onerror` (CDN 실패 시 로컬 번들 시도)
-2. **`rehighlightAll()` 개선**: `data-highlighted` 체크 제거 → 모든 `.hljs` 코드블럭 재처리
-3. **`ensureMarked()` 이후 hljs 가용 시 재렌더**: `markedReady` 상태에서 `hljs` 미감지 → 다음 메시지에서 재시도 자동
+jsdelivr에서 `highlight.js` 패키지의 major-only 버전 태그(`@11`)가 resolve 안 됨.
+→ `<script defer>` 로드 실패 → `typeof hljs === 'undefined'` → `escapeHtml()` 폴백 → 흰색 단색 출력.
 
-```diff
- // render.js rehighlightAll()
- export function rehighlightAll() {
-     if (typeof hljs === 'undefined') return;
-     document.querySelectorAll('.code-block-wrapper pre code').forEach(el => {
--        if (el.dataset.highlighted) return;
-         const lang = el.className.match(/language-(\w+)/)?.[1];
-         if (lang && hljs.getLanguage(lang)) {
-             try { hljs.highlightElement(el); } catch { }
-+        } else {
-+            try { hljs.highlightElement(el); } catch { }
-         }
-     });
- }
+같은 CDN의 `marked@14`, `katex@0.16`, `dompurify@3`은 정상 resolve → hljs만 단독 실패.
+
+### 수정 내역 ✅ 완료
+
+**1) CDN 교체 (jsdelivr → cdnjs.cloudflare.com)**
+
+| 파일 | 변경 |
+|------|------|
+| `index.html` L20-24 | hljs CSS + JS URL을 `cdnjs.cloudflare.com/.../11.11.1/...`로 변경 |
+| `theme.js` L6-7 | `HLJS_DARK`, `HLJS_LIGHT` URL도 동일하게 변경 |
+
+```bash
+$ curl -sI "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"
+HTTP/2 200  # ✅
+```
+
+**2) rehighlightAll() 개선 (render.js)**
+
+- `hljs.highlightElement()` 대신 `hljs.highlight()` 수동 호출 (innerHTML 직접 교체, 더 안정적)
+- `data-highlighted === 'yes'` 플래그로 중복 방지
+- `language-*` 클래스에서 언어 추출 → 해당 언어로 하이라이팅, 없으면 `highlightAuto`
+
+**3) hljs 로드 자동 감지 (render.js)**
+
+- 200ms 폴링으로 `typeof hljs !== 'undefined'` 감지 → `rehighlightAll()` 자동 호출
+- `index.html`의 `onload` 속성 제거 (폴링으로 대체)
+
+**4) renderMarkdown() 내 재하이라이팅 (render.js)**
+
+- `requestAnimationFrame` 내에서 `renderMermaidBlocks()` + `rehighlightAll()` 동시 호출
+- 새 메시지 렌더링 시에도 DOM 삽입 직후 하이라이팅 보장
+
+### 디버깅 과정
+
+```
+1. 브라우저 콘솔 확인: typeof hljs → "undefined" (모든 CDN 라이브러리 미로드)
+2. 페이지 이동 후 재확인: marked=object, DOMPurify=function, hljs=undefined
+3. curl -sI jsdelivr URL → HTTP/2 404 확인 ← 근본 원인
+4. cdnjs URL 테스트 → HTTP/2 200 확인
+5. CDN 교체 후 reload: typeof hljs → "object", version "11.11.1"
+6. rehighlightAll() 수동 실행 → 13개 블럭 전부 highlighted
+7. hljs-keyword span의 computedColor → rgb(255,123,114) 확인 (정상)
 ```
 
 ### 복사 버튼 현황
@@ -103,7 +131,7 @@ render.js:   renderer.code = function({ text, lang }) { if (typeof hljs !== 'und
 - CSS: `cursor: pointer`, hover scale, `.copied` 색상 변경
 - 언어 없는 코드블럭은 `labelText = '복사'`로 표시
 
-→ **hljs 문제 해결되면 복사 기능도 살아남** (DOM 구조는 이미 정상)
+→ **hljs CDN 404가 근본 원인이었으므로 CDN 교체로 모두 해결됨** ✅
 
 ---
 
@@ -131,21 +159,23 @@ render.js:   renderer.code = function({ text, lang }) { if (typeof hljs !== 'und
 
 ## 구현 계획
 
-| # | 작업 | 파일 | 영향 |
+| # | 작업 | 파일 | 상태 |
 |---|------|------|------|
-| 1 | `orchestrate_done` 핸들러 추가 | `ws.js` | 프론트 2줄 추가 |
-| 2 | `finalizeAgent()` 이중 호출 guard | `ui.js` | 프론트 3줄 추가 |
-| 3 | `rehighlightAll()` 개선 | `render.js` | `data-highlighted` 제거 |
-| 4 | sub-agent prompt 캐싱 | `orchestrator.js` | `distributeByPhase` 내 |
-| 5 | 스킬 파일 캐싱 | `prompt.js` | 모듈 변수 캐시 |
-| 6 | sysPrompt null 체크 수정 | `agent.js` | 1줄 수정 |
-| 7 | review 결과 압축 | `orchestrator.js` | 400→200자 |
+| 1 | `orchestrate_done` 핸들러 추가 | `ws.js` | ✅ 완료 |
+| 2 | `finalizeAgent()` 이중 호출 guard | `ui.js` | ✅ 완료 |
+| 3 | hljs CDN 404 수정 (jsdelivr→cdnjs) | `index.html`, `theme.js` | ✅ 완료 |
+| 4 | `rehighlightAll()` 개선 + 폴링 | `render.js` | ✅ 완료 |
+| 5 | 복사 버튼 (이벤트 위임) | `render.js`, `markdown.css` | ✅ 완료 |
+| 6 | sub-agent prompt 캐싱 | `orchestrator.js` | 🔜 P2 |
+| 7 | 스킬 파일 캐싱 | `prompt.js` | 🔜 P2 |
+| 8 | sysPrompt null 체크 수정 | `agent.js` | 🔜 P2 |
+| 9 | review 결과 압축 | `orchestrator.js` | 🔜 P2 |
 
 ### 우선순위
 
-**P0 (즉시)**: #1, #2 — done 응답이 안 나오는 건 사용자 경험 치명적
-**P1 (같은 날)**: #3 — 코드블럭 색깔 없는 것도 시각적으로 중요
-**P2 (다음)**: #4~#7 — 토큰 비용 최적화
+**P0 (즉시)**: #1, #2 — done 응답이 안 나오는 건 사용자 경험 치명적 ✅
+**P1 (같은 날)**: #3, #4, #5 — CDN 404 수정 + 하이라이팅 + 복사 버튼 ✅
+**P2 (다음)**: #6~#9 — 토큰 비용 최적화
 
 ---
 
