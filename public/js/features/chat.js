@@ -1,6 +1,7 @@
 // ── Chat Feature ──
 import { state } from '../state.js';
 import { addMessage, addSystemMsg, scrollToBottom } from '../ui.js';
+import * as slashCmd from './slash-commands.js';
 
 export async function sendMessage() {
     const input = document.getElementById('chatInput');
@@ -15,7 +16,26 @@ export async function sendMessage() {
     const text = input.value.trim();
     if (!text && !state.attachedFile) return;
 
-    if (text === '/clear') { clearChat(); input.value = ''; return; }
+    if (text.startsWith('/') && !state.attachedFile) {
+        input.value = '';
+        slashCmd.close();
+        try {
+            const res = await fetch('/api/command', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text }),
+            });
+            const result = await res.json().catch(() => ({}));
+            if (!res.ok && !result?.text) throw new Error(`HTTP ${res.status}`);
+            if (result?.code === 'clear_screen') {
+                document.getElementById('chatMessages').innerHTML = '';
+            }
+            if (result?.text) addSystemMsg(result.text);
+        } catch (err) {
+            addSystemMsg(`❌ 커맨드 실행 실패: ${err.message}`);
+        }
+        return;
+    }
 
     if (state.attachedFile) {
         const displayMsg = `[📎 ${state.attachedFile.name}] ${text}`;

@@ -43,6 +43,7 @@ import {
     steerAgent, enqueueMessage, processQueue, messageQueue,
     saveUpload, memoryFlushCounter,
 } from './src/agent.js';
+import { parseCommand, executeCommand, COMMANDS } from './src/commands.js';
 import { orchestrate } from './src/orchestrator.js';
 import { initTelegram } from './src/telegram.js';
 import { startHeartbeat, stopHeartbeat, watchHeartbeatFile } from './src/heartbeat.js';
@@ -67,6 +68,7 @@ try {
 // ─── Init ────────────────────────────────────────────
 
 const PORT = process.env.PORT || 3457;
+const APP_VERSION = '0.1.0';
 
 ensureDirs();
 fs.mkdirSync(join(__dirname, 'public'), { recursive: true });
@@ -195,14 +197,120 @@ wss.on('connection', (ws) => {
 
 // ─── API Routes ──────────────────────────────────────
 
-app.get('/api/session', (_, res) => res.json(getSession()));
-app.get('/api/messages', (_, res) => res.json(getMessages.all()));
-app.get('/api/runtime', (_, res) => {
-    res.json({
+function getRuntimeSnapshot() {
+    return {
         uptimeSec: Math.floor(process.uptime()),
         activeAgent: !!activeProcess,
         queuePending: messageQueue.length,
-    });
+    };
+}
+
+function clearSessionState() {
+    clearMessages.run();
+    const session = getSession();
+    updateSession.run(session.active_cli, null, session.model, session.permissions, session.working_dir, session.effort);
+    broadcast('clear', {});
+}
+
+function applySettingsPatch(rawPatch = {}, { restartTelegram = false } = {}) {
+    const patch = { ...(rawPatch || {}) };
+    const prevCli = settings.cli;
+    const hasTelegramUpdate = !!patch.telegram;
+
+    for (const key of ['perCli', 'heartbeat', 'telegram', 'memory']) {
+        if (patch[key] && typeof patch[key] === 'object') {
+            settings[key] = { ...settings[key], ...patch[key] };
+            delete patch[key];
+        }
+    }
+
+    replaceSettings({ ...settings, ...patch });
+    saveSettings(settings);
+
+    const session = getSession();
+    const activeModel = settings.perCli?.[settings.cli]?.model || 'default';
+    const activeEffort = settings.perCli?.[settings.cli]?.effort || 'medium';
+    const sessionId = (settings.cli !== prevCli) ? null : session.session_id;
+    if (settings.cli !== prevCli && session.session_id) {
+        console.log(`[claw:session] invalidated — CLI changed ${prevCli} → ${settings.cli}`);
+    }
+    updateSession.run(settings.cli, sessionId, activeModel, settings.permissions, settings.workingDir, activeEffort);
+
+    if (restartTelegram && hasTelegramUpdate) initTelegram();
+    return settings;
+}
+
+function makeWebCommandCtx() {
+    return {
+        interface: 'web',
+        version: APP_VERSION,
+        getSession,
+        getSettings: () => settings,
+        updateSettings: async (patch) => applySettingsPatch(patch, { restartTelegram: true }),
+        getRuntime: getRuntimeSnapshot,
+        getSkills: getMergedSkills,
+        clearSession: async () => clearSessionState(),
+        getCliStatus: () => detectAllCli(),
+        getMcp: () => loadUnifiedMcp(),
+        syncMcp: async () => ({ results: syncToAll(loadUnifiedMcp(), settings.workingDir) }),
+        installMcp: async () => {
+            const config = loadUnifiedMcp();
+            const { installMcpServers } = await import('./lib/mcp-sync.js');
+            const results = await installMcpServers(config);
+            saveUnifiedMcp(config);
+            const synced = syncToAll(config, settings.workingDir);
+            return { results, synced };
+        },
+        listMemory: () => memory.list(),
+        searchMemory: (q) => memory.search(q),
+        getBrowserStatus: async () => browser.getBrowserStatus(settings.browser?.cdpPort || 9240),
+        getBrowserTabs: async () => ({ tabs: await browser.listTabs(settings.browser?.cdpPort || 9240) }),
+        getPrompt: () => {
+            const a2 = fs.existsSync(A2_PATH) ? fs.readFileSync(A2_PATH, 'utf8') : '';
+            return { content: a2 };
+        },
+    };
+}
+
+app.get('/api/session', (_, res) => res.json(getSession()));
+app.get('/api/messages', (_, res) => res.json(getMessages.all()));
+app.get('/api/runtime', (_, res) => res.json(getRuntimeSnapshot()));
+
+app.post('/api/command', async (req, res) => {
+    try {
+        const text = String(req.body?.text || '').trim().slice(0, 500);
+        const parsed = parseCommand(text);
+        if (!parsed) {
+            return res.status(400).json({
+                ok: false,
+                code: 'not_command',
+                text: '슬래시 커맨드가 아닙니다.',
+            });
+        }
+        const result = await executeCommand(parsed, makeWebCommandCtx());
+        res.json(result);
+    } catch (err) {
+        console.error('[cmd:error]', err);
+        res.status(500).json({
+            ok: false,
+            code: 'internal_error',
+            text: `서버 오류: ${err.message}`,
+        });
+    }
+});
+
+app.get('/api/commands', (req, res) => {
+    const iface = String(req.query.interface || 'web');
+    res.json(COMMANDS
+        .filter(c => c.interfaces.includes(iface) && !c.hidden)
+        .map(c => ({
+            name: c.name,
+            desc: c.desc,
+            args: c.args || null,
+            category: c.category || 'tools',
+            aliases: c.aliases || [],
+        }))
+    );
 });
 
 app.post('/api/message', (req, res) => {
@@ -222,36 +330,14 @@ app.post('/api/stop', (req, res) => {
 });
 
 app.post('/api/clear', (_, res) => {
-    clearMessages.run();
-    const session = getSession();
-    updateSession.run(session.active_cli, null, session.model, session.permissions, session.working_dir, session.effort);
-    broadcast('clear', {});
+    clearSessionState();
     res.json({ ok: true });
 });
 
 // Settings
 app.get('/api/settings', (_, res) => res.json(settings));
 app.put('/api/settings', (req, res) => {
-    const prevCli = settings.cli;
-    const hasTelegramUpdate = !!req.body.telegram;
-    for (const key of ['perCli', 'heartbeat', 'telegram', 'memory']) {
-        if (req.body[key] && typeof req.body[key] === 'object') {
-            settings[key] = { ...settings[key], ...req.body[key] };
-            delete req.body[key];
-        }
-    }
-    replaceSettings({ ...settings, ...req.body });
-    saveSettings(settings);
-    const session = getSession();
-    const activeModel = settings.perCli?.[settings.cli]?.model || 'default';
-    const activeEffort = settings.perCli?.[settings.cli]?.effort || 'medium';
-    const sessionId = (settings.cli !== prevCli) ? null : session.session_id;
-    if (settings.cli !== prevCli && session.session_id) {
-        console.log(`[claw:session] invalidated — CLI changed ${prevCli} → ${settings.cli}`);
-    }
-    updateSession.run(settings.cli, sessionId, activeModel, settings.permissions, settings.workingDir, activeEffort);
-    if (hasTelegramUpdate) initTelegram();
-    res.json(settings);
+    res.json(applySettingsPatch(req.body, { restartTelegram: true }));
 });
 
 // Prompts (A-2)

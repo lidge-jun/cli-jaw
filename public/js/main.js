@@ -4,6 +4,10 @@
 import { connect } from './ws.js';
 import { switchTab, handleSave, loadStats, loadMessages, loadMemory } from './ui.js';
 import { sendMessage, handleKey, clearAttachedFile, clearChat, initDragDrop } from './features/chat.js';
+import {
+    loadCommands, update as updateSlashDropdown, handleKeydown as handleSlashKeydown,
+    handleClick as handleSlashClick, handleOutsideClick as handleSlashOutsideClick,
+} from './features/slash-commands.js';
 import { loadSkills, toggleSkill, filterSkills } from './features/skills.js';
 import {
     loadSettings, setPerm, handleModelSelect, applyCustomModel, onCliChange,
@@ -28,7 +32,20 @@ import { state } from './state.js';
 
 // ── Chat Actions ──
 document.getElementById('btnSend').addEventListener('click', sendMessage);
-document.getElementById('chatInput').addEventListener('keydown', handleKey);
+const chatInput = document.getElementById('chatInput');
+chatInput.addEventListener('keydown', (e) => {
+    if (handleSlashKeydown(e)) return;
+    handleKey(e);
+});
+chatInput.addEventListener('input', (e) => {
+    if (e.isComposing) return;
+    updateSlashDropdown(e.target.value);
+});
+chatInput.addEventListener('cmd-execute', () => {
+    void sendMessage();
+});
+document.getElementById('cmdDropdown')?.addEventListener('click', handleSlashClick);
+document.addEventListener('click', handleSlashOutsideClick);
 document.querySelector('.file-preview .remove').addEventListener('click', clearAttachedFile);
 document.querySelector('.btn-attach').addEventListener('click', () => {
     document.getElementById('fileInput').click();
@@ -191,6 +208,7 @@ document.getElementById('memFilesList').addEventListener('click', (e) => {
 // ── Init ──
 connect();
 initDragDrop();
+void loadCommands();
 loadSettings();
 loadMemory();
 loadMessages();

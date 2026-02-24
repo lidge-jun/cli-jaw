@@ -7,7 +7,10 @@ import { parseArgs } from 'node:util';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import fs from 'node:fs';
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const projectRoot = join(__dirname, '..', '..');
 
 const { values } = parseArgs({
     args: process.argv.slice(3),
@@ -19,12 +22,16 @@ const { values } = parseArgs({
     strict: false,
 });
 
-const serverPath = join(__dirname, '..', '..', 'server.js');
+const serverPath = join(projectRoot, 'server.js');
+const envFile = join(projectRoot, '.env');
 
 console.log(`\n  🦞 cli-claw serve — port ${values.port}\n`);
 
+const nodeArgs = ['--dns-result-order=ipv4first'];
+if (fs.existsSync(envFile)) nodeArgs.unshift(`--env-file=${envFile}`);
+
 const child = spawn(process.execPath,
-    ['--dns-result-order=ipv4first', serverPath],
+    [...nodeArgs, serverPath],
     {
         stdio: 'inherit',
         env: { ...process.env, PORT: values.port, HOST: values.host },

@@ -4,13 +4,16 @@ import https from 'node:https';
 import { Bot } from 'grammy';
 import { sequentialize } from '@grammyjs/runner';
 import { broadcast, addBroadcastListener, removeBroadcastListener } from './bus.js';
-import { settings } from './config.js';
-import { insertMessage } from './db.js';
+import { settings, detectAllCli } from './config.js';
+import { insertMessage, getSession, updateSession, clearMessages } from './db.js';
 import { orchestrate } from './orchestrator.js';
 import {
     activeProcess, killActiveAgent, waitForProcessEnd,
-    saveUpload, buildMediaPrompt,
+    saveUpload, buildMediaPrompt, messageQueue,
 } from './agent.js';
+import { parseCommand, executeCommand, COMMANDS } from './commands.js';
+import { getMergedSkills } from './prompt.js';
+import * as memory from './memory.js';
 import { downloadTelegramFile } from '../lib/upload.js';
 
 // ─── Helpers ─────────────────────────────────────────
@@ -85,6 +88,70 @@ export function orchestrateAndCollect(prompt) {
 
 export let telegramBot = null;
 export const telegramActiveChatIds = new Set();
+const APP_VERSION = '0.1.0';
+const RESERVED_CMDS = new Set(['start', 'id', 'help', 'settings']);
+
+function toTelegramCommandDescription(desc) {
+    const text = String(desc || '').trim();
+    return text.length >= 3 ? text.slice(0, 256) : 'Run command';
+}
+
+function syncTelegramCommands(bot) {
+    return bot.api.setMyCommands(
+        COMMANDS
+            .filter(c => c.interfaces.includes('telegram') && !RESERVED_CMDS.has(c.name))
+            .map(c => ({
+                command: c.name,
+                description: toTelegramCommandDescription(c.desc),
+            }))
+    );
+}
+
+function makeTelegramCommandCtx() {
+    return {
+        interface: 'telegram',
+        version: APP_VERSION,
+        getSession,
+        getSettings: () => settings,
+        // Telegram side-effects are intentionally restricted in Phase 2.
+        updateSettings: async () => ({ ok: false, text: '❌ Telegram에서 설정 변경은 지원하지 않습니다.' }),
+        getRuntime: () => ({
+            uptimeSec: Math.floor(process.uptime()),
+            activeAgent: !!activeProcess,
+            queuePending: messageQueue.length,
+        }),
+        getSkills: () => getMergedSkills(),
+        clearSession: async () => {
+            clearMessages.run();
+            const s = getSession();
+            updateSession.run(s.active_cli, null, s.model, s.permissions, s.working_dir, s.effort);
+            broadcast('clear', {});
+        },
+        getCliStatus: () => detectAllCli(),
+        getMcp: () => ({ servers: {} }),
+        syncMcp: async () => ({ results: {} }),
+        installMcp: async () => ({ results: {} }),
+        listMemory: () => memory.list(),
+        searchMemory: (q) => memory.search(q),
+        getBrowserStatus: async () => {
+            try {
+                const m = await import('./browser/index.js');
+                return m.getBrowserStatus(settings.browser?.cdpPort || 9240);
+            } catch {
+                return { running: false, tabs: [] };
+            }
+        },
+        getBrowserTabs: async () => {
+            try {
+                const m = await import('./browser/index.js');
+                return { tabs: await m.listTabs(settings.browser?.cdpPort || 9240) };
+            } catch {
+                return { tabs: [] };
+            }
+        },
+        getPrompt: () => ({ content: '(Telegram에서 미지원)' }),
+    };
+}
 
 // ─── Init ────────────────────────────────────────────
 
@@ -96,6 +163,14 @@ export function initTelegram() {
     }
     const envToken = process.env.TELEGRAM_TOKEN;
     if (envToken) settings.telegram.token = envToken;
+
+    const envChatIds = process.env.TELEGRAM_ALLOWED_CHAT_IDS;
+    if (envChatIds) {
+        settings.telegram.allowedChatIds = envChatIds
+            .split(',')
+            .map(id => parseInt(id.trim(), 10))
+            .filter(id => !isNaN(id));
+    }
 
     if (!settings.telegram?.enabled || !settings.telegram?.token) {
         console.log('[tg] ⏸️  Telegram pending (disabled or no token)');
@@ -221,7 +296,20 @@ export function initTelegram() {
 
     bot.on('message:text', async (ctx) => {
         const text = ctx.message.text;
-        if (text.startsWith('/')) return;
+        if (text.startsWith('/')) {
+            const parsed = parseCommand(text);
+            if (!parsed) return;
+            const result = await executeCommand(parsed, makeTelegramCommandCtx());
+            if (result?.text) {
+                const out = String(result.text);
+                try {
+                    await ctx.reply(out);
+                } catch {
+                    await ctx.reply(out.slice(0, 4000));
+                }
+            }
+            return;
+        }
         console.log(`[tg:in] ${ctx.chat.id}: ${text.slice(0, 80)}`);
         tgOrchestrate(ctx, text, text);
     });
@@ -255,6 +343,10 @@ export function initTelegram() {
             console.error('[tg:doc:error]', err);
             await ctx.reply(`❌ 파일 처리 실패: ${err.message}`);
         }
+    });
+
+    void syncTelegramCommands(bot).catch((e) => {
+        console.warn('[tg:commands] setMyCommands failed:', e.message);
     });
 
     bot.start({

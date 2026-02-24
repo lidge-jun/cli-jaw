@@ -161,7 +161,8 @@ async function modelHandler(args, ctx) {
             model: nextModel,
         },
     };
-    await ctx.updateSettings({ perCli: nextPerCli });
+    const updateResult = await ctx.updateSettings({ perCli: nextPerCli });
+    if (updateResult?.ok === false) return updateResult;
     return {
         ok: true,
         text: `✅ 모델 변경: ${nextModel}\n다음 메시지부터 적용됩니다.`,
@@ -195,7 +196,8 @@ async function cliHandler(args, ctx) {
         return { ok: true, text: `이미 ${nextCli}가 활성화되어 있습니다.` };
     }
 
-    await ctx.updateSettings({ cli: nextCli });
+    const updateResult = await ctx.updateSettings({ cli: nextCli });
+    if (updateResult?.ok === false) return updateResult;
     return { ok: true, text: `✅ CLI 변경: ${current} → ${nextCli}` };
 }
 
