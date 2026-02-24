@@ -1,7 +1,7 @@
 /* ── Markdown rendering styles ── */
 
 /* Tables */
-.msg-body table {
+.msg-content table {
     border-collapse: collapse;
     max-width: 100%;
     margin: 8px 0;
@@ -11,16 +11,16 @@
     overflow-x: auto;
 }
 
-.msg-body thead,
-.msg-body tbody,
-.msg-body tr {
+.msg-content thead,
+.msg-content tbody,
+.msg-content tr {
     display: table;
     width: 100%;
     table-layout: auto;
 }
 
-.msg-body th,
-.msg-body td {
+.msg-content th,
+.msg-content td {
     border: 1px solid rgba(74, 222, 128, 0.25);
     padding: 6px 12px;
     text-align: left;
@@ -28,22 +28,22 @@
     max-width: 320px;
 }
 
-.msg-body th {
+.msg-content th {
     background: rgba(74, 222, 128, 0.08);
     font-weight: 600;
     border-bottom: 2px solid #4ade80;
 }
 
-.msg-body tr:nth-child(even) {
+.msg-content tr:nth-child(even) {
     background: rgba(255, 255, 255, 0.03);
 }
 
-.msg-body tr:hover {
+.msg-content tr:hover {
     background: rgba(74, 222, 128, 0.04);
 }
 
 /* Code blocks */
-.msg-body pre {
+.msg-content pre {
     background: #0d1117;
     padding: 12px;
     border-radius: 6px;
@@ -53,14 +53,14 @@
     line-height: 1.45;
 }
 
-.msg-body pre code {
+.msg-content pre code {
     background: none;
     padding: 0;
     border-radius: 0;
     font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
-.msg-body code {
+.msg-content code {
     background: var(--border);
     padding: 1px 5px;
     border-radius: 3px;
@@ -69,7 +69,7 @@
 }
 
 /* Blockquotes */
-.msg-body blockquote {
+.msg-content blockquote {
     border-left: 3px solid var(--accent, #60a5fa);
     margin: 8px 0;
     padding: 4px 12px;
@@ -79,72 +79,72 @@
 }
 
 /* Lists */
-.msg-body ul,
-.msg-body ol {
+.msg-content ul,
+.msg-content ol {
     margin: 4px 0;
     padding-left: 20px;
 }
 
-.msg-body li {
+.msg-content li {
     margin: 2px 0;
 }
 
 /* Links */
-.msg-body a {
+.msg-content a {
     color: #60a5fa;
     text-decoration: none;
 }
 
-.msg-body a:hover {
+.msg-content a:hover {
     text-decoration: underline;
 }
 
 /* Horizontal rules */
-.msg-body hr {
+.msg-content hr {
     border: none;
     border-top: 1px solid var(--border);
     margin: 12px 0;
 }
 
 /* Headings inside messages */
-.msg-body h1,
-.msg-body h2,
-.msg-body h3 {
+.msg-content h1,
+.msg-content h2,
+.msg-content h3 {
     margin: 10px 0 4px;
     line-height: 1.3;
 }
 
-.msg-body h1 {
+.msg-content h1 {
     font-size: 16px;
 }
 
-.msg-body h2 {
+.msg-content h2 {
     font-size: 14px;
 }
 
-.msg-body h3 {
+.msg-content h3 {
     font-size: 13px;
 }
 
 /* Paragraphs */
-.msg-body p {
+.msg-content p {
     margin: 4px 0;
 }
 
 /* KaTeX */
-.msg-body .katex-display {
+.msg-content .katex-display {
     margin: 8px 0;
     overflow-x: auto;
     overflow-y: hidden;
     padding: 4px 0;
 }
 
-.msg-body .katex-display>.katex {
+.msg-content .katex-display>.katex {
     white-space: normal;
     word-break: break-word;
 }
 
-.msg-body .katex {
+.msg-content .katex {
     font-size: 1.05em;
 }
 
