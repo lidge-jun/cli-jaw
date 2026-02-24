@@ -1,77 +1,79 @@
-# Phase 6: Message Triage — 복잡한 작업만 오케스트레이션
+# Phase 6: Message Triage + 순차 실행
 
 > **의존**: Phase 5 완료
-> **목표**: 복잡한 코딩/개발 작업만 planning pipeline 실행, 나머지는 직접 응답
+> **검증일**: 2026-02-24
+> **산출물**: needsOrchestration, direct_answer, 순차 실행, 프롬프트 조정
 
 ---
 
-## 문제
+## 6-A: 2-Tier Triage
 
-orchestrate()가 **모든 메시지**를 풀 파이프라인으로 처리:
-- "안녕" → planning + worklog + subtask + verdict
-- "그래서 대답이 뭐냐고" → planning + worklog + subtask + verdict
-- "서버 상태 어때?" → planning + worklog + subtask + verdict
+### Tier 1: Regex 기반 (`needsOrchestration`)
 
-## 설계 (역전 로직)
+**복잡한 작업만** orchestrate — 2개 이상 signal 필요:
+1. 길이 ≥ 80자
+2. 코드 키워드 (`.js`, `구현`, `수정`, `API`, `만들어` 등)
+3. 파일 경로 (`src/`, `bin/`, `public/`)
+4. 멀티 태스크 (`그리고`, `먼저`, 번호 목록)
 
-~~기존: 간단한 거 걸러내기~~ → **복잡한 작업만 파이프라인 태우기**
+| 입력                    | signal | 판정        |
+| ----------------------- | ------ | ----------- |
+| "안녕"                  | 0      | direct      |
+| "그래서 대답이 뭐냐고"  | 0      | direct      |
+| "API가 뭐야?"           | 1      | direct      |
+| "src/agent.js 수정해줘" | 2      | orchestrate |
 
+**16/16 unit test pass.**
+
+### Tier 2: Planning Agent 자율 판단 (`direct_answer`)
+
+Regex 통과한 메시지도 planning agent가 판단:
+
+```json
+{
+  "direct_answer": "직접 응답 내용",
+  "subtasks": []
+}
 ```
-orchestrate(prompt)
-  ├── needsOrchestration(prompt) === true  → full pipeline
-  └── else                                  → spawnAgent(prompt) 직접
-```
 
-### `needsOrchestration()` — 복잡 작업 탐지
-
-**조건: 아래 중 2개 이상** 충족 시 orchestrate:
-
-1. **길이**: 80자 이상
-2. **코드 키워드**: 파일 경로(.js/.ts/.py...), "구현", "작성", "만들어", "수정", "리팩토링", "코딩", "버그", "디버그", "테스트", "빌드", "배포", "API", "함수", "클래스", "컴포넌트"
-3. **멀티 작업 신호**: "그리고", "다음에", "먼저...그리고", 줄바꿈 2개+, 번호 목록 (1. 2. 3.)
-4. **파일 경로 패턴**: `/path/to/file`, `src/`, `bin/`, `public/`
-
-**1개만 충족**: 코드 키워드 1개 있어도 "API 어때?" 같은 짧은 질문은 direct.
-**2개 이상**: "src/agent.js의 함수를 리팩토링하고 테스트 작성해줘" → orchestrate.
-
-| 입력                                                             | 키워드 | 길이 | 멀티 | 판정           |
-| ---------------------------------------------------------------- | ------ | ---- | ---- | -------------- |
-| "안녕"                                                           | 0      | ✗    | ✗    | direct         |
-| "그래서 대답이 뭐냐고"                                           | 0      | ✗    | ✗    | direct         |
-| "서버 상태 어때?"                                                | 0      | ✗    | ✗    | direct         |
-| "API가 뭐야?"                                                    | 1      | ✗    | ✗    | direct (1개만) |
-| "코드 리뷰해줘"                                                  | 1      | ✗    | ✗    | direct (1개만) |
-| "src/agent.js 수정해줘"                                          | 2      | ✗    | ✗    | orchestrate ✅  |
-| "API 만들고 테스트 작성해"                                       | 2      | ✗    | 1    | orchestrate ✅  |
-| "메모리 시스템 리팩토링하고 벡터 DB 추가해줘 그리고 테스트도..." | 3      | ✅    | ✅    | orchestrate ✅  |
+`parseDirectAnswer()` 함수로 파싱, orchestrate()에서 즉시 broadcast.
 
 ---
 
-## 변경 파일
+## 6-B: 순차 실행
 
-| 파일                  | 작업                                          |
-| --------------------- | --------------------------------------------- |
-| `src/orchestrator.js` | [MODIFY] `needsOrchestration()` + triage 분기 |
+### 변경
+
+`distributeByPhase`: `Promise.all` → **`for...of` 순차 루프**
+
+### 프롬프트 조정 (orchestrator.js + prompt.js)
+
+각 sub-agent에게 주입:
+```
+## 순차 실행 규칙
+- 이전 에이전트가 이미 수정한 파일은 건드리지 마세요 (충돌 방지)
+- 중복 작업을 하지 마세요
+- 당신의 담당 영역(${role})에만 집중하세요
+
+### 이전 에이전트 결과
+- 프론트 (frontend): done — UI 수정 완료...
+```
+
+prompt.js `getSubAgentPromptV2`에도 순차 인식 추가:
+- worklog 먼저 읽기
+- 이미 수정된 파일 건드리지 않기
+- 담당 영역에만 집중
 
 ---
 
-## 검증
+## 파일 변경 요약
 
-```bash
-# Unit test
-node -e "
-import { needsOrchestration } from './src/orchestrator.js';
-const cases = [
-  ['안녕', false],
-  ['그래서 대답이 뭐냐고', false],
-  ['API가 뭐야?', false],
-  ['서버 상태 어때?', false],
-  ['ㅇㅇ', false],
-  ['고마워', false],
-  ['코드 리뷰해줘', false],
-  ['src/agent.js 수정해줘', true],
-  ['API 엔드포인트 만들어줘', true],
-  ['메모리 시스템 리팩토링하고 벡터 DB 추가해줘', true],
-];
-"
-```
+| 파일                  | 작업                                                                | L    |
+| --------------------- | ------------------------------------------------------------------- | ---- |
+| `src/orchestrator.js` | [MODIFY] needsOrchestration, parseDirectAnswer, 순차 실행, 프롬프트 | 523L |
+| `src/prompt.js`       | [MODIFY] getSubAgentPromptV2 순차 실행 인식                         | 498L |
+
+---
+
+## 벤치마크
+→ `devlog/260224_orch/benchmark.md` (30개 테스트, 5 Tier)

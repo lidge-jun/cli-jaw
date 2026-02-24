@@ -10,7 +10,7 @@
 
 ```text
 cli-claw/
-├── server.js                 ← 라우트 + 글루 + 슬래시커맨드 ctx (843L)
+├── server.js                 ← 라우트 + 글루 + 슬래시커맨드 ctx (844L)
 ├── lib/
 │   ├── mcp-sync.js           ← MCP 통합 + 스킬 복사 + DEDUP_EXCLUDED + 글로벌 설치 (494L)
 │   └── upload.js             ← 파일 업로드 + Telegram 다운로드 (70L)
@@ -21,11 +21,11 @@ cli-claw/
 │   ├── events.js             ← NDJSON 파싱 + logEventSummary + traceLog + pushTrace (185L)
 │   ├── commands.js           ← 슬래시 커맨드 레지스트리 + 디스패쳐 (647L)
 │   ├── agent.js              ← CLI spawn + 히스토리빌더 + 스트림 + 큐 + 메모리 flush + 폴백 (427L)
-│   ├── orchestrator.js       ← Phase-based 오케스트레이션 v2 + isContinueIntent (407L)
+│   ├── orchestrator.js       ← Phase-based 오케스트레이션 v2 + triage + 순차실행 (523L)
 │   ├── worklog.js            ← Worklog CRUD + phase matrix + PHASES (153L)
 │   ├── telegram.js           ← Telegram 봇 + 슬래시디스패치 + setMyCommands (382L)
 │   ├── heartbeat.js          ← Heartbeat 잡 스케줄 + fs.watch (90L)
-│   ├── prompt.js             ← 프롬프트 생성 + 스킬 + 서브에이전트 v2 + vision-click + telegram-send 주입 (493L)
+│   ├── prompt.js             ← 프롬프트 생성 + 스킬 + 서브에이전트 v2 + 순차실행 + vision-click (498L)
 │   ├── memory.js             ← Persistent Memory grep 기반 (128L)
 │   └── browser/              ← Chrome CDP 제어
 │       ├── connection.js     ← Chrome 탐지/launch/CDP 연결 (71L)
