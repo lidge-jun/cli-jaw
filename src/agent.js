@@ -319,6 +319,11 @@ export function spawnAgent(prompt, opts = {}) {
                 }
                 ctx.sessionId = acp.sessionId;
 
+                // Reset accumulated text from loadSession replay (ACP replays full history)
+                ctx.fullText = '';
+                ctx.toolLog = [];
+                ctx.seenToolKeys.clear();
+
                 const promptResult = await acp.prompt(prompt);
                 if (process.env.DEBUG) console.log('[acp:prompt:result]', JSON.stringify(promptResult).slice(0, 200));
 
