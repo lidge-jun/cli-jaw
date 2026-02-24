@@ -127,7 +127,7 @@ export function loadSettings() {
         if (raw.planning) saveSettings(merged);
         settings = merged;
         return merged;
-    } catch {
+    } catch { /* expected: settings.json may not exist on first run */
         settings = createDefaultSettings();
         return settings;
     }
@@ -149,7 +149,7 @@ export function replaceSettings(s) {
 export function loadHeartbeatFile() {
     try {
         return JSON.parse(fs.readFileSync(HEARTBEAT_JOBS_PATH, 'utf8'));
-    } catch {
+    } catch { /* expected: heartbeat.json may not exist yet */
         return { jobs: [] };
     }
 }
@@ -165,7 +165,7 @@ export function detectCli(name) {
     try {
         const p = execFileSync('which', [name], { encoding: 'utf8', timeout: 3000 }).trim();
         return { available: true, path: p };
-    } catch { return { available: false, path: null }; }
+    } catch { /* expected: CLI binary may not be installed */ return { available: false, path: null }; }
 }
 
 export function detectAllCli() {

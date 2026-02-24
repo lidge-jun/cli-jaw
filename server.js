@@ -19,6 +19,8 @@ import {
 
 import { assertSkillId, assertFilename, safeResolveUnder } from './src/security/path-guards.js';
 import { decodeFilenameSafe } from './src/security/decode.js';
+import { ok, fail } from './src/http/response.js';
+import { mergeSettingsPatch } from './src/settings-merge.js';
 import { setWss, broadcast } from './src/bus.js';
 import * as browser from './src/browser/index.js';
 import * as memory from './src/memory.js';
@@ -112,7 +114,7 @@ function readCodexTokens() {
         const authPath = join(os.homedir(), '.codex', 'auth.json');
         const j = JSON.parse(fs.readFileSync(authPath, 'utf8'));
         if (j?.tokens?.access_token) return { access_token: j.tokens.access_token, account_id: j.tokens.account_id ?? '' };
-    } catch { }
+    } catch (e) { console.debug('[quota:codex] token read failed', e.message); }
     return null;
 }
 
@@ -269,36 +271,11 @@ function getLatestTelegramChatId() {
 }
 
 function applySettingsPatch(rawPatch = {}, { restartTelegram = false } = {}) {
-    const patch = { ...(rawPatch || {}) };
     const prevCli = settings.cli;
-    const hasTelegramUpdate = !!patch.telegram || patch.locale !== undefined;
+    const hasTelegramUpdate = !!(rawPatch || {}).telegram || (rawPatch || {}).locale !== undefined;
 
-    // Deep merge perCli at per-CLI level (so individual model/effort fields aren't wiped)
-    if (patch.perCli && typeof patch.perCli === 'object') {
-        settings.perCli = settings.perCli || {};
-        for (const [cli, cfg] of Object.entries(patch.perCli)) {
-            settings.perCli[cli] = { ...settings.perCli[cli], ...cfg };
-        }
-        delete patch.perCli;
-    }
-
-    // Deep merge activeOverrides at per-CLI level
-    if (patch.activeOverrides && typeof patch.activeOverrides === 'object') {
-        settings.activeOverrides = settings.activeOverrides || {};
-        for (const [cli, cfg] of Object.entries(patch.activeOverrides)) {
-            settings.activeOverrides[cli] = { ...settings.activeOverrides[cli], ...cfg };
-        }
-        delete patch.activeOverrides;
-    }
-
-    for (const key of ['heartbeat', 'telegram', 'memory']) {
-        if (patch[key] && typeof patch[key] === 'object') {
-            settings[key] = { ...settings[key], ...patch[key] };
-            delete patch[key];
-        }
-    }
-
-    replaceSettings({ ...settings, ...patch });
+    const merged = mergeSettingsPatch(settings, rawPatch);
+    replaceSettings(merged);
     saveSettings(settings);
 
     const session = getSession();
@@ -373,13 +350,13 @@ function makeWebCommandCtx(req, localeOverride = null) {
     };
 }
 
-app.get('/api/session', (_, res) => res.json(getSession()));
+app.get('/api/session', (_, res) => ok(res, getSession(), getSession()));
 app.get('/api/messages', (req, res) => {
     const includeTrace = ['1', 'true', 'yes'].includes(String(req.query.includeTrace || '').toLowerCase());
     const rows = includeTrace ? getMessagesWithTrace.all() : getMessages.all();
-    res.json(rows);
+    ok(res, rows);
 });
-app.get('/api/runtime', (_, res) => res.json(getRuntimeSnapshot()));
+app.get('/api/runtime', (_, res) => ok(res, getRuntimeSnapshot(), getRuntimeSnapshot()));
 
 app.post('/api/command', async (req, res) => {
     try {
@@ -457,18 +434,18 @@ app.post('/api/orchestrate/continue', (req, res) => {
 
 app.post('/api/stop', (req, res) => {
     const killed = killActiveAgent('api');
-    res.json({ ok: true, killed });
+    ok(res, { killed });
 });
 
 app.post('/api/clear', (_, res) => {
     clearSessionState();
-    res.json({ ok: true });
+    ok(res, null);
 });
 
 // Settings
-app.get('/api/settings', (_, res) => res.json(settings));
+app.get('/api/settings', (_, res) => ok(res, settings, settings));
 app.put('/api/settings', (req, res) => {
-    res.json(applySettingsPatch(req.body, { restartTelegram: true }));
+    ok(res, applySettingsPatch(req.body, { restartTelegram: true }));
 });
 
 // Prompts (A-2)
@@ -497,16 +474,16 @@ app.put('/api/heartbeat-md', (req, res) => {
 });
 
 // Memory (key-value)
-app.get('/api/memory', (_, res) => res.json(getMemory.all()));
+app.get('/api/memory', (_, res) => ok(res, getMemory.all()));
 app.post('/api/memory', (req, res) => {
     const { key, value, source = 'manual' } = req.body;
-    if (!key || !value) return res.status(400).json({ error: 'key and value required' });
+    if (!key || !value) return fail(res, 400, 'key and value required');
     upsertMemory.run(key, value, source);
-    res.json({ ok: true });
+    ok(res, null);
 });
 app.delete('/api/memory/:key', (req, res) => {
     deleteMemory.run(req.params.key);
-    res.json({ ok: true });
+    ok(res, null);
 });
 
 // Memory files (Claude native)
@@ -674,7 +651,7 @@ app.get('/api/quota', async (_, res) => {
 });
 
 // Employees
-app.get('/api/employees', (_, res) => res.json(getEmployees.all()));
+app.get('/api/employees', (_, res) => ok(res, getEmployees.all()));
 app.post('/api/employees', (req, res) => {
     const id = crypto.randomUUID();
     const { name = 'New Agent', cli = 'claude', model = 'default', role = '' } = req.body || {};
@@ -892,8 +869,8 @@ app.post('/api/browser/navigate', async (req, res) => {
 });
 
 app.get('/api/browser/tabs', async (_, res) => {
-    try { res.json({ tabs: await browser.listTabs(cdpPort()) }); }
-    catch { res.json({ tabs: [] }); }
+    try { ok(res, { tabs: await browser.listTabs(cdpPort()) }); }
+    catch (e) { console.warn('[browser:tabs] failed', { error: e.message }); ok(res, { tabs: [] }); }
 });
 
 app.post('/api/browser/evaluate', async (req, res) => {

@@ -100,7 +100,7 @@ export function watchHeartbeatFile() {
                 startHeartbeat();
             }, 500);
         });
-    } catch { /* file doesn't exist yet — created on first save */ }
+    } catch { /* expected: heartbeat file doesn't exist yet — created on first save */ }
 }
 
 // Re-export for route handlers

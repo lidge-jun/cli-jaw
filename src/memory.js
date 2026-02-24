@@ -50,7 +50,8 @@ export function search(query) {
         }
         // Trim paths to relative
         return (proc.stdout || '').split(MEMORY_DIR + '/').join('');
-    } catch {
+    } catch (e) {
+        console.warn('[memory:search] grep failed', { error: e.message });
         return '(no results)';
     }
 }
