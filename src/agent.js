@@ -309,7 +309,9 @@ export function spawnAgent(prompt, opts = {}) {
         }
 
         // session/update → broadcast mapping
+        let replayMode = false;  // Phase 17.2: suppress events during loadSession replay
         acp.on('session/update', (params) => {
+            if (replayMode) return;  // 리플레이 중 모든 이벤트 무시
             const parsed = extractFromAcpUpdate(params);
             if (!parsed) return;
 
@@ -340,6 +342,7 @@ export function spawnAgent(prompt, opts = {}) {
                 const initResult = await acp.initialize();
                 if (process.env.DEBUG) console.log('[acp:init]', JSON.stringify(initResult).slice(0, 200));
 
+                replayMode = true;  // Phase 17.2: mute during session load
                 if (isResume && session.session_id) {
                     try {
                         await acp.loadSession(session.session_id);
@@ -349,12 +352,14 @@ export function spawnAgent(prompt, opts = {}) {
                 } else {
                     await acp.createSession(settings.workingDir);
                 }
+                replayMode = false;  // Phase 17.2: unmute after session load
                 ctx.sessionId = acp.sessionId;
 
                 // Reset accumulated text from loadSession replay (ACP replays full history)
                 ctx.fullText = '';
                 ctx.toolLog = [];
                 ctx.seenToolKeys.clear();
+                ctx.thinkingBuf = '';  // Phase 17.2: clear replay thinking too
 
                 const { promise: promptPromise } = acp.prompt(prompt);
                 const promptResult = await promptPromise;
