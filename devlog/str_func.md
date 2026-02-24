@@ -1,6 +1,6 @@
 # CLI-CLAW — Source Structure & Function Reference
 
-> 마지막 검증: 2026-02-25T01:29 (server.js 856L / agent.js 585L / orchestrator.js 584L / prompt.js 502L / telegram.js 470L / acp-client.js 253L / cli-registry.js 88L)
+> 마지막 검증: 2026-02-25T01:35 (server.js 856L / agent.js 585L / orchestrator.js 584L / prompt.js 502L / telegram.js 470L / acp-client.js 253L / cli-registry.js 88L)
 >
 > 상세 모듈 문서는 [서브 문서](#서브-문서)를 참조하세요.
 
@@ -23,7 +23,7 @@ cli-claw/
 │   ├── bus.js                ← WS + 내부 리스너 broadcast + removeBroadcastListener(fn) (18L)
 │   ├── events.js             ← NDJSON 파싱 + dedupe key + ACP update 파싱 + logEventSummary + test helpers (318L)
 │   ├── commands.js           ← 슬래시 커맨드 레지스트리 + 디스패쳐 (cli-registry import) (639L)
-│   ├── agent.js              ← CLI spawn + ACP 분기 + effort config.json 쓰기 + origin 전달 + ctx reset + 스트림 + 큐 + 메모리 flush (585L)
+│   ├── agent.js              ← CLI spawn + ACP 분기 + effort config.json 쓰기 + origin 전달 + ctx reset + 스트림 + 큐 + 메모리 flush (606L)
 │   ├── orchestrator.js       ← Orchestration v2 + triage + 순차실행 + origin 전달 + phase skip (584L)
 │   ├── worklog.js            ← Worklog CRUD + phase matrix + PHASES (153L)
 │   ├── telegram.js           ← Telegram 봇 + forwarder lifecycle + origin 필터링 + 디바운스 tool 업데이트 (470L)
@@ -36,10 +36,11 @@ cli-claw/
 │       ├── actions.js        ← snapshot/click/type/navigate/screenshot/mouseClick (179L)
 │       ├── vision.js         ← vision-click 파이프라인 + Codex provider (138L)
 │       └── index.js          ← re-export hub (13L)
-├── public/                   ← Web UI (ES Modules, 20 files, ~3500L)
-│   ├── index.html            ← HTML 뼈대 (422L, CDN defer 4개, 🦞 CLI-CLAW 브랜딩)
-│   ├── css/                  ← 6 files (1113L)
-│   │   └── markdown.css      ← [NEW] 마크다운 렌더링 스타일 (테이블·코드·KaTeX·Mermaid) (149L)
+├── public/                   ← Web UI (ES Modules, 20 files, ~3579L)
+│   ├── index.html            ← HTML 뼈대 (425L, CDN defer 4개 + Outfit font, 🦞 CLI-CLAW 브랜딩)
+│   ├── css/                  ← 6 files (1191L)
+│   │   ├── markdown.css      ← [NEW] 마크다운 렌더링 스타일 (테이블·코드·KaTeX·Mermaid) (149L)
+│   │   └── variables.css     ← CSS 커스텀 프로퍼티 + 듀얼 폰트 + 스크롤바 (73L)
 │   └── js/                   ← 13 files (~1960L)
 │       ├── render.js          ← [REWRITE] marked+hljs+KaTeX+Mermaid 렌더러 (21L→141L)
 │       └── constants.js      ← loadCliRegistry() 동적 로딩 + FALLBACK_CLI_REGISTRY (119L)
@@ -195,7 +196,7 @@ graph LR
 | `260224_skill/`               | 스킬 큐레이션 + Telegram Send + Voice STT (P0~P2)           | 🟡    |
 | `260224_vision/`              | Vision Click P1✅ P2✅ — P3 멀티프로바이더 미구현              | 🟡    |
 | `260224_orch/`                | 오케스트레이션 v2 P0✅ P1✅ P2✅ P3✅ P4✅ P5✅                   | ✅    |
-| `260225_finness/`             | P0~P3✅ + P4 ACP응답누적fix✅ + P5 마크다운렌더링(marked+hljs+KaTeX+Mermaid)✅ | ✅    |
+| `260225_finness/`             | P0~P3✅ + P4 ACP응답누적fix✅ + P5 마크다운렌더링✅ + P5.9 비주얼폴리시(Outfit폰트+스크롤바+애니메이션)✅ | ✅    |
 | `260225_copilot-cli-integration/` | Copilot ACP 통합 Phase 1~6 완료 (할당량+effort+브랜딩)  | ✅    |
 | `269999_메모리 개선/`          | 메모리 고도화 (flush✅ + vector DB 📋 후순위)                 | 🔜    |
 

@@ -102,7 +102,7 @@ export function switchTab(name, targetBtn) {
     document.getElementById(tabMap[name]).classList.add('active');
     if (targetBtn) targetBtn.classList.add('active');
     // Lazy-load tab content
-    if (name === 'settings') { import('./features/settings.js').then(m => m.loadCliStatus()); }
+    if (name === 'settings') { import('./features/settings.js').then(m => m.loadSettings()); }
     if (name === 'agents') { import('./features/employees.js').then(m => m.loadEmployees()); }
     if (name === 'skills') { import('./features/skills.js').then(m => m.loadSkills()); }
 }

@@ -43,6 +43,7 @@ declare -a CHECKS=(
   "vision.js.*vision-click|src/browser/vision.js"
   "index.js.*re-export|src/browser/index.js"
   "index.html.*HTML.*L,|public/index.html"
+  "variables.css.*커스텀|public/css/variables.css"
   "postinstall.js|bin/postinstall.js"
   "chat.js.*TUI|bin/commands/chat.js"
   "browser.js.*17|bin/commands/browser.js"
