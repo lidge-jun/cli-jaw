@@ -63,7 +63,7 @@
 ## Skills System
 
 ### Active Skills (17)
-These skills are installed and triggered automatically by the CLI.
+These skills are installed and available for reference.\n**Development tasks**: Before writing code, ALWAYS read `~/.cli-claw/skills/dev/SKILL.md` for project conventions.\nFor role-specific tasks, also read the relevant skill (dev-frontend, dev-backend, dev-data, dev-testing).
 - browser (browser)
 - dev (dev)
 ...

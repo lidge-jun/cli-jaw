@@ -25,12 +25,12 @@ cli-claw/
 │   ├── events.js             ← NDJSON 파싱 + dedupe key + ACP update 파싱 + logEventSummary + test helpers (322L)
 │   ├── commands.js           ← 슬래시 커맨드 레지스트리 + 디스패쳐 (cli-registry import) (639L)
 │   ├── agent.js              ← CLI spawn + ACP 분기 + model+effort config.json 동기화 + activeOverrides + origin 전달 + ctx reset + 스트림 + 큐 + 메모리 flush (619L)
-│   ├── orchestrator.js       ← Orchestration v2 + triage + 순차실행 + origin 전달 + phase skip (584L)
+│   ├── orchestrator.js       ← Orchestration v2 + triage + 순차실행 + origin 전달 + phase skip + AI dispatch 재진입 (637L)
 │   ├── worklog.js            ← Worklog CRUD + phase matrix + PHASES (153L)
 │   ├── telegram.js           ← Telegram 봇 + forwarder lifecycle + origin 필터링 + chatId auto-persist + 디바운스 tool 업데이트 (493L)
 │   ├── telegram-forwarder.js ← [NEW] Telegram 포워딩 헬퍼 추출 (escape, chunk, createForwarder) (105L)
 │   ├── heartbeat.js          ← Heartbeat 잡 스케줄 + pending queue + fs.watch (107L)
-│   ├── prompt.js             ← 프롬프트 + 스킬 + getMergedSkills i18n 필드 통과 + 서브에이전트 v2 + phase skip + EN defaults + 브라우저 커맨드 인라인 + Telegram bot-first (512L)
+│   ├── prompt.js             ← 프롬프트 + 스킬 + getMergedSkills i18n 필드 통과 + 서브에이전트 v2 + phase skip + EN defaults + 브라우저 커맨드 인라인 + Telegram bot-first + dispatch 정책 교정 (515L)
 │   ├── memory.js             ← Persistent Memory grep 기반 (128L)
 │   ├── settings-merge.js     ← [P9.4] perCli/activeOverrides deep merge 추출 (46L)
 │   ├── security/             ← [P9.1] 보안 입력 검증
@@ -227,6 +227,8 @@ graph LR
 33. **hljs CDN v11**: CDN 404 수정 (`cdnjs.cloudflare.com` → v11.11.1), `rehighlightAll()` 폴링으로 lazy load 후 재하이라이트, 코드 복사 버튼 event delegation
 34. **User message markdown**: `ui.js` 유저 메시지에도 `renderMarkdown()` 적용 (agent 전용 → 전체 적용)
 35. **Prompt restructure**: Browser 섬션 인라인화 (snapshot→act→verify workflow), Telegram file delivery bot-first 방식, heartbeat `HEARTBEAT_OK` 응답 규칙
+36. **[P17] AI-driven triage**: direct response 경로에서 에이전트가 subtask JSON 출력 시 orchestration 재진입 (regex만으로 판단 → AI 자율 dispatch)
+37. **[P17.1] Dispatch 정책 교정**: "항상 subtask JSON 출력하라" → "진짜 여러 전문가 필요할 때만 dispatch" + dev 스킬 참조 의무화
 
 ---
 
@@ -258,7 +260,7 @@ graph LR
 | `260224_skill/`               | 스킬 큐레이션 + Telegram Send + Voice STT (P0~P2)           | 🟡    |
 | `260224_vision/`              | Vision Click P1✅ P2✅ — P3 멀티프로바이더 미구현              | 🟡    |
 | `260224_orch/`                | 오케스트레이션 v2 P0✅ P1✅ P2✅ P3✅ P4✅ P5✅                   | ✅    |
-| `260225_finness/`             | P0~P6.2✅ + P7.9✅ (XSS+Auth) + P12✅ (AGENTS.md) + P13✅ (TG chatId) + P14✅ (스킬 dedup) + P7.1 fix✅ + P16✅ (orchestrate_done UI) + **P8✅ (감사) + P9✅ (하드닝 실행)** | ✅    |
+| `260225_finness/`             | P0~P6.2✅ + P7.9✅ (XSS+Auth) + P12✅ (AGENTS.md) + P13✅ (TG chatId) + P14✅ (스킬 dedup) + P7.1 fix✅ + P16✅ (orchestrate_done UI) + P8✅ (감사) + P9✅ (하드닝) + **P17✅ (AI triage)** | ✅    |
 | `260225_copilot-cli-integration/` | Copilot ACP 통합 Phase 1~6 완료 (할당량+effort+브랜딩)  | ✅    |
 | `269999_메모리 개선/`          | 메모리 고도화 (flush✅ + vector DB 📋 후순위)                 | 🔜    |
 

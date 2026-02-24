@@ -164,7 +164,7 @@ extractFromAcpUpdate(params):
 
 ---
 
-## orchestrator.js — Orchestration v2 + Triage + 순차실행 + origin 전달 (584L)
+## orchestrator.js — Orchestration v2 + Triage + 순차실행 + origin 전달 + AI dispatch (637L)
 
 | Function                     | 역할                                           |
 | ---------------------------- | ---------------------------------------------- |
@@ -193,6 +193,7 @@ orchestrateContinue({ origin: 'telegram' })  // 이어하기에도 origin 전달
 ```text
 orchestrate(prompt, meta)
   ├─ Tier 1: needsOrchestration(prompt) false → direct agent (origin 전달)
+  │   └─ [P17] agent 응답에 subtask JSON 있으면 → orchestration 재진입
   ├─ employees === 0 → direct agent (origin 전달)
   └─ pipeline:
       1. phasePlan → direct_answer? → 즉시 응답 (Tier 2)
@@ -204,7 +205,7 @@ orchestrate(prompt, meta)
 
 ---
 
-## prompt.js — System Prompt & Skills (502L)
+## prompt.js — System Prompt & Skills (515L)
 
 | Function                                | 역할                                                                  |
 | --------------------------------------- | --------------------------------------------------------------------- |
