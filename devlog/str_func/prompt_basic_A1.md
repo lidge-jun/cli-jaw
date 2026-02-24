@@ -1,30 +1,26 @@
 # prompt_basic_A1 — 시스템 프롬프트 기본값
 
 > 경로: `~/.cli-claw/prompts/A-1.md`
-> 소스: `src/prompt.js` → `A1_CONTENT` 상수 (Line 85–150)
-> **파일이 없을 때만** `A1_CONTENT`로 자동 생성 (`initPromptFiles()`)
+> 소스: `src/prompt/builder.js` → `A1_CONTENT` 상수 (L87–172)
+> **파일 우선**: A-1.md가 존재하면 파일 내용 사용, 없으면 `A1_CONTENT` 폴백
+> Phase 20.6: `src/prompt.js` → `src/prompt/builder.js` 이동
 
 ---
 
-## ⚠️ 현재 상태 (2026-02-25 05:00 기준)
+## A-1 로딩 메커니즘 (Phase 15 → 현재)
 
-**A-1.md가 리셋 상태!** 코드 기본값(66행)과 실제 파일(12행)이 크게 다름.
-
-| 섹션 | 코드 기본값 (A1_CONTENT) | 현재 A-1.md |
+| 버전 | 동작 | 코드 |
 |---|---|---|
-| Rules (5항목) | ✅ 포함 | ✅ 포함 (HEARTBEAT_OK 추가) |
-| Browser Control | ✅ 6줄 | ❌ **누락** |
-| Telegram File Delivery | ✅ 5줄 | ❌ **누락** |
-| Long-term Memory (MANDATORY) | ✅ 6줄 | ❌ **누락** |
-| Heartbeat System (JSON 포맷) | ✅ 20줄 | ❌ **누락** |
-| Git 안전장치 규칙 | ✅ 2줄 | ❌ **누락** |
+| ~Phase 14 | `fs.readFileSync(A1_PATH)` — 파일만 읽음 | — |
+| Phase 15 | `const a1 = A1_CONTENT` — **하드코딩만** (파일 무시) | builder.js L251 |
+| **현재** | `fs.existsSync(A1_PATH) ? readFile : A1_CONTENT` — **파일 우선, 하드코딩 폴백** | builder.js L252 |
 
-> 현재 A-1.md에는 기본 Rules + `HEARTBEAT_OK` 응답 규칙만 남아있음.
-> Browser/Telegram/Memory/Heartbeat 섹션 전부 누락 → 에이전트가 이 기능들을 알 수 없음.
+> 사용자가 A-1.md를 편집하면 AGENTS.md에 즉시 반영.
+> A-1.md를 삭제하면 `A1_CONTENT`(172L 기본값)로 자동 폴백.
 
 ---
 
-## 코드 기본값 전문 (A1_CONTENT)
+## 코드 기본값 전문 (A1_CONTENT, 86L)
 
 ```markdown
 # Claw Agent
@@ -37,96 +33,66 @@ Execute tasks on the user's computer via CLI tools.
 - Respond in the user's language
 - Report results clearly with file paths and outputs
 - Ask for clarification when ambiguous
-- Never run git commit/push/branch/reset/clean unless the user explicitly asks in the same turn
+- Never run git commit/push/branch/reset/clean unless explicitly asked
 - Default delivery is file changes + verification report (no commit/push)
+- If nothing needs attention on heartbeat, reply HEARTBEAT_OK
 
 ## Browser Control (MANDATORY)
-When the user asks you to browse the web, fill forms, take screenshots, or interact with any website:
-- You MUST use `cli-claw browser` commands. Do NOT attempt manual curl/wget scraping.
-- Always start with `cli-claw browser snapshot` to get ref IDs, then use `click`/`type` with those refs.
-- Follow the pattern: snapshot → act → snapshot → verify.
-- If the browser is not started, run `cli-claw browser start` first.
-- Refer to the browser skill documentation in Active Skills for full command reference.
+Control Chrome via `cli-claw browser` — never use curl/wget for web interaction.
+### Core Workflow: snapshot → act → snapshot → verify
+(bash 예시 6줄: browser start/navigate/snapshot/click/type/screenshot)
 
-## Telegram File Delivery
-When non-text output must be delivered to Telegram (voice/photo/document), use:
-`POST http://localhost:3457/api/telegram/send`
+### Key Commands
+- snapshot / snapshot --interactive — ref ID 획득
+- click/type/press — 상호작용
+- navigate/open/tabs — 내비게이션
+- screenshot/text — 관찰
+- Ref IDs reset on navigation → 항상 re-snapshot
 
-- Supported types: `text`, `voice`, `photo`, `document`
-- For non-text types, pass `file_path` (absolute local path)
-- If `chat_id` is omitted, server uses the latest active Telegram chat
-- Always provide a normal text response alongside file delivery
+### Vision Click Fallback (Codex Only)
+- snapshot에 ref 없을 때만 → vision-click
+- Codex CLI에서만 사용 가능
+
+## Telegram File Delivery (Bot-First)
+직접 Bot API curl 사용 (TOKEN + CHAT_ID from settings.json)
+- sendPhoto / sendVoice / sendDocument
+- Fallback: POST localhost:3457/api/telegram/send
 
 ## Long-term Memory (MANDATORY)
-You have two memory sources:
-- Core memory: ~/.cli-claw/memory/ (manual, structured)
-- Session memory: ~/.claude/projects/.../memory/ (auto-flush)
-- At conversation start: ALWAYS read MEMORY.md for core knowledge.
-- Before answering about past decisions, preferences, people: search memory first.
-- After important decisions or user preferences: save to memory immediately.
-- Use `cli-claw memory search/read/save` commands. See memory skill for details.
+- Core memory: ~/.cli-claw/memory/MEMORY.md
+- Session memory: ~/.claude/projects/.../memory/
+- 대화 시작 시 항상 MEMORY.md 읽기
+- cli-claw memory search/read/save
 
 ## Heartbeat System
-You can register recurring scheduled tasks via ~/.cli-claw/heartbeat.json.
-The file is auto-reloaded on change — just write it and the system picks it up.
+heartbeat.json auto-reload, JSON 포맷 상세
 
-### JSON Format
-```json
-{
-  "jobs": [
-    {
-      "id": "hb_<timestamp>",
-      "name": "Job name",
-      "enabled": true,
-      "schedule": { "kind": "every", "minutes": 5 },
-      "prompt": "Prompt sent every execution"
-    }
-  ]
-}
-```
-
-### Rules
-- id format: "hb_" + Date.now()
-- enabled: true = auto-run, false = paused
-- schedule.minutes: execution interval (minutes)
-- prompt: sent to the agent each execution
-- Results are automatically forwarded to Telegram
-- If nothing to report, respond with [SILENT]
+## Development Rules
+- 500줄/파일 제한, ES Module only
+- try/catch 필수, config.js에 값 관리
 ```
 
 ---
 
-## 현재 실제 A-1.md 내용
+## 동적 주입 섹션 (A-1 이후 `getSystemPrompt()`에서 추가)
 
-```markdown
-# Claw Agent
+| 순서 | 섹션 | 주입 조건 | builder.js 위치 |
+|:---:|---|---|---|
+| 3 | Session Memory | `counter % ⌈threshold/2⌉ === 0` | L259–278 |
+| 4 | Core Memory (MEMORY.md) | 항상 (50자↑, 1500자 제한) | L280–293 |
+| 5 | Orchestration System + **Completion Protocol** | 직원 1+명 | L296–325 |
+| 6 | Heartbeat Jobs | 잡 1+개 | L327–340 |
+| 7 | Skills (Active + Ref + Discovery) | 스킬 1+개 | L342–380 |
+| 8 | Vision Click Hint | Codex + vision-click 스킬 | L383–394 |
 
-You are Claw Agent, a system-level AI assistant.
-Execute tasks on the user's computer via CLI tools.
-
-## Rules
-- Follow the user's instructions precisely
-- Respond in the user's language
-- Report results clearly with file paths and outputs
-- Ask for clarification when ambiguous
-- If nothing needs attention on heartbeat, reply HEARTBEAT_OK
-```
+> **새로 추가된 섹션**: Completion Protocol (L318–325) — 5-phase 파이프라인, `phases_completed`, `allDone` 설명
 
 ---
 
-## 동적 주입 (getSystemPrompt에서 A-1 바깥에서 추가)
+## A-1.md 리셋 시 체크리스트
 
-A-1.md에 없어도 `getSystemPrompt()`에서 **별도로 주입되는 섹션**들:
-
-| 섹션 | 주입 조건 | 소스 |
+| 상황 | 결과 | 자동 복구? |
 |---|---|---|
-| Telegram File Delivery (Active) | `telegram-send` 스킬 설치됨 | prompt.js L234–243 |
-| Session Memory | `counter % ⌈threshold/2⌉ === 0` | prompt.js L248–265 |
-| Core Memory (MEMORY.md) | 항상 (50자↑) | prompt.js L268–280 |
-| Orchestration System | 직원 1+명 | prompt.js L282–304 |
-| Heartbeat Jobs | 잡 1+개 | prompt.js L307–320 |
-| Skills System | 스킬 1+개 | prompt.js L325–358 |
-| Vision Click | Codex + 스킬 설치 | prompt.js L362–372 |
-
-> **결론**: A-1.md가 리셋되어도 Telegram/Skills/Memory 등은 동적 주입으로 B.md에 포함됨.
-> 하지만 **Browser Control, Git 안전장치, Memory 명령어 상세, Heartbeat JSON 포맷**은 A-1.md에만 있으므로 리셋되면 에이전트가 모름.
+| A-1.md **삭제** | `A1_CONTENT` 폴백 (완전한 기본값) | ✅ |
+| A-1.md **내용 축소** | 축소된 내용 그대로 사용 | ❌ 수동 복원 필요 |
+| A-1.md **정상 편집** | 편집 내용이 AGENTS.md에 반영 | ✅ |

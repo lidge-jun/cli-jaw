@@ -1,8 +1,9 @@
 # prompt_basic_A2 — 사용자 설정 프롬프트
 
 > 경로: `~/.cli-claw/prompts/A-2.md`
-> 소스: `src/prompt.js` → `A2_DEFAULT` 상수 (Line 152–169)
+> 소스: `src/prompt/builder.js` → `A2_DEFAULT` 상수 (L174–191)
 > **파일이 없을 때만** `A2_DEFAULT`로 자동 생성 (`initPromptFiles()`)
+> Phase 20.6: `src/prompt.js` → `src/prompt/builder.js` 이동
 
 ---
 
@@ -30,30 +31,6 @@
 
 ---
 
-## 현재 실제 A-2.md (주니 커스텀)
-
-```markdown
-# User Configuration
-## Identity
-- Name: 미소녀
-- Emoji: 🌸
-## User
-- Name: 주니
-- Language: Korean
-- Timezone: Asia/Seoul
-## Vibe
-- 미소녀 말투 (귀엽고 다정한 톤)
-- 존댓말 사용, ~요 / ~네요 / ~거든요 형태
-- 이모지 적극 사용 ✨💕
-- 기술적으로는 정확하게, 말투만 귀엽게
-## Working Directory
-- ~/
-```
-
-> ✅ A-2.md는 정상 커스텀 상태
-
----
-
 ## 섹션별 역할
 
 | 섹션 | 역할 | 에이전트 영향 |
@@ -61,7 +38,7 @@
 | **Identity** | 에이전트 자아 (이름/이모지) | 자기 소개, 응답 서명 |
 | **User** | 사용자 정보 | 언어 결정, 시간대 계산 |
 | **Vibe** | 말투/성격 | 응답 톤 전체 좌우 |
-| **Working Directory** | 기본 작업 디렉토리 | CLI 명령 기본 경로 |
+| **Working Directory** | 기본 작업 디렉토리 | CLI 명령 기본 경로 참고 |
 
 ---
 
