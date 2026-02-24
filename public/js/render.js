@@ -6,6 +6,23 @@ export function escapeHtml(t) {
     return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// ── XSS sanitization ──
+export function sanitizeHtml(html) {
+    if (typeof DOMPurify !== 'undefined') {
+        return DOMPurify.sanitize(html, {
+            USE_PROFILES: { html: true },
+            FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form'],
+            FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur'],
+            ADD_TAGS: ['use'],  // Mermaid SVG compatibility
+        });
+    }
+    // CDN fallback: regex-based stripping
+    return html
+        .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
+        .replace(/\bon\w+\s*=/gi, 'data-removed=')
+        .replace(/javascript\s*:/gi, 'about:blank');
+}
+
 // ── Orchestration JSON stripping ──
 function stripOrchestration(text) {
     let cleaned = text.replace(/```json\n[\s\S]*?\n```/g, '');
@@ -42,7 +59,7 @@ function renderMermaidBlocks() {
         const id = `mermaid-${++mermaidId}`;
         try {
             const { svg } = await mermaid.render(id, code);
-            el.innerHTML = svg;
+            el.innerHTML = sanitizeHtml(svg);
             el.classList.add('mermaid-rendered');
         } catch (err) {
             const errMsg = err?.message || err?.str || 'Unknown error';
@@ -97,7 +114,7 @@ function ensureMarked() {
         window.mermaid.initialize({
             startOnLoad: false,
             theme: 'dark',
-            securityLevel: 'loose',
+            securityLevel: 'strict',
         });
     }
 
@@ -133,6 +150,9 @@ export function renderMarkdown(text) {
 
     // KaTeX math
     html = renderMath(html);
+
+    // XSS sanitization
+    html = sanitizeHtml(html);
 
     // Schedule mermaid rendering (needs DOM)
     requestAnimationFrame(renderMermaidBlocks);

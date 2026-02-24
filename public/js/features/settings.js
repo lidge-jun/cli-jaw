@@ -433,7 +433,7 @@ function renderCliStatus(data) {
         codex: { install: 'npm i -g @openai/codex', auth: 'codex login' },
         gemini: { install: 'npm i -g @google/gemini-cli', auth: 'gemini  (첫 실행 시 브라우저 인증)' },
         opencode: { install: 'npm i -g opencode-ai', auth: 'opencode auth' },
-        copilot: { install: 'gh copilot --help', auth: 'copilot login' },
+        copilot: { install: 'gh copilot --help', auth: '1) gh auth login → 2) gh copilot --help → 3) copilot login' },
     };
 
     let html = '';

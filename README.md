@@ -62,7 +62,7 @@ CLI-CLAW takes a fundamentally different approach:
 
 graph TB
     subgraph Interfaces["🖥️ Interfaces"]
-        WEB["🌐 Web UI<br/>ES Modules · 19 files"]
+        WEB["🌐 Web UI<br/>ES Modules · 23 files"]
         TUI["⌨️ Terminal TUI<br/>chat.js · 843L"]
         TG["📱 Telegram Bot"]
     end
@@ -134,7 +134,7 @@ This single command automatically:
 |-----|-------------|-------|
 | Claude | `claude auth` | Opens browser for Anthropic login |
 | Codex | `codex login` | OpenAI account |
-| Copilot | `copilot login` | OAuth device flow (needs `gh` CLI) |
+| Copilot | `gh auth login` → `gh copilot --help` → `copilot login` | OAuth device flow (needs `gh` CLI) |
 | Gemini | `gemini` (first run) | Google Cloud browser auth |
 | OpenCode | `opencode auth` | Manage credentials |
 
@@ -170,6 +170,8 @@ cli-claw chat       # Or use terminal TUI
 | **Heartbeat** | Scheduled auto-execution with active hours + quiet hours | ⭐⭐ |
 | **Fallback Chains** | `claude → codex → gemini` automatic retry on failure | ⭐⭐⭐ |
 | **Event Deduplication** | Claude `stream_event`/`assistant` overlap prevention | ⭐⭐⭐ |
+| **Dark/Light Theme** | ☀️/🌙 toggle, 13 semantic CSS vars, highlight.js sync | ⭐⭐ |
+| **Responsive Sidebar** | Collapsible ◀/▶, auto-collapse <900px, localStorage persist | ⭐⭐ |
 | **70 Unit Tests** | `node:test` — zero deps, events + telegram + registry + commands | ⭐⭐ |
 
 ### 🔜 Planned

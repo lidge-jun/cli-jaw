@@ -479,16 +479,13 @@ export function regenerateB() {
     const fullPrompt = getSystemPrompt();
     fs.writeFileSync(join(PROMPTS_DIR, 'B.md'), fullPrompt);
 
-    // Generate CODEX.md in workingDir for compact-protected system prompt
-    // Codex reads .codex/AGENTS.md or CODEX.md automatically
+    // Generate {workDir}/AGENTS.md — read by Codex, Copilot, and OpenCode
     try {
         const wd = settings.workingDir || os.homedir();
-        const codexDir = join(wd, '.codex');
-        fs.mkdirSync(codexDir, { recursive: true });
-        fs.writeFileSync(join(codexDir, 'AGENTS.md'), fullPrompt);
-        console.log(`[prompt] CODEX AGENTS.md generated at ${codexDir}`);
+        fs.writeFileSync(join(wd, 'AGENTS.md'), fullPrompt);
+        console.log(`[prompt] AGENTS.md generated at ${wd}`);
     } catch (e) {
-        console.error(`[prompt] CODEX AGENTS.md generation failed:`, e.message);
+        console.error(`[prompt] AGENTS.md generation failed:`, e.message);
     }
 
     try {

@@ -173,7 +173,7 @@ textarea.prompt-editor {
 }
 
 .skill-toggle.off {
-    background: #444;
+    background: var(--toggle-off);
 }
 
 .skill-toggle::after {
@@ -183,7 +183,7 @@ textarea.prompt-editor {
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    background: #fff;
+    background: var(--toggle-on);
     transition: left .2s;
 }
 

@@ -1,6 +1,6 @@
 # Phase 6 (finness): 테마 시스템 + 사이드바 접기
 
-> 목표: 다크/라이트 테마 전환 + 좌우 사이드바 접기/펼치기
+> 완료: 2026-02-25T02:15
 > 디자인: `skills_ref/dev-frontend` — Color & Theme, Spatial Composition, Motion
 
 ---
@@ -82,3 +82,69 @@
 | 테마 토글 | 🌙↔☀️ 즉시 전환, 새로고침 유지 |
 | 하드코딩 0건 | CSS `#hex` 직접 참조 없음 |
 | hljs 연동 | 코드블록 테마 동기 전환 |
+
+---
+
+## Part D: 타이포그래피 + 브랜딩 (P5.9, P5.9.1 통합)
+
+### 3단 타이포그래피
+
+| 티어 | 폰트 | 용도 |
+|------|------|------|
+| Display | `Chakra Petch` | 로고, 섹션 타이틀, 탭, 사이드바 버튼, 배지, 헤더 |
+| Body | `Outfit` | 레이블, 본문, 일반 UI |
+| Code | `SF Mono` | 입력창, 코드블록 |
+
+### 비주얼 폴리시
+
+- 커스텀 스크롤바 6px (Webkit + Firefox)
+- 메시지 `msgSlideIn` 0.2s 등장 애니메이션
+- 비대칭 버블 (12px/4px border-radius)
+- 사이드바 그라디언트 + inner shadow
+- 버튼/카드 hover: `translateY(-1px)` + glow
+- 입력 포커스 링: accent 색상 + 2px blur
+
+### 브랜딩
+
+- 🦞 이모지 프론트엔드 전체 제거
+- CLI-CLAW: 로고·헤더·타이틀 = **불변 하드코딩**
+- Agent Name: 좌측 사이드바, localStorage 기반, 메시지 라벨만 변경
+- Phase 99에서 프롬프트 이름 연동 예정
+
+---
+
+## 변경 파일 총괄
+
+| 파일 | 라인 | 변경 요약 |
+|------|------|----------|
+| `variables.css` | 126L | 3단 폰트 + 사이드바 변수 + 13개 시맨틱 색상 + 라이트 팔레트 + 스크롤바 |
+| `layout.css` | 250L | 사이드바 그라디언트/depth + collapse CSS + toggle 버튼 + display font |
+| `chat.css` | 404L | 메시지 애니메이션 + 버블 + 포커스 링 + 헤더 flex + stop-btn var |
+| `sidebar.css` | 224L | 카드 lift + settings hover + display font + toggle vars |
+| `markdown.css` | 149L | 코드/테이블/링크 색상 변수화 |
+| `index.html` | 442L | Chakra Petch CDN + 🦞 제거 + Agent Name + ◀/▶ + ☀️/🌙 |
+| `sidebar.js` | 42L | **NEW** 사이드바 접기 |
+| `theme.js` | 38L | **NEW** 테마 토글 |
+| `appname.js` | 43L | **NEW** Agent Name |
+| `main.js` | 239L | 3개 모듈 wire |
+| `ui.js` | 143L | `getAppName()` 동적 라벨 |
+
+---
+
+## Phase 6.1: 레이아웃 리팩터 + 이모지 정리
+
+### 사이드바 토글 구조
+- ◀/▶ 각 사이드바 첫번째 자식으로 배치 (로고 위)
+- 접힌 상태: 토글만 표시 (`:first-child` 외 `display:none`)
+- 반응형: `@media (max-width: 900px)` 자동 접힘
+
+### 이모지 정리
+- 탭 버튼: `🤖 Agents` → `Agents`, `📦 Skills` → `Skills`, `🔧 Settings` → `Settings`
+- 서브에이전트 카드: `🤖` → CSS accent dot (8px)
+- ROLE_PRESETS: `🎨⚙️📊📝✏️` 전부 제거 → 텍스트만
+- 모델 커스텀: `✏️ 직접 입력...` → `직접 입력...`
+
+### 하단 버튼 통일
+- `/clear` 포함 전부 `sidebar-hb-btn` 클래스
+- `.sidebar-bottom` 컨테이너: `gap: 6px` 균일 간격
+- `btn-clear`, `btn-save`: `--font-display` 폰트 통일

@@ -6,7 +6,7 @@
     width: auto;
     margin: 8px 0;
     font-size: 12px;
-    border: 1px solid #06b6d4;
+    border: 1px solid var(--table-border);
 }
 
 .msg-content th,
@@ -20,7 +20,7 @@
     background: rgba(6, 182, 212, 0.1);
     font-weight: 600;
     white-space: nowrap;
-    border-bottom: 2px solid #06b6d4;
+    border-bottom: 2px solid var(--table-border);
 }
 
 .msg-content tr:nth-child(even) {
@@ -29,7 +29,7 @@
 
 /* Code blocks */
 .msg-content pre {
-    background: #0d1117;
+    background: var(--code-bg);
     padding: 12px;
     border-radius: 6px;
     overflow-x: auto;
@@ -76,7 +76,7 @@
 
 /* Links */
 .msg-content a {
-    color: #60a5fa;
+    color: var(--link-color);
     text-decoration: none;
 }
 
@@ -143,7 +143,7 @@
     right: 0;
     padding: 2px 8px;
     font-size: 10px;
-    color: #8b949e;
+    color: var(--code-label-color);
     background: rgba(255, 255, 255, 0.05);
     border-radius: 0 6px 0 4px;
     font-family: 'SF Mono', monospace;

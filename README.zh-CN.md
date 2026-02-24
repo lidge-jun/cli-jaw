@@ -131,7 +131,7 @@ npm install -g cli-claw
 |-----|----------|------|
 | Claude | `claude auth` | Anthropic 登录 |
 | Codex | `codex login` | OpenAI 账号 |
-| Copilot | `copilot login` | OAuth 设备流程（需要 `gh` CLI） |
+| Copilot | `gh auth login` → `gh copilot --help` → `copilot login` | OAuth 设备流程（需要 `gh` CLI） |
 | Gemini | `gemini`（首次运行） | Google Cloud 浏览器认证 |
 | OpenCode | `opencode auth` | 管理凭据 |
 

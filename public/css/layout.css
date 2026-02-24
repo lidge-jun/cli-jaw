@@ -3,7 +3,7 @@
     background: linear-gradient(180deg, var(--surface) 0%, color-mix(in srgb, var(--surface) 95%, #000) 100%);
     border-right: 1px solid var(--border);
     box-shadow: inset -1px 0 0 var(--border);
-    padding: 16px;
+    padding: 48px 16px 16px;
     display: flex;
     flex-direction: column;
     gap: 16px;
@@ -60,14 +60,14 @@
 }
 
 .status-idle {
-    background: #1a2e1a;
+    background: var(--status-idle-bg);
     color: var(--green);
     box-shadow: 0 0 6px rgba(74, 222, 128, 0.2);
 }
 
 .status-running {
-    background: #2e2a1a;
-    color: #fbbf24;
+    background: var(--status-running-bg);
+    color: var(--status-running-color);
     box-shadow: 0 0 6px rgba(251, 191, 36, 0.3);
 }
 
@@ -79,7 +79,7 @@
     border-radius: 6px;
     cursor: pointer;
     font-size: 12px;
-    font-family: inherit;
+    font-family: var(--font-display);
     margin-top: auto;
     transition: border-color 0.15s, color 0.15s, transform 0.1s;
 }
@@ -101,6 +101,7 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+    padding-top: 48px;
 }
 
 .tab-bar {
@@ -155,7 +156,7 @@
     border-radius: 6px;
     color: #fff;
     font-size: 11px;
-    font-family: inherit;
+    font-family: var(--font-display);
     cursor: pointer;
     font-weight: 600;
 }
@@ -181,4 +182,101 @@
 .sidebar-hb-btn:hover {
     border-color: var(--accent);
     box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* ── Sidebar Collapse ── */
+.sidebar-toggle {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.sidebar-toggle:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+/* Sidebar bottom group */
+.sidebar-bottom {
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Toggle positioning — absolute, never moves */
+.sidebar-left,
+.sidebar-right {
+    position: relative;
+}
+
+.sidebar-left .sidebar-toggle,
+.sidebar-right .sidebar-toggle {
+    position: absolute;
+    top: 10px;
+    z-index: 2;
+}
+
+.sidebar-left .sidebar-toggle {
+    left: 10px;
+}
+
+.sidebar-right .sidebar-toggle {
+    right: 10px;
+}
+
+/* Collapsed states */
+body.left-collapsed .sidebar-left>*:not(.sidebar-toggle) {
+    display: none;
+}
+
+body.left-collapsed .sidebar-left {
+    padding: 16px 10px;
+}
+
+body.right-collapsed .sidebar-right>*:not(.sidebar-toggle) {
+    display: none;
+}
+
+body.right-collapsed .sidebar-right {
+    padding: 16px 10px;
+}
+
+/* Responsive — auto-collapse under 900px */
+@media (max-width: 900px) {
+    body:not(.left-expanded) {
+        --sidebar-left-w: var(--sidebar-collapsed-w);
+    }
+
+    body:not(.left-expanded) .sidebar-left>*:not(.sidebar-toggle) {
+        display: none;
+    }
+
+    body:not(.left-expanded) .sidebar-left {
+        padding: 16px 10px;
+    }
+
+    body:not(.right-expanded) {
+        --sidebar-right-w: var(--sidebar-collapsed-w);
+    }
+
+    body:not(.right-expanded) .sidebar-right>*:not(.sidebar-toggle) {
+        display: none;
+    }
+
+    body:not(.right-expanded) .sidebar-right {
+        padding: 16px 10px;
+    }
 }

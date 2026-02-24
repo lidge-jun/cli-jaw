@@ -31,6 +31,8 @@ import {
 import { state } from './state.js';
 import { loadCliRegistry, getCliKeys } from './constants.js';
 import { initAppName } from './features/appname.js';
+import { initSidebar } from './features/sidebar.js';
+import { initTheme } from './features/theme.js';
 
 // ── Chat Actions ──
 document.getElementById('btnSend').addEventListener('click', sendMessage);
@@ -228,6 +230,8 @@ async function bootstrap() {
     loadEmployees();
     initHeartbeatBadge();
     initAppName();
+    initSidebar();
+    initTheme();
 }
 
 void bootstrap().catch((err) => {

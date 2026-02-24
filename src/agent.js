@@ -388,7 +388,7 @@ export function spawnAgent(prompt, opts = {}) {
                 }
             } else if (!forceNew && code !== 0) {
                 let errMsg = `Copilot CLI 실행 실패 (exit ${code})`;
-                if (ctx.stderrBuf.includes('auth')) errMsg = '🔐 인증 오류 — gh auth login이 필요합니다';
+                if (ctx.stderrBuf.includes('auth')) errMsg = '🔐 인증 오류 — 1) gh auth login → 2) gh copilot --help → 3) copilot login';
                 else if (ctx.stderrBuf.trim()) errMsg = ctx.stderrBuf.trim().slice(0, 200);
 
                 if (!opts.internal && !opts._isFallback) {

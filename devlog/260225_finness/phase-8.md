@@ -996,3 +996,185 @@ Phase 9 담당자가 바로 시작할 수 있도록 아래를 선행 공유한�
 - dual response
 - lockfile-only commits
 
+
+---
+
+## 22) CMD Line · Telegram · Web · CLI 통합 감사 (AGENTS/agent md 참조)
+
+요청 반영:
+- `cmd line / telegram / web / cli` 커맨드 체계를 별도 축으로 감사함.
+- 참조 문서:
+  - `cli-claw/AGENTS.md`
+  - `cli-claw/devlog/str_func/AGENTS.md`
+  - `cli-claw/devlog/str_func/commands.md`
+  - `cli-claw/devlog/str_func/agent_spawn.md`
+
+핵심 참조 규칙(`str_func/AGENTS.md`):
+- 커맨드/API 변경 시 `src/commands.js`, `server.js`, `bin/commands/chat.js`, `src/telegram.js`를 동시 점검해야 함.
+- CLI 서브커맨드 변경 시 `bin/cli-claw.js`의 `printHelp`와 switch case를 동기화해야 함.
+
+### 22.1 현재 통합 구조 맵
+
+| 인터페이스 | 진입점 | 커맨드 파싱/실행 | Help 소스 | 비고 |
+|---|---|---|---|---|
+| CMD line (root) | `bin/cli-claw.js` | subcommand switch | `printHelp()` 하드코딩 | Slash registry와 분리 |
+| CLI Chat (REPL) | `bin/commands/chat.js` | `parseCommand` + `executeCommand` | `/help` (`src/commands.js`) | WebSocket + HTTP 혼합 |
+| Web | `public/js/features/chat.js` + `/api/command` | 서버에서 `parse/execute` | `/help` + `/api/commands` | dropdown은 `/api/commands?interface=web` |
+| Telegram | `src/telegram.js` | `parse/execute` | `/help` + `setMyCommands` | menu는 일부 command 제외 |
+
+### 22.2 실제 갭 (중요)
+
+1. root help와 slash help가 이원화됨
+- `bin/cli-claw.js` 도움말은 수동 텍스트.
+- `src/commands.js`는 동적 registry.
+- 결과: help 내용 불일치 위험.
+
+2. root help 누락
+- 실제 switch에 있는 `browser`, `memory`가 `printHelp()` Commands 블록에 누락됨.
+- 사용자 관점에서 "명령이 있는데 도움말엔 없는" 상태 발생.
+
+3. Telegram 메뉴와 `/help` 정보 불일치
+- `setMyCommands`는 `TG_EXCLUDED_CMDS(model, cli)` 제외.
+- 그러나 `/help`는 telegram interface 기준으로 `model`, `cli`를 계속 표시.
+- Telegram ctx에서는 설정 변경이 제한되어 `/model`, `/cli`가 사실상 안내만 가능.
+
+4. Web 자동완성은 command-level prefix만 지원
+- 현재 dropdown은 `filterCommands(/prefix)`만 수행.
+- `src/commands.js`에 있는 `getArgumentCompletionItems` 기능이 Web에서 미사용.
+
+5. 인터페이스 capability 정책이 분산
+- `makeWebCommandCtx`, `makeCliCommandCtx`, `makeTelegramCommandCtx`에 권한/지원 범위가 분산.
+- 동일 명령이 인터페이스마다 어떤 모드(readonly/blocked/full)인지 중앙정의가 없음.
+
+6. `/api/commands` 메타가 최소치
+- name/desc/args/category만 전달.
+- aliases, readonly, hidden reason, examples, interface policy가 없어 도움말/자동완성 확장이 어려움.
+
+### 22.3 스킬 기준으로 본 해석
+
+| 스킬 | 요구/근거 | 현재 상태 | 개선 필요 |
+|---|---|---|---|
+| `dev` | Self-reference 3계층(Skill→API→CLI), 모듈화 | 일부 충족 | help/catalog 단일소스화 필요 |
+| `dev-backend` | 일관된 API/응답 계약 | `/api/commands`는 bare array | `{ok,data}` + 확장 메타 권장 |
+| `dev-testing` | 회귀 테스트 루프 | 인터페이스 parity 테스트 없음 | help/command parity test 필요 |
+| `telegram-send` | Bot-first 정책 + local fallback | 전송 경로는 구현됨 | command help/메뉴 정책과 통합 필요 |
+| `web-routing` | 브라우저 요청 분기 단순화 | `/browser` 명령 존재 | help에 분기 힌트 추가 필요 |
+| `browser` | snapshot→action 패턴 가시화 | command desc 단문 | help 상세에 workflow 안내 필요 |
+
+### 22.4 감사 결론 (통합/Help 축)
+
+- 기능은 이미 공유 레지스트리(`src/commands.js`) 중심으로 절반 이상 통합되어 있음.
+- 하지만 **도움말/노출 정책/자동완성 정책**이 인터페이스별로 분리되어 “인지 부채”가 남아 있음.
+- Phase 9에서 이를 "Command Contract v2"로 명확히 통합해야 한다.
+
+---
+
+## 23) Command Contract v2 제안 (Phase 9 입력)
+
+### 23.1 목표
+
+1. 명령 정의 단일소스화
+2. 인터페이스 capability 명시화 (`full`, `readonly`, `hidden`, `blocked`)
+3. Help 출력 일관화 (root/cli/web/tg 동일 정책)
+4. 자동완성 일관화 (command + args)
+
+### 23.2 제안 스키마
+
+```ts
+interface CommandSpec {
+  name: string;
+  aliases?: string[];
+  desc: string;
+  args?: string;
+  category: 'session' | 'model' | 'tools' | 'cli';
+  interfaces: ('cli'|'web'|'telegram'|'cmdline')[];
+  capability?: Partial<Record<'cli'|'web'|'telegram'|'cmdline', 'full'|'readonly'|'hidden'|'blocked'>>;
+  examples?: string[];
+  handler: Function;
+}
+```
+
+### 23.3 Help 출력 정책
+
+- `/help` 기본: 현재 interface에서 `hidden/blocked` 제외 항목만 표시
+- `/help <cmd>`: 지원 interface + capability + 예시까지 표시
+- `cli-claw --help`/`cli-claw help`: 동일 catalog에서 root command 목록 생성
+- Telegram `setMyCommands`: 동일 policy에서 `full/readable` 항목만 반영
+
+### 23.4 Web 자동완성 정책
+
+- 현재: `/prefix` 필터링
+- 목표:
+  - command completion: 서버 `getCompletionItems` 결과 사용
+  - argument completion: 서버 `getArgumentCompletionItems` 결과 사용
+  - `/help` 인라인 힌트 표시
+
+---
+
+## 24) 통합 검증 스니펫 (parity check)
+
+### 24.1 command/help parity 스크립트 예시
+
+```js
+#!/usr/bin/env node
+import { COMMANDS } from '../src/commands.js';
+
+const RESERVED = new Set(['start', 'id', 'help', 'settings']);
+const TG_EXCLUDED = new Set(['model', 'cli']);
+
+const byIface = (iface) => COMMANDS
+  .filter(c => c.interfaces.includes(iface) && !c.hidden)
+  .map(c => c.name)
+  .sort();
+
+const telegramHelp = byIface('telegram').filter(name => !RESERVED.has(name));
+const telegramMenu = COMMANDS
+  .filter(c => c.interfaces.includes('telegram') && !RESERVED.has(c.name) && !TG_EXCLUDED.has(c.name))
+  .map(c => c.name)
+  .sort();
+
+const missingInMenu = telegramHelp.filter(x => !telegramMenu.includes(x));
+
+console.log('[parity] telegram help:', telegramHelp);
+console.log('[parity] telegram menu:', telegramMenu);
+
+if (missingInMenu.length) {
+  console.error('[parity] mismatch (help only):', missingInMenu.join(', '));
+  process.exit(1);
+}
+
+console.log('[parity] ok');
+```
+
+### 24.2 실행 명령
+
+```bash
+node scripts/check-command-parity.mjs
+```
+
+권장:
+- CI에서 `npm test` 앞에 parity check를 붙여 메뉴/도움말 드리프트를 차단.
+
+---
+
+## 25) 통합 축 우선순위 (Phase 9와 결합)
+
+1. P0
+- Telegram help/menu mismatch 해소
+- root help 누락 수정 (`browser`, `memory`)
+
+2. P1
+- Command capability map 도입
+- `/api/commands` 메타 확장
+
+3. P2
+- Web argument completion 연결
+- parity test + snapshot test 추가
+
+4. P3
+- docs/AGENTS/str_func 동기화 자동 체크
+
+완료 기준:
+- 인터페이스별 command 목록과 help output이 정책상 완전히 일치
+- "보이지만 실행 불가" 명령 0건
+

@@ -17,6 +17,9 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
     position: relative;
     z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
 .chat-messages {
@@ -178,13 +181,13 @@
 }
 
 .btn-send.stop-mode {
-    background: #ef4444;
+    background: var(--stop-btn);
     font-size: 16px;
     transition: background .2s;
 }
 
 .btn-send.stop-mode:hover {
-    background: #dc2626;
+    background: var(--stop-btn-hover);
 }
 
 .btn-send:disabled {

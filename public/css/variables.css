@@ -10,9 +10,25 @@
     --green: #4ade80;
     --user-bg: #1a1a2e;
     --agent-bg: #0f0f1a;
+    --status-idle-bg: #1a2e1a;
+    --status-running-bg: #2e2a1a;
+    --status-running-color: #fbbf24;
+    --code-bg: #0d1117;
+    --link-color: #60a5fa;
+    --table-border: #06b6d4;
+    --stop-btn: #ef4444;
+    --stop-btn-hover: #dc2626;
+    --toggle-off: #444;
+    --toggle-on: #fff;
+    --delete-color: #f55;
+    --code-label-color: #8b949e;
+    --modal-bg: rgba(0, 0, 0, 0.6);
     --font-display: 'Chakra Petch', 'Outfit', system-ui, sans-serif;
     --font-ui: 'Outfit', -apple-system, system-ui, sans-serif;
     --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    --sidebar-left-w: 220px;
+    --sidebar-right-w: 260px;
+    --sidebar-collapsed-w: 48px;
 }
 
 * {
@@ -27,7 +43,43 @@ body {
     color: var(--text);
     height: 100vh;
     display: grid;
-    grid-template-columns: 220px 1fr 260px;
+    grid-template-columns: var(--sidebar-left-w) 1fr var(--sidebar-right-w);
+    transition: grid-template-columns 0.25s ease;
+}
+
+body.left-collapsed {
+    --sidebar-left-w: var(--sidebar-collapsed-w);
+}
+
+body.right-collapsed {
+    --sidebar-right-w: var(--sidebar-collapsed-w);
+}
+
+/* ── Light Theme ── */
+[data-theme="light"] {
+    --bg: #f5f5f7;
+    --surface: #ffffff;
+    --border: #e0e0e6;
+    --text: #1a1a2e;
+    --text-dim: #6e6e8a;
+    --accent: #e04848;
+    --accent2: #d35f3a;
+    --green: #16a34a;
+    --user-bg: #eef0f8;
+    --agent-bg: #f8f8fc;
+    --status-idle-bg: #dcfce7;
+    --status-running-bg: #fef9c3;
+    --status-running-color: #a16207;
+    --code-bg: #f0f2f5;
+    --link-color: #2563eb;
+    --table-border: #2563eb;
+    --stop-btn: #dc2626;
+    --stop-btn-hover: #b91c1c;
+    --toggle-off: #c0c0c0;
+    --toggle-on: #ffffff;
+    --delete-color: #dc2626;
+    --code-label-color: #6e6e8a;
+    --modal-bg: rgba(0, 0, 0, 0.3);
 }
 
 label {

@@ -846,3 +846,294 @@ npm outdated --json
 npm test
 ```
 
+
+---
+
+## 25) WS6 — CMD line/Telegram/Web/CLI 커맨드 통합 + Help 통일
+
+요청 반영:
+- `cmd line`, `telegram`, `web`, `cli`를 하나의 커맨드 계약으로 묶는 실행 단계 추가.
+- `AGENTS.md`/`str_func/AGENTS.md` 체크리스트를 구현 플로우에 편입.
+- 관련 스킬(`dev`, `dev-backend`, `dev-testing`, `telegram-send`, `web-routing`, `browser`) 지침을 직접 반영.
+
+### 25.1 목표
+
+1. 명령 정의와 노출 정책 단일소스화
+2. Help 출력 정책 단일화 (`--help`, `/help`, Web dropdown, Telegram menu)
+3. 인터페이스별 capability(읽기전용/숨김/차단) 명시
+4. 자동완성 품질 통일 (command + argument)
+
+### 25.2 현재 문제를 구현 항목으로 변환
+
+| 문제 | 구현 항목 |
+|---|---|
+| root help 하드코딩/누락 | help generator를 registry 기반으로 전환 |
+| Telegram 메뉴 vs `/help` 불일치 | interface policy에서 동시 계산 |
+| Web arg completion 미지원 | API completion endpoint 추가 |
+| ctx 권한 정책 분산 | capability map + context contract 정리 |
+
+---
+
+## 26) WS6 구현 설계
+
+### 26.1 파일 구조 제안
+
+```text
+src/commands/
+  catalog.js             # COMMANDS + capability metadata
+  policy.js              # interface별 노출/실행 정책
+  help-renderer.js       # text/json/telegram help 렌더러
+  completion-service.js  # command + argument completion
+src/http/
+  command-controller.js  # /api/commands, /api/command, /api/commands/complete
+bin/
+  cli-claw.js            # printHelp 제거, renderer 사용
+src/telegram.js          # setMyCommands policy 연동
+public/js/features/
+  slash-commands.js      # API completion 연동
+```
+
+### 26.2 capability 정책 모델
+
+```js
+export const INTERFACES = ['cmdline', 'cli', 'web', 'telegram'];
+
+// full: 실행 가능, readonly: 조회만 가능, hidden: 목록 숨김, blocked: 실행 차단
+export const CAP = {
+  full: 'full',
+  readonly: 'readonly',
+  hidden: 'hidden',
+  blocked: 'blocked',
+};
+```
+
+```js
+// 예시
+{
+  name: 'cli',
+  desc: '활성 CLI 확인/변경',
+  interfaces: ['cli', 'web', 'telegram'],
+  capability: {
+    cli: 'full',
+    web: 'full',
+    telegram: 'readonly',
+  }
+}
+```
+
+원칙:
+- Telegram에서 설정 변경이 제한된 명령은 `readonly`로 명시.
+- `/help`는 readonly 항목에 `[read-only]` 표시.
+- Telegram `setMyCommands`는 `full`만 노출.
+
+### 26.3 help renderer 단일화
+
+```js
+import { getVisibleCommands } from './policy.js';
+
+export function renderHelp({ iface, commandName, format = 'text' }) {
+  const cmds = getVisibleCommands(iface, { includeReadonly: true });
+  if (!commandName) return renderCommandList(cmds, { iface, format });
+  const cmd = cmds.find(c => c.name === commandName || (c.aliases || []).includes(commandName));
+  if (!cmd) return { ok: false, text: `unknown command: ${commandName}` };
+  return renderCommandDetail(cmd, { iface, format });
+}
+```
+
+### 26.4 `/api/commands` 확장
+
+현재 응답(요약):
+- `name`, `desc`, `args`, `category`
+
+목표 응답:
+
+```json
+{
+  "ok": true,
+  "data": [
+    {
+      "name": "help",
+      "aliases": ["h"],
+      "desc": "커맨드 목록",
+      "args": "[command]",
+      "category": "session",
+      "capability": "full",
+      "examples": ["/help", "/help status"]
+    }
+  ]
+}
+```
+
+### 26.5 completion API 추가
+
+`POST /api/commands/complete`
+
+request:
+
+```json
+{
+  "interface": "web",
+  "input": "/mod",
+  "argv": []
+}
+```
+
+response:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "kind": "command",
+    "items": [
+      { "insertText": "/model ", "name": "model", "desc": "모델 확인/변경" }
+    ]
+  }
+}
+```
+
+argument 모드:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "kind": "argument",
+    "command": "model",
+    "items": [
+      { "insertText": "/model gpt-5", "name": "gpt-5", "desc": "codex" }
+    ]
+  }
+}
+```
+
+---
+
+## 27) 인터페이스별 실행 정책
+
+### 27.1 CMD line (`cli-claw --help`)
+
+- `bin/cli-claw.js`에서 수동 문자열 대신 `help-renderer`를 사용.
+- switch/subcommand 목록과 출력 목록이 자동 동기화되게 변경.
+- 누락 방지: `browser`, `memory` 같은 신규 서브커맨드 자동 반영.
+
+### 27.2 CLI chat (`bin/commands/chat.js`)
+
+- 기존 `parseCommand`/`executeCommand` 경로 유지.
+- 추가: `tab` 자동완성은 `completion-service` 결과를 직접 사용.
+- `/help`는 renderer 결과를 그대로 표시.
+
+### 27.3 Web
+
+- `slash-commands.js`에서 `/api/commands?interface=web` 초기 로드 유지.
+- 입력 시 prefix local filter 대신 `/api/commands/complete` 사용 가능 모드 추가.
+- `/help` 실행 결과에 capability 배지 렌더링 (`read-only`, `blocked`).
+
+### 27.4 Telegram
+
+- `setMyCommands` payload는 policy에서 계산해 menu/help와 일치시킴.
+- `TG_EXCLUDED_CMDS` 하드코딩 제거 후 capability 정책으로 대체.
+- `readonly` 명령은 설명 텍스트에 `(조회 전용)` 포함.
+
+---
+
+## 28) 테스트 설계 (WS6)
+
+### 28.1 단위 테스트
+
+- `tests/unit/commands-policy.test.js`
+  - interface별 visible/full/readonly 분기 검증
+- `tests/unit/help-renderer.test.js`
+  - list/detail 출력 snapshot 검증
+- `tests/unit/commands-completion.test.js`
+  - command/argument completion 분기 검증
+
+### 28.2 통합 테스트
+
+- `tests/integration/help-parity.test.js`
+  - `cli/web/telegram` help 목록 비교
+  - menu(help 노출) 불일치 fail
+
+- `tests/integration/cmdline-help.test.js`
+  - `bin/cli-claw.js`의 help 출력에 switch command 전체 포함 확인
+
+### 28.3 parity 검증 스크립트
+
+`node scripts/check-command-parity.mjs`
+
+검증 항목:
+- command registry vs cmdline help
+- command registry vs telegram setMyCommands
+- command registry vs `/api/commands` 응답
+
+---
+
+## 29) AGENTS/문서 동기화 절차 (필수)
+
+`str_func/AGENTS.md` 기준으로, WS6 완료 시 아래 동기화 필수:
+
+코드 6곳:
+1. `src/commands.js` (또는 분리 후 catalog/policy)
+2. `server.js` (또는 controller)
+3. `bin/commands/chat.js`
+4. `src/telegram.js`
+5. `bin/cli-claw.js`
+6. `bin/commands/<subcommand>.js` (변경 시)
+
+문서 4곳:
+1. `README.md`
+2. `devlog/str_func.md`
+3. `devlog/str_func/commands.md`
+4. `devlog/str_func/server_api.md`
+
+검증 명령:
+
+```bash
+npm test
+node scripts/check-command-parity.mjs
+bash devlog/verify-counts.sh
+```
+
+---
+
+## 30) WS6 완료 기준 (Definition of Done)
+
+- [ ] `cmdline/cli/web/telegram`에서 help 정책이 단일소스로 생성됨
+- [ ] Telegram 메뉴와 `/help`의 노출 집합이 정책적으로 일치함
+- [ ] root `--help`가 실제 서브커맨드와 100% 일치함
+- [ ] Web에서 argument completion 사용 가능
+- [ ] parity 테스트/스크립트 통과
+- [ ] AGENTS 체크리스트 문서 동기화 완료
+
+---
+
+## 31) WS6 리스크와 완화
+
+| 리스크 | 영향 | 완화 |
+|---|---|---|
+| 정책 전환 중 일부 command 숨김 오작동 | 중 | dual-mode(구/신 정책) 임시 병행 |
+| Telegram command 길이/설명 제한 초과 | 낮음 | `toTelegramCommandDescription` 길이 보정 유지 |
+| Web completion API 호출 증가 | 낮음 | debounce + local cache |
+| root help 리팩토링으로 초기 UX 변화 | 낮음 | 기존 포맷 유지 + 내용만 동기화 |
+
+---
+
+## 32) 스킬 반영 체크 (요청사항 “skill 무조건 봐” 대응)
+
+실제 참조 후 반영한 스킬/문서:
+- `skills_ref/dev/SKILL.md`
+- `skills_ref/dev-backend/SKILL.md`
+- `skills_ref/dev-data/SKILL.md`
+- `skills_ref/dev-testing/SKILL.md`
+- `skills_ref/telegram-send/SKILL.md`
+- `skills_ref/web-routing/SKILL.md`
+- `skills_ref/browser/SKILL.md`
+- `cli-claw/AGENTS.md`
+- `cli-claw/devlog/str_func/AGENTS.md`
+- `cli-claw/devlog/str_func/commands.md`
+- `cli-claw/devlog/str_func/agent_spawn.md`
+
+적용 방식:
+- 스킬 지침을 "규칙"이 아니라 구현 항목(WS6)으로 매핑.
+- Help/command 통합과 인터페이스 capability를 Phase 9 실행 플랜에 직접 편입.
+

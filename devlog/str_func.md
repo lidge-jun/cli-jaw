@@ -28,23 +28,28 @@ cli-claw/
 │   ├── worklog.js            ← Worklog CRUD + phase matrix + PHASES (153L)
 │   ├── telegram.js           ← Telegram 봇 + forwarder lifecycle + origin 필터링 + 디바운스 tool 업데이트 (470L)
 │   ├── telegram-forwarder.js ← [NEW] Telegram 포워딩 헬퍼 추출 (escape, chunk, createForwarder) (105L)
-│   ├── heartbeat.js          ← Heartbeat 잡 스케줄 + fs.watch (90L)
-│   ├── prompt.js             ← 프롬프트 + 스킬 + 서브에이전트 v2 + phase skip + git금지 (502L)
+│   ├── heartbeat.js          ← Heartbeat 잡 스케줄 + pending queue + fs.watch (107L)
+│   ├── prompt.js             ← 프롬프트 + 스킬 + 서브에이전트 v2 + phase skip + git금지 (499L)
 │   ├── memory.js             ← Persistent Memory grep 기반 (128L)
 │   └── browser/              ← Chrome CDP 제어
 │       ├── connection.js     ← Chrome 탐지/launch/CDP 연결 (71L)
 │       ├── actions.js        ← snapshot/click/type/navigate/screenshot/mouseClick (179L)
 │       ├── vision.js         ← vision-click 파이프라인 + Codex provider (138L)
 │       └── index.js          ← re-export hub (13L)
-├── public/                   ← Web UI (ES Modules, 21 files, ~3647L)
-│   ├── index.html            ← HTML 뼈대 (436L, CDN defer 4개 + Chakra Petch/Outfit font, CLI-CLAW 브랜딩)
-│   ├── css/                  ← 6 files (1191L)
-│   │   ├── markdown.css      ← [NEW] 마크다운 렌더링 스타일 (테이블·코드·KaTeX·Mermaid) (149L)
-│   │   └── variables.css     ← CSS 커스텀 프로퍼티 + 듀얼 폰트 + 스크롤바 (74L)
-│   └── js/                   ← 14 files (~2020L)
-│       ├── render.js          ← [REWRITE] marked+hljs+KaTeX+Mermaid 렌더러 (21L→141L)
-│       ├── constants.js      ← loadCliRegistry() 동적 로딩 + FALLBACK_CLI_REGISTRY (119L)
-│       └── features/appname.js ← [NEW] Agent Name 커스텀 (localStorage, 메시지 라벨) (43L)
+├── public/                   ← Web UI (ES Modules, 23 files, ~3957L)
+│   ├── index.html            ← 뼈대 (443L, CDN 4개 + data-theme + ◀/▶ 토글)
+│   ├── css/                  ← 6 files (1355L)
+│   │   ├── variables.css     ← 커스텀 프로퍼티 + 3단 폰트 + 라이트 팔레트 + 사이드바 변수 (126L)
+│   │   ├── layout.css        ← 사이드바 + 토글 absolute + collapse + 반응형 900px (281L)
+│   │   └── markdown.css      ← 렌더링 (테이블·코드·KaTeX·Mermaid) + 시맨틱 색상 var (149L)
+│   └── js/                   ← 16 files (~2159L)
+│       ├── main.js           ← 앱 진입점 + 5개 모듈 wire (239L)
+│       ├── render.js         ← marked+hljs+KaTeX+Mermaid 렌더러 (161L)
+│       ├── constants.js      ← CLI_REGISTRY 동적 로딩 + ROLE_PRESETS (119L)
+│       └── features/
+│           ├── sidebar.js    ← [NEW] 사이드바 접기 (이중 모드 responsive) (88L)
+│           ├── theme.js      ← [NEW] 다크/라이트 테마 토글 + hljs 스와프 (38L)
+│           └── appname.js    ← [NEW] Agent Name 커스텀 (43L)
 ├── bin/
 │   ├── cli-claw.js           ← 11개 서브커맨드 라우팅
 │   ├── postinstall.js        ← npm install 후 5-CLI 자동설치(bun→npm 폴백) + MCP + 스킬 + Copilot (212L)
@@ -198,7 +203,7 @@ graph LR
 | `260224_skill/`               | 스킬 큐레이션 + Telegram Send + Voice STT (P0~P2)           | 🟡    |
 | `260224_vision/`              | Vision Click P1✅ P2✅ — P3 멀티프로바이더 미구현              | 🟡    |
 | `260224_orch/`                | 오케스트레이션 v2 P0✅ P1✅ P2✅ P3✅ P4✅ P5✅                   | ✅    |
-| `260225_finness/`             | P0~P3✅ + P4 ACP응답누적fix✅ + P5 마크다운렌더링✅ + P5.9 비주얼폴리시✅ + P5.9.1 타이포+AgentName✅ + P10 ACP activityTimeout✅ | ✅    |
+| `260225_finness/`             | P0~P5✅ + P5.9✅ + P5.9.1✅ + P6✅ + P6.1✅ + P6.2✅ 테마·사이드바·이모지·반응형 | ✅    |
 | `260225_copilot-cli-integration/` | Copilot ACP 통합 Phase 1~6 완료 (할당량+effort+브랜딩)  | ✅    |
 | `269999_메모리 개선/`          | 메모리 고도화 (flush✅ + vector DB 📋 후순위)                 | 🔜    |
 

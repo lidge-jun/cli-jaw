@@ -36,7 +36,7 @@ export function renderEmployees() {
         return `
         <div class="settings-group" style="margin-bottom:8px;padding:8px 10px">
             <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-                <span>🤖</span>
+                <span style="width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block;flex-shrink:0"></span>
                 <input style="flex:1;background:none;border:none;color:var(--text);font-size:12px;font-weight:600;font-family:inherit;outline:none"
                        value="${escapeHtml(a.name || 'Agent')}"
                        data-emp-name="${a.id}">
@@ -88,7 +88,7 @@ export async function deleteEmployee(id) {
 export function onEmpCliChange(id, cli) {
     const models = MODEL_MAP[cli] || [];
     const sel = document.querySelector(`[data-emp-model="${id}"]`);
-    sel.innerHTML = `<option value="default" selected>default</option>` + models.map(m => `<option>${m}</option>`).join('') + `<option value="__custom__">✏️ 직접 입력...</option>`;
+    sel.innerHTML = `<option value="default" selected>default</option>` + models.map(m => `<option>${m}</option>`).join('') + `<option value="__custom__">직접 입력...</option>`;
     updateEmployee(id, { cli, model: 'default' });
 }
 

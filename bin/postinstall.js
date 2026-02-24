@@ -117,7 +117,7 @@ try {
         ensureSymlink(copilotBin, path.join(home, '.local', 'bin', 'copilot'));
         console.log('[claw:init] ✅ copilot installed');
     }
-} catch { console.log('[claw:init] ⚠️ copilot: gh not authenticated — run: gh auth login'); }
+} catch { console.log('[claw:init] ⚠️ copilot: gh not authenticated — run: 1) gh auth login → 2) gh copilot --help → 3) copilot login'); }
 
 
 // 3. ~/CLAUDE.md → ~/AGENTS.md (if AGENTS.md exists and CLAUDE.md doesn't)

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" data-theme="dark">
 
 <head>
     <meta charset="UTF-8">
@@ -17,12 +17,14 @@
     <link rel="stylesheet" href="/css/modals.css">
     <link rel="stylesheet" href="/css/markdown.css">
     <!-- CDN: markdown rendering -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark.min.css">
+    <link rel="stylesheet" id="hljsTheme"
+        href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">
     <script defer src="https://cdn.jsdelivr.net/npm/marked@14/marked.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/highlight.js@11/highlight.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
     <link rel="modulepreload" href="/js/state.js">
     <link rel="modulepreload" href="/js/ws.js">
     <link rel="modulepreload" href="/js/ui.js">
@@ -31,6 +33,7 @@
 <body>
     <!-- Left Sidebar -->
     <div class="sidebar-left">
+        <button class="sidebar-toggle" id="toggleLeft" title="Collapse">◀</button>
         <div class="logo">CLI-CLAW</div>
 
         <div>
@@ -67,23 +70,26 @@
             </div>
         </div>
 
-        <div style="margin-top:auto;padding-top:8px;border-top:1px solid var(--border)">
+        <div class="sidebar-bottom">
             <div class="section-title">Agent Name</div>
-            <div style="display:flex;gap:4px;align-items:center;margin-bottom:8px">
+            <div style="display:flex;gap:4px;align-items:center">
                 <input type="text" id="appNameInput" value="CLI-CLAW"
                     style="flex:1;font-family:var(--font-display);font-size:13px;font-weight:600;padding:4px 8px">
                 <button class="sidebar-hb-btn" id="appNameSave"
                     style="width:auto;padding:4px 8px;font-size:11px">✓</button>
             </div>
-            <button class="btn-clear" id="btnClearChat">/clear</button>
+            <button class="sidebar-hb-btn" id="btnClearChat">/clear</button>
+            <button class="sidebar-hb-btn" id="hbSidebarBtn">💓 Heartbeat (0)</button>
         </div>
-        <button class="sidebar-hb-btn" id="hbSidebarBtn">💓 Heartbeat (0)</button>
     </div>
 
     <!-- Chat Area -->
     <div class="chat-area" style="position:relative">
         <div class="drag-overlay" id="dragOverlay">📎 파일을 여기에 드랍하세요</div>
-        <div class="chat-header">CLI-CLAW ● <span id="headerCli">claude</span></div>
+        <div class="chat-header">
+            <span>CLI-CLAW ● <span id="headerCli">claude</span></span>
+            <button class="sidebar-toggle" id="toggleTheme" title="Toggle Theme">☀️</button>
+        </div>
         <div class="chat-messages" id="chatMessages"></div>
         <div class="typing-indicator" id="typingIndicator">
             <span class="label">응답 중</span>
@@ -110,10 +116,11 @@
 
     <!-- Right Sidebar (Tabbed) -->
     <div class="sidebar-right">
+        <button class="sidebar-toggle" id="toggleRight" title="Collapse">▶</button>
         <div class="tab-bar">
-            <button class="tab-btn active">🤖 Agents</button>
-            <button class="tab-btn">📦 Skills</button>
-            <button class="tab-btn">🔧 Settings</button>
+            <button class="tab-btn active">Agents</button>
+            <button class="tab-btn">Skills</button>
+            <button class="tab-btn">Settings</button>
         </div>
         <div class="sidebar-save-bar">
             <button class="btn-save">Save</button>

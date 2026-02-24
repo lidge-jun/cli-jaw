@@ -3,9 +3,11 @@
 import fs from 'fs';
 import { settings, HEARTBEAT_JOBS_PATH, loadHeartbeatFile, saveHeartbeatFile } from './config.js';
 import { orchestrateAndCollect, markdownToTelegramHtml, chunkTelegramMessage, telegramBot, telegramActiveChatIds } from './telegram.js';
+import { broadcast } from './bus.js';
 
 const heartbeatTimers = new Map();
 let heartbeatBusy = false;
+const pendingJobs = [];
 
 export function startHeartbeat() {
     stopHeartbeat();
@@ -28,7 +30,13 @@ export function stopHeartbeat() {
 
 async function runHeartbeatJob(job) {
     if (heartbeatBusy) {
-        console.log(`[heartbeat:${job.name}] skipped — busy`);
+        if (!pendingJobs.some(j => j.id === job.id)) {
+            pendingJobs.push(job);
+            console.log(`[heartbeat:${job.name}] queued (${pendingJobs.length} pending)`);
+            broadcast('heartbeat_pending', { pending: pendingJobs.length });
+        } else {
+            console.log(`[heartbeat:${job.name}] already queued, skip`);
+        }
         return;
     }
     heartbeatBusy = true;
@@ -68,7 +76,16 @@ async function runHeartbeatJob(job) {
         console.error(`[heartbeat:${job.name}] error:`, err.message);
     } finally {
         heartbeatBusy = false;
+        drainPending();
     }
+}
+
+async function drainPending() {
+    if (pendingJobs.length === 0) return;
+    const next = pendingJobs.shift();
+    broadcast('heartbeat_pending', { pending: pendingJobs.length });
+    console.log(`[heartbeat:${next.name}] dequeued (${pendingJobs.length} remaining)`);
+    await runHeartbeatJob(next);
 }
 
 // ─── fs.watch — auto-reload on file change ───────────
