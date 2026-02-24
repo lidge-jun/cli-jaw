@@ -87,11 +87,11 @@ test('EMP-012: parseSubtasks returns empty for no JSON', () => {
 // ─── old name should not exist ───────────────────────
 
 test('EMP-013: getSubAgentPrompt should not be exported (renamed)', async () => {
-    const mod = await import('../../src/prompt.js');
+    const mod = await import('../../src/prompt/builder.js');
     assert.equal(mod.getSubAgentPrompt, undefined, 'old name should not exist');
 });
 
 test('EMP-014: getSubAgentPromptV2 should not be exported (renamed)', async () => {
-    const mod = await import('../../src/prompt.js');
+    const mod = await import('../../src/prompt/builder.js');
     assert.equal(mod.getSubAgentPromptV2, undefined, 'old name should not exist');
 });
