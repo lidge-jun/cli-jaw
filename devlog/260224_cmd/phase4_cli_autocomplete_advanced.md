@@ -1,6 +1,6 @@
 # Phase 4: Autocomplete Advanced Layer
 
-> 상태: 📋 신규 계획
+> 상태: ✅ 구현 완료 | 날짜: 2026-02-24
 > 날짜: 2026-02-24
 > 선행조건: Phase 1.3c 완료 (필수), Phase 2~3 완료 (권장)
 
@@ -15,6 +15,25 @@ Phase 1이 command name 선택까지라면, Phase 4는 Codex 스타일에 더 �
 2. prefix-only에서 점수 기반 정렬로 개선 (정확도 + 사용성)
 3. 목록이 길어도 스크롤 가능한 popup (page window)
 4. raw TTY/resize 상황에서 안정 동작 유지
+
+---
+
+## 리뷰 반영 사항 (2026-02-24)
+
+### 필수 보완 3개
+
+| #   | 이슈                                                  | 반영 결정                                          |
+| --- | ----------------------------------------------------- | -------------------------------------------------- |
+| 1   | `resolveAutocompleteState()`가 공백 입력 시 즉시 닫힘 | 공백 이후를 argument stage로 분기하여 popup 유지   |
+| 2   | `getCompletionItems()`가 command name만 반환          | `getArgumentCompletions()` provider 호출 경로 추가 |
+| 3   | 정렬이 prefix-only                                    | 점수 기반 정렬(exact > startsWith > includes) 적용 |
+
+### 추가 반영
+
+- `ac.stage` 필드 추가: `'command' | 'argument'`
+- popup 행 수를 stage별로 분리:
+  - command stage: 6줄 유지
+  - argument stage: 8줄(긴 목록 대응)
 
 ---
 
@@ -114,6 +133,7 @@ Phase 4에서는 간단한 점수함수 도입:
 ac = {
   open: true,
   items: [...],
+  stage: 'argument',
   selected: 13,
   windowStart: 8,
   windowSize: 8,

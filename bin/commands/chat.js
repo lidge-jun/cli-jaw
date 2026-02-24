@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { resolve as resolvePath, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseCommand, executeCommand, getCompletionItems } from '../../src/commands.js';
+import { parseCommand, executeCommand, getCompletionItems, getArgumentCompletionItems } from '../../src/commands.js';
 
 const { values } = parseArgs({
     args: process.argv.slice(3),
@@ -305,18 +305,32 @@ if (values.simple) {
     let escTimer = null;
     const ac = {
         open: false,
+        stage: 'command',
+        contextHeader: '',
         items: [],
         selected: 0,
         windowStart: 0,
         visibleRows: 0,
         renderedRows: 0,
-        maxRows: 6,
+        maxRowsCommand: 6,
+        maxRowsArgument: 8,
     };
 
     function getMaxPopupRows() {
         // Scroll region ends at rows-2 (rows-1/rows are fixed footer).
         // Prompt baseline at rows-2 can be lifted up to rows-3 lines.
         return Math.max(0, getRows() - 3);
+    }
+
+    function makeSelectionKey(item, stage) {
+        if (!item) return '';
+        const base = item.command ? `${item.command}:${item.name}` : item.name;
+        return `${stage}:${base}`;
+    }
+
+    function popupTotalRows(state) {
+        if (!state?.open) return 0;
+        return (state.visibleRows || 0) + (state.contextHeader ? 1 : 0);
     }
 
     // ─ Phase 1c: use terminal natural scrolling to create space below ─
@@ -342,24 +356,55 @@ if (values.simple) {
         }
     }
 
-    function resolveAutocompleteState(prevName) {
-        if (!inputBuf.startsWith('/') || inputBuf.includes(' ')) {
+    function resolveAutocompleteState(prevKey) {
+        if (!inputBuf.startsWith('/') || inputBuf.includes('\n')) {
             return { open: false, items: [], selected: 0, visibleRows: 0 };
         }
-        const items = getCompletionItems(inputBuf, 'cli');
+
+        const body = inputBuf.slice(1);
+        const firstSpace = body.indexOf(' ');
+        let stage = 'command';
+        let contextHeader = '';
+        let items = [];
+
+        if (firstSpace === -1) {
+            items = getCompletionItems(inputBuf, 'cli');
+        } else {
+            const commandName = body.slice(0, firstSpace).trim().toLowerCase();
+            if (!commandName) return { open: false, items: [], selected: 0, visibleRows: 0 };
+
+            const rest = body.slice(firstSpace + 1);
+            const endsWithSpace = /\s$/.test(rest);
+            const tokens = rest.trim() ? rest.trim().split(/\s+/) : [];
+            const partial = endsWithSpace ? '' : (tokens[tokens.length - 1] || '');
+            const argv = endsWithSpace ? tokens : tokens.slice(0, -1);
+
+            items = getArgumentCompletionItems(commandName, partial, 'cli', argv, {});
+            if (items.length) {
+                stage = 'argument';
+                contextHeader = `${commandName} ▸ ${items[0].commandDesc || '인자 선택'}`;
+            }
+        }
+
         if (!items.length) {
             return { open: false, items: [], selected: 0, visibleRows: 0 };
         }
+
         const selected = (() => {
-            if (!prevName) return 0;
-            const idx = items.findIndex(i => i.name === prevName);
+            if (!prevKey) return 0;
+            const idx = items.findIndex(i => makeSelectionKey(i, stage) === prevKey);
             return idx >= 0 ? idx : 0;
         })();
-        const visibleRows = Math.min(ac.maxRows, items.length, getMaxPopupRows());
+
+        const maxRows = getMaxPopupRows();
+        const headerRows = contextHeader ? 1 : 0;
+        const maxItemRows = Math.max(0, maxRows - headerRows);
+        const stageCap = stage === 'argument' ? ac.maxRowsArgument : ac.maxRowsCommand;
+        const visibleRows = Math.min(stageCap, items.length, maxItemRows);
         if (visibleRows <= 0) {
             return { open: false, items: [], selected: 0, visibleRows: 0 };
         }
-        return { open: true, items, selected, visibleRows };
+        return { open: true, stage, contextHeader, items, selected, visibleRows };
     }
 
     function clearAutocomplete() {
@@ -375,18 +420,20 @@ if (values.simple) {
     function closeAutocomplete() {
         clearAutocomplete();
         ac.open = false;
+        ac.stage = 'command';
+        ac.contextHeader = '';
         ac.items = [];
         ac.selected = 0;
         ac.windowStart = 0;
         ac.visibleRows = 0;
     }
 
-    function formatAutocompleteLine(item, selected) {
-        const cmd = `/${item.name}`;
-        const cmdCol = 14;
-        const cmdText = cmd.length >= cmdCol ? cmd.slice(0, cmdCol) : cmd.padEnd(cmdCol, ' ');
+    function formatAutocompleteLine(item, selected, stage) {
+        const value = stage === 'argument' ? item.name : `/${item.name}`;
+        const valueCol = stage === 'argument' ? 24 : 14;
+        const valueText = value.length >= valueCol ? value.slice(0, valueCol) : value.padEnd(valueCol, ' ');
         const desc = item.desc || '';
-        const raw = `  ${cmdText}  ${desc}`;
+        const raw = `  ${valueText}  ${desc}`;
         const line = clipTextToCols(raw, (process.stdout.columns || 80) - 2);
         return selected ? `\x1b[7m${line}${c.reset}` : `${c.dim}${line}${c.reset}`;
     }
@@ -394,29 +441,42 @@ if (values.simple) {
     function renderAutocomplete() {
         clearAutocomplete();
         if (!ac.open || ac.items.length === 0 || ac.visibleRows <= 0) return;
+
         syncAutocompleteWindow();
         const start = ac.windowStart;
         const end = Math.min(ac.items.length, start + ac.visibleRows);
+        const headerRows = ac.contextHeader ? 1 : 0;
         process.stdout.write('\x1b[s');
+
+        if (headerRows) {
+            process.stdout.write('\x1b[1B\r\x1b[2K');
+            const header = clipTextToCols(`  ${ac.contextHeader}`, (process.stdout.columns || 80) - 2);
+            process.stdout.write(`${c.dim}${header}${c.reset}`);
+            process.stdout.write('\x1b[1A');
+        }
+
         for (let i = start; i < end; i++) {
-            const row = (i - start) + 1;
+            const row = (i - start) + 1 + headerRows;
             process.stdout.write(`\x1b[${row}B\r\x1b[2K`);
-            process.stdout.write(formatAutocompleteLine(ac.items[i], i === ac.selected));
+            process.stdout.write(formatAutocompleteLine(ac.items[i], i === ac.selected, ac.stage));
             process.stdout.write(`\x1b[${row}A`);
         }
-        ac.renderedRows = end - start;
+        ac.renderedRows = headerRows + (end - start);
         process.stdout.write('\x1b[u');
     }
 
     function redrawInputWithAutocomplete() {
-        const prevName = ac.items[ac.selected]?.name;
-        const next = resolveAutocompleteState(prevName);
+        const prevItem = ac.items[ac.selected];
+        const prevKey = makeSelectionKey(prevItem, ac.stage);
+        const next = resolveAutocompleteState(prevKey);
         clearAutocomplete();
         // ─ Phase 1c: scroll to create space BELOW prompt (not above) ─
-        if (next.open) ensureSpaceBelow(next.visibleRows);
+        if (next.open) ensureSpaceBelow(popupTotalRows(next));
         redrawPromptLine();
         if (!next.open) {
             ac.open = false;
+            ac.stage = 'command';
+            ac.contextHeader = '';
             ac.items = [];
             ac.selected = 0;
             ac.windowStart = 0;
@@ -424,6 +484,8 @@ if (values.simple) {
             return;
         }
         ac.open = true;
+        ac.stage = next.stage;
+        ac.contextHeader = next.contextHeader || '';
         ac.items = next.items;
         ac.selected = next.selected;
         ac.visibleRows = next.visibleRows;
@@ -520,6 +582,10 @@ if (values.simple) {
         // Autocomplete navigation (raw ESC sequences)
         const isUpKey = key === '\x1b[A' || key === '\x1bOA';
         const isDownKey = key === '\x1b[B' || key === '\x1bOB';
+        const isPageUpKey = key === '\x1b[5~';
+        const isPageDownKey = key === '\x1b[6~';
+        const isHomeKey = key === '\x1b[H' || key === '\x1b[1~' || key === '\x1bOH';
+        const isEndKey = key === '\x1b[F' || key === '\x1b[4~' || key === '\x1bOF';
         if (ac.open && isUpKey) { // Up
             ac.selected = Math.max(0, ac.selected - 1);
             if (ac.selected < ac.windowStart) ac.windowStart = ac.selected;
@@ -535,10 +601,46 @@ if (values.simple) {
             renderAutocomplete();
             return;
         }
+        if (ac.open && isPageUpKey) {
+            const step = Math.max(1, ac.visibleRows);
+            ac.selected = Math.max(0, ac.selected - step);
+            if (ac.selected < ac.windowStart) ac.windowStart = ac.selected;
+            renderAutocomplete();
+            return;
+        }
+        if (ac.open && isPageDownKey) {
+            const step = Math.max(1, ac.visibleRows);
+            const maxIdx = ac.items.length - 1;
+            ac.selected = Math.min(maxIdx, ac.selected + step);
+            if (ac.selected >= ac.windowStart + ac.visibleRows) {
+                ac.windowStart = ac.selected - ac.visibleRows + 1;
+            }
+            renderAutocomplete();
+            return;
+        }
+        if (ac.open && isHomeKey) {
+            ac.selected = 0;
+            ac.windowStart = 0;
+            renderAutocomplete();
+            return;
+        }
+        if (ac.open && isEndKey) {
+            ac.selected = Math.max(0, ac.items.length - 1);
+            if (ac.selected >= ac.windowStart + ac.visibleRows) {
+                ac.windowStart = ac.selected - ac.visibleRows + 1;
+            }
+            renderAutocomplete();
+            return;
+        }
         if (ac.open && key === '\t') { // Tab accept (no execute)
             const picked = ac.items[ac.selected];
+            const pickedStage = ac.stage;
             if (picked) {
-                inputBuf = `/${picked.name}${picked.args ? ' ' : ''}`;
+                if (pickedStage === 'argument') {
+                    inputBuf = picked.insertText || `/${picked.command || ''} ${picked.name}`.trim();
+                } else {
+                    inputBuf = `/${picked.name}${picked.args ? ' ' : ''}`;
+                }
                 closeAutocomplete();
                 redrawPromptLine();
             }
@@ -547,8 +649,14 @@ if (values.simple) {
         if (key === '\r' || key === '\n') {
             if (ac.open) {
                 const picked = ac.items[ac.selected];
+                const pickedStage = ac.stage;
                 closeAutocomplete();
                 if (picked) {
+                    if (pickedStage === 'argument') {
+                        inputBuf = picked.insertText || `/${picked.command || ''} ${picked.name}`.trim();
+                        redrawPromptLine();
+                        return;
+                    }
                     if (picked.args) {
                         inputBuf = `/${picked.name} `;
                         redrawPromptLine();

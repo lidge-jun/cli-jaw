@@ -1,6 +1,8 @@
 # CLI-Claw — Source Structure & Function Reference
 
-> 마지막 검증: 2026-02-24 (server.js 685L / agent.js 355L / chat.js 720L / commands.js 411L / mcp-sync.js 461L / prompt.js 348L / public/ 19파일)
+> 마지막 검증: 2026-02-24 (server.js 685L / agent.js 363L / commands.js 557L / prompt.js 400L / public/ 18파일 ~2580L)
+>
+> 상세 모듈 문서는 [서브 문서](#서브-문서)를 참조하세요.
 
 ---
 
@@ -10,46 +12,28 @@
 cli-claw/
 ├── server.js                 ← 라우트 + 글루 + 슬래시커맨드 ctx (685L)
 ├── lib/
-│   ├── mcp-sync.js           ← MCP 통합 + 스킬 복사 + 글로벌 설치 (461L)
-│   └── upload.js             ← 파일 업로드 + Telegram 다운로드 (71L)
+│   ├── mcp-sync.js           ← MCP 통합 + 스킬 복사 + 글로벌 설치 (453L)
+│   └── upload.js             ← 파일 업로드 + Telegram 다운로드 (70L)
 ├── src/
 │   ├── config.js             ← CLAW_HOME, settings, CLI 탐지, APP_VERSION (167L)
-│   ├── db.js                 ← SQLite 스키마 + prepared statements (76L)
-│   ├── bus.js                ← WS + 내부 리스너 broadcast (19L)
-│   ├── events.js             ← NDJSON 이벤트 파싱 (97L)
-│   ├── commands.js           ← 슬래시 커맨드 레지스트리 + 디스패쳐 (411L) [NEW]
-│   ├── agent.js              ← CLI spawn + 스트림 + 큐 + 메모리 flush (355L)
-│   ├── orchestrator.js       ← Planning → Sub-agent 오케스트레이션 (131L)
+│   ├── db.js                 ← SQLite 스키마 + prepared statements (75L)
+│   ├── bus.js                ← WS + 내부 리스너 broadcast (18L)
+│   ├── events.js             ← NDJSON 이벤트 파싱 (96L)
+│   ├── commands.js           ← 슬래시 커맨드 레지스트리 + 디스패쳐 (557L)
+│   ├── agent.js              ← CLI spawn + 스트림 + 큐 + 메모리 flush (363L)
+│   ├── orchestrator.js       ← Planning → Sub-agent 오케스트레이션 (130L)
 │   ├── telegram.js           ← Telegram 봇 + 슬래시디스패치 + setMyCommands (358L)
-│   ├── heartbeat.js          ← Heartbeat 잡 스케줄 + fs.watch (91L)
-│   ├── prompt.js             ← 프롬프트 생성 + 스킬 + 서브에이전트 주입 (348L)
-│   ├── memory.js             ← Persistent Memory grep 기반 (122L)
+│   ├── heartbeat.js          ← Heartbeat 잡 스케줄 + fs.watch (90L)
+│   ├── prompt.js             ← 프롬프트 생성 + 스킬 + 서브에이전트 주입 (400L)
+│   ├── memory.js             ← Persistent Memory grep 기반 (128L)
 │   └── browser/              ← Chrome CDP 제어
-│       ├── connection.js     ← Chrome 탐지/launch/CDP 연결
-│       └── actions.js        ← snapshot/click/type/navigate/screenshot
-├── public/                   ← Web UI (ES Modules, 18 files, 2504L)
-│   ├── index.html            ← HTML 뼈대 (418L, inline JS/CSS 없음)
-│   ├── css/
-│   │   ├── variables.css     ← CSS 커스텀 프로퍼티, 리셋 (47L)
-│   │   ├── layout.css        ← 사이드바, 탭, 세이브바 (162L)
-│   ├── chat.css          ← 채팅, 메시지, 타이핑, 첨부, 드롭다운, 먈춤 버튼 (355L)
-│   │   ├── sidebar.css       ← 설정, 스킬 카드, 토글 (215L)
-│   │   └── modals.css        ← 모달, 하트비트 카드 (171L)
-│   └── js/
-│       ├── main.js           ← 앱 진입점 + 이벤트 바인딩 (221L)
-│       ├── state.js          ← 공유 상태 모듈 (16L)
-│       ├── constants.js      ← MODEL_MAP, ROLE_PRESETS (23L)
-│       ├── render.js         ← renderMarkdown, escapeHtml (20L)
-│       ├── ui.js             ← DOM 조작 유틸 + stop-mode 토글 (141L)
-│       ├── ws.js             ← WebSocket 연결 + 메시지 라우팅 (41L)
-│       └── features/
-│           ├── chat.js       ← 전송, 첨부, 드래그앤드롭, 멈춤, 큐 (124L)
-│           ├── settings.js   ← 설정, CLI 상태, MCP, 프롬프트 (351L)
-│           ├── skills.js     ← 로드, 토글, 필터, 기타 카테고리 (69L)
-│           ├── employees.js  ← 서브에이전트 CRUD (92L)
-│           ├── heartbeat.js  ← 하트비트 모달/작업 (83L)
-│           ├── memory.js     ← 메모리 모달/설정 (90L)
-│           └── slash-commands.js ← 슬래시 커맨드 드롭다운 (219L) [NEW]
+│       ├── connection.js     ← Chrome 탐지/launch/CDP 연결 (71L)
+│       ├── actions.js        ← snapshot/click/type/navigate/screenshot (169L)
+│       └── index.js          ← re-export hub (10L)
+├── public/                   ← Web UI (ES Modules, 18 files, ~2580L)
+│   ├── index.html            ← HTML 뼈대 (421L, inline JS/CSS 없음)
+│   ├── css/                  ← 5 files (950L)
+│   └── js/                   ← 12 files (1209L)
 ├── bin/
 │   ├── cli-claw.js           ← 9개 서브커맨드 라우팅
 │   ├── postinstall.js        ← npm install 후 8단계 자동 설정 (139L)
@@ -129,190 +113,6 @@ graph LR
 
 ---
 
-## src/ 모듈 상세
-
-### config.js — 경로, 설정, CLI 탐지
-
-**상수**: `CLAW_HOME` · `PROMPTS_DIR` · `DB_PATH` · `SETTINGS_PATH` · `HEARTBEAT_JOBS_PATH` · `UPLOADS_DIR` · `SKILLS_DIR` · `SKILLS_REF_DIR` · `APP_VERSION` (← package.json)
-
-| Function             | 역할                              |
-| -------------------- | --------------------------------- |
-| `ensureDirs()`       | 필수 디렉토리 생성                |
-| `runMigration()`     | 레거시 DB/settings → ~/.cli-claw  |
-| `loadSettings()`     | settings.json 로드 + 마이그레이션 |
-| `saveSettings(s)`    | 설정 저장                         |
-| `replaceSettings(s)` | ESM live binding 대체 (API PUT용) |
-| `detectCli(name)`    | `which` 기반 바이너리 존재 확인   |
-| `detectAllCli()`     | 4개 CLI 상태 반환                 |
-
-### commands.js — Slash Command Registry & Dispatcher [NEW]
-
-커맨드 레지스트리 (`COMMANDS[]`) + 디스패쳐 엔진. 14개 커맨드, 3개 인터페이스 (cli/web/telegram).
-
-| Function                             | 역할                                                  |
-| ------------------------------------ | ----------------------------------------------------- |
-| `parseCommand(text)`                 | `/cmd args` 파싱 → `{ name, args[] }`                 |
-| `executeCommand(parsed, ctx)`        | 커맨드 실행 + `normalizeResult` (응답 type 자동 추론) |
-| `getCompletions(partial, iface)`     | CLI/Web 자동완성용 명령 필터링                        |
-| `getCompletionItems(partial, iface)` | 자동완성 항목 (name+desc+args)                        |
-| `COMMANDS` (export)                  | 커맨드 배열 (name, desc, args, interfaces, handler)   |
-
-응답 `type` 필드: `normalizeResult()`에서 `ok` 기반 자동 추론 (`success`/`error`/`info`). 핸들러에서 명시 가능.
-
-### db.js — Database
-
-```sql
-session   (id='default', active_cli, session_id, model, permissions, working_dir, effort)
-messages  (id PK, role, content, cli, model, cost_usd, duration_ms, created_at)
-memory    (id PK, key UNIQUE, value, source, created_at, updated_at)
-employees (id PK, name, cli, model, role, status, created_at)
-```
-
-### bus.js — Broadcast Bus
-
-순환 의존 방지 허브. `setWss(w)` · `broadcast(type, data)` — WS + 내부 리스너 동시 전파 · `addBroadcastListener(fn)` / `removeBroadcastListener(fn)`
-
-### events.js — NDJSON Event Extraction
-
-`extractSessionId(cli, event)` · `extractFromEvent(cli, event, ctx, agentLabel)` · `extractToolLabel(cli, event)`
-
-CLI 매핑: claude(`system/assistant/result`) · codex(`thread.started/item.completed`) · gemini(`init/message/result`) · opencode(`text/step_finish`)
-
-### agent.js — CLI Spawn & Queue
-
-| Function                                   | 역할                                                 |
-| ------------------------------------------ | ---------------------------------------------------- |
-| `killActiveAgent(reason)`                  | SIGTERM → SIGKILL 종료                               |
-| `steerAgent(newPrompt, source)`            | kill → 대기 → 새 프롬프트로 restart                  |
-| `enqueueMessage(prompt, source)`           | 큐에 메시지 추가                                     |
-| `buildArgs(cli, model, effort, prompt, …)` | 신규 세션용 CLI args                                 |
-| `buildResumeArgs(…)`                       | resume용 args                                        |
-| `spawnAgent(prompt, opts)`                 | **핵심** — spawn/stream/DB/broadcast                 |
-| `triggerMemoryFlush()`                     | threshold개 메시지 요약 → 메모리 파일 (줄글 1-3문장) |
-| `flushCycleCount`                          | flush 사이클 카운터 (x2 주입용)                      |
-
-**spawnAgent 흐름**: 실행 중 체크 → cli/model/effort 결정 → resume or new args → child spawn → stdin 주입 (context + prompt + history) → stdout NDJSON 파싱 → 종료: session 저장 / agent_done / processQueue
-
-### orchestrator.js — Multi-Agent
-
-`parseSubtasks(text)` · `stripSubtaskJSON(text)` · `distributeAndWait(subtasks)` · `orchestrate(prompt)` — MAX 3 라운드
-
-Flow: 직원 0명→단일 agent / planning 먼저 실행 / distribute→보고→재평가
-
-### telegram.js — Telegram Bot
-
-| Function                     | 역할                                                           |
-| ---------------------------- | -------------------------------------------------------------- |
-| `initTelegram()`             | Bot 생성, allowlist, 핸들러 (텍스트/사진/문서), 슬래시디스패치 |
-| `orchestrateAndCollect()`    | agent_done까지 수집 (idle timeout)                             |
-| `tgOrchestrate(ctx, prompt)` | TG → orchestrate → 응답 전송                                   |
-| `syncTelegramCommands(bot)`  | `setMyCommands` 등록 (TG_EXCLUDED_CMDS 필터) [NEW]             |
-| `makeTelegramCommandCtx()`   | TG용 read-only ctx 생성 [NEW]                                  |
-| `ipv4Fetch(url, init)`       | IPv4 강제 fetch                                                |
-
-### heartbeat.js — Scheduled Jobs
-
-`startHeartbeat()` · `stopHeartbeat()` · `runHeartbeatJob(job)` — busy guard · `watchHeartbeatFile()` — fs.watch debounce
-
-### prompt.js — System Prompt & Skills
-
-`loadActiveSkills()` · `loadSkillRegistry()` · `getMergedSkills()` · `initPromptFiles()` · `getSystemPrompt()` — A-1 + A-2 + MEMORY.md(시스템레벨) + session memory(threshold x2 주입, 10000자) + skills + employees + heartbeat · `loadRecentMemories()` — flush 메모리 최신순 로드 (10000자 제한) · `getSubAgentPrompt(emp)` — 실행자용 경량 프롬프트 · `regenerateB()`
-
-### memory.js — Persistent Memory
-
-`search(query)` — grep -rni · `read(filename)` · `save(filename, content)` — append · `list()` · `appendDaily(content)` · `loadMemoryForPrompt(maxChars=1500)` · `MEMORY_DIR` = `~/.cli-claw/memory/`
-
-**메모리 2-tier 구조:**
-- **시스템 레벨**: `MEMORY.md` → `getSystemPrompt()`에서 1500자 자동 주입 (매 메시지)
-- **세션 레벨**: flush 결과 → `loadRecentMemories()` 10000자, `settings.memory.injectEvery` (기본 2) 사이클마다 주입
-- **온디맨드**: `cli-claw memory search/read` → AI가 필요시 호출
-
-### Browser Module (`src/browser/`)
-
-Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
-
-| connection.js            | actions.js               |
-| ------------------------ | ------------------------ |
-| `findChrome()`           | `snapshot(port, opts)`   |
-| `launchChrome(port)`     | `screenshot(port, opts)` |
-| `connectCdp(port)`       | `click(port, ref, opts)` |
-| `getActivePage(port)`    | `type(port, ref, text)`  |
-| `getCdpSession(port)`    | `press(port, key)`       |
-| `listTabs(port)`         | `hover(port, ref)`       |
-| `getBrowserStatus(port)` | `navigate(port, url)`    |
-| `closeBrowser()`         | `evaluate(port, expr)`   |
-
----
-
-## lib/mcp-sync.js — MCP 통합 관리
-
-소스: `~/.cli-claw/mcp.json`
-
-| Function                     | 역할                           |
-| ---------------------------- | ------------------------------ |
-| `loadUnifiedMcp()`           | 통합 MCP 설정 로드             |
-| `toClaudeMcp(config)`        | Claude/Gemini `.mcp.json` 변환 |
-| `toCodexToml(config)`        | Codex `config.toml` 변환       |
-| `toOpenCodeMcp(config)`      | OpenCode `opencode.json` 변환  |
-| `syncToAll(config, workDir)` | 통합 → 4개 CLI 설정 동기화     |
-| `copyDefaultSkills()`        | 2×3 분류 + Codex 폴백 자동활성 |
-| `installMcpServers(config)`  | npm -g / uv tool install       |
-
----
-
-## bin/commands/ — CLI 명령어
-
-| 명령어        | 설명                                                              |
-| ------------- | ----------------------------------------------------------------- |
-| `serve`       | `--port 3457` `--host 0.0.0.0` `--open`, IPv4 first               |
-| `chat`        | 3모드 (Default/Raw/Simple), 슬래시명령, 멀티라인, CJK 너비 (468L) |
-| `init`        | Interactive/`--non-interactive`, 완료 후 postinstall              |
-| `doctor`      | 11개 체크 (CLI/Telegram/Skills/Chrome 등), `--json`               |
-| `mcp`         | `install <pkg>` · `sync` · `list` · `reset` (PyPI 자동 감지)      |
-| `skill`       | `install` · `remove` · `info` · `list` · `reset` (degit)          |
-| `browser`     | 15개 서브커맨드 (start/stop/snapshot/screenshot/click/type/…)     |
-| `memory`      | `search` · `read` · `save` · `list` · `init`                      |
-| `postinstall` | 8단계: dirs → symlinks → heartbeat → MCP → skills → deps          |
-
----
-
-## server.js — Glue + API Routes (685L)
-
-라우트 + 초기화 + 커맨드 ctx 구성. Quota 함수: `readClaudeCreds()` · `fetchClaudeUsage()` · `readCodexTokens()` · `fetchCodexUsage()` · `readGeminiAccount()`
-
-함수 추출: `getRuntimeSnapshot()` · `clearSessionState()` · `applySettingsPatch(rawPatch, opts)` · `makeWebCommandCtx()`
-
-초기화: `ensureDirs() → runMigration() → loadSettings() → initPromptFiles() → regenerateB() → listen() → mcp-sync → initTelegram() → startHeartbeat()`
-
-### REST API
-
-| Category       | Endpoints                                                                                     |
-| -------------- | --------------------------------------------------------------------------------------------- |
-| Core           | `GET /api/session` `GET /api/messages` `POST /api/message` `POST /api/stop` `POST /api/clear` |
-| Commands       | `POST /api/command` `GET /api/commands?interface=` [NEW]                                      |
-| Settings       | `GET/PUT /api/settings` `GET/PUT /api/prompt` `GET/PUT /api/heartbeat-md`                     |
-| Memory (DB)    | `GET/POST /api/memory` `DELETE /api/memory/:key`                                              |
-| Memory Files   | `GET /api/memory-files` `GET/DELETE /api/memory-files/:fn` `PUT /api/memory-files/settings`   |
-| Claw Memory    | `GET /api/claw-memory/search,read,list` `POST /api/claw-memory/save,init`                     |
-| Upload & MCP   | `POST /api/upload` `GET/PUT /api/mcp` `POST /api/mcp/sync,install,reset`                      |
-| Status & Quota | `GET /api/cli-status` `GET /api/quota`                                                        |
-| Employees      | `GET/POST /api/employees` `PUT/DELETE /api/employees/:id`                                     |
-| Skills         | `GET /api/skills` `POST /api/skills/enable,disable` `GET /api/skills/:id`                     |
-| Browser        | `POST start,stop,act,navigate,screenshot,evaluate` `GET status,tabs,snapshot,text`            |
-
-### WebSocket Events
-
-| Type                          | 설명                          |
-| ----------------------------- | ----------------------------- |
-| `agent_status`                | running/done/error/evaluating |
-| `agent_tool` / `agent_done`   | 툴 사용 / 완료 + 결과         |
-| `round_start` / `round_done`  | 오케스트레이션 라운드         |
-| `new_message` / `clear`       | 메시지 추가 / 전체 삭제       |
-| `queue_update`                | 큐 상태 변경                  |
-| `agent_added/updated/deleted` | 직원 CRUD                     |
-
----
-
 ## 핵심 주의 포인트
 
 1. **큐**: busy 시 queue → agent 종료 후 자동 처리
@@ -323,6 +123,19 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 6. **에러 처리**: 429/auth 커스텀 메시지
 7. **IPv4 강제**: `--dns-result-order=ipv4first` + Telegram
 8. **MCP 동기화**: mcp.json → 4개 CLI 포맷 자동 변환
+
+---
+
+## 서브 문서
+
+| 문서                                        | 범위                                               | 파일                             |
+| ------------------------------------------- | -------------------------------------------------- | -------------------------------- |
+| [🔧 infra.md](str_func/infra.md)             | config · db · bus · memory · browser · mcp-sync    | 의존 0 모듈 + 데이터 레이어      |
+| [🌐 server_api.md](str_func/server_api.md)   | server.js · REST API · WebSocket · CLI 명령어      | 라우트 + 초기화 + 40+ 엔드포인트 |
+| [⚡ commands.md](str_func/commands.md)       | commands.js · 슬래시 커맨드 · slash-commands.js    | 레지스트리 + 디스패쳐 + Web UI   |
+| [🤖 agent_spawn.md](str_func/agent_spawn.md) | agent.js · events.js · orchestrator.js · prompt.js | spawn + 스트림 + 오케스트레이션  |
+| [📱 telegram.md](str_func/telegram.md)       | telegram.js · heartbeat.js                         | 외부 인터페이스 + 스케줄         |
+| [🎨 frontend.md](str_func/frontend.md)       | public/ 전체 (18파일)                              | ES Modules + CSS 시스템          |
 
 ---
 
@@ -343,4 +156,4 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
 ---
 
-> 프로젝트 전체 파일 검증 완전 레퍼런스.
+> 프로젝트 전체 파일 검증 완전 레퍼런스. 상세는 서브 문서 참조.

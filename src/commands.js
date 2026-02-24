@@ -7,6 +7,18 @@ const CATEGORY_LABEL = {
     tools: 'Tools',
     cli: 'CLI',
 };
+const DEFAULT_CLI_CHOICES = ['claude', 'codex', 'gemini', 'opencode'];
+const MODEL_CHOICES_BY_CLI = {
+    claude: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-sonnet-4-6[1m]', 'claude-opus-4-6[1m]', 'claude-haiku-4-5-20251001'],
+    codex: ['gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini'],
+    gemini: ['gemini-3.0-pro-preview', 'gemini-3.1-pro-preview', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-2.5-flash'],
+    opencode: [
+        'github-copilot/claude-sonnet-4.5', 'github-copilot/claude-opus-4.6',
+        'github-copilot/gpt-5', 'github-copilot/gemini-2.5-pro',
+        'opencode/big-pickle', 'opencode/GLM-5 Free', 'opencode/MiniMax M2.5 Free',
+        'opencode/Kimi K2.5 Free', 'opencode/GPT 5 Nano Free', 'opencode/Grok Code Fast 1 Free',
+    ],
+};
 
 function sortCommands(list) {
     return [...list].sort((a, b) => {
@@ -19,6 +31,113 @@ function sortCommands(list) {
 
 function displayUsage(cmd) {
     return `/${cmd.name}${cmd.args ? ` ${cmd.args}` : ''}`;
+}
+
+function toChoiceKey(value) {
+    return String(value || '').trim().toLowerCase();
+}
+
+function dedupeChoices(list) {
+    const out = [];
+    const seen = new Set();
+    for (const entry of list || []) {
+        const key = toChoiceKey(entry?.value ?? entry);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        out.push(entry);
+    }
+    return out;
+}
+
+function normalizeArgumentCandidate(entry) {
+    if (typeof entry === 'string') {
+        const value = entry.trim();
+        if (!value) return null;
+        return { value, label: '' };
+    }
+    if (!entry || typeof entry !== 'object') return null;
+    const value = String(entry.value ?? entry.name ?? '').trim();
+    if (!value) return null;
+    const label = String(entry.label ?? entry.desc ?? '').trim();
+    return { value, label };
+}
+
+function scoreToken(value, query) {
+    const target = toChoiceKey(value);
+    const q = toChoiceKey(query);
+    if (!q) return 0;
+    if (!target) return -1;
+    if (target === q) return 100;
+    if (target.startsWith(q)) return 60;
+    if (target.includes(q)) return 30;
+    return -1;
+}
+
+function categoryIndex(category) {
+    const idx = CATEGORY_ORDER.indexOf(category || 'tools');
+    return idx >= 0 ? idx : CATEGORY_ORDER.length;
+}
+
+function scoreCommandCandidate(cmd, query) {
+    const q = toChoiceKey(query);
+    if (!q) return 0;
+
+    let score = scoreToken(cmd.name, q);
+    for (const alias of (cmd.aliases || [])) {
+        const aliasScore = scoreToken(alias, q);
+        if (aliasScore > score) score = aliasScore - 5; // alias는 name보다 낮게 우선
+    }
+    return score;
+}
+
+function scoreArgumentCandidate(item, query) {
+    const base = scoreToken(item.value, query);
+    if (base >= 0) return base;
+    const labelScore = scoreToken(item.label, query);
+    if (labelScore >= 0) return Math.max(10, labelScore - 10);
+    return -1;
+}
+
+function getCliChoicesFromContext(ctx) {
+    const keys = Object.keys(ctx?.settings?.perCli || {});
+    return keys.length ? keys : DEFAULT_CLI_CHOICES;
+}
+
+function getModelChoicesFromContext(ctx) {
+    const fromCatalog = Object.values(MODEL_CHOICES_BY_CLI).flat();
+    const fromSettings = Object.values(ctx?.settings?.perCli || {})
+        .map(v => v?.model)
+        .filter(Boolean);
+    const activeCli = ctx?.settings?.cli || '';
+    const currentModel = ctx?.settings?.perCli?.[activeCli]?.model;
+    return dedupeChoices([...fromCatalog, ...fromSettings, ...(currentModel ? [currentModel] : [])]);
+}
+
+function modelArgumentCompletions(ctx) {
+    // CLI별 라벨 역매핑: model → CLI name
+    const cliByModel = new Map();
+    for (const [cli, models] of Object.entries(MODEL_CHOICES_BY_CLI)) {
+        for (const m of models) cliByModel.set(toChoiceKey(m), cli);
+    }
+
+    return getModelChoicesFromContext(ctx)
+        .map(value => ({
+            value,
+            label: cliByModel.get(toChoiceKey(value)) || 'custom',
+        }));
+}
+
+function cliArgumentCompletions(ctx) {
+    return getCliChoicesFromContext(ctx)
+        .map(value => ({ value, label: 'cli' }));
+}
+
+function skillArgumentCompletions() {
+    return [{ value: 'list', label: '스킬 목록' }, { value: 'reset', label: '스킬 초기화' }];
+}
+
+function browserArgumentCompletions() {
+    return [{ value: 'status', label: '브라우저 상태' }, { value: 'tabs', label: '열린 탭 목록' }];
 }
 
 function findCommand(name) {
@@ -342,13 +461,13 @@ export const COMMANDS = [
     { name: 'status', desc: '현재 상태', category: 'session', interfaces: ['cli', 'web', 'telegram'], handler: statusHandler },
     { name: 'clear', desc: '화면 정리 (비파괴)', category: 'session', interfaces: ['cli', 'web', 'telegram'], handler: clearHandler },
     { name: 'reset', desc: '세션/대화 초기화', args: '[confirm]', category: 'session', interfaces: ['cli', 'web', 'telegram'], handler: resetHandler },
-    { name: 'model', desc: '모델 확인/변경', args: '[name]', category: 'model', interfaces: ['cli', 'web', 'telegram'], handler: modelHandler },
-    { name: 'cli', desc: '활성 CLI 확인/변경', args: '[name]', category: 'model', interfaces: ['cli', 'web', 'telegram'], handler: cliHandler },
+    { name: 'model', desc: '모델 확인/변경', args: '[name]', category: 'model', interfaces: ['cli', 'web', 'telegram'], getArgumentCompletions: modelArgumentCompletions, handler: modelHandler },
+    { name: 'cli', desc: '활성 CLI 확인/변경', args: '[name]', category: 'model', interfaces: ['cli', 'web', 'telegram'], getArgumentCompletions: cliArgumentCompletions, handler: cliHandler },
     { name: 'version', desc: '버전/CLI 설치 상태', category: 'cli', interfaces: ['cli', 'web', 'telegram'], handler: versionHandler },
-    { name: 'skill', desc: '스킬 목록/초기화', args: '[list|reset]', category: 'tools', interfaces: ['cli', 'web', 'telegram'], handler: skillHandler },
+    { name: 'skill', desc: '스킬 목록/초기화', args: '[list|reset]', category: 'tools', interfaces: ['cli', 'web', 'telegram'], getArgumentCompletions: skillArgumentCompletions, handler: skillHandler },
     { name: 'mcp', desc: 'MCP 목록/동기화/설치', args: '[sync|install]', category: 'tools', interfaces: ['cli', 'web'], handler: mcpHandler },
     { name: 'memory', desc: '메모리 검색/목록', args: '[query]', category: 'tools', interfaces: ['cli'], handler: memoryHandler },
-    { name: 'browser', desc: '브라우저 상태/탭', args: '[status|tabs]', category: 'tools', interfaces: ['cli', 'web', 'telegram'], handler: browserHandler },
+    { name: 'browser', desc: '브라우저 상태/탭', args: '[status|tabs]', category: 'tools', interfaces: ['cli', 'web', 'telegram'], getArgumentCompletions: browserArgumentCompletions, handler: browserHandler },
     { name: 'prompt', desc: '시스템 프롬프트 확인', category: 'tools', interfaces: ['cli', 'web'], handler: promptHandler },
     { name: 'quit', aliases: ['q', 'exit'], desc: '프로세스 종료', category: 'cli', interfaces: ['cli'], handler: quitHandler },
     { name: 'file', desc: '파일 첨부', args: '<path> [caption]', category: 'cli', interfaces: ['cli'], hidden: true, handler: fileHandler },
@@ -395,17 +514,53 @@ export function getCompletions(partial, iface = 'cli') {
 }
 
 export function getCompletionItems(partial, iface = 'cli') {
-    const prefix = (partial || '').startsWith('/')
-        ? (partial || '').toLowerCase()
-        : '/' + String(partial || '').toLowerCase();
-    return sortCommands(COMMANDS.filter(c =>
-        c.interfaces.includes(iface) && !c.hidden
-    ))
-        .filter(c => (`/${c.name}`).startsWith(prefix))
-        .map(c => ({
-            name: c.name,
-            desc: c.desc,
-            args: c.args || '',
-            category: c.category || 'tools',
+    const query = String(partial || '').replace(/^\//, '').trim().toLowerCase();
+    return COMMANDS
+        .filter(c => c.interfaces.includes(iface) && !c.hidden)
+        .map(cmd => ({ cmd, score: scoreCommandCandidate(cmd, query) }))
+        .filter(({ score }) => !query || score >= 0)
+        .sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            const catDiff = categoryIndex(a.cmd.category) - categoryIndex(b.cmd.category);
+            if (catDiff !== 0) return catDiff;
+            return a.cmd.name.localeCompare(b.cmd.name);
+        })
+        .map(({ cmd }) => ({
+            kind: 'command',
+            name: cmd.name,
+            desc: cmd.desc,
+            args: cmd.args || '',
+            category: cmd.category || 'tools',
+            insertText: `/${cmd.name}${cmd.args ? ' ' : ''}`,
+        }));
+}
+
+export function getArgumentCompletionItems(commandName, partial = '', iface = 'cli', argv = [], ctx = {}) {
+    const cmd = findCommand(commandName);
+    if (!cmd || cmd.hidden) return [];
+    if (!cmd.interfaces.includes(iface)) return [];
+    if (typeof cmd.getArgumentCompletions !== 'function') return [];
+
+    const candidates = cmd.getArgumentCompletions(ctx, argv, partial) || [];
+    const normalized = dedupeChoices(candidates.map(normalizeArgumentCandidate).filter(Boolean));
+    const query = String(partial || '').trim().toLowerCase();
+
+    return normalized
+        .map((entry, idx) => ({ entry, idx, score: scoreArgumentCandidate(entry, query) }))
+        .filter(({ score }) => !query || score >= 0)
+        .sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            if (a.idx !== b.idx) return a.idx - b.idx;
+            return a.entry.value.localeCompare(b.entry.value);
+        })
+        .map(({ entry }) => ({
+            kind: 'argument',
+            name: entry.value,
+            desc: entry.label,
+            args: '',
+            category: cmd.category || 'tools',
+            command: cmd.name,
+            commandDesc: cmd.desc,
+            insertText: `/${cmd.name} ${entry.value}`,
         }));
 }
