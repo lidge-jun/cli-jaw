@@ -5,6 +5,8 @@ import { settings, CLAW_HOME, PROMPTS_DIR, SKILLS_DIR, SKILLS_REF_DIR, loadHeart
 import { getSession, updateSession, getEmployees } from './db.js';
 import { memoryFlushCounter, flushCycleCount } from './agent.js';
 
+const promptCache = new Map();
+
 // ─── Skill Loading ───────────────────────────────────
 
 /** Read all active skills from ~/.cli-claw/skills/ */
@@ -438,6 +440,9 @@ export function getEmployeePrompt(emp) {
 // ─── Employee Prompt v2 (orchestration phase-aware) ──
 
 export function getEmployeePromptV2(emp, role, currentPhase) {
+    const cacheKey = `${emp.id || emp.name}:${role}:${currentPhase}`;
+    if (promptCache.has(cacheKey)) return promptCache.get(cacheKey);
+
     let prompt = getEmployeePrompt(emp);
 
     // ─── 1. 공통 Dev 스킬 (항상 주입)
@@ -488,8 +493,11 @@ export function getEmployeePromptV2(emp, role, currentPhase) {
     prompt += `\n- If current Phase > 1, previous Phases are already complete. Do not redo planning/review.`;
     prompt += `\n\nNote: You must meet ALL gate conditions above to pass the Quality Gate. Incomplete work will be retried.`;
 
+    promptCache.set(cacheKey, prompt);
     return prompt;
 }
+
+export function clearPromptCache() { promptCache.clear(); }
 
 export function regenerateB() {
     const fullPrompt = getSystemPrompt();

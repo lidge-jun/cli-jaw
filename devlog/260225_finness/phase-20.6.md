@@ -15,7 +15,7 @@ src/                    ← 21개 파일 플랫 + 4개 서브디렉토리
 ├── security/           ← ✅ 이미 분리됨 (2파일)
 ├── agent.js (562)
 ├── agent-args.js (67)
-├── orchestrator.js (502)
+├── orchestrator.js (538)     ← hotfix: PHASE 상수 복원 +36
 ├── orchestrator-parser.js (108)
 ├── commands.js (268)
 ├── commands-handlers.js (432)
@@ -30,8 +30,8 @@ src/                    ← 21개 파일 플랫 + 4개 서브디렉토리
 ├── i18n.js, settings-merge.js
 ```
 
-500줄 초과 잔여: `prompt.js`(515), `agent.js`(562), `orchestrator.js`(502)
-(20.3에서 args/parser 추출했지만 원본 축소 미완)
+500줄 초과 잔여: `prompt.js`(515), `agent.js`(562), `orchestrator.js`(538)
+(20.3에서 args/parser 추출 + hotfix로 PHASE 상수 복원)
 
 ---
 
@@ -90,27 +90,27 @@ src/
 
 | 현재 경로 | 새 경로 | import 수정 필요 |
 |---|---|---|
-| `src/config.js` | `src/core/config.js` | 7곳 (가장 많음) |
-| `src/db.js` | `src/core/db.js` | 4곳 |
-| `src/bus.js` | `src/core/bus.js` | 5곳 |
+| `src/config.js` | `src/core/config.js` | **17곳** (bin/commands 7 + server.js + src 8 + browser 2) |
+| `src/db.js` | `src/core/db.js` | 5곳 (server + telegram + prompt + agent + orchestrator) |
+| `src/bus.js` | `src/core/bus.js` | 7곳 (server + events + telegram + heartbeat + agent + orchestrator + tests 1) |
 | `src/logger.js` | `src/core/logger.js` | 1곳 (server.js) |
-| `src/i18n.js` | `src/core/i18n.js` | 3곳 |
-| `src/settings-merge.js` | `src/core/settings-merge.js` | 1곳 |
-| `src/agent.js` | `src/agent/spawn.js` | 3곳 |
-| `src/agent-args.js` | `src/agent/args.js` | 1곳 |
-| `src/events.js` | `src/agent/events.js` | 1곳 |
-| `src/orchestrator.js` | `src/orchestrator/pipeline.js` | 2곳 |
-| `src/orchestrator-parser.js` | `src/orchestrator/parser.js` | 1곳 |
-| `src/commands.js` | `src/cli/commands.js` | 1곳 |
-| `src/commands-handlers.js` | `src/cli/handlers.js` | 1곳 |
-| `src/cli-registry.js` | `src/cli/registry.js` | 3곳 |
-| `src/acp-client.js` | `src/cli/acp-client.js` | 1곳 |
-| `src/prompt.js` | `src/prompt/builder.js` | 3곳 |
-| `src/telegram.js` | `src/telegram/bot.js` | 1곳 |
-| `src/telegram-forwarder.js` | `src/telegram/forwarder.js` | 2곳 |
-| `src/memory.js` | `src/memory/memory.js` | 1곳 |
-| `src/worklog.js` | `src/memory/worklog.js` | 1곳 |
-| `src/heartbeat.js` | `src/memory/heartbeat.js` | 1곳 |
+| `src/i18n.js` | `src/core/i18n.js` | 3곳 src만 (telegram + commands + commands-handlers) — public/ i18n.js는 별도 |
+| `src/settings-merge.js` | `src/core/settings-merge.js` | 2곳 (server.js + tests 1) |
+| `src/agent.js` | `src/agent/spawn.js` | 5곳 (server + telegram + prompt + orchestrator + tests 1) |
+| `src/agent-args.js` | `src/agent/args.js` | 1곳 (agent.js) |
+| `src/events.js` | `src/agent/events.js` | 3곳 (agent + tests 2) |
+| `src/orchestrator.js` | `src/orchestrator/pipeline.js` | **6곳** (server + telegram + agent + tests 3) |
+| `src/orchestrator-parser.js` | `src/orchestrator/parser.js` | 1곳 (orchestrator.js) |
+| `src/commands.js` | `src/cli/commands.js` | **8곳** (bin/chat + server + telegram + command-contract + public 2 + tests 2) |
+| `src/commands-handlers.js` | `src/cli/handlers.js` | 1곳 (commands.js) |
+| `src/cli-registry.js` | `src/cli/registry.js` | 5곳 (server + config + commands + commands-handlers + tests 1) |
+| `src/acp-client.js` | `src/cli/acp-client.js` | 2곳 (agent + tests 1) |
+| `src/prompt.js` | `src/prompt/builder.js` | 5곳 (server + telegram + agent + orchestrator + tests 1) |
+| `src/telegram.js` | `src/telegram/bot.js` | 2곳 (server + heartbeat) |
+| `src/telegram-forwarder.js` | `src/telegram/forwarder.js` | 2곳 (telegram + tests 1) |
+| `src/memory.js` | `src/memory/memory.js` | 3곳 (server + telegram + public/main) |
+| `src/worklog.js` | `src/memory/worklog.js` | 2곳 (orchestrator + tests 1) |
+| `src/heartbeat.js` | `src/memory/heartbeat.js` | 2곳 (server + public/main) |
 
 ### 하위호환 re-export 패턴
 
@@ -172,7 +172,7 @@ find . -name '*.js' -not -path './node_modules/*' -not -path './skills_ref/*' \
 
 ## 20.6-C: 루트 파일 정리
 
-### `server.js` (963줄) → 라우트 분리
+### `server.js` (1008줄) → 라우트 분리
 
 > 9.3에서 계획되었지만 미완.
 

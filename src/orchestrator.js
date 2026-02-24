@@ -2,7 +2,7 @@
 
 import { broadcast } from './bus.js';
 import { insertMessage, getEmployees } from './db.js';
-import { getEmployeePromptV2 } from './prompt.js';
+import { getEmployeePromptV2, clearPromptCache } from './prompt.js';
 import { spawnAgent } from './agent.js';
 import { createWorklog, readLatestWorklog, appendToWorklog, updateMatrix, updateWorklogStatus, parseWorklogPending } from './worklog.js';
 
@@ -361,6 +361,8 @@ JSON으로 출력:
 // ─── Main Orchestrate v2 ─────────────────────────────
 
 export async function orchestrate(prompt, meta = {}) {
+    clearPromptCache();
+
     const origin = meta.origin || 'web';
     const employees = getEmployees.all();
 

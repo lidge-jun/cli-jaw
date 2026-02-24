@@ -184,3 +184,8 @@ export function clearPromptCache() { promptCache.clear(); }
 
 > [!IMPORTANT]
 > Option B만으로도 즉각 효과. A는 B 위에 얹으면 되고, C는 별도 검증 필요.
+
+## 7. 구현 결과 (Option B)
+- promptCache Map 추가 (prompt.js)
+- clearPromptCache() 오케스트레이션 시작 시 호출 (orchestrator.js)
+- 예상 효과: 동일 role spawn 시 디스크 I/O 제거
