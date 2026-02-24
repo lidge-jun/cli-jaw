@@ -138,6 +138,8 @@ node --test --experimental-test-coverage \
 | 대상 | 충돌 |
 |---|---|
 | `tests/unit/*` (4개 NEW) | 없음 |
+| `src/orchestrator.js` | 필요 함수 이미 export 됨 — 추가 작업 없음 |
+| `src/agent.js` | 필요 함수 이미 export 됨 — 추가 작업 없음 |
 | `src/settings-merge.js` | **NEW** (server.js의 병합 로직 추출) |
 | `server.js` | `applySettingsPatch`가 `mergeSettingsPatch` 사용하도록 경량 수정 |
 | Phase 9.3 | 9.3 완료 후 import 경로 안정 → **순서: 9.3 → 9.4** |

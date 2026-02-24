@@ -292,6 +292,7 @@ src/
     memory.js
     integrations.js
     employees.js
+    browser.js
   http/
     response.js
     errors.js
