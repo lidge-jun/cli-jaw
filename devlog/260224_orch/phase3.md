@@ -132,13 +132,13 @@ if (!getEmployees().length) seedDefaultEmployees();
 
 ## 파일 변경 요약
 
-| 파일                                        | 작업                                |
-| ------------------------------------------- | ----------------------------------- |
-| `public/js/features/employees.js`           | [MODIFY] phase 뱃지 표시            |
-| `public/js/ws.js`                           | [MODIFY] 새 이벤트 핸들링           |
-| `src/orchestrator.js`                       | [MODIFY] `orchestrateContinue` 추가 |
-| `server.js` (루트)                          | [MODIFY] "이어서" API 엔드포인트    |
-| `src/config.js` 또는 `bin/commands/init.js` | [MODIFY] 기본 서브에이전트 5명      |
+| 파일                                        | 작업                                              |
+| ------------------------------------------- | ------------------------------------------------- |
+| `public/js/features/employees.js`           | [MODIFY] phase 뱃지 표시                          |
+| `public/js/ws.js`                           | [MODIFY] 새 이벤트 핸들링                         |
+| `src/orchestrator.js`                       | [MODIFY] `orchestrateContinue` 추가               |
+| `server.js` (루트)                          | [MODIFY] "이어서" API + continue감지 + reset seed |
+| `src/config.js` 또는 `bin/commands/init.js` | [MODIFY] 기본 서브에이전트 5명                    |
 
 ---
 
@@ -174,8 +174,10 @@ export function parseWorklogPending(content) {
 
 파일 변경 요약에 `src/server.js`로 표기되어 있었지만 실제 서버 파일은 **루트 `server.js`**.
 
-### 🟡 MEDIUM: WS 이벤트 프런트엔드 처리
+### ✅ RESOLVED: WS 이벤트 프런트엔드 처리
 
-새 이벤트 (`worklog_created`, `round_start`, `round_done`)를 `ws.js`에서 핸들링 추가 필요.
-현재 `ws.js`에는 이 이벤트 타입이 없으므로 무시됨 → Phase 3에서 반드시 추가.
+~~새 이벤트 (`worklog_created`, `round_start`, `round_done`)를 `ws.js`에서 핸들링 추가 필요.~~
+
+**해결**: ws.js에 핸들러 추가 완료. `agentPhases` 키 지원, `worklog_created` 표시, `action='next'` 구분.
+`agentPhaseState`로 badge 데이터도 실시간 추적.
 

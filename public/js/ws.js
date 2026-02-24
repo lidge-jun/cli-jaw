@@ -2,6 +2,9 @@
 import { state } from './state.js';
 import { setStatus, updateQueueBadge, addSystemMsg, appendAgentText, finalizeAgent, addMessage } from './ui.js';
 
+// Agent phase state (populated by agent_status events from orchestrator)
+const agentPhaseState = {};
+
 export function connect() {
     state.ws = new WebSocket(`ws://${location.host}`);
     state.ws.onmessage = (e) => {
@@ -11,6 +14,11 @@ export function connect() {
                 setStatus(msg.running ? 'running' : 'idle');
             } else {
                 setStatus(msg.status);
+            }
+            // Track per-agent phase for badge rendering
+            if (msg.agentId && msg.phase) {
+                agentPhaseState[msg.agentId] = { phase: msg.phase, phaseLabel: msg.phaseLabel || '' };
+                import('./features/employees.js').then(m => m.loadEmployees());
             }
         } else if (msg.type === 'queue_update') {
             updateQueueBadge(msg.pending || 0);
@@ -45,4 +53,8 @@ export function connect() {
         }
     };
     state.ws.onclose = () => setTimeout(connect, 2000);
+}
+
+export function getAgentPhase(agentId) {
+    return agentPhaseState[agentId] || null;
 }

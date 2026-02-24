@@ -187,7 +187,11 @@ wss.on('connection', (ws) => {
                 } else {
                     insertMessage.run('user', msg.text, 'cli', '');
                     broadcast('new_message', { role: 'user', content: msg.text, source: 'cli' });
-                    orchestrate(msg.text);
+                    if (/이어서|계속|continue/i.test(msg.text)) {
+                        orchestrateContinue();
+                    } else {
+                        orchestrate(msg.text);
+                    }
                 }
             }
             if (msg.type === 'stop') killActiveAgent('ws');
@@ -329,7 +333,11 @@ app.post('/api/message', (req, res) => {
         enqueueMessage(prompt.trim(), 'web');
         return res.json({ ok: true, queued: true, pending: messageQueue.length });
     }
-    orchestrate(prompt.trim());
+    if (/이어서|계속|continue/i.test(prompt.trim())) {
+        orchestrateContinue();
+    } else {
+        orchestrate(prompt.trim());
+    }
     res.json({ ok: true });
 });
 
@@ -572,6 +580,26 @@ app.delete('/api/employees/:id', (req, res) => {
     broadcast('agent_deleted', { id: req.params.id });
     regenerateB();
     res.json({ ok: true });
+});
+
+// Employee reset — delete all + re-seed 5 defaults
+app.post('/api/employees/reset', (req, res) => {
+    const all = getEmployees.all();
+    for (const emp of all) deleteEmployee.run(emp.id);
+    const DEFAULT_EMPLOYEES = [
+        { name: '프런트', role: 'UI/UX 구현, CSS, 컴포넌트 개발' },
+        { name: '백엔드', role: 'API, DB, 서버 로직 구현' },
+        { name: '데이터', role: '데이터 파이프라인, 분석, ML' },
+        { name: '문서', role: '문서화, README, API docs' },
+        { name: '검수', role: '코드 리뷰, 테스트 검증, QA' },
+    ];
+    const cli = settings.cli;
+    for (const emp of DEFAULT_EMPLOYEES) {
+        insertEmployee.run(crypto.randomUUID(), emp.name, cli, 'default', emp.role);
+    }
+    broadcast('agent_updated', {});
+    regenerateB();
+    res.json({ ok: true, seeded: DEFAULT_EMPLOYEES.length });
 });
 
 // Heartbeat API

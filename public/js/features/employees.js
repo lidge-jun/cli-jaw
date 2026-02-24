@@ -2,6 +2,7 @@
 import { state } from '../state.js';
 import { MODEL_MAP, ROLE_PRESETS } from '../constants.js';
 import { escapeHtml } from '../render.js';
+import { getAgentPhase } from '../ws.js';
 
 export async function loadEmployees() {
     state.employees = await (await fetch('/api/employees')).json();
@@ -65,7 +66,7 @@ export function renderEmployees() {
             </div>
             <div style="margin-top:4px;font-size:10px;display:flex;align-items:center;gap:6px">
                 <span style="color:${a.status === 'running' ? '#fbbf24' : 'var(--green)'}">● ${a.status || 'idle'}</span>
-                ${a.phase ? `<span style="background:${({ 1: '#60a5fa', 2: '#a78bfa', 3: '#34d399', 4: '#fbbf24', 5: '#f472b6' })[a.phase] || '#888'};color:#000;padding:1px 6px;border-radius:9px;font-size:9px">${a.phaseLabel || 'P' + a.phase}</span>` : ''}
+                ${(() => { const ps = getAgentPhase(a.id); const p = ps?.phase || a.phase; const pl = ps?.phaseLabel || a.phaseLabel; return p ? `<span style="background:${({ 1: '#60a5fa', 2: '#a78bfa', 3: '#34d399', 4: '#fbbf24', 5: '#f472b6' })[p] || '#888'};color:#000;padding:1px 6px;border-radius:9px;font-size:9px">${pl || 'P' + p}</span>` : ''; })()}
             </div>
         </div>`;
     }).join('');
