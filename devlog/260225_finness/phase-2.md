@@ -11,6 +11,14 @@
 - [x] CI 워크플로 추가: `.github/workflows/test.yml` (`npm ci --ignore-scripts` + `npm test`)
 - [x] 로컬 검증 명령: `npm run test:events`, `npm run test:telegram`, `npm test`
 
+## 추가 반영 (2026-02-25)
+- [x] `tests/acp-client.test.js` 추가
+  - ACP `id+method`(agent request) 라우팅 우선순위 검증
+  - notification 분기/response id 매칭/stdio 비가용 즉시 실패 검증
+- [x] Copilot Telegram 과다 상태 이벤트 대응 핫픽스 검증을 `npm test` 루프에 포함
+- [x] `package.json` test glob 수정: `tests/*.test.js` + `tests/**/*.test.js` 동시 실행
+  - CI(`.github/workflows/test.yml`)에서도 루트 테스트(`events`, `telegram`, `acp-client`) 누락 없이 실행
+
 ## 목표
 - 이벤트/텔레그램 테스트 커버리지 확장
 - 동시성/라이프사이클 회귀까지 자동 차단
@@ -89,8 +97,8 @@ test('re-init should not duplicate forwarder listener', async () => {
 ```json
 {
   "scripts": {
-    "test": "node --test tests/**/*.test.js",
-    "test:watch": "node --test --watch tests/**/*.test.js",
+    "test": "node --test tests/*.test.js tests/**/*.test.js",
+    "test:watch": "node --test --watch tests/*.test.js tests/**/*.test.js",
     "test:events": "node --test tests/events.test.js",
     "test:telegram": "node --test tests/telegram-forwarding.test.js"
   }

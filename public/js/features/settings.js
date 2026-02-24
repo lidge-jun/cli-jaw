@@ -81,10 +81,13 @@ function syncPerCliModelAndEffortControls(settings = null) {
             const options = [''].concat(meta?.efforts || []);
             const selected = settings?.perCli?.[cli]?.effort || effortSel.value || '';
             const unique = [...new Set(options)];
+            const noneLabel = meta?.effortNote || '— none';
             effortSel.innerHTML = unique.map(v => {
-                if (!v) return '<option value="">— none</option>';
+                if (!v) return `<option value="">${escapeHtml(noneLabel)}</option>`;
                 return `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
             }).join('');
+            if (meta?.effortNote) effortSel.disabled = true;
+            else effortSel.disabled = false;
             if (Array.from(effortSel.options).some(o => o.value === selected)) effortSel.value = selected;
         }
     }
@@ -93,12 +96,16 @@ function syncPerCliModelAndEffortControls(settings = null) {
 function syncActiveEffortOptions(cli, selected = '') {
     const selEffort = document.getElementById('selEffort');
     if (!selEffort) return;
-    const efforts = [''].concat(getCliMeta(cli)?.efforts || []);
+    const meta = getCliMeta(cli);
+    const efforts = [''].concat(meta?.efforts || []);
     const unique = [...new Set(efforts)];
+    const noneLabel = meta?.effortNote || '— none';
     selEffort.innerHTML = unique.map(v => {
-        if (!v) return '<option value="">— none</option>';
+        if (!v) return `<option value="">${escapeHtml(noneLabel)}</option>`;
         return `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
     }).join('');
+    if (meta?.effortNote) selEffort.disabled = true;
+    else selEffort.disabled = false;
     if (Array.from(selEffort.options).some(o => o.value === selected)) selEffort.value = selected;
 }
 

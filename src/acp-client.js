@@ -80,6 +80,10 @@ export class AcpClient extends EventEmitter {
     /** Send a JSON-RPC request and return a promise for the result */
     request(method, params = {}, timeoutMs = 30000) {
         return new Promise((resolve, reject) => {
+            if (!this.proc?.stdin?.writable) {
+                reject(new Error(`ACP stdin is not writable: ${method}`));
+                return;
+            }
             const id = ++this._reqId;
             const msg = { jsonrpc: '2.0', method, id, params };
 
@@ -128,15 +132,15 @@ export class AcpClient extends EventEmitter {
             return;
         }
 
-        // Notification from agent (no id, has method)
-        if (msg.method) {
-            this.emit(msg.method, msg.params);
-            return;
-        }
-
         // Agent request to client (has id + method) — auto-respond
         if (msg.id != null && msg.method) {
             this._handleAgentRequest(msg);
+            return;
+        }
+
+        // Notification from agent (no id, has method)
+        if (msg.method) {
+            this.emit(msg.method, msg.params);
             return;
         }
     }
@@ -158,8 +162,14 @@ export class AcpClient extends EventEmitter {
                     id: msg.id,
                     result: {
                         outcome: allowOption
-                            ? { outcome: 'selected', optionId: allowOption.value }
-                            : { outcome: 'selected', optionId: options[0]?.value || 'allow' },
+                            ? {
+                                outcome: 'selected',
+                                optionId: allowOption.value || allowOption.id || allowOption.optionId || 'allow',
+                            }
+                            : {
+                                outcome: 'selected',
+                                optionId: options[0]?.value || options[0]?.id || options[0]?.optionId || 'allow',
+                            },
                     },
                 });
                 break;

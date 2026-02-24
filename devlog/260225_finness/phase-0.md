@@ -50,12 +50,27 @@
   - `lib/mcp-sync.js`: `ensureSymlinkForce` 제거, `ensureSymlinkSafe` + backup/skip 정책 도입
   - `bin/postinstall.js`: symlink 충돌 백업 결과를 설치 로그로 노출
 
+## 추가 핫픽스 반영 (2026-02-25)
+- [완료] Copilot Telegram 상태메시지 폭주 차단
+  - `src/telegram.js`: `statusMsgCreatePromise` + 스로틀 큐(`scheduleStatusUpdate`)로 생성/수정 경쟁 상태 제거
+  - `src/telegram.js`: Copilot ACP `💭` 이벤트는 Telegram 상태표시에서 제외
+  - `src/telegram.js`: 중복 라인/버퍼 길이 제한 적용, 완료/에러 시 타이머 정리
+  - `src/telegram.js`: `orchestrate_done` 처리 시 `origin` 일치 검증 추가(웹 요청 완료 신호 혼입 방지)
+- [완료] ACP request 라우팅 오류 수정
+  - `src/acp-client.js`: `id + method` 메시지를 notification보다 먼저 처리하도록 분기 순서 수정
+  - `src/acp-client.js`: `request()`에서 stdin 비가용 시 즉시 실패 처리(타임아웃 대기 제거)
+
 ## 구현 검증 결과 (2026-02-24)
 - 문법 검증: `node --check`로 아래 파일 통과
   - `src/events.js`, `src/agent.js`, `src/orchestrator.js`, `src/telegram.js`, `server.js`, `lib/mcp-sync.js`, `bin/postinstall.js`
 - 동작 스모크 테스트(스크립트 실행):
   - `stream_event` + `assistant` 연속 입력 시 tool 라벨 1회만 기록 확인
   - `assistant`만 있는 입력에서도 fallback tool 라벨 기록 확인
+
+## 추가 검증 결과 (2026-02-25)
+- `node --check src/telegram.js src/acp-client.js` 통과
+- `npm run test:telegram` 통과
+- `npm test` 통과 (ACP client 테스트 포함)
 
 ## 구현 시 주의사항
 - `origin`은 기본값이 `'web'`이며, heartbeat 등 기존 호출부는 meta 미전달 시 기본 동작 유지

@@ -51,6 +51,7 @@ export const CLI_REGISTRY = {
         defaultModel: 'claude-sonnet-4.6',
         defaultEffort: '',
         efforts: [],
+        effortNote: '~/.copilot/config.json',
         models: [
             'claude-sonnet-4.6',
             'claude-opus-4.6',

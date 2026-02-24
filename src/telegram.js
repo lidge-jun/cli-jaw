@@ -57,6 +57,7 @@ export function orchestrateAndCollect(prompt, meta = {}) {
                 collected = collected || data.text;
             }
             if (type === 'orchestrate_done') {
+                if (meta?.origin && data?.origin && data.origin !== meta.origin) return;
                 clearTimeout(timeout);
                 removeBroadcastListener(handler);
                 resolve(data.text || collected || '응답 없음');
@@ -264,7 +265,7 @@ export function initTelegram() {
 
             // 큐 처리 후 응답을 이 채팅으로 전달
             const queueHandler = (type, data) => {
-                if (type === 'orchestrate_done' && data.text) {
+                if (type === 'orchestrate_done' && data.text && data.origin === 'telegram') {
                     removeBroadcastListener(queueHandler);
                     const html = markdownToTelegramHtml(data.text);
                     const chunks = chunkTelegramMessage(html);
