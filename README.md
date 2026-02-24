@@ -262,7 +262,9 @@ cli-claw reset                      # Full reset (MCP/skills/employees/session)
 
 ---
 
-## 🤖 Supported Models
+## 🤖 Preconfigured Models & Custom Input
+
+> ⚠️ These are **preconfigured presets for quick selection** — you can type **any model ID** directly in any CLI, and CLI-CLAW will use it as-is.
 
 <details>
 <summary><b>Claude Code</b> — claude-sonnet-4-6 (default)</summary>
@@ -332,9 +334,9 @@ cli-claw reset                      # Full reset (MCP/skills/employees/session)
 
 </details>
 
-> 💡 Type any model ID directly — CLI-CLAW accepts custom model inputs.
+> 💡 **These are just presets** — type any model ID directly in the UI or CLI, and CLI-CLAW will pass it through.
 >
-> 🔧 Adding a new CLI or model? Edit `src/cli-registry.js` — **one file, auto-propagates everywhere**.
+> 🔧 Want to add a new CLI or model to the presets? Edit `src/cli-registry.js` — **one file, auto-propagates everywhere**.
 
 ---
 
