@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🦞 CLI-CLAW</title>
+    <title>CLI-CLAW</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -31,7 +31,7 @@
 <body>
     <!-- Left Sidebar -->
     <div class="sidebar-left">
-        <div class="logo">🦞 CLI-CLAW</div>
+        <div class="logo">CLI-CLAW</div>
 
         <div>
             <div class="section-title">Status</div>
@@ -67,17 +67,26 @@
             </div>
         </div>
 
-        <button class="btn-clear" id="btnClearChat">/clear</button>
+        <div style="margin-top:auto;padding-top:8px;border-top:1px solid var(--border)">
+            <div class="section-title">Agent Name</div>
+            <div style="display:flex;gap:4px;align-items:center;margin-bottom:8px">
+                <input type="text" id="appNameInput" value="CLI-CLAW"
+                    style="flex:1;font-family:var(--font-display);font-size:13px;font-weight:600;padding:4px 8px">
+                <button class="sidebar-hb-btn" id="appNameSave"
+                    style="width:auto;padding:4px 8px;font-size:11px">✓</button>
+            </div>
+            <button class="btn-clear" id="btnClearChat">/clear</button>
+        </div>
         <button class="sidebar-hb-btn" id="hbSidebarBtn">💓 Heartbeat (0)</button>
     </div>
 
     <!-- Chat Area -->
     <div class="chat-area" style="position:relative">
         <div class="drag-overlay" id="dragOverlay">📎 파일을 여기에 드랍하세요</div>
-        <div class="chat-header">🦞 CLI-CLAW ● <span id="headerCli">claude</span></div>
+        <div class="chat-header">CLI-CLAW ● <span id="headerCli">claude</span></div>
         <div class="chat-messages" id="chatMessages"></div>
         <div class="typing-indicator" id="typingIndicator">
-            <span class="label">🦞 응답 중</span>
+            <span class="label">응답 중</span>
             <span class="typing-dot"></span>
             <span class="typing-dot"></span>
             <span class="typing-dot"></span>

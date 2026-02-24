@@ -1,6 +1,7 @@
 // ── UI Utilities ──
 import { state } from './state.js';
 import { renderMarkdown, escapeHtml } from './render.js';
+import { getAppName } from './features/appname.js';
 
 export function setStatus(s) {
     const badge = document.getElementById('statusBadge');
@@ -84,7 +85,7 @@ export function addMessage(role, text) {
     const div = document.createElement('div');
     div.className = `msg msg-${role}`;
     const rendered = role === 'agent' ? renderMarkdown(text) : escapeHtml(text);
-    div.innerHTML = `<div class="msg-label">${role === 'user' ? 'You' : '🦞 Claw'}</div><div class="msg-content">${rendered}</div>`;
+    div.innerHTML = `<div class="msg-label">${role === 'user' ? 'You' : getAppName()}</div><div class="msg-content">${rendered}</div>`;
     container.appendChild(div);
     scrollToBottom();
     return div;
