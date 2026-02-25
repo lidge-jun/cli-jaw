@@ -5,8 +5,8 @@ import { chromium } from 'playwright-core';
 
 const DEFAULT_CDP_PORT = 9240;
 const PROFILE_DIR = join(CLAW_HOME, 'browser-profile');
-let cached = null;   // { browser, cdpUrl }
-let chromeProc = null;
+let cached: any = null;   // { browser, cdpUrl }
+let chromeProc: any = null;
 
 function findChrome() {
     const paths = [
@@ -43,13 +43,13 @@ export async function connectCdp(port = DEFAULT_CDP_PORT) {
 
 export async function getActivePage(port = DEFAULT_CDP_PORT) {
     const { browser } = await connectCdp(port);
-    const pages = browser.contexts().flatMap(c => c.pages());
+    const pages = browser.contexts().flatMap((c: any) => c.pages());
     return pages[pages.length - 1] || null;
 }
 
 export async function listTabs(port = DEFAULT_CDP_PORT) {
     const resp = await fetch(`http://127.0.0.1:${port}/json/list`);
-    return (await resp.json()).filter(t => t.type === 'page');
+    return ((await resp.json()) as any[]).filter((t: any) => t.type === 'page');
 }
 
 export async function getBrowserStatus(port = DEFAULT_CDP_PORT) {

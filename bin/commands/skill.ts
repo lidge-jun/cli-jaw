@@ -35,13 +35,13 @@ function listSkills() {
             try {
                 const content = readFileSync(skillMd, 'utf8');
                 const match = content.match(/description:\s*(.+)/i);
-                if (match) desc = match[1].trim();
+                if (match) desc = match[1]!.trim();
             } catch { }
             return { name: d.name, desc };
         });
 }
 
-function installFromCodex(name) {
+function installFromCodex(name: string) {
     const src = join(CODEX_SKILLS, name);
     const dst = join(SKILLS_DIR, name);
     if (existsSync(dst)) return { status: 'exists', path: dst };
@@ -50,7 +50,7 @@ function installFromCodex(name) {
     return { status: 'installed', path: dst, source: 'codex' };
 }
 
-function installFromRef(name) {
+function installFromRef(name: string) {
     const REF_DIR = join(CLAW_HOME, 'skills_ref');
     const src = join(REF_DIR, name);
     const dst = join(SKILLS_DIR, name);
@@ -60,7 +60,7 @@ function installFromRef(name) {
     return { status: 'installed', path: dst, source: 'skills_ref' };
 }
 
-function installFromGithub(name) {
+function installFromGithub(name: string) {
     // Try known repos: openai/codex
     const repos = [
         { owner: 'openai', repo: 'codex', path: `codex-cli/skills/${name}` },
@@ -196,7 +196,7 @@ switch (sub) {
                 rl.question(`\n  ${c.yellow}⚠️  스킬 디렉토리를 초기화합니다.${c.reset}\n  기존 active/ref 스킬이 삭제되고 2×3 분류가 재실행됩니다.\n  계속하시겠습니까? (y/N): `, r);
             });
             rl.close();
-            if (answer.toLowerCase() !== 'y') {
+            if ((answer as string).toLowerCase() !== 'y') {
                 console.log('  취소됨.\n');
                 break;
             }
@@ -233,7 +233,7 @@ switch (sub) {
             console.log(`  ${c.cyan}⚡ Active: ${activeCount}개${c.reset}`);
             console.log(`  ${c.cyan}📦 Ref: ${refCount}개${c.reset}\n`);
         } catch (e) {
-            console.error(`  ${c.red}❌ 초기화 실패: ${e.message}${c.reset}\n`);
+            console.error(`  ${c.red}❌ 초기화 실패: ${(e as Error).message}${c.reset}\n`);
         }
         break;
     }

@@ -32,10 +32,10 @@ export {
     createTelegramForwarder,
 } from './forwarder.ts';
 
-export function orchestrateAndCollect(prompt, meta = {}) {
+export function orchestrateAndCollect(prompt: string, meta: Record<string, any> = {}) {
     return new Promise((resolve) => {
         let collected = '';
-        let timeout;
+        let timeout: ReturnType<typeof setTimeout>;
         const IDLE_TIMEOUT = 1200000;
 
         function resetTimeout() {
@@ -46,7 +46,7 @@ export function orchestrateAndCollect(prompt, meta = {}) {
             }, IDLE_TIMEOUT);
         }
 
-        const handler = (type, data) => {
+        const handler = (type: string, data: Record<string, any>) => {
             if (type === 'agent_chunk' || type === 'agent_tool' ||
                 type === 'agent_output' || type === 'agent_status' ||
                 type === 'agent_done' || type === 'agent_fallback' ||
@@ -77,19 +77,19 @@ export function orchestrateAndCollect(prompt, meta = {}) {
 
 // ─── State ───────────────────────────────────────────
 
-export let telegramBot = null;
+export let telegramBot: any = null;
 export const telegramActiveChatIds = new Set();
 const telegramForwarderLifecycle = createForwarderLifecycle({
     addListener: addBroadcastListener,
     removeListener: removeBroadcastListener,
-    buildForwarder: ({ bot }) => createTelegramForwarder({
+    buildForwarder: ({ bot }: Record<string, any>) => createTelegramForwarder({
         bot,
         getLastChatId: () => {
             const chatIds = Array.from(telegramActiveChatIds);
             return chatIds.length ? chatIds[chatIds.length - 1] : null;
         },
-        shouldSkip: (data) => data.origin === 'telegram', // handled by tgOrchestrate already
-        log: ({ chatId, preview }) => {
+        shouldSkip: (data: any) => data.origin === 'telegram', // handled by tgOrchestrate already
+        log: ({ chatId, preview }: { chatId: any; preview: any }) => {
             console.log(`[tg:forward] → chat ${chatId}: ${String(preview).slice(0, 60)}...`);
         },
     }),
@@ -101,7 +101,7 @@ function currentLocale() {
     return normalizeLocale(settings.locale, 'ko');
 }
 
-function markChatActive(chatId) {
+function markChatActive(chatId: number) {
     // Refresh insertion order so Array.from(set).at(-1) points to latest active chat.
     telegramActiveChatIds.delete(chatId);
     telegramActiveChatIds.add(chatId);
@@ -117,16 +117,16 @@ function detachTelegramForwarder() {
     telegramForwarderLifecycle.detach();
 }
 
-function attachTelegramForwarder(bot) {
+function attachTelegramForwarder(bot: any) {
     telegramForwarderLifecycle.attach({ bot });
 }
 
-function toTelegramCommandDescription(desc) {
+function toTelegramCommandDescription(desc: string) {
     const text = String(desc || '').trim();
     return text.length >= 3 ? text.slice(0, 256) : 'Run command';
 }
 
-function syncTelegramCommands(bot) {
+function syncTelegramCommands(bot: any) {
     const locale = currentLocale();
     const cmds = COMMANDS
         .filter(c => c.interfaces.includes('telegram') && !RESERVED_CMDS.has(c.name) && !TG_EXCLUDED_CMDS.has(c.name))
@@ -150,7 +150,7 @@ function makeTelegramCommandCtx() {
         getSession,
         getSettings: () => settings,
         // Telegram settings changes: only fallbackOrder allowed
-        updateSettings: async (patch) => {
+        updateSettings: async (patch: Record<string, any>) => {
             if (patch.fallbackOrder !== undefined && Object.keys(patch).length === 1) {
                 const { replaceSettings: _replace, saveSettings: _save } = await import('../core/config.js');
                 _replace({ ...settings, ...patch });
@@ -167,7 +167,7 @@ function makeTelegramCommandCtx() {
         getSkills: () => getMergedSkills(),
         clearSession: async () => {
             clearMessages.run();
-            const s = getSession();
+            const s = getSession() as Record<string, any>;
             updateSession.run(s.active_cli, null, s.model, s.permissions, s.working_dir, s.effort);
             broadcast('clear', {});
         },
@@ -176,7 +176,7 @@ function makeTelegramCommandCtx() {
         syncMcp: async () => ({ results: {} }),
         installMcp: async () => ({ results: {} }),
         listMemory: () => memory.list(),
-        searchMemory: (q) => memory.search(q),
+        searchMemory: (q: string) => memory.search(q),
         getBrowserStatus: async () => {
             try {
                 const m = await import('../browser/index.js');
@@ -204,7 +204,7 @@ export function initTelegram() {
     if (telegramBot) {
         const old = telegramBot;
         telegramBot = null;
-        try { old.stop(); } catch (e) { console.warn('[telegram:stop] bot stop failed', { error: e.message }); }
+        try { old.stop(); } catch (e: unknown) { console.warn('[telegram:stop] bot stop failed', { error: (e as Error).message }); }
     }
     const envToken = process.env.TELEGRAM_TOKEN;
     if (envToken) settings.telegram.token = envToken;
@@ -229,7 +229,7 @@ export function initTelegram() {
     }
 
     const ipv4Agent = new https.Agent({ family: 4 });
-    const ipv4Fetch = (url, init = {}) => {
+    const ipv4Fetch = (url: string, init: Record<string, any> = {}): Promise<any> => {
         return new Promise((resolve, reject) => {
             const u = new URL(url);
             const opts = {
@@ -239,9 +239,9 @@ export function initTelegram() {
             };
             const req = https.request(opts, (res) => {
                 let data = '';
-                res.on('data', c => data += c);
+                res.on('data', (c: string) => data += c);
                 res.on('end', () => resolve({
-                    ok: res.statusCode >= 200 && res.statusCode < 300,
+                    ok: (res.statusCode ?? 0) >= 200 && (res.statusCode ?? 0) < 300,
                     status: res.statusCode,
                     json: () => Promise.resolve(JSON.parse(data)),
                     text: () => Promise.resolve(data),
@@ -254,7 +254,7 @@ export function initTelegram() {
     };
 
     const bot = new Bot(settings.telegram.token, {
-        client: { fetch: ipv4Fetch },
+        client: { fetch: ipv4Fetch as any },
     });
     bot.catch((err) => console.error('[tg:error]', err.message || err));
     bot.use(sequentialize((ctx) => `tg:${ctx.chat?.id || 'unknown'}`));
@@ -276,7 +276,7 @@ export function initTelegram() {
     bot.command('start', (ctx) => ctx.reply(t('tg.connected', {}, currentLocale())));
     bot.command('id', (ctx) => ctx.reply(`Chat ID: <code>${ctx.chat.id}</code>`, { parse_mode: 'HTML' }));
 
-    async function tgOrchestrate(ctx, prompt, displayMsg) {
+    async function tgOrchestrate(ctx: any, prompt: string, displayMsg: string) {
         if (activeProcess) {
             // 큐에 추가 — steer 대신 대기
             console.log('[tg:queue] agent busy, queueing message');
@@ -287,7 +287,7 @@ export function initTelegram() {
             await ctx.reply(t('tg.queued', { count: messageQueue.length }, currentLocale()));
 
             // 큐 처리 후 응답을 이 채팅으로 전달
-            const queueHandler = (type, data) => {
+            const queueHandler = (type: string, data: Record<string, any>) => {
                 if (type === 'orchestrate_done' && data.text && data.origin === 'telegram') {
                     removeBroadcastListener(queueHandler);
                     const html = markdownToTelegramHtml(data.text);
@@ -310,20 +310,20 @@ export function initTelegram() {
 
         await ctx.replyWithChatAction('typing')
             .then(() => console.log('[tg:typing] ✅ sent'))
-            .catch(e => console.log('[tg:typing] ❌', e.message));
+            .catch((e: any) => console.log('[tg:typing] ❌', e.message));
         const typingInterval = setInterval(() => {
             ctx.replyWithChatAction('typing')
                 .then(() => console.log('[tg:typing] ✅ refresh'))
-                .catch(e => console.log('[tg:typing] ❌ refresh', e.message));
+                .catch((e: any) => console.log('[tg:typing] ❌ refresh', e.message));
         }, 4000);
 
         const showTools = settings.telegram?.showToolUse !== false;
-        let statusMsgId = null;
-        let statusMsgCreatePromise = null;
-        let statusUpdateTimer = null;
+        let statusMsgId: number | null = null;
+        let statusMsgCreatePromise: Promise<any> | null = null;
+        let statusUpdateTimer: ReturnType<typeof setTimeout> | null = null;
         let statusUpdateRunning = false;
         let pendingStatusText = '';
-        let toolLines = [];
+        let toolLines: string[] = [];
 
         const flushStatusUpdate = async () => {
             const display = pendingStatusText;
@@ -332,7 +332,7 @@ export function initTelegram() {
             if (!statusMsgId) {
                 if (!statusMsgCreatePromise) {
                     statusMsgCreatePromise = ctx.reply(`🔄 ${display}`)
-                        .then((m) => {
+                        .then((m: any) => {
                             statusMsgId = m.message_id;
                             return statusMsgId;
                         })
@@ -365,7 +365,7 @@ export function initTelegram() {
             }, 180);
         };
 
-        const pushToolLine = (line) => {
+        const pushToolLine = (line: string) => {
             if (!line) return;
             if (toolLines[toolLines.length - 1] === line) return;
             toolLines.push(line);
@@ -374,7 +374,7 @@ export function initTelegram() {
             scheduleStatusUpdate();
         };
 
-        const toolHandler = showTools ? (type, data) => {
+        const toolHandler = showTools ? (type: string, data: Record<string, any>) => {
             if (type === 'agent_fallback') {
                 pushToolLine(`⚡ ${data.from} → ${data.to}`);
             } else if (type === 'agent_tool' && data.icon && data.label) {
@@ -389,7 +389,7 @@ export function initTelegram() {
         if (toolHandler) addBroadcastListener(toolHandler);
 
         try {
-            const result = await orchestrateAndCollect(prompt, { origin: 'telegram', chatId: ctx.chat.id });
+            const result = await orchestrateAndCollect(prompt, { origin: 'telegram', chatId: ctx.chat.id }) as string;
             clearInterval(typingInterval);
             if (statusUpdateTimer) {
                 clearTimeout(statusUpdateTimer);
@@ -409,7 +409,7 @@ export function initTelegram() {
                 }
             }
             console.log(`[tg:out] ${ctx.chat.id}: ${result.slice(0, 80)}`);
-        } catch (err) {
+        } catch (err: unknown) {
             clearInterval(typingInterval);
             if (statusUpdateTimer) {
                 clearTimeout(statusUpdateTimer);
@@ -420,7 +420,7 @@ export function initTelegram() {
                 ctx.api.deleteMessage(ctx.chat.id, statusMsgId).catch(() => { });
             }
             console.error('[tg:error]', err);
-            await ctx.reply(`❌ Error: ${err.message}`);
+            await ctx.reply(`❌ Error: ${(err as Error).message}`);
         }
     }
 
@@ -447,17 +447,17 @@ export function initTelegram() {
 
     bot.on('message:photo', async (ctx) => {
         const photos = ctx.message.photo;
-        const largest = photos[photos.length - 1];
+        const largest = photos[photos.length - 1]!;
         const caption = ctx.message.caption || '';
         console.log(`[tg:photo] ${ctx.chat.id}: fileId=${largest.file_id.slice(0, 20)}... caption=${caption.slice(0, 40)}`);
         try {
-            const { buffer, ext } = await downloadTelegramFile(largest.file_id, settings.telegram.token);
-            const filePath = saveUpload(buffer, `photo${ext}`);
+            const dlResult = await downloadTelegramFile(largest.file_id, settings.telegram.token) as Record<string, any>;
+            const filePath = saveUpload(dlResult.buffer, `photo${dlResult.ext}`);
             const prompt = buildMediaPrompt(filePath, caption);
             tgOrchestrate(ctx, prompt, `${t('tg.imageCaption', { caption }, currentLocale())}`);
-        } catch (err) {
+        } catch (err: unknown) {
             console.error('[tg:photo:error]', err);
-            await ctx.reply(t('tg.imageFail', { msg: err.message }, currentLocale()));
+            await ctx.reply(t('tg.imageFail', { msg: (err as Error).message }, currentLocale()));
         }
     });
 
@@ -466,13 +466,13 @@ export function initTelegram() {
         const caption = ctx.message.caption || '';
         console.log(`[tg:doc] ${ctx.chat.id}: ${doc.file_name} (${doc.file_size} bytes)`);
         try {
-            const { buffer } = await downloadTelegramFile(doc.file_id, settings.telegram.token);
-            const filePath = saveUpload(buffer, doc.file_name || 'document');
+            const dlResult = await downloadTelegramFile(doc.file_id, settings.telegram.token) as Record<string, any>;
+            const filePath = saveUpload(dlResult.buffer, doc.file_name || 'document');
             const prompt = buildMediaPrompt(filePath, caption);
             tgOrchestrate(ctx, prompt, `[📎 ${doc.file_name || 'file'}] ${caption}`);
-        } catch (err) {
+        } catch (err: unknown) {
             console.error('[tg:doc:error]', err);
-            await ctx.reply(t('tg.fileFail', { msg: err.message }, currentLocale()));
+            await ctx.reply(t('tg.fileFail', { msg: (err as Error).message }, currentLocale()));
         }
     });
     // ─── Global Forwarding: non-Telegram responses → Telegram ───
@@ -488,6 +488,6 @@ export function initTelegram() {
         drop_pending_updates: true,
         onStart: (info) => console.log(`[tg] ✅ @${info.username} polling active`),
     });
-    telegramBot = bot;
+    telegramBot = bot as any;
     console.log('[tg] Bot starting...');
 }

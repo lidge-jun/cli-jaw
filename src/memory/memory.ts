@@ -33,7 +33,7 @@ export function ensureMemoryDir() {
 
 // ─── Search (grep) ───────────────────────────────
 
-export function search(query) {
+export function search(query: string) {
     ensureMemoryDir();
     if (!query || !query.trim()) return '(query required)';
     try {
@@ -51,14 +51,14 @@ export function search(query) {
         // Trim paths to relative
         return (proc.stdout || '').split(MEMORY_DIR + '/').join('');
     } catch (e) {
-        console.warn('[memory:search] grep failed', { error: e.message });
+        console.warn('[memory:search] grep failed', { error: (e as Error).message });
         return '(no results)';
     }
 }
 
 // ─── Read ────────────────────────────────────────
 
-export function read(filename, opts = {}) {
+export function read(filename: string, opts: Record<string, any> = {}) {
     const filepath = join(MEMORY_DIR, filename);
     if (!fs.existsSync(filepath)) return null;
     const content = fs.readFileSync(filepath, 'utf8');
@@ -71,7 +71,7 @@ export function read(filename, opts = {}) {
 
 // ─── Save (append) ───────────────────────────────
 
-export function save(filename, content) {
+export function save(filename: string, content: string) {
     ensureMemoryDir();
     const filepath = join(MEMORY_DIR, filename);
     fs.mkdirSync(join(filepath, '..'), { recursive: true });
@@ -85,8 +85,8 @@ export function save(filename, content) {
 
 export function list() {
     ensureMemoryDir();
-    const files = [];
-    function walk(dir, prefix = '') {
+    const files: Array<{ path: string; size: number; modified: string }> = [];
+    function walk(dir: string, prefix = '') {
         for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
             if (entry.name.startsWith('.')) continue;
             if (entry.isDirectory()) walk(join(dir, entry.name), prefix + entry.name + '/');
@@ -106,7 +106,7 @@ export function list() {
 
 // ─── Daily auto-log ──────────────────────────────
 
-export function appendDaily(content) {
+export function appendDaily(content: string) {
     ensureMemoryDir();
     const date = new Date().toISOString().slice(0, 10);
     const filepath = join(MEMORY_DIR, 'daily', `${date}.md`);

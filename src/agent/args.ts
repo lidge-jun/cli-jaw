@@ -1,7 +1,7 @@
 // ─── Agent CLI Argument Builders ──────────────────────
 // Extracted from agent.js for 500-line compliance.
 
-export function buildArgs(cli, model, effort, prompt, sysPrompt, permissions = 'auto') {
+export function buildArgs(cli: string, model: string, effort: string, prompt: string, sysPrompt: string, permissions = 'auto') {
     const autoPerm = permissions === 'auto';
     switch (cli) {
         case 'claude':
@@ -33,7 +33,7 @@ export function buildArgs(cli, model, effort, prompt, sysPrompt, permissions = '
     }
 }
 
-export function buildResumeArgs(cli, model, effort, sessionId, prompt, permissions = 'auto') {
+export function buildResumeArgs(cli: string, model: string, effort: string, sessionId: string, prompt: string, permissions = 'auto') {
     const autoPerm = permissions === 'auto';
     switch (cli) {
         case 'claude':

@@ -11,12 +11,12 @@ import { getVisibleCommands } from './policy.ts';
  * @param {'text'|'html'} [opts.format='text']
  * @returns {{ ok: boolean, text: string }}
  */
-export function renderHelp({ iface, commandName, format = 'text' } = {}) {
+export function renderHelp({ iface, commandName, format = 'text' }: { iface?: string; commandName?: string; format?: string } = {}) {
     const cmds = getVisibleCommands(iface || 'cli');
 
     if (!commandName) {
         const lines = cmds.map(c => {
-            const cap = c.capability?.[iface];
+            const cap = c.capability?.[iface || 'cli'];
             const tag = cap === 'readonly' ? ' [조회전용]' : '';
             const desc = c.desc || '';
             return `  /${c.name}${c.args ? ' ' + c.args : ''}${tag} — ${desc}`;
@@ -34,7 +34,7 @@ export function renderHelp({ iface, commandName, format = 'text' } = {}) {
         text: [
             `/${cmd.name}${cmd.args ? ' ' + cmd.args : ''} — ${cmd.desc || ''}`,
             cmd.aliases?.length ? `별칭: ${cmd.aliases.join(', ')}` : '',
-            cmd.examples?.length ? `예시:\n${cmd.examples.map(e => '  ' + e).join('\n')}` : '',
+            (cmd as Record<string, any>).examples?.length ? `예시:\n${(cmd as Record<string, any>).examples.map((e: string) => '  ' + e).join('\n')}` : '',
             `지원: ${Object.entries(cmd.capability || {})
                 .filter(([, v]) => v !== 'hidden')
                 .map(([k, v]) => `${k}(${v})`)

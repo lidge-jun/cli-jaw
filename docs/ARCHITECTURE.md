@@ -16,19 +16,19 @@
 │  └────┬─────┘  └────┬─────┘  └──────┬───────┘              │
 │       │HTTP+WS      │HTTP           │Grammy                │
 ├───────┴──────────────┴───────────────┴──────────────────────┤
-│                    EXPRESS SERVER (server.js)                │
+│                    EXPRESS SERVER (server.ts)                │
 │  Routes(40+) · WebSocket · ok/fail · Security Guards        │
 ├─────────────────────────────────────────────────────────────┤
 │                     CORE ENGINE                             │
 │  ┌─────────┐  ┌──────────────┐  ┌───────────┐              │
-│  │ agent.js│  │orchestrator.js│  │commands.js│              │
+│  │ agent.ts│  │orchestrator.ts│  │commands.ts│              │
 │  │ spawn + │  │ triage +     │  │ slash cmd │              │
 │  │ ACP     │  │ 5-phase pipe │  │ registry  │              │
 │  └────┬────┘  └──────┬───────┘  └───────────┘              │
 │       │              │                                      │
 │  ┌────┴────────────┐ │                                      │
-│  │  events.js      │ │  ┌──────────────────────────┐        │
-│  │  NDJSON + ACP   │ │  │ prompt.js                │        │
+│  │  events.ts      │ │  ┌──────────────────────────┐        │
+│  │  NDJSON + ACP   │ │  │ prompt.ts                │        │
 │  │  dedupe         │ │  │ System + SubAgent prompt │        │
 │  └─────────────────┘ │  └──────────────────────────┘        │
 ├──────────────────────┴──────────────────────────────────────┤
@@ -48,29 +48,29 @@
 
 ```mermaid
 graph LR
-    CLI["bin/commands/*"] -->|HTTP| SRV["server.js"]
+    CLI["bin/commands/*"] -->|HTTP| SRV["server.ts"]
     WEB["public/"] -->|HTTP+WS| SRV
-    SRV --> CFG["config.js"]
-    SRV --> DB["db.js"]
-    SRV --> AGT["agent.js"]
-    SRV --> ORC["orchestrator.js"]
-    SRV --> PRM["prompt.js"]
-    SRV --> MEM["memory.js"]
-    SRV --> TG["telegram.js"]
-    SRV --> HB["heartbeat.js"]
+    SRV --> CFG["config.ts"]
+    SRV --> DB["db.ts"]
+    SRV --> AGT["agent.ts"]
+    SRV --> ORC["orchestrator.ts"]
+    SRV --> PRM["prompt.ts"]
+    SRV --> MEM["memory.ts"]
+    SRV --> TG["telegram.ts"]
+    SRV --> HB["heartbeat.ts"]
     SRV --> BR["browser/*"]
-    SRV --> MCP["lib/mcp-sync.js"]
-    SRV --> CMD["commands.js"]
-    SRV --> REG["cli-registry.js"]
+    SRV --> MCP["lib/mcp-sync.ts"]
+    SRV --> CMD["commands.ts"]
+    SRV --> REG["cli-registry.ts"]
     SRV --> SEC["security/*"]
     SRV --> HTTP["http/*"]
-    SRV --> SM["settings-merge.js"]
+    SRV --> SM["settings-merge.ts"]
     CMD --> REG
     CMD --> CC["command-contract/*"]
     CFG --> REG
-    AGT --> EVT["events.js"]
-    AGT --> BUS["bus.js"]
-    AGT --> ACP["acp-client.js"]
+    AGT --> EVT["events.ts"]
+    AGT --> BUS["bus.ts"]
+    AGT --> ACP["acp-client.ts"]
     ORC --> AGT
     TG --> ORC
     HB --> TG
@@ -80,22 +80,22 @@ graph LR
 
 | Module | Dependencies | Notes |
 |--------|-------------|-------|
-| `bus.js` | — | Zero deps, broadcast hub |
-| `config.js` | cli-registry | Registry-based CLI detection |
-| `cli-registry.js` | — | Zero deps, CLI/model single source |
-| `db.js` | config | DB_PATH only |
-| `events.js` | bus | Broadcast + dedupe + ACP |
-| `memory.js` | config | CLAW_HOME only, independent |
-| `acp-client.js` | — | Zero deps, Copilot ACP client |
-| `agent.js` | bus, config, db, events, prompt, orchestrator, acp-client | Core hub |
-| `orchestrator.js` | bus, db, prompt, agent | Planning ↔ agent mutual |
-| `telegram.js` | bus, config, db, agent, orchestrator, commands, upload | External interface |
-| `heartbeat.js` | config, telegram | Telegram re-export |
-| `prompt.js` | config, db | A-1/A-2 + skills |
-| `commands.js` | config, cli-registry | Command registry + dynamic models |
+| `bus.ts` | — | Zero deps, broadcast hub |
+| `config.ts` | cli-registry | Registry-based CLI detection |
+| `cli-registry.ts` | — | Zero deps, CLI/model single source |
+| `db.ts` | config | DB_PATH only |
+| `events.ts` | bus | Broadcast + dedupe + ACP |
+| `memory.ts` | config | CLAW_HOME only, independent |
+| `acp-client.ts` | — | Zero deps, Copilot ACP client |
+| `agent.ts` | bus, config, db, events, prompt, orchestrator, acp-client | Core hub |
+| `orchestrator.ts` | bus, db, prompt, agent | Planning ↔ agent mutual |
+| `telegram.ts` | bus, config, db, agent, orchestrator, commands, upload | External interface |
+| `heartbeat.ts` | config, telegram | Telegram re-export |
+| `prompt.ts` | config, db | A-1/A-2 + skills |
+| `commands.ts` | config, cli-registry | Command registry + dynamic models |
 | `security/*` | — | Input validation (path, id, filename) |
 | `http/*` | — | Response standardization + error middleware |
-| `settings-merge.js` | — | perCli/activeOverrides merge |
+| `settings-merge.ts` | — | perCli/activeOverrides merge |
 | `browser/*` | — | Independent Chrome CDP module |
 
 ---
@@ -109,41 +109,41 @@ graph LR
 
 | File | Lines | Responsibility |
 |------|------:|----------------|
-| `config.js` | ~177 | CLAW_HOME, settings, CLI detection |
-| `db.js` | ~84 | SQLite schema + prepared statements |
-| `bus.js` | ~18 | WS + internal listener broadcast |
-| `events.js` | ~322 | NDJSON parsing + dedupe + ACP updates |
-| `commands.js` | ~639 | Slash command registry + dispatcher |
-| `agent.js` | ~619 | CLI spawn + ACP + queue + memory flush |
-| `orchestrator.js` | ~637 | Triage + 5-phase pipeline + AI dispatch |
-| `prompt.js` | ~515 | System prompt + sub-agent prompt |
-| `telegram.js` | ~493 | Telegram bot + forwarder lifecycle |
-| `telegram-forwarder.js` | ~105 | Forwarding helpers |
-| `heartbeat.js` | ~107 | Heartbeat job scheduling |
-| `memory.js` | ~128 | Persistent memory (grep-based) |
-| `worklog.js` | ~153 | Worklog CRUD + phase matrix |
-| `cli-registry.js` | ~88 | 5 CLI/model single source |
-| `acp-client.js` | ~315 | Copilot ACP JSON-RPC client |
-| `settings-merge.js` | ~46 | Deep merge for perCli/activeOverrides |
+| `config.ts` | ~177 | CLAW_HOME, settings, CLI detection |
+| `db.ts` | ~84 | SQLite schema + prepared statements |
+| `bus.ts` | ~18 | WS + internal listener broadcast |
+| `events.ts` | ~322 | NDJSON parsing + dedupe + ACP updates |
+| `commands.ts` | ~639 | Slash command registry + dispatcher |
+| `agent.ts` | ~619 | CLI spawn + ACP + queue + memory flush |
+| `orchestrator.ts` | ~637 | Triage + 5-phase pipeline + AI dispatch |
+| `prompt.ts` | ~515 | System prompt + sub-agent prompt |
+| `telegram.ts` | ~493 | Telegram bot + forwarder lifecycle |
+| `telegram-forwarder.ts` | ~105 | Forwarding helpers |
+| `heartbeat.ts` | ~107 | Heartbeat job scheduling |
+| `memory.ts` | ~128 | Persistent memory (grep-based) |
+| `worklog.ts` | ~153 | Worklog CRUD + phase matrix |
+| `cli-registry.ts` | ~88 | 5 CLI/model single source |
+| `acp-client.ts` | ~315 | Copilot ACP JSON-RPC client |
+| `settings-merge.ts` | ~46 | Deep merge for perCli/activeOverrides |
 
 ### Security & HTTP (`src/security/`, `src/http/`)
 
 | File | Lines | Added In |
 |------|------:|----------|
-| `security/path-guards.js` | ~67 | Phase 9.1 |
-| `security/decode.js` | ~22 | Phase 9.1 |
-| `http/response.js` | ~25 | Phase 9.2 |
-| `http/async-handler.js` | ~12 | Phase 9.2 |
-| `http/error-middleware.js` | ~27 | Phase 9.2 |
-| `command-contract/catalog.js` | ~39 | Phase 9.5 |
-| `command-contract/policy.js` | ~40 | Phase 9.5 |
-| `command-contract/help-renderer.js` | ~46 | Phase 9.5 |
+| `security/path-guards.ts` | ~67 | Phase 9.1 |
+| `security/decode.ts` | ~22 | Phase 9.1 |
+| `http/response.ts` | ~25 | Phase 9.2 |
+| `http/async-handler.ts` | ~12 | Phase 9.2 |
+| `http/error-middleware.ts` | ~27 | Phase 9.2 |
+| `command-contract/catalog.ts` | ~39 | Phase 9.5 |
+| `command-contract/policy.ts` | ~40 | Phase 9.5 |
+| `command-contract/help-renderer.ts` | ~46 | Phase 9.5 |
 
 ### Server
 
 | File | Lines | Notes |
 |------|------:|-------|
-| `server.js` | ~949 | Routes + WebSocket + glue (Phase 20.3 splits planned) |
+| `server.ts` | ~949 | Routes + WebSocket + glue (Phase 20.3 splits planned) |
 
 ### Frontend (`public/`)
 
@@ -157,10 +157,10 @@ graph LR
 
 | File | Lines | Notes |
 |------|------:|-------|
-| `cli-claw.js` | — | 11 subcommand routing |
-| `postinstall.js` | ~212 | Auto-install 5 CLIs + MCP + skills |
-| `commands/chat.js` | ~844 | Terminal TUI (Phase 20.3 splits planned) |
-| `commands/browser.js` | ~239 | 17 subcommands + vision-click |
+| `cli-claw.ts` | — | 11 subcommand routing |
+| `postinstall.ts` | ~212 | Auto-install 5 CLIs + MCP + skills |
+| `commands/chat.ts` | ~844 | Terminal TUI (Phase 20.3 splits planned) |
+| `commands/browser.ts` | ~239 | 17 subcommands + vision-click |
 | Other commands | ~30-70ea | serve, init, doctor, status, mcp, skill, etc. |
 
 ---
@@ -172,8 +172,8 @@ graph LR
 All AI interactions go through official CLI binaries via stdio:
 
 ```
-agent.js → spawn('claude', [...args]) → NDJSON stdout → events.js → broadcast
-agent.js → spawn('copilot', ['--acp']) → JSON-RPC stdin/stdout → acp-client.js
+agent.ts → spawn('claude', [...args]) → NDJSON stdout → events.ts → broadcast
+agent.ts → spawn('copilot', ['--acp']) → JSON-RPC stdin/stdout → acp-client.ts
 ```
 
 - **No API keys** — uses vendor authentication (OAuth, keychain)
@@ -182,7 +182,7 @@ agent.js → spawn('copilot', ['--acp']) → JSON-RPC stdin/stdout → acp-clien
 
 ### 2. Event Deduplication
 
-Claude emits overlapping `stream_event` and `assistant` blocks. The `events.js` dedupe system:
+Claude emits overlapping `stream_event` and `assistant` blocks. The `events.ts` dedupe system:
 - Tracks `hasClaudeStreamEvents` flag per session
 - Once stream events seen → blocks duplicate assistant blocks
 - Tool labels use deterministic keys for dedup
@@ -221,7 +221,7 @@ main.js (entry)
       ├── chat.js, settings.js, employees.js
       ├── heartbeat.js, memory.js, skills.js
       ├── sidebar.js, theme.js, appname.js
-      ├── i18n.js, slash-commands.js
+      ├── i18n.ts, slash-commands.ts
       └── modals.js (planned)
 ```
 
@@ -229,11 +229,11 @@ main.js (entry)
 
 | Layer | Module | Protection |
 |-------|--------|-----------|
-| Input | `path-guards.js` | Path traversal, ID injection, filename abuse |
-| Input | `decode.js` | Safe URL decoding |
-| Response | `response.js` | Standardized `ok()`/`fail()` format |
-| Error | `async-handler.js` | Async route error catching |
-| Error | `error-middleware.js` | 404 + global error handler |
+| Input | `path-guards.ts` | Path traversal, ID injection, filename abuse |
+| Input | `decode.ts` | Safe URL decoding |
+| Response | `response.ts` | Standardized `ok()`/`fail()` format |
+| Error | `async-handler.ts` | Async route error catching |
+| Error | `error-middleware.ts` | 404 + global error handler |
 | Commands | `command-contract/*` | Capability-based access control |
 
 ---
@@ -280,7 +280,7 @@ main.js (entry)
 - **ESM only** — `import`/`export`, no CommonJS
 - **Never delete exports** — other modules may import them
 - **try/catch mandatory** — no silent failures
-- **Config centralized** — `config.js` or `settings.json`, never hardcode
+- **Config centralized** — `config.ts` or `settings.json`, never hardcode
 - **Verify with** `bash devlog/verify-counts.sh` — ensures doc/code line count sync
 
 ---

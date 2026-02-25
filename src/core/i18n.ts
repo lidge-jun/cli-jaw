@@ -4,7 +4,7 @@
 import fs from 'fs';
 import { join } from 'path';
 
-const locales = {};
+const locales: Record<string, Record<string, string>> = {};
 
 /**
  * Normalize a BCP47 locale string to a supported locale code.
@@ -14,9 +14,9 @@ const locales = {};
  * @param {string} defaultLocale - Fallback locale
  * @returns {string}
  */
-export function normalizeLocale(raw, defaultLocale = 'ko') {
+export function normalizeLocale(raw: string, defaultLocale = 'ko') {
     if (!raw || typeof raw !== 'string') return defaultLocale;
-    const base = raw.trim().toLowerCase().split(/[-_]/)[0];
+    const base = raw.trim().toLowerCase().split(/[-_]/)[0] || '';
     return locales[base] ? base : defaultLocale;
 }
 
@@ -24,14 +24,14 @@ export function normalizeLocale(raw, defaultLocale = 'ko') {
  * Load all locale JSON files from the given directory.
  * Ignores files prefixed with 'skills-' (handled separately).
  */
-export function loadLocales(localeDir) {
+export function loadLocales(localeDir: string) {
     if (!fs.existsSync(localeDir)) return;
     for (const f of fs.readdirSync(localeDir).filter(f => f.endsWith('.json') && !f.startsWith('skills-'))) {
         try {
             const lang = f.replace('.json', '');
             locales[lang] = JSON.parse(fs.readFileSync(join(localeDir, f), 'utf8'));
-        } catch (err) {
-            console.warn(`[i18n] failed to load ${f}:`, err.message);
+        } catch (err: unknown) {
+            console.warn(`[i18n] failed to load ${f}:`, (err as Error).message);
         }
     }
 }
@@ -45,7 +45,7 @@ export function loadLocales(localeDir) {
  * @param {string} lang - Target locale code ('ko', 'en', etc.)
  * @returns {string}
  */
-export function t(key, params = {}, lang = 'ko') {
+export function t(key: string, params: Record<string, unknown> = {}, lang = 'ko') {
     const dict = locales[lang] || locales['ko'] || {};
     let val = dict[key] ?? key;
     for (const [k, v] of Object.entries(params)) {
@@ -64,7 +64,7 @@ export function getAvailableLocales() {
 
 // ─── Prompt Locale (A-2.md Language field) ───────────
 
-const LANG_NORMALIZE = {
+const LANG_NORMALIZE: Record<string, string> = {
     'korean': 'ko', '한국어': 'ko', 'ko': 'ko',
     'english': 'en', '영어': 'en', 'en': 'en',
     'japanese': 'ja', '일본어': 'ja', 'ja': 'ja',
@@ -78,7 +78,7 @@ const LANG_NORMALIZE = {
  * @param {string} a2Path - Absolute path to A-2.md
  * @returns {string} Locale code
  */
-export function getPromptLocale(a2Path) {
+export function getPromptLocale(a2Path: string) {
     try {
         const a2 = fs.existsSync(a2Path) ? fs.readFileSync(a2Path, 'utf8') : '';
         const match = a2.match(/Language\s*[:：]\s*(.+)/i);

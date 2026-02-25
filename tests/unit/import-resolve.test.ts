@@ -9,13 +9,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../..');
 const SRC = path.join(ROOT, 'src');
 
-function collectJsFiles(dir) {
-    const results = [];
+function collectTsFiles(dir: string): string[] {
+    const results: string[] = [];
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
         if (entry.isDirectory() && entry.name !== 'node_modules') {
-            results.push(...collectJsFiles(full));
-        } else if (entry.isFile() && entry.name.endsWith('.js')) {
+            results.push(...collectTsFiles(full));
+        } else if (entry.isFile() && entry.name.endsWith('.ts')) {
             results.push(full);
         }
     }
@@ -25,7 +25,7 @@ function collectJsFiles(dir) {
 // Match both static and dynamic imports: from './foo.js' or import('./foo.js')
 const IMPORT_RE = /(?:from\s+['"]|import\s*\(\s*['"])(\.[^'"]+)['"]/g;
 
-function extractImports(filePath) {
+function extractImports(filePath: string) {
     const code = fs.readFileSync(filePath, 'utf8');
     const imports = [];
     let m;
@@ -35,10 +35,10 @@ function extractImports(filePath) {
     return imports;
 }
 
-// Scan src/ and server.js + top-level JS
-const srcFiles = collectJsFiles(SRC);
-const serverJs = path.join(ROOT, 'server.js');
-const allFiles = fs.existsSync(serverJs) ? [serverJs, ...srcFiles] : srcFiles;
+// Scan src/ and server.ts + top-level TS
+const srcFiles = collectTsFiles(SRC);
+const serverTs = path.join(ROOT, 'server.ts');
+const allFiles = fs.existsSync(serverTs) ? [serverTs, ...srcFiles] : srcFiles;
 
 const broken = [];
 
@@ -47,7 +47,9 @@ for (const file of allFiles) {
     for (const { specifier, line } of imports) {
         if (!specifier.startsWith('.')) continue; // skip bare specifiers
         const resolved = path.resolve(path.dirname(file), specifier);
-        if (!fs.existsSync(resolved)) {
+        // NodeNext: .ts files use .js in import specifiers, so also check .ts equivalent
+        const resolvedTs = resolved.endsWith('.js') ? resolved.replace(/\.js$/, '.ts') : null;
+        if (!fs.existsSync(resolved) && !(resolvedTs && fs.existsSync(resolvedTs))) {
             const rel = path.relative(ROOT, file);
             broken.push(`${rel}:${line} → ${specifier} (resolved: ${path.relative(ROOT, resolved)})`);
         }

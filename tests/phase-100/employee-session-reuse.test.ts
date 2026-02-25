@@ -4,15 +4,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const ROOT = process.cwd();
-const PIPELINE = path.join(ROOT, 'src/orchestrator/pipeline.js');
-const SPAWN = path.join(ROOT, 'src/agent/spawn.js');
-const DB = path.join(ROOT, 'src/core/db.js');
+const PIPELINE = path.join(ROOT, 'src/orchestrator/pipeline.ts');
+const SPAWN = path.join(ROOT, 'src/agent/spawn.ts');
+const DB = path.join(ROOT, 'src/core/db.ts');
 
 test('P100-001: pipeline uses employeeSessionId-based resume and global clear', () => {
     const src = fs.readFileSync(PIPELINE, 'utf8');
-    assert.match(src, /employeeSessionId:\s*canResume\s*\?\s*empSession\.session_id\s*:\s*undefined/);
+    assert.match(src, /employeeSessionId:\s*canResume\s*\?\s*empSession!?\.session_id\s*:\s*undefined/);
     assert.match(src, /clearAllEmployeeSessions\.run\(\)/);
-    assert.match(src, /upsertEmployeeSession\.run\(emp\.id,\s*r\.sessionId,\s*emp\.cli\)/);
+    assert.match(src, /upsertEmployeeSession\.run\(.*\.id,\s*r\.sessionId,\s*.*\.cli\)/);
 });
 
 test('P100-002: spawn guards main session update when employee session is used', () => {

@@ -1,13 +1,13 @@
 // ─── Telegram Forwarding Utilities ───────────────────
 
-export function escapeHtmlTg(text) {
+export function escapeHtmlTg(text: string) {
     return String(text || '')
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
 }
 
-export function markdownToTelegramHtml(md) {
+export function markdownToTelegramHtml(md: string) {
     if (!md) return '';
     let html = escapeHtmlTg(md);
     html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
@@ -18,7 +18,7 @@ export function markdownToTelegramHtml(md) {
     return html;
 }
 
-export function chunkTelegramMessage(text, limit = 4096) {
+export function chunkTelegramMessage(text: string, limit = 4096) {
     const raw = String(text || '');
     if (raw.length <= limit) return [raw];
     const chunks = [];
@@ -44,8 +44,8 @@ export function createForwarderLifecycle({
     addListener,
     removeListener,
     buildForwarder,
-} = {}) {
-    let forwarder = null;
+}: Record<string, any> = {}) {
+    let forwarder: ((...args: any[]) => any) | null = null;
     return {
         attach(args = {}) {
             if (forwarder) return forwarder;
@@ -75,11 +75,11 @@ export function createForwarderLifecycle({
 export function createTelegramForwarder({
     bot,
     getLastChatId,
-    shouldSkip = () => false,
-    log = () => { },
+    shouldSkip = (_data: any) => false,
+    log = (_info: any) => { },
     prefix = '📡 ',
-} = {}) {
-    return (type, data) => {
+}: Record<string, any> = {}) {
+    return (type: string, data: Record<string, any>) => {
         if (type !== 'agent_done' || !data?.text) return;
         if (data.error) return;
         if (shouldSkip(data)) return;

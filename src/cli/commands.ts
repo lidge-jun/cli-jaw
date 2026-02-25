@@ -20,7 +20,7 @@ const CATEGORY_LABEL = {
     cli: 'CLI',
 };
 
-function sortCommands(list) {
+function sortCommands(list: any[]) {
     return [...list].sort((a, b) => {
         const ai = CATEGORY_ORDER.indexOf(a.category || 'tools');
         const bi = CATEGORY_ORDER.indexOf(b.category || 'tools');
@@ -29,15 +29,15 @@ function sortCommands(list) {
     });
 }
 
-function displayUsage(cmd) {
+function displayUsage(cmd: any) {
     return `/${cmd.name}${cmd.args ? ` ${cmd.args}` : ''}`;
 }
 
-function toChoiceKey(value) {
+function toChoiceKey(value: any) {
     return String(value || '').trim().toLowerCase();
 }
 
-function normalizeArgumentCandidate(entry) {
+function normalizeArgumentCandidate(entry: any) {
     if (typeof entry === 'string') {
         const value = entry.trim();
         if (!value) return null;
@@ -50,7 +50,7 @@ function normalizeArgumentCandidate(entry) {
     return { value, label };
 }
 
-function dedupeChoices(list) {
+function dedupeChoices(list: any[]) {
     const out = [];
     const seen = new Set();
     for (const entry of list || []) {
@@ -62,7 +62,7 @@ function dedupeChoices(list) {
     return out;
 }
 
-function scoreToken(value, query) {
+function scoreToken(value: any, query: any) {
     const target = toChoiceKey(value);
     const q = toChoiceKey(query);
     if (!q) return 0;
@@ -73,12 +73,12 @@ function scoreToken(value, query) {
     return -1;
 }
 
-function categoryIndex(category) {
+function categoryIndex(category: any) {
     const idx = CATEGORY_ORDER.indexOf(category || 'tools');
     return idx >= 0 ? idx : CATEGORY_ORDER.length;
 }
 
-function scoreCommandCandidate(cmd, query) {
+function scoreCommandCandidate(cmd: any, query: any) {
     const q = toChoiceKey(query);
     if (!q) return 0;
     let score = scoreToken(cmd.name, q);
@@ -89,7 +89,7 @@ function scoreCommandCandidate(cmd, query) {
     return score;
 }
 
-function scoreArgumentCandidate(item, query) {
+function scoreArgumentCandidate(item: any, query: any) {
     const base = scoreToken(item.value, query);
     if (base >= 0) return base;
     const labelScore = scoreToken(item.label, query);
@@ -97,22 +97,22 @@ function scoreArgumentCandidate(item, query) {
     return -1;
 }
 
-function findCommand(name) {
+function findCommand(name: any): any {
     const key = (name || '').toLowerCase();
     return COMMANDS.find(c => c.name === key || (c.aliases || []).includes(key));
 }
 
 // ─── helpHandler (kept here — needs COMMANDS/findCommand/sortCommands) ──
 
-async function helpHandler(args, ctx) {
+async function helpHandler(args: any[], ctx: any): Promise<any> {
     const iface = ctx.interface || 'cli';
     const L = ctx.locale || 'ko';
     if (args[0]) {
         const targetName = String(args[0]).replace(/^\//, '');
-        const target = findCommand(targetName);
+        const target: any = findCommand(targetName);
         if (!target) return unknownCommand(targetName, L);
         const desc = target.descKey ? t(target.descKey, {}, L) : target.desc;
-        const lines = [
+        const lines: string[] = [
             `${displayUsage(target)} — ${desc}`,
             `interfaces: ${target.interfaces.join(', ')}`,
         ];
@@ -133,7 +133,7 @@ async function helpHandler(args, ctx) {
     for (const cat of CATEGORY_ORDER) {
         const cmds = byCategory.get(cat);
         if (!cmds?.length) continue;
-        lines.push(`\n[${CATEGORY_LABEL[cat] || cat}]`);
+        lines.push(`\n[${(CATEGORY_LABEL as Record<string, string>)[cat] || cat}]`);
         for (const cmd of cmds) {
             const desc = cmd.descKey ? t(cmd.descKey, {}, L) : cmd.desc;
             lines.push(`- ${displayUsage(cmd)} — ${desc}`);
@@ -166,7 +166,7 @@ export const COMMANDS = [
 
 // ─── Dispatch ────────────────────────────────────────
 
-export function parseCommand(text) {
+export function parseCommand(text: any) {
     if (typeof text !== 'string' || !text.startsWith('/')) return null;
     const body = text.slice(1).trim();
     if (!body) {
@@ -180,7 +180,7 @@ export function parseCommand(text) {
     return { type: 'known', cmd, args: parts, name };
 }
 
-export async function executeCommand(parsed, ctx) {
+export async function executeCommand(parsed: any, ctx: any) {
     const L = ctx?.locale || 'ko';
     if (!parsed) return null;
     if (parsed.type === 'unknown') return unknownCommand(parsed.name, L);
@@ -189,8 +189,8 @@ export async function executeCommand(parsed, ctx) {
     }
     try {
         return normalizeResult(await parsed.cmd.handler(parsed.args || [], ctx));
-    } catch (err) {
-        const msg = err?.message || String(err);
+    } catch (err: unknown) {
+        const msg = (err as Error)?.message || String(err);
         return {
             ok: false,
             code: 'command_error',
@@ -201,7 +201,7 @@ export async function executeCommand(parsed, ctx) {
 
 // ─── Completions ─────────────────────────────────────
 
-export function getCompletions(partial, iface = 'cli') {
+export function getCompletions(partial: any, iface = 'cli') {
     const prefix = (partial || '').startsWith('/')
         ? (partial || '').toLowerCase()
         : '/' + String(partial || '').toLowerCase();
@@ -209,7 +209,7 @@ export function getCompletions(partial, iface = 'cli') {
         .map(c => `/${c.name}`);
 }
 
-export function getCompletionItems(partial, iface = 'cli', locale = 'ko') {
+export function getCompletionItems(partial: any, iface = 'cli', locale = 'ko') {
     const query = String(partial || '').replace(/^\//, '').trim().toLowerCase();
     return COMMANDS
         .filter(c => c.interfaces.includes(iface) && !c.hidden)
@@ -231,7 +231,7 @@ export function getCompletionItems(partial, iface = 'cli', locale = 'ko') {
         }));
 }
 
-export function getArgumentCompletionItems(commandName, partial = '', iface = 'cli', argv = [], ctx = {}) {
+export function getArgumentCompletionItems(commandName: any, partial = '', iface = 'cli', argv: any[] = [], ctx: any = {}) {
     const cmd = findCommand(commandName);
     if (!cmd || cmd.hidden) return [];
     if (!cmd.interfaces.includes(iface)) return [];
@@ -240,8 +240,8 @@ export function getArgumentCompletionItems(commandName, partial = '', iface = 'c
     let candidates;
     try {
         candidates = cmd.getArgumentCompletions(ctx, argv, partial) || [];
-    } catch (err) {
-        if (process.env.DEBUG) console.warn('[commands:argComplete]', err.message);
+    } catch (err: unknown) {
+        if (process.env.DEBUG) console.warn('[commands:argComplete]', (err as Error).message);
         return [];
     }
     const normalized = dedupeChoices(candidates.map(normalizeArgumentCandidate).filter(Boolean));

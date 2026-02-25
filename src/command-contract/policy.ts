@@ -8,7 +8,7 @@ import { getCommandCatalog, CAPABILITY } from './catalog.ts';
  * @param {string} iface - 'cli' | 'web' | 'telegram' | 'cmdline'
  * @returns {Array}
  */
-export function getVisibleCommands(iface) {
+export function getVisibleCommands(iface: string) {
     return getCommandCatalog()
         .filter(c => {
             const cap = c.capability?.[iface];
@@ -21,7 +21,7 @@ export function getVisibleCommands(iface) {
  * @param {string} iface
  * @returns {Array}
  */
-export function getExecutableCommands(iface) {
+export function getExecutableCommands(iface: string) {
     return getCommandCatalog()
         .filter(c => c.capability?.[iface] === CAPABILITY.full);
 }

@@ -2,28 +2,28 @@
 
 import { broadcast } from '../core/bus.ts';
 
-function pushTrace(ctx, line) {
+function pushTrace(ctx: any, line: any) {
     if (!ctx?.traceLog || !line) return;
     ctx.traceLog.push(line);
 }
 
-function logLine(line, ctx) {
+function logLine(line: any, ctx: any) {
     console.log(line);
     pushTrace(ctx, line);
 }
 
-function toSingleLine(text) {
+function toSingleLine(text: any) {
     return String(text || '').replace(/\s+/g, ' ').trim();
 }
 
-function toIndentedPreview(text, max = 200) {
+function toIndentedPreview(text: any, max = 200) {
     const raw = String(text || '').trim();
     if (!raw) return '';
     const clipped = raw.length > max ? `${raw.slice(0, max)}…` : raw;
     return clipped.replace(/\n/g, '\n  ');
 }
 
-export function extractSessionId(cli, event) {
+export function extractSessionId(cli: string, event: any) {
     switch (cli) {
         case 'claude': return event.type === 'system' ? event.session_id : null;
         case 'codex': return event.type === 'thread.started' ? event.thread_id : null;
@@ -33,7 +33,7 @@ export function extractSessionId(cli, event) {
     }
 }
 
-export function extractFromEvent(cli, event, ctx, agentLabel) {
+export function extractFromEvent(cli: string, event: any, ctx: any, agentLabel: string) {
     const toolLabels = extractToolLabels(cli, event, ctx);
     for (const toolLabel of toolLabels) {
         // Dedupe: same logic as ACP path — skip already-seen tool keys
@@ -86,7 +86,7 @@ export function extractFromEvent(cli, event, ctx, agentLabel) {
     }
 }
 
-export function logEventSummary(agentLabel, cli, event, ctx = null) {
+export function logEventSummary(agentLabel: string, cli: string, event: any, ctx: any = null) {
     const item = event.item || event.part || {};
 
     if (cli === 'codex') {
@@ -168,7 +168,7 @@ export function logEventSummary(agentLabel, cli, event, ctx = null) {
     }
 }
 
-function makeClaudeToolKey(event, label) {
+function makeClaudeToolKey(event: any, label: any) {
     const idx = event.event?.index;
     if (idx !== undefined && idx !== null) return `claude:idx:${idx}:${label.icon}:${label.label}`;
     const msgId = event.message?.id || '';
@@ -176,7 +176,7 @@ function makeClaudeToolKey(event, label) {
     return `claude:type:${event.type}:${label.icon}:${label.label}`;
 }
 
-function pushToolLabel(labels, label, cli, event, ctx) {
+function pushToolLabel(labels: any[], label: any, cli: string, event: any, ctx: any) {
     if (cli !== 'claude' || !ctx?.seenToolKeys) {
         labels.push(label);
         return;
@@ -188,7 +188,7 @@ function pushToolLabel(labels, label, cli, event, ctx) {
 }
 
 // Returns array of tool labels (supports multiple blocks per event)
-function extractToolLabels(cli, event, ctx) {
+function extractToolLabels(cli: string, event: any, ctx: any = null) {
     const item = event.item || event.part || event;
     const labels = [];
 
@@ -234,17 +234,17 @@ function extractToolLabels(cli, event, ctx) {
 }
 
 // Backward-compat: return first label or null
-export function extractToolLabel(cli, event) {
+export function extractToolLabel(cli: string, event: any) {
     const labels = extractToolLabels(cli, event);
     return labels.length ? labels[0] : null;
 }
 
 // Test-only helpers (keep parser logic private for runtime flow)
-export function extractToolLabelsForTest(cli, event, ctx = {}) {
+export function extractToolLabelsForTest(cli: string, event: any, ctx: any = {}) {
     return extractToolLabels(cli, event, ctx);
 }
 
-export function makeClaudeToolKeyForTest(event, label) {
+export function makeClaudeToolKeyForTest(event: any, label: any) {
     return makeClaudeToolKey(event, label);
 }
 
@@ -252,7 +252,7 @@ export function makeClaudeToolKeyForTest(event, label) {
 // Official ACP schema: update.sessionUpdate is the discriminator field.
 // Types: agent_message_chunk, agent_thought_chunk, tool_call, tool_call_update, plan
 
-function extractText(content) {
+function extractText(content: any) {
     if (typeof content === 'string') return content;
     if (Array.isArray(content)) {
         return content
@@ -267,7 +267,7 @@ function extractText(content) {
     return '';
 }
 
-export function extractFromAcpUpdate(params) {
+export function extractFromAcpUpdate(params: any) {
     const update = params?.update;
     if (!update) return null;
 

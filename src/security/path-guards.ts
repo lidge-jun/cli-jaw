@@ -5,16 +5,12 @@ import path from 'node:path';
 const SKILL_ID_RE = /^[a-z0-9][a-z0-9._-]*$/;
 const FILE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
-function badRequest(code) {
-    const e = new Error(code);
-    e.statusCode = 400;
-    return e;
+function badRequest(code: string) {
+    return Object.assign(new Error(code), { statusCode: 400 });
 }
 
-function forbidden(code) {
-    const e = new Error(code);
-    e.statusCode = 403;
-    return e;
+function forbidden(code: string) {
+    return Object.assign(new Error(code), { statusCode: 403 });
 }
 
 /**
@@ -23,7 +19,7 @@ function forbidden(code) {
  * @returns {string} trimmed id
  * @throws 400 invalid_skill_id / path_segment_denied
  */
-export function assertSkillId(id) {
+export function assertSkillId(id: string) {
     const v = String(id || '').trim();
     if (!SKILL_ID_RE.test(v)) throw badRequest('invalid_skill_id');
     if (v.includes('..') || v.includes('/') || v.includes('\\')) throw badRequest('path_segment_denied');
@@ -38,7 +34,7 @@ export function assertSkillId(id) {
  * @returns {string} trimmed filename
  * @throws 400 invalid_filename / invalid_extension
  */
-export function assertFilename(filename, { allowExt = ['.md'] } = {}) {
+export function assertFilename(filename: string, { allowExt = ['.md'] }: { allowExt?: string[] } = {}) {
     const v = String(filename || '').trim();
     if (!v || v.length > 200) throw badRequest('invalid_filename');
     if (!FILE_NAME_RE.test(v)) throw badRequest('invalid_filename');
@@ -55,7 +51,7 @@ export function assertFilename(filename, { allowExt = ['.md'] } = {}) {
  * @returns {string} resolved absolute path
  * @throws 403 path_escape
  */
-export function safeResolveUnder(baseDir, unsafeName) {
+export function safeResolveUnder(baseDir: string, unsafeName: string) {
     const base = path.resolve(baseDir);
     const resolved = path.resolve(base, unsafeName);
     const pref = base.endsWith(path.sep) ? base : base + path.sep;

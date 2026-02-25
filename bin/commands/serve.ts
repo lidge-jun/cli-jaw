@@ -35,7 +35,7 @@ const child = spawn(process.execPath,
     [...nodeArgs, serverPath],
     {
         stdio: 'inherit',
-        env: { ...process.env, PORT: values.port, HOST: values.host },
+        env: { ...process.env, PORT: values.port as string, HOST: values.host as string },
     }
 );
 
@@ -43,14 +43,14 @@ const child = spawn(process.execPath,
 process.on('SIGINT', () => child.kill('SIGINT'));
 process.on('SIGTERM', () => child.kill('SIGTERM'));
 
-child.on('exit', (code, signal) => {
+child.on('exit', (code: number | null, signal: string | null) => {
     if (signal) {
         process.exit(1);
     }
     process.exit(code ?? 1);
 });
 
-child.on('error', (err) => {
+child.on('error', (err: Error) => {
     console.error(`  ❌ Failed to start server: ${err.message}`);
     process.exit(1);
 });
@@ -58,7 +58,7 @@ child.on('error', (err) => {
 // --open: open browser after a short delay
 if (values.open) {
     setTimeout(() => {
-        exec(`open ${getServerUrl(values.port)}`, (err) => {
+        exec(`open ${getServerUrl(values.port as string)}`, (err) => {
             if (err) console.log('  ⚠️ Could not open browser');
         });
     }, 2000);

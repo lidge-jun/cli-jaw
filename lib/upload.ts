@@ -14,7 +14,7 @@ import { join, extname, basename } from 'path';
  * @param {string} originalName - Original filename (for extension)
  * @returns {string} Absolute path to saved file
  */
-export function saveUpload(uploadsDir, buffer, originalName) {
+export function saveUpload(uploadsDir: string, buffer: Buffer, originalName: string) {
     const ts = Date.now();
     const ext = extname(originalName) || '.bin';
     const safeName = `${ts}_${basename(originalName, ext).replace(/[^a-zA-Z0-9_-]/g, '')}${ext}`;
@@ -30,7 +30,7 @@ export function saveUpload(uploadsDir, buffer, originalName) {
  * @param {string} [caption] - Optional user message
  * @returns {string} Prompt string
  */
-export function buildMediaPrompt(filePath, caption) {
+export function buildMediaPrompt(filePath: string, caption?: string) {
     return `[사용자가 파일을 보냈습니다: ${filePath}]\n이 파일을 Read 도구로 읽고 분석해주세요.${caption ? `\n\n사용자 메시지: ${caption}` : ''}`;
 }
 
@@ -40,7 +40,7 @@ export function buildMediaPrompt(filePath, caption) {
  * @param {string} token - Bot token
  * @returns {Promise<{buffer: Buffer, ext: string, originalName: string}>}
  */
-export function downloadTelegramFile(fileId, token) {
+export function downloadTelegramFile(fileId: string, token: string) {
     return new Promise((resolve, reject) => {
         const getFileUrl = `https://api.telegram.org/bot${token}/getFile?file_id=${fileId}`;
         https.get(getFileUrl, { agent: new https.Agent({ family: 4 }) }, (res) => {
@@ -53,7 +53,7 @@ export function downloadTelegramFile(fileId, token) {
                     if (!filePath) return reject(new Error('getFile failed'));
                     const fileUrl = `https://api.telegram.org/file/bot${token}/${filePath}`;
                     https.get(fileUrl, { agent: new https.Agent({ family: 4 }) }, (fres) => {
-                        const chunks = [];
+                        const chunks: Buffer[] = [];
                         fres.on('data', c => chunks.push(c));
                         fres.on('end', () => resolve({
                             buffer: Buffer.concat(chunks),

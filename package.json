@@ -21,12 +21,14 @@
     "check:deps": "node scripts/check-deps-offline.mjs",
     "check:deps:online": "bash scripts/check-deps-online.sh",
     "test": "tsx --test tests/*.test.ts tests/**/*.test.ts",
-    "test:coverage": "node --test --experimental-test-coverage tests/*.test.js tests/**/*.test.js",
-    "test:watch": "node --test --watch tests/*.test.js tests/**/*.test.js",
-    "test:events": "node --test tests/events.test.js",
-    "test:telegram": "node --test tests/telegram-forwarding.test.js",
-    "test:smoke": "TEST_PORT=3457 node --test tests/integration/api-smoke.test.js",
+    "test:coverage": "tsx --test tests/*.test.ts tests/**/*.test.ts",
+    "test:watch": "tsx --test --watch tests/*.test.ts tests/**/*.test.ts",
+    "test:events": "tsx --test tests/events.test.ts",
+    "test:telegram": "tsx --test tests/telegram-forwarding.test.ts",
+    "test:smoke": "TEST_PORT=3457 tsx --test tests/integration/api-smoke.test.ts",
     "build": "tsc",
+    "build:frontend": "node esbuild.config.mjs",
+    "watch:frontend": "node esbuild.config.mjs --watch",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -41,11 +43,12 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "typescript": "^5.7.0",
-    "@types/node": "^22.0.0",
-    "@types/express": "^5.0.0",
     "@types/better-sqlite3": "^7.6.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
     "@types/ws": "^8.5.0",
-    "tsx": "^4.19.0"
+    "esbuild": "^0.27.3",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
   }
 }

@@ -19,17 +19,17 @@ const { values } = parseArgs({
     strict: false,
 });
 
-const results = [];
+const results: Array<{ name: string; status: string; detail: string }> = [];
 
-function check(name, fn) {
+function check(name: string, fn: () => string) {
     try {
         const detail = fn();
         results.push({ name, status: 'ok', detail: detail || 'OK' });
         if (!values.json) console.log(`  ✅ ${name}: ${detail || 'OK'}`);
     } catch (e) {
-        const isWarn = e.message?.startsWith('WARN:');
+        const isWarn = (e as Error).message?.startsWith('WARN:');
         const status = isWarn ? 'warn' : 'error';
-        const msg = e.message?.replace(/^WARN:\s*/, '') || 'unknown';
+        const msg = (e as Error).message?.replace(/^WARN:\s*/, '') || 'unknown';
         results.push({ name, status, detail: msg });
         if (!values.json) {
             console.log(`  ${isWarn ? '⚠️ ' : '❌'} ${name}: ${msg}`);
@@ -46,11 +46,11 @@ check('Home directory', () => {
 });
 
 // 2. settings.json
-let settings = null;
+let settings: Record<string, any> | null = null;
 check('settings.json', () => {
     if (!fs.existsSync(SETTINGS_PATH)) throw new Error('WARN: not found — run cli-claw init');
     settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
-    return `cli=${settings.cli || 'not set'}`;
+    return `cli=${settings?.cli || 'not set'}`;
 });
 
 // 3. Database
@@ -64,7 +64,7 @@ check('claw.db', () => {
 check('heartbeat.json', () => {
     if (!fs.existsSync(HEARTBEAT_PATH)) throw new Error('WARN: not found');
     const hb = JSON.parse(fs.readFileSync(HEARTBEAT_PATH, 'utf8'));
-    const active = (hb.jobs || []).filter(j => j.enabled).length;
+    const active = (hb.jobs || []).filter((j: any) => j.enabled).length;
     return `${active} active job${active !== 1 ? 's' : ''}`;
 });
 

@@ -7,6 +7,7 @@
 *一个界面，五个 CLI，封号？不存在的。*
 
 [![Tests](https://img.shields.io/badge/tests-216%20pass-brightgreen)](#-测试)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
 
@@ -261,7 +262,7 @@ cli-claw reset                         # 全面重置
 
 </details>
 
-> 🔧 想添加模型：修改 `src/cli-registry.js` — 一个文件，全局自动生效。
+> 🔧 想添加模型：修改 `src/cli-registry.ts` — 一个文件，全局自动生效。
 
 ---
 

@@ -28,7 +28,7 @@ test('FALLBACK_MAX_RETRIES is 3 (verified via module constants)', async () => {
     const { dirname, join } = await import('node:path');
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
-    const src = fs.readFileSync(join(__dirname, '../../src/agent/spawn.js'), 'utf8');
+    const src = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
     const match = src.match(/FALLBACK_MAX_RETRIES\s*=\s*(\d+)/);
     assert.ok(match, 'FALLBACK_MAX_RETRIES constant should exist');
     assert.equal(Number(match[1]), 3);
@@ -57,7 +57,7 @@ test('fallback retry flow: state transitions described correctly in source', asy
     const { dirname, join } = await import('node:path');
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
-    const src = fs.readFileSync(join(__dirname, '../../src/agent/spawn.js'), 'utf8');
+    const src = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
 
     // 1. retries exhausted → direct fallback
     assert.ok(src.includes('retriesLeft <= 0'), 'should check retriesLeft <= 0 for exhaustion');
@@ -81,7 +81,7 @@ test('server.js calls resetFallbackState on settings save', async () => {
     const { dirname, join } = await import('node:path');
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
-    const src = fs.readFileSync(join(__dirname, '../../server.js'), 'utf8');
+    const src = fs.readFileSync(join(__dirname, '../../server.ts'), 'utf8');
 
     assert.ok(src.includes('resetFallbackState'), 'server.js should import/use resetFallbackState');
     assert.ok(src.includes('resetFallbackState()'), 'server.js should call resetFallbackState()');

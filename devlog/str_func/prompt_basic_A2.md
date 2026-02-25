@@ -1,9 +1,9 @@
 # prompt_basic_A2 — 사용자 설정 프롬프트
 
 > 경로: `~/.cli-claw/prompts/A-2.md`
-> 소스: `src/prompt/builder.js` → `A2_DEFAULT` 상수 (L174–191)
+> 소스: `src/prompt/builder.ts` → `A2_DEFAULT` 상수 (L174–191)
 > **파일이 없을 때만** `A2_DEFAULT`로 자동 생성 (`initPromptFiles()`)
-> Phase 20.6: `src/prompt.js` → `src/prompt/builder.js` 이동
+> Phase 20.6: `src/prompt.ts` → `src/prompt/builder.ts` 이동
 
 ---
 

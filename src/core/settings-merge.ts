@@ -8,14 +8,14 @@
  * @param {object} patch - 적용할 패치
  * @returns {object} 새 settings (current를 직접 변경하지 않음)
  */
-export function mergeSettingsPatch(current, patch) {
+export function mergeSettingsPatch(current: Record<string, any>, patch: Record<string, any>) {
     const result = { ...current };
     const remaining = { ...patch };
 
     // Deep merge perCli at per-CLI level
     if (remaining.perCli && typeof remaining.perCli === 'object') {
         result.perCli = result.perCli || {};
-        for (const [cli, cfg] of Object.entries(remaining.perCli)) {
+        for (const [cli, cfg] of Object.entries(remaining.perCli) as [string, Record<string, any>][]) {
             result.perCli[cli] = { ...result.perCli[cli], ...cfg };
         }
         delete remaining.perCli;
@@ -24,7 +24,7 @@ export function mergeSettingsPatch(current, patch) {
     // Deep merge activeOverrides at per-CLI level
     if (remaining.activeOverrides && typeof remaining.activeOverrides === 'object') {
         result.activeOverrides = result.activeOverrides || {};
-        for (const [cli, cfg] of Object.entries(remaining.activeOverrides)) {
+        for (const [cli, cfg] of Object.entries(remaining.activeOverrides) as [string, Record<string, any>][]) {
             result.activeOverrides[cli] = { ...result.activeOverrides[cli], ...cfg };
         }
         delete remaining.activeOverrides;

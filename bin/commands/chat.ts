@@ -29,14 +29,14 @@ const c = {
 };
 
 // ─── Connect ─────────────────────────────────
-const wsUrl = getWsUrl(values.port);
-const apiUrl = getServerUrl(values.port);
+const wsUrl = getWsUrl(values.port as string);
+const apiUrl = getServerUrl(values.port as string);
 import { APP_VERSION, getServerUrl, getWsUrl } from '../../src/core/config.ts';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const SKILL_SCRIPT = resolvePath(__dirname, 'skill.js');
 
-let ws;
+let ws: any;
 try {
     ws = await new Promise((resolve, reject) => {
         const s = new WebSocket(wsUrl);
@@ -53,32 +53,32 @@ try {
 let info = { cli: 'codex', workingDir: '~' };
 try {
     const r = await fetch(`${apiUrl}/api/settings`, { signal: AbortSignal.timeout(2000) });
-    if (r.ok) { const s = await r.json(); info = { cli: s.cli || 'codex', workingDir: s.workingDir || '~' }; }
+    if (r.ok) { const s = await r.json() as Record<string, any>; info = { cli: s.cli || 'codex', workingDir: s.workingDir || '~' }; }
 } catch { }
 
-const cliLabel = { claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI', opencode: 'OpenCode' };
-const cliColor = { claude: c.magenta, codex: c.red, gemini: c.blue, opencode: c.yellow };
+const cliLabel: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI', opencode: 'OpenCode' };
+const cliColor: Record<string, string> = { claude: c.magenta, codex: c.red, gemini: c.blue, opencode: c.yellow };
 const accent = cliColor[info.cli] || c.red;
 const label = cliLabel[info.cli] || info.cli;
-const dir = info.workingDir.replace(process.env.HOME, '~');
+const dir = info.workingDir.replace(process.env.HOME || '', '~');
 
 // ─── Width helper ────────────────────────────
 const W = () => Math.max(20, Math.min((process.stdout.columns || 60) - 4, 60));
 const hrLine = () => '-'.repeat(W());
 
-function renderCommandText(text) {
+function renderCommandText(text: string) {
     return String(text || '').replace(/\n/g, '\n  ');
 }
 
-async function apiJson(path, init = {}, timeoutMs = 10000) {
-    const headers = { ...(init.headers || {}) };
-    const req = { ...init, headers, signal: AbortSignal.timeout(timeoutMs) };
+async function apiJson(path: string, init: Record<string, any> = {}, timeoutMs = 10000) {
+    const headers: Record<string, string> = { ...(init.headers || {}) };
+    const req: Record<string, any> = { ...init, headers, signal: AbortSignal.timeout(timeoutMs) };
     if (req.body && typeof req.body !== 'string') {
         req.body = JSON.stringify(req.body);
         if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
     }
     const resp = await fetch(`${apiUrl}${path}`, req);
-    const data = await resp.json().catch(() => ({}));
+    const data = await resp.json().catch(() => ({})) as Record<string, any>;
     if (!resp.ok) {
         const msg = data?.error || data?.message || `${resp.status} ${resp.statusText}`;
         throw new Error(msg);
@@ -105,7 +105,7 @@ function makeCliCommandCtx() {
         version: APP_VERSION,
         getSession: () => apiJson('/api/session'),
         getSettings: () => apiJson('/api/settings'),
-        updateSettings: (patch) => apiJson('/api/settings', { method: 'PUT', body: patch }),
+        updateSettings: (patch: any) => apiJson('/api/settings', { method: 'PUT', body: patch }),
         getRuntime: () => apiJson('/api/runtime').catch(() => null),
         getSkills: () => apiJson('/api/skills').catch(() => []),
         clearSession: () => apiJson('/api/clear', { method: 'POST' }),
@@ -113,8 +113,8 @@ function makeCliCommandCtx() {
         getMcp: () => apiJson('/api/mcp'),
         syncMcp: () => apiJson('/api/mcp/sync', { method: 'POST' }),
         installMcp: () => apiJson('/api/mcp/install', { method: 'POST' }, 120000),
-        listMemory: () => apiJson('/api/claw-memory/list').then(d => d.files || []),
-        searchMemory: (q) => apiJson(`/api/claw-memory/search?q=${encodeURIComponent(q)}`).then(d => d.result || '(no results)'),
+        listMemory: () => apiJson('/api/claw-memory/list').then((d: any) => d.files || []),
+        searchMemory: (q: string) => apiJson(`/api/claw-memory/search?q=${encodeURIComponent(q)}`).then((d: any) => d.result || '(no results)'),
         getBrowserStatus: () => apiJson('/api/browser/status'),
         getBrowserTabs: () => apiJson('/api/browser/tabs'),
         resetEmployees: () => apiJson('/api/employees/reset', { method: 'POST' }),
@@ -128,7 +128,7 @@ if (values.simple) {
     console.log(`\n  cli-claw v${APP_VERSION} · ${label} · :${values.port}\n`);
     const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: `${label} > ` });
     let streaming = false;
-    async function runSlashCommand(parsed) {
+    async function runSlashCommand(parsed: any) {
         try {
             const result = await executeCommand(parsed, makeCliCommandCtx());
             if (result?.code === 'clear_screen') console.clear();
@@ -140,11 +140,11 @@ if (values.simple) {
                 return;
             }
         } catch (err) {
-            console.log(`  ${c.red}${err.message}${c.reset}`);
+            console.log(`  ${c.red}${(err as Error).message}${c.reset}`);
         }
         rl.prompt();
     }
-    ws.on('message', (data) => {
+    ws.on('message', (data: any) => {
         try {
             const msg = JSON.parse(data.toString());
             if (msg.type === 'agent_chunk') { if (!streaming) streaming = true; process.stdout.write(msg.text || ''); }
@@ -166,7 +166,7 @@ if (values.simple) {
         // Phase 10: /file command
         if (t.startsWith('/file ')) {
             const parts = t.slice(6).trim().split(/\s+/);
-            const fp = resolvePath(parts[0]);
+            const fp = resolvePath(parts[0]!);
             const caption = parts.slice(1).join(' ');
             if (!fs.existsSync(fp)) { console.log(`  ${c.red}파일 없음: ${fp}${c.reset}`); rl.prompt(); return; }
             const prompt = `[사용자가 파일을 보냈습니다: ${fp}]\n이 파일을 Read 도구로 읽고 분석해주세요.${caption ? `\n\n사용자 메시지: ${caption}` : ''}`;
@@ -229,12 +229,13 @@ if (values.simple) {
     }
 
     // Phase 12.1.7: Calculate visual width (Korean/CJK = 2 columns, ANSI codes = 0)
-    function visualWidth(str) {
+    function visualWidth(str: string) {
         // Strip ANSI escape codes first
         const stripped = str.replace(/\x1b\[[0-9;]*m/g, '');
         let w = 0;
         for (const ch of stripped) {
             const cp = ch.codePointAt(0);
+            if (cp === undefined) { w += 1; continue; }
             // CJK ranges: Hangul, CJK Unified, Fullwidth, etc
             if ((cp >= 0x1100 && cp <= 0x115F) || (cp >= 0x2E80 && cp <= 0x303E) ||
                 (cp >= 0x3040 && cp <= 0x33BF) || (cp >= 0x3400 && cp <= 0x4DBF) ||
@@ -251,7 +252,7 @@ if (values.simple) {
         return w;
     }
 
-    function clipTextToCols(str, maxCols) {
+    function clipTextToCols(str: string, maxCols: number) {
         if (maxCols <= 0) return '';
         let out = '';
         let w = 0;
@@ -304,8 +305,13 @@ if (values.simple) {
     let commandRunning = false;
     const ESC_WAIT_MS = 70;
     let escPending = false;
-    let escTimer = null;
-    const ac = {
+    let escTimer: ReturnType<typeof setTimeout> | null = null;
+    const ac: {
+        open: boolean; stage: string; contextHeader: string;
+        items: any[]; selected: number; windowStart: number;
+        visibleRows: number; renderedRows: number;
+        maxRowsCommand: number; maxRowsArgument: number;
+    } = {
         open: false,
         stage: 'command',
         contextHeader: '',
@@ -324,13 +330,13 @@ if (values.simple) {
         return Math.max(0, getRows() - 3);
     }
 
-    function makeSelectionKey(item, stage) {
+    function makeSelectionKey(item: any, stage: string) {
         if (!item) return '';
         const base = item.command ? `${item.command}:${item.name}` : item.name;
         return `${stage}:${base}`;
     }
 
-    function popupTotalRows(state) {
+    function popupTotalRows(state: any) {
         if (!state?.open) return 0;
         return (state.visibleRows || 0) + (state.contextHeader ? 1 : 0);
     }
@@ -338,7 +344,7 @@ if (values.simple) {
     // ─ Phase 1c: use terminal natural scrolling to create space below ─
     // Prints \n within scroll region to push content up if needed,
     // then CSI A back to prompt row. No content is overwritten.
-    function ensureSpaceBelow(n) {
+    function ensureSpaceBelow(n: number) {
         if (n <= 0) return;
         for (let i = 0; i < n; i++) process.stdout.write('\n');
         process.stdout.write(`\x1b[${n}A`);
@@ -358,7 +364,7 @@ if (values.simple) {
         }
     }
 
-    function resolveAutocompleteState(prevKey) {
+    function resolveAutocompleteState(prevKey: string) {
         if (!inputBuf.startsWith('/') || inputBuf.includes('\n')) {
             return { open: false, items: [], selected: 0, visibleRows: 0 };
         }
@@ -384,7 +390,7 @@ if (values.simple) {
             items = getArgumentCompletionItems(commandName, partial, 'cli', argv, {});
             if (items.length) {
                 stage = 'argument';
-                contextHeader = `${commandName} ▸ ${items[0].commandDesc || '인자 선택'}`;
+                contextHeader = `${commandName} ▸ ${items[0]?.commandDesc || '인자 선택'}`;
             }
         }
 
@@ -430,7 +436,7 @@ if (values.simple) {
         ac.visibleRows = 0;
     }
 
-    function formatAutocompleteLine(item, selected, stage) {
+    function formatAutocompleteLine(item: any, selected: boolean, stage: string) {
         const value = stage === 'argument' ? item.name : `/${item.name}`;
         const valueCol = stage === 'argument' ? 24 : 14;
         const valueText = value.length >= valueCol ? value.slice(0, valueCol) : value.padEnd(valueCol, ' ');
@@ -486,9 +492,9 @@ if (values.simple) {
             return;
         }
         ac.open = true;
-        ac.stage = next.stage;
+        ac.stage = next.stage ?? 'command';
         ac.contextHeader = next.contextHeader || '';
-        ac.items = next.items;
+        ac.items = next.items as any[];
         ac.selected = next.selected;
         ac.visibleRows = next.visibleRows;
         syncAutocompleteWindow();
@@ -502,13 +508,13 @@ if (values.simple) {
     }
 
     // Redraw footer + input/autocomplete on terminal resize (debounced)
-    let resizeTimer = null;
+    let resizeTimer: ReturnType<typeof setTimeout> | null = null;
     process.stdout.on('resize', () => {
         if (resizeTimer) clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => { resizeTimer = null; handleResize(); }, 50);
     });
 
-    async function runSlashCommand(parsed) {
+    async function runSlashCommand(parsed: any) {
         let exiting = false;
         try {
             const result = await executeCommand(parsed, makeCliCommandCtx());
@@ -526,7 +532,7 @@ if (values.simple) {
                 process.exit(0);
             }
         } catch (err) {
-            console.log(`  ${c.red}${err.message}${c.reset}`);
+            console.log(`  ${c.red}${(err as Error).message}${c.reset}`);
         } finally {
             if (!exiting) {
                 commandRunning = false;
@@ -559,7 +565,8 @@ if (values.simple) {
         }
     }
 
-    process.stdin.on('data', (key) => {
+    process.stdin.on('data', (_key) => {
+        let key = _key as unknown as string;
         if (escPending) {
             if (escTimer) clearTimeout(escTimer);
             escTimer = null;
@@ -688,7 +695,7 @@ if (values.simple) {
             // Phase 10: /file command
             if (text.startsWith('/file ')) {
                 const parts = text.slice(6).trim().split(/\s+/);
-                const fp = resolvePath(parts[0]);
+                const fp = resolvePath(parts[0]!);
                 const caption = parts.slice(1).join(' ');
                 if (!fs.existsSync(fp)) {
                     console.log(`  ${c.red}파일 없음: ${fp}${c.reset}`);
@@ -748,7 +755,7 @@ if (values.simple) {
     });
 
     // ─── WS messages ─────────────────────────
-    ws.on('message', (data) => {
+    ws.on('message', (data: Buffer | string) => {
         const raw = data.toString();
         try {
             const msg = JSON.parse(raw);

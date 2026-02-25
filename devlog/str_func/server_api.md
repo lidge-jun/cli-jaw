@@ -1,4 +1,4 @@
-# server.js — Glue + API Routes (949L)
+# server.ts — Glue + API Routes (949L)
 
 > 라우트 + 초기화 + 커맨드 ctx 구성 + Quota 조회 + CLI Registry API
 > Phase 9: `ok()`/`fail()` 표준 응답 13라우트 적용, 보안 가드 4라우트 적용, `mergeSettingsPatch` 호출
@@ -43,7 +43,7 @@ ensureDirs() → runMigration() → loadSettings() → initPromptFiles()
 | Core           | `GET /api/session` `GET /api/messages` `POST /api/message` `POST /api/stop` `POST /api/clear`                 |
 | Commands       | `POST /api/command` `GET /api/commands?interface=`                                                            |
 | Settings       | `GET/PUT /api/settings` `GET/PUT /api/prompt` `GET/PUT /api/heartbeat-md`                                     |
-| **Registry**   | **`GET /api/cli-registry`** — CLI/모델 단일 소스 (cli-registry.js 반환)                                       |
+| **Registry**   | **`GET /api/cli-registry`** — CLI/모델 단일 소스 (cli-registry.ts 반환)                                       |
 | Memory (DB)    | `GET/POST /api/memory` `DELETE /api/memory/:key`                                                              |
 | Memory Files   | `GET /api/memory-files` `GET/DELETE /api/memory-files/:fn` `PUT /api/memory-files/settings`                   |
 | Claw Memory    | `GET /api/claw-memory/search,read,list` `POST /api/claw-memory/save,init`                                     |
@@ -57,7 +57,7 @@ ensureDirs() → runMigration() → loadSettings() → initPromptFiles()
 >
 > **보안 가드 적용 라우트**: memory-files (`assertFilename` + `safeResolveUnder`), upload (`decodeFilenameSafe`), skills (`assertSkillId`), claw-memory (`assertFilename` + `safeResolveUnder`)
 >
-> **새 import**: `ok`/`fail` (← src/http/response.js), `mergeSettingsPatch` (← src/settings-merge.js), `assertSkillId`/`assertFilename`/`safeResolveUnder` (← src/security/path-guards.js), `decodeFilenameSafe` (← src/security/decode.js)
+> **새 import**: `ok`/`fail` (← src/http/response.ts), `mergeSettingsPatch` (← src/settings-merge.ts), `assertSkillId`/`assertFilename`/`safeResolveUnder` (← src/security/path-guards.ts), `decodeFilenameSafe` (← src/security/decode.ts)
 
 ---
 

@@ -10,24 +10,24 @@
 
 | #   | 파일                                           | 역할          | 확인 사항                                         |
 | --- | ---------------------------------------------- | ------------- | ------------------------------------------------- |
-| 1   | `src/commands.js`                              | COMMANDS 배열 | name, interfaces, handler, getArgumentCompletions |
-| 2   | `server.js` → `makeWebCommandCtx()`            | Web ctx       | handler가 쓰는 ctx 함수 존재 여부                 |
-| 3   | `bin/commands/chat.js` → `makeCliCommandCtx()` | CLI ctx       | handler가 쓰는 ctx 함수 존재 여부                 |
-| 4   | `src/telegram.js` → `makeTelegramCommandCtx()` | Telegram ctx  | handler가 쓰는 ctx 함수 존재 여부                 |
+| 1   | `src/commands.ts`                              | COMMANDS 배열 | name, interfaces, handler, getArgumentCompletions |
+| 2   | `server.ts` → `makeWebCommandCtx()`            | Web ctx       | handler가 쓰는 ctx 함수 존재 여부                 |
+| 3   | `bin/commands/chat.ts` → `makeCliCommandCtx()` | CLI ctx       | handler가 쓰는 ctx 함수 존재 여부                 |
+| 4   | `src/telegram.ts` → `makeTelegramCommandCtx()` | Telegram ctx  | handler가 쓰는 ctx 함수 존재 여부                 |
 
 추가로 CLI 서브커맨드일 경우:
 
 | #   | 파일                     | 확인 사항                    |
 | --- | ------------------------ | ---------------------------- |
-| 5   | `bin/cli-claw.js`        | switch case + printHelp 등록 |
-| 6   | `bin/commands/<name>.js` | 실제 구현 파일               |
+| 5   | `bin/cli-claw.ts`        | switch case + printHelp 등록 |
+| 6   | `bin/commands/<name>.ts` | 실제 구현 파일               |
 
 ### CLI/모델 변경 시 (cli-registry 단일 소스)
 
 | #   | 파일                  | 확인 사항                          |
 | --- | --------------------- | ---------------------------------- |
-| 1   | `src/cli-registry.js` | **유일한 수정 지점** — label, binary, defaultModel, efforts, models |
-| 2   | `server.js`           | `/api/cli-registry` 자동 반영 (수정 불필요) |
+| 1   | `src/cli-registry.ts` | **유일한 수정 지점** — label, binary, defaultModel, efforts, models |
+| 2   | `server.ts`           | `/api/cli-registry` 자동 반영 (수정 불필요) |
 | 3   | Frontend              | `fetchCliRegistry()` 자동 반영 (수정 불필요) |
 
 ### 문서 (4곳)
@@ -69,7 +69,7 @@
 ### 1. 파일 생성
 
 ```
-src/discord.js    ← 봇 연결 + 메시지 핸들러
+src/discord.ts    ← 봇 연결 + 메시지 핸들러
 ```
 
 ### 2. 커맨드 ctx 구현
@@ -79,17 +79,17 @@ src/discord.js    ← 봇 연결 + 메시지 핸들러
 - 위 ctx 매핑 테이블의 함수들 중 지원할 것만 구현
 - 지원 안 하는 것은 stub으로 (`() => ({})`)
 
-### 3. commands.js COMMANDS 배열 업데이트
+### 3. commands.ts COMMANDS 배열 업데이트
 
 각 커맨드의 `interfaces` 배열에 `'discord'` 추가:
 ```javascript
 interfaces: ['cli', 'web', 'telegram', 'discord']
 ```
 
-### 4. server.js 연동
+### 4. server.ts 연동
 
 ```javascript
-import { startDiscordBot } from './src/discord.js';
+import { startDiscordBot } from './src/discord.ts';
 // startup 시:
 if (settings.discord?.token) startDiscordBot(settings);
 ```

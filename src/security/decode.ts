@@ -7,7 +7,7 @@
  * @returns {string} decoded filename
  * @throws 400 filename_too_long / invalid_percent_encoding
  */
-export function decodeFilenameSafe(rawHeader) {
+export function decodeFilenameSafe(rawHeader: string | null | undefined) {
     const raw = String(rawHeader || '').trim();
     if (!raw) return 'upload.bin';
     if (raw.length > 200) {

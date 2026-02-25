@@ -59,22 +59,22 @@ const PHASE_INSTRUCTIONS = {
 
 // ─── Per-Agent Phase Tracking ────────────────────────
 
-function initAgentPhases(subtasks) {
-    return subtasks.map(st => {
+function initAgentPhases(subtasks: any[]) {
+    return subtasks.map((st: Record<string, any>) => {
         const role = (st.role || 'custom').toLowerCase();
-        const fullProfile = PHASE_PROFILES[role] || [3];
+        const fullProfile = PHASE_PROFILES[role as keyof typeof PHASE_PROFILES] || [3];
 
         // start_phase 지원: planning agent가 지정한 시작 phase부터
         // 잘못된 값은 profile 범위 내로 보정 (예: 99 -> 마지막 phase)
         const rawStart = Number(st.start_phase);
-        const minPhase = fullProfile[0];
-        const maxPhase = fullProfile[fullProfile.length - 1];
-        const startPhase = Number.isFinite(rawStart)
+        const minPhase = fullProfile[0]!;
+        const maxPhase = fullProfile[fullProfile.length - 1]!;
+        const startPhase: number = Number.isFinite(rawStart)
             ? Math.max(minPhase, Math.min(maxPhase, rawStart))
             : minPhase;
-        const profile = fullProfile.filter(p => p >= startPhase);
+        const profile = fullProfile.filter((p: number) => p >= startPhase);
         // profile이 비면 최소한 마지막 phase는 실행
-        const effectiveProfile = profile.length > 0 ? profile : [fullProfile[fullProfile.length - 1]];
+        const effectiveProfile = profile.length > 0 ? profile : [fullProfile[fullProfile.length - 1]!];
 
         if (startPhase > minPhase) {
             console.log(`[claw:phase-skip] ${st.agent} (${role}): skipping to phase ${startPhase}`);
@@ -89,12 +89,12 @@ function initAgentPhases(subtasks) {
             currentPhaseIdx: 0,
             currentPhase: effectiveProfile[0],
             completed: false,
-            history: [],
+            history: [] as Record<string, any>[],
         };
     });
 }
 
-function advancePhase(ap, passed) {
+function advancePhase(ap: Record<string, any>, passed: boolean) {
     if (!passed) return;
     if (ap.currentPhaseIdx < ap.phaseProfile.length - 1) {
         ap.currentPhaseIdx++;
@@ -106,7 +106,7 @@ function advancePhase(ap, passed) {
 
 // ─── Plan Phase ──────────────────────────────────────
 
-async function phasePlan(prompt, worklog, meta = {}) {
+async function phasePlan(prompt: string, worklog: Record<string, any>, meta: Record<string, any> = {}) {
     broadcast('agent_status', { agentId: 'planning', agentName: '🎯 기획', status: 'planning' });
 
     const planPrompt = `## 작업 요청
@@ -187,8 +187,8 @@ ${prompt}
 worklog 경로: ${worklog.path}
 이 파일에 계획을 기록하세요.`;
 
-    const { promise } = spawnAgent(planPrompt, { agentId: 'planning', origin: meta.origin || 'web' });
-    const result = await promise;
+    const { promise } = spawnAgent(planPrompt, { agentId: 'planning', origin: (meta as Record<string, any>).origin || 'web' });
+    const result = await promise as Record<string, any>;
 
     // Agent 자율 판단: direct_answer가 있으면 subtask 생략
     const directAnswer = parseDirectAnswer(result.text);
@@ -205,16 +205,16 @@ worklog 경로: ${worklog.path}
 
 // ─── Distribute Phase (per-agent phase-aware) ────────
 
-async function distributeByPhase(agentPhases, worklog, round, meta = {}) {
-    const emps = getEmployees.all();
-    const results = [];
+async function distributeByPhase(agentPhases: Record<string, any>[], worklog: Record<string, any>, round: number, meta: Record<string, any> = {}) {
+    const emps = getEmployees.all() as Record<string, any>[];
+    const results: Record<string, any>[] = [];
 
-    const active = agentPhases.filter(ap => !ap.completed);
+    const active = agentPhases.filter((ap: Record<string, any>) => !ap.completed);
     if (active.length === 0) return results;
 
     // 순차 실행: 각 에이전트가 이전 에이전트의 변경을 볼 수 있도록
     for (const ap of active) {
-        const emp = emps.find(e =>
+        const emp = emps.find((e: Record<string, any>) =>
             e.name === ap.agent || e.name?.includes(ap.agent) || ap.agent.includes(e.name)
         );
         if (!emp) {
@@ -222,8 +222,8 @@ async function distributeByPhase(agentPhases, worklog, round, meta = {}) {
             continue;
         }
 
-        const instruction = PHASE_INSTRUCTIONS[ap.currentPhase];
-        const phaseLabel = PHASES[ap.currentPhase];
+        const instruction = PHASE_INSTRUCTIONS[ap.currentPhase as keyof typeof PHASE_INSTRUCTIONS];
+        const phaseLabel = PHASES[ap.currentPhase as keyof typeof PHASES];
         const sysPrompt = getEmployeePromptV2(emp, ap.role, ap.currentPhase);
 
         // 이전 에이전트 결과 요약 (순차 실행이므로 이미 완료된 것들)
@@ -231,7 +231,7 @@ async function distributeByPhase(agentPhases, worklog, round, meta = {}) {
             ? results.map(r => `- ${r.agent} (${r.role}): ${r.status} — ${r.text.slice(0, 150)}`).join('\n')
             : '(첫 번째 에이전트입니다)';
 
-        const remainingPhases = ap.phaseProfile.slice(ap.currentPhaseIdx).map(p => `${p}(${PHASES[p]})`).join('→');
+        const remainingPhases = ap.phaseProfile.slice(ap.currentPhaseIdx).map((p: number) => `${p}(${PHASES[p as keyof typeof PHASES]})`).join('→');
 
         const taskPrompt = `## 작업 지시 [${phaseLabel}]
 ${ap.task}
@@ -268,39 +268,39 @@ ${priorSummary}
 작업 완료 후 반드시 Execution Log 섹션에 결과를 기록하세요.`;
 
         broadcast('agent_status', {
-            agentId: emp.id, agentName: emp.name,
+            agentId: (emp as Record<string, any>).id, agentName: (emp as Record<string, any>).name,
             status: 'running', phase: ap.currentPhase, phaseLabel,
         });
 
-        const empSession = getEmployeeSession.get(emp.id);
-        const canResume = !!(empSession?.session_id && empSession?.cli === emp.cli);
+        const empSession = getEmployeeSession.get((emp as Record<string, any>).id) as Record<string, any> | undefined;
+        const canResume = !!(empSession?.session_id && empSession?.cli === (emp as Record<string, any>).cli);
         const { promise } = spawnAgent(taskPrompt, {
-            agentId: emp.id, cli: emp.cli, model: emp.model,
+            agentId: (emp as Record<string, any>).id, cli: (emp as Record<string, any>).cli, model: (emp as Record<string, any>).model,
             forceNew: !canResume,
-            employeeSessionId: canResume ? empSession.session_id : undefined,
+            employeeSessionId: canResume ? empSession!.session_id : undefined,
             sysPrompt: canResume ? undefined : sysPrompt,
-            origin: meta.origin || 'web',
+            origin: (meta as Record<string, any>).origin || 'web',
         });
 
-        const r = await promise;
+        const r = await promise as Record<string, any>;
         if (r.code === 0 && r.sessionId) {
-            upsertEmployeeSession.run(emp.id, r.sessionId, emp.cli);
+            upsertEmployeeSession.run((emp as Record<string, any>).id, r.sessionId, (emp as Record<string, any>).cli);
         }
         const result = {
-            agent: ap.agent, role: ap.role, id: emp.id,
+            agent: ap.agent, role: ap.role, id: (emp as Record<string, any>).id,
             phase: ap.currentPhase, phaseLabel,
             status: r.code === 0 ? 'done' : 'error',
             text: r.text || '',
         };
 
         // phases_completed 파싱: 에이전트가 여러 phase를 한 번에 완료 선언
-        const pcMatch = (r.text || '').match(/\{[\s\S]*"phases_completed"\s*:\s*\[[\d,\s]+\][\s\S]*\}/);
+        const pcMatch = ((r as Record<string, any>).text || '').match(/\{[\s\S]*"phases_completed"\s*:\s*\[[\d,\s]+\][\s\S]*\}/);
         if (pcMatch) {
             try {
                 const pc = JSON.parse(pcMatch[0]);
                 if (Array.isArray(pc.phases_completed) && pc.phases_completed.length > 1) {
                     const maxCompleted = Math.max(...pc.phases_completed);
-                    const newIdx = ap.phaseProfile.findIndex(p => p > maxCompleted);
+                    const newIdx = ap.phaseProfile.findIndex((p: number) => p > maxCompleted);
                     if (newIdx === -1) {
                         ap.completed = true;
                         console.log(`[claw:phase-skip] ${ap.agent} completed ALL phases in one pass`);
@@ -314,7 +314,7 @@ ${priorSummary}
         }
 
         results.push(result);
-        broadcast('agent_status', { agentId: emp.id, agentName: emp.name, status: result.status, phase: ap.currentPhase });
+        broadcast('agent_status', { agentId: (emp as Record<string, any>).id, agentName: (emp as Record<string, any>).name, status: result.status, phase: ap.currentPhase });
 
         // 즉시 worklog에 기록
         appendToWorklog(worklog.path, 'Execution Log',
@@ -327,13 +327,13 @@ ${priorSummary}
 
 // ─── Review Phase (per-agent verdict) ────────────────
 
-async function phaseReview(results, agentPhases, worklog, round, meta = {}) {
-    const report = results.map(r =>
+async function phaseReview(results: Record<string, any>[], agentPhases: Record<string, any>[], worklog: Record<string, any>, round: number, meta: Record<string, any> = {}) {
+    const report = results.map((r: Record<string, any>) =>
         `- **${r.agent}** (${r.role}, ${r.phaseLabel}): ${r.status === 'done' ? '✅' : '❌'}\n  ${r.text.slice(0, 400)}`
     ).join('\n');
 
-    const matrixStr = agentPhases.map(ap => {
-        const base = `- ${ap.agent}: role=${ap.role}, phase=${ap.currentPhase}(${PHASES[ap.currentPhase]}), completed=${ap.completed}`;
+    const matrixStr = agentPhases.map((ap: Record<string, any>) => {
+        const base = `- ${ap.agent}: role=${ap.role}, phase=${ap.currentPhase}(${PHASES[ap.currentPhase as keyof typeof PHASES]}), completed=${ap.completed}`;
         if (ap.verification) {
             return `${base}\n  pass_criteria: ${ap.verification.pass_criteria || 'N/A'}\n  fail_criteria: ${ap.verification.fail_criteria || 'N/A'}`;
         }
@@ -380,8 +380,8 @@ JSON으로 출력:
 모든 작업이 완료되면 allDone: true + 사용자에게 보여줄 자연어 요약을 함께 작성.`;
 
     broadcast('agent_status', { agentId: 'planning', agentName: '🎯 기획', status: 'reviewing' });
-    const { promise } = spawnAgent(reviewPrompt, { agentId: 'planning', internal: true, origin: meta.origin || 'web' });
-    const evalR = await promise;
+    const { promise } = spawnAgent(reviewPrompt, { agentId: 'planning', internal: true, origin: (meta as Record<string, any>).origin || 'web' });
+    const evalR = await promise as Record<string, any>;
 
     const verdicts = parseVerdicts(evalR.text);
     return { verdicts, rawText: evalR.text };
@@ -389,7 +389,7 @@ JSON으로 출력:
 
 // ─── Main Orchestrate v2 ─────────────────────────────
 
-export async function orchestrate(prompt, meta = {}) {
+export async function orchestrate(prompt: string, meta: Record<string, any> = {}) {
     clearAllEmployeeSessions.run();
     clearPromptCache();
 
@@ -400,9 +400,7 @@ export async function orchestrate(prompt, meta = {}) {
     if (employees.length > 0 && !needsOrchestration(prompt)) {
         console.log(`[claw:triage] direct response (no orchestration needed)`);
         const { promise } = spawnAgent(prompt, { origin });
-        const result = await promise;
-
-        // Phase 17: AI가 subtask JSON을 출력했으면 → orchestration 재진입
+        const result = await promise as Record<string, any>;
         const lateSubtasks = parseSubtasks(result.text);
         if (lateSubtasks?.length) {
             console.log(`[claw:triage] agent chose to dispatch (${lateSubtasks.length} subtasks)`);
@@ -421,7 +419,7 @@ export async function orchestrate(prompt, meta = {}) {
                 const { verdicts, rawText } = await phaseReview(results, agentPhases, worklog, round, { origin });
                 if (verdicts?.verdicts) {
                     for (const v of verdicts.verdicts) {
-                        const ap = agentPhases.find(a => a.agent === v.agent);
+                        const ap = agentPhases.find((a: Record<string, any>) => a.agent === v.agent);
                         if (ap) {
                             const judgedPhase = ap.currentPhase;
                             advancePhase(ap, v.pass);
@@ -430,7 +428,7 @@ export async function orchestrate(prompt, meta = {}) {
                     }
                 }
                 updateMatrix(worklog.path, agentPhases);
-                const allDone = agentPhases.every(ap => ap.completed);
+                const allDone = agentPhases.every((ap: Record<string, any>) => ap.completed);
                 if (allDone) {
                     const summary = stripSubtaskJSON(rawText) || '모든 작업 완료';
                     appendToWorklog(worklog.path, 'Final Summary', summary);
@@ -442,10 +440,10 @@ export async function orchestrate(prompt, meta = {}) {
                 }
                 broadcast('round_done', { round, action: 'next', agentPhases });
                 if (round === MAX_ROUNDS) {
-                    const done = agentPhases.filter(ap => ap.completed);
-                    const pending = agentPhases.filter(ap => !ap.completed);
-                    const partial = `## 완료 (${done.length})\n${done.map(a => `- ✅ ${a.agent} (${a.role})`).join('\n')}\n\n` +
-                        `## 미완료 (${pending.length})\n${pending.map(a => `- ⏳ ${a.agent} (${a.role}) — Phase ${a.currentPhase}: ${PHASES[a.currentPhase]}`).join('\n')}\n\n` +
+                    const done = agentPhases.filter((ap: Record<string, any>) => ap.completed);
+                    const pending = agentPhases.filter((ap: Record<string, any>) => !ap.completed);
+                    const partial = `## 완료 (${done.length})\n${done.map((a: Record<string, any>) => `- ✅ ${a.agent} (${a.role})`).join('\n')}\n\n` +
+                        `## 미완료 (${pending.length})\n${pending.map((a: Record<string, any>) => `- ⏳ ${a.agent} (${a.role}) — Phase ${a.currentPhase}: ${PHASES[a.currentPhase as keyof typeof PHASES]}`).join('\n')}\n\n` +
                         `이어서 진행하려면 "이어서 해줘"라고 말씀하세요.\nWorklog: ${worklog.path}`;
                     appendToWorklog(worklog.path, 'Final Summary', partial);
                     updateWorklogStatus(worklog.path, 'partial', round);
@@ -464,7 +462,7 @@ export async function orchestrate(prompt, meta = {}) {
     // 직원 없으면 단일 에이전트 모드
     if (employees.length === 0) {
         const { promise } = spawnAgent(prompt, { origin });
-        const result = await promise;
+        const result = await promise as Record<string, any>;
         const stripped = stripSubtaskJSON(result.text);
         broadcast('orchestrate_done', { text: stripped || result.text || '', origin });
         return;
@@ -505,7 +503,7 @@ export async function orchestrate(prompt, meta = {}) {
         // 4. Per-agent phase advance
         if (verdicts?.verdicts) {
             for (const v of verdicts.verdicts) {
-                const ap = agentPhases.find(a => a.agent === v.agent);
+                const ap = agentPhases.find((a: Record<string, any>) => a.agent === v.agent);
                 if (ap) {
                     const judgedPhase = ap.currentPhase;  // advance 전 기록
                     advancePhase(ap, v.pass);
@@ -516,7 +514,7 @@ export async function orchestrate(prompt, meta = {}) {
         updateMatrix(worklog.path, agentPhases);
 
         // 5. 완료 판정 (agentPhases 기준 우선, allDone은 보조)
-        const allDone = agentPhases.every(ap => ap.completed);
+        const allDone = agentPhases.every((ap: Record<string, any>) => ap.completed);
         if (allDone) {
             const summary = stripSubtaskJSON(rawText) || '모든 작업 완료';
             appendToWorklog(worklog.path, 'Final Summary', summary);
@@ -531,10 +529,10 @@ export async function orchestrate(prompt, meta = {}) {
 
         // 6. Max round 도달 → 부분 보고
         if (round === MAX_ROUNDS) {
-            const done = agentPhases.filter(ap => ap.completed);
-            const pending = agentPhases.filter(ap => !ap.completed);
-            const partial = `## 완료 (${done.length})\n${done.map(a => `- ✅ ${a.agent} (${a.role})`).join('\n')}\n\n` +
-                `## 미완료 (${pending.length})\n${pending.map(a => `- ⏳ ${a.agent} (${a.role}) — Phase ${a.currentPhase}: ${PHASES[a.currentPhase]}`).join('\n')}\n\n` +
+            const done = agentPhases.filter((ap: Record<string, any>) => ap.completed);
+            const pending = agentPhases.filter((ap: Record<string, any>) => !ap.completed);
+            const partial = `## 완료 (${done.length})\n${done.map((a: Record<string, any>) => `- ✅ ${a.agent} (${a.role})`).join('\n')}\n\n` +
+                `## 미완료 (${pending.length})\n${pending.map((a: Record<string, any>) => `- ⏳ ${a.agent} (${a.role}) — Phase ${a.currentPhase}: ${PHASES[a.currentPhase as keyof typeof PHASES]}`).join('\n')}\n\n` +
                 `이어서 진행하려면 "이어서 해줘"라고 말씀하세요.\nWorklog: ${worklog.path}`;
             appendToWorklog(worklog.path, 'Final Summary', partial);
             updateWorklogStatus(worklog.path, 'partial', round);
@@ -546,8 +544,8 @@ export async function orchestrate(prompt, meta = {}) {
 
 // ─── Continue (이어서 해줘) ───────────────────────────
 
-export async function orchestrateContinue(meta = {}) {
-    const origin = meta.origin || 'web';
+export async function orchestrateContinue(meta: Record<string, any> = {}) {
+    const origin = (meta as Record<string, any>).origin || 'web';
     const latest = readLatestWorklog();
     if (!latest) {
         broadcast('orchestrate_done', { text: '이어갈 worklog가 없습니다.', origin });
@@ -566,7 +564,7 @@ export async function orchestrateContinue(meta = {}) {
 Worklog: ${latest.path}
 
 미완료 항목:
-${pending.map(p => `- ${p.agent} (${p.role}): Phase ${p.currentPhase}`).join('\n')}
+${pending.map((p: Record<string, any>) => `- ${p.agent} (${p.role}): Phase ${p.currentPhase}`).join('\n')}
 
 subtask JSON을 출력하세요.`;
 

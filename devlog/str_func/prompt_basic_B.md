@@ -2,8 +2,8 @@
 
 > B.md = `getSystemPrompt()` 결과 캐시
 > 경로: `~/.cli-claw/prompts/B.md` + `{workDir}/AGENTS.md`
-> 소스: `src/prompt/builder.js` → `regenerateB()` (L502–523)
-> Phase 20.6: `src/prompt.js` → `src/prompt/builder.js` 이동
+> 소스: `src/prompt/builder.ts` → `regenerateB()` (L502–523)
+> Phase 20.6: `src/prompt.ts` → `src/prompt/builder.ts` 이동
 
 ---
 
@@ -11,7 +11,7 @@
 
 ```
 ┌──────────────────────────────────────────────────┐
-│ getSystemPrompt() 조립 순서 (builder.js L250–396)│
+│ getSystemPrompt() 조립 순서 (builder.ts L250–396)│
 ├──────────────────────────────────────────────────┤
 │ 1. A-1.md (시스템 규칙)                  ← 항상  │
 │    └ 파일 우선, A1_CONTENT 폴백                  │
@@ -36,7 +36,7 @@
 └──────────────────────────────────────────────────┘
 ```
 
-### regenerateB() 호출 시점 (server.js, 10곳)
+### regenerateB() 호출 시점 (server.ts, 10곳)
 
 | 호출 위치 | 트리거 |
 |---|---|
@@ -51,7 +51,7 @@
 
 ## Orchestration 프롬프트 (NEW — Completion Protocol)
 
-`getSystemPrompt()`에서 직원 1+명일 때 주입 (builder.js L296–325):
+`getSystemPrompt()`에서 직원 1+명일 때 주입 (builder.ts L296–325):
 
 ```markdown
 ## Orchestration System
@@ -94,7 +94,7 @@ V1 + 추가 주입:
 
 ### Active Skills (자동 활성화)
 
-소스: `lib/mcp-sync.js` → `copyDefaultSkills()`
+소스: `lib/mcp-sync.ts` → `copyDefaultSkills()`
 
 | 출처 | 자동 활성화 ID |
 |---|---|
@@ -114,7 +114,7 @@ V1 + 추가 주입:
 
 ---
 
-## Orchestration Plan Prompt (pipeline.js L112–185)
+## Orchestration Plan Prompt (pipeline.ts L112–185)
 
 planning agent에게 보내는 프롬프트. **3-tier 호출 전략**:
 
@@ -132,7 +132,7 @@ Dev Skills 참고 안내 포함: role별 자동 주입 스킬 목록 (dev-fronte
 
 ### Source of Truth: `~/.cli-claw/mcp.json`
 
-코드 기본 서버: `lib/mcp-sync.js` → `DEFAULT_MCP_SERVERS`
+코드 기본 서버: `lib/mcp-sync.ts` → `DEFAULT_MCP_SERVERS`
 
 ```json
 { "context7": { "command": "npx", "args": ["-y", "@upstash/context7-mcp"] } }
@@ -159,7 +159,7 @@ Dev Skills 참고 안내 포함: role별 자동 주입 스킬 목록 (dev-fronte
 
 ---
 
-## Settings 기본값 (`core/config.js` → `createDefaultSettings`)
+## Settings 기본값 (`core/config.ts` → `createDefaultSettings`)
 
 ```json
 {

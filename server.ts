@@ -49,7 +49,7 @@ import {
     getMergedSkills,
 } from './src/prompt/builder.ts';
 import {
-    activeProcess, killActiveAgent, waitForProcessEnd,
+    activeProcess, killActiveAgent, killAllAgents, waitForProcessEnd,
     steerAgent, enqueueMessage, processQueue, messageQueue,
     saveUpload, memoryFlushCounter, resetFallbackState,
 } from './src/agent/spawn.ts';
@@ -72,7 +72,7 @@ try {
     if (fs.existsSync(envPath)) {
         for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
             const m = line.match(/^([A-Z_]+)=(.*)$/);
-            if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
+            if (m && m[1] && !process.env[m[1]]) process.env[m[1]] = m[2]!.trim();
         }
     }
 } catch { /* no .env, that's fine */ }
@@ -189,7 +189,7 @@ wss.on('connection', (ws) => {
                     orchestrate(text, { origin: 'cli' });
                 }
             }
-            if (msg.type === 'stop') killActiveAgent('ws');
+            if (msg.type === 'stop') killAllAgents('ws');
         } catch (e) { console.warn('[ws:parse] message parse failed', { preview: String(raw).slice(0, 80) }); }
     });
 });
@@ -206,12 +206,12 @@ function getRuntimeSnapshot() {
 
 function clearSessionState() {
     clearMessages.run();
-    const session = getSession();
+    const session = getSession() as Record<string, any>;
     updateSession.run(session.active_cli, null, session.model, session.permissions, session.working_dir, session.effort);
     broadcast('clear', {});
 }
 
-function resolveRequestLocale(req, preferred = null) {
+function resolveRequestLocale(req: any, preferred: string | null = null) {
     const fallback = settings.locale || 'ko';
     const direct = typeof preferred === 'string' ? preferred.trim() : '';
     if (direct) return normalizeLocale(direct, fallback);
@@ -238,7 +238,7 @@ function getLatestTelegramChatId() {
     return ids.at(-1) || null;
 }
 
-function applySettingsPatch(rawPatch = {}, { restartTelegram = false } = {}) {
+function applySettingsPatch(rawPatch: Record<string, any> = {}, { restartTelegram = false } = {}) {
     const prevCli = settings.cli;
     const hasTelegramUpdate = !!(rawPatch || {}).telegram || (rawPatch || {}).locale !== undefined;
 
@@ -246,7 +246,7 @@ function applySettingsPatch(rawPatch = {}, { restartTelegram = false } = {}) {
     replaceSettings(merged);
     saveSettings(settings);
     resetFallbackState();
-    const session = getSession();
+    const session = getSession() as Record<string, any>;
     const ao = settings.activeOverrides?.[settings.cli] || {};
     const pc = settings.perCli?.[settings.cli] || {};
     const activeModel = ao.model || pc.model || 'default';
@@ -264,7 +264,7 @@ function applySettingsPatch(rawPatch = {}, { restartTelegram = false } = {}) {
 function seedDefaultEmployees({ reset = false, notify = false } = {}) {
     const existing = getEmployees.all();
     if (reset) {
-        for (const emp of existing) deleteEmployee.run(emp.id);
+        for (const emp of existing) deleteEmployee.run((emp as any).id);
     } else if (existing.length > 0) {
         return { seeded: 0, cli: settings.cli, skipped: true };
     }
@@ -278,14 +278,14 @@ function seedDefaultEmployees({ reset = false, notify = false } = {}) {
     return { seeded: DEFAULT_EMPLOYEES.length, cli, skipped: false };
 }
 
-function makeWebCommandCtx(req, localeOverride = null) {
+function makeWebCommandCtx(req: any, localeOverride: string | null = null) {
     return {
         interface: 'web',
         locale: resolveRequestLocale(req, localeOverride),
         version: APP_VERSION,
         getSession,
         getSettings: () => settings,
-        updateSettings: async (patch) => applySettingsPatch(patch, { restartTelegram: true }),
+        updateSettings: async (patch: any) => applySettingsPatch(patch, { restartTelegram: true }),
         getRuntime: getRuntimeSnapshot,
         getSkills: getMergedSkills,
         clearSession: async () => clearSessionState(),
@@ -301,7 +301,7 @@ function makeWebCommandCtx(req, localeOverride = null) {
             return { results, synced };
         },
         listMemory: () => memory.list(),
-        searchMemory: (q) => memory.search(q),
+        searchMemory: (q: any) => memory.search(q),
         getBrowserStatus: async () => browser.getBrowserStatus(settings.browser?.cdpPort || 9240),
         getBrowserTabs: async () => ({ tabs: await browser.listTabs(settings.browser?.cdpPort || 9240) }),
         resetEmployees: async () => seedDefaultEmployees({ reset: true, notify: true }),
@@ -318,7 +318,7 @@ function makeWebCommandCtx(req, localeOverride = null) {
     };
 }
 
-app.get('/api/session', (_, res) => ok(res, getSession(), getSession()));
+app.get('/api/session', (_, res) => ok(res, getSession(), getSession() as Record<string, unknown> | undefined));
 app.get('/api/messages', (req, res) => {
     const includeTrace = ['1', 'true', 'yes'].includes(String(req.query.includeTrace || '').toLowerCase());
     const rows = includeTrace ? getMessagesWithTrace.all() : getMessages.all();
@@ -340,22 +340,22 @@ app.post('/api/command', async (req, res) => {
                 text: t('api.notCommand', {}, locale),
             });
         }
-        const result = await executeCommand(parsed, makeWebCommandCtx(req, locale));
+        const result = await executeCommand(parsed, makeWebCommandCtx(req, locale as string));
         res.json(result);
-    } catch (err) {
+    } catch (err: unknown) {
         console.error('[cmd:error]', err);
         const locale = resolveRequestLocale(req, req.body?.locale);
         res.status(500).json({
             ok: false,
             code: 'internal_error',
-            text: t('api.serverError', { msg: err.message }, locale),
+            text: t('api.serverError', { msg: (err as Error).message }, locale),
         });
     }
 });
 
 app.get('/api/commands', (req, res) => {
     const iface = String(req.query.interface || 'web');
-    const locale = resolveRequestLocale(req, req.query.locale);
+    const locale = resolveRequestLocale(req, req.query.locale as string);
     res.vary('Accept-Language');
     res.set('Content-Language', locale);
     res.json(COMMANDS
@@ -401,7 +401,7 @@ app.post('/api/orchestrate/continue', (req, res) => {
 });
 
 app.post('/api/stop', (req, res) => {
-    const killed = killActiveAgent('api');
+    const killed = killAllAgents('api');
     ok(res, { killed });
 });
 
@@ -457,7 +457,7 @@ app.delete('/api/memory/:key', (req, res) => {
 // Memory files (Claude native)
 app.get('/api/memory-files', (_, res) => {
     const memDir = getMemoryDir();
-    let files = [];
+    let files: any[] = [];
     if (fs.existsSync(memDir)) {
         files = fs.readdirSync(memDir).filter(f => f.endsWith('.md')).sort().reverse().map(f => {
             const content = fs.readFileSync(join(memDir, f), 'utf8');
@@ -481,8 +481,8 @@ app.get('/api/memory-files/:filename', (req, res) => {
         const fp = safeResolveUnder(getMemoryDir(), name);
         if (!fs.existsSync(fp)) return res.status(404).json({ error: 'not found' });
         res.json({ name, content: fs.readFileSync(fp, 'utf8') });
-    } catch (e) {
-        res.status(e.statusCode || 400).json({ error: e.message });
+    } catch (e: unknown) {
+        res.status((e as any).statusCode || 400).json({ error: (e as Error).message });
     }
 });
 app.delete('/api/memory-files/:filename', (req, res) => {
@@ -491,8 +491,8 @@ app.delete('/api/memory-files/:filename', (req, res) => {
         const fp = safeResolveUnder(getMemoryDir(), name);
         if (fs.existsSync(fp)) fs.unlinkSync(fp);
         res.json({ ok: true });
-    } catch (e) {
-        res.status(e.statusCode || 400).json({ error: e.message });
+    } catch (e: unknown) {
+        res.status((e as any).statusCode || 400).json({ error: (e as Error).message });
     }
 });
 app.put('/api/memory-files/settings', (req, res) => {
@@ -504,11 +504,11 @@ app.put('/api/memory-files/settings', (req, res) => {
 // File upload
 app.post('/api/upload', express.raw({ type: '*/*', limit: '20mb' }), (req, res) => {
     try {
-        const filename = decodeFilenameSafe(req.headers['x-filename']);
+        const filename = decodeFilenameSafe(req.headers['x-filename'] as string | undefined);
         const filePath = saveUpload(req.body, filename);
         res.json({ path: filePath, filename: basename(filePath) });
-    } catch (e) {
-        res.status(e.statusCode || 400).json({ error: e.message });
+    } catch (e: unknown) {
+        res.status((e as any).statusCode || 400).json({ error: (e as Error).message });
     }
 });
 
@@ -555,9 +555,9 @@ app.post('/api/telegram/send', async (req, res) => {
         }
 
         return res.json({ ok: true, chat_id: chatId, type });
-    } catch (e) {
+    } catch (e: unknown) {
         console.error('[telegram:send]', e);
-        return res.status(500).json({ error: e.message });
+        return res.status(500).json({ error: (e as Error).message });
     }
 });
 
@@ -582,9 +582,9 @@ app.post('/api/mcp/install', async (req, res) => {
         saveUnifiedMcp(config);
         const syncResults = syncToAll(config, settings.workingDir);
         res.json({ ok: true, results, synced: syncResults });
-    } catch (e) {
+    } catch (e: unknown) {
         console.error('[mcp:install]', e);
-        res.status(500).json({ error: e.message });
+        res.status(500).json({ error: (e as Error).message });
     }
 });
 app.post('/api/mcp/reset', (req, res) => {
@@ -599,9 +599,9 @@ app.post('/api/mcp/reset', (req, res) => {
             count: Object.keys(config.servers).length,
             synced: results,
         });
-    } catch (e) {
+    } catch (e: unknown) {
         console.error('[mcp:reset]', e);
-        res.status(500).json({ error: e.message });
+        res.status(500).json({ error: (e as Error).message });
     }
 });
 
@@ -624,7 +624,7 @@ app.post('/api/employees', (req, res) => {
     const id = crypto.randomUUID();
     const { name = 'New Agent', cli = 'claude', model = 'default', role = '' } = req.body || {};
     insertEmployee.run(id, name, cli, model, role);
-    const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(id);
+    const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(id) as Record<string, any>;
     broadcast('agent_added', emp);
     regenerateB();
     res.json(emp);
@@ -634,9 +634,9 @@ app.put('/api/employees/:id', (req, res) => {
     const allowed = ['name', 'cli', 'model', 'role', 'status'];
     const sets = Object.keys(updates).filter(k => allowed.includes(k)).map(k => `${k} = ?`);
     if (sets.length === 0) return res.status(400).json({ error: 'no valid fields' });
-    const vals = sets.map((_, i) => updates[Object.keys(updates).filter(k => allowed.includes(k))[i]]);
+    const vals = sets.map((_, i) => (updates as Record<string, any>)[Object.keys(updates).filter(k => allowed.includes(k))[i]!]);
     db.prepare(`UPDATE employees SET ${sets.join(', ')} WHERE id = ?`).run(...vals, req.params.id);
-    const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);
+    const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id) as Record<string, any>;
     broadcast('agent_updated', emp);
     regenerateB();
     res.json(emp);
@@ -667,7 +667,7 @@ app.put('/api/heartbeat', (req, res) => {
 // ─── Skills API (Phase 6) ────────────────────────────
 
 app.get('/api/skills', (req, res) => {
-    const lang = (req.query.locale || 'ko').toLowerCase();
+    const lang = (String(req.query.locale || 'ko')).toLowerCase();
     const skills = getMergedSkills().map(s => ({
         ...s,
         name: s[`name_${lang}`] || s.name,
@@ -691,8 +691,8 @@ app.post('/api/skills/enable', (req, res) => {
         }
         regenerateB();
         res.json({ ok: true });
-    } catch (e) {
-        res.status(e.statusCode || 400).json({ error: e.message });
+    } catch (e: unknown) {
+        res.status((e as any).statusCode || 400).json({ error: (e as Error).message });
     }
 });
 
@@ -704,8 +704,8 @@ app.post('/api/skills/disable', (req, res) => {
         fs.rmSync(dstDir, { recursive: true });
         regenerateB();
         res.json({ ok: true });
-    } catch (e) {
-        res.status(e.statusCode || 400).json({ error: e.message });
+    } catch (e: unknown) {
+        res.status((e as any).statusCode || 400).json({ error: (e as Error).message });
     }
 });
 
@@ -717,8 +717,8 @@ app.get('/api/skills/:id', (req, res) => {
         const p = fs.existsSync(activePath) ? activePath : refPath;
         if (!fs.existsSync(p)) return res.status(404).json({ error: 'not found' });
         res.type('text/markdown').send(fs.readFileSync(p, 'utf8'));
-    } catch (e) {
-        res.status(e.statusCode || 400).json({ error: e.message });
+    } catch (e: unknown) {
+        res.status((e as any).statusCode || 400).json({ error: (e as Error).message });
     }
 });
 
@@ -729,24 +729,24 @@ app.post('/api/skills/reset', (req, res) => {
         const symlinks = ensureSkillsSymlinks(settings.workingDir, { onConflict: 'backup' });
         regenerateB();
         res.json({ ok: true, symlinks });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
+    } catch (e: unknown) {
+        res.status(500).json({ error: (e as Error).message });
     }
 });
 
 // ─── Memory API (Phase A) ────────────────────────────
 
 app.get('/api/claw-memory/search', (req, res) => {
-    try { res.json({ result: memory.search(req.query.q || '') }); }
-    catch (e) { res.status(500).json({ error: e.message }); }
+    try { res.json({ result: memory.search(String(req.query.q || '')) }); }
+    catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
 });
 
 app.get('/api/claw-memory/read', (req, res) => {
     try {
-        const file = assertFilename(req.query.file, { allowExt: ['.md', '.txt', '.json'] });
-        const content = memory.read(file, { lines: req.query.lines });
+        const file = assertFilename(req.query.file as string, { allowExt: ['.md', '.txt', '.json'] });
+        const content = memory.read(file, { lines: req.query.lines as any });
         res.json({ content });
-    } catch (e) { res.status(e.statusCode || 500).json({ error: e.message }); }
+    } catch (e: unknown) { res.status((e as any).statusCode || 500).json({ error: (e as Error).message }); }
 });
 
 app.post('/api/claw-memory/save', (req, res) => {
@@ -754,17 +754,17 @@ app.post('/api/claw-memory/save', (req, res) => {
         const file = assertFilename(req.body.file, { allowExt: ['.md', '.txt', '.json'] });
         const p = memory.save(file, req.body.content);
         res.json({ ok: true, path: p });
-    } catch (e) { res.status(e.statusCode || 500).json({ error: e.message }); }
+    } catch (e: unknown) { res.status((e as any).statusCode || 500).json({ error: (e as Error).message }); }
 });
 
 app.get('/api/claw-memory/list', (_, res) => {
     try { res.json({ files: memory.list() }); }
-    catch (e) { res.status(500).json({ error: e.message }); }
+    catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
 });
 
 app.post('/api/claw-memory/init', (_, res) => {
     try { memory.ensureMemoryDir(); res.json({ ok: true }); }
-    catch (e) { res.status(500).json({ error: e.message }); }
+    catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
 });
 
 // ─── Browser API (Phase 7) — see src/routes/browser.js
@@ -799,7 +799,7 @@ watchHeartbeatFile();
 ['SIGTERM', 'SIGINT'].forEach(sig => process.on(sig, () => {
     console.log(`\n[server] ${sig} received, shutting down...`);
     stopHeartbeat();
-    killActiveAgent('shutdown');
+    killAllAgents('shutdown');
     wss.close();
     server.close(() => {
         console.log('[server] closed');
@@ -827,7 +827,7 @@ server.listen(PORT, () => {
             console.log(`  Skills: moved ${moved.length} conflict path(s) to ~/.cli-claw/backups/skills-conflicts`);
         }
         console.log(`  MCP:    ~/.cli-claw/mcp.json`);
-    } catch (e) { console.error('[mcp-init]', e.message); }
+    } catch (e: unknown) { console.error('[mcp-init]', (e as Error).message); }
 
     initTelegram();
     startHeartbeat();
@@ -843,8 +843,8 @@ server.listen(PORT, () => {
     const allEmps = db.prepare('SELECT id, name FROM employees').all();
     let migrated = 0;
     for (const emp of allEmps) {
-        const en = NAME_MAP[emp.name];
-        if (en) { db.prepare('UPDATE employees SET name = ? WHERE id = ?').run(en, emp.id); migrated++; }
+        const en = (NAME_MAP as Record<string, string>)[(emp as any).name];
+        if (en) { db.prepare('UPDATE employees SET name = ? WHERE id = ?').run(en, (emp as any).id); migrated++; }
     }
     if (migrated > 0) console.log(`  Agents: migrated ${migrated} Korean names → English`);
 });

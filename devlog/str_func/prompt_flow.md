@@ -1,7 +1,7 @@
 # 프롬프트 삽입 흐름 — Prompt Injection Flow
 
 > CLI-Claw의 프롬프트 조립 + 주입 전체 흐름. 에이전트 빌딩의 핵심 레퍼런스.
-> Phase 20.6: prompt.js → prompt/builder.js (523L) + promptCache 추가
+> Phase 20.6: prompt.ts → prompt/builder.ts (523L) + promptCache 추가
 
 ---
 
@@ -76,7 +76,7 @@ graph TD
 ### 조립 순서
 
 ```js
-// prompt/builder.js
+// prompt/builder.ts
 const a1 = fs.readFileSync(A1_PATH, 'utf8');
 const a2 = fs.readFileSync(A2_PATH, 'utf8');
 let prompt = `${a1}\n\n${a2}`;
@@ -118,7 +118,7 @@ graph LR
 경로: `~/.cli-claw/memory/MEMORY.md`
 
 ```js
-// prompt/builder.js — 항상 주입, 조건 없음
+// prompt/builder.ts — 항상 주입, 조건 없음
 const coreMem = fs.readFileSync(memPath, 'utf8').trim();
 if (coreMem && coreMem.length > 50) {
     const truncated = coreMem.length > 1500
@@ -218,7 +218,7 @@ graph TD
 ### Claude — 중복 방지 핵심
 
 ```js
-// agent.js:209-212
+// agent.ts:209-212
 if (cli === 'claude') {
     // sysPrompt already in --append-system-prompt (compact-protected)
     // Only send user message via stdin to avoid duplication
@@ -244,7 +244,7 @@ if (cli === 'claude') {
 ### Copilot — ACP JSON-RPC
 
 ```js
-// agent.js — copilot 분기
+// agent.ts — copilot 분기
 if (cli === 'copilot') {
     const acp = new AcpClient(model, workingDir, permissions);
     await acp.initialize();
@@ -258,7 +258,7 @@ if (cli === 'copilot') {
 ### Gemini — tmpfile 환경변수
 
 ```js
-// agent.js:189-193
+// agent.ts:189-193
 if (cli === 'gemini' && sysPrompt) {
     const tmpSysFile = join(os.tmpdir(), `claw-gemini-sys-${agentLabel}.md`);
     fs.writeFileSync(tmpSysFile, sysPrompt);
@@ -272,7 +272,7 @@ if (cli === 'gemini' && sysPrompt) {
 
 ```mermaid
 graph TD
-    MAIN["메인 에이전트<br/>getSystemPrompt() 풀 버전"] -->|"subtask JSON 감지"| ORC["orchestrator.js"]
+    MAIN["메인 에이전트<br/>getSystemPrompt() 풀 버전"] -->|"subtask JSON 감지"| ORC["orchestrator.ts"]
     ORC -->|"직원별 spawn"| SUB["getEmployeePrompt(emp)"]
     
     SUB --> S1["# 직원이름<br/>역할: 범용 개발자"]
@@ -303,7 +303,7 @@ graph TD
 
 ```text
 1. 메인 에이전트 응답에서 ```json { "subtasks": [...] } ``` 감지
-2. orchestrator.js → parseSubtasks() → 직원 목록 매칭
+2. orchestrator.ts → parseSubtasks() → 직원 목록 매칭
 3. 각 직원에 대해:
    spawnAgent(task, {
      forceNew: true,        ← 메인 세션과 분리

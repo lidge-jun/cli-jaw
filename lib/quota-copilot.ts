@@ -4,7 +4,7 @@
 
 import { execSync } from 'child_process';
 
-let _cachedToken = null;
+let _cachedToken: string | null = null;
 
 function getCopilotToken() {
     if (_cachedToken) return _cachedToken;
@@ -13,8 +13,8 @@ function getCopilotToken() {
             'security find-generic-password -s "copilot-cli" -w',
             { encoding: 'utf8', timeout: 5000 }
         ).trim();
-    } catch (e) {
-        console.warn('[quota-copilot] keychain read failed:', e.message?.split('\n')[0]);
+    } catch (e: unknown) {
+        console.warn('[quota-copilot] keychain read failed:', (e as Error).message?.split('\n')[0]);
         return null;
     }
     return _cachedToken || null;
@@ -33,7 +33,7 @@ export async function fetchCopilotQuota() {
             signal: AbortSignal.timeout(8000),
         });
         if (!res.ok) return null;
-        const data = await res.json();
+        const data = await res.json() as Record<string, any>;
 
         const snap = data.quota_snapshots || {};
         const pi = snap.premium_interactions || {};
@@ -56,8 +56,8 @@ export async function fetchCopilotQuota() {
             windows,
             resetDate: data.quota_reset_date || null,
         };
-    } catch (e) {
-        console.error('[quota-copilot]', e.message);
+    } catch (e: unknown) {
+        console.error('[quota-copilot]', (e as Error).message);
         return null;
     }
 }

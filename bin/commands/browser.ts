@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { getServerUrl } from '../../src/core/config.ts';
 
-const SERVER = getServerUrl();
+const SERVER = getServerUrl('3457');
 const sub = process.argv[3];
 const CLAW_HOME = join(homedir(), '.cli-claw');
 
@@ -19,12 +19,12 @@ const c = {
     cyan: '\x1b[36m',
 };
 
-async function api(method, path, body) {
-    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+async function api(method: string, path: string, body?: any) {
+    const opts: Record<string, any> = { method, headers: { 'Content-Type': 'application/json' } };
     if (body) opts.body = JSON.stringify(body);
     const resp = await fetch(`${SERVER}/api/browser${path}`, opts);
     if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: resp.statusText }));
+        const err = await resp.json().catch(() => ({ error: resp.statusText })) as Record<string, any>;
         throw new Error(err.error || `HTTP ${resp.status}`);
     }
     return resp.json();
@@ -37,16 +37,16 @@ try {
                 args: process.argv.slice(4),
                 options: { port: { type: 'string', default: '9240' } }, strict: false
             });
-            const r = await api('POST', '/start', { port: Number(values.port) });
+            const r = await api('POST', '/start', { port: Number(values.port) }) as Record<string, any>;
             console.log(r.running ? `🌐 Chrome started (CDP: ${r.cdpUrl})` : '❌ Failed');
             break;
         }
         case 'stop':
-            await api('POST', '/stop');
+            await api('POST', '/stop', {});
             console.log('🌐 Chrome stopped');
             break;
         case 'status': {
-            const r = await api('GET', '/status');
+            const r = await api('GET', '/status') as Record<string, any>;
             console.log(`running: ${r.running}\ntabs: ${r.tabs}\ncdpUrl: ${r.cdpUrl || 'n/a'}`);
             break;
         }
@@ -55,7 +55,7 @@ try {
                 args: process.argv.slice(4),
                 options: { interactive: { type: 'boolean', default: false } }, strict: false
             });
-            const r = await api('GET', `/snapshot?interactive=${values.interactive}`);
+            const r = await api('GET', `/snapshot?interactive=${values.interactive}`) as Record<string, any>;
             for (const n of r.nodes || []) {
                 const indent = '  '.repeat(n.depth);
                 const val = n.value ? ` = "${n.value}"` : '';
@@ -68,14 +68,14 @@ try {
                 args: process.argv.slice(4),
                 options: { 'full-page': { type: 'boolean' }, ref: { type: 'string' } }, strict: false
             });
-            const r = await api('POST', '/screenshot', { fullPage: values['full-page'], ref: values.ref });
+            const r = await api('POST', '/screenshot', { fullPage: values['full-page'], ref: values.ref }) as Record<string, any>;
             console.log(r.path);
             break;
         }
         case 'click': {
             const ref = process.argv[4];
             if (!ref) { console.error('Usage: cli-claw browser click <ref>'); process.exit(1); }
-            const opts = {};
+            const opts: Record<string, any> = {};
             if (process.argv.includes('--double')) opts.doubleClick = true;
             await api('POST', '/act', { kind: 'click', ref, ...opts });
             console.log(`clicked ${ref}`);
@@ -100,15 +100,15 @@ try {
             break;
         }
         case 'mouse-click': {
-            const x = parseInt(process.argv[4]);
-            const y = parseInt(process.argv[5]);
+            const x = parseInt(process.argv[4]!);
+            const y = parseInt(process.argv[5]!);
             if (isNaN(x) || isNaN(y)) {
                 console.error('Usage: cli-claw browser mouse-click <x> <y> [--double]');
                 process.exit(1);
             }
-            const opts = {};
+            const opts: Record<string, any> = {};
             if (process.argv.includes('--double')) opts.doubleClick = true;
-            const r = await api('POST', '/act', { kind: 'mouse-click', x, y, ...opts });
+            const r = await api('POST', '/act', { kind: 'mouse-click', x, y, ...opts }) as Record<string, any>;
             console.log(`🖱️ clicked at (${x}, ${y})`);
             break;
         }
@@ -118,13 +118,13 @@ try {
                 console.error('Usage: cli-claw browser vision-click "<target>" [--provider codex] [--double]');
                 process.exit(1);
             }
-            const opts = {};
+            const opts: Record<string, any> = {};
             if (process.argv.includes('--double')) opts.doubleClick = true;
             const providerIdx = process.argv.indexOf('--provider');
             if (providerIdx !== -1) opts.provider = process.argv[providerIdx + 1];
 
             console.log(`${c.dim}👁️ vision-click: "${target}"...${c.reset}`);
-            const r = await api('POST', '/vision-click', { target, ...opts });
+            const r = await api('POST', '/vision-click', { target, ...opts }) as Record<string, any>;
 
             if (r.success) {
                 console.log(`${c.green}🖱️ vision-clicked "${target}" at (${r.clicked.x}, ${r.clicked.y}) via ${r.provider}${c.reset}`);
@@ -135,18 +135,18 @@ try {
             break;
         }
         case 'navigate': {
-            const r = await api('POST', '/navigate', { url: process.argv[4] });
+            const r = await api('POST', '/navigate', { url: process.argv[4] }) as Record<string, any>;
             console.log(`navigated → ${r.url}`);
             break;
         }
         case 'open': {
-            const r = await api('POST', '/navigate', { url: process.argv[4] });
+            const r = await api('POST', '/navigate', { url: process.argv[4] }) as Record<string, any>;
             console.log(`opened → ${r.url}`);
             break;
         }
         case 'tabs': {
-            const r = await api('GET', '/tabs');
-            (r.tabs || []).forEach((t, i) => console.log(`${i + 1}. ${t.title}\n   ${t.url}`));
+            const r = await api('GET', '/tabs') as Record<string, any>;
+            (r.tabs || []).forEach((t: any, i: number) => console.log(`${i + 1}. ${t.title}\n   ${t.url}`));
             break;
         }
         case 'text': {
@@ -154,12 +154,12 @@ try {
                 args: process.argv.slice(4),
                 options: { format: { type: 'string', default: 'text' } }, strict: false
             });
-            const r = await api('GET', `/text?format=${values.format}`);
+            const r = await api('GET', `/text?format=${values.format}`) as Record<string, any>;
             console.log(r.text);
             break;
         }
         case 'evaluate': {
-            const r = await api('POST', '/evaluate', { expression: process.argv.slice(4).join(' ') });
+            const r = await api('POST', '/evaluate', { expression: process.argv.slice(4).join(' ') }) as Record<string, any>;
             console.log(JSON.stringify(r.result, null, 2));
             break;
         }
@@ -172,7 +172,7 @@ try {
                     rl.question(`\n  ${c.yellow}⚠️  브라우저를 초기화합니다.${c.reset}\n  프로필, 스크린샷, CDP 캐시가 삭제됩니다.\n  계속하시겠습니까? (y/N): `, r);
                 });
                 rl.close();
-                if (answer.toLowerCase() !== 'y') {
+                if ((answer as string).toLowerCase() !== 'y') {
                     console.log('  취소됨.\n');
                     break;
                 }
@@ -182,7 +182,7 @@ try {
 
             // 1. Stop browser (ignore errors if server not running)
             try {
-                await api('POST', '/stop');
+                await api('POST', '/stop', {});
                 console.log(`  ${c.dim}✓ browser stopped${c.reset}`);
             } catch {
                 console.log(`  ${c.dim}✓ browser not running${c.reset}`);
@@ -234,7 +234,7 @@ try {
 `);
     }
 } catch (e) {
-    console.error(`❌ ${e.message}`);
+    console.error(`❌ ${(e as Error).message}`);
     process.exitCode = 1;
 }
 

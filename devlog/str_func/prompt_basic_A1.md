@@ -1,9 +1,9 @@
 # prompt_basic_A1 — 시스템 프롬프트 기본값
 
 > 경로: `~/.cli-claw/prompts/A-1.md`
-> 소스: `src/prompt/builder.js` → `A1_CONTENT` 상수 (L87–172)
+> 소스: `src/prompt/builder.ts` → `A1_CONTENT` 상수 (L87–172)
 > **파일 우선**: A-1.md가 존재하면 파일 내용 사용, 없으면 `A1_CONTENT` 폴백
-> Phase 20.6: `src/prompt.js` → `src/prompt/builder.js` 이동
+> Phase 20.6: `src/prompt.ts` → `src/prompt/builder.ts` 이동
 
 ---
 
@@ -12,8 +12,8 @@
 | 버전 | 동작 | 코드 |
 |---|---|---|
 | ~Phase 14 | `fs.readFileSync(A1_PATH)` — 파일만 읽음 | — |
-| Phase 15 | `const a1 = A1_CONTENT` — **하드코딩만** (파일 무시) | builder.js L251 |
-| **현재** | `fs.existsSync(A1_PATH) ? readFile : A1_CONTENT` — **파일 우선, 하드코딩 폴백** | builder.js L252 |
+| Phase 15 | `const a1 = A1_CONTENT` — **하드코딩만** (파일 무시) | builder.ts L251 |
+| **현재** | `fs.existsSync(A1_PATH) ? readFile : A1_CONTENT` — **파일 우선, 하드코딩 폴백** | builder.ts L252 |
 
 > 사용자가 A-1.md를 편집하면 AGENTS.md에 즉시 반영.
 > A-1.md를 삭제하면 `A1_CONTENT`(172L 기본값)로 자동 폴백.
@@ -76,7 +76,7 @@ heartbeat.json auto-reload, JSON 포맷 상세
 
 ## 동적 주입 섹션 (A-1 이후 `getSystemPrompt()`에서 추가)
 
-| 순서 | 섹션 | 주입 조건 | builder.js 위치 |
+| 순서 | 섹션 | 주입 조건 | builder.ts 위치 |
 |:---:|---|---|---|
 | 3 | Session Memory | `counter % ⌈threshold/2⌉ === 0` | L259–278 |
 | 4 | Core Memory (MEMORY.md) | 항상 (50자↑, 1500자 제한) | L280–293 |

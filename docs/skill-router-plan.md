@@ -19,7 +19,7 @@
   - `workflow: e2e_test`
   - `provider: n/a`
   - `status: active`
-- 코드 라우터(`src/skill-router.js`)는 제거하고, 단순 운영 모델로 전환:
+- 코드 라우터(`src/skill-router.ts`)는 제거하고, 단순 운영 모델로 전환:
   - `skills_ref/web-routing/SKILL.md`에서 분기 규칙만 선언
   - `playwright` 명칭은 `browser` alias로만 처리
 

@@ -2,14 +2,14 @@
 
 [![Tests](https://img.shields.io/badge/tests-246%20pass-brightgreen)](#)
 
-> `node:test` + `node:assert` — zero external dependencies.
+> `node:test` + `node:assert` via `tsx` runner — zero external test dependencies.
 
 ## Run
 
 ```bash
 npm test                            # All 246 tests (~500ms)
-node --test tests/unit/*.test.js    # Unit tests only
-node --test tests/integration/*.test.js  # Integration tests only
+tsx --test tests/unit/*.test.ts    # Unit tests only
+tsx --test tests/integration/*.test.ts  # Integration tests only
 npm run test:watch                  # Watch mode
 npm run test:coverage               # Coverage report (Node 22+)
 npm run test:smoke                  # API smoke tests (requires running server)
@@ -24,44 +24,44 @@ npm run check:deps                  # Dependency vulnerability check
 
 | File | Tests | Coverage |
 |------|:-----:|----------|
-| `acp-client.test.js` | 8 | ACP JSON-RPC: requests, notifications, permissions, heartbeat, activity timeout |
-| `events.test.js` | 8 | NDJSON parser, session ID, tool labels, multi-CLI fixture matrix |
-| `events-acp.test.js` | 4 | ACP `session/update` — thought/tool/message/plan event types |
-| `telegram-forwarding.test.js` | 12 | Origin filter, fallback, chunking, markdown→HTML, lifecycle attach/detach |
+| `acp-client.test.ts` | 8 | ACP JSON-RPC: requests, notifications, permissions, heartbeat, activity timeout |
+| `events.test.ts` | 8 | NDJSON parser, session ID, tool labels, multi-CLI fixture matrix |
+| `events-acp.test.ts` | 4 | ACP `session/update` — thought/tool/message/plan event types |
+| `telegram-forwarding.test.ts` | 12 | Origin filter, fallback, chunking, markdown→HTML, lifecycle attach/detach |
 
 ### Unit (Tier 1 — pure functions, zero I/O)
 
 | File | Tests | Coverage |
 |------|:-----:|----------|
-| `agent-args.test.js` | 16 | `buildArgs` / `buildResumeArgs` — 5 CLIs × model/effort/permissions combos |
-| `async-handler.test.js` | 4 | Express async wrapper, error forwarding, statusCode preservation |
-| `bus.test.js` | 6 | Broadcast, listener add/remove, WS mock, safety |
-| `cli-registry.test.js` | 8 | CLI_KEYS, required fields, `buildDefaultPerCli`, `buildModelChoicesByCli` |
-| `commands-parse.test.js` | 21 | parseCommand, executeCommand, getCompletions, COMMANDS integrity, i18n |
-| `commands-policy.test.js` | 5 | Command-contract capability map, `getVisibleCommands`, Telegram menu |
-| `decode.test.js` | 5 | `decodeFilenameSafe` — URL encoding, traversal prevention |
-| `deps-check.test.js` | 10 | Semver range matching, advisory detection, offline vulnerability check |
-| `frontend-constants.test.js` | 2 | ROLE_PRESETS structure, CLI registry schema |
-| `heartbeat-queue.test.js` | 4 | Pending queue enqueue/dequeue, max size, drain order |
-| `help-renderer.test.js` | 5 | `renderHelp` list/detail mode, markdown formatting |
-| `http-response.test.js` | 6 | `ok()` / `fail()` standard response format, status codes |
-| `i18n.test.js` | 26 | Locale loading, fallback chains, interpolation, plural rules |
-| `orchestrator-parsing.test.js` | 13 | `parseSubtasks`, `parseDirectAnswer`, `stripSubtaskJSON` — fenced/raw/malformed |
-| `orchestrator-triage.test.js` | 10 | `isContinueIntent`, `needsOrchestration` — signal threshold logic |
-| `path-guards.test.js` | 16 | `assertSkillId`, `assertFilename`, `safeResolveUnder` — traversal/injection/overlong |
-| `render-sanitize.test.js` | 11 | XSS regex fallback — script/event/javascript: stripping, content preservation |
-| `settings-merge.test.js` | 5 | `mergeSettingsPatch` — perCli/activeOverrides deep merge |
-| `employee-prompt.test.js` | 14 | `getEmployeePrompt`, `getEmployeePromptV2`, old name exclusion |
-| `import-resolve.test.js` | 1 | **전체 src/ import 경로 존재 검증** — 리팩토링 후 깨진 경로 탐지 |
-| `worklog.test.js` | 6 | PHASES mapping, `parseWorklogPending` extraction |
+| `agent-args.test.ts` | 16 | `buildArgs` / `buildResumeArgs` — 5 CLIs × model/effort/permissions combos |
+| `async-handler.test.ts` | 4 | Express async wrapper, error forwarding, statusCode preservation |
+| `bus.test.ts` | 6 | Broadcast, listener add/remove, WS mock, safety |
+| `cli-registry.test.ts` | 8 | CLI_KEYS, required fields, `buildDefaultPerCli`, `buildModelChoicesByCli` |
+| `commands-parse.test.ts` | 21 | parseCommand, executeCommand, getCompletions, COMMANDS integrity, i18n |
+| `commands-policy.test.ts` | 5 | Command-contract capability map, `getVisibleCommands`, Telegram menu |
+| `decode.test.ts` | 5 | `decodeFilenameSafe` — URL encoding, traversal prevention |
+| `deps-check.test.ts` | 10 | Semver range matching, advisory detection, offline vulnerability check |
+| `frontend-constants.test.ts` | 2 | ROLE_PRESETS structure, CLI registry schema |
+| `heartbeat-queue.test.ts` | 4 | Pending queue enqueue/dequeue, max size, drain order |
+| `help-renderer.test.ts` | 5 | `renderHelp` list/detail mode, markdown formatting |
+| `http-response.test.ts` | 6 | `ok()` / `fail()` standard response format, status codes |
+| `i18n.test.ts` | 26 | Locale loading, fallback chains, interpolation, plural rules |
+| `orchestrator-parsing.test.ts` | 13 | `parseSubtasks`, `parseDirectAnswer`, `stripSubtaskJSON` — fenced/raw/malformed |
+| `orchestrator-triage.test.ts` | 10 | `isContinueIntent`, `needsOrchestration` — signal threshold logic |
+| `path-guards.test.ts` | 16 | `assertSkillId`, `assertFilename`, `safeResolveUnder` — traversal/injection/overlong |
+| `render-sanitize.test.ts` | 11 | XSS regex fallback — script/event/javascript: stripping, content preservation |
+| `settings-merge.test.ts` | 5 | `mergeSettingsPatch` — perCli/activeOverrides deep merge |
+| `employee-prompt.test.ts` | 14 | `getEmployeePrompt`, `getEmployeePromptV2`, old name exclusion |
+| `import-resolve.test.ts` | 1 | **전체 src/ import 경로 존재 검증** — 리팩토링 후 깨진 경로 탐지 |
+| `worklog.test.ts` | 6 | PHASES mapping, `parseWorklogPending` extraction |
 
 ### Integration (Tier 2-3 — Express routes, CLI)
 
 | File | Tests | Coverage |
 |------|:-----:|----------|
-| `route-registration.test.js` | 5 | Baseline route list, core/memory/browser route groups, dedup check |
-| `cli-basic.test.js` | 4 | CLI --help, --version, unknown command, doctor |
-| `api-smoke.test.js` | 12 | API endpoint smoke tests (server startup required) |
+| `route-registration.test.ts` | 5 | Baseline route list, core/memory/browser route groups, dedup check |
+| `cli-basic.test.ts` | 4 | CLI --help, --version, unknown command, doctor |
+| `api-smoke.test.ts` | 12 | API endpoint smoke tests (server startup required) |
 
 ---
 
@@ -75,7 +75,7 @@ npm run check:deps                  # Dependency vulnerability check
 npm run test:coverage    # Node --experimental-test-coverage
 ```
 
-### 20.4-B: API Smoke Tests (`tests/integration/api-smoke.test.js`)
+### 20.4-B: API Smoke Tests (`tests/integration/api-smoke.test.ts`)
 
 | ID | Endpoint | Assertion |
 |----|----------|-----------|
@@ -94,7 +94,7 @@ npm run test:coverage    # Node --experimental-test-coverage
 
 > Requires server running: `TEST_PORT=3457 npm run test:smoke`
 
-### 20.4-C: CLI Basic Tests (`tests/integration/cli-basic.test.js`)
+### 20.4-C: CLI Basic Tests (`tests/integration/cli-basic.test.ts`)
 
 | ID | Command | Assertion |
 |----|---------|-----------|
@@ -134,10 +134,10 @@ npm run test:coverage    # Node --experimental-test-coverage
 
 | Script | Command | Description |
 |--------|---------|-------------|
-| `test` | `node --test tests/*.test.js tests/**/*.test.js` | All tests |
-| `test:watch` | `node --test --watch ...` | Watch mode |
-| `test:coverage` | `node --test --experimental-test-coverage ...` | Coverage report |
-| `test:smoke` | `TEST_PORT=3457 node --test tests/integration/api-smoke.test.js` | API smoke (needs server) |
+| `test` | `tsx --test tests/*.test.ts tests/**/*.test.ts` | All tests |
+| `test:watch` | `tsx --test --watch ...` | Watch mode |
+| `test:coverage` | `tsx --test --experimental-test-coverage ...` | Coverage report |
+| `test:smoke` | `TEST_PORT=3457 tsx --test tests/integration/api-smoke.test.ts` | API smoke (needs server) |
 | `check:deps` | `node scripts/check-deps-offline.mjs` | Offline vulnerability check |
 
 ---
@@ -145,7 +145,7 @@ npm run test:coverage    # Node --experimental-test-coverage
 ## Adding Tests
 
 ```js
-// tests/unit/<module>.test.js
+// tests/unit/<module>.test.ts
 import test from 'node:test';
 import assert from 'node:assert/strict';
 

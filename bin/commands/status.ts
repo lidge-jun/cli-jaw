@@ -14,12 +14,12 @@ const { values } = parseArgs({
     strict: false,
 });
 
-const url = `${getServerUrl(values.port)}/api/settings`;
+const url = `${getServerUrl(values.port as string)}/api/settings`;
 
 try {
     const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
     if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as Record<string, any>;
         if (values.json) {
             console.log(JSON.stringify({ status: 'running', port: values.port, cli: data.cli }));
         } else {
@@ -29,9 +29,9 @@ try {
 
             // Heartbeat status
             try {
-                const hbRes = await fetch(`${getServerUrl(values.port)}/api/heartbeat`, { signal: AbortSignal.timeout(2000) });
-                const hb = await hbRes.json();
-                const active = (hb.jobs || []).filter(j => j.enabled).length;
+                const hbRes = await fetch(`${getServerUrl(values.port as string)}/api/heartbeat`, { signal: AbortSignal.timeout(2000) });
+                const hb = await hbRes.json() as Record<string, any>;
+                const active = (hb.jobs || []).filter((j: any) => j.enabled).length;
                 console.log(`  Heartbeat: ${active} job${active !== 1 ? 's' : ''} active`);
             } catch { }
         }

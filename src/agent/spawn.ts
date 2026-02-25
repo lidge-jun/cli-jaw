@@ -15,10 +15,11 @@ import { saveUpload as _saveUpload, buildMediaPrompt } from '../../lib/upload.ts
 
 // ─── State ───────────────────────────────────────────
 
-export let activeProcess = null;
+export let activeProcess: any = null;
+export const activeProcesses = new Map<string, any>(); // agentId → child process
 export let memoryFlushCounter = 0;
 export let flushCycleCount = 0;
-export const messageQueue = [];
+export const messageQueue: any[] = [];
 
 // ─── Fallback Retry State ────────────────────────────
 // key: originalCli, value: { fallbackCli, retriesLeft }
@@ -39,17 +40,34 @@ export function getFallbackState() {
 export function killActiveAgent(reason = 'user') {
     if (!activeProcess) return false;
     console.log(`[claw:kill] reason=${reason}`);
-    try { activeProcess.kill('SIGTERM'); } catch (e) { console.warn('[agent:kill] SIGTERM failed', { pid: activeProcess?.pid, error: e.message }); }
+    try { activeProcess.kill('SIGTERM'); } catch (e: unknown) { console.warn('[agent:kill] SIGTERM failed', { pid: activeProcess?.pid, error: (e as Error).message }); }
     const proc = activeProcess;
     setTimeout(() => {
-        try { if (proc && !proc.killed) proc.kill('SIGKILL'); } catch (e) { console.warn('[agent:kill] SIGKILL failed', { pid: proc?.pid, error: e.message }); }
+        try { if (proc && !proc.killed) proc.kill('SIGKILL'); } catch (e: unknown) { console.warn('[agent:kill] SIGKILL failed', { pid: proc?.pid, error: (e as Error).message }); }
     }, 2000);
     return true;
 }
 
+export function killAllAgents(reason = 'user') {
+    let killed = 0;
+    for (const [id, proc] of activeProcesses) {
+        console.log(`[claw:killAll] killing ${id}, reason=${reason}`);
+        try { proc.kill('SIGTERM'); killed++; } catch (e: unknown) { console.warn(`[agent:killAll] SIGTERM failed for ${id}`, (e as Error).message); }
+        const ref = proc;
+        setTimeout(() => {
+            try { if (ref && !ref.killed) ref.kill('SIGKILL'); } catch { /* already dead */ }
+        }, 2000);
+    }
+    // Also kill main activeProcess if not in map
+    if (activeProcess && !activeProcesses.has('main')) {
+        killActiveAgent(reason);
+    }
+    return killed > 0 || !!activeProcess;
+}
+
 export function waitForProcessEnd(timeoutMs = 3000) {
     if (!activeProcess) return Promise.resolve();
-    return new Promise(resolve => {
+    return new Promise<void>(resolve => {
         const check = setInterval(() => {
             if (!activeProcess) { clearInterval(check); resolve(); }
         }, 100);
@@ -57,7 +75,7 @@ export function waitForProcessEnd(timeoutMs = 3000) {
     });
 }
 
-export async function steerAgent(newPrompt, source) {
+export async function steerAgent(newPrompt: string, source: string) {
     const wasRunning = killActiveAgent('steer');
     if (wasRunning) await waitForProcessEnd(3000);
     insertMessage.run('user', newPrompt, source, '');
@@ -70,7 +88,7 @@ export async function steerAgent(newPrompt, source) {
 
 // ─── Message Queue ───────────────────────────────────
 
-export function enqueueMessage(prompt, source) {
+export function enqueueMessage(prompt: string, source: string) {
     messageQueue.push({ prompt, source, ts: Date.now() });
     console.log(`[queue] +1 (${messageQueue.length} pending)`);
     broadcast('queue_update', { pending: messageQueue.length });
@@ -102,8 +120,8 @@ function makeCleanEnv() {
     return env;
 }
 
-function buildHistoryBlock(currentPrompt, maxSessions = 5, maxTotalChars = 8000) {
-    const recent = getRecentMessages.all(Math.max(1, maxSessions * 2));
+function buildHistoryBlock(currentPrompt: string, maxSessions = 5, maxTotalChars = 8000) {
+    const recent = getRecentMessages.all(Math.max(1, maxSessions * 2)) as any[];
     if (!recent.length) return '';
 
     const promptText = String(currentPrompt || '').trim();
@@ -136,7 +154,7 @@ function buildHistoryBlock(currentPrompt, maxSessions = 5, maxTotalChars = 8000)
     return `[Recent Context]\n${blocks.reverse().join('\n\n')}`;
 }
 
-function withHistoryPrompt(prompt, historyBlock) {
+function withHistoryPrompt(prompt: string, historyBlock: string) {
     const body = String(prompt || '');
     if (!historyBlock) return body;
     return `${historyBlock}\n\n---\n[Current Message]\n${body}`;
@@ -147,7 +165,7 @@ export { buildArgs, buildResumeArgs };
 
 // ─── Upload wrapper ──────────────────────────────────
 
-export const saveUpload = (buffer, originalName) => _saveUpload(UPLOADS_DIR, buffer, originalName);
+export const saveUpload = (buffer: any, originalName: string) => _saveUpload(UPLOADS_DIR, buffer, originalName);
 export { buildMediaPrompt };
 
 // ─── Spawn Agent ─────────────────────────────────────
@@ -155,7 +173,22 @@ export { buildMediaPrompt };
 import { stripSubtaskJSON } from '../orchestrator/pipeline.ts';
 import { AcpClient } from '../cli/acp-client.ts';
 
-export function spawnAgent(prompt, opts = {}) {
+interface SpawnOpts {
+    internal?: boolean;
+    _isFallback?: boolean;
+    _skipInsert?: boolean;
+    forceNew?: boolean;
+    agentId?: string;
+    sysPrompt?: string;
+    origin?: string;
+    employeeSessionId?: string;
+    cli?: string;
+    model?: string;
+    effort?: string;
+    permissions?: string;
+}
+
+export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     // Ensure AGENTS.md on disk is fresh before CLI reads it
     if (!opts.internal && !opts._isFallback) regenerateB();
 
@@ -169,10 +202,10 @@ export function spawnAgent(prompt, opts = {}) {
         return { child: null, promise: Promise.resolve({ text: '', code: -1 }) };
     }
 
-    let resolve;
+    let resolve: (value: any) => void;
     const resultPromise = new Promise(r => { resolve = r; });
 
-    const session = getSession();
+    const session: any = getSession();
     let cli = opts.cli || session.active_cli || settings.cli;
 
     // ─── Fallback retry: skip to fallback if retries exhausted ───
@@ -250,12 +283,13 @@ export function spawnAgent(prompt, opts = {}) {
             }
 
             if (changed) fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
-        } catch (e) { console.warn('[claw:copilot] config.json sync failed:', e.message); }
+        } catch (e: unknown) { console.warn('[claw:copilot] config.json sync failed:', (e as Error).message); }
 
-        const acp = new AcpClient({ model, workDir: settings.workingDir, permissions });
+        const acp = new AcpClient({ model, workDir: settings.workingDir, permissions } as any);
         acp.spawn();
-        const child = acp.proc;
+        const child = (acp as any).proc;
         if (mainManaged) activeProcess = child;
+        activeProcesses.set(agentLabel, child);
         broadcast('agent_status', { running: true, agentId: agentLabel, cli });
 
         if (mainManaged && !opts.internal && !opts._skipInsert) {
@@ -264,9 +298,9 @@ export function spawnAgent(prompt, opts = {}) {
         broadcast('agent_status', { status: 'running', cli, agentId: agentLabel });
 
         const ctx = {
-            fullText: '', traceLog: [], toolLog: [], seenToolKeys: new Set(),
-            hasClaudeStreamEvents: false, sessionId: null, cost: null,
-            turns: null, duration: null, tokens: null, stderrBuf: '',
+            fullText: '', traceLog: [] as any[], toolLog: [] as any[], seenToolKeys: new Set<string>(),
+            hasClaudeStreamEvents: false, sessionId: null as string | null, cost: null as number | null,
+            turns: null as number | null, duration: null as number | null, tokens: null as any, stderrBuf: '',
             thinkingBuf: '',
         };
 
@@ -329,7 +363,7 @@ export function spawnAgent(prompt, opts = {}) {
                     await acp.createSession(settings.workingDir);
                 }
                 replayMode = false;  // Phase 17.2: unmute after session load
-                ctx.sessionId = acp.sessionId;
+                ctx.sessionId = (acp as any).sessionId;
 
                 // Reset accumulated text from loadSession replay (ACP replays full history)
                 ctx.fullText = '';
@@ -337,20 +371,22 @@ export function spawnAgent(prompt, opts = {}) {
                 ctx.seenToolKeys.clear();
                 ctx.thinkingBuf = '';  // Phase 17.2: clear replay thinking too
 
-                const { promise: promptPromise } = acp.prompt(prompt);
+                const acpPrompt = isResume ? prompt : withHistoryPrompt(prompt, historyBlock);
+                const { promise: promptPromise } = acp.prompt(acpPrompt);
                 const promptResult = await promptPromise;
                 if (process.env.DEBUG) console.log('[acp:prompt:result]', JSON.stringify(promptResult).slice(0, 200));
 
                 await acp.shutdown();
-            } catch (err) {
-                console.error(`[acp:error] ${err.message}`);
-                ctx.stderrBuf += err.message;
+            } catch (err: unknown) {
+                console.error(`[acp:error] ${(err as Error).message}`);
+                ctx.stderrBuf += (err as Error).message;
                 acp.kill();
             }
         })();
 
         acp.on('exit', ({ code, signal }) => {
             flushThinking();  // Flush any remaining thinking buffer
+            activeProcesses.delete(agentLabel);
             if (mainManaged) {
                 activeProcess = null;
                 broadcast('agent_status', { running: false, agentId: agentLabel });
@@ -379,7 +415,14 @@ export function spawnAgent(prompt, opts = {}) {
                 if (mainManaged && !opts.internal) {
                     insertMessageWithTrace.run('assistant', finalContent, cli, model, traceText || null);
                     broadcast('agent_done', { text: finalContent, toolLog: ctx.toolLog, origin });
+
                     memoryFlushCounter++;
+                    const threshold = settings.memory?.flushEvery ?? 20;
+                    if (settings.memory?.enabled !== false && memoryFlushCounter >= threshold) {
+                        memoryFlushCounter = 0;
+                        flushCycleCount++;
+                        triggerMemoryFlush();
+                    }
                 }
             } else if (mainManaged && code !== 0) {
                 let errMsg = `Copilot CLI 실행 실패 (exit ${code})`;
@@ -388,9 +431,8 @@ export function spawnAgent(prompt, opts = {}) {
 
                 if (!opts.internal && !opts._isFallback) {
                     const fallbackCli = (settings.fallbackOrder || [])
-                        .find(fc => fc !== cli && detectCli(fc).available);
-                    if (fallbackCli) {
-                        // Record fallback state for retry tracking
+                        .find((fc: string) => fc !== cli && detectCli(fc).available);
+                    if (fallbackCli) {                        // Record fallback state for retry tracking
                         const st = fallbackState.get(cli);
                         if (st) {
                             st.retriesLeft = Math.max(0, st.retriesLeft - 1);
@@ -425,6 +467,7 @@ export function spawnAgent(prompt, opts = {}) {
         stdio: ['pipe', 'pipe', 'pipe'],
     });
     if (mainManaged) activeProcess = child;
+    activeProcesses.set(agentLabel, child);
     broadcast('agent_status', { running: true, agentId: agentLabel, cli });
 
     if (mainManaged && !opts.internal && !opts._skipInsert) {
@@ -445,15 +488,15 @@ export function spawnAgent(prompt, opts = {}) {
 
     const ctx = {
         fullText: '',
-        traceLog: [],
-        toolLog: [],
-        seenToolKeys: new Set(),
+        traceLog: [] as any[],
+        toolLog: [] as any[],
+        seenToolKeys: new Set<string>(),
         hasClaudeStreamEvents: false,
-        sessionId: null,
-        cost: null,
-        turns: null,
-        duration: null,
-        tokens: null,
+        sessionId: null as string | null,
+        cost: null as number | null,
+        turns: null as number | null,
+        duration: null as number | null,
+        tokens: null as any,
         stderrBuf: '',
     };
     let buffer = '';
@@ -461,7 +504,7 @@ export function spawnAgent(prompt, opts = {}) {
     child.stdout.on('data', (chunk) => {
         buffer += chunk.toString();
         const lines = buffer.split('\n');
-        buffer = lines.pop();
+        buffer = lines.pop() ?? '';
         for (const line of lines) {
             if (!line.trim()) continue;
             try {
@@ -484,6 +527,7 @@ export function spawnAgent(prompt, opts = {}) {
     });
 
     child.on('close', (code) => {
+        activeProcesses.delete(agentLabel);
         if (mainManaged) {
             activeProcess = null;
             broadcast('agent_status', { running: false, agentId: agentLabel });
@@ -542,7 +586,7 @@ export function spawnAgent(prompt, opts = {}) {
             // ─── Fallback with retry tracking ─────────────
             if (!opts.internal && !opts._isFallback) {
                 const fallbackCli = (settings.fallbackOrder || [])
-                    .find(fc => fc !== cli && detectCli(fc).available);
+                    .find((fc: string) => fc !== cli && detectCli(fc).available);
                 if (fallbackCli) {
                     const st = fallbackState.get(cli);
                     if (st) {
@@ -581,7 +625,7 @@ async function triggerMemoryFlush() {
     const { getMemoryDir } = await import('../prompt/builder.js');
     const memDir = getMemoryDir();
     const threshold = settings.memory?.flushEvery ?? 20;
-    const recent = getRecentMessages.all(threshold).reverse();
+    const recent = (getRecentMessages.all(threshold) as any[]).reverse();
     if (recent.length < 4) return;
 
     const lines = [];

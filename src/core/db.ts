@@ -5,7 +5,7 @@ import fs from 'fs';
 import { dirname } from 'path';
 import { DB_PATH } from './config.ts';
 
-function ensureDbDirExists(dbPath) {
+function ensureDbDirExists(dbPath: string) {
     const dbDir = dirname(dbPath);
     if (!dbDir) return;
     fs.mkdirSync(dbDir, { recursive: true });
@@ -70,7 +70,7 @@ db.exec(`
 
 // Lightweight migration for existing DBs created before `trace` column existed.
 const messageCols = db.prepare('PRAGMA table_info(messages)').all();
-if (!messageCols.some(c => c.name === 'trace')) {
+if (!(messageCols as Record<string, unknown>[]).some(c => c.name === 'trace')) {
     db.exec('ALTER TABLE messages ADD COLUMN trace TEXT DEFAULT NULL');
 }
 

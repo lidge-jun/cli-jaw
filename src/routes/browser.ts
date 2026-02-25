@@ -1,44 +1,45 @@
 // ─── Browser API Routes (Phase 7) ─────────────────────
+import type { Express, Request, Response } from 'express';
 import * as browser from '../browser/index.ts';
 import { ok } from '../http/response.ts';
 import { settings } from '../core/config.ts';
 
 const cdpPort = () => settings.browser?.cdpPort || 9240;
 
-export function registerBrowserRoutes(app) {
-    app.post('/api/browser/start', async (req, res) => {
+export function registerBrowserRoutes(app: Express) {
+    app.post('/api/browser/start', async (req: Request, res: Response) => {
         try {
             await browser.launchChrome(req.body?.port || cdpPort());
             res.json(await browser.getBrowserStatus(cdpPort()));
-        } catch (e) { res.status(500).json({ error: e.message }); }
+        } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
-    app.post('/api/browser/stop', async (_, res) => {
+    app.post('/api/browser/stop', async (_: Request, res: Response) => {
         try { await browser.closeBrowser(); res.json({ ok: true }); }
-        catch (e) { res.status(500).json({ error: e.message }); }
+        catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
-    app.get('/api/browser/status', async (_, res) => {
+    app.get('/api/browser/status', async (_: Request, res: Response) => {
         try { res.json(await browser.getBrowserStatus(cdpPort())); }
-        catch (e) { res.status(500).json({ error: e.message }); }
+        catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
-    app.get('/api/browser/snapshot', async (req, res) => {
+    app.get('/api/browser/snapshot', async (req: Request, res: Response) => {
         try {
             res.json({
                 nodes: await browser.snapshot(cdpPort(), {
                     interactive: req.query.interactive === 'true',
                 })
             });
-        } catch (e) { res.status(500).json({ error: e.message }); }
+        } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
-    app.post('/api/browser/screenshot', async (req, res) => {
+    app.post('/api/browser/screenshot', async (req: Request, res: Response) => {
         try { res.json(await browser.screenshot(cdpPort(), req.body)); }
-        catch (e) { res.status(500).json({ error: e.message }); }
+        catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
-    app.post('/api/browser/act', async (req, res) => {
+    app.post('/api/browser/act', async (req: Request, res: Response) => {
         try {
             const { kind, ref, text, key, submit, doubleClick, x, y } = req.body;
             let result;
@@ -51,37 +52,37 @@ export function registerBrowserRoutes(app) {
                 default: return res.status(400).json({ error: `unknown action: ${kind}` });
             }
             res.json(result);
-        } catch (e) { res.status(500).json({ error: e.message }); }
+        } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
-    app.post('/api/browser/vision-click', async (req, res) => {
+    app.post('/api/browser/vision-click', async (req: Request, res: Response) => {
         try {
             const { target, provider, doubleClick } = req.body;
             if (!target) return res.status(400).json({ error: 'target required' });
             const result = await browser.visionClick(cdpPort(), target, { provider, doubleClick });
             res.json(result);
-        } catch (e) {
-            res.status(500).json({ error: e.message });
+        } catch (e: unknown) {
+            res.status(500).json({ error: (e as Error).message });
         }
     });
 
-    app.post('/api/browser/navigate', async (req, res) => {
+    app.post('/api/browser/navigate', async (req: Request, res: Response) => {
         try { res.json(await browser.navigate(cdpPort(), req.body.url)); }
-        catch (e) { res.status(500).json({ error: e.message }); }
+        catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
-    app.get('/api/browser/tabs', async (_, res) => {
+    app.get('/api/browser/tabs', async (_: Request, res: Response) => {
         try { ok(res, { tabs: await browser.listTabs(cdpPort()) }); }
-        catch (e) { console.warn('[browser:tabs] failed', { error: e.message }); ok(res, { tabs: [] }); }
+        catch (e: unknown) { console.warn('[browser:tabs] failed', { error: (e as Error).message }); ok(res, { tabs: [] }); }
     });
 
-    app.post('/api/browser/evaluate', async (req, res) => {
+    app.post('/api/browser/evaluate', async (req: Request, res: Response) => {
         try { res.json(await browser.evaluate(cdpPort(), req.body.expression)); }
-        catch (e) { res.status(500).json({ error: e.message }); }
+        catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
-    app.get('/api/browser/text', async (req, res) => {
-        try { res.json(await browser.getPageText(cdpPort(), req.query.format)); }
-        catch (e) { res.status(500).json({ error: e.message }); }
+    app.get('/api/browser/text', async (req: Request, res: Response) => {
+        try { res.json(await browser.getPageText(cdpPort(), req.query.format as string | undefined)); }
+        catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 }

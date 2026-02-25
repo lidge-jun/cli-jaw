@@ -7,11 +7,11 @@ import { t } from '../core/i18n.ts';
 const DEFAULT_CLI_CHOICES = [...CLI_KEYS];
 const MODEL_CHOICES_BY_CLI = buildModelChoicesByCli();
 
-function toChoiceKey(value) {
+function toChoiceKey(value: any) {
     return String(value || '').trim().toLowerCase();
 }
 
-function dedupeChoices(list) {
+function dedupeChoices(list: any[]) {
     const out = [];
     const seen = new Set();
     for (const entry of list || []) {
@@ -23,32 +23,32 @@ function dedupeChoices(list) {
     return out;
 }
 
-function getCliChoicesFromContext(ctx) {
+function getCliChoicesFromContext(ctx: any) {
     const keys = Object.keys(ctx?.settings?.perCli || {});
     return keys.length ? keys : DEFAULT_CLI_CHOICES;
 }
 
-function getModelChoicesFromContext(ctx) {
+function getModelChoicesFromContext(ctx: any) {
     const fromCatalog = Object.values(MODEL_CHOICES_BY_CLI).flat();
-    const fromSettings = Object.values(ctx?.settings?.perCli || {})
-        .map(v => v?.model)
+    const fromSettings = Object.values(ctx?.settings?.perCli || {} as Record<string, any>)
+        .map((v: any) => v?.model)
         .filter(Boolean);
     const activeCli = ctx?.settings?.cli || '';
     const currentModel = ctx?.settings?.perCli?.[activeCli]?.model;
     return dedupeChoices([...fromCatalog, ...fromSettings, ...(currentModel ? [currentModel] : [])]);
 }
 
-async function safeCall(fn, fallback = null) {
+async function safeCall(fn: any, fallback: any = null) {
     if (typeof fn !== 'function') return fallback;
     try {
         return await fn();
-    } catch (err) {
-        if (process.env.DEBUG) console.warn('[commands:safeCall]', err.message);
+    } catch (err: unknown) {
+        if (process.env.DEBUG) console.warn('[commands:safeCall]', (err as Error).message);
         return fallback;
     }
 }
 
-export function formatDuration(seconds) {
+export function formatDuration(seconds: any) {
     if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0) return '-';
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -58,7 +58,7 @@ export function formatDuration(seconds) {
     return `${s}s`;
 }
 
-export function unknownCommand(name, locale = 'ko') {
+export function unknownCommand(name: any, locale = 'ko') {
     return {
         ok: false,
         type: 'error',
@@ -67,7 +67,7 @@ export function unknownCommand(name, locale = 'ko') {
     };
 }
 
-export function unsupportedCommand(cmd, iface, locale = 'ko') {
+export function unsupportedCommand(cmd: any, iface: any, locale = 'ko') {
     return {
         ok: false,
         type: 'error',
@@ -76,7 +76,7 @@ export function unsupportedCommand(cmd, iface, locale = 'ko') {
     };
 }
 
-export function normalizeResult(result) {
+export function normalizeResult(result: any) {
     if (!result) return { ok: true, type: 'success', text: '' };
     if (typeof result === 'string') return { ok: true, type: 'info', text: result };
     if (typeof result === 'object') {
@@ -90,12 +90,12 @@ export function normalizeResult(result) {
 // ─── Individual Handlers ─────────────────────────────
 // helpHandler is kept in commands.js (needs COMMANDS/findCommand access)
 
-export async function statusHandler(_args, ctx) {
+export async function statusHandler(_args: any[], ctx: any) {
     const [settings, session, runtime, skills] = await Promise.all([
         safeCall(ctx.getSettings, null),
         safeCall(ctx.getSession, null),
         safeCall(ctx.getRuntime, null),
-        safeCall(ctx.getSkills, []),
+        safeCall(ctx.getSkills, null),
     ]);
 
     const cli = settings?.cli || session?.active_cli || 'unknown';
@@ -128,7 +128,7 @@ export async function statusHandler(_args, ctx) {
     };
 }
 
-export async function modelHandler(args, ctx) {
+export async function modelHandler(args: any[], ctx: any) {
     const L = ctx.locale || 'ko';
     const settings = await safeCall(ctx.getSettings, null);
     if (!settings) return { ok: false, text: t('cmd.settingsLoadFail', {}, L) };
@@ -160,7 +160,7 @@ export async function modelHandler(args, ctx) {
     };
 }
 
-export async function cliHandler(args, ctx) {
+export async function cliHandler(args: any[], ctx: any) {
     const L = ctx.locale || 'ko';
     const settings = await safeCall(ctx.getSettings, null);
     if (!settings) return { ok: false, text: t('cmd.settingsLoadFail', {}, L) };
@@ -193,11 +193,11 @@ export async function cliHandler(args, ctx) {
     return { ok: true, text: t('cmd.cli.changed', { from: current, to: nextCli }, L) };
 }
 
-export async function skillHandler(args, ctx) {
+export async function skillHandler(args: any[], ctx: any) {
     const L = ctx.locale || 'ko';
     const sub = (args[0] || 'list').toLowerCase();
     if (sub === 'list') {
-        const skills = await safeCall(ctx.getSkills, []);
+        const skills = await safeCall(ctx.getSkills, null);
         if (!Array.isArray(skills)) return { ok: false, text: t('cmd.skill.loadFail', {}, L) };
         const active = skills.filter(s => s.enabled).length;
         const ref = skills.filter(s => !s.enabled).length;
@@ -213,7 +213,7 @@ export async function skillHandler(args, ctx) {
     return { ok: false, text: 'Usage: /skill [list|reset]' };
 }
 
-export async function employeeHandler(args, ctx) {
+export async function employeeHandler(args: any[], ctx: any) {
     const L = ctx.locale || 'ko';
     const sub = (args[0] || '').toLowerCase();
     if (sub !== 'reset') {
@@ -227,7 +227,7 @@ export async function employeeHandler(args, ctx) {
     return { ok: true, text: t('cmd.employee.resetDone', { count: seeded }, L) };
 }
 
-export async function clearHandler(_args, ctx) {
+export async function clearHandler(_args: any[], ctx: any) {
     const L = ctx.locale || 'ko';
     if ((ctx.interface || 'cli') === 'telegram') {
         return { ok: true, text: t('cmd.clear.telegram', {}, L) };
@@ -239,7 +239,7 @@ export async function clearHandler(_args, ctx) {
     };
 }
 
-export async function resetHandler(args, ctx) {
+export async function resetHandler(args: any[], ctx: any) {
     const L = ctx.locale || 'ko';
     if ((args[0] || '').toLowerCase() !== 'confirm') {
         return {
@@ -270,7 +270,7 @@ export async function resetHandler(args, ctx) {
     return { ok: true, text: t('cmd.reset.done', { items: results.join(', ') }, L) };
 }
 
-export async function versionHandler(_args, ctx) {
+export async function versionHandler(_args: any[], ctx: any) {
     const status = await safeCall(ctx.getCliStatus, null);
     const lines = [`cli-claw v${ctx.version || 'unknown'}`];
     if (status && typeof status === 'object') {
@@ -284,7 +284,7 @@ export async function versionHandler(_args, ctx) {
     return { ok: true, text: lines.join('\n') };
 }
 
-export async function mcpHandler(args, ctx) {
+export async function mcpHandler(args: any[], ctx: any) {
     const L = ctx.locale || 'ko';
     const sub = (args[0] || '').toLowerCase();
     if (sub === 'sync') {
@@ -305,12 +305,12 @@ export async function mcpHandler(args, ctx) {
     };
 }
 
-export async function memoryHandler(args, ctx) {
+export async function memoryHandler(args: any[], ctx: any) {
     const L = ctx.locale || 'ko';
     if (!args.length || (args.length === 1 && args[0].toLowerCase() === 'list')) {
         const files = await ctx.listMemory();
         if (!files?.length) return { ok: true, text: t('cmd.memory.empty', {}, L) };
-        const lines = files.slice(0, 20).map(f => `- ${f.path} (${f.size}b)`);
+        const lines = files.slice(0, 20).map((f: any) => `- ${f.path} (${f.size}b)`);
         return { ok: true, text: `🧠 memory files (${files.length})\n${lines.join('\n')}` };
     }
     const query = args.join(' ').trim();
@@ -320,14 +320,14 @@ export async function memoryHandler(args, ctx) {
     return { ok: true, text: text.length > MAX ? text.slice(0, MAX) + '\n...(truncated)' : text };
 }
 
-export async function browserHandler(args, ctx) {
+export async function browserHandler(args: any[], ctx: any) {
     const L = ctx.locale || 'ko';
     const sub = (args[0] || 'status').toLowerCase();
     if (sub === 'tabs') {
         const d = await ctx.getBrowserTabs();
         const tabs = d?.tabs || [];
         if (!tabs.length) return { ok: true, text: t('cmd.browser.noTabs', {}, L) };
-        const lines = tabs.slice(0, 10).map((tab, i) => `${i + 1}. ${tab.title || '(untitled)'}\n   ${tab.url || ''}`);
+        const lines = tabs.slice(0, 10).map((tab: any, i: number) => `${i + 1}. ${tab.title || '(untitled)'}\n   ${tab.url || ''}`);
         return { ok: true, text: lines.join('\n') };
     }
     if (sub !== 'status') return { ok: false, text: 'Usage: /browser [status|tabs]' };
@@ -337,7 +337,7 @@ export async function browserHandler(args, ctx) {
     return { ok: true, text: `🌐 Browser: ${running}\nTabs: ${tabCount}\nCDP: ${d?.cdpUrl || '-'}` };
 }
 
-export async function promptHandler(_args, ctx) {
+export async function promptHandler(_args: any[], ctx: any) {
     const d = await ctx.getPrompt();
     const content = d?.content || '';
     if (!content.trim()) return { ok: true, text: '(empty prompt)' };
@@ -355,7 +355,7 @@ export async function fileHandler() {
     return { ok: false, text: 'Usage: /file <path> [caption]' };
 }
 
-export async function fallbackHandler(args, ctx) {
+export async function fallbackHandler(args: any[], ctx: any) {
     const L = ctx.locale || 'ko';
     const settings = await safeCall(ctx.getSettings, null);
     if (!settings) return { ok: false, text: t('cmd.settingsLoadFail', {}, L) };
@@ -377,7 +377,7 @@ export async function fallbackHandler(args, ctx) {
         return { ok: true, text: t('cmd.fallback.off', {}, L) };
     }
 
-    const order = args.filter(a => available.includes(a.toLowerCase())).map(a => a.toLowerCase());
+    const order = args.filter((a: any) => available.includes(a.toLowerCase())).map((a: any) => a.toLowerCase());
     if (!order.length) {
         return { ok: false, text: t('cmd.fallback.invalidCli', { available: available.join(', ') }, L) };
     }
@@ -389,7 +389,7 @@ export async function fallbackHandler(args, ctx) {
 
 // ─── Argument Completions ────────────────────────────
 
-export function modelArgumentCompletions(ctx) {
+export function modelArgumentCompletions(ctx: any) {
     const cliByModel = new Map();
     for (const [cli, models] of Object.entries(MODEL_CHOICES_BY_CLI)) {
         for (const m of models) cliByModel.set(toChoiceKey(m), cli);
@@ -402,27 +402,27 @@ export function modelArgumentCompletions(ctx) {
         }));
 }
 
-export function cliArgumentCompletions(ctx) {
+export function cliArgumentCompletions(ctx: any) {
     return getCliChoicesFromContext(ctx)
         .map(value => ({ value, label: 'cli' }));
 }
 
-export function skillArgumentCompletions(ctx) {
+export function skillArgumentCompletions(ctx: any) {
     const L = ctx?.locale || 'ko';
     return [{ value: 'list', label: t('cmd.arg.skillList', {}, L) }, { value: 'reset', label: t('cmd.arg.skillReset', {}, L) }];
 }
 
-export function employeeArgumentCompletions(ctx) {
+export function employeeArgumentCompletions(ctx: any) {
     const L = ctx?.locale || 'ko';
     return [{ value: 'reset', label: t('cmd.arg.employeeReset', {}, L) }];
 }
 
-export function browserArgumentCompletions(ctx) {
+export function browserArgumentCompletions(ctx: any) {
     const L = ctx?.locale || 'ko';
     return [{ value: 'status', label: t('cmd.arg.browserStatus', {}, L) }, { value: 'tabs', label: t('cmd.arg.browserTabs', {}, L) }];
 }
 
-export function fallbackArgumentCompletions(ctx) {
+export function fallbackArgumentCompletions(ctx: any) {
     const L = ctx?.locale || 'ko';
     const clis = Object.keys(ctx?.settings?.perCli || {});
     return [

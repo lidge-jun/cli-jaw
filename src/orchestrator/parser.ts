@@ -8,7 +8,7 @@ const CONTINUE_PATTERNS = [
     /^계속(?:\s*해줘)?$/i,
 ];
 
-export function isContinueIntent(text) {
+export function isContinueIntent(text: string) {
     const t = String(text || '').trim();
     if (!t) return false;
     return CONTINUE_PATTERNS.some(re => re.test(t));
@@ -20,7 +20,7 @@ const CODE_KEYWORDS = /\.(js|ts|jsx|tsx|py|md|json|css|html|sql|yml|yaml|sh|go|r
 const FILE_PATH_PATTERN = /(?:src|bin|public|lib|devlog|config|components?|pages?|api)\//i;
 const MULTI_TASK_PATTERN = /(?:그리고|다음에|먼저|또한|추가로|\n\n|\d+\.\s)/;
 
-export function needsOrchestration(text) {
+export function needsOrchestration(text: string) {
     const t = String(text || '').trim();
     if (!t) return false;
 
@@ -47,26 +47,26 @@ export function needsOrchestration(text) {
 
 // ─── JSON Parsing (export 유지 — agent.js가 import) ──
 
-export function parseSubtasks(text) {
+export function parseSubtasks(text: string) {
     if (!text) return null;
     const fenced = text.match(/```json\n([\s\S]*?)\n```/);
     if (fenced) {
-        try { return JSON.parse(fenced[1]).subtasks || null; } catch (e) { console.debug('[orchestrator:subtask] fenced JSON parse failed', { preview: String(fenced[1]).slice(0, 80) }); }
+        try { return JSON.parse(fenced[1]!).subtasks || null; } catch (e) { console.debug('[orchestrator:subtask] fenced JSON parse failed', { preview: String(fenced[1]).slice(0, 80) }); }
     }
     const raw = text.match(/(\{[\s\S]*"subtasks"\s*:\s*\[[\s\S]*\]\s*\})/);
     if (raw) {
-        try { return JSON.parse(raw[1]).subtasks || null; } catch (e) { console.debug('[orchestrator:subtask] raw JSON parse failed', { preview: String(raw[1]).slice(0, 80) }); }
+        try { return JSON.parse(raw[1]!).subtasks || null; } catch (e) { console.debug('[orchestrator:subtask] raw JSON parse failed', { preview: String(raw[1]).slice(0, 80) }); }
     }
     return null;
 }
 
-export function parseDirectAnswer(text) {
+export function parseDirectAnswer(text: string) {
     if (!text) return null;
     // Fenced JSON block
     const fenced = text.match(/```json\n([\s\S]*?)\n```/);
     if (fenced) {
         try {
-            const obj = JSON.parse(fenced[1]);
+            const obj = JSON.parse(fenced[1]!);
             if (obj.direct_answer && (!obj.subtasks || obj.subtasks.length === 0)) {
                 return obj.direct_answer;
             }
@@ -76,7 +76,7 @@ export function parseDirectAnswer(text) {
     const raw = text.match(/(\{[\s\S]*"direct_answer"\s*:[\s\S]*\})/);
     if (raw) {
         try {
-            const obj = JSON.parse(raw[1]);
+            const obj = JSON.parse(raw[1]!);
             if (obj.direct_answer && (!obj.subtasks || obj.subtasks.length === 0)) {
                 return obj.direct_answer;
             }
@@ -85,7 +85,7 @@ export function parseDirectAnswer(text) {
     return null;
 }
 
-export function stripSubtaskJSON(text) {
+export function stripSubtaskJSON(text: string) {
     return text
         .replace(/```json\n[\s\S]*?\n```/g, '')
         .replace(/\{[\s\S]*"subtasks"\s*:\s*\[[\s\S]*?\]\s*\}/g, '')
@@ -94,11 +94,11 @@ export function stripSubtaskJSON(text) {
 
 // ─── Verdict JSON Parsing (이중 전략) ────────────────
 
-export function parseVerdicts(text) {
+export function parseVerdicts(text: string) {
     if (!text) return null;
     try {
         const fenced = text.match(/```(?:json)?\n([\s\S]*?)\n```/);
-        if (fenced) return JSON.parse(fenced[1]);
+        if (fenced) return JSON.parse(fenced[1]!);
     } catch { /* expected: fenced JSON may not exist or be malformed */ }
     try {
         const raw = text.match(/\{[\s\S]*"verdicts"[\s\S]*\}/);

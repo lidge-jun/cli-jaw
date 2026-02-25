@@ -28,16 +28,16 @@ function printHelp() {
 `);
 }
 
-async function apiJson(baseUrl, path, init = {}) {
+async function apiJson(baseUrl: string, path: string, init: Record<string, any> = {}) {
     const res = await fetch(baseUrl + path, { ...init, signal: AbortSignal.timeout(15000) });
     const text = await res.text();
-    let data = {};
+    let data: Record<string, any> = {};
     try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
 }
 
-async function confirm(question) {
+async function confirm(question: string) {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     return new Promise(resolve => {
         rl.question(question, ans => {
@@ -52,7 +52,7 @@ if (values.help) {
     process.exit(0);
 }
 
-const baseUrl = getServerUrl(values.port);
+const baseUrl = getServerUrl(values.port as string);
 const hasConfirm = values.yes || process.argv.slice(3).includes('confirm');
 
 // Check server is running
@@ -76,22 +76,22 @@ const results = [];
 try {
     await apiJson(baseUrl, '/api/skills/reset', { method: 'POST' });
     results.push('스킬');
-} catch (e) { console.error(`  ⚠️  스킬 초기화 실패: ${e.message}`); }
+} catch (e) { console.error(`  ⚠️  스킬 초기화 실패: ${(e as Error).message}`); }
 
 try {
     await apiJson(baseUrl, '/api/employees/reset', { method: 'POST' });
     results.push('직원');
-} catch (e) { console.error(`  ⚠️  직원 초기화 실패: ${e.message}`); }
+} catch (e) { console.error(`  ⚠️  직원 초기화 실패: ${(e as Error).message}`); }
 
 try {
     await apiJson(baseUrl, '/api/mcp/sync', { method: 'POST' });
     results.push('MCP');
-} catch (e) { console.error(`  ⚠️  MCP 동기화 실패: ${e.message}`); }
+} catch (e) { console.error(`  ⚠️  MCP 동기화 실패: ${(e as Error).message}`); }
 
 try {
     await apiJson(baseUrl, '/api/clear', { method: 'POST' });
     results.push('세션');
-} catch (e) { console.error(`  ⚠️  세션 초기화 실패: ${e.message}`); }
+} catch (e) { console.error(`  ⚠️  세션 초기화 실패: ${(e as Error).message}`); }
 
 if (results.length) {
     console.log(`  ✅ 초기화 완료: ${results.join(', ')}`);

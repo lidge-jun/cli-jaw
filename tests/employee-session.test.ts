@@ -7,8 +7,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const ROOT = process.cwd();
-const DB_SRC = path.join(ROOT, 'src/core/db.js');
-const PIPELINE_SRC = path.join(ROOT, 'src/orchestrator/pipeline.js');
+const DB_SRC = path.join(ROOT, 'src/core/db.ts');
+const PIPELINE_SRC = path.join(ROOT, 'src/orchestrator/pipeline.ts');
 
 // ─── 1. employee_sessions 테이블 존재 확인 ──────────
 

@@ -1,11 +1,11 @@
 # Agent Spawn — agent/ · orchestrator/ · cli/acp-client
 
 > CLI spawn + ACP 분기 + 스트림 + 큐 + 메모리 flush + 멀티에이전트 오케스트레이션
-> Phase 20.6: agent.js → agent/spawn.js+args.js+events.js, orchestrator.js → orchestrator/pipeline.js+parser.js
+> Phase 20.6: agent.ts → agent/spawn.ts+args.ts+events.ts, orchestrator.ts → orchestrator/pipeline.ts+parser.ts
 
 ---
 
-## agent/spawn.js — CLI Spawn & Queue + ACP 분기 (567L) + args.js (67L) + events.js (322L)
+## agent/spawn.ts — CLI Spawn & Queue + ACP 분기 (567L) + args.ts (67L) + events.ts (322L)
 
 | Function                                   | 역할                                                 |
 | ------------------------------------------ | ---------------------------------------------------- |
@@ -73,7 +73,7 @@ opts.effort → activeOverrides[cli].effort → perCli[cli].effort → ''
 
 ---
 
-## acp-client.js — Copilot ACP JSON-RPC 클라이언트 (311L) `[NEW]`
+## acp-client.ts — Copilot ACP JSON-RPC 클라이언트 (311L) `[NEW]`
 
 | Class / Method               | 역할                                              |
 | ---------------------------- | ------------------------------------------------- |
@@ -115,7 +115,7 @@ Client (cli-claw)               Agent (copilot --acp)
 
 ---
 
-## events.js — NDJSON Event Parsing + Dedupe + ACP (318L)
+## events.ts — NDJSON Event Parsing + Dedupe + ACP (318L)
 
 | Function                                        | 역할                                              |
 | ----------------------------------------------- | ------------------------------------------------- |
@@ -165,7 +165,7 @@ extractFromAcpUpdate(params):
 
 ---
 
-## orchestrator/pipeline.js (560L) + parser.js (108L) — Orchestration v2 + Phase + AI dispatch
+## orchestrator/pipeline.ts (560L) + parser.ts (108L) — Orchestration v2 + Phase + AI dispatch
 
 | Function                     | 역할                                           |
 | ---------------------------- | ---------------------------------------------- |
@@ -206,7 +206,7 @@ orchestrate(prompt, meta)
 
 ---
 
-## prompt.js — System Prompt & Skills (515L)
+## prompt.ts — System Prompt & Skills (515L)
 
 | Function                                | 역할                                                                  |
 | --------------------------------------- | --------------------------------------------------------------------- |

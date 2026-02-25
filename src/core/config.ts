@@ -26,10 +26,10 @@ export const SKILLS_REF_DIR = join(CLAW_HOME, 'skills_ref');
 
 // ─── Server URLs ────────────────────────────────────
 export const DEFAULT_PORT = '3457';
-export function getServerUrl(port) {
+export function getServerUrl(port: string | number | undefined) {
     return `http://localhost:${port || process.env.PORT || DEFAULT_PORT}`;
 }
-export function getWsUrl(port) {
+export function getWsUrl(port: string | number | undefined) {
     return `ws://localhost:${port || process.env.PORT || DEFAULT_PORT}`;
 }
 
@@ -49,7 +49,7 @@ export function ensureDirs() {
 
 // ─── 1-time migration (Phase 9.2) ───────────────────
 
-export function runMigration(projectDir) {
+export function runMigration(projectDir: string) {
     if (fs.existsSync(MIGRATION_MARKER)) return;
     const legacySettings = join(projectDir, 'settings.json');
     const legacyDb = join(projectDir, 'claw.db');
@@ -102,7 +102,7 @@ function createDefaultSettings() {
 
 export const DEFAULT_SETTINGS = createDefaultSettings();
 
-function migrateSettings(s) {
+function migrateSettings(s: Record<string, any>) {
     if (s.planning) {
         if (s.planning.cli && s.planning.cli !== s.cli) s.cli = s.planning.cli;
         if (s.planning.model && s.planning.model !== 'default') {
@@ -119,16 +119,16 @@ function migrateSettings(s) {
 }
 
 /** Mutable settings object — shared across all modules via ESM live binding */
-export let settings = createDefaultSettings();
+export let settings: Record<string, any> = createDefaultSettings();
 
 export function loadSettings() {
     try {
         const raw = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
         const defaults = createDefaultSettings();
         // Deep merge perCli so new CLI defaults (e.g. copilot) are preserved
-        const mergedPerCli = buildDefaultPerCli();
+        const mergedPerCli: Record<string, any> = buildDefaultPerCli();
         if (raw.perCli) {
-            for (const [cli, cfg] of Object.entries(raw.perCli)) {
+            for (const [cli, cfg] of Object.entries(raw.perCli) as [string, Record<string, any>][]) {
                 mergedPerCli[cli] = { ...(mergedPerCli[cli] || {}), ...cfg };
             }
         }
@@ -142,13 +142,13 @@ export function loadSettings() {
     }
 }
 
-export function saveSettings(s) {
+export function saveSettings(s: Record<string, any>) {
     settings = s;
     fs.writeFileSync(SETTINGS_PATH, JSON.stringify(s, null, 2));
 }
 
 /** Replace settings object (for API PUT /api/settings deep merge) */
-export function replaceSettings(s) {
+export function replaceSettings(s: Record<string, any>) {
     settings = s;
 }
 
@@ -163,13 +163,13 @@ export function loadHeartbeatFile() {
     }
 }
 
-export function saveHeartbeatFile(data) {
+export function saveHeartbeatFile(data: Record<string, any>) {
     fs.writeFileSync(HEARTBEAT_JOBS_PATH, JSON.stringify(data, null, 2));
 }
 
 // ─── CLI Detection ───────────────────────────────────
 
-export function detectCli(name) {
+export function detectCli(name: string) {
     if (!/^[a-z0-9_-]+$/i.test(name)) return { available: false, path: null };
     try {
         const p = execFileSync('which', [name], { encoding: 'utf8', timeout: 3000 }).trim();
@@ -178,9 +178,9 @@ export function detectCli(name) {
 }
 
 export function detectAllCli() {
-    const out = {};
+    const out: Record<string, any> = {};
     for (const key of CLI_KEYS) {
-        const binary = CLI_REGISTRY[key]?.binary || key;
+        const binary = (CLI_REGISTRY as Record<string, any>)[key]?.binary || key;
         out[key] = detectCli(binary);
     }
     return out;

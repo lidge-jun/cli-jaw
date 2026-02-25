@@ -38,34 +38,34 @@ export function loadSkillRegistry() {
         const regPath = join(SKILLS_REF_DIR, 'registry.json');
         if (!fs.existsSync(regPath)) return [];
         const reg = JSON.parse(fs.readFileSync(regPath, 'utf8'));
-        return Object.entries(reg.skills || {}).map(([id, s]) => ({ id, ...s }));
+        return Object.entries(reg.skills || {}).map(([id, s]: [string, any]) => ({ id, ...s }));
     } catch { return []; }
 }
 
 /** Get merged skill list (active + ref) for API */
 export function getMergedSkills() {
     const active = loadActiveSkills();
-    const activeIds = new Set(active.map(s => s.id));
+    const activeIds = new Set(active.map(s => s!.id));
     const ref = loadSkillRegistry();
     const merged = [];
 
     // Active skills (from skills/)
     for (const s of active) {
-        const refInfo = ref.find(r => r.id === s.id);
+        const refInfo = ref.find(r => r.id === s!.id);
         merged.push({
-            id: s.id,
-            name: refInfo?.name || s.name,
+            id: s!.id,
+            name: refInfo?.name || s!.name,
             name_ko: refInfo?.name_ko || undefined,
             name_en: refInfo?.name_en || undefined,
             emoji: refInfo?.emoji || '🔧',
             category: refInfo?.category || 'installed',
-            description: refInfo?.description || s.description,
+            description: refInfo?.description || s!.description,
             desc_ko: refInfo?.desc_ko || undefined,
             desc_en: refInfo?.desc_en || undefined,
             requires: refInfo?.requires || null,
             install: refInfo?.install || null,
             enabled: true,
-            source: activeIds.has(s.id) && ref.find(r => r.id === s.id) ? 'both' : 'active',
+            source: activeIds.has(s!.id) && ref.find(r => r.id === s!.id) ? 'both' : 'active',
         });
     }
 
@@ -304,9 +304,9 @@ export function getSystemPrompt() {
         const emps = getEmployees.all();
         if (emps.length > 0) {
             const list = emps.map(e =>
-                `- "${e.name}" (CLI: ${e.cli}) — ${e.role || 'general developer'}`
+                `- "${(e as any).name}" (CLI: ${(e as any).cli}) — ${(e as any).role || 'general developer'}`
             ).join('\n');
-            const example = emps[0].name;
+            const example = (emps[0] as any).name;
             prompt += '\n\n---\n';
             prompt += '\n## Orchestration System';
             prompt += '\nYou have external employees (separate CLI processes).';
@@ -336,7 +336,7 @@ export function getSystemPrompt() {
     try {
         const hbData = loadHeartbeatFile();
         if (hbData.jobs.length > 0) {
-            const activeJobs = hbData.jobs.filter(j => j.enabled);
+            const activeJobs = hbData.jobs.filter((j: any) => j.enabled);
             prompt += '\n\n---\n## Current Heartbeat Jobs\n';
             for (const job of hbData.jobs) {
                 const status = job.enabled ? '✅' : '⏸️';
@@ -354,7 +354,7 @@ export function getSystemPrompt() {
     try {
         const activeSkills = loadActiveSkills();
         const refSkills = loadSkillRegistry();
-        const activeIds = new Set(activeSkills.map(s => s.id));
+        const activeIds = new Set(activeSkills.map(s => s!.id));
         const availableRef = refSkills.filter(s => !activeIds.has(s.id));
 
         if (activeSkills.length > 0 || availableRef.length > 0) {
@@ -367,7 +367,7 @@ export function getSystemPrompt() {
                 prompt += '**Development tasks**: Before writing code, ALWAYS read `~/.cli-claw/skills/dev/SKILL.md` for project conventions.\n';
                 prompt += 'For role-specific tasks, also read the relevant skill (dev-frontend, dev-backend, dev-data, dev-testing).\n';
                 for (const s of activeSkills) {
-                    prompt += `- ${s.name} (${s.id})\n`;
+                    prompt += `- ${s!.name} (${s!.id})\n`;
                 }
             }
 
@@ -391,7 +391,7 @@ export function getSystemPrompt() {
 
     // ─── Vision-Click Hint (Codex only) ──────────────
     try {
-        const session = getSession();
+        const session: any = getSession();
         if (session.active_cli === 'codex') {
             const visionSkillPath = join(SKILLS_DIR, 'vision-click', 'SKILL.md');
             if (fs.existsSync(visionSkillPath)) {
@@ -407,7 +407,7 @@ export function getSystemPrompt() {
 
 // ─── Employee Prompt (orchestration-free) ────────────
 
-export function getEmployeePrompt(emp) {
+export function getEmployeePrompt(emp: any) {
     let prompt = `# ${emp.name}\nRole: ${emp.role || 'general developer'}\n`;
 
     // ─── Core rules (orchestration rules intentionally excluded → prevent recursion)
@@ -440,7 +440,7 @@ export function getEmployeePrompt(emp) {
             prompt += `\n## Active Skills (${activeSkills.length})\n`;
             prompt += `Installed skills — automatically triggered by the CLI.\n`;
             for (const s of activeSkills) {
-                prompt += `- ${s.name} (${s.id})\n`;
+                prompt += `- ${s!.name} (${s!.id})\n`;
             }
         }
     } catch { /* skills not ready */ }
@@ -464,7 +464,7 @@ export function getEmployeePrompt(emp) {
 
 // ─── Employee Prompt v2 (orchestration phase-aware) ──
 
-export function getEmployeePromptV2(emp, role, currentPhase) {
+export function getEmployeePromptV2(emp: any, role: any, currentPhase: any) {
     const cacheKey = `${emp.id || emp.name}:${role}:${currentPhase}`;
     if (promptCache.has(cacheKey)) return promptCache.get(cacheKey);
 
@@ -485,7 +485,7 @@ export function getEmployeePromptV2(emp, role, currentPhase) {
         custom: null,
     };
 
-    const skillPath = ROLE_SKILL_MAP[role];
+    const skillPath = (ROLE_SKILL_MAP as Record<string, any>)[role];
     if (skillPath && fs.existsSync(skillPath)) {
         prompt += `\n\n## Development Guide (${role})\n${fs.readFileSync(skillPath, 'utf8')}`;
     }
@@ -499,8 +499,8 @@ export function getEmployeePromptV2(emp, role, currentPhase) {
     }
 
     // ─── 4. Phase 컨텍스트 + Quality Gate
-    const PHASES = { 1: 'Planning', 2: 'Plan Review', 3: 'Development', 4: 'Debugging', 5: 'Integration' };
-    const PHASE_GATES = {
+    const PHASES: Record<string, string> = { 1: 'Planning', 2: 'Plan Review', 3: 'Development', 4: 'Debugging', 5: 'Integration' };
+    const PHASE_GATES: Record<string, string> = {
         1: 'Gate: impact analysis + dependency check + edge case list complete',
         2: 'Gate: code cross-check + conflict scan + test strategy established',
         3: 'Gate: changed file list + export/import integrity + zero build errors',
@@ -533,12 +533,12 @@ export function regenerateB() {
         const wd = settings.workingDir || os.homedir();
         fs.writeFileSync(join(wd, 'AGENTS.md'), fullPrompt);
         console.log(`[prompt] AGENTS.md generated at ${wd}`);
-    } catch (e) {
-        console.error(`[prompt] AGENTS.md generation failed:`, e.message);
+    } catch (e: unknown) {
+        console.error(`[prompt] AGENTS.md generation failed:`, (e as Error).message);
     }
 
     try {
-        const session = getSession();
+        const session: any = getSession();
         if (session.session_id) {
             updateSession.run(session.active_cli, null, session.model,
                 session.permissions, session.working_dir, session.effort);

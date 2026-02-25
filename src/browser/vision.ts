@@ -12,7 +12,7 @@ import { screenshot, mouseClick, snapshot } from './actions.ts';
  * @param {object} opts - { provider: 'codex' }
  * @returns {Promise<{ found: boolean, x: number, y: number, description?: string, provider: string }>}
  */
-export async function extractCoordinates(screenshotPath, target, opts = {}) {
+export async function extractCoordinates(screenshotPath: string, target: string, opts: Record<string, any> = {}) {
     const provider = opts.provider || 'codex';
     switch (provider) {
         case 'codex': return codexVision(screenshotPath, target);
@@ -24,7 +24,7 @@ export async function extractCoordinates(screenshotPath, target, opts = {}) {
  * Codex CLI vision provider.
  * Spawns `codex exec -i <image> --json` and parses NDJSON response.
  */
-function codexVision(screenshotPath, target) {
+function codexVision(screenshotPath: string, target: string) {
     const prompt = [
         `Look at this screenshot image carefully.`,
         `Find the UI element "${target}" and return its center pixel coordinate.`,
@@ -85,7 +85,7 @@ function codexVision(screenshotPath, target) {
                 }
                 reject(new Error('No coordinate JSON found in codex output'));
             } catch (e) {
-                reject(new Error(`Failed to parse codex output: ${e.message}`));
+                reject(new Error(`Failed to parse codex output: ${(e as Error).message}`));
             }
         });
 
@@ -99,7 +99,7 @@ function codexVision(screenshotPath, target) {
  * @param {string} target - Element description (e.g. "Login button")
  * @param {object} opts - { provider, doubleClick }
  */
-export async function visionClick(port, target, opts = {}) {
+export async function visionClick(port: number, target: string, opts: Record<string, any> = {}) {
     // 1. Screenshot (includes DPR)
     const ss = await screenshot(port);
     const dpr = ss.dpr || 1;
@@ -107,7 +107,7 @@ export async function visionClick(port, target, opts = {}) {
     // 2. Vision → coordinates (image pixel space)
     const result = await extractCoordinates(ss.path, target, {
         provider: opts.provider || 'codex',
-    });
+    }) as Record<string, any>;
 
     if (!result.found) {
         return { success: false, reason: 'target not found', provider: result.provider };

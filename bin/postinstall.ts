@@ -23,14 +23,14 @@ import { ensureSkillsSymlinks, initMcpConfig, copyDefaultSkills, loadUnifiedMcp,
 const home = os.homedir();
 const clawHome = path.join(home, '.cli-claw');
 
-function ensureDir(dir) {
+function ensureDir(dir: string) {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
         console.log(`[claw:init] created ${dir}`);
     }
 }
 
-function ensureSymlink(target, linkPath) {
+function ensureSymlink(target: string, linkPath: string) {
     if (fs.existsSync(linkPath)) return false;
     fs.mkdirSync(path.dirname(linkPath), { recursive: true });
     fs.symlinkSync(target, linkPath);
@@ -38,10 +38,10 @@ function ensureSymlink(target, linkPath) {
     return true;
 }
 
-function logSkillsSymlinkReport(report) {
+function logSkillsSymlinkReport(report: any) {
     if (!report?.links) return;
 
-    const moved = report.links.filter(x => x.action === 'backup_replace');
+    const moved = report.links.filter((x: any) => x.action === 'backup_replace');
     if (moved.length) {
         console.log(`[claw:init] skills conflicts moved to backup: ${moved.length}`);
         for (const item of moved) {
@@ -51,7 +51,7 @@ function logSkillsSymlinkReport(report) {
         }
     }
 
-    const errors = report.links.filter(x => x.status === 'error');
+    const errors = report.links.filter((x: any) => x.status === 'error');
     for (const item of errors) {
         console.log(`[claw:init] ⚠️ symlink error: ${item.linkPath} (${item.message || 'unknown'})`);
     }
@@ -162,7 +162,7 @@ for (const { pkg, bin } of MCP_PACKAGES) {
         console.log(`[claw:init] ✅ ${bin} → ${binPath}`);
 
         // Update mcp.json: npx → direct binary
-        for (const [name, srv] of Object.entries(config.servers || {})) {
+        for (const [name, srv] of Object.entries(config.servers || {}) as [string, any][]) {
             if (srv.command === 'npx' && (srv.args || []).includes(pkg)) {
                 srv.command = bin;
                 srv.args = [];
@@ -170,7 +170,7 @@ for (const { pkg, bin } of MCP_PACKAGES) {
             }
         }
     } catch (e) {
-        console.error(`[claw:init] ⚠️  ${pkg}: ${e.message?.slice(0, 80)}`);
+        console.error(`[claw:init] ⚠️  ${pkg}: ${(e as Error).message?.slice(0, 80)}`);
     }
 }
 

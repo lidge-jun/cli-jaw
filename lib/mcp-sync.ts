@@ -26,7 +26,7 @@ export function loadUnifiedMcp() {
     }
 }
 
-export function saveUnifiedMcp(config) {
+export function saveUnifiedMcp(config: Record<string, any>) {
     fs.mkdirSync(CLAW_HOME, { recursive: true });
     fs.writeFileSync(MCP_PATH, JSON.stringify(config, null, 4) + '\n');
 }
@@ -34,11 +34,11 @@ export function saveUnifiedMcp(config) {
 // ─── Import from existing configs ──────────────────
 
 /** Import from Claude-style .mcp.json into unified format */
-export function importFromClaudeMcp(filePath) {
+export function importFromClaudeMcp(filePath: string) {
     try {
         const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-        const servers = {};
-        for (const [name, srv] of Object.entries(raw.mcpServers || {})) {
+        const servers: Record<string, any> = {};
+        for (const [name, srv] of Object.entries(raw.mcpServers || {}) as [string, any][]) {
             servers[name] = {
                 command: srv.command,
                 args: srv.args || [],
@@ -52,19 +52,19 @@ export function importFromClaudeMcp(filePath) {
 // ─── Convert to CLI-specific formats ───────────────
 
 /** → Claude Code / Gemini CLI format (.mcp.json / settings.json mcpServers block) */
-export function toClaudeMcp(config) {
-    const mcpServers = {};
-    for (const [name, srv] of Object.entries(config.servers || {})) {
-        mcpServers[name] = { command: srv.command, args: srv.args || [] };
-        if (srv.env && Object.keys(srv.env).length) mcpServers[name].env = srv.env;
+export function toClaudeMcp(config: Record<string, any>) {
+    const mcpServers: Record<string, any> = {};
+    for (const [name, srv] of Object.entries(config.servers || {}) as [string, any][]) {
+        (mcpServers as Record<string, any>)[name] = { command: srv.command, args: srv.args || [] };
+        if (srv.env && Object.keys(srv.env).length) (mcpServers as Record<string, any>)[name].env = srv.env;
     }
     return { mcpServers };
 }
 
 /** → Codex config.toml MCP section string */
-export function toCodexToml(config) {
+export function toCodexToml(config: Record<string, any>) {
     let toml = '';
-    for (const [name, srv] of Object.entries(config.servers || {})) {
+    for (const [name, srv] of Object.entries(config.servers || {}) as [string, any][]) {
         toml += `[mcp_servers.${name}]\n`;
         toml += `command = "${srv.command}"\n`;
         toml += `args = ${JSON.stringify(srv.args || [])}\n`;
@@ -80,14 +80,14 @@ export function toCodexToml(config) {
 }
 
 /** → OpenCode opencode.json mcp block */
-export function toOpenCodeMcp(config) {
-    const mcp = {};
-    for (const [name, srv] of Object.entries(config.servers || {})) {
-        mcp[name] = {
+export function toOpenCodeMcp(config: Record<string, any>) {
+    const mcp: Record<string, any> = {};
+    for (const [name, srv] of Object.entries(config.servers || {}) as [string, any][]) {
+        (mcp as Record<string, any>)[name] = {
             type: 'local',
             command: [srv.command, ...(srv.args || [])],
         };
-        if (srv.env && Object.keys(srv.env).length) mcp[name].environment = srv.env;
+        if (srv.env && Object.keys(srv.env).length) (mcp as Record<string, any>)[name].environment = srv.env;
     }
     return mcp;
 }
@@ -95,7 +95,7 @@ export function toOpenCodeMcp(config) {
 // ─── Patch helpers ─────────────────────────────────
 
 /** Replace only [mcp_servers.*] sections in existing TOML, keep everything else */
-export function patchCodexToml(existingToml, newMcpToml) {
+export function patchCodexToml(existingToml: string, newMcpToml: string) {
     const lines = existingToml.split('\n');
     const output = [];
     let inMcp = false;
@@ -112,14 +112,14 @@ export function patchCodexToml(existingToml, newMcpToml) {
     }
 
     // Remove trailing blank lines before appending MCP section
-    while (output.length && output[output.length - 1].trim() === '') output.pop();
+    while (output.length && output[output.length - 1]!.trim() === '') output.pop();
     return output.join('\n') + '\n\n' + newMcpToml;
 }
 
 /** Patch JSON file — merge a block into existing JSON without losing other keys */
-function patchJsonFile(filePath, patchObj) {
-    let existing = {};
-    try { existing = JSON.parse(fs.readFileSync(filePath, 'utf8')); } catch { }
+function patchJsonFile(filePath: string, patchObj: Record<string, any>) {
+    let existing: Record<string, any> = {};
+    try { existing = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Record<string, any>; } catch { }
     const merged = { ...existing, ...patchObj };
     fs.mkdirSync(dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, JSON.stringify(merged, null, 4) + '\n');
@@ -132,7 +132,7 @@ function patchJsonFile(filePath, patchObj) {
  * @param {Object} config - Unified MCP config { servers: {...} }
  * @param {string} workingDir - Current working directory for project-scoped files
  */
-export function syncToAll(config, workingDir) {
+export function syncToAll(config: Record<string, any>, workingDir: string) {
     const results = { claude: false, codex: false, gemini: false, opencode: false, copilot: false };
 
     // 1. Claude Code: {workingDir}/.mcp.json
@@ -140,13 +140,13 @@ export function syncToAll(config, workingDir) {
         const claudePath = join(workingDir, '.mcp.json');
         const claudeData = toClaudeMcp(config);
         // Merge with existing (keep other keys if any)
-        let existing = {};
-        try { existing = JSON.parse(fs.readFileSync(claudePath, 'utf8')); } catch { }
+        let existing: Record<string, any> = {};
+        try { existing = JSON.parse(fs.readFileSync(claudePath, 'utf8')) as Record<string, any>; } catch { }
         existing.mcpServers = claudeData.mcpServers;
         fs.writeFileSync(claudePath, JSON.stringify(existing, null, 4) + '\n');
         results.claude = true;
         console.log(`[mcp-sync] ✅ Claude: ${claudePath}`);
-    } catch (e) { console.error(`[mcp-sync] ❌ Claude:`, e.message); }
+    } catch (e: unknown) { console.error(`[mcp-sync] ❌ Claude:`, (e as Error).message); }
 
     // 2. Codex: ~/.codex/config.toml
     try {
@@ -160,7 +160,7 @@ export function syncToAll(config, workingDir) {
         } else {
             console.log(`[mcp-sync] ⏭️ Codex: config.toml not found, skipping`);
         }
-    } catch (e) { console.error(`[mcp-sync] ❌ Codex:`, e.message); }
+    } catch (e: unknown) { console.error(`[mcp-sync] ❌ Codex:`, (e as Error).message); }
 
     // 3. Gemini CLI: ~/.gemini/settings.json
     try {
@@ -173,7 +173,7 @@ export function syncToAll(config, workingDir) {
         } else {
             console.log(`[mcp-sync] ⏭️ Gemini: settings.json not found, skipping`);
         }
-    } catch (e) { console.error(`[mcp-sync] ❌ Gemini:`, e.message); }
+    } catch (e: unknown) { console.error(`[mcp-sync] ❌ Gemini:`, (e as Error).message); }
 
     // 4. OpenCode: ~/.config/opencode/opencode.json
     try {
@@ -186,7 +186,7 @@ export function syncToAll(config, workingDir) {
         } else {
             console.log(`[mcp-sync] ⏭️ OpenCode: opencode.json not found, skipping`);
         }
-    } catch (e) { console.error(`[mcp-sync] ❌ OpenCode:`, e.message); }
+    } catch (e: unknown) { console.error(`[mcp-sync] ❌ OpenCode:`, (e as Error).message); }
 
     // 5. Copilot: ~/.copilot/mcp-config.json
     try {
@@ -194,13 +194,13 @@ export function syncToAll(config, workingDir) {
         const copilotPath = join(copilotDir, 'mcp-config.json');
         const copilotData = toClaudeMcp(config); // same format as Claude
         fs.mkdirSync(copilotDir, { recursive: true });
-        let existing = {};
-        try { existing = JSON.parse(fs.readFileSync(copilotPath, 'utf8')); } catch { }
+        let existing: Record<string, any> = {};
+        try { existing = JSON.parse(fs.readFileSync(copilotPath, 'utf8')) as Record<string, any>; } catch { }
         existing.mcpServers = copilotData.mcpServers;
         fs.writeFileSync(copilotPath, JSON.stringify(existing, null, 4) + '\n');
         results.copilot = true;
         console.log(`[mcp-sync] ✅ Copilot: ${copilotPath}`);
-    } catch (e) { console.error(`[mcp-sync] ❌ Copilot:`, e.message); }
+    } catch (e: unknown) { console.error(`[mcp-sync] ❌ Copilot:`, (e as Error).message); }
 
     return results;
 }
@@ -212,7 +212,7 @@ export function syncToAll(config, workingDir) {
  * Also ensure ~/.agent/skills → ~/.agents/skills (compat)
  * Also ensure {workingDir}/.claude/skills + ~/.claude/skills (Claude Code CLI)
  */
-export function ensureSkillsSymlinks(workingDir, opts = {}) {
+export function ensureSkillsSymlinks(workingDir: string, opts: Record<string, any> = {}) {
     const onConflict = opts.onConflict === 'skip' ? 'skip' : 'backup';
     const skillsSource = join(CLAW_HOME, 'skills');
     fs.mkdirSync(skillsSource, { recursive: true });
@@ -263,7 +263,7 @@ export function ensureSkillsSymlinks(workingDir, opts = {}) {
         const key = item.action || 'unknown';
         acc[key] = (acc[key] || 0) + 1;
         return acc;
-    }, {});
+    }, {} as Record<string, any>);
 
     return {
         source: skillsSource,
@@ -279,13 +279,13 @@ function createBackupContext() {
     return { root: join(CLAW_HOME, 'backups', 'skills-conflicts', stamp) };
 }
 
-function resolveSymlinkTarget(linkPath, rawTarget) {
+function resolveSymlinkTarget(linkPath: string, rawTarget: string) {
     return isAbsolute(rawTarget)
         ? resolve(rawTarget)
         : resolve(dirname(linkPath), rawTarget);
 }
 
-function ensureSymlinkSafe(target, linkPath, opts = {}) {
+function ensureSymlinkSafe(target: string, linkPath: string, opts: Record<string, any> = {}) {
     const onConflict = opts.onConflict === 'skip' ? 'skip' : 'backup';
     const backupContext = opts.backupContext || createBackupContext();
     const absTarget = resolve(target);
@@ -332,13 +332,13 @@ function ensureSymlinkSafe(target, linkPath, opts = {}) {
             action: 'backup_replace',
             backupPath,
         };
-    } catch (e) {
-        if (e?.code !== 'ENOENT') {
+    } catch (e: unknown) {
+        if ((e as any)?.code !== 'ENOENT') {
             return {
                 ...baseResult,
                 status: 'error',
                 action: 'error',
-                message: e.message,
+                message: (e as Error).message,
             };
         }
     }
@@ -348,17 +348,17 @@ function ensureSymlinkSafe(target, linkPath, opts = {}) {
         fs.symlinkSync(target, linkPath);
         console.log(`[skills] symlink: ${linkPath} → ${target}`);
         return { ...baseResult, status: 'ok', action: 'create' };
-    } catch (e) {
+    } catch (e: unknown) {
         return {
             ...baseResult,
             status: 'error',
             action: 'error',
-            message: e.message,
+            message: (e as Error).message,
         };
     }
 }
 
-function movePathToBackup(pathToMove, context) {
+function movePathToBackup(pathToMove: string, context: Record<string, any>) {
     fs.mkdirSync(context.root, { recursive: true });
     const normalized = pathToMove
         .replace(/^[a-zA-Z]:/, '')
@@ -391,9 +391,9 @@ const NPX_TO_GLOBAL = {
     '@upstash/context7-mcp': { pkg: '@upstash/context7-mcp', bin: 'context7-mcp' },
 };
 
-function resolveNpxPackage(args) {
-    const pkg = (args || []).find(a => !a.startsWith('-'));
-    return pkg ? NPX_TO_GLOBAL[pkg] : null;
+function resolveNpxPackage(args: any) {
+    const pkg = (args || []).find((a: string) => !a.startsWith('-'));
+    return pkg ? (NPX_TO_GLOBAL as Record<string, any>)[pkg] : null;
 }
 
 /**
@@ -401,14 +401,14 @@ function resolveNpxPackage(args) {
  * npx-based → npm i -g, uv-based → uv tool install.
  * Returns per-server results.
  */
-export async function installMcpServers(config) {
+export async function installMcpServers(config: Record<string, any>) {
     const { execSync } = await import('child_process');
-    const results = {};
+    const results: Record<string, any> = {};
 
-    for (const [name, srv] of Object.entries(config.servers || {})) {
+    for (const [name, srv] of Object.entries(config.servers || {}) as [string, any][]) {
         // Skip already-global servers
         if (srv.command !== 'npx' && srv.command !== 'uv' && srv.command !== 'uvx') {
-            results[name] = { status: 'skip', reason: 'already global' };
+            (results as Record<string, any>)[name] = { status: 'skip', reason: 'already global' };
             continue;
         }
 
@@ -432,7 +432,7 @@ export async function installMcpServers(config) {
 
             } else {
                 // uv/uvx ecosystem (pypi)
-                const pkg = (srv.args || []).find(a => !a.startsWith('-') && !a.startsWith('/'));
+                const pkg = (srv.args || []).find((a: string) => !a.startsWith('-') && !a.startsWith('/'));
                 if (!pkg) { results[name] = { status: 'skip', reason: 'no pypi pkg found' }; continue; }
 
                 console.log(`[mcp:install] uv tool install ${pkg} ...`);
@@ -452,9 +452,9 @@ export async function installMcpServers(config) {
                 results[name] = { status: 'installed', bin: binPath, eco: 'pypi' };
                 console.log(`[mcp:install] ✅ ${name} → ${binPath}`);
             }
-        } catch (e) {
-            results[name] = { status: 'error', message: e.message?.slice(0, 200) };
-            console.error(`[mcp:install] ❌ ${name}: ${e.message?.slice(0, 100)}`);
+        } catch (e: unknown) {
+            results[name] = { status: 'error', message: (e as Error).message?.slice(0, 200) };
+            console.error(`[mcp:install] ❌ ${name}: ${(e as Error).message?.slice(0, 100)}`);
         }
     }
 
@@ -468,7 +468,7 @@ export async function installMcpServers(config) {
  * If workingDir has .mcp.json, import and merge with defaults.
  * Otherwise, create config with default servers (context7).
  */
-export function initMcpConfig(workingDir) {
+export function initMcpConfig(workingDir: string) {
     if (fs.existsSync(MCP_PATH)) {
         console.log(`[mcp-sync] unified config exists: ${MCP_PATH}`);
         return loadUnifiedMcp();
@@ -598,7 +598,7 @@ export function copyDefaultSkills() {
         const registryPath = join(refDir, 'registry.json');
         if (fs.existsSync(registryPath)) {
             const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
-            for (const [id, meta] of Object.entries(registry.skills || {})) {
+            for (const [id, meta] of Object.entries(registry.skills || {}) as [string, any][]) {
                 if (meta.category === 'orchestration') OPENCLAW_ACTIVE.add(id);
             }
         }
@@ -621,7 +621,7 @@ export function copyDefaultSkills() {
 }
 
 /** Recursively copy a directory (symlink-safe, error-resilient) */
-function copyDirRecursive(src, dst) {
+function copyDirRecursive(src: string, dst: string) {
     fs.mkdirSync(dst, { recursive: true });
     let entries;
     try { entries = fs.readdirSync(src, { withFileTypes: true }); }

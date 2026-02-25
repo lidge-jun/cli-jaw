@@ -1,11 +1,11 @@
-# Telegram & Heartbeat — telegram/bot.js · telegram/forwarder.js · memory/heartbeat.js
+# Telegram & Heartbeat — telegram/bot.ts · telegram/forwarder.ts · memory/heartbeat.ts
 
 > 외부 인터페이스 (Telegram Bot) + 주기적 작업 스케줄 + forwarder lifecycle + origin 필터링
-> Phase 20.6: telegram.js → telegram/bot.js, telegram-forwarder.js → telegram/forwarder.js, heartbeat.js → memory/heartbeat.js
+> Phase 20.6: telegram.ts → telegram/bot.ts, telegram-forwarder.ts → telegram/forwarder.ts, heartbeat.ts → memory/heartbeat.ts
 
 ---
 
-## telegram/bot.js — Telegram Bot + Forwarder Lifecycle (493L)
+## telegram/bot.ts — Telegram Bot + Forwarder Lifecycle (493L)
 
 | Function                                              | 역할                                                            |
 | ----------------------------------------------------- | --------------------------------------------------------------- |
@@ -66,7 +66,7 @@ initTelegram()
 
 ---
 
-## memory/heartbeat.js — Scheduled Jobs (107L)
+## memory/heartbeat.ts — Scheduled Jobs (107L)
 
 | Function               | 역할                                   |
 | ---------------------- | -------------------------------------- |

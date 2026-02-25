@@ -19,7 +19,7 @@ export const PHASES = {
 
 // ─── Create ──────────────────────────────────────────
 
-export function createWorklog(prompt) {
+export function createWorklog(prompt: string) {
     fs.mkdirSync(WORKLOG_DIR, { recursive: true });
     const ts = new Date().toISOString().replace(/[:-]/g, '').slice(0, 15);
     const slug = prompt.slice(0, 30).replace(/[^a-zA-Z가-힣0-9]/g, '_');
@@ -71,7 +71,7 @@ export function readLatestWorklog() {
 
 // ─── Append ──────────────────────────────────────────
 
-export function appendToWorklog(wlPath, section, content) {
+export function appendToWorklog(wlPath: string, section: string, content: string) {
     if (!wlPath || !fs.existsSync(wlPath)) return;
 
     const file = fs.readFileSync(wlPath, 'utf8');
@@ -92,11 +92,11 @@ export function appendToWorklog(wlPath, section, content) {
 
 // ─── Matrix Update ───────────────────────────────────
 
-export function updateMatrix(wlPath, agentPhases) {
+export function updateMatrix(wlPath: string, agentPhases: Array<Record<string, any>>) {
     if (!wlPath || !fs.existsSync(wlPath)) return;
 
-    const table = agentPhases.map(ap =>
-        `| ${ap.agent} | ${ap.role} | Phase ${ap.currentPhase}: ${PHASES[ap.currentPhase] || '?'} | ${ap.completed ? '✅ 완료' : '⏳ 진행 중'} |`
+    const table = agentPhases.map((ap: Record<string, any>) =>
+        `| ${ap.agent} | ${ap.role} | Phase ${ap.currentPhase}: ${(PHASES as Record<string, string>)[ap.currentPhase] || '?'} | ${ap.completed ? '✅ 완료' : '⏳ 진행 중'} |`
     ).join('\n');
 
     const file = fs.readFileSync(wlPath, 'utf8');
@@ -116,7 +116,7 @@ export function updateMatrix(wlPath, agentPhases) {
 
 // ─── Status Update ───────────────────────────────────
 
-export function updateWorklogStatus(wlPath, status, round) {
+export function updateWorklogStatus(wlPath: string, status: string, round: number) {
     if (!wlPath || !fs.existsSync(wlPath)) return;
 
     const file = fs.readFileSync(wlPath, 'utf8');
@@ -128,7 +128,7 @@ export function updateWorklogStatus(wlPath, status, round) {
 
 // ─── Parse Pending (for "이어서 해줘") ───────────────
 
-export function parseWorklogPending(content) {
+export function parseWorklogPending(content: string) {
     const lines = content.split('\n');
     const pending = [];
     let inMatrix = false;
@@ -137,13 +137,13 @@ export function parseWorklogPending(content) {
         if (line.includes('## Agent Status Matrix')) { inMatrix = true; continue; }
         if (inMatrix && line.startsWith('## ')) break;
         if (inMatrix && line.includes('⏳')) {
-            const cols = line.split('|').map(c => c.trim()).filter(Boolean);
+            const cols = line.split('|').map((c: string) => c.trim()).filter(Boolean);
             if (cols.length >= 3) {
-                const phaseMatch = cols[2].match(/Phase (\d+)/);
+                const phaseMatch = cols[2]!.match(/Phase (\d+)/);
                 pending.push({
                     agent: cols[0],
                     role: cols[1],
-                    currentPhase: phaseMatch ? +phaseMatch[1] : 1,  // fallback: 기획부터 재시작
+                    currentPhase: phaseMatch ? +phaseMatch[1]! : 1,  // fallback: 기획부터 재시작
                 });
             }
         }

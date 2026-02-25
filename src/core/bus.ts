@@ -1,18 +1,20 @@
 // ─── Broadcast Bus (EventEmitter-style) ──────────────
 // All modules import from here to avoid circular deps.
 
-const broadcastListeners = new Set();
-let wss = null;
+type BroadcastListener = (type: string, data: Record<string, any>) => void;
 
-export function setWss(w) { wss = w; }
+const broadcastListeners = new Set<BroadcastListener>();
+let wss: any = null;
 
-export function addBroadcastListener(fn) { broadcastListeners.add(fn); }
-export function removeBroadcastListener(fn) { broadcastListeners.delete(fn); }
+export function setWss(w: any) { wss = w; }
 
-export function broadcast(type, data) {
+export function addBroadcastListener(fn: BroadcastListener) { broadcastListeners.add(fn); }
+export function removeBroadcastListener(fn: BroadcastListener) { broadcastListeners.delete(fn); }
+
+export function broadcast(type: string, data: Record<string, any>) {
     const msg = JSON.stringify({ type, ...data, ts: Date.now() });
     if (wss) {
-        wss.clients.forEach(c => { if (c.readyState === 1) c.send(msg); });
+        wss.clients.forEach((c: any) => { if (c.readyState === 1) c.send(msg); });
     }
     for (const fn of broadcastListeners) fn(type, data);
 }

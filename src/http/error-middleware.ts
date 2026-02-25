@@ -1,19 +1,20 @@
 // ─── HTTP: Error Middleware ──────────────────────────
 // Phase 9.2 — Express global error handler
 
+import type { Request, Response, NextFunction } from 'express';
 import { fail } from './response.ts';
 
 /**
  * 404 Not Found 핸들러
  */
-export function notFoundHandler(req, res) {
+export function notFoundHandler(req: Request, res: Response) {
     return fail(res, 404, 'route_not_found', { method: req.method, path: req.path });
 }
 
 /**
  * Global error handler — 모든 throw된 에러를 표준 포맷으로 변환
  */
-export function errorHandler(err, req, res, _next) {
+export function errorHandler(err: Record<string, any>, req: Request, res: Response, _next: NextFunction) {
     const status = err?.statusCode || 500;
     const msg = status >= 500 ? 'internal_error' : (err?.message || 'bad_request');
 

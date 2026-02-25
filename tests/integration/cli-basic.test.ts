@@ -8,11 +8,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CLI = join(__dirname, '../../bin/cli-claw.js');
+const CLI = join(__dirname, '../../bin/cli-claw.ts');
 
-function run(...args) {
+function run(...args: string[]) {
     try {
-        return execFileSync('node', [CLI, ...args], {
+        return execFileSync('npx', ['tsx', CLI, ...args], {
             encoding: 'utf8',
             timeout: 5000,
             env: { ...process.env, NO_COLOR: '1' },

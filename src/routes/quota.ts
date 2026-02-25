@@ -24,11 +24,11 @@ export function readCodexTokens() {
         const authPath = join(os.homedir(), '.codex', 'auth.json');
         const j = JSON.parse(fs.readFileSync(authPath, 'utf8'));
         if (j?.tokens?.access_token) return { access_token: j.tokens.access_token, account_id: j.tokens.account_id ?? '' };
-    } catch (e) { console.debug('[quota:codex] token read failed', e.message); }
+    } catch (e: unknown) { console.debug('[quota:codex] token read failed', (e as Error).message); }
     return null;
 }
 
-export async function fetchClaudeUsage(creds) {
+export async function fetchClaudeUsage(creds: any) {
     if (!creds?.token) return null;
     try {
         const resp = await fetch('https://api.anthropic.com/api/oauth/usage', {
@@ -36,7 +36,7 @@ export async function fetchClaudeUsage(creds) {
             signal: AbortSignal.timeout(8000),
         });
         if (!resp.ok) return null;
-        const data = await resp.json();
+        const data = await resp.json() as Record<string, any>;
         const windows = [];
         const labelMap = { five_hour: '5-hour', seven_day: '7-day', seven_day_sonnet: '7-day Sonnet', seven_day_opus: '7-day Opus' };
         for (const [key, label] of Object.entries(labelMap)) {
@@ -48,7 +48,7 @@ export async function fetchClaudeUsage(creds) {
     } catch { return null; }
 }
 
-export async function fetchCodexUsage(tokens) {
+export async function fetchCodexUsage(tokens: any) {
     if (!tokens) return null;
     try {
         const resp = await fetch('https://chatgpt.com/backend-api/wham/usage', {
@@ -56,7 +56,7 @@ export async function fetchCodexUsage(tokens) {
             signal: AbortSignal.timeout(8000),
         });
         if (!resp.ok) return null;
-        const data = await resp.json();
+        const data = await resp.json() as Record<string, any>;
         const account = { email: data.email ?? null, plan: data.plan_type ?? null };
         const windows = [];
         if (data.rate_limit?.primary_window) {

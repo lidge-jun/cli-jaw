@@ -4,15 +4,15 @@
 import { parseArgs } from 'node:util';
 import { getServerUrl } from '../../src/core/config.ts';
 
-const SERVER = getServerUrl();
+const SERVER = getServerUrl('3457');
 const sub = process.argv[3];
 
-async function api(method, path, body) {
-    const opts = { method, headers: { 'Content-Type': 'application/json' } };
+async function api(method: string, path: string, body?: any) {
+    const opts: Record<string, any> = { method, headers: { 'Content-Type': 'application/json' } };
     if (body) opts.body = JSON.stringify(body);
     const resp = await fetch(`${SERVER}/api/claw-memory${path}`, opts);
     if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: resp.statusText }));
+        const err = await resp.json().catch(() => ({ error: resp.statusText })) as Record<string, any>;
         throw new Error(err.error || `HTTP ${resp.status}`);
     }
     return resp.json();
@@ -23,7 +23,7 @@ try {
         case 'search': {
             const query = process.argv.slice(4).join(' ');
             if (!query) { console.error('Usage: cli-claw memory search <query>'); process.exit(1); }
-            const r = await api('GET', `/search?q=${encodeURIComponent(query)}`);
+            const r = await api('GET', `/search?q=${encodeURIComponent(query)}`) as Record<string, any>;
             console.log(r.result);
             break;
         }
@@ -35,8 +35,8 @@ try {
                 options: { lines: { type: 'string' } }, strict: false
             });
             const params = new URLSearchParams({ file });
-            if (values.lines) params.set('lines', values.lines);
-            const r = await api('GET', `/read?${params}`);
+            if (values.lines) params.set('lines', values.lines as string);
+            const r = await api('GET', `/read?${params}`) as Record<string, any>;
             if (r.content === null) console.error(`❌ File not found: ${file}`);
             else console.log(r.content);
             break;
@@ -45,12 +45,12 @@ try {
             const file = process.argv[4];
             const content = process.argv.slice(5).join(' ');
             if (!file || !content) { console.error('Usage: cli-claw memory save <file> <content>'); process.exit(1); }
-            const r = await api('POST', '/save', { file, content });
+            const r = await api('POST', '/save', { file, content }) as Record<string, any>;
             console.log(`✅ Saved to ${r.path}`);
             break;
         }
         case 'list': {
-            const r = await api('GET', '/list');
+            const r = await api('GET', '/list') as Record<string, any>;
             if (r.files.length === 0) {
                 console.log('(no memory files — run: cli-claw memory init)');
             } else {
@@ -62,7 +62,7 @@ try {
             break;
         }
         case 'init': {
-            await api('POST', '/init');
+            await api('POST', '/init', {});
             console.log('🧠 Memory initialized at ~/.cli-claw/memory/');
             break;
         }
@@ -87,6 +87,6 @@ try {
 `);
     }
 } catch (e) {
-    console.error(`❌ ${e.message}`);
+    console.error(`❌ ${(e as Error).message}`);
     process.exitCode = 1;
 }

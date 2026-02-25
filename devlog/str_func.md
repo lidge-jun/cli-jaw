@@ -1,7 +1,7 @@
 # CLI-CLAW — Source Structure & Function Reference
 
 > 마지막 검증: 2026-02-25T07:44 (Phase 20.6 디렉토리 리팩토링 완료)
-> server.js 850L / src/ 35파일 12서브디렉토리 / tests 244 pass
+> server.ts 850L / src/ 35파일 12서브디렉토리 / tests 244 pass (tsx runner)
 > Phase 9 보안 하드닝 + Phase 17 AI triage + Phase 20.6 모듈 분리 반영
 >
 > 상세 모듈 문서는 [서브 문서](#서브-문서)를 참조하세요.
@@ -11,60 +11,60 @@
 ## File Tree
 
 ```text
-cli-claw/
-├── server.js                 ← Express 라우트 + 글루 + ok/fail + security guards (850L)
+cli-claw-ts/
+├── server.ts                 ← Express 라우트 + 글루 + ok/fail + security guards (850L)
 ├── lib/
-│   ├── mcp-sync.js           ← MCP 통합 + 스킬 복사 + DEDUP_EXCLUDED + 글로벌 설치 (645L)
-│   ├── upload.js             ← 파일 업로드 + Telegram 다운로드 (70L)
-│   └── quota-copilot.js      ← Copilot 할당량 조회 (keychain → API) (67L)
+│   ├── mcp-sync.ts           ← MCP 통합 + 스킬 복사 + DEDUP_EXCLUDED + 글로벌 설치 (645L)
+│   ├── upload.ts             ← 파일 업로드 + Telegram 다운로드 (70L)
+│   └── quota-copilot.ts      ← Copilot 할당량 조회 (keychain → API) (67L)
 ├── src/
 │   ├── core/                 ← 의존 0 인프라 계층
-│   │   ├── config.js         ← CLAW_HOME, settings, CLI 탐지, APP_VERSION (187L)
-│   │   ├── db.js             ← SQLite 스키마 + prepared statements + trace (105L)
-│   │   ├── bus.js            ← WS + 내부 리스너 broadcast (18L)
-│   │   ├── logger.js         ← 로거 유틸 (11L)
-│   │   ├── i18n.js           ← 서버사이드 번역 (90L)
-│   │   └── settings-merge.js ← perCli/activeOverrides deep merge (45L)
+│   │   ├── config.ts         ← CLAW_HOME, settings, CLI 탐지, APP_VERSION (187L)
+│   │   ├── db.ts             ← SQLite 스키마 + prepared statements + trace (105L)
+│   │   ├── bus.ts            ← WS + 내부 리스너 broadcast (18L)
+│   │   ├── logger.ts         ← 로거 유틸 (11L)
+│   │   ├── i18n.ts           ← 서버사이드 번역 (90L)
+│   │   └── settings-merge.ts ← perCli/activeOverrides deep merge (45L)
 │   ├── agent/                ← CLI 에이전트 런타임
-│   │   ├── spawn.js          ← CLI spawn + ACP 분기 + 큐 + 메모리 flush (567L)
-│   │   ├── args.js           ← CLI별 인자 빌더 (67L)
-│   │   └── events.js         ← NDJSON 파서 + ACP update + logEventSummary (322L)
+│   │   ├── spawn.ts          ← CLI spawn + ACP 분기 + 큐 + 메모리 flush (567L)
+│   │   ├── args.ts           ← CLI별 인자 빌더 (67L)
+│   │   └── events.ts         ← NDJSON 파서 + ACP update + logEventSummary (322L)
 │   ├── orchestrator/         ← 직원 오케스트레이션
-│   │   ├── pipeline.js       ← Plan → Phase-aware Distribute → Quality Gate (560L)
-│   │   └── parser.js         ← triage + subtask JSON + verdict 파싱 (108L)
+│   │   ├── pipeline.ts       ← Plan → Phase-aware Distribute → Quality Gate (560L)
+│   │   └── parser.ts         ← triage + subtask JSON + verdict 파싱 (108L)
 │   ├── prompt/               ← 프롬프트 조립
-│   │   └── builder.js        ← A-1/A-2 + 스킬 + 직원 프롬프트 v2 + promptCache (523L)
+│   │   └── builder.ts        ← A-1/A-2 + 스킬 + 직원 프롬프트 v2 + promptCache (523L)
 │   ├── cli/                  ← 커맨드 시스템
-│   │   ├── commands.js       ← 슬래시 커맨드 레지스트리 + 디스패처 (268L)
-│   │   ├── handlers.js       ← 18개 커맨드 핸들러 (432L)
-│   │   ├── registry.js       ← 5개 CLI/모델 단일 소스 (89L)
-│   │   └── acp-client.js     ← Copilot ACP JSON-RPC 클라이언트 (315L)
+│   │   ├── commands.ts       ← 슬래시 커맨드 레지스트리 + 디스패처 (268L)
+│   │   ├── handlers.ts       ← 18개 커맨드 핸들러 (432L)
+│   │   ├── registry.ts       ← 5개 CLI/모델 단일 소스 (89L)
+│   │   └── acp-client.ts     ← Copilot ACP JSON-RPC 클라이언트 (315L)
 │   ├── memory/               ← 데이터 영속화
-│   │   ├── memory.js         ← Persistent Memory grep 기반 (129L)
-│   │   ├── worklog.js        ← Worklog CRUD + phase matrix (153L)
-│   │   └── heartbeat.js      ← Heartbeat 잡 스케줄 + fs.watch (107L)
+│   │   ├── memory.ts         ← Persistent Memory grep 기반 (129L)
+│   │   ├── worklog.ts        ← Worklog CRUD + phase matrix (153L)
+│   │   └── heartbeat.ts      ← Heartbeat 잡 스케줄 + fs.watch (107L)
 │   ├── telegram/             ← Telegram 인터페이스
-│   │   ├── bot.js            ← Telegram 봇 + forwarder lifecycle + origin 필터링 (493L)
-│   │   └── forwarder.js      ← 포워딩 헬퍼 (escape, chunk, createForwarder) (105L)
+│   │   ├── bot.ts            ← Telegram 봇 + forwarder lifecycle + origin 필터링 (493L)
+│   │   └── forwarder.ts      ← 포워딩 헬퍼 (escape, chunk, createForwarder) (105L)
 │   ├── browser/              ← Chrome CDP 제어
-│   │   ├── connection.js     ← Chrome 탐지/launch/CDP 연결 (71L)
-│   │   ├── actions.js        ← snapshot/click/type/navigate/screenshot (179L)
-│   │   ├── vision.js         ← vision-click 파이프라인 + Codex provider (138L)
-│   │   └── index.js          ← re-export hub (13L)
+│   │   ├── connection.ts     ← Chrome 탐지/launch/CDP 연결 (71L)
+│   │   ├── actions.ts        ← snapshot/click/type/navigate/screenshot (179L)
+│   │   ├── vision.ts         ← vision-click 파이프라인 + Codex provider (138L)
+│   │   └── index.ts          ← re-export hub (13L)
 │   ├── routes/               ← Express 라우트 추출
-│   │   ├── quota.js          ← Copilot/Claude/Codex 할당량 (82L)
-│   │   └── browser.js        ← 브라우저 API 라우트 (87L)
+│   │   ├── quota.ts          ← Copilot/Claude/Codex 할당량 (82L)
+│   │   └── browser.ts        ← 브라우저 API 라우트 (87L)
 │   ├── security/             ← 보안 입력 검증
-│   │   ├── path-guards.js    ← assertSkillId, assertFilename, safeResolveUnder (64L)
-│   │   └── decode.js         ← decodeFilenameSafe (21L)
+│   │   ├── path-guards.ts    ← assertSkillId, assertFilename, safeResolveUnder (64L)
+│   │   └── decode.ts         ← decodeFilenameSafe (21L)
 │   ├── http/                 ← 응답 계약
-│   │   ├── response.js       ← ok(), fail() 표준 응답 (23L)
-│   │   ├── async-handler.js  ← asyncHandler 래퍼 (12L)
-│   │   └── error-middleware.js ← notFoundHandler, errorHandler (25L)
+│   │   ├── response.ts       ← ok(), fail() 표준 응답 (23L)
+│   │   ├── async-handler.ts  ← asyncHandler 래퍼 (12L)
+│   │   └── error-middleware.ts ← notFoundHandler, errorHandler (25L)
 │   └── command-contract/     ← 커맨드 인터페이스 통합
-│       ├── catalog.js        ← COMMANDS → capability map 확장 (39L)
-│       ├── policy.js         ← getVisibleCommands, getTelegramMenuCommands (37L)
-│       └── help-renderer.js  ← renderHelp list/detail mode (44L)
+│       ├── catalog.ts        ← COMMANDS → capability map 확장 (39L)
+│       ├── policy.ts         ← getVisibleCommands, getTelegramMenuCommands (37L)
+│       └── help-renderer.ts  ← renderHelp list/detail mode (44L)
 ├── public/                   ← Web UI (ES Modules, ~26 files, ~4420L)
 │   ├── index.html            ← 뼈대 (456L, data-i18n 완전 한글화)
 │   ├── css/                  ← 6 files (1355L)
@@ -79,47 +79,47 @@ cli-claw/
 │       ├── render.js         ← marked+hljs+KaTeX+Mermaid 렌더러 + sanitize (217L)
 │       ├── constants.js      ← CLI_REGISTRY 동적 로딩 + ROLE_PRESETS (119L)
 │       └── features/
-│           ├── i18n.js       ← 프론트엔드 i18n + applyI18n() (126L)
+│           ├── i18n.ts       ← 프론트엔드 i18n + applyI18n() (126L)
 │           ├── sidebar.js    ← 사이드바 접기 (이중 모드) (88L)
 │           ├── theme.js      ← 다크/라이트 테마 토글 (38L)
 │           └── appname.js    ← Agent Name 커스텀 (43L)
 ├── bin/
-│   ├── cli-claw.js           ← 11개 서브커맨드 라우팅
-│   ├── postinstall.js        ← npm install 후 5-CLI 자동설치 + MCP + 스킬 (212L)
+│   ├── cli-claw.ts           ← 11개 서브커맨드 라우팅
+│   ├── postinstall.ts        ← npm install 후 5-CLI 자동설치 + MCP + 스킬 (212L)
 │   └── commands/
-│       ├── serve.js          ← 서버 시작 (--port/--host/--open)
-│       ├── chat.js           ← 터미널 채팅 TUI (3모드, 842L)
-│       ├── init.js           ← 초기화 마법사
-│       ├── doctor.js         ← 진단 (12개 체크, --json)
-│       ├── status.js         ← 서버 상태 (--json)
-│       ├── mcp.js            ← MCP 관리 (install/sync/list/reset)
-│       ├── skill.js          ← 스킬 관리 (install/remove/info/list/reset)
-│       ├── employee.js       ← 직원 관리 (reset, REST API 호출, 67L)
-│       ├── reset.js          ← 전체 초기화 (MCP/스킬/직원/세션)
-│       ├── memory.js         ← 메모리 CLI (search/read/save/list/init)
-│       └── browser.js        ← 브라우저 CLI (17개 서브커맨드, 240L)
+│       ├── serve.ts          ← 서버 시작 (--port/--host/--open)
+│       ├── chat.ts           ← 터미널 채팅 TUI (3모드, 842L)
+│       ├── init.ts           ← 초기화 마법사
+│       ├── doctor.ts         ← 진단 (12개 체크, --json)
+│       ├── status.ts         ← 서버 상태 (--json)
+│       ├── mcp.ts            ← MCP 관리 (install/sync/list/reset)
+│       ├── skill.ts          ← 스킬 관리 (install/remove/info/list/reset)
+│       ├── employee.ts       ← 직원 관리 (reset, REST API 호출, 67L)
+│       ├── reset.ts          ← 전체 초기화 (MCP/스킬/직원/세션)
+│       ├── memory.ts         ← 메모리 CLI (search/read/save/list/init)
+│       └── browser.ts        ← 브라우저 CLI (17개 서브커맨드, 240L)
 ├── tests/                    ← 회귀 방지 테스트 (244 pass)
-│   ├── events.test.js        ← 이벤트 파서 단위 테스트
-│   ├── events-acp.test.js    ← ACP session/update 이벤트 테스트
-│   ├── telegram-forwarding.test.js ← Telegram 포워딩 동작 테스트
+│   ├── events.test.ts        ← 이벤트 파서 단위 테스트
+│   ├── events-acp.test.ts    ← ACP session/update 이벤트 테스트
+│   ├── telegram-forwarding.test.ts ← Telegram 포워딩 동작 테스트
 │   ├── unit/                 ← Tier 1-2 단위 테스트 (~20 files)
-│   │   ├── employee-prompt.test.js ← 직원 프롬프트 14건
-│   │   ├── orchestrator-parsing.test.js ← subtask 파싱 13건
-│   │   ├── orchestrator-triage.test.js  ← triage 판단 10건
-│   │   ├── agent-args.test.js        ← CLI args 빌드 16건
-│   │   ├── path-guards.test.js       ← 입력 검증 16건
-│   │   ├── http-response.test.js     ← ok/fail 6건
-│   │   ├── settings-merge.test.js    ← deep merge 5건
-│   │   ├── render-sanitize.test.js   ← XSS sanitize 11건
+│   │   ├── employee-prompt.test.ts ← 직원 프롬프트 14건
+│   │   ├── orchestrator-parsing.test.ts ← subtask 파싱 13건
+│   │   ├── orchestrator-triage.test.ts  ← triage 판단 10건
+│   │   ├── agent-args.test.ts        ← CLI args 빌드 16건
+│   │   ├── path-guards.test.ts       ← 입력 검증 16건
+│   │   ├── http-response.test.ts     ← ok/fail 6건
+│   │   ├── settings-merge.test.ts    ← deep merge 5건
+│   │   ├── render-sanitize.test.ts   ← XSS sanitize 11건
 │   │   └── ...
 │   └── integration/
-│       ├── cli-basic.test.js         ← CLI 기본 통합
-│       ├── api-smoke.test.js         ← API 스모크 (서버 기동)
-│       └── route-registration.test.js ← 라우트 등록 스모크
+│       ├── cli-basic.test.ts         ← CLI 기본 통합
+│       ├── api-smoke.test.ts         ← API 스모크 (서버 기동)
+│       └── route-registration.test.ts ← 라우트 등록 스모크
 ├── README.md                 ← 영문 (기본, 언어 스위처)
 ├── README.ko.md              ← 한국어 번역
 ├── README.zh-CN.md           ← 중국어 번역
-├── TESTS.md                  ← 테스트 상세
+├── tsconfig.json             ← TypeScript 설정├── TESTS.md                  ← 테스트 상세
 ├── scripts/                  ← 도구 스크립트
 │   ├── check-deps-offline.mjs ← 오프라인 취약 버전 체크
 │   └── check-deps-online.sh  ← npm audit + semgrep
@@ -143,13 +143,15 @@ cli-claw/
 
 npm 의존성: `express` ^4.21 · `ws` ^8.18 · `better-sqlite3` ^11.7 · `grammy` ^1.40 · `@grammyjs/runner` ^2.0 · `node-fetch` ^3.3 · `playwright-core` ^1.58
 
+dev 의존성: `typescript` ^5.7 · `tsx` ^4.19 · `@types/node` ^22 · `@types/express` ^5 · `@types/better-sqlite3` ^7.6 · `@types/ws` ^8.5
+
 ---
 
 ## 코드 구조 개요
 
 ```mermaid
 graph LR
-    CLI["bin/commands/*"] -->|HTTP| SRV["server.js"]
+    CLI["bin/commands/*"] -->|HTTP| SRV["server.ts"]
     WEB["public/"] -->|HTTP+WS| SRV
     SRV --> CORE["src/core/"]
     SRV --> AGT["src/agent/"]
@@ -158,7 +160,7 @@ graph LR
     SRV --> MEM["src/memory/"]
     SRV --> TG["src/telegram/"]
     SRV --> BR["src/browser/"]
-    SRV --> MCP["lib/mcp-sync.js"]
+    SRV --> MCP["lib/mcp-sync.ts"]
     SRV --> CMD["src/cli/"]
     SRV --> RT["src/routes/"]
     SRV --> SEC["src/security/"]
@@ -166,8 +168,8 @@ graph LR
     CMD --> CC["src/command-contract/"]
     CORE --> |config,db,bus,i18n| AGT
     CORE --> |config,db| ORC
-    AGT --> EVT["agent/events.js"]
-    AGT --> ACP["cli/acp-client.js"]
+    AGT --> EVT["agent/events.ts"]
+    AGT --> ACP["cli/acp-client.ts"]
     ORC --> AGT
     TG --> ORC
     MEM --> |heartbeat| TG
@@ -189,7 +191,7 @@ graph LR
 | `src/orchestrator/` | core, prompt, agent | planning ↔ agent 상호 + phase 관리 |
 | `src/telegram/` | core, orchestrator, agent, cli, prompt, memory | 외부 인터페이스 + lifecycle |
 | `src/routes/` | core, browser | Express 라우트 추출 |
-| `server.js` | 전체 | 글루 레이어 |
+| `server.ts` | 전체 | 글루 레이어 |
 
 ---
 
@@ -207,7 +209,7 @@ graph LR
 10. **Telegram origin**: `origin` 메타 기반으로 포워딩 판단
 11. **Forwarder lifecycle**: named handler attach/detach로 중복 등록 방지
 12. **symlink 보호**: 실디렉토리 충돌 시 backup 우선
-13. **CLI registry**: `src/cli/registry.js`에서 5개 CLI 정의, `/api/cli-registry`로 동기화
+13. **CLI registry**: `src/cli/registry.ts`에서 5개 CLI 정의, `/api/cli-registry`로 동기화
 14. **Copilot ACP**: JSON-RPC 2.0 over stdio, `session/update` 실시간 스트리밍
 15. **Copilot effort**: `~/.copilot/config.json` `reasoning_effort` 직접 수정
 16. **Copilot quota**: macOS keychain → `copilot_internal/user` API
@@ -230,7 +232,7 @@ graph LR
 33. **[P17.3] Employee 명칭**: subagent → employee 통일
 34. **[P17.4] HTML i18n**: 26키 추가, data-i18n 완전 한글화
 35. **[P20.5] XSS 수정**: escapeHtml 인용부호 처리, 4개 모듈 패치
-36. **[P20.6] 디렉토리 분리**: flat src/ → 12 subdirs, server.js 850L
+36. **[P20.6] 디렉토리 분리**: flat src/ → 12 subdirs, server.ts 850L
 37. **[P20.6] promptCache**: `getEmployeePromptV2` 캐싱, orchestrate() 시 clear
 
 ---
@@ -240,12 +242,12 @@ graph LR
 | 문서                                        | 범위                                                          | 파일                                  |
 | ------------------------------------------- | ------------------------------------------------------------- | ------------------------------------- |
 | [🔧 infra.md](str_func/infra.md)             | core/ (config·db·bus·logger·i18n·settings-merge) + security/ + http/ | 의존 0 계층 + Phase 9 보안/응답  |
-| [🌐 server_api.md](str_func/server_api.md)   | server.js · routes/ · REST API · WebSocket                     | 라우트 + 40+ 엔드포인트 + guards |
+| [🌐 server_api.md](str_func/server_api.md)   | server.ts · routes/ · REST API · WebSocket                     | 라우트 + 40+ 엔드포인트 + guards |
 | [⚡ commands.md](str_func/commands.md)       | cli/ (commands·handlers·registry) + command-contract/          | 레지스트리 + 디스패처 + capability   |
 | [🤖 agent_spawn.md](str_func/agent_spawn.md) | agent/ (spawn·args·events) + orchestrator/ (pipeline·parser) + cli/acp-client | spawn + ACP + 오케스트레이션 |
 | [📱 telegram.md](str_func/telegram.md)       | telegram/ (bot·forwarder) + memory/heartbeat                   | 외부 인터페이스 + lifecycle + origin   |
 | [🎨 frontend.md](str_func/frontend.md)       | public/ 전체 (~25파일, i18n 포함)                              | ES Modules + CSS + 동적 registry      |
-| [🧠 prompt_flow.md](str_func/prompt_flow.md) | prompt/builder.js · 직원 프롬프트 · promptCache                | **핵심** — 정적/동적 + Copilot ACP    |
+| [🧠 prompt_flow.md](str_func/prompt_flow.md) | prompt/builder.ts · 직원 프롬프트 · promptCache                | **핵심** — 정적/동적 + Copilot ACP    |
 | [📄 prompt_basic_A1.md](str_func/prompt_basic_A1.md) | A-1 기본 프롬프트 원문                                  | EN 기본 프롬프트 레퍼런스 |
 | [📄 prompt_basic_A2.md](str_func/prompt_basic_A2.md) | A-2 프롬프트 템플릿                                     | 사용자 편집 가능 |
 | [📄 prompt_basic_B.md](str_func/prompt_basic_B.md) | B 프롬프트 원문 (직원 규칙, 위임 정책)                    | 직원 레퍼런스 |

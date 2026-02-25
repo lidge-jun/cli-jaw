@@ -7,7 +7,7 @@ import { broadcast } from '../core/bus.ts';
 
 const heartbeatTimers = new Map();
 let heartbeatBusy = false;
-const pendingJobs = [];
+const pendingJobs: Array<Record<string, any>> = [];
 
 export function startHeartbeat() {
     stopHeartbeat();
@@ -28,7 +28,7 @@ export function stopHeartbeat() {
     heartbeatTimers.clear();
 }
 
-async function runHeartbeatJob(job) {
+async function runHeartbeatJob(job: Record<string, any>) {
     if (heartbeatBusy) {
         if (!pendingJobs.some(j => j.id === job.id)) {
             pendingJobs.push(job);
@@ -44,7 +44,7 @@ async function runHeartbeatJob(job) {
         const now = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
         const prompt = `[heartbeat:${job.name}] 현재 시간: ${now}\n\n${job.prompt || '정기 점검입니다. 할 일 없으면 [SILENT]로 응답.'}`;
         console.log(`[heartbeat:${job.name}] tick`);
-        const result = await orchestrateAndCollect(prompt);
+        const result: string = String(await orchestrateAndCollect(prompt));
 
         if (result.includes('[SILENT]')) {
             console.log(`[heartbeat:${job.name}] silent`);
@@ -65,15 +65,15 @@ async function runHeartbeatJob(job) {
             for (const chatId of chatIds) {
                 for (const chunk of chunks) {
                     try {
-                        await telegramBot.api.sendMessage(chatId, chunk, { parse_mode: 'HTML' });
+                        await (telegramBot as any).api.sendMessage(chatId, chunk, { parse_mode: 'HTML' });
                     } catch {
-                        await telegramBot.api.sendMessage(chatId, chunk.replace(/<[^>]+>/g, ''));
+                        await (telegramBot as any).api.sendMessage(chatId, chunk.replace(/<[^>]+>/g, ''));
                     }
                 }
             }
         }
     } catch (err) {
-        console.error(`[heartbeat:${job.name}] error:`, err.message);
+        console.error(`[heartbeat:${job.name}] error:`, (err as Error).message);
     } finally {
         heartbeatBusy = false;
         drainPending();
@@ -83,6 +83,7 @@ async function runHeartbeatJob(job) {
 async function drainPending() {
     if (pendingJobs.length === 0) return;
     const next = pendingJobs.shift();
+    if (!next) return;
     broadcast('heartbeat_pending', { pending: pendingJobs.length });
     console.log(`[heartbeat:${next.name}] dequeued (${pendingJobs.length} remaining)`);
     await runHeartbeatJob(next);
@@ -92,7 +93,7 @@ async function drainPending() {
 
 export function watchHeartbeatFile() {
     try {
-        let watchDebounce = null;
+        let watchDebounce: ReturnType<typeof setTimeout> | undefined;
         fs.watch(HEARTBEAT_JOBS_PATH, () => {
             clearTimeout(watchDebounce);
             watchDebounce = setTimeout(() => {

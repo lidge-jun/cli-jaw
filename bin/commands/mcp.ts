@@ -37,7 +37,7 @@ const c = {
 
 // ─── Helpers ─────────────────────────────────
 
-function exec(cmd) {
+function exec(cmd: string) {
     return execSync(cmd, { encoding: 'utf8', stdio: 'pipe', timeout: 120000 }).trim();
 }
 
@@ -55,7 +55,7 @@ const PYPI_PATTERNS = [
     /^mcp-/,
 ];
 
-function detectEcosystem(pkg, forceFlag) {
+function detectEcosystem(pkg: string, forceFlag: string | null) {
     if (forceFlag === 'pypi') return 'pypi';
     if (forceFlag === 'npm') return 'npm';
     // Auto-detect
@@ -64,7 +64,7 @@ function detectEcosystem(pkg, forceFlag) {
     return 'npm'; // default
 }
 
-function installNpm(pkg) {
+function installNpm(pkg: string) {
     console.log(`  ${c.yellow}📦 npm i -g ${pkg}${c.reset}`);
     exec(`npm i -g ${pkg}`);
     // Find binary name: last segment of package name
@@ -74,7 +74,7 @@ function installNpm(pkg) {
     return { command: binName, args: [], bin: binPath };
 }
 
-function installPypi(pkg) {
+function installPypi(pkg: string) {
     // Prefer uv tool install (faster), fallback to pip
     const hasUv = (() => { try { exec('which uv'); return true; } catch { return false; } })();
     if (hasUv) {
@@ -115,7 +115,7 @@ switch (sub) {
             : process.argv.includes('--npm') ? 'npm' : null;
         const eco = detectEcosystem(arg, forceFlag);
         const config = loadUnifiedMcp();
-        const serverName = arg.split('/').pop().replace(/^@/, '');
+        const serverName = arg.split('/').pop()!.replace(/^@/, '');
 
         console.log(`\n  ${c.bold}Installing ${arg}${c.reset} (${eco})\n`);
 
@@ -134,7 +134,7 @@ switch (sub) {
             syncToAll(config, getWorkingDir());
             console.log(`\n  ${c.green}Done!${c.reset} Server "${serverName}" ready for all CLIs.\n`);
         } catch (e) {
-            console.error(`\n  ${c.red}❌ Install failed: ${e.message}${c.reset}\n`);
+            console.error(`\n  ${c.red}❌ Install failed: ${(e as Error).message}${c.reset}\n`);
             process.exit(1);
         }
         break;
@@ -161,7 +161,7 @@ switch (sub) {
                 );
             });
             rl.close();
-            if (answer.toLowerCase() !== 'y') {
+            if ((answer as string).toLowerCase() !== 'y') {
                 console.log('  취소됨.\n');
                 break;
             }
@@ -201,9 +201,10 @@ switch (sub) {
             console.log(`  ${c.dim}(none)${c.reset}`);
         } else {
             for (const [name, srv] of entries) {
-                const cmd = srv.args?.length
-                    ? `${srv.command} ${srv.args.join(' ')}`
-                    : srv.command;
+                const s = srv as Record<string, any>;
+                const cmd = s.args?.length
+                    ? `${s.command} ${s.args.join(' ')}`
+                    : s.command;
                 console.log(`  ${c.cyan}•${c.reset} ${c.bold}${name}${c.reset}  ${c.dim}${cmd}${c.reset}`);
             }
         }

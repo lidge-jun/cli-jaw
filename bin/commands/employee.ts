@@ -27,16 +27,16 @@ function printHelp() {
 `);
 }
 
-async function apiJson(baseUrl, path, init = {}) {
-    const headers = { ...(init.headers || {}) };
-    let body = init.body;
+async function apiJson(baseUrl: string, path: string, init: Record<string, any> = {}) {
+    const headers: Record<string, string> = { ...(init.headers || {}) };
+    let body: any = init.body;
     if (body && typeof body !== 'string') {
         headers['Content-Type'] = 'application/json';
         body = JSON.stringify(body);
     }
     const res = await fetch(baseUrl + path, { ...init, headers, body, signal: AbortSignal.timeout(10000) });
     const text = await res.text();
-    let data = {};
+    let data: Record<string, any> = {};
     try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
     if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
     return data;
@@ -47,15 +47,15 @@ if (values.help || !sub || isHelpSubcommand) {
     process.exit(0);
 }
 
-const baseUrl = getServerUrl(values.port);
+const baseUrl = getServerUrl(values.port as string);
 
 switch (sub) {
     case 'reset': {
         try {
-            const result = await apiJson(baseUrl, '/api/employees/reset', { method: 'POST' });
+            const result = await apiJson(baseUrl, '/api/employees/reset', { method: 'POST' }) as Record<string, any>;
             console.log(`✅ employees reset complete (${result.seeded ?? 0} seeded)`);
         } catch (err) {
-            console.error(`❌ employee reset failed: ${err.message}`);
+            console.error(`❌ employee reset failed: ${(err as Error).message}`);
             process.exitCode = 1;
         }
         break;

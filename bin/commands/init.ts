@@ -30,11 +30,11 @@ const { values } = parseArgs({
 fs.mkdirSync(CLAW_HOME, { recursive: true });
 
 // Load existing settings (merge)
-let settings = {};
+let settings: Record<string, any> = {};
 try { settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8')); } catch { }
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
-const ask = (q, def) => new Promise(r => {
+const ask = (q: string, def: string): Promise<string> => new Promise(r => {
     if (values['non-interactive']) { r(def); return; }
     rl.question(`  ${q} [${def}]: `, (ans) => r(ans.trim() || def));
 });
@@ -50,12 +50,12 @@ const permissions = values.permissions ||
     await ask('Permissions (safe/auto)', settings.permissions || 'safe');
 
 // Telegram
-let tgEnabled = false, tgToken = '', tgChatIds = [];
+let tgEnabled = false, tgToken = '', tgChatIds: number[] = [];
 if (values['non-interactive']) {
     if (values['telegram-token']) {
         tgEnabled = true;
-        tgToken = values['telegram-token'];
-        tgChatIds = (values['allowed-chat-ids'] || '').split(',').map(s => +s.trim()).filter(Boolean);
+        tgToken = values['telegram-token'] as string;
+        tgChatIds = ((values['allowed-chat-ids'] || '') as string).split(',').map((s: string) => +s.trim()).filter(Boolean);
     }
 } else {
     const tgAnswer = await ask('Telegram 연결? (y/n)', settings.telegram?.enabled ? 'y' : 'n');
@@ -64,7 +64,7 @@ if (values['non-interactive']) {
         tgToken = await ask('Bot token', settings.telegram?.token || '');
         const idsStr = await ask('Chat IDs (comma)',
             (settings.telegram?.allowedChatIds || []).join(',') || '');
-        tgChatIds = idsStr.split(',').map(s => +s.trim()).filter(Boolean);
+        tgChatIds = idsStr.split(',').map((s: string) => +s.trim()).filter(Boolean);
     }
 }
 
@@ -75,7 +75,7 @@ const skillsDir = values['skills-dir'] ||
 rl.close();
 
 // Merge (preserve existing values unless --force)
-const merged = values.force ? {} : { ...settings };
+const merged: Record<string, any> = values.force ? {} : { ...settings };
 merged.workingDir = workingDir;
 merged.cli = cli;
 merged.permissions = permissions;
@@ -88,7 +88,7 @@ if (tgEnabled || values.force) {
 fs.writeFileSync(SETTINGS_PATH, JSON.stringify(merged, null, 2));
 
 // Ensure skills dir + heartbeat.json
-fs.mkdirSync(skillsDir, { recursive: true });
+fs.mkdirSync(skillsDir as string, { recursive: true });
 const hbPath = path.join(CLAW_HOME, 'heartbeat.json');
 if (!fs.existsSync(hbPath)) {
     fs.writeFileSync(hbPath, JSON.stringify({ jobs: [] }, null, 2));
@@ -98,7 +98,7 @@ if (!fs.existsSync(hbPath)) {
 try {
     await import('../postinstall.js');
 } catch (e) {
-    console.log(`  ⚠️ Symlink setup: ${e.message}`);
+    console.log(`  ⚠️ Symlink setup: ${(e as Error).message}`);
 }
 
 console.log(`

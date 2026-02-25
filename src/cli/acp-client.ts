@@ -7,7 +7,18 @@ import { EventEmitter } from 'events';
 import { createInterface } from 'readline';
 
 export class AcpClient extends EventEmitter {
-    constructor({ model, workDir, permissions = 'safe' } = {}) {
+    model: any;
+    workDir: any;
+    permissions: string;
+    sessionId: any;
+    proc: any;
+    _reqId: number;
+    _pending: Map<number, any>;
+    _buffer: string;
+    _activityPing: (() => void) | null;
+    _agentCapabilities: any;
+
+    constructor({ model, workDir, permissions = 'safe' }: { model?: any; workDir?: any; permissions?: string } = {}) {
         super();
         this.model = model;
         this.workDir = workDir;
@@ -17,6 +28,8 @@ export class AcpClient extends EventEmitter {
         this._reqId = 0;
         this._pending = new Map(); // id → { resolve, reject, timer }
         this._buffer = '';
+        this._activityPing = null;
+        this._agentCapabilities = null;
     }
 
     // ─── Process lifecycle ──────────────────────
@@ -44,7 +57,7 @@ export class AcpClient extends EventEmitter {
         rl.on('line', (line) => this._handleLine(line));
 
         // Capture stderr for debugging + heartbeat
-        this.proc.stderr.on('data', (chunk) => {
+        this.proc.stderr.on('data', (chunk: any) => {
             this._activityPing?.();  // stderr activity = agent is alive
             const text = chunk.toString().trim();
             if (text && process.env.DEBUG) {
@@ -52,7 +65,7 @@ export class AcpClient extends EventEmitter {
             }
         });
 
-        this.proc.on('exit', (code, signal) => {
+        this.proc.on('exit', (code: any, signal: any) => {
             // Reject all pending requests
             for (const [id, p] of this._pending) {
                 clearTimeout(p.timer);
@@ -62,7 +75,7 @@ export class AcpClient extends EventEmitter {
             this.emit('exit', { code, signal });
         });
 
-        this.proc.on('error', (err) => {
+        this.proc.on('error', (err: any) => {
             this.emit('error', err);
         });
 
@@ -79,7 +92,7 @@ export class AcpClient extends EventEmitter {
     // ─── JSON-RPC transport ──────────────────────
 
     /** Send a JSON-RPC request and return a promise for the result */
-    request(method, params = {}, timeoutMs = 30000) {
+    request(method: any, params = {}, timeoutMs = 30000) {
         return new Promise((resolve, reject) => {
             if (!this.proc?.stdin?.writable) {
                 reject(new Error(`ACP stdin is not writable: ${method}`));
@@ -105,8 +118,8 @@ export class AcpClient extends EventEmitter {
      *   - idle timer (idleMs): resets on each activityPing() call
      *   - absolute timer (maxMs): hard cap, never resets
      */
-    requestWithActivityTimeout(method, params = {}, idleMs = 120000, maxMs = 1200000) {
-        let idleTimer, absTimer, settled = false;
+    requestWithActivityTimeout(method: any, params = {}, idleMs = 120000, maxMs = 1200000) {
+        let idleTimer: ReturnType<typeof setTimeout> | undefined, absTimer: ReturnType<typeof setTimeout> | undefined, settled = false;
 
         const promise = new Promise((resolve, reject) => {
             if (!this.proc?.stdin?.writable) {
@@ -122,7 +135,7 @@ export class AcpClient extends EventEmitter {
                 clearTimeout(absTimer);
             };
 
-            const onTimeout = (reason) => {
+            const onTimeout = (reason: any) => {
                 cleanup();
                 this._pending.delete(id);
                 reject(new Error(`ACP request timeout (${reason}): ${method} (id=${id})`));
@@ -140,8 +153,8 @@ export class AcpClient extends EventEmitter {
 
             // Wrap resolve/reject to cleanup timers
             this._pending.set(id, {
-                resolve: (val) => { cleanup(); resolve(val); },
-                reject: (err) => { cleanup(); reject(err); },
+                resolve: (val: any) => { cleanup(); resolve(val); },
+                reject: (err: any) => { cleanup(); reject(err); },
                 timer: idleTimer, // for process exit cleanup
             });
 
@@ -157,16 +170,16 @@ export class AcpClient extends EventEmitter {
     }
 
     /** Send a JSON-RPC notification (no response expected) */
-    notify(method, params = {}) {
+    notify(method: any, params = {}) {
         this._write({ jsonrpc: '2.0', method, params });
     }
 
-    _write(msg) {
+    _write(msg: any) {
         if (!this.proc?.stdin?.writable) return;
         this.proc.stdin.write(JSON.stringify(msg) + '\n');
     }
 
-    _handleLine(line) {
+    _handleLine(line: any) {
         const trimmed = line.trim();
         if (!trimmed) return;
 
@@ -208,12 +221,12 @@ export class AcpClient extends EventEmitter {
     }
 
     /** Handle requests FROM the agent (permission requests, file ops, etc.) */
-    _handleAgentRequest(msg) {
+    _handleAgentRequest(msg: any) {
         switch (msg.method) {
             case 'session/request_permission': {
                 // Auto-approve all permissions (yolo/auto mode)
                 const options = msg.params?.options || [];
-                const allowOption = options.find(o =>
+                const allowOption = options.find((o: any) =>
                     o.name?.toLowerCase().includes('allow') ||
                     o.name?.toLowerCase().includes('approve') ||
                     o.name?.toLowerCase().includes('yes')
@@ -266,27 +279,27 @@ export class AcpClient extends EventEmitter {
     }
 
     /** Create a new session */
-    async createSession(workDir = this.workDir, mcpServers = []) {
+    async createSession(workDir = this.workDir, mcpServers: any[] = []) {
         const result = await this.request('session/new', {
             cwd: workDir,
             mcpServers,
-        });
+        }) as Record<string, any>;
         this.sessionId = result?.sessionId;
         return result;
     }
 
     /** Send a prompt to the agent (activity-based timeout) */
-    prompt(text, sessionId = null) {
+    prompt(text: any, sessionId: any = null) {
         const sid = sessionId || this.sessionId;
         if (!sid) throw new Error('No session. Call createSession first.');
         return this.requestWithActivityTimeout('session/prompt', {
             sessionId: sid,
             prompt: [{ type: 'text', text }],
-        }, 1200000, 1200000); // idle 20min, max 20min
+        }, 1200000, 14400000); // idle 20min, max 4h
     }
 
     /** Resume a previous session (if agent supports loadSession capability) */
-    async loadSession(sessionId, workDir = this.workDir, mcpServers = []) {
+    async loadSession(sessionId: any, workDir = this.workDir, mcpServers: any[] = []) {
         const result = await this.request('session/load', {
             sessionId,
             cwd: workDir,
@@ -297,7 +310,7 @@ export class AcpClient extends EventEmitter {
     }
 
     /** Cancel current operation */
-    cancel(sessionId = null) {
+    cancel(sessionId: any = null) {
         const sid = sessionId || this.sessionId;
         if (sid) this.notify('session/cancel', { sessionId: sid });
     }
@@ -309,7 +322,7 @@ export class AcpClient extends EventEmitter {
     }
 
     /** Check if agent supports a capability */
-    hasCapability(name) {
+    hasCapability(name: any) {
         return !!this._agentCapabilities?.[name];
     }
 }

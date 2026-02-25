@@ -5,9 +5,9 @@
 
 ---
 
-## src/cli/registry.js — CLI/모델 단일 소스 (89L)
+## src/cli/registry.ts — CLI/모델 단일 소스 (89L)
 
-**의존 없음** — core/config.js, cli/commands.js, server.js, 프론트엔드가 모두 이 레지스트리를 참조.
+**의존 없음** — core/config.ts, cli/commands.ts, server.ts, 프론트엔드가 모두 이 레지스트리를 참조.
 
 | Export                   | 역할                                                     |
 | ------------------------ | -------------------------------------------------------- |
@@ -29,7 +29,7 @@ CLI_REGISTRY = {
 
 ---
 
-## src/core/config.js — 경로, 설정, CLI 탐지 (187L)
+## src/core/config.ts — 경로, 설정, CLI 탐지 (187L)
 
 **상수**: `CLAW_HOME` · `PROMPTS_DIR` · `DB_PATH` · `SETTINGS_PATH` · `HEARTBEAT_JOBS_PATH` · `UPLOADS_DIR` · `SKILLS_DIR` · `SKILLS_REF_DIR` · `APP_VERSION` (← package.json)
 
@@ -46,7 +46,7 @@ CLI_REGISTRY = {
 
 ---
 
-## src/core/db.js — Database (105L)
+## src/core/db.ts — Database (105L)
 
 ```sql
 session   (id='default', active_cli, session_id, model, permissions, working_dir, effort)
@@ -67,7 +67,7 @@ employees (id PK, name, cli, model, role, status, created_at)
 
 ---
 
-## src/core/bus.js — Broadcast Bus (18L)
+## src/core/bus.ts — Broadcast Bus (18L)
 
 순환 의존 방지 허브. 의존 0.
 
@@ -82,7 +82,7 @@ employees (id PK, name, cli, model, role, status, created_at)
 
 ---
 
-## src/memory/memory.js — Persistent Memory (129L)
+## src/memory/memory.ts — Persistent Memory (129L)
 
 | Function                        | 역할                           |
 | ------------------------------- | ------------------------------ |
@@ -106,7 +106,7 @@ employees (id PK, name, cli, model, role, status, created_at)
 
 Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
-| connection.js (71L)      | actions.js (179L)                |
+| connection.ts (71L)      | actions.ts (179L)                |
 | ------------------------ | -------------------------------- |
 | `findChrome()`           | `snapshot(port, opts)`           |
 | `launchChrome(port)`     | `screenshot(port, opts)` +dpr    |
@@ -119,7 +119,7 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 |                          | `getPageText(port, fmt)`         |
 |                          | `mouseClick(port, x, y)` Phase 1 |
 
-### vision.js (138L) — Vision Click 파이프라인
+### vision.ts (138L) — Vision Click 파이프라인
 
 | Function                           | 역할                                            |
 | ---------------------------------- | ----------------------------------------------- |
@@ -127,11 +127,11 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 | `codexVision(path, target)`        | Codex exec -i + NDJSON 파싱                     |
 | `visionClick(port, target, opts)`  | screenshot → vision → DPR 보정 → click → verify |
 
-`index.js` (13L) — re-export hub (mouseClick + visionClick 포함)
+`index.ts` (13L) — re-export hub (mouseClick + visionClick 포함)
 
 ---
 
-## lib/mcp-sync.js — MCP 통합 관리 (645L)
+## lib/mcp-sync.ts — MCP 통합 관리 (645L)
 
 소스: `~/.cli-claw/mcp.json`
 
@@ -155,7 +155,7 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 - 백업 경로: `~/.cli-claw/backups/skills-conflicts/<timestamp>/`
 - 결과가 로그/API 응답에 기록됨 (`status: ok/skip`, `action: noop/backup/create/conflict`)
 
-## lib/upload.js (70L)
+## lib/upload.ts (70L)
 
 파일 업로드 처리 + Telegram 다운로드.
 
@@ -163,9 +163,9 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
 ## src/security/ — 보안 입력 검증 [P9.1]
 
-**의존 없음** — server.js에서 라우트 핸들러 진입 시 호출.
+**의존 없음** — server.ts에서 라우트 핸들러 진입 시 호출.
 
-### path-guards.js (67L)
+### path-guards.ts (67L)
 
 | Function            | 역할                                                  |
 | ------------------- | ----------------------------------------------------- |
@@ -173,7 +173,7 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 | `assertFilename(f, opts)` | 확장자 화이트리스트 + path separator 차단 + 길이 제한 |
 | `safeResolveUnder(base, rel)` | `path.resolve` 후 base 디렉토리 탈출 검증         |
 
-### decode.js (22L)
+### decode.ts (22L)
 
 | Function                | 역할                                                  |
 | ----------------------- | ----------------------------------------------------- |
@@ -194,20 +194,20 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
 **의존 없음** — Express 라우트에서 직접 사용.
 
-### response.js (25L)
+### response.ts (25L)
 
 | Function          | 역할                                          |
 | ----------------- | --------------------------------------------- |
 | `ok(res, data)`   | `{ ok: true, ...data }` 200 응답              |
 | `fail(res, status, error, extra)` | `{ ok: false, error, ...extra }` 에러 응답 |
 
-### async-handler.js (12L)
+### async-handler.ts (12L)
 
 | Function             | 역할                                     |
 | -------------------- | ---------------------------------------- |
 | `asyncHandler(fn)`   | `Promise.catch(next)` 래퍼 — async 에러 전달 |
 
-### error-middleware.js (27L)
+### error-middleware.ts (27L)
 
 | Function            | 역할                                     |
 | ------------------- | ---------------------------------------- |
@@ -216,9 +216,9 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
 ---
 
-## src/core/settings-merge.js — 설정 deep merge (45L)
+## src/core/settings-merge.ts — 설정 deep merge (45L)
 
-**의존 없음** — server.js `applySettingsPatch()`에서 호출.
+**의존 없음** — server.ts `applySettingsPatch()`에서 호출.
 
 | Function                       | 역할                                           |
 | ------------------------------ | ---------------------------------------------- |

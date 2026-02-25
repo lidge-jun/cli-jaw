@@ -35,7 +35,7 @@ public/
         ├── sidebar.js    ← [NEW] 사이드바 접기 (이중 모드: wide=collapsed, narrow=expanded) (88L)
         ├── theme.js      ← [NEW] 다크/라이트 테마 토글 + hljs 스타일시트 스와프 (38L)
         ├── appname.js    ← [NEW] Agent Name 커스텀 (localStorage, 메시지 라벨) (43L)
-        └── slash-commands.js ← 슬래시 커맨드 드롭다운 (220L)
+        └── slash-commands.ts ← 슬래시 커맨드 드롭다운 (220L)
 ```
 
 ---
@@ -71,7 +71,7 @@ public/
 | `sidebar.js` | 사이드바 접기 (이중 모드 responsive) | 88 |
 | `theme.js` | 다크/라이트 테마 + hljs 스와프 | 38 |
 | `appname.js` | Agent Name 커스텀 | 43 |
-| `slash-commands.js` | 슬래시 커맨드 드롭다운 | 220 |
+| `slash-commands.ts` | 슬래시 커맨드 드롭다운 | 220 |
 
 ---
 
