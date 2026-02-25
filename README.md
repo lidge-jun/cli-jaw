@@ -2,9 +2,9 @@
 
 # 🦞 CLI-CLAW
 
-### Unified AI Agent Orchestration Platform
+### Your Personal AI Assistant — Powered by 5 AI Engines
 
-*One interface. Five CLIs. Zero API bans.*
+*One assistant. Five brains. Always on.*
 
 [![Tests](https://img.shields.io/badge/tests-252%20pass-brightgreen)](#-tests)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
@@ -19,28 +19,29 @@
 
 ---
 
-## Why CLI-CLAW?
+## What is CLI-CLAW?
 
-Most AI coding tools hit the same wall: **API key bans, rate limits, TOS violations.**
+CLI-CLAW is a **personal AI assistant** that lives on your machine and works from the interfaces you already use — **Web, Terminal, and Telegram**. Ask it anything, delegate tasks, automate your workflows.
 
-CLI-CLAW takes a different approach — every interaction goes through **official CLI binaries** that vendors ship themselves. Not wrappers. Not proxied APIs. Your account stays safe.
+> 💬 *"Summarize today's schedule"* → answer on Telegram  
+> 💬 *"Refactor this module and write tests"* → sub-agents handle it while you grab coffee  
+> 💬 *"Download that PDF and put the key points in Notion"* → browser + Notion skill, done
 
-### How is this different?
+Unlike single-model assistants, CLI-CLAW orchestrates **5 AI engines** (Claude, Codex, Gemini, OpenCode, Copilot) through their official CLIs — giving you the best of every provider in one unified experience. If one engine is busy, it automatically falls back to the next. 107 built-in skills handle everything from browser automation to document generation.
 
-| | CLI-CLAW | API Wrappers | Other Orchestrators |
-|--|----------|-------------|---------------------|
-| **TOS Compliance** | ✅ Uses official CLI binaries | ❌ Direct API calls risk bans | ⚠️ Varies |
-| **Multi-Model** | 5 CLIs unified | Usually 1 provider | 1-2 providers |
-| **Auto Fallback** | `claude → codex → gemini` | Manual switch | ❌ |
-| **MCP Sync** | Install once → 5 CLIs | Per-tool setup | ❌ |
-| **Skill Ecosystem** | 107 built-in skills | Plugins vary | Limited |
-| **Cost** | Free tier via Copilot/OpenCode | API costs | API costs |
+| | Why CLI-CLAW? |
+|---|---|
+| 🛡️ **TOS-Safe** | Uses official CLIs only — no API key scraping, no reverse engineering, no ban risk. |
+| 🤖 **Verified Agent Tools** | 5 battle-tested coding agents (Claude, Codex, Gemini, OpenCode, Copilot) under one roof. |
+| ⚡ **Multi-Agent Fallback** | One engine down? The next picks up automatically. Zero downtime. |
+| 🎭 **Orchestrated Performance** | Complex tasks split across specialized sub-agents for maximum throughput. |
+| 📦 **107 Built-in Skills** | Browser automation, document generation, Telegram, memory — ready out of the box. |
 
 ![CLI-CLAW Terminal](docs/screenshots/terminal-cli.png)
 
 ---
 
-## What it does
+## What can your assistant do?
 
 ```mermaid
 graph LR
@@ -57,17 +58,16 @@ graph LR
     style CLAW fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
 ```
 
-- 🔄 **5 CLIs, 1 interface** — Claude · Codex · Gemini · OpenCode · Copilot. Switch with `/cli`.
-- ⚡ **Auto fallback** — `claude → codex → gemini`. If one fails, the next picks up automatically.
-- 🎭 **Multi-agent orchestration** — Split complex tasks across role-based sub-agents with a 5-phase pipeline.
-- 🔌 **MCP sync** — Install an MCP server once, available to all 5 CLIs instantly.
-- 📦 **107 skills** — Built-in plugin system with two tiers (see [Skill System](#-skill-system) below).
-- 🧠 **Persistent memory** — Auto-summarize conversations, long-term recall, prompt injection.
-- 📱 **Telegram bot** — Chat, receive photos/documents/voice, control agents from your phone.
-- 🌐 **Browser automation** — Chrome CDP + AI-powered Vision Click.
-- 🔍 **Web search** — Real-time web search via MCP tools (Context7, etc.)
-- 🌍 **i18n** — Korean / English, everywhere (UI, API, CLI, Telegram).
-- 📎 **Multi-file attach** — Drag & drop or pick multiple files. Chip preview with individual removal.
+- 🤖 **5 AI engines, 1 assistant** — Claude · Codex · Gemini · OpenCode · Copilot. Switch with `/cli`.
+- ⚡ **Auto fallback** — If one engine is down, the next picks up seamlessly.
+- 🎭 **Multi-agent orchestration** — Complex tasks get split across specialized sub-agents automatically.
+- 📦 **107 skills** — Browser control, file editing, image generation, web search, and [much more](#-skill-system).
+- 🧠 **Persistent memory** — Your assistant remembers past conversations and preferences across sessions.
+- 📱 **Telegram bot** — Chat with your assistant from your phone, send voice/photos/files.
+- 🌐 **Browser automation** — Your assistant can navigate the web, click, type, and screenshot.
+- 🔌 **MCP ecosystem** — Install once, available to all 5 AI engines instantly.
+- 🔍 **Web search** — Real-time information via MCP tools.
+- ⏰ **Heartbeat jobs** — Schedule recurring tasks that run automatically.
 
 ---
 
@@ -94,16 +94,17 @@ cli-claw chat        # Or use terminal TUI
 
 ## 📦 Skill System
 
-CLI-CLAW comes with **105+ built-in skills** organized into two tiers:
+**107 skills** out of the box — browser, github, notion, telegram, memory, pdf, image generation, and [much more](#).
+
+<details>
+<summary>View all skills</summary>
 
 | Tier | Count | How it works |
 |------|:-----:|--------------|
 | **Active Skills** | 17 | Auto-injected into every AI prompt. Always available. |
 | **Reference Skills** | 90 | AI reads them on-demand when you ask for a relevant task. |
 
-### Active Skills (always on)
-
-These are injected into the system prompt automatically:
+#### Active Skills (always on)
 
 | Skill | What it does |
 |-------|-------------|
@@ -119,54 +120,37 @@ These are injected into the system prompt automatically:
 | `openai-docs` | Up-to-date OpenAI API documentation |
 | `dev` / `dev-frontend` / `dev-backend` / `dev-data` / `dev-testing` | Development guidelines for sub-agents |
 
-### Reference Skills (on-demand)
+#### Reference Skills (on-demand)
 
-88+ more skills ready to use. When you ask for something relevant, the AI reads the skill guide and follows it:
-
-```bash
-# Examples of reference skills:
-spotify-player     # Control Spotify playback
-weather            # Get weather forecasts
-deep-research      # Multi-step web research
-tts                # Text-to-speech
-video-downloader   # Download videos
-apple-reminders    # Manage Apple Reminders
-1password          # 1Password CLI integration
-terraform          # Infrastructure as code
-postgres           # PostgreSQL operations
-jupyter-notebook   # Run Jupyter notebooks
-sentry             # Error monitoring
-# ... and 77 more
-```
-
-To permanently activate a reference skill:
+88+ more skills ready to use — spotify, weather, deep-research, tts, video-downloader, apple-reminders, 1password, terraform, postgres, jupyter-notebook, sentry, and more.
 
 ```bash
-cli-claw skill install <name>    # Move from reference → active
+cli-claw skill install <name>    # Activate a reference skill permanently
 ```
+
+</details>
 
 ---
 
-## 📱 Telegram Integration
+## 📱 Telegram — Your Assistant in Your Pocket
 
-CLI-CLAW isn't just a chat bot — it's a full **bidirectional bridge**:
+Your assistant isn't tied to your desk. Chat from anywhere via Telegram:
 
 ```
-📱 Telegram ←→ 🦞 CLI-CLAW ←→ 🤖 AI Agents
+📱 Telegram ←→ 🦞 CLI-CLAW ←→ 🤖 AI Engines
 ```
 
 **What you can do from Telegram:**
-- 💬 Chat with any of the 5 AI CLIs
-- 📸 Receive screenshots, generated images, documents
-- 🎤 Send voice messages (transcribed automatically)
-- 📎 Send files for the AI to process (multiple files at once)
-- ⚡ Run slash commands (`/cli`, `/model`, `/status`, etc.)
-- 🔄 Switch CLIs and models on the fly
+- 💬 Chat with your assistant (any of 5 AI engines)
+- 🎤 Send voice messages (auto-transcribed)
+- 📎 Send files and photos for processing
+- ⚡ Run commands (`/cli`, `/model`, `/status`)
+- 🔄 Switch AI engines on the fly
 
-**What CLI-CLAW sends to Telegram:**
-- AI responses with full markdown formatting
+**What your assistant sends back:**
+- AI responses with markdown formatting
 - Generated images, PDFs, documents
-- Heartbeat job results (scheduled tasks)
+- Scheduled task results (heartbeat jobs)
 - Browser screenshots
 
 <p align="center">
@@ -175,9 +159,9 @@ CLI-CLAW isn't just a chat bot — it's a full **bidirectional bridge**:
 
 ---
 
-## 🎭 Orchestration
+## 🎭 Multi-Agent Orchestration
 
-For complex tasks, CLI-CLAW splits the work across specialized sub-agents:
+For complex tasks, your assistant delegates work to specialized sub-agents:
 
 ![Orchestration Log](docs/screenshots/orchestration-log.png)
 
@@ -205,11 +189,11 @@ graph TD
     style GATE fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
 ```
 
-The AI **decides by itself** whether a task needs orchestration or a direct response. No configuration needed.
+Your assistant **decides by itself** whether a task needs orchestration or a direct response. No configuration needed.
 
 ---
 
-## 🔌 MCP — One Config, Five CLIs
+## 🔌 MCP — One Config, Five AI Engines
 
 ```bash
 cli-claw mcp install @anthropic/context7    # Install once
@@ -227,7 +211,7 @@ graph LR
     style MJ fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
 ```
 
-No more editing 5 different config files. Install an MCP server once → all CLIs get it.
+No more editing 5 different config files. Install once → all AI engines get it.
 
 ---
 
@@ -270,6 +254,9 @@ Each CLI comes with preconfigured presets, but you can type **any model ID** dir
 
 ## 🛠️ Development
 
+<details>
+<summary>Build, run, and project structure</summary>
+
 ```bash
 # Build (TypeScript → JavaScript)
 npm run build          # tsc → dist/
@@ -280,9 +267,6 @@ npx tsx bin/cli-claw.ts serve   # Run CLI directly from .ts
 
 # Run from build (production)
 node dist/bin/cli-claw.js serve
-
-# ⚠️ node cannot run .ts files directly:
-# node bin/cli-claw.ts   ← This does NOT work
 ```
 
 **Project structure:**
@@ -302,18 +286,24 @@ src/
 └── telegram/       # Telegram bot integration
 ```
 
-> 🔧 **TypeScript** with `strict: true`, `NodeNext` module resolution, targeting ES2022.
+> TypeScript with `strict: true`, `NodeNext` module resolution, targeting ES2022.
+
+</details>
 
 ---
 
 ## 🧪 Tests
 
+<details>
+<summary>252 pass · 1 skipped · zero external dependencies</summary>
+
 ```bash
-npm test    # 252 pass, 1 skipped, zero external dependencies
+npm test
 ```
 
-- All tests run via `tsx --test` (native Node.js test runner + TypeScript).
-- CI hardening note: `src/core/db.ts` now creates the parent directory of `DB_PATH` before opening SQLite, preventing `better-sqlite3` path errors in clean test/CI environments.
+All tests run via `tsx --test` (native Node.js test runner + TypeScript).
+
+</details>
 
 ---
 
@@ -321,11 +311,29 @@ npm test    # 252 pass, 1 skipped, zero external dependencies
 
 | Document | What's inside |
 |----------|---------------|
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, module graph, full feature inventory, REST API (40+ endpoints) |
-| [TESTS.md](TESTS.md) | Test coverage, tier model, Phase 20 test plan |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, module graph, REST API (40+ endpoints) |
+| [TESTS.md](TESTS.md) | Test coverage and test plan |
 
 ---
 
-## License
+## 🤝 Contributing
 
-ISC
+Contributions are welcome! Here's how to get started:
+
+1. Fork the repo and create your branch from `main`
+2. Run `npm run build && npm test` to make sure everything works
+3. Submit a PR — we'll review it promptly
+
+> 📋 Found a bug or have a feature idea? [Open an issue](https://github.com/cli-claw/cli-claw/issues)
+
+---
+
+<div align="center">
+
+**⭐ If CLI-CLAW helps you, give it a star — it means a lot!**
+
+Made with ❤️ by the CLI-CLAW community
+
+[ISC License](LICENSE)
+
+</div>
