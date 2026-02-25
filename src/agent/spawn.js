@@ -16,6 +16,7 @@ import { saveUpload as _saveUpload, buildMediaPrompt } from '../../lib/upload.js
 // ─── State ───────────────────────────────────────────
 
 export let activeProcess = null;
+export const activeProcesses = new Map(); // agentId → child process
 export let memoryFlushCounter = 0;
 export let flushCycleCount = 0;
 export const messageQueue = [];
@@ -45,6 +46,23 @@ export function killActiveAgent(reason = 'user') {
         try { if (proc && !proc.killed) proc.kill('SIGKILL'); } catch (e) { console.warn('[agent:kill] SIGKILL failed', { pid: proc?.pid, error: e.message }); }
     }, 2000);
     return true;
+}
+
+export function killAllAgents(reason = 'user') {
+    let killed = 0;
+    for (const [id, proc] of activeProcesses) {
+        console.log(`[claw:killAll] killing ${id}, reason=${reason}`);
+        try { proc.kill('SIGTERM'); killed++; } catch (e) { console.warn(`[agent:killAll] SIGTERM failed for ${id}`, e.message); }
+        const ref = proc;
+        setTimeout(() => {
+            try { if (ref && !ref.killed) ref.kill('SIGKILL'); } catch { /* already dead */ }
+        }, 2000);
+    }
+    // Also kill main activeProcess if not in map
+    if (activeProcess && !activeProcesses.has('main')) {
+        killActiveAgent(reason);
+    }
+    return killed > 0 || !!activeProcess;
 }
 
 export function waitForProcessEnd(timeoutMs = 3000) {
@@ -256,6 +274,7 @@ export function spawnAgent(prompt, opts = {}) {
         acp.spawn();
         const child = acp.proc;
         if (mainManaged) activeProcess = child;
+        activeProcesses.set(agentLabel, child);
         broadcast('agent_status', { running: true, agentId: agentLabel, cli });
 
         if (mainManaged && !opts.internal && !opts._skipInsert) {
@@ -337,7 +356,8 @@ export function spawnAgent(prompt, opts = {}) {
                 ctx.seenToolKeys.clear();
                 ctx.thinkingBuf = '';  // Phase 17.2: clear replay thinking too
 
-                const { promise: promptPromise } = acp.prompt(prompt);
+                const acpPrompt = isResume ? prompt : withHistoryPrompt(prompt, historyBlock);
+                const { promise: promptPromise } = acp.prompt(acpPrompt);
                 const promptResult = await promptPromise;
                 if (process.env.DEBUG) console.log('[acp:prompt:result]', JSON.stringify(promptResult).slice(0, 200));
 
@@ -351,6 +371,7 @@ export function spawnAgent(prompt, opts = {}) {
 
         acp.on('exit', ({ code, signal }) => {
             flushThinking();  // Flush any remaining thinking buffer
+            activeProcesses.delete(agentLabel);
             if (mainManaged) {
                 activeProcess = null;
                 broadcast('agent_status', { running: false, agentId: agentLabel });
@@ -379,7 +400,14 @@ export function spawnAgent(prompt, opts = {}) {
                 if (mainManaged && !opts.internal) {
                     insertMessageWithTrace.run('assistant', finalContent, cli, model, traceText || null);
                     broadcast('agent_done', { text: finalContent, toolLog: ctx.toolLog, origin });
+
                     memoryFlushCounter++;
+                    const threshold = settings.memory?.flushEvery ?? 20;
+                    if (settings.memory?.enabled !== false && memoryFlushCounter >= threshold) {
+                        memoryFlushCounter = 0;
+                        flushCycleCount++;
+                        triggerMemoryFlush();
+                    }
                 }
             } else if (mainManaged && code !== 0) {
                 let errMsg = `Copilot CLI 실행 실패 (exit ${code})`;
@@ -425,6 +453,7 @@ export function spawnAgent(prompt, opts = {}) {
         stdio: ['pipe', 'pipe', 'pipe'],
     });
     if (mainManaged) activeProcess = child;
+    activeProcesses.set(agentLabel, child);
     broadcast('agent_status', { running: true, agentId: agentLabel, cli });
 
     if (mainManaged && !opts.internal && !opts._skipInsert) {
@@ -484,6 +513,7 @@ export function spawnAgent(prompt, opts = {}) {
     });
 
     child.on('close', (code) => {
+        activeProcesses.delete(agentLabel);
         if (mainManaged) {
             activeProcess = null;
             broadcast('agent_status', { running: false, agentId: agentLabel });

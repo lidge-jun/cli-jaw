@@ -49,7 +49,7 @@ import {
     getMergedSkills,
 } from './src/prompt/builder.js';
 import {
-    activeProcess, killActiveAgent, waitForProcessEnd,
+    activeProcess, killActiveAgent, killAllAgents, waitForProcessEnd,
     steerAgent, enqueueMessage, processQueue, messageQueue,
     saveUpload, memoryFlushCounter, resetFallbackState,
 } from './src/agent/spawn.js';
@@ -189,7 +189,7 @@ wss.on('connection', (ws) => {
                     orchestrate(text, { origin: 'cli' });
                 }
             }
-            if (msg.type === 'stop') killActiveAgent('ws');
+            if (msg.type === 'stop') killAllAgents('ws');
         } catch (e) { console.warn('[ws:parse] message parse failed', { preview: String(raw).slice(0, 80) }); }
     });
 });
@@ -401,7 +401,7 @@ app.post('/api/orchestrate/continue', (req, res) => {
 });
 
 app.post('/api/stop', (req, res) => {
-    const killed = killActiveAgent('api');
+    const killed = killAllAgents('api');
     ok(res, { killed });
 });
 
@@ -799,7 +799,7 @@ watchHeartbeatFile();
 ['SIGTERM', 'SIGINT'].forEach(sig => process.on(sig, () => {
     console.log(`\n[server] ${sig} received, shutting down...`);
     stopHeartbeat();
-    killActiveAgent('shutdown');
+    killAllAgents('shutdown');
     wss.close();
     server.close(() => {
         console.log('[server] closed');

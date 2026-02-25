@@ -282,7 +282,7 @@ export class AcpClient extends EventEmitter {
         return this.requestWithActivityTimeout('session/prompt', {
             sessionId: sid,
             prompt: [{ type: 'text', text }],
-        }, 1200000, 1200000); // idle 20min, max 20min
+        }, 1200000, 14400000); // idle 20min, max 4h
     }
 
     /** Resume a previous session (if agent supports loadSession capability) */
