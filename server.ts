@@ -5,6 +5,7 @@ import express from 'express';
 import helmet from 'helmet';
 import { log } from './src/core/logger.js';
 import { createServer } from 'http';
+import { spawn } from 'node:child_process';
 import { WebSocketServer } from 'ws';
 import { fileURLToPath } from 'url';
 import { dirname, join, basename } from 'path';
@@ -834,14 +835,21 @@ server.listen(PORT, () => {
 
     // Auto-open browser (cross-platform)
     const url = `http://localhost:${PORT}`;
-    const openCmd = process.platform === 'darwin' ? 'open'
-        : process.platform === 'win32' ? 'start'
-            : 'xdg-open';
-    import('child_process').then(({ exec }) => {
-        exec(`${openCmd} ${url}`, (err) => {
-            if (err) log.info(`  Browser: could not auto-open (${err.message})`);
+    try {
+        const openCmd = process.platform === 'darwin' ? 'open'
+            : process.platform === 'win32' ? 'cmd'
+                : 'xdg-open';
+        const openArgs = process.platform === 'win32'
+            ? ['/c', 'start', '', url]
+            : [url];
+        const opener = spawn(openCmd, openArgs, { detached: true, stdio: 'ignore' });
+        opener.on('error', (err) => {
+            log.info(`  Browser: could not auto-open (${err.message})`);
         });
-    });
+        opener.unref();
+    } catch (e: unknown) {
+        log.info(`  Browser: could not auto-open (${(e as Error).message})`);
+    }
 
     try {
         initMcpConfig(settings.workingDir);

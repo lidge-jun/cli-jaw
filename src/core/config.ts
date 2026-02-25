@@ -195,8 +195,11 @@ export function saveHeartbeatFile(data: Record<string, any>) {
 export function detectCli(name: string) {
     if (!/^[a-z0-9_-]+$/i.test(name)) return { available: false, path: null };
     try {
-        const p = execFileSync('which', [name], { encoding: 'utf8', timeout: 3000 }).trim();
-        return { available: true, path: p };
+        const cmd = process.platform === 'win32' ? 'where' : 'which';
+        const raw = execFileSync(cmd, [name], { encoding: 'utf8', timeout: 3000 }).trim();
+        const firstLine = raw.split(/\r?\n/).map(x => x.trim()).find(Boolean) || '';
+        if (!firstLine) return { available: false, path: null };
+        return { available: true, path: firstLine };
     } catch { /* expected: CLI binary may not be installed */ return { available: false, path: null }; }
 }
 

@@ -1,6 +1,7 @@
 import { JAW_HOME } from '../core/config.js';
-import { execSync, spawn } from 'child_process';
+import { spawn } from 'child_process';
 import { join } from 'path';
+import fs from 'node:fs';
 import { chromium } from 'playwright-core';
 
 const DEFAULT_CDP_PORT = 9240;
@@ -8,14 +9,55 @@ const PROFILE_DIR = join(JAW_HOME, 'browser-profile');
 let cached: any = null;   // { browser, cdpUrl }
 let chromeProc: any = null;
 
+function isWSL() {
+    if (process.platform !== 'linux') return false;
+    try {
+        return fs.readFileSync('/proc/version', 'utf8').toLowerCase().includes('microsoft');
+    } catch {
+        return false;
+    }
+}
+
 function findChrome() {
-    const paths = [
-        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-        '/Applications/Chromium.app/Contents/MacOS/Chromium',
-        '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
-    ];
+    const platform = process.platform;
+    const paths: string[] = [];
+
+    if (platform === 'darwin') {
+        paths.push(
+            '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+            '/Applications/Chromium.app/Contents/MacOS/Chromium',
+            '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
+            `${process.env.HOME || ''}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`,
+        );
+    } else if (platform === 'win32') {
+        const pf = process.env.PROGRAMFILES || 'C:\\Program Files';
+        const pf86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
+        const local = process.env.LOCALAPPDATA || '';
+        paths.push(
+            `${pf}\\Google\\Chrome\\Application\\chrome.exe`,
+            `${pf86}\\Google\\Chrome\\Application\\chrome.exe`,
+            `${local}\\Google\\Chrome\\Application\\chrome.exe`,
+            `${pf}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`,
+        );
+    } else {
+        paths.push(
+            '/usr/bin/google-chrome-stable',
+            '/usr/bin/google-chrome',
+            '/usr/bin/chromium-browser',
+            '/usr/bin/chromium',
+            '/snap/bin/chromium',
+            '/usr/bin/brave-browser',
+        );
+        if (isWSL()) {
+            paths.push(
+                '/mnt/c/Program Files/Google/Chrome/Application/chrome.exe',
+                '/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+            );
+        }
+    }
+
     for (const p of paths) {
-        try { execSync(`test -f "${p}"`, { stdio: 'pipe' }); return p; } catch { }
+        if (p && fs.existsSync(p)) return p;
     }
     throw new Error('Chrome not found — install Google Chrome');
 }

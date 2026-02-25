@@ -2,7 +2,7 @@
  * cli-jaw serve — Phase 9.1
  * Starts the server in foreground with signal forwarding.
  */
-import { spawn, exec } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { parseArgs } from 'node:util';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -76,11 +76,27 @@ child.on('error', (err: Error) => {
     process.exit(1);
 });
 
+function openUrl(url: string) {
+    try {
+        const cmd = process.platform === 'darwin' ? 'open'
+            : process.platform === 'win32' ? 'cmd'
+                : 'xdg-open';
+        const args = process.platform === 'win32'
+            ? ['/c', 'start', '', url]
+            : [url];
+        const opener = spawn(cmd, args, { detached: true, stdio: 'ignore' });
+        opener.on('error', () => {
+            console.log('  ⚠️ Could not open browser');
+        });
+        opener.unref();
+    } catch {
+        console.log('  ⚠️ Could not open browser');
+    }
+}
+
 // --open: open browser after a short delay
 if (values.open) {
     setTimeout(() => {
-        exec(`open ${getServerUrl(values.port as string)}`, (err) => {
-            if (err) console.log('  ⚠️ Could not open browser');
-        });
+        openUrl(getServerUrl(values.port as string));
     }, 2000);
 }

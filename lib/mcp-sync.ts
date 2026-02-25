@@ -413,8 +413,17 @@ function resolveNpxPackage(args: any) {
  * Returns per-server results.
  */
 export async function installMcpServers(config: Record<string, any>) {
-    const { execSync } = await import('child_process');
+    const { execSync, execFileSync } = await import('child_process');
     const results: Record<string, any> = {};
+    const pathLookupCmd = process.platform === 'win32' ? 'where' : 'which';
+    const findBinary = (name: string) => {
+        try {
+            const raw = execFileSync(pathLookupCmd, [name], { encoding: 'utf8', stdio: 'pipe', timeout: 5000 }).trim();
+            return raw.split(/\r?\n/).map(x => x.trim()).find(Boolean) || name;
+        } catch {
+            return name;
+        }
+    };
 
     for (const [name, srv] of Object.entries(config.servers || {}) as [string, any][]) {
         // Skip already-global servers
@@ -432,9 +441,7 @@ export async function installMcpServers(config: Record<string, any>) {
                 console.log(`[mcp:install] npm i -g ${info.pkg} ...`);
                 execSync(`npm i -g ${info.pkg}`, { stdio: 'pipe', timeout: 120000 });
 
-                let binPath;
-                try { binPath = execSync(`which ${info.bin}`, { encoding: 'utf8' }).trim(); }
-                catch { binPath = info.bin; }
+                const binPath = findBinary(info.bin);
 
                 srv.command = info.bin;
                 srv.args = [];
@@ -454,9 +461,7 @@ export async function installMcpServers(config: Record<string, any>) {
                     catch { /* already latest */ }
                 }
 
-                let binPath;
-                try { binPath = execSync(`which ${pkg}`, { encoding: 'utf8' }).trim(); }
-                catch { binPath = pkg; }
+                const binPath = findBinary(pkg);
 
                 srv.command = binPath || pkg;
                 srv.args = [];

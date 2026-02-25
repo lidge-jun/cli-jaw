@@ -17,10 +17,11 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import { ensureSkillsSymlinks, initMcpConfig, copyDefaultSkills, loadUnifiedMcp, saveUnifiedMcp } from '../lib/mcp-sync.js';
 
 const home = os.homedir();
+const PATH_LOOKUP_CMD = process.platform === 'win32' ? 'where' : 'which';
 
 // ─── Legacy migration: ~/.cli-jaw → ~/.cli-jaw ───
 const legacyHome = path.join(home, '.cli-jaw');
@@ -44,9 +45,39 @@ function ensureDir(dir: string) {
 function ensureSymlink(target: string, linkPath: string) {
     if (fs.existsSync(linkPath)) return false;
     fs.mkdirSync(path.dirname(linkPath), { recursive: true });
-    fs.symlinkSync(target, linkPath);
-    console.log(`[jaw:init] symlink: ${linkPath} → ${target}`);
-    return true;
+    try {
+        fs.symlinkSync(target, linkPath);
+        console.log(`[jaw:init] symlink: ${linkPath} → ${target}`);
+        return true;
+    } catch (e: any) {
+        if (process.platform === 'win32' && (e?.code === 'EPERM' || e?.code === 'UNKNOWN')) {
+            try {
+                const stat = fs.statSync(target);
+                if (stat.isDirectory()) {
+                    fs.symlinkSync(target, linkPath, 'junction');
+                } else {
+                    fs.copyFileSync(target, linkPath);
+                }
+                console.log(`[jaw:init] fallback link: ${linkPath} → ${target}`);
+                return true;
+            } catch (fallbackErr: any) {
+                console.error(`[jaw:init] ⚠️ symlink fallback failed: ${linkPath} (${fallbackErr?.message || 'unknown'})`);
+                return false;
+            }
+        }
+        console.error(`[jaw:init] ⚠️ symlink failed: ${linkPath} (${e?.message || 'unknown'})`);
+        return false;
+    }
+}
+
+function findBinaryPath(name: string): string | null {
+    try {
+        const out = execFileSync(PATH_LOOKUP_CMD, [name], { encoding: 'utf8', stdio: 'pipe', timeout: 5000 }).trim();
+        const first = out.split(/\r?\n/).map(x => x.trim()).find(Boolean);
+        return first || null;
+    } catch {
+        return null;
+    }
 }
 
 function logSkillsSymlinkReport(report: any) {
@@ -91,27 +122,27 @@ const CLI_PACKAGES = [
 
 console.log(`[jaw:init] checking CLI tools (using ${installLabel})...`);
 for (const { bin, pkg } of CLI_PACKAGES) {
-    try {
-        execSync(`which ${bin}`, { stdio: 'pipe' });
+    if (findBinaryPath(bin)) {
         console.log(`[jaw:init] ⏭️  ${bin} (already installed)`);
+        continue;
+    }
+
+    console.log(`[jaw:init] 📦 ${installGlobal} ${pkg} ...`);
+    try {
+        execSync(`${installGlobal} ${pkg}`, { stdio: 'pipe', timeout: 180000 });
+        console.log(`[jaw:init] ✅ ${bin} installed`);
     } catch {
-        console.log(`[jaw:init] 📦 ${installGlobal} ${pkg} ...`);
-        try {
-            execSync(`${installGlobal} ${pkg}`, { stdio: 'pipe', timeout: 180000 });
-            console.log(`[jaw:init] ✅ ${bin} installed`);
-        } catch {
-            // Fallback: if bun failed, try npm
-            if (hasBun) {
-                console.log(`[jaw:init] ⚠️  bun failed, trying npm i -g ${pkg} ...`);
-                try {
-                    execSync(`npm i -g ${pkg}`, { stdio: 'pipe', timeout: 180000 });
-                    console.log(`[jaw:init] ✅ ${bin} installed (via npm fallback)`);
-                } catch {
-                    console.error(`[jaw:init] ⚠️  ${bin}: auto-install failed — install manually: npm i -g ${pkg}`);
-                }
-            } else {
+        // Fallback: if bun failed, try npm
+        if (hasBun) {
+            console.log(`[jaw:init] ⚠️  bun failed, trying npm i -g ${pkg} ...`);
+            try {
+                execSync(`npm i -g ${pkg}`, { stdio: 'pipe', timeout: 180000 });
+                console.log(`[jaw:init] ✅ ${bin} installed (via npm fallback)`);
+            } catch {
                 console.error(`[jaw:init] ⚠️  ${bin}: auto-install failed — install manually: npm i -g ${pkg}`);
             }
+        } else {
+            console.error(`[jaw:init] ⚠️  ${bin}: auto-install failed — install manually: npm i -g ${pkg}`);
         }
     }
 }
@@ -163,13 +194,16 @@ let updated = false;
 for (const { pkg, bin } of MCP_PACKAGES) {
     try {
         // Check if already installed
-        try { execSync(`which ${bin}`, { stdio: 'pipe' }); console.log(`[jaw:init] ⏭️  ${bin} (already installed)`); continue; }
-        catch { /* not installed, proceed */ }
+        const installedPath = findBinaryPath(bin);
+        if (installedPath) {
+            console.log(`[jaw:init] ⏭️  ${bin} (already installed)`);
+            continue;
+        }
 
         console.log(`[jaw:init] 📦 npm i -g ${pkg} ...`);
         execSync(`npm i -g ${pkg}`, { stdio: 'pipe', timeout: 120000 });
 
-        const binPath = execSync(`which ${bin}`, { encoding: 'utf8', stdio: 'pipe' }).trim();
+        const binPath = findBinaryPath(bin) || bin;
         console.log(`[jaw:init] ✅ ${bin} → ${binPath}`);
 
         // Update mcp.json: npx → direct binary
@@ -192,7 +226,9 @@ const SKILL_DEPS = [
     {
         name: 'uv',
         check: 'uv --version',
-        install: 'curl -LsSf https://astral.sh/uv/install.sh | sh',
+        install: process.platform === 'win32'
+            ? 'powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"'
+            : 'curl -LsSf https://astral.sh/uv/install.sh | sh',
         why: 'Python skills (imagegen, pdf, speech, spreadsheet, transcribe)',
     },
     {

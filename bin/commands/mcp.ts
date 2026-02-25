@@ -13,7 +13,7 @@
  *   pypi: name (with --pypi flag)      → uv tool install <pkg> / pip install <pkg>
  *         or auto-detect by known prefixes (mcp-server-*)
  */
-import { execSync } from 'node:child_process';
+import { execSync, execFileSync } from 'node:child_process';
 import { readFileSync, existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -27,6 +27,7 @@ import {
 } from '../../lib/mcp-sync.js';
 
 const JAW_HOME = join(homedir(), '.cli-jaw');
+const PATH_LOOKUP_CMD = process.platform === 'win32' ? 'where' : 'which';
 
 // ─── ANSI ────────────────────────────────────
 const c = {
@@ -39,6 +40,16 @@ const c = {
 
 function exec(cmd: string) {
     return execSync(cmd, { encoding: 'utf8', stdio: 'pipe', timeout: 120000 }).trim();
+}
+
+function findBinaryPath(name: string): string | null {
+    try {
+        const out = execFileSync(PATH_LOOKUP_CMD, [name], { encoding: 'utf8', stdio: 'pipe', timeout: 5000 }).trim();
+        const first = out.split(/\r?\n/).map(x => x.trim()).find(Boolean);
+        return first || null;
+    } catch {
+        return null;
+    }
 }
 
 /** Read workingDir from settings.json for syncToAll() */
@@ -69,14 +80,13 @@ function installNpm(pkg: string) {
     exec(`npm i -g ${pkg}`);
     // Find binary name: last segment of package name
     const binName = pkg.split('/').pop();
-    let binPath;
-    try { binPath = exec(`which ${binName}`); } catch { binPath = binName; }
+    const binPath = findBinaryPath(binName || '') || binName;
     return { command: binName, args: [], bin: binPath };
 }
 
 function installPypi(pkg: string) {
     // Prefer uv tool install (faster), fallback to pip
-    const hasUv = (() => { try { exec('which uv'); return true; } catch { return false; } })();
+    const hasUv = !!findBinaryPath('uv');
     if (hasUv) {
         console.log(`  ${c.yellow}📦 uv tool install ${pkg}${c.reset}`);
         try {
@@ -91,8 +101,7 @@ function installPypi(pkg: string) {
     }
     // Find binary: usually same as package name
     const binName = pkg;
-    let binPath;
-    try { binPath = exec(`which ${binName}`); } catch { binPath = binName; }
+    const binPath = findBinaryPath(binName) || binName;
     return { command: binPath || binName, args: [], bin: binPath };
 }
 

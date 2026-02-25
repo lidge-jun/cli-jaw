@@ -12,6 +12,7 @@ const JAW_HOME = path.join(os.homedir(), '.cli-jaw');
 const SETTINGS_PATH = path.join(JAW_HOME, 'settings.json');
 const DB_PATH = path.join(JAW_HOME, 'jaw.db');
 const HEARTBEAT_PATH = path.join(JAW_HOME, 'heartbeat.json');
+const PATH_LOOKUP_CMD = process.platform === 'win32' ? 'where' : 'which';
 
 const { values } = parseArgs({
     args: process.argv.slice(3),
@@ -20,6 +21,25 @@ const { values } = parseArgs({
 });
 
 const results: Array<{ name: string; status: string; detail: string }> = [];
+
+function findBinaryPath(name: string): string | null {
+    try {
+        const out = execSync(`${PATH_LOOKUP_CMD} ${name}`, { encoding: 'utf8', stdio: 'pipe', timeout: 3000 }).trim();
+        const first = out.split(/\r?\n/).map(x => x.trim()).find(Boolean);
+        return first || null;
+    } catch {
+        return null;
+    }
+}
+
+function isWSL() {
+    if (process.platform !== 'linux') return false;
+    try {
+        return fs.readFileSync('/proc/version', 'utf8').toLowerCase().includes('microsoft');
+    } catch {
+        return false;
+    }
+}
 
 function check(name: string, fn: () => string) {
     try {
@@ -71,12 +91,9 @@ check('heartbeat.json', () => {
 // 5. CLI tools
 for (const cli of ['claude', 'codex', 'gemini', 'opencode', 'copilot']) {
     check(`CLI: ${cli}`, () => {
-        try {
-            execSync(`which ${cli}`, { stdio: 'pipe' });
-            return 'installed';
-        } catch {
-            throw new Error('WARN: not installed');
-        }
+        const found = findBinaryPath(cli);
+        if (found) return `installed (${found})`;
+        throw new Error('WARN: not installed');
     });
 }
 
@@ -115,13 +132,25 @@ if (process.platform === 'darwin') {
     });
 }
 
+if (process.platform === 'linux') {
+    check('Display Server', () => {
+        if (process.env.WAYLAND_DISPLAY) return `Wayland (${process.env.WAYLAND_DISPLAY})`;
+        if (process.env.DISPLAY) return `X11 (${process.env.DISPLAY})`;
+        if (isWSL()) throw new Error('WARN: no DISPLAY in WSL — enable WSLg or set DISPLAY to an X server');
+        throw new Error('WARN: no DISPLAY — browser skill needs X11/Wayland');
+    });
+}
+
 // 9. Skill dependencies (Phase 9)
 check('uv (Python)', () => {
     try {
         const ver = execSync('uv --version', { encoding: 'utf8', stdio: 'pipe' }).trim();
         return ver;
     } catch {
-        throw new Error('WARN: not installed — run: curl -LsSf https://astral.sh/uv/install.sh | sh');
+        const installHint = process.platform === 'win32'
+            ? 'powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"'
+            : 'curl -LsSf https://astral.sh/uv/install.sh | sh';
+        throw new Error(`WARN: not installed — run: ${installHint}`);
     }
 });
 
@@ -134,13 +163,40 @@ check('playwright-core', () => {
     }
 });
 
-if (process.platform === 'darwin') {
-    check('Google Chrome', () => {
+check('Google Chrome', () => {
+    if (process.platform === 'darwin') {
         if (fs.existsSync('/Applications/Google Chrome.app')) return 'installed';
         if (fs.existsSync(path.join(os.homedir(), 'Applications/Google Chrome.app'))) return 'installed (user)';
-        throw new Error('WARN: not found — required for browser skill');
-    });
-}
+    } else if (process.platform === 'win32') {
+        const pf = process.env.PROGRAMFILES || 'C:\\Program Files';
+        const pf86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
+        const local = process.env.LOCALAPPDATA || '';
+        const winPaths = [
+            `${pf}\\Google\\Chrome\\Application\\chrome.exe`,
+            `${pf86}\\Google\\Chrome\\Application\\chrome.exe`,
+            `${local}\\Google\\Chrome\\Application\\chrome.exe`,
+            `${pf}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`,
+        ];
+        for (const p of winPaths) {
+            if (p && fs.existsSync(p)) return 'installed';
+        }
+    } else {
+        const linuxPaths = [
+            '/usr/bin/google-chrome-stable',
+            '/usr/bin/google-chrome',
+            '/usr/bin/chromium-browser',
+            '/usr/bin/chromium',
+            '/snap/bin/chromium',
+            '/usr/bin/brave-browser',
+            '/mnt/c/Program Files/Google/Chrome/Application/chrome.exe',
+            '/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+        ];
+        for (const p of linuxPaths) {
+            if (fs.existsSync(p)) return 'installed';
+        }
+    }
+    throw new Error('WARN: not found — required for browser skill');
+});
 
 // Output
 if (values.json) {
