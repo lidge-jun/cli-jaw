@@ -10,6 +10,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
+[![npm](https://img.shields.io/npm/v/cli-jaw)](https://npmjs.com/package/cli-jaw)
 
 **English** / [한국어](README.ko.md) / [中文](README.zh-CN.md)
 
@@ -73,22 +74,70 @@ graph LR
 
 ## Quick Start
 
+### Prerequisites
+
+| Requirement | Why |
+|-------------|-----|
+| **Node.js ≥ 22** | Runtime. [Download](https://nodejs.org) |
+| **At least 1 AI CLI** | The engine that powers your assistant |
+
+> 🆓 **Free options:** [Copilot CLI](https://docs.github.com/en/copilot) (GitHub free tier) and [OpenCode](https://opencode.ai) have free models — no credit card needed.
+
+### Install
+
 ```bash
-# Install (sets up everything: 5 CLIs, MCP, 105+ skills)
+# 1. Install globally
 npm install -g cli-jaw
 
-# Authenticate whichever CLIs you want (even 1 is enough)
-claude auth          # Anthropic
-codex login          # OpenAI
-gemini               # Google (first run)
+# 2. Run setup wizard (creates config, installs skills)
+cli-jaw init
 
-# Go
-cli-jaw doctor      # Check what's installed (12 checks)
-cli-jaw serve       # Web UI → http://localhost:3457
-cli-jaw chat        # Or use terminal TUI
+# 3. Health check — see what's ready
+cli-jaw doctor
 ```
 
-> 💡 **You don't need all 5.** Even one CLI is enough to start. Copilot and OpenCode have free tiers.
+<details>
+<summary>📋 Example <code>cli-jaw doctor</code> output</summary>
+
+```
+🦈 CLI-JAW Doctor — 12 checks
+
+ ✅ Node.js        v22.15.0
+ ✅ npm             v10.9.4
+ ✅ Claude CLI      installed
+ ✅ Codex CLI       installed
+ ⚠️ Gemini CLI      not found (optional)
+ ✅ OpenCode CLI    installed
+ ✅ Copilot CLI     installed
+ ✅ Database        jaw.db OK
+ ✅ Skills          17 active, 90 reference
+ ✅ MCP             3 servers configured
+ ✅ Memory          MEMORY.md exists
+ ✅ Server          port 3457 available
+```
+
+</details>
+
+### Authenticate your AI engines
+
+```bash
+# Pick whichever you have — even 1 is enough
+claude auth          # Anthropic  (paid)
+codex login          # OpenAI     (paid)
+gemini               # Google     (first run triggers auth)
+# OpenCode            # auto-auth on first run
+# Copilot             # uses GitHub login (free tier available)
+```
+
+### Launch
+
+```bash
+cli-jaw serve        # Web UI → http://localhost:3457
+# — or —
+cli-jaw chat         # Terminal TUI (no browser needed)
+```
+
+> 💡 **You don't need all 5.** Even one CLI is enough to start. Your assistant auto-detects which engines are available and falls back gracefully.
 
 ---
 
@@ -139,6 +188,15 @@ Your assistant isn't tied to your desk. Chat from anywhere via Telegram:
 ```
 📱 Telegram ←→ 🦈 CLI-JAW ←→ 🤖 AI Engines
 ```
+
+<details>
+<summary>📋 Telegram setup (3 steps)</summary>
+
+1. **Create a bot** — Message [@BotFather](https://t.me/BotFather) → `/newbot` → copy the token
+2. **Configure** — Run `cli-jaw init --telegram-token YOUR_TOKEN` or edit settings in the Web UI
+3. **Start chatting** — Send any message to your bot. Your chat ID is auto-saved on first message.
+
+</details>
 
 **What you can do from Telegram:**
 - 💬 Chat with your assistant (any of 5 AI engines)
@@ -316,6 +374,25 @@ All tests run via `tsx --test` (native Node.js test runner + TypeScript).
 
 ---
 
+## ❓ Troubleshooting
+
+<details>
+<summary>Common issues</summary>
+
+| Problem | Solution |
+|---------|----------|
+| `cli-jaw: command not found` | Run `npm install -g cli-jaw` again. Check `npm bin -g` is in your `$PATH`. |
+| `Error: node version` | Upgrade to Node.js ≥ 22: `nvm install 22` or download from [nodejs.org](https://nodejs.org) |
+| Agent timeout / no response | Run `cli-jaw doctor` to check CLI auth. Re-authenticate with `claude auth` / `codex login`. |
+| `EADDRINUSE: port 3457` | Another instance is running. Stop it or use `cli-jaw serve --port 3458`. |
+| Telegram bot not responding | Check token with `cli-jaw doctor`. Ensure `cli-jaw serve` is running. |
+| Skills not loading | Run `cli-jaw skill reset` then `cli-jaw mcp sync`. |
+| Browser commands fail | Install Chrome/Chromium. Run `cli-jaw browser start` first. |
+
+</details>
+
+---
+
 ## 🤝 Contributing
 
 Contributions are welcome! Here's how to get started:
@@ -324,7 +401,7 @@ Contributions are welcome! Here's how to get started:
 2. Run `npm run build && npm test` to make sure everything works
 3. Submit a PR — we'll review it promptly
 
-> 📋 Found a bug or have a feature idea? [Open an issue](https://github.com/cli-jaw/cli-jaw/issues)
+> 📋 Found a bug or have a feature idea? [Open an issue](https://github.com/bitkyc08-arch/cli-jaw/issues)
 
 ---
 

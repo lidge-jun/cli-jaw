@@ -1,7 +1,34 @@
 {
   "name": "cli-jaw",
   "version": "0.1.0",
+  "description": "Personal AI assistant powered by 5 engines (Claude, Codex, Gemini, OpenCode, Copilot) — Web, Terminal, and Telegram interfaces with 107 built-in skills",
   "type": "module",
+  "keywords": [
+    "ai-assistant",
+    "cli",
+    "claude",
+    "codex",
+    "gemini",
+    "copilot",
+    "multi-agent",
+    "orchestration",
+    "telegram-bot",
+    "browser-automation",
+    "mcp"
+  ],
+  "author": "CLI-JAW Contributors",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bitkyc08-arch/cli-jaw.git"
+  },
+  "homepage": "https://github.com/bitkyc08-arch/cli-jaw#readme",
+  "bugs": {
+    "url": "https://github.com/bitkyc08-arch/cli-jaw/issues"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "bin": {
     "cli-jaw": "dist/bin/cli-jaw.js",
     "jaw": "dist/bin/cli-jaw.js"
