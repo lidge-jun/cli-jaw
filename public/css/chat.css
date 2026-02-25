@@ -185,6 +185,51 @@
     margin-bottom: 4px;
 }
 
+/* ── Message Copy Button ── */
+.msg {
+    position: relative;
+}
+
+.msg-copy {
+    position: absolute;
+    bottom: 6px;
+    width: 12px;
+    height: 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 2px;
+    background: none;
+    cursor: pointer;
+    opacity: 0.4;
+    transition: opacity 0.15s, border-color 0.15s, transform 0.1s, background 0.15s;
+    padding: 0;
+}
+
+.msg-agent .msg-copy {
+    right: 8px;
+}
+
+.msg-user .msg-copy {
+    left: 8px;
+}
+
+
+.msg-copy:hover {
+    opacity: 1 !important;
+    border-color: var(--accent);
+}
+
+.msg-copy:active {
+    transform: scale(0.75);
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.msg-copy.copied {
+    opacity: 1 !important;
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
 .chat-input-area {
     padding: 12px 20px;
     border-top: 1px solid var(--border);

@@ -343,39 +343,8 @@ body.right-collapsed .sidebar-right {
         display: none;
     }
 
-    .chat-footer {
-        padding-bottom: 56px;
-    }
-
-    .mobile-nav {
-        display: flex;
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        z-index: 99;
-        background: var(--bg-sidebar, var(--surface));
-        border-top: 1px solid var(--border);
-        padding: 8px;
-        gap: 8px;
-        justify-content: space-around;
-    }
-
-    .mobile-nav button {
-        flex: 1;
-        padding: 8px;
-        background: var(--surface);
-        border: 1px solid var(--border);
-        color: var(--text);
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 12px;
-        font-family: var(--font-display);
-    }
 }
 
-@media (min-width: 769px) {
-    .mobile-nav {
-        display: none;
-    }
+.mobile-nav {
+    display: none;
 }

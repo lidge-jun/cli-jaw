@@ -400,6 +400,8 @@ app.post('/api/message', (req, res) => {
         enqueueMessage(trimmed, 'web');
         return res.json({ ok: true, queued: true, pending: messageQueue.length });
     }
+    insertMessage.run('user', trimmed, 'web', '');
+    broadcast('new_message', { role: 'user', content: trimmed, source: 'web' });
     orchestrate(trimmed, { origin: 'web' });
     res.json({ ok: true });
 });

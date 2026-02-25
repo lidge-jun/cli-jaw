@@ -214,4 +214,29 @@ export function initDragDrop() {
         if (files.length) attachFiles(files);
         e.target.value = ''; // allow re-selecting same file
     });
+
+    // ── Clipboard paste (Cmd+V) ──
+    document.addEventListener('paste', (e) => {
+        const items = e.clipboardData?.items;
+        if (!items) return;
+        const files = [];
+        for (const item of items) {
+            if (item.kind !== 'file') continue;
+            const blob = item.getAsFile();
+            if (!blob) continue;
+            // Pasted images often have no useful name; generate one
+            if (!blob.name || blob.name === 'image.png') {
+                const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                const ext = blob.type.split('/')[1] || 'png';
+                const named = new File([blob], `pasted-${ts}.${ext}`, { type: blob.type });
+                files.push(named);
+            } else {
+                files.push(blob);
+            }
+        }
+        if (files.length) {
+            e.preventDefault();
+            attachFiles(files);
+        }
+    });
 }

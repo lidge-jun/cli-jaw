@@ -73,6 +73,7 @@ export function finalizeAgent(text, toolLog) {
             state.currentAgentDiv = addMessage('agent', '');
         }
         const content = state.currentAgentDiv.querySelector('.msg-content');
+        state.currentAgentDiv.dataset.rawText = text;
         let toolHtml = '';
         if (toolLog && toolLog.length > 0) {
             const counts = {};
@@ -93,8 +94,10 @@ export function addMessage(role, text) {
     const container = document.getElementById('chatMessages');
     const div = document.createElement('div');
     div.className = `msg msg-${role}`;
+    div.dataset.rawText = text;
     const rendered = renderMarkdown(text);
-    div.innerHTML = `<div class="msg-label">${role === 'user' ? t('msg.you') : getAppName()}</div><div class="msg-content">${rendered}</div>`;
+    const copyBtn = '<span class="msg-copy" title="Copy raw text"></span>';
+    div.innerHTML = `<div class="msg-label">${role === 'user' ? t('msg.you') : getAppName()}</div><div class="msg-content">${rendered}</div>${copyBtn}`;
     container.appendChild(div);
     scrollToBottom();
     return div;
@@ -136,6 +139,21 @@ export async function loadMessages() {
     const msgs = await api('/api/messages');
     if (!msgs) return;
     msgs.forEach(m => addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content));
+}
+
+// ── Copy button delegation ──
+export function initMsgCopy() {
+    document.getElementById('chatMessages').addEventListener('click', async (e) => {
+        const btn = e.target.closest('.msg-copy');
+        if (!btn) return;
+        const msg = btn.closest('.msg');
+        const raw = msg?.dataset?.rawText || msg?.querySelector('.msg-content')?.innerText || '';
+        try {
+            await navigator.clipboard.writeText(raw);
+            btn.classList.add('copied');
+            setTimeout(() => { btn.classList.remove('copied'); }, 1500);
+        } catch { setTimeout(() => { }, 1500); }
+    });
 }
 
 export async function loadMemory() {

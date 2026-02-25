@@ -17,12 +17,12 @@ public/
 │   ├── chat.css          ← pill theme-switch + border-left 구분 + 채팅 버블 (530L)
 │   ├── sidebar.css       ← 설정/스킬 카드 hover + display font (224L)
 │   ├── modals.css        ← 모달, 하트비트 카드 (171L)
-│   └── markdown.css      ← 렌더링 (테이블·코드·KaTeX·Mermaid) + 시맨틱 var + copy 버튼 (161L)
+│   └── markdown.css      ← rendering (table·code·KaTeX·Mermaid) + mermaid overlay popup + copy btn (269L)
 └── js/                   ← 16 files (~2300L)
     ├── main.js           ← 앱 진입점 + 5개 모듈 wire + 인덱스 탭 전환 (281L)
     ├── state.js          ← 공유 상태 모듈 (attachedFiles 배열) (16L)
     ├── constants.js      ← CLI_REGISTRY 동적 로딩 + ROLE_PRESETS (이모지 제거) (119L)
-    ├── render.js         ← marked+hljs+KaTeX+Mermaid 렌더러 + rehighlightAll + copy delegation + sanitize + i18n (220L)
+    ├── render.js         ← marked+hljs+KaTeX+Mermaid renderer + mermaid overlay popup + rehighlightAll + copy + sanitize + i18n (294L)
     ├── ui.js             ← DOM 유틸 + stop-mode + getAppName() + finalizeAgent guard + user 마크다운 (151L)
     ├── ws.js             ← WebSocket + 메시지 라우팅 + orchestrate_done (64L)
     └── features/
@@ -54,7 +54,7 @@ public/
 
 | 모듈 | 역할 | 라인 |
 |------|------|------|
-| `render.js` | marked+hljs+KaTeX+Mermaid 렌더러 + rehighlightAll + copy + sanitize + i18n | 220 |
+| `render.js` | marked+hljs+KaTeX+Mermaid renderer + rehighlightAll + mermaid overlay popup + copy + sanitize + i18n | 294 |
 | `ui.js` | DOM 유틸 + stop-mode + finalizeAgent guard + user 마크다운 | 151 |
 | `ws.js` | WebSocket + 메시지 라우팅 + orchestrate_done | 64 |
 
@@ -84,7 +84,7 @@ public/
 | `chat.css` | pill theme-switch + border-left 구분 + 채팅 버블 + auto-expand | 530 |
 | `sidebar.css` | 설정/스킬 카드 hover + display font | 224 |
 | `modals.css` | 모달 + 하트비트 카드 | 171 |
-| `markdown.css` | 마크다운 렌더링 + 시맨틱 색상 var + copy 버튼 스타일 | 161 |
+| `markdown.css` | markdown rendering + semantic color vars + mermaid overlay popup + copy btn style | 269 |
 
 ### 테마 (Arctic Cyan)
 
@@ -128,3 +128,5 @@ public/
 | Multi-file | `attachedFile` → `attachedFiles[]`, chip 프리뷰, 개별 제거, 병렬 업로드, `<input multiple>` |
 | Rename | CLI-CLAW → CLI-JAW 대문자 로고, 페이지 타이틀, 헤더, agent name default |
 | Theme | Red → Arctic Cyan (`#22d3ee`), pill switch, sidebar jank fix, border 구분, 글로우 |
+| Mermaid Fix | DOMPurify removed from mermaid SVG (was stripping foreignObject/text). Overlay: z-index fix, size 95vw/95vh, raw SVG capture (no duplicate buttons) |
+| Msg Persist | `POST /api/message` now calls `insertMessage.run('user')` before `orchestrate()` — user messages survive page refresh |

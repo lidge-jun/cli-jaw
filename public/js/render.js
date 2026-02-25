@@ -50,19 +50,9 @@ function renderMath(html) {
     return html;
 }
 
-// ── Mermaid SVG sanitization (preserves <style> for diagram rendering) ──
-function sanitizeMermaidSvg(svg) {
-    if (typeof DOMPurify !== 'undefined') {
-        return DOMPurify.sanitize(svg, {
-            USE_PROFILES: { svg: true, svgFilters: true },
-            ADD_TAGS: ['style', 'use'],
-            FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
-        });
-    }
-    return svg;
-}
-
 // ── Mermaid deferred rendering ──
+// NOTE: No DOMPurify on mermaid SVG — mermaid.render() with securityLevel:'loose'
+// handles its own sanitization. DOMPurify strips foreignObject/style tags needed for text.
 let mermaidId = 0;
 
 function renderMermaidBlocks() {
@@ -73,14 +63,16 @@ function renderMermaidBlocks() {
         const id = `mermaid-${++mermaidId}`;
         try {
             const { svg } = await mermaid.render(id, code);
-            el.innerHTML = sanitizeMermaidSvg(svg);
+            el.innerHTML = svg;
             el.classList.add('mermaid-rendered');
+            // Store raw SVG for overlay (before zoom button is appended)
+            const rawSvg = el.innerHTML;
             // Add zoom button
             const zoomBtn = document.createElement('button');
             zoomBtn.className = 'mermaid-zoom-btn';
             zoomBtn.textContent = '⛶';
             zoomBtn.title = 'Expand diagram';
-            zoomBtn.addEventListener('click', () => openMermaidOverlay(el.innerHTML));
+            zoomBtn.addEventListener('click', () => openMermaidOverlay(rawSvg));
             el.appendChild(zoomBtn);
         } catch (err) {
             const errMsg = err?.message || err?.str || 'Unknown error';
@@ -116,12 +108,16 @@ function openMermaidOverlay(svgHtml) {
         svgEl.removeAttribute('height');
         svgEl.style.width = '100%';
         svgEl.style.height = 'auto';
-        svgEl.style.maxHeight = '80vh';
+        svgEl.style.maxHeight = '85vh';
     }
 
     const close = () => overlay.remove();
     overlay.querySelector('.mermaid-overlay-backdrop').addEventListener('click', close);
-    overlay.querySelector('.mermaid-overlay-close').addEventListener('click', close);
+    overlay.querySelector('.mermaid-overlay-close').addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        close();
+    });
     document.addEventListener('keydown', function handler(e) {
         if (e.key === 'Escape') { close(); document.removeEventListener('keydown', handler); }
     });

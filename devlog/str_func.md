@@ -71,13 +71,13 @@ cli-jaw/
 │   ├── css/                  ← 6 files (~1420L)
 │   │   ├── variables.css     ← Arctic Cyan 테마 + will-change + scrollbar tint (142L)
 │   │   ├── layout.css        ← opacity 전환 + contain 격리 + 로고 글로우 (290L)
-│   │   └── markdown.css      ← 렌더링 (테이블·코드·KaTeX·Mermaid) + copy 버튼 (161L)
+│   │   └── markdown.css      ← rendering (table·code·KaTeX·Mermaid) + mermaid overlay popup + copy btn (269L)
 │   ├── locales/              ← i18n 로케일
 │   │   ├── ko.json           ← 한국어 (180키)
 │   │   └── en.json           ← 영어 (180키)
 │   └── js/                   ← 16 files (~2300L)
 │       ├── main.js           ← 앱 진입점 + 5개 모듈 wire + 인덱스 탭 전환 (281L)
-│       ├── render.js         ← marked+hljs+KaTeX+Mermaid 렌더러 + sanitize + i18n import (220L)
+│       ├── render.js         ← marked+hljs+KaTeX+Mermaid 렌더러 + sanitize + mermaid overlay popup + i18n import (294L)
 │       ├── constants.js      ← CLI_REGISTRY 동적 로딩 + ROLE_PRESETS (119L)
 │       └── features/
 │           ├── i18n.ts       ← 프론트엔드 i18n + applyI18n() (126L)
@@ -256,6 +256,11 @@ graph LR
 56. **[ux] Logo uppercase**: 프론트엔드 로고 `CLI-JAW` 대문자, 이모지 없음
 57. **[critical fix] activeOverrides 모델**: `spawn.ts:228`에서 planning/employee agent도 `activeOverrides` 모델 사용하도록 수정 — 이전에는 `agentId` 있으면 `perCli` 폴백 → config.json 모델 충돌 → Copilot 자동 취소 유발
 58. **[config] 기본 permissions**: `config.ts` 기본값 `safe` → `auto` — Copilot ACP에서 safe 모드는 도구 승인 블로킹으로 자동 취소 유발
+59. **[fix] Mermaid text invisible**: `sanitizeMermaidSvg()` removed — DOMPurify strips `<foreignObject>`/`<style>` tags needed by Mermaid v11 for text rendering. `mermaid.render()` with `securityLevel:'loose'` handles its own sanitization.
+60. **[fix] Mermaid overlay duplicate buttons**: `openMermaidOverlay()` received `el.innerHTML` which included the zoom button. Fixed by saving raw SVG before appending zoom button.
+61. **[fix] Mermaid overlay X button unresponsive**: `.mermaid-overlay-close` z-index 1→10, `pointer-events: auto`, `.mermaid-overlay-svg` z-index 0, added `stopPropagation()`+`preventDefault()`.
+62. **[fix] Mermaid overlay too small**: `.mermaid-overlay-content` max-width 90vw→95vw, max-height 90vh→95vh, SVG maxHeight 80vh→85vh.
+63. **[fix] User messages lost on refresh**: `POST /api/message` handler did not call `insertMessage.run()` before `orchestrate()`. WebSocket and queue paths saved correctly, but HTTP path was missing. Added `insertMessage.run('user', trimmed, 'web', '')` + `broadcast()`.
 
 ---
 
@@ -292,6 +297,7 @@ graph LR
 | `260225_copilot-cli-integration/` | Copilot ACP 통합 Phase 1~6                              | ✅    |
 | `260225_debug/`                   | i18n + multifile + dev skill + filepath fix + parallel dispatch + session fix | ✅    |
 | `260225_clijaw_rename/`           | cli-claw→cli-jaw 리네임 + Arctic Cyan 테마 + CLI 블록아트 배너 | ✅    |
+| `260225_mermaid_bugs/`            | Mermaid text invisible (DOMPurify foreignObject strip) + overlay UX + user msg persistence | ✅    |
 | `269999_메모리 개선/`          | 메모리 고도화 (flush✅ + vector DB 📋 후순위)                 | 🔜    |
 
 ---

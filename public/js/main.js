@@ -11,7 +11,7 @@ window.addEventListener('error', (e) => {
 });
 
 import { connect } from './ws.js';
-import { switchTab, handleSave, loadStats, loadMessages, loadMemory } from './ui.js';
+import { switchTab, handleSave, loadStats, loadMessages, loadMemory, initMsgCopy } from './ui.js';
 import { sendMessage, handleKey, clearAttachedFiles, removeAttachedFile, clearChat, initDragDrop, initAutoResize } from './features/chat.js';
 import {
     loadCommands, update as updateSlashDropdown, handleKeydown as handleSlashKeydown,
@@ -260,6 +260,7 @@ async function bootstrap() {
     initAppName();
     initSidebar();
     initTheme();
+    initMsgCopy();
 }
 
 void bootstrap().catch((err) => {
