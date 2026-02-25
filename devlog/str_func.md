@@ -1,8 +1,8 @@
 # CLI-CLAW — Source Structure & Function Reference
 
-> 마지막 검증: 2026-02-25T14:50 (Multi-file input + i18n 버그픽스 + dist 빌드 호환)
+> 마지막 검증: 2026-02-25T16:05 (Dev skill rules + file path fix + history 10 + parallel dispatch plan)
 > server.ts 863L / src/ 35파일 12서브디렉토리 / tests 252 pass (tsx runner)
-> Phase 9 보안 하드닝 + Phase 17 AI triage + Phase 20.6 모듈 분리 + i18n/dist 버그픽스 반영
+> Phase 9 보안 하드닝 + Phase 17 AI triage + Phase 20.6 모듈 분리 + i18n/dist 버그픽스 + prompt/orchestration 개선 반영
 >
 > 상세 모듈 문서는 [서브 문서](#서브-문서)를 참조하세요.
 
@@ -26,16 +26,16 @@ cli-claw-ts/
 │   │   ├── i18n.ts           ← 서버사이드 번역 (90L)
 │   │   └── settings-merge.ts ← perCli/activeOverrides deep merge (45L)
 │   ├── agent/                ← CLI 에이전트 런타임
-│   │   ├── spawn.ts          ← CLI spawn + ACP 분기 + 큐 + 메모리 flush (567L)
+│   │   ├── spawn.ts          ← CLI spawn + ACP 분기 + 큐 + 메모리 flush (672L)
 │   │   ├── args.ts           ← CLI별 인자 빌더 (67L)
 │   │   └── events.ts         ← NDJSON 파서 + ACP update + logEventSummary (322L)
 │   ├── orchestrator/         ← 직원 오케스트레이션
-│   │   ├── pipeline.ts       ← Plan → Phase-aware Distribute → Quality Gate (560L)
+│   │   ├── pipeline.ts       ← Plan → Phase-aware Distribute → Quality Gate (582L)
 │   │   └── parser.ts         ← triage + subtask JSON + verdict 파싱 (108L)
 │   ├── prompt/               ← 프롬프트 조립
-│   │   └── builder.ts        ← A-1/A-2 + 스킬 + 직원 프롬프트 v2 + promptCache (523L)
+│   │   └── builder.ts        ← A-1/A-2 + 스킬 + 직원 프롬프트 v2 + promptCache + dev skill rules (560L)
 │   ├── cli/                  ← 커맨드 시스템
-│   │   ├── commands.ts       ← 슬래시 커맨드 레지스트리 + 디스패처 (268L)
+│   │   ├── commands.ts       ← 슬래시 커맨드 레지스트리 + 디스패처 + 파일경로 필터 (271L)
 │   │   ├── handlers.ts       ← 18개 커맨드 핸들러 (432L)
 │   │   ├── registry.ts       ← 5개 CLI/모델 단일 소스 (89L)
 │   │   └── acp-client.ts     ← Copilot ACP JSON-RPC 클라이언트 (315L)
@@ -200,7 +200,7 @@ graph LR
 1.  **큐**: busy 시 queue → agent 종료 후 자동 처리
 2.  **세션 무효화**: CLI 변경 시 session_id 제거
 3.  **직원 dispatch**: B 프롬프트에 JSON subtask 포맷
-4.  **메모리 flush**: `forceNew` spawn → 메인 세션 분리, threshold개 메시지만 요약 (줄글 1-3문장)
+4.  **메모리 flush**: `forceNew` spawn → 메인 세션 분리, threshold개 메시지만 요약 (줄글 1-3문장) → [memory_architecture.md](str_func/memory_architecture.md) 참조
 5.  **메모리 주입**: MEMORY.md = 매번, session memory = `injectEvery` cycle마다 (기본 x2)
 6.  **에러 처리**: 429/auth 커스텀 메시지
 7.  **IPv4 강제**: `--dns-result-order=ipv4first` + Telegram
@@ -239,6 +239,10 @@ graph LR
 40. **[dist] projectRoot**: `server.ts`/`config.ts`에서 `package.json` 위치 동적 탐색 (source/dist 양쪽 호환)
 41. **[dist] serve.ts dual-mode**: `server.js` 존재 → node(dist), 없으면 tsx(source) 자동 감지
 42. **[feat] Multi-file input**: `attachedFiles[]` 배열, 병렬 업로드, chip 프리뷰, 개별 제거
+43. **[prompt] Dev skill rules**: A1_CONTENT에 `### Dev Skills (MANDATORY)` 서브섹션 추가 — 코드 작성 전 dev/SKILL.md 읽기 의무화
+44. **[ux] 파일 경로 커맨드 오인 수정**: `parseCommand()`에서 첫 토큰에 `/` 포함 시 커맨드가 아닌 일반 텍스트로 판별
+45. **[feat] History block 10**: `buildHistoryBlock()` `maxSessions` 5→10 (비-resume 세션에서 최근 대화 10개 불러옴, 8000자 제한 유지)
+46. **[docs] README i18n**: 한국어/중국어 Hero 카피 리뉴얼 + 전체 톤 공식 문서 스타일로 격상
 
 ---
 
@@ -256,6 +260,7 @@ graph LR
 | [📄 prompt_basic_A1.md](str_func/prompt_basic_A1.md) | A-1 기본 프롬프트 원문                                  | EN 기본 프롬프트 레퍼런스 |
 | [📄 prompt_basic_A2.md](str_func/prompt_basic_A2.md) | A-2 프롬프트 템플릿                                     | 사용자 편집 가능 |
 | [📄 prompt_basic_B.md](str_func/prompt_basic_B.md) | B 프롬프트 원문 (직원 규칙, 위임 정책)                    | 직원 레퍼런스 |
+| [💾 memory_architecture.md](str_func/memory_architecture.md) | 3계층 메모리 시스템 (History Block · Flush · Injection) | 메모리 전체 구조 레퍼런스 |
 
 ---
 
@@ -272,7 +277,7 @@ graph LR
 | `260224_orch/`                | 오케스트레이션 v2 P0~P5✅                                     | ✅    |
 | `260225_finness/`             | P0~P9✅ + P10~P17✅ + P20~P20.6✅ — 보안, i18n, AI triage, 디렉토리 분리 | ✅    |
 | `260225_copilot-cli-integration/` | Copilot ACP 통합 Phase 1~6                              | ✅    |
-| `260225_debug/`                   | i18n 탭버그 + 하드코딩 문자열 + dist 빌드 호환               | ✅    |
+| `260225_debug/`                   | i18n 탭버그 + 하드코딩 + multifile + dev skill + filepath fix + parallel plan | 🟡    |
 | `269999_메모리 개선/`          | 메모리 고도화 (flush✅ + vector DB 📋 후순위)                 | 🔜    |
 
 ---
