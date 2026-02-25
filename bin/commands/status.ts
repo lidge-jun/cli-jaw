@@ -1,5 +1,5 @@
 /**
- * cli-claw status — Phase 9.1
+ * cli-jaw status — Phase 9.1
  * Checks if the server is running by pinging the API.
  */
 import { parseArgs } from 'node:util';
@@ -23,7 +23,7 @@ try {
         if (values.json) {
             console.log(JSON.stringify({ status: 'running', port: values.port, cli: data.cli }));
         } else {
-            console.log(`  🦞 Server is running on port ${values.port}`);
+            console.log(`  🦈 Server is running on port ${values.port}`);
             console.log(`  CLI: ${data.cli}`);
             console.log(`  Working dir: ${data.workingDir || '~'}`);
 

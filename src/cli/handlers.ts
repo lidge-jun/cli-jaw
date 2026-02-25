@@ -115,7 +115,7 @@ export async function statusHandler(_args: any[], ctx: any) {
         ok: true,
         type: 'info',
         text: [
-            `🦞 cli-claw v${ctx.version || 'unknown'}`,
+            `🦈 cli-jaw v${ctx.version || 'unknown'}`,
             `CLI:      ${cli}`,
             `Model:    ${model}`,
             `Effort:   ${effort || '-'}`,
@@ -272,7 +272,7 @@ export async function resetHandler(args: any[], ctx: any) {
 
 export async function versionHandler(_args: any[], ctx: any) {
     const status = await safeCall(ctx.getCliStatus, null);
-    const lines = [`cli-claw v${ctx.version || 'unknown'}`];
+    const lines = [`cli-jaw v${ctx.version || 'unknown'}`];
     if (status && typeof status === 'object') {
         for (const key of DEFAULT_CLI_CHOICES) {
             if (!status[key]) continue;

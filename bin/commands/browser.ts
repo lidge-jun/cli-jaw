@@ -1,5 +1,5 @@
 /**
- * cli-claw browser — Phase 7
+ * cli-jaw browser — Phase 7
  * Browser control via HTTP API to the server.
  */
 import { parseArgs } from 'node:util';
@@ -10,7 +10,7 @@ import { getServerUrl } from '../../src/core/config.js';
 
 const SERVER = getServerUrl('3457');
 const sub = process.argv[3];
-const CLAW_HOME = join(homedir(), '.cli-claw');
+const JAW_HOME = join(homedir(), '.cli-jaw');
 
 // ─── ANSI ────────────────────────────────────
 const c = {
@@ -74,7 +74,7 @@ try {
         }
         case 'click': {
             const ref = process.argv[4];
-            if (!ref) { console.error('Usage: cli-claw browser click <ref>'); process.exit(1); }
+            if (!ref) { console.error('Usage: cli-jaw browser click <ref>'); process.exit(1); }
             const opts: Record<string, any> = {};
             if (process.argv.includes('--double')) opts.doubleClick = true;
             await api('POST', '/act', { kind: 'click', ref, ...opts });
@@ -103,7 +103,7 @@ try {
             const x = parseInt(process.argv[4]!);
             const y = parseInt(process.argv[5]!);
             if (isNaN(x) || isNaN(y)) {
-                console.error('Usage: cli-claw browser mouse-click <x> <y> [--double]');
+                console.error('Usage: cli-jaw browser mouse-click <x> <y> [--double]');
                 process.exit(1);
             }
             const opts: Record<string, any> = {};
@@ -115,7 +115,7 @@ try {
         case 'vision-click': {
             const target = process.argv.slice(4).filter(a => !a.startsWith('--')).join(' ');
             if (!target) {
-                console.error('Usage: cli-claw browser vision-click "<target>" [--provider codex] [--double]');
+                console.error('Usage: cli-jaw browser vision-click "<target>" [--provider codex] [--double]');
                 process.exit(1);
             }
             const opts: Record<string, any> = {};
@@ -189,14 +189,14 @@ try {
             }
 
             // 2. Clear browser profile
-            const profileDir = join(CLAW_HOME, 'browser-profile');
+            const profileDir = join(JAW_HOME, 'browser-profile');
             if (existsSync(profileDir)) {
                 rmSync(profileDir, { recursive: true, force: true });
                 console.log(`  ${c.dim}✓ cleared ${profileDir}${c.reset}`);
             }
 
             // 3. Clear screenshots
-            const screenshotsDir = join(CLAW_HOME, 'screenshots');
+            const screenshotsDir = join(JAW_HOME, 'screenshots');
             if (existsSync(screenshotsDir)) {
                 rmSync(screenshotsDir, { recursive: true, force: true });
                 console.log(`  ${c.dim}✓ cleared ${screenshotsDir}${c.reset}`);
@@ -207,7 +207,7 @@ try {
         }
         default:
             console.log(`
-  🌐 cli-claw browser
+  🌐 cli-jaw browser
 
   Commands:
     start [--port 9240]    Start Chrome (default CDP port: 9240)

@@ -1,7 +1,7 @@
 /**
  * lib/mcp-sync.js — Phase 12.1
  * Unified MCP config → CLI-specific format conversion.
- * Source of truth: ~/.cli-claw/mcp.json
+ * Source of truth: ~/.cli-jaw/mcp.json
  *
  * Supported targets:
  *   Claude Code  → {workingDir}/.mcp.json        (JSON, mcpServers)
@@ -13,8 +13,8 @@ import fs from 'fs';
 import os from 'os';
 import { join, dirname, resolve, isAbsolute } from 'path';
 
-const CLAW_HOME = join(os.homedir(), '.cli-claw');
-const MCP_PATH = join(CLAW_HOME, 'mcp.json');
+const JAW_HOME = join(os.homedir(), '.cli-jaw');
+const MCP_PATH = join(JAW_HOME, 'mcp.json');
 
 // ─── Load / Save unified config ────────────────────
 
@@ -27,7 +27,7 @@ export function loadUnifiedMcp() {
 }
 
 export function saveUnifiedMcp(config: Record<string, any>) {
-    fs.mkdirSync(CLAW_HOME, { recursive: true });
+    fs.mkdirSync(JAW_HOME, { recursive: true });
     fs.writeFileSync(MCP_PATH, JSON.stringify(config, null, 4) + '\n');
 }
 
@@ -208,18 +208,18 @@ export function syncToAll(config: Record<string, any>, workingDir: string) {
 // ─── Skills symlink helper ─────────────────────────
 
 /**
- * Ensure {workingDir}/.agents/skills → ~/.cli-claw/skills
+ * Ensure {workingDir}/.agents/skills → ~/.cli-jaw/skills
  * Also ensure ~/.agent/skills → ~/.agents/skills (compat)
  * Also ensure {workingDir}/.claude/skills + ~/.claude/skills (Claude Code CLI)
  */
 export function ensureSkillsSymlinks(workingDir: string, opts: Record<string, any> = {}) {
     const onConflict = opts.onConflict === 'skip' ? 'skip' : 'backup';
-    const skillsSource = join(CLAW_HOME, 'skills');
+    const skillsSource = join(JAW_HOME, 'skills');
     fs.mkdirSync(skillsSource, { recursive: true });
     const backupContext = createBackupContext();
     const links = [];
 
-    // 1. {workingDir}/.agents/skills → ~/.cli-claw/skills
+    // 1. {workingDir}/.agents/skills → ~/.cli-jaw/skills
     const wdLink = join(workingDir, '.agents', 'skills');
     links.push(ensureSymlinkSafe(skillsSource, wdLink, { onConflict, backupContext, name: 'wdAgents' }));
 
@@ -241,11 +241,11 @@ export function ensureSkillsSymlinks(workingDir: string, opts: Record<string, an
     const compatLink = join(os.homedir(), '.agent', 'skills');
     links.push(ensureSymlinkSafe(homeLink, compatLink, { onConflict, backupContext, name: 'compatAgent' }));
 
-    // 4. Claude Code CLI: {workingDir}/.claude/skills → ~/.cli-claw/skills
+    // 4. Claude Code CLI: {workingDir}/.claude/skills → ~/.cli-jaw/skills
     const wdClaudeSkills = join(workingDir, '.claude', 'skills');
     links.push(ensureSymlinkSafe(skillsSource, wdClaudeSkills, { onConflict, backupContext, name: 'wdClaude' }));
 
-    // 5. Home Claude Code: ~/.claude/skills → ~/.cli-claw/skills
+    // 5. Home Claude Code: ~/.claude/skills → ~/.cli-jaw/skills
     const homeClaudeSkills = join(os.homedir(), '.claude', 'skills');
     if (homeClaudeSkills !== wdClaudeSkills) {
         links.push(ensureSymlinkSafe(skillsSource, homeClaudeSkills, { onConflict, backupContext, name: 'homeClaude' }));
@@ -276,7 +276,7 @@ export function ensureSkillsSymlinks(workingDir: string, opts: Record<string, an
 
 function createBackupContext() {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    return { root: join(CLAW_HOME, 'backups', 'skills-conflicts', stamp) };
+    return { root: join(JAW_HOME, 'backups', 'skills-conflicts', stamp) };
 }
 
 function resolveSymlinkTarget(linkPath: string, rawTarget: string) {
@@ -498,13 +498,13 @@ export function initMcpConfig(workingDir: string) {
  * Priority: ~/.codex/skills/ (live Codex) > bundled skills_ref/ (fallback)
  *
  * 1. If Codex is installed, classify its skills into active/ref
- * 2. Copy bundled skills_ref/ (OpenClaw + Codex fallback) → ~/.cli-claw/skills_ref/
+ * 2. Copy bundled skills_ref/ (OpenClaw + Codex fallback) → ~/.cli-jaw/skills_ref/
  * 3. Auto-activate: CODEX_ACTIVE + OPENCLAW_ACTIVE from refDir → activeDir
  *    (covers devices where Codex isn't installed)
  */
 export function copyDefaultSkills() {
-    const activeDir = join(CLAW_HOME, 'skills');
-    const refDir = join(CLAW_HOME, 'skills_ref');
+    const activeDir = join(JAW_HOME, 'skills');
+    const refDir = join(JAW_HOME, 'skills_ref');
     fs.mkdirSync(activeDir, { recursive: true });
     fs.mkdirSync(refDir, { recursive: true });
 
@@ -570,7 +570,7 @@ export function copyDefaultSkills() {
         console.log(`[skills] Codex: not installed, using bundled fallback`);
     }
 
-    // ─── 2. Bundled skills_ref/ → ~/.cli-claw/skills_ref/ ───
+    // ─── 2. Bundled skills_ref/ → ~/.cli-jaw/skills_ref/ ───
     const packageRefDir = join(new URL('.', import.meta.url).pathname, '..', 'skills_ref');
     if (fs.existsSync(packageRefDir)) {
         const entries = fs.readdirSync(packageRefDir, { withFileTypes: true });

@@ -1,9 +1,9 @@
 import { getActivePage, getCdpSession } from './connection.js';
-import { CLAW_HOME } from '../core/config.js';
+import { JAW_HOME } from '../core/config.js';
 import { join } from 'path';
 import fs from 'fs';
 
-const SCREENSHOTS_DIR = join(CLAW_HOME, 'screenshots');
+const SCREENSHOTS_DIR = join(JAW_HOME, 'screenshots');
 
 // ─── ref snapshot ────────────────────────────────
 

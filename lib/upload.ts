@@ -8,7 +8,7 @@ import https from 'node:https';
 import { join, extname, basename } from 'path';
 
 /**
- * Save a buffer to ~/.cli-claw/uploads/ with a timestamped filename.
+ * Save a buffer to ~/.cli-jaw/uploads/ with a timestamped filename.
  * @param {string} uploadsDir - Absolute path to uploads directory
  * @param {Buffer} buffer - File content
  * @param {string} originalName - Original filename (for extension)

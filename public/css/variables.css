@@ -5,8 +5,8 @@
     --border: #1e1e2e;
     --text: #e4e4ef;
     --text-dim: #6e6e8a;
-    --accent: #ff6b6b;
-    --accent2: #ffa07a;
+    --accent: #22d3ee;
+    --accent2: #06b6d4;
     --green: #4ade80;
     --user-bg: #1a1a2e;
     --agent-bg: #0f0f1a;
@@ -44,7 +44,8 @@ body {
     height: 100vh;
     display: grid;
     grid-template-columns: var(--sidebar-left-w) 1fr var(--sidebar-right-w);
-    transition: grid-template-columns 0.25s ease;
+    transition: grid-template-columns 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: grid-template-columns;
 }
 
 body.left-collapsed {
@@ -62,8 +63,8 @@ body.right-collapsed {
     --border: #e0e0e6;
     --text: #1a1a2e;
     --text-dim: #6e6e8a;
-    --accent: #e04848;
-    --accent2: #d35f3a;
+    --accent: #0891b2;
+    --accent2: #0e7490;
     --green: #16a34a;
     --user-bg: #eef0f8;
     --agent-bg: #f8f8fc;
@@ -117,7 +118,7 @@ input[type="text"] {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: var(--text-dim);
+    background: color-mix(in srgb, var(--accent) 30%, var(--text-dim));
 }
 
 /* Firefox */

@@ -1,4 +1,4 @@
-# CLI-CLAW — Source Structure & Function Reference
+# CLI-JAW — Source Structure & Function Reference
 
 > 마지막 검증: 2026-02-25T16:24 (Parallel dispatch 구현 + session invalidation fix)
 > server.ts 863L / src/ 36파일 12서브디렉토리 / tests 252 pass (tsx runner)
@@ -11,7 +11,7 @@
 ## File Tree
 
 ```text
-cli-claw-ts/
+cli-jaw/
 ├── server.ts                 ← Express 라우트 + 글루 + ok/fail + security guards (863L)
 ├── lib/
 │   ├── mcp-sync.ts           ← MCP 통합 + 스킬 복사 + DEDUP_EXCLUDED + 글로벌 설치 (645L)
@@ -19,7 +19,7 @@ cli-claw-ts/
 │   └── quota-copilot.ts      ← Copilot 할당량 조회 (keychain → API) (67L)
 ├── src/
 │   ├── core/                 ← 의존 0 인프라 계층
-│   │   ├── config.ts         ← CLAW_HOME, settings, CLI 탐지, APP_VERSION (187L)
+│   │   ├── config.ts         ← JAW_HOME, settings, CLI 탐지, APP_VERSION (187L)
 │   │   ├── db.ts             ← SQLite 스키마 + prepared statements + trace (105L)
 │   │   ├── bus.ts            ← WS + 내부 리스너 broadcast (18L)
 │   │   ├── logger.ts         ← 로거 유틸 (11L)
@@ -85,7 +85,7 @@ cli-claw-ts/
 │           ├── theme.js      ← 다크/라이트 테마 토글 (38L)
 │           └── appname.js    ← Agent Name 커스텀 (43L)
 ├── bin/
-│   ├── cli-claw.ts           ← 11개 서브커맨드 라우팅
+│   ├── cli-jaw.ts           ← 11개 서브커맨드 라우팅
 │   ├── postinstall.ts        ← npm install 후 5-CLI 자동설치 + MCP + 스킬 (212L)
 │   └── commands/
 │       ├── serve.ts          ← 서버 시작 (--port/--host/--open)
@@ -128,11 +128,11 @@ cli-claw-ts/
 └── devlog/                   ← MVP 12 Phase + Post-MVP devlogs
 ```
 
-### 런타임 데이터 (`~/.cli-claw/`)
+### 런타임 데이터 (`~/.cli-jaw/`)
 
 | 경로               | 설명                                      |
 | ------------------ | ----------------------------------------- |
-| `claw.db`          | SQLite DB                                 |
+| `jaw.db`          | SQLite DB                                 |
 | `settings.json`    | 사용자 설정                               |
 | `mcp.json`         | 통합 MCP 설정 (source of truth)           |
 | `prompts/`         | A-1, A-2, HEARTBEAT 프롬프트              |

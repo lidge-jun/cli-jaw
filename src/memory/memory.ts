@@ -1,12 +1,12 @@
 /**
  * src/memory.js — Phase A: grep-based persistent memory
  */
-import { CLAW_HOME } from '../core/config.js';
+import { JAW_HOME } from '../core/config.js';
 import { join } from 'path';
 import fs from 'fs';
 import { spawnSync } from 'child_process';
 
-export const MEMORY_DIR = join(CLAW_HOME, 'memory');
+export const MEMORY_DIR = join(JAW_HOME, 'memory');
 
 const DEFAULT_MEMORY = `# Memory
 
@@ -124,6 +124,6 @@ export function loadMemoryForPrompt(maxChars = 1500) {
     const content = fs.readFileSync(memPath, 'utf8').trim();
     if (!content || content === DEFAULT_MEMORY.trim()) return '';
     return content.length > maxChars
-        ? content.slice(0, maxChars) + '\n...(use `cli-claw memory read MEMORY.md` for full content)'
+        ? content.slice(0, maxChars) + '\n...(use `cli-jaw memory read MEMORY.md` for full content)'
         : content;
 }

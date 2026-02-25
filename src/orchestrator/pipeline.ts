@@ -55,7 +55,7 @@ function initAgentPhases(subtasks: any[]) {
         const effectiveProfile = profile.length > 0 ? profile : [fullProfile[fullProfile.length - 1]!];
 
         if (startPhase > minPhase) {
-            console.log(`[claw:phase-skip] ${st.agent} (${role}): skipping to phase ${startPhase}`);
+            console.log(`[jaw:phase-skip] ${st.agent} (${role}): skipping to phase ${startPhase}`);
         }
 
         return {
@@ -233,12 +233,12 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
 
     // Triage: 간단한 메시지는 직접 응답
     if (employees.length > 0 && !needsOrchestration(prompt)) {
-        console.log(`[claw:triage] direct response (no orchestration needed)`);
+        console.log(`[jaw:triage] direct response (no orchestration needed)`);
         const { promise } = spawnAgent(prompt, { origin });
         const result = await promise as Record<string, any>;
         const lateSubtasks = parseSubtasks(result.text);
         if (lateSubtasks?.length) {
-            console.log(`[claw:triage] agent chose to dispatch (${lateSubtasks.length} subtasks)`);
+            console.log(`[jaw:triage] agent chose to dispatch (${lateSubtasks.length} subtasks)`);
             const worklog = createWorklog(prompt);
             broadcast('worklog_created', { path: worklog.path });
             clearAllEmployeeSessions.run();
@@ -312,7 +312,7 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
 
     // Agent 자율 판단: subtask 불필요 → 직접 응답
     if (directAnswer) {
-        console.log('[claw:triage] planning agent chose direct response');
+        console.log('[jaw:triage] planning agent chose direct response');
         broadcast('agent_done', { text: directAnswer, origin });
         broadcast('orchestrate_done', { text: directAnswer, origin });
         return;

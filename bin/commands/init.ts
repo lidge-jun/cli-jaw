@@ -1,5 +1,5 @@
 /**
- * cli-claw init — Phase 9.3
+ * cli-jaw init — Phase 9.3
  * Interactive setup wizard or --non-interactive flag mode.
  */
 import { createInterface } from 'node:readline';
@@ -8,8 +8,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const CLAW_HOME = path.join(os.homedir(), '.cli-claw');
-const SETTINGS_PATH = path.join(CLAW_HOME, 'settings.json');
+const JAW_HOME = path.join(os.homedir(), '.cli-jaw');
+const SETTINGS_PATH = path.join(JAW_HOME, 'settings.json');
 
 const { values } = parseArgs({
     args: process.argv.slice(3),
@@ -27,7 +27,7 @@ const { values } = parseArgs({
 });
 
 // Ensure home dir
-fs.mkdirSync(CLAW_HOME, { recursive: true });
+fs.mkdirSync(JAW_HOME, { recursive: true });
 
 // Load existing settings (merge)
 let settings: Record<string, any> = {};
@@ -39,7 +39,7 @@ const ask = (q: string, def: string): Promise<string> => new Promise(r => {
     rl.question(`  ${q} [${def}]: `, (ans) => r(ans.trim() || def));
 });
 
-console.log('\n  🦞 cli-claw 초기 설정\n');
+console.log('\n  🦈 cli-jaw 초기 설정\n');
 
 // Collect
 const workingDir = values['working-dir'] ||
@@ -70,7 +70,7 @@ if (values['non-interactive']) {
 
 // Skills dir
 const skillsDir = values['skills-dir'] ||
-    await ask('Skills directory', settings.skillsDir || path.join(CLAW_HOME, 'skills'));
+    await ask('Skills directory', settings.skillsDir || path.join(JAW_HOME, 'skills'));
 
 rl.close();
 
@@ -89,7 +89,7 @@ fs.writeFileSync(SETTINGS_PATH, JSON.stringify(merged, null, 2));
 
 // Ensure skills dir + heartbeat.json
 fs.mkdirSync(skillsDir as string, { recursive: true });
-const hbPath = path.join(CLAW_HOME, 'heartbeat.json');
+const hbPath = path.join(JAW_HOME, 'heartbeat.json');
 if (!fs.existsSync(hbPath)) {
     fs.writeFileSync(hbPath, JSON.stringify({ jobs: [] }, null, 2));
 }
@@ -112,6 +112,6 @@ console.log(`
   Settings    : ${SETTINGS_PATH}
 
   다음 단계:
-    cli-claw doctor     설치 상태 진단
-    cli-claw serve      서버 시작
+    cli-jaw doctor     설치 상태 진단
+    cli-jaw serve      서버 시작
 `);

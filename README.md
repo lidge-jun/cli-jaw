@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🦞 CLI-CLAW
+# 🦈 CLI-JAW
 
 ### Your Personal AI Assistant — Powered by 5 AI Engines
 
@@ -13,23 +13,23 @@
 
 **English** / [한국어](README.ko.md) / [中文](README.zh-CN.md)
 
-![CLI-CLAW Web UI](docs/screenshots/web-ui.png)
+![CLI-JAW Web UI](docs/screenshots/web-ui.png)
 
 </div>
 
 ---
 
-## What is CLI-CLAW?
+## What is CLI-JAW?
 
-CLI-CLAW is a **personal AI assistant** that lives on your machine and works from the interfaces you already use — **Web, Terminal, and Telegram**. Ask it anything, delegate tasks, automate your workflows.
+CLI-JAW is a **personal AI assistant** that lives on your machine and works from the interfaces you already use — **Web, Terminal, and Telegram**. Ask it anything, delegate tasks, automate your workflows.
 
 > 💬 *"Summarize today's schedule"* → answer on Telegram  
 > 💬 *"Refactor this module and write tests"* → sub-agents handle it while you grab coffee  
 > 💬 *"Download that PDF and put the key points in Notion"* → browser + Notion skill, done
 
-Unlike single-model assistants, CLI-CLAW orchestrates **5 AI engines** (Claude, Codex, Gemini, OpenCode, Copilot) through their official CLIs — giving you the best of every provider in one unified experience. If one engine is busy, it automatically falls back to the next. 107 built-in skills handle everything from browser automation to document generation.
+Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, Codex, Gemini, OpenCode, Copilot) through their official CLIs — giving you the best of every provider in one unified experience. If one engine is busy, it automatically falls back to the next. 107 built-in skills handle everything from browser automation to document generation.
 
-| | Why CLI-CLAW? |
+| | Why CLI-JAW? |
 |---|---|
 | 🛡️ **TOS-Safe** | Uses official CLIs only — no API key scraping, no reverse engineering, no ban risk. |
 | 🤖 **Verified Agent Tools** | 5 battle-tested coding agents (Claude, Codex, Gemini, OpenCode, Copilot) under one roof. |
@@ -37,7 +37,7 @@ Unlike single-model assistants, CLI-CLAW orchestrates **5 AI engines** (Claude, 
 | 🎭 **Orchestrated Performance** | Complex tasks split across specialized sub-agents for maximum throughput. |
 | 📦 **107 Built-in Skills** | Browser automation, document generation, Telegram, memory — ready out of the box. |
 
-![CLI-CLAW Terminal](docs/screenshots/terminal-cli.png)
+![CLI-JAW Terminal](docs/screenshots/terminal-cli.png)
 
 ---
 
@@ -45,7 +45,7 @@ Unlike single-model assistants, CLI-CLAW orchestrates **5 AI engines** (Claude, 
 
 ```mermaid
 graph LR
-    YOU["👤 You"] -->|Web / Terminal / Telegram| CLAW["🦞 CLI-CLAW"]
+    YOU["👤 You"] -->|Web / Terminal / Telegram| CLAW["🦈 CLI-JAW"]
     CLAW -->|spawn| C["Claude"]
     CLAW -->|spawn| X["Codex"]
     CLAW -->|spawn| G["Gemini"]
@@ -75,7 +75,7 @@ graph LR
 
 ```bash
 # Install (sets up everything: 5 CLIs, MCP, 105+ skills)
-npm install -g cli-claw
+npm install -g cli-jaw
 
 # Authenticate whichever CLIs you want (even 1 is enough)
 claude auth          # Anthropic
@@ -83,9 +83,9 @@ codex login          # OpenAI
 gemini               # Google (first run)
 
 # Go
-cli-claw doctor      # Check what's installed (12 checks)
-cli-claw serve       # Web UI → http://localhost:3457
-cli-claw chat        # Or use terminal TUI
+cli-jaw doctor      # Check what's installed (12 checks)
+cli-jaw serve       # Web UI → http://localhost:3457
+cli-jaw chat        # Or use terminal TUI
 ```
 
 > 💡 **You don't need all 5.** Even one CLI is enough to start. Copilot and OpenCode have free tiers.
@@ -125,7 +125,7 @@ cli-claw chat        # Or use terminal TUI
 88+ more skills ready to use — spotify, weather, deep-research, tts, video-downloader, apple-reminders, 1password, terraform, postgres, jupyter-notebook, sentry, and more.
 
 ```bash
-cli-claw skill install <name>    # Activate a reference skill permanently
+cli-jaw skill install <name>    # Activate a reference skill permanently
 ```
 
 </details>
@@ -137,7 +137,7 @@ cli-claw skill install <name>    # Activate a reference skill permanently
 Your assistant isn't tied to your desk. Chat from anywhere via Telegram:
 
 ```
-📱 Telegram ←→ 🦞 CLI-CLAW ←→ 🤖 AI Engines
+📱 Telegram ←→ 🦈 CLI-JAW ←→ 🤖 AI Engines
 ```
 
 **What you can do from Telegram:**
@@ -196,7 +196,7 @@ Your assistant **decides by itself** whether a task needs orchestration or a dir
 ## 🔌 MCP — One Config, Five AI Engines
 
 ```bash
-cli-claw mcp install @anthropic/context7    # Install once
+cli-jaw mcp install @anthropic/context7    # Install once
 # → Automatically syncs to Claude, Codex, Gemini, OpenCode, Copilot
 ```
 
@@ -218,15 +218,15 @@ No more editing 5 different config files. Install once → all AI engines get it
 ## ⌨️ CLI Commands
 
 ```bash
-cli-claw serve                         # Start server
-cli-claw chat                          # Terminal TUI
-cli-claw doctor                        # Diagnostics (12 checks)
-cli-claw skill install <name>          # Install a skill
-cli-claw mcp install <package>         # Install MCP → syncs to all 5 CLIs
-cli-claw memory search <query>         # Search memory
-cli-claw browser start                 # Launch Chrome (CDP)
-cli-claw browser vision-click "Login"  # AI-powered click
-cli-claw reset                         # Full reset
+cli-jaw serve                         # Start server
+cli-jaw chat                          # Terminal TUI
+cli-jaw doctor                        # Diagnostics (12 checks)
+cli-jaw skill install <name>          # Install a skill
+cli-jaw mcp install <package>         # Install MCP → syncs to all 5 CLIs
+cli-jaw memory search <query>         # Search memory
+cli-jaw browser start                 # Launch Chrome (CDP)
+cli-jaw browser vision-click "Login"  # AI-powered click
+cli-jaw reset                         # Full reset
 ```
 
 ---
@@ -263,10 +263,10 @@ npm run build          # tsc → dist/
 
 # Run from source (development)
 npm run dev            # tsx server.ts (hot-reload friendly)
-npx tsx bin/cli-claw.ts serve   # Run CLI directly from .ts
+npx tsx bin/cli-jaw.ts serve   # Run CLI directly from .ts
 
 # Run from build (production)
-node dist/bin/cli-claw.js serve
+node dist/bin/cli-jaw.js serve
 ```
 
 **Project structure:**
@@ -324,15 +324,15 @@ Contributions are welcome! Here's how to get started:
 2. Run `npm run build && npm test` to make sure everything works
 3. Submit a PR — we'll review it promptly
 
-> 📋 Found a bug or have a feature idea? [Open an issue](https://github.com/cli-claw/cli-claw/issues)
+> 📋 Found a bug or have a feature idea? [Open an issue](https://github.com/cli-jaw/cli-jaw/issues)
 
 ---
 
 <div align="center">
 
-**⭐ If CLI-CLAW helps you, give it a star — it means a lot!**
+**⭐ If CLI-JAW helps you, give it a star — it means a lot!**
 
-Made with ❤️ by the CLI-CLAW community
+Made with ❤️ by the CLI-JAW community
 
 [ISC License](LICENSE)
 

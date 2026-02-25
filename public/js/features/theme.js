@@ -26,9 +26,11 @@ function toggleTheme() {
 function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', theme);
 
-    // Update button icon
+    // Update button icon (SVG sun/moon swap)
     const btn = document.getElementById('toggleTheme');
-    if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
+    if (btn) {
+        btn.classList.toggle('is-light', theme === 'light');
+    }
 
     // Swap highlight.js theme
     const hljsLink = document.getElementById('hljsTheme');

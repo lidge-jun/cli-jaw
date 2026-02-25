@@ -268,7 +268,7 @@ export class AcpClient extends EventEmitter {
     async initialize() {
         const result = await this.request('initialize', {
             protocolVersion: 1,
-            clientInfo: { name: 'cli-claw', version: '0.1.0' },
+            clientInfo: { name: 'cli-jaw', version: '0.1.0' },
             capabilities: {
                 fs: { readTextFile: false, writeTextFile: false },
                 terminal: false,

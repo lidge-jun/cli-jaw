@@ -5,7 +5,7 @@ metadata:
   openclaw:
     emoji: "👁️"
     requires:
-      bins: ["codex", "cli-claw"]
+      bins: ["codex", "cli-jaw"]
       system: ["Google Chrome"]
 ---
 
@@ -17,26 +17,26 @@ Uses `codex exec -i` for vision-based coordinate extraction.
 ## Quick Start (One Command — Phase 2)
 
 ```bash
-cli-claw browser vision-click "Submit button"
+cli-jaw browser vision-click "Submit button"
 # → screenshot → codex vision → DPR correction → click → verify
 # 🖱️ vision-clicked "Submit button" at (400, 276) via codex
 ```
 
 With options:
 ```bash
-cli-claw browser vision-click "Login" --double          # double-click
-cli-claw browser vision-click "Menu" --provider codex   # explicit provider
+cli-jaw browser vision-click "Login" --double          # double-click
+cli-jaw browser vision-click "Menu" --provider codex   # explicit provider
 ```
 
 ## Prerequisites
 
 - **Codex CLI** installed and authenticated
-- cli-claw server running (`cli-claw serve`)
-- Browser started (`cli-claw browser start`)
+- cli-jaw server running (`cli-jaw serve`)
+- Browser started (`cli-jaw browser start`)
 
 ## When to Use
 
-Use when `cli-claw browser snapshot` returns **NO ref** for target:
+Use when `cli-jaw browser snapshot` returns **NO ref** for target:
 - Canvas elements, iframes, Shadow DOM
 - Dynamically rendered content (WebGL, SVG)
 - Elements behind overlays or custom web components
@@ -46,18 +46,18 @@ Use when `cli-claw browser snapshot` returns **NO ref** for target:
 ## Manual Workflow (Phase 1)
 
 ```
-1. cli-claw browser snapshot        → Check if target has a ref ID
-2. If ref exists → cli-claw browser click <ref>  (normal path)
+1. cli-jaw browser snapshot        → Check if target has a ref ID
+2. If ref exists → cli-jaw browser click <ref>  (normal path)
 3. If NO ref → vision-click fallback:
-   a. cli-claw browser screenshot   → Save screenshot (check output for path)
+   a. cli-jaw browser screenshot   → Save screenshot (check output for path)
    b. codex exec -i <screenshot_path> --json \
         --dangerously-bypass-approvals-and-sandbox \
         --skip-git-repo-check \
         'Screenshot is WxHpx. Find "<TARGET>" center pixel coordinate. \
          Return ONLY JSON: {"found":true,"x":int,"y":int,"description":"..."}'
    c. Parse JSON response for x, y coordinates
-   d. cli-claw browser mouse-click <x> <y>
-   e. cli-claw browser snapshot     → Verify click worked
+   d. cli-jaw browser mouse-click <x> <y>
+   e. cli-jaw browser snapshot     → Verify click worked
 ```
 
 ## Commands
@@ -66,8 +66,8 @@ Use when `cli-claw browser snapshot` returns **NO ref** for target:
 
 ```bash
 # 1. Take screenshot
-cli-claw browser screenshot
-# Output: /Users/you/.cli-claw/screenshots/screenshot-20260224-1200.png
+cli-jaw browser screenshot
+# Output: /Users/you/.cli-jaw/screenshots/screenshot-20260224-1200.png
 
 # 2. Extract coordinates with Codex vision
 codex exec -i /path/to/screenshot.png --json \
@@ -77,16 +77,16 @@ codex exec -i /path/to/screenshot.png --json \
    Return ONLY JSON: {"found":true,"x":640,"y":400,"description":"blue submit button"}'
 
 # 3. Click at coordinates
-cli-claw browser mouse-click 640 400
+cli-jaw browser mouse-click 640 400
 
 # 4. Verify
-cli-claw browser snapshot
+cli-jaw browser snapshot
 ```
 
 ### Mouse Click (pixel coordinates)
 
 ```bash
-cli-claw browser mouse-click <x> <y>          # Single click
+cli-jaw browser mouse-click <x> <y>          # Single click
 # Double-click via API:
 curl -X POST http://localhost:3457/api/browser/act \
   -H 'Content-Type: application/json' \

@@ -2,9 +2,69 @@
 .chat-area {
     display: flex;
     flex-direction: column;
+    border-left: 1px solid var(--border);
     border-right: 1px solid var(--border);
     overflow: hidden;
     min-height: 0;
+    background: var(--bg);
+}
+
+/* ── Theme Toggle Switch (Pill) ── */
+.theme-switch {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+    transition: background 0.3s, border-color 0.3s;
+}
+
+.theme-switch:hover {
+    border-color: var(--accent);
+}
+
+.theme-switch-knob {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--text);
+    transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s;
+}
+
+/* Moon crescent in dark mode via box-shadow */
+.theme-switch-knob::after {
+    content: '';
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    top: 3px;
+    left: 5px;
+    box-shadow: -3px 0 0 var(--surface);
+    background: transparent;
+    transition: all 0.3s;
+}
+
+/* Light mode: knob slides right, amber sun */
+.theme-switch.is-light .theme-switch-knob {
+    left: 23px;
+    background: #f59e0b;
+}
+
+.theme-switch.is-light .theme-switch-knob::after {
+    box-shadow: none;
+    background: #fbbf24;
+    width: 4px;
+    height: 4px;
+    top: 6px;
+    left: 6px;
 }
 
 .chat-header {

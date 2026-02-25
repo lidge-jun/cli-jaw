@@ -248,7 +248,7 @@ export function makeClaudeToolKeyForTest(event: any, label: any) {
     return makeClaudeToolKey(event, label);
 }
 
-// ─── ACP session/update → cli-claw internal event ────────────────
+// ─── ACP session/update → cli-jaw internal event ────────────────
 // Official ACP schema: update.sessionUpdate is the discriminator field.
 // Types: agent_message_chunk, agent_thought_chunk, tool_call, tool_call_update, plan
 

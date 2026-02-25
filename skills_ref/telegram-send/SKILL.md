@@ -26,13 +26,13 @@ Keep your normal text response in stdout.
 
 - Non-text requires `file_path`.
 - Bot API requires `chat_id`.
-- Token is read from `~/.cli-claw/settings.json`.
+- Token is read from `~/.cli-jaw/settings.json`.
 
 ## 1) Read token and chat id
 
 ```bash
-TOKEN=$(jq -r '.telegram.token' ~/.cli-claw/settings.json)
-CHAT_ID=$(jq -r '.telegram.allowedChatIds[-1]' ~/.cli-claw/settings.json)
+TOKEN=$(jq -r '.telegram.token' ~/.cli-jaw/settings.json)
+CHAT_ID=$(jq -r '.telegram.allowedChatIds[-1]' ~/.cli-jaw/settings.json)
 ```
 
 If `CHAT_ID` is `null` (no previous Telegram message), recover via local endpoint:

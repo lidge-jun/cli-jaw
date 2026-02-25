@@ -1,7 +1,7 @@
 /**
- * cli-claw employee — employee utilities
+ * cli-jaw employee — employee utilities
  * Usage:
- *   cli-claw employee reset [--port 3457]
+ *   cli-jaw employee reset [--port 3457]
  */
 import { parseArgs } from 'node:util';
 import { getServerUrl } from '../../src/core/config.js';
@@ -20,7 +20,7 @@ const { values } = parseArgs({
 function printHelp() {
     console.log(`
   Usage:
-    cli-claw employee reset [--port 3457]
+    cli-jaw employee reset [--port 3457]
 
   Description:
     Reset employees to default 5 profiles (frontend/backend/data/docs/qa).

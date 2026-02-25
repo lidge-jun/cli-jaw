@@ -24,15 +24,15 @@ export const APP_VERSION: string = pkg.version;
 
 // ─── Paths ───────────────────────────────────────────
 
-export const CLAW_HOME = join(os.homedir(), '.cli-claw');
-export const PROMPTS_DIR = join(CLAW_HOME, 'prompts');
-export const DB_PATH = join(CLAW_HOME, 'claw.db');
-export const SETTINGS_PATH = join(CLAW_HOME, 'settings.json');
-export const HEARTBEAT_JOBS_PATH = join(CLAW_HOME, 'heartbeat.json');
-export const UPLOADS_DIR = join(CLAW_HOME, 'uploads');
-export const MIGRATION_MARKER = join(CLAW_HOME, '.migrated-v1');
-export const SKILLS_DIR = join(CLAW_HOME, 'skills');
-export const SKILLS_REF_DIR = join(CLAW_HOME, 'skills_ref');
+export const JAW_HOME = join(os.homedir(), '.cli-jaw');
+export const PROMPTS_DIR = join(JAW_HOME, 'prompts');
+export const DB_PATH = join(JAW_HOME, 'jaw.db');
+export const SETTINGS_PATH = join(JAW_HOME, 'settings.json');
+export const HEARTBEAT_JOBS_PATH = join(JAW_HOME, 'heartbeat.json');
+export const UPLOADS_DIR = join(JAW_HOME, 'uploads');
+export const MIGRATION_MARKER = join(JAW_HOME, '.migrated-v1');
+export const SKILLS_DIR = join(JAW_HOME, 'skills');
+export const SKILLS_REF_DIR = join(JAW_HOME, 'skills_ref');
 
 // ─── Server URLs ────────────────────────────────────
 export const DEFAULT_PORT = '3457';
@@ -43,7 +43,7 @@ export function getWsUrl(port: string | number | undefined) {
     return `ws://localhost:${port || process.env.PORT || DEFAULT_PORT}`;
 }
 
-/** Locate the cli-claw package root (for bundled skills_ref/) */
+/** Locate the cli-jaw package root (for bundled skills_ref/) */
 export function getProjectDir() {
     return join(new URL('.', import.meta.url).pathname, '..');
 }
@@ -61,11 +61,24 @@ export function ensureDirs() {
 
 export function runMigration(projectDir: string) {
     if (fs.existsSync(MIGRATION_MARKER)) return;
+
+    // Legacy claw.db → jaw.db rename (in-place)
+    const legacyClaw = join(JAW_HOME, 'claw.db');
+    if (fs.existsSync(legacyClaw) && !fs.existsSync(DB_PATH)) {
+        fs.renameSync(legacyClaw, DB_PATH);
+        for (const ext of ['-wal', '-shm']) {
+            const src = legacyClaw + ext;
+            const dst = DB_PATH + ext;
+            if (fs.existsSync(src)) fs.renameSync(src, dst);
+        }
+        console.log('[migrate] claw.db → jaw.db');
+    }
+
     const legacySettings = join(projectDir, 'settings.json');
-    const legacyDb = join(projectDir, 'claw.db');
+    const legacyDb = join(projectDir, 'jaw.db');
     if (fs.existsSync(legacySettings) && !fs.existsSync(SETTINGS_PATH)) {
         fs.copyFileSync(legacySettings, SETTINGS_PATH);
-        console.log('[migrate] settings.json → ~/.cli-claw/');
+        console.log('[migrate] settings.json → ~/.cli-jaw/');
     }
     if (fs.existsSync(legacyDb) && !fs.existsSync(DB_PATH)) {
         fs.copyFileSync(legacyDb, DB_PATH);
@@ -73,7 +86,7 @@ export function runMigration(projectDir: string) {
             const src = legacyDb + ext;
             if (fs.existsSync(src)) fs.copyFileSync(src, DB_PATH + ext);
         }
-        console.log('[migrate] claw.db → ~/.cli-claw/');
+        console.log('[migrate] jaw.db → ~/.cli-jaw/');
     }
     fs.writeFileSync(MIGRATION_MARKER, JSON.stringify({ migratedAt: new Date().toISOString() }));
 }

@@ -3,7 +3,7 @@
 
 import fs from 'fs';
 import { join } from 'path';
-import { CLAW_HOME } from '../core/config.js';
+import { JAW_HOME } from '../core/config.js';
 
 // ─── Write Lock (prevents race condition in parallel agent writes) ──
 const writeLocks = new Map<string, Promise<void>>();
@@ -18,7 +18,7 @@ function withWriteLock(filePath: string, fn: () => void): void {
     writeLocks.set(filePath, next);
 }
 
-export const WORKLOG_DIR = join(CLAW_HOME, 'worklogs');
+export const WORKLOG_DIR = join(JAW_HOME, 'worklogs');
 const LATEST_LINK = join(WORKLOG_DIR, 'latest.md');
 
 // Phase 번호 매핑 (orchestrator.js와 공유)

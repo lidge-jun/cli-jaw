@@ -81,7 +81,7 @@ initTelegram()
 
 ### 작업 스케줄
 
-- 설정: `~/.cli-claw/heartbeat.md` (마크다운 테이블)
+- 설정: `~/.cli-jaw/heartbeat.md` (마크다운 테이블)
 - 각 작업: name, schedule (cron), prompt, enabled
 - busy guard: 이전 작업 실행 중이면 스킵
 - telegram 통해 결과 전송

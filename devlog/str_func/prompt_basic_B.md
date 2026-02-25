@@ -1,7 +1,7 @@
 # prompt_basic_B — 조립 결과 + 스킬/MCP/하트비트 기본값
 
 > B.md = `getSystemPrompt()` 결과 캐시
-> 경로: `~/.cli-claw/prompts/B.md` + `{workDir}/AGENTS.md`
+> 경로: `~/.cli-jaw/prompts/B.md` + `{workDir}/AGENTS.md`
 > 소스: `src/prompt/builder.ts` → `regenerateB()` (L502–523)
 > Phase 20.6: `src/prompt.ts` → `src/prompt/builder.ts` 이동
 
@@ -73,7 +73,7 @@
 | Browser Control | snapshot→act→verify 패턴 |
 | Telegram File Delivery | POST /api/telegram/send |
 | Active Skills | 동적 로딩 (name list) |
-| Memory | cli-claw memory commands |
+| Memory | cli-jaw memory commands |
 | **Task Completion Protocol** | `phases_completed` JSON 출력 규칙 (NEW) |
 
 ### Employee Prompt V2 (getEmployeePromptV2, L442–498)
@@ -108,8 +108,8 @@ V1 + 추가 주입:
 
 ### Reference Skills (비활성, 요청 시 사용)
 
-- 소스: `~/.cli-claw/skills_ref/` (번들 + Codex 스킬)
-- 레지스트리: `~/.cli-claw/skills_ref/registry.json`
+- 소스: `~/.cli-jaw/skills_ref/` (번들 + Codex 스킬)
+- 레지스트리: `~/.cli-jaw/skills_ref/registry.json`
 - 현재 87개 (프롬프트에 compact CSV로 주입)
 
 ---
@@ -130,7 +130,7 @@ Dev Skills 참고 안내 포함: role별 자동 주입 스킬 목록 (dev-fronte
 
 ## MCP 기본값
 
-### Source of Truth: `~/.cli-claw/mcp.json`
+### Source of Truth: `~/.cli-jaw/mcp.json`
 
 코드 기본 서버: `lib/mcp-sync.ts` → `DEFAULT_MCP_SERVERS`
 
@@ -152,8 +152,8 @@ Dev Skills 참고 안내 포함: role별 자동 주입 스킬 목록 (dev-fronte
 
 ## 하트비트 기본값
 
-- HEARTBEAT.md: `~/.cli-claw/prompts/HEARTBEAT.md` (empty template)
-- heartbeat.json: `~/.cli-claw/heartbeat.json` (잡 등록, auto-reload)
+- HEARTBEAT.md: `~/.cli-jaw/prompts/HEARTBEAT.md` (empty template)
+- heartbeat.json: `~/.cli-jaw/heartbeat.json` (잡 등록, auto-reload)
 - 잡 0개 → 프롬프트에 하트비트 섹션 미주입
 - 잡 1+개 → `## Current Heartbeat Jobs` 섹션 주입
 

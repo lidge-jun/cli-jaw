@@ -88,7 +88,7 @@
 .perm-btn.active {
     border-color: var(--accent);
     color: var(--accent);
-    background: #1a0a0a;
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg));
 }
 
 textarea.prompt-editor {
@@ -119,7 +119,7 @@ textarea.prompt-editor {
 .skill-filter.active {
     border-color: var(--accent);
     color: var(--accent);
-    background: #1a0a0a;
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg));
 }
 
 .skill-card {

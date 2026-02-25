@@ -1,7 +1,7 @@
 /* ── Left Sidebar ── */
 .sidebar-left {
     background: linear-gradient(180deg, var(--surface) 0%, color-mix(in srgb, var(--surface) 95%, #000) 100%);
-    border-right: 1px solid var(--border);
+    border-right: 1px solid color-mix(in srgb, var(--border) 80%, var(--accent) 20%);
     box-shadow: inset -1px 0 0 var(--border);
     padding: 48px 16px 16px;
     display: flex;
@@ -16,6 +16,7 @@
     color: var(--accent);
     font-family: var(--font-display);
     letter-spacing: 1px;
+    text-shadow: 0 0 20px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .section-title {
@@ -97,6 +98,7 @@
 /* ── Right Sidebar ── */
 .sidebar-right {
     background: linear-gradient(180deg, var(--surface) 0%, color-mix(in srgb, var(--surface) 95%, #000) 100%);
+    border-left: 1px solid color-mix(in srgb, var(--border) 80%, var(--accent) 20%);
     box-shadow: inset 1px 0 0 var(--border);
     overflow-y: auto;
     display: flex;
@@ -220,6 +222,14 @@
 .sidebar-left,
 .sidebar-right {
     position: relative;
+    contain: layout style;
+}
+
+/* Sidebar content transition (opacity instead of display:none to avoid reflow) */
+.sidebar-left>*:not(.sidebar-toggle),
+.sidebar-right>*:not(.sidebar-toggle) {
+    opacity: 1;
+    transition: opacity 0.15s 0.05s ease-in;
 }
 
 .sidebar-left .sidebar-toggle,
@@ -237,21 +247,27 @@
     right: 10px;
 }
 
-/* Collapsed states */
+/* Collapsed states — opacity fade instead of display:none */
 body.left-collapsed .sidebar-left>*:not(.sidebar-toggle) {
-    display: none;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.1s ease-out;
 }
 
 body.left-collapsed .sidebar-left {
     padding: 16px 10px;
+    overflow: hidden;
 }
 
 body.right-collapsed .sidebar-right>*:not(.sidebar-toggle) {
-    display: none;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.1s ease-out;
 }
 
 body.right-collapsed .sidebar-right {
     padding: 16px 10px;
+    overflow: hidden;
 }
 
 /* Responsive — auto-collapse under 900px */
@@ -261,11 +277,13 @@ body.right-collapsed .sidebar-right {
     }
 
     body:not(.left-expanded) .sidebar-left>*:not(.sidebar-toggle) {
-        display: none;
+        opacity: 0;
+        pointer-events: none;
     }
 
     body:not(.left-expanded) .sidebar-left {
         padding: 16px 10px;
+        overflow: hidden;
     }
 
     body:not(.right-expanded) {
@@ -273,11 +291,13 @@ body.right-collapsed .sidebar-right {
     }
 
     body:not(.right-expanded) .sidebar-right>*:not(.sidebar-toggle) {
-        display: none;
+        opacity: 0;
+        pointer-events: none;
     }
 
     body:not(.right-expanded) .sidebar-right {
         padding: 16px 10px;
+        overflow: hidden;
     }
 }
 

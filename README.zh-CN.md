@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🦞 CLI-CLAW
+# 🦈 CLI-JAW
 
 ### 内置 5 大 AI 引擎的专属本地助手
 
@@ -13,23 +13,23 @@
 
 [English](README.md) / [한국어](README.ko.md) / **中文**
 
-![CLI-CLAW Web UI](docs/screenshots/web-ui.png)
+![CLI-JAW Web UI](docs/screenshots/web-ui.png)
 
 </div>
 
 ---
 
-## CLI-CLAW 是什么？
+## CLI-JAW 是什么？
 
-CLI-CLAW 是驻留在您本地机器上的**专属 AI 助手**，并在您熟悉的界面中运行 — **网页、终端和 Telegram**。您可以向它提出任何问题、委派任务或是自动化您的工作流。
+CLI-JAW 是驻留在您本地机器上的**专属 AI 助手**，并在您熟悉的界面中运行 — **网页、终端和 Telegram**。您可以向它提出任何问题、委派任务或是自动化您的工作流。
 
 > 💬 *"帮我整理一下今天的日程"* → 直接在 Telegram 上收到整理好的结果  
 > 💬 *"重构这个模块，顺便写好测试"* → 子 Agent 搞定，你喝杯咖啡回来就行  
 > 💬 *"把那个 PDF 下载下来，关键信息放到 Notion 里"* → 浏览器 + Notion 技能组合，搞定
 
-与单一模型的助手不同，CLI-CLAW 通过官方 CLI 命令行工具对 **5 大 AI 引擎**（Claude、Codex、Gemini、OpenCode、Copilot）进行编排 — 为您提供各大供应商最优势的能力及统一的体验。当一个引擎处于繁忙状态时，它会自动无缝切换至下一个。107 个内置技能可处理从浏览器自动化到文档生成的所有事务。
+与单一模型的助手不同，CLI-JAW 通过官方 CLI 命令行工具对 **5 大 AI 引擎**（Claude、Codex、Gemini、OpenCode、Copilot）进行编排 — 为您提供各大供应商最优势的能力及统一的体验。当一个引擎处于繁忙状态时，它会自动无缝切换至下一个。107 个内置技能可处理从浏览器自动化到文档生成的所有事务。
 
-| | 为什么选择 CLI-CLAW？ |
+| | 为什么选择 CLI-JAW？ |
 |---|---|
 | 🛡️ **安全合规 (TOS-Safe)** | 仅使用官方 CLI — 无 API 密钥抓取、无逆向工程、无封号风险。 |
 | 🤖 **经过验证的智能体工具** | 5 大实战级编码智能体（Claude、Codex、Gemini、OpenCode、Copilot）集于一身。 |
@@ -37,7 +37,7 @@ CLI-CLAW 是驻留在您本地机器上的**专属 AI 助手**，并在您熟悉
 | 🎭 **基于编排的性能优化** | 复杂的任务会被拆分给专业的子智能体，以实现效率最大化。 |
 | 📦 **107 个内置技能** | 浏览器自动化、文档生成、Telegram 通知、持久化记忆 — 开箱即用。 |
 
-![CLI-CLAW 终端](docs/screenshots/terminal-cli.png)
+![CLI-JAW 终端](docs/screenshots/terminal-cli.png)
 
 ---
 
@@ -45,7 +45,7 @@ CLI-CLAW 是驻留在您本地机器上的**专属 AI 助手**，并在您熟悉
 
 ```mermaid
 graph LR
-    YOU["👤 您"] -->|网页 / 终端 / Telegram| CLAW["🦞 CLI-CLAW"]
+    YOU["👤 您"] -->|网页 / 终端 / Telegram| CLAW["🦈 CLI-JAW"]
     CLAW -->|创建| C["Claude"]
     CLAW -->|创建| X["Codex"]
     CLAW -->|创建| G["Gemini"]
@@ -75,7 +75,7 @@ graph LR
 
 ```bash
 # 安装（自动设置一切：5 个 CLI、MCP、105+ 个技能）
-npm install -g cli-claw
+npm install -g cli-jaw
 
 # 认证你要用的 CLI（有一个就够）
 claude auth          # Anthropic
@@ -83,9 +83,9 @@ codex login          # OpenAI
 gemini               # Google（首次运行）
 
 # 开始
-cli-claw doctor      # 检查安装状态（12 项检查）
-cli-claw serve       # Web UI → http://localhost:3457
-cli-claw chat        # 或使用终端 TUI
+cli-jaw doctor      # 检查安装状态（12 项检查）
+cli-jaw serve       # Web UI → http://localhost:3457
+cli-jaw chat        # 或使用终端 TUI
 ```
 
 > 💡 **不用 5 个全装。** 有一个就能用。Copilot 和 OpenCode 都有免费额度。
@@ -125,7 +125,7 @@ cli-claw chat        # 或使用终端 TUI
 88 个技能随时待命 — Spotify、天气、深度研究、TTS、视频下载、Apple 提醒事项、1Password、Terraform、PostgreSQL、Jupyter 等。
 
 ```bash
-cli-claw skill install <name>    # 参考 → 活跃，永久激活
+cli-jaw skill install <name>    # 参考 → 活跃，永久激活
 ```
 
 </details>
@@ -137,7 +137,7 @@ cli-claw skill install <name>    # 参考 → 活跃，永久激活
 您的助手不再被局限于办公桌前。通过 Telegram 随时随地开展对话：
 
 ```
-📱 Telegram ←→ 🦞 CLI-CLAW ←→ 🤖 AI 引擎
+📱 Telegram ←→ 🦈 CLI-JAW ←→ 🤖 AI 引擎
 ```
 
 **您可以在 Telegram 中进行哪些操作：**
@@ -196,7 +196,7 @@ graph TD
 ## 🔌 MCP — 单次配置，驱动 5 大 AI 引擎
 
 ```bash
-cli-claw mcp install @anthropic/context7    # 安装一次
+cli-jaw mcp install @anthropic/context7    # 安装一次
 # → 自动同步到 Claude、Codex、Gemini、OpenCode、Copilot
 ```
 
@@ -218,15 +218,15 @@ graph LR
 ## ⌨️ CLI 命令
 
 ```bash
-cli-claw serve                         # 启动服务器
-cli-claw chat                          # 终端 TUI
-cli-claw doctor                        # 诊断（12 项检查）
-cli-claw skill install <name>          # 安装技能
-cli-claw mcp install <package>         # 安装 MCP → 同步全部 5 CLI
-cli-claw memory search <query>         # 搜索记忆
-cli-claw browser start                 # 启动 Chrome（CDP）
-cli-claw browser vision-click "登录"    # AI 智能点击
-cli-claw reset                         # 全面重置
+cli-jaw serve                         # 启动服务器
+cli-jaw chat                          # 终端 TUI
+cli-jaw doctor                        # 诊断（12 项检查）
+cli-jaw skill install <name>          # 安装技能
+cli-jaw mcp install <package>         # 安装 MCP → 同步全部 5 CLI
+cli-jaw memory search <query>         # 搜索记忆
+cli-jaw browser start                 # 启动 Chrome（CDP）
+cli-jaw browser vision-click "登录"    # AI 智能点击
+cli-jaw reset                         # 全面重置
 ```
 
 ---
@@ -263,10 +263,10 @@ npm run build          # tsc → dist/
 
 # 从源码运行（开发）
 npm run dev            # tsx server.ts
-npx tsx bin/cli-claw.ts serve   # 直接运行 .ts 文件
+npx tsx bin/cli-jaw.ts serve   # 直接运行 .ts 文件
 
 # 从构建产物运行（生产）
-node dist/bin/cli-claw.js serve
+node dist/bin/cli-jaw.js serve
 ```
 
 **项目结构：**
@@ -324,15 +324,15 @@ npm test
 2. `npm run build && npm test` 确认一切正常
 3. 提交 PR — 我们会尽快 review
 
-> 📋 发现 Bug 或者有好点子？[提个 Issue](https://github.com/cli-claw/cli-claw/issues)
+> 📋 发现 Bug 或者有好点子？[提个 Issue](https://github.com/cli-jaw/cli-jaw/issues)
 
 ---
 
 <div align="center">
 
-**⭐ 觉得 CLI-CLAW 好用？点个 Star 支持一下吧！**
+**⭐ 觉得 CLI-JAW 好用？点个 Star 支持一下吧！**
 
-Made with ❤️ by the CLI-CLAW community
+Made with ❤️ by the CLI-JAW community
 
 [ISC License](LICENSE)
 

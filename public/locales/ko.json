@@ -72,7 +72,7 @@
     "tg.fileFail": "❌ 파일 처리 실패: {msg}",
     "tg.timeout": "⏰ 시간 초과 (20분 무응답)",
     "tg.noResponse": "응답 없음",
-    "tg.connected": "🦞 Claw Agent 연결됨! 메시지를 보내면 AI 에이전트가 응답합니다.",
+    "tg.connected": "🦈 Jaw Agent 연결됨! 메시지를 보내면 AI 에이전트가 응답합니다.",
     "cli.fileNotFound": "파일 없음: {path}",
     "cli.fileSentPrompt": "[사용자가 파일을 보냈습니다: {path}]\n이 파일을 Read 도구로 읽고 분석해주세요.",
     "cli.fileSentWithMsg": "\n\n사용자 메시지: {text}",

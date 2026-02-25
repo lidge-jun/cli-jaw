@@ -1,20 +1,20 @@
 /**
- * cli-claw skill — Phase 12.1.6
+ * cli-jaw skill — Phase 12.1.6
  * Skill management: list, install, remove, info.
  *
  * Usage:
- *   cli-claw skill                    # list installed skills
- *   cli-claw skill install <name>     # install from Codex or GitHub
- *   cli-claw skill remove <name>      # delete a skill
- *   cli-claw skill info <name>        # show SKILL.md content
+ *   cli-jaw skill                    # list installed skills
+ *   cli-jaw skill install <name>     # install from Codex or GitHub
+ *   cli-jaw skill remove <name>      # delete a skill
+ *   cli-jaw skill info <name>        # show SKILL.md content
  */
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, rmSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
 
-const CLAW_HOME = join(homedir(), '.cli-claw');
-const SKILLS_DIR = join(CLAW_HOME, 'skills');
+const JAW_HOME = join(homedir(), '.cli-jaw');
+const SKILLS_DIR = join(JAW_HOME, 'skills');
 const CODEX_SKILLS = join(homedir(), '.codex', 'skills');
 
 // ─── ANSI ────────────────────────────────────
@@ -51,7 +51,7 @@ function installFromCodex(name: string) {
 }
 
 function installFromRef(name: string) {
-    const REF_DIR = join(CLAW_HOME, 'skills_ref');
+    const REF_DIR = join(JAW_HOME, 'skills_ref');
     const src = join(REF_DIR, name);
     const dst = join(SKILLS_DIR, name);
     if (existsSync(dst)) return { status: 'exists', path: dst };
@@ -95,10 +95,10 @@ const arg = process.argv[4];
 switch (sub) {
     case 'install': {
         if (!arg) {
-            console.log(`\n  Usage: cli-claw skill install <name>\n`);
+            console.log(`\n  Usage: cli-jaw skill install <name>\n`);
             console.log(`  Examples:`);
-            console.log(`    cli-claw skill install playwright`);
-            console.log(`    cli-claw skill install doc\n`);
+            console.log(`    cli-jaw skill install playwright`);
+            console.log(`    cli-jaw skill install doc\n`);
             process.exit(1);
         }
 
@@ -134,14 +134,14 @@ switch (sub) {
             console.log(`  ${c.dim}${ghResult.path}${c.reset}\n`);
         } else {
             console.log(`  ${c.red}❌ "${arg}" 스킬을 찾을 수 없습니다${c.reset}`);
-            console.log(`  ${c.dim}직접 생성: mkdir -p ~/.cli-claw/skills/${arg} && touch ~/.cli-claw/skills/${arg}/SKILL.md${c.reset}\n`);
+            console.log(`  ${c.dim}직접 생성: mkdir -p ~/.cli-jaw/skills/${arg} && touch ~/.cli-jaw/skills/${arg}/SKILL.md${c.reset}\n`);
         }
         break;
     }
 
     case 'remove': {
         if (!arg) {
-            console.log(`  Usage: cli-claw skill remove <name>`);
+            console.log(`  Usage: cli-jaw skill remove <name>`);
             process.exit(1);
         }
         const target = join(SKILLS_DIR, arg);
@@ -156,7 +156,7 @@ switch (sub) {
 
     case 'info': {
         if (!arg) {
-            console.log(`  Usage: cli-claw skill info <name>`);
+            console.log(`  Usage: cli-jaw skill info <name>`);
             process.exit(1);
         }
         const skillMd = join(SKILLS_DIR, arg, 'SKILL.md');
@@ -180,10 +180,10 @@ switch (sub) {
                 console.log(`  ${c.cyan}•${c.reset} ${c.bold}${s.name}${c.reset}${s.desc ? `  ${c.dim}${s.desc}${c.reset}` : ''}`);
             }
         }
-        console.log(`\n  ${c.dim}cli-claw skill install <name>  — 스킬 설치${c.reset}`);
-        console.log(`  ${c.dim}cli-claw skill info <name>     — 상세 보기${c.reset}`);
-        console.log(`  ${c.dim}cli-claw skill remove <name>   — 삭제${c.reset}`);
-        console.log(`  ${c.dim}cli-claw skill reset           — 초기화 (2×3 분류 재실행)${c.reset}\n`);
+        console.log(`\n  ${c.dim}cli-jaw skill install <name>  — 스킬 설치${c.reset}`);
+        console.log(`  ${c.dim}cli-jaw skill info <name>     — 상세 보기${c.reset}`);
+        console.log(`  ${c.dim}cli-jaw skill remove <name>   — 삭제${c.reset}`);
+        console.log(`  ${c.dim}cli-jaw skill reset           — 초기화 (2×3 분류 재실행)${c.reset}\n`);
         break;
     }
 
@@ -212,7 +212,7 @@ switch (sub) {
         mkdirSync(SKILLS_DIR, { recursive: true });
 
         // 2. Clear ref skills
-        const REF_DIR = join(CLAW_HOME, 'skills_ref');
+        const REF_DIR = join(JAW_HOME, 'skills_ref');
         if (existsSync(REF_DIR)) {
             rmSync(REF_DIR, { recursive: true, force: true });
             console.log(`  ${c.dim}✓ cleared ${REF_DIR}${c.reset}`);

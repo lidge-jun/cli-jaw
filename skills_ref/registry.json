@@ -353,7 +353,7 @@
                     "Google Chrome"
                 ],
                 "bins": [
-                    "cli-claw"
+                    "cli-jaw"
                 ]
             },
             "install": null,
@@ -377,7 +377,7 @@
             "requires": {
                 "bins": [
                     "codex",
-                    "cli-claw"
+                    "cli-jaw"
                 ],
                 "system": [
                     "Google Chrome"

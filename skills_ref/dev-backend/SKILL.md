@@ -56,6 +56,6 @@ app.post('/api/feature', express.json(), async (req, res) => {
 ## 참고 스킬
 
 더 깊은 가이드가 필요하면:
-- `~/.cli-claw/skills_ref/postgres/` — SQL 쿼리 패턴
-- `~/.cli-claw/skills_ref/security-best-practices/` — 보안 심화
-- `~/.cli-claw/skills_ref/web-perf/` — 성능 최적화
+- `~/.cli-jaw/skills_ref/postgres/` — SQL 쿼리 패턴
+- `~/.cli-jaw/skills_ref/security-best-practices/` — 보안 심화
+- `~/.cli-jaw/skills_ref/web-perf/` — 성능 최적화

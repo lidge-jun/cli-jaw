@@ -1,5 +1,5 @@
 /**
- * CLI Basic Tests — bin/cli-claw.js 기본 동작 확인
+ * CLI Basic Tests — bin/cli-jaw.js 기본 동작 확인
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,7 +8,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const CLI = join(__dirname, '../../bin/cli-claw.ts');
+const CLI = join(__dirname, '../../bin/cli-jaw.ts');
 
 function run(...args: string[]) {
     try {
@@ -25,7 +25,7 @@ function run(...args: string[]) {
 
 test('CLI-001: --help shows usage', () => {
     const out = run('--help');
-    assert.ok(out.includes('cli-claw') || out.includes('Commands') || out.includes('Usage'));
+    assert.ok(out.includes('cli-jaw') || out.includes('Commands') || out.includes('Usage'));
 });
 
 test('CLI-002: --version shows version', () => {

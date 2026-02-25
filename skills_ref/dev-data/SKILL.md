@@ -71,6 +71,6 @@ function transform(rows) {
 ## 참고 스킬
 
 더 깊은 가이드가 필요하면:
-- `~/.cli-claw/skills_ref/postgres/` — PostgreSQL 쿼리, 스키마 탐색
-- `~/.cli-claw/skills_ref/data-structure-chooser/` — 적절한 자료구조 선택
-- `~/.cli-claw/skills_ref/xlsx/` — Excel 파일 처리
+- `~/.cli-jaw/skills_ref/postgres/` — PostgreSQL 쿼리, 스키마 탐색
+- `~/.cli-jaw/skills_ref/data-structure-chooser/` — 적절한 자료구조 선택
+- `~/.cli-jaw/skills_ref/xlsx/` — Excel 파일 처리

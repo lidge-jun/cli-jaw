@@ -2,8 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseWorklogPending, PHASES } from '../../src/memory/worklog.ts';
 
-// Note: createWorklog, appendToWorklog, updateMatrix write to ~/.cli-claw/worklogs/
-// which requires CLAW_HOME override. Testing only pure functions here.
+// Note: createWorklog, appendToWorklog, updateMatrix write to ~/.cli-jaw/worklogs/
+// which requires JAW_HOME override. Testing only pure functions here.
 // Full I/O tests belong in integration/ with tmp-home helper.
 
 // ─── PHASES constant ────────────────────────────────

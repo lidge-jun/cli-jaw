@@ -1,6 +1,6 @@
 # 프롬프트 삽입 흐름 — Prompt Injection Flow
 
-> CLI-Claw의 프롬프트 조립 + 주입 전체 흐름. 에이전트 빌딩의 핵심 레퍼런스.
+> cli-jaw의 프롬프트 조립 + 주입 전체 흐름. 에이전트 빌딩의 핵심 레퍼런스.
 > Phase 20.6: prompt.ts → prompt/builder.ts (523L) + promptCache 추가
 
 ---
@@ -51,12 +51,12 @@ graph TD
 
 ### A-1.md (시스템 규칙)
 
-경로: `~/.cli-claw/prompts/A-1.md`
+경로: `~/.cli-jaw/prompts/A-1.md`
 
 | 섹션             | 내용                                               |
 | ---------------- | -------------------------------------------------- |
 | Rules            | 지시 따르기, 사용자 언어, 결과 보고, 모호하면 질문 |
-| Browser Control  | `cli-claw browser` 패턴: snapshot → act → verify   |
+| Browser Control  | `cli-jaw browser` 패턴: snapshot → act → verify   |
 | Long-term Memory | MEMORY.md 읽기, 검색, 저장 규칙                    |
 | Heartbeat System | heartbeat.json 포맷 + 규칙                         |
 
@@ -64,11 +64,11 @@ graph TD
 
 ### A-2.md (사용자 설정)
 
-경로: `~/.cli-claw/prompts/A-2.md`
+경로: `~/.cli-jaw/prompts/A-2.md`
 
 | 섹션        | 내용                  | 예시          |
 | ----------- | --------------------- | ------------- |
-| Identity    | 에이전트 이름/이모지  | Claw 🦞        |
+| Identity    | 에이전트 이름/이모지  | Jaw 🦈        |
 | User        | 사용자 이름, 언어, TZ | Korean, UTC+9 |
 | Vibe        | 톤/말투               | 친절, 따뜻    |
 | Working Dir | 기본 작업 디렉토리    | ~/Developer   |
@@ -115,14 +115,14 @@ graph LR
 
 ### MEMORY.md (항상 주입 ✅)
 
-경로: `~/.cli-claw/memory/MEMORY.md`
+경로: `~/.cli-jaw/memory/MEMORY.md`
 
 ```js
 // prompt/builder.ts — 항상 주입, 조건 없음
 const coreMem = fs.readFileSync(memPath, 'utf8').trim();
 if (coreMem && coreMem.length > 50) {
     const truncated = coreMem.length > 1500
-        ? coreMem.slice(0, 1500) + '\n...(use `cli-claw memory read MEMORY.md` for full)'
+        ? coreMem.slice(0, 1500) + '\n...(use `cli-jaw memory read MEMORY.md` for full)'
         : coreMem;
     prompt += '\n\n---\n## Core Memory\n' + truncated;
 }
@@ -182,7 +182,7 @@ The middleware detects your JSON output and AUTOMATICALLY spawns employees.
 
 | 대상        | 경로                         | 용도                                         |
 | ----------- | ---------------------------- | -------------------------------------------- |
-| `B.md`      | `~/.cli-claw/prompts/B.md`   | 디버그/참조용                                |
+| `B.md`      | `~/.cli-jaw/prompts/B.md`   | 디버그/참조용                                |
 | `AGENTS.md` | `{workDir}/AGENTS.md`        | **Codex + Copilot + OpenCode** — 자동 로딩   |
 
 **세션 무효화**: B.md 변경 시 `session_id = null` → 다음 메시지에서 신규 세션 생성
@@ -229,7 +229,7 @@ if (cli === 'claude') {
 ### Codex — stdin 전문 구조 (⚠️ 중복, Phase 6 제거 예정)
 
 ```text
-[Claw Platform Context]      ← ⚠️ AGENTS.md와 100% 중복!
+[Jaw Platform Context]      ← ⚠️ AGENTS.md와 100% 중복!
 {getSystemPrompt() 전체}     ← ⚠️ 매 턴 developer role로 이미 들어감
 
 [Recent History]
@@ -260,7 +260,7 @@ if (cli === 'copilot') {
 ```js
 // agent.ts:189-193
 if (cli === 'gemini' && sysPrompt) {
-    const tmpSysFile = join(os.tmpdir(), `claw-gemini-sys-${agentLabel}.md`);
+    const tmpSysFile = join(os.tmpdir(), `jaw-gemini-sys-${agentLabel}.md`);
     fs.writeFileSync(tmpSysFile, sysPrompt);
     spawnEnv.GEMINI_SYSTEM_MD = tmpSysFile;
 }
@@ -277,9 +277,9 @@ graph TD
     
     SUB --> S1["# 직원이름<br/>역할: 범용 개발자"]
     SUB --> S2["## 규칙<br/>직접 실행 + 보고<br/>❌ JSON subtask 출력 금지"]
-    SUB --> S3["## Browser Control<br/>cli-claw browser 명령어"]
+    SUB --> S3["## Browser Control<br/>cli-jaw browser 명령어"]
     SUB --> S4["## Active Skills<br/>설치된 스킬 목록"]
-    SUB --> S5["## Memory<br/>cli-claw memory 명령어"]
+    SUB --> S5["## Memory<br/>cli-jaw memory 명령어"]
 ```
 
 ### 메인 vs 직원 프롬프트 비교

@@ -31,12 +31,12 @@ CLI_REGISTRY = {
 
 ## src/core/config.ts — 경로, 설정, CLI 탐지 (187L)
 
-**상수**: `CLAW_HOME` · `PROMPTS_DIR` · `DB_PATH` · `SETTINGS_PATH` · `HEARTBEAT_JOBS_PATH` · `UPLOADS_DIR` · `SKILLS_DIR` · `SKILLS_REF_DIR` · `APP_VERSION` (← package.json)
+**상수**: `JAW_HOME` · `PROMPTS_DIR` · `DB_PATH` · `SETTINGS_PATH` · `HEARTBEAT_JOBS_PATH` · `UPLOADS_DIR` · `SKILLS_DIR` · `SKILLS_REF_DIR` · `APP_VERSION` (← package.json)
 
 | Function              | 역할                                       |
 | --------------------- | ------------------------------------------ |
 | `ensureDirs()`        | 필수 디렉토리 생성                         |
-| `runMigration()`      | 레거시 DB/settings → ~/.cli-claw           |
+| `runMigration()`      | 레거시 DB/settings → ~/.cli-jaw           |
 | `loadSettings()`      | settings.json 로드 + 마이그레이션          |
 | `saveSettings(s)`     | 설정 저장                                  |
 | `replaceSettings(s)`  | ESM live binding 대체 (API PUT용)          |
@@ -92,13 +92,13 @@ employees (id PK, name, cli, model, role, status, created_at)
 | `list()`                        | 파일 목록                      |
 | `appendDaily(content)`          | 일별 메모리 추가               |
 | `loadMemoryForPrompt(maxChars)` | 문맥 주입용 로드 (기본 1500자) |
-| `MEMORY_DIR`                    | `~/.cli-claw/memory/`          |
+| `MEMORY_DIR`                    | `~/.cli-jaw/memory/`          |
 
 ### 메모리 2-tier 구조
 
 - **시스템 레벨**: `MEMORY.md` → `getSystemPrompt()`에서 1500자 자동 주입 (매 메시지)
 - **세션 레벨**: flush 결과 → `loadRecentMemories()` 10000자, `settings.memory.injectEvery` (기본 2) 사이클마다 주입
-- **온디맨드**: `cli-claw memory search/read` → AI가 필요시 호출
+- **온디맨드**: `cli-jaw memory search/read` → AI가 필요시 호출
 
 ---
 
@@ -133,7 +133,7 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 
 ## lib/mcp-sync.ts — MCP 통합 관리 (645L)
 
-소스: `~/.cli-claw/mcp.json`
+소스: `~/.cli-jaw/mcp.json`
 
 | Function                     | 역할                                              |
 | ---------------------------- | ------------------------------------------------- |
@@ -152,7 +152,7 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 ### symlink 보호 정책
 
 - 실디렉토리 충돌 시 `fs.rmSync` 대신 `renameSync`로 백업
-- 백업 경로: `~/.cli-claw/backups/skills-conflicts/<timestamp>/`
+- 백업 경로: `~/.cli-jaw/backups/skills-conflicts/<timestamp>/`
 - 결과가 로그/API 응답에 기록됨 (`status: ok/skip`, `action: noop/backup/create/conflict`)
 
 ## lib/upload.ts (70L)
@@ -186,7 +186,7 @@ Chrome CDP 제어, 완전 독립 모듈. Phase 7.2: `ariaSnapshot()` 기반.
 | `/api/memory-files/:filename` | `assertFilename` + `safeResolveUnder` |
 | `/api/upload`                 | `decodeFilenameSafe`                |
 | `/api/skills/enable`, `disable` | `assertSkillId`                  |
-| `/api/claw-memory/read`, `save` | `assertFilename` + `safeResolveUnder` |
+| `/api/jaw-memory/read`, `save` | `assertFilename` + `safeResolveUnder` |
 
 ---
 

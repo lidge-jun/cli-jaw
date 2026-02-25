@@ -1,9 +1,9 @@
 // ── Agent Name Customization ──
 // localStorage-based agent display name (message label only)
-// Logo, header, title remain "CLI-CLAW" (immutable)
+// Logo, header, title remain "CLI-JAW" (immutable)
 
 const STORAGE_KEY = 'agentName';
-const DEFAULT_NAME = 'CLI-CLAW';
+const DEFAULT_NAME = 'CLI-JAW';
 
 let currentName = DEFAULT_NAME;
 

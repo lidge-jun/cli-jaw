@@ -1,10 +1,10 @@
-import { CLAW_HOME } from '../core/config.js';
+import { JAW_HOME } from '../core/config.js';
 import { execSync, spawn } from 'child_process';
 import { join } from 'path';
 import { chromium } from 'playwright-core';
 
 const DEFAULT_CDP_PORT = 9240;
-const PROFILE_DIR = join(CLAW_HOME, 'browser-profile');
+const PROFILE_DIR = join(JAW_HOME, 'browser-profile');
 let cached: any = null;   // { browser, cdpUrl }
 let chromeProc: any = null;
 

@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CLI-CLAW</title>
+    <title>CLI-JAW</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -34,7 +34,7 @@
     <!-- Left Sidebar -->
     <nav class="sidebar-left" role="navigation" aria-label="Main navigation">
         <button class="sidebar-toggle" id="toggleLeft" title="Collapse" aria-label="Collapse sidebar">◀</button>
-        <div class="logo">CLI-CLAW</div>
+        <div class="logo">CLI-JAW</div>
 
         <div>
             <div class="section-title" data-i18n="sidebar.status">상태</div>
@@ -58,10 +58,19 @@
                 <div style="color:var(--text-dim);font-size:11px">Loading...</div>
             </div>
             <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
-                <button class="btn-clear" style="margin:0;flex:1;padding:6px" data-action="refreshCli">🔄
+                <button class="btn-clear"
+                    style="margin:0;flex:1;padding:6px;font-size:11px;display:flex;align-items:center;justify-content:center;gap:4px;height:32px"
+                    data-action="refreshCli">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 2v6h-6" />
+                        <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                        <path d="M3 22v-6h6" />
+                        <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                    </svg>
                     Refresh</button>
                 <select id="cliStatusInterval"
-                    style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                    style="font-size:11px;padding:6px 8px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;min-width:60px;height:32px">
                     <option value="60" data-i18n="time.1m">1분</option>
                     <option value="300" selected data-i18n="time.5m">5분</option>
                     <option value="600" data-i18n="time.10m">10분</option>
@@ -73,7 +82,7 @@
         <div class="sidebar-bottom">
             <div class="section-title" data-i18n="sidebar.agentName">에이전트 이름</div>
             <div style="display:flex;gap:4px;align-items:center">
-                <input type="text" id="appNameInput" value="CLI-CLAW"
+                <input type="text" id="appNameInput" value="CLI-JAW"
                     style="flex:1;font-family:var(--font-display);font-size:13px;font-weight:600;padding:4px 8px">
                 <button class="sidebar-hb-btn" id="appNameSave"
                     style="width:auto;padding:4px 8px;font-size:11px">✓</button>
@@ -88,8 +97,10 @@
     <div class="chat-area" style="position:relative">
         <div class="drag-overlay" id="dragOverlay" data-i18n="drag.drop">📎 파일을 여기에 드랍하세요</div>
         <div class="chat-header">
-            <span>CLI-CLAW ● <span id="headerCli">claude</span></span>
-            <button class="sidebar-toggle" id="toggleTheme" title="Toggle Theme">☀️</button>
+            <span>CLI-JAW ● <span id="headerCli">claude</span></span>
+            <button class="theme-switch" id="toggleTheme" title="Toggle Theme" aria-label="Toggle dark/light mode">
+                <span class="theme-switch-knob"></span>
+            </button>
         </div>
         <div class="chat-messages" id="chatMessages"></div>
         <div class="typing-indicator" id="typingIndicator">

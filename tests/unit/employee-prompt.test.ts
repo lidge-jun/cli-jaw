@@ -33,7 +33,7 @@ test('EMP-005: getEmployeePrompt includes browser control section', () => {
     const emp = { name: 'Test', cli: 'claude', role: 'tester' };
     const prompt = getEmployeePrompt(emp);
     assert.ok(prompt.includes('Browser Control'));
-    assert.ok(prompt.includes('cli-claw browser'));
+    assert.ok(prompt.includes('cli-jaw browser'));
 });
 
 test('EMP-006: getEmployeePrompt includes telegram section', () => {

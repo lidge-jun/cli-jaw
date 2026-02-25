@@ -106,7 +106,7 @@ injectInterval = ceil(threshold / 2) = ceil(20/2) = 10
 | 항목 | 값 |
 |------|-----|
 | **소스** | `builder.ts` L288 |
-| **저장소** | `~/.cli-claw/memory/MEMORY.md` |
+| **저장소** | `~/.cli-jaw/memory/MEMORY.md` |
 | **주입 빈도** | **매번** (50자 이상일 때) |
 | **최대 크기** | `1500자` (초과 시 잘림 + 안내 메시지) |
 | **주입 형태** | `## Core Memory` 섹션으로 시스템 프롬프트에 추가 |

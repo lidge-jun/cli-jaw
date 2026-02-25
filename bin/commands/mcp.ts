@@ -1,12 +1,12 @@
 /**
- * cli-claw mcp — Phase 10
+ * cli-jaw mcp — Phase 10
  * MCP server management: list, install, sync, reset.
  *
  * Usage:
- *   cli-claw mcp                       # list servers
- *   cli-claw mcp install <pkg>         # install npm/pypi package + add to mcp.json + sync
- *   cli-claw mcp sync                  # sync mcp.json → 4 CLI configs
- *   cli-claw mcp reset [--force]       # reset mcp.json to defaults + re-sync
+ *   cli-jaw mcp                       # list servers
+ *   cli-jaw mcp install <pkg>         # install npm/pypi package + add to mcp.json + sync
+ *   cli-jaw mcp sync                  # sync mcp.json → 4 CLI configs
+ *   cli-jaw mcp reset [--force]       # reset mcp.json to defaults + re-sync
  *
  * Package detection:
  *   npm:  @scope/name or name          → npm i -g <pkg>
@@ -26,7 +26,7 @@ import {
     initMcpConfig,
 } from '../../lib/mcp-sync.js';
 
-const CLAW_HOME = join(homedir(), '.cli-claw');
+const JAW_HOME = join(homedir(), '.cli-jaw');
 
 // ─── ANSI ────────────────────────────────────
 const c = {
@@ -44,7 +44,7 @@ function exec(cmd: string) {
 /** Read workingDir from settings.json for syncToAll() */
 function getWorkingDir() {
     try {
-        const settingsPath = join(CLAW_HOME, 'settings.json');
+        const settingsPath = join(JAW_HOME, 'settings.json');
         return JSON.parse(readFileSync(settingsPath, 'utf8')).workingDir || homedir();
     } catch { return homedir(); }
 }
@@ -103,11 +103,11 @@ const arg = process.argv[4];
 switch (sub) {
     case 'install': {
         if (!arg) {
-            console.log(`\n  Usage: cli-claw mcp install <package> [--pypi|--npm]\n`);
+            console.log(`\n  Usage: cli-jaw mcp install <package> [--pypi|--npm]\n`);
             console.log(`  Examples:`);
-            console.log(`    cli-claw mcp install @modelcontextprotocol/server-filesystem`);
-            console.log(`    cli-claw mcp install mcp-server-fetch --pypi`);
-            console.log(`    cli-claw mcp install @upstash/context7-mcp\n`);
+            console.log(`    cli-jaw mcp install @modelcontextprotocol/server-filesystem`);
+            console.log(`    cli-jaw mcp install mcp-server-fetch --pypi`);
+            console.log(`    cli-jaw mcp install @upstash/context7-mcp\n`);
             process.exit(1);
         }
 
@@ -156,7 +156,7 @@ switch (sub) {
             const answer = await new Promise(r => {
                 rl.question(
                     `\n  ${c.yellow}⚠️  MCP 설정을 초기화합니다.${c.reset}\n` +
-                    `  ~/.cli-claw/mcp.json이 재생성되고 4개 CLI에 재동기화됩니다.\n` +
+                    `  ~/.cli-jaw/mcp.json이 재생성되고 4개 CLI에 재동기화됩니다.\n` +
                     `  계속하시겠습니까? (y/N): `, r
                 );
             });
@@ -170,7 +170,7 @@ switch (sub) {
         console.log(`\n  ${c.bold}🔄 MCP 설정 초기화 중...${c.reset}\n`);
 
         // 1. Delete existing mcp.json
-        const mcpPath = join(CLAW_HOME, 'mcp.json');
+        const mcpPath = join(JAW_HOME, 'mcp.json');
         if (existsSync(mcpPath)) {
             unlinkSync(mcpPath);
             console.log(`  ${c.dim}✓ deleted ${mcpPath}${c.reset}`);
@@ -208,14 +208,14 @@ switch (sub) {
                 console.log(`  ${c.cyan}•${c.reset} ${c.bold}${name}${c.reset}  ${c.dim}${cmd}${c.reset}`);
             }
         }
-        console.log(`\n  ${c.dim}cli-claw mcp install <pkg>  — 새 MCP 서버 설치${c.reset}`);
-        console.log(`  ${c.dim}cli-claw mcp sync           — 4개 CLI에 동기화${c.reset}`);
-        console.log(`  ${c.dim}cli-claw mcp reset          — 설정 초기화 + 재동기화${c.reset}\n`);
+        console.log(`\n  ${c.dim}cli-jaw mcp install <pkg>  — 새 MCP 서버 설치${c.reset}`);
+        console.log(`  ${c.dim}cli-jaw mcp sync           — 4개 CLI에 동기화${c.reset}`);
+        console.log(`  ${c.dim}cli-jaw mcp reset          — 설정 초기화 + 재동기화${c.reset}\n`);
         break;
     }
 
     default:
         console.error(`  ${c.red}Unknown mcp subcommand: ${sub}${c.reset}`);
-        console.log(`  Try: cli-claw mcp install <pkg>\n`);
+        console.log(`  Try: cli-jaw mcp install <pkg>\n`);
         process.exit(1);
 }

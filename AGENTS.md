@@ -1,4 +1,4 @@
-# CLI-Claw
+# cli-jaw
 
 System-level AI agent with full computer control via CLI wrapping (claude, codex, gemini).
 
@@ -30,7 +30,7 @@ File tree の行数は **`(NNNL)`** 형식으로 기재. 두 가지 변형 허�
 ---
 created: 2026-MM-DD
 status: planning | done | deferred
-tags: [cli-claw, ...]
+tags: [cli-jaw, ...]
 ---
 # (fin) Phase Title    ← 구현 완료 시 (fin) 접두사
 ```

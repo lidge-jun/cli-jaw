@@ -1,6 +1,6 @@
 # prompt_basic_A2 — 사용자 설정 프롬프트
 
-> 경로: `~/.cli-claw/prompts/A-2.md`
+> 경로: `~/.cli-jaw/prompts/A-2.md`
 > 소스: `src/prompt/builder.ts` → `A2_DEFAULT` 상수 (L174–191)
 > **파일이 없을 때만** `A2_DEFAULT`로 자동 생성 (`initPromptFiles()`)
 > Phase 20.6: `src/prompt.ts` → `src/prompt/builder.ts` 이동
@@ -13,8 +13,8 @@
 # User Configuration
 
 ## Identity
-- Name: Claw
-- Emoji: 🦞
+- Name: Jaw
+- Emoji: 🦈
 
 ## User
 - Name: (your name)
@@ -45,7 +45,7 @@
 ## 수정 방법
 
 1. **Web UI**: 설정 → 시스템 프롬프트 편집 (A-2 탭)
-2. **직접 편집**: `~/.cli-claw/prompts/A-2.md`
+2. **직접 편집**: `~/.cli-jaw/prompts/A-2.md`
 3. **리셋**: 파일 삭제 → 서버 재시작 시 `A2_DEFAULT`로 재생성
 
 ---

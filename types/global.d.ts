@@ -1,10 +1,10 @@
-// Global type declarations for cli-claw-ts
+// Global type declarations for cli-jaw
 
 declare module 'node-fetch' {
   export default function fetch(url: string, init?: RequestInit): Promise<Response>;
 }
 
-export interface CliClawConfig {
+export interface CliJawConfig {
   port: number;
   host: string;
   dataDir: string;

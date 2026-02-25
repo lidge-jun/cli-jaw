@@ -1,4 +1,4 @@
-# CLI-Claw 테스트 계획
+# cli-jaw 테스트 계획
 
 > 작성일: 2026-02-25
 > 상태: Tier 1-2 구현 완료 (65 tests pass, 85ms)
@@ -50,7 +50,7 @@ tests/
 │   ├── opencode-events.json
 │   └── acp-updates.json
 └── helpers/
-    └── tmp-home.js                ← 테스트용 임시 CLAW_HOME 유틸
+    └── tmp-home.js                ← 테스트용 임시 JAW_HOME 유틸
 ```
 
 ---

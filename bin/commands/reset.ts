@@ -1,7 +1,7 @@
 /**
- * cli-claw reset — factory reset via API
+ * cli-jaw reset — factory reset via API
  * Usage:
- *   cli-claw reset [--yes] [--port 3457]
+ *   cli-jaw reset [--yes] [--port 3457]
  */
 import { parseArgs } from 'node:util';
 import { createInterface } from 'node:readline';
@@ -20,7 +20,7 @@ const { values } = parseArgs({
 function printHelp() {
     console.log(`
   Usage:
-    cli-claw reset [--yes] [--port 3457]
+    cli-jaw reset [--yes] [--port 3457]
 
   Description:
     Factory reset: MCP sync + skill reset + employee reset + session clear.
@@ -60,7 +60,7 @@ try {
     await fetch(`${baseUrl}/api/session`, { signal: AbortSignal.timeout(2000) });
 } catch {
     console.error(`  ❌ 서버에 연결할 수 없습니다 (localhost:${values.port})`);
-    console.error(`  cli-claw serve 를 먼저 실행하세요.`);
+    console.error(`  cli-jaw serve 를 먼저 실행하세요.`);
     process.exit(1);
 }
 

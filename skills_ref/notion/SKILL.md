@@ -210,7 +210,7 @@ Common property formats for database items:
 
 ### Heartbeat Integration
 - heartbeat job `notion_hourly_upgrade` (120min 주기)가 `Lidge AI/개인 작업함` 범위에서 소규모 개선 자동 수행
-- heartbeat 설정: `~/.cli-claw/heartbeat.json`
+- heartbeat 설정: `~/.cli-jaw/heartbeat.json`
 
 ## Visual Design Rules (미감 가이드)
 

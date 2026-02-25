@@ -1,4 +1,4 @@
-// ─── CLI-Claw Server (glue + routes) ─────────────────
+// ─── cli-jaw Server (glue + routes) ─────────────────
 // All business logic lives in src/ modules.
 
 import express from 'express';
@@ -30,7 +30,7 @@ import * as browser from './src/browser/index.js';
 import * as memory from './src/memory/memory.js';
 import { loadLocales, t, normalizeLocale } from './src/core/i18n.js';
 import {
-    CLAW_HOME, PROMPTS_DIR, DB_PATH, UPLOADS_DIR,
+    JAW_HOME, PROMPTS_DIR, DB_PATH, UPLOADS_DIR,
     SKILLS_DIR, SKILLS_REF_DIR,
     settings, loadSettings, saveSettings, replaceSettings,
     ensureDirs, runMigration,
@@ -265,7 +265,7 @@ function applySettingsPatch(rawPatch: Record<string, any> = {}, { restartTelegra
     const activeEffort = ao.effort || pc.effort || 'medium';
     const sessionId = (settings.cli !== prevCli) ? null : session.session_id;
     if (settings.cli !== prevCli && session.session_id) {
-        console.log(`[claw:session] invalidated — CLI changed ${prevCli} → ${settings.cli}`);
+        console.log(`[jaw:session] invalidated — CLI changed ${prevCli} → ${settings.cli}`);
     }
     updateSession.run(settings.cli, sessionId, activeModel, settings.permissions, settings.workingDir, activeEffort);
 
@@ -601,7 +601,7 @@ app.post('/api/mcp/install', async (req, res) => {
 });
 app.post('/api/mcp/reset', (req, res) => {
     try {
-        const mcpPath = join(CLAW_HOME, 'mcp.json');
+        const mcpPath = join(JAW_HOME, 'mcp.json');
         if (fs.existsSync(mcpPath)) fs.unlinkSync(mcpPath);
         const config = initMcpConfig(settings.workingDir);
         const results = syncToAll(config, settings.workingDir);
@@ -748,12 +748,12 @@ app.post('/api/skills/reset', (req, res) => {
 
 // ─── Memory API (Phase A) ────────────────────────────
 
-app.get('/api/claw-memory/search', (req, res) => {
+app.get('/api/jaw-memory/search', (req, res) => {
     try { res.json({ result: memory.search(String(req.query.q || '')) }); }
     catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
 });
 
-app.get('/api/claw-memory/read', (req, res) => {
+app.get('/api/jaw-memory/read', (req, res) => {
     try {
         const file = assertFilename(req.query.file as string, { allowExt: ['.md', '.txt', '.json'] });
         const content = memory.read(file, { lines: req.query.lines as any });
@@ -761,7 +761,7 @@ app.get('/api/claw-memory/read', (req, res) => {
     } catch (e: unknown) { res.status((e as any).statusCode || 500).json({ error: (e as Error).message }); }
 });
 
-app.post('/api/claw-memory/save', (req, res) => {
+app.post('/api/jaw-memory/save', (req, res) => {
     try {
         const file = assertFilename(req.body.file, { allowExt: ['.md', '.txt', '.json'] });
         const p = memory.save(file, req.body.content);
@@ -769,12 +769,12 @@ app.post('/api/claw-memory/save', (req, res) => {
     } catch (e: unknown) { res.status((e as any).statusCode || 500).json({ error: (e as Error).message }); }
 });
 
-app.get('/api/claw-memory/list', (_, res) => {
+app.get('/api/jaw-memory/list', (_, res) => {
     try { res.json({ files: memory.list() }); }
     catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
 });
 
-app.post('/api/claw-memory/init', (_, res) => {
+app.post('/api/jaw-memory/init', (_, res) => {
     try { memory.ensureMemoryDir(); res.json({ ok: true }); }
     catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
 });
@@ -823,7 +823,7 @@ watchHeartbeatFile();
 server.listen(PORT, () => {
     // Bootstrap i18n locale dictionaries
     loadLocales(join(projectRoot, 'public', 'locales'));
-    log.info(`\n  🦞 Claw Agent — http://localhost:${PORT}\n`);
+    log.info(`\n  🦈 Jaw Agent — http://localhost:${PORT}\n`);
     log.info(`  CLI:    ${settings.cli}`);
     log.info(`  Perms:  ${settings.permissions}`);
     log.info(`  CWD:    ${settings.workingDir}`);
@@ -836,9 +836,9 @@ server.listen(PORT, () => {
         copyDefaultSkills();
         const moved = (symlinks?.links || []).filter(x => x.action === 'backup_replace');
         if (moved.length) {
-            console.log(`  Skills: moved ${moved.length} conflict path(s) to ~/.cli-claw/backups/skills-conflicts`);
+            console.log(`  Skills: moved ${moved.length} conflict path(s) to ~/.cli-jaw/backups/skills-conflicts`);
         }
-        console.log(`  MCP:    ~/.cli-claw/mcp.json`);
+        console.log(`  MCP:    ~/.cli-jaw/mcp.json`);
     } catch (e: unknown) { console.error('[mcp-init]', (e as Error).message); }
 
     initTelegram();

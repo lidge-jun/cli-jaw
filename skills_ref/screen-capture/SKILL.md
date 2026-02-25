@@ -1,6 +1,6 @@
 ---
 name: screen-capture
-description: "Screen capture and camera snapshots using macOS built-in tools. Full screen, region, window, webcam, and video recording. Use as default when tool-specific capture (Figma, Playwright, CDP) is unavailable. Prefer cli-claw browser screenshot for web pages."
+description: "Screen capture and camera snapshots using macOS built-in tools. Full screen, region, window, webcam, and video recording. Use as default when tool-specific capture (Figma, Playwright, CDP) is unavailable. Prefer cli-jaw browser screenshot for web pages."
 metadata:
   {
     "openclaw":
@@ -159,4 +159,4 @@ screencapture -x ~/finder.png
 - `screencapture` is macOS-only (pre-installed).
 - Screen Recording permission may be required (System Settings > Privacy > Screen Recording).
 - Use `-x` flag to suppress the camera shutter sound.
-- For browser-specific screenshots, prefer `cli-claw browser screenshot` which captures the page content directly via CDP.
+- For browser-specific screenshots, prefer `cli-jaw browser screenshot` which captures the page content directly via CDP.

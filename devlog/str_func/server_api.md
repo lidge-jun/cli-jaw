@@ -46,7 +46,7 @@ ensureDirs() → runMigration() → loadSettings() → initPromptFiles()
 | **Registry**   | **`GET /api/cli-registry`** — CLI/모델 단일 소스 (cli-registry.ts 반환)                                       |
 | Memory (DB)    | `GET/POST /api/memory` `DELETE /api/memory/:key`                                                              |
 | Memory Files   | `GET /api/memory-files` `GET/DELETE /api/memory-files/:fn` `PUT /api/memory-files/settings`                   |
-| Claw Memory    | `GET /api/claw-memory/search,read,list` `POST /api/claw-memory/save,init`                                     |
+| Jaw Memory    | `GET /api/jaw-memory/search,read,list` `POST /api/jaw-memory/save,init`                                     |
 | Upload & MCP   | `POST /api/upload` `GET/PUT /api/mcp` `POST /api/mcp/sync,install,reset`                                      |
 | Status & Quota | `GET /api/cli-status` `GET /api/quota` (Claude/Codex/Gemini/**Copilot**)                                       |
 | Skills         | `GET /api/skills` `POST /api/skills/enable,disable` `GET /api/skills/:id` `POST /api/skills/reset`            |
@@ -55,7 +55,7 @@ ensureDirs() → runMigration() → loadSettings() → initPromptFiles()
 
 > 총 40+ 엔드포인트. 13개 라우트에 `ok()`/`fail()` 표준 응답 적용 (Phase 9.2). 4개 라우트에 보안 가드 적용 (Phase 9.1).
 >
-> **보안 가드 적용 라우트**: memory-files (`assertFilename` + `safeResolveUnder`), upload (`decodeFilenameSafe`), skills (`assertSkillId`), claw-memory (`assertFilename` + `safeResolveUnder`)
+> **보안 가드 적용 라우트**: memory-files (`assertFilename` + `safeResolveUnder`), upload (`decodeFilenameSafe`), skills (`assertSkillId`), jaw-memory (`assertFilename` + `safeResolveUnder`)
 >
 > **새 import**: `ok`/`fail` (← src/http/response.ts), `mergeSettingsPatch` (← src/settings-merge.ts), `assertSkillId`/`assertFilename`/`safeResolveUnder` (← src/security/path-guards.ts), `decodeFilenameSafe` (← src/security/decode.ts)
 

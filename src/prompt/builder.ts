@@ -1,7 +1,7 @@
 import fs from 'fs';
 import os from 'os';
 import { join } from 'path';
-import { settings, CLAW_HOME, PROMPTS_DIR, SKILLS_DIR, SKILLS_REF_DIR, loadHeartbeatFile } from '../core/config.js';
+import { settings, JAW_HOME, PROMPTS_DIR, SKILLS_DIR, SKILLS_REF_DIR, loadHeartbeatFile } from '../core/config.js';
 import { getSession, getEmployees } from '../core/db.js';
 import { memoryFlushCounter, flushCycleCount } from '../agent/spawn.js';
 
@@ -9,7 +9,7 @@ const promptCache = new Map();
 
 // ─── Skill Loading ───────────────────────────────────
 
-/** Read all active skills from ~/.cli-claw/skills/ */
+/** Read all active skills from ~/.cli-jaw/skills/ */
 export function loadActiveSkills() {
     try {
         if (!fs.existsSync(SKILLS_DIR)) return [];
@@ -84,9 +84,9 @@ export function getMergedSkills() {
 
 // ─── Prompt Templates ────────────────────────────────
 
-const A1_CONTENT = `# Claw Agent
+const A1_CONTENT = `# Jaw Agent
 
-You are Claw Agent, a system-level AI assistant.
+You are Jaw Agent, a system-level AI assistant.
 Execute tasks on the user's computer via CLI tools.
 
 ## Rules
@@ -99,16 +99,16 @@ Execute tasks on the user's computer via CLI tools.
 - If nothing needs attention on heartbeat, reply HEARTBEAT_OK
 
 ## Browser Control (MANDATORY)
-Control Chrome via \`cli-claw browser\` — never use curl/wget for web interaction.
+Control Chrome via \`cli-jaw browser\` — never use curl/wget for web interaction.
 
 ### Core Workflow: snapshot → act → snapshot → verify
 \`\`\`bash
-cli-claw browser start                          # Start Chrome (CDP 9240)
-cli-claw browser navigate "https://example.com" # Go to URL
-cli-claw browser snapshot --interactive          # Get ref IDs (clickable elements)
-cli-claw browser click e3                        # Click ref
-cli-claw browser type e5 "hello" --submit        # Type + Enter
-cli-claw browser screenshot                      # Save screenshot
+cli-jaw browser start                          # Start Chrome (CDP 9240)
+cli-jaw browser navigate "https://example.com" # Go to URL
+cli-jaw browser snapshot --interactive          # Get ref IDs (clickable elements)
+cli-jaw browser click e3                        # Click ref
+cli-jaw browser type e5 "hello" --submit        # Type + Enter
+cli-jaw browser screenshot                      # Save screenshot
 \`\`\`
 
 ### Key Commands
@@ -121,8 +121,8 @@ cli-claw browser screenshot                      # Save screenshot
 ### Vision Click Fallback (Codex Only)
 If \`snapshot\` returns **no ref** for target (Canvas, iframe, Shadow DOM, WebGL):
 \`\`\`bash
-cli-claw browser vision-click "Submit button"   # screenshot → AI coords → click
-cli-claw browser vision-click "Menu" --double    # double-click variant
+cli-jaw browser vision-click "Submit button"   # screenshot → AI coords → click
+cli-jaw browser vision-click "Menu" --double    # double-click variant
 \`\`\`
 - Requires **Codex CLI** — only available when active CLI is codex
 - Always try \`snapshot\` + ref-based click first, vision-click is fallback only
@@ -131,8 +131,8 @@ cli-claw browser vision-click "Menu" --double    # double-click variant
 ## Telegram File Delivery (Bot-First)
 For non-text output to Telegram, prefer direct Bot API:
 \`\`\`bash
-TOKEN=$(jq -r '.telegram.token' ~/.cli-claw/settings.json)
-CHAT_ID=$(jq -r '.telegram.allowedChatIds[-1]' ~/.cli-claw/settings.json)
+TOKEN=$(jq -r '.telegram.token' ~/.cli-jaw/settings.json)
+CHAT_ID=$(jq -r '.telegram.allowedChatIds[-1]' ~/.cli-jaw/settings.json)
 # photo:
 curl -sS -X POST "https://api.telegram.org/bot\${TOKEN}/sendPhoto" \\
   -F "chat_id=\${CHAT_ID}" -F "photo=@/path/to/image.png" -F "caption=desc"
@@ -146,14 +146,14 @@ Fallback local endpoint: \`POST http://localhost:3457/api/telegram/send\`
 
 ## Long-term Memory (MANDATORY)
 Two memory sources:
-- Core memory: \`~/.cli-claw/memory/MEMORY.md\` (structured, persistent)
+- Core memory: \`~/.cli-jaw/memory/MEMORY.md\` (structured, persistent)
 - Session memory: \`~/.claude/projects/.../memory/\` (auto-flush)
 
 Rules:
 - At conversation start: ALWAYS read MEMORY.md
 - Before answering about past decisions/preferences: search memory first
 - After important decisions or user preferences: save immediately
-- Commands: \`cli-claw memory search/read/save\`
+- Commands: \`cli-jaw memory search/read/save\`
 
 ### What to Save (IMPORTANT)
 - ✅ User preferences, key decisions, project facts
@@ -164,7 +164,7 @@ Rules:
 - ❌ Do NOT dump raw conversation history into memory
 
 ## Heartbeat System
-Recurring tasks via \`~/.cli-claw/heartbeat.json\` (auto-reloads on save):
+Recurring tasks via \`~/.cli-jaw/heartbeat.json\` (auto-reloads on save):
 \`\`\`json
 { "jobs": [{ "id": "hb_<timestamp>", "name": "Job name", "enabled": true,
   "schedule": { "kind": "every", "minutes": 5 }, "prompt": "task description" }] }
@@ -180,13 +180,13 @@ Recurring tasks via \`~/.cli-claw/heartbeat.json\` (auto-reloads on save):
 
 ### Dev Skills (MANDATORY for Development Tasks)
 Before writing ANY code, you MUST read the relevant dev skill guides:
-1. **Always read first**: \`~/.cli-claw/skills/dev/SKILL.md\` — project-wide conventions, file structure, coding standards
+1. **Always read first**: \`~/.cli-jaw/skills/dev/SKILL.md\` — project-wide conventions, file structure, coding standards
 2. **Role-specific** (read the one matching your task):
    - \`dev-frontend\` — UI components, CSS, browser compatibility
    - \`dev-backend\` — API design, error handling, security
    - \`dev-data\` — database, queries, migrations
    - \`dev-testing\` — test strategy, coverage, assertion patterns
-3. **How to read**: \`cat ~/.cli-claw/skills/dev/SKILL.md\` or \`cli-claw skill read dev\`
+3. **How to read**: \`cat ~/.cli-jaw/skills/dev/SKILL.md\` or \`cli-jaw skill read dev\`
 4. Follow ALL guidelines from the skill before and during implementation
 5. If a skill contradicts these rules, the skill takes priority (skills are project-specific)
 `;
@@ -194,8 +194,8 @@ Before writing ANY code, you MUST read the relevant dev skill guides:
 const A2_DEFAULT = `# User Configuration
 
 ## Identity
-- Name: Claw
-- Emoji: 🦞
+- Name: Jaw
+- Emoji: 🦈
 
 ## User
 - Name: (your name)
@@ -299,12 +299,12 @@ export function getSystemPrompt() {
 
     // Core memory (MEMORY.md, system-level injection)
     try {
-        const memPath = join(CLAW_HOME, 'memory', 'MEMORY.md');
+        const memPath = join(JAW_HOME, 'memory', 'MEMORY.md');
         if (fs.existsSync(memPath)) {
             const coreMem = fs.readFileSync(memPath, 'utf8').trim();
             if (coreMem && coreMem.length > 50) {
                 const truncated = coreMem.length > 1500
-                    ? coreMem.slice(0, 1500) + '\n...(use `cli-claw memory read MEMORY.md` for full)'
+                    ? coreMem.slice(0, 1500) + '\n...(use `cli-jaw memory read MEMORY.md` for full)'
                     : coreMem;
                 prompt += '\n\n---\n## Core Memory\n' + truncated;
                 console.log(`[memory] MEMORY.md loaded: ${truncated.length} chars`);
@@ -358,7 +358,7 @@ export function getSystemPrompt() {
                 prompt += `- ${status} "${job.name}" — every ${mins}min: ${(job.prompt || '').slice(0, 50)}\n`;
             }
             prompt += `\nActive: ${activeJobs.length}, Total: ${hbData.jobs.length}`;
-            prompt += '\nTo modify: edit ~/.cli-claw/heartbeat.json (auto-reloads on save)';
+            prompt += '\nTo modify: edit ~/.cli-jaw/heartbeat.json (auto-reloads on save)';
         }
     } catch { /* heartbeat.json not ready */ }
 
@@ -378,7 +378,7 @@ export function getSystemPrompt() {
             if (activeSkills.length > 0) {
                 prompt += `\n### Active Skills (${activeSkills.length})\n`;
                 prompt += 'These skills are installed and available for reference.\n';
-                prompt += '**Development tasks**: Before writing code, ALWAYS read `~/.cli-claw/skills/dev/SKILL.md` for project conventions.\n';
+                prompt += '**Development tasks**: Before writing code, ALWAYS read `~/.cli-jaw/skills/dev/SKILL.md` for project conventions.\n';
                 prompt += 'For role-specific tasks, also read the relevant skill (dev-frontend, dev-backend, dev-data, dev-testing).\n';
                 for (const s of activeSkills) {
                     prompt += `- ${s!.name} (${s!.id})\n`;
@@ -389,8 +389,8 @@ export function getSystemPrompt() {
             if (availableRef.length > 0) {
                 prompt += `\n### Available Skills (${availableRef.length})\n`;
                 prompt += 'These are reference skills — not active yet, but ready to use on demand.\n';
-                prompt += '**How to use**: read `~/.cli-claw/skills_ref/<name>/SKILL.md` and follow its instructions.\n';
-                prompt += '**To activate permanently**: `cli-claw skill install <name>`\n\n';
+                prompt += '**How to use**: read `~/.cli-jaw/skills_ref/<name>/SKILL.md` and follow its instructions.\n';
+                prompt += '**To activate permanently**: `cli-jaw skill install <name>`\n\n';
                 prompt += availableRef.map(s => s.id).join(', ') + '\n';
             }
 
@@ -434,10 +434,10 @@ export function getEmployeePrompt(emp: any) {
 
     // ─── Browser commands
     prompt += `\n## Browser Control\n`;
-    prompt += `For web tasks, always use \`cli-claw browser\` commands.\n`;
+    prompt += `For web tasks, always use \`cli-jaw browser\` commands.\n`;
     prompt += `Pattern: snapshot → act → snapshot → verify\n`;
-    prompt += `Start: \`cli-claw browser start\`, Snapshot: \`cli-claw browser snapshot\`\n`;
-    prompt += `Click: \`cli-claw browser click <ref>\`, Type: \`cli-claw browser type <ref> "text"\`\n`;
+    prompt += `Start: \`cli-jaw browser start\`, Snapshot: \`cli-jaw browser snapshot\`\n`;
+    prompt += `Click: \`cli-jaw browser click <ref>\`, Type: \`cli-jaw browser type <ref> "text"\`\n`;
 
     // ─── Telegram file delivery
     prompt += `\n## Telegram File Delivery\n`;
@@ -461,7 +461,7 @@ export function getEmployeePrompt(emp: any) {
 
     // ─── Memory commands
     prompt += `\n## Memory\n`;
-    prompt += `Long-term memory: use \`cli-claw memory search/read/save\` commands.\n`;
+    prompt += `Long-term memory: use \`cli-jaw memory search/read/save\` commands.\n`;
 
     // ─── Orchestration Completion Protocol
     prompt += `\n## Task Completion Protocol\n`;

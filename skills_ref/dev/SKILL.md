@@ -16,7 +16,7 @@ description: "Common development guidelines for all orchestrated sub-agents. Enf
 
 ## 2. Self-Reference 패턴
 
-이 프로젝트(cli-claw) 자체를 참고 패턴으로 사용:
+이 프로젝트(cli-jaw) 자체를 참고 패턴으로 사용:
 
 | 패턴                | 참고 파일                                                | 설명                          |
 | ------------------- | -------------------------------------------------------- | ----------------------------- |
@@ -30,10 +30,10 @@ description: "Common development guidelines for all orchestrated sub-agents. Enf
 
 ## 3. 스킬 레퍼런스 탐색
 
-필요한 기술이 이 가이드에 없으면 `~/.cli-claw/skills_ref/`에서 관련 스킬을 탐색:
+필요한 기술이 이 가이드에 없으면 `~/.cli-jaw/skills_ref/`에서 관련 스킬을 탐색:
 
 ```
-~/.cli-claw/skills_ref/
+~/.cli-jaw/skills_ref/
 ├── react-best-practices/   ← React 컴포넌트/훅/상태 관리
 ├── postgres/               ← PostgreSQL 쿼리, 스키마
 ├── security-best-practices/ ← 보안 검토, 취약점 방지
@@ -41,7 +41,7 @@ description: "Common development guidelines for all orchestrated sub-agents. Enf
 ├── debugging-checklist/    ← 디버깅 체계적 접근법
 ├── tdd/                    ← 테스트 주도 개발
 ├── web-perf/               ← 웹 성능 최적화
-└── ... (전체 목록: ls ~/.cli-claw/skills_ref/)
+└── ... (전체 목록: ls ~/.cli-jaw/skills_ref/)
 ```
 
 관련 스킬이 있으면 `SKILL.md`를 읽고 지침을 따르세요.

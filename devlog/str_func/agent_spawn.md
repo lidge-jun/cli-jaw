@@ -28,7 +28,7 @@
     [YES] AcpClient 경로:
       → config.json model + effort 동기화 (~/.copilot/config.json)
       → new AcpClient(model, workingDir, permissions)
-      → log: [claw:main] Spawning: copilot --acp --model {model} [{permissions}]
+      → log: [jaw:main] Spawning: copilot --acp --model {model} [{permissions}]
       → acp.initialize() → acp.createSession(workDir) or loadSession()
       → acp.on('session/update') → extractFromAcpUpdate → broadcast
       → **ctx reset** (fullText='', toolLog=[], seenToolKeys.clear()) ← loadSession 히스토리 리플레이 방지
@@ -96,7 +96,7 @@ opts.effort → activeOverrides[cli].effort → perCli[cli].effort → ''
 ### ACP 이벤트 플로우
 
 ```text
-Client (cli-claw)               Agent (copilot --acp)
+Client (cli-jaw)               Agent (copilot --acp)
   ├─→ initialize ──────────────→  capabilities 교환
   ├─→ session/new ─────────────→  세션 생성
   ├─→ session/prompt ──────────→  질의
@@ -108,7 +108,7 @@ Client (cli-claw)               Agent (copilot --acp)
 
 ### 권한 모드
 
-| cli-claw 설정          | Copilot 플래그/config.json                        |
+| cli-jaw 설정          | Copilot 플래그/config.json                        |
 | ---------------------- | --------------------------------------------- |
 | `permissions: 'auto'`  | `--allow-all-tools`                           |
 | `permissions: 'yolo'`  | `--yolo` (== `--allow-all-tools --allow-all-paths --allow-all-urls`) |
@@ -125,7 +125,7 @@ Client (cli-claw)               Agent (copilot --acp)
 | `makeClaudeToolKey(event, label)`               | Claude dedupe 키 생성 (claude:idx/msg/type:icon:label) |
 | `pushToolLabel(labels, label, cli, event, ctx)` | dedupe 검사 후 라벨 추가                          |
 | `extractToolLabel(cli, event)`                  | Backward-compat: 첨 라벨 반환 (or null)          |
-| `extractFromAcpUpdate(params)`                  | **ACP `session/update`** → cli-claw broadcast 변환 |
+| `extractFromAcpUpdate(params)`                  | **ACP `session/update`** → cli-jaw broadcast 변환 |
 | `logEventSummary(agentLabel, cli, event, ctx)`  | 이벤트별 한 줄 로그 + traceLog 누적               |
 | `pushTrace(ctx, line)`                          | ctx.traceLog에 라인 추가                          |
 | `logLine(line, ctx)`                            | console.log + pushTrace 동시                      |

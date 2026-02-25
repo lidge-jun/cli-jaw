@@ -1,5 +1,5 @@
 /**
- * cli-claw chat — Phase 9.5
+ * cli-jaw chat — Phase 9.5
  * Three modes: default (raw stdin, persistent footer), --raw (JSON in UI), --simple (plain readline)
  */
 import { createInterface } from 'node:readline';
@@ -45,7 +45,7 @@ try {
     });
 } catch {
     console.error(`\n  ${c.red}x${c.reset} Cannot connect to ${wsUrl}`);
-    console.error(`  Run ${c.cyan}cli-claw serve${c.reset} first\n`);
+    console.error(`  Run ${c.cyan}cli-jaw serve${c.reset} first\n`);
     process.exit(1);
 }
 
@@ -113,8 +113,8 @@ function makeCliCommandCtx() {
         getMcp: () => apiJson('/api/mcp'),
         syncMcp: () => apiJson('/api/mcp/sync', { method: 'POST' }),
         installMcp: () => apiJson('/api/mcp/install', { method: 'POST' }, 120000),
-        listMemory: () => apiJson('/api/claw-memory/list').then((d: any) => d.files || []),
-        searchMemory: (q: string) => apiJson(`/api/claw-memory/search?q=${encodeURIComponent(q)}`).then((d: any) => d.result || '(no results)'),
+        listMemory: () => apiJson('/api/jaw-memory/list').then((d: any) => d.files || []),
+        searchMemory: (q: string) => apiJson(`/api/jaw-memory/search?q=${encodeURIComponent(q)}`).then((d: any) => d.result || '(no results)'),
         getBrowserStatus: () => apiJson('/api/browser/status'),
         getBrowserTabs: () => apiJson('/api/browser/tabs'),
         resetEmployees: () => apiJson('/api/employees/reset', { method: 'POST' }),
@@ -125,7 +125,7 @@ function makeCliCommandCtx() {
 
 // ─── Simple mode (plain readline, no tricks) ──
 if (values.simple) {
-    console.log(`\n  cli-claw v${APP_VERSION} · ${label} · :${values.port}\n`);
+    console.log(`\n  cli-jaw v${APP_VERSION} · ${label} · :${values.port}\n`);
     const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: `${label} > ` });
     let streaming = false;
     async function runSlashCommand(parsed: any) {
@@ -187,7 +187,7 @@ if (values.simple) {
 
     // Banner
     console.log('');
-    console.log(`  ${c.bold}cli-claw${c.reset} ${c.dim}v${APP_VERSION}${c.reset}${isRaw ? `  ${c.dim}(raw json)${c.reset}` : ''}`);
+    console.log(`  ${c.bold}cli-jaw${c.reset} ${c.dim}v${APP_VERSION}${c.reset}${isRaw ? `  ${c.dim}(raw json)${c.reset}` : ''}`);
     console.log('');
     console.log(`  ${c.dim}engine:${c.reset}    ${accent}${label}${c.reset}`);
     console.log(`  ${c.dim}directory:${c.reset}  ${c.cyan}${dir}${c.reset}`);

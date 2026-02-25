@@ -72,7 +72,7 @@
     "tg.fileFail": "❌ File processing failed: {msg}",
     "tg.timeout": "⏰ Timeout (20 min no response)",
     "tg.noResponse": "No response",
-    "tg.connected": "🦞 Claw Agent connected! Send a message and the AI agent will respond.",
+    "tg.connected": "🦈 Jaw Agent connected! Send a message and the AI agent will respond.",
     "cli.fileNotFound": "File not found: {path}",
     "cli.fileSentPrompt": "[User sent a file: {path}]\nPlease read and analyze this file.",
     "cli.fileSentWithMsg": "\n\nUser message: {text}",

@@ -1,4 +1,4 @@
-# 🏗️ CLI-CLAW Architecture
+# 🏗️ CLI-JAW Architecture
 
 > Technical reference for developers and contributors.
 > For user-facing docs, see [README.md](../README.md).
@@ -85,7 +85,7 @@ graph LR
 | `cli-registry.ts` | — | Zero deps, CLI/model single source |
 | `db.ts` | config | DB_PATH only |
 | `events.ts` | bus | Broadcast + dedupe + ACP |
-| `memory.ts` | config | CLAW_HOME only, independent |
+| `memory.ts` | config | JAW_HOME only, independent |
 | `acp-client.ts` | — | Zero deps, Copilot ACP client |
 | `agent.ts` | bus, config, db, events, prompt, orchestrator, acp-client | Core hub |
 | `orchestrator.ts` | bus, db, prompt, agent | Planning ↔ agent mutual |
@@ -109,7 +109,7 @@ graph LR
 
 | File | Lines | Responsibility |
 |------|------:|----------------|
-| `config.ts` | ~177 | CLAW_HOME, settings, CLI detection |
+| `config.ts` | ~177 | JAW_HOME, settings, CLI detection |
 | `db.ts` | ~84 | SQLite schema + prepared statements |
 | `bus.ts` | ~18 | WS + internal listener broadcast |
 | `events.ts` | ~322 | NDJSON parsing + dedupe + ACP updates |
@@ -157,7 +157,7 @@ graph LR
 
 | File | Lines | Notes |
 |------|------:|-------|
-| `cli-claw.ts` | — | 11 subcommand routing |
+| `cli-jaw.ts` | — | 11 subcommand routing |
 | `postinstall.ts` | ~212 | Auto-install 5 CLIs + MCP + skills |
 | `commands/chat.ts` | ~844 | Terminal TUI (Phase 20.3 splits planned) |
 | `commands/browser.ts` | ~239 | 17 subcommands + vision-click |
@@ -238,11 +238,11 @@ main.js (entry)
 
 ---
 
-## Runtime Data (`~/.cli-claw/`)
+## Runtime Data (`~/.cli-jaw/`)
 
 | Path | Description |
 |------|-------------|
-| `claw.db` | SQLite DB (sessions, messages) |
+| `jaw.db` | SQLite DB (sessions, messages) |
 | `settings.json` | User settings (CLI, model, permissions, perCli) |
 | `mcp.json` | Unified MCP config (source of truth) |
 | `prompts/` | A-1, A-2, HEARTBEAT prompt templates |
@@ -350,7 +350,7 @@ main.js (entry)
 | Orchestration | `POST /api/orchestrate/continue`, `POST /api/employees/reset` |
 | Commands | `POST /api/command`, `GET /api/commands?interface=` |
 | Settings | `GET/PUT /api/settings`, `GET/PUT /api/prompt` |
-| Memory | `GET/POST /api/memory`, `GET /api/claw-memory/search` |
+| Memory | `GET/POST /api/memory`, `GET /api/jaw-memory/search` |
 | MCP | `GET/PUT /api/mcp`, `POST /api/mcp/sync,install,reset` |
 | Skills | `GET /api/skills`, `POST /api/skills/enable,disable` |
 | Browser | `POST /api/browser/start,stop,act,navigate,screenshot` |

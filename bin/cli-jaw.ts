@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * cli-claw — Phase 9.1
+ * cli-jaw — Phase 9.1
  * CLI entrypoint with subcommand routing.
  * No external dependencies — Node built-in only.
  */
@@ -9,22 +9,32 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-let pkg: { version?: string; name?: string };
+let pkg: any;
 try {
-    pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
+    const pkgPath = join(__dirname, '..', 'package.json');
+    pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
 } catch {
-    pkg = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf8'));
+    const pkgPath = join(__dirname, '..', '..', 'package.json');
+    pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
 }
 
 const command = process.argv[2];
 
 function printHelp() {
+    const c = { cyan: '\x1b[36m', dim: '\x1b[2m', bold: '\x1b[1m', reset: '\x1b[0m' };
     console.log(`
-  🦞 cli-claw v${pkg.version}
+${c.cyan}     _____ _      _____       _                 
+    / ____| |    |_   _|     | |                
+   | |    | |      | |       | | __ ___      __ 
+   | |    | |      | |   _   | |/ _\` \\ \\ /\\ / / 
+   | |____| |____ _| |_ | |__| | (_| |\\ V  V /  
+    \\_____|______|_____| \\____/ \\__,_| \\_/\\_/   ${c.reset}
+${c.dim}   ─────────────────────────────────────${c.reset}
+${c.bold}   🦈 v${pkg.version}${c.reset}  ${c.dim}AI Agent Orchestration Platform${c.reset}
 
-  Usage:  cli-claw <command> [options]
+  ${c.bold}Usage:${c.reset}  cli-jaw <command> [options]
 
-  Commands:
+  ${c.bold}Commands:${c.reset}
     serve      서버 시작 (포그라운드)
     init       초기 설정 마법사
     doctor     설치/설정 진단
@@ -34,16 +44,18 @@ function printHelp() {
     mcp        MCP 서버 관리 (install/sync/list)
     skill      스킬 관리 (install/remove/info)
     status     서버 상태 확인
+    browser    브라우저 제어
+    memory     영구 메모리 관리
 
-  Options:
+  ${c.bold}Options:${c.reset}
     --help     도움말 표시
     --version  버전 표시
 
-  Examples:
-    cli-claw serve --port 3457
-    cli-claw init
-    cli-claw doctor --json
-    cli-claw chat --raw
+  ${c.bold}Examples:${c.reset}
+    cli-jaw serve --port 3457
+    cli-jaw init
+    cli-jaw doctor --json
+    cli-jaw chat --raw
 `);
 }
 
@@ -83,7 +95,7 @@ switch (command) {
         break;
     case '--version':
     case '-v':
-        console.log(`cli-claw v${pkg.version}`);
+        console.log(`cli-jaw v${pkg.version}`);
         break;
     case '--help':
     case '-h':

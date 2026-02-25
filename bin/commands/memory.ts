@@ -1,5 +1,5 @@
 /**
- * cli-claw memory — persistent memory CLI
+ * cli-jaw memory — persistent memory CLI
  */
 import { parseArgs } from 'node:util';
 import { getServerUrl } from '../../src/core/config.js';
@@ -10,7 +10,7 @@ const sub = process.argv[3];
 async function api(method: string, path: string, body?: any) {
     const opts: Record<string, any> = { method, headers: { 'Content-Type': 'application/json' } };
     if (body) opts.body = JSON.stringify(body);
-    const resp = await fetch(`${SERVER}/api/claw-memory${path}`, opts);
+    const resp = await fetch(`${SERVER}/api/jaw-memory${path}`, opts);
     if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: resp.statusText })) as Record<string, any>;
         throw new Error(err.error || `HTTP ${resp.status}`);
@@ -22,14 +22,14 @@ try {
     switch (sub) {
         case 'search': {
             const query = process.argv.slice(4).join(' ');
-            if (!query) { console.error('Usage: cli-claw memory search <query>'); process.exit(1); }
+            if (!query) { console.error('Usage: cli-jaw memory search <query>'); process.exit(1); }
             const r = await api('GET', `/search?q=${encodeURIComponent(query)}`) as Record<string, any>;
             console.log(r.result);
             break;
         }
         case 'read': {
             const file = process.argv[4];
-            if (!file) { console.error('Usage: cli-claw memory read <file>'); process.exit(1); }
+            if (!file) { console.error('Usage: cli-jaw memory read <file>'); process.exit(1); }
             const { values } = parseArgs({
                 args: process.argv.slice(5),
                 options: { lines: { type: 'string' } }, strict: false
@@ -44,7 +44,7 @@ try {
         case 'save': {
             const file = process.argv[4];
             const content = process.argv.slice(5).join(' ');
-            if (!file || !content) { console.error('Usage: cli-claw memory save <file> <content>'); process.exit(1); }
+            if (!file || !content) { console.error('Usage: cli-jaw memory save <file> <content>'); process.exit(1); }
             const r = await api('POST', '/save', { file, content }) as Record<string, any>;
             console.log(`✅ Saved to ${r.path}`);
             break;
@@ -52,7 +52,7 @@ try {
         case 'list': {
             const r = await api('GET', '/list') as Record<string, any>;
             if (r.files.length === 0) {
-                console.log('(no memory files — run: cli-claw memory init)');
+                console.log('(no memory files — run: cli-jaw memory init)');
             } else {
                 for (const f of r.files) {
                     const kb = (f.size / 1024).toFixed(1);
@@ -63,12 +63,12 @@ try {
         }
         case 'init': {
             await api('POST', '/init', {});
-            console.log('🧠 Memory initialized at ~/.cli-claw/memory/');
+            console.log('🧠 Memory initialized at ~/.cli-jaw/memory/');
             break;
         }
         default:
             console.log(`
-  🧠 cli-claw memory
+  🧠 cli-jaw memory
 
   Commands:
     search <query>               Search all memory files (grep)

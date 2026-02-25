@@ -1,5 +1,5 @@
 /**
- * cli-claw doctor — Phase 9.4
+ * cli-jaw doctor — Phase 9.4
  * Diagnoses installation and configuration health.
  */
 import { parseArgs } from 'node:util';
@@ -8,10 +8,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const CLAW_HOME = path.join(os.homedir(), '.cli-claw');
-const SETTINGS_PATH = path.join(CLAW_HOME, 'settings.json');
-const DB_PATH = path.join(CLAW_HOME, 'claw.db');
-const HEARTBEAT_PATH = path.join(CLAW_HOME, 'heartbeat.json');
+const JAW_HOME = path.join(os.homedir(), '.cli-jaw');
+const SETTINGS_PATH = path.join(JAW_HOME, 'settings.json');
+const DB_PATH = path.join(JAW_HOME, 'jaw.db');
+const HEARTBEAT_PATH = path.join(JAW_HOME, 'heartbeat.json');
 
 const { values } = parseArgs({
     args: process.argv.slice(3),
@@ -37,24 +37,24 @@ function check(name: string, fn: () => string) {
     }
 }
 
-console.log(!values.json ? '\n  🦞 cli-claw doctor\n' : '');
+console.log(!values.json ? '\n  🦈 cli-jaw doctor\n' : '');
 
 // 1. Home directory
 check('Home directory', () => {
-    fs.accessSync(CLAW_HOME, fs.constants.W_OK);
-    return CLAW_HOME;
+    fs.accessSync(JAW_HOME, fs.constants.W_OK);
+    return JAW_HOME;
 });
 
 // 2. settings.json
 let settings: Record<string, any> | null = null;
 check('settings.json', () => {
-    if (!fs.existsSync(SETTINGS_PATH)) throw new Error('WARN: not found — run cli-claw init');
+    if (!fs.existsSync(SETTINGS_PATH)) throw new Error('WARN: not found — run cli-jaw init');
     settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
     return `cli=${settings?.cli || 'not set'}`;
 });
 
 // 3. Database
-check('claw.db', () => {
+check('jaw.db', () => {
     if (!fs.existsSync(DB_PATH)) throw new Error('WARN: not found — will be created on first serve');
     const stat = fs.statSync(DB_PATH);
     return `${(stat.size / 1024).toFixed(0)} KB`;
@@ -90,7 +90,7 @@ check('Telegram', () => {
 
 // 7. Skills symlink
 check('Skills directory', () => {
-    const skillsDir = settings?.skillsDir || path.join(CLAW_HOME, 'skills');
+    const skillsDir = settings?.skillsDir || path.join(JAW_HOME, 'skills');
     if (!fs.existsSync(skillsDir)) throw new Error('WARN: not found');
     const agentsSkills = path.join(os.homedir(), '.agents', 'skills');
     const hasSymlink = fs.existsSync(agentsSkills);

@@ -28,7 +28,7 @@ const fallbackState = new Map();
 
 export function resetFallbackState() {
     fallbackState.clear();
-    console.log('[claw:fallback] state reset');
+    console.log('[jaw:fallback] state reset');
 }
 
 export function getFallbackState() {
@@ -39,7 +39,7 @@ export function getFallbackState() {
 
 export function killActiveAgent(reason = 'user') {
     if (!activeProcess) return false;
-    console.log(`[claw:kill] reason=${reason}`);
+    console.log(`[jaw:kill] reason=${reason}`);
     try { activeProcess.kill('SIGTERM'); } catch (e: unknown) { console.warn('[agent:kill] SIGTERM failed', { pid: activeProcess?.pid, error: (e as Error).message }); }
     const proc = activeProcess;
     setTimeout(() => {
@@ -51,7 +51,7 @@ export function killActiveAgent(reason = 'user') {
 export function killAllAgents(reason = 'user') {
     let killed = 0;
     for (const [id, proc] of activeProcesses) {
-        console.log(`[claw:killAll] killing ${id}, reason=${reason}`);
+        console.log(`[jaw:killAll] killing ${id}, reason=${reason}`);
         try { proc.kill('SIGTERM'); killed++; } catch (e: unknown) { console.warn(`[agent:killAll] SIGTERM failed for ${id}`, (e as Error).message); }
         const ref = proc;
         setTimeout(() => {
@@ -198,7 +198,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     const mainManaged = !forceNew && !empSid;
 
     if (activeProcess && mainManaged) {
-        console.log('[claw] Agent already running, skipping');
+        console.log('[jaw] Agent already running, skipping');
         return { child: null, promise: Promise.resolve({ text: '', code: -1 }) };
     }
 
@@ -214,7 +214,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         if (st && st.retriesLeft <= 0) {
             const fbAvail = detectCli(st.fallbackCli)?.available;
             if (fbAvail) {
-                console.log(`[claw:fallback] ${cli} retries exhausted → direct ${st.fallbackCli}`);
+                console.log(`[jaw:fallback] ${cli} retries exhausted → direct ${st.fallbackCli}`);
                 broadcast('agent_fallback', { from: cli, to: st.fallbackCli, reason: 'retries exhausted' });
                 return spawnAgent(prompt, {
                     ...opts, cli: st.fallbackCli, _isFallback: true, _skipInsert: true,
@@ -241,7 +241,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         : prompt;
     let args;
     if (isResume) {
-        console.log(`[claw:resume] ${cli} session=${resumeSessionId.slice(0, 12)}...`);
+        console.log(`[jaw:resume] ${cli} session=${resumeSessionId.slice(0, 12)}...`);
         args = buildResumeArgs(cli, model, effort, resumeSessionId, prompt, permissions);
     } else {
         args = buildArgs(cli, model, effort, promptForArgs, sysPrompt, permissions);
@@ -249,15 +249,15 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
 
     const agentLabel = agentId || 'main';
     if (cli === 'copilot') {
-        console.log(`[claw:${agentLabel}] Spawning: copilot --acp --model ${model} [${permissions}]`);
+        console.log(`[jaw:${agentLabel}] Spawning: copilot --acp --model ${model} [${permissions}]`);
     } else {
-        console.log(`[claw:${agentLabel}] Spawning: ${cli} ${args.join(' ').slice(0, 120)}...`);
+        console.log(`[jaw:${agentLabel}] Spawning: ${cli} ${args.join(' ').slice(0, 120)}...`);
     }
 
     const spawnEnv = makeCleanEnv();
 
     if (cli === 'gemini' && sysPrompt) {
-        const tmpSysFile = join(os.tmpdir(), `claw-gemini-sys-${agentLabel}.md`);
+        const tmpSysFile = join(os.tmpdir(), `jaw-gemini-sys-${agentLabel}.md`);
         fs.writeFileSync(tmpSysFile, sysPrompt);
         spawnEnv.GEMINI_SYSTEM_MD = tmpSysFile;
     }
@@ -283,7 +283,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             }
 
             if (changed) fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
-        } catch (e: unknown) { console.warn('[claw:copilot] config.json sync failed:', (e as Error).message); }
+        } catch (e: unknown) { console.warn('[jaw:copilot] config.json sync failed:', (e as Error).message); }
 
         const acp = new AcpClient({ model, workDir: settings.workingDir, permissions } as any);
         acp.spawn();
@@ -398,7 +398,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
 
             // ─── Success: clear fallback state (auto-recovery) ───
             if (code === 0 && fallbackState.has(cli)) {
-                console.log(`[claw:fallback] ${cli} recovered — clearing fallback state`);
+                console.log(`[jaw:fallback] ${cli} recovered — clearing fallback state`);
                 fallbackState.delete(cli);
             }
 
@@ -436,10 +436,10 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                         const st = fallbackState.get(cli);
                         if (st) {
                             st.retriesLeft = Math.max(0, st.retriesLeft - 1);
-                            console.log(`[claw:fallback] ${cli} retry consumed, ${st.retriesLeft} left`);
+                            console.log(`[jaw:fallback] ${cli} retry consumed, ${st.retriesLeft} left`);
                         } else {
                             fallbackState.set(cli, { fallbackCli, retriesLeft: FALLBACK_MAX_RETRIES });
-                            console.log(`[claw:fallback] ${cli} → ${fallbackCli}, ${FALLBACK_MAX_RETRIES} retries queued`);
+                            console.log(`[jaw:fallback] ${cli} → ${fallbackCli}, ${FALLBACK_MAX_RETRIES} retries queued`);
                         }
                         broadcast('agent_fallback', { from: cli, to: fallbackCli, reason: errMsg });
                         const { promise: retryP } = spawnAgent(prompt, {
@@ -510,8 +510,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             try {
                 const event = JSON.parse(line);
                 if (process.env.DEBUG) {
-                    console.log(`[claw:event:${agentLabel}] ${cli} type=${event.type}`);
-                    console.log(`[claw:raw:${agentLabel}] ${line.slice(0, 300)}`);
+                    console.log(`[jaw:event:${agentLabel}] ${cli} type=${event.type}`);
+                    console.log(`[jaw:raw:${agentLabel}] ${line.slice(0, 300)}`);
                 }
                 logEventSummary(agentLabel, cli, event, ctx);
                 if (!ctx.sessionId) ctx.sessionId = extractSessionId(cli, event);
@@ -522,7 +522,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
 
     child.stderr.on('data', (chunk) => {
         const text = chunk.toString().trim();
-        console.error(`[claw:stderr:${agentLabel}] ${text}`);
+        console.error(`[jaw:stderr:${agentLabel}] ${text}`);
         ctx.stderrBuf += text + '\n';
     });
 
@@ -535,12 +535,12 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
 
         if (!forceNew && !empSid && ctx.sessionId && code === 0) {
             updateSession.run(cli, ctx.sessionId, model, settings.permissions, settings.workingDir, cfg.effort || 'medium');
-            console.log(`[claw:session] saved ${cli} session=${ctx.sessionId.slice(0, 12)}...`);
+            console.log(`[jaw:session] saved ${cli} session=${ctx.sessionId.slice(0, 12)}...`);
         }
 
         // ─── Success: clear fallback state (auto-recovery) ───
         if (code === 0 && fallbackState.has(cli)) {
-            console.log(`[claw:fallback] ${cli} recovered — clearing fallback state`);
+            console.log(`[jaw:fallback] ${cli} recovered — clearing fallback state`);
             fallbackState.delete(cli);
         }
 
@@ -591,10 +591,10 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                     const st = fallbackState.get(cli);
                     if (st) {
                         st.retriesLeft = Math.max(0, st.retriesLeft - 1);
-                        console.log(`[claw:fallback] ${cli} retry consumed, ${st.retriesLeft} left`);
+                        console.log(`[jaw:fallback] ${cli} retry consumed, ${st.retriesLeft} left`);
                     } else {
                         fallbackState.set(cli, { fallbackCli, retriesLeft: FALLBACK_MAX_RETRIES });
-                        console.log(`[claw:fallback] ${cli} → ${fallbackCli}, ${FALLBACK_MAX_RETRIES} retries queued`);
+                        console.log(`[jaw:fallback] ${cli} → ${fallbackCli}, ${FALLBACK_MAX_RETRIES} retries queued`);
                     }
                     broadcast('agent_fallback', { from: cli, to: fallbackCli, reason: errMsg });
                     const { promise: retryP } = spawnAgent(prompt, {
@@ -609,7 +609,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         }
 
         broadcast('agent_status', { status: code === 0 ? 'done' : 'error', agentId: agentLabel });
-        console.log(`[claw:${agentLabel}] exited code=${code}, text=${ctx.fullText.length} chars`);
+        console.log(`[jaw:${agentLabel}] exited code=${code}, text=${ctx.fullText.length} chars`);
 
         resolve({ text: ctx.fullText, code, sessionId: ctx.sessionId, cost: ctx.cost, tools: ctx.toolLog });
 

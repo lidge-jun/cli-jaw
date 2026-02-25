@@ -1,5 +1,5 @@
 /**
- * cli-claw serve — Phase 9.1
+ * cli-jaw serve — Phase 9.1
  * Starts the server in foreground with signal forwarding.
  */
 import { spawn, exec } from 'node:child_process';
@@ -30,7 +30,7 @@ const isDistMode = fs.existsSync(serverJs);
 const serverPath = isDistMode ? serverJs : serverTs;
 const envFile = join(projectRoot, '.env');
 
-console.log(`\n  🦞 cli-claw serve — port ${values.port}\n`);
+console.log(`\n  🦈 cli-jaw serve — port ${values.port}\n`);
 
 let child;
 if (isDistMode) {

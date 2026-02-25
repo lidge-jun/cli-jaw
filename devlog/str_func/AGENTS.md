@@ -19,7 +19,7 @@
 
 | #   | 파일                     | 확인 사항                    |
 | --- | ------------------------ | ---------------------------- |
-| 5   | `bin/cli-claw.ts`        | switch case + printHelp 등록 |
+| 5   | `bin/cli-jaw.ts`        | switch case + printHelp 등록 |
 | 6   | `bin/commands/<name>.ts` | 실제 구현 파일               |
 
 ### CLI/모델 변경 시 (cli-registry 단일 소스)

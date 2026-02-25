@@ -1,4 +1,4 @@
-# 🧪 CLI-CLAW Tests
+# 🧪 CLI-JAW Tests
 
 [![Tests](https://img.shields.io/badge/tests-246%20pass-brightgreen)](#)
 

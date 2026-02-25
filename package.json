@@ -1,9 +1,10 @@
 {
-  "name": "cli-claw-ts",
+  "name": "cli-jaw",
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "cli-claw": "dist/bin/cli-claw.js"
+    "cli-jaw": "dist/bin/cli-jaw.js",
+    "jaw": "dist/bin/cli-jaw.js"
   },
   "files": [
     "dist/",
