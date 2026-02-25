@@ -97,7 +97,7 @@ function createDefaultSettings() {
     return {
         cli: DEFAULT_CLI,
         fallbackOrder: [],
-        permissions: 'safe',
+        permissions: 'auto',
         workingDir: os.homedir(),
         perCli: buildDefaultPerCli(),
         heartbeat: {

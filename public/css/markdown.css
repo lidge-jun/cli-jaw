@@ -126,10 +126,115 @@
 .msg-content .mermaid-container {
     margin: 8px 0;
     text-align: center;
+    position: relative;
+    background: rgba(30, 41, 59, 0.4);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 12px;
+    overflow-x: auto;
 }
 
 .msg-content .mermaid-container svg {
     max-width: 100%;
+}
+
+/* Mermaid popup button */
+.mermaid-zoom-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--text-dim);
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, color 0.15s;
+    z-index: 2;
+}
+
+.mermaid-zoom-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: var(--text);
+}
+
+/* Mermaid popup overlay */
+.mermaid-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mermaid-overlay-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(6px);
+}
+
+.mermaid-overlay-content {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 90vw;
+    max-height: 90vh;
+    overflow: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    animation: mermaid-pop 0.2s ease-out;
+}
+
+@keyframes mermaid-pop {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.mermaid-overlay-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: var(--text-dim);
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    z-index: 1;
+}
+
+.mermaid-overlay-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: var(--text);
+}
+
+.mermaid-overlay-svg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 400px;
+    min-height: 200px;
 }
 
 /* Code block language label */

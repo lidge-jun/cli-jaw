@@ -91,7 +91,7 @@ async function phasePlan(prompt: string, worklog: Record<string, any>, meta: Rec
     const emps = getEmployees.all() as Record<string, any>[];
     const planPrompt = buildPlanPrompt(prompt, worklog.path, emps);
 
-    const { promise } = spawnAgent(planPrompt, { agentId: 'planning', origin: (meta as Record<string, any>).origin || 'web' });
+    const { promise } = spawnAgent(planPrompt, { agentId: 'planning', _skipInsert: true, origin: (meta as Record<string, any>).origin || 'web' });
     const result = await promise as Record<string, any>;
 
     // Agent 자율 판단: direct_answer가 있으면 subtask 생략

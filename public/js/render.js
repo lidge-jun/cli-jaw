@@ -50,6 +50,18 @@ function renderMath(html) {
     return html;
 }
 
+// ── Mermaid SVG sanitization (preserves <style> for diagram rendering) ──
+function sanitizeMermaidSvg(svg) {
+    if (typeof DOMPurify !== 'undefined') {
+        return DOMPurify.sanitize(svg, {
+            USE_PROFILES: { svg: true, svgFilters: true },
+            ADD_TAGS: ['style', 'use'],
+            FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
+        });
+    }
+    return svg;
+}
+
 // ── Mermaid deferred rendering ──
 let mermaidId = 0;
 
@@ -61,8 +73,15 @@ function renderMermaidBlocks() {
         const id = `mermaid-${++mermaidId}`;
         try {
             const { svg } = await mermaid.render(id, code);
-            el.innerHTML = sanitizeHtml(svg);
+            el.innerHTML = sanitizeMermaidSvg(svg);
             el.classList.add('mermaid-rendered');
+            // Add zoom button
+            const zoomBtn = document.createElement('button');
+            zoomBtn.className = 'mermaid-zoom-btn';
+            zoomBtn.textContent = '⛶';
+            zoomBtn.title = 'Expand diagram';
+            zoomBtn.addEventListener('click', () => openMermaidOverlay(el.innerHTML));
+            el.appendChild(zoomBtn);
         } catch (err) {
             const errMsg = err?.message || err?.str || 'Unknown error';
             el.innerHTML = `
@@ -72,6 +91,39 @@ function renderMermaidBlocks() {
                     <pre style="margin:0;font-size:11px;overflow-x:auto"><code>${escapeHtml(code)}</code></pre>
                 </div>`;
         }
+    });
+}
+// ── Mermaid popup overlay ──
+function openMermaidOverlay(svgHtml) {
+    // Remove existing overlay if any
+    document.getElementById('mermaidOverlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'mermaidOverlay';
+    overlay.className = 'mermaid-overlay';
+    overlay.innerHTML = `
+        <div class="mermaid-overlay-backdrop"></div>
+        <div class="mermaid-overlay-content">
+            <button class="mermaid-overlay-close">✕</button>
+            <div class="mermaid-overlay-svg">${svgHtml}</div>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    // Make SVG fill the popup
+    const svgEl = overlay.querySelector('svg');
+    if (svgEl) {
+        svgEl.removeAttribute('width');
+        svgEl.removeAttribute('height');
+        svgEl.style.width = '100%';
+        svgEl.style.height = 'auto';
+        svgEl.style.maxHeight = '80vh';
+    }
+
+    const close = () => overlay.remove();
+    overlay.querySelector('.mermaid-overlay-backdrop').addEventListener('click', close);
+    overlay.querySelector('.mermaid-overlay-close').addEventListener('click', close);
+    document.addEventListener('keydown', function handler(e) {
+        if (e.key === 'Escape') { close(); document.removeEventListener('keydown', handler); }
     });
 }
 
@@ -116,8 +168,25 @@ function ensureMarked() {
     if (typeof window.mermaid !== 'undefined') {
         window.mermaid.initialize({
             startOnLoad: false,
-            theme: 'dark',
-            securityLevel: 'strict',
+            theme: 'base',
+            securityLevel: 'loose',
+            themeVariables: {
+                darkMode: true,
+                background: '#0f172a',
+                primaryColor: '#1e3a5f',
+                primaryTextColor: '#e2e8f0',
+                primaryBorderColor: '#38bdf8',
+                lineColor: '#94a3b8',
+                secondaryColor: '#1e293b',
+                tertiaryColor: '#0f172a',
+                textColor: '#e2e8f0',
+                mainBkg: '#1e293b',
+                nodeBorder: '#38bdf8',
+                clusterBkg: '#1e293b',
+                titleColor: '#e2e8f0',
+                edgeLabelBackground: '#1e293b',
+                nodeTextColor: '#e2e8f0',
+            },
         });
     }
 
@@ -159,6 +228,16 @@ export function rehighlightAll() {
 (function waitForHljs() {
     if (typeof hljs !== 'undefined') { rehighlightAll(); return; }
     setTimeout(waitForHljs, 200);
+})();
+
+// Poll for mermaid load and render pending blocks
+(function waitForMermaid() {
+    if (typeof mermaid !== 'undefined') {
+        ensureMarked(); // ensure mermaid.initialize() runs
+        renderMermaidBlocks();
+        return;
+    }
+    setTimeout(waitForMermaid, 300);
 })();
 
 // ── Copy button event delegation (one-time setup) ──

@@ -225,7 +225,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
 
     const permissions = opts.permissions || settings.permissions || session.permissions || 'auto';
     const cfg = settings.perCli?.[cli] || {};
-    const ao = (!opts.internal && !opts.agentId) ? (settings.activeOverrides?.[cli] || {}) : {};
+    const ao = settings.activeOverrides?.[cli] || {};
     const model = opts.model || ao.model || cfg.model || 'default';
     const effort = opts.effort || ao.effort || cfg.effort || '';
 

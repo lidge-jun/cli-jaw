@@ -26,7 +26,7 @@ cli-jaw/
 │   │   ├── i18n.ts           ← 서버사이드 번역 (90L)
 │   │   └── settings-merge.ts ← perCli/activeOverrides deep merge (45L)
 │   ├── agent/                ← CLI 에이전트 런타임
-│   │   ├── spawn.ts          ← CLI spawn + ACP 분기 + 큐 + 메모리 flush (672L)
+│   │   ├── spawn.ts          ← CLI spawn + ACP 분기 + 큐 + 메모리 flush + activeOverrides 통합 (673L)
 │   │   ├── args.ts           ← CLI별 인자 빌더 (67L)
 │   │   └── events.ts         ← NDJSON 파서 + ACP update + logEventSummary (322L)
 │   ├── orchestrator/         ← 직원 오케스트레이션
@@ -254,6 +254,8 @@ graph LR
 54. **[perf] Sidebar jank fix**: `display:none` → `opacity` 전환 + `contain: layout style` + `overflow:hidden`
 55. **[ux] CLI 블록아트 배너**: `██╗` 스타일 CLIJaw ASCII art + active model(`/api/session`) 표시
 56. **[ux] Logo uppercase**: 프론트엔드 로고 `CLI-JAW` 대문자, 이모지 없음
+57. **[critical fix] activeOverrides 모델**: `spawn.ts:228`에서 planning/employee agent도 `activeOverrides` 모델 사용하도록 수정 — 이전에는 `agentId` 있으면 `perCli` 폴백 → config.json 모델 충돌 → Copilot 자동 취소 유발
+58. **[config] 기본 permissions**: `config.ts` 기본값 `safe` → `auto` — Copilot ACP에서 safe 모드는 도구 승인 블로킹으로 자동 취소 유발
 
 ---
 
