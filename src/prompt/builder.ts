@@ -177,6 +177,18 @@ Recurring tasks via \`~/.cli-claw/heartbeat.json\` (auto-reloads on save):
 - Never delete existing \`export\` (other modules may import)
 - Error handling: \`try/catch\` mandatory, no silent failures
 - Config values → \`config.js\` or \`settings.json\`, never hardcode
+
+### Dev Skills (MANDATORY for Development Tasks)
+Before writing ANY code, you MUST read the relevant dev skill guides:
+1. **Always read first**: \`~/.cli-claw/skills/dev/SKILL.md\` — project-wide conventions, file structure, coding standards
+2. **Role-specific** (read the one matching your task):
+   - \`dev-frontend\` — UI components, CSS, browser compatibility
+   - \`dev-backend\` — API design, error handling, security
+   - \`dev-data\` — database, queries, migrations
+   - \`dev-testing\` — test strategy, coverage, assertion patterns
+3. **How to read**: \`cat ~/.cli-claw/skills/dev/SKILL.md\` or \`cli-claw skill read dev\`
+4. Follow ALL guidelines from the skill before and during implementation
+5. If a skill contradicts these rules, the skill takes priority (skills are project-specific)
 `;
 
 const A2_DEFAULT = `# User Configuration
