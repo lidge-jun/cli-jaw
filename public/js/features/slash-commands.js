@@ -9,6 +9,13 @@ let selectedIdx = -1;   // -1 = none
 let isOpen = false;
 let closeTimer = null;
 
+// File paths like /Users/junny/... or /tmp/foo — not commands
+function looksLikeFilePath(text) {
+    const after = String(text || '').slice(1).trim();
+    const tok = after.split(/\s+/)[0] || '';
+    return tok.includes('/') || tok.includes('\\');
+}
+
 const dropdown = () => document.getElementById('cmdDropdown');
 const input = () => document.getElementById('chatInput');
 
@@ -48,7 +55,7 @@ function render() {
     if (!el || !inp) return;
 
     if (!filtered.length) {
-        if (!inp.value.startsWith('/')) { close(); return; }
+        if (!inp.value.startsWith('/') || looksLikeFilePath(inp.value)) { close(); return; }
 
         el.innerHTML = `
             <div class="cmd-item cmd-empty" role="option" aria-disabled="true">
@@ -138,7 +145,7 @@ export function close() {
 
 export function update(text) {
     const raw = String(text || '');
-    if (!raw.startsWith('/') || raw.includes(' ') || raw.includes('\n')) {
+    if (!raw.startsWith('/') || raw.includes(' ') || raw.includes('\n') || looksLikeFilePath(raw)) {
         close();
         return;
     }

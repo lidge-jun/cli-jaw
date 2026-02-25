@@ -19,7 +19,12 @@ export async function sendMessage() {
     const text = input.value.trim();
     if (!text && !state.attachedFiles.length) return;
 
-    if (text.startsWith('/') && !state.attachedFiles.length) {
+    // File paths like /Users/junny/... or /tmp/foo — not commands
+    const afterSlash = text.slice(1).trim();
+    const firstToken = afterSlash.split(/\s+/)[0] || '';
+    const isFilePath = firstToken.includes('/') || firstToken.includes('\\');
+
+    if (text.startsWith('/') && !state.attachedFiles.length && !isFilePath) {
         input.value = '';
         resetInputHeight();
         slashCmd.close();
@@ -44,6 +49,12 @@ export async function sendMessage() {
             });
             if (timer) clearTimeout(timer);
             const result = await res.json().catch(() => ({}));
+            // not_command → fall through to normal chat
+            if (result?.code === 'not_command') {
+                addMessage('user', text);
+                await apiJson('/api/message', 'POST', { prompt: text });
+                return;
+            }
             if (!res.ok && !result?.text) throw new Error(`HTTP ${res.status}`);
             if (result?.code === 'clear_screen') {
                 document.getElementById('chatMessages').innerHTML = '';
