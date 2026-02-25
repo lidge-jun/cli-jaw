@@ -2,9 +2,9 @@
 
 # 🦞 CLI-CLAW
 
-### 您的专属 AI 助手 — 由 5 大 AI 引擎驱动
+### 内置 5 大 AI 引擎的专属本地助手
 
-*一个助手。五颗大脑。全天候待命。*
+*Claude、Codex、Gemini... 从此告别来回切换。*
 
 [![Tests](https://img.shields.io/badge/tests-252%20pass-brightgreen)](#-测试)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)

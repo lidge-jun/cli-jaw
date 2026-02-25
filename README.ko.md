@@ -2,9 +2,9 @@
 
 # 🦞 CLI-CLAW
 
-### 당신의 개인용 AI 비서 — 5개의 AI 엔진으로 구동됩니다
+### 5대 AI 엔진을 품은 나만의 로컬 비서
 
-*하나의 비서. 다섯 개의 두뇌. 24시간 언제나.*
+*Claude, Codex, Gemini... 이제 번갈아 쓰지 마세요.*
 
 [![Tests](https://img.shields.io/badge/tests-252%20pass-brightgreen)](#-테스트)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
