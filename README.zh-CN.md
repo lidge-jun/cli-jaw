@@ -13,8 +13,7 @@
 
 [English](README.md) / [한국어](README.ko.md) / **中文**
 
-<!-- 📸 TODO: Web UI 截图 -->
-<!-- ![CLI-CLAW Web UI](docs/screenshots/web-ui.png) -->
+![CLI-CLAW Web UI](docs/screenshots/web-ui.png)
 
 </div>
 

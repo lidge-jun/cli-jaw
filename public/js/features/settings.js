@@ -165,7 +165,7 @@ export async function loadMcpServers() {
         if (!d) return;
         const el = document.getElementById('mcpServerList');
         const names = Object.entries(d.servers || {});
-        if (!names.length) { el.textContent = '(no servers configured)'; return; }
+        if (!names.length) { el.textContent = t('mcp.noServers'); return; }
         el.innerHTML = names.map(([n, s]) =>
             `<div style="padding:2px 0">• <b>${n}</b> <span style="opacity:.6">${s.command} ${(s.args || []).slice(0, 2).join(' ')}</span></div>`
         ).join('');

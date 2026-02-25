@@ -172,5 +172,9 @@
     "emp.empty": "직원이 없습니다",
     "modal.promptTitle": "시스템 프롬프트 (A-2)",
     "modal.heartbeatTitle": "💓 하트비트 작업",
-    "modal.memoryTitle": "🧠 메모리"
+    "modal.memoryTitle": "🧠 메모리",
+    "code.copy": "복사",
+    "code.copied": "복사됨 ✓",
+    "mcp.noServers": "(서버 미설정)",
+    "orchestrator.dispatching": "🎯 작업 분배 중..."
 }

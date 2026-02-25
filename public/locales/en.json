@@ -172,5 +172,9 @@
     "emp.empty": "No employees yet",
     "modal.promptTitle": "System Prompt (A-2)",
     "modal.heartbeatTitle": "💓 Heartbeat Jobs",
-    "modal.memoryTitle": "🧠 Memory"
+    "modal.memoryTitle": "🧠 Memory",
+    "code.copy": "Copy",
+    "code.copied": "Copied ✓",
+    "mcp.noServers": "(no servers configured)",
+    "orchestrator.dispatching": "🎯 Dispatching tasks..."
 }

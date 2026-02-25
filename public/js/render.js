@@ -1,9 +1,10 @@
 // ── Render Helpers ──
 // Modular markdown rendering: marked.js + highlight.js + KaTeX + Mermaid
 // All libs loaded via CDN (defer), graceful fallback if unavailable
+import { t } from './features/i18n.js';
 
-export function escapeHtml(t) {
-    return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+export function escapeHtml(str) {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
@@ -100,7 +101,7 @@ function ensureMarked() {
                 highlighted = hljs.highlightAuto(text).value;
             } catch { /* fallback */ }
         }
-        const labelText = lang ? escapeHtml(lang) : '복사';
+        const labelText = lang ? escapeHtml(lang) : t('code.copy');
         const label = `<span class="code-lang-label" data-lang="${lang ? escapeHtml(lang) : ''}">${labelText}</span>`;
         return `<div class="code-block-wrapper">${label}<pre><code class="hljs${lang ? ` language-${escapeHtml(lang)}` : ''}">${highlighted}</code></pre></div>`;
     };
@@ -175,7 +176,7 @@ function ensureCopyDelegation() {
         if (!codeEl) return;
         navigator.clipboard.writeText(codeEl.textContent).then(() => {
             const orig = label.textContent;
-            label.textContent = '복사됨 ✓';
+            label.textContent = t('code.copied');
             label.classList.add('copied');
             setTimeout(() => {
                 label.textContent = orig;
@@ -188,7 +189,7 @@ function ensureCopyDelegation() {
 // ── Main export ──
 export function renderMarkdown(text) {
     const cleaned = stripOrchestration(text);
-    if (!cleaned) return '<em style="color:var(--text-dim)">🎯 작업 분배 중...</em>';
+    if (!cleaned) return `<em style="color:var(--text-dim)">${t('orchestrator.dispatching')}</em>`;
 
     let html;
     if (ensureMarked()) {
