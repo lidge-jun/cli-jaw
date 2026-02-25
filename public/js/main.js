@@ -89,10 +89,10 @@ document.getElementById('langToggle')?.addEventListener('click', async () => {
 document.querySelector('.tab-bar').addEventListener('click', (e) => {
     const btn = e.target.closest('.tab-btn');
     if (!btn) return;
-    const text = btn.textContent.trim();
-    if (text.includes('Agents')) switchTab('agents', btn);
-    else if (text.includes('Skills')) switchTab('skills', btn);
-    else if (text.includes('Settings')) switchTab('settings', btn);
+    const tabs = [...btn.parentElement.children].filter(c => c.classList.contains('tab-btn'));
+    const idx = tabs.indexOf(btn);
+    const names = ['agents', 'skills', 'settings'];
+    if (names[idx]) switchTab(names[idx], btn);
 });
 
 // ── Save Button ──
