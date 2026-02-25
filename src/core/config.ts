@@ -4,13 +4,23 @@ import os from 'os';
 import fs from 'fs';
 import { join } from 'path';
 import { execFileSync } from 'child_process';
-import { createRequire } from 'module';
 import { CLI_REGISTRY, CLI_KEYS, DEFAULT_CLI, buildDefaultPerCli } from '../cli/registry.js';
 
 // ─── Version (single source of truth: package.json) ──
-const require = createRequire(import.meta.url);
-const pkg = require('../../package.json');
-export const APP_VERSION = pkg.version;
+import { dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+function findPackageJson(): string {
+    let dir = dirname(fileURLToPath(import.meta.url));
+    while (dir !== dirname(dir)) {
+        const candidate = join(dir, 'package.json');
+        if (fs.existsSync(candidate)) return candidate;
+        dir = dirname(dir);
+    }
+    throw new Error('package.json not found');
+}
+const pkg = JSON.parse(fs.readFileSync(findPackageJson(), 'utf8'));
+export const APP_VERSION: string = pkg.version;
 
 // ─── Paths ───────────────────────────────────────────
 
