@@ -1,9 +1,9 @@
 import fs from 'fs';
 import os from 'os';
 import { join } from 'path';
-import { settings, CLAW_HOME, PROMPTS_DIR, SKILLS_DIR, SKILLS_REF_DIR, loadHeartbeatFile } from '../core/config.ts';
-import { getSession, updateSession, getEmployees } from '../core/db.ts';
-import { memoryFlushCounter, flushCycleCount } from '../agent/spawn.ts';
+import { settings, CLAW_HOME, PROMPTS_DIR, SKILLS_DIR, SKILLS_REF_DIR, loadHeartbeatFile } from '../core/config.js';
+import { getSession, updateSession, getEmployees } from '../core/db.js';
+import { memoryFlushCounter, flushCycleCount } from '../agent/spawn.js';
 
 const promptCache = new Map();
 

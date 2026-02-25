@@ -221,7 +221,7 @@ switch (sub) {
 
         // 3. Re-run copyDefaultSkills (2×3 classification)
         try {
-            const { copyDefaultSkills } = await import('../../lib/mcp-sync.ts');
+            const { copyDefaultSkills } = await import('../../lib/mcp-sync.js');
             const count = copyDefaultSkills();
             console.log(`\n  ${c.green}✅ 초기화 완료!${c.reset}`);
 

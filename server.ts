@@ -3,7 +3,7 @@
 
 import express from 'express';
 import helmet from 'helmet';
-import { log } from './src/core/logger.ts';
+import { log } from './src/core/logger.js';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { fileURLToPath } from 'url';
@@ -12,23 +12,23 @@ import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import { InputFile } from 'grammy';
-import { readClaudeCreds, readCodexTokens, fetchClaudeUsage, fetchCodexUsage, readGeminiAccount } from './src/routes/quota.ts';
-import { registerBrowserRoutes } from './src/routes/browser.ts';
+import { readClaudeCreds, readCodexTokens, fetchClaudeUsage, fetchCodexUsage, readGeminiAccount } from './src/routes/quota.js';
+import { registerBrowserRoutes } from './src/routes/browser.js';
 import {
     loadUnifiedMcp, saveUnifiedMcp, syncToAll,
     ensureSkillsSymlinks, initMcpConfig, copyDefaultSkills,
-} from './lib/mcp-sync.ts';
+} from './lib/mcp-sync.js';
 
 // ─── src/ modules ────────────────────────────────────
 
-import { assertSkillId, assertFilename, safeResolveUnder } from './src/security/path-guards.ts';
-import { decodeFilenameSafe } from './src/security/decode.ts';
-import { ok, fail } from './src/http/response.ts';
-import { mergeSettingsPatch } from './src/core/settings-merge.ts';
-import { setWss, broadcast } from './src/core/bus.ts';
-import * as browser from './src/browser/index.ts';
-import * as memory from './src/memory/memory.ts';
-import { loadLocales, t, normalizeLocale } from './src/core/i18n.ts';
+import { assertSkillId, assertFilename, safeResolveUnder } from './src/security/path-guards.js';
+import { decodeFilenameSafe } from './src/security/decode.js';
+import { ok, fail } from './src/http/response.js';
+import { mergeSettingsPatch } from './src/core/settings-merge.js';
+import { setWss, broadcast } from './src/core/bus.js';
+import * as browser from './src/browser/index.js';
+import * as memory from './src/memory/memory.js';
+import { loadLocales, t, normalizeLocale } from './src/core/i18n.js';
 import {
     CLAW_HOME, PROMPTS_DIR, DB_PATH, UPLOADS_DIR,
     SKILLS_DIR, SKILLS_REF_DIR,
@@ -36,29 +36,29 @@ import {
     ensureDirs, runMigration,
     loadHeartbeatFile, saveHeartbeatFile,
     detectAllCli, APP_VERSION,
-} from './src/core/config.ts';
+} from './src/core/config.js';
 import {
     db, getSession, updateSession, insertMessage, getMessages, getMessagesWithTrace,
     getRecentMessages, clearMessages,
     getMemory, upsertMemory, deleteMemory,
     getEmployees, insertEmployee, deleteEmployee,
-} from './src/core/db.ts';
+} from './src/core/db.js';
 import {
     initPromptFiles, getMemoryDir, getSystemPrompt, regenerateB,
     A2_PATH, HEARTBEAT_PATH,
     getMergedSkills,
-} from './src/prompt/builder.ts';
+} from './src/prompt/builder.js';
 import {
     activeProcess, killActiveAgent, killAllAgents, waitForProcessEnd,
     steerAgent, enqueueMessage, processQueue, messageQueue,
     saveUpload, memoryFlushCounter, resetFallbackState,
-} from './src/agent/spawn.ts';
-import { parseCommand, executeCommand, COMMANDS } from './src/cli/commands.ts';
-import { orchestrate, orchestrateContinue, isContinueIntent } from './src/orchestrator/pipeline.ts';
-import { initTelegram, telegramBot, telegramActiveChatIds } from './src/telegram/bot.ts';
-import { startHeartbeat, stopHeartbeat, watchHeartbeatFile } from './src/memory/heartbeat.ts';
-import { fetchCopilotQuota } from './lib/quota-copilot.ts';
-import { CLI_REGISTRY } from './src/cli/registry.ts';
+} from './src/agent/spawn.js';
+import { parseCommand, executeCommand, COMMANDS } from './src/cli/commands.js';
+import { orchestrate, orchestrateContinue, isContinueIntent } from './src/orchestrator/pipeline.js';
+import { initTelegram, telegramBot, telegramActiveChatIds } from './src/telegram/bot.js';
+import { startHeartbeat, stopHeartbeat, watchHeartbeatFile } from './src/memory/heartbeat.js';
+import { fetchCopilotQuota } from './lib/quota-copilot.js';
+import { CLI_REGISTRY } from './src/cli/registry.js';
 
 // ─── Resolve paths ───────────────────────────────────
 
@@ -294,7 +294,7 @@ function makeWebCommandCtx(req: any, localeOverride: string | null = null) {
         syncMcp: async () => ({ results: syncToAll(loadUnifiedMcp(), settings.workingDir) }),
         installMcp: async () => {
             const config = loadUnifiedMcp();
-            const { installMcpServers } = await import('./lib/mcp-sync.ts');
+            const { installMcpServers } = await import('./lib/mcp-sync.js');
             const results = await installMcpServers(config);
             saveUnifiedMcp(config);
             const synced = syncToAll(config, settings.workingDir);
@@ -577,7 +577,7 @@ app.post('/api/mcp/sync', (req, res) => {
 app.post('/api/mcp/install', async (req, res) => {
     try {
         const config = loadUnifiedMcp();
-        const { installMcpServers } = await import('./lib/mcp-sync.ts');
+        const { installMcpServers } = await import('./lib/mcp-sync.js');
         const results = await installMcpServers(config);
         saveUnifiedMcp(config);
         const syncResults = syncToAll(config, settings.workingDir);

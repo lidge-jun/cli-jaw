@@ -3,7 +3,7 @@
  * Phase 2: Codex provider only. Phase 3: + Gemini/Claude REST.
  */
 import { spawn } from 'child_process';
-import { screenshot, mouseClick, snapshot } from './actions.ts';
+import { screenshot, mouseClick, snapshot } from './actions.js';
 
 /**
  * Extract click coordinates from screenshot using vision AI.

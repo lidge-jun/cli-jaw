@@ -5,7 +5,7 @@
  */
 import { parseArgs } from 'node:util';
 import { createInterface } from 'node:readline';
-import { getServerUrl } from '../../src/core/config.ts';
+import { getServerUrl } from '../../src/core/config.js';
 
 const { values } = parseArgs({
     args: process.argv.slice(3),

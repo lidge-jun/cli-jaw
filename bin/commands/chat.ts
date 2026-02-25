@@ -9,7 +9,7 @@ import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { resolve as resolvePath, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseCommand, executeCommand, getCompletionItems, getArgumentCompletionItems } from '../../src/cli/commands.ts';
+import { parseCommand, executeCommand, getCompletionItems, getArgumentCompletionItems } from '../../src/cli/commands.js';
 
 const { values } = parseArgs({
     args: process.argv.slice(3),
@@ -31,7 +31,7 @@ const c = {
 // ─── Connect ─────────────────────────────────
 const wsUrl = getWsUrl(values.port as string);
 const apiUrl = getServerUrl(values.port as string);
-import { APP_VERSION, getServerUrl, getWsUrl } from '../../src/core/config.ts';
+import { APP_VERSION, getServerUrl, getWsUrl } from '../../src/core/config.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const SKILL_SCRIPT = resolvePath(__dirname, 'skill.js');

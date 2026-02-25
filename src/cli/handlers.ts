@@ -1,8 +1,8 @@
 // ─── Slash Command Handlers ─────────────────────────
 // Extracted from commands.js for 500-line compliance.
 
-import { CLI_KEYS, buildModelChoicesByCli } from './registry.ts';
-import { t } from '../core/i18n.ts';
+import { CLI_KEYS, buildModelChoicesByCli } from './registry.js';
+import { t } from '../core/i18n.js';
 
 const DEFAULT_CLI_CHOICES = [...CLI_KEYS];
 const MODEL_CHOICES_BY_CLI = buildModelChoicesByCli();

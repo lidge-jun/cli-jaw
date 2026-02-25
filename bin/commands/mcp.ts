@@ -24,7 +24,7 @@ import {
     saveUnifiedMcp,
     syncToAll,
     initMcpConfig,
-} from '../../lib/mcp-sync.ts';
+} from '../../lib/mcp-sync.js';
 
 const CLAW_HOME = join(homedir(), '.cli-claw');
 

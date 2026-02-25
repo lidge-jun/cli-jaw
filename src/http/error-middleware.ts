@@ -2,7 +2,7 @@
 // Phase 9.2 — Express global error handler
 
 import type { Request, Response, NextFunction } from 'express';
-import { fail } from './response.ts';
+import { fail } from './response.js';
 
 /**
  * 404 Not Found 핸들러

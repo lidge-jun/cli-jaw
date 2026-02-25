@@ -2,7 +2,7 @@
  * cli-claw memory — persistent memory CLI
  */
 import { parseArgs } from 'node:util';
-import { getServerUrl } from '../../src/core/config.ts';
+import { getServerUrl } from '../../src/core/config.js';
 
 const SERVER = getServerUrl('3457');
 const sub = process.argv[3];

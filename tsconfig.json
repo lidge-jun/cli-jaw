@@ -13,9 +13,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "noUncheckedIndexedAccess": true,
-    "allowImportingTsExtensions": true,
-    "noEmit": true
+    "noUncheckedIndexedAccess": true
   },
   "include": [
     "src/**/*.ts",

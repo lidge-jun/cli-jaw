@@ -4,14 +4,14 @@ import fs from 'fs';
 import os from 'os';
 import { join } from 'path';
 import { spawn } from 'child_process';
-import { broadcast } from '../core/bus.ts';
-import { settings, UPLOADS_DIR, detectCli } from '../core/config.ts';
+import { broadcast } from '../core/bus.js';
+import { settings, UPLOADS_DIR, detectCli } from '../core/config.js';
 import {
     getSession, updateSession, insertMessage, insertMessageWithTrace, getRecentMessages, getEmployees,
-} from '../core/db.ts';
-import { getSystemPrompt, regenerateB } from '../prompt/builder.ts';
-import { extractSessionId, extractFromEvent, extractFromAcpUpdate, logEventSummary } from './events.ts';
-import { saveUpload as _saveUpload, buildMediaPrompt } from '../../lib/upload.ts';
+} from '../core/db.js';
+import { getSystemPrompt, regenerateB } from '../prompt/builder.js';
+import { extractSessionId, extractFromEvent, extractFromAcpUpdate, logEventSummary } from './events.js';
+import { saveUpload as _saveUpload, buildMediaPrompt } from '../../lib/upload.js';
 
 // ─── State ───────────────────────────────────────────
 
@@ -80,7 +80,7 @@ export async function steerAgent(newPrompt: string, source: string) {
     if (wasRunning) await waitForProcessEnd(3000);
     insertMessage.run('user', newPrompt, source, '');
     broadcast('new_message', { role: 'user', content: newPrompt, source });
-    const { orchestrate, orchestrateContinue, isContinueIntent } = await import('../orchestrator/pipeline.ts');
+    const { orchestrate, orchestrateContinue, isContinueIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
     if (isContinueIntent(newPrompt)) orchestrateContinue({ origin });
     else orchestrate(newPrompt, { origin });
@@ -105,7 +105,7 @@ export async function processQueue() {
     insertMessage.run('user', combined, source, '');
     broadcast('new_message', { role: 'user', content: combined, source });
     broadcast('queue_update', { pending: 0 });
-    const { orchestrate, orchestrateContinue, isContinueIntent } = await import('../orchestrator/pipeline.ts');
+    const { orchestrate, orchestrateContinue, isContinueIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
     if (isContinueIntent(combined)) orchestrateContinue({ origin });
     else orchestrate(combined, { origin });
@@ -160,7 +160,7 @@ function withHistoryPrompt(prompt: string, historyBlock: string) {
     return `${historyBlock}\n\n---\n[Current Message]\n${body}`;
 }
 
-import { buildArgs, buildResumeArgs } from './args.ts';
+import { buildArgs, buildResumeArgs } from './args.js';
 export { buildArgs, buildResumeArgs };
 
 // ─── Upload wrapper ──────────────────────────────────
@@ -170,8 +170,8 @@ export { buildMediaPrompt };
 
 // ─── Spawn Agent ─────────────────────────────────────
 
-import { stripSubtaskJSON } from '../orchestrator/pipeline.ts';
-import { AcpClient } from '../cli/acp-client.ts';
+import { stripSubtaskJSON } from '../orchestrator/pipeline.js';
+import { AcpClient } from '../cli/acp-client.js';
 
 interface SpawnOpts {
     internal?: boolean;
@@ -622,7 +622,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
 // ─── Memory Flush ────────────────────────────────────
 
 async function triggerMemoryFlush() {
-    const { getMemoryDir } = await import('../prompt/builder.ts');
+    const { getMemoryDir } = await import('../prompt/builder.js');
     const memDir = getMemoryDir();
     const threshold = settings.memory?.flushEvery ?? 20;
     const recent = (getRecentMessages.all(threshold) as any[]).reverse();

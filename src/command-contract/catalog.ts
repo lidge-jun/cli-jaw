@@ -1,7 +1,7 @@
 // ─── Command Contract: Capability Catalog ────────────
 // Phase 9.5 — COMMANDS 배열을 capability map으로 확장
 
-import { COMMANDS } from '../cli/commands.ts';
+import { COMMANDS } from '../cli/commands.js';
 
 export const CAPABILITY = {
     full: 'full',         // 실행 가능

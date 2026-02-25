@@ -1,7 +1,7 @@
 // ─── Command Contract: Help Renderer ─────────────────
 // Phase 9.5 — 인터페이스별 통일 /help 렌더링
 
-import { getVisibleCommands } from './policy.ts';
+import { getVisibleCommands } from './policy.js';
 
 /**
  * 커맨드 도움말 렌더링

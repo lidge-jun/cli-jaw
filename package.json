@@ -3,20 +3,17 @@
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "cli-claw": "bin/cli-claw.ts"
+    "cli-claw": "dist/bin/cli-claw.js"
   },
   "files": [
-    "bin/",
-    "server.js",
+    "dist/",
     "public/",
     "package.json",
-    "src/",
-    "lib/",
     "skills_ref/"
   ],
   "scripts": {
     "dev": "tsx --env-file=.env server.ts",
-    "postinstall": "tsx bin/postinstall.ts",
+    "postinstall": "node dist/bin/postinstall.js",
     "check:copilot-gap": "node scripts/check-copilot-gap.js",
     "check:deps": "node scripts/check-deps-offline.mjs",
     "check:deps:online": "bash scripts/check-deps-online.sh",
@@ -29,7 +26,8 @@
     "build": "tsc",
     "build:frontend": "node esbuild.config.mjs",
     "watch:frontend": "node esbuild.config.mjs --watch",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "tsc"
   },
   "dependencies": {
     "@grammyjs/runner": "^2.0.3",
@@ -40,7 +38,6 @@
     "helmet": "^8.1.0",
     "node-fetch": "^3.3.2",
     "playwright-core": "^1.58.2",
-    "tsx": "^4.21.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {
@@ -49,6 +46,7 @@
     "@types/node": "^22.0.0",
     "@types/ws": "^8.5.0",
     "esbuild": "^0.27.3",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "tsx": "^4.21.0"
   }
 }

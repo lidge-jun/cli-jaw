@@ -1,8 +1,8 @@
 // ─── Browser API Routes (Phase 7) ─────────────────────
 import type { Express, Request, Response } from 'express';
-import * as browser from '../browser/index.ts';
-import { ok } from '../http/response.ts';
-import { settings } from '../core/config.ts';
+import * as browser from '../browser/index.js';
+import { ok } from '../http/response.js';
+import { settings } from '../core/config.js';
 
 const cdpPort = () => settings.browser?.cdpPort || 9240;
 

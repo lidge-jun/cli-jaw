@@ -2,12 +2,12 @@ export {
     launchChrome, connectCdp, getActivePage,
     listTabs, getBrowserStatus, closeBrowser,
     getCdpSession,
-} from './connection.ts';
+} from './connection.js';
 
 export {
     snapshot, screenshot, click, type, press,
     hover, navigate, evaluate, getPageText,
     mouseClick,
-} from './actions.ts';
+} from './actions.js';
 
-export { visionClick, extractCoordinates } from './vision.ts';
+export { visionClick, extractCoordinates } from './vision.js';

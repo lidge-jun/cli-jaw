@@ -1,9 +1,9 @@
 // ─── Heartbeat (Scheduled Jobs + fs.watch) ───────────
 
 import fs from 'fs';
-import { settings, HEARTBEAT_JOBS_PATH, loadHeartbeatFile, saveHeartbeatFile } from '../core/config.ts';
-import { orchestrateAndCollect, markdownToTelegramHtml, chunkTelegramMessage, telegramBot, telegramActiveChatIds } from '../telegram/bot.ts';
-import { broadcast } from '../core/bus.ts';
+import { settings, HEARTBEAT_JOBS_PATH, loadHeartbeatFile, saveHeartbeatFile } from '../core/config.js';
+import { orchestrateAndCollect, markdownToTelegramHtml, chunkTelegramMessage, telegramBot, telegramActiveChatIds } from '../telegram/bot.js';
+import { broadcast } from '../core/bus.js';
 
 const heartbeatTimers = new Map();
 let heartbeatBusy = false;

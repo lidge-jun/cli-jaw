@@ -1,7 +1,7 @@
 // ─── Command Contract: Policy ────────────────────────
 // Phase 9.5 — 인터페이스별 커맨드 필터링
 
-import { getCommandCatalog, CAPABILITY } from './catalog.ts';
+import { getCommandCatalog, CAPABILITY } from './catalog.js';
 
 /**
  * 특정 인터페이스에서 보이는 커맨드 목록 (hidden/blocked 제외)

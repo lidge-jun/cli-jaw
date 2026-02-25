@@ -3,7 +3,7 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import { dirname } from 'path';
-import { DB_PATH } from './config.ts';
+import { DB_PATH } from './config.js';
 
 function ensureDbDirExists(dbPath: string) {
     const dbDir = dirname(dbPath);

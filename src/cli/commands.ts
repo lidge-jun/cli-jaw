@@ -1,8 +1,8 @@
 // ─── Slash Commands Registry + Dispatcher ───────────────────────────────
 // Handlers extracted to commands-handlers.js for 500-line compliance.
 
-import { CLI_KEYS, buildModelChoicesByCli } from './registry.ts';
-import { t } from '../core/i18n.ts';
+import { CLI_KEYS, buildModelChoicesByCli } from './registry.js';
+import { t } from '../core/i18n.js';
 import {
     formatDuration, unknownCommand, unsupportedCommand, normalizeResult,
     statusHandler, modelHandler, cliHandler, skillHandler, employeeHandler,
@@ -10,7 +10,7 @@ import {
     browserHandler, promptHandler, quitHandler, fileHandler, fallbackHandler,
     modelArgumentCompletions, cliArgumentCompletions, skillArgumentCompletions,
     employeeArgumentCompletions, browserArgumentCompletions, fallbackArgumentCompletions,
-} from './handlers.ts';
+} from './handlers.js';
 
 const CATEGORY_ORDER = ['session', 'model', 'tools', 'cli'];
 const CATEGORY_LABEL = {

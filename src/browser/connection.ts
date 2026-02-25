@@ -1,4 +1,4 @@
-import { CLAW_HOME } from '../core/config.ts';
+import { CLAW_HOME } from '../core/config.js';
 import { execSync, spawn } from 'child_process';
 import { join } from 'path';
 import { chromium } from 'playwright-core';

@@ -1,4 +1,4 @@
-#!/usr/bin/env npx tsx
+#!/usr/bin/env node
 /**
  * cli-claw — Phase 9.1
  * CLI entrypoint with subcommand routing.
@@ -9,7 +9,12 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
+let pkg: { version?: string; name?: string };
+try {
+    pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
+} catch {
+    pkg = JSON.parse(readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf8'));
+}
 
 const command = process.argv[2];
 
@@ -44,37 +49,37 @@ function printHelp() {
 
 switch (command) {
     case 'serve':
-        await import('./commands/serve.ts');
+        await import('./commands/serve.js');
         break;
     case 'init':
-        await import('./commands/init.ts');
+        await import('./commands/init.js');
         break;
     case 'doctor':
-        await import('./commands/doctor.ts');
+        await import('./commands/doctor.js');
         break;
     case 'chat':
-        await import('./commands/chat.ts');
+        await import('./commands/chat.js');
         break;
     case 'employee':
-        await import('./commands/employee.ts');
+        await import('./commands/employee.js');
         break;
     case 'reset':
-        await import('./commands/reset.ts');
+        await import('./commands/reset.js');
         break;
     case 'mcp':
-        await import('./commands/mcp.ts');
+        await import('./commands/mcp.js');
         break;
     case 'skill':
-        await import('./commands/skill.ts');
+        await import('./commands/skill.js');
         break;
     case 'status':
-        await import('./commands/status.ts');
+        await import('./commands/status.js');
         break;
     case 'browser':
-        await import('./commands/browser.ts');
+        await import('./commands/browser.js');
         break;
     case 'memory':
-        await import('./commands/memory.ts');
+        await import('./commands/memory.js');
         break;
     case '--version':
     case '-v':

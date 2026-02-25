@@ -3,26 +3,26 @@
 import https from 'node:https';
 import { Bot } from 'grammy';
 import { sequentialize } from '@grammyjs/runner';
-import { broadcast, addBroadcastListener, removeBroadcastListener } from '../core/bus.ts';
-import { settings, detectAllCli, APP_VERSION } from '../core/config.ts';
-import { t, normalizeLocale } from '../core/i18n.ts';
-import { insertMessage, getSession, updateSession, clearMessages } from '../core/db.ts';
-import { orchestrate, orchestrateContinue, isContinueIntent } from '../orchestrator/pipeline.ts';
+import { broadcast, addBroadcastListener, removeBroadcastListener } from '../core/bus.js';
+import { settings, detectAllCli, APP_VERSION } from '../core/config.js';
+import { t, normalizeLocale } from '../core/i18n.js';
+import { insertMessage, getSession, updateSession, clearMessages } from '../core/db.js';
+import { orchestrate, orchestrateContinue, isContinueIntent } from '../orchestrator/pipeline.js';
 import {
     activeProcess, killActiveAgent, waitForProcessEnd,
     saveUpload, buildMediaPrompt, messageQueue,
-} from '../agent/spawn.ts';
-import { parseCommand, executeCommand, COMMANDS } from '../cli/commands.ts';
-import { getMergedSkills } from '../prompt/builder.ts';
-import * as memory from '../memory/memory.ts';
-import { downloadTelegramFile } from '../../lib/upload.ts';
+} from '../agent/spawn.js';
+import { parseCommand, executeCommand, COMMANDS } from '../cli/commands.js';
+import { getMergedSkills } from '../prompt/builder.js';
+import * as memory from '../memory/memory.js';
+import { downloadTelegramFile } from '../../lib/upload.js';
 import {
     escapeHtmlTg,
     markdownToTelegramHtml,
     chunkTelegramMessage,
     createForwarderLifecycle,
     createTelegramForwarder,
-} from './forwarder.ts';
+} from './forwarder.js';
 
 export {
     escapeHtmlTg,
@@ -30,7 +30,7 @@ export {
     chunkTelegramMessage,
     createForwarderLifecycle,
     createTelegramForwarder,
-} from './forwarder.ts';
+} from './forwarder.js';
 
 export function orchestrateAndCollect(prompt: string, meta: Record<string, any> = {}) {
     return new Promise((resolve) => {
@@ -109,7 +109,7 @@ function markChatActive(chatId: number) {
     const allowed = settings.telegram?.allowedChatIds || [];
     if (!allowed.includes(chatId)) {
         settings.telegram.allowedChatIds = [...allowed, chatId];
-        import('../core/config.ts').then(m => m.saveSettings(settings)).catch(() => { });
+        import('../core/config.js').then(m => m.saveSettings(settings)).catch(() => { });
     }
 }
 
@@ -152,7 +152,7 @@ function makeTelegramCommandCtx() {
         // Telegram settings changes: only fallbackOrder allowed
         updateSettings: async (patch: Record<string, any>) => {
             if (patch.fallbackOrder !== undefined && Object.keys(patch).length === 1) {
-                const { replaceSettings: _replace, saveSettings: _save } = await import('../core/config.ts');
+                const { replaceSettings: _replace, saveSettings: _save } = await import('../core/config.js');
                 _replace({ ...settings, ...patch });
                 _save(settings);
                 return { ok: true };
@@ -179,7 +179,7 @@ function makeTelegramCommandCtx() {
         searchMemory: (q: string) => memory.search(q),
         getBrowserStatus: async () => {
             try {
-                const m = await import('../browser/index.ts');
+                const m = await import('../browser/index.js');
                 return m.getBrowserStatus(settings.browser?.cdpPort || 9240);
             } catch {
                 return { running: false, tabs: [] };
@@ -187,7 +187,7 @@ function makeTelegramCommandCtx() {
         },
         getBrowserTabs: async () => {
             try {
-                const m = await import('../browser/index.ts');
+                const m = await import('../browser/index.js');
                 return { tabs: await m.listTabs(settings.browser?.cdpPort || 9240) };
             } catch {
                 return { tabs: [] };
@@ -280,7 +280,7 @@ export function initTelegram() {
         if (activeProcess) {
             // 큐에 추가 — steer 대신 대기
             console.log('[tg:queue] agent busy, queueing message');
-            const { enqueueMessage } = await import('../agent/spawn.ts');
+            const { enqueueMessage } = await import('../agent/spawn.js');
             enqueueMessage(prompt, 'telegram');
             insertMessage.run('user', displayMsg, 'telegram', '');
             broadcast('new_message', { role: 'user', content: displayMsg, source: 'telegram' });
