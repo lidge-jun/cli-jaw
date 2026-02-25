@@ -45,17 +45,17 @@ Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, C
 
 ```mermaid
 graph LR
-    YOU["👤 You"] -->|Web / Terminal / Telegram| CLAW["🦈 CLI-JAW"]
-    CLAW -->|spawn| C["Claude"]
-    CLAW -->|spawn| X["Codex"]
-    CLAW -->|spawn| G["Gemini"]
-    CLAW -->|spawn| O["OpenCode"]
-    CLAW -->|spawn| P["Copilot"]
-    CLAW -->|inject| SK["📦 Skills"]
-    CLAW -->|control| BR["🌐 Chrome"]
-    CLAW -->|send| TG["📱 Telegram"]
+    YOU["👤 You"] -->|Web / Terminal / Telegram| JAW["🦈 CLI-JAW"]
+    JAW -->|spawn| C["Claude"]
+    JAW -->|spawn| X["Codex"]
+    JAW -->|spawn| G["Gemini"]
+    JAW -->|spawn| O["OpenCode"]
+    JAW -->|spawn| P["Copilot"]
+    JAW -->|inject| SK["📦 Skills"]
+    JAW -->|control| BR["🌐 Chrome"]
+    JAW -->|send| TG["📱 Telegram"]
     
-    style CLAW fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
+    style JAW fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
 ```
 
 - 🤖 **5 AI engines, 1 assistant** — Claude · Codex · Gemini · OpenCode · Copilot. Switch with `/cli`.

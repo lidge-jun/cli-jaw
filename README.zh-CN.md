@@ -45,17 +45,17 @@ CLI-JAW 是驻留在您本地机器上的**专属 AI 助手**，并在您熟悉�
 
 ```mermaid
 graph LR
-    YOU["👤 您"] -->|网页 / 终端 / Telegram| CLAW["🦈 CLI-JAW"]
-    CLAW -->|创建| C["Claude"]
-    CLAW -->|创建| X["Codex"]
-    CLAW -->|创建| G["Gemini"]
-    CLAW -->|创建| O["OpenCode"]
-    CLAW -->|创建| P["Copilot"]
-    CLAW -->|注入| SK["📦 技能"]
-    CLAW -->|控制| BR["🌐 Chrome"]
-    CLAW -->|发送| TG["📱 Telegram"]
+    YOU["👤 您"] -->|网页 / 终端 / Telegram| JAW["🦈 CLI-JAW"]
+    JAW -->|创建| C["Claude"]
+    JAW -->|创建| X["Codex"]
+    JAW -->|创建| G["Gemini"]
+    JAW -->|创建| O["OpenCode"]
+    JAW -->|创建| P["Copilot"]
+    JAW -->|注入| SK["📦 技能"]
+    JAW -->|控制| BR["🌐 Chrome"]
+    JAW -->|发送| TG["📱 Telegram"]
     
-    style CLAW fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
+    style JAW fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
 ```
 
 - 🤖 **5 大 AI 引擎，1 个专属助手** — Claude · Codex · Gemini · OpenCode · Copilot。使用 `/cli` 命令一键切换。
