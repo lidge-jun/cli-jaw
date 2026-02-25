@@ -2,7 +2,7 @@
 // src/http/async-handler.js 가 생성되면 통과
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { asyncHandler } from '../../src/http/async-handler.js';
+import { asyncHandler } from '../../src/http/async-handler.ts';
 
 test('AH-001: passes sync handler through', async () => {
     let called = false;

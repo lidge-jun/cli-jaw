@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env npx tsx
 /**
  * cli-claw — Phase 9.1
  * CLI entrypoint with subcommand routing.
@@ -44,37 +44,37 @@ function printHelp() {
 
 switch (command) {
     case 'serve':
-        await import('./commands/serve.js');
+        await import('./commands/serve.ts');
         break;
     case 'init':
-        await import('./commands/init.js');
+        await import('./commands/init.ts');
         break;
     case 'doctor':
-        await import('./commands/doctor.js');
+        await import('./commands/doctor.ts');
         break;
     case 'chat':
-        await import('./commands/chat.js');
+        await import('./commands/chat.ts');
         break;
     case 'employee':
-        await import('./commands/employee.js');
+        await import('./commands/employee.ts');
         break;
     case 'reset':
-        await import('./commands/reset.js');
+        await import('./commands/reset.ts');
         break;
     case 'mcp':
-        await import('./commands/mcp.js');
+        await import('./commands/mcp.ts');
         break;
     case 'skill':
-        await import('./commands/skill.js');
+        await import('./commands/skill.ts');
         break;
     case 'status':
-        await import('./commands/status.js');
+        await import('./commands/status.ts');
         break;
     case 'browser':
-        await import('./commands/browser.js');
+        await import('./commands/browser.ts');
         break;
     case 'memory':
-        await import('./commands/memory.js');
+        await import('./commands/memory.ts');
         break;
     case '--version':
     case '-v':

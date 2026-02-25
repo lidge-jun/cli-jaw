@@ -2,7 +2,7 @@
 // src/security/decode.js 가 생성되면 통과
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decodeFilenameSafe } from '../../src/security/decode.js';
+import { decodeFilenameSafe } from '../../src/security/decode.ts';
 
 test('DC-001: decodes normal UTF-8 filename', () => {
     const decoded = decodeFilenameSafe('%ED%95%9C%EA%B8%80.md');

@@ -6,7 +6,7 @@ import {
     DEFAULT_CLI,
     buildDefaultPerCli,
     buildModelChoicesByCli,
-} from '../../src/cli/registry.js';
+} from '../../src/cli/registry.ts';
 
 // ─── Structure validation ────────────────────────────
 

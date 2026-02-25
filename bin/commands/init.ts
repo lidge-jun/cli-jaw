@@ -96,7 +96,7 @@ if (!fs.existsSync(hbPath)) {
 
 // Run postinstall symlinks
 try {
-    await import('../postinstall.js');
+    await import('../postinstall.ts');
 } catch (e) {
     console.log(`  ⚠️ Symlink setup: ${(e as Error).message}`);
 }

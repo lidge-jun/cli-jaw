@@ -294,7 +294,7 @@ function makeWebCommandCtx(req: any, localeOverride: string | null = null) {
         syncMcp: async () => ({ results: syncToAll(loadUnifiedMcp(), settings.workingDir) }),
         installMcp: async () => {
             const config = loadUnifiedMcp();
-            const { installMcpServers } = await import('./lib/mcp-sync.js');
+            const { installMcpServers } = await import('./lib/mcp-sync.ts');
             const results = await installMcpServers(config);
             saveUnifiedMcp(config);
             const synced = syncToAll(config, settings.workingDir);
@@ -577,7 +577,7 @@ app.post('/api/mcp/sync', (req, res) => {
 app.post('/api/mcp/install', async (req, res) => {
     try {
         const config = loadUnifiedMcp();
-        const { installMcpServers } = await import('./lib/mcp-sync.js');
+        const { installMcpServers } = await import('./lib/mcp-sync.ts');
         const results = await installMcpServers(config);
         saveUnifiedMcp(config);
         const syncResults = syncToAll(config, settings.workingDir);

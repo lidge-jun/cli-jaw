@@ -23,16 +23,21 @@ const { values } = parseArgs({
     strict: false,
 });
 
-const serverPath = join(projectRoot, 'server.js');
+const serverPath = join(projectRoot, 'server.ts');
 const envFile = join(projectRoot, '.env');
 
 console.log(`\n  🦞 cli-claw serve — port ${values.port}\n`);
 
-const nodeArgs = ['--dns-result-order=ipv4first'];
-if (fs.existsSync(envFile)) nodeArgs.unshift(`--env-file=${envFile}`);
+// Resolve tsx binary — prefer local install, fall back to npx
+const localTsx = join(projectRoot, 'node_modules', '.bin', 'tsx');
+const tsxBin = fs.existsSync(localTsx) ? localTsx : 'tsx';
 
-const child = spawn(process.execPath,
-    [...nodeArgs, serverPath],
+const tsxArgs: string[] = [];
+if (fs.existsSync(envFile)) tsxArgs.push(`--env-file=${envFile}`);
+tsxArgs.push(serverPath);
+
+const child = spawn(tsxBin,
+    tsxArgs,
     {
         stdio: 'inherit',
         env: { ...process.env, PORT: values.port as string, HOST: values.host as string },

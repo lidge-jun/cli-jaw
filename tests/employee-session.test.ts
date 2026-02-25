@@ -27,7 +27,7 @@ test('P100-ES-001: employee_sessions 테이블 스키마가 db.js에 정의됨',
 // ─── 2. getEmployeeSession — 없는 ID 조회 시 undefined ──
 
 test('P100-ES-002: getEmployeeSession 없는 ID 조회 시 undefined', async () => {
-    const { getEmployeeSession } = await import('../src/core/db.js');
+    const { getEmployeeSession } = await import('../src/core/db.ts');
     const result = getEmployeeSession.get('nonexistent_employee_999');
     assert.equal(result, undefined, '존재하지 않는 employee_id 조회 시 undefined 반환');
 });
@@ -35,7 +35,7 @@ test('P100-ES-002: getEmployeeSession 없는 ID 조회 시 undefined', async () 
 // ─── 3. upsertEmployeeSession — 저장 후 조회 일치 ──────
 
 test('P100-ES-003: upsertEmployeeSession 저장 후 조회 일치', async () => {
-    const { upsertEmployeeSession, getEmployeeSession, clearAllEmployeeSessions } = await import('../src/core/db.js');
+    const { upsertEmployeeSession, getEmployeeSession, clearAllEmployeeSessions } = await import('../src/core/db.ts');
 
     const testId = `test_emp_${Date.now()}`;
     const testSid = 'session_abc123';
@@ -58,7 +58,7 @@ test('P100-ES-003: upsertEmployeeSession 저장 후 조회 일치', async () => 
 // ─── 4. upsertEmployeeSession — 같은 ID로 업데이트 시 덮어쓰기 ──
 
 test('P100-ES-004: upsertEmployeeSession 같은 ID로 업데이트 시 덮어쓰기', async () => {
-    const { upsertEmployeeSession, getEmployeeSession, clearAllEmployeeSessions } = await import('../src/core/db.js');
+    const { upsertEmployeeSession, getEmployeeSession, clearAllEmployeeSessions } = await import('../src/core/db.ts');
 
     const testId = `test_emp_overwrite_${Date.now()}`;
 
@@ -80,7 +80,7 @@ test('P100-ES-004: upsertEmployeeSession 같은 ID로 업데이트 시 덮어쓰
 // ─── 5. clearAllEmployeeSessions — 전체 삭제 후 조회 시 undefined ──
 
 test('P100-ES-005: clearAllEmployeeSessions 전체 삭제 후 조회 시 undefined', async () => {
-    const { upsertEmployeeSession, getEmployeeSession, clearAllEmployeeSessions } = await import('../src/core/db.js');
+    const { upsertEmployeeSession, getEmployeeSession, clearAllEmployeeSessions } = await import('../src/core/db.ts');
 
     const id1 = `test_clear_1_${Date.now()}`;
     const id2 = `test_clear_2_${Date.now()}`;
@@ -99,7 +99,7 @@ test('P100-ES-005: clearAllEmployeeSessions 전체 삭제 후 조회 시 undefin
 // ─── 6. clearAllEmployeeSessions가 main session 테이블 안 건드리는지 확인 ──
 
 test('P100-ES-006: clearAllEmployeeSessions가 main session 테이블을 건드리지 않음', async () => {
-    const { getSession, upsertEmployeeSession, clearAllEmployeeSessions } = await import('../src/core/db.js');
+    const { getSession, upsertEmployeeSession, clearAllEmployeeSessions } = await import('../src/core/db.ts');
 
     // main session 상태 스냅샷
     const before = getSession();

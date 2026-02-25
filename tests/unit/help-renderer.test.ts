@@ -8,7 +8,7 @@ let renderHelp;
 // 모듈 로드 시도 — 미생성 시 graceful skip
 let moduleLoaded = false;
 try {
-    const mod = await import('../../src/command-contract/help-renderer.js');
+    const mod = await import('../../src/command-contract/help-renderer.ts');
     renderHelp = mod.renderHelp;
     moduleLoaded = true;
 } catch (e) {

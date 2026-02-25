@@ -7,7 +7,7 @@ import {
     getCompletionItems,
     getArgumentCompletionItems,
     COMMANDS,
-} from '../../src/cli/commands.js';
+} from '../../src/cli/commands.ts';
 
 // ─── parseCommand ────────────────────────────────────
 

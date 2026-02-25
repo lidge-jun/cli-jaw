@@ -60,7 +60,7 @@ test('RR-001: baseline route list is non-empty', () => {
 test('RR-002: core routes registration', async () => {
     const app = createRouteCollector();
     try {
-        const { registerCoreRoutes } = await import('../../src/routes/core.js');
+        const { registerCoreRoutes } = await import('../../src/routes/core.ts');
         registerCoreRoutes(app, {});
         const registered = app.__routes || [];
         // 최소 session, messages, runtime 등록 확인
@@ -75,7 +75,7 @@ test('RR-002: core routes registration', async () => {
 test('RR-003: memory routes registration', async () => {
     const app = createRouteCollector();
     try {
-        const { registerMemoryRoutes } = await import('../../src/routes/memory.js');
+        const { registerMemoryRoutes } = await import('../../src/routes/memory.ts');
         registerMemoryRoutes(app, {});
     } catch (e) {
         assert.ok(e.code === 'ERR_MODULE_NOT_FOUND',
@@ -86,7 +86,7 @@ test('RR-003: memory routes registration', async () => {
 test('RR-004: browser routes registration', async () => {
     const app = createRouteCollector();
     try {
-        const { registerBrowserRoutes } = await import('../../src/routes/browser.js');
+        const { registerBrowserRoutes } = await import('../../src/routes/browser.ts');
         registerBrowserRoutes(app, {});
     } catch (e) {
         assert.ok(e.code === 'ERR_MODULE_NOT_FOUND',

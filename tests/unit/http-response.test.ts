@@ -2,7 +2,7 @@
 // src/http/response.js 가 생성되면 통과
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ok, fail } from '../../src/http/response.js';
+import { ok, fail } from '../../src/http/response.ts';
 
 function mockRes() {
     let sent = null, status = 200;

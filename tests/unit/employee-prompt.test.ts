@@ -1,8 +1,8 @@
 // Phase 17.3: employee prompt 명칭 통일 + 내용 검증
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getEmployeePrompt, getEmployeePromptV2 } from '../../src/prompt/builder.js';
-import { needsOrchestration, parseSubtasks } from '../../src/orchestrator/pipeline.js';
+import { getEmployeePrompt, getEmployeePromptV2 } from '../../src/prompt/builder.ts';
+import { needsOrchestration, parseSubtasks } from '../../src/orchestrator/pipeline.ts';
 
 // ─── getEmployeePrompt: export + 기본 구조 ─────────
 
@@ -87,11 +87,11 @@ test('EMP-012: parseSubtasks returns empty for no JSON', () => {
 // ─── old name should not exist ───────────────────────
 
 test('EMP-013: getSubAgentPrompt should not be exported (renamed)', async () => {
-    const mod = await import('../../src/prompt/builder.js');
+    const mod = await import('../../src/prompt/builder.ts');
     assert.equal(mod.getSubAgentPrompt, undefined, 'old name should not exist');
 });
 
 test('EMP-014: getSubAgentPromptV2 should not be exported (renamed)', async () => {
-    const mod = await import('../../src/prompt/builder.js');
+    const mod = await import('../../src/prompt/builder.ts');
     assert.equal(mod.getSubAgentPromptV2, undefined, 'old name should not exist');
 });

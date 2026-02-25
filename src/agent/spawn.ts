@@ -80,7 +80,7 @@ export async function steerAgent(newPrompt: string, source: string) {
     if (wasRunning) await waitForProcessEnd(3000);
     insertMessage.run('user', newPrompt, source, '');
     broadcast('new_message', { role: 'user', content: newPrompt, source });
-    const { orchestrate, orchestrateContinue, isContinueIntent } = await import('../orchestrator/pipeline.js');
+    const { orchestrate, orchestrateContinue, isContinueIntent } = await import('../orchestrator/pipeline.ts');
     const origin = source || 'web';
     if (isContinueIntent(newPrompt)) orchestrateContinue({ origin });
     else orchestrate(newPrompt, { origin });
@@ -105,7 +105,7 @@ export async function processQueue() {
     insertMessage.run('user', combined, source, '');
     broadcast('new_message', { role: 'user', content: combined, source });
     broadcast('queue_update', { pending: 0 });
-    const { orchestrate, orchestrateContinue, isContinueIntent } = await import('../orchestrator/pipeline.js');
+    const { orchestrate, orchestrateContinue, isContinueIntent } = await import('../orchestrator/pipeline.ts');
     const origin = source || 'web';
     if (isContinueIntent(combined)) orchestrateContinue({ origin });
     else orchestrate(combined, { origin });
@@ -622,7 +622,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
 // ─── Memory Flush ────────────────────────────────────
 
 async function triggerMemoryFlush() {
-    const { getMemoryDir } = await import('../prompt/builder.js');
+    const { getMemoryDir } = await import('../prompt/builder.ts');
     const memDir = getMemoryDir();
     const threshold = settings.memory?.flushEvery ?? 20;
     const recent = (getRecentMessages.all(threshold) as any[]).reverse();

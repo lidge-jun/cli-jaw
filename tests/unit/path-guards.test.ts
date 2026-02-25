@@ -2,7 +2,7 @@
 // src/security/path-guards.js 가 생성되면 통과
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertSkillId, assertFilename, safeResolveUnder } from '../../src/security/path-guards.js';
+import { assertSkillId, assertFilename, safeResolveUnder } from '../../src/security/path-guards.ts';
 import path from 'node:path';
 
 // ─── assertSkillId ───────────────────────────────────

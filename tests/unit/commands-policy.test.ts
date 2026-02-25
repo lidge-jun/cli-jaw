@@ -8,7 +8,7 @@ let getVisibleCommands, getTelegramMenuCommands, getExecutableCommands;
 // 모듈 로드 시도 — 미생성 시 graceful skip
 let moduleLoaded = false;
 try {
-    const mod = await import('../../src/command-contract/policy.js');
+    const mod = await import('../../src/command-contract/policy.ts');
     getVisibleCommands = mod.getVisibleCommands;
     getTelegramMenuCommands = mod.getTelegramMenuCommands;
     getExecutableCommands = mod.getExecutableCommands;

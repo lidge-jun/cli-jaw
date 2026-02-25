@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
     resetFallbackState,
     getFallbackState,
-} from '../../src/agent/spawn.js';
+} from '../../src/agent/spawn.ts';
 
 // ─── Unit tests for fallback retry state ─────────────
 

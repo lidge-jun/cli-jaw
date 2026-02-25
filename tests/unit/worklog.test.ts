@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseWorklogPending, PHASES } from '../../src/memory/worklog.js';
+import { parseWorklogPending, PHASES } from '../../src/memory/worklog.ts';
 
 // Note: createWorklog, appendToWorklog, updateMatrix write to ~/.cli-claw/worklogs/
 // which requires CLAW_HOME override. Testing only pure functions here.
