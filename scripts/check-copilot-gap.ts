@@ -1,21 +1,27 @@
 #!/usr/bin/env node
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+interface CheckItem {
+    name: string;
+    file: string;
+    needle: string;
+}
+
+const __filename: string = fileURLToPath(import.meta.url);
+const __dirname: string = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
 
-const checks = [
+const checks: CheckItem[] = [
     {
         name: 'CLI registry has copilot',
-        file: 'src/cli-registry.js',
+        file: 'src/cli/registry.ts',
         needle: 'copilot:',
     },
     {
         name: 'Server exposes /api/cli-registry',
-        file: 'server.js',
+        file: 'server.ts',
         needle: "app.get('/api/cli-registry'",
     },
     {
@@ -25,8 +31,8 @@ const checks = [
     },
     {
         name: 'Frontend loads registry from API',
-        file: 'public/js/constants.js',
-        needle: "fetch('/api/cli-registry')",
+        file: 'public/js/constants.ts',
+        needle: "'/api/cli-registry')",
     },
     {
         name: 'Employees UI uses dynamic CLI keys',
@@ -35,10 +41,12 @@ const checks = [
     },
 ];
 
-const rows = checks.map((item) => {
+const rows = checks.map((item: CheckItem) => {
     const fullPath = path.join(ROOT, item.file);
-    const content = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : '';
-    const ok = content.includes(item.needle);
+    const content: string = fs.existsSync(fullPath)
+        ? fs.readFileSync(fullPath, 'utf8')
+        : '';
+    const ok: boolean = content.includes(item.needle);
     return { ...item, ok };
 });
 

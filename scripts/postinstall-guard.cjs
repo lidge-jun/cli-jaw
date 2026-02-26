@@ -2,6 +2,11 @@
 /**
  * postinstall-guard.cjs — Cross-platform guard for postinstall.
  *
+ * ⚠️ INTENTIONALLY CommonJS (.cjs) — DO NOT convert to TypeScript.
+ * Reason: Runs during `npm postinstall` BEFORE any build step.
+ * At this point, tsx/tsc may not be available (fresh install).
+ * Must work with bare Node.js on all platforms (macOS/Linux/Windows).
+ *
  * 1. Node version check (fail-fast before any build attempt)
  * 2. dist/bin/postinstall.js exists? → exit 0
  * 3. Dev clone fallback: local tsc → build → exit 0
