@@ -68,23 +68,40 @@ test('SAF-008: all install functions support dryRun', () => {
     assert.ok(depsBlock.includes('opts.dryRun'), 'installSkillDeps supports dryRun');
 });
 
+// ── SAF-009: isEntryPoint guard ──
+
+test('SAF-009: postinstall has isEntryPoint guard', () => {
+    assert.ok(postinstallSrc.includes('isEntryPoint'), 'checks isEntryPoint');
+    assert.ok(postinstallSrc.includes("endsWith('postinstall"), 'checks postinstall filename');
+    assert.ok(postinstallSrc.includes('runPostinstall()'), 'calls runPostinstall from guard');
+});
+
+// ── SAF-010: safe mode guard runs before skills/uploads creation ──
+
+test('SAF-010: safe mode guard is before skills/uploads ensureDir', () => {
+    const guardPos = postinstallSrc.indexOf('if (isSafeMode)');
+    const skillsDirPos = postinstallSrc.indexOf("ensureDir(path.join(jawHome, 'skills'))");
+    const uploadsDirPos = postinstallSrc.indexOf("ensureDir(path.join(jawHome, 'uploads'))");
+    assert.ok(guardPos < skillsDirPos, 'safe guard before skills dir creation');
+    assert.ok(guardPos < uploadsDirPos, 'safe guard before uploads dir creation');
+});
+
 // ── INIT-001: --dry-run option ──
 
 test('INIT-001: init.ts has --dry-run option', () => {
     assert.ok(initSrc.includes("'dry-run': { type: 'boolean'"), '--dry-run option defined');
 });
 
-// ── INIT-002: --dry-run option ──
+// ── INIT-002: --safe option (safe install mode) ──
 
-test('INIT-002: init.ts has --dry-run option', () => {
-    assert.ok(initSrc.includes("'dry-run': { type: 'boolean'"), '--dry-run option defined');
+test('INIT-002: init.ts has --safe option for safe install mode', () => {
+    assert.ok(initSrc.includes("safe: { type: 'boolean'"), '--safe option defined in parseArgs');
 });
 
 // ── INIT-003: no direct import('../postinstall.js') side-effect ──
 
 test('INIT-003: init.ts uses dynamic import for postinstall (no static side-effect)', () => {
-    // Static import causes top-level side effects; dynamic import() is controlled
-    const hasStaticImport = /^import\s+\{[^}]+\}\s+from\s+['"]\.\.[\/]postinstall/m.test(initSrc);
+    const hasStaticImport = /^import\s+\{[^}]+\}\s+from\s+['"]\.\.[\\/]postinstall/m.test(initSrc);
     assert.ok(!hasStaticImport, 'no static import of postinstall (would cause side effects)');
     assert.ok(
         initSrc.includes("await import('../postinstall.js')"),
@@ -100,26 +117,9 @@ test('INIT-004: init.ts imports and calls extracted install functions', () => {
     assert.ok(initSrc.includes('installSkillDeps'), 'calls installSkillDeps');
 });
 
-// ── SAF-009: isEntryPoint guard ──
-
-test('SAF-009: postinstall has isEntryPoint guard', () => {
-    assert.ok(postinstallSrc.includes('isEntryPoint'), 'checks isEntryPoint');
-    assert.ok(postinstallSrc.includes("endsWith('postinstall"), 'checks postinstall filename');
-    assert.ok(postinstallSrc.includes('runPostinstall()'), 'calls runPostinstall from guard');
-});
-
 // ── INIT-005: --dry-run skips settings write ──
 
 test('INIT-005: --dry-run guards settings/dir writes', () => {
     assert.ok(initSrc.includes("!values['dry-run']"), 'dry-run guards file writes');
     assert.ok(initSrc.includes('[dry-run] would save settings'), 'dry-run reports settings skip');
-});
-
-// ── INIT-006: no top-level postinstall import side effects ──
-
-test('INIT-006: uses dynamic import for postinstall', () => {
-    assert.ok(
-        initSrc.includes("await import('../postinstall"),
-        'uses dynamic import (not static) for postinstall',
-    );
 });

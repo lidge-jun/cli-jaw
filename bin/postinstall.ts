@@ -38,17 +38,18 @@ const home = os.homedir();
 const jawHome = JAW_HOME;
 const PATH_LOOKUP_CMD = process.platform === 'win32' ? 'where' : 'which';
 
-// ─── Legacy migration: ~/.cli-jaw → jawHome ───
-// Only run when jawHome IS the default (~/.cli-jaw). Custom --home must never move default data.
+// ─── Legacy migration ───
+// Default jawHome IS ~/.cli-jaw, so legacy migration only applies when
+// CLI_JAW_HOME is set to a DIFFERENT path and ~/.cli-jaw still exists.
 const legacyHome = path.join(home, '.cli-jaw');
-const isDefaultHome = jawHome === legacyHome;
+const isCustomHome = jawHome !== legacyHome;
 
-if (isDefaultHome && fs.existsSync(legacyHome) && !fs.existsSync(jawHome)) {
+if (isCustomHome && fs.existsSync(legacyHome) && !fs.existsSync(jawHome)) {
     console.log(`[jaw:init] migrating ~/.cli-jaw → ${jawHome} ...`);
     fs.renameSync(legacyHome, jawHome);
     console.log(`[jaw:init] ✅ migration complete`);
-} else if (isDefaultHome && fs.existsSync(legacyHome) && fs.existsSync(jawHome)) {
-    console.log(`[jaw:init] ⚠️ both ~/.cli-jaw and ~/.cli-jaw exist — using ~/.cli-jaw`);
+} else if (isCustomHome && fs.existsSync(legacyHome) && fs.existsSync(jawHome)) {
+    console.log(`[jaw:init] ⚠️ both ~/.cli-jaw and ${jawHome} exist — using ${jawHome}`);
 }
 
 function ensureDir(dir: string) {
@@ -252,22 +253,24 @@ export async function installSkillDeps(opts: InstallOpts = {}) {
 // Dynamic import from init.ts gets clean library exports only.
 
 export async function runPostinstall() {
-    // 1. Ensure ~/.cli-jaw/ directories
-    ensureDir(jawHome);
-    ensureDir(path.join(jawHome, 'skills'));
-    ensureDir(path.join(jawHome, 'uploads'));
-
-    // ── Safe mode guard ──
+    // ── Safe mode guard (before any dir creation beyond jawHome) ──
     const isSafeMode = process.env.npm_config_jaw_safe === '1'
         || process.env.npm_config_jaw_safe === 'true'
         || process.env.JAW_SAFE === '1'
         || process.env.JAW_SAFE === 'true';
+
+    // 1. Ensure ~/.cli-jaw/ home directory
+    ensureDir(jawHome);
 
     if (isSafeMode) {
         console.log('[jaw:postinstall] 🔒 safe mode — home directory created only');
         console.log('[jaw:postinstall] Run `jaw init` to configure interactively');
         return;
     }
+
+    // 2. Ensure sub-directories (only in normal mode)
+    ensureDir(path.join(jawHome, 'skills'));
+    ensureDir(path.join(jawHome, 'uploads'));
 
     // 2. Skills symlinks
     const skillsSymlinkReport = ensureSkillsSymlinks(home, { onConflict: 'backup' });
