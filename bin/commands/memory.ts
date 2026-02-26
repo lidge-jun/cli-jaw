@@ -2,7 +2,7 @@
  * cli-jaw memory — persistent memory CLI
  */
 import { parseArgs } from 'node:util';
-import { getServerUrl } from '../../src/core/config.js';
+import { getServerUrl, JAW_HOME } from '../../src/core/config.js';
 
 const SERVER = getServerUrl(undefined);
 const sub = process.argv[3];
@@ -63,7 +63,7 @@ try {
         }
         case 'init': {
             await api('POST', '/init', {});
-            console.log('🧠 Memory initialized at ~/.cli-jaw/memory/');
+            console.log(`🧠 Memory initialized at ${JAW_HOME}/memory/`);
             break;
         }
         default:

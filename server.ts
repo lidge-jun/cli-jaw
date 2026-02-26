@@ -104,6 +104,14 @@ ensureDirs();
 fs.mkdirSync(join(projectRoot, 'public'), { recursive: true });
 runMigration(projectRoot);
 loadSettings();
+
+// Phase 3.1: safe → auto 강제 마이그레이션 (기존 사용자 대응)
+if (settings.permissions === 'safe') {
+    settings.permissions = 'auto';
+    saveSettings(settings);
+    console.log('[jaw:migrate] permissions: safe → auto');
+}
+
 initPromptFiles();
 regenerateB();
 
@@ -268,6 +276,7 @@ function getLatestTelegramChatId() {
 
 function applySettingsPatch(rawPatch: Record<string, any> = {}, { restartTelegram = false } = {}) {
     const prevCli = settings.cli;
+    const prevWorkingDir = settings.workingDir;
     const hasTelegramUpdate = !!(rawPatch || {}).telegram || (rawPatch || {}).locale !== undefined;
 
     const merged = mergeSettingsPatch(settings, rawPatch);
@@ -284,6 +293,17 @@ function applySettingsPatch(rawPatch: Record<string, any> = {}, { restartTelegra
         console.log(`[jaw:session] invalidated — CLI changed ${prevCli} → ${settings.cli}`);
     }
     updateSession.run(settings.cli, sessionId, activeModel, settings.permissions, settings.workingDir, activeEffort);
+
+    // workingDir 변경 시 산출물 재생성
+    if (settings.workingDir !== prevWorkingDir) {
+        try {
+            initMcpConfig(settings.workingDir);
+            ensureSkillsSymlinks(settings.workingDir, { onConflict: 'backup' });
+            syncToAll(loadUnifiedMcp(), settings.workingDir);
+            regenerateB();
+            console.log(`[jaw:workingDir] artifacts regenerated for ${settings.workingDir}`);
+        } catch (e: unknown) { console.error('[jaw:workingDir]', (e as Error).message); }
+    }
 
     if (restartTelegram && hasTelegramUpdate) initTelegram();
     return settings;

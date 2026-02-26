@@ -32,6 +32,16 @@ const { values: launchdOpts, positionals: launchdPos } = parseArgs({
 });
 const PORT = launchdOpts.port as string;
 
+// unknown flag guard (strict:false absorbs unknowns silently)
+const knownKeys = new Set(['port']);
+for (const key of Object.keys(launchdOpts)) {
+    if (!knownKeys.has(key)) {
+        console.error(`❌ Unknown option: --${key}`);
+        console.error('   Usage: jaw launchd [--port PORT] [status|unset]');
+        process.exit(1);
+    }
+}
+
 const INSTANCE = instanceId();
 const LABEL = `com.cli-jaw.${INSTANCE}`;
 const PLIST_PATH = join(homedir(), 'Library', 'LaunchAgents', `${LABEL}.plist`);
@@ -104,7 +114,7 @@ switch (sub) {
             console.log('⚠️  launchd에 등록되어 있지 않습니다');
             break;
         }
-        try { execSync(`launchctl unload ${PLIST_PATH}`, { stdio: 'pipe' }); } catch { /* ok */ }
+        try { execSync(`launchctl unload "${PLIST_PATH}"`, { stdio: 'pipe' }); } catch { /* ok */ }
         unlinkSync(PLIST_PATH);
         console.log('✅ jaw serve 자동 실행 해제 완료');
         break;
@@ -137,7 +147,7 @@ switch (sub) {
         // 1. plist 확인
         if (existsSync(PLIST_PATH)) {
             console.log('📄 plist 발견 — 재생성합니다');
-            try { execSync(`launchctl unload ${PLIST_PATH}`, { stdio: 'pipe' }); } catch { /* ok */ }
+            try { execSync(`launchctl unload "${PLIST_PATH}"`, { stdio: 'pipe' }); } catch { /* ok */ }
         } else {
             console.log('📄 plist 없음 — 새로 생성합니다');
         }
@@ -148,7 +158,7 @@ switch (sub) {
         console.log(`✅ plist 저장: ${PLIST_PATH}`);
 
         // 3. launchd 등록 + 시작
-        execSync(`launchctl load -w ${PLIST_PATH}`);
+        execSync(`launchctl load -w "${PLIST_PATH}"`);
         console.log('✅ launchd 등록 + 시작 완료\n');
 
         // 4. 상태 확인
