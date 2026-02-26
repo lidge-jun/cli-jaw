@@ -361,6 +361,17 @@ export async function initTelegram() {
             const parsed = parseCommand(text);
             if (!parsed) return;
             const result = await executeCommand(parsed, makeTelegramCommandCtx());
+
+            // ── /steer special path: kill + re-orchestrate with full TG UX ──
+            // steerHandler already killed the agent and waited for exit.
+            // Just start tgOrchestrate for typing indicator + result delivery.
+            if (result?.type === 'steer' && result?.steerPrompt) {
+                const steerPrompt = result.steerPrompt;
+                await ctx.reply(result.text || '🔄');
+                tgOrchestrate(ctx, steerPrompt, steerPrompt);
+                return;
+            }
+
             if (result?.text) {
                 const out = String(result.text);
                 try {

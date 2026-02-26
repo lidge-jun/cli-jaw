@@ -355,6 +355,32 @@ export async function fileHandler() {
     return { ok: false, text: 'Usage: /file <path> [caption]' };
 }
 
+export async function steerHandler(args: any[], ctx: any) {
+    const L = ctx.locale || 'ko';
+    const prompt = args.join(' ').trim();
+    if (!prompt) {
+        return { ok: false, type: 'error', text: t('cmd.steer.noPrompt', {}, L) };
+    }
+    const { activeProcess, killActiveAgent, waitForProcessEnd } = await import('../agent/spawn.js');
+    if (!activeProcess) {
+        return { ok: false, type: 'error', text: t('cmd.steer.noAgent', {}, L) };
+    }
+
+    // Kill running agent and wait for clean exit
+    killActiveAgent('steer');
+    await waitForProcessEnd(3000);
+
+    // Telegram: return signal for bot.ts to handle with full UX (typing + tool preview)
+    if ((ctx.interface || 'cli') === 'telegram') {
+        return { ok: true, type: 'steer', text: t('cmd.steer.started', {}, L), steerPrompt: prompt };
+    }
+
+    // Web/CLI: fire orchestration directly via submitMessage
+    const { submitMessage } = await import('../orchestrator/gateway.js');
+    submitMessage(prompt, { origin: (ctx.interface || 'web') as 'web' | 'cli' | 'telegram' });
+    return { ok: true, type: 'success', text: t('cmd.steer.started', {}, L) };
+}
+
 export async function fallbackHandler(args: any[], ctx: any) {
     const L = ctx.locale || 'ko';
     const settings = await safeCall(ctx.getSettings, null);

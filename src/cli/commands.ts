@@ -8,6 +8,7 @@ import {
     statusHandler, modelHandler, cliHandler, skillHandler, employeeHandler,
     clearHandler, resetHandler, versionHandler, mcpHandler, memoryHandler,
     browserHandler, promptHandler, quitHandler, fileHandler, fallbackHandler,
+    steerHandler,
     modelArgumentCompletions, cliArgumentCompletions, skillArgumentCompletions,
     employeeArgumentCompletions, browserArgumentCompletions, fallbackArgumentCompletions,
 } from './handlers.js';
@@ -162,6 +163,7 @@ export const COMMANDS = [
     { name: 'prompt', descKey: 'cmd.prompt.desc', desc: 'View system prompt', category: 'tools', interfaces: ['cli', 'web'], handler: promptHandler },
     { name: 'quit', aliases: ['q', 'exit'], descKey: 'cmd.quit.desc', desc: 'Quit process', category: 'cli', interfaces: ['cli'], handler: quitHandler },
     { name: 'file', descKey: 'cmd.file.desc', desc: 'Attach file', args: '<path> [caption]', category: 'cli', interfaces: ['cli'], hidden: true, handler: fileHandler },
+    { name: 'steer', descKey: 'cmd.steer.desc', desc: 'Interrupt agent and redirect', args: '<prompt>', category: 'session', interfaces: ['web', 'telegram'], handler: steerHandler },
 ];
 
 // ─── Dispatch ────────────────────────────────────────
