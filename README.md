@@ -39,6 +39,7 @@ Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, C
 | ⚡ **Multi-Agent Fallback**     | One engine down? The next picks up automatically. Zero downtime.                         |
 | 🎭 **Orchestrated Performance** | Complex tasks split across specialized sub-agents for maximum throughput.                |
 | 📦 **107 Built-in Skills**      | Browser automation, document generation, Telegram, memory — ready out of the box.        |
+| 🖥️ **Cross-Platform**           | macOS, Linux, Windows (WSL) — browser launch, CLI detection, and install all work natively. |
 
 ![CLI-JAW Terminal](docs/screenshots/terminal-cli.png)
 
