@@ -5,7 +5,7 @@
  * Usage:
  *   cli-jaw mcp                       # list servers
  *   cli-jaw mcp install <pkg>         # install npm/pypi package + add to mcp.json + sync
- *   cli-jaw mcp sync                  # sync mcp.json → 4 CLI configs
+ *   cli-jaw mcp sync                  # sync mcp.json → 6 CLI configs
  *   cli-jaw mcp reset [--force]       # reset mcp.json to defaults + re-sync
  *
  * Package detection:
@@ -132,7 +132,7 @@ switch (sub) {
             saveUnifiedMcp(config);
             console.log(`  ${c.green}✅ Added to mcp.json:${c.reset} ${serverName}`);
 
-            // Sync to all 4 CLIs
+            // Sync to all 6 CLIs
             syncToAll(config);
             console.log(`\n  ${c.green}Done!${c.reset} Server "${serverName}" ready for all CLIs.\n`);
         } catch (e) {
@@ -158,7 +158,7 @@ switch (sub) {
             const answer = await new Promise(r => {
                 rl.question(
                     `\n  ${c.yellow}⚠️  MCP 설정을 초기화합니다.${c.reset}\n` +
-                    `  ~/.cli-jaw/mcp.json이 재생성되고 4개 CLI에 재동기화됩니다.\n` +
+                    `  ~/.cli-jaw/mcp.json이 재생성되고 6개 CLI에 재동기화됩니다.\n` +
                     `  계속하시겠습니까? (y/N): `, r
                 );
             });

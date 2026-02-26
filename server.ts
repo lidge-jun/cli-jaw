@@ -806,7 +806,10 @@ server.listen(PORT, () => {
     log.info(`  Prompts: ${PROMPTS_DIR}\n`);
 
     // Auto-open browser (opt-in via JAW_OPEN_BROWSER=1, set by `jaw serve --open`)
-    if (process.env.JAW_OPEN_BROWSER === '1') {
+    // Skip in test environments to prevent browser tabs during npm test
+    const isTestEnv = process.env.NODE_ENV === 'test'
+        || (process.env.npm_lifecycle_event || '').includes('test');
+    if (process.env.JAW_OPEN_BROWSER === '1' && !isTestEnv) {
         const url = `http://localhost:${PORT}`;
         try {
             const openCmd = process.platform === 'darwin' ? 'open'
