@@ -14,7 +14,7 @@
 
 [English](README.md) / **한국어** / [中文](README.zh-CN.md)
 
-<video src="https://github.com/lidge-jun/cli-jaw/releases/download/v1.0.3/demo.mp4" autoplay loop muted playsinline width="100%"></video>
+<video src="https://github.com/user-attachments/assets/a7cf17c9-bfb3-44f0-b7fd-d001a39643fd" autoplay loop muted playsinline width="100%"></video>
 
 </div>
 
