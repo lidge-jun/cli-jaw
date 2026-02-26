@@ -8,9 +8,10 @@ import {
     statusHandler, modelHandler, cliHandler, skillHandler, employeeHandler,
     clearHandler, resetHandler, versionHandler, mcpHandler, memoryHandler,
     browserHandler, promptHandler, quitHandler, fileHandler, fallbackHandler,
-    steerHandler,
+    steerHandler, flushHandler,
     modelArgumentCompletions, cliArgumentCompletions, skillArgumentCompletions,
     employeeArgumentCompletions, browserArgumentCompletions, fallbackArgumentCompletions,
+    flushArgumentCompletions,
 } from './handlers.js';
 
 const CATEGORY_ORDER = ['session', 'model', 'tools', 'cli'];
@@ -154,6 +155,7 @@ export const COMMANDS = [
     { name: 'model', descKey: 'cmd.model.desc', desc: 'View/change model', args: '[name]', category: 'model', interfaces: ['cli', 'web', 'telegram'], getArgumentCompletions: modelArgumentCompletions, handler: modelHandler },
     { name: 'cli', descKey: 'cmd.cli.desc', desc: 'View/change CLI', args: '[name]', category: 'model', interfaces: ['cli', 'web', 'telegram'], getArgumentCompletions: cliArgumentCompletions, handler: cliHandler },
     { name: 'fallback', descKey: 'cmd.fallback.desc', desc: 'Set fallback order', args: '[cli1 cli2...|off]', category: 'model', interfaces: ['cli', 'web', 'telegram'], getArgumentCompletions: fallbackArgumentCompletions, handler: fallbackHandler },
+    { name: 'flush', descKey: 'cmd.flush.desc', desc: 'Set flush model', args: '[cli] [model] | off', category: 'model', interfaces: ['cli', 'web', 'telegram'], getArgumentCompletions: flushArgumentCompletions, handler: flushHandler },
     { name: 'version', descKey: 'cmd.version.desc', desc: 'Version/CLI status', category: 'cli', interfaces: ['cli', 'web', 'telegram'], handler: versionHandler },
     { name: 'skill', descKey: 'cmd.skill.desc', desc: 'Skill list/reset', args: '[list|reset]', category: 'tools', interfaces: ['cli', 'web', 'telegram'], getArgumentCompletions: skillArgumentCompletions, handler: skillHandler },
     { name: 'employee', descKey: 'cmd.employee.desc', desc: 'Reset employees', args: 'reset', category: 'tools', interfaces: ['cli', 'web'], getArgumentCompletions: employeeArgumentCompletions, handler: employeeHandler },

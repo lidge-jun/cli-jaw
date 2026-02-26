@@ -3,6 +3,7 @@
 
 import { CLI_KEYS, buildModelChoicesByCli } from './registry.js';
 import { t } from '../core/i18n.js';
+import { detectCli } from '../core/config.js';
 
 const DEFAULT_CLI_CHOICES = [...CLI_KEYS];
 const MODEL_CHOICES_BY_CLI = buildModelChoicesByCli();
@@ -413,6 +414,84 @@ export async function fallbackHandler(args: any[], ctx: any) {
     return { ok: true, text: t('cmd.fallback.set', { order: order.join(' → ') }, L) };
 }
 
+export async function flushHandler(args: any[], ctx: any) {
+    const L = ctx.locale || 'ko';
+    const settings = await safeCall(ctx.getSettings, null);
+    if (!settings) return { ok: false, text: t('cmd.settingsLoadFail', {}, L) };
+
+    const activeCli = settings.cli || 'claude';
+    const currentFlushCli = settings.memory?.cli || activeCli;
+    const currentFlushModel = settings.memory?.model
+        || settings.perCli?.[currentFlushCli]?.model || 'default';
+
+    if (!args.length) {
+        const isDefault = !settings.memory?.cli && !settings.memory?.model;
+        const suffix = isDefault ? ` (active ${activeCli} 사용)` : '';
+        return { ok: true, text: t('cmd.flush.current', { cli: currentFlushCli, model: currentFlushModel }, L) + suffix };
+    }
+
+    const first = args[0].toLowerCase();
+
+    // /flush off|reset
+    if (first === 'off' || first === 'reset') {
+        const mem = { ...(settings.memory || {}), cli: '', model: '' };
+        const r = await ctx.updateSettings({ memory: mem });
+        if (r?.ok === false) return r;
+        return { ok: true, text: t('cmd.flush.reset', {}, L) };
+    }
+
+    const cliKeys = [...CLI_KEYS];
+    let newCli: string;
+    let newModel: string;
+
+    if (cliKeys.includes(first)) {
+        // /flush <cli> [model]
+        newCli = first;
+        newModel = args.slice(1).join(' ').trim() || 'default';
+    } else {
+        // /flush <model> — auto-detect CLI from registry
+        const modelName = args.join(' ').trim();
+        const modelKey = modelName.toLowerCase();
+        const matchedClis: string[] = [];
+        for (const [cli, models] of Object.entries(MODEL_CHOICES_BY_CLI)) {
+            if ((models as string[]).some(m => m.toLowerCase() === modelKey)) {
+                matchedClis.push(cli);
+            }
+        }
+
+        // Filter by available CLIs
+        const availableClis = matchedClis.filter(c => detectCli(c).available);
+
+        if (availableClis.length > 0) {
+            newCli = availableClis[0]!;
+            newModel = modelName;
+        } else if (matchedClis.length > 0) {
+            // CLI found in registry but not installed
+            return {
+                ok: false,
+                text: t('cmd.flush.cliUnavailable', { cli: matchedClis.join(', '), model: modelName }, L),
+            };
+        } else {
+            // Custom model name — keep current flush CLI
+            newCli = currentFlushCli;
+            newModel = modelName;
+        }
+    }
+
+    // Validate target CLI is available
+    if (!detectCli(newCli).available) {
+        return {
+            ok: false,
+            text: t('cmd.flush.cliUnavailable', { cli: newCli, model: newModel }, L),
+        };
+    }
+
+    const mem = { ...(settings.memory || {}), cli: newCli, model: newModel };
+    const r = await ctx.updateSettings({ memory: mem });
+    if (r?.ok === false) return r;
+    return { ok: true, text: t('cmd.flush.changed', { cli: newCli, model: newModel }, L) };
+}
+
 // ─── Argument Completions ────────────────────────────
 
 export function modelArgumentCompletions(ctx: any) {
@@ -455,4 +534,15 @@ export function fallbackArgumentCompletions(ctx: any) {
         ...clis.map(c => ({ value: c, label: 'cli' })),
         { value: 'off', label: t('cmd.arg.fallbackOff', {}, L) },
     ];
+}
+
+export function flushArgumentCompletions(ctx: any) {
+    const L = ctx?.locale || 'ko';
+    const clis = Object.keys(ctx?.settings?.perCli || {});
+    const allModels: string[] = Object.values(MODEL_CHOICES_BY_CLI).flat();
+    return dedupeChoices([
+        ...clis.map(c => ({ value: c, label: 'cli' })),
+        ...allModels.map(m => ({ value: m, label: 'model' })),
+        { value: 'off', label: t('cmd.arg.flushOff', {}, L) },
+    ]);
 }
