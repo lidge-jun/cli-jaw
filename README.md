@@ -335,6 +335,55 @@ Each CLI comes with preconfigured presets, but you can type **any model ID** dir
 
 ---
 
+## 🐳 Docker — Container Isolation
+
+Run CLI-JAW in a Docker container for **security isolation** — AI agents cannot access host files.
+
+```bash
+# Quick start (after npm publish)
+docker compose up -d
+# → http://localhost:3457
+
+# Or build manually
+docker build -t cli-jaw .
+docker run -d -p 3457:3457 --env-file .env --name jaw cli-jaw
+```
+
+<details>
+<summary>📋 Docker details</summary>
+
+**Two Dockerfiles:**
+
+| File | Purpose | Use Case |
+|------|---------|----------|
+| `Dockerfile` | Installs from npm registry | Production / deployment |
+| `Dockerfile.dev` | Builds from local source | Development / testing |
+
+```bash
+# Dev build (local source)
+docker build -f Dockerfile.dev -t cli-jaw:dev .
+docker run -d -p 3457:3457 --env-file .env cli-jaw:dev
+
+# Pin version for CI
+docker build --build-arg CLI_JAW_VERSION=1.0.1 -t cli-jaw:1.0.1 .
+
+# If Chromium sandbox fails in your environment
+docker run -e CHROME_NO_SANDBOX=1 -p 3457:3457 cli-jaw
+```
+
+**Security:**
+- Non-root `jaw` user — Chromium sandbox enabled by default
+- No `ipc: host` or `seccomp=unconfined` — full container isolation
+- `--no-sandbox` only via explicit `CHROME_NO_SANDBOX=1` opt-in
+- Build-time feature guard prevents outdated image deployment
+
+**Volumes:** Data persists in `jaw-data` named volume (`/home/jaw/.cli-jaw`).
+To use existing host config: `-v ~/.cli-jaw:/home/jaw/.cli-jaw`
+
+</details>
+
+---
+
 ## 🛠️ Development
 
 <details>

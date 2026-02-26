@@ -343,6 +343,19 @@ jaw --home ~/my-project launchd --port 3458    # 项目 → 端口 3458
 
 ---
 
+## 🐳 Docker — 容器隔离
+
+在 Docker 容器中运行以实现安全隔离 — AI 代理无法访问主机文件。
+
+```bash
+docker compose up -d        # → http://localhost:3457
+```
+
+> 详细信息请参阅 [English README](README.md#-docker--container-isolation)。
+> 提供 `Dockerfile`（npm 发布版）和 `Dockerfile.dev`（本地源码构建）两种方式。
+
+---
+
 ## 🛠️ 开发
 
 <details>

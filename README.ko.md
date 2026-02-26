@@ -343,6 +343,19 @@ jaw --home ~/my-project launchd --port 3458    # 프로젝트 → 포트 3458
 
 ---
 
+## 🐳 Docker — 컨테이너 격리
+
+보안 격리를 위해 Docker 컨테이너에서 실행 — AI 에이전트가 호스트 파일에 접근 불가.
+
+```bash
+docker compose up -d        # → http://localhost:3457
+```
+
+> 자세한 내용은 [English README](README.md#-docker--container-isolation) 참고.
+> `Dockerfile` (npm 배포판) / `Dockerfile.dev` (로컬 소스) 두 가지 제공.
+
+---
+
 ## 🛠️ 개발
 
 <details>
