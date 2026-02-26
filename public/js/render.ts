@@ -26,6 +26,15 @@ export function sanitizeHtml(html: string): string {
         .replace(/javascript\s*:/gi, 'about:blank');
 }
 
+// ── CJK bold/italic fix (CommonMark 6.2 right-flanking workaround) ──
+// When closing ** is preceded by punctuation and followed by non-space
+// non-punctuation (e.g. CJK), CommonMark rejects it as right-flanking.
+// Insert ZWSP after ** to satisfy the delimiter rule.
+export function fixCjkBoldAdjacent(text: string): string {
+    // **text)**CJK  →  **text)** ZWSP CJK
+    return text.replace(/(\*{1,3})([^\s\p{P}])/gu, '$1\u200B$2');
+}
+
 // ── Orchestration JSON stripping ──
 function stripOrchestration(text: string): string {
     let cleaned = text.replace(/```json\n[\s\S]*?\n```/g, '');
@@ -195,7 +204,8 @@ export function renderMarkdown(text: string): string {
 
     let html: string;
     if (ensureMarked()) {
-        html = marked.parse(cleaned) as string;
+        const fixed = fixCjkBoldAdjacent(cleaned);
+        html = marked.parse(fixed) as string;
         // Wrap tables for horizontal scrolling
         html = html.replace(/<table/g, '<div class="table-wrapper"><table').replace(/<\/table>/g, '</table></div>');
     } else {
