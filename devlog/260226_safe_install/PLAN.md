@@ -21,17 +21,34 @@
 
 ## 설계
 
-### 진입점 2가지
+### 진입점 3가지
 
 ```bash
-# 방법 1: postinstall에서 safe 모드 감지
-npm install -g cli-jaw          # → 기존 동작 (자동 설치)
-JAW_SAFE=1 npm install -g cli-jaw  # → safe 모드 (스킵, 나중에 jaw init)
+# 방법 1: npm 커스텀 플래그 (가장 자연스러움)
+npm install -g cli-jaw              # → 기존 동작 (자동 설치)
+npm install -g cli-jaw --jaw-safe   # → postinstall 스킵, jaw init --safe 안내
+# npm이 --jaw-safe를 process.env.npm_config_jaw_safe로 전달
 
-# 방법 2: 별도 init 커맨드
-jaw init              # → 자동 모드 (현재 postinstall과 동일)
-jaw init --safe       # → 대화형 y/n 프롬프트
-jaw init --dry-run    # → 변경 없이 계획만 표시
+# 방법 2: 환경변수
+JAW_SAFE=1 npm install -g cli-jaw   # → 동일하게 safe 모드
+
+# 방법 3: ignore-scripts + 수동 init
+npm install -g cli-jaw --ignore-scripts  # → postinstall 완전 스킵
+jaw init --safe                          # → 대화형 y/n 프롬프트
+jaw init --dry-run                       # → 변경 없이 계획만 표시
+jaw init                                 # → 자동 모드 (현재 postinstall과 동일)
+```
+
+### postinstall safe 감지
+
+```typescript
+// bin/postinstall.ts 상단
+if (process.env.npm_config_jaw_safe || process.env.JAW_SAFE) {
+    ensureDir(jawHome);
+    console.log('[jaw:init] 🔒 safe mode — directories created only');
+    console.log('[jaw:init] Run `jaw init --safe` to configure interactively');
+    process.exit(0);
+}
 ```
 
 ### Safe 모드 흐름
