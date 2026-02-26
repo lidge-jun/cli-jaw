@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CLI-JAW — Your Personal AI Assistant</title>
+    <meta name="description"
+        content="One assistant. Five AI engines. Always on. CLI-JAW orchestrates Claude, Codex, Gemini, OpenCode, and Copilot through a unified interface — Web, Terminal, and Telegram.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        /* ── Reset & Base ── */
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #06060b;
+            --surface: #0d0d15;
+            --surface2: #12121e;
+            --border: #1a1a2e;
+            --text: #e4e4ef;
+            --text-dim: #6e6e8a;
+            --accent: #22d3ee;
+            --accent2: #06b6d4;
+            --accent-glow: rgba(34, 211, 238, 0.15);
+            --accent-glow2: rgba(34, 211, 238, 0.06);
+            --green: #4ade80;
+            --font-display: 'Chakra Petch', monospace;
+            --font-body: 'Outfit', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* ── Grid Background ── */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(34, 211, 238, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(34, 211, 238, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── Utility ── */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .section {
+            padding: 100px 0;
+            position: relative;
+        }
+
+        .section-label {
+            font-family: var(--font-mono);
+            font-size: 12px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            color: var(--accent);
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .section-title {
+            font-family: var(--font-display);
+            font-size: clamp(28px, 4vw, 42px);
+            font-weight: 700;
+            margin-bottom: 16px;
+            line-height: 1.2;
+        }
+
+        .section-desc {
+            color: var(--text-dim);
+            font-size: 16px;
+            max-width: 600px;
+            margin-bottom: 48px;
+        }
+
+        /* ── Reveal Animation ── */
+        .reveal {
+            opacity: 0;
+            transform: translateY(30px);
+            transition: opacity 0.7s ease, transform 0.7s ease;
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* ═══════════════════════════════════════
+   HERO
+   ═══════════════════════════════════════ */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 60px 24px;
+            position: relative;
+        }
+
+        /* Radial glow behind hero */
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 20%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 800px;
+            height: 500px;
+            background: radial-gradient(ellipse, var(--accent-glow) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        /* Block Art */
+        .block-art {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            margin-bottom: 32px;
+        }
+
+        .block-art .letter {
+            display: grid;
+            gap: 2px;
+            opacity: 1;
+            animation: heroFloat 3s ease-in-out infinite;
+        }
+
+        .block-art .letter:nth-child(1) {
+            animation-delay: 0s;
+        }
+
+        .block-art .letter:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .block-art .letter:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        .block-art .letter:nth-child(4) {
+            animation-delay: 0.6s;
+        }
+
+        .block-art .letter:nth-child(5) {
+            animation-delay: 0.8s;
+        }
+
+        .block-art .letter:nth-child(6) {
+            animation-delay: 1.0s;
+        }
+
+        @keyframes heroFloat {
+
+            0%,
+            100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-6px);
+            }
+        }
+
+        .block-art .b {
+            width: clamp(8px, 1.5vw, 14px);
+            height: clamp(8px, 1.5vw, 14px);
+            border-radius: 2px;
+        }
+
+        .block-art .b.on {
+            background: var(--accent);
+            box-shadow: 0 0 8px var(--accent-glow), inset -1px -1px 0 rgba(0, 0, 0, 0.2), inset 1px 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        .block-art .b.off {
+            background: transparent;
+        }
+
+        .hero-tagline {
+            font-family: var(--font-display);
+            font-size: clamp(18px, 3vw, 28px);
+            font-weight: 600;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, var(--text) 40%, var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-sub {
+            color: var(--text-dim);
+            font-size: 16px;
+            margin-bottom: 40px;
+            letter-spacing: 2px;
+        }
+
+        .hero-cta {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-family: var(--font-mono);
+            font-size: 14px;
+            text-decoration: none;
+            border: none;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent2), var(--accent));
+            color: var(--bg);
+            font-weight: 600;
+            box-shadow: 0 4px 24px var(--accent-glow);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(34, 211, 238, 0.3);
+        }
+
+        .btn-ghost {
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-ghost:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .hero-badges {
+            margin-top: 32px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .hero-badges img {
+            height: 22px;
+        }
+
+        /* ── Scroll indicator ── */
+        .scroll-hint {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-dim);
+            font-size: 11px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            animation: scrollBounce 2s ease-in-out infinite;
+        }
+
+        .scroll-hint::after {
+            content: '';
+            width: 1px;
+            height: 30px;
+            background: linear-gradient(to bottom, var(--accent), transparent);
+        }
+
+        @keyframes scrollBounce {
+
+            0%,
+            100% {
+                transform: translateX(-50%) translateY(0);
+            }
+
+            50% {
+                transform: translateX(-50%) translateY(8px);
+            }
+        }
+
+        /* ═══════════════════════════════════════
+   DEMO VIDEO
+   ═══════════════════════════════════════ */
+        .demo-section {
+            padding: 60px 0 100px;
+        }
+
+        .demo-wrapper {
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px var(--accent-glow2);
+            position: relative;
+        }
+
+        .demo-wrapper::before {
+            content: '● ● ●';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 10px 16px;
+            background: var(--surface);
+            font-size: 10px;
+            letter-spacing: 6px;
+            color: var(--text-dim);
+            z-index: 2;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .demo-wrapper video {
+            width: 100%;
+            display: block;
+            margin-top: 34px;
+        }
+
+        /* ═══════════════════════════════════════
+   ENGINES
+   ═══════════════════════════════════════ */
+        .engines-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 16px;
+        }
+
+        .engine-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 28px 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .engine-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .engine-card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(34, 211, 238, 0.3);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .engine-card:hover::before {
+            opacity: 1;
+        }
+
+        .engine-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .engine-name {
+            font-family: var(--font-display);
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .engine-model {
+            font-family: var(--font-mono);
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+
+        .engine-badge {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+        }
+
+        .badge-free {
+            background: rgba(74, 222, 128, 0.15);
+            color: var(--green);
+        }
+
+        .badge-paid {
+            background: rgba(34, 211, 238, 0.1);
+            color: var(--accent);
+        }
+
+        .fallback-line {
+            text-align: center;
+            margin-top: 24px;
+            color: var(--text-dim);
+            font-size: 14px;
+        }
+
+        .fallback-line span {
+            color: var(--accent);
+        }
+
+        /* ═══════════════════════════════════════
+   FEATURES
+   ═══════════════════════════════════════ */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .feature-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 32px 24px;
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            border-color: rgba(34, 211, 238, 0.2);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .feature-icon {
+            font-size: 28px;
+            margin-bottom: 16px;
+            display: block;
+        }
+
+        .feature-title {
+            font-family: var(--font-display);
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .feature-desc {
+            color: var(--text-dim);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* ═══════════════════════════════════════
+   SCREENSHOTS
+   ═══════════════════════════════════════ */
+        .screenshots-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 24px;
+            background: var(--surface);
+            border-radius: 8px;
+            padding: 4px;
+            width: fit-content;
+        }
+
+        .tab-btn {
+            padding: 10px 20px;
+            border: none;
+            background: transparent;
+            color: var(--text-dim);
+            font-family: var(--font-body);
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active {
+            background: var(--accent);
+            color: var(--bg);
+            font-weight: 600;
+        }
+
+        .tab-btn:hover:not(.active) {
+            color: var(--text);
+        }
+
+        .screenshot-panel {
+            display: none;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .screenshot-panel.active {
+            display: block;
+        }
+
+        .screenshot-panel img {
+            width: 100%;
+            display: block;
+        }
+
+        /* ═══════════════════════════════════════
+   QUICK START
+   ═══════════════════════════════════════ */
+        .quickstart-steps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        .step-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 32px 24px;
+            position: relative;
+        }
+
+        .step-num {
+            position: absolute;
+            top: -14px;
+            left: 24px;
+            background: var(--accent);
+            color: var(--bg);
+            font-family: var(--font-display);
+            font-weight: 700;
+            font-size: 14px;
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .step-title {
+            font-family: var(--font-display);
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            margin-top: 4px;
+        }
+
+        .code-block {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            color: var(--accent);
+            overflow-x: auto;
+            line-height: 1.8;
+        }
+
+        .code-block .dim {
+            color: var(--text-dim);
+        }
+
+        /* ═══════════════════════════════════════
+   FOOTER
+   ═══════════════════════════════════════ */
+        .footer {
+            border-top: 1px solid var(--border);
+            padding: 60px 0;
+            text-align: center;
+        }
+
+        .footer-logo {
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 16px;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 24px;
+            justify-content: center;
+            margin-bottom: 24px;
+        }
+
+        .footer-links a {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.2s;
+        }
+
+        .footer-links a:hover {
+            color: var(--accent);
+        }
+
+        .footer-copy {
+            color: var(--text-dim);
+            font-size: 12px;
+        }
+
+        /* ═══════════════════════════════════════
+   PLATFORM
+   ═══════════════════════════════════════ */
+        .platform-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            justify-content: center;
+            margin-bottom: 48px;
+        }
+
+        .platform-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 40px;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            color: var(--text);
+            transition: all 0.25s;
+        }
+
+        .platform-chip:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 16px var(--accent-glow);
+            transform: translateY(-2px);
+        }
+
+        .platform-chip .chip-icon {
+            font-size: 18px;
+        }
+
+        .docker-block {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 32px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 32px;
+            align-items: center;
+        }
+
+        .docker-info h3 {
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+
+        .docker-info p {
+            color: var(--text-dim);
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+
+        .docker-tag {
+            display: inline-block;
+            padding: 4px 10px;
+            background: rgba(34, 211, 238, 0.1);
+            border-radius: 4px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--accent);
+        }
+
+        @media (max-width: 600px) {
+            .docker-block {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ═══════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════ */
+        @media (max-width: 900px) {
+            .engines-grid {
+                grid-template-columns: repeat(3, 1fr);
+            }
+
+            .features-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .quickstart-steps {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .engines-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .section {
+                padding: 60px 0;
+            }
+
+            .screenshots-tabs {
+                flex-wrap: wrap;
+                width: 100%;
+            }
+
+            .tab-btn {
+                flex: 1;
+                min-width: 80px;
+                text-align: center;
+                font-size: 12px;
+                padding: 8px 12px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ═══════════════ HERO ═══════════════ -->
+    <section class="hero">
+        <div class="block-art" id="blockArt"></div>
+        <h1 class="hero-tagline">Your Personal AI Assistant</h1>
+        <p class="hero-sub">5 Engines · One Brain · Always On</p>
+        <p style="color:var(--text-dim); font-size:14px; margin-bottom:12px; letter-spacing:1px;">Get your personal AI
+            assistant in <span style="color:var(--accent); font-weight:600;">2 lines</span></p>
+        <div class="hero-install">
+            <div class="code-block" style="display:inline-block; text-align:left; padding:16px 32px;">
+                <span class="dim">$</span> npm install -g cli-jaw<br>
+                <span class="dim">$</span> jaw serve
+            </div>
+        </div>
+        <div class="hero-cta" style="margin-top:20px;">
+            <a href="#quickstart" class="btn btn-primary">
+                Get Started
+            </a>
+            <a href="https://github.com/lidge-jun/cli-jaw" class="btn btn-ghost" target="_blank">
+                ⭐ GitHub
+            </a>
+        </div>
+        <div class="hero-badges">
+            <img src="https://img.shields.io/badge/tests-445%20pass-brightgreen" alt="Tests">
+            <img src="https://img.shields.io/npm/v/cli-jaw" alt="npm">
+            <img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript">
+            <img src="https://img.shields.io/badge/node-%3E%3D22-blue" alt="Node">
+            <img src="https://img.shields.io/badge/Docker-supported-2496ED?logo=docker&logoColor=white" alt="Docker">
+            <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20WSL%20%7C%20Docker-lightgrey"
+                alt="Platforms">
+        </div>
+        <div class="scroll-hint">Scroll</div>
+    </section>
+
+    <!-- ═══════════════ DEMO ═══════════════ -->
+    <section class="demo-section">
+        <div class="container reveal">
+            <span class="section-label">// demo</span>
+            <h2 class="section-title">See It in Action</h2>
+            <div class="demo-wrapper">
+                <video src="https://github.com/user-attachments/assets/a7cf17c9-bfb3-44f0-b7fd-d001a39643fd" autoplay
+                    loop muted playsinline></video>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════ 5 ENGINES ═══════════════ -->
+    <section class="section" id="engines">
+        <div class="container reveal">
+            <span class="section-label">// engines</span>
+            <h2 class="section-title">Five AI Engines, One Roof</h2>
+            <p class="section-desc">Pick whichever you have. CLI-JAW auto-detects and falls back gracefully. Even one
+                engine is enough.</p>
+            <div class="engines-grid">
+                <div class="engine-card">
+                    <span class="engine-icon">🟣</span>
+                    <div class="engine-name">Claude</div>
+                    <div class="engine-model">claude-sonnet-4-6</div>
+                    <span class="engine-badge badge-paid">Paid</span>
+                </div>
+                <div class="engine-card">
+                    <span class="engine-icon">🟢</span>
+                    <div class="engine-name">Codex</div>
+                    <div class="engine-model">gpt-5.3-codex</div>
+                    <span class="engine-badge badge-paid">Paid</span>
+                </div>
+                <div class="engine-card">
+                    <span class="engine-icon">🔵</span>
+                    <div class="engine-name">Gemini</div>
+                    <div class="engine-model">gemini-2.5-pro</div>
+                    <span class="engine-badge badge-paid">Paid</span>
+                </div>
+                <div class="engine-card">
+                    <span class="engine-icon">⚪</span>
+                    <div class="engine-name">OpenCode</div>
+                    <div class="engine-model">claude-opus-4-6</div>
+                    <span class="engine-badge badge-free">🆓 Free</span>
+                </div>
+                <div class="engine-card">
+                    <span class="engine-icon">🟠</span>
+                    <div class="engine-name">Copilot</div>
+                    <div class="engine-model">gpt-4.1</div>
+                    <span class="engine-badge badge-free">🆓 Free</span>
+                </div>
+            </div>
+            <p class="fallback-line">Engine down? → <span>Next one picks up automatically. Zero downtime.</span></p>
+        </div>
+    </section>
+
+    <!-- ═══════════════ FEATURES ═══════════════ -->
+    <section class="section" id="features">
+        <div class="container reveal">
+            <span class="section-label">// features</span>
+            <h2 class="section-title">Why CLI-JAW?</h2>
+            <p class="section-desc">Not just another chatbot. A full-stack personal assistant with real capabilities.
+            </p>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <span class="feature-icon">🛡️</span>
+                    <div class="feature-title">TOS-Safe</div>
+                    <p class="feature-desc">Uses official CLIs only — no API key scraping, no reverse engineering, no
+                        ban risk.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🎭</span>
+                    <div class="feature-title">Orchestration</div>
+                    <p class="feature-desc">Complex tasks split across specialized sub-agents for maximum throughput.
+                        Planning → Execution → Review.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">📦</span>
+                    <div class="feature-title">107 Skills</div>
+                    <p class="feature-desc">Browser automation, document generation, Telegram, memory, GitHub, Notion —
+                        ready out of the box.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">📱</span>
+                    <div class="feature-title">Telegram Bot</div>
+                    <p class="feature-desc">Chat from your phone. Send voice, photos, files. Get AI responses, generated
+                        docs, and screenshots back.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🔌</span>
+                    <div class="feature-title">MCP Ecosystem</div>
+                    <p class="feature-desc">Install MCP once → syncs to all 6 AI engines instantly. One config, six
+                        agents.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon">🖥️</span>
+                    <div class="feature-title">Cross-Platform</div>
+                    <p class="feature-desc">macOS, Linux, WSL, Docker. ENOENT-safe spawn, auto-detection, container
+                        isolation.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+    <!-- ═══════════════ PLATFORM ═══════════════ -->
+    <section class="section" id="platform">
+        <div class="container reveal">
+            <span class="section-label">// platform</span>
+            <h2 class="section-title">Runs Everywhere</h2>
+            <p class="section-desc">If your OS has a CLI, CLI-JAW works there. No exceptions.</p>
+            <div class="platform-strip">
+                <div class="platform-chip"><span class="chip-icon">🍎</span> macOS</div>
+                <div class="platform-chip"><span class="chip-icon">🐧</span> Linux</div>
+                <div class="platform-chip"><span class="chip-icon">🔲</span> WSL</div>
+                <div class="platform-chip"><span class="chip-icon">🐳</span> Docker</div>
+                <div class="platform-chip"><span class="chip-icon">☁️</span> Cloud VMs</div>
+                <div class="platform-chip"><span class="chip-icon">📦</span> CI/CD</div>
+            </div>
+            <div class="docker-block">
+                <div class="docker-info">
+                    <h3>🐳 Docker — Container Isolation</h3>
+                    <p>Run CLI-JAW in a Docker container for security isolation. AI agents cannot access host files.
+                        Non-root user, Chromium sandbox enabled by default.</p>
+                    <span class="docker-tag">Dockerfile</span>
+                    <span class="docker-tag">Dockerfile.dev</span>
+                    <span class="docker-tag">docker-compose.yml</span>
+                </div>
+                <div class="code-block">
+                    <span class="dim"># Quick start</span><br>
+                    docker compose up -d<br>
+                    <span class="dim"># → http://localhost:3457</span><br><br>
+                    <span class="dim"># Or build manually</span><br>
+                    docker build -t cli-jaw .<br>
+                    docker run -d -p 3457:3457 cli-jaw
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════ SCREENSHOTS ═══════════════ -->
+    <section class="section" id="screenshots">
+        <div class="container reveal">
+            <span class="section-label">// interfaces</span>
+            <h2 class="section-title">Three Ways to Connect</h2>
+            <p class="section-desc">Web UI, Terminal TUI, or Telegram. Same assistant, same memory, same skills.</p>
+            <div class="screenshots-tabs">
+                <button class="tab-btn active" onclick="showTab('web')">🌐 Web</button>
+                <button class="tab-btn" onclick="showTab('terminal')">⌨️ Terminal</button>
+                <button class="tab-btn" onclick="showTab('telegram')">📱 Telegram</button>
+                <button class="tab-btn" onclick="showTab('orchestration')">🎭 Orchestration</button>
+            </div>
+            <div class="screenshot-panel active" id="tab-web">
+                <img src="screenshots/web-ui.png" alt="CLI-JAW Web UI">
+            </div>
+            <div class="screenshot-panel" id="tab-terminal">
+                <img src="screenshots/terminal-cli.png" alt="CLI-JAW Terminal">
+            </div>
+            <div class="screenshot-panel" id="tab-telegram">
+                <img src="screenshots/telegram-bot.png" alt="CLI-JAW Telegram Bot"
+                    style="max-width: 400px; margin: 0 auto;">
+            </div>
+            <div class="screenshot-panel" id="tab-orchestration">
+                <img src="screenshots/orchestration-log.png" alt="CLI-JAW Orchestration">
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════ QUICK START ═══════════════ -->
+    <section class="section" id="quickstart">
+        <div class="container reveal">
+            <span class="section-label">// quickstart</span>
+            <h2 class="section-title">Up and Running in 30 Seconds</h2>
+            <div class="quickstart-steps">
+                <div class="step-card">
+                    <div class="step-num">1</div>
+                    <div class="step-title">Install</div>
+                    <div class="code-block">
+                        npm install -g cli-jaw
+                    </div>
+                </div>
+                <div class="step-card">
+                    <div class="step-num">2</div>
+                    <div class="step-title">Authenticate</div>
+                    <div class="code-block">
+                        <span class="dim"># pick any one</span><br>
+                        gh auth login<br>
+                        claude auth<br>
+                        codex login
+                    </div>
+                </div>
+                <div class="step-card">
+                    <div class="step-num">3</div>
+                    <div class="step-title">Launch</div>
+                    <div class="code-block">
+                        jaw serve<br>
+                        <span class="dim"># → http://localhost:3457</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ═══════════════ FOOTER ═══════════════ -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-logo">🦈 CLI-JAW</div>
+            <div class="footer-links">
+                <a href="https://github.com/lidge-jun/cli-jaw" target="_blank">GitHub</a>
+                <a href="https://npmjs.com/package/cli-jaw" target="_blank">npm</a>
+                <a href="https://github.com/lidge-jun/cli-jaw/blob/master/docs/ARCHITECTURE.md" target="_blank">Docs</a>
+                <a href="https://github.com/lidge-jun/cli-jaw/issues" target="_blank">Issues</a>
+            </div>
+            <p class="footer-copy">ISC License · Made with ❤️</p>
+        </div>
+    </footer>
+
+    <script>
+        // ── Block Art Generator ──
+        const font = {
+            C: [[0, 1, 1, 1, 1, 1], [1, 1, 0, 0, 0, 1], [1, 1, 0, 0, 0, 0], [1, 1, 0, 0, 0, 0], [1, 1, 0, 0, 0, 0], [1, 1, 0, 0, 0, 1], [0, 1, 1, 1, 1, 1]],
+            L: [[1, 1, 0, 0, 0, 0], [1, 1, 0, 0, 0, 0], [1, 1, 0, 0, 0, 0], [1, 1, 0, 0, 0, 0], [1, 1, 0, 0, 0, 0], [1, 1, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1]],
+            I: [[1, 1, 1, 1], [0, 1, 1, 0], [0, 1, 1, 0], [0, 1, 1, 0], [0, 1, 1, 0], [0, 1, 1, 0], [1, 1, 1, 1]],
+            J: [[0, 0, 1, 1, 1, 1], [0, 0, 0, 1, 1, 0], [0, 0, 0, 1, 1, 0], [0, 0, 0, 1, 1, 0], [1, 0, 0, 1, 1, 0], [1, 1, 0, 1, 1, 0], [0, 1, 1, 1, 0, 0]],
+            A: [[0, 0, 1, 1, 0, 0], [0, 1, 1, 1, 1, 0], [1, 1, 0, 0, 1, 1], [1, 1, 0, 0, 1, 1], [1, 1, 1, 1, 1, 1], [1, 1, 0, 0, 1, 1], [1, 1, 0, 0, 1, 1]],
+            W: [[1, 1, 0, 0, 0, 1, 1], [1, 1, 0, 0, 0, 1, 1], [1, 1, 0, 0, 0, 1, 1], [1, 1, 0, 1, 0, 1, 1], [1, 1, 0, 1, 0, 1, 1], [1, 1, 1, 1, 1, 1, 1], [0, 1, 1, 0, 1, 1, 0]],
+        };
+        const art = document.getElementById('blockArt');
+        for (const ch of 'CLIJAW') {
+            const m = font[ch], cols = m[0].length;
+            const el = document.createElement('div');
+            el.className = 'letter';
+            el.style.gridTemplateColumns = `repeat(${cols}, clamp(8px, 1.5vw, 14px))`;
+            el.style.gridTemplateRows = `repeat(7, clamp(8px, 1.5vw, 14px))`;
+            for (let r = 0; r < 7; r++)
+                for (let c = 0; c < cols; c++) {
+                    const b = document.createElement('div');
+                    b.className = `b ${m[r][c] ? 'on' : 'off'}`;
+                    el.appendChild(b);
+                }
+            art.appendChild(el);
+        }
+
+        // ── Scroll Reveal ──
+        const reveals = document.querySelectorAll('.reveal');
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); } });
+        }, { threshold: 0.15 });
+        reveals.forEach(el => observer.observe(el));
+
+        // ── Tab Switching ──
+        function showTab(id) {
+            document.querySelectorAll('.screenshot-panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('tab-' + id).classList.add('active');
+            event.target.classList.add('active');
+        }
+    </script>
+</body>
+
+</html>
