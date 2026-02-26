@@ -42,6 +42,7 @@ export { orchestrateAndCollect };
 
 export let telegramBot: any = null;
 export const telegramActiveChatIds = new Set();
+let tgRetryTimer: ReturnType<typeof setTimeout> | null = null;
 const telegramForwarderLifecycle = createForwarderLifecycle({
     addListener: addBroadcastListener,
     removeListener: removeBroadcastListener,
@@ -124,12 +125,15 @@ function makeTelegramCommandCtx() {
 
 // ─── Init ────────────────────────────────────────────
 
-export function initTelegram() {
+export async function initTelegram() {
+    // Dedupe retry timer — cancel pending retry if initTelegram called again
+    if (tgRetryTimer) { clearTimeout(tgRetryTimer); tgRetryTimer = null; }
+
     detachTelegramForwarder();
     if (telegramBot) {
         const old = telegramBot;
         telegramBot = null;
-        try { old.stop(); } catch (e: unknown) { console.warn('[telegram:stop] bot stop failed', { error: (e as Error).message }); }
+        try { await old.stop(); } catch (e: unknown) { console.warn('[telegram:stop]', (e as Error).message); }
     }
     const envToken = process.env.TELEGRAM_TOKEN;
     if (envToken) settings.telegram.token = envToken;
@@ -424,6 +428,16 @@ export function initTelegram() {
     bot.start({
         drop_pending_updates: true,
         onStart: (info) => console.log(`[tg] ✅ @${info.username} polling active`),
+    }).catch((err) => {
+        const is409 = err?.error_code === 409 || err?.message?.includes('409');
+        if (is409) {
+            console.warn('[tg:409] Polling conflict — retrying in 5s...');
+            if (!tgRetryTimer) {
+                tgRetryTimer = setTimeout(() => { tgRetryTimer = null; void initTelegram(); }, 5000);
+            }
+        } else {
+            console.error('[tg:fatal]', err);
+        }
     });
     telegramBot = bot as any;
     console.log('[tg] Bot starting...');

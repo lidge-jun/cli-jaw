@@ -277,7 +277,7 @@ function applySettingsPatch(rawPatch: Record<string, any> = {}, { restartTelegra
         } catch (e: unknown) { console.error('[jaw:workingDir]', (e as Error).message); }
     }
 
-    if (restartTelegram && hasTelegramUpdate) initTelegram();
+    if (restartTelegram && hasTelegramUpdate) void initTelegram();
     return settings;
 }
 
@@ -784,10 +784,13 @@ app.get('/api/i18n/:lang', (req, res) => {
 watchHeartbeatFile();
 
 // ─── Graceful Shutdown ──────────────────────────────
-['SIGTERM', 'SIGINT'].forEach(sig => process.on(sig, () => {
+['SIGTERM', 'SIGINT'].forEach(sig => process.on(sig, async () => {
     console.log(`\n[server] ${sig} received, shutting down...`);
     stopHeartbeat();
     killAllAgents('shutdown');
+    if (telegramBot) {
+        try { await telegramBot.stop(); } catch { }
+    }
     wss.close();
     server.close(() => {
         console.log('[server] closed');
@@ -840,7 +843,7 @@ server.listen(PORT, () => {
         console.log(`  MCP:    ~/.cli-jaw/mcp.json`);
     } catch (e: unknown) { console.error('[mcp-init]', (e as Error).message); }
 
-    initTelegram();
+    void initTelegram();
     startHeartbeat();
 
     // ─── Seed default employees if none exist ────────
