@@ -37,9 +37,12 @@ export function getFallbackState() {
 
 // ─── Kill / Steer ────────────────────────────────────
 
+let killReason: string | null = null;
+
 export function killActiveAgent(reason = 'user') {
     if (!activeProcess) return false;
     console.log(`[jaw:kill] reason=${reason}`);
+    killReason = reason;
     try { activeProcess.kill('SIGTERM'); } catch (e: unknown) { console.warn('[agent:kill] SIGTERM failed', { pid: activeProcess?.pid, error: (e as Error).message }); }
     const proc = activeProcess;
     setTimeout(() => {
@@ -385,6 +388,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         })();
 
         acp.on('exit', ({ code, signal }) => {
+            const wasSteer = killReason === 'steer';
+            if (mainManaged) killReason = null;  // consume
             flushThinking();  // Flush any remaining thinking buffer
             activeProcesses.delete(agentLabel);
             if (mainManaged) {
@@ -409,8 +414,14 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                     .replace(/<\/?tool_result>[\s\S]*?(?:<\/tool_result>|$)/g, '')
                     .replace(/\n{3,}/g, '\n\n')
                     .trim();
-                const finalContent = cleaned || ctx.fullText.trim();
+                let finalContent = cleaned || ctx.fullText.trim();
                 const traceText = ctx.traceLog.join('\n');
+
+                // Tag interrupted output so history block can distinguish
+                if (wasSteer && mainManaged && !opts.internal) {
+                    finalContent = `⏹️ [interrupted]\n\n${finalContent}`;
+                    console.log(`[jaw:steer] saving interrupted output (${finalContent.length} chars)`);
+                }
 
                 if (mainManaged && !opts.internal) {
                     insertMessageWithTrace.run('assistant', finalContent, cli, model, traceText || null);
@@ -424,7 +435,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                         triggerMemoryFlush();
                     }
                 }
-            } else if (mainManaged && code !== 0) {
+            } else if (mainManaged && code !== 0 && !wasSteer) {
                 let errMsg = `Copilot CLI 실행 실패 (exit ${code})`;
                 if (ctx.stderrBuf.includes('auth')) errMsg = '🔐 인증 오류 — 1) gh auth login → 2) gh copilot --help → 3) copilot login';
                 else if (ctx.stderrBuf.trim()) errMsg = ctx.stderrBuf.trim().slice(0, 200);
@@ -527,6 +538,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     });
 
     child.on('close', (code) => {
+        const wasSteer = killReason === 'steer';
+        if (mainManaged) killReason = null;  // consume
         activeProcesses.delete(agentLabel);
         if (mainManaged) {
             activeProcess = null;
@@ -558,8 +571,14 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 .replace(/\n{3,}/g, '\n\n')
                 .trim();
             const displayText = cleaned || ctx.fullText.trim();
-            const finalContent = displayText + costLine;
+            let finalContent = displayText + costLine;
             const traceText = ctx.traceLog.join('\n');
+
+            // Tag interrupted output so history block can distinguish
+            if (wasSteer && mainManaged && !opts.internal) {
+                finalContent = `⏹️ [interrupted]\n\n${finalContent}`;
+                console.log(`[jaw:steer] saving interrupted output (${finalContent.length} chars)`);
+            }
 
             if (mainManaged && !opts.internal) {
                 insertMessageWithTrace.run('assistant', finalContent, cli, model, traceText || null);
@@ -573,7 +592,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                     triggerMemoryFlush();
                 }
             }
-        } else if (mainManaged && code !== 0) {
+        } else if (mainManaged && code !== 0 && !wasSteer) {
             let errMsg = `CLI 실행 실패 (exit ${code})`;
             if (ctx.stderrBuf.includes('429') || ctx.stderrBuf.includes('RESOURCE_EXHAUSTED')) {
                 errMsg = '⚡ API 용량 초과 (429) — 잠시 후 다시 시도해주세요';

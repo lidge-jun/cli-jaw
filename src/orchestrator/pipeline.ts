@@ -42,17 +42,26 @@ function initAgentPhases(subtasks: any[]) {
         const role = (st.role || 'custom').toLowerCase();
         const fullProfile = PHASE_PROFILES[role as keyof typeof PHASE_PROFILES] || [3];
 
-        // start_phase 지원: planning agent가 지정한 시작 phase부터
+        // start_phase / end_phase 지원: planning agent가 지정한 범위
         // 잘못된 값은 profile 범위 내로 보정 (예: 99 -> 마지막 phase)
         const rawStart = Number(st.start_phase);
+        const rawEnd = Number(st.end_phase);
         const minPhase = fullProfile[0]!;
         const maxPhase = fullProfile[fullProfile.length - 1]!;
         const startPhase: number = Number.isFinite(rawStart)
             ? Math.max(minPhase, Math.min(maxPhase, rawStart))
             : minPhase;
-        const profile = fullProfile.filter((p: number) => p >= startPhase);
-        // profile이 비면 최소한 마지막 phase는 실행
-        const effectiveProfile = profile.length > 0 ? profile : [fullProfile[fullProfile.length - 1]!];
+        const endPhase: number = Number.isFinite(rawEnd)
+            ? Math.max(startPhase, Math.min(maxPhase, rawEnd))
+            : maxPhase;
+        const profile = fullProfile.filter((p: number) => p >= startPhase && p <= endPhase);
+        // sparse fallback: 빈 profile이면 startPhase 이상 가장 가까운 phase 사용
+        const effectiveProfile = profile.length > 0
+            ? profile
+            : [fullProfile.find((p: number) => p >= startPhase) || fullProfile[fullProfile.length - 1]!];
+        if (profile.length === 0) {
+            console.warn(`[jaw:phase] ${st.agent}: no phases in [${startPhase},${endPhase}], fallback to [${effectiveProfile[0]}]`);
+        }
 
         if (startPhase > minPhase) {
             console.log(`[jaw:phase-skip] ${st.agent} (${role}): skipping to phase ${startPhase}`);
@@ -63,6 +72,8 @@ function initAgentPhases(subtasks: any[]) {
             task: st.task,
             role,
             parallel: st.parallel === true,
+            checkpoint: st.checkpoint === true,
+            checkpointed: false,
             verification: st.verification || null,
             phaseProfile: effectiveProfile,
             currentPhaseIdx: 0,

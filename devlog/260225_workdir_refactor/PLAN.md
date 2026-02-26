@@ -300,9 +300,43 @@ Current UI has a text input `<input id="inpCwd" value="~/">` in sidebar.
 
 ## Implementation Order
 
-- [ ] **Phase 1**: PATCH-1 + 2 + 3 (core defaults, 4 files, 5 lines) — do first, test
-- [ ] **Phase 2**: PATCH-4 (frontend cleanup) — remove toggles
-- [ ] **Phase 3**: PATCH-5 (`cli-jaw workdir set`) — future enhancement
+> ⚠️ **REVIEW FIX R2 (2026-02-26)**: Updated to match multi-instance roadmap phases.
+> Old order (PATCH-1~5) was for the initial workdir-only refactor.
+> New order integrates with the full multi-instance architecture.
+
+### Phase 1: workingDir Default → JAW_HOME *(this plan's PATCH-1 + 2 + 3)*
+- [ ] PATCH-1: `config.ts:101` + `init.ts:46` — workingDir default → JAW_HOME
+- [ ] PATCH-2: `builder.ts:210` — A-2 template path `~/` → `~/.cli-jaw/`
+- [ ] PATCH-3: `postinstall.ts:166-167` — CLAUDE.md symlink → JAW_HOME
+- [ ] Run 252 tests — all must pass
+- **Scope**: 4 files, 5 lines
+
+### Phase 2.0: JAW_HOME Import Centralization *(prerequisite for env var)*
+- [ ] Refactor 8 files to `import { JAW_HOME } from config.ts`:
+  - `doctor.ts:11`, `init.ts:11`, `mcp.ts:29`, `browser.ts:13`, `skill.ts:16`
+  - `mcp-sync.ts:17`, `launchd.ts:15`, `postinstall.ts:28`
+- [ ] Run 252 tests — pure refactor, zero behavior change
+- **Scope**: 8 files, ~8 lines each (replace local definition with import)
+
+### Phase 2.1-2.2: JAW_HOME Dynamic *(env var + --home flag)*
+- [ ] `config.ts:27` — add CLI_JAW_HOME env var support (with `~` expansion)
+- [ ] `cli-jaw.ts` — parse `--home` flag before subcommand imports
+- [ ] Run 252 tests + 3 new P2-* tests
+- **Scope**: 2 files, ~10 lines
+
+### Phase 2 Frontend: PATCH-4 *(optional cleanup)*
+- [ ] `public/index.html:172-183` — remove permissions toggle + workdir input
+
+### Phase 3: `jaw clone` Command *(independent, after Phase 2)*
+- [ ] New file `bin/commands/clone.ts` + routing in `cli-jaw.ts`
+- [ ] Uses subprocess for regenerateB (env var must work first)
+- **Scope**: 1 new file (~120 lines), 1 modified
+
+### Phase 4: Multi-Instance launchd *(independent, after Phase 2)*
+- [ ] `launchd.ts` — dynamic LABEL, --home/--port pass-through
+- **Scope**: 1 file, ~30 lines
+
+### Phase 99: Frontend Instance UI *(far future)*
 
 ---
 
@@ -319,3 +353,95 @@ Verified against source (2026-02-26, commit `8054549`):
 - `src/prompt/builder.ts:547-548` → `join(settings.workingDir, 'AGENTS.md')` (no change)
 - `src/agent/spawn.ts:465` → `cwd: settings.workingDir` (no change)
 - `src/agent/args.ts:20` → `'--skip-git-repo-check'` (already in place)
+
+---
+
+## Review Fixes Applied (2026-02-26)
+
+Findings from code review were verified against actual code. All plan documents updated:
+
+### HIGH Issues Fixed
+
+1. **Phase 2 scope severely underestimated**
+   - Original: "2 files, ~15 lines"
+   - Reality: **8 files** define local JAW_HOME (not importing from config.ts)
+   - Files: `doctor.ts:11`, `init.ts:11`, `mcp.ts:29`, `browser.ts:13`, `skill.ts:16`, `mcp-sync.ts:17`, `launchd.ts:15`, `postinstall.ts:28`
+   - Fix: Added **Phase 2.0** sub-phase — centralize all JAW_HOME imports first
+   - Updated: `PHASE-2_jaw_home_dynamic.md`, `ROADMAP_multi_instance.md`
+
+2. **Phase 3 clone uses nonexistent doctor --json regeneration**
+   - `doctor --json` returns `{ checks: [...] }` only — does NOT call `regenerateB()`
+   - Fix: Changed to direct `import { regenerateB }` from builder.ts
+   - Updated: `PHASE-3_clone_command.md`
+
+3. **Test plans reference nonexistent endpoints/fields**
+   - `/api/status` does NOT exist → actual: `/api/cli-status`
+   - `jawHome`/`configDir` not in doctor --json output
+   - Fix: Updated all test plans in PHASE-2, PHASE-3, PHASE-4
+   
+### MEDIUM Issues Fixed
+
+4. **launchd subcommands mismatch**
+   - Docs: `jaw launchd install`, `--dry-run` — don't exist
+   - Reality: default action = install, subcommands = `unset`, `status` only
+   - Fix: Updated PHASE-4 smoke tests, ROADMAP examples
+
+5. **--no-ref vs --link-ref inconsistency**
+   - ROADMAP FAQ said `--no-ref`, PHASE-3 spec said `--link-ref`
+   - Fix: Unified to `--link-ref` (symlinks skills_ref instead of copying)
+   - Updated: `ROADMAP_multi_instance.md` FAQ
+
+6. **resolve() doesn't handle ~ expansion**
+   - Fix: Added explicit `.replace(/^~/, os.homedir())` before `resolve()`
+   - Updated: `PHASE-2_jaw_home_dynamic.md` diffs + edge cases table
+
+---
+
+## Review Fixes R2 Applied (2026-02-26 01:26)
+
+Second pass review found issues remaining after R1 fixes. All verified and corrected:
+
+### HIGH Issues Fixed
+
+1. **Phase 3 regenerateB direct import WILL NOT WORK**
+   - `JAW_HOME` is `export const` — evaluated once at ES module load time
+   - Setting `process.env.CLI_JAW_HOME` after import has zero effect on frozen constants
+   - ES module cache means re-importing returns the same cached module instance
+   - Fix: Changed to subprocess approach (`execSync` with `CLI_JAW_HOME` env var)
+   - Updated: `PHASE-3_clone_command.md` lines 111-130 with full explanation
+   - Source: Context7 Node.js ESM docs confirm cache behavior
+
+2. **Phase 4 smoke test self-contradiction**
+   - Installed without `--port` but tested `curl localhost:3458` (port mismatch)
+   - `launchd status` output shows PID/plist/log — NOT port number
+   - Fix: Added `--port 3458` to install step, use `curl` for port verification
+   - Updated: `PHASE-4_port_launchd.md` smoke test section
+
+3. **PLAN.md execution TODO outdated**
+   - Still referenced old PATCH-1~5 order, didn't include Phase 2.0/2.1 flow
+   - Fix: Complete rewrite of Implementation Order with proper phase sequence
+   - Updated: `PLAN.md` Implementation Order section
+
+### MEDIUM Issues Fixed
+
+4. **Phase 2 test P2-003 verification too weak**
+   - Just checked `settingsCheck` exists — would pass even without custom home
+   - Fix: Assert `homeCheck.detail === tmpHome` (doctor returns JAW_HOME as detail)
+   - Updated: `PHASE-2_jaw_home_dynamic.md` test P2-003
+
+5. **File count inconsistencies**
+   - PHASE-2 header said "9 files" — actual: 10 (8 refactor + 2 new logic)
+   - ROADMAP said "6개" then listed 8
+   - Fix: Corrected all counts with breakdown
+   - Updated: `PHASE-2_jaw_home_dynamic.md` header, `ROADMAP_multi_instance.md`
+
+6. **Non-existent dir "auto-creation" claim inaccurate**
+   - `doctor` runs `accessSync(JAW_HOME, W_OK)` (doctor.ts:64) — throws on missing dir
+   - Fix: Split edge case by command (serve=creates, doctor=fails correctly)
+   - Updated: `PHASE-2_jaw_home_dynamic.md` edge cases table
+
+7. **launchd load/unload is legacy API**
+   - Current code uses `launchctl load -w` / `launchctl unload` (launchd.ts:78,120)
+   - Apple recommends `bootstrap/bootout` since macOS 10.10+
+   - Fix: Added legacy note with migration path, keep load/unload for now
+   - Updated: `PHASE-4_port_launchd.md` Cross-Platform Note section

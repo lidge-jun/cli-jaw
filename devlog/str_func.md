@@ -1,8 +1,8 @@
 # CLI-JAW — Source Structure & Function Reference
 
-> 마지막 검증: 2026-02-25T17:35 (cli-jaw rename + Arctic Cyan theme + CLI banner)
+> 마지막 검증: 2026-02-26T10:27 (orchestration v3 — end_phase + checkpoint)
 > server.ts 863L / src/ 36파일 12서브디렉토리 / tests 252 pass (tsx runner)
-> Phase 9 보안 하드닝 + Phase 17 AI triage + Phase 20.6 모듈 분리 + parallel dispatch + session fix + cli-jaw rename 반영
+> Phase 9 보안 하드닝 + Phase 17 AI triage + Phase 20.6 모듈 분리 + parallel dispatch + session fix + cli-jaw rename + orchestration v3 반영
 >
 > 상세 모듈 문서는 [서브 문서](#서브-문서)를 참조하세요.
 
@@ -30,7 +30,7 @@ cli-jaw/
 │   │   ├── args.ts           ← CLI별 인자 빌더 (67L)
 │   │   └── events.ts         ← NDJSON 파서 + ACP update + logEventSummary (322L)
 │   ├── orchestrator/         ← 직원 오케스트레이션
-│   │   ├── pipeline.ts       ← Plan → Distribute → Quality Gate (407L, parallel/sequential 분기)
+│   │   ├── pipeline.ts       ← Plan → Distribute → Quality Gate (418L, parallel/sequential + end_phase/checkpoint)
 │   │   ├── distribute.ts     ← runSingleAgent + buildPlanPrompt + parallel helpers (344L)
 │   │   └── parser.ts         ← triage + subtask JSON + verdict 파싱 (108L)
 │   ├── prompt/               ← 프롬프트 조립
@@ -42,7 +42,7 @@ cli-jaw/
 │   │   └── acp-client.ts     ← Copilot ACP JSON-RPC 클라이언트 (315L)
 │   ├── memory/               ← 데이터 영속화
 │   │   ├── memory.ts         ← Persistent Memory grep 기반 (129L)
-│   │   ├── worklog.ts        ← Worklog CRUD + phase matrix (153L)
+│   │   ├── worklog.ts        ← Worklog CRUD + phase matrix (172L)
 │   │   └── heartbeat.ts      ← Heartbeat 잡 스케줄 + fs.watch (107L)
 │   ├── telegram/             ← Telegram 인터페이스
 │   │   ├── bot.ts            ← Telegram 봇 + forwarder lifecycle + origin 필터링 (493L)
@@ -262,6 +262,7 @@ graph LR
 61. **[fix] Mermaid overlay X button unresponsive**: `.mermaid-overlay-close` z-index 1→10, `pointer-events: auto`, `.mermaid-overlay-svg` z-index 0, added `stopPropagation()`+`preventDefault()`.
 62. **[fix] Mermaid overlay too small**: `.mermaid-overlay-content` max-width 90vw→95vw, max-height 90vh→95vh, SVG maxHeight 80vh→85vh.
 63. **[fix] User messages lost on refresh**: `POST /api/message` handler did not call `insertMessage.run()` before `orchestrate()`. WebSocket and queue paths saved correctly, but HTTP path was missing. Added `insertMessage.run('user', trimmed, 'web', '')` + `broadcast()`.
+64. **[orch-v3] end_phase + checkpoint**: `initAgentPhases()`에 `end_phase` 파싱 + sparse fallback + `checkpoint`/`checkpointed` 필드 추가. Planning agent가 phase 범위(`start_phase: 3, end_phase: 3`)와 체크포인트 모드 지정 가능.
 
 ---
 
@@ -299,6 +300,7 @@ graph LR
 | `260225_debug/`                   | i18n + multifile + dev skill + filepath fix + parallel dispatch + session fix              | ✅    |
 | `260225_clijaw_rename/`           | cli-claw→cli-jaw 리네임 + Arctic Cyan 테마 + CLI 블록아트 배너                             | ✅    |
 | `260225_mermaid_bugs/`            | Mermaid text invisible (DOMPurify foreignObject strip) + overlay UX + user msg persistence | ✅    |
+| `260226_session_cleanup/`         | Orchestration v3: end_phase + checkpoint + reset + session lifecycle                       | 🟡    |
 | `269999_메모리 개선/`             | 메모리 고도화 (flush✅ + vector DB 📋 후순위)                                                | 🔜    |
 
 ---

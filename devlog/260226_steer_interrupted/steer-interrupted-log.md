@@ -1,0 +1,49 @@
+# Steer 중단 시 Partial Output 저장
+
+> 날짜: 2026-02-26
+> 파일: `src/agent/spawn.ts`
+
+---
+
+## 배경
+
+`steerAgent()` 호출 시 `killActiveAgent('steer')` → SIGTERM으로 현재 에이전트를 종료한다.
+종료된 에이전트의 partial output(NDJSON 파싱 결과, ACP 중간 결과)이 DB에 저장되지 않는 문제 발견.
+
+## 원인 분석
+
+- close/exit 핸들러에서 `ctx.fullText`에 내용이 있으면 `insertMessageWithTrace`로 DB 저장하는 로직은 **이미 존재**
+- 하지만 두 가지 문제:
+  1. **steer 킬과 진짜 에러 구분 불가**: `ctx.fullText`가 비어있고 exit code ≠ 0이면 fallback 시도 → 의도적 kill인데 오동작
+  2. **interrupted 구분 불가**: 저장된 메시지가 정상 응답과 동일하게 보임 → history block에서 맥락 손실
+
+## 수정 내용
+
+### 1. `killReason` 변수 추가 (L40)
+
+```typescript
+let killReason: string | null = null;
+```
+
+`killActiveAgent()` 호출 시 reason 기록.
+
+### 2. ACP exit 핸들러 수정 (L389-431)
+
+- `wasSteer = killReason === 'steer'` 체크
+- `ctx.fullText` 있으면 `⏹️ [interrupted]\n\n` 접두사 붙여서 저장
+- fallback 조건에 `&& !wasSteer` 추가 → steer 시 fallback 억제
+
+### 3. Standard CLI close 핸들러 수정 (L531-579)
+
+- 동일 패턴 적용
+
+## 효과
+
+- steer 후 다음 에이전트가 `buildHistoryBlock()`으로 history를 읽을 때, 이전 에이전트의 중단된 결과가 `⏹️ [interrupted]` 태그와 함께 포함됨
+- 불필요한 fallback 시도 방지
+
+## 테스트
+
+```
+# tests 253 / pass 252 / fail 0 / skipped 1
+```
