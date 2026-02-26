@@ -211,7 +211,7 @@ export function initTelegram() {
 
             // 큐 처리 후 응답을 이 채팅으로 전달
             const queueHandler = (type: string, data: Record<string, any>) => {
-                if (type === 'orchestrate_done' && data.text && data.origin === 'telegram' && (!data.chatId || data.chatId === chatId)) {
+                if (type === 'orchestrate_done' && data.text && data.origin === 'telegram' && data.chatId === chatId) {
                     removeBroadcastListener(queueHandler);
                     const html = markdownToTelegramHtml(data.text);
                     const chunks = chunkTelegramMessage(html);

@@ -100,16 +100,32 @@ export function enqueueMessage(prompt: string, source: string, meta?: { chatId?:
 
 export async function processQueue() {
     if (activeProcess || messageQueue.length === 0) return;
-    const batched = messageQueue.splice(0);
-    const combined = batched.length === 1
-        ? batched[0].prompt
-        : batched.map(m => m.prompt).join('\n\n---\n\n');
-    const source = batched[batched.length - 1].source;
-    const chatId = batched[batched.length - 1].chatId;
-    console.log(`[queue] processing ${batched.length} queued message(s)`);
+
+    // Group by source+chatId — only process the first group, leave rest in queue
+    const first = messageQueue[0];
+    const groupKey = `${first.source}:${first.chatId ?? ''}`;
+    const batch: typeof messageQueue = [];
+    const remaining: typeof messageQueue = [];
+
+    for (const m of messageQueue) {
+        const key = `${m.source}:${m.chatId ?? ''}`;
+        if (key === groupKey) batch.push(m);
+        else remaining.push(m);
+    }
+
+    // Replace queue with remaining items
+    messageQueue.length = 0;
+    messageQueue.push(...remaining);
+
+    const combined = batch.length === 1
+        ? batch[0].prompt
+        : batch.map(m => m.prompt).join('\n\n---\n\n');
+    const source = batch[0].source;
+    const chatId = batch[0].chatId;
+    console.log(`[queue] processing ${batch.length} message(s) for ${groupKey}, ${remaining.length} remaining`);
     insertMessage.run('user', combined, source, '');
     // NOTE: no broadcast('new_message') here — gateway.ts already broadcast at enqueue time
-    broadcast('queue_update', { pending: 0 });
+    broadcast('queue_update', { pending: remaining.length });
     const { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
     if (isResetIntent(combined)) orchestrateReset({ origin, chatId });
