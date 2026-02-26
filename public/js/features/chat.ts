@@ -14,8 +14,10 @@ export async function sendMessage(): Promise<void> {
     const btn = document.getElementById('btnSend');
     if (!input || !btn) return;
 
-    // Stop mode: clicking ■ stops the agent
-    if (btn.classList.contains('stop-mode') && !input.value.trim() && !state.attachedFiles.length) {
+    // Stop mode: only explicit button interaction should stop the agent.
+    // Prevent accidental Enter key presses in the input from sending /api/stop.
+    const stopByExplicitButton = document.activeElement === btn;
+    if (btn.classList.contains('stop-mode') && stopByExplicitButton && !input.value.trim() && !state.attachedFiles.length) {
         apiFire('/api/stop', 'POST');
         return;
     }

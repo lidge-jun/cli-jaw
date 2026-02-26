@@ -27,8 +27,6 @@ export function sanitizeHtml(html: string): string {
         .replace(/javascript\s*:/gi, 'about:blank');
 }
 
-
-
 // ── Orchestration JSON stripping ──
 function stripOrchestration(text: string): string {
     let cleaned = text.replace(/```json\n[\s\S]*?\n```/g, '');

@@ -32,19 +32,23 @@ export class AcpClient extends EventEmitter {
         this._agentCapabilities = null;
     }
 
+    /** Build copilot process args from model + permission mode */
+    buildSpawnArgs() {
+        const args = ['--acp'];
+        if (this.model) args.push('--model', this.model);
+
+        // In cli-jaw, "auto" is intended as unattended full-permission mode.
+        if (this.permissions === 'auto' || this.permissions === 'yolo') {
+            args.push('--allow-all-tools', '--allow-all-paths', '--allow-all-urls');
+        }
+        return args;
+    }
+
     // ─── Process lifecycle ──────────────────────
 
     /** Spawn the copilot --acp process */
     spawn() {
-        const args = ['--acp'];
-        if (this.model) args.push('--model', this.model);
-
-        // Permission flags
-        if (this.permissions === 'yolo') {
-            args.push('--allow-all-tools', '--allow-all-paths', '--allow-all-urls');
-        } else if (this.permissions === 'auto') {
-            args.push('--allow-all-tools');
-        }
+        const args = this.buildSpawnArgs();
 
         this.proc = spawn('copilot', args, {
             cwd: this.workDir,
