@@ -6,12 +6,16 @@
 
 ---
 
-## Phase 1: workingDir Default → JAW_HOME
+## Phase 1: workingDir Default → JAW_HOME ✅ IMPLEMENTED
+
+> **Status**: Committed `e910e84` — 286 pass, 0 fail
+> **Automated tests**: `tests/unit/workdir-default.test.ts` (P1-001, P1-002)
 
 ### P1-M1: 빌드 + 기존 테스트 통과
 ```bash
 npm run build && npm test
 # ✅ Expected: 252+ tests pass, 0 fail
+# ✅ Result: 286 pass, 0 fail (2026-02-26)
 ```
 
 ### P1-M2: AGENTS.md ~/.cli-jaw 기준 동작
@@ -38,7 +42,11 @@ jaw doctor --json | jq '.checks[] | select(.name == "Home directory")'
 
 ---
 
-## Phase 2: JAW_HOME Dynamic
+## Phase 2: JAW_HOME Dynamic ✅ IMPLEMENTED
+
+> **Status**: Committed `e910e84` — 286 pass, 0 fail
+> **Automated tests**: `tests/unit/jaw-home-import.test.ts` (P20-001/002), `tests/unit/jaw-home-env.test.ts` (P2-001~005)
+> **Note**: --home uses manual indexOf (NOT parseArgs — it absorbs subcommand flags)
 
 ### P2-M1: 기본 동작 변화 없음
 ```bash

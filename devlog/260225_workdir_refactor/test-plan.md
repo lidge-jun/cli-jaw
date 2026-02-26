@@ -8,20 +8,20 @@
 
 ## Overview: Test Files per Phase
 
-| Phase | Test File | Tests | Type | Description |
-|-------|-----------|-------|------|-------------|
-| 1 | `tests/unit/workdir-default.test.ts` | 2 | Unit | workingDir → JAW_HOME, prompt text |
-| 2.0 | `tests/unit/jaw-home-import.test.ts` | 3 | Unit | 8-file import centralization 검증 |
-| 2.1-2.2 | `tests/unit/jaw-home-env.test.ts` | 5 | Unit+Subprocess | env var, --home flag, tilde, = syntax |
-| 3 | `tests/unit/clone.test.ts` | 6 | Unit+Subprocess | clone 디렉토리/설정/메모리/에러 |
-| 4 | `tests/unit/launchd-multi.test.ts` | 7 | Unit+Subprocess | instanceId, plist, xmlEsc, port |
-| E2E | `tests/integration/multi-instance.test.ts` | 3 | Integration | 두 인스턴스 동시 실행 |
+| Phase | Test File | Tests | Type | Status | Description |
+|-------|-----------|-------|------|--------|-------------|
+| 1 | `tests/unit/workdir-default.test.ts` | 2 | Unit | ✅ Pass | workingDir → JAW_HOME, prompt text |
+| 2.0 | `tests/unit/jaw-home-import.test.ts` | 2 | Unit | ✅ Pass | 8-file import centralization 검증 |
+| 2.1-2.2 | `tests/unit/jaw-home-env.test.ts` | 5 | Unit+Subprocess | ✅ Pass | env var, --home flag, tilde, = syntax |
+| 3 | `tests/unit/clone.test.ts` | 6 | Unit+Subprocess | ⬜ Pending | clone 디렉토리/설정/메모리/에러 |
+| 4 | `tests/unit/launchd-multi.test.ts` | 7 | Unit+Subprocess | ⬜ Pending | instanceId, plist, xmlEsc, port |
+| E2E | `tests/integration/multi-instance.test.ts` | 3 | Integration | ⬜ Pending | 두 인스턴스 동시 실행 |
 
-**Total: 6 files, 26 tests**
+**Total: 6 files, 25 tests** (Phase 2.0 reduced from 3→2 during implementation)
 
 ---
 
-## Phase 1: `tests/unit/workdir-default.test.ts`
+## Phase 1: `tests/unit/workdir-default.test.ts` ✅ DONE
 
 ```typescript
 // Multi-Instance Phase 1: workingDir default 검증
@@ -45,7 +45,7 @@ test('P1-002: A2_DEFAULT prompt contains ~/.cli-jaw not ~/', async () => {
 
 ---
 
-## Phase 2.0: `tests/unit/jaw-home-import.test.ts`
+## Phase 2.0: `tests/unit/jaw-home-import.test.ts` ✅ DONE
 
 ```typescript
 // Multi-Instance Phase 2.0: import centralization 검증
@@ -101,7 +101,7 @@ test('P20-003: existing 252+ tests still pass after refactor', () => {
 
 ---
 
-## Phase 2.1-2.2: `tests/unit/jaw-home-env.test.ts`
+## Phase 2.1-2.2: `tests/unit/jaw-home-env.test.ts` ✅ DONE
 
 ```typescript
 // Multi-Instance Phase 2.1-2.2: JAW_HOME dynamic 검증

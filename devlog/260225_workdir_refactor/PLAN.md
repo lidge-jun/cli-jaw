@@ -304,27 +304,31 @@ Current UI has a text input `<input id="inpCwd" value="~/">` in sidebar.
 > Old order (PATCH-1~5) was for the initial workdir-only refactor.
 > New order integrates with the full multi-instance architecture.
 
-### Phase 1: workingDir Default → JAW_HOME *(this plan's PATCH-1 + 2 + 3)*
-- [ ] PATCH-1: `config.ts:101` + `init.ts:46` — workingDir default → JAW_HOME
-- [ ] PATCH-2: `builder.ts:210` — A-2 template path `~/` → `~/.cli-jaw/`
-- [ ] PATCH-3: `postinstall.ts:166-167` — CLAUDE.md symlink → JAW_HOME
-- [ ] Run 252 tests — all must pass
+### Phase 1: workingDir Default → JAW_HOME *(this plan's PATCH-1 + 2 + 3)* ✅ DONE
+- [x] PATCH-1: `config.ts:101` + `init.ts:46` — workingDir default → JAW_HOME
+- [x] PATCH-2: `builder.ts:210` — A-2 template path `~/` → `~/.cli-jaw/`
+- [x] PATCH-3: `postinstall.ts:166-167` — CLAUDE.md symlink → JAW_HOME
+- [x] Run 286 tests — all pass (was 252 baseline, +9 new P1+P2 tests)
 - **Scope**: 4 files, 5 lines
+- **Commit**: `e910e84`
 
-### Phase 2.0: JAW_HOME Import Centralization *(prerequisite for env var)*
-- [ ] Refactor 8 files to `import { JAW_HOME } from config.ts`:
+### Phase 2.0: JAW_HOME Import Centralization *(prerequisite for env var)* ✅ DONE
+- [x] Refactor 8 files to `import { JAW_HOME } from config.ts`:
   - `doctor.ts:11`, `init.ts:11`, `mcp.ts:29`, `browser.ts:13`, `skill.ts:16`
   - `mcp-sync.ts:17`, `launchd.ts:15`, `postinstall.ts:28`
-- [ ] Run 252 tests — pure refactor, zero behavior change
+- [x] Run 286 tests — pure refactor, zero behavior change
 - **Scope**: 8 files, ~8 lines each (replace local definition with import)
+- **Commit**: `e910e84`
 
-### Phase 2.1-2.2: JAW_HOME Dynamic *(env var + --home flag)*
-- [ ] `config.ts:27` — add CLI_JAW_HOME env var support (tilde regex: `/^~(?=\/|$)/`)
-- [ ] `cli-jaw.ts` — parse `--home` flag with `parseArgs({ strict: false })` BEFORE `const command` *(R7)*
-- [ ] `builder.ts` — replace ~10 hardcoded `~/.cli-jaw` in prompts with `${JAW_HOME}` *(RE-1)*
-- [ ] Run 252 tests + 3 new P2-* tests
-- **Scope**: 3 files, ~20 lines
+### Phase 2.1-2.2: JAW_HOME Dynamic *(env var + --home flag)* ✅ DONE
+- [x] `config.ts:27` — add CLI_JAW_HOME env var support (tilde regex: `/^~(?=\/|$)/`)
+- [x] `cli-jaw.ts` — parse `--home` flag with manual indexOf (NOT parseArgs — absorbs subcommand flags) *(R7 accepted, approach changed)*
+- [x] `builder.ts` — replace 9 hardcoded `~/.cli-jaw` in prompts with `${JAW_HOME}` *(RE-1)*
+- [x] Run 286 tests (277 baseline + 9 new: P1-001/002, P20-001/002, P2-001~005)
+- **Scope**: 3 files, ~30 lines
 - **Constraint**: cli-jaw.ts MUST NOT add static imports to internal modules *(R6 ESM safety)*
+- **Discovery**: `parseArgs({ strict: false })` absorbs ALL unknown flags (--json, --port etc), breaking subcommands. Used manual indexOf + --home= detection instead.
+- **Commit**: `e910e84`
 
 ### Phase 2 Frontend: PATCH-4 *(optional cleanup)*
 - [ ] `public/index.html:172-183` — remove permissions toggle + workdir input
