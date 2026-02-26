@@ -32,13 +32,13 @@ CLI-JAW is a **personal AI assistant** that lives on your machine and works from
 
 Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, Codex, Gemini, OpenCode, Copilot) through their official CLIs — giving you the best of every provider in one unified experience. If one engine is busy, it automatically falls back to the next. 122 built-in skills handle everything from browser automation to document generation.
 
-|                                | Why CLI-JAW?                                                                             |
-| ------------------------------ | ---------------------------------------------------------------------------------------- |
-| 🛡️ **TOS-Safe**                 | Uses official CLIs only — no API key scraping, no reverse engineering, no ban risk.      |
-| 🤖 **Verified Agent Tools**     | 5 battle-tested coding agents (Claude, Codex, Gemini, OpenCode, Copilot) under one roof. |
-| ⚡ **Multi-Agent Fallback**     | One engine down? The next picks up automatically. Zero downtime.                         |
-| 🎭 **Orchestrated Performance** | Complex tasks split across specialized sub-agents for maximum throughput.                |
-| 📦 **122 Built-in Skills**      | Browser automation, document generation, Telegram, memory — ready out of the box.        |
+|                                | Why CLI-JAW?                                                                                |
+| ------------------------------ | ------------------------------------------------------------------------------------------- |
+| 🛡️ **TOS-Safe**                 | Uses official CLIs only — no API key scraping, no reverse engineering, no ban risk.         |
+| 🤖 **Verified Agent Tools**     | 5 battle-tested coding agents (Claude, Codex, Gemini, OpenCode, Copilot) under one roof.    |
+| ⚡ **Multi-Agent Fallback**     | One engine down? The next picks up automatically. Zero downtime.                            |
+| 🎭 **Orchestrated Performance** | Complex tasks split across specialized sub-agents for maximum throughput.                   |
+| 📦 **122 Built-in Skills**      | Browser automation, document generation, Telegram, memory — ready out of the box.           |
 | 🖥️ **Cross-Platform**           | macOS, Linux, Windows (WSL) — browser launch, CLI detection, and install all work natively. |
 
 ![CLI-JAW Terminal](docs/screenshots/terminal-cli.png)
@@ -155,7 +155,7 @@ jaw chat         # Terminal TUI (no browser needed)
 | Tier                 | Count | How it works                                              |
 | -------------------- | :---: | --------------------------------------------------------- |
 | **Active Skills**    |  17   | Auto-injected into every AI prompt. Always available.     |
-| **Reference Skills** | 105   | AI reads them on-demand when you ask for a relevant task. |
+| **Reference Skills** |  105  | AI reads them on-demand when you ask for a relevant task. |
 
 #### Active Skills (always on)
 
@@ -317,13 +317,13 @@ jaw --home ~/my-project launchd --port 3458    # project → port 3458
 
 Each instance is fully independent — different working directory, different memory, different MCP config. Perfect for separating work/personal contexts or per-project AI setups.
 
-| Flag / Env             | What it does                                |
-| ---------------------- | ------------------------------------------- |
-| `--home <path>`        | Use a custom home directory for this run    |
-| `--home=<path>`        | Same, with `=` syntax                       |
-| `CLI_JAW_HOME=<path>`  | Set via environment variable                |
-| `jaw clone <target>`   | Clone current instance to a new directory   |
-| `--port <port>`        | Custom port for `serve` / `launchd`         |
+| Flag / Env            | What it does                              |
+| --------------------- | ----------------------------------------- |
+| `--home <path>`       | Use a custom home directory for this run  |
+| `--home=<path>`       | Same, with `=` syntax                     |
+| `CLI_JAW_HOME=<path>` | Set via environment variable              |
+| `jaw clone <target>`  | Clone current instance to a new directory |
+| `--port <port>`       | Custom port for `serve` / `launchd`       |
 
 ---
 
@@ -426,6 +426,51 @@ All tests run via `tsx --test` (native Node.js test runner + TypeScript).
 | Telegram bot not responding  | Check token with `jaw doctor`. Ensure `jaw serve` is running.                               |
 | Skills not loading           | Run `jaw skill reset` then `jaw mcp sync`.                                                  |
 | Browser commands fail        | Install Chrome/Chromium. Run `jaw browser start` first.                                     |
+
+</details>
+
+<details>
+<summary>🔄 Fresh start — clean reinstall for legacy / cli-claw users</summary>
+
+If you previously used **cli-claw** or an older version of cli-jaw and want a completely clean slate:
+
+```bash
+# ── 1. Uninstall ──
+npm uninstall -g cli-jaw
+
+# Verify removal
+which jaw && echo "⚠️  jaw still found" || echo "✅ jaw removed"
+
+# ── 2. Back up & remove data ──
+# Back up current data (just in case)
+[ -d ~/.cli-jaw ] && mv ~/.cli-jaw ~/.cli-jaw.bak.$(date +%s)
+
+# Remove work instances
+[ -d ~/.jaw-work ] && rm -rf ~/.jaw-work
+
+# ── 3. Remove launchd daemons (macOS) ──
+launchctl list | grep com.cli-jaw | awk '{print $3}' | \
+  xargs -I{} launchctl bootout gui/$(id -u) system/{}  2>/dev/null
+rm -f ~/Library/LaunchAgents/com.cli-jaw.*
+
+# ── 4. Remove legacy artifacts ──
+rm -f ~/AGENTS.md ~/CLAUDE.md          # postinstall symlinks
+rm -rf ~/.agents ~/.agent              # skill symlink dirs
+rm -rf ~/.cli-claw                     # old cli-claw data
+rm -f ~/.copilot/mcp-config.json       # MCP config synced by jaw
+
+# ── 5. Verify clean state ──
+echo "=== Clean State Check ==="
+which jaw; which cli-jaw               # should be "not found"
+ls ~/.cli-jaw ~/.cli-claw 2>&1         # should be "No such file"
+
+# ── 6. Reinstall ──
+npm install -g cli-jaw
+jaw init
+jaw doctor
+```
+
+> 💡 Your backup is at `~/.cli-jaw.bak.<timestamp>` — copy back `settings.json` or `jaw.db` if you want to restore previous config or conversation history.
 
 </details>
 
