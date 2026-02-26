@@ -130,7 +130,7 @@ export async function loadSettings() {
     if (Array.from(selCli.options).some(o => o.value === s.cli)) {
         selCli.value = s.cli;
     }
-    document.getElementById('inpCwd').value = s.workingDir;
+    document.getElementById('inpCwd').textContent = s.workingDir;
     document.getElementById('headerCli').textContent = s.cli;
     setPerm(s.permissions, false);
 
@@ -204,7 +204,6 @@ export async function installMcpGlobal() {
 export async function updateSettings() {
     const s = {
         cli: document.getElementById('selCli').value,
-        workingDir: document.getElementById('inpCwd').value,
     };
     document.getElementById('headerCli').textContent = s.cli;
     await apiJson('/api/settings', 'PUT', s);

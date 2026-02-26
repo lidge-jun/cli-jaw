@@ -223,3 +223,17 @@ textarea.prompt-editor {
     outline: none;
     border-color: var(--accent2);
 }
+
+.cwd-display {
+    display: block;
+    font-family: monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 6px 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
