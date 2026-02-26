@@ -8,6 +8,8 @@ import { settings, detectAllCli, APP_VERSION } from '../core/config.js';
 import { t, normalizeLocale } from '../core/i18n.js';
 import { insertMessage, getSession, updateSession, clearMessages } from '../core/db.js';
 import { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } from '../orchestrator/pipeline.js';
+import { submitMessage } from '../orchestrator/gateway.js';
+import { makeCommandCtx } from '../cli/command-context.js';
 import {
     activeProcess, killActiveAgent, waitForProcessEnd,
     saveUpload, buildMediaPrompt, messageQueue,
@@ -32,52 +34,9 @@ export {
     createTelegramForwarder,
 } from './forwarder.js';
 
-export function orchestrateAndCollect(prompt: string, meta: Record<string, any> = {}) {
-    return new Promise((resolve) => {
-        let collected = '';
-        let timeout: ReturnType<typeof setTimeout>;
-        const IDLE_TIMEOUT = 1200000;
-
-        function resetTimeout() {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => {
-                removeBroadcastListener(handler);
-                resolve(collected || t('tg.timeout', {}, currentLocale()));
-            }, IDLE_TIMEOUT);
-        }
-
-        const handler = (type: string, data: Record<string, any>) => {
-            if (type === 'agent_chunk' || type === 'agent_tool' ||
-                type === 'agent_output' || type === 'agent_status' ||
-                type === 'agent_done' || type === 'agent_fallback' ||
-                type === 'round_start' || type === 'round_done') {
-                resetTimeout();
-            }
-            if (type === 'agent_output') collected += data.text || '';
-            if (type === 'agent_done' && data.error && data.text) {
-                collected = collected || data.text;
-            }
-            if (type === 'orchestrate_done') {
-                if (meta?.origin && data?.origin && data.origin !== meta.origin) return;
-                clearTimeout(timeout);
-                removeBroadcastListener(handler);
-                resolve(data.text || collected || t('tg.noResponse', {}, currentLocale()));
-            }
-        };
-        addBroadcastListener(handler);
-        const run = isResetIntent(prompt)
-            ? orchestrateReset(meta)
-            : isContinueIntent(prompt)
-                ? orchestrateContinue(meta)
-                : orchestrate(prompt, meta);
-        Promise.resolve(run).catch(err => {
-            clearTimeout(timeout);
-            removeBroadcastListener(handler);
-            resolve(`❌ ${err.message}`);
-        });
-        resetTimeout();
-    });
-}
+// Re-exported from collect.ts (extracted in Phase B)
+import { orchestrateAndCollect } from '../orchestrator/collect.js';
+export { orchestrateAndCollect };
 
 // ─── State ───────────────────────────────────────────
 
@@ -147,58 +106,20 @@ function syncTelegramCommands(bot: any) {
 }
 
 function makeTelegramCommandCtx() {
-    return {
-        interface: 'telegram',
-        locale: currentLocale(),
-        version: APP_VERSION,
-        getSession,
-        getSettings: () => settings,
-        // Telegram settings changes: only fallbackOrder allowed
-        updateSettings: async (patch: Record<string, any>) => {
-            if (patch.fallbackOrder !== undefined && Object.keys(patch).length === 1) {
-                const { replaceSettings: _replace, saveSettings: _save } = await import('../core/config.js');
-                _replace({ ...settings, ...patch });
-                _save(settings);
-                return { ok: true };
-            }
-            return { ok: false, text: t('tg.settingsUnsupported', {}, currentLocale()) };
+    return makeCommandCtx('telegram', currentLocale(), {
+        applySettings: async (patch) => {
+            const { replaceSettings: _replace, saveSettings: _save } = await import('../core/config.js');
+            _replace({ ...settings, ...patch });
+            _save(settings);
+            return { ok: true };
         },
-        getRuntime: () => ({
-            uptimeSec: Math.floor(process.uptime()),
-            activeAgent: !!activeProcess,
-            queuePending: messageQueue.length,
-        }),
-        getSkills: () => getMergedSkills(),
-        clearSession: async () => {
+        clearSession: () => {
             clearMessages.run();
             const s = getSession() as Record<string, any>;
             updateSession.run(s.active_cli, null, s.model, s.permissions, s.working_dir, s.effort);
             broadcast('clear', {});
         },
-        getCliStatus: () => detectAllCli(),
-        getMcp: () => ({ servers: {} }),
-        syncMcp: async () => ({ results: {} }),
-        installMcp: async () => ({ results: {} }),
-        listMemory: () => memory.list(),
-        searchMemory: (q: string) => memory.search(q),
-        getBrowserStatus: async () => {
-            try {
-                const m = await import('../browser/index.js');
-                return m.getBrowserStatus(settings.browser?.cdpPort || 9240);
-            } catch {
-                return { running: false, tabs: [] };
-            }
-        },
-        getBrowserTabs: async () => {
-            try {
-                const m = await import('../browser/index.js');
-                return { tabs: await m.listTabs(settings.browser?.cdpPort || 9240) };
-            } catch {
-                return { tabs: [] };
-            }
-        },
-        getPrompt: () => ({ content: t('tg.promptUnsupported', {}, currentLocale()) }),
-    };
+    });
 }
 
 // ─── Init ────────────────────────────────────────────
@@ -281,14 +202,11 @@ export function initTelegram() {
     bot.command('id', (ctx) => ctx.reply(`Chat ID: <code>${ctx.chat.id}</code>`, { parse_mode: 'HTML' }));
 
     async function tgOrchestrate(ctx: any, prompt: string, displayMsg: string) {
-        if (activeProcess) {
-            // 큐에 추가 — steer 대신 대기
-            console.log('[tg:queue] agent busy, queueing message');
-            const { enqueueMessage } = await import('../agent/spawn.js');
-            enqueueMessage(prompt, 'telegram');
-            insertMessage.run('user', displayMsg, 'telegram', '');
-            broadcast('new_message', { role: 'user', content: displayMsg, source: 'telegram' });
-            await ctx.reply(t('tg.queued', { count: messageQueue.length }, currentLocale()));
+        const result = submitMessage(prompt, { origin: 'telegram', displayText: displayMsg });
+
+        if (result.action === 'queued') {
+            console.log(`[tg:queue] agent busy, queued (${result.pending} pending)`);
+            await ctx.reply(t('tg.queued', { count: result.pending }, currentLocale()));
 
             // 큐 처리 후 응답을 이 채팅으로 전달
             const queueHandler = (type: string, data: Record<string, any>) => {
@@ -303,14 +221,17 @@ export function initTelegram() {
                 }
             };
             addBroadcastListener(queueHandler);
-            // 5분 후 자동 정리
             setTimeout(() => removeBroadcastListener(queueHandler), 300000);
             return;
         }
 
+        if (result.action === 'rejected') {
+            await ctx.reply(`❌ ${result.reason}`);
+            return;
+        }
+
+        // result.action === 'started' — TG 출력 로직 진입
         markChatActive(ctx.chat.id);
-        insertMessage.run('user', displayMsg, 'telegram', '');
-        broadcast('new_message', { role: 'user', content: displayMsg, source: 'telegram' });
 
         await ctx.replyWithChatAction('typing')
             .then(() => console.log('[tg:typing] ✅ sent'))

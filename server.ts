@@ -56,6 +56,8 @@ import {
 } from './src/agent/spawn.js';
 import { parseCommand, executeCommand, COMMANDS } from './src/cli/commands.js';
 import { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } from './src/orchestrator/pipeline.js';
+import { submitMessage } from './src/orchestrator/gateway.js';
+import { makeCommandCtx } from './src/cli/command-context.js';
 import { initTelegram, telegramBot, telegramActiveChatIds } from './src/telegram/bot.js';
 import { startHeartbeat, stopHeartbeat, watchHeartbeatFile } from './src/memory/heartbeat.js';
 import { fetchCopilotQuota } from './lib/quota-copilot.js';
@@ -187,42 +189,12 @@ wss.on('connection', (ws) => {
                 if (!text) return;
                 console.log(`[ws:in] ${text.slice(0, 80)}`);
 
-                // Continue intent는 큐에 넣지 않고 명시적으로 처리
-                if (isContinueIntent(text)) {
-                    if (activeProcess) {
-                        broadcast('agent_done', {
-                            text: t('ws.agentBusy', {}, resolveRequestLocale(null, settings.locale)),
-                            error: true,
-                        });
-                    } else {
-                        insertMessage.run('user', text, 'cli', '');
-                        broadcast('new_message', { role: 'user', content: text, source: 'cli' });
-                        orchestrateContinue({ origin: 'cli' });
-                    }
-                    return;
-                }
-
-                // Reset intent
-                if (isResetIntent(text)) {
-                    if (activeProcess) {
-                        broadcast('agent_done', {
-                            text: t('ws.agentBusy', {}, resolveRequestLocale(null, settings.locale)),
-                            error: true,
-                        });
-                    } else {
-                        insertMessage.run('user', text, 'cli', '');
-                        broadcast('new_message', { role: 'user', content: text, source: 'cli' });
-                        orchestrateReset({ origin: 'cli' });
-                    }
-                    return;
-                }
-
-                if (activeProcess) {
-                    enqueueMessage(text, 'cli');
-                } else {
-                    insertMessage.run('user', text, 'cli', '');
-                    broadcast('new_message', { role: 'user', content: text, source: 'cli' });
-                    orchestrate(text, { origin: 'cli' });
+                const result = submitMessage(text, { origin: 'cli' });
+                if (result.action === 'rejected' && result.reason === 'busy') {
+                    broadcast('agent_done', {
+                        text: t('ws.agentBusy', {}, resolveRequestLocale(null, settings.locale)),
+                        error: true,
+                    });
                 }
             }
             if (msg.type === 'stop') killAllAgents('ws');
@@ -327,43 +299,11 @@ function seedDefaultEmployees({ reset = false, notify = false } = {}) {
 }
 
 function makeWebCommandCtx(req: any, localeOverride: string | null = null) {
-    return {
-        interface: 'web',
-        locale: resolveRequestLocale(req, localeOverride),
-        version: APP_VERSION,
-        getSession,
-        getSettings: () => settings,
-        updateSettings: async (patch: any) => applySettingsPatch(patch, { restartTelegram: true }),
-        getRuntime: getRuntimeSnapshot,
-        getSkills: getMergedSkills,
-        clearSession: async () => clearSessionState(),
-        getCliStatus: () => detectAllCli(),
-        getMcp: () => loadUnifiedMcp(),
-        syncMcp: async () => ({ results: syncToAll(loadUnifiedMcp(), settings.workingDir) }),
-        installMcp: async () => {
-            const config = loadUnifiedMcp();
-            const { installMcpServers } = await import('./lib/mcp-sync.js');
-            const results = await installMcpServers(config);
-            saveUnifiedMcp(config);
-            const synced = syncToAll(config, settings.workingDir);
-            return { results, synced };
-        },
-        listMemory: () => memory.list(),
-        searchMemory: (q: any) => memory.search(q),
-        getBrowserStatus: async () => browser.getBrowserStatus(settings.browser?.cdpPort || 9240),
-        getBrowserTabs: async () => ({ tabs: await browser.listTabs(settings.browser?.cdpPort || 9240) }),
-        resetEmployees: async () => seedDefaultEmployees({ reset: true, notify: true }),
-        resetSkills: async () => {
-            copyDefaultSkills();
-            const symlinks = ensureSkillsSymlinks(settings.workingDir, { onConflict: 'backup' });
-            regenerateB();
-            return { symlinks };
-        },
-        getPrompt: () => {
-            const a2 = fs.existsSync(A2_PATH) ? fs.readFileSync(A2_PATH, 'utf8') : '';
-            return { content: a2 };
-        },
-    };
+    return makeCommandCtx('web', resolveRequestLocale(req, localeOverride), {
+        applySettings: (patch) => applySettingsPatch(patch, { restartTelegram: true }),
+        clearSession: () => clearSessionState(),
+        resetEmployees: () => seedDefaultEmployees({ reset: true, notify: true }),
+    });
 }
 
 app.get('/api/session', (_, res) => ok(res, getSession(), getSession() as Record<string, unknown> | undefined));
@@ -421,34 +361,13 @@ app.get('/api/commands', (req, res) => {
 app.post('/api/message', (req, res) => {
     const { prompt } = req.body;
     if (!prompt?.trim()) return res.status(400).json({ error: 'prompt required' });
-    const trimmed = prompt.trim();
 
-    // Continue intent는 큐에 넣지 않고 전용 경로로 처리
-    if (isContinueIntent(trimmed)) {
-        if (activeProcess) {
-            return res.status(409).json({ error: 'agent already running' });
-        }
-        orchestrateContinue({ origin: 'web' });
-        return res.json({ ok: true, continued: true });
+    const result = submitMessage(prompt.trim(), { origin: 'web' });
+    if (result.action === 'rejected') {
+        return res.status(result.reason === 'busy' ? 409 : 400)
+            .json({ error: result.reason });
     }
-
-    // Reset intent
-    if (isResetIntent(trimmed)) {
-        if (activeProcess) {
-            return res.status(409).json({ error: 'agent already running' });
-        }
-        orchestrateReset({ origin: 'web' });
-        return res.json({ ok: true, reset: true });
-    }
-
-    if (activeProcess) {
-        enqueueMessage(trimmed, 'web');
-        return res.json({ ok: true, queued: true, pending: messageQueue.length });
-    }
-    insertMessage.run('user', trimmed, 'web', '');
-    broadcast('new_message', { role: 'user', content: trimmed, source: 'web' });
-    orchestrate(trimmed, { origin: 'web' });
-    res.json({ ok: true });
+    res.json({ ok: true, ...result });
 });
 
 app.post('/api/orchestrate/continue', (req, res) => {
