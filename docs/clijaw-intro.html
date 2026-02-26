@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 1662px;
+            height: 1080px;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+        }
+
+        .block-art-container {
+            display: flex;
+            gap: 18px;
+            align-items: flex-end;
+        }
+
+        /* Each letter is a grid of blocks */
+        .letter {
+            display: grid;
+            gap: 3px;
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            animation: holdThenDrop 0.3s ease-in forwards, jumpIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        /* Phase 1: All letters visible, then drop out sequentially */
+        .letter:nth-child(1) {
+            animation-delay: 0.7s, 1.0s;
+        }
+
+        .letter:nth-child(2) {
+            animation-delay: 0.78s, 1.12s;
+        }
+
+        .letter:nth-child(3) {
+            animation-delay: 0.86s, 1.24s;
+        }
+
+        .letter:nth-child(4) {
+            animation-delay: 0.94s, 1.36s;
+        }
+
+        .letter:nth-child(5) {
+            animation-delay: 1.02s, 1.48s;
+        }
+
+        .letter:nth-child(6) {
+            animation-delay: 1.10s, 1.60s;
+        }
+
+        @keyframes holdThenDrop {
+            0% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateY(40px) scale(0.9);
+            }
+        }
+
+        @keyframes jumpIn {
+            0% {
+                opacity: 0;
+                transform: translateY(80px) scale(0.8);
+            }
+
+            60% {
+                opacity: 1;
+                transform: translateY(-12px) scale(1.05);
+            }
+
+            80% {
+                transform: translateY(4px) scale(0.98);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .block {
+            width: 16px;
+            height: 16px;
+            border-radius: 2px;
+        }
+
+        .block.on {
+            background: #0099cc;
+            box-shadow: inset -2px -2px 0 rgba(0, 0, 0, 0.15), inset 2px 2px 0 rgba(255, 255, 255, 0.3);
+        }
+
+        .block.off {
+            background: transparent;
+        }
+
+        .subtitle {
+            margin-top: 32px;
+            font-size: 22px;
+            color: #888;
+            letter-spacing: 3px;
+            opacity: 1;
+            animation: fadeOutIn 1.0s ease forwards;
+            animation-delay: 0.7s;
+        }
+
+        .version {
+            margin-top: 12px;
+            font-size: 16px;
+            color: #bbb;
+            opacity: 1;
+            animation: fadeOutIn 1.0s ease forwards;
+            animation-delay: 0.7s;
+        }
+
+        @keyframes fadeOutIn {
+            0% {
+                opacity: 1;
+            }
+
+            30% {
+                opacity: 0;
+            }
+
+            70% {
+                opacity: 0;
+            }
+
+            100% {
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="block-art-container" id="art"></div>
+    <div class="subtitle">YOUR PERSONAL AI ASSISTANT</div>
+    <div class="version">5 Engines · One Brain</div>
+
+    <script>
+        // Block art font - each letter is a 7-row grid
+        // 1 = filled, 0 = empty
+        const font = {
+            C: [
+                [0, 1, 1, 1, 1, 1],
+                [1, 1, 0, 0, 0, 1],
+                [1, 1, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 1],
+                [0, 1, 1, 1, 1, 1],
+            ],
+            L: [
+                [1, 1, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 0],
+                [1, 1, 0, 0, 0, 0],
+                [1, 1, 1, 1, 1, 1],
+            ],
+            I: [
+                [1, 1, 1, 1],
+                [0, 1, 1, 0],
+                [0, 1, 1, 0],
+                [0, 1, 1, 0],
+                [0, 1, 1, 0],
+                [0, 1, 1, 0],
+                [1, 1, 1, 1],
+            ],
+            J: [
+                [0, 0, 1, 1, 1, 1],
+                [0, 0, 0, 1, 1, 0],
+                [0, 0, 0, 1, 1, 0],
+                [0, 0, 0, 1, 1, 0],
+                [1, 0, 0, 1, 1, 0],
+                [1, 1, 0, 1, 1, 0],
+                [0, 1, 1, 1, 0, 0],
+            ],
+            A: [
+                [0, 0, 1, 1, 0, 0],
+                [0, 1, 1, 1, 1, 0],
+                [1, 1, 0, 0, 1, 1],
+                [1, 1, 0, 0, 1, 1],
+                [1, 1, 1, 1, 1, 1],
+                [1, 1, 0, 0, 1, 1],
+                [1, 1, 0, 0, 1, 1],
+            ],
+            W: [
+                [1, 1, 0, 0, 0, 1, 1],
+                [1, 1, 0, 0, 0, 1, 1],
+                [1, 1, 0, 0, 0, 1, 1],
+                [1, 1, 0, 1, 0, 1, 1],
+                [1, 1, 0, 1, 0, 1, 1],
+                [1, 1, 1, 1, 1, 1, 1],
+                [0, 1, 1, 0, 1, 1, 0],
+            ],
+        };
+
+        const word = 'CLIJAW';
+        const container = document.getElementById('art');
+
+        for (const ch of word) {
+            const matrix = font[ch];
+            const cols = matrix[0].length;
+            const letterEl = document.createElement('div');
+            letterEl.className = 'letter';
+            letterEl.style.gridTemplateColumns = `repeat(${cols}, 16px)`;
+            letterEl.style.gridTemplateRows = `repeat(7, 16px)`;
+
+            for (let r = 0; r < 7; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const block = document.createElement('div');
+                    block.className = `block ${matrix[r][c] ? 'on' : 'off'}`;
+                    letterEl.appendChild(block);
+                }
+            }
+            container.appendChild(letterEl);
+        }
+    </script>
+</body>
+
+</html>

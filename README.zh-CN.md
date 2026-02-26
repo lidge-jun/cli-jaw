@@ -14,7 +14,7 @@
 
 [English](README.md) / [한국어](README.ko.md) / **中文**
 
-![CLI-JAW Web UI](docs/screenshots/web-ui.png)
+<video src="docs/demo.mp4" autoplay loop muted playsinline width="100%"></video>
 
 </div>
 
@@ -79,9 +79,10 @@ gemini                       # Google Gemini — 首次运行触发认证
 ## CLI-JAW 是什么？
 
 CLI-JAW 是驻留在您本地机器上的**专属 AI 助手**，并在您熟悉的界面中运行 — **网页、终端和 Telegram**。您可以向它提出任何问题、委派任务或是自动化您的工作流。
+![CLI-JAW Web UI](image/README/1772128366759.png)
 
-> 💬 *"帮我整理一下今天的日程"* → 直接在 Telegram 上收到整理好的结果  
-> 💬 *"重构这个模块，顺便写好测试"* → 子 Agent 搞定，你喝杯咖啡回来就行  
+> 💬 *"帮我整理一下今天的日程"* → 直接在 Telegram 上收到整理好的结果
+> 💬 *"重构这个模块，顺便写好测试"* → 子 Agent 搞定，你喝杯咖啡回来就行
 > 💬 *"把那个 PDF 下载下来，关键信息放到 Notion 里"* → 浏览器 + Notion 技能组合，搞定
 
 与单一模型的助手不同，CLI-JAW 通过官方 CLI 命令行工具对 **5 大 AI 引擎**（Claude、Codex、Gemini、OpenCode、Copilot）进行编排 — 为您提供各大供应商最优势的能力及统一的体验。当一个引擎处于繁忙状态时，它会自动无缝切换至下一个。107 个内置技能可处理从浏览器自动化到文档生成的所有事务。
@@ -399,7 +400,7 @@ src/
 ## 🧪 测试
 
 <details>
-<summary>383 pass · 1 skipped · 零外部依赖</summary>
+<summary>445 pass · 1 skipped · 零外部依赖</summary>
 
 ```bash
 npm test

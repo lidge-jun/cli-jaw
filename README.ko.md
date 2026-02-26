@@ -14,7 +14,7 @@
 
 [English](README.md) / **한국어** / [中文](README.zh-CN.md)
 
-![CLI-JAW Web UI](docs/screenshots/web-ui.png)
+<video src="docs/demo.mp4" autoplay loop muted playsinline width="100%"></video>
 
 </div>
 
@@ -79,9 +79,10 @@ gemini                       # Google Gemini — 첫 실행 시 인증
 ## CLI-JAW란 무엇인가요?
 
 CLI-JAW는 내 컴퓨터에 상주하며 이미 익숙한 인터페이스인 **웹, 터미널, 텔레그램**에서 작동하는 **개인용 AI 비서**입니다. 궁금한 것을 묻고, 작업을 위임하고, 워크플로우를 자동화하세요.
+![CLI-JAW Web UI](image/README/1772128366759.png)
 
-> 💬 *"오늘 일정 정리해줘"* → 텔레그램으로 바로 정리해서 보내줘요  
-> 💬 *"이 모듈 리팩토링하고 테스트도 짜줘"* → 서브에이전트가 알아서, 커피 한 잔 하고 오면 돼요  
+> 💬 *"오늘 일정 정리해줘"* → 텔레그램으로 바로 정리해서 보내줘요
+> 💬 *"이 모듈 리팩토링하고 테스트도 짜줘"* → 서브에이전트가 알아서, 커피 한 잔 하고 오면 돼요
 > 💬 *"저 PDF 다운받아서 핵심만 노션에 정리해"* → 브라우저 + 노션 스킬 조합으로 뚝딱
 
 단일 모델만을 사용하는 기존 비서들과 달리, CLI-JAW는 5개의 AI 엔진(Claude, Codex, Gemini, OpenCode, Copilot)을 공식 CLI를 통해 오케스트레이션하여 모든 제공업체의 장점을 통합된 경험으로 제공합니다. 하나의 엔진 사용량이 초과되면 자동으로 다음 엔진으로 전환됩니다. 107개의 내장 스킬이 브라우저 자동화부터 문서 생성까지 모든 것을 처리합니다.
@@ -399,7 +400,7 @@ src/
 ## 🧪 테스트
 
 <details>
-<summary>383 pass · 1 skipped · 외부 의존성 0</summary>
+<summary>445 pass · 1 skipped · 외부 의존성 0</summary>
 
 ```bash
 npm test
