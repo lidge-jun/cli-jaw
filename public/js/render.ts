@@ -2,8 +2,10 @@
 // Modular markdown rendering: marked.js + highlight.js + KaTeX + Mermaid
 // All libs loaded via CDN (defer), graceful fallback if unavailable
 
-export function escapeHtml(t: string): string {
-    return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+import { t } from './features/i18n.js';
+
+export function escapeHtml(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
@@ -11,7 +13,7 @@ export function escapeHtml(t: string): string {
 export function sanitizeHtml(html: string): string {
     if (typeof DOMPurify !== 'undefined') {
         return DOMPurify.sanitize(html, {
-            USE_PROFILES: { html: true },
+            USE_PROFILES: { html: true, svg: true, svgFilters: true },
             FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form'],
             FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur'],
             ADD_TAGS: ['use'],  // Mermaid SVG compatibility
@@ -67,7 +69,7 @@ function renderMermaidBlocks(): void {
                 || (err as { str?: string })?.str || 'Unknown error';
             el.innerHTML = `
                 <div style="border:1px solid #ef4444;border-radius:6px;padding:8px;margin:4px 0">
-                    <div style="color:#ef4444;font-size:11px;margin-bottom:4px">⚠️ Mermaid 렌더링 실패</div>
+                    <div style="color:#ef4444;font-size:11px;margin-bottom:4px">⚠️ ${escapeHtml(t('mermaid.renderFail') || 'Mermaid render failed')}</div>
                     <div style="color:#fbbf24;font-size:10px;margin-bottom:6px">${escapeHtml(errMsg.slice(0, 200))}</div>
                     <pre style="margin:0;font-size:11px;overflow-x:auto"><code>${escapeHtml(code)}</code></pre>
                 </div>`;
@@ -101,7 +103,7 @@ function ensureMarked(): boolean {
                 highlighted = hljs.highlightAuto(text).value;
             } catch { /* fallback */ }
         }
-        const labelText = lang ? escapeHtml(lang) : '복사';
+        const labelText = lang ? escapeHtml(lang) : t('code.copy');
         const label = `<span class="code-lang-label" data-lang="${lang ? escapeHtml(lang) : ''}">${labelText}</span>`;
         return `<div class="code-block-wrapper">${label}<pre><code class="hljs${lang ? ` language-${escapeHtml(lang)}` : ''}">${highlighted}</code></pre></div>`;
     };
@@ -176,7 +178,7 @@ function ensureCopyDelegation(): void {
         if (!codeEl) return;
         navigator.clipboard.writeText(codeEl.textContent || '').then(() => {
             const orig = label.textContent || '';
-            label.textContent = '복사됨 ✓';
+            label.textContent = t('code.copied');
             label.classList.add('copied');
             setTimeout(() => {
                 label.textContent = orig;
@@ -189,7 +191,7 @@ function ensureCopyDelegation(): void {
 // ── Main export ──
 export function renderMarkdown(text: string): string {
     const cleaned = stripOrchestration(text);
-    if (!cleaned) return '<em style="color:var(--text-dim)">🎯 작업 분배 중...</em>';
+    if (!cleaned) return `<em style="color:var(--text-dim)">${escapeHtml(t('orchestrator.dispatching'))}</em>`;
 
     let html: string;
     if (ensureMarked()) {
