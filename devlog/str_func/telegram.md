@@ -5,7 +5,7 @@
 
 ---
 
-## telegram/bot.ts — Telegram Bot + Forwarder Lifecycle (497L)
+## telegram/bot.ts — Telegram Bot + Forwarder Lifecycle (511L)
 
 | Function                                              | 역할                                                            |
 | ----------------------------------------------------- | --------------------------------------------------------------- |

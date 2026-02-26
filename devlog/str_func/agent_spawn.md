@@ -5,7 +5,7 @@
 
 ---
 
-## agent/spawn.ts — CLI Spawn & Queue + ACP 분기 (691L) + args.ts (67L) + events.ts (322L)
+## agent/spawn.ts — CLI Spawn & Queue + ACP 분기 (697L) + args.ts (67L) + events.ts (322L)
 
 | Function                                   | 역할                                                 |
 | ------------------------------------------ | ---------------------------------------------------- |

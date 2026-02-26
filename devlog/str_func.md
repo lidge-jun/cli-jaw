@@ -1,7 +1,7 @@
 # CLI-JAW — Source Structure & Function Reference
 
-> 마지막 검증: 2026-02-26T02:40 (multi-instance Phase 1-4.1 반영)
-> server.ts 935L / src/ 36파일 13서브디렉토리 / tests 314 total · 306 pass (tsx runner)
+> 마지막 검증: 2026-02-26T14:42 (multi-instance Phase 1-4.1 + sidebar hotfix 반영)
+> server.ts 935L / src/ 36파일 13서브디렉토리 / tests 314 total · 313 pass (tsx runner)
 > Phase 9 보안 하드닝 + Phase 17 AI triage + Phase 20.6 모듈 분리 + parallel dispatch + session fix + cli-jaw rename + orchestration v3 + **multi-instance refactor (Phase 1-4.1)** 반영
 >
 > 상세 모듈 문서는 [서브 문서](#서브-문서)를 참조하세요.
@@ -26,7 +26,7 @@ cli-jaw/
 │   │   ├── i18n.ts           ← 서버사이드 번역 (90L)
 │   │   └── settings-merge.ts ← perCli/activeOverrides deep merge (45L)
 │   ├── agent/                ← CLI 에이전트 런타임
-│   │   ├── spawn.ts          ← CLI spawn + ACP 분기 + 큐 + 메모리 flush + activeOverrides 통합 (691L)
+│   │   ├── spawn.ts          ← CLI spawn + ACP 분기 + 큐 + 메모리 flush + activeOverrides 통합 (697L)
 │   │   ├── args.ts           ← CLI별 인자 빌더 (67L)
 │   │   └── events.ts         ← NDJSON 파서 + ACP update + logEventSummary (322L)
 │   ├── orchestrator/         ← 직원 오케스트레이션
@@ -45,7 +45,7 @@ cli-jaw/
 │   │   ├── worklog.ts        ← Worklog CRUD + phase matrix (172L)
 │   │   └── heartbeat.ts      ← Heartbeat 잡 스케줄 + fs.watch (108L)
 │   ├── telegram/             ← Telegram 인터페이스
-│   │   ├── bot.ts            ← Telegram 봇 + forwarder lifecycle + origin 필터링 (497L)
+│   │   ├── bot.ts            ← Telegram 봇 + forwarder lifecycle + origin 필터링 (511L)
 │   │   └── forwarder.ts      ← 포워딩 헬퍼 (escape, chunk, createForwarder) (105L)
 │   ├── browser/              ← Chrome CDP 제어
 │   │   ├── connection.ts     ← Chrome 탐지/launch/CDP 연결 (113L)
@@ -66,20 +66,21 @@ cli-jaw/
 │       ├── catalog.ts        ← COMMANDS → capability map 확장 (39L)
 │       ├── policy.ts         ← getVisibleCommands, getTelegramMenuCommands (37L)
 │       └── help-renderer.ts  ← renderHelp list/detail mode (44L)
-├── public/                   ← Web UI (ES Modules, 28 files, ~5500L)
-│   ├── index.html            ← 뼈대 (469L, CLI-JAW 대문자 로고, pill theme switch, data-i18n)
-│   ├── css/                  ← 6 files (~1724L)
+├── public/                   ← Web UI (ES Modules, 29 files, ~5230L)
+│   ├── index.html            ← 뼈대 (468L, CLI-JAW 대문자 로고, pill theme switch, data-i18n)
+│   ├── theme-test.html       ← 테마 테스트 페이지
+│   ├── css/                  ← 6 files (~1738L)
 │   │   ├── variables.css     ← Arctic Cyan 테마 + will-change + scrollbar tint (141L)
 │   │   ├── layout.css        ← opacity 전환 + contain 격리 + 로고 글로우 (349L)
 │   │   ├── markdown.css      ← rendering (table·code·KaTeX·Mermaid) + mermaid overlay popup + copy btn (269L)
 │   │   ├── chat.css          ← 채팅 UI (메시지 버블·입력·첨부·스피너) (570L)
-│   │   ├── sidebar.css       ← 사이드바 레이아웃 + 접기/펼치기 (224L)
+│   │   ├── sidebar.css       ← 사이드바 레이아웃 + 접기/펼치기 + cwd-display (238L)
 │   │   └── modals.css        ← 모달·탭·설정 패널 (171L)
 │   ├── locales/              ← i18n 로케일
-│   │   ├── ko.json           ← 한국어 (178키)
-│   │   └── en.json           ← 영어 (178키)
-│   └── js/                   ← 19 files (~3250L)
-│       ├── main.js           ← 앱 진입점 + 모듈 wire + 인덱스 탭 전환 (281L)
+│   │   ├── ko.json           ← 한국어 (180키)
+│   │   └── en.json           ← 영어 (180키)
+│   └── js/                   ← 19 files (~2665L)
+│       ├── main.js           ← 앱 진입점 + 모듈 wire + 인덱스 탭 전환 (278L)
 │       ├── render.js         ← marked+hljs+KaTeX+Mermaid 렌더러 + sanitize + mermaid overlay popup (294L)
 │       ├── constants.js      ← CLI_REGISTRY 동적 로딩 + ROLE_PRESETS (119L)
 │       ├── api.js            ← fetch 래퍼 + REST 엔드포인트 (55L)
@@ -93,20 +94,20 @@ cli-jaw/
 │           ├── employees.js  ← 직원 관리 UI (120L)
 │           ├── heartbeat.js  ← Heartbeat 상태 표시 (80L)
 │           ├── memory.js     ← 메모리 관리 UI (85L)
-│           ├── settings.js   ← 설정 탭 UI (512L)
+│           ├── settings.js   ← 설정 탭 UI (510L)
 │           ├── skills.js     ← 스킬 관리 UI (68L)
 │           ├── slash-commands.js ← 슬래시 커맨드 자동완성 (231L)
 │           ├── sidebar.js    ← 사이드바 접기 (이중 모드) (88L)
 │           ├── theme.js      ← pill switch 다크/라이트 (is-light class) (40L)
 │           └── appname.js    ← Agent Name (DEFAULT_NAME='CLI-JAW') (43L)
 ├── bin/
-│   ├── cli-jaw.ts           ← 12개 서브커맨드 라우팅
-│   ├── postinstall.ts        ← npm install 후 5-CLI 자동설치 + MCP + 스킬 (259L)
+│   ├── cli-jaw.ts           ← 12개 서브커맨드 라우팅 + --home flag (147L)
+│   ├── postinstall.ts        ← npm install 후 5-CLI 자동설치 + MCP + 스킬 (244L)
 │   └── commands/
 │       ├── serve.ts          ← 서버 시작 (--port/--host/--open)
 │       ├── chat.ts           ← 터미널 채팅 TUI (3모드, 블록아트 배너, active model 표시, 873L)
 │       ├── init.ts           ← 초기화 마법사
-│       ├── doctor.ts         ← 진단 (12개 체크, --json)
+│       ├── doctor.ts         ← 진단 (12개 체크, --json) (212L)
 │       ├── status.ts         ← 서버 상태 (--json)
 │       ├── mcp.ts            ← MCP 관리 (install/sync/list/reset)
 │       ├── skill.ts          ← 스킬 관리 (install/remove/info/list/reset)
@@ -116,7 +117,7 @@ cli-jaw/
 │       ├── memory.ts         ← 메모리 CLI (search/read/save/list/init) (92L)
 │       ├── launchd.ts        ← macOS LaunchAgent 관리 (instanceId, --port, xmlEsc) (179L)
 │       └── browser.ts        ← 브라우저 CLI (17개 서브커맨드, 238L)
-├── tests/                    ← 회귀 방지 테스트 (276 total · 275 pass)
+├── tests/                    ← 회귀 방지 테스트 (314 total · 313 pass)
 │   ├── events.test.ts        ← 이벤트 파서 단위 테스트
 │   ├── events-acp.test.ts    ← ACP session/update 이벤트 테스트
 │   ├── telegram-forwarding.test.ts ← Telegram 포워딩 동작 테스트
@@ -141,7 +142,7 @@ cli-jaw/
 ├── scripts/                  ← 도구 스크립트
 │   ├── check-deps-offline.mjs ← 오프라인 취약 버전 체크
 │   └── check-deps-online.sh  ← npm audit + semgrep
-├── skills_ref/               ← 번들 스킬 (105개)
+├── skills_ref/               ← 번들 스킬 (101개)
 └── devlog/                   ← MVP 12 Phase + Post-MVP devlogs
 ```
 
@@ -291,6 +292,7 @@ graph LR
 74. **[multi-instance] Phase 3.1: Frontend hotfix**: workingDir 입력란 `value=""` + placeholder, Safe/Auto → Auto 고정 배지. `settings.js` setPerm() → no-op + always 'auto'.
 75. **[multi-instance] Phase 4: launchd multi-instance**: `instanceId()` hash 기반 label (`com.cli-jaw.default` / `com.cli-jaw.<name>-<hash8>`), `xmlEsc()`, `parseArgs --port`, `--home`/`--port` plist pass-through, `CLI_JAW_HOME` env in plist, `WorkingDirectory → JAW_HOME`. `browser.ts`/`memory.ts` `getServerUrl('3457')` → `getServerUrl(undefined)`.
 76. **[multi-instance] Phase 4.1 hotfix**: `applySettingsPatch` workingDir 변경 시 `regenerateB`+`ensureSkillsSymlinks`+`syncToAll` 후처리. 서버 시작 시 `safe→auto` 강제 마이그레이션. launchd unknown flag guard + plist path quoting. memory init 경로 JAW_HOME 동적화.
+77. **[hotfix] Sidebar cwd read-only + Auto full-width**: `inpCwd` `<input>` → `<span class="cwd-display">` 읽기 전용 표시. `settings.js` workingDir PUT 제거, `.textContent` 사용. Auto 버튼 `flex:none` → `width:100%` 사이드바 채움. `main.js` inpCwd change 리스너 제거. `sidebar.css` `.cwd-display` 클래스 추가.
 
 ---
 
@@ -314,18 +316,15 @@ graph LR
 
 ## Devlog
 
-**완료 아카이브** (`devlog/_fin/`): mvp P01~12, 250225_acp-parity, 260223_권한 P1~13, 260223_모델, 260223_프론트엔드 모듈화, 260223_서브에이전트프롬프트, 260224_cmd P0~P6, 260224_orch P0~P5, 260224_skill P0~P2, 260224_vision P1~P2, 260225_copilot-cli-integration P1~P6, 260225_esbuild_번들러_도입, 260225_finness P0~P20.6, 260226_fallback
+**완료 아카이브** (`devlog/_fin/`): mvp P01~12, 250225_acp-parity, 260223_권한 P1~13, 260223_모델, 260223_프론트엔드 모듈화, 260223_서브에이전트프롬프트, 260224_cmd P0~P6, 260224_orch P0~P5, 260224_skill P0~P2, 260224_vision P1~P2, 260225_copilot-cli-integration P1~P6, 260225_esbuild_번들러_도입, 260225_finness P0~P20.6, 260225_debug, 260225_clijaw_rename, 260225_cross_platform, 260225_mermaid_bugs, 260225_workdir_refactor, 260226_fallback, 260226_session_cleanup, 260226_sidebar_hotfix
 
 **진행 중** (`devlog/`):
 
 | 폴더                              | 주제                                                                                       | 상태 |
 | --------------------------------- | ------------------------------------------------------------------------------------------ | ---- |
-| `260225_debug/`                   | i18n + multifile + dev skill + filepath fix + parallel dispatch + session fix              | ✅    |
-| `260225_clijaw_rename/`           | cli-claw→cli-jaw 리네임 + Arctic Cyan 테마 + CLI 블록아트 배너                             | ✅    |
-| `260225_mermaid_bugs/`            | Mermaid text invisible (DOMPurify foreignObject strip) + overlay UX + user msg persistence | ✅    |
-| `260225_cross_platform/`          | 크로스 플랫폼 호환 패치 (browser serve, doctor, postinstall config)                        | 🟡    |
-| `260225_workdir_refactor/`        | Multi-instance refactor Phase 1-4.1 (workingDir, JAW_HOME, clone, launchd, frontend)      | ✅    |
-| `260226_session_cleanup/`         | Orchestration v3: end_phase + checkpoint + reset + session lifecycle                       | 🟡    |
+| `260226_interface_unify/`         | WebUI·CLI·Telegram 입력/출력 통합 (submitMessage gateway + TG output handler)              | 🟡    |
+| `260226_repo_hygiene/`            | skills_ref 별도 레포 분리 + devlog gitignore + tests 정리                                  | 📋    |
+| `260226_safe_install/`            | `jaw init --safe` 대화형 설치 모드 + `--dry-run`                                          | 📋    |
 | `260226_steer_interrupted/`       | steer 중단 시 부분 결과 저장 조사                                                          | 🟡    |
 | `devlog_ts/`                      | TypeScript 빌드 호환 (dist build, import ext fix)                                          | 🟡    |
 | `269999_메모리 개선/`             | 메모리 고도화 (flush✅ + vector DB 📋 후순위)                                                | 🔜    |

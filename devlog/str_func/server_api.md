@@ -88,7 +88,7 @@ ensureDirs() → runMigration() → loadSettings() → initPromptFiles()
 | `serve`       | `--port 3457` `--host 0.0.0.0` `--open`, IPv4 first                                    |
 | `chat`        | 3모드 (Default/Raw/Simple), 슬래시명령, 멀티라인, CJK 너비 (873L)                      |
 | `init`        | Interactive/`--non-interactive`, 완료 후 postinstall                                   |
-| `doctor`      | 11개 체크 (CLI/Telegram/Skills/Chrome 등), `--json`                                    |
+| `doctor`      | 12개 체크 (CLI/Telegram/Skills/Chrome 등), `--json`                                    |
 | `mcp`         | `install <pkg>` · `sync` · `list` · `reset` (PyPI 자동 감지)                           |
 | `skill`       | `install` (Codex→Ref→GitHub) · `remove` · `info` · `list` · `reset`                    |
 | `browser`     | 17개 서브커맨드 (start/stop/snapshot/screenshot/click/mouse-click/vision-click/type/…) |

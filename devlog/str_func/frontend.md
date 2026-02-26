@@ -1,4 +1,4 @@
-# Frontend — public/ (28 files, ~5500L)
+# Frontend — public/ (29 files, ~5230L)
 
 > Web UI — Vanilla HTML + CSS + ES Modules. CDN: marked, highlight.js, KaTeX, Mermaid.
 > 3단 폰트: Chakra Petch(display) + Outfit(body) + SF Mono(code).
@@ -10,16 +10,17 @@
 
 ```text
 public/
-├── index.html            ← CLI-JAW 대문자 로고, pill theme switch, quota 높이 정렬 (469L)
-├── css/                  ← 6 files (~1724L)
+├── index.html            ← CLI-JAW 대문자 로고, pill theme switch, quota 높이 정렬 (468L)
+├── theme-test.html       ← 테마 테스트 페이지
+├── css/                  ← 6 files (~1738L)
 │   ├── variables.css     ← Arctic Cyan (#22d3ee/#06b6d4) + will-change + scrollbar tint (141L)
 │   ├── layout.css        ← opacity 전환 + contain 격리 + 로고 글로우 + overflow:hidden (349L)
 │   ├── chat.css          ← 채팅 UI (메시지 버블·입력·첨부·스피너) (570L)
-│   ├── sidebar.css       ← 사이드바 레이아웃 + 접기/펼치기 (224L)
+│   ├── sidebar.css       ← 사이드바 레이아웃 + 접기/펼치기 + cwd-display (238L)
 │   ├── modals.css        ← 모달·탭·설정 패널 (171L)
 │   └── markdown.css      ← rendering (table·code·KaTeX·Mermaid) + mermaid overlay popup + copy btn (269L)
-└── js/                   ← 19 files (~3250L)
-    ├── main.js           ← 앱 진입점 + 모듈 wire + 인덱스 탭 전환 (281L)
+└── js/                   ← 19 files (~2665L)
+    ├── main.js           ← 앱 진입점 + 모듈 wire + 인덱스 탭 전환 (278L)
     ├── state.js          ← 공유 상태 모듈 (attachedFiles 배열) (16L)
     ├── constants.js      ← CLI_REGISTRY 동적 로딩 + ROLE_PRESETS (이모지 제거) (119L)
     ├── render.js         ← marked+hljs+KaTeX+Mermaid renderer + mermaid overlay popup + copy + sanitize (294L)
@@ -30,7 +31,7 @@ public/
     └── features/
         ├── i18n.js       ← 프론트엔드 i18n + applyI18n() (125L)
         ├── chat.js       ← 전송, multi-file 첨부, chip 프리뷰, 드래그앤드롭, 멈춤, 큐, auto-expand (242L)
-        ├── settings.js   ← 설정 + CLI 상태 + perCli (5개 CLI) (512L)
+        ├── settings.js   ← 설정 + CLI 상태 + perCli (5개 CLI) (510L)
         ├── skills.js     ← 로드, 토글, 필터 (68L)
         ├── employees.js  ← 직원(employee) CRUD (CSS dot, 이모지 없음) (120L)
         ├── heartbeat.js  ← 하트비트 모달/작업 (80L)
@@ -49,7 +50,7 @@ public/
 
 | 모듈 | 역할 | 라인 |
 |------|------|------|
-| `main.js` | 앱 진입점, 이벤트 바인딩, 인덱스 탭 전환 | 281 |
+| `main.js` | 앱 진입점, 이벤트 바인딩, 인덱스 탭 전환 | 278 |
 | `state.js` | 공유 상태 | 16 |
 | `constants.js` | CLI_REGISTRY 동적 로딩 + ROLE_PRESETS | 119 |
 
@@ -69,7 +70,7 @@ public/
 |------|------|------|
 | `i18n.js` | 프론트엔드 i18n + applyI18n() | 125 |
 | `chat.js` | 전송, multi-file 첨부, chip 프리뷰, 개별제거, 드래그앤드롭, auto-expand | 242 |
-| `settings.js` | 설정 패널 + perCli (5개 CLI) | 512 |
+| `settings.js` | 설정 패널 + perCli (5개 CLI) | 510 |
 | `skills.js` | 스킬 카드 UI | 68 |
 | `employees.js` | 직원(employee) CRUD (CSS dot) | 120 |
 | `heartbeat.js` | 하트비트 모달 | 80 |
@@ -88,7 +89,7 @@ public/
 | `variables.css` | Arctic Cyan + will-change + cubic-bezier easing + scrollbar tint | 141 |
 | `layout.css` | opacity 전환 + contain 격리 + 로고 글로우 + overflow:hidden | 349 |
 | `chat.css` | 채팅 UI (메시지 버블·입력·첨부·스피너) | 570 |
-| `sidebar.css` | 설정/스킬 카드 hover + display font | 224 |
+| `sidebar.css` | 설정/스킬 카드 hover + display font + cwd-display | 238 |
 | `modals.css` | 모달 + 하트비트 카드 | 171 |
 | `markdown.css` | markdown rendering + semantic color vars + mermaid overlay popup + copy btn style | 269 |
 
@@ -137,3 +138,4 @@ public/
 | Mermaid Fix | DOMPurify removed from mermaid SVG (was stripping foreignObject/text). Overlay: z-index fix, size 95vw/95vh, raw SVG capture (no duplicate buttons) |
 | Msg Persist | `POST /api/message` now calls `insertMessage.run('user')` before `orchestrate()` — user messages survive page refresh |
 | Phase 3.1 | workingDir 입력란: `value=""` + placeholder 동적, 유저가 직접 경로 입력 가능. Permission 토글 Safe/Auto → Auto 고정 배지(`setPerm()` no-op). `settings.js` |
+| Sidebar Hotfix | workingDir `<input>` → `<span class="cwd-display">` 읽기 전용. `settings.js` workingDir PUT 제거. Auto 버튼 `width:100%` 사이드바 채움. `sidebar.css` `.cwd-display` 추가 |
