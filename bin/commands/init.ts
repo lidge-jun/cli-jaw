@@ -13,6 +13,8 @@ const { values } = parseArgs({
     args: process.argv.slice(3),
     options: {
         'non-interactive': { type: 'boolean', default: false },
+        safe: { type: 'boolean', default: false },
+        'dry-run': { type: 'boolean', default: false },
         force: { type: 'boolean', default: false },
         'working-dir': { type: 'string' },
         cli: { type: 'string' },
@@ -92,12 +94,26 @@ if (!fs.existsSync(hbPath)) {
     fs.writeFileSync(hbPath, JSON.stringify({ jobs: [] }, null, 2));
 }
 
-// Run postinstall symlinks
-try {
-    await import('../postinstall.js');
-} catch (e) {
-    console.log(`  ⚠️ Symlink setup: ${(e as Error).message}`);
-}
+// Step-by-step component install (instead of importing all side-effects)
+import { installCliTools, installMcpServers, installSkillDeps, type InstallOpts } from '../postinstall.js';
+
+const installOpts: InstallOpts = {
+    dryRun: !!values['dry-run'],
+    interactive: !!values.safe || !values['non-interactive'],
+    ask: async (question: string, defaultVal: string): Promise<string> => {
+        if (values['non-interactive']) return defaultVal;
+        return new Promise(r => {
+            const rl2 = createInterface({ input: process.stdin, output: process.stdout });
+            rl2.question(`  ${question} `, (ans) => { rl2.close(); r(ans.trim() || defaultVal); });
+        });
+    },
+};
+
+if (values['dry-run']) console.log('\n  \ud83d\udd0d Dry run mode — no changes will be made\n');
+
+await installCliTools(installOpts);
+await installMcpServers(installOpts);
+await installSkillDeps(installOpts);
 
 console.log(`
   ✅ 설정 완료!

@@ -120,14 +120,30 @@ ensureDir(jawHome);
 ensureDir(path.join(jawHome, 'skills'));
 ensureDir(path.join(jawHome, 'uploads'));
 
+// ── Safe mode guard ──
+// JAW_SAFE=1 npm install -g cli-jaw → skip all side-effects
+const isSafeMode = process.env.npm_config_jaw_safe === '1'
+    || process.env.npm_config_jaw_safe === 'true'
+    || process.env.JAW_SAFE === '1'
+    || process.env.JAW_SAFE === 'true';
+
+if (isSafeMode) {
+    console.log('[jaw:postinstall] 🔒 safe mode — home directory created only');
+    console.log('[jaw:postinstall] Run `jaw init` to configure interactively');
+    process.exit(0);
+}
+
 // 2. Skills symlinks (home-based default)
 const skillsSymlinkReport = ensureSkillsSymlinks(home, { onConflict: 'backup' });
 logSkillsSymlinkReport(skillsSymlinkReport);
 
-// 2b. Auto-install 5 CLI tools (bun preferred, npm fallback)
-const hasBun = (() => { try { execSync('bun --version', { stdio: 'pipe' }); return true; } catch { return false; } })();
-const installGlobal = hasBun ? 'bun install -g' : 'npm i -g';
-const installLabel = hasBun ? 'bun' : 'npm';
+// ─── Exported install functions (used by init.ts) ─────
+
+export type InstallOpts = {
+    dryRun?: boolean;
+    interactive?: boolean;
+    ask?: (question: string, defaultVal: string) => Promise<string>;
+};
 
 const CLI_PACKAGES = [
     { bin: 'claude', pkg: '@anthropic-ai/claude-code' },
@@ -137,24 +153,34 @@ const CLI_PACKAGES = [
     { bin: 'opencode', pkg: 'opencode-ai' },
 ];
 
-console.log(`[jaw:init] installing CLI tools @latest (using ${installLabel})...`);
-for (const { bin, pkg } of CLI_PACKAGES) {
-    console.log(`[jaw:init] 📦 ${installGlobal} ${pkg}@latest ...`);
-    try {
-        execSync(`${installGlobal} ${pkg}@latest`, { stdio: 'pipe', timeout: 180000 });
-        console.log(`[jaw:init] ✅ ${bin} installed`);
-    } catch {
-        // Fallback: if bun failed, try npm
-        if (hasBun) {
-            console.log(`[jaw:init] ⚠️  bun failed, trying npm i -g ${pkg}@latest ...`);
-            try {
-                execSync(`npm i -g ${pkg}@latest`, { stdio: 'pipe', timeout: 180000 });
-                console.log(`[jaw:init] ✅ ${bin} installed (via npm fallback)`);
-            } catch {
+export async function installCliTools(opts: InstallOpts = {}) {
+    const hasBun = (() => { try { execSync('bun --version', { stdio: 'pipe' }); return true; } catch { return false; } })();
+    const installGlobal = hasBun ? 'bun install -g' : 'npm i -g';
+    const installLabel = hasBun ? 'bun' : 'npm';
+
+    console.log(`[jaw:init] installing CLI tools @latest (using ${installLabel})...`);
+    for (const { bin, pkg } of CLI_PACKAGES) {
+        if (opts.dryRun) { console.log(`  [dry-run] would install ${pkg}`); continue; }
+        if (opts.interactive && opts.ask) {
+            const answer = await opts.ask(`Install ${bin} (${pkg})? [y/N]`, 'n');
+            if (answer.toLowerCase() !== 'y') { console.log(`  ⏭️  skipped ${bin}`); continue; }
+        }
+        console.log(`[jaw:init] 📦 ${installGlobal} ${pkg}@latest ...`);
+        try {
+            execSync(`${installGlobal} ${pkg}@latest`, { stdio: 'pipe', timeout: 180000 });
+            console.log(`[jaw:init] ✅ ${bin} installed`);
+        } catch {
+            if (hasBun) {
+                console.log(`[jaw:init] ⚠️  bun failed, trying npm i -g ${pkg}@latest ...`);
+                try {
+                    execSync(`npm i -g ${pkg}@latest`, { stdio: 'pipe', timeout: 180000 });
+                    console.log(`[jaw:init] ✅ ${bin} installed (via npm fallback)`);
+                } catch {
+                    console.error(`[jaw:init] ⚠️  ${bin}: auto-install failed — install manually: npm i -g ${pkg}`);
+                }
+            } else {
                 console.error(`[jaw:init] ⚠️  ${bin}: auto-install failed — install manually: npm i -g ${pkg}`);
             }
-        } else {
-            console.error(`[jaw:init] ⚠️  ${bin}: auto-install failed — install manually: npm i -g ${pkg}`);
         }
     }
 }
@@ -185,39 +211,44 @@ const MCP_PACKAGES = [
     { pkg: '@upstash/context7-mcp', bin: 'context7-mcp' },
 ];
 
-console.log('[jaw:init] installing MCP servers globally...');
-const config = loadUnifiedMcp();
-let updated = false;
+export async function installMcpServers(opts: InstallOpts = {}) {
+    console.log('[jaw:init] installing MCP servers globally...');
+    const config = loadUnifiedMcp();
+    let updated = false;
 
-for (const { pkg, bin } of MCP_PACKAGES) {
-    try {
-        // Check if already installed
-        const installedPath = findBinaryPath(bin);
-        if (installedPath) {
-            console.log(`[jaw:init] ⏭️  ${bin} (already installed)`);
-            continue;
-        }
-
-        console.log(`[jaw:init] 📦 npm i -g ${pkg} ...`);
-        execSync(`npm i -g ${pkg}`, { stdio: 'pipe', timeout: 120000 });
-
-        const binPath = findBinaryPath(bin) || bin;
-        console.log(`[jaw:init] ✅ ${bin} → ${binPath}`);
-
-        // Update mcp.json: npx → direct binary
-        for (const [name, srv] of Object.entries(config.servers || {}) as [string, any][]) {
-            if (srv.command === 'npx' && (srv.args || []).includes(pkg)) {
-                srv.command = bin;
-                srv.args = [];
-                updated = true;
+    for (const { pkg, bin } of MCP_PACKAGES) {
+        try {
+            const installedPath = findBinaryPath(bin);
+            if (installedPath) {
+                console.log(`[jaw:init] ⏭️  ${bin} (already installed)`);
+                continue;
             }
-        }
-    } catch (e) {
-        console.error(`[jaw:init] ⚠️  ${pkg}: ${(e as Error).message?.slice(0, 80)}`);
-    }
-}
+            if (opts.dryRun) { console.log(`  [dry-run] would install ${pkg}`); continue; }
+            if (opts.interactive && opts.ask) {
+                const answer = await opts.ask(`Install MCP server ${bin} (${pkg})? [y/N]`, 'n');
+                if (answer.toLowerCase() !== 'y') { console.log(`  ⏭️  skipped ${bin}`); continue; }
+            }
 
-if (updated) saveUnifiedMcp(config);
+            console.log(`[jaw:init] 📦 npm i -g ${pkg} ...`);
+            execSync(`npm i -g ${pkg}`, { stdio: 'pipe', timeout: 120000 });
+
+            const binPath = findBinaryPath(bin) || bin;
+            console.log(`[jaw:init] ✅ ${bin} → ${binPath}`);
+
+            for (const [name, srv] of Object.entries(config.servers || {}) as [string, any][]) {
+                if (srv.command === 'npx' && (srv.args || []).includes(pkg)) {
+                    srv.command = bin;
+                    srv.args = [];
+                    updated = true;
+                }
+            }
+        } catch (e) {
+            console.error(`[jaw:init] ⚠️  ${pkg}: ${(e as Error).message?.slice(0, 80)}`);
+        }
+    }
+
+    if (updated) saveUnifiedMcp(config);
+}
 
 // 8. Auto-install skill dependencies (Phase 9)
 const SKILL_DEPS = [
@@ -237,21 +268,32 @@ const SKILL_DEPS = [
     },
 ];
 
-console.log('[jaw:init] checking skill dependencies...');
-for (const dep of SKILL_DEPS) {
-    try {
-        execSync(dep.check, { stdio: 'pipe', timeout: 10000 });
-        console.log(`[jaw:init] ⏭️  ${dep.name} (already installed)`);
-    } catch {
-        console.log(`[jaw:init] 📦 installing ${dep.name} (${dep.why})...`);
+export async function installSkillDeps(opts: InstallOpts = {}) {
+    console.log('[jaw:init] checking skill dependencies...');
+    for (const dep of SKILL_DEPS) {
         try {
-            execSync(dep.install, { stdio: 'pipe', timeout: 120000 });
-            console.log(`[jaw:init] ✅ ${dep.name} installed`);
-        } catch (e) {
-            console.error(`[jaw:init] ⚠️  ${dep.name}: auto-install failed — install manually:`);
-            console.error(`             ${dep.install}`);
+            execSync(dep.check, { stdio: 'pipe', timeout: 10000 });
+            console.log(`[jaw:init] ⏭️  ${dep.name} (already installed)`);
+        } catch {
+            if (opts.dryRun) { console.log(`  [dry-run] would install ${dep.name} (${dep.why})`); continue; }
+            if (opts.interactive && opts.ask) {
+                const answer = await opts.ask(`Install ${dep.name} (${dep.why})? [y/N]`, 'n');
+                if (answer.toLowerCase() !== 'y') { console.log(`  ⏭️  skipped ${dep.name}`); continue; }
+            }
+            console.log(`[jaw:init] 📦 installing ${dep.name} (${dep.why})...`);
+            try {
+                execSync(dep.install, { stdio: 'pipe', timeout: 120000 });
+                console.log(`[jaw:init] ✅ ${dep.name} installed`);
+            } catch (e) {
+                console.error(`[jaw:init] ⚠️  ${dep.name}: auto-install failed — install manually:`);
+                console.error(`             ${dep.install}`);
+            }
         }
     }
 }
 
+// ─── Main postinstall flow (non-safe mode) ──────────
+await installCliTools();
+await installMcpServers();
+await installSkillDeps();
 console.log('[jaw:init] setup complete ✅');
