@@ -31,7 +31,7 @@ export function renderHeartbeatJobs(): void {
         container.innerHTML = jobs.map((job, i) => `
             <div class="hb-job-card">
                 <div class="hb-job-header">
-                    <input type="text" value="${escapeHtml(job.name || '')}" placeholder="${t('hb.name')}"
+                    <input type="text" value="${escapeHtml(String(job.name || ''))}" placeholder="${t('hb.name')}"
                         data-hb-name="${i}">
                     <span style="font-size:11px;color:var(--text-dim)">every</span>
                     <input type="number" value="${(job.schedule as Record<string, unknown>)?.minutes || 5}" min="1"
@@ -42,7 +42,7 @@ export function renderHeartbeatJobs(): void {
                     <button class="hb-del" data-hb-remove="${i}">✕</button>
                 </div>
                 <textarea class="hb-prompt" rows="2" placeholder="${t('hb.prompt')}"
-                    data-hb-prompt="${i}">${escapeHtml(job.prompt || '')}</textarea>
+                    data-hb-prompt="${i}">${escapeHtml(String(job.prompt || ''))}</textarea>
             </div>
         `).join('');
     }

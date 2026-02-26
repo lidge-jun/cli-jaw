@@ -13,13 +13,10 @@
         "isolatedModules": true,
         "esModuleInterop": true,
         "skipLibCheck": true,
-        "forceConsistentCasingInFileNames": true,
-        "allowJs": true,
-        "checkJs": false
+        "forceConsistentCasingInFileNames": true
     },
     "include": [
         "public/js/**/*.ts",
-        "public/js/**/*.js",
         "types/frontend.d.ts"
     ]
 }
