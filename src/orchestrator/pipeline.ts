@@ -245,6 +245,7 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
     clearPromptCache();
 
     const origin = meta.origin || 'web';
+    const chatId = meta.chatId;
     const employees = getEmployees.all();
 
     // Triage: 간단한 메시지는 직접 응답
@@ -300,7 +301,7 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
                     appendToWorklog(worklog.path, 'Final Summary', summary);
                     updateWorklogStatus(worklog.path, 'checkpoint', round);
                     insertMessage.run('assistant', summary + '\n\n다음: "리뷰해봐", "이어서 해줘", "리셋해"', 'orchestrator', '');
-                    broadcast('orchestrate_done', { text: summary, worklog: worklog.path, origin, checkpoint: true });
+                    broadcast('orchestrate_done', { text: summary, worklog: worklog.path, origin, chatId, checkpoint: true });
                     return;
                 }
 
@@ -313,7 +314,7 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
                     updateWorklogStatus(worklog.path, 'done', round);
                     clearAllEmployeeSessions.run();
                     insertMessage.run('assistant', summary, 'orchestrator', '');
-                    broadcast('orchestrate_done', { text: summary, worklog: worklog.path, origin });
+                    broadcast('orchestrate_done', { text: summary, worklog: worklog.path, origin, chatId });
                     return;
                 }
 
@@ -328,14 +329,14 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
                     updateWorklogStatus(worklog.path, 'partial', round);
                     // partial: 세션 보존 (이어서 해줘 대비, 새 orchestrate() 시 L228에서 자동 정리)
                     insertMessage.run('assistant', partial, 'orchestrator', '');
-                    broadcast('orchestrate_done', { text: partial, worklog: worklog.path, origin });
+                    broadcast('orchestrate_done', { text: partial, worklog: worklog.path, origin, chatId });
                 }
             }
             return;
         }
 
         const stripped = stripSubtaskJSON(result.text);
-        broadcast('orchestrate_done', { text: stripped || result.text || '', origin });
+        broadcast('orchestrate_done', { text: stripped || result.text || '', origin, chatId });
         return;
     }
 
@@ -344,7 +345,7 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
         const { promise } = spawnAgent(prompt, { origin });
         const result = await promise as Record<string, any>;
         const stripped = stripSubtaskJSON(result.text);
-        broadcast('orchestrate_done', { text: stripped || result.text || '', origin });
+        broadcast('orchestrate_done', { text: stripped || result.text || '', origin, chatId });
         return;
     }
 
@@ -359,12 +360,12 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
     if (directAnswer) {
         console.log('[jaw:triage] planning agent chose direct response');
         broadcast('agent_done', { text: directAnswer, origin });
-        broadcast('orchestrate_done', { text: directAnswer, origin });
+        broadcast('orchestrate_done', { text: directAnswer, origin, chatId });
         return;
     }
 
     if (!subtasks?.length) {
-        broadcast('orchestrate_done', { text: planText || '', origin });
+        broadcast('orchestrate_done', { text: planText || '', origin, chatId });
         return;
     }
 
@@ -426,7 +427,7 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
             updateWorklogStatus(worklog.path, 'done', round);
             clearAllEmployeeSessions.run();
             insertMessage.run('assistant', summary, 'orchestrator', '');
-            broadcast('orchestrate_done', { text: summary, worklog: worklog.path, origin });
+            broadcast('orchestrate_done', { text: summary, worklog: worklog.path, origin, chatId });
             break;
         }
 
@@ -443,7 +444,7 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
             updateWorklogStatus(worklog.path, 'partial', round);
             // partial: 세션 보존 (이어서 해줘 대비, 새 orchestrate() 시 L228에서 자동 정리)
             insertMessage.run('assistant', partial, 'orchestrator', '');
-            broadcast('orchestrate_done', { text: partial, worklog: worklog.path, origin });
+            broadcast('orchestrate_done', { text: partial, worklog: worklog.path, origin, chatId });
         }
     }
 }
@@ -452,15 +453,16 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
 
 export async function orchestrateContinue(meta: Record<string, any> = {}) {
     const origin = (meta as Record<string, any>).origin || 'web';
+    const chatId = meta.chatId;
     const latest = readLatestWorklog();
     if (!latest || latest.content.includes('Status: done') || latest.content.includes('Status: reset')) {
-        broadcast('orchestrate_done', { text: '이어갈 worklog가 없습니다.', origin });
+        broadcast('orchestrate_done', { text: '이어갈 worklog가 없습니다.', origin, chatId });
         return;
     }
 
     const pending = parseWorklogPending(latest.content);
     if (!pending.length) {
-        broadcast('orchestrate_done', { text: '모든 작업이 이미 완료되었습니다.', origin });
+        broadcast('orchestrate_done', { text: '모든 작업이 이미 완료되었습니다.', origin, chatId });
         return;
     }
 
@@ -481,13 +483,14 @@ subtask JSON을 출력하세요.`;
 
 export async function orchestrateReset(meta: Record<string, any> = {}) {
     const origin = meta.origin || 'web';
+    const chatId = meta.chatId;
     clearAllEmployeeSessions.run();
     const latest = readLatestWorklog();
     if (!latest) {
-        broadcast('orchestrate_done', { text: '리셋할 worklog가 없습니다.', origin });
+        broadcast('orchestrate_done', { text: '리셋할 worklog가 없습니다.', origin, chatId });
         return;
     }
     updateWorklogStatus(latest.path, 'reset', 0);
     appendToWorklog(latest.path, 'Final Summary', '유저 요청으로 리셋됨.');
-    broadcast('orchestrate_done', { text: '리셋 완료.', origin });
+    broadcast('orchestrate_done', { text: '리셋 완료.', origin, chatId });
 }

@@ -202,7 +202,8 @@ export function initTelegram() {
     bot.command('id', (ctx) => ctx.reply(`Chat ID: <code>${ctx.chat.id}</code>`, { parse_mode: 'HTML' }));
 
     async function tgOrchestrate(ctx: any, prompt: string, displayMsg: string) {
-        const result = submitMessage(prompt, { origin: 'telegram', displayText: displayMsg, skipOrchestrate: true });
+        const chatId = ctx.chat?.id;
+        const result = submitMessage(prompt, { origin: 'telegram', displayText: displayMsg, skipOrchestrate: true, chatId });
 
         if (result.action === 'queued') {
             console.log(`[tg:queue] agent busy, queued (${result.pending} pending)`);
@@ -210,7 +211,7 @@ export function initTelegram() {
 
             // 큐 처리 후 응답을 이 채팅으로 전달
             const queueHandler = (type: string, data: Record<string, any>) => {
-                if (type === 'orchestrate_done' && data.text && data.origin === 'telegram') {
+                if (type === 'orchestrate_done' && data.text && data.origin === 'telegram' && (!data.chatId || data.chatId === chatId)) {
                     removeBroadcastListener(queueHandler);
                     const html = markdownToTelegramHtml(data.text);
                     const chunks = chunkTelegramMessage(html);

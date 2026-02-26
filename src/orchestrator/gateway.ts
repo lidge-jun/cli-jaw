@@ -21,7 +21,7 @@ export type SubmitResult = {
 
 export function submitMessage(
     text: string,
-    meta: { origin: 'web' | 'cli' | 'telegram'; displayText?: string; skipOrchestrate?: boolean },
+    meta: { origin: 'web' | 'cli' | 'telegram'; displayText?: string; skipOrchestrate?: boolean; chatId?: string | number },
 ): SubmitResult {
     const trimmed = text.trim();
     if (!trimmed) return { action: 'rejected', reason: 'empty' };
@@ -33,7 +33,7 @@ export function submitMessage(
         if (activeProcess) return { action: 'rejected', reason: 'busy' };
         insertMessage.run('user', display, meta.origin, '');
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
-        if (!meta.skipOrchestrate) orchestrateContinue({ origin: meta.origin });
+        if (!meta.skipOrchestrate) orchestrateContinue({ origin: meta.origin, chatId: meta.chatId });
         return { action: 'started', continued: true };
     }
 
@@ -42,7 +42,7 @@ export function submitMessage(
         if (activeProcess) return { action: 'rejected', reason: 'busy' };
         insertMessage.run('user', display, meta.origin, '');
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
-        if (!meta.skipOrchestrate) orchestrateReset({ origin: meta.origin });
+        if (!meta.skipOrchestrate) orchestrateReset({ origin: meta.origin, chatId: meta.chatId });
         return { action: 'started' };
     }
 
@@ -50,7 +50,7 @@ export function submitMessage(
     // NOTE: insertMessage is NOT called here — processQueue() handles it.
     // This fixes the dual-insert bug where bot.ts called both enqueue + insert.
     if (activeProcess) {
-        enqueueMessage(trimmed, meta.origin);
+        enqueueMessage(trimmed, meta.origin, { chatId: meta.chatId });
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
         return { action: 'queued', pending: messageQueue.length, queued: true };
     }
@@ -59,7 +59,7 @@ export function submitMessage(
     insertMessage.run('user', display, meta.origin, '');
     broadcast('new_message', { role: 'user', content: display, source: meta.origin });
     if (!meta.skipOrchestrate) {
-        orchestrate(trimmed, { origin: meta.origin });
+        orchestrate(trimmed, { origin: meta.origin, chatId: meta.chatId });
     }
     return { action: 'started' };
 }

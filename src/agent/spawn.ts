@@ -92,8 +92,8 @@ export async function steerAgent(newPrompt: string, source: string) {
 
 // ─── Message Queue ───────────────────────────────────
 
-export function enqueueMessage(prompt: string, source: string) {
-    messageQueue.push({ prompt, source, ts: Date.now() });
+export function enqueueMessage(prompt: string, source: string, meta?: { chatId?: string | number }) {
+    messageQueue.push({ prompt, source, chatId: meta?.chatId, ts: Date.now() });
     console.log(`[queue] +1 (${messageQueue.length} pending)`);
     broadcast('queue_update', { pending: messageQueue.length });
 }
@@ -105,15 +105,16 @@ export async function processQueue() {
         ? batched[0].prompt
         : batched.map(m => m.prompt).join('\n\n---\n\n');
     const source = batched[batched.length - 1].source;
+    const chatId = batched[batched.length - 1].chatId;
     console.log(`[queue] processing ${batched.length} queued message(s)`);
     insertMessage.run('user', combined, source, '');
-    broadcast('new_message', { role: 'user', content: combined, source });
+    // NOTE: no broadcast('new_message') here — gateway.ts already broadcast at enqueue time
     broadcast('queue_update', { pending: 0 });
     const { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
-    if (isResetIntent(combined)) orchestrateReset({ origin });
-    else if (isContinueIntent(combined)) orchestrateContinue({ origin });
-    else orchestrate(combined, { origin });
+    if (isResetIntent(combined)) orchestrateReset({ origin, chatId });
+    else if (isContinueIntent(combined)) orchestrateContinue({ origin, chatId });
+    else orchestrate(combined, { origin, chatId });
 }
 
 // ─── Helpers ─────────────────────────────────────────
