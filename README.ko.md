@@ -6,7 +6,7 @@
 
 *Claude, Codex, Gemini... 이제 번갈아 쓰지 마세요.*
 
-[![Tests](https://img.shields.io/badge/tests-373%20pass-brightgreen)](#-테스트)
+[![Tests](https://img.shields.io/badge/tests-383%20pass-brightgreen)](#-테스트)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
@@ -250,11 +250,11 @@ graph TD
 
 ---
 
-## 🔌 MCP — 단일 설정, 5개의 AI 엔진
+## 🔌 MCP — 단일 설정, 6개의 AI 엔진
 
 ```bash
 jaw mcp install @anthropic/context7    # 한 번만 설치
-# → Claude, Codex, Gemini, OpenCode, Copilot 전부 자동 동기화
+# → Claude, Codex, Gemini, OpenCode, Copilot, Antigravity 전부 자동 동기화
 ```
 
 ```mermaid
@@ -263,12 +263,13 @@ graph LR
     MJ -->|자동 동기화| CX["Codex"]
     MJ -->|자동 동기화| GM["Gemini"]
     MJ -->|자동 동기화| OC["OpenCode"]
-    MJ -->|자동 동기화| CP["Copilot"]
+    MJ -->|자동 동기화| CP["코파일럿"]
+    MJ -->|자동 동기화| AG["안티그래비티"]
     
     style MJ fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
 ```
 
-설정 파일 5개를 별도로 수정할 필요가 없습니다. 한 번만 설치하면 모든 AI 엔진에 적용됩니다.
+설정 파일 6개를 별도로 수정할 필요가 없습니다. 한 번만 설치하면 모든 AI 엔진에 적용됩니다.
 
 ---
 
@@ -282,12 +283,42 @@ jaw launchd unset                 # 자동 실행 해제
 jaw chat                          # 터미널 TUI
 jaw doctor                        # 진단 (12개 체크)
 jaw skill install <name>          # 스킬 설치
-jaw mcp install <package>         # MCP 설치 → 5개 CLI 전부 동기화
+jaw mcp install <package>         # MCP 설치 → 6개 CLI 전부 동기화
 jaw memory search <query>         # 메모리 검색
 jaw browser start                 # Chrome 시작 (CDP)
 jaw browser vision-click "로그인"  # AI가 알아서 클릭
+jaw clone ~/my-project            # 인스턴스 복제
+jaw --home ~/my-project serve --port 3458  # 두 번째 인스턴스 실행
 jaw reset                         # 전체 초기화
 ```
+
+---
+
+## 🏗️ 멀티 인스턴스 — 프로젝트별 독립 환경
+
+CLI-JAW의 독립된 인스턴스를 여러 개 실행할 수 있어요 — 각각 고유한 설정, 메모리, 스킬, 데이터베이스를 가집니다.
+
+```bash
+# 기본 인스턴스를 새 프로젝트로 복제
+jaw clone ~/my-project
+
+# 다른 포트로 실행
+jaw --home ~/my-project serve --port 3458
+
+# 또는 둘 다 부팅 시 자동 실행
+jaw launchd                                    # 기본 → 포트 3457
+jaw --home ~/my-project launchd --port 3458    # 프로젝트 → 포트 3458
+```
+
+각 인스턴스는 완전히 독립적입니다 — 작업 디렉토리, 메모리, MCP 설정이 모두 다릅니다. 업무/개인 컨텍스트 분리나 프로젝트별 AI 설정에 안성맞춤이에요.
+
+| 플래그 / 환경변수      | 기능                                     |
+| --------------------- | ---------------------------------------- |
+| `--home <경로>`       | 이 실행에 사용할 커스텀 홈 디렉토리 지정  |
+| `--home=<경로>`       | 동일 (`=` 구문)                         |
+| `CLI_JAW_HOME=<경로>` | 환경변수로 지정                       |
+| `jaw clone <대상>`   | 현재 인스턴스를 새 디렉토리로 복제      |
+| `--port <포트>`       | `serve` / `launchd`용 커스텀 포트      |
 
 ---
 
@@ -355,7 +386,7 @@ src/
 ## 🧪 테스트
 
 <details>
-<summary>373 pass · 1 skipped · 외부 의존성 0</summary>
+<summary>383 pass · 1 skipped · 외부 의존성 0</summary>
 
 ```bash
 npm test

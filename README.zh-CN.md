@@ -6,7 +6,7 @@
 
 *Claude、Codex、Gemini... 从此告别来回切换。*
 
-[![Tests](https://img.shields.io/badge/tests-373%20pass-brightgreen)](#-测试)
+[![Tests](https://img.shields.io/badge/tests-383%20pass-brightgreen)](#-测试)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
@@ -250,11 +250,11 @@ graph TD
 
 ---
 
-## 🔌 MCP — 单次配置，驱动 5 大 AI 引擎
+## 🔌 MCP — 单次配置，驱动 6 大 AI 引擎
 
 ```bash
 jaw mcp install @anthropic/context7    # 安装一次
-# → 自动同步到 Claude、Codex、Gemini、OpenCode、Copilot
+# → 自动同步到 Claude、Codex、Gemini、OpenCode、Copilot、Antigravity
 ```
 
 ```mermaid
@@ -264,11 +264,12 @@ graph LR
     MJ -->|自动同步| GM["Gemini"]
     MJ -->|自动同步| OC["OpenCode"]
     MJ -->|自动同步| CP["Copilot"]
+    MJ -->|自动同步| AG["Antigravity"]
     
     style MJ fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
 ```
 
-只需告别编辑 5 份不同配置文件的繁琐流程。单次安装，所有 AI 引擎立刻生效。
+只需告别编辑 6 份不同配置文件的繁琐流程。单次安装，所有 AI 引擎立刻生效。
 
 ---
 
@@ -282,12 +283,42 @@ jaw launchd unset                 # 取消自动启动
 jaw chat                          # 终端 TUI
 jaw doctor                        # 诊断（12 项检查）
 jaw skill install <name>          # 安装技能
-jaw mcp install <package>         # 安装 MCP → 同步全部 5 CLI
+jaw mcp install <package>         # 安装 MCP → 同步全部 6 CLI
 jaw memory search <query>         # 搜索记忆
 jaw browser start                 # 启动 Chrome（CDP）
 jaw browser vision-click "登录"    # AI 智能点击
+jaw clone ~/my-project            # 实例克隆
+jaw --home ~/my-project serve --port 3458  # 运行第二个实例
 jaw reset                         # 全面重置
 ```
+
+---
+
+## 🏗️ 多实例 — 项目级别的独立环境
+
+可以同时运行多个独立的 CLI-JAW 实例 — 每个都有自己的设置、记忆、技能和数据库。
+
+```bash
+# 将默认实例克隆到新项目
+jaw clone ~/my-project
+
+# 在不同端口运行
+jaw --home ~/my-project serve --port 3458
+
+# 或者两个都设置开机自启
+jaw launchd                                    # 默认 → 端口 3457
+jaw --home ~/my-project launchd --port 3458    # 项目 → 端口 3458
+```
+
+每个实例完全独立 — 工作目录、记忆、MCP 配置各不相同。非常适合工作/个人环境分离或按项目配置 AI。
+
+| 参数 / 环境变量          | 功能                                 |
+| --------------------- | ------------------------------------ |
+| `--home <路径>`       | 指定本次运行使用的自定义主目录   |
+| `--home=<路径>`       | 同上（`=` 语法）                     |
+| `CLI_JAW_HOME=<路径>` | 通过环境变量指定                   |
+| `jaw clone <目标>`    | 将当前实例克隆到新目录           |
+| `--port <端口>`       | `serve` / `launchd` 自定义端口    |
 
 ---
 
@@ -355,7 +386,7 @@ src/
 ## 🧪 测试
 
 <details>
-<summary>373 pass · 1 skipped · 零外部依赖</summary>
+<summary>383 pass · 1 skipped · 零外部依赖</summary>
 
 ```bash
 npm test

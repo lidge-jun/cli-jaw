@@ -6,7 +6,7 @@
 
 *One assistant. Five brains. Always on.*
 
-[![Tests](https://img.shields.io/badge/tests-373%20pass-brightgreen)](#-tests)
+[![Tests](https://img.shields.io/badge/tests-383%20pass-brightgreen)](#-tests)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
@@ -241,11 +241,11 @@ Your assistant **decides by itself** whether a task needs orchestration or a dir
 
 ---
 
-## 🔌 MCP — One Config, Five AI Engines
+## 🔌 MCP — One Config, Six AI Engines
 
 ```bash
 jaw mcp install @anthropic/context7    # Install once
-# → Automatically syncs to Claude, Codex, Gemini, OpenCode, Copilot
+# → Automatically syncs to Claude, Codex, Gemini, OpenCode, Copilot, Antigravity
 ```
 
 ```mermaid
@@ -255,6 +255,7 @@ graph LR
     MJ -->|auto-sync| GM["Gemini"]
     MJ -->|auto-sync| OC["OpenCode"]
     MJ -->|auto-sync| CP["Copilot"]
+    MJ -->|auto-sync| AG["Antigravity"]
     
     style MJ fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
 ```
@@ -270,7 +271,7 @@ jaw serve                         # Start server
 jaw chat                          # Terminal TUI
 jaw doctor                        # Diagnostics (12 checks)
 jaw skill install <name>          # Install a skill
-jaw mcp install <package>         # Install MCP → syncs to all 5 CLIs
+jaw mcp install <package>         # Install MCP → syncs to all 6 CLIs
 jaw memory search <query>         # Search memory
 jaw browser start                 # Launch Chrome (CDP)
 jaw browser vision-click "Login"  # AI-powered click
@@ -377,7 +378,7 @@ src/
 ## 🧪 Tests
 
 <details>
-<summary>373 pass · 1 skipped · zero external dependencies</summary>
+<summary>383 pass · 1 skipped · zero external dependencies</summary>
 
 ```bash
 npm test
