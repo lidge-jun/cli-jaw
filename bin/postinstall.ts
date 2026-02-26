@@ -120,26 +120,22 @@ const CLI_PACKAGES = [
     { bin: 'claude', pkg: '@anthropic-ai/claude-code' },
     { bin: 'codex', pkg: '@openai/codex' },
     { bin: 'gemini', pkg: '@google/gemini-cli' },
+    { bin: 'copilot', pkg: 'copilot' },
     { bin: 'opencode', pkg: 'opencode-ai' },
 ];
 
-console.log(`[jaw:init] checking CLI tools (using ${installLabel})...`);
+console.log(`[jaw:init] installing CLI tools @latest (using ${installLabel})...`);
 for (const { bin, pkg } of CLI_PACKAGES) {
-    if (findBinaryPath(bin)) {
-        console.log(`[jaw:init] ⏭️  ${bin} (already installed)`);
-        continue;
-    }
-
-    console.log(`[jaw:init] 📦 ${installGlobal} ${pkg} ...`);
+    console.log(`[jaw:init] 📦 ${installGlobal} ${pkg}@latest ...`);
     try {
-        execSync(`${installGlobal} ${pkg}`, { stdio: 'pipe', timeout: 180000 });
+        execSync(`${installGlobal} ${pkg}@latest`, { stdio: 'pipe', timeout: 180000 });
         console.log(`[jaw:init] ✅ ${bin} installed`);
     } catch {
         // Fallback: if bun failed, try npm
         if (hasBun) {
-            console.log(`[jaw:init] ⚠️  bun failed, trying npm i -g ${pkg} ...`);
+            console.log(`[jaw:init] ⚠️  bun failed, trying npm i -g ${pkg}@latest ...`);
             try {
-                execSync(`npm i -g ${pkg}`, { stdio: 'pipe', timeout: 180000 });
+                execSync(`npm i -g ${pkg}@latest`, { stdio: 'pipe', timeout: 180000 });
                 console.log(`[jaw:init] ✅ ${bin} installed (via npm fallback)`);
             } catch {
                 console.error(`[jaw:init] ⚠️  ${bin}: auto-install failed — install manually: npm i -g ${pkg}`);
@@ -149,20 +145,6 @@ for (const { bin, pkg } of CLI_PACKAGES) {
         }
     }
 }
-
-// 2c. Copilot CLI: gh extension + PATH symlink
-try {
-    const copilotBin = path.join(home, '.local', 'share', 'gh', 'copilot', 'copilot');
-    if (!fs.existsSync(copilotBin)) {
-        console.log('[jaw:init] 📦 Installing Copilot CLI via gh...');
-        execSync('gh copilot --help', { stdio: 'ignore', timeout: 30000 });
-    }
-    if (fs.existsSync(copilotBin)) {
-        ensureDir(path.join(home, '.local', 'bin'));
-        ensureSymlink(copilotBin, path.join(home, '.local', 'bin', 'copilot'));
-        console.log('[jaw:init] ✅ copilot installed');
-    }
-} catch { console.log('[jaw:init] ⚠️ copilot: gh not authenticated — run: 1) gh auth login → 2) gh copilot --help → 3) copilot login'); }
 
 
 // 3. ~/CLAUDE.md → ~/AGENTS.md (if AGENTS.md exists and CLAUDE.md doesn't)
