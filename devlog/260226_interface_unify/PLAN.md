@@ -2,8 +2,9 @@
 
 ## 메타
 - Date: 2026-02-26
-- Status: Phase 0 (분석 완료, 기획 승인 대기)
+- Status: Phase 1 (계획검증 완료, 6건 수정 반영)
 - 관련 파일: server.ts, src/telegram/bot.ts, src/telegram/forwarder.ts, bin/commands/chat.ts
+- 리뷰: [REVIEW.md](file:///Users/junny/Documents/BlogProject/cli-jaw/devlog/260226_interface_unify/REVIEW.md)
 
 ---
 
@@ -21,6 +22,23 @@
 - 다른 인터페이스에서 전달 (`forwarder.ts`): `agent_done` → 결과만 전달 (typing 없음)
 
 → **같은 orchestrate인데 입력 출처에 따라 UX가 완전히 다른 문제**
+
+---
+
+## 0.1 계획검증 결과 (6건 반영)
+
+> 코드 대조 기반 검증 후 수정 반영. 상세: [REVIEW.md](file:///Users/junny/Documents/BlogProject/cli-jaw/devlog/260226_interface_unify/REVIEW.md)
+
+| # | 심각도 | 지적사항 | 수정 |
+|---|:---:|---------|------|
+| 1 | 🔴 | `orchestrateAndCollect` 제거 시 `heartbeat.ts:47` 컴파일 깨짐 | **제거 → 공용 유틸 분리** (`collect.ts`) |
+| 2 | 🔴 | `agent_tool/status`에 origin 필드 없음 → skip 불가 | **origin 대신 세션 상태 변수 기반 skip** |
+| 3 | 🟠 | `getLastChatId`로 통합 시 ctx.chat.id 보장 상실 | **TG 직접 입력은 `tgOrchestrate` 유지** |
+| 4 | 🟠 | busy 분기 insert + processQueue insert = 이중 저장 | **busy 분기에서 insert 안 함** |
+| 5 | 🟡 | §6 Phase B vs §9.2 TG-004 모순 | **output handler = 타 인터페이스→TG 전달 전용** |
+| 6 | 🟡 | `/api/orchestrate/*` 계약 변경 리스크 | **별도 유지, submitMessage 미포함** |
+
+> ⚠️ **추가 발견**: TG bot은 **현재도 이중 저장 버그** 있음 (L288-289 enqueue+insert, processQueue:109 재insert). Phase A에서 함께 수정.
 
 ---
 
@@ -230,6 +248,9 @@ function orchestrateAndCollect(prompt, meta) {
 
 ### Phase A — 입력 통합: `submitMessage()` Gateway
 
+> ⚠️ 리뷰 반영: busy 분기에서 `insertMessage` 호출하지 않음 (processQueue가 처리)
+> ⚠️ 리뷰 반영: `/api/orchestrate/continue|reset`은 별도 유지
+
 ```typescript
 // src/orchestrator/gateway.ts [NEW]
 
@@ -240,6 +261,7 @@ export function submitMessage(text: string, meta: {
     const trimmed = text.trim();
     if (!trimmed) return { action: 'rejected', reason: 'empty' };
 
+    // Intent detection — idle 상태에서만 처리
     if (isContinueIntent(trimmed)) {
         if (activeProcess) return { action: 'rejected', reason: 'busy' };
         insertMessage.run('user', meta.displayText || trimmed, meta.origin, '');
@@ -254,12 +276,15 @@ export function submitMessage(text: string, meta: {
         orchestrateReset({ origin: meta.origin });
         return { action: 'started' };
     }
+
+    // Busy → enqueue만 (insert는 processQueue()에서 수행)
     if (activeProcess) {
         enqueueMessage(trimmed, meta.origin);
-        insertMessage.run('user', meta.displayText || trimmed, meta.origin, '');
-        broadcast('new_message', { role: 'user', content: meta.displayText || trimmed, source: meta.origin });
+        // ❌ insertMessage 호출하지 않음! processQueue():109에서 처리
         return { action: 'queued', pending: messageQueue.length };
     }
+
+    // Idle → 즉시 실행
     insertMessage.run('user', meta.displayText || trimmed, meta.origin, '');
     broadcast('new_message', { role: 'user', content: meta.displayText || trimmed, source: meta.origin });
     orchestrate(trimmed, { origin: meta.origin });
@@ -298,7 +323,11 @@ export function submitMessage(text: string, meta: {
  }
 ```
 
-### Phase B — TG 출력 통합: `createTelegramOutputHandler`
+### Phase B — TG 출력 통합: `createTelegramOutputHandler` (타 인터페이스 → TG 전달용)
+
+> ⚠️ 리뷰 반영: **TG 직접 입력은 기존 `tgOrchestrate` → `ctx.reply()` 유지**.
+> output handler는 **WebUI/CLI → TG 전달**에만 사용.
+> `orchestrateAndCollect()`는 **제거 대신 `collect.ts`로 분리**.
 
 기존 `forwarder.ts`의 `createTelegramForwarder`를 확장하여 **중간 이벤트 감지 + typing + tool 표시** 추가:
 
@@ -306,48 +335,65 @@ export function submitMessage(text: string, meta: {
  // forwarder.ts
 -export function createTelegramForwarder(…) {
 +export function createTelegramOutputHandler(…) {
++    let typingInterval: any = null;
++    let tgDirectActive = false;  // TG 직접 입력 중이면 skip
++
      return (type, data) => {
 -        if (type !== 'agent_done' || !data?.text) return;
-+        if (shouldSkip(data)) return;
++        // TG 직접 입력 세션 감지 (origin 기반 — orchestrate_done에만 있음)
++        if (type === 'orchestrate_done' && data.origin === 'telegram') return;
++        // tgDirectActive 세션 상태로 중간 이벤트도 skip
++        if (tgDirectActive) return;
++
 +        const chatId = getLastChatId();
 +        if (!chatId) return;
 +
 +        // typing 시작/갱신
 +        if (type === 'agent_status' && data.status === 'running') {
-+            startTyping(chatId);  // 4초 간격 sendChatAction
++            if (!typingInterval) {
++                bot.api.sendChatAction(chatId, 'typing').catch(() => {});
++                typingInterval = setInterval(() => {
++                    bot.api.sendChatAction(chatId, 'typing').catch(() => {});
++                }, 4000);
++            }
 +        }
 +        // tool 표시
 +        if (type === 'agent_tool' && data.icon && data.label) {
-+            pushToolStatus(chatId, `${data.icon} ${data.label}`);
++            // tool status 메시지 (debounced)
 +        }
 +        // 완료 → typing 정리 + 결과 전달
 +        if (type === 'orchestrate_done' && data.text) {
-+            stopTyping();
-+            sendResult(chatId, data.text);
++            if (typingInterval) { clearInterval(typingInterval); typingInterval = null; }
++            const html = markdownToTelegramHtml(data.text);
++            const chunks = chunkTelegramMessage(html);
++            for (const chunk of chunks) { /* 기존 전달 로직 */ }
 +        }
      };
  }
 ```
 
 이렇게 하면:
-- `tgOrchestrate` 내부의 typing/tool/reply 로직(L315-428) → output handler로 이동
-- `orchestrateAndCollect()` (L35-80) → **제거** (output handler가 `orchestrate_done` 감지)
-- **어디서 보내든 텔레그램에서 동일한 UX** (typing + tool + 결과)
+- TG 직접 입력: **기존 `tgOrchestrate` 경로 유지** (ctx.chat.id 보장)
+- 다른 인터페이스 → TG: **typing + tool + 결과 전달** (현재 agent_done만 → 개선)
+- `orchestrateAndCollect()`: **`src/orchestrator/collect.ts`로 분리** (heartbeat.ts도 사용)
 
 ---
 
-## 7. 변경 파일 요약
+## 7. 변경 파일 요약 (리뷰 수정 반영)
 
-| 파일 | 변경 | 감소 라인 (추정) |
+| 파일 | 변경 | 라인 변경 (추정) |
 |------|------|:---:|
-| [NEW] `src/orchestrator/gateway.ts` | `submitMessage()` 함수 | +35 |
+| [NEW] `src/orchestrator/gateway.ts` | `submitMessage()` 함수 | +30 |
+| [NEW] `src/orchestrator/collect.ts` | `orchestrateAndCollect` 분리 | +50 (이동) |
 | `server.ts` L174-222 | WS handler → `submitMessage()` | -33 |
-| `server.ts` L401-432 | REST handler → `submitMessage()` | -27 |
-| `server.ts` L434-448 | `/api/orchestrate/*` → `submitMessage()` | -14 |
-| `bot.ts` L35-80 | `orchestrateAndCollect()` → 제거 | -45 |
-| `bot.ts` L283-429 | `tgOrchestrate` 입력+출력 분리 | -80 |
-| `forwarder.ts` L75-105 | `createTelegramOutputHandler`로 확장 | +40 |
-| **순 감소** | | **~124줄** |
+| `server.ts` L401-452 | REST handler → `submitMessage()` | -27 |
+| `server.ts` L454-468 | `/api/orchestrate/*` — **별도 유지** | 0 |
+| `bot.ts` L35-80 | `orchestrateAndCollect()` → `collect.ts`로 이동 | -45 (이동) |
+| `bot.ts` L283-429 | `tgOrchestrate` 입력만 `submitMessage()` 교체 (출력 유지) | -30 |
+| `bot.ts` L288-289 | **기존 이중 저장 버그 수정** (enqueue 시 insert 제거) | -2 |
+| `forwarder.ts` L75-105 | `createTelegramOutputHandler`로 확장 (타 IF → TG) | +40 |
+| `heartbeat.ts` L5 | import 경로 변경 (`bot.js` → `collect.js`) | ~1 |
+| **순 감소** | | **~46줄** (이동 제외) |
 
 ---
 
