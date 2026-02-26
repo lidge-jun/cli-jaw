@@ -32,6 +32,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Fresh install smoke (safe mode)
+        run: npm run test:fresh-install
+
       - name: Deps security check
         run: npm run check:deps
 
@@ -61,4 +64,3 @@ jobs:
           exit ${SMOKE_EXIT:-0}
         env:
           NODE_ENV: test
-

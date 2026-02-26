@@ -60,13 +60,13 @@ export function makeCommandCtx(
 
         // MCP — unified across all interfaces (TG previously returned empty)
         getMcp: () => loadUnifiedMcp(),
-        syncMcp: async () => ({ results: syncToAll(loadUnifiedMcp(), settings.workingDir) }),
+        syncMcp: async () => ({ results: syncToAll(loadUnifiedMcp()) }),
         installMcp: async () => {
             const config = loadUnifiedMcp();
             const { installMcpServers } = await import('../../lib/mcp-sync.js');
             const results = await installMcpServers(config);
             saveUnifiedMcp(config);
-            const synced = syncToAll(config, settings.workingDir);
+            const synced = syncToAll(config);
             return { results, synced };
         },
 

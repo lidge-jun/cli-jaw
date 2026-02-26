@@ -12,3 +12,7 @@ devlog/
 .env
 .artifacts/
 node_modules/
+
+# Prevent stale legacy dist artifacts
+dist/bin/cli-claw.js
+dist/bin/cli-claw.js.map

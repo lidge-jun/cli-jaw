@@ -271,7 +271,7 @@ function applySettingsPatch(rawPatch: Record<string, any> = {}, { restartTelegra
         try {
             initMcpConfig(settings.workingDir);
             ensureSkillsSymlinks(settings.workingDir, { onConflict: 'backup' });
-            syncToAll(loadUnifiedMcp(), settings.workingDir);
+            syncToAll(loadUnifiedMcp());
             regenerateB();
             console.log(`[jaw:workingDir] artifacts regenerated for ${settings.workingDir}`);
         } catch (e: unknown) { console.error('[jaw:workingDir]', (e as Error).message); }
@@ -557,7 +557,7 @@ app.put('/api/mcp', (req, res) => {
 });
 app.post('/api/mcp/sync', (req, res) => {
     const config = loadUnifiedMcp();
-    const results = syncToAll(config, settings.workingDir);
+    const results = syncToAll(config);
     res.json({ ok: true, results });
 });
 app.post('/api/mcp/install', async (req, res) => {
@@ -566,7 +566,7 @@ app.post('/api/mcp/install', async (req, res) => {
         const { installMcpServers } = await import('./lib/mcp-sync.js');
         const results = await installMcpServers(config);
         saveUnifiedMcp(config);
-        const syncResults = syncToAll(config, settings.workingDir);
+        const syncResults = syncToAll(config);
         res.json({ ok: true, results, synced: syncResults });
     } catch (e: unknown) {
         console.error('[mcp:install]', e);
@@ -578,7 +578,7 @@ app.post('/api/mcp/reset', (req, res) => {
         const mcpPath = join(JAW_HOME, 'mcp.json');
         if (fs.existsSync(mcpPath)) fs.unlinkSync(mcpPath);
         const config = initMcpConfig(settings.workingDir);
-        const results = syncToAll(config, settings.workingDir);
+        const results = syncToAll(config);
         res.json({
             ok: true,
             servers: Object.keys(config.servers),

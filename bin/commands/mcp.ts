@@ -51,13 +51,7 @@ function findBinaryPath(name: string): string | null {
     }
 }
 
-/** Read workingDir from settings.json for syncToAll() */
-function getWorkingDir() {
-    try {
-        const settingsPath = join(JAW_HOME, 'settings.json');
-        return JSON.parse(readFileSync(settingsPath, 'utf8')).workingDir || JAW_HOME;
-    } catch { return JAW_HOME; }
-}
+
 
 // Known PyPI MCP packages (auto-detect without --pypi flag)
 const PYPI_PATTERNS = [
@@ -139,7 +133,7 @@ switch (sub) {
             console.log(`  ${c.green}✅ Added to mcp.json:${c.reset} ${serverName}`);
 
             // Sync to all 4 CLIs
-            syncToAll(config, getWorkingDir());
+            syncToAll(config);
             console.log(`\n  ${c.green}Done!${c.reset} Server "${serverName}" ready for all CLIs.\n`);
         } catch (e) {
             console.error(`\n  ${c.red}❌ Install failed: ${(e as Error).message}${c.reset}\n`);
@@ -151,7 +145,7 @@ switch (sub) {
     case 'sync': {
         const config = loadUnifiedMcp();
         console.log(`\n  ${c.bold}Syncing MCP config → all CLIs${c.reset}\n`);
-        syncToAll(config, getWorkingDir());
+        syncToAll(config);
         console.log('');
         break;
     }
@@ -185,11 +179,15 @@ switch (sub) {
         }
 
         // 2. Re-init (import from workingDir/.mcp.json + DEFAULT_MCP_SERVERS merge)
-        const workingDir = getWorkingDir();
+        let workingDir: string;
+        try {
+            const settingsPath = join(JAW_HOME, 'settings.json');
+            workingDir = JSON.parse(readFileSync(settingsPath, 'utf8')).workingDir || JAW_HOME;
+        } catch { workingDir = JAW_HOME; }
         const config = initMcpConfig(workingDir);
 
         // 3. Re-sync to all CLIs
-        const results = syncToAll(config, workingDir);
+        const results = syncToAll(config);
 
         const count = Object.keys(config.servers || {}).length;
         console.log(`\n  ${c.green}✅ 초기화 완료!${c.reset} (${count}개 서버)`);
@@ -217,7 +215,7 @@ switch (sub) {
             }
         }
         console.log(`\n  ${c.dim}cli-jaw mcp install <pkg>  — 새 MCP 서버 설치${c.reset}`);
-        console.log(`  ${c.dim}cli-jaw mcp sync           — 4개 CLI에 동기화${c.reset}`);
+        console.log(`  ${c.dim}cli-jaw mcp sync           — 6개 CLI에 동기화${c.reset}`);
         console.log(`  ${c.dim}cli-jaw mcp reset          — 설정 초기화 + 재동기화${c.reset}\n`);
         break;
     }

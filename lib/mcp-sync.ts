@@ -3,11 +3,13 @@
  * Unified MCP config → CLI-specific format conversion.
  * Source of truth: ~/.cli-jaw/mcp.json
  *
- * Supported targets:
- *   Claude Code  → {workingDir}/.mcp.json        (JSON, mcpServers)
- *   Codex        → ~/.codex/config.toml           (TOML, [mcp_servers.name])
- *   Gemini CLI   → ~/.gemini/settings.json        (JSON, mcpServers)
- *   OpenCode     → ~/.config/opencode/opencode.json (JSON, mcp block)
+ * Supported targets (all global):
+ *   Claude Code   → ~/.mcp.json                          (JSON, mcpServers)
+ *   Codex         → ~/.codex/config.toml                  (TOML, [mcp_servers.name])
+ *   Gemini CLI    → ~/.gemini/settings.json               (JSON, mcpServers)
+ *   OpenCode      → ~/.config/opencode/opencode.json      (JSON, mcp block)
+ *   Copilot       → ~/.copilot/mcp-config.json            (JSON, mcpServers)
+ *   Antigravity   → ~/.gemini/antigravity/mcp_config.json (JSON, mcpServers)
  */
 import fs from 'fs';
 import os from 'os';
@@ -144,16 +146,15 @@ function patchJsonFile(filePath: string, patchObj: Record<string, any>) {
 // ─── Sync to all targets ──────────────────────────
 
 /**
- * Sync unified MCP config to all CLI config files.
+ * Sync unified MCP config to all CLI config files (global paths only).
  * @param {Object} config - Unified MCP config { servers: {...} }
- * @param {string} workingDir - Current working directory for project-scoped files
  */
-export function syncToAll(config: Record<string, any>, workingDir: string) {
-    const results = { claude: false, codex: false, gemini: false, opencode: false, copilot: false };
+export function syncToAll(config: Record<string, any>) {
+    const results = { claude: false, codex: false, gemini: false, opencode: false, copilot: false, antigravity: false };
 
-    // 1. Claude Code: {workingDir}/.mcp.json
+    // 1. Claude Code: ~/.mcp.json (global)
     try {
-        const claudePath = join(workingDir, '.mcp.json');
+        const claudePath = join(os.homedir(), '.mcp.json');
         const claudeData = toClaudeMcp(config);
         // Merge with existing (keep other keys if any)
         let existing: Record<string, any> = {};
@@ -217,6 +218,19 @@ export function syncToAll(config: Record<string, any>, workingDir: string) {
         results.copilot = true;
         console.log(`[mcp-sync] ✅ Copilot: ${copilotPath}`);
     } catch (e: unknown) { console.error(`[mcp-sync] ❌ Copilot:`, (e as Error).message); }
+
+    // 6. Antigravity: ~/.gemini/antigravity/mcp_config.json
+    try {
+        const antigravityPath = join(os.homedir(), '.gemini', 'antigravity', 'mcp_config.json');
+        const antigravityData = toClaudeMcp(config); // same mcpServers format
+        fs.mkdirSync(dirname(antigravityPath), { recursive: true });
+        let existing: Record<string, any> = {};
+        try { existing = JSON.parse(fs.readFileSync(antigravityPath, 'utf8')) as Record<string, any>; } catch { }
+        existing.mcpServers = antigravityData.mcpServers;
+        fs.writeFileSync(antigravityPath, JSON.stringify(existing, null, 4) + '\n');
+        results.antigravity = true;
+        console.log(`[mcp-sync] ✅ Antigravity: ${antigravityPath}`);
+    } catch (e: unknown) { console.error(`[mcp-sync] ❌ Antigravity:`, (e as Error).message); }
 
     return results;
 }
