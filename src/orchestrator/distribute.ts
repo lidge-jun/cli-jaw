@@ -77,7 +77,21 @@ ${priorSummary}`;
 // ─── Employee Lookup ─────────────────────────────────
 
 export function findEmployee(emps: Record<string, any>[], ap: Record<string, any>) {
-    return emps.find(e => e.name === ap.agent || e.name?.includes(ap.agent) || ap.agent.includes(e.name));
+    // 가드: agent 이름 없으면 즉시 null (빈값/비정상값 방어)
+    if (!ap.agent || typeof ap.agent !== 'string') {
+        console.warn(`[jaw:match] ⚠️ invalid agent name: ${JSON.stringify(ap.agent)}`);
+        return null;
+    }
+    // 1차: 정확 매칭 (가장 안전)
+    const exact = emps.find(e => e.name === ap.agent);
+    if (exact) return exact;
+    // 2차: case-insensitive 정확 매칭
+    const ci = emps.find(e => e.name?.toLowerCase() === ap.agent.toLowerCase());
+    if (ci) return ci;
+    // 3차: fallback substring (경고 로그)
+    const fuzzy = emps.find(e => typeof e.name === 'string' && (e.name.includes(ap.agent) || ap.agent.includes(e.name)));
+    if (fuzzy) console.warn(`[jaw:match] ⚠️ Fuzzy match: "${ap.agent}" → "${fuzzy.name}"`);
+    return fuzzy ?? null;
 }
 
 // ─── Parallel Safety Guard ───────────────────────────

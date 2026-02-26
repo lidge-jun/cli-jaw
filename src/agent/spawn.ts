@@ -113,19 +113,23 @@ export async function processQueue() {
         else remaining.push(m);
     }
 
-    // Replace queue with remaining items
+    // Replace queue with remaining items + unprocessed batch tail (공정성 유지)
     messageQueue.length = 0;
-    messageQueue.push(...remaining);
+    if (batch.length > 1) {
+        // 🔑 batch 분리: 첫 메시지만 처리
+        // remaining(다른 chatId) 먼저 → batch tail(같은 chatId) 뒤 → chatId 독점 방지
+        messageQueue.push(...remaining, ...batch.slice(1));
+    } else {
+        messageQueue.push(...remaining);
+    }
 
-    const combined = batch.length === 1
-        ? batch[0].prompt
-        : batch.map(m => m.prompt).join('\n\n---\n\n');
+    const combined = batch[0].prompt;  // 항상 단일 메시지만 처리
     const source = batch[0].source;
     const chatId = batch[0].chatId;
-    console.log(`[queue] processing ${batch.length} message(s) for ${groupKey}, ${remaining.length} remaining`);
+    console.log(`[queue] processing 1/${batch.length} message(s) for ${groupKey}, ${messageQueue.length} remaining`);
     insertMessage.run('user', combined, source, '');
     // NOTE: no broadcast('new_message') here — gateway.ts already broadcast at enqueue time
-    broadcast('queue_update', { pending: remaining.length });
+    broadcast('queue_update', { pending: messageQueue.length });
     const { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
     if (isResetIntent(combined)) orchestrateReset({ origin, chatId });
