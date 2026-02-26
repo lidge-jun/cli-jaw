@@ -39,18 +39,8 @@ const jawHome = JAW_HOME;
 const PATH_LOOKUP_CMD = process.platform === 'win32' ? 'where' : 'which';
 
 // ─── Legacy migration ───
-// Default jawHome IS ~/.cli-jaw, so legacy migration only applies when
-// CLI_JAW_HOME is set to a DIFFERENT path and ~/.cli-jaw still exists.
-const legacyHome = path.join(home, '.cli-jaw');
-const isCustomHome = jawHome !== legacyHome;
-
-if (isCustomHome && fs.existsSync(legacyHome) && !fs.existsSync(jawHome)) {
-    console.log(`[jaw:init] migrating ~/.cli-jaw → ${jawHome} ...`);
-    fs.renameSync(legacyHome, jawHome);
-    console.log(`[jaw:init] ✅ migration complete`);
-} else if (isCustomHome && fs.existsSync(legacyHome) && fs.existsSync(jawHome)) {
-    console.log(`[jaw:init] ⚠️ both ~/.cli-jaw and ${jawHome} exist — using ${jawHome}`);
-}
+// Moved into runPostinstall() to prevent side effects on dynamic import.
+// (init.ts imports this module for installCliTools/etc — must not trigger fs.renameSync)
 
 function ensureDir(dir: string) {
     if (!fs.existsSync(dir)) {
@@ -253,6 +243,17 @@ export async function installSkillDeps(opts: InstallOpts = {}) {
 // Dynamic import from init.ts gets clean library exports only.
 
 export async function runPostinstall() {
+    // ── Legacy migration (only in entry-point mode, NOT on import) ──
+    const legacyHome = path.join(home, '.cli-jaw');
+    const isCustomHome = jawHome !== legacyHome;
+    if (isCustomHome && fs.existsSync(legacyHome) && !fs.existsSync(jawHome)) {
+        console.log(`[jaw:init] migrating ~/.cli-jaw → ${jawHome} ...`);
+        fs.renameSync(legacyHome, jawHome);
+        console.log(`[jaw:init] ✅ migration complete`);
+    } else if (isCustomHome && fs.existsSync(legacyHome) && fs.existsSync(jawHome)) {
+        console.log(`[jaw:init] ⚠️ both ~/.cli-jaw and ${jawHome} exist — using ${jawHome}`);
+    }
+
     // ── Safe mode guard (before any dir creation beyond jawHome) ──
     const isSafeMode = process.env.npm_config_jaw_safe === '1'
         || process.env.npm_config_jaw_safe === 'true'

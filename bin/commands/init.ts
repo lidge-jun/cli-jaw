@@ -22,7 +22,7 @@ const { values } = parseArgs({
         'allowed-chat-ids': { type: 'string' },
         'skills-dir': { type: 'string' },
     },
-    strict: false,
+    strict: true,
 });
 
 // Ensure home dir
