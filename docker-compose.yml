@@ -1,0 +1,17 @@
+services:
+  jaw:
+    build: .
+    container_name: cli-jaw
+    ports:
+      - "${PORT:-3457}:3457"
+    env_file: .env
+    volumes:
+      - jaw-data:/home/jaw/.cli-jaw
+    restart: unless-stopped
+    # tmpfs로 /dev/shm 확장 (Chromium 메모리 매핑 안정성)
+    # ipc: host 대신 사용 — 호스트 IPC 격리 유지
+    tmpfs:
+      - /dev/shm:size=512m
+
+volumes:
+  jaw-data:

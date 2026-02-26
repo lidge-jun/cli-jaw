@@ -1,0 +1,25 @@
+# ─── cli-jaw Docker image (로컬 소스) ────────────
+FROM node:22-slim
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 make g++ chromium curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r jaw && useradd -r -g jaw -m jaw
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --ignore-scripts
+COPY . .
+RUN npm run build && npm run build:frontend
+
+ENV CLI_JAW_HOME=/home/jaw/.cli-jaw
+ENV PORT=3457
+RUN node dist/bin/postinstall.js && chown -R jaw:jaw /home/jaw/.cli-jaw
+USER jaw
+EXPOSE 3457
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+    CMD node -e "fetch('http://localhost:3457/api/health').then(r=>{if(!r.ok)throw 1})" || exit 1
+
+ENTRYPOINT ["node", "--dns-result-order=ipv4first", "dist/server.js"]

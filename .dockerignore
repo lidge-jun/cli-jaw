@@ -1,0 +1,12 @@
+node_modules/
+.git/
+devlog/
+skills_ref/
+tests/
+*.db
+*.db-shm
+*.db-wal
+.env
+.DS_Store
+.artifacts/
+dist/
