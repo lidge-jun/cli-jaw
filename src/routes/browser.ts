@@ -2,15 +2,19 @@
 import type { Express, Request, Response } from 'express';
 import * as browser from '../browser/index.js';
 import { ok } from '../http/response.js';
-import { settings } from '../core/config.js';
+import { settings, deriveCdpPort } from '../core/config.js';
 
-const cdpPort = () => settings.browser?.cdpPort || 9240;
+const cdpPort = () => settings.browser?.cdpPort || deriveCdpPort();
 
 export function registerBrowserRoutes(app: Express) {
     app.post('/api/browser/start', async (req: Request, res: Response) => {
         try {
-            await browser.launchChrome(req.body?.port || cdpPort());
-            res.json(await browser.getBrowserStatus(cdpPort()));
+            const requestedPort = Number(req.body?.port);
+            const port = Number.isInteger(requestedPort) && requestedPort > 0 && requestedPort <= 65535
+                ? requestedPort
+                : cdpPort();
+            await browser.launchChrome(port);
+            res.json(await browser.getBrowserStatus(port));
         } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 

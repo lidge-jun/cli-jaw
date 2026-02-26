@@ -4,7 +4,7 @@
 
 import fs from 'fs';
 import { join } from 'path';
-import { settings, detectAllCli, APP_VERSION, JAW_HOME } from '../core/config.js';
+import { settings, detectAllCli, APP_VERSION, JAW_HOME, deriveCdpPort } from '../core/config.js';
 import { getSession, clearMessages, updateSession } from '../core/db.js';
 import { broadcast } from '../core/bus.js';
 import { t, normalizeLocale } from '../core/i18n.js';
@@ -75,8 +75,8 @@ export function makeCommandCtx(
         searchMemory: (q: any) => memory.search(q),
 
         // Browser
-        getBrowserStatus: async () => browser.getBrowserStatus(settings.browser?.cdpPort || 9240),
-        getBrowserTabs: async () => ({ tabs: await browser.listTabs(settings.browser?.cdpPort || 9240) }),
+        getBrowserStatus: async () => browser.getBrowserStatus(settings.browser?.cdpPort || deriveCdpPort()),
+        getBrowserTabs: async () => ({ tabs: await browser.listTabs(settings.browser?.cdpPort || deriveCdpPort()) }),
 
         // Employees
         resetEmployees: deps.resetEmployees

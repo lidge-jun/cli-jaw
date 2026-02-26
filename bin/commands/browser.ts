@@ -5,7 +5,7 @@
 import { parseArgs } from 'node:util';
 import { rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { getServerUrl, JAW_HOME } from '../../src/core/config.js';
+import { getServerUrl, JAW_HOME, deriveCdpPort } from '../../src/core/config.js';
 
 const SERVER = getServerUrl(undefined);
 const sub = process.argv[3];
@@ -33,7 +33,7 @@ try {
         case 'start': {
             const { values } = parseArgs({
                 args: process.argv.slice(4),
-                options: { port: { type: 'string', default: '9240' } }, strict: false
+                options: { port: { type: 'string', default: String(deriveCdpPort()) } }, strict: false
             });
             const r = await api('POST', '/start', { port: Number(values.port) }) as Record<string, any>;
             console.log(r.running ? `🌐 Chrome started (CDP: ${r.cdpUrl})` : '❌ Failed');
@@ -208,7 +208,7 @@ try {
   🌐 cli-jaw browser
 
   Commands:
-    start [--port 9240]    Start Chrome (default CDP port: 9240)
+    start [--port <auto>]    Start Chrome (CDP port auto-derived from server port)
     stop                   Stop Chrome
     status                 Connection status
     reset [--force]        Reset (clear profile + screenshots)

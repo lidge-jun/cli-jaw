@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import { createHash } from 'crypto';
 import { join } from 'path';
-import { settings, JAW_HOME, PROMPTS_DIR, SKILLS_DIR, SKILLS_REF_DIR, loadHeartbeatFile } from '../core/config.js';
+import { settings, JAW_HOME, PROMPTS_DIR, SKILLS_DIR, SKILLS_REF_DIR, loadHeartbeatFile, deriveCdpPort } from '../core/config.js';
 import { getSession, getEmployees } from '../core/db.js';
 import { memoryFlushCounter, flushCycleCount } from '../agent/spawn.js';
 
@@ -104,7 +104,7 @@ Control Chrome via \`cli-jaw browser\` — never use curl/wget for web interacti
 
 ### Core Workflow: snapshot → act → snapshot → verify
 \`\`\`bash
-cli-jaw browser start                          # Start Chrome (CDP 9240)
+cli-jaw browser start                          # Start Chrome (CDP ${deriveCdpPort()})
 cli-jaw browser navigate "https://example.com" # Go to URL
 cli-jaw browser snapshot --interactive          # Get ref IDs (clickable elements)
 cli-jaw browser click e3                        # Click ref

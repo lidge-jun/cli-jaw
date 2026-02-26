@@ -1,10 +1,9 @@
-import { JAW_HOME } from '../core/config.js';
+import { JAW_HOME, deriveCdpPort } from '../core/config.js';
 import { spawn } from 'child_process';
 import { join } from 'path';
 import fs from 'node:fs';
 import { chromium } from 'playwright-core';
 
-const DEFAULT_CDP_PORT = 9240;
 const PROFILE_DIR = join(JAW_HOME, 'browser-profile');
 let cached: any = null;   // { browser, cdpUrl }
 let chromeProc: any = null;
@@ -62,7 +61,7 @@ function findChrome() {
     throw new Error('Chrome not found — install Google Chrome');
 }
 
-export async function launchChrome(port = DEFAULT_CDP_PORT) {
+export async function launchChrome(port = deriveCdpPort()) {
     if (chromeProc && !chromeProc.killed) return;
     const chrome = findChrome();
     const noSandbox = process.env.CHROME_NO_SANDBOX === '1';
@@ -77,7 +76,7 @@ export async function launchChrome(port = DEFAULT_CDP_PORT) {
     await new Promise(r => setTimeout(r, 2000));
 }
 
-export async function connectCdp(port = DEFAULT_CDP_PORT) {
+export async function connectCdp(port = deriveCdpPort()) {
     const cdpUrl = `http://127.0.0.1:${port}`;
     if (cached?.cdpUrl === cdpUrl && cached.browser.isConnected()) return cached;
     const browser = await chromium.connectOverCDP(cdpUrl);
@@ -86,25 +85,25 @@ export async function connectCdp(port = DEFAULT_CDP_PORT) {
     return cached;
 }
 
-export async function getActivePage(port = DEFAULT_CDP_PORT) {
+export async function getActivePage(port = deriveCdpPort()) {
     const { browser } = await connectCdp(port);
     const pages = browser.contexts().flatMap((c: any) => c.pages());
     return pages[pages.length - 1] || null;
 }
 
-export async function listTabs(port = DEFAULT_CDP_PORT) {
+export async function listTabs(port = deriveCdpPort()) {
     const resp = await fetch(`http://127.0.0.1:${port}/json/list`);
     return ((await resp.json()) as any[]).filter((t: any) => t.type === 'page');
 }
 
-export async function getBrowserStatus(port = DEFAULT_CDP_PORT) {
+export async function getBrowserStatus(port = deriveCdpPort()) {
     try {
         const tabs = await listTabs(port);
         return { running: true, tabs: tabs.length, cdpUrl: `http://127.0.0.1:${port}` };
     } catch { return { running: false, tabs: 0 }; }
 }
 
-export async function getCdpSession(port = DEFAULT_CDP_PORT) {
+export async function getCdpSession(port = deriveCdpPort()) {
     const page = await getActivePage(port);
     if (!page) return null;
     return page.context().newCDPSession(page);

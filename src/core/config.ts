@@ -38,6 +38,15 @@ export const SKILLS_REF_DIR = join(JAW_HOME, 'skills_ref');
 
 // ─── Server URLs ────────────────────────────────────
 export const DEFAULT_PORT = '3457';
+export const CDP_PORT_OFFSET = 5783;  // 9240 - 3457
+
+export function deriveCdpPort(serverPort?: number | string): number {
+    const port = Number(serverPort || process.env.PORT || DEFAULT_PORT);
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return 9240;
+    const cdp = port + CDP_PORT_OFFSET;
+    return cdp > 65535 ? 9240 : cdp;
+}
+
 export function getServerUrl(port: string | number | undefined) {
     return `http://localhost:${port || process.env.PORT || DEFAULT_PORT}`;
 }
