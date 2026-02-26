@@ -150,7 +150,7 @@ jaw launchd      # 부팅 시 자동 실행 (macOS)
 | 티어               | 수량  | 작동 방식                                        |
 | ------------------ | :---: | ------------------------------------------------ |
 | **Active 스킬**    |  17   | 매번 AI한테 자동으로 주입돼요. 항상 켜져 있어요. |
-| **Reference 스킬** |  84   | 관련 작업을 시키면 그때 AI가 읽어서 써요.        |
+| **Reference 스킬** |  89   | 관련 작업을 시키면 그때 AI가 읽어서 써요.        |
 
 #### Active 스킬 (항상 켜짐)
 
@@ -170,7 +170,7 @@ jaw launchd      # 부팅 시 자동 실행 (macOS)
 
 #### Reference 스킬 (필요할 때만)
 
-84개 스킬이 더 있어요 — spotify, 날씨, 딥리서치, TTS, 비디오 다운로드, Apple 미리알림, 1Password, Terraform, PostgreSQL, Jupyter 등.
+89개 스킬이 더 있어요 — spotify, 날씨, 딥리서치, TTS, 비디오 다운로드, Apple 미리알림, 1Password, Terraform, PostgreSQL, Jupyter 등.
 
 ```bash
 jaw skill install <name>    # reference → active로 영구 활성화

@@ -93,7 +93,7 @@ Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, C
 | 🤖 **Verified Agent Tools**     | 5 battle-tested coding agents (Claude, Codex, Gemini, OpenCode, Copilot) under one roof.    |
 | ⚡ **Multi-Agent Fallback**     | One engine down? The next picks up automatically. Zero downtime.                            |
 | 🎭 **Orchestrated Performance** | Complex tasks split across specialized sub-agents for maximum throughput.                   |
-| 📦 **101 Built-in Skills**      | Browser automation, document generation, Telegram, memory — ready out of the box.           |
+| 📦 **105 Built-in Skills**      | Browser automation, document generation, Telegram, memory — ready out of the box.           |
 | 🖥️ **Cross-Platform**           | macOS, Linux, Windows (WSL) — browser launch, CLI detection, and install all work natively. |
 
 ![CLI-JAW Terminal](docs/screenshots/terminal-cli.png)
@@ -120,7 +120,7 @@ graph LR
 - 🤖 **5 AI engines, 1 assistant** — Claude · Codex · Gemini · OpenCode · Copilot. Switch with `/cli`.
 - ⚡ **Auto fallback** — If one engine is down, the next picks up seamlessly.
 - 🎭 **Multi-agent orchestration** — Complex tasks get split across specialized sub-agents automatically.
-- 📦 **101 skills** — Browser control, file editing, image generation, web search, and [much more](#-skill-system).
+- 📦 **105 skills** — Browser control, file editing, image generation, web search, and [much more](#-skill-system).
 - 🧠 **Persistent memory** — Your assistant remembers past conversations and preferences across sessions.
 - 📱 **Telegram bot** — Chat with your assistant from your phone, send voice/photos/files.
 - 🌐 **Browser automation** — Your assistant can navigate the web, click, type, and screenshot.
@@ -133,7 +133,7 @@ graph LR
 
 ## 📦 Skill System
 
-**101 skills** out of the box — browser, github, notion, telegram, memory, pdf, image generation, and [much more](#).
+**105 skills** out of the box — browser, github, notion, telegram, memory, pdf, image generation, and [much more](#).
 
 <details>
 <summary>View all skills</summary>
@@ -141,7 +141,7 @@ graph LR
 | Tier                 | Count | How it works                                              |
 | -------------------- | :---: | --------------------------------------------------------- |
 | **Active Skills**    |  17   | Auto-injected into every AI prompt. Always available.     |
-| **Reference Skills** |  84   | AI reads them on-demand when you ask for a relevant task. |
+| **Reference Skills** |  89   | AI reads them on-demand when you ask for a relevant task. |
 
 #### Active Skills (always on)
 

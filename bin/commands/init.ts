@@ -94,9 +94,11 @@ if (!fs.existsSync(hbPath)) {
     fs.writeFileSync(hbPath, JSON.stringify({ jobs: [] }, null, 2));
 }
 
-// Step-by-step component install (instead of importing all side-effects)
-import { installCliTools, installMcpServers, installSkillDeps, type InstallOpts } from '../postinstall.js';
+// Step-by-step component install — dynamic import to prevent postinstall top-level side effects
+const { installCliTools, installMcpServers, installSkillDeps } = await import('../postinstall.js') as
+    typeof import('../postinstall.js');
 
+type InstallOpts = Parameters<typeof installCliTools>[0];
 const installOpts: InstallOpts = {
     dryRun: !!values['dry-run'],
     interactive: !!values.safe || !values['non-interactive'],
