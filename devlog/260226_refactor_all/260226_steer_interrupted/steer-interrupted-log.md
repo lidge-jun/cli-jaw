@@ -1,7 +1,9 @@
 # Steer 중단 시 Partial Output 저장
 
-> 날짜: 2026-02-26
-> 파일: `src/agent/spawn.ts`
+> 날짜: 2026-02-26  
+> 파일: `src/agent/spawn.ts`  
+> Status: ✅ **코드 구현 완료** | 🟠 **회귀 테스트 미작성**  
+> Hotfix: [HOTFIX.md](file:///Users/junny/Documents/BlogProject/cli-jaw/devlog/260226_steer_interrupted/HOTFIX.md) — 테스트 추가 계획
 
 ---
 

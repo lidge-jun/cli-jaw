@@ -1,19 +1,21 @@
 # Safe Install Mode — `jaw init --safe`
 
 **Date**: 2026-02-26  
-**Status**: 📋 Plan  
+**Status**: 📋 Plan → **구현 대기 (우선순위 2번)**  
+**구현 순서**: ① interface_unify → **② safe_install** → ③ repo_hygiene
 
 ---
 
 ## 문제
 
-현재 `npm install -g cli-jaw`의 postinstall은 **무조건 실행**:
-- 5개 CLI 글로벌 설치 (@latest)
-- MCP 서버 글로벌 설치
-- `~/.agents/skills/` 심링크 생성
-- `~/AGENTS.md` → `~/CLAUDE.md` 심링크
-- `~/.cli-jaw/mcp.json` 생성 + 기존 설정 병합
-- `uv`, `playwright-core` 설치
+> [!CAUTION]
+> **🔴 실코드 버그**: postinstall이 지금도 사용자 동의 없이 글로벌 설치/설정 변경 수행.
+
+현재 `npm install -g cli-jaw`의 postinstall은 **무조건 실행** (`bin/postinstall.ts`):
+- **L127-147**: 5개 CLI 글로벌 설치 (`@anthropic-ai/claude-code`, `@openai/codex`, `@google/gemini-cli`, `copilot`, `opencode-ai`)
+- **L170-207**: MCP 서버 글로벌 설치 (`@upstash/context7-mcp`)
+- **L209-242**: 스킬 의존성 설치 (`uv`, `playwright-core`)
+- 추가: `~/.agents/skills/` 심링크, `~/AGENTS.md` → `~/CLAUDE.md` 심링크, `~/.cli-jaw/mcp.json` 생성
 
 **기존 환경에 영향을 줄 수 있는 동작**이 사전 동의 없이 실행됨.
 

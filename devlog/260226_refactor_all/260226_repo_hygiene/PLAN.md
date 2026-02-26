@@ -1,6 +1,9 @@
 # 260226: Repository Hygiene — skills_ref 분리 + 레포 정리
 
-> 시니어 코드 리뷰 피드백 대응
+> 시니어 코드 리뷰 피드백 대응  
+> **Status**: 📋 Plan → **구현 대기 (우선순위 3번)**  
+> **구현 순서**: ① interface_unify → ② safe_install → **③ repo_hygiene**  
+> **선행 조건**: safe_install 완료 후 postinstall.ts 반영 합치
 
 ## 목표
 
@@ -13,16 +16,18 @@
 
 ## 현재 상태
 
-| 항목                              | 상태                | 크기                           |
-| --------------------------------- | ------------------- | ------------------------------ |
-| `skills_ref/`                     | npm에 통째로 번들   | **13MB** (101개 스킬 디렉토리) |
-| ├─ `canvas-fonts/`                | `.ttf` 54개         | 5.5MB                          |
-| ├─ `docx/scripts/office/schemas/` | `.xsd` 39개         | 1.0MB                          |
-| ├─ `pptx/scripts/office/schemas/` | `.xsd` 21개         | 1.0MB                          |
-| └─ `theme-showcase.pdf`           | 바이너리            | —                              |
-| `devlog/`                         | 소스 트리에 포함    | 2.3MB (255 파일)               |
-| `tests/phase-100/`                | 진척도 기준 폴더    | 테스트 1개                     |
-| `public/js/`                      | 바닐라 JS (19 파일) | 백엔드 TS와 불일치             |
+> [!IMPORTANT]
+> **미반영 항목**: `skills_ref/`가 여전히 publish 대상이고, `.gitignore`에 `devlog/`, `skills_ref/`가 없음.
+
+| 항목                              | 상태                | 현재 코드 위치 |
+| --------------------------------- | ------------------- | -------------- |
+| `skills_ref/` npm 번들            | ❌ `package.json:36` `files` 배열에 포함   | **13MB** |
+| `skills_ref/` 스크립트 참조        | ❌ `package.json:40` `scripts.postinstall`  | — |
+| `.gitignore`                      | ❌ `devlog/`, `skills_ref/` 미등록   | `.gitignore:1` |
+| `tests/phase-100/`                | ❌ 테스트 1개만 존재 (`employee-session-reuse.test.ts`) | — |
+| `canvas-fonts/`                   | `.ttf` 54개        | 5.5MB          |
+| `docx/scripts/office/schemas/`    | `.xsd` 39개        | 1.0MB          |
+| `devlog/`                         | 소스 트리에 포함    | 2.3MB (255 파일) |
 
 ## Phase 1: `skills_ref/` 별도 레포 분리
 

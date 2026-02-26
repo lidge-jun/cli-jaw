@@ -2,9 +2,11 @@
 
 ## 메타
 - Date: 2026-02-26
-- Status: Phase 1 (계획검증 완료, 6건 수정 반영)
+- Status: Phase 1 (계획검증 완료, 6건 수정 반영) → **구현 대기 (우선순위 1번)**
+- 구현 순서: **① interface_unify → ② safe_install → ③ repo_hygiene**
 - 관련 파일: server.ts, src/telegram/bot.ts, src/telegram/forwarder.ts, bin/commands/chat.ts
 - 리뷰: [REVIEW.md](file:///Users/junny/Documents/BlogProject/cli-jaw/devlog/260226_interface_unify/REVIEW.md)
+- 관련 hotfix: `steer_interrupted` — 코드 반영 완료, 회귀 테스트만 추가 예정
 
 ---
 
@@ -38,7 +40,20 @@
 | 5 | 🟡 | §6 Phase B vs §9.2 TG-004 모순 | **output handler = 타 인터페이스→TG 전달 전용** |
 | 6 | 🟡 | `/api/orchestrate/*` 계약 변경 리스크 | **별도 유지, submitMessage 미포함** |
 
-> ⚠️ **추가 발견**: TG bot은 **현재도 이중 저장 버그** 있음 (L288-289 enqueue+insert, processQueue:109 재insert). Phase A에서 함께 수정.
+> [!CAUTION]
+> **🔴 실코드 버그 (지금 즉시 수정 가능)**: TG bot은 **현재도 이중 저장 버그** 있음.
+> - `bot.ts:288` — `enqueueMessage(prompt, 'telegram')` 큐 등록
+> - `bot.ts:289` — `insertMessage.run('user', displayMsg, 'telegram', '')` ← **여기서 한 번 저장**
+> - `spawn.ts:109` — `processQueue()` 내부에서 `insertMessage.run(...)` ← **여기서 또 저장**
+> - → user 메시지가 2번 DB에 저장됨. Phase A `submitMessage` 게이트웨이 도입 시 함께 수정.
+
+## 0.2 heartbeat 호환 주의사항
+
+> [!WARNING]
+> `orchestrateAndCollect`를 바로 제거하면 `heartbeat.ts`가 깨짐.
+> - `heartbeat.ts:5` — `import { orchestrateAndCollect, ... } from '../telegram/bot.js'`
+> - `heartbeat.ts:47` — `const result = await orchestrateAndCollect(prompt)`
+> - **해결**: `orchestrateAndCollect`를 `src/orchestrator/collect.ts`로 분리하여 heartbeat 호환 유지.
 
 ---
 
