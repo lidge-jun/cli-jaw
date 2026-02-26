@@ -14,7 +14,7 @@
 | 2.0 | `tests/unit/jaw-home-import.test.ts` | 2 | Unit | ✅ Pass | 8-file import centralization 검증 |
 | 2.1-2.2 | `tests/unit/jaw-home-env.test.ts` | 5 | Unit+Subprocess | ✅ Pass | env var, --home flag, tilde, = syntax |
 | 3 | `tests/unit/clone.test.ts` | 8 | Unit+Subprocess | ✅ Pass | clone 디렉토리/설정/메모리/에러/소스검증 |
-| 4 | `tests/unit/launchd-multi.test.ts` | 7 | Unit+Subprocess | ⬜ Pending | instanceId, plist, xmlEsc, port |
+| 4 | `tests/unit/launchd-multi.test.ts` | 7 | Unit+Subprocess | ✅ Pass | instanceId, plist, xmlEsc, port |
 | E2E | `tests/integration/multi-instance.test.ts` | 3 | Integration | ⬜ Pending | 두 인스턴스 동시 실행 |
 
 **Total: 6 files, 25 tests** (Phase 2.0 reduced from 3→2 during implementation)

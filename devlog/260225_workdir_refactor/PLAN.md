@@ -1,7 +1,7 @@
 # Working Directory Refactor — Default `~` -> `~/.cli-jaw`
 
 **Date**: 2026-02-26
-**Status**: Smoke-tested ✅ — Ready for implementation
+**Status**: Phase 1~3.1 merged, Phase 4 in progress (validation updated)
 **Priority**: High (prevents instruction pollution for standalone CLI users)
 
 ---
@@ -336,7 +336,7 @@ Current UI has a text input `<input id="inpCwd" value="~/">` in sidebar.
 - [x] `mcp.ts:59-60` — workingDir fallback: `homedir()` → `JAW_HOME` (+ removed unused `homedir` import)
 - **Scope**: 3 files, ~5 lines
 
-### Phase 3.1: Frontend Hotfix — workingDir 동적화 + 권한 Auto 고정 ✅ DONE
+### Phase 3.1: Frontend Hotfix — workingDir 동적화 + 권한 Auto 고정 ⚠️ CODE MERGED / FOLLOW-UP REQUIRED
 
 **Scope**: 3 source files + bundle rebuild  
 **목표**: 웹 대시보드의 workingDir/권한 UI를 현재 코드 상태에 맞게 정합
@@ -350,24 +350,31 @@ Current UI has a text input `<input id="inpCwd" value="~/">` in sidebar.
 - [x] `public/js/features/settings.js:213-216` — `setPerm` → UI no-op, auto 고정 저장
 - [x] `public/dist/bundle.js` — esbuild 리빌드 완료
 
+#### 3.1-C: Runtime follow-up (검증에서 발견)
+- [ ] 기존 `permissions: safe` 사용자를 자동 `auto`로 정규화 (UI가 고정이어도 서버 값은 safe로 남음)
+- [ ] `workingDir` 변경 시 `regenerateB()` + `ensureSkillsSymlinks()` + `syncToAll()` 후처리 훅 연결
+- [ ] 3.1 동작 회귀 테스트 추가 (UI/API 기반)
+
 ### Phase 3: `jaw clone` Command *(independent, after Phase 2)* ✅ DONE
 - [x] New file `bin/commands/clone.ts` (~140 lines) + routing in `cli-jaw.ts`
 - [x] parseArgs for --from/--with-memory/--link-ref (safe here — clone is a leaf command)
 - [x] Subprocess regenerateB with CLI_JAW_HOME env var
 - [x] Tilde regex: `/^~(?=\/|$)/` (R6 fix applied)
 - [x] Source default: `JAW_HOME` (not hardcoded `~/.cli-jaw`)
-- [x] Tests: 6 new (P3-001~006), all pass
+- [x] Source validation: non-existent/invalid source는 즉시 실패 처리
+- [x] Tests: 8 new (P3-001~008, fixture-based), all pass
 - **Scope**: 1 new file (140 lines), 1 modified (cli-jaw.ts: +3 lines)
 
-### Phase 4: Multi-Instance launchd + Port Separation *(independent, after Phase 2)*
-- [ ] `launchd.ts` — dynamic LABEL with hash-based instanceId *(R7: collision prevention)*
-- [ ] `launchd.ts` — manual `--port` parsing (same pattern as --home: indexOf + --port=) *(R7+R8: NOT parseArgs)*
-- [ ] `launchd.ts` — `xmlEsc()` helper for all plist string interpolations *(R7: XML injection)*
-- [ ] `launchd.ts` — `--home`/`--port` pass-through, path quoting *(RE-5)*
-- [ ] `browser.ts:11` — change `getServerUrl('3457')` → `getServerUrl(undefined)` *(RE-2)*
-- [ ] `memory.ts:7` — change `getServerUrl('3457')` → `getServerUrl(undefined)` *(RE-2)*
-- ~~`mcp.ts:58` — change `homedir()` fallback → `JAW_HOME` *(RE-4)*~~ → Moved to Phase 2.3
-- **Scope**: 4 files, ~50 lines (launchd ~40 + browser/memory ~3 each)
+### Phase 4: Multi-Instance launchd + Port Separation ✅ DONE
+- [x] `launchd.ts` — dynamic LABEL with hash-based instanceId
+- [x] `launchd.ts` — `--port` parseArgs + status output 반영
+- [x] `launchd.ts` — `xmlEsc()` 적용 + plist 문자열 escape
+- [x] `launchd.ts` — plist ProgramArguments에 `--home`/`--port` pass-through
+- [x] `launchd.ts` — WorkingDirectory → JAW_HOME, CLI_JAW_HOME env in plist
+- [x] `browser.ts:10` — `getServerUrl('3457')` → `getServerUrl(undefined)`
+- [x] `memory.ts:7` — `getServerUrl('3457')` → `getServerUrl(undefined)`
+- [x] Tests: 7 new (P4-001~007), all pass
+- **Scope**: 4 files changed (launchd ~50 lines, browser/memory 1 line each), 1 new test file
 
 ### Phase 99: Frontend Instance UI *(far future)*
 
@@ -375,7 +382,7 @@ Current UI has a text input `<input id="inpCwd" value="~/">` in sidebar.
 
 ## Source Validation Snapshot
 
-Verified against source (2026-02-26, commit `e910e84` + Phase 2.3 hotfix):
+Verified against source (2026-02-26, Phase 4 complete):
 
 - `src/core/config.ts:27` → `JAW_HOME = process.env.CLI_JAW_HOME || join(os.homedir(), '.cli-jaw')` ✅ Dynamic
 - `src/core/config.ts:101` → `workingDir: JAW_HOME` ✅ Phase 1
@@ -384,7 +391,11 @@ Verified against source (2026-02-26, commit `e910e84` + Phase 2.3 hotfix):
 - `src/prompt/builder.ts` → 9x `${JAW_HOME}` interpolation ✅ RE-1
 - `bin/postinstall.ts:31` → `isDefaultHome && ...` legacy rename guard ✅ Phase 2.3
 - `bin/commands/mcp.ts:59-60` → `JAW_HOME` fallback (was `homedir()`) ✅ Phase 2.3
-- `public/index.html:172-183` → permissions toggle + workdir input ← PATCH-4 (pending)
+- `public/index.html` + `public/js/main.js` + `public/js/features/settings.js` → Phase 3.1 UI patch ✅
+- `bin/commands/launchd.ts` → instanceId(), xmlEsc(), --port parseArgs, --home pass-through, CLI_JAW_HOME env ✅ Phase 4
+- `bin/commands/browser.ts:10` → `getServerUrl(undefined)` (was `'3457'`) ✅ Phase 4
+- `bin/commands/memory.ts:7` → `getServerUrl(undefined)` (was `'3457'`) ✅ Phase 4
+- `server.ts:269-289` (`applySettingsPatch`) → workingDir 변경 후 artifact 재생성 훅 없음 ❗ follow-up
 - `src/prompt/builder.ts:547-548` → `join(settings.workingDir, 'AGENTS.md')` (no change needed)
 - `src/agent/spawn.ts:465` → `cwd: settings.workingDir` (no change needed)
 - `src/agent/args.ts:20` → `'--skip-git-repo-check'` (already in place)
@@ -684,3 +695,32 @@ basename-only label). An implementer following the diffs would reproduce all the
 - `PHASE-4_port_launchd.md`: instanceId hash + parseArgs port + xmlEsc + import lines
 - `ROADMAP_multi_instance.md`: Phase 2.2 snippet parseArgs + Phase 4 scope "~50줄"
 - `PLAN.md`: Phase 2/4 checklists expanded + this R7 review log
+
+---
+
+## Review Fix Log — R8 (260226, Phase 3.1 + 4 execution validation)
+
+검증 기준은 "문서/의도"가 아니라 **현재 코드 실행 경로** 기준으로 재확인.
+
+### Runtime verified
+
+1. **전체 테스트 통과**: `npm test` → `pass 299 / fail 0 / skipped 1`
+2. **Phase 3 clone 안정화 확인**:
+   - `clone.ts`에 source 유효성 체크 추가됨 (`exists(source)`, `settings.json` 필수)
+   - `tests/unit/clone.test.ts`는 fixture 기반 8개 케이스로 확장
+
+### New gaps found
+
+3. **Phase 3.1 follow-up needed (HIGH)**:
+   - `server.ts:269-289`의 `applySettingsPatch()`는 `workingDir` 변경 후
+     `regenerateB()/ensureSkillsSymlinks()/syncToAll()`를 호출하지 않음.
+   - 검증 결과: settings 업데이트 후 새 workingDir에 `AGENTS.md` 미생성.
+
+4. **Phase 3.1 "Auto fixed" incomplete (HIGH)**:
+   - 기존 `settings.permissions = safe` 사용자는 UI가 Auto로 보여도 서버 값이 그대로 safe.
+   - 검증 결과: `/api/settings`에 `cli/workingDir`만 PUT하면 permissions는 safe 유지.
+
+5. **Phase 4 partially done (MEDIUM)**:
+   - launchd core(라벨 해시, xmlEsc, --home/--port pass-through)는 구현됨.
+   - 남은 핵심: `browser.ts`, `memory.ts`의 `getServerUrl('3457')` 하드코딩 제거.
+   - 추가 하드닝: launchctl 명령 path quoting, 미지원 플래그(`--dry-run`) 명시 에러.

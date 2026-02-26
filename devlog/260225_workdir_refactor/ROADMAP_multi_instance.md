@@ -149,7 +149,7 @@ PROMPTS_DIR, DB_PATH, SKILLS_DIR 등 전부 JAW_HOME 기반.
 
 ---
 
-### Phase 3: `jaw clone` 명령어
+### Phase 3: `jaw clone` 명령어 ✅ 완료
 
 **목표**: 기존 인스턴스를 복제해서 새 인스턴스 생성
 
@@ -186,7 +186,19 @@ flowchart TD
 
 ---
 
-### Phase 4: 포트 분리 + 동시 실행
+### Phase 3.1: 프론트엔드 hotfix ✅ 코드 반영 (후속 필요)
+
+**완료된 것:**
+- settings 패널 `workingDir` 입력값을 서버값으로 로드 (`value=""` + JS populate)
+- 권한 토글 UI 제거, Auto 배지 고정
+
+**남은 것 (3.1 follow-up):**
+- `workingDir` 변경 시 서버에서 `regenerateB()/ensureSkillsSymlinks()/syncToAll()` 자동 수행
+- 기존 `permissions: safe` 사용자 자동 정규화(또는 마이그레이션 안내)
+
+---
+
+### Phase 4: 포트 분리 + 동시 실행 🚧 진행 중
 
 **목표**: 여러 인스턴스를 동시에 실행
 
@@ -196,11 +208,15 @@ jaw serve --home ~/.jaw-work --port 3458
 jaw serve --home ~/.jaw-lab --port 3459
 ```
 
-**고려사항:**
-- `server.ts:95` — 이미 `process.env.PORT || 3457` 지원
-- `launchd.ts` — 인스턴스별 plist 생성 필요 (다른 Label)
-- 텔레그램 봇 — 하나의 토큰으로 여러 인스턴스? 아니면 인스턴스별 봇?
-- 브라우저 CDP 포트 — 인스턴스별 다른 프로파일 디렉토리 (이미 JAW_HOME 기반)
+**이미 반영됨 (launchd core):**
+- 인스턴스별 Label 해시 (`com.cli-jaw.<instance>-<hash>`)
+- plist XML escaping (`xmlEsc`)
+- ProgramArguments에 `--home <JAW_HOME> serve --port <PORT>` 전달
+
+**남은 핵심:**
+- `browser.ts` / `memory.ts` 서버 URL 하드코딩(`3457`) 제거
+- launchctl 명령에서 plist path quoting 보강
+- 미지원 플래그(`--dry-run`)는 install 실행 대신 명시 에러
 
 **launchd 멀티 인스턴스:**
 ```bash
@@ -225,15 +241,17 @@ jaw --home ~/.jaw-work launchd unset                 # 해제
 
 ```mermaid
 flowchart LR
-    P1["Phase 1<br>workingDir → JAW_HOME<br><b>4파일 5줄</b>"] --> P2["Phase 2<br>2.0 JAW_HOME 중앙화 (8파일)<br>2.1-2.2 env var + --home (~10줄)"]
-    P2 --> P3["Phase 3<br>jaw clone<br><b>1 새파일 ~120줄</b>"]
-    P2 --> P4["Phase 4<br>포트 분리 + launchd<br><b>4파일 ~50줄</b><br>(launchd+browser+memory+mcp)"]
-    P3 --> P99["Phase 99<br>프론트엔드 UI<br><b>먼 미래</b>"]
+    P1["Phase 1<br>workingDir → JAW_HOME<br><b>완료</b>"] --> P2["Phase 2<br>JAW_HOME 동적화<br><b>완료</b>"]
+    P2 --> P3["Phase 3<br>jaw clone<br><b>완료</b>"]
+    P3 --> P31["Phase 3.1<br>Frontend hotfix<br><b>코드 반영, 후속 필요</b>"]
+    P2 --> P4["Phase 4<br>포트 분리 + launchd<br><b>남은 작업: 3파일 ~20줄</b><br>(launchd+browser+memory)"]
+    P31 --> P99["Phase 99<br>프론트엔드 UI<br><b>먼 미래</b>"]
     P4 --> P99
 ```
 
 **Phase 1 → 2는 필수 순서** (workingDir이 먼저 JAW_HOME 안으로 와야 자급자족)
-**Phase 3, 4는 독립** (병렬 가능)
+**Phase 3과 Phase 4는 독립** (병렬 가능)
+**Phase 3.1은 완료됐지만 운영 안정화를 위한 후속(3.1 follow-up) 필요**
 **Phase 99는 3+4 이후 (먼 미래)**
 
 ---
@@ -271,6 +289,9 @@ Phase 2의 env var / --home은 완전 opt-in.
 ### Q: skills_ref (87개, ~3.5MB)를 매번 복사?
 **A:** `jaw clone`에서 `--link-ref` 옵션으로 심링크 공유 가능 (복사 대신 symlink → 3.5MB 절약).
 skills_ref는 읽기 전용이라 공유해도 안전.
+
+### Q: `jaw launchd --dry-run` 지원하나?
+**A:** 아직 미지원. 현재는 `launchd`, `launchd status`, `launchd unset`만 공식 동작으로 간주해야 함.
 
 ### Q: 동시 실행 시 SQLite 충돌?
 **A:** 각 인스턴스가 별도 jaw.db 사용 → 충돌 없음.

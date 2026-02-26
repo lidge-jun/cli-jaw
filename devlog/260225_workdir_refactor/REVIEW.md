@@ -1,71 +1,59 @@
-# Review — Workdir Refactor Plan Validation
+# Review — Phase 3.1 + Phase 4 Execution Validation
 
 **Date**: 2026-02-26  
-**Scope**: Plan-only validation, no code changes
+**Scope**: 실제 코드 기준 검증 (Phase 3.1, Phase 4, 전반 기능)
 
 ---
 
-## Patch Verdicts
+## Findings (Severity Order)
 
-### PATCH-1_default_workdir.md
-**Verdict**: APPROVE
+### HIGH-1: `workingDir` 변경 후 산출물 재생성이 자동으로 일어나지 않음
+- 근거: `server.ts`의 `applySettingsPatch()`는 설정 저장만 하고, `regenerateB()` / `ensureSkillsSymlinks()` / `syncToAll()`를 호출하지 않음.
+- 영향: UI/API에서 `workingDir`만 바꾸면 새 경로에 `AGENTS.md`, `.mcp.json`, `.agents/skills`가 준비되지 않아 런타임 불일치 발생.
 
-- Targeted files are correct: `src/core/config.ts`, `bin/commands/init.ts`
-- Existing users are safe: `loadSettings()` merges defaults with existing file values, so persisted `workingDir` remains unchanged.
-- Import/export risk: none (`join` already imported in `config.ts`, `path` already imported in `init.ts`)
+### HIGH-2: "권한 Auto 고정"이 기존 사용자(`safe`)에 대해 강제되지 않음
+- 근거: 프런트 UI는 Auto 배지만 표시하지만, `permissions: safe`를 가진 기존 설정은 그대로 유지됨.
+- 영향: 사용자는 UI상 Auto로 오해할 수 있고, 실제 실행은 safe 제약으로 동작 가능.
 
-### PATCH-2_a2_template.md
-**Verdict**: APPROVE
+### MEDIUM-1: Phase 4 포트 분리 미완료 (`browser`/`memory` CLI)
+- 근거: 두 명령이 서버 URL을 `getServerUrl('3457')`로 고정.
+- 영향: 비기본 포트 인스턴스(예: 3458/3459)에서 CLI 제어 실패.
 
-- Target file is correct: `src/prompt/builder.ts` (`A2_DEFAULT`)
-- Scope is correct: only affects first creation of `A-2.md` (`if (!fs.existsSync(A2_PATH))`)
-- Runtime behavior remains controlled by `settings.workingDir` in spawn path
+### MEDIUM-2: `launchd` 미지원 플래그가 install 경로로 떨어질 수 있음
+- 근거: `parseArgs(..., strict:false)` + 기본 분기(`default`) 조합으로 `--dry-run` 같은 미지원 플래그가 에러 없이 setup 경로로 진입.
+- 영향: 사용자가 비파괴 옵션으로 기대한 입력이 실제 설치 동작을 유발할 수 있음.
 
-### PATCH-3_readme_note.md
-**Verdict**: APPROVE
-
-- Docs alignment is necessary to avoid confusion after PATCH-1/2 rollout
-- Must ship together with PATCH-1/2 to prevent temporary mismatch
-
----
-
-## Required Source Checks (Verified)
-
-1. `src/core/config.ts:101` -> default is `workingDir: os.homedir()`
-2. `bin/commands/init.ts:45-46` -> init prompt default uses `settings.workingDir || os.homedir()`
-3. `src/prompt/builder.ts:194-211` -> A2 template contains `Working Directory: ~/`
-4. `src/prompt/builder.ts:541-548` -> `regenerateB()` writes `AGENTS.md` to `join(settings.workingDir || os.homedir(), 'AGENTS.md')`
-5. `src/agent/spawn.ts:465` -> child process `cwd: settings.workingDir`
+### LOW-1: `launchctl load/unload` 실행 시 plist 경로 quoting 미적용
+- 근거: `launchctl unload ${PLIST_PATH}`, `launchctl load -w ${PLIST_PATH}` 형태.
+- 영향: 경로에 공백/특수문자 포함 시 실패 가능.
 
 ---
 
-## Additional References Checked (No Missed Default Sources)
+## Verified Good
 
-- `src/prompt/builder.ts:236` uses `settings.workingDir || os.homedir()` for session-memory path derivation (fallback only)
-- No other default `workingDir` source was found outside PATCH-1 scope
+- Phase 1~2: 계획된 핵심 변경은 코드에 반영됨 (`JAW_HOME` 동적화, `--home` 처리, fallback 정리).
+- Phase 3 (`clone`):
+  - source 유효성 체크(존재 + `settings.json`)가 반영됨.
+  - 테스트가 fixture 기반으로 개선되어 환경 의존성이 줄어듦.
+- Phase 4 (`launchd`):
+  - instance hash label, xmlEsc, `--home/--port` pass-through는 코드 반영됨.
 
 ---
 
-## Edge Cases
+## Verification Evidence
 
-1. Empty string `workingDir` in settings:
-`settings.workingDir || ...` fallback behavior remains intact.
-
-2. Non-existent directory path:
-`regenerateB()` already wraps AGENTS write in `try/catch` and logs failure.
-
-3. Existing users with `~/` explicitly configured:
-No forced migration; behavior remains unchanged until user edits settings.
-
-4. Full home access expectation:
-Changing cwd default does not remove absolute path access to `~/...` when permissions allow.
-
-5. Legacy `~/AGENTS.md` compatibility:
-Postinstall symlink logic (`~/CLAUDE.md` -> `~/AGENTS.md` if present) remains independent and should be documented.
+1. `npm test` 결과: `pass 299 / fail 0 / skipped 1`
+2. 런타임 검증:
+   - `workingDir` PUT 이후 새 경로 `AGENTS.md` 미생성 재현
+   - 기존 `permissions: safe` 설정은 일반 settings PUT 이후에도 `safe` 유지 재현
+3. 정적 검증:
+   - `browser.ts`, `memory.ts`의 포트 고정 경로 확인
+   - `launchd.ts` 기본 분기/명령 문자열 처리 확인
 
 ---
 
 ## Conclusion
 
-Plan is feasible and safe as a default-only change.  
-Recommended application order: **PATCH-1 -> PATCH-2 -> PATCH-3**.
+Phase 3.1은 **UI 반영 완료 + 런타임 후속 미완료** 상태입니다.  
+Phase 4는 **launchd 코어 반영 + 포트 연동 마무리 미완료** 상태입니다.  
+전반적으로 큰 구조는 안정적이며, 남은 작업은 Phase 3.1 follow-up + Phase 4 마감 항목에 집중하면 됩니다.

@@ -1,7 +1,7 @@
 # Phase 4: Port Separation + Multi-Instance launchd
 
-**Status**: Planning
-**Files**: 4 files modified (~40 lines: launchd ~30 + browser/memory/mcp ~3 each)
+**Status**: ✅ Implemented
+**Files**: 4 files modified (~50 lines: launchd ~45 + browser/memory ~1 each)
 **Dependency**: Phase 2 (needs `--home` flag support)
 
 ---
