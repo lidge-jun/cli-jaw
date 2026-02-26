@@ -272,10 +272,34 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
                             ap.history.push({ round, phase: judgedPhase, pass: v.pass, feedback: v.feedback });
                         }
                     }
+                } else {
+                    console.warn(`[jaw:review] verdict parse failed — skipping phase advance (round ${round})`);
                 }
                 updateMatrix(worklog.path, agentPhases);
-                const allDone = agentPhases.every((ap: Record<string, any>) => ap.completed);
-                if (allDone) {
+
+                // 완료 판정
+                const scopeDone = agentPhases.every((ap: Record<string, any>) => ap.completed)
+                    || verdicts?.allDone === true;
+                const hasCheckpoint = agentPhases.some((ap: Record<string, any>) => ap.checkpoint && !ap.checkpointed);
+
+                if (scopeDone && hasCheckpoint) {
+                    // CHECKPOINT: completed 마킹 안 함, 세션 보존
+                    agentPhases.forEach((ap: Record<string, any>) => {
+                        if (ap.checkpoint) ap.checkpointed = true;
+                    });
+                    updateMatrix(worklog.path, agentPhases);
+                    const summary = stripSubtaskJSON(rawText) || '요청된 scope 완료';
+                    appendToWorklog(worklog.path, 'Final Summary', summary);
+                    updateWorklogStatus(worklog.path, 'checkpoint', round);
+                    insertMessage.run('assistant', summary + '\n\n다음: "리뷰해봐", "이어서 해줘", "리셋해"', 'orchestrator', '');
+                    broadcast('orchestrate_done', { text: summary, worklog: worklog.path, origin, checkpoint: true });
+                    return;
+                }
+
+                if (scopeDone) {
+                    // DONE: 진짜 완료
+                    agentPhases.forEach((ap: Record<string, any>) => { ap.completed = true; });
+                    updateMatrix(worklog.path, agentPhases);
                     const summary = stripSubtaskJSON(rawText) || '모든 작업 완료';
                     appendToWorklog(worklog.path, 'Final Summary', summary);
                     updateWorklogStatus(worklog.path, 'done', round);
@@ -284,6 +308,7 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
                     broadcast('orchestrate_done', { text: summary, worklog: worklog.path, origin });
                     return;
                 }
+
                 broadcast('round_done', { round, action: 'next', agentPhases });
                 if (round === MAX_ROUNDS) {
                     const done = agentPhases.filter((ap: Record<string, any>) => ap.completed);
@@ -293,6 +318,7 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
                         `이어서 진행하려면 "이어서 해줘"라고 말씀하세요.\nWorklog: ${worklog.path}`;
                     appendToWorklog(worklog.path, 'Final Summary', partial);
                     updateWorklogStatus(worklog.path, 'partial', round);
+                    // partial: 세션 보존 (이어서 해줘 대비, 새 orchestrate() 시 L228에서 자동 정리)
                     insertMessage.run('assistant', partial, 'orchestrator', '');
                     broadcast('orchestrate_done', { text: partial, worklog: worklog.path, origin });
                 }
@@ -356,12 +382,34 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
                     ap.history.push({ round, phase: judgedPhase, pass: v.pass, feedback: v.feedback });
                 }
             }
+        } else {
+            console.warn(`[jaw:review] verdict parse failed — skipping phase advance (round ${round})`);
         }
         updateMatrix(worklog.path, agentPhases);
 
-        // 5. 완료 판정 (agentPhases 기준 우선, allDone은 보조)
-        const allDone = agentPhases.every((ap: Record<string, any>) => ap.completed);
-        if (allDone) {
+        // 5. 완료 판정
+        const scopeDone = agentPhases.every((ap: Record<string, any>) => ap.completed)
+            || verdicts?.allDone === true;
+        const hasCheckpoint = agentPhases.some((ap: Record<string, any>) => ap.checkpoint && !ap.checkpointed);
+
+        if (scopeDone && hasCheckpoint) {
+            // CHECKPOINT: completed 마킹 안 함, 세션 보존
+            agentPhases.forEach((ap: Record<string, any>) => {
+                if (ap.checkpoint) ap.checkpointed = true;
+            });
+            updateMatrix(worklog.path, agentPhases);
+            const summary = stripSubtaskJSON(rawText) || '요청된 scope 완료';
+            appendToWorklog(worklog.path, 'Final Summary', summary);
+            updateWorklogStatus(worklog.path, 'checkpoint', round);
+            insertMessage.run('assistant', summary + '\n\n다음: "리뷰해봐", "이어서 해줘", "리셋해"', 'orchestrator', '');
+            broadcast('orchestrate_done', { text: summary, worklog: worklog.path, origin, checkpoint: true });
+            break;
+        }
+
+        if (scopeDone) {
+            // DONE: 진짜 완료
+            agentPhases.forEach((ap: Record<string, any>) => { ap.completed = true; });
+            updateMatrix(worklog.path, agentPhases);
             const summary = stripSubtaskJSON(rawText) || '모든 작업 완료';
             appendToWorklog(worklog.path, 'Final Summary', summary);
             updateWorklogStatus(worklog.path, 'done', round);
@@ -382,6 +430,7 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
                 `이어서 진행하려면 "이어서 해줘"라고 말씀하세요.\nWorklog: ${worklog.path}`;
             appendToWorklog(worklog.path, 'Final Summary', partial);
             updateWorklogStatus(worklog.path, 'partial', round);
+            // partial: 세션 보존 (이어서 해줘 대비, 새 orchestrate() 시 L228에서 자동 정리)
             insertMessage.run('assistant', partial, 'orchestrator', '');
             broadcast('orchestrate_done', { text: partial, worklog: worklog.path, origin });
         }
