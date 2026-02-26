@@ -118,20 +118,19 @@ export const JAW_HOME = process.env.CLI_JAW_HOME
 ```typescript
 // --home 플래그 파싱 → process.env.CLI_JAW_HOME 설정
 // ⚠️ const command = process.argv[2] 보다 먼저 실행해야 함!
-// parseArgs로 --home /path 와 --home=/path 모두 대응
-import { parseArgs } from 'node:util';
-const { values: globalOpts, positionals: rawPositionals } = parseArgs({
-    args: process.argv.slice(2),
-    options: { home: { type: 'string' } },
-    strict: false,
-    allowPositionals: true,
-});
-if (globalOpts.home) {
-    process.env.CLI_JAW_HOME = path.resolve(
-        String(globalOpts.home).replace(/^~(?=\/|$)/, os.homedir())
+// Manual indexOf (NOT parseArgs — strict:false absorbs all subcommand flags)
+const _homeIdx = process.argv.indexOf('--home');
+const _homeEqArg = process.argv.find(a => a.startsWith('--home='));
+if (_homeIdx !== -1 && process.argv[_homeIdx + 1]) {
+    process.env.CLI_JAW_HOME = resolve(
+        process.argv[_homeIdx + 1]!.replace(/^~(?=\/|$)/, homedir())
     );
+    process.argv.splice(_homeIdx, 2);
+} else if (_homeEqArg) {
+    const val = _homeEqArg.slice('--home='.length);
+    process.env.CLI_JAW_HOME = resolve(val.replace(/^~(?=\/|$)/, homedir()));
+    process.argv.splice(process.argv.indexOf(_homeEqArg), 1);
 }
-process.argv = [process.argv[0], process.argv[1], ...rawPositionals];
 // 이 다음에 const command = process.argv[2]; 위치
 ```
 

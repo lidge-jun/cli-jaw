@@ -44,9 +44,10 @@ jaw doctor --json | jq '.checks[] | select(.name == "Home directory")'
 
 ## Phase 2: JAW_HOME Dynamic ✅ IMPLEMENTED
 
-> **Status**: Committed `e910e84` — 286 pass, 0 fail
-> **Automated tests**: `tests/unit/jaw-home-import.test.ts` (P20-001/002), `tests/unit/jaw-home-env.test.ts` (P2-001~005)
+> **Status**: Committed `e910e84` + Phase 2.3 hotfix — 289 pass, 0 fail
+> **Automated tests**: `tests/unit/jaw-home-import.test.ts` (P20-001/002), `tests/unit/jaw-home-env.test.ts` (P2-001~005, P23-001~003)
 > **Note**: --home uses manual indexOf (NOT parseArgs — it absorbs subcommand flags)
+> **Phase 2.3 hotfix (R8)**: postinstall legacy rename guard, init.ts workingDir default, mcp.ts fallback
 
 ### P2-M1: 기본 동작 변화 없음
 ```bash

@@ -1,7 +1,7 @@
 # Phase 2: JAW_HOME Dynamic (env var + --home flag)
 
-**Status**: Planning
-**Files**: Phase 2.0: 8 files (import refactor) + Phase 2.1-2.2: 2 files (env var + --home) = **10 files total, ~30 lines**
+**Status**: ✅ Implemented (commit `e910e84`, hotfixed `Phase 2.3`)
+**Files**: Phase 2.0: 8 files (import refactor) + Phase 2.1-2.2: 3 files (env var + --home + prompt) + Phase 2.3: 3 files (hotfix) = **14 file touches**
 **Dependency**: Phase 1 (workingDir must be JAW_HOME-based first)
 
 > ⚠️ **REVIEW FIX (2026-02-26)**: Original plan said "2 files, ~15 lines" but 
@@ -10,9 +10,9 @@
 
 ---
 
-## Phase 2.0: Centralize JAW_HOME Imports (PREREQUISITE)
+## Phase 2.0: Centralize JAW_HOME Imports (PREREQUISITE) ✅ DONE
 
-Currently these files define `const JAW_HOME = ...` locally instead of importing from `config.ts`:
+These files previously defined `const JAW_HOME = ...` locally — now all import from `config.ts`:
 
 | File | Line | Current Code | Correct Import Path |
 |------|------|-------------|---------------------|
@@ -92,28 +92,33 @@ Add `import { resolve } from 'path'` if not already present (`join` is imported,
 ```diff
  // After pkg loading (lines 13-19), BEFORE command parsing:
 
-+// ─── --home flag: must run BEFORE command parsing + config.ts import ───
-+import { resolve as pathResolve } from 'node:path';
-+import os from 'node:os';
-+import { parseArgs } from 'node:util';
++// ─── --home flag: must run BEFORE command parsing (ESM hoisting safe) ───
++// Manual parsing instead of parseArgs to avoid absorbing subcommand flags.
++// parseArgs({ strict: false }) takes ALL unknown flags (--json, --port, etc.)
++// and removes them from positionals, breaking subcommands.
++import { resolve } from 'node:path';
++import { homedir } from 'node:os';
 +
-+// parseArgs with strict:false — handles both --home /path and --home=/path
-+const { values: globalOpts, positionals: rawPositionals } = parseArgs({
-+    args: process.argv.slice(2),
-+    options: { home: { type: 'string' } },
-+    strict: false,
-+    allowPositionals: true,
-+});
-+if (globalOpts.home) {
-+    process.env.CLI_JAW_HOME = pathResolve(
-+        String(globalOpts.home).replace(/^~(?=\/|$)/, os.homedir())
++const _homeIdx = process.argv.indexOf('--home');
++const _homeEqArg = process.argv.find(a => a.startsWith('--home='));
++if (_homeIdx !== -1 && process.argv[_homeIdx + 1]) {
++    process.env.CLI_JAW_HOME = resolve(
++        process.argv[_homeIdx + 1]!.replace(/^~(?=\/|$)/, homedir())
 +    );
++    process.argv.splice(_homeIdx, 2);
++} else if (_homeEqArg) {
++    const val = _homeEqArg.slice('--home='.length);
++    process.env.CLI_JAW_HOME = resolve(val.replace(/^~(?=\/|$)/, homedir()));
++    process.argv.splice(process.argv.indexOf(_homeEqArg), 1);
 +}
-+// Rebuild argv without --home so subcommands see clean positionals
-+process.argv = [process.argv[0], process.argv[1], ...rawPositionals];
 +
  const command = process.argv[2];  // ← NOW this correctly gets 'doctor', not '--home'
 ```
+
+> ⚠️ **Implementation Note (R8)**: The original plan specified `parseArgs({ strict: false })`
+> but this was discovered to be **unsafe** — it absorbs ALL unknown flags into `values`,
+> stripping them from `positionals`. Example: `jaw --home X doctor --json` → parseArgs takes
+> `--json` → doctor never receives it. Manual indexOf + --home= detection is the correct approach.
 
 This must go **before** `const command = process.argv[2]` (line 22) because:
 1. `--home /path` consumes 2 argv positions → splice shifts everything
@@ -137,11 +142,13 @@ jaw --home /path doctor --json
 > **CONSTRAINT**: cli-jaw.ts MUST NEVER add static imports to internal modules (e.g., `config.ts`).
 > If a static import chain reaches `config.ts`, ESM hoisting would freeze `JAW_HOME` before `--home` runs.
 
-> ⚠️ **REVIEW FIX R6-2 (= syntax support)**:
-> `process.argv.indexOf('--home')` does NOT match `--home=/path`. Users familiar with Unix CLI
-> conventions may use `jaw --home=/path doctor`. Consider upgrading to `parseArgs({ strict: false })`
-> for `--home` parsing to handle both `--home /path` and `--home=/path` forms.
-> Verified: `parseArgs` correctly splits `--home=/custom/path` into `values.home = '/custom/path'`.
+> ⚠️ **REVIEW FIX R6-2 (= syntax support) — RESOLVED**:
+> `process.argv.indexOf('--home')` does NOT match `--home=/path`. Implementation handles both:
+> 1. `--home /path` via indexOf + splice(idx, 2)
+> 2. `--home=/path` via find(a => a.startsWith('--home=')) + slice
+>
+> `parseArgs({ strict: false })` was considered but **rejected** — it absorbs ALL unknown flags
+> (--json, --port, etc.) from positionals, breaking subcommand flag passing.
 
 > ⚠️ **REVIEW FIX R6-3 (tilde regex)**:
 > Regex changed from `/^~/` to `/^~(?=\/|$)/` to prevent `~username/path` from becoming

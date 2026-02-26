@@ -330,6 +330,12 @@ Current UI has a text input `<input id="inpCwd" value="~/">` in sidebar.
 - **Discovery**: `parseArgs({ strict: false })` absorbs ALL unknown flags (--json, --port etc), breaking subcommands. Used manual indexOf + --home= detection instead.
 - **Commit**: `e910e84`
 
+### Phase 2.3: Hotfix — Multi-Instance Safety *(R8 review)* ✅ DONE
+- [x] `postinstall.ts` — legacy rename guard: only migrate when `JAW_HOME === ~/.cli-jaw` (prevents `jaw --home X init` from moving `~/.cli-jaw` to X)
+- [x] `init.ts:44` — workingDir default fallback: `os.homedir()/.cli-jaw` → `JAW_HOME` (respects --home)
+- [x] `mcp.ts:59-60` — workingDir fallback: `homedir()` → `JAW_HOME` (+ removed unused `homedir` import)
+- **Scope**: 3 files, ~5 lines
+
 ### Phase 2 Frontend: PATCH-4 *(optional cleanup)*
 - [ ] `public/index.html:172-183` — remove permissions toggle + workdir input
 
@@ -340,13 +346,13 @@ Current UI has a text input `<input id="inpCwd" value="~/">` in sidebar.
 
 ### Phase 4: Multi-Instance launchd + Port Separation *(independent, after Phase 2)*
 - [ ] `launchd.ts` — dynamic LABEL with hash-based instanceId *(R7: collision prevention)*
-- [ ] `launchd.ts` — `parseArgs({ strict: false })` for `--port` parsing *(R7: --port= support)*
+- [ ] `launchd.ts` — manual `--port` parsing (same pattern as --home: indexOf + --port=) *(R7+R8: NOT parseArgs)*
 - [ ] `launchd.ts` — `xmlEsc()` helper for all plist string interpolations *(R7: XML injection)*
 - [ ] `launchd.ts` — `--home`/`--port` pass-through, path quoting *(RE-5)*
 - [ ] `browser.ts:11` — change `getServerUrl('3457')` → `getServerUrl(undefined)` *(RE-2)*
 - [ ] `memory.ts:7` — change `getServerUrl('3457')` → `getServerUrl(undefined)` *(RE-2)*
-- [ ] `mcp.ts:58` — change `homedir()` fallback → `JAW_HOME` *(RE-4)*
-- **Scope**: 4 files, ~50 lines (launchd ~40 + browser/memory/mcp ~3 each)
+- ~~`mcp.ts:58` — change `homedir()` fallback → `JAW_HOME` *(RE-4)*~~ → Moved to Phase 2.3
+- **Scope**: 4 files, ~50 lines (launchd ~40 + browser/memory ~3 each)
 
 ### Phase 99: Frontend Instance UI *(far future)*
 
@@ -354,16 +360,18 @@ Current UI has a text input `<input id="inpCwd" value="~/">` in sidebar.
 
 ## Source Validation Snapshot
 
-Verified against source (2026-02-26, commit `8054549`):
+Verified against source (2026-02-26, commit `e910e84` + Phase 2.3 hotfix):
 
-- `src/core/config.ts:27` → `JAW_HOME = join(os.homedir(), '.cli-jaw')`
-- `src/core/config.ts:101` → `workingDir: os.homedir()` ← PATCH-1
-- `bin/commands/init.ts:46` → `settings.workingDir || os.homedir()` ← PATCH-1
-- `src/prompt/builder.ts:210` → `- ~/` ← PATCH-2
-- `bin/postinstall.ts:166-167` → `path.join(home, 'AGENTS.md')` ← PATCH-3
-- `public/index.html:172-183` → permissions toggle + workdir input ← PATCH-4
-- `src/prompt/builder.ts:547-548` → `join(settings.workingDir, 'AGENTS.md')` (no change)
-- `src/agent/spawn.ts:465` → `cwd: settings.workingDir` (no change)
+- `src/core/config.ts:27` → `JAW_HOME = process.env.CLI_JAW_HOME || join(os.homedir(), '.cli-jaw')` ✅ Dynamic
+- `src/core/config.ts:101` → `workingDir: JAW_HOME` ✅ Phase 1
+- `bin/commands/init.ts:44` → `settings.workingDir || JAW_HOME` ✅ Phase 2.3
+- `bin/cli-jaw.ts:24-35` → manual indexOf --home + --home= parsing ✅ Phase 2.2
+- `src/prompt/builder.ts` → 9x `${JAW_HOME}` interpolation ✅ RE-1
+- `bin/postinstall.ts:31` → `isDefaultHome && ...` legacy rename guard ✅ Phase 2.3
+- `bin/commands/mcp.ts:59-60` → `JAW_HOME` fallback (was `homedir()`) ✅ Phase 2.3
+- `public/index.html:172-183` → permissions toggle + workdir input ← PATCH-4 (pending)
+- `src/prompt/builder.ts:547-548` → `join(settings.workingDir, 'AGENTS.md')` (no change needed)
+- `src/agent/spawn.ts:465` → `cwd: settings.workingDir` (no change needed)
 - `src/agent/args.ts:20` → `'--skip-git-repo-check'` (already in place)
 
 ---
