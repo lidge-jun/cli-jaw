@@ -427,3 +427,97 @@ TG-005: origin 'web' → forwarder가 typing + 결과 전달
 | **Phase C** | CommandContext 통합 (선택) | 낮음 |
 
 > Phase A만으로도 입력 로직 중복 제거(-74줄). Phase B까지 하면 TG UX 균일화 달성.
+
+---
+
+## Appendix A — 외부 검증 (Web / grammY Docs)
+
+### A.1 `bot.api.sendChatAction` — ctx 없이 호출 가능 ✅
+
+**grammY 공식 문서 확인** ([grammy.dev/ref/core/api#sendChatAction](https://grammy.dev/ref/core/api#sendChatAction)):
+
+```typescript
+// 시그니처
+sendChatAction(
+    chat_id: number | string,
+    action: "typing" | "upload_photo" | ...,
+    other?: Other<R, "sendChatAction", "chat_id" | "action">,
+    signal?: AbortSignal
+);
+```
+
+> "Use this method when you need to tell the user that something is happening on the bot's side. The status is set for **5 seconds or less** (when a message arrives from your bot, Telegram clients clear its typing status)."
+
+**핵심 확인**:
+- `bot.api.sendChatAction(chatId, 'typing')` → **ctx 없이 chatId만으로 호출 가능**
+- 현재 forwarder에서 `bot` 객체는 이미 보유 중 (`createTelegramForwarder({ bot, ... })`)
+- → Phase B 구현에 **API 제약 없음**
+
+### A.2 Typing 타이밍 — 현재 구현 정확
+
+| 항목 | Telegram API 사양 | 현재 코드 (bot.ts) |
+|------|:---:|:---:|
+| typing 만료 시간 | **5초** | - |
+| 갱신 간격 | 3-5초 권장 | **4초** ✅ |
+| 메시지 도착 시 | 자동 해제됨 | clearInterval ✅ |
+
+### A.3 grammY `autoChatAction` 플러그인 — 사용 불가
+
+grammY에는 `autoChatAction` 플러그인이 존재하지만:
+- **미들웨어 체인 안에서만 동작** (`ctx.chatAction = "typing"`)
+- forwarder는 미들웨어 외부 (broadcast listener)에서 동작
+- → **수동 `setInterval` + `bot.api.sendChatAction` 방식 유지가 정확**
+
+### A.4 `sequentialize` 미들웨어 — bot.api 외부 호출에 적용 안 됨
+
+grammY `sequentialize` ([grammy.dev/plugins/runner](https://grammy.dev/plugins/runner)):
+- **incoming update 처리 순서만 보장** (chat_id 기준)
+- `bot.api.*` 호출 자체는 sequentialize 범위 밖
+- → forwarder에서 `bot.api.sendChatAction()` 직접 호출해도 **lock 충돌 없음**
+
+### A.5 다중 채팅 — per-chat typing 상태 관리 필요 ⚠️
+
+**엣지 케이스**: `telegramActiveChatIds`에 채팅 2개+ 등록된 상태에서 WebUI 메시지 발생
+
+| 시나리오 | 현재 동작 | 통합 후 예상 |
+|----------|-----------|-------------|
+| 1개 채팅 활성 | forwarder → agent_done → 결과 전달 | ✅ typing + 결과 전달 |
+| 2개 채팅 활성 | forwarder → 마지막 chatId만 | ⚠️ 두 채팅 모두 typing? |
+
+**해결**: `getLastChatId()` (현재 forwarder 방식) 유지 — 마지막 활성 채팅에만 전달. 동시 다중 채팅 지원은 별도 이슈.
+
+### A.6 이벤트 구분: `agent_done` vs `orchestrate_done`
+
+현재 forwarder가 듣는 이벤트와 통합 후 이벤트 차이:
+
+| 이벤트 | 언제 발생 | 횟수 | 데이터 |
+|--------|-----------|:---:|--------|
+| `agent_status` | agent 시작 시 | N회 (agent 수) | `{ status: 'running', agentId }` |
+| `agent_tool` | tool 호출 시 | 0~N회 | `{ icon, label }` |
+| `agent_chunk` | 스트리밍 중 | 0~N회 | `{ text }` |
+| `agent_done` | **개별 agent** 완료 | N회 | `{ text, error? }` |
+| `orchestrate_done` | **전체 오케스트레이션** 완료 | **1회** | `{ text, origin, worklog? }` |
+
+**현재 forwarder**: `agent_done` 감지 → multi-agent 시 **여러 번 전달** (각 agent마다)
+**통합 후**: `orchestrate_done` 감지 → **1번만 최종 결과 전달** ← 더 정확!
+
+> ⚠️ **중요**: typing은 `agent_status` (running)에서 시작, `orchestrate_done`에서 정리. `agent_done`은 중간 agent 완료이므로 typing을 해제하면 안 됨.
+
+### A.7 Rate Limiting — 문제 없음
+
+Telegram Bot API 제한:
+- 단일 채팅: 메시지당 1/s
+- 벌크: ~30 req/s
+
+현재 간격:
+- typing: 4초 간격 (0.25 req/s) ← **매우 여유**
+- tool status: 180ms debounce → 최대 5.5 req/s ← **안전**
+
+### A.8 위험 요소 정리
+
+| 위험 | 확률 | 영향 | 대응 |
+|------|:---:|:---:|------|
+| Phase A: submitMessage 누락 분기 | 낮음 | 높음 | 기존 테스트 + SM-001~007로 커버 |
+| Phase B: typing 정리 누락 (leak) | 중간 | 낮음 | `orchestrate_done` + 타임아웃 이중 안전장치 |
+| Phase B: 다중 agent_done → 중복 결과 전달 | 낮음 | 중간 | `orchestrate_done` 1회만 감지로 해결 |
+| Phase B: forwarder 교체 시 기존 테스트 깨짐 | 중간 | 중간 | `telegram-forwarding.test.ts` 업데이트 |
