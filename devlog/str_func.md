@@ -264,6 +264,7 @@ graph LR
 63. **[fix] User messages lost on refresh**: `POST /api/message` handler did not call `insertMessage.run()` before `orchestrate()`. WebSocket and queue paths saved correctly, but HTTP path was missing. Added `insertMessage.run('user', trimmed, 'web', '')` + `broadcast()`.
 64. **[orch-v3] end_phase + checkpoint**: `initAgentPhases()`에 `end_phase` 파싱 + sparse fallback + `checkpoint`/`checkpointed` 필드 추가. Planning agent가 phase 범위(`start_phase: 3, end_phase: 3`)와 체크포인트 모드 지정 가능.
 65. **[orch-v3] checkpoint branching**: 라운드 루프(2곳)에 checkpoint/done 분기 추가. `scopeDone && hasCheckpoint` → 세션 보존 + 유저 보고. `verdicts.allDone` 조기 완료 지원. verdict parse 실패 시 warn 로그.
+66. **[orch-v3] _skipClear + continue**: `orchestrate()` 진입 2곳에 `_skipClear` 조건 적용. `orchestrateContinue`에서 `_skipClear: true` 전달 → 세션 복원. done/reset worklog은 continue 거부.
 
 ---
 

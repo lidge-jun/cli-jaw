@@ -236,7 +236,7 @@ JSON으로 출력:
 // ─── Main Orchestrate v2 ─────────────────────────────
 
 export async function orchestrate(prompt: string, meta: Record<string, any> = {}) {
-    clearAllEmployeeSessions.run();
+    if (!meta._skipClear) clearAllEmployeeSessions.run();
     clearPromptCache();
 
     const origin = meta.origin || 'web';
@@ -252,7 +252,7 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
             console.log(`[jaw:triage] agent chose to dispatch (${lateSubtasks.length} subtasks)`);
             const worklog = createWorklog(prompt);
             broadcast('worklog_created', { path: worklog.path });
-            clearAllEmployeeSessions.run();
+            if (!meta._skipClear) clearAllEmployeeSessions.run();
             const planText = stripSubtaskJSON(result.text);
             appendToWorklog(worklog.path, 'Plan', planText || '(Agent-initiated dispatch)');
             const agentPhases = initAgentPhases(lateSubtasks);
@@ -442,7 +442,7 @@ export async function orchestrate(prompt: string, meta: Record<string, any> = {}
 export async function orchestrateContinue(meta: Record<string, any> = {}) {
     const origin = (meta as Record<string, any>).origin || 'web';
     const latest = readLatestWorklog();
-    if (!latest) {
+    if (!latest || latest.content.includes('Status: done') || latest.content.includes('Status: reset')) {
         broadcast('orchestrate_done', { text: '이어갈 worklog가 없습니다.', origin });
         return;
     }
@@ -463,5 +463,5 @@ ${pending.map((p: Record<string, any>) => `- ${p.agent} (${p.role}): Phase ${p.c
 
 subtask JSON을 출력하세요.`;
 
-    return orchestrate(resumePrompt, meta);
+    return orchestrate(resumePrompt, { ...meta, _skipClear: true });
 }

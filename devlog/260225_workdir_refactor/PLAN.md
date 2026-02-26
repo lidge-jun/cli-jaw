@@ -371,7 +371,8 @@ Findings from code review were verified against actual code. All plan documents 
 
 2. **Phase 3 clone uses nonexistent doctor --json regeneration**
    - `doctor --json` returns `{ checks: [...] }` only — does NOT call `regenerateB()`
-   - Fix: Changed to direct `import { regenerateB }` from builder.ts
+   - ~~Fix: Changed to direct `import { regenerateB }` from builder.ts~~
+   - **R2 superseded**: Direct import won't work (ES module const freeze). Changed to subprocess.
    - Updated: `PHASE-3_clone_command.md`
 
 3. **Test plans reference nonexistent endpoints/fields**
@@ -445,3 +446,57 @@ Second pass review found issues remaining after R1 fixes. All verified and corre
    - Apple recommends `bootstrap/bootout` since macOS 10.10+
    - Fix: Added legacy note with migration path, keep load/unload for now
    - Updated: `PHASE-4_port_launchd.md` Cross-Platform Note section
+
+---
+
+## Review Fixes R3 Applied (2026-02-26 01:37)
+
+Third pass review focused on "would this actually execute?" validation.
+
+### HIGH Issues Fixed
+
+1. **--home parsing breaks command detection**
+   - `const command = process.argv[2]` (cli-jaw.ts:22) → `jaw --home /path doctor` sets command='--home'
+   - Fix: Explicit note that --home parse + splice MUST precede `const command` line
+   - Added full execution order diagram with argv transformation
+   - Updated: `PHASE-2_jaw_home_dynamic.md` section 2.2
+
+2. **Phase 2.0 import paths incorrect for lib/ and bin/ files**
+   - Generic example used `../../src/core/config.js` for ALL files
+   - `lib/mcp-sync.ts` and `bin/postinstall.ts` need `../src/core/config.js` (one level up, not two)
+   - Fix: Added per-file "Correct Import Path" column to table
+   - Verified against existing imports (browser.ts:9, status.ts:6 use `../../src/core/config.js`)
+   - Updated: `PHASE-2_jaw_home_dynamic.md` Phase 2.0 table
+
+3. **Phase 3 clone.ts subprocess paths wrong**
+   - `path.resolve(__dirname, '../..')` from `dist/bin/commands/` = `dist/`
+   - Then `./dist/src/core/config.js` resolves to `dist/dist/src/...` — WRONG
+   - Fix: Use `path.join(__dirname, '..', '..')` (= `dist/`) + `./src/core/config.js`
+   - Follows project convention (serve.ts:14 uses same pattern)
+   - Updated: `PHASE-3_clone_command.md` regeneration block
+
+4. **Phase 3 arg parsing: `--from A B` picks A as target**
+   - Old: `args.findIndex(a => !a.startsWith('-'))` picks first non-dash arg
+   - `jaw clone --from /src /target` → first non-dash = '/src' (--from's value) → wrong target
+   - Fix: Replaced manual parsing with `parseArgs()` + `allowPositionals: true`
+   - `parseArgs` correctly separates flag values from positional args
+   - Updated: `PHASE-3_clone_command.md` entire arg parsing section
+
+### MEDIUM Issues Fixed
+
+5. **"6 files" vs "8 files" in PHASE-2 review note**
+   - Line 8 said "6 files" but table lists 8
+   - Fix: Corrected to "8 files"
+   - Updated: `PHASE-2_jaw_home_dynamic.md` line 8
+
+6. **PLAN R1 log contradicts R2 log**
+   - R1: "Fix: Changed to direct import { regenerateB }"
+   - R2: "Direct import WILL NOT WORK"
+   - Fix: R1 entry now shows strikethrough with "R2 superseded" note
+   - Updated: `PLAN.md` R1 section item 2
+
+### Validated (NOT issues)
+
+- **Top-level await in `node -e`**: Works on Node v22+ (tested: `node -e "const x = await ..."` → OK)
+- **`__dirname` in ESM**: Project already uses `dirname(fileURLToPath(import.meta.url))` pattern
+  (cli-jaw.ts:11, serve.ts:13, chat.ts:36) — clone.ts must include same boilerplate
