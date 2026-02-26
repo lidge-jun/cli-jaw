@@ -25,9 +25,17 @@ ls ~/Library/LaunchAgents/com.cli-jaw.* 2>/dev/null && \
   launchctl unload ~/Library/LaunchAgents/com.cli-jaw.* 2>/dev/null; \
   rm -f ~/Library/LaunchAgents/com.cli-jaw.*
 
-# 5. 확인
+# 5. 레거시 찌꺼기 제거 (cli-claw + postinstall 산출물)
+rm -f ~/AGENTS.md ~/CLAUDE.md          # postinstall이 만든 심링크
+rm -rf ~/.agents ~/.agent              # skills 심링크 디렉토리
+rm -rf ~/.cli-claw                     # 구 cli-claw 데이터
+rm -rf ~/.copilot/mcp-config.json      # copilot MCP 설정 (jaw가 sync한 것)
+
+# 6. 확인
 echo "=== Clean State Check ==="
-which jaw; which cli-jaw; ls ~/.cli-jaw 2>/dev/null; ls ~/Library/LaunchAgents/com.cli-jaw.* 2>/dev/null
+which jaw; which cli-jaw
+ls ~/.cli-jaw ~/.cli-claw ~/.agents ~/.agent ~/AGENTS.md ~/CLAUDE.md 2>&1
+ls ~/Library/LaunchAgents/com.cli-jaw.* 2>/dev/null
 # ✅ Expected: 전부 "not found" / "No such file"
 ```
 
@@ -276,32 +284,32 @@ rm -rf ~/.jaw-work
 
 ## Quick Reference: 시간별 테스트 범위
 
-| 시간 | 범위 | 테스트 ID |
-|------|------|-----------|
-| **3분** | 설치 + doctor + serve | T-01, T-02, T-03 |
+| 시간     | 범위                     | 테스트 ID          |
+| -------- | ------------------------ | ------------------ |
+| **3분**  | 설치 + doctor + serve    | T-01, T-02, T-03   |
 | **10분** | + multi-instance + clone | + T-04, T-07, T-08 |
-| **20분** | + launchd + 에러 핸들링 | + T-09, T-12~T-15 |
-| **30분** | 전체 (UI 포함) | T-01 ~ T-16 |
+| **20분** | + launchd + 에러 핸들링  | + T-09, T-12~T-15  |
+| **30분** | 전체 (UI 포함)           | T-01 ~ T-16        |
 
 ---
 
 ## 결과 기록
 
 | Test | 결과 | 비고 |
-|------|------|------|
-| T-01 |  |  |
-| T-02 |  |  |
-| T-03 |  |  |
-| T-04 |  |  |
-| T-05 |  |  |
-| T-06 |  |  |
-| T-07 |  |  |
-| T-08 |  |  |
-| T-09 |  |  |
-| T-10 |  |  |
-| T-11 |  |  |
-| T-12 |  |  |
-| T-13 |  |  |
-| T-14 |  |  |
-| T-15 |  |  |
-| T-16 |  |  |
+| ---- | ---- | ---- |
+| T-01 |      |      |
+| T-02 |      |      |
+| T-03 |      |      |
+| T-04 |      |      |
+| T-05 |      |      |
+| T-06 |      |      |
+| T-07 |      |      |
+| T-08 |      |      |
+| T-09 |      |      |
+| T-10 |      |      |
+| T-11 |      |      |
+| T-12 |      |      |
+| T-13 |      |      |
+| T-14 |      |      |
+| T-15 |      |      |
+| T-16 |      |      |
