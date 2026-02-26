@@ -98,7 +98,7 @@ function createDefaultSettings() {
         cli: DEFAULT_CLI,
         fallbackOrder: [],
         permissions: 'auto',
-        workingDir: os.homedir(),
+        workingDir: JAW_HOME,
         perCli: buildDefaultPerCli(),
         heartbeat: {
             enabled: false,

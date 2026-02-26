@@ -446,6 +446,20 @@ export function initTelegram() {
             return;
         }
         console.log(`[tg:in] ${ctx.chat.id}: ${text.slice(0, 80)}`);
+
+        // Reset intent: agent busy이면 거부 (큐에 넣으면 일반 orchestrate로 실행됨)
+        if (isResetIntent(text)) {
+            if (activeProcess) {
+                await ctx.reply(t('ws.agentBusy', {}, currentLocale()));
+                return;
+            }
+            markChatActive(ctx.chat.id);
+            insertMessage.run('user', text, 'telegram', '');
+            broadcast('new_message', { role: 'user', content: text, source: 'telegram' });
+            await orchestrateReset({ origin: 'telegram' });
+            await ctx.reply(t('tg.resetDone', {}, currentLocale()) || '리셋 완료.');
+            return;
+        }
         tgOrchestrate(ctx, text, text);
     });
 

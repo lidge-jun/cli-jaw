@@ -163,8 +163,8 @@ try {
 
 
 // 3. ~/CLAUDE.md → ~/AGENTS.md (if AGENTS.md exists and CLAUDE.md doesn't)
-const agentsMd = path.join(home, 'AGENTS.md');
-const claudeMd = path.join(home, 'CLAUDE.md');
+const agentsMd = path.join(jawHome, 'AGENTS.md');
+const claudeMd = path.join(jawHome, 'CLAUDE.md');
 if (fs.existsSync(agentsMd) && !fs.existsSync(claudeMd)) {
     ensureSymlink(agentsMd, claudeMd);
 }

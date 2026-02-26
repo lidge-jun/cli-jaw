@@ -207,7 +207,7 @@ const A2_DEFAULT = `# User Configuration
 - Technically accurate
 
 ## Working Directory
-- ~/
+- ~/.cli-jaw
 `;
 
 const HEARTBEAT_DEFAULT = `# Heartbeat checklist
