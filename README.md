@@ -6,7 +6,7 @@
 
 *One assistant. Five brains. Always on.*
 
-[![Tests](https://img.shields.io/badge/tests-252%20pass-brightgreen)](#-tests)
+[![Tests](https://img.shields.io/badge/tests-306%20pass-brightgreen)](#-tests)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
@@ -30,7 +30,7 @@ CLI-JAW is a **personal AI assistant** that lives on your machine and works from
 > 💬 *"Refactor this module and write tests"* → sub-agents handle it while you grab coffee  
 > 💬 *"Download that PDF and put the key points in Notion"* → browser + Notion skill, done
 
-Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, Codex, Gemini, OpenCode, Copilot) through their official CLIs — giving you the best of every provider in one unified experience. If one engine is busy, it automatically falls back to the next. 107 built-in skills handle everything from browser automation to document generation.
+Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, Codex, Gemini, OpenCode, Copilot) through their official CLIs — giving you the best of every provider in one unified experience. If one engine is busy, it automatically falls back to the next. 122 built-in skills handle everything from browser automation to document generation.
 
 |                                | Why CLI-JAW?                                                                             |
 | ------------------------------ | ---------------------------------------------------------------------------------------- |
@@ -38,7 +38,7 @@ Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, C
 | 🤖 **Verified Agent Tools**     | 5 battle-tested coding agents (Claude, Codex, Gemini, OpenCode, Copilot) under one roof. |
 | ⚡ **Multi-Agent Fallback**     | One engine down? The next picks up automatically. Zero downtime.                         |
 | 🎭 **Orchestrated Performance** | Complex tasks split across specialized sub-agents for maximum throughput.                |
-| 📦 **107 Built-in Skills**      | Browser automation, document generation, Telegram, memory — ready out of the box.        |
+| 📦 **122 Built-in Skills**      | Browser automation, document generation, Telegram, memory — ready out of the box.        |
 | 🖥️ **Cross-Platform**           | macOS, Linux, Windows (WSL) — browser launch, CLI detection, and install all work natively. |
 
 ![CLI-JAW Terminal](docs/screenshots/terminal-cli.png)
@@ -65,7 +65,7 @@ graph LR
 - 🤖 **5 AI engines, 1 assistant** — Claude · Codex · Gemini · OpenCode · Copilot. Switch with `/cli`.
 - ⚡ **Auto fallback** — If one engine is down, the next picks up seamlessly.
 - 🎭 **Multi-agent orchestration** — Complex tasks get split across specialized sub-agents automatically.
-- 📦 **107 skills** — Browser control, file editing, image generation, web search, and [much more](#-skill-system).
+- 📦 **122 skills** — Browser control, file editing, image generation, web search, and [much more](#-skill-system).
 - 🧠 **Persistent memory** — Your assistant remembers past conversations and preferences across sessions.
 - 📱 **Telegram bot** — Chat with your assistant from your phone, send voice/photos/files.
 - 🌐 **Browser automation** — Your assistant can navigate the web, click, type, and screenshot.
@@ -147,7 +147,7 @@ jaw chat         # Terminal TUI (no browser needed)
 
 ## 📦 Skill System
 
-**107 skills** out of the box — browser, github, notion, telegram, memory, pdf, image generation, and [much more](#).
+**122 skills** out of the box — browser, github, notion, telegram, memory, pdf, image generation, and [much more](#).
 
 <details>
 <summary>View all skills</summary>
@@ -155,7 +155,7 @@ jaw chat         # Terminal TUI (no browser needed)
 | Tier                 | Count | How it works                                              |
 | -------------------- | :---: | --------------------------------------------------------- |
 | **Active Skills**    |  17   | Auto-injected into every AI prompt. Always available.     |
-| **Reference Skills** |  90   | AI reads them on-demand when you ask for a relevant task. |
+| **Reference Skills** | 105   | AI reads them on-demand when you ask for a relevant task. |
 
 #### Active Skills (always on)
 
@@ -175,7 +175,7 @@ jaw chat         # Terminal TUI (no browser needed)
 
 #### Reference Skills (on-demand)
 
-88+ more skills ready to use — spotify, weather, deep-research, tts, video-downloader, apple-reminders, 1password, terraform, postgres, jupyter-notebook, sentry, and more.
+88+ more skills ready to use — spotify, weather, deep-research, tts, video-downloader, apple-reminders, 1password, terraform, postgres, jupyter-notebook, sentry, whatsapp, and more.
 
 ```bash
 jaw skill install <name>    # Activate a reference skill permanently
@@ -288,11 +288,42 @@ jaw mcp install <package>         # Install MCP → syncs to all 5 CLIs
 jaw memory search <query>         # Search memory
 jaw browser start                 # Launch Chrome (CDP)
 jaw browser vision-click "Login"  # AI-powered click
+jaw clone ~/my-project            # Clone instance for a separate project
+jaw --home ~/my-project serve --port 3458  # Run a second instance
 jaw launchd                       # Auto-start on boot (macOS)
+jaw launchd --port 3458           # Auto-start with custom port
 jaw launchd status                # Check daemon status
 jaw launchd unset                 # Remove auto-start
 jaw reset                         # Full reset
 ```
+
+---
+
+## 🏗️ Multi-Instance — Separate Projects, Separate Contexts
+
+Run multiple isolated instances of CLI-JAW — each with its own settings, memory, skills, and database.
+
+```bash
+# Clone your default instance to a new project
+jaw clone ~/my-project
+
+# Run it on a different port
+jaw --home ~/my-project serve --port 3458
+
+# Or auto-start both on boot
+jaw launchd                                    # default → port 3457
+jaw --home ~/my-project launchd --port 3458    # project → port 3458
+```
+
+Each instance is fully independent — different working directory, different memory, different MCP config. Perfect for separating work/personal contexts or per-project AI setups.
+
+| Flag / Env             | What it does                                |
+| ---------------------- | ------------------------------------------- |
+| `--home <path>`        | Use a custom home directory for this run    |
+| `--home=<path>`        | Same, with `=` syntax                       |
+| `CLI_JAW_HOME=<path>`  | Set via environment variable                |
+| `jaw clone <target>`   | Clone current instance to a new directory   |
+| `--port <port>`        | Custom port for `serve` / `launchd`         |
 
 ---
 
@@ -360,7 +391,7 @@ src/
 ## 🧪 Tests
 
 <details>
-<summary>252 pass · 1 skipped · zero external dependencies</summary>
+<summary>306 pass · 1 skipped · zero external dependencies</summary>
 
 ```bash
 npm test
@@ -404,7 +435,7 @@ All tests run via `tsx --test` (native Node.js test runner + TypeScript).
 
 Contributions are welcome! Here's how to get started:
 
-1. Fork the repo and create your branch from `main`
+1. Fork the repo and create your branch from `master`
 2. Run `npm run build && npm test` to make sure everything works
 3. Submit a PR — we'll review it promptly
 
