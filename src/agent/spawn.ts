@@ -276,6 +276,18 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     }
 
     const agentLabel = agentId || 'main';
+
+    // ─── DIFF-A: Preflight — verify CLI binary exists before spawn ───
+    const detected = detectCli(cli);
+    if (!detected.available) {
+        const msg = `CLI '${cli}' not found in PATH. Run \`jaw doctor --json\`.`;
+        console.error(`[jaw:${agentLabel}] ${msg}`);
+        broadcast('agent_done', { text: `❌ ${msg}`, error: true, origin });
+        resolve!({ text: '', code: 127 });
+        if (mainManaged) processQueue();
+        return { child: null, promise: resultPromise };
+    }
+
     if (cli === 'copilot') {
         console.log(`[jaw:${agentLabel}] Spawning: copilot --acp --model ${model} [${permissions}]`);
     } else {
@@ -319,6 +331,20 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         if (mainManaged) activeProcess = child;
         activeProcesses.set(agentLabel, child);
         broadcast('agent_status', { running: true, agentId: agentLabel, cli });
+
+        // ─── DIFF-C: ACP error guard — prevent uncaught EventEmitter crash ───
+        acp.on('error', (err: Error) => {
+            const msg = `Copilot ACP spawn failed: ${err.message}`;
+            console.error(`[acp:error] ${msg}`);
+            activeProcesses.delete(agentLabel);
+            if (mainManaged) {
+                activeProcess = null;
+                broadcast('agent_status', { running: false, agentId: agentLabel });
+            }
+            broadcast('agent_done', { text: `❌ ${msg}`, error: true, origin });
+            resolve!({ text: '', code: 1 });
+            if (mainManaged) processQueue();
+        });
 
         if (mainManaged && !opts.internal && !opts._skipInsert) {
             insertMessage.run('user', prompt, cli, model);
@@ -502,14 +528,32 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     }
 
     // ─── Standard CLI branch (claude/codex/gemini/opencode) ──────
+    // DIFF-B: Windows needs shell:true to resolve .cmd shims (npm global installs)
     const child = spawn(cli, args, {
         cwd: settings.workingDir,
         env: spawnEnv,
         stdio: ['pipe', 'pipe', 'pipe'],
+        ...(process.platform === 'win32' ? { shell: true } : {}),
     });
     if (mainManaged) activeProcess = child;
     activeProcesses.set(agentLabel, child);
     broadcast('agent_status', { running: true, agentId: agentLabel, cli });
+
+    // ─── DIFF-A: error guard — prevent uncaught ENOENT crash ───
+    child.on('error', (err: NodeJS.ErrnoException) => {
+        const msg = err.code === 'ENOENT'
+            ? `CLI '${cli}' 실행 실패 (ENOENT). 설치/경로를 확인하세요.`
+            : `CLI '${cli}' 실행 실패: ${err.message}`;
+        console.error(`[jaw:${agentLabel}:error] ${msg}`);
+        activeProcesses.delete(agentLabel);
+        if (mainManaged) {
+            activeProcess = null;
+            broadcast('agent_status', { running: false, agentId: agentLabel });
+        }
+        broadcast('agent_done', { text: `❌ ${msg}`, error: true, origin });
+        resolve!({ text: '', code: 127 });
+        if (mainManaged) processQueue();
+    });
 
     if (mainManaged && !opts.internal && !opts._skipInsert) {
         insertMessage.run('user', prompt, cli, model);

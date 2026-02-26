@@ -8,16 +8,36 @@ let _cachedToken: string | null = null;
 
 function getCopilotToken() {
     if (_cachedToken) return _cachedToken;
-    try {
-        _cachedToken = execSync(
-            'security find-generic-password -s "copilot-cli" -w',
-            { encoding: 'utf8', timeout: 5000 }
-        ).trim();
-    } catch (e: unknown) {
-        console.warn('[quota-copilot] keychain read failed:', (e as Error).message?.split('\n')[0]);
-        return null;
+
+    // ─── DIFF-D: env-first fallback (cross-platform) ───
+    const envToken =
+        process.env.COPILOT_GITHUB_TOKEN ||
+        process.env.GH_TOKEN ||
+        process.env.GITHUB_TOKEN;
+    if (envToken) {
+        _cachedToken = envToken;
+        return _cachedToken;
     }
-    return _cachedToken || null;
+
+    // macOS only: Keychain lookup
+    if (process.platform === 'darwin') {
+        try {
+            _cachedToken = execSync(
+                'security find-generic-password -s "copilot-cli" -w',
+                { encoding: 'utf8', timeout: 5000 }
+            ).trim();
+        } catch (e: unknown) {
+            console.warn('[quota-copilot] keychain read failed:', (e as Error).message?.split('\n')[0]);
+            return null;
+        }
+        return _cachedToken || null;
+    }
+
+    // win32/linux: no keychain CLI — rely on env tokens above
+    if (process.env.DEBUG) {
+        console.info(`[quota-copilot] token lookup skipped on ${process.platform} (set COPILOT_GITHUB_TOKEN or GH_TOKEN)`);
+    }
+    return null;
 }
 
 export async function fetchCopilotQuota() {
