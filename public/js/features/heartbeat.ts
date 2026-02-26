@@ -1,16 +1,9 @@
 // ── Heartbeat Feature ──
 import { state } from '../state.js';
+import type { HeartbeatJob } from '../state.js';
 import { t } from './i18n.js';
 import { api, apiJson } from '../api.js';
 import { escapeHtml } from '../render.js';
-
-interface HeartbeatJob {
-    id: string;
-    name?: string;
-    enabled: boolean;
-    schedule?: { kind?: string; minutes?: number };
-    prompt?: string;
-}
 
 interface HeartbeatData {
     jobs: HeartbeatJob[];
@@ -41,7 +34,7 @@ export function renderHeartbeatJobs(): void {
                     <input type="text" value="${escapeHtml(job.name || '')}" placeholder="${t('hb.name')}"
                         data-hb-name="${i}">
                     <span style="font-size:11px;color:var(--text-dim)">every</span>
-                    <input type="number" value="${job.schedule?.minutes || 5}" min="1"
+                    <input type="number" value="${(job.schedule as Record<string, unknown>)?.minutes || 5}" min="1"
                         data-hb-minutes="${i}">
                     <span style="font-size:11px;color:var(--text-dim)">min</span>
                     <button class="hb-toggle ${job.enabled ? 'on' : 'off'}"

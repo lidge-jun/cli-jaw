@@ -106,7 +106,7 @@ function renderMemFiles(files: MemoryFile[]): void {
 
 export async function deleteMemFile(name: string): Promise<void> {
     if (!confirm('Delete ' + name + '?')) return;
-    await apiJson('/api/memory-files/' + name, 'DELETE', null);
+    await apiJson('/api/memory-files/' + name, 'DELETE', {});
     openMemoryModal();
 }
 
