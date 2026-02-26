@@ -42,6 +42,7 @@
   "scripts": {
     "dev": "tsx --env-file=.env server.ts",
     "postinstall": "node scripts/postinstall-guard.cjs && node dist/bin/postinstall.js",
+    "clean:dist": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});\"",
     "check:copilot-gap": "node scripts/check-copilot-gap.js",
     "check:deps": "node scripts/check-deps-offline.mjs",
     "check:deps:online": "bash scripts/check-deps-online.sh",
@@ -51,11 +52,13 @@
     "test:events": "tsx --test tests/events.test.ts",
     "test:telegram": "tsx --test tests/telegram-forwarding.test.ts",
     "test:smoke": "TEST_PORT=3457 tsx --test tests/integration/api-smoke.test.ts",
-    "build": "tsc",
+    "test:fresh-install": "node scripts/fresh-install-smoke.mjs",
+    "build": "npm run clean:dist && tsc",
     "build:frontend": "node esbuild.config.mjs",
     "watch:frontend": "node esbuild.config.mjs --watch",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "tsc && node esbuild.config.mjs"
+    "typecheck:frontend": "tsc --noEmit -p tsconfig.frontend.json",
+    "prepublishOnly": "npm run build && node esbuild.config.mjs"
   },
   "dependencies": {
     "@grammyjs/runner": "^2.0.3",

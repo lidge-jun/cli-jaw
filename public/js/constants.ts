@@ -1,7 +1,16 @@
 // ── Shared constants (frontend) ──
 import { api } from './api.js';
 
-const FALLBACK_CLI_REGISTRY = {
+export interface CliEntry {
+    label: string;
+    efforts: string[];
+    models: string[];
+    effortNote?: string;
+}
+
+export type CliRegistry = Record<string, CliEntry>;
+
+const FALLBACK_CLI_REGISTRY: CliRegistry = {
     claude: {
         label: 'Claude',
         efforts: ['low', 'medium', 'high'],
@@ -53,36 +62,39 @@ const FALLBACK_CLI_REGISTRY = {
     },
 };
 
-function toModelMap(registry) {
-    const out = {};
-    for (const [key, value] of Object.entries(registry || {})) {
+type ModelMap = Record<string, string[]>;
+
+function toModelMap(registry: CliRegistry): ModelMap {
+    const out: ModelMap = {};
+    for (const [key, value] of Object.entries(registry)) {
         out[key] = Array.isArray(value?.models) ? [...value.models] : [];
     }
     return out;
 }
 
-function normalizeRegistry(input) {
-    const out = {};
+function normalizeRegistry(input: Record<string, unknown>): CliRegistry {
+    const out: CliRegistry = {};
     for (const [key, value] of Object.entries(input || {})) {
         if (!value || typeof value !== 'object') continue;
-        const normalized = {
-            label: value.label || key,
-            efforts: Array.isArray(value.efforts) ? [...value.efforts] : [],
-            models: Array.isArray(value.models) ? [...value.models] : [],
+        const v = value as Record<string, unknown>;
+        const normalized: CliEntry = {
+            label: (v.label as string) || key,
+            efforts: Array.isArray(v.efforts) ? [...v.efforts] as string[] : [],
+            models: Array.isArray(v.models) ? [...v.models] as string[] : [],
         };
-        if (typeof value.effortNote === 'string' && value.effortNote.trim()) {
-            normalized.effortNote = value.effortNote;
+        if (typeof v.effortNote === 'string' && v.effortNote.trim()) {
+            normalized.effortNote = v.effortNote;
         }
         out[key] = normalized;
     }
     return out;
 }
 
-export let CLI_REGISTRY = normalizeRegistry(FALLBACK_CLI_REGISTRY);
-export let CLI_KEYS = Object.keys(CLI_REGISTRY);
-export let MODEL_MAP = toModelMap(CLI_REGISTRY);
+export let CLI_REGISTRY: CliRegistry = normalizeRegistry(FALLBACK_CLI_REGISTRY as unknown as Record<string, unknown>);
+export let CLI_KEYS: string[] = Object.keys(CLI_REGISTRY);
+export let MODEL_MAP: ModelMap = toModelMap(CLI_REGISTRY);
 
-function applyRegistry(registry) {
+function applyRegistry(registry: Record<string, unknown>): boolean {
     const normalized = normalizeRegistry(registry);
     if (!Object.keys(normalized).length) return false;
     CLI_REGISTRY = normalized;
@@ -91,29 +103,37 @@ function applyRegistry(registry) {
     return true;
 }
 
-export async function loadCliRegistry() {
+export async function loadCliRegistry(): Promise<CliRegistry> {
     try {
-        const data = await api('/api/cli-registry');
+        const data = await api<Record<string, unknown>>('/api/cli-registry');
         if (!data || !applyRegistry(data)) throw new Error('invalid registry');
     } catch (e) {
-        console.warn('[cli-registry] fallback:', e.message);
-        applyRegistry(FALLBACK_CLI_REGISTRY);
+        console.warn('[cli-registry] fallback:', (e as Error).message);
+        applyRegistry(FALLBACK_CLI_REGISTRY as unknown as Record<string, unknown>);
     }
     return CLI_REGISTRY;
 }
 
-export function getCliKeys() {
+export function getCliKeys(): string[] {
     return CLI_KEYS;
 }
 
-export function getCliMeta(cli) {
+export function getCliMeta(cli: string): CliEntry | null {
     return CLI_REGISTRY[cli] || null;
 }
 
-export const ROLE_PRESETS = [
+export interface RolePreset {
+    value: string;
+    labelKey: string;
+    label: string;
+    prompt: string;
+    skill: string | null;
+}
+
+export const ROLE_PRESETS: readonly RolePreset[] = [
     { value: 'frontend', labelKey: 'role.label.frontend', label: 'Frontend', prompt: 'UI/UX, CSS, components', skill: 'dev-frontend' },
     { value: 'backend', labelKey: 'role.label.backend', label: 'Backend', prompt: 'API, DB, server logic', skill: 'dev-backend' },
     { value: 'data', labelKey: 'role.label.data', label: 'Data', prompt: 'Data pipeline, analysis, ML', skill: 'dev-data' },
     { value: 'docs', labelKey: 'role.label.docs', label: 'Docs', prompt: 'Documentation, README, API docs', skill: 'documentation' },
     { value: 'custom', labelKey: 'role.label.custom', label: 'Custom...', prompt: '', skill: null },
-];
+] as const;

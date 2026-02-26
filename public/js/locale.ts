@@ -1,8 +1,8 @@
 // ── Web Locale Helpers ──
 
-const LOCALE_KEYS = ['claw_locale', 'claw.locale'];
+const LOCALE_KEYS: string[] = ['claw_locale', 'claw.locale'];
 
-export function getPreferredLocale() {
+export function getPreferredLocale(): string {
     try {
         for (const key of LOCALE_KEYS) {
             const saved = localStorage.getItem(key);
@@ -12,7 +12,7 @@ export function getPreferredLocale() {
     return navigator.language || 'ko';
 }
 
-export function syncStoredLocale(locale) {
+export function syncStoredLocale(locale: string): void {
     const value = String(locale || '').trim();
     if (!value) return;
     try {
