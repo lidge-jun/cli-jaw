@@ -48,7 +48,7 @@ Phase 1-5 구현 완료 후 직원 리뷰에서 발견된 3건의 실제 버그 
 | WS (cli) | server.ts L195-201 | `if (activeProcess)` → busy 응답 |
 | HTTP `/api/message` | server.ts L408-411 | `if (activeProcess)` → 409 |
 | HTTP `/api/orchestrate/reset` | server.ts L431-433 | `if (activeProcess)` → 409 |
-| Telegram | bot.ts L67 | 이미 `activeProcess` 체크 있음 (큐 경로) — **수정 불필요** |
+| Telegram | bot.ts L450 | `if (activeProcess)` → busy 응답, idle → `orchestrateReset` 직접 실행 |
 
 ---
 

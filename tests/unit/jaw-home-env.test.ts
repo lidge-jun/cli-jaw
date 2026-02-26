@@ -96,3 +96,23 @@ test('P23-003: mcp.ts fallback uses JAW_HOME, not homedir()', () => {
     assert.ok(!fn.includes('homedir()'), 'getWorkingDir fallback should NOT use homedir()');
     assert.ok(fn.includes('JAW_HOME'), 'getWorkingDir fallback should use JAW_HOME');
 });
+
+test('P23-004: --home with subcommand as value produces error', () => {
+    assert.throws(
+        () => execSync(
+            `node dist/bin/cli-jaw.js --home clone`,
+            { cwd: projectRoot, encoding: 'utf8', stdio: 'pipe' }
+        ),
+        { status: 1 },
+    );
+});
+
+test('P23-005: --home without any value produces error', () => {
+    assert.throws(
+        () => execSync(
+            `node dist/bin/cli-jaw.js --home`,
+            { cwd: projectRoot, encoding: 'utf8', stdio: 'pipe' }
+        ),
+        { status: 1 },
+    );
+});

@@ -83,9 +83,10 @@ export async function steerAgent(newPrompt: string, source: string) {
     if (wasRunning) await waitForProcessEnd(3000);
     insertMessage.run('user', newPrompt, source, '');
     broadcast('new_message', { role: 'user', content: newPrompt, source });
-    const { orchestrate, orchestrateContinue, isContinueIntent } = await import('../orchestrator/pipeline.js');
+    const { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
-    if (isContinueIntent(newPrompt)) orchestrateContinue({ origin });
+    if (isResetIntent(newPrompt)) orchestrateReset({ origin });
+    else if (isContinueIntent(newPrompt)) orchestrateContinue({ origin });
     else orchestrate(newPrompt, { origin });
 }
 
@@ -108,9 +109,10 @@ export async function processQueue() {
     insertMessage.run('user', combined, source, '');
     broadcast('new_message', { role: 'user', content: combined, source });
     broadcast('queue_update', { pending: 0 });
-    const { orchestrate, orchestrateContinue, isContinueIntent } = await import('../orchestrator/pipeline.js');
+    const { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
-    if (isContinueIntent(combined)) orchestrateContinue({ origin });
+    if (isResetIntent(combined)) orchestrateReset({ origin });
+    else if (isContinueIntent(combined)) orchestrateContinue({ origin });
     else orchestrate(combined, { origin });
 }
 

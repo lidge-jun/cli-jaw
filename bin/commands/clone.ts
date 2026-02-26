@@ -44,6 +44,15 @@ if (fs.existsSync(target) && fs.readdirSync(target).length > 0) {
     process.exit(1);
 }
 
+if (!fs.existsSync(source)) {
+    console.error(`❌ Source directory does not exist: ${source}`);
+    process.exit(1);
+}
+if (!fs.existsSync(path.join(source, 'settings.json'))) {
+    console.error(`❌ Source is not a valid cli-jaw instance (missing settings.json): ${source}`);
+    process.exit(1);
+}
+
 // ── 1. Create target structure ──
 fs.mkdirSync(target, { recursive: true });
 for (const dir of ['prompts', 'skills', 'worklogs', 'uploads', 'memory', 'logs']) {

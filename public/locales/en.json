@@ -73,6 +73,7 @@
     "tg.timeout": "⏰ Timeout (20 min no response)",
     "tg.noResponse": "No response",
     "tg.connected": "🦈 Jaw Agent connected! Send a message and the AI agent will respond.",
+    "tg.resetDone": "✅ Reset complete.",
     "cli.fileNotFound": "File not found: {path}",
     "cli.fileSentPrompt": "[User sent a file: {path}]\nPlease read and analyze this file.",
     "cli.fileSentWithMsg": "\n\nUser message: {text}",

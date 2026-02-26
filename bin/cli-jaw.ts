@@ -24,10 +24,22 @@ try {
 const _homeIdx = process.argv.indexOf('--home');
 const _homeEqArg = process.argv.find(a => a.startsWith('--home='));
 if (_homeIdx !== -1 && process.argv[_homeIdx + 1]) {
+    const _homeVal = process.argv[_homeIdx + 1]!;
+    // Guard: if the "value" looks like a known subcommand, user forgot the path
+    const _knownCmds = ['serve','init','doctor','chat','employee','reset','mcp','skill','status','browser','memory','launchd','clone'];
+    if (_knownCmds.includes(_homeVal)) {
+        console.error(`  ❌ --home requires a path argument (got subcommand '${_homeVal}')`);
+        console.error(`  Usage: jaw --home <path> ${_homeVal}`);
+        process.exit(1);
+    }
     process.env.CLI_JAW_HOME = resolve(
-        process.argv[_homeIdx + 1]!.replace(/^~(?=\/|$)/, homedir())
+        _homeVal.replace(/^~(?=\/|$)/, homedir())
     );
     process.argv.splice(_homeIdx, 2);
+} else if (_homeIdx !== -1 && !process.argv[_homeIdx + 1]) {
+    console.error('  ❌ --home requires a path argument');
+    console.error('  Usage: jaw --home <path> <command>');
+    process.exit(1);
 } else if (_homeEqArg) {
     const val = _homeEqArg.slice('--home='.length);
     process.env.CLI_JAW_HOME = resolve(val.replace(/^~(?=\/|$)/, homedir()));

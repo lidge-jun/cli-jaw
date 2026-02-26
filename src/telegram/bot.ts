@@ -457,7 +457,7 @@ export function initTelegram() {
             insertMessage.run('user', text, 'telegram', '');
             broadcast('new_message', { role: 'user', content: text, source: 'telegram' });
             await orchestrateReset({ origin: 'telegram' });
-            await ctx.reply(t('tg.resetDone', {}, currentLocale()) || '리셋 완료.');
+            await ctx.reply(t('tg.resetDone', {}, currentLocale()));
             return;
         }
         tgOrchestrate(ctx, text, text);

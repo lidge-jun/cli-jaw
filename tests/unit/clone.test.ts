@@ -1,4 +1,4 @@
-// Multi-Instance Phase 3: jaw clone command 검증
+// Multi-Instance Phase 3: jaw clone command 검증 (fixture-based, CI-safe)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
@@ -14,80 +14,95 @@ function cleanup(dir: string) {
     rmSync(dir, { recursive: true, force: true });
 }
 
+/** Create a minimal fixture source that clone accepts */
+function createFixtureSource(dir: string) {
+    mkdirSync(dir, { recursive: true });
+    mkdirSync(join(dir, 'prompts'), { recursive: true });
+    mkdirSync(join(dir, 'skills'), { recursive: true });
+    mkdirSync(join(dir, 'memory'), { recursive: true });
+    writeFileSync(join(dir, 'settings.json'), JSON.stringify({ workingDir: dir, cli: 'claude', permissions: 'auto' }, null, 4));
+    writeFileSync(join(dir, 'mcp.json'), '{}');
+    writeFileSync(join(dir, 'heartbeat.json'), '{"jobs":[]}');
+    writeFileSync(join(dir, 'prompts', 'A-1.md'), '# Test Prompt');
+    writeFileSync(join(dir, 'memory', 'MEMORY.md'), '# Test Memory');
+}
+
 test('P3-001: clone creates all required directories', () => {
+    const source = '/tmp/test-clone-src-001';
     const target = '/tmp/test-clone-p3-001';
-    cleanup(target);
+    cleanup(source); cleanup(target);
+    createFixtureSource(source);
     try {
-        execSync(`${JAW} clone ${target}`, { cwd: projectRoot, stdio: 'pipe' });
+        execSync(`${JAW} clone ${target} --from ${source}`, { cwd: projectRoot, stdio: 'pipe' });
         for (const dir of ['prompts', 'skills', 'worklogs', 'uploads', 'memory', 'logs']) {
             assert.ok(existsSync(join(target, dir)), `${dir}/ should exist`);
         }
         assert.ok(existsSync(join(target, 'settings.json')), 'settings.json should exist');
     } finally {
-        cleanup(target);
+        cleanup(source); cleanup(target);
     }
 });
 
 test('P3-002: clone sets workingDir to target path', () => {
+    const source = '/tmp/test-clone-src-002';
     const target = '/tmp/test-clone-p3-002';
-    cleanup(target);
+    cleanup(source); cleanup(target);
+    createFixtureSource(source);
     try {
-        execSync(`${JAW} clone ${target}`, { cwd: projectRoot, stdio: 'pipe' });
+        execSync(`${JAW} clone ${target} --from ${source}`, { cwd: projectRoot, stdio: 'pipe' });
         const settings = JSON.parse(readFileSync(join(target, 'settings.json'), 'utf8'));
         assert.equal(settings.workingDir, target);
     } finally {
-        cleanup(target);
+        cleanup(source); cleanup(target);
     }
 });
 
 test('P3-003: clone does NOT copy jaw.db from source', () => {
+    const source = '/tmp/test-clone-src-003';
     const target = '/tmp/test-clone-p3-003';
-    cleanup(target);
+    cleanup(source); cleanup(target);
+    createFixtureSource(source);
+    writeFileSync(join(source, 'jaw.db'), 'fake-db-data-should-not-be-copied');
     try {
-        execSync(`${JAW} clone ${target}`, { cwd: projectRoot, stdio: 'pipe' });
-        // jaw.db may be created by regenerateB subprocess, but it should be fresh (empty)
-        // The key is that source DB data is NOT carried over
+        execSync(`${JAW} clone ${target} --from ${source}`, { cwd: projectRoot, stdio: 'pipe' });
         if (existsSync(join(target, 'jaw.db'))) {
-            const stat = lstatSync(join(target, 'jaw.db'));
-            // Fresh DB should be very small (< 100KB) compared to active one
-            assert.ok(stat.size < 100_000, 'jaw.db should be fresh (small)');
+            const content = readFileSync(join(target, 'jaw.db'), 'utf8');
+            assert.notEqual(content, 'fake-db-data-should-not-be-copied', 'jaw.db should not be copied from source');
         }
-        // Either doesn't exist or is fresh — both valid
         assert.ok(true);
     } finally {
-        cleanup(target);
+        cleanup(source); cleanup(target);
     }
 });
 
 test('P3-004: clone --with-memory copies MEMORY.md', () => {
+    const source = '/tmp/test-clone-src-004';
     const target = '/tmp/test-clone-p3-004';
-    cleanup(target);
+    cleanup(source); cleanup(target);
+    createFixtureSource(source);
     try {
-        execSync(`${JAW} clone ${target} --with-memory`, { cwd: projectRoot, stdio: 'pipe' });
-        const memPath = join(target, 'memory', 'MEMORY.md');
-        // Only assert if source has MEMORY.md
-        const sourceMem = join(process.env.HOME || '', '.cli-jaw', 'memory', 'MEMORY.md');
-        if (existsSync(sourceMem)) {
-            assert.ok(existsSync(memPath), 'MEMORY.md should be copied');
-        } else {
-            assert.ok(true, 'No source MEMORY.md to copy');
-        }
+        execSync(`${JAW} clone ${target} --from ${source} --with-memory`, { cwd: projectRoot, stdio: 'pipe' });
+        assert.ok(existsSync(join(target, 'memory', 'MEMORY.md')), 'MEMORY.md should be copied');
+        assert.equal(readFileSync(join(target, 'memory', 'MEMORY.md'), 'utf8'), '# Test Memory');
     } finally {
-        cleanup(target);
+        cleanup(source); cleanup(target);
     }
 });
 
 test('P3-005: clone --link-ref creates symlink for skills_ref', () => {
+    const source = '/tmp/test-clone-src-005';
     const target = '/tmp/test-clone-p3-005';
-    cleanup(target);
+    cleanup(source); cleanup(target);
+    createFixtureSource(source);
+    mkdirSync(join(source, 'skills_ref'), { recursive: true });
+    writeFileSync(join(source, 'skills_ref', 'test.md'), 'ref');
     try {
-        execSync(`${JAW} clone ${target} --link-ref`, { cwd: projectRoot, stdio: 'pipe' });
+        execSync(`${JAW} clone ${target} --from ${source} --link-ref`, { cwd: projectRoot, stdio: 'pipe' });
         const refPath = join(target, 'skills_ref');
-        if (existsSync(refPath)) {
-            assert.ok(lstatSync(refPath).isSymbolicLink(), 'skills_ref should be a symlink');
-        }
+        assert.ok(existsSync(refPath), 'skills_ref should exist');
+        assert.ok(lstatSync(refPath).isSymbolicLink(), 'skills_ref should be a symlink');
     } finally {
-        cleanup(target);
+        cleanup(source); cleanup(target);
     }
 });
 
@@ -103,5 +118,34 @@ test('P3-006: clone to non-empty dir fails', () => {
         );
     } finally {
         cleanup(target);
+    }
+});
+
+test('P3-007: clone from non-existent source fails', () => {
+    const target = '/tmp/test-clone-p3-007';
+    cleanup(target);
+    try {
+        assert.throws(
+            () => execSync(`${JAW} clone ${target} --from /tmp/does-not-exist-xyz`, { cwd: projectRoot, stdio: 'pipe' }),
+            { status: 1 },
+        );
+    } finally {
+        cleanup(target);
+    }
+});
+
+test('P3-008: clone from invalid source (no settings.json) fails', () => {
+    const source = '/tmp/test-clone-src-008';
+    const target = '/tmp/test-clone-p3-008';
+    cleanup(source); cleanup(target);
+    mkdirSync(source, { recursive: true });
+    // No settings.json → not a valid cli-jaw instance
+    try {
+        assert.throws(
+            () => execSync(`${JAW} clone ${target} --from ${source}`, { cwd: projectRoot, stdio: 'pipe' }),
+            { status: 1 },
+        );
+    } finally {
+        cleanup(source); cleanup(target);
     }
 });

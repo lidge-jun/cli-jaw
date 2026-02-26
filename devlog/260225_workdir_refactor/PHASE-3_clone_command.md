@@ -1,7 +1,7 @@
 # Phase 3: `jaw clone` Command
 
-**Status**: Planning
-**Files**: 1 new file (~120 lines), 1 modified (cli-jaw.ts routing)
+**Status**: ✅ Implemented (commit `8912541`, hotfixed R9)
+**Files**: `bin/commands/clone.ts` (156 lines), `bin/cli-jaw.ts` (routing + --home guard)
 **Dependency**: Phase 2 (needs dynamic JAW_HOME to point cloned instance at new dir)
 
 ---

@@ -51,7 +51,7 @@ npm test -- --test-name-pattern "EP-|CP-|IN-|RS-|ORT-"
 
 ### A-004 reset regex 경계 확인 (수동 스모크 스크립트)
 ```bash
-node -e "const re=/^페이즈?스*리셋해?$/i; ['페이즈 리셋해','페이즈리셋해','페이스리셋해'].forEach(s=>console.log(s,re.test(s)));"
+node -e "const re=/^페이즈?\s*리셋해?$/i; ['페이즈 리셋해','페이즈리셋해','페이스리셋해'].forEach(s=>console.log(s,re.test(s)));"
 ```
 기대 결과(목표): `"페이즈 리셋해"`는 `true`여야 함.
 
