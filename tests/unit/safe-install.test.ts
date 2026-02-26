@@ -26,10 +26,10 @@ test('SAF-002: postinstall has npm_config_jaw_safe guard', () => {
 
 // ── SAF-003: safe guard exits early ──
 
-test('SAF-003: safe mode exits with process.exit(0)', () => {
+test('SAF-003: safe mode returns early (no side effects)', () => {
     const guardStart = postinstallSrc.indexOf('if (isSafeMode)');
     const guardBlock = postinstallSrc.slice(guardStart, guardStart + 500);
-    assert.ok(guardBlock.includes('process.exit(0)'), 'exits cleanly in safe mode');
+    assert.ok(guardBlock.includes('return'), 'returns early in safe mode');
     assert.ok(guardBlock.includes('safe mode'), 'prints safe mode message');
 });
 
@@ -82,10 +82,13 @@ test('INIT-002: init.ts has --dry-run option', () => {
 
 // ── INIT-003: no direct import('../postinstall.js') side-effect ──
 
-test('INIT-003: init.ts does not import postinstall.js as side-effect', () => {
+test('INIT-003: init.ts uses dynamic import for postinstall (no static side-effect)', () => {
+    // Static import causes top-level side effects; dynamic import() is controlled
+    const hasStaticImport = /^import\s+\{[^}]+\}\s+from\s+['"]\.\.[\/]postinstall/m.test(initSrc);
+    assert.ok(!hasStaticImport, 'no static import of postinstall (would cause side effects)');
     assert.ok(
-        !initSrc.includes("await import('../postinstall.js')"),
-        'no side-effect import of postinstall',
+        initSrc.includes("await import('../postinstall.js')"),
+        'uses dynamic import() for controlled loading',
     );
 });
 

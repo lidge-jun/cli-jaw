@@ -115,29 +115,7 @@ function logSkillsSymlinkReport(report: any) {
     }
 }
 
-// 1. Ensure ~/.cli-jaw/ directories
-ensureDir(jawHome);
-ensureDir(path.join(jawHome, 'skills'));
-ensureDir(path.join(jawHome, 'uploads'));
-
-// ── Safe mode guard ──
-// JAW_SAFE=1 npm install -g cli-jaw → skip all side-effects
-const isSafeMode = process.env.npm_config_jaw_safe === '1'
-    || process.env.npm_config_jaw_safe === 'true'
-    || process.env.JAW_SAFE === '1'
-    || process.env.JAW_SAFE === 'true';
-
-if (isSafeMode) {
-    console.log('[jaw:postinstall] 🔒 safe mode — home directory created only');
-    console.log('[jaw:postinstall] Run `jaw init` to configure interactively');
-    process.exit(0);
-}
-
-// 2. Skills symlinks (home-based default)
-const skillsSymlinkReport = ensureSkillsSymlinks(home, { onConflict: 'backup' });
-logSkillsSymlinkReport(skillsSymlinkReport);
-
-// ─── Exported install functions (used by init.ts) ─────
+// ─── Exported install functions (module-level, no side effects) ─────
 
 export type InstallOpts = {
     dryRun?: boolean;
@@ -185,28 +163,6 @@ export async function installCliTools(opts: InstallOpts = {}) {
     }
 }
 
-
-// 3. ~/CLAUDE.md → ~/AGENTS.md (if AGENTS.md exists and CLAUDE.md doesn't)
-const agentsMd = path.join(jawHome, 'AGENTS.md');
-const claudeMd = path.join(jawHome, 'CLAUDE.md');
-if (fs.existsSync(agentsMd) && !fs.existsSync(claudeMd)) {
-    ensureSymlink(agentsMd, claudeMd);
-}
-
-// 4. Ensure default heartbeat.json if missing
-const heartbeatPath = path.join(jawHome, 'heartbeat.json');
-if (!fs.existsSync(heartbeatPath)) {
-    fs.writeFileSync(heartbeatPath, JSON.stringify({ jobs: [] }, null, 2));
-    console.log(`[jaw:init] created ${heartbeatPath}`);
-}
-
-// 5. Initialize unified MCP config (import from existing .mcp.json if found)
-initMcpConfig(home);
-
-// 6. Copy default skills (Codex → ~/.cli-jaw/skills)
-copyDefaultSkills();
-
-// 7. Install default MCP servers globally (Phase 12.1.3)
 const MCP_PACKAGES = [
     { pkg: '@upstash/context7-mcp', bin: 'context7-mcp' },
 ];
@@ -250,7 +206,6 @@ export async function installMcpServers(opts: InstallOpts = {}) {
     if (updated) saveUnifiedMcp(config);
 }
 
-// 8. Auto-install skill dependencies (Phase 9)
 const SKILL_DEPS = [
     {
         name: 'uv',
@@ -292,8 +247,63 @@ export async function installSkillDeps(opts: InstallOpts = {}) {
     }
 }
 
-// ─── Main postinstall flow (non-safe mode) ──────────
-await installCliTools();
-await installMcpServers();
-await installSkillDeps();
-console.log('[jaw:init] setup complete ✅');
+// ─── runPostinstall: setup + install (no top-level side effects) ────
+// Called only when running as npm postinstall entry point.
+// Dynamic import from init.ts gets clean library exports only.
+
+export async function runPostinstall() {
+    // 1. Ensure ~/.cli-jaw/ directories
+    ensureDir(jawHome);
+    ensureDir(path.join(jawHome, 'skills'));
+    ensureDir(path.join(jawHome, 'uploads'));
+
+    // ── Safe mode guard ──
+    const isSafeMode = process.env.npm_config_jaw_safe === '1'
+        || process.env.npm_config_jaw_safe === 'true'
+        || process.env.JAW_SAFE === '1'
+        || process.env.JAW_SAFE === 'true';
+
+    if (isSafeMode) {
+        console.log('[jaw:postinstall] 🔒 safe mode — home directory created only');
+        console.log('[jaw:postinstall] Run `jaw init` to configure interactively');
+        return;
+    }
+
+    // 2. Skills symlinks
+    const skillsSymlinkReport = ensureSkillsSymlinks(home, { onConflict: 'backup' });
+    logSkillsSymlinkReport(skillsSymlinkReport);
+
+    // 3. CLAUDE.md → AGENTS.md symlink
+    const agentsMd = path.join(jawHome, 'AGENTS.md');
+    const claudeMd = path.join(jawHome, 'CLAUDE.md');
+    if (fs.existsSync(agentsMd) && !fs.existsSync(claudeMd)) {
+        ensureSymlink(agentsMd, claudeMd);
+    }
+
+    // 4. Default heartbeat.json
+    const heartbeatPath = path.join(jawHome, 'heartbeat.json');
+    if (!fs.existsSync(heartbeatPath)) {
+        fs.writeFileSync(heartbeatPath, JSON.stringify({ jobs: [] }, null, 2));
+        console.log(`[jaw:init] created ${heartbeatPath}`);
+    }
+
+    // 5. MCP config
+    initMcpConfig(home);
+
+    // 6. Default skills
+    copyDefaultSkills();
+
+    // 7-8. Install CLI tools, MCP servers, skill deps
+    await installCliTools();
+    await installMcpServers();
+    await installSkillDeps();
+    console.log('[jaw:init] setup complete ✅');
+}
+
+// Auto-run only when executed as CLI entry point (not imported)
+const isEntryPoint = process.argv[1]?.endsWith('postinstall.js')
+    || process.argv[1]?.endsWith('postinstall.ts');
+if (isEntryPoint) {
+    runPostinstall().catch(e => { console.error(e); process.exit(1); });
+}
+

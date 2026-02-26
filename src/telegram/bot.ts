@@ -202,7 +202,7 @@ export function initTelegram() {
     bot.command('id', (ctx) => ctx.reply(`Chat ID: <code>${ctx.chat.id}</code>`, { parse_mode: 'HTML' }));
 
     async function tgOrchestrate(ctx: any, prompt: string, displayMsg: string) {
-        const result = submitMessage(prompt, { origin: 'telegram', displayText: displayMsg });
+        const result = submitMessage(prompt, { origin: 'telegram', displayText: displayMsg, skipOrchestrate: true });
 
         if (result.action === 'queued') {
             console.log(`[tg:queue] agent busy, queued (${result.pending} pending)`);
@@ -368,17 +368,14 @@ export function initTelegram() {
         }
         console.log(`[tg:in] ${ctx.chat.id}: ${text.slice(0, 80)}`);
 
-        // Reset intent: agent busy이면 거부 (큐에 넣으면 일반 orchestrate로 실행됨)
+        // Reset intent: use submitMessage gateway for consistency
         if (isResetIntent(text)) {
-            if (activeProcess) {
+            const result = submitMessage(text, { origin: 'telegram' });
+            if (result.action === 'rejected') {
                 await ctx.reply(t('ws.agentBusy', {}, currentLocale()));
-                return;
+            } else {
+                await ctx.reply(t('tg.resetDone', {}, currentLocale()));
             }
-            markChatActive(ctx.chat.id);
-            insertMessage.run('user', text, 'telegram', '');
-            broadcast('new_message', { role: 'user', content: text, source: 'telegram' });
-            await orchestrateReset({ origin: 'telegram' });
-            await ctx.reply(t('tg.resetDone', {}, currentLocale()));
             return;
         }
         tgOrchestrate(ctx, text, text);

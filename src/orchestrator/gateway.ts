@@ -14,11 +14,14 @@ export type SubmitResult = {
     action: 'started' | 'queued' | 'rejected';
     reason?: string;
     pending?: number;
+    // backward-compat for REST consumers (chat.js expects these)
+    queued?: true;
+    continued?: true;
 };
 
 export function submitMessage(
     text: string,
-    meta: { origin: 'web' | 'cli' | 'telegram'; displayText?: string },
+    meta: { origin: 'web' | 'cli' | 'telegram'; displayText?: string; skipOrchestrate?: boolean },
 ): SubmitResult {
     const trimmed = text.trim();
     if (!trimmed) return { action: 'rejected', reason: 'empty' };
@@ -30,8 +33,8 @@ export function submitMessage(
         if (activeProcess) return { action: 'rejected', reason: 'busy' };
         insertMessage.run('user', display, meta.origin, '');
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
-        orchestrateContinue({ origin: meta.origin });
-        return { action: 'started' };
+        if (!meta.skipOrchestrate) orchestrateContinue({ origin: meta.origin });
+        return { action: 'started', continued: true };
     }
 
     // ── reset intent ──
@@ -39,7 +42,7 @@ export function submitMessage(
         if (activeProcess) return { action: 'rejected', reason: 'busy' };
         insertMessage.run('user', display, meta.origin, '');
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
-        orchestrateReset({ origin: meta.origin });
+        if (!meta.skipOrchestrate) orchestrateReset({ origin: meta.origin });
         return { action: 'started' };
     }
 
@@ -49,12 +52,14 @@ export function submitMessage(
     if (activeProcess) {
         enqueueMessage(trimmed, meta.origin);
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
-        return { action: 'queued', pending: messageQueue.length };
+        return { action: 'queued', pending: messageQueue.length, queued: true };
     }
 
     // ── idle → start immediately ──
     insertMessage.run('user', display, meta.origin, '');
     broadcast('new_message', { role: 'user', content: display, source: meta.origin });
-    orchestrate(trimmed, { origin: meta.origin });
+    if (!meta.skipOrchestrate) {
+        orchestrate(trimmed, { origin: meta.origin });
+    }
     return { action: 'started' };
 }

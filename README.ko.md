@@ -6,7 +6,7 @@
 
 *Claude, Codex, Gemini... 이제 번갈아 쓰지 마세요.*
 
-[![Tests](https://img.shields.io/badge/tests-345%20pass-brightgreen)](#-테스트)
+[![Tests](https://img.shields.io/badge/tests-357%20pass-brightgreen)](#-테스트)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
@@ -355,7 +355,7 @@ src/
 ## 🧪 테스트
 
 <details>
-<summary>345 pass · 1 skipped · 외부 의존성 0</summary>
+<summary>357 pass · 1 skipped · 외부 의존성 0</summary>
 
 ```bash
 npm test

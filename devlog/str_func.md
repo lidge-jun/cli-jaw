@@ -1,8 +1,8 @@
 # CLI-JAW — Source Structure & Function Reference
 
-> 마지막 검증: 2026-02-26T15:30 (multi-instance Phase 1-4.1 + sidebar hotfix + interface_unify + postinstall fix 반영)
-> server.ts 854L / src/ 39파일 12서브디렉토리 / tests 346 total · 345 pass · 1 skip (tsx runner)
-> Phase 9 보안 하드닝 + Phase 17 AI triage + Phase 20.6 모듈 분리 + parallel dispatch + session fix + cli-jaw rename + orchestration v3 + **multi-instance refactor (Phase 1-4.1)** + **interface_unify (submitMessage gateway)** + **postinstall fix** 반영
+> 마지막 검증: 2026-02-26T15:40 (multi-instance Phase 1-4.1 + sidebar hotfix + interface_unify + safe_install 반영)
+> server.ts 854L / src/ 42파일 12서브디렉토리 / tests 358 total · 357 pass · 1 skip (tsx runner)
+> Phase 9 보안 하드닝 + Phase 17 AI triage + Phase 20.6 모듈 분리 + parallel dispatch + session fix + cli-jaw rename + orchestration v3 + **multi-instance refactor (Phase 1-4.1)** + **interface_unify (submitMessage gateway + collect.ts + command-context.ts)** + **safe_install (postinstall guard + init.ts refactor)** 반영
 >
 > 상세 모듈 문서는 [서브 문서](#서브-문서)를 참조하세요.
 
@@ -33,7 +33,7 @@ cli-jaw/
 │   │   ├── pipeline.ts       ← Plan → Distribute → Quality Gate (493L, parallel/sequential + end_phase/checkpoint + reset)
 │   │   ├── distribute.ts     ← runSingleAgent + buildPlanPrompt + parallel helpers (356L)
 │   │   ├── parser.ts         ← triage + subtask JSON + verdict 파싱 + isResetIntent (126L)
-│   │   ├── gateway.ts        ← submitMessage 통합 진입점 (WebUI+CLI+TG 공통) (60L)
+│   │   ├── gateway.ts        ← submitMessage 통합 진입점 (WebUI+CLI+TG 공통) (65L)
 │   │   └── collect.ts        ← orchestrateAndCollect (bot.ts에서 분리) (62L)
 │   ├── prompt/               ← 프롬프트 조립
 │   │   └── builder.ts        ← A-1/A-2 + 스킬 + 직원 프롬프트 v2 + promptCache + dev skill rules (557L)
@@ -48,7 +48,7 @@ cli-jaw/
 │   │   ├── worklog.ts        ← Worklog CRUD + phase matrix (172L)
 │   │   └── heartbeat.ts      ← Heartbeat 잡 스케줄 + fs.watch (109L)
 │   ├── telegram/             ← Telegram 인터페이스
-│   │   ├── bot.ts            ← Telegram 봇 + forwarder lifecycle + origin 필터링 (432L)
+│   │   ├── bot.ts            ← Telegram 봇 + forwarder lifecycle + origin 필터링 (429L)
 │   │   └── forwarder.ts      ← 포워딩 헬퍼 (escape, chunk, createForwarder) (105L)
 │   ├── browser/              ← Chrome CDP 제어
 │   │   ├── connection.ts     ← Chrome 탐지/launch/CDP 연결 (113L)
@@ -105,11 +105,11 @@ cli-jaw/
 │           └── appname.js    ← Agent Name (DEFAULT_NAME='CLI-JAW') (43L)
 ├── bin/
 │   ├── cli-jaw.ts           ← 12개 서브커맨드 라우팅 + --home flag (147L)
-│   ├── postinstall.ts        ← npm install 후 5-CLI 자동설치 + MCP + 스킬 (299L, Node guard + inline JAW_HOME)
+│   ├── postinstall.ts        ← npm install 후 5-CLI 자동설치 + MCP + 스킬 + safe 가드 (299L, Node guard + inline JAW_HOME)
 │   └── commands/
 │       ├── serve.ts          ← 서버 시작 (--port/--host/--open)
 │       ├── chat.ts           ← 터미널 채팅 TUI (3모드, 블록아트 배너, active model 표시, 873L)
-│       ├── init.ts           ← 초기화 마법사
+│       ├── init.ts           ← 초기화 마법사 + --safe/--dry-run (133L)
 │       ├── doctor.ts         ← 진단 (12개 체크, --json) (212L)
 │       ├── status.ts         ← 서버 상태 (--json)
 │       ├── mcp.ts            ← MCP 관리 (install/sync/list/reset)
@@ -120,7 +120,7 @@ cli-jaw/
 │       ├── memory.ts         ← 메모리 CLI (search/read/save/list/init) (92L)
 │       ├── launchd.ts        ← macOS LaunchAgent 관리 (instanceId, --port, xmlEsc) (179L)
 │       └── browser.ts        ← 브라우저 CLI (17개 서브커맨드, 238L)
-├── tests/                    ← 회귀 방지 테스트 (346 total · 345 pass · 1 skip)
+├── tests/                    ← 회귀 방지 테스트 (358 total · 357 pass · 1 skip)
 │   ├── events.test.ts        ← 이벤트 파서 단위 테스트
 │   ├── events-acp.test.ts    ← ACP session/update 이벤트 테스트
 │   ├── telegram-forwarding.test.ts ← Telegram 포워딩 동작 테스트
@@ -297,6 +297,9 @@ graph LR
 75. **[multi-instance] Phase 4: launchd multi-instance**: `instanceId()` hash 기반 label (`com.cli-jaw.default` / `com.cli-jaw.<name>-<hash8>`), `xmlEsc()`, `parseArgs --port`, `--home`/`--port` plist pass-through, `CLI_JAW_HOME` env in plist, `WorkingDirectory → JAW_HOME`. `browser.ts`/`memory.ts` `getServerUrl('3457')` → `getServerUrl(undefined)`.
 76. **[multi-instance] Phase 4.1 hotfix**: `applySettingsPatch` workingDir 변경 시 `regenerateB`+`ensureSkillsSymlinks`+`syncToAll` 후처리. 서버 시작 시 `safe→auto` 강제 마이그레이션. launchd unknown flag guard + plist path quoting. memory init 경로 JAW_HOME 동적화.
 77. **[hotfix] Sidebar cwd read-only + Auto full-width**: `inpCwd` `<input>` → `<span class="cwd-display">` 읽기 전용 표시. `settings.js` workingDir PUT 제거, `.textContent` 사용. Auto 버튼 `flex:none` → `width:100%` 사이드바 채움. `main.js` inpCwd change 리스너 제거. `sidebar.css` `.cwd-display` 클래스 추가.
+78. **[interface_unify] submitMessage gateway**: `src/orchestrator/gateway.ts` — WS/REST/TG 3개 입력 경로의 중복 로직(intent 판별, 큐잉, insert, broadcast) → 단일 `submitMessage()`. TG 이중저장 버그 수정, REST continue intent insert 누락 수정. `skipOrchestrate` 옵션으로 TG 이중실행 방지.
+79. **[interface_unify] collect + CommandContext**: `src/orchestrator/collect.ts` — `orchestrateAndCollect` bot.ts에서 분리 (agent_output dead branch 제거). `src/cli/command-context.ts` — Web/TG 커맨드 컨텍스트 통합 (TG에서 MCP/스킬/프롬프트 실제 데이터 반환).
+80. **[safe_install] postinstall guard + init refactor**: `JAW_SAFE=1` / `npm_config_jaw_safe=1` 환경변수로 safe 모드 진입 (홈 디렉토리만 생성). `installCliTools`/`installMcpServers`/`installSkillDeps` 함수 분리. `init.ts` `--safe`/`--dry-run` 옵션, 동적 import으로 side-effect 차단.
 
 ---
 
@@ -328,10 +331,10 @@ graph LR
 | --------------------------------------------- | ------------------------------------------------------------------------------------------ | ---- |
 | `260226_postinstall/`                          | postinstall 클린 클론 실패 수정 + 크로스플랫폼 가드                                       | ✅    |
 | `260226_refactor_all/`                         | 통합 리팩토링 계획 (3 phase)                                                               | 🟡    |
-| `260226_refactor_all/260226_interface_unify/`  | WebUI·CLI·Telegram 입력/출력 통합 (submitMessage gateway + TG output handler)              | 🟡    |
+| `260226_refactor_all/260226_interface_unify/`  | WebUI·CLI·Telegram 입력/출력 통합 (submitMessage + collect + commandCtx)                   | ✅    |
 | `260226_refactor_all/260226_repo_hygiene/`     | skills_ref 별도 레포 분리 + devlog gitignore + tests 정리                                  | 📋    |
-| `260226_refactor_all/260226_safe_install/`     | `jaw init --safe` 대화형 설치 모드 + `--dry-run`                                          | 📋    |
-| `260226_refactor_all/260226_steer_interrupted/`| steer 중단 시 부분 결과 저장 조사                                                          | 🟡    |
+| `260226_refactor_all/260226_safe_install/`     | `jaw init --safe` 대화형 설치 모드 + `--dry-run` + postinstall 가드                     | ✅    |
+| `260226_refactor_all/260226_steer_interrupted/`| steer 중단 시 부분 결과 저장 + 회귀 테스트 15건                                            | ✅    |
 | `260226_skill_refactor/`                       | 스킬 리팩토링 (후보 비교 + 드래프트)                                                       | 🟡    |
 | `26_readme_polish/`                            | README 다국어 정비                                                                         | 🟡    |
 | `devlog_ts/`                                   | TypeScript 빌드 호환 (dist build, import ext fix)                                          | 🟡    |
