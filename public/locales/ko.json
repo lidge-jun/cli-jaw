@@ -177,5 +177,6 @@
     "code.copy": "복사",
     "code.copied": "복사됨 ✓",
     "mcp.noServers": "(서버 미설정)",
+    "mermaid.renderFail": "Mermaid 렌더링 실패",
     "orchestrator.dispatching": "🎯 작업 분배 중..."
 }

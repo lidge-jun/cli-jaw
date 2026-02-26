@@ -177,5 +177,6 @@
     "code.copy": "Copy",
     "code.copied": "Copied ✓",
     "mcp.noServers": "(no servers configured)",
+    "mermaid.renderFail": "Mermaid render failed",
     "orchestrator.dispatching": "🎯 Dispatching tasks..."
 }
