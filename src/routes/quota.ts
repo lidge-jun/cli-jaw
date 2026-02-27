@@ -4,7 +4,10 @@ import fs from 'fs';
 import os from 'os';
 import { join } from 'path';
 
+// macOS-only: reads Claude Code OAuth token from system keychain.
+// On Linux/WSL: returns null → classified as { authenticated: false } by /api/quota.
 export function readClaudeCreds() {
+    if (process.platform !== 'darwin') return null;
     try {
         const raw = execSync(
             'security find-generic-password -s "Claude Code-credentials" -w',
@@ -35,7 +38,11 @@ export async function fetchClaudeUsage(creds: any) {
             headers: { 'Authorization': `Bearer ${creds.token}`, 'anthropic-beta': 'oauth-2025-04-20' },
             signal: AbortSignal.timeout(8000),
         });
-        if (!resp.ok) return null;
+        if (!resp.ok) {
+            // 401/403 = token expired/invalid → auth failure
+            if (resp.status === 401 || resp.status === 403) return { authenticated: false };
+            return { error: true }; // 5xx, rate limit, etc.
+        }
         const data = await resp.json() as Record<string, any>;
         const windows = [];
         const labelMap = { five_hour: '5-hour', seven_day: '7-day', seven_day_sonnet: '7-day Sonnet', seven_day_opus: '7-day Opus' };
@@ -45,7 +52,7 @@ export async function fetchClaudeUsage(creds: any) {
             }
         }
         return { account: creds.account, windows, raw: data };
-    } catch { return null; }
+    } catch { return { error: true }; } // network timeout, DNS, etc.
 }
 
 export async function fetchCodexUsage(tokens: any) {
@@ -55,7 +62,10 @@ export async function fetchCodexUsage(tokens: any) {
             headers: { 'Authorization': `Bearer ${tokens.access_token}`, 'ChatGPT-Account-Id': tokens.account_id ?? '' },
             signal: AbortSignal.timeout(8000),
         });
-        if (!resp.ok) return null;
+        if (!resp.ok) {
+            if (resp.status === 401 || resp.status === 403) return { authenticated: false };
+            return { error: true };
+        }
         const data = await resp.json() as Record<string, any>;
         const account = { email: data.email ?? null, plan: data.plan_type ?? null };
         const windows = [];
@@ -66,9 +76,11 @@ export async function fetchCodexUsage(tokens: any) {
             windows.push({ label: '7-day', percent: data.rate_limit.secondary_window.used_percent ?? 0, resetsAt: data.rate_limit.secondary_window.reset_at ? new Date(data.rate_limit.secondary_window.reset_at * 1000).toISOString() : null });
         }
         return { account, windows, raw: data };
-    } catch { return null; }
+    } catch { return { error: true }; }
 }
 
+// Cross-platform: reads Gemini OAuth creds from ~/.gemini/oauth_creds.json.
+// Returns null if file doesn't exist (= not authenticated).
 export function readGeminiAccount() {
     try {
         const credsPath = join(os.homedir(), '.gemini', 'oauth_creds.json');
