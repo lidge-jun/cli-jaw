@@ -1,13 +1,13 @@
 # 🧪 CLI-JAW Tests
 
-[![Tests](https://img.shields.io/badge/tests-548%20pass-brightgreen)](#)
+[![Tests](https://img.shields.io/badge/tests-549%20pass-brightgreen)](#)
 
 > `node:test` + `node:assert` via `tsx` runner — zero external test dependencies.
 
 ## Run
 
 ```bash
-npm test                            # All 548 tests (~14s)
+npm test                            # All 549 tests (~14s)
 tsx --test tests/unit/*.test.ts    # Unit tests only
 tsx --test tests/integration/*.test.ts  # Integration tests only
 npm run test:watch                  # Watch mode
@@ -38,7 +38,7 @@ npm run check:deps                  # Dependency vulnerability check
 | `bus.test.ts`                  |   6   | Broadcast, listener add/remove, WS mock, safety                                           |
 | `cli-registry.test.ts`         |   8   | CLI_KEYS, required fields, `buildDefaultPerCli`, `buildModelChoicesByCli`                 |
 | `commands-parse.test.ts`       |  21   | parseCommand, executeCommand, getCompletions, COMMANDS integrity, i18n                    |
-| `commands-policy.test.ts`      |   8   | Command-contract capability map, `getVisibleCommands`, Telegram menu, readonly, tgDescKey |
+| `commands-policy.test.ts`      |  10   | Command-contract capability map, `getVisibleCommands`, Telegram menu, readonly, tgDescKey |
 | `decode.test.ts`               |   5   | `decodeFilenameSafe` — URL encoding, traversal prevention                                 |
 | `deps-check.test.ts`           |  10   | Semver range matching, advisory detection, offline vulnerability check                    |
 | `frontend-constants.test.ts`   |   2   | ROLE_PRESETS structure, CLI registry schema                                               |
