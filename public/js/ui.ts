@@ -1,6 +1,6 @@
 // ── UI Utilities ──
 import { state } from './state.js';
-import { renderMarkdown, escapeHtml } from './render.js';
+import { renderMarkdown, escapeHtml, stripOrchestration } from './render.js';
 import { getAppName } from './features/appname.js';
 import { t } from './features/i18n.js';
 import { api } from './api.js';
@@ -81,6 +81,7 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
             toolHtml = `<details class="tool-summary"><summary>${summaryParts}</summary><div class="tool-log">${logLines}</div></details>`;
         }
         if (content) content.innerHTML = toolHtml + renderMarkdown(text);
+        if (content) content.setAttribute('data-raw', stripOrchestration(text));
     }
     state.currentAgentDiv = null;
     lastFinalizeTs = Date.now();
@@ -94,6 +95,8 @@ export function addMessage(role: string, text: string): HTMLDivElement {
     div.className = `msg msg-${role}`;
     const rendered = renderMarkdown(text);
     div.innerHTML = `<div class="msg-label">${role === 'user' ? t('msg.you') : getAppName()}</div><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy"></button>`;
+    const contentEl = div.querySelector('.msg-content');
+    if (contentEl) contentEl.setAttribute('data-raw', stripOrchestration(text));
     container?.appendChild(div);
     scrollToBottom();
     return div;
@@ -161,7 +164,7 @@ export function initMsgCopy(): void {
         const msg = btn.closest('.msg');
         const content = msg?.querySelector('.msg-content') as HTMLElement | null;
         if (!content) return;
-        const text = content.innerText || content.textContent || '';
+        const text = content.getAttribute('data-raw') || content.innerText || content.textContent || '';
         navigator.clipboard.writeText(text).then(() => {
             btn.classList.add('copied');
             setTimeout(() => btn.classList.remove('copied'), 600);
