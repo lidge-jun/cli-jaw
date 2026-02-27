@@ -12,7 +12,7 @@ import { dirname, join, basename } from 'path';
 import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
-import { InputFile } from 'grammy';
+import { validateFileSize, sendTelegramFile } from './src/telegram/telegram-file.js';
 import { readClaudeCreds, readCodexTokens, fetchClaudeUsage, fetchCodexUsage, readGeminiAccount } from './src/routes/quota.js';
 import { registerBrowserRoutes } from './src/routes/browser.js';
 import {
@@ -524,27 +524,24 @@ app.post('/api/telegram/send', async (req, res) => {
         if (!filePath) return res.status(400).json({ error: 'file_path required for non-text types' });
         if (!fs.existsSync(filePath)) return res.status(400).json({ error: `file not found: ${filePath}` });
 
+        // Validate file size before upload attempt
+        validateFileSize(filePath, type);
+
         const caption = req.body?.caption ? String(req.body.caption) : undefined;
-        const file = new InputFile(filePath);
+        const result = await sendTelegramFile(telegramBot, chatId, filePath, type, { caption });
 
-        switch (type) {
-            case 'voice':
-                await telegramBot.api.sendVoice(chatId, file, { caption });
-                break;
-            case 'photo':
-                await telegramBot.api.sendPhoto(chatId, file, { caption });
-                break;
-            case 'document':
-                await telegramBot.api.sendDocument(chatId, file, { caption });
-                break;
-            default:
-                return res.status(400).json({ error: `unsupported type: ${type}` });
+        if (!result.ok) {
+            const sc = result.statusCode || 502;
+            return res.status(sc).json({
+                error: result.error, attempts: result.attempts,
+                ...(result.retryAfter != null && { retry_after: result.retryAfter }),
+            });
         }
-
-        return res.json({ ok: true, chat_id: chatId, type });
+        return res.json({ ok: true, chat_id: chatId, type, attempts: result.attempts });
     } catch (e: unknown) {
         console.error('[telegram:send]', e);
-        return res.status(500).json({ error: (e as Error).message });
+        const statusCode = (e as any).statusCode || 500;
+        return res.status(statusCode).json({ error: (e as Error).message, code: (e as any).code });
     }
 });
 
