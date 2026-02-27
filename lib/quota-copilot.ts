@@ -34,10 +34,10 @@ function readCopilotConfig(): { login: string; host: string } | null {
 }
 
 // ─── File cache with account binding ────────────────
-function writeTokenCache(login: string, token: string) {
+function writeTokenCache(source: string, token: string) {
     try {
         fs.mkdirSync(AUTH_DIR, { recursive: true, mode: 0o700 });
-        fs.writeFileSync(TOKEN_CACHE_PATH, `${login}\n${token}`, { mode: 0o600 });
+        fs.writeFileSync(TOKEN_CACHE_PATH, `${source}\n${token}`, { mode: 0o600 });
     } catch (e: unknown) {
         console.warn('[quota-copilot] token cache write failed:', (e as Error).message);
     }
@@ -48,14 +48,24 @@ function readTokenCache(expectedLogin: string | null): string | null {
         if (!fs.existsSync(TOKEN_CACHE_PATH)) return null;
         const content = fs.readFileSync(TOKEN_CACHE_PATH, 'utf8').trim();
         const newlineIdx = content.indexOf('\n');
-        if (newlineIdx < 0) return null; // old format or corrupt
 
-        const cachedLogin = content.slice(0, newlineIdx);
+        // Legacy migration: single-line token (pre-v1.0.6)
+        if (newlineIdx < 0) {
+            const legacyToken = content;
+            if (legacyToken && expectedLogin) {
+                // Migrate: rewrite with source tag
+                writeTokenCache(expectedLogin, legacyToken);
+            }
+            return legacyToken || null;
+        }
+
+        const cachedSource = content.slice(0, newlineIdx);
         const cachedToken = content.slice(newlineIdx + 1).trim();
 
-        // Account binding: invalidate if login changed
-        if (expectedLogin && cachedLogin !== expectedLogin) {
-            console.info(`[quota-copilot] cache login mismatch (${cachedLogin} ≠ ${expectedLogin}), invalidating`);
+        // Account binding: invalidate if copilot login changed
+        // gh-cli: source is allowed regardless of copilot login
+        if (expectedLogin && cachedSource !== expectedLogin && !cachedSource.startsWith('gh-cli')) {
+            console.info(`[quota-copilot] cache source mismatch (${cachedSource} ≠ ${expectedLogin}), invalidating`);
             try { fs.unlinkSync(TOKEN_CACHE_PATH); } catch { /* ignore */ }
             return null;
         }
@@ -97,7 +107,7 @@ function getCopilotToken() {
         }).trim();
         if (ghToken) {
             _cachedToken = ghToken;
-            writeTokenCache(expectedLogin || 'gh-cli', ghToken);
+            writeTokenCache('gh-cli', ghToken);
             return _cachedToken;
         }
     } catch {

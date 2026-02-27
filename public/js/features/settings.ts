@@ -447,7 +447,7 @@ function renderCliStatus(data: { cliStatus: Record<string, { available: boolean 
         codex: { install: 'npm i -g @openai/codex', auth: 'codex login' },
         gemini: { install: 'npm i -g @google/gemini-cli', auth: `gemini  (${t('cli.gemini.auth')})` },
         opencode: { install: 'npm i -g opencode-ai', auth: 'opencode auth' },
-        copilot: { install: 'gh copilot --help', auth: '1) gh auth login → 2) gh copilot --help → 3) copilot login' },
+        copilot: { install: 'copilot --help', auth: 'copilot login 또는 gh auth login' },
     };
 
     let html = '';

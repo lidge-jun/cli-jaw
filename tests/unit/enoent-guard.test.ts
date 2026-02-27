@@ -257,8 +257,8 @@ test('EG-014: quota-copilot cache includes account binding', () => {
     // Should read last_logged_in_user from copilot config
     assert.ok(quotaSrc.includes('last_logged_in_user'), 'should read last_logged_in_user');
 
-    // Should compare cached login with expected login
-    assert.ok(quotaSrc.includes('cachedLogin'), 'should track cached login');
+    // Should compare cached source with expected login
+    assert.ok(quotaSrc.includes('cachedSource'), 'should track cached source');
     assert.ok(
         quotaSrc.includes('mismatch') || quotaSrc.includes('invalidat'),
         'should invalidate on login mismatch',
