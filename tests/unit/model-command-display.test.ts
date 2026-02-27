@@ -136,3 +136,41 @@ test('MD-008: /status and /model show same model (cross-consistency)', async () 
     assert.equal(statusModel, 'gemini-2.5-flash');
 });
 
+test('MD-009: /status effort uses activeOverrides over perCli', async () => {
+    const ctx = makeCtx({
+        activeOverrides: {
+            gemini: { model: 'gemini-2.5-flash', effort: 'high' },
+        },
+    });
+    const result = await statusHandler([], ctx);
+    assert.equal(result.ok, true);
+    assert.ok(result.text.includes('high'), '/status should show activeOverrides effort');
+});
+
+test('MD-010: /status effort does not leak from different CLI session', async () => {
+    const ctx = makeCtx({
+        session: {
+            active_cli: 'codex',
+            model: 'gpt-5.3-codex',
+            effort: 'low',
+        },
+    });
+    // settings.cli is 'gemini', session is 'codex' → effort should come from perCli.gemini, not session
+    const result = await statusHandler([], ctx);
+    assert.equal(result.ok, true);
+    // perCli.gemini.effort is '' (empty), so final should be '-' (default), NOT 'low' from codex session
+    assert.ok(!result.text.includes('low'), '/status should not leak effort from different CLI session');
+});
+
+test('MD-011: /status handles space-containing model names', async () => {
+    const ctx = makeCtx({
+        activeOverrides: {
+            gemini: { model: 'my custom model v2' },
+        },
+    });
+    const modelResult = await modelHandler([], ctx);
+    const statusResult = await statusHandler([], ctx);
+    const statusModel = statusResult.text.match(/Model:\s+(.+)/)?.[1]?.trim();
+    assert.ok(modelResult.text.includes('my custom model v2'));
+    assert.equal(statusModel, 'my custom model v2');
+});

@@ -114,8 +114,8 @@ export async function statusHandler(_args: any[], ctx: any) {
         ? session.effort
         : undefined;
     const effort = overrideEffort
-        || settings?.perCli?.[cli]?.effort
         || sessionEffort
+        || settings?.perCli?.[cli]?.effort
         || '-';
     const agent = runtime?.activeAgent === true
         ? '● running'
