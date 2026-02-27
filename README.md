@@ -59,7 +59,7 @@ jaw serve
 </details>
 
 <details>
-<summary>💻 <b>New to the terminal?</b> — One-click Node.js + CLI-JAW install</summary>
+<summary>🍎 <b>New to the terminal?</b> — One-click Node.js + CLI-JAW install</summary>
 
 Paste this in your terminal — it auto-detects your setup and installs everything:
 
@@ -67,7 +67,12 @@ Paste this in your terminal — it auto-detects your setup and installs everythi
 curl -fsSL https://raw.githubusercontent.com/lidge-jun/cli-jaw/master/scripts/install.sh | bash
 ```
 
-> 💡 **Just want to try it?** Run directly without installing: `npx cli-jaw serve`
+After install, authenticate with any one AI engine and launch:
+
+```bash
+gh auth login        # or: claude auth / codex login
+jaw serve
+```
 
 </details>
 

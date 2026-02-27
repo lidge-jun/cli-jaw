@@ -59,7 +59,7 @@ jaw serve
 </details>
 
 <details>
-<summary>💻 <b>终端新手？</b> — 一键安装 Node.js + CLI-JAW</summary>
+<summary>🍎 <b>终端新手？</b> — 一键安装 Node.js + CLI-JAW</summary>
 
 在终端粘贴这一行 — 自动检测并安装所有依赖：
 
