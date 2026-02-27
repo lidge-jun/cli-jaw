@@ -92,7 +92,7 @@ export async function sendTelegramFile(
         } catch (err: any) {
             const transient = isTransient(err);
             if (!transient || attempt === MAX_RETRIES) {
-                const sc = transient ? classifyUpstreamError(err) : (err?.statusCode || 500);
+                const sc = transient ? classifyUpstreamError(err) : (err?.error_code || err?.statusCode || 500);
                 console.error(`[telegram:file] failed after ${attempt} attempt(s):`, err?.message);
                 return {
                     ok: false, attempts: attempt,
@@ -116,7 +116,7 @@ export async function sendTelegramFile(
 
             const delay = Math.max(retryAfterMs, BASE_DELAY_MS * Math.pow(2, attempt - 1));
             totalWaited += delay;
-            if (totalWaited > MAX_TOTAL_WAIT_MS) {
+            if (totalWaited >= MAX_TOTAL_WAIT_MS) {
                 console.error(`[telegram:file] total wait ${totalWaited}ms exceeds cap, giving up`);
                 return {
                     ok: false, attempts: attempt,
