@@ -77,7 +77,7 @@ Node.js + CLI-JAW가 자동으로 설치됩니다. 🎉 가 뜰 때까지 기다
 **Step 3: 로그인 & 실행**
 
 ```bash
-copilot login
+copilot login    # 또는: claude auth / codex login / gemini login
 jaw serve
 ```
 

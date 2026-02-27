@@ -65,7 +65,7 @@ ensure_node() {
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 
   if [ ! -s "$NVM_DIR/nvm.sh" ]; then
-    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
   fi
 
   # Source nvm

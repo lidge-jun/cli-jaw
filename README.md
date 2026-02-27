@@ -77,7 +77,7 @@ This installs Node.js + CLI-JAW automatically. Just wait until you see 🎉.
 **Step 3: Login & Launch**
 
 ```bash
-copilot login
+copilot login    # or: claude auth / codex login / gemini login
 jaw serve
 ```
 

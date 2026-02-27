@@ -77,7 +77,7 @@ Node.js + CLI-JAW 会自动安装。等到出现 🎉 就完成了。
 **第三步：登录并启动**
 
 ```bash
-copilot login
+copilot login    # 或者: claude auth / codex login / gemini login
 jaw serve
 ```
 
