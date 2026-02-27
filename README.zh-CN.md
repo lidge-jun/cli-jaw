@@ -37,7 +37,17 @@ wsl --install
 curl -fsSL https://raw.githubusercontent.com/lidge-jun/cli-jaw/master/scripts/install-wsl.sh | bash
 ```
 
-脚本会自动安装 **Node.js 22 + cli-jaw**。完成后：
+**第三步：认证 AI 引擎**（任选其一）
+
+```bash
+gh auth login    # GitHub Copilot（免费）
+opencode         # OpenCode（提供免费模型）
+claude auth      # Anthropic Claude
+codex login      # OpenAI Codex
+gemini           # Google Gemini
+```
+
+**第四步：启动聊天**
 
 ```bash
 jaw serve

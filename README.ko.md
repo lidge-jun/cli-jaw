@@ -37,7 +37,17 @@ wsl --install
 curl -fsSL https://raw.githubusercontent.com/lidge-jun/cli-jaw/master/scripts/install-wsl.sh | bash
 ```
 
-**Node.js 22 + cli-jaw**가 자동으로 설치됩니다. 완료 후:
+**Step 3: AI 엔진 인증** (하나 선택)
+
+```bash
+gh auth login    # GitHub Copilot (무료)
+opencode         # OpenCode (무료 모델 제공)
+claude auth      # Anthropic Claude
+codex login      # OpenAI Codex
+gemini           # Google Gemini
+```
+
+**Step 4: 시작하기**
 
 ```bash
 jaw serve

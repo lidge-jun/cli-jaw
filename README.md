@@ -37,7 +37,17 @@ Restart your computer when prompted. After reboot, open **Ubuntu** from the Star
 curl -fsSL https://raw.githubusercontent.com/lidge-jun/cli-jaw/master/scripts/install-wsl.sh | bash
 ```
 
-This automatically installs **Node.js 22 + cli-jaw**. When it finishes:
+**Step 3: Authenticate an AI Engine** (pick one)
+
+```bash
+gh auth login    # GitHub Copilot (Free)
+opencode         # OpenCode (Free models available)
+claude auth      # Anthropic Claude
+codex login      # OpenAI Codex
+gemini           # Google Gemini
+```
+
+**Step 4: Start Chatting**
 
 ```bash
 jaw serve
