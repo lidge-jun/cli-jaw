@@ -48,13 +48,17 @@ jobs:
         run: npm run check:deps
 
       - name: Verify devlog submodule
+        id: devlog-check
         run: |
           if [[ ! -d devlog/_fin ]]; then
             echo "⚠️ devlog submodule not checked out — SUBMODULE_PAT secret may be missing"
-            exit 1
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Devlog _fin status gate
+        if: steps.devlog-check.outputs.available == 'true'
         run: bash devlog/str_func/audit-fin-status.sh
 
       - name: Upload audit report

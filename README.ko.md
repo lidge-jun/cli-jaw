@@ -59,7 +59,7 @@ jaw serve
 </details>
 
 <details>
-<summary>🍺 <b>Homebrew가 없나요?</b> — 원클릭 Node.js + CLI-JAW 설치</summary>
+<summary>💻 <b>터미널이 처음이신가요?</b> — 원클릭 Node.js + CLI-JAW 설치</summary>
 
 터미널에 이 한 줄만 붙여넣으세요 — 알아서 감지하고 다 설치해줍니다:
 

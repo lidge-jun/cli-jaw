@@ -59,7 +59,7 @@ jaw serve
 </details>
 
 <details>
-<summary>🍺 <b>No Homebrew?</b> — One-click Node.js + CLI-JAW install</summary>
+<summary>💻 <b>New to the terminal?</b> — One-click Node.js + CLI-JAW install</summary>
 
 Paste this in your terminal — it auto-detects your setup and installs everything:
 
