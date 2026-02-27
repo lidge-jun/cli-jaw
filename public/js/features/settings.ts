@@ -9,7 +9,12 @@ import { api, apiJson, apiFire } from '../api.js';
 interface PerCliConfig { model?: string; effort?: string; }
 interface TelegramConfig { enabled?: boolean; token?: string; allowedChatIds?: number[]; }
 interface QuotaWindow { label: string; percent: number; }
-interface QuotaEntry { account?: { email?: string; type?: string; plan?: string; tier?: string }; windows?: QuotaWindow[]; }
+interface QuotaEntry {
+    account?: { email?: string; type?: string; plan?: string; tier?: string };
+    windows?: QuotaWindow[];
+    authenticated?: boolean;
+    error?: boolean;
+}
 interface SettingsData {
     cli: string; workingDir: string; permissions: string; locale?: string;
     perCli?: Record<string, PerCliConfig>;
@@ -459,7 +464,17 @@ function renderCliStatus(data: { cliStatus: Record<string, { available: boolean 
 
     for (const [name, info] of Object.entries(cliStatus)) {
         const q = quota?.[name];
-        const dotClass = info.available ? 'ok' : 'missing';
+        // 3-state: ok (installed+authed), warn (installed+no-auth), missing (not installed)
+        let dotClass: string;
+        if (!info.available) {
+            dotClass = 'missing';
+        } else if (!q || q.error) {
+            dotClass = 'ok'; // transient error or no data — keep green
+        } else if (q.authenticated === false) {
+            dotClass = 'warn'; // explicitly unauthenticated
+        } else {
+            dotClass = 'ok';
+        }
 
         let accountLine = '';
         if (q?.account) {
@@ -471,16 +486,19 @@ function renderCliStatus(data: { cliStatus: Record<string, { available: boolean 
             if (parts.length) accountLine = `<div style="font-size:10px;color:var(--text-dim);margin:2px 0 4px 16px">${escapeHtml(parts.join(' · '))}</div>`;
         }
 
-        // Auth hint when CLI is not available
+        // Auth hint when CLI is not available OR not authenticated
         let authHint = '';
-        if (!info.available) {
+        if (!info.available || dotClass === 'warn') {
             const hint = AUTH_HINTS[name];
             if (hint) {
+                const isNotInstalled = !info.available;
+                const title = isNotInstalled ? t('cli.authRequired') : t('cli.notAuthenticated');
+                const borderColor = isNotInstalled ? '#ef4444' : '#fbbf24';
                 authHint = `
-                    <div style="font-size:10px;margin:4px 0 2px 16px;padding:6px 8px;background:var(--bg-dim, #1e1e2e);border-radius:4px;border-left:2px solid #fbbf24">
-                        <div style="color:#fbbf24;margin-bottom:3px">${t('cli.authRequired')}</div>
-                        <div style="color:var(--text-dim)"><code style="font-size:10px;background:var(--border);padding:1px 4px;border-radius:2px">${escapeHtml(hint.install)}</code></div>
-                        <div style="color:var(--text-dim);margin-top:2px"><code style="font-size:10px;background:var(--border);padding:1px 4px;border-radius:2px">${escapeHtml(hint.auth)}</code></div>
+                    <div style="font-size:10px;margin:4px 0 2px 16px;padding:6px 8px;background:var(--bg-dim, #1e1e2e);border-radius:4px;border-left:2px solid ${borderColor}">
+                        <div style="color:${borderColor};margin-bottom:3px">${title}</div>
+                        ${isNotInstalled ? `<div style="color:var(--text-dim)"><code style="font-size:10px;background:var(--border);padding:1px 4px;border-radius:2px">${escapeHtml(hint.install)}</code></div>` : ''}
+                        <div style="color:var(--text-dim)${isNotInstalled ? ';margin-top:2px' : ''}"><code style="font-size:10px;background:var(--border);padding:1px 4px;border-radius:2px">${escapeHtml(hint.auth)}</code></div>
                     </div>
                 `;
             }

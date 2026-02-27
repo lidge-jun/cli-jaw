@@ -131,6 +131,7 @@
     "settings.none": "(없음)",
     "cli.gemini.auth": "첫 실행 시 브라우저 인증",
     "cli.authRequired": "⚠️ 설치 / 인증 필요",
+    "cli.notAuthenticated": "🔑 인증 필요 — 아래 명령어 실행",
     "drag.drop": "📎 파일을 여기에 드랍하세요",
     "status.responding": "응답 중",
     "aria.cmdList": "커맨드 목록",

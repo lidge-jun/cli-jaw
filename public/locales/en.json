@@ -131,6 +131,7 @@
     "settings.none": "(none)",
     "cli.gemini.auth": "Browser auth on first run",
     "cli.authRequired": "⚠️ Install / auth required",
+    "cli.notAuthenticated": "🔑 Auth required — run command below",
     "drag.drop": "📎 Drop files here",
     "status.responding": "Responding",
     "aria.cmdList": "Command list",

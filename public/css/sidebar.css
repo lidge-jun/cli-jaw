@@ -18,6 +18,23 @@
     background: var(--green);
 }
 
+.cli-dot.warn {
+    background: #fbbf24;
+    animation: pulse-warn 2s ease-in-out infinite;
+}
+
+@keyframes pulse-warn {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+}
+
 .cli-dot.missing {
     background: #ef4444;
 }

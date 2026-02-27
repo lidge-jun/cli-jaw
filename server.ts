@@ -593,13 +593,26 @@ app.post('/api/mcp/reset', (req, res) => {
 app.get('/api/cli-registry', (_, res) => res.json(CLI_REGISTRY));
 app.get('/api/cli-status', (_, res) => res.json(detectAllCli()));
 app.get('/api/quota', async (_, res) => {
-    const [claude, codex, copilot] = await Promise.all([
-        fetchClaudeUsage(readClaudeCreds()),
-        fetchCodexUsage(readCodexTokens()),
+    const claudeCreds = readClaudeCreds();
+    const codexTokens = readCodexTokens();
+    const [claudeResult, codexResult, copilotResult] = await Promise.all([
+        fetchClaudeUsage(claudeCreds),
+        fetchCodexUsage(codexTokens),
         fetchCopilotQuota(),
     ]);
-    const gemini = readGeminiAccount();
-    res.json({ claude, codex, gemini, opencode: null, copilot });
+    const geminiResult = readGeminiAccount();
+
+    // null → { authenticated: false } if no creds, { error: true } if API failure
+    const classify = (result: any, hasCreds: boolean) =>
+        result ?? (hasCreds ? { error: true } : { authenticated: false });
+
+    res.json({
+        claude: classify(claudeResult, !!claudeCreds),
+        codex: classify(codexResult, !!codexTokens),
+        gemini: geminiResult ?? { authenticated: false },
+        opencode: { authenticated: true },
+        copilot: copilotResult ?? { authenticated: false },
+    });
 });
 
 // Employees
