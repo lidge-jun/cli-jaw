@@ -1,6 +1,9 @@
 // Flush command unit tests (#27)
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { join, delimiter } from 'node:path';
+import { tmpdir } from 'node:os';
 import { flushHandler } from '../../src/cli/handlers.ts';
 
 // ─── Mock helpers ────────────────────────────────────
@@ -27,6 +30,35 @@ function makeCtx(overrides: Record<string, any> = {}) {
             return { ok: true };
         },
     };
+}
+
+function createCliShim(dir: string, name: string) {
+    if (process.platform === 'win32') {
+        const cmdPath = join(dir, `${name}.cmd`);
+        fs.writeFileSync(cmdPath, '@echo off\r\nexit /b 0\r\n');
+        return;
+    }
+    const shimPath = join(dir, name);
+    fs.writeFileSync(shimPath, '#!/bin/sh\nexit 0\n');
+    fs.chmodSync(shimPath, 0o755);
+}
+
+async function withIsolatedPath(cliNames: string[], fn: () => Promise<void>) {
+    const prevPath = process.env.PATH || '';
+    const tmpBin = fs.mkdtempSync(join(tmpdir(), 'flush-cli-bin-'));
+    for (const name of cliNames) createCliShim(tmpBin, name);
+
+    const basePath = process.platform === 'win32'
+        ? [join(process.env.SystemRoot || 'C:\\Windows', 'System32')]
+        : ['/usr/bin', '/bin'];
+
+    process.env.PATH = [tmpBin, ...basePath].join(delimiter);
+    try {
+        await fn();
+    } finally {
+        process.env.PATH = prevPath;
+        fs.rmSync(tmpBin, { recursive: true, force: true });
+    }
 }
 
 // ─── FC-001: /flush (no args) shows current ─────────
@@ -110,4 +142,29 @@ test('FC-006: /flush <cli> without model sets model to default', async () => {
         assert.equal(ctx.settings.memory.cli, 'claude');
         assert.equal(ctx.settings.memory.model, 'default');
     }
+});
+
+// ─── FC-007: duplicate model name across CLIs ───────
+
+test('FC-007: /flush <model> picks first available matched CLI (codex before copilot)', async () => {
+    await withIsolatedPath(['codex', 'copilot'], async () => {
+        const ctx = makeCtx();
+        const result = await flushHandler(['gpt-5.3-codex'], ctx);
+        assert.equal(result.ok, true);
+        assert.equal(ctx.settings.memory.cli, 'codex');
+        assert.equal(ctx.settings.memory.model, 'gpt-5.3-codex');
+    });
+});
+
+// ─── FC-008: model exists but CLI unavailable ───────
+
+test('FC-008: /flush <model> returns cliUnavailable when matched CLIs are not installed', async () => {
+    await withIsolatedPath([], async () => {
+        const ctx = makeCtx();
+        const result = await flushHandler(['gpt-5.3-codex'], ctx);
+        assert.equal(result.ok, false);
+        assert.ok(String(result.text).includes('cmd.flush.cliUnavailable'));
+        assert.equal(ctx.settings.memory.cli, '');
+        assert.equal(ctx.settings.memory.model, '');
+    });
 });
