@@ -100,8 +100,23 @@ export async function statusHandler(_args: any[], ctx: any) {
     ]);
 
     const cli = settings?.cli || session?.active_cli || 'unknown';
-    const model = settings?.perCli?.[cli]?.model || session?.model || 'default';
-    const effort = settings?.perCli?.[cli]?.effort || session?.effort || '-';
+    const overrideModel = settings?.activeOverrides?.[cli]?.model;
+    const sessionCli = session?.active_cli || session?.activeCli;
+    const sessionModel = session?.model && (!sessionCli || sessionCli === cli)
+        ? session.model
+        : undefined;
+    const model = overrideModel
+        || sessionModel
+        || settings?.perCli?.[cli]?.model
+        || 'default';
+    const overrideEffort = settings?.activeOverrides?.[cli]?.effort;
+    const sessionEffort = session?.effort && (!sessionCli || sessionCli === cli)
+        ? session.effort
+        : undefined;
+    const effort = overrideEffort
+        || settings?.perCli?.[cli]?.effort
+        || sessionEffort
+        || '-';
     const agent = runtime?.activeAgent === true
         ? '● running'
         : runtime?.activeAgent === false ? '○ idle' : '-';

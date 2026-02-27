@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { loadLocales } from '../../src/core/i18n.ts';
-import { modelHandler } from '../../src/cli/handlers.ts';
+import { modelHandler, statusHandler } from '../../src/cli/handlers.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 loadLocales(join(__dirname, '../../public/locales'));
@@ -103,3 +103,36 @@ test('MD-005: /model <new> then /model shows the updated model', async () => {
     assert.equal(current.ok, true);
     assert.ok(current.text.includes('gemini-2.5-flash'));
 });
+
+test('MD-006: /status shows activeOverrides model when set', async () => {
+    const ctx = makeCtx({
+        activeOverrides: {
+            gemini: { model: 'gemini-2.5-flash' },
+        },
+    });
+    const result = await statusHandler([], ctx);
+    assert.equal(result.ok, true);
+    assert.ok(result.text.includes('gemini-2.5-flash'));
+});
+
+test('MD-007: /status shows perCli model by default (no overrides)', async () => {
+    const ctx = makeCtx();
+    const result = await statusHandler([], ctx);
+    assert.equal(result.ok, true);
+    assert.ok(result.text.includes('gemini-3-flash-preview'));
+});
+
+test('MD-008: /status and /model show same model (cross-consistency)', async () => {
+    const ctx = makeCtx({
+        activeOverrides: {
+            gemini: { model: 'gemini-2.5-flash' },
+        },
+    });
+    const modelResult = await modelHandler([], ctx);
+    const statusResult = await statusHandler([], ctx);
+    // .+ instead of \S+ to handle space-containing model names
+    const statusModel = statusResult.text.match(/Model:\s+(.+)/)?.[1]?.trim();
+    assert.ok(modelResult.text.includes('gemini-2.5-flash'));
+    assert.equal(statusModel, 'gemini-2.5-flash');
+});
+
