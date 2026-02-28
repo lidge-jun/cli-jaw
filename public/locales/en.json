@@ -87,6 +87,7 @@
     "ws.roundNext": "➡️ Round {round} → next round",
     "ws.roundRetry": "↩️ Round {round} → retry",
     "ws.fallback": "⚡ {from} failed → retrying with {to}",
+    "ws.retry": "⏳ {cli} 429 → retrying in {delay}s",
     "tg.settingsUnsupported": "❌ Settings changes are not supported on Telegram.",
     "tg.promptUnsupported": "(Not supported on Telegram)",
     "tg.queued": "📥 Added to queue (#{count})",

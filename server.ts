@@ -50,7 +50,7 @@ import {
     getMergedSkills,
 } from './src/prompt/builder.js';
 import {
-    activeProcess, killActiveAgent, killAllAgents, waitForProcessEnd,
+    activeProcess, isAgentBusy, killActiveAgent, killAllAgents, waitForProcessEnd,
     steerAgent, enqueueMessage, processQueue, messageQueue,
     saveUpload, memoryFlushCounter, resetFallbackState,
 } from './src/agent/spawn.js';
@@ -174,7 +174,7 @@ app.use(express.static(join(projectRoot, 'public')));
 
 // WebSocket incoming messages
 wss.on('connection', (ws) => {
-    if (activeProcess) {
+    if (isAgentBusy()) {
         ws.send(JSON.stringify({ type: 'agent_status', status: 'running', agentId: 'active' }));
     }
     if (messageQueue.length > 0) {
@@ -207,7 +207,7 @@ wss.on('connection', (ws) => {
 function getRuntimeSnapshot() {
     return {
         uptimeSec: Math.floor(process.uptime()),
-        activeAgent: !!activeProcess,
+        activeAgent: isAgentBusy(),
         queuePending: messageQueue.length,
     };
 }
@@ -372,7 +372,7 @@ app.post('/api/message', (req, res) => {
 });
 
 app.post('/api/orchestrate/continue', (req, res) => {
-    if (activeProcess) {
+    if (isAgentBusy()) {
         return res.status(409).json({ error: 'agent already running' });
     }
     orchestrateContinue({ origin: 'web' });
@@ -380,7 +380,7 @@ app.post('/api/orchestrate/continue', (req, res) => {
 });
 
 app.post('/api/orchestrate/reset', (req, res) => {
-    if (activeProcess) {
+    if (isAgentBusy()) {
         return res.status(409).json({ error: 'agent already running' });
     }
     orchestrateReset({ origin: 'web' });

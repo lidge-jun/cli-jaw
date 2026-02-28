@@ -9,7 +9,7 @@ import { getSession, clearMessages, updateSession } from '../core/db.js';
 import { broadcast } from '../core/bus.js';
 import { t, normalizeLocale } from '../core/i18n.js';
 import { getMergedSkills, A2_PATH, regenerateB } from '../prompt/builder.js';
-import { activeProcess, messageQueue } from '../agent/spawn.js';
+import { isAgentBusy, messageQueue } from '../agent/spawn.js';
 import * as browser from '../browser/index.js';
 import * as memory from '../memory/memory.js';
 import {
@@ -58,7 +58,7 @@ export function makeCommandCtx(
         },
         getRuntime: () => ({
             uptimeSec: Math.floor(process.uptime()),
-            activeAgent: !!activeProcess,
+            activeAgent: isAgentBusy(),
             queuePending: messageQueue.length,
         }),
         getSkills: () => getMergedSkills(),

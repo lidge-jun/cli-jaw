@@ -329,7 +329,9 @@ export async function initTelegram() {
         };
 
         const toolHandler = showTools ? (type: string, data: Record<string, any>) => {
-            if (type === 'agent_fallback') {
+            if (type === 'agent_retry') {
+                pushToolLine(`⏳ ${data.cli} 429 — ${data.delay}s 후 재시도`);
+            } else if (type === 'agent_fallback') {
                 pushToolLine(`⚡ ${data.from} → ${data.to}`);
             } else if (type === 'agent_tool' && data.icon && data.label) {
                 // Copilot ACP emits many thought chunks; hide them on Telegram to avoid message storms.

@@ -1,4 +1,4 @@
-import { JAW_HOME, deriveCdpPort } from '../core/config.js';
+import { JAW_HOME, deriveCdpPort, settings } from '../core/config.js';
 import { spawn } from 'child_process';
 import { join } from 'path';
 import fs from 'node:fs';
@@ -8,6 +8,7 @@ import { chromium } from 'playwright-core';
 const PROFILE_DIR = join(JAW_HOME, 'browser-profile');
 let cached: any = null;   // { browser, cdpUrl }
 let chromeProc: any = null;
+let activePort: number | null = null;
 
 /** Check if a port is already listening via TCP connect */
 function isPortListening(port: number, host = '127.0.0.1'): Promise<boolean> {
@@ -96,6 +97,7 @@ export async function launchChrome(port = deriveCdpPort(), opts: { headless?: bo
             });
             if (resp.ok) {
                 console.log(`[browser] CDP already listening on port ${port} — reusing existing instance`);
+                activePort = port;
                 return;
             }
         } catch {
@@ -126,7 +128,9 @@ export async function launchChrome(port = deriveCdpPort(), opts: { headless?: bo
 
     // 2. CDP readiness polling (replaces blind 2s sleep)
     const ready = await waitForCdpReady(port);
-    if (!ready) {
+    if (ready) {
+        activePort = port;
+    } else {
         if (chromeProc && !chromeProc.killed) {
             chromeProc.kill('SIGTERM');
             chromeProc = null;
@@ -141,7 +145,12 @@ export async function launchChrome(port = deriveCdpPort(), opts: { headless?: bo
     }
 }
 
-export async function connectCdp(port = deriveCdpPort(), retries = 3) {
+/** Resolve effective CDP port: activePort > settings.browser.cdpPort > deriveCdpPort() */
+export function getActivePort(): number {
+    return activePort || settings.browser?.cdpPort || deriveCdpPort();
+}
+
+export async function connectCdp(port = getActivePort(), retries = 3) {
     const cdpUrl = `http://127.0.0.1:${port}`;
     if (cached?.cdpUrl === cdpUrl && cached.browser.isConnected()) return cached;
 
@@ -163,25 +172,25 @@ export async function connectCdp(port = deriveCdpPort(), retries = 3) {
     throw new Error(`CDP connection failed after ${retries} attempts: ${lastError?.message}`);
 }
 
-export async function getActivePage(port = deriveCdpPort()) {
+export async function getActivePage(port = getActivePort()) {
     const { browser } = await connectCdp(port);
     const pages = browser.contexts().flatMap((c: any) => c.pages());
     return pages[pages.length - 1] || null;
 }
 
-export async function listTabs(port = deriveCdpPort()) {
+export async function listTabs(port = getActivePort()) {
     const resp = await fetch(`http://127.0.0.1:${port}/json/list`);
     return ((await resp.json()) as any[]).filter((t: any) => t.type === 'page');
 }
 
-export async function getBrowserStatus(port = deriveCdpPort()) {
+export async function getBrowserStatus(port = getActivePort()) {
     try {
         const tabs = await listTabs(port);
         return { running: true, tabs: tabs.length, cdpUrl: `http://127.0.0.1:${port}` };
     } catch { return { running: false, tabs: 0 }; }
 }
 
-export async function getCdpSession(port = deriveCdpPort()) {
+export async function getCdpSession(port = getActivePort()) {
     const page = await getActivePage(port);
     if (!page) return null;
     return page.context().newCDPSession(page);
@@ -190,4 +199,5 @@ export async function getCdpSession(port = deriveCdpPort()) {
 export async function closeBrowser() {
     if (cached?.browser) { await cached.browser.close().catch(() => { }); cached = null; }
     if (chromeProc && !chromeProc.killed) { chromeProc.kill('SIGTERM'); chromeProc = null; }
+    activePort = null;
 }

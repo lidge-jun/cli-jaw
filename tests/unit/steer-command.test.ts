@@ -86,7 +86,7 @@ test('STR-005: steerHandler returns error when no agent running', () => {
     const body = fnMatch![0]!;
 
     assert.ok(body.includes('noAgent'), 'should have noAgent error path');
-    assert.ok(body.includes('activeProcess'), 'should check activeProcess');
+    assert.ok(body.includes('isAgentBusy'), 'should check isAgentBusy (429 retry-aware)');
 });
 
 // ── STR-006: bot.ts steer branch does NOT call steerAgent ──

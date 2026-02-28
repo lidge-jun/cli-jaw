@@ -1,5 +1,5 @@
 export {
-    launchChrome, connectCdp, getActivePage,
+    launchChrome, connectCdp, getActivePage, getActivePort,
     listTabs, getBrowserStatus, closeBrowser,
     getCdpSession,
 } from './connection.js';

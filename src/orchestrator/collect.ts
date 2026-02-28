@@ -30,7 +30,7 @@ export function orchestrateAndCollect(
 
         const handler = (type: string, data: Record<string, any>) => {
             if (type === 'agent_chunk' || type === 'agent_tool' ||
-                type === 'agent_status' ||
+                type === 'agent_status' || type === 'agent_retry' ||
                 type === 'agent_done' || type === 'agent_fallback' ||
                 type === 'round_start' || type === 'round_done') {
                 resetTimeout();

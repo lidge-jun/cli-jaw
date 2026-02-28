@@ -386,12 +386,12 @@ export async function steerHandler(args: any[], ctx: any) {
     if (!prompt) {
         return { ok: false, type: 'error', text: t('cmd.steer.noPrompt', {}, L) };
     }
-    const { activeProcess, killActiveAgent, waitForProcessEnd } = await import('../agent/spawn.js');
-    if (!activeProcess) {
+    const { isAgentBusy, killActiveAgent, waitForProcessEnd } = await import('../agent/spawn.js');
+    if (!isAgentBusy()) {
         return { ok: false, type: 'error', text: t('cmd.steer.noAgent', {}, L) };
     }
 
-    // Kill running agent and wait for clean exit
+    // Kill running agent (or cancel retry timer) and wait for clean exit
     killActiveAgent('steer');
     await waitForProcessEnd(3000);
 

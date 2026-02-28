@@ -21,12 +21,53 @@ export let memoryFlushCounter = 0;
 export let flushCycleCount = 0;
 export const messageQueue: any[] = [];
 
+// ─── 429 Retry Timer State ──────────────────────────
+// INVARIANT: single-main — 동시에 1개의 main spawnAgent만 존재한다고 가정.
+// 멀티 main task 도입 시 request-id 키 맵으로 전환 필요.
+let retryPendingTimer: ReturnType<typeof setTimeout> | null = null;
+let retryPendingResolve: ((v: any) => void) | null = null;
+let retryPendingOrigin: string | null = null;
+
+/** busy = process alive OR retry timer pending */
+export function isAgentBusy(): boolean {
+    return !!activeProcess || !!retryPendingTimer;
+}
+
+/**
+ * Cancel pending retry timer AND resolve the dangling Promise.
+ *
+ * @param resumeQueue - true: 취소 후 대기 메시지 실행 (settings 변경 등)
+ *                      false: 큐도 중단 (stop/steer 의도)
+ *
+ * 취소 규약: broadcast agent_done(error:true) → collect.ts L39가 수집함.
+ */
+export function clearRetryTimer(resumeQueue = true): void {
+    if (retryPendingTimer) {
+        clearTimeout(retryPendingTimer);
+        retryPendingTimer = null;
+        console.log('[jaw:retry] timer cancelled');
+
+        if (retryPendingResolve) {
+            broadcast('agent_done', {
+                text: '⏹️ 재시도 취소됨',
+                error: true,
+                origin: retryPendingOrigin || 'web',
+            });
+            retryPendingResolve({ text: '', code: -1 });
+            retryPendingResolve = null;
+            retryPendingOrigin = null;
+        }
+        if (resumeQueue) processQueue();
+    }
+}
+
 // ─── Fallback Retry State ────────────────────────────
 // key: originalCli, value: { fallbackCli, retriesLeft }
 const FALLBACK_MAX_RETRIES = 3;
 const fallbackState = new Map();
 
 export function resetFallbackState() {
+    clearRetryTimer(true);  // settings 변경 = 큐 재개 OK
     fallbackState.clear();
     console.log('[jaw:fallback] state reset');
 }
@@ -40,7 +81,9 @@ export function getFallbackState() {
 let killReason: string | null = null;
 
 export function killActiveAgent(reason = 'user') {
-    if (!activeProcess) return false;
+    const hadTimer = !!retryPendingTimer;
+    clearRetryTimer(false);  // stop 의도: 큐 재개 안 함
+    if (!activeProcess) return hadTimer;  // timer 취소도 "killed" 취급
     console.log(`[jaw:kill] reason=${reason}`);
     killReason = reason;
     try { activeProcess.kill('SIGTERM'); } catch (e: unknown) { console.warn('[agent:kill] SIGTERM failed', { pid: activeProcess?.pid, error: (e as Error).message }); }
@@ -52,6 +95,8 @@ export function killActiveAgent(reason = 'user') {
 }
 
 export function killAllAgents(reason = 'user') {
+    const hadTimer = !!retryPendingTimer;
+    clearRetryTimer(false);  // stop 의도: 큐 재개 안 함
     let killed = 0;
     for (const [id, proc] of activeProcesses) {
         console.log(`[jaw:killAll] killing ${id}, reason=${reason}`);
@@ -65,7 +110,7 @@ export function killAllAgents(reason = 'user') {
     if (activeProcess && !activeProcesses.has('main')) {
         killActiveAgent(reason);
     }
-    return killed > 0 || !!activeProcess;
+    return killed > 0 || !!activeProcess || hadTimer;
 }
 
 export function waitForProcessEnd(timeoutMs = 3000) {
@@ -99,7 +144,7 @@ export function enqueueMessage(prompt: string, source: string, meta?: { chatId?:
 }
 
 export async function processQueue() {
-    if (activeProcess || messageQueue.length === 0) return;
+    if (activeProcess || retryPendingTimer || messageQueue.length === 0) return;
 
     // Group by source+chatId — only process the first group, leave rest in queue
     const first = messageQueue[0];
@@ -204,6 +249,7 @@ import { AcpClient } from '../cli/acp-client.js';
 interface SpawnOpts {
     internal?: boolean;
     _isFallback?: boolean;
+    _isRetry?: boolean;      // 429 delay retry 중 여부
     _skipInsert?: boolean;
     forceNew?: boolean;
     agentId?: string;
@@ -225,6 +271,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     const empSid = opts.employeeSessionId || null;
     const mainManaged = !forceNew && !empSid;
 
+    // INVARIANT: 모든 외부 호출은 gateway.ts isAgentBusy()를 거침.
+    // 직접 spawnAgent 호출 시 retryPendingTimer도 확인할 것.
     if (activeProcess && mainManaged) {
         console.log('[jaw] Agent already running, skipping');
         return { child: null, promise: Promise.resolve({ text: '', code: -1 }) };
@@ -498,13 +546,38 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 }
             } else if (mainManaged && code !== 0 && !wasSteer) {
                 let errMsg = `Copilot CLI 실행 실패 (exit ${code})`;
+                const is429 = ctx.stderrBuf.includes('429') || ctx.stderrBuf.includes('RESOURCE_EXHAUSTED');
                 if (ctx.stderrBuf.includes('auth')) errMsg = '🔐 인증 오류 — `copilot login` 또는 `gh auth login` 실행 후 다시 시도해주세요';
+                else if (is429) errMsg = '⚡ API 용량 초과 (429)';
                 else if (ctx.stderrBuf.trim()) errMsg = ctx.stderrBuf.trim().slice(0, 200);
 
+                // ─── 429 delay retry (same engine, 1회만) ────────
+                if (!opts.internal && !opts._isFallback && is429 && !opts._isRetry) {
+                    console.log(`[jaw:retry] ${cli} 429 detected — waiting 10s before retry`);
+                    broadcast('agent_retry', { cli, delay: 10, reason: errMsg });
+                    retryPendingResolve = resolve;
+                    retryPendingOrigin = origin;
+                    retryPendingTimer = setTimeout(() => {
+                        retryPendingTimer = null;
+                        retryPendingResolve = null;
+                        retryPendingOrigin = null;
+                        const { promise: retryP } = spawnAgent(prompt, {
+                            ...opts, _isRetry: true, _skipInsert: true,
+                        });
+                        retryP.then(r => resolve(r)).catch(() => {
+                            broadcast('agent_done', { text: `❌ ${errMsg} (재시도 실패)`, error: true, origin });
+                            resolve({ text: '', code: 1 });
+                            if (mainManaged) processQueue();
+                        });
+                    }, 10_000);
+                    return;
+                }
+
+                // ─── Fallback with retry tracking ─────────────
                 if (!opts.internal && !opts._isFallback) {
                     const fallbackCli = (settings.fallbackOrder || [])
                         .find((fc: string) => fc !== cli && detectCli(fc).available);
-                    if (fallbackCli) {                        // Record fallback state for retry tracking
+                    if (fallbackCli) {
                         const st = fallbackState.get(cli);
                         if (st) {
                             st.retriesLeft = Math.max(0, st.retriesLeft - 1);
@@ -679,12 +752,35 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             }
         } else if (mainManaged && code !== 0 && !wasSteer) {
             let errMsg = `CLI 실행 실패 (exit ${code})`;
-            if (ctx.stderrBuf.includes('429') || ctx.stderrBuf.includes('RESOURCE_EXHAUSTED')) {
-                errMsg = '⚡ API 용량 초과 (429) — 잠시 후 다시 시도해주세요';
+            const is429 = ctx.stderrBuf.includes('429') || ctx.stderrBuf.includes('RESOURCE_EXHAUSTED');
+            if (is429) {
+                errMsg = '⚡ API 용량 초과 (429)';
             } else if (ctx.stderrBuf.includes('auth') || ctx.stderrBuf.includes('credentials')) {
                 errMsg = '🔐 인증 오류 — CLI 로그인 상태를 확인해주세요';
             } else if (ctx.stderrBuf.trim()) {
                 errMsg = ctx.stderrBuf.trim().slice(0, 200);
+            }
+
+            // ─── 429 delay retry (same engine, 1회만) ────────
+            if (!opts.internal && !opts._isFallback && is429 && !opts._isRetry) {
+                console.log(`[jaw:retry] ${cli} 429 detected — waiting 10s before retry`);
+                broadcast('agent_retry', { cli, delay: 10, reason: errMsg });
+                retryPendingResolve = resolve;
+                retryPendingOrigin = origin;
+                retryPendingTimer = setTimeout(() => {
+                    retryPendingTimer = null;
+                    retryPendingResolve = null;
+                    retryPendingOrigin = null;
+                    const { promise: retryP } = spawnAgent(prompt, {
+                        ...opts, _isRetry: true, _skipInsert: true,
+                    });
+                    retryP.then(r => resolve(r)).catch(() => {
+                        broadcast('agent_done', { text: `❌ ${errMsg} (재시도 실패)`, error: true, origin });
+                        resolve({ text: '', code: 1 });
+                        if (mainManaged) processQueue();
+                    });
+                }, 10_000);
+                return;
             }
 
             // ─── Fallback with retry tracking ─────────────

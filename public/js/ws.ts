@@ -25,6 +25,8 @@ interface WsMessage {
     source?: string;
     role?: string;
     content?: string;
+    cli?: string;
+    delay?: number;
 }
 
 // Agent phase state (populated by agent_status events from orchestrator)
@@ -65,6 +67,8 @@ export function connect(): void {
             addSystemMsg(`${msg.icon || ''} ${msg.label || ''}`, 'tool-activity');
         } else if (msg.type === 'agent_output') {
             appendAgentText(msg.text || '');
+        } else if (msg.type === 'agent_retry') {
+            addSystemMsg(t('ws.retry', { cli: msg.cli || '', delay: msg.delay || 10 }), 'tool-activity');
         } else if (msg.type === 'agent_fallback') {
             addSystemMsg(t('ws.fallback', { from: msg.from || '', to: msg.to || '' }), 'tool-activity');
         } else if (msg.type === 'agent_done') {

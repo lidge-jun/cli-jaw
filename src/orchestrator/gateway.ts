@@ -2,7 +2,7 @@
 // Unified message submission for all interfaces (WebUI, REST, Telegram).
 // Replaces duplicated intent/queue/orchestrate logic in server.ts + bot.ts.
 
-import { activeProcess, enqueueMessage, messageQueue } from '../agent/spawn.js';
+import { isAgentBusy, enqueueMessage, messageQueue } from '../agent/spawn.js';
 import { insertMessage } from '../core/db.js';
 import { broadcast } from '../core/bus.js';
 import {
@@ -30,7 +30,7 @@ export function submitMessage(
 
     // ── continue intent ──
     if (isContinueIntent(trimmed)) {
-        if (activeProcess) return { action: 'rejected', reason: 'busy' };
+        if (isAgentBusy()) return { action: 'rejected', reason: 'busy' };
         insertMessage.run('user', display, meta.origin, '');
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
         if (!meta.skipOrchestrate) orchestrateContinue({ origin: meta.origin, chatId: meta.chatId });
@@ -39,7 +39,7 @@ export function submitMessage(
 
     // ── reset intent ──
     if (isResetIntent(trimmed)) {
-        if (activeProcess) return { action: 'rejected', reason: 'busy' };
+        if (isAgentBusy()) return { action: 'rejected', reason: 'busy' };
         insertMessage.run('user', display, meta.origin, '');
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
         if (!meta.skipOrchestrate) orchestrateReset({ origin: meta.origin, chatId: meta.chatId });
@@ -49,7 +49,7 @@ export function submitMessage(
     // ── busy → enqueue only ──
     // NOTE: insertMessage is NOT called here — processQueue() handles it.
     // This fixes the dual-insert bug where bot.ts called both enqueue + insert.
-    if (activeProcess) {
+    if (isAgentBusy()) {
         enqueueMessage(trimmed, meta.origin, { chatId: meta.chatId });
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
         return { action: 'queued', pending: messageQueue.length, queued: true };

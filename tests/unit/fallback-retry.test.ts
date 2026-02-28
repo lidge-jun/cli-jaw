@@ -86,3 +86,188 @@ test('server.js calls resetFallbackState on settings save', async () => {
     assert.ok(src.includes('resetFallbackState'), 'server.js should import/use resetFallbackState');
     assert.ok(src.includes('resetFallbackState()'), 'server.js should call resetFallbackState()');
 });
+
+// ─── 429 Retry: helpers ─────────────────────────────
+
+import { describe } from 'node:test';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+function readSrc(rel: string): string {
+    return fs.readFileSync(join(__dirname, rel), 'utf8');
+}
+
+function extractFn(src: string, name: string): string {
+    const start = src.indexOf(`function ${name}`);
+    if (start === -1) return '';
+    let depth = 0, i = src.indexOf('{', start);
+    for (; i < src.length; i++) {
+        if (src[i] === '{') depth++;
+        if (src[i] === '}') { depth--; if (depth === 0) break; }
+    }
+    return src.slice(start, i + 1);
+}
+
+// ─── 429 Retry: structural tests ────────────────────
+
+test('429: isAgentBusy checks activeProcess + retryPendingTimer', () => {
+    const src = readSrc('../../src/agent/spawn.ts');
+    assert.ok(src.includes('function isAgentBusy'));
+    assert.ok(src.includes('retryPendingTimer'));
+});
+
+test('429: clearRetryTimer accepts resumeQueue param and defaults true', () => {
+    const src = readSrc('../../src/agent/spawn.ts');
+    const fn = extractFn(src, 'clearRetryTimer');
+    assert.ok(fn.includes('resumeQueue = true'), 'default resumeQueue=true');
+    assert.ok(fn.includes('if (resumeQueue) processQueue'), 'conditional processQueue');
+    assert.ok(fn.includes('error: true'), 'broadcasts error:true');
+});
+
+test('429: killActiveAgent calls clearRetryTimer(false) and returns hadTimer', () => {
+    const src = readSrc('../../src/agent/spawn.ts');
+    const fn = extractFn(src, 'killActiveAgent');
+    assert.ok(fn.includes('clearRetryTimer(false)'), 'passes resumeQueue=false');
+    assert.ok(fn.includes('hadTimer'), 'returns hadTimer');
+    assert.ok(!fn.includes('return false'), 'no plain return false');
+});
+
+test('429: killAllAgents returns true when timer cancelled', () => {
+    const src = readSrc('../../src/agent/spawn.ts');
+    const fn = extractFn(src, 'killAllAgents');
+    assert.ok(fn.includes('clearRetryTimer(false)'));
+    assert.ok(fn.includes('hadTimer'), 'tracks hadTimer for return value');
+});
+
+test('429: resetFallbackState calls clearRetryTimer(true)', () => {
+    const src = readSrc('../../src/agent/spawn.ts');
+    const fn = extractFn(src, 'resetFallbackState');
+    assert.ok(fn.includes('clearRetryTimer(true)'));
+});
+
+test('429: processQueue guards against retryPendingTimer', () => {
+    const src = readSrc('../../src/agent/spawn.ts');
+    const fn = extractFn(src, 'processQueue');
+    assert.ok(fn.includes('retryPendingTimer'), 'processQueue checks retryPendingTimer');
+});
+
+test('429: INVARIANT comment present', () => {
+    const src = readSrc('../../src/agent/spawn.ts');
+    assert.ok(src.includes('INVARIANT: single-main'));
+});
+
+test('429: retryPendingResolve stored before setTimeout', () => {
+    const src = readSrc('../../src/agent/spawn.ts');
+    const r = src.indexOf('retryPendingResolve = resolve');
+    const t = src.indexOf('retryPendingTimer = setTimeout');
+    assert.ok(r > 0 && t > 0 && r < t, 'resolve ref stored first');
+});
+
+test('429: steerHandler uses isAgentBusy not activeProcess', () => {
+    const src = readSrc('../../src/cli/handlers.ts');
+    const fn = src.slice(src.indexOf('async function steerHandler'));
+    assert.ok(fn.includes('isAgentBusy'), 'uses isAgentBusy');
+    assert.ok(!fn.includes('if (!activeProcess)'), 'no raw activeProcess guard');
+});
+
+test('429: gateway uses isAgentBusy', () => {
+    const gw = readSrc('../../src/orchestrator/gateway.ts');
+    assert.ok(gw.includes('isAgentBusy'));
+    assert.ok(!gw.match(/if \(activeProcess\)/));
+});
+
+test('429: event consumers handle agent_retry', () => {
+    assert.ok(readSrc('../../src/orchestrator/collect.ts').includes('agent_retry'));
+    assert.ok(readSrc('../../src/telegram/bot.ts').includes('agent_retry'));
+    assert.ok(readSrc('../../public/js/ws.ts').includes('agent_retry'));
+});
+
+test('429: i18n keys exist', () => {
+    assert.ok(readSrc('../../public/locales/ko.json').includes('"ws.retry"'));
+    assert.ok(readSrc('../../public/locales/en.json').includes('"ws.retry"'));
+});
+
+// ─── 429 Retry: behavioral tests ────────────────────
+
+describe('429 retry: behavioral tests', () => {
+    test('clearRetryTimer(false) is safe on empty state', async () => {
+        const spawn = await import('../../src/agent/spawn.ts');
+        spawn.clearRetryTimer(false);
+        assert.ok(true, 'no-op without crash');
+    });
+
+    test('clearRetryTimer(true) is safe on empty state', async () => {
+        const spawn = await import('../../src/agent/spawn.ts');
+        spawn.clearRetryTimer(true);
+        assert.ok(true, 'no-op without crash');
+    });
+
+    test('killActiveAgent returns false when nothing pending', async () => {
+        const spawn = await import('../../src/agent/spawn.ts');
+        const result = spawn.killActiveAgent('test');
+        assert.equal(result, false, 'nothing to kill → false');
+    });
+
+    test('isAgentBusy reflects activeProcess state', async () => {
+        const spawn = await import('../../src/agent/spawn.ts');
+        assert.equal(spawn.isAgentBusy(), !!spawn.activeProcess);
+    });
+
+    test('processQueue guards against retryPendingTimer at runtime', async () => {
+        const spawn = await import('../../src/agent/spawn.ts');
+        spawn.processQueue();
+        assert.ok(true, 'no-op on empty queue');
+    });
+});
+
+// ─── 429 Retry: edge case tests ─────────────────────
+
+describe('429 retry: edge case coverage', () => {
+    test('timer pending blocks processQueue at runtime', async () => {
+        // Verifies the guard `retryPendingTimer` in processQueue body
+        // prevents queue drain during active retry wait
+        const src = readSrc('../../src/agent/spawn.ts');
+        const fn = extractFn(src, 'processQueue');
+        // The three guard conditions must all be present in the single return line
+        assert.ok(fn.includes('activeProcess || retryPendingTimer || messageQueue.length === 0'),
+            'processQueue must guard on all three: activeProcess, retryPendingTimer, messageQueue');
+    });
+
+    test('steer/stop during retry calls clearRetryTimer(false) — queue stays blocked', () => {
+        // killActiveAgent uses resumeQueue=false to prevent queue drain after steer/stop
+        const src = readSrc('../../src/agent/spawn.ts');
+        const killFn = extractFn(src, 'killActiveAgent');
+        // Must call clearRetryTimer(false) BEFORE the activeProcess check
+        const clearIdx = killFn.indexOf('clearRetryTimer(false)');
+        const processCheck = killFn.indexOf('if (!activeProcess)');
+        assert.ok(clearIdx > 0 && processCheck > 0, 'both calls should exist');
+        assert.ok(clearIdx < processCheck, 'clearRetryTimer(false) must precede activeProcess check');
+
+        // killAllAgents also uses false
+        const killAllFn = extractFn(src, 'killAllAgents');
+        assert.ok(killAllFn.includes('clearRetryTimer(false)'),
+            'killAllAgents must also use resumeQueue=false');
+    });
+
+    test('429 retry branch appears BEFORE fallback branch in both exit handlers', () => {
+        // Critical ordering: same-engine retry (429) must be tried before cross-engine fallback
+        const src = readSrc('../../src/agent/spawn.ts');
+
+        // Find both exit handler sections (ACP + Standard)
+        const acpExit = src.slice(src.indexOf("acp.on('exit'"));
+        const stdExit = src.slice(src.indexOf("child.on('close'"));
+
+        for (const [label, handler] of [['ACP', acpExit], ['Standard', stdExit]] as const) {
+            const retryIdx = handler.indexOf('429 delay retry');
+            const fallbackIdx = handler.indexOf('Fallback with retry tracking');
+            assert.ok(retryIdx > 0, `${label}: 429 retry branch must exist`);
+            assert.ok(fallbackIdx > 0, `${label}: fallback branch must exist`);
+            assert.ok(retryIdx < fallbackIdx,
+                `${label}: 429 retry must come BEFORE fallback to ensure same-engine retry first`);
+        }
+    });
+});

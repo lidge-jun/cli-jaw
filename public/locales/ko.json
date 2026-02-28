@@ -87,6 +87,7 @@
     "ws.roundNext": "➡️ 라운드 {round} → 다음 라운드",
     "ws.roundRetry": "↩️ 라운드 {round} → 재시도",
     "ws.fallback": "⚡ {from} 실패 → {to}로 재시도",
+    "ws.retry": "⏳ {cli} 429 → {delay}s 후 재시도",
     "tg.settingsUnsupported": "❌ Telegram에서 설정 변경은 지원하지 않습니다.",
     "tg.promptUnsupported": "(Telegram에서 미지원)",
     "tg.queued": "📥 대기열에 추가됨 ({count}번째)",

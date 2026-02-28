@@ -66,8 +66,8 @@ test('SM-005: continue intent when busy → rejected/busy', () => {
         gatewaySrc.indexOf('// ── reset'),
     );
     assert.ok(
-        continueBlock.includes("if (activeProcess) return { action: 'rejected', reason: 'busy' }"),
-        'continue intent rejects when busy',
+        continueBlock.includes("if (isAgentBusy()) return { action: 'rejected', reason: 'busy' }"),
+        'continue intent rejects when busy (429 retry-aware)',
     );
 });
 
@@ -91,8 +91,8 @@ test('SM-007: reset intent when busy → rejected/busy', () => {
         gatewaySrc.indexOf('// ── busy'),
     );
     assert.ok(
-        resetBlock.includes("if (activeProcess) return { action: 'rejected', reason: 'busy' }"),
-        'reset intent rejects when busy',
+        resetBlock.includes("if (isAgentBusy()) return { action: 'rejected', reason: 'busy' }"),
+        'reset intent rejects when busy (429 retry-aware)',
     );
 });
 
