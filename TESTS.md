@@ -7,7 +7,7 @@
 ## Run
 
 ```bash
-npm test                            # All 605 tests (~14s)
+npm test                            # All 606 tests (~14s)
 tsx --test tests/unit/*.test.ts    # Unit tests only
 tsx --test tests/integration/*.test.ts  # Integration tests only
 npm run test:watch                  # Watch mode
@@ -57,6 +57,7 @@ npm run check:deps                  # Dependency vulnerability check
 | `steer-command.test.ts`        |   8   | `/steer` command: registration, kill+wait, telegram branch, `isAgentBusy` guard           |
 | `submit-message.test.ts`       |  10   | `submitMessage` gateway: idle/busy/continue/reset paths, `isAgentBusy` busy rejection     |
 | `worklog.test.ts`              |   6   | PHASES mapping, `parseWorklogPending` extraction                                          |
+| `browser-port.test.ts`         |   9   | `activePort` lifecycle, `getActivePort` fallback chain, `cdpPort(req)` validation (#49)   |
 
 ### Integration (Tier 2-3 — Express routes, CLI)
 
