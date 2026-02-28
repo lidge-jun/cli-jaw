@@ -6,7 +6,7 @@
 
 *One assistant. Five brains. Always on.*
 
-[![Tests](https://img.shields.io/badge/tests-575%20pass-brightgreen)](#-tests)
+[![Tests](https://img.shields.io/badge/tests-608%20pass-brightgreen)](#-tests)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
@@ -187,7 +187,7 @@ graph LR
 - 🤖 **5 AI engines, 1 assistant** — Claude · Codex · Gemini · OpenCode · Copilot. Switch with `/cli`.
 - ⚡ **Auto fallback** — If one engine is down, the next picks up seamlessly.
 - 🎭 **Multi-agent orchestration** — Complex tasks get split across specialized sub-agents automatically.
-- 📦 **107 skills** — Browser control, file editing, image generation, web search, and [much more](#-skill-system).
+- 📦 **108 skills** — Browser control, file editing, image generation, web search, and [much more](#-skill-system).
 - 🧠 **Persistent memory** — Your assistant remembers past conversations and preferences across sessions.
 - 📱 **Telegram bot** — Chat with your assistant from your phone, send voice/photos/files.
 - 🌐 **Browser automation** — Your assistant can navigate the web, click, type, and screenshot.
@@ -199,7 +199,7 @@ graph LR
 
 ## 📦 Skill System
 
-**107 skills** out of the box — browser, github, notion, telegram, memory, pdf, image generation, and [much more](#).
+**108 skills** out of the box — browser, github, notion, telegram, memory, pdf, image generation, and [much more](#).
 
 <details>
 <summary>View all skills</summary>
@@ -500,7 +500,7 @@ src/
 ## 🧪 Tests
 
 <details>
-<summary>575 pass · 1 skipped · zero external dependencies</summary>
+<summary>608 pass · 1 skipped · zero external dependencies</summary>
 
 ```bash
 npm test
@@ -509,6 +509,19 @@ npm test
 All tests run via `tsx --test` (native Node.js test runner + TypeScript).
 
 </details>
+
+---
+
+## 🆕 What's New (v1.2.0)
+
+> **24-hour patch cycle** — issues reported today, fixed today.
+
+| Feature                    | Description                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **429 Smart Retry**        | Rate-limited? Same engine retries once (10s), then auto-falls back to the next engine.                  |
+| **Browser Port Fix**       | `browser start --port 9338` now persists across `status`/`tabs`/`snapshot`. No more silent port resets. |
+| **Cross-Platform Service** | `jaw service install` — systemd, launchd, or Docker auto-detected.                                      |
+| **608 Tests**              | Up from 575. Zero regressions, zero external test dependencies.                                         |
 
 ---
 
