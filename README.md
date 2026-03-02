@@ -161,7 +161,7 @@ Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, C
 | 🛡️**TOS-Safe**                 | Uses official CLIs only — no API key scraping, no reverse engineering, no ban risk.                                              |
 | 🤖**Verified Agent Tools**     | 5 battle-tested coding agents (Claude, Codex, Gemini, OpenCode, Copilot) under one roof.                                         |
 | ⚡**Multi-Agent Fallback**     | One engine down? The next picks up automatically. Zero downtime.                                                                 |
-| 🎭**Orchestrated Performance** | Complex tasks split across specialized sub-agents for maximum throughput.                                                        |
+| 🎭**PABCD Orchestration**      | DB-persisted FSM pipeline — Plan → Audit → Build → Check → Done. Workers are read-only. You approve every phase.                 |
 | 📦**107 Built-in Skills**      | Browser automation, document generation, Telegram, memory — ready out of the box.                                                |
 | 🖥️**Cross-Platform**           | macOS, Linux, Windows — ENOENT-safe CLI spawn, auto-detection,`.cmd` shim support, and native install all work across platforms. |
 
@@ -277,37 +277,60 @@ Your assistant isn't tied to your desk. Chat from anywhere via Telegram:
 
 ---
 
-## 🎭 Multi-Agent Orchestration
+## 🎭 Multi-Agent Orchestration — PABCD
 
-For complex tasks, your assistant delegates work to specialized sub-agents:
+For complex tasks, CLI-JAW uses **PABCD** — a finite state machine that enforces a strict 5-phase pipeline:
 
-![Orchestration Log](docs/screenshots/orchestration-log.png)
+```
+ ┌─────────────────────────────────────────────────────────┐
+ │  P          A            B           C          D       │
+ │  Plan  →  Audit  →    Build   →  Check  →    Done      │
+ │  📝        🔍          🔨          ✅          🏁       │
+ │            ↑            ↑                               │
+ │            └── reject ──┘── reject (self-heal loop)     │
+ └─────────────────────────────────────────────────────────┘
+```
+
+| Phase | Name | What happens |
+|:-----:|------|------|
+| **P** | Plan | Boss AI writes a diff-level implementation plan. Stops and waits for your approval. |
+| **A** | Audit | A read-only worker verifies the plan is feasible — imports resolve, signatures match, no integration risks. |
+| **B** | Build | Boss implements the code directly. A read-only worker verifies the result. Self-heals on failure. |
+| **C** | Check | Final verification — `tsc --noEmit`, docs update, consistency check. |
+| **D** | Done | Summary of all changes. State returns to IDLE. |
+
+**Key design decisions:**
+- **DB-persisted FSM** — state survives server restarts, CLI and Web UI share the same state
+- **Hard STOP at every phase** — the AI cannot self-advance; you approve each transition
+- **Workers are READ-ONLY** — audit and verify phases can never accidentally modify files
+- **Parallel-safe** — independent subtasks run concurrently via `Promise.all` with file-overlap detection
 
 ```mermaid
 graph TD
     USER["👤 Your Request"] --> TRIAGE["🔍 Triage — Simple or Complex?"]
   
     TRIAGE -->|Simple| DIRECT["⚡ Direct Response"]
-    TRIAGE -->|Complex| PLAN["📝 Planning"]
+    TRIAGE -->|Complex| P["📝 P: Plan"]
   
-    PLAN --> FE["🎨 Frontend"]
-    PLAN --> BE["⚙️ Backend"]  
-    PLAN --> DATA["📊 Data"]
-  
-    FE --> GATE["🚪 Gate Review"]
-    BE --> GATE
-    DATA --> GATE
-  
-    GATE -->|Pass| NEXT["✅ Done"]
-    GATE -->|Fail| RETRY["🔄 Debug & Retry"]
+    P -->|approved| A["🔍 A: Audit"]
+    A -->|pass| B["🔨 B: Build"]
+    A -->|fail| P
+    B -->|verified| C["✅ C: Check"]
+    B -->|needs fix| B
+    C --> D["🏁 D: Done"]
+    D --> IDLE["💤 IDLE"]
 
     style USER fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
-    style TRIAGE fill:#fdf2e9,stroke:#d4a574,color:#5c4033
-    style PLAN fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
-    style GATE fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
+    style P fill:#fdf2e9,stroke:#d4a574,color:#5c4033
+    style A fill:#fdf2e9,stroke:#d4a574,color:#5c4033
+    style B fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
+    style C fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
+    style D fill:#f5e6d3,stroke:#d4a574,stroke-width:2px,color:#5c4033
 ```
 
-Your assistant **decides by itself** whether a task needs orchestration or a direct response. No configuration needed.
+Activate manually with `jaw orchestrate` or let the assistant decide automatically. The Web UI shows a live roadmap bar with phase indicators and a 🦈 runner animation.
+
+![Orchestration Log](docs/screenshots/orchestration-log.png)
 
 ---
 
