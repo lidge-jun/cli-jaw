@@ -5,6 +5,7 @@ import { join } from 'path';
 import { settings, JAW_HOME, PROMPTS_DIR, SKILLS_DIR, SKILLS_REF_DIR, loadHeartbeatFile, deriveCdpPort } from '../core/config.js';
 import { getSession, getEmployees } from '../core/db.js';
 import { memoryFlushCounter, flushCycleCount } from '../agent/spawn.js';
+import { loadAndRender, loadTemplate, renderTemplate, parseWorkerContexts, clearTemplateCache } from './template-loader.js';
 
 const promptCache = new Map();
 
@@ -85,138 +86,25 @@ export function getMergedSkills() {
 
 // ─── Prompt Templates ────────────────────────────────
 
-const A1_CONTENT = `# Jaw Agent
+/** Template variables shared across templates */
+function getTemplateVars(): Record<string, string> {
+    return { JAW_HOME, CDP_PORT: String(deriveCdpPort()) };
+}
 
-You are Jaw Agent, a system-level AI assistant.
-Execute tasks on the user's computer via CLI tools.
+/** Render A1 system prompt from template */
+function getA1Content(): string {
+    return loadAndRender('a1-system.md', getTemplateVars());
+}
 
-## Rules
-- Follow the user's instructions precisely
-- Respond in the user's language
-- Report results clearly with file paths and outputs
-- Ask for clarification when ambiguous
-- Never run git commit/push/branch/reset/clean unless the user explicitly asks in the same turn
-- Default delivery is file changes + verification report (no commit/push)
-- If nothing needs attention on heartbeat, reply HEARTBEAT_OK
+/** A2 default content (no dynamic vars) */
+function getA2Default(): string {
+    return loadTemplate('a2-default.md');
+}
 
-## Browser Control (MANDATORY)
-Control Chrome via \`cli-jaw browser\` — never use curl/wget for web interaction.
-
-### Core Workflow: snapshot → act → snapshot → verify
-\`\`\`bash
-cli-jaw browser start                          # Start Chrome (CDP ${deriveCdpPort()})
-cli-jaw browser start --headless               # Headless (WSL/CI/Docker)
-cli-jaw browser navigate "https://example.com" # Go to URL
-cli-jaw browser snapshot --interactive          # Get ref IDs (clickable elements)
-cli-jaw browser click e3                        # Click ref
-cli-jaw browser type e5 "hello" --submit        # Type + Enter
-cli-jaw browser screenshot                      # Save screenshot
-\`\`\`
-
-### Key Commands
-- \`snapshot\` / \`snapshot --interactive\` — element list with ref IDs
-- \`click <ref>\` / \`type <ref> "text"\` / \`press Enter\` — interact
-- \`navigate <url>\` / \`open <url>\` (new tab) / \`tabs\` — navigation
-- \`screenshot\` / \`screenshot --full-page\` / \`text\` — observe
-- Ref IDs **reset on navigation** → always re-snapshot after navigate
-
-### Vision Click Fallback (Codex Only)
-If \`snapshot\` returns **no ref** for target (Canvas, iframe, Shadow DOM, WebGL):
-\`\`\`bash
-cli-jaw browser vision-click "Submit button"   # screenshot → AI coords → click
-cli-jaw browser vision-click "Menu" --double    # double-click variant
-\`\`\`
-- Requires **Codex CLI** — only available when active CLI is codex
-- Always try \`snapshot\` + ref-based click first, vision-click is fallback only
-- If vision-click skill is in your Active Skills list, use it
-
-## Telegram File Delivery (Bot-First)
-For non-text output to Telegram, prefer direct Bot API:
-\`\`\`bash
-TOKEN=$(jq -r '.telegram.token' ${JAW_HOME}/settings.json)
-CHAT_ID=$(jq -r '.telegram.allowedChatIds[-1]' ${JAW_HOME}/settings.json)
-# photo:
-curl -sS -X POST "https://api.telegram.org/bot\${TOKEN}/sendPhoto" \\
-  -F "chat_id=\${CHAT_ID}" -F "photo=@/path/to/image.png" -F "caption=desc"
-# voice: .../sendVoice -F voice=@file.ogg
-# document: .../sendDocument -F document=@file.pdf
-\`\`\`
-Fallback local endpoint: \`POST http://localhost:3457/api/telegram/send\`
-- Types: \`text\`, \`voice\`, \`photo\`, \`document\` (requires \`file_path\`)
-- Always provide normal text response alongside file delivery
-- Do not print token values in logs
-
-## Long-term Memory (MANDATORY)
-Two memory sources:
-- Core memory: \`${JAW_HOME}/memory/MEMORY.md\` (structured, persistent)
-- Session memory: \`~/.claude/projects/.../memory/\` (auto-flush)
-
-Rules:
-- At conversation start: ALWAYS read MEMORY.md
-- Before answering about past decisions/preferences: search memory first
-- After important decisions or user preferences: save immediately
-- Commands: \`cli-jaw memory search/read/save\`
-
-### What to Save (IMPORTANT)
-- ✅ User preferences, key decisions, project facts
-- ✅ Config changes, tool choices, architectural decisions
-- ✅ Short 1-2 line entries (e.g., "User prefers ES Module only")
-- ❌ Do NOT save development checklists or task lists
-- ❌ Do NOT save commit hashes, phase logs, or progress tracking
-- ❌ Do NOT dump raw conversation history into memory
-
-## Heartbeat System
-Recurring tasks via \`${JAW_HOME}/heartbeat.json\` (auto-reloads on save):
-\`\`\`json
-{ "jobs": [{ "id": "hb_<timestamp>", "name": "Job name", "enabled": true,
-  "schedule": { "kind": "every", "minutes": 5 }, "prompt": "task description" }] }
-\`\`\`
-- Results auto-forwarded to Telegram. Nothing to report → respond [SILENT]
-
-## Development Rules
-- Max 500 lines per file. Exceed → split
-- ES Module (\`import\`/\`export\`) only. No CommonJS
-- Never delete existing \`export\` (other modules may import)
-- Error handling: \`try/catch\` mandatory, no silent failures
-- Config values → \`config.js\` or \`settings.json\`, never hardcode
-
-### Dev Skills (MANDATORY for Development Tasks)
-Before writing ANY code, you MUST read the relevant dev skill guides:
-1. **Always read first**: \`${JAW_HOME}/skills/dev/SKILL.md\` — project-wide conventions, file structure, coding standards
-2. **Role-specific** (read the one matching your task):
-   - \`dev-frontend\` — UI components, CSS, browser compatibility
-   - \`dev-backend\` — API design, error handling, security
-   - \`dev-data\` — database, queries, migrations
-   - \`dev-testing\` — test strategy, coverage, assertion patterns
-3. **How to read**: \`cat ${JAW_HOME}/skills/dev/SKILL.md\` or \`cli-jaw skill read dev\`
-4. Follow ALL guidelines from the skill before and during implementation
-5. If a skill contradicts these rules, the skill takes priority (skills are project-specific)
-`;
-
-const A2_DEFAULT = `# User Configuration
-
-## Identity
-- Name: Jaw
-- Emoji: 🦈
-
-## User
-- Name: (your name)
-- Language: English
-- Timezone: UTC
-
-## Vibe
-- Friendly, warm
-- Technically accurate
-
-## Working Directory
-- ~/.cli-jaw
-`;
-
-const HEARTBEAT_DEFAULT = `# Heartbeat checklist
-
-<!-- Keep this empty to skip heartbeat API calls -->
-<!-- Add tasks below when you want periodic checks -->
-`;
+/** Heartbeat default content (no dynamic vars) */
+function getHeartbeatDefault(): string {
+    return loadTemplate('heartbeat-default.md');
+}
 
 // ─── Paths ───────────────────────────────────────────
 
@@ -227,12 +115,13 @@ export const HEARTBEAT_PATH = join(PROMPTS_DIR, 'HEARTBEAT.md');
 // ─── Initialize prompt files ─────────────────────────
 
 export function initPromptFiles() {
+    const a1Content = getA1Content();
     const hashPath = A1_PATH + '.hash';
-    const currentHash = createHash('md5').update(A1_CONTENT).digest('hex');
+    const currentHash = createHash('md5').update(a1Content).digest('hex');
 
     if (!fs.existsSync(A1_PATH)) {
         // First install
-        fs.writeFileSync(A1_PATH, A1_CONTENT);
+        fs.writeFileSync(A1_PATH, a1Content);
         fs.writeFileSync(hashPath, currentHash);
     } else if (fs.existsSync(hashPath)) {
         const savedHash = fs.readFileSync(hashPath, 'utf8').trim();
@@ -241,7 +130,7 @@ export function initPromptFiles() {
             const fileHash = createHash('md5').update(fs.readFileSync(A1_PATH, 'utf8')).digest('hex');
             if (fileHash === savedHash) {
                 // User hasn't edited → safe to update
-                fs.writeFileSync(A1_PATH, A1_CONTENT);
+                fs.writeFileSync(A1_PATH, a1Content);
                 fs.writeFileSync(hashPath, currentHash);
                 console.log('[prompt] A-1.md updated to new version');
             } else {
@@ -254,8 +143,8 @@ export function initPromptFiles() {
         fs.writeFileSync(hashPath, fileHash);
     }
 
-    if (!fs.existsSync(A2_PATH)) fs.writeFileSync(A2_PATH, A2_DEFAULT);
-    if (!fs.existsSync(HEARTBEAT_PATH)) fs.writeFileSync(HEARTBEAT_PATH, HEARTBEAT_DEFAULT);
+    if (!fs.existsSync(A2_PATH)) fs.writeFileSync(A2_PATH, getA2Default());
+    if (!fs.existsSync(HEARTBEAT_PATH)) fs.writeFileSync(HEARTBEAT_PATH, getHeartbeatDefault());
 }
 
 // ─── Memory ──────────────────────────────────────────
@@ -296,8 +185,8 @@ export function loadRecentMemories() {
 // ─── System Prompt Generation ────────────────────────
 
 export function getSystemPrompt() {
-    // A-1: file takes priority (user-editable), hardcoded fallback
-    const a1 = fs.existsSync(A1_PATH) ? fs.readFileSync(A1_PATH, 'utf8') : A1_CONTENT;
+    // A-1: file takes priority (user-editable), rendered template fallback
+    const a1 = fs.existsSync(A1_PATH) ? fs.readFileSync(A1_PATH, 'utf8') : getA1Content();
     const a2 = fs.existsSync(A2_PATH) ? fs.readFileSync(A2_PATH, 'utf8') : '';
     let prompt = `${a1}\n\n${a2}`;
 
@@ -347,55 +236,11 @@ export function getSystemPrompt() {
                 `- "${(e as any).name}" (CLI: ${(e as any).cli}) — ${(e as any).role || 'general developer'}`
             ).join('\n');
             const example = (emps[0] as any).name;
+            const vars = getTemplateVars();
+            vars.EMPLOYEE_LIST = list;
+            vars.EXAMPLE_AGENT = example;
             prompt += '\n\n---\n';
-            prompt += '\n## Orchestration System';
-            prompt += '\nYou have external employees (separate CLI processes).';
-            prompt += '\nThe middleware detects your JSON output and AUTOMATICALLY spawns employees.';
-            prompt += `\n\n### Available Employees\n${list}`;
-            prompt += '\n\n### Dispatch Format';
-            prompt += '\nTo assign work, output EXACTLY this format (triple-backtick fenced JSON block):';
-            prompt += `\n\n\\\`\\\`\\\`json\n{\n  "subtasks": [\n    {\n      "agent": "${example}",\n      "task": "Specific task instruction",\n      "priority": 1\n    }\n  ]\n}\n\\\`\\\`\\\``;
-            prompt += '\n\n### CRITICAL RULES';
-            prompt += '\n1. JSON MUST be wrapped in ```json ... ``` code blocks (mandatory)';
-            prompt += '\n2. Never output raw JSON without code blocks';
-            prompt += '\n3. Agent name must exactly match the list above';
-            prompt += '\n4. Dispatch employees ONLY when the task genuinely needs multiple specialists or parallel work';
-            prompt += '\n5. If you can handle the task yourself, respond directly WITHOUT JSON dispatch';
-            prompt += '\n6. When receiving a "result report", summarize it in natural language for the user';
-            prompt += '\n7. Simple questions, single-file edits, or tasks in your expertise → handle directly';
-            prompt += '\n8. For Tier 1-2 tasks: mark independent subtasks with `"parallel": true` for concurrent execution';
-            prompt += '\n9. Default is `"parallel": false`. Only use `true` when affected_files have zero overlap';
-            prompt += '\n\n### PABCD Orchestration (지휘 모드)';
-            prompt += '\nFor complex, multi-step tasks, you have a structured orchestration system called PABCD:';
-            prompt += '\n  **P** (Plan) → **A** (Plan Audit) → **B** (Build) → **C** (Check) → **D** (Done)';
-            prompt += '\n';
-            prompt += '\n**How to activate**:';
-            prompt += '\n- User says "orchestrate", "지휘 모드", or "pabcd" → system auto-enters P.';
-            prompt += '\n- You can also run: `cli-jaw orchestrate P` to enter P manually.';
-            prompt += '\n';
-            prompt += '\n**How to transition phases** (Shell commands):';
-            prompt += '\n```bash';
-            prompt += '\ncli-jaw orchestrate P   # Enter Planning';
-            prompt += '\ncli-jaw orchestrate A   # Enter Plan Audit';
-            prompt += '\ncli-jaw orchestrate B   # Enter Build';
-            prompt += '\ncli-jaw orchestrate C   # Enter Check';
-            prompt += '\ncli-jaw orchestrate D   # Enter Done';
-            prompt += '\n```';
-            prompt += '\nIf shell is unavailable, the system will auto-advance when the user explicitly approves.';
-            prompt += '\n';
-            prompt += '\n**Critical rules**:';
-            prompt += '\n- Each phase has a SPECIFIC job. Do ONLY that phase\'s job.';
-            prompt += '\n- ⛔ STOP at the end of each phase and WAIT for user approval.';
-            prompt += '\n- Do NOT skip phases. Do NOT self-advance multiple phases in one turn.';
-            prompt += '\n- Workers are spawned automatically when you output subtask JSON in A or B phases.';
-            prompt += '\n- Worker results are fed back to you. Review them and report to the user.';
-            prompt += '\n';
-            prompt += '\n**Phase summary**:';
-            prompt += '\n- P: Write a plan → present to user → STOP. Wait for approval.';
-            prompt += '\n- A: Spawn worker to audit THE PLAN (not code) → review results → STOP. Wait for approval.';
-            prompt += '\n- B: Implement code → spawn verify worker → STOP. Wait for approval.';
-            prompt += '\n- C: Final check (tsc, docs) → call `cli-jaw orchestrate D`.';
-            prompt += '\n- D: Summarize and return to IDLE.';
+            prompt += renderTemplate(loadTemplate('orchestration.md'), vars);
         }
     } catch { /* DB not ready yet */ }
 
@@ -403,20 +248,19 @@ export function getSystemPrompt() {
         const hbData = loadHeartbeatFile();
         if (hbData.jobs.length > 0) {
             const activeJobs = hbData.jobs.filter((j: any) => j.enabled);
-            prompt += '\n\n---\n## Current Heartbeat Jobs\n';
-            for (const job of hbData.jobs) {
+            const jobList = hbData.jobs.map((job: any) => {
                 const status = job.enabled ? '✅' : '⏸️';
                 const mins = job.schedule?.minutes || '?';
-                prompt += `- ${status} "${job.name}" — every ${mins}min: ${(job.prompt || '').slice(0, 50)}\n`;
-            }
-            prompt += `\nActive: ${activeJobs.length}, Total: ${hbData.jobs.length}`;
-            prompt += `\nTo modify: edit ${JAW_HOME}/heartbeat.json (auto-reloads on save)`;
+                return `- ${status} "${job.name}" — every ${mins}min: ${(job.prompt || '').slice(0, 50)}`;
+            }).join('\n');
+            const vars = getTemplateVars();
+            vars.JOB_LIST = jobList;
+            vars.ACTIVE_COUNT = String(activeJobs.length);
+            vars.TOTAL_COUNT = String(hbData.jobs.length);
+            prompt += '\n\n---\n' + renderTemplate(loadTemplate('heartbeat-jobs.md'), vars);
         }
     } catch { /* heartbeat.json not ready */ }
 
-    // ─── Skills (Phase 6) ────────────────────────────
-    // Active skills are loaded by CLI tools natively via .agents/skills/ symlink.
-    // We only inject: (1) active skill names, (2) ref skill list, (3) search/create instruction.
     try {
         const activeSkills = loadActiveSkills();
         const refSkills = loadSkillRegistry();
@@ -426,32 +270,27 @@ export function getSystemPrompt() {
         if (activeSkills.length > 0 || availableRef.length > 0) {
             prompt += '\n\n---\n## Skills System\n';
 
-            // 1. Active skills — name list only (CLI handles trigger/execution)
-            if (activeSkills.length > 0) {
-                prompt += `\n### Active Skills (${activeSkills.length})\n`;
-                prompt += 'These skills are installed and available for reference.\n';
-                prompt += `**Development tasks**: Before writing code, ALWAYS read \`${JAW_HOME}/skills/dev/SKILL.md\` for project conventions.\n`;
-                prompt += 'For role-specific tasks, also read the relevant skill (dev-frontend, dev-backend, dev-data, dev-testing).\n';
-                for (const s of activeSkills) {
-                    prompt += `- ${s!.name} (${s!.id})\n`;
-                }
-            }
+            const vars = getTemplateVars();
+            vars.ACTIVE_SKILLS_COUNT = String(activeSkills.length);
+            vars.ACTIVE_SKILLS_LIST = activeSkills.map(s => `- ${s!.name} (${s!.id})`).join('\n');
+            vars.REF_SKILLS_COUNT = String(availableRef.length);
+            vars.REF_SKILLS_LIST = availableRef.map(s => s.id).join(', ');
 
-            // 2. Ref skills — compact name list (full details in skills_ref/)
-            if (availableRef.length > 0) {
-                prompt += `\n### Available Skills (${availableRef.length})\n`;
-                prompt += 'These are reference skills — not active yet, but ready to use on demand.\n';
-                prompt += `**How to use**: read \`${JAW_HOME}/skills_ref/<name>/SKILL.md\` and follow its instructions.\n`;
-                prompt += '**To activate permanently**: `cli-jaw skill install <name>`\n\n';
-                prompt += availableRef.map(s => s.id).join(', ') + '\n';
+            // Only render sections that have content
+            if (activeSkills.length > 0 && availableRef.length > 0) {
+                prompt += renderTemplate(loadTemplate('skills.md'), vars);
+            } else if (activeSkills.length > 0) {
+                // Only active skills — render just that portion
+                const tmpl = loadTemplate('skills.md');
+                const activeSection = tmpl.split('### Available Skills')[0];
+                const discoverySection = tmpl.split('### Skill Discovery')[1];
+                prompt += renderTemplate(activeSection + '### Skill Discovery' + (discoverySection || ''), vars);
+            } else {
+                // Only ref skills
+                const tmpl = loadTemplate('skills.md');
+                const refSection = tmpl.substring(tmpl.indexOf('### Available Skills'));
+                prompt += renderTemplate(refSection, vars);
             }
-
-            // 3. Search or create instruction
-            prompt += '\n### Skill Discovery\n';
-            prompt += 'If a requested task is not covered by any active or available skill:\n';
-            prompt += '1. Search the system for relevant CLI tools that can accomplish the task.\n';
-            prompt += '2. If a suitable tool exists, create a new SKILL.md and save it to the skills directory.\n';
-            prompt += '3. Use the skill-creator reference if available for formatting guidance.\n';
         }
     } catch { /* skills not ready */ }
 
@@ -461,9 +300,7 @@ export function getSystemPrompt() {
         if (session.active_cli === 'codex') {
             const visionSkillPath = join(SKILLS_DIR, 'vision-click', 'SKILL.md');
             if (fs.existsSync(visionSkillPath)) {
-                prompt += '\n### Vision Click (Active)\n';
-                prompt += '- If browser snapshot shows no ref for target, use vision-click: screenshot → `codex exec -i` → `mouse-click <x> <y>`.\n';
-                prompt += '- See vision-click skill SKILL.md for full workflow.\n';
+                prompt += '\n' + loadTemplate('vision-click.md');
             }
         }
     } catch { /* vision-click not ready */ }
@@ -474,59 +311,26 @@ export function getSystemPrompt() {
 // ─── Employee Prompt (orchestration-free) ────────────
 
 export function getEmployeePrompt(emp: any) {
-    let prompt = `# ${emp.name}\nRole: ${emp.role || 'general developer'}\n`;
+    const vars: Record<string, string> = {
+        EMP_NAME: emp.name,
+        EMP_ROLE: emp.role || 'general developer',
+        ACTIVE_SKILLS_SECTION: '',
+    };
 
-    // ─── Core rules (orchestration rules intentionally excluded → prevent recursion)
-    prompt += `\n## Rules\n`;
-    prompt += `- Execute the given task directly and report the results\n`;
-    prompt += `- Do NOT output JSON subtasks (you are an executor, not a planner)\n`;
-    prompt += `- ⛔ Do NOT create, modify, or delete files unless the task EXPLICITLY says to write code\n`;
-    prompt += `- If the task says "audit", "verify", "check", or "review" → READ ONLY. Report findings, do NOT fix them.\n`;
-    prompt += `- Report results concisely in natural language\n`;
-    prompt += `- Respond in the user's language\n`;
-    prompt += `- Never run git commit/push/branch/reset/clean unless the user explicitly asks\n`;
-
-    // ─── Browser commands
-    prompt += `\n## Browser Control\n`;
-    prompt += `For web tasks, always use \`cli-jaw browser\` commands.\n`;
-    prompt += `Pattern: snapshot → act → snapshot → verify\n`;
-    prompt += `Start: \`cli-jaw browser start\`, Snapshot: \`cli-jaw browser snapshot\`\n`;
-    prompt += `Click: \`cli-jaw browser click <ref>\`, Type: \`cli-jaw browser type <ref> "text"\`\n`;
-
-    // ─── Telegram file delivery
-    prompt += `\n## Telegram File Delivery\n`;
-    prompt += `For non-text output, use \`POST /api/telegram/send\`.\n`;
-    prompt += `Types: \`voice|photo|document\` (optionally \`text\`)\n`;
-    prompt += `Required for non-text: \`type\` + \`file_path\`\n`;
-    prompt += `Specify \`chat_id\` when possible; if omitted, the latest active chat is used.\n`;
-    prompt += `Always provide a natural language text report alongside file delivery.\n`;
-
-    // ─── Active Skills (dynamic loading)
+    // Active Skills (dynamic loading)
     try {
         const activeSkills = loadActiveSkills();
         if (activeSkills.length > 0) {
-            prompt += `\n## Active Skills (${activeSkills.length})\n`;
-            prompt += `Installed skills — automatically triggered by the CLI.\n`;
+            let section = `\n## Active Skills (${activeSkills.length})\n`;
+            section += `Installed skills — automatically triggered by the CLI.\n`;
             for (const s of activeSkills) {
-                prompt += `- ${s!.name} (${s!.id})\n`;
+                section += `- ${s!.name} (${s!.id})\n`;
             }
+            vars.ACTIVE_SKILLS_SECTION = section;
         }
     } catch { /* skills not ready */ }
 
-    // ─── Memory commands
-    prompt += `\n## Memory\n`;
-    prompt += `Long-term memory: use \`cli-jaw memory search/read/save\` commands.\n`;
-
-    // ─── Task Completion Protocol (PABCD)
-    prompt += `\n## Task Completion Protocol\n`;
-    prompt += `You are an employee agent. Complete your assigned task and report results.\n`;
-    prompt += `Do NOT output subtask JSON — you are an executor, not a planner.\n`;
-    prompt += `Report findings clearly in natural language. Include:\n`;
-    prompt += `- What was checked or implemented\n`;
-    prompt += `- PASS/FAIL verdict (for audits) or DONE/NEEDS_FIX (for reviews)\n`;
-    prompt += `- Specific file paths and line numbers for any issues found\n`;
-
-    return prompt;
+    return renderTemplate(loadTemplate('employee.md'), vars);
 }
 
 // ─── Employee Prompt v2 (orchestration phase-aware) ──
@@ -575,12 +379,8 @@ export function getEmployeePromptV2(emp: any, role: any, currentPhase: number | 
     }
 
     // ─── 4. Worker context (PABCD-aware)
-    const WORKER_CONTEXT: Record<number, string> = {
-        2: 'You are a PLAN AUDIT worker. Verify THE PLAN (not code): dependency validation, API integrity, integration risks. Verdict: PASS or FAIL with itemized issues.',
-        3: 'You are an IMPLEMENTATION worker. Execute the assigned code task. Follow dev conventions, no TODOs, all imports must resolve.',
-        4: 'You are a CHECK worker. Test and verify the implementation. Report: execution evidence, bugs found, edge case results. Verdict: DONE or NEEDS_FIX.',
-    };
-    const ctx = WORKER_CONTEXT[phase] || WORKER_CONTEXT[3];
+    const workerContexts = parseWorkerContexts();
+    const ctx = workerContexts[phase] || workerContexts[3];
     prompt += `\n\n## Worker Role\n${ctx}`;
     prompt += `\n\n## Execution Rules`;
     prompt += `\n- Read the worklog first to understand context`;
@@ -595,6 +395,7 @@ export function getEmployeePromptV2(emp: any, role: any, currentPhase: number | 
 export function clearPromptCache() { promptCache.clear(); }
 
 export function regenerateB() {
+    clearTemplateCache();
     const fullPrompt = getSystemPrompt();
     fs.writeFileSync(join(PROMPTS_DIR, 'B.md'), fullPrompt);
 
