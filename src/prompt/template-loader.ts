@@ -43,5 +43,8 @@ export function parseWorkerContexts(): Record<number, string> {
     return result;
 }
 
+/** Expose template directory path for API routes */
+export function getTemplateDir(): string { return TEMPLATE_DIR; }
+
 /** Clear template cache (call on regenerateB or settings change) */
 export function clearTemplateCache() { templateCache.clear(); }

@@ -49,6 +49,7 @@ import {
     A2_PATH, HEARTBEAT_PATH,
     getMergedSkills,
 } from './src/prompt/builder.js';
+import { clearTemplateCache, getTemplateDir } from './src/prompt/template-loader.js';
 import {
     activeProcess, isAgentBusy, killActiveAgent, killAllAgents, waitForProcessEnd,
     steerAgent, enqueueMessage, processQueue, messageQueue,
@@ -441,6 +442,37 @@ app.put('/api/prompt', (req, res) => {
     const { content } = req.body;
     if (content == null) return res.status(400).json({ error: 'content required' });
     fs.writeFileSync(A2_PATH, content);
+    regenerateB();
+    res.json({ ok: true });
+});
+
+// Prompt Templates (Node Map + Editor)
+app.get('/api/prompt-templates', (_, res) => {
+    const dir = getTemplateDir();
+    const files = fs.readdirSync(dir).filter((f: string) => f.endsWith('.md'));
+    const templates = files.map((f: string) => ({
+        id: f.replace('.md', ''),
+        filename: f,
+        content: fs.readFileSync(join(dir, f), 'utf8'),
+    }));
+    const tree = [
+        { id: 'system', label: 'getSystemPrompt()', emoji: '🟢',
+          children: ['a1-system','a2-default','orchestration','skills','heartbeat-jobs','heartbeat-default','vision-click'] },
+        { id: 'employee', label: 'getEmployeePrompt()', emoji: '🟡',
+          children: ['employee','worker-context'] },
+    ];
+    res.json({ templates, tree });
+});
+app.put('/api/prompt-templates/:id', (req, res) => {
+    const { content } = req.body;
+    if (content == null || typeof content !== 'string') return res.status(400).json({ error: 'content required' });
+    const filename = req.params.id + '.md';
+    if (!/^[a-z0-9-]+\.md$/.test(filename)) return res.status(400).json({ error: 'invalid id' });
+    const dir = getTemplateDir();
+    fs.writeFileSync(join(dir, filename), content);
+    const srcDir = join(projectRoot, 'src/prompt/templates');
+    if (fs.existsSync(srcDir)) fs.writeFileSync(join(srcDir, filename), content);
+    clearTemplateCache();
     regenerateB();
     res.json({ ok: true });
 });
