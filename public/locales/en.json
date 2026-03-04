@@ -94,6 +94,8 @@
     "tg.imageCaption": "[📷 Image] {caption}",
     "tg.imageFail": "❌ Image processing failed: {msg}",
     "tg.fileFail": "❌ File processing failed: {msg}",
+    "tg.voiceFail": "❌ Voice transcription failed: {msg}",
+    "tg.voiceEmpty": "🤔 Couldn't understand the voice message. Please try again.",
     "tg.timeout": "⏰ Timeout (20 min no response)",
     "tg.noResponse": "No response",
     "tg.connected": "🦈 Jaw Agent connected! Send a message and the AI agent will respond.",

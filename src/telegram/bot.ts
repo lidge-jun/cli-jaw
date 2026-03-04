@@ -19,6 +19,7 @@ import { getTelegramMenuCommands } from '../command-contract/policy.js';
 import { getMergedSkills } from '../prompt/builder.js';
 import * as memory from '../memory/memory.js';
 import { downloadTelegramFile } from '../../lib/upload.js';
+import { handleVoice } from './voice.js';
 import {
     escapeHtmlTg,
     markdownToTelegramHtml,
@@ -456,6 +457,9 @@ export async function initTelegram() {
             await ctx.reply(t('tg.fileFail', { msg: (err as Error).message }, currentLocale()));
         }
     });
+
+    bot.on('message:voice', (ctx) => handleVoice(ctx, currentLocale, tgOrchestrate));
+
     // ─── Global Forwarding: non-Telegram responses → Telegram ───
     if (settings.telegram?.forwardAll !== false) {
         attachTelegramForwarder(bot);
