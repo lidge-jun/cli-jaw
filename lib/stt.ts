@@ -16,7 +16,7 @@ export interface SttResult {
  * Gemini STT via REST API (no SDK dependency).
  * POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
  */
-export async function sttGemini(audioPath: string): Promise<SttResult> {
+export async function sttGemini(audioPath: string, mimeType = 'audio/ogg'): Promise<SttResult> {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error('GEMINI_API_KEY not set');
 
@@ -27,7 +27,7 @@ export async function sttGemini(audioPath: string): Promise<SttResult> {
     const body = JSON.stringify({
         contents: [{ parts: [
             { text: 'Transcribe this voice message accurately. Output ONLY the transcribed text, nothing else.' },
-            { inline_data: { mime_type: 'audio/ogg', data: audioB64 } },
+            { inline_data: { mime_type: mimeType, data: audioB64 } },
         ] }],
     });
 
@@ -84,9 +84,9 @@ print(json.dumps({'text': r.get('text','')}))
 /**
  * Main entry: try Gemini → fallback whisper → throw.
  */
-export async function transcribeVoice(audioPath: string): Promise<SttResult> {
+export async function transcribeVoice(audioPath: string, mimeType = 'audio/ogg'): Promise<SttResult> {
     if (process.env.GEMINI_API_KEY) {
-        try { return await sttGemini(audioPath); }
+        try { return await sttGemini(audioPath, mimeType); }
         catch (e: any) { console.warn('[stt] Gemini failed, trying whisper:', e.message); }
     }
     try { return await sttWhisper(audioPath); }

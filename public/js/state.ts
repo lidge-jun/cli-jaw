@@ -25,6 +25,7 @@ export interface AppState {
     heartbeatJobs: HeartbeatJob[];
     cliStatusCache: CliStatusCache | null;
     cliStatusTs: number;
+    isRecording: boolean;
 }
 
 export const state: AppState = {
@@ -39,4 +40,5 @@ export const state: AppState = {
     cliStatusCache: null,
     cliStatusTs: 0,
     orcState: 'IDLE',
+    isRecording: false,
 };

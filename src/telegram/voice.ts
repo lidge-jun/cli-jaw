@@ -21,7 +21,7 @@ export async function handleVoice(
         const dlResult = await downloadTelegramFile(voice.file_id, settings.telegram.token) as Record<string, any>;
         const filePath = saveUpload(dlResult.buffer, `voice${dlResult.ext || '.ogg'}`);
 
-        const stt = await transcribeVoice(filePath);
+        const stt = await transcribeVoice(filePath, 'audio/ogg');
         console.log(`[tg:voice] STT (${stt.engine}): ${stt.elapsed.toFixed(1)}s → "${stt.text.slice(0, 60)}"`);
 
         if (!stt.text.trim()) {

@@ -560,6 +560,32 @@ app.post('/api/upload', express.raw({ type: '*/*', limit: '20mb' }), (req, res) 
     }
 });
 
+// Voice STT endpoint — receives raw audio blob, transcribes, submits as message
+app.post('/api/voice', express.raw({ type: ['audio/*', 'application/octet-stream'], limit: '20mb' }), async (req, res) => {
+    try {
+        const ext = (req.headers['x-voice-ext'] as string) || '.webm';
+        const mime = req.headers['content-type'] || 'audio/webm';
+        const filePath = saveUpload(req.body, `voice${ext}`);
+
+        const { transcribeVoice } = await import('./lib/stt.js');
+        const result = await transcribeVoice(filePath, mime);
+
+        if (!result.text.trim()) {
+            return res.status(422).json({ error: 'Empty transcription' });
+        }
+
+        console.log(`[web:voice] STT (${result.engine}, ${result.elapsed.toFixed(1)}s): ${result.text.slice(0, 80)}`);
+
+        const prompt = `🎤 ${result.text}`;
+        submitMessage(prompt, { origin: 'web' });
+
+        res.json({ ok: true, text: result.text, engine: result.engine, elapsed: result.elapsed });
+    } catch (e: unknown) {
+        console.error('[web:voice] STT failed:', (e as Error).message);
+        res.status(500).json({ error: (e as Error).message });
+    }
+});
+
 // Telegram direct send (Phase 2.1)
 app.post('/api/telegram/send', async (req, res) => {
     try {

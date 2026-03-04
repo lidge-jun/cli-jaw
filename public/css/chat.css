@@ -426,6 +426,44 @@
     color: #f55;
 }
 
+/* ── Voice Recording Button ── */
+.btn-voice {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 6px 10px;
+    color: var(--text);
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.btn-voice:hover {
+    border-color: var(--accent);
+    background: var(--surface);
+}
+
+.btn-voice.recording {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: #ef4444;
+    animation: pulse-recording 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-recording {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+
+.voice-timer {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: #ef4444;
+    min-width: 36px;
+    text-align: center;
+    animation: pulse-recording 1.5s ease-in-out infinite;
+}
+
 /* ── Slash Command Dropdown ── */
 .cmd-dropdown {
     position: absolute;

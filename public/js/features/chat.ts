@@ -251,3 +251,28 @@ export function initDragDrop(): void {
         }
     });
 }
+
+/** Upload recorded voice blob and send to /api/voice for STT */
+export async function sendVoiceToServer(blob: Blob, ext: string, mime: string): Promise<void> {
+    addMessage('user', '🎤 [음성 메시지]');
+    try {
+        const res = await fetch('/api/voice', {
+            method: 'POST',
+            headers: {
+                'Content-Type': mime,
+                'X-Voice-Ext': ext,
+            },
+            body: blob,
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || `HTTP ${res.status}`);
+        }
+        const result = await res.json().catch(() => null);
+        if (result?.text) {
+            addSystemMsg(`🎤 STT (${result.engine}, ${result.elapsed?.toFixed(1)}s): "${result.text.slice(0, 100)}"`, '', 'info');
+        }
+    } catch (err) {
+        addSystemMsg(t('voice.sttFail', { msg: (err as Error).message }), '', 'error');
+    }
+}
