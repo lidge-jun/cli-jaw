@@ -241,6 +241,12 @@ export function getSystemPrompt() {
             vars.EXAMPLE_AGENT = example;
             prompt += '\n\n---\n';
             prompt += renderTemplate(loadTemplate('orchestration.md'), vars);
+
+            // PABCD orchestration skill (boss needs to know the workflow)
+            const pabcdPath = join(SKILLS_DIR, 'dev-pabcd', 'SKILL.md');
+            if (fs.existsSync(pabcdPath)) {
+                prompt += `\n\n## PABCD Orchestration Guide\n${fs.readFileSync(pabcdPath, 'utf8')}`;
+            }
         }
     } catch { /* DB not ready yet */ }
 
@@ -346,6 +352,12 @@ export function getEmployeePromptV2(emp: any, role: any, currentPhase: number | 
     const devCommonPath = join(SKILLS_DIR, 'dev', 'SKILL.md');
     if (fs.existsSync(devCommonPath)) {
         prompt += `\n\n## Development Guide (Common)\n${fs.readFileSync(devCommonPath, 'utf8')}`;
+    }
+
+    // ─── 1b. Scaffolding guide (always injected)
+    const scaffoldingPath = join(SKILLS_DIR, 'dev-scaffolding', 'SKILL.md');
+    if (fs.existsSync(scaffoldingPath)) {
+        prompt += `\n\n## Project Scaffolding Guide\n${fs.readFileSync(scaffoldingPath, 'utf8')}`;
     }
 
     // ─── 2. Role-based dev skill injection

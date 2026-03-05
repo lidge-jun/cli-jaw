@@ -204,3 +204,19 @@ export function clearCopilotTokenCache() {
         if (fs.existsSync(TOKEN_CACHE_PATH)) fs.unlinkSync(TOKEN_CACHE_PATH);
     } catch { /* ignore */ }
 }
+
+/** Force token re-read: reset keychain suppression + clear all caches + retry full chain */
+export async function refreshCopilotFromKeychain(): Promise<{ ok: boolean; account?: any }> {
+    _keychainFailed = false;
+    _cachedToken = null;
+    try {
+        if (fs.existsSync(TOKEN_CACHE_PATH)) fs.unlinkSync(TOKEN_CACHE_PATH);
+    } catch { /* ignore */ }
+
+    // Re-run full priority chain (ENV → cache → gh → keychain) with keychain now unblocked
+    const token = getCopilotToken();
+    if (!token) return { ok: false };
+
+    const result = await fetchCopilotQuota();
+    return { ok: true, account: result?.account ?? null };
+}

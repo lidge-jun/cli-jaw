@@ -107,6 +107,8 @@
     "voice.tooLarge": "⚠️ Recording too large (max 20MB).",
     "voice.tooShort": "⚠️ Recording too short.",
     "voice.sttFail": "❌ Voice recognition failed: {msg}",
+    "copilot.keychain": "🔑 Keychain",
+    "copilot.keychainHint": "Re-read Copilot token from macOS Keychain",
     "tg.timeout": "⏰ Timeout (20 min no response)",
     "tg.noResponse": "No response",
     "tg.connected": "🦈 Jaw Agent connected! Send a message and the AI agent will respond.",

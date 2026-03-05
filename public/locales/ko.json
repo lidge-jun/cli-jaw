@@ -107,6 +107,8 @@
     "voice.tooLarge": "⚠️ 녹음이 너무 길어요 (최대 20MB).",
     "voice.tooShort": "⚠️ 녹음이 너무 짧아요.",
     "voice.sttFail": "❌ 음성 인식 실패: {msg}",
+    "copilot.keychain": "🔑 키체인",
+    "copilot.keychainHint": "macOS 키체인에서 Copilot 토큰을 다시 읽습니다",
     "tg.timeout": "⏰ 시간 초과 (20분 무응답)",
     "tg.noResponse": "응답 없음",
     "tg.connected": "🦈 Jaw Agent 연결됨! 메시지를 보내면 AI 에이전트가 응답합니다.",

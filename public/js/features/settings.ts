@@ -495,6 +495,11 @@ function renderCliStatus(data: { cliStatus: Record<string, { available: boolean 
             if (parts.length) accountLine = `<div style="font-size:10px;color:var(--text-dim);margin:2px 0 4px 16px">${escapeHtml(parts.join(' · '))}</div>`;
         }
 
+        // Copilot: keychain refresh button (always visible, outside account check)
+        if (name === 'copilot') {
+            accountLine += `<button id="copilotKeychainBtn" style="font-size:10px;margin:2px 0 4px 16px;padding:2px 8px;background:var(--border);color:var(--text);border:1px solid var(--text-dim);border-radius:4px;cursor:pointer" title="${t('copilot.keychainHint')}">${t('copilot.keychain')}</button>`;
+        }
+
         // Auth hint when CLI is not available OR not authenticated
         let authHint = '';
         if (!info.available || dotClass === 'warn') {
@@ -544,6 +549,34 @@ function renderCliStatus(data: { cliStatus: Record<string, { available: boolean 
     }
 
     if (el) el.innerHTML = html;
+
+    // Copilot keychain refresh handler — step-by-step feedback
+    const kcBtn = document.getElementById('copilotKeychainBtn');
+    if (kcBtn) {
+        kcBtn.addEventListener('click', async () => {
+            kcBtn.textContent = '1️⃣ 캐시 클리어…';
+            await new Promise(r => setTimeout(r, 400));
+
+            kcBtn.textContent = '2️⃣ 토큰 재조회…';
+            try {
+                const res = await api<{ ok: boolean; account?: any }>('/api/copilot/refresh', { method: 'POST' });
+
+                if (res?.ok) {
+                    kcBtn.textContent = '3️⃣ 상태 새로고침…';
+                    await new Promise(r => setTimeout(r, 300));
+                    await loadCliStatus(true);
+                    kcBtn.textContent = '4️⃣ ✅ 완료!';
+                    setTimeout(() => { kcBtn.textContent = t('copilot.keychain'); }, 2000);
+                } else {
+                    kcBtn.textContent = '❌ 토큰 없음';
+                    setTimeout(() => { kcBtn.textContent = t('copilot.keychain'); }, 3000);
+                }
+            } catch {
+                kcBtn.textContent = '❌ 실패';
+                setTimeout(() => { kcBtn.textContent = t('copilot.keychain'); }, 3000);
+            }
+        });
+    }
 }
 
 // ── Prompt Modal ──

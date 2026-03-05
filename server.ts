@@ -63,7 +63,8 @@ import { submitMessage } from './src/orchestrator/gateway.js';
 import { makeCommandCtx } from './src/cli/command-context.js';
 import { initTelegram, telegramBot, telegramActiveChatIds } from './src/telegram/bot.js';
 import { startHeartbeat, stopHeartbeat, watchHeartbeatFile } from './src/memory/heartbeat.js';
-import { fetchCopilotQuota } from './lib/quota-copilot.js';
+import { fetchCopilotQuota, refreshCopilotFromKeychain } from './lib/quota-copilot.js';
+import { startTokenKeepAlive } from './lib/token-keepalive.js';
 import { CLI_REGISTRY } from './src/cli/registry.js';
 
 // ─── Resolve paths ───────────────────────────────────
@@ -702,6 +703,16 @@ app.get('/api/quota', async (_, res) => {
     });
 });
 
+// Copilot: force keychain re-read (clears _keychainFailed suppression)
+app.post('/api/copilot/refresh', async (_, res) => {
+    try {
+        const result = await refreshCopilotFromKeychain();
+        res.json(result);
+    } catch (e: unknown) {
+        res.status(500).json({ ok: false, error: (e as Error).message });
+    }
+});
+
 // Employees
 app.get('/api/employees', (_, res) => ok(res, getEmployees.all()));
 app.post('/api/employees', (req, res) => {
@@ -962,6 +973,7 @@ server.listen(PORT, () => {
 
     void initTelegram();
     startHeartbeat();
+    startTokenKeepAlive();
 
     // ─── Seed default employees if none exist ────────
     const seeded = seedDefaultEmployees();
