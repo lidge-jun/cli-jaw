@@ -9,7 +9,7 @@ import { settings } from '../src/core/config.js';
 
 export interface SttResult {
     text: string;
-    engine: 'gemini' | 'whisper' | 'openai' | 'vortex';
+    engine: 'gemini' | 'whisper' | 'openai' | 'vertex';
     elapsed: number;
 }
 
@@ -23,7 +23,7 @@ function getSttSettings() {
         openaiBaseUrl: stt.openaiBaseUrl || '',
         openaiApiKey: stt.openaiApiKey || '',
         openaiModel: stt.openaiModel || '',
-        vortexConfig: stt.vortexConfig || '',
+        vertexConfig: stt.vertexConfig || '',
     };
 }
 
@@ -116,15 +116,15 @@ export async function sttOpenaiCompatible(audioPath: string, mimeType = 'audio/o
 }
 
 /**
- * Vortex STT — sends base64 audio to a custom JSON endpoint.
+ * Vertex AI STT — uses Gemini API format with JSON service account auth.
  * Config is a JSON string: { endpoint, token?, model? }
  */
-export async function sttVortex(audioPath: string, mimeType = 'audio/ogg'): Promise<SttResult> {
-    const { vortexConfig: configStr } = getSttSettings();
-    if (!configStr) throw new Error('Vortex: config JSON not set');
+export async function sttVertex(audioPath: string, mimeType = 'audio/ogg'): Promise<SttResult> {
+    const { vertexConfig: configStr } = getSttSettings();
+    if (!configStr) throw new Error('Vertex AI: config JSON not set');
     let config: { endpoint: string; token?: string; model?: string };
-    try { config = JSON.parse(configStr); } catch { throw new Error('Vortex: invalid JSON config'); }
-    if (!config.endpoint) throw new Error('Vortex: endpoint required in config');
+    try { config = JSON.parse(configStr); } catch { throw new Error('Vertex AI: invalid JSON config'); }
+    if (!config.endpoint) throw new Error('Vertex AI: endpoint required in config');
     const audioB64 = fs.readFileSync(audioPath).toString('base64');
     const reqBody = JSON.stringify({ audio: audioB64, mime_type: mimeType, model: config.model });
     const t0 = Date.now();
@@ -138,15 +138,15 @@ export async function sttVortex(audioPath: string, mimeType = 'audio/ogg'): Prom
         }, (res) => {
             let data = ''; res.on('data', (c: Buffer | string) => data += c);
             res.on('end', () => {
-                if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) return reject(new Error(`Vortex ${res.statusCode}: ${data.slice(0, 200)}`));
+                if (res.statusCode && (res.statusCode < 200 || res.statusCode >= 300)) return reject(new Error(`Vertex AI ${res.statusCode}: ${data.slice(0, 200)}`));
                 try { resolve(JSON.parse(data).text || data.trim()); } catch { resolve(data.trim()); }
             });
         });
-        req.on('timeout', () => req.destroy(new Error('Vortex timeout (60s)')));
+        req.on('timeout', () => req.destroy(new Error('Vertex AI timeout (60s)')));
         req.on('error', reject);
         req.write(reqBody); req.end();
     });
-    return { text, engine: 'vortex', elapsed: (Date.now() - t0) / 1000 };
+    return { text, engine: 'vertex', elapsed: (Date.now() - t0) / 1000 };
 }
 
 /**
@@ -175,7 +175,7 @@ print(json.dumps({'text': r.get('text','')}))
  * whisper = Whisper only (skip Gemini)
  */
 export async function transcribeVoice(audioPath: string, mimeType = 'audio/ogg'): Promise<SttResult> {
-    const { engine, geminiApiKey, openaiApiKey, vortexConfig } = getSttSettings();
+    const { engine, geminiApiKey, openaiApiKey, vertexConfig } = getSttSettings();
     console.log(`[stt] engine=${engine}, geminiKeySet=${!!geminiApiKey}, openaiKeySet=${!!openaiApiKey}, file=${audioPath}`);
 
     if (engine === 'whisper') {
@@ -184,8 +184,8 @@ export async function transcribeVoice(audioPath: string, mimeType = 'audio/ogg')
     if (engine === 'openai') {
         return await sttOpenaiCompatible(audioPath, mimeType);
     }
-    if (engine === 'vortex') {
-        return await sttVortex(audioPath, mimeType);
+    if (engine === 'vertex') {
+        return await sttVertex(audioPath, mimeType);
     }
     if (engine === 'gemini' || (engine === 'auto' && geminiApiKey)) {
         try { return await sttGemini(audioPath, mimeType); }

@@ -121,7 +121,7 @@
     "stt.openaiBaseUrl": "Base URL",
     "stt.openaiKey": "API Key",
     "stt.openaiModel": "모델",
-    "stt.vortexConfig": "Vortex 설정 (JSON)",
+    "stt.vertexConfig": "Vertex AI 설정 (JSON)",
     "tg.timeout": "⏰ 시간 초과 (20분 무응답)",
     "tg.noResponse": "응답 없음",
     "tg.connected": "🦈 Jaw Agent 연결됨! 메시지를 보내면 AI 에이전트가 응답합니다.",

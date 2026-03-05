@@ -377,7 +377,7 @@
                         <option value="auto">Auto (Gemini → Whisper)</option>
                         <option value="gemini">Gemini only</option>
                         <option value="openai">OpenAI Compatible</option>
-                        <option value="vortex">Vortex</option>
+                        <option value="vertex">Vertex AI</option>
                         <option value="whisper">Whisper only (local)</option>
                     </select>
                 </div>
@@ -411,10 +411,10 @@
                     <input type="text" id="sttOpenaiModel" placeholder="whisper-large-v3"
                         style="width:100%;font-size:11px;padding:4px">
                 </div>
-                <!-- Vortex -->
-                <div class="settings-row sub-row stt-vortex" style="display:none">
-                    <label data-i18n="stt.vortexConfig">Vortex Config (JSON)</label>
-                    <textarea id="sttVortexJson" rows="4" placeholder='{"endpoint":"...","token":"..."}'
+                <!-- Vertex AI -->
+                <div class="settings-row sub-row stt-vertex" style="display:none">
+                    <label data-i18n="stt.vertexConfig">Vertex AI Config (JSON)</label>
+                    <textarea id="sttVertexJson" rows="4" placeholder='{"project_id":"...","location":"us-central1","credentials":{...}}'
                         style="width:100%;font-size:11px;padding:4px;font-family:var(--font-mono)"></textarea>
                 </div>
                 <div class="settings-row sub-row stt-whisper">
@@ -422,8 +422,6 @@
                     <input type="text" id="sttWhisperModel" placeholder="mlx-community/..."
                         style="width:100%;font-size:11px;padding:4px">
                 </div>
-                <button class="btn-clear" style="width:100%;margin:4px 0;padding:6px;font-size:11px"
-                    id="sttSave" data-i18n="stt.save">💾 STT 설정 저장</button>
                 <small style="font-size:9px;color:var(--text-dim)" data-i18n="stt.shortcutHint">
                     ⌨️ Ctrl+Shift+Space (⌘+Shift+Space on Mac)</small>
             </div>

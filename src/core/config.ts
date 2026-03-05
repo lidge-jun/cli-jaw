@@ -140,7 +140,7 @@ function createDefaultSettings() {
             openaiBaseUrl: '',
             openaiApiKey: '',
             openaiModel: '',
-            vortexConfig: '',
+            vertexConfig: '',
         },
     };
 }

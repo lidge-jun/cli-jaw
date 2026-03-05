@@ -193,7 +193,7 @@ function initSttSettings(sttConfig: Record<string, any>): void {
     const openaiBaseUrl = document.getElementById('sttOpenaiBaseUrl') as HTMLInputElement | null;
     const openaiKey = document.getElementById('sttOpenaiKey') as HTMLInputElement | null;
     const openaiModel = document.getElementById('sttOpenaiModel') as HTMLInputElement | null;
-    const vortexJson = document.getElementById('sttVortexJson') as HTMLTextAreaElement | null;
+    const vertexJson = document.getElementById('sttVertexJson') as HTMLTextAreaElement | null;
 
     if (engine) engine.value = sttConfig.engine || 'auto';
     if (geminiKey) geminiKey.placeholder = sttConfig.geminiKeySet ? '••••••••' : 'AIza...';
@@ -202,52 +202,53 @@ function initSttSettings(sttConfig: Record<string, any>): void {
     if (openaiBaseUrl) openaiBaseUrl.value = sttConfig.openaiBaseUrl || '';
     if (openaiKey) openaiKey.placeholder = sttConfig.openaiKeySet ? '••••••••' : 'sk-...';
     if (openaiModel) openaiModel.value = sttConfig.openaiModel || '';
-    if (vortexJson) vortexJson.value = sttConfig.vortexConfig || '';
+    if (vertexJson) vertexJson.value = sttConfig.vertexConfig || '';
 
     function toggleProviderFields() {
         const v = engine?.value || 'auto';
         const showGemini = v === 'auto' || v === 'gemini';
         const showOpenai = v === 'openai';
-        const showVortex = v === 'vortex';
+        const showVertex = v === 'vertex';
         const showWhisper = v === 'auto' || v === 'whisper';
         document.querySelectorAll('.stt-gemini').forEach(el => (el as HTMLElement).style.display = showGemini ? '' : 'none');
         document.querySelectorAll('.stt-openai').forEach(el => (el as HTMLElement).style.display = showOpenai ? '' : 'none');
-        document.querySelectorAll('.stt-vortex').forEach(el => (el as HTMLElement).style.display = showVortex ? '' : 'none');
+        document.querySelectorAll('.stt-vertex').forEach(el => (el as HTMLElement).style.display = showVertex ? '' : 'none');
         document.querySelectorAll('.stt-whisper').forEach(el => (el as HTMLElement).style.display = showWhisper ? '' : 'none');
     }
     toggleProviderFields();
-    engine?.addEventListener('change', toggleProviderFields);
 
-    const btn = document.getElementById('sttSave');
-    if (btn && !btn.dataset.bound) {
-        btn.dataset.bound = '1';
-        btn.addEventListener('click', async () => {
-            const patch: Record<string, any> = {
-                stt: {
-                    engine: engine?.value || 'auto',
-                    geminiModel: geminiModel?.value || 'gemini-2.5-flash-lite',
-                    whisperModel: whisperModel?.value || '',
-                    openaiBaseUrl: openaiBaseUrl?.value || '',
-                    openaiModel: openaiModel?.value || '',
-                    vortexConfig: vortexJson?.value || '',
-                },
-            };
-            if (geminiKey?.value) patch.stt.geminiApiKey = geminiKey.value;
-            if (openaiKey?.value) patch.stt.openaiApiKey = openaiKey.value;
-            console.log('[stt] saving:', { engine: patch.stt.engine, hasGeminiKey: !!patch.stt.geminiApiKey, hasOpenaiKey: !!patch.stt.openaiApiKey });
-            try {
-                await apiJson('/api/settings', 'PUT', patch);
-                btn.textContent = t('stt.saved');
-                setTimeout(() => btn.textContent = t('stt.save'), 2000);
-                if (geminiKey) { geminiKey.value = ''; geminiKey.placeholder = '••••••••'; }
-                if (openaiKey) { openaiKey.value = ''; openaiKey.placeholder = '••••••••'; }
-            } catch (e) {
-                console.error('[stt] save failed:', e);
-                btn.textContent = '❌ Save failed';
-                setTimeout(() => btn.textContent = t('stt.save'), 3000);
-            }
-        });
+    async function saveStt() {
+        const patch: Record<string, any> = {
+            stt: {
+                engine: engine?.value || 'auto',
+                geminiModel: geminiModel?.value || 'gemini-2.5-flash-lite',
+                whisperModel: whisperModel?.value || '',
+                openaiBaseUrl: openaiBaseUrl?.value || '',
+                openaiModel: openaiModel?.value || '',
+                vertexConfig: vertexJson?.value || '',
+            },
+        };
+        if (geminiKey?.value) patch.stt.geminiApiKey = geminiKey.value;
+        if (openaiKey?.value) patch.stt.openaiApiKey = openaiKey.value;
+        console.log('[stt] saving:', { engine: patch.stt.engine, hasGeminiKey: !!patch.stt.geminiApiKey, hasOpenaiKey: !!patch.stt.openaiApiKey });
+        try {
+            await apiJson('/api/settings', 'PUT', patch);
+            if (geminiKey?.value) { geminiKey.value = ''; geminiKey.placeholder = '••••••••'; }
+            if (openaiKey?.value) { openaiKey.value = ''; openaiKey.placeholder = '••••••••'; }
+        } catch (e) {
+            console.error('[stt] save failed:', e);
+        }
     }
+
+    // Auto-save on change (selects) and blur (text/password inputs)
+    engine?.addEventListener('change', () => { toggleProviderFields(); saveStt(); });
+    geminiModel?.addEventListener('change', saveStt);
+    geminiKey?.addEventListener('blur', () => { if (geminiKey.value) saveStt(); });
+    openaiKey?.addEventListener('blur', () => { if (openaiKey.value) saveStt(); });
+    openaiBaseUrl?.addEventListener('blur', saveStt);
+    openaiModel?.addEventListener('blur', saveStt);
+    whisperModel?.addEventListener('blur', saveStt);
+    vertexJson?.addEventListener('blur', saveStt);
 }
 
 interface McpData { servers: Record<string, { command: string; args?: string[] }>; }
