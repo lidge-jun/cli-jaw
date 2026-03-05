@@ -495,10 +495,6 @@ function renderCliStatus(data: { cliStatus: Record<string, { available: boolean 
             if (parts.length) accountLine = `<div style="font-size:10px;color:var(--text-dim);margin:2px 0 4px 16px">${escapeHtml(parts.join(' · '))}</div>`;
         }
 
-        // Copilot: keychain refresh button (always visible, outside account check)
-        if (name === 'copilot') {
-            accountLine += `<button id="copilotKeychainBtn" style="font-size:10px;margin:2px 0 4px 16px;padding:2px 8px;background:var(--border);color:var(--text);border:1px solid var(--text-dim);border-radius:4px;cursor:pointer" title="${t('copilot.keychainHint')}">${t('copilot.keychain')}</button>`;
-        }
         let authHint = '';
         if (!info.available || dotClass === 'warn') {
             const hint = AUTH_HINTS[name];
