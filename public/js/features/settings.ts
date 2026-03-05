@@ -189,6 +189,7 @@ function initSttSettings(sttConfig: Record<string, any>): void {
     const engine = document.getElementById('sttEngine') as HTMLSelectElement | null;
     const geminiKey = document.getElementById('sttGeminiKey') as HTMLInputElement | null;
     const geminiModel = document.getElementById('sttGeminiModel') as HTMLSelectElement | null;
+    const geminiModelCustom = document.getElementById('sttGeminiModelCustom') as HTMLInputElement | null;
     const whisperModel = document.getElementById('sttWhisperModel') as HTMLInputElement | null;
     const openaiBaseUrl = document.getElementById('sttOpenaiBaseUrl') as HTMLInputElement | null;
     const openaiKey = document.getElementById('sttOpenaiKey') as HTMLInputElement | null;
@@ -197,7 +198,12 @@ function initSttSettings(sttConfig: Record<string, any>): void {
 
     if (engine) engine.value = sttConfig.engine || 'auto';
     if (geminiKey) geminiKey.placeholder = sttConfig.geminiKeySet ? '••••••••' : 'AIza...';
-    if (geminiModel) geminiModel.value = sttConfig.geminiModel || 'gemini-2.5-flash-lite';
+    if (geminiModel) {
+        const saved = sttConfig.geminiModel || 'gemini-2.5-flash-lite';
+        const hasOption = Array.from(geminiModel.options).some(o => o.value === saved);
+        if (hasOption) { geminiModel.value = saved; }
+        else { geminiModel.value = '__custom__'; if (geminiModelCustom) { geminiModelCustom.value = saved; geminiModelCustom.style.display = ''; } }
+    }
     if (whisperModel) whisperModel.value = sttConfig.whisperModel || 'mlx-community/whisper-large-v3-turbo';
     if (openaiBaseUrl) openaiBaseUrl.value = sttConfig.openaiBaseUrl || '';
     if (openaiKey) openaiKey.placeholder = sttConfig.openaiKeySet ? '••••••••' : 'sk-...';
@@ -221,7 +227,7 @@ function initSttSettings(sttConfig: Record<string, any>): void {
         const patch: Record<string, any> = {
             stt: {
                 engine: engine?.value || 'auto',
-                geminiModel: geminiModel?.value || 'gemini-2.5-flash-lite',
+                geminiModel: (geminiModel?.value === '__custom__' ? geminiModelCustom?.value : geminiModel?.value) || 'gemini-2.5-flash-lite',
                 whisperModel: whisperModel?.value || '',
                 openaiBaseUrl: openaiBaseUrl?.value || '',
                 openaiModel: openaiModel?.value || '',
@@ -242,7 +248,11 @@ function initSttSettings(sttConfig: Record<string, any>): void {
 
     // Auto-save on change (selects) and blur (text/password inputs)
     engine?.addEventListener('change', () => { toggleProviderFields(); saveStt(); });
-    geminiModel?.addEventListener('change', saveStt);
+    geminiModel?.addEventListener('change', () => {
+        if (geminiModelCustom) geminiModelCustom.style.display = geminiModel.value === '__custom__' ? '' : 'none';
+        if (geminiModel.value !== '__custom__') saveStt();
+    });
+    geminiModelCustom?.addEventListener('blur', saveStt);
     geminiKey?.addEventListener('blur', () => { if (geminiKey.value) saveStt(); });
     openaiKey?.addEventListener('blur', () => { if (openaiKey.value) saveStt(); });
     openaiBaseUrl?.addEventListener('blur', saveStt);

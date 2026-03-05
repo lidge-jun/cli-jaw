@@ -389,11 +389,13 @@
                 <div class="settings-row sub-row stt-gemini">
                     <label data-i18n="stt.geminiModel">Gemini 모델</label>
                     <select id="sttGeminiModel">
-                        <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite (fastest)</option>
+                        <option value="gemini-3.1-flash-lite-preview">gemini-3.1-flash-lite-preview (fastest)</option>
                         <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (fast)</option>
                         <option value="gemini-2.5-flash">gemini-2.5-flash (balanced)</option>
                         <option value="gemini-2.5-pro">gemini-2.5-pro (accurate)</option>
+                        <option value="__custom__">✏️ 직접 입력...</option>
                     </select>
+                    <input type="text" id="sttGeminiModelCustom" placeholder="모델명 입력" style="display:none; margin-top:4px;" />
                 </div>
                 <!-- OpenAI Compatible -->
                 <div class="settings-row sub-row stt-openai" style="display:none">
