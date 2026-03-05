@@ -57,8 +57,10 @@ If shell is unavailable, the system will auto-advance when the user explicitly a
 - Worker results are fed back to you. Review them and report to the user.
 
 **Phase summary**:
-- P: Write a plan → present to user → STOP. Wait for approval.
-- A: Spawn worker to audit THE PLAN (not code) → review results → STOP. Wait for approval.
-- B: Implement code → spawn verify worker → STOP. Wait for approval.
-- C: Final check (tsc, docs) → call `cli-jaw orchestrate D`.
+- P: Write a plan → STOP → approved → `cli-jaw orchestrate A`
+- A: Spawn audit worker → review results → STOP → approved → `cli-jaw orchestrate B`
+- B: Implement code → spawn verify worker → STOP → approved → `cli-jaw orchestrate C`
+- C: Final check (tsc, docs) → `cli-jaw orchestrate D`
 - D: Summarize and return to IDLE.
+
+**⚠️ State transitions MUST use `cli-jaw orchestrate` commands. No other method.**

@@ -66,7 +66,7 @@ export function resetState(): void {
 const PREFIXES: Record<string, string> = {
   Pb2: `[PLANNING MODE — User Feedback]
 The user has reviewed your plan. Apply their feedback and present the revised plan.
-If user explicitly approves (OK, next, lgtm, 진행해), advance to Plan Audit phase.
+If user explicitly approves, run \`cli-jaw orchestrate A\` to advance.
 Otherwise revise and present again.
 
 ⛔ STOP after presenting the revision. WAIT for another user response.
@@ -74,20 +74,22 @@ Otherwise revise and present again.
 User says:`,
 
   Ab2: `[PLAN AUDIT — Worker Results]
-Below are the plan audit results. The worker checked YOUR PLAN for feasibility — not the code.
+Below are the plan audit results from the verification worker.
 If issues found: fix the plan and re-audit (output worker JSON again).
-If PASS: report results to the user.
+If PASS: report results to the user and wait for approval.
+When user approves, run \`cli-jaw orchestrate B\` to advance to Build.
 
-⛔ STOP after reporting. WAIT for user approval before advancing to Build.
+⛔ STOP after reporting. WAIT for user approval.
 
 Worker results:`,
 
   Bb2: `[IMPLEMENTATION REVIEW — Worker Results]
 Below are verification results for your code.
 If NEEDS_FIX: fix and re-verify (output worker JSON again).
-If DONE: report results to the user.
+If DONE: report results to the user and wait for approval.
+When user approves, run \`cli-jaw orchestrate C\` to advance to Check.
 
-⛔ STOP after reporting. WAIT for user approval before advancing to Check.
+⛔ STOP after reporting. WAIT for user approval.
 
 Worker results:`,
 };
@@ -116,9 +118,8 @@ Steps:
 4. Ask: "Any business logic I shouldn't decide alone?" and "Does Part 1 match your intent?"
 
 ⛔ STOP HERE. Do NOT proceed to the next phase.
-⛔ Do NOT call cli-jaw orchestrate A yet.
 ⛔ WAIT for the user to review and approve your plan.
-⛔ Only after explicit user approval (OK, lgtm, 진행, etc.) should you advance.
+⛔ When user approves, run: \`cli-jaw orchestrate A\`
 
 You will receive user feedback with a [PLANNING MODE] prefix. Revise until approved.`,
 
@@ -141,7 +142,8 @@ After receiving worker results:
 - If FAIL: fix the plan and re-audit (output worker JSON again).
 - If PASS: report results to the user.
 
-⛔ STOP after reporting. WAIT for user approval before advancing to B.`,
+⛔ STOP after reporting. WAIT for user approval.
+⛔ When user approves, run: \`cli-jaw orchestrate B\``,
 
   B: `[PABCD — B: BUILD]
 
@@ -164,7 +166,8 @@ Wait for worker verification results.
 - NEEDS_FIX: YOU fix the issues yourself, then re-verify with another worker.
 - DONE: Report results to the user.
 
-⛔ STOP after reporting. WAIT for user approval before advancing to C.`,
+⛔ STOP after reporting. WAIT for user approval.
+⛔ When user approves, run: \`cli-jaw orchestrate C\``,
 
   C: `[PABCD — C: CHECK]
 
