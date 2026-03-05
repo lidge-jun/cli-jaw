@@ -31,6 +31,9 @@ export function readCodexTokens() {
     return null;
 }
 
+let _claudeUsageCache: { data: Record<string, unknown>; ts: number } | null = null;
+const CLAUDE_CACHE_TTL = 5 * 60 * 1000; // 5 min
+
 export async function fetchClaudeUsage(creds: any) {
     if (!creds?.token) return null;
     try {
@@ -39,10 +42,18 @@ export async function fetchClaudeUsage(creds: any) {
             signal: AbortSignal.timeout(8000),
         });
         if (!resp.ok) {
-            // 401/403 = token expired/invalid → auth failure
             if (resp.status === 401 || resp.status === 403) return { authenticated: false };
-            if (resp.status === 429) return { error: true, reason: 'rate_limited' };
-            return { error: true }; // 5xx, etc.
+            if (resp.status === 429) {
+                if (_claudeUsageCache && Date.now() - _claudeUsageCache.ts < CLAUDE_CACHE_TTL) {
+                    return { ..._claudeUsageCache.data, cached: true };
+                }
+                return {
+                    account: creds.account,
+                    windows: [{ label: '5-hour', percent: 100, resetsAt: null }],
+                    error: true, reason: 'rate_limited',
+                };
+            }
+            return { error: true };
         }
         const data = await resp.json() as Record<string, any>;
         const windows = [];
@@ -52,8 +63,10 @@ export async function fetchClaudeUsage(creds: any) {
                 windows.push({ label, percent: Math.round(data[key].utilization), resetsAt: data[key].resets_at ?? null });
             }
         }
-        return { account: creds.account, windows, raw: data };
-    } catch { return { error: true }; } // network timeout, DNS, etc.
+        const result = { account: creds.account, windows, raw: data };
+        _claudeUsageCache = { data: result, ts: Date.now() };
+        return result;
+    } catch { return { error: true }; }
 }
 
 export async function fetchCodexUsage(tokens: any) {
