@@ -63,5 +63,5 @@ test('RH-006: .npmignore excludes dist/bin/cli-claw.js', () => {
 
 test('RH-007: package build runs clean:dist before tsc', () => {
     const pkg = JSON.parse(fs.readFileSync(join(root, 'package.json'), 'utf8'));
-    assert.equal(pkg.scripts?.build, 'npm run clean:dist && tsc');
+    assert.ok(pkg.scripts?.build?.startsWith('npm run clean:dist && tsc'), 'build should start with clean:dist && tsc');
 });

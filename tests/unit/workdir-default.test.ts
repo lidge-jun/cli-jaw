@@ -16,8 +16,15 @@ test('P1-001: DEFAULT_SETTINGS.workingDir === JAW_HOME', () => {
 
 test('P1-002: A2_DEFAULT prompt contains ~/.cli-jaw not bare ~/', () => {
     const a2Match = builderSrc.match(/const A2_DEFAULT = `([\s\S]*?)`;/);
-    assert.ok(a2Match, 'A2_DEFAULT should exist in builder.ts');
-    const a2Content = a2Match[1];
+    const templatePath = join(__dirname, '..', '..', 'src', 'prompt', 'templates', 'a2-default.md');
+    let a2Content: string;
+    if (a2Match) {
+        a2Content = a2Match[1];
+    } else {
+        // A2_DEFAULT moved to template file
+        a2Content = readFileSync(templatePath, 'utf8');
+        assert.ok(a2Content.length > 0, 'a2-default.md template should exist');
+    }
     assert.ok(a2Content.includes('~/.cli-jaw'), 'Should reference ~/.cli-jaw');
     assert.ok(!a2Content.includes('- ~/\n'), 'Should NOT have bare "- ~/"');
 });
