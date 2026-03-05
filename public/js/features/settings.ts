@@ -499,8 +499,6 @@ function renderCliStatus(data: { cliStatus: Record<string, { available: boolean 
         if (name === 'copilot') {
             accountLine += `<button id="copilotKeychainBtn" style="font-size:10px;margin:2px 0 4px 16px;padding:2px 8px;background:var(--border);color:var(--text);border:1px solid var(--text-dim);border-radius:4px;cursor:pointer" title="${t('copilot.keychainHint')}">${t('copilot.keychain')}</button>`;
         }
-
-        // Auth hint when CLI is not available OR not authenticated
         let authHint = '';
         if (!info.available || dotClass === 'warn') {
             const hint = AUTH_HINTS[name];
@@ -539,7 +537,7 @@ function renderCliStatus(data: { cliStatus: Record<string, { available: boolean 
             <div class="settings-group" style="margin-bottom:6px;padding:8px 10px">
                 <div class="cli-status-row">
                     <span class="cli-dot ${dotClass}"></span>
-                    <span class="cli-name" style="font-weight:600">${name}</span>
+                    <span class="cli-name" style="font-weight:600">${name}</span>${name === 'copilot' ? `<button id="copilotKeychainBtn" style="font-size:9px;margin-left:6px;padding:1px 5px;background:var(--border);color:var(--text-dim);border:1px solid var(--text-dim);border-radius:3px;cursor:pointer;vertical-align:middle;line-height:1" title="${t('copilot.keychainHint')}">🔑</button>` : ''}
                 </div>
                 ${accountLine}
                 ${authHint}
@@ -556,30 +554,15 @@ function renderCliStatus(data: { cliStatus: Record<string, { available: boolean 
         kcBtn.addEventListener('click', async () => {
             const btn = kcBtn as HTMLButtonElement;
             btn.disabled = true;
-            btn.textContent = '🔍 조회 중…';
-
+            btn.textContent = '⏳';
             try {
-                const res = await api<{ ok: boolean; account?: any; steps: Array<{ source: string; status: string; detail?: string }> }>('/api/copilot/refresh', { method: 'POST' });
-                if (!res?.steps) { btn.textContent = '❌'; btn.disabled = false; return; }
-
-                // Show each step result sequentially
-                for (let i = 0; i < res.steps.length; i++) {
-                    const s = res.steps[i];
-                    const icon = s.status === 'hit' ? '✅' : s.status === 'error' ? '❌' : '⬜';
-                    btn.textContent = `${i + 1}. ${s.source} ${icon}`;
-                    await new Promise(r => setTimeout(r, 500));
-                }
-
-                if (res.ok) {
-                    btn.textContent = '✅ 완료!';
-                    await loadCliStatus(true);
-                } else {
-                    btn.textContent = '❌ 토큰 없음';
-                }
+                const res = await api<{ ok: boolean }>('/api/copilot/refresh', { method: 'POST' });
+                btn.textContent = res?.ok ? '✅' : '❌';
+                if (res?.ok) await loadCliStatus(true);
             } catch {
-                btn.textContent = '❌ 실패';
+                btn.textContent = '❌';
             }
-            setTimeout(() => { btn.textContent = t('copilot.keychain'); btn.disabled = false; }, 3000);
+            setTimeout(() => { btn.textContent = '🔑'; btn.disabled = false; }, 2000);
         });
     }
 }
