@@ -6,7 +6,7 @@
 
 *One assistant. Five brains. Always on.*
 
-[![Tests](https://img.shields.io/badge/tests-608%20pass-brightgreen)](#-tests)
+[![Tests](https://img.shields.io/badge/tests-639%20pass-brightgreen)](#-tests)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
@@ -153,7 +153,7 @@ Check what's ready: `jaw doctor`
  ✅ OpenCode CLI    installed
  ✅ Copilot CLI     installed
  ✅ Database        jaw.db OK
- ✅ Skills          17 active, 90 reference
+ ✅ Skills          20 active, 89 reference
  ✅ MCP             3 servers configured
  ✅ Memory          MEMORY.md exists
  ✅ Server          port 3457 available
@@ -189,6 +189,21 @@ Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, C
 
 ---
 
+## 🆕 What's New (v1.3.0)
+
+| Feature | Description |
+|---------|-------------|
+| 🎤 **Voice & STT** | Web mic button + Telegram voice transcription. Multi-provider STT: OpenAI-compatible, Google Vertex AI, custom endpoints. Settings UI with API key management. |
+| 📝 **Prompt Templates** | Create, edit, and manage prompt templates via the Web UI. Node-map visualization + full CRUD API. |
+| 📊 **Quota Dashboard** | Compact quota bars with reset-time display. Graceful 429 rate-limit handling with cached usage data. |
+| 🔍 **IDE Diff View** | Fingerprint-based change detection. Auto-detects VS Code or Antigravity and opens inline diffs. |
+| 🎭 **PABCD Enhancements** | Live roadmap bar with 🦈 shark runner animation. Glow, pulse, and badge feedback on phase transitions. |
+| 🪟 **WSL Installer v2** | Auto-installs prerequisites (`unzip`, `curl`, `git`), fixes PATH for `jaw` command, adds troubleshooting guide. |
+| 🧪 **639 Tests** | Up from 608 — new coverage for STT, quota caching, orchestration, and CI stability. |
+| 📦 **109 Skills** | 20 active + 89 reference. New: `dev-pabcd`, `dev-scaffolding`, `dev-code-reviewer`. |
+
+---
+
 ## What can your assistant do?
 
 ```mermaid
@@ -209,7 +224,9 @@ graph LR
 - 🤖 **5 AI engines, 1 assistant** — Claude · Codex · Gemini · OpenCode · Copilot. Switch with `/cli`.
 - ⚡ **Auto fallback** — If one engine is down, the next picks up seamlessly.
 - 🎭 **Multi-agent orchestration** — Complex tasks get split across specialized sub-agents automatically.
-- 📦 **108 skills** — Browser control, file editing, image generation, web search, and [much more](#-skill-system).
+- 🎤 **Voice input** — Mic button on the web + Telegram voice messages. Multi-provider STT (OpenAI, Vertex AI).
+- 📝 **Prompt templates** — Create, manage, and reuse prompt templates with a visual node-map editor.
+- 📦 **109 skills** — Browser control, file editing, image generation, web search, and [much more](#-skill-system).
 - 🧠 **Persistent memory** — Your assistant remembers past conversations and preferences across sessions.
 - 📱 **Telegram bot** — Chat with your assistant from your phone, send voice/photos/files.
 - 🌐 **Browser automation** — Your assistant can navigate the web, click, type, and screenshot.
@@ -221,15 +238,15 @@ graph LR
 
 ## 📦 Skill System
 
-**108 skills** out of the box — browser, github, notion, telegram, memory, pdf, image generation, and [much more](#).
+**109 skills** out of the box — browser, github, notion, telegram, memory, pdf, image generation, and [much more](#).
 
 <details>
 <summary>View all skills</summary>
 
 | Tier                 | Count | How it works                                              |
 | -------------------- | :---: | --------------------------------------------------------- |
-| **Active Skills**    |  17   | Auto-injected into every AI prompt. Always available.     |
-| **Reference Skills** |  90   | AI reads them on-demand when you ask for a relevant task. |
+| **Active Skills**    |  20   | Auto-injected into every AI prompt. Always available.     |
+| **Reference Skills** |  89   | AI reads them on-demand when you ask for a relevant task. |
 
 #### Active Skills (always on)
 
@@ -246,10 +263,11 @@ graph LR
 | `screen-capture`                                                    | macOS screenshot and camera capture                       |
 | `openai-docs`                                                       | Up-to-date OpenAI API documentation                       |
 | `dev` / `dev-frontend` / `dev-backend` / `dev-data` / `dev-testing` | Development guidelines for sub-agents                     |
+| `dev-pabcd` / `dev-scaffolding` / `dev-code-reviewer`               | Orchestration, scaffolding, and code review guides        |
 
 #### Reference Skills (on-demand)
 
-90 more skills ready to use — spotify, weather, deep-research, tts, video-downloader, apple-reminders, 1password, terraform, postgres, jupyter-notebook, sentry, whatsapp, and more.
+89 more skills ready to use — spotify, weather, deep-research, tts, video-downloader, apple-reminders, 1password, terraform, postgres, jupyter-notebook, sentry, whatsapp, and more.
 
 ```bash
 jaw skill install <name>    # Activate a reference skill permanently
@@ -279,8 +297,9 @@ Your assistant isn't tied to your desk. Chat from anywhere via Telegram:
 **What you can do from Telegram:**
 
 - 💬 Chat with your assistant (any of 5 AI engines)
-- 🎤 Send voice messages (auto-transcribed)
+- 🎤 Send voice messages (auto-transcribed via multi-provider STT)
 - 📎 Send files and photos for processing
+- 🎙️ Combine voice + text + attachments in a single message
 - ⚡ Run commands (`/cli`, `/model`, `/status`)
 - 🔄 Switch AI engines on the fly
 
@@ -541,7 +560,7 @@ src/
 ## 🧪 Tests
 
 <details>
-<summary>608 pass · 1 skipped · zero external dependencies</summary>
+<summary>639 pass · 1 skipped · zero external dependencies</summary>
 
 ```bash
 npm test
