@@ -464,6 +464,22 @@
     animation: pulse-recording 1.5s ease-in-out infinite;
 }
 
+.btn-voice-cancel {
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid #ef4444;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    padding: 4px 8px;
+    color: #ef4444;
+    flex-shrink: 0;
+    transition: all 0.2s;
+}
+
+.btn-voice-cancel:hover {
+    background: rgba(239, 68, 68, 0.3);
+}
+
 /* ── Slash Command Dropdown ── */
 .cmd-dropdown {
     position: absolute;

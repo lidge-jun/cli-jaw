@@ -44,7 +44,7 @@ import { initAppName } from './features/appname.js';
 import { initSidebar, toggleLeft, toggleRight } from './features/sidebar.js';
 import { initTheme } from './features/theme.js';
 import { initI18n, setLang, getLang, t } from './features/i18n.js';
-import { toggleRecording } from './features/voice-recorder.js';
+import { toggleRecording, cancelRecording } from './features/voice-recorder.js';
 
 // ── Chat Actions ──
 document.getElementById('btnSend')?.addEventListener('click', sendMessage);
@@ -76,6 +76,7 @@ document.querySelector('.btn-attach')?.addEventListener('click', () => {
     (document.getElementById('fileInput') as HTMLInputElement | null)?.click();
 });
 document.getElementById('btnVoice')?.addEventListener('click', () => toggleRecording());
+document.getElementById('btnVoiceCancel')?.addEventListener('click', () => cancelRecording());
 
 // ── Left Sidebar ──
 document.getElementById('memorySidebarBtn')?.addEventListener('click', openMemoryModal);

@@ -438,7 +438,13 @@ app.get('/api/settings', (_, res) => {
     ok(res, safe, safe);
 });
 app.put('/api/settings', (req, res) => {
-    ok(res, applySettingsPatch(req.body, { restartTelegram: true }));
+    const result = applySettingsPatch(req.body, { restartTelegram: true });
+    const safe = { ...result };
+    if (safe.stt) {
+        const hasGemini = !!(safe.stt.geminiApiKey || process.env.GEMINI_API_KEY);
+        safe.stt = { ...safe.stt, geminiApiKey: undefined, geminiKeySet: hasGemini };
+    }
+    ok(res, safe);
 });
 
 // Prompts (A-2)

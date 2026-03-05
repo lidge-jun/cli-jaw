@@ -100,6 +100,7 @@ print(json.dumps({'text': r.get('text','')}))
  */
 export async function transcribeVoice(audioPath: string, mimeType = 'audio/ogg'): Promise<SttResult> {
     const { engine, geminiApiKey } = getSttSettings();
+    console.log(`[stt] engine=${engine}, geminiKeySet=${!!geminiApiKey}, file=${audioPath}`);
 
     if (engine === 'whisper') {
         return await sttWhisper(audioPath);

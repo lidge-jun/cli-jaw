@@ -208,10 +208,19 @@ function initSttSettings(sttConfig: Record<string, any>): void {
                 },
             };
             if (geminiKey?.value) patch.stt.geminiApiKey = geminiKey.value;
-            await apiJson('/api/settings', 'PUT', patch);
-            if (geminiKey) {
-                geminiKey.value = '';
-                geminiKey.placeholder = '••••••••';
+            console.log('[stt] saving:', { engine: patch.stt.engine, hasKey: !!patch.stt.geminiApiKey });
+            try {
+                await apiJson('/api/settings', 'PUT', patch);
+                btn.textContent = t('stt.saved');
+                setTimeout(() => btn.textContent = t('stt.save'), 2000);
+                if (geminiKey) {
+                    geminiKey.value = '';
+                    geminiKey.placeholder = '••••••••';
+                }
+            } catch (e) {
+                console.error('[stt] save failed:', e);
+                btn.textContent = '❌ Save failed';
+                setTimeout(() => btn.textContent = t('stt.save'), 3000);
             }
         });
     }

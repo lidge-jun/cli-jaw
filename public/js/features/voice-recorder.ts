@@ -5,6 +5,8 @@ import { addSystemMsg } from '../ui.js';
 import { t } from './i18n.js';
 import { sendVoiceToServer } from './chat.js';
 
+let cancelled = false;
+
 let mediaRecorder: MediaRecorder | null = null;
 let chunks: Blob[] = [];
 let recordingStream: MediaStream | null = null;
@@ -75,6 +77,12 @@ export async function startRecording(): Promise<void> {
     };
 
     mediaRecorder.onstop = async () => {
+        if (cancelled) {
+            chunks = [];
+            releaseStream();
+            cancelled = false;
+            return;
+        }
         const actualMime = mediaRecorder?.mimeType || mimeType || 'audio/webm';
         const ext = actualMime.includes('mp4') ? '.m4a'
                   : actualMime.includes('ogg') ? '.ogg'
@@ -113,6 +121,17 @@ export function stopRecording(): void {
     updateRecordingUI(false);
 }
 
+export function cancelRecording(): void {
+    if (!state.isRecording || !mediaRecorder) return;
+    cancelled = true;
+    if (mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+    }
+    state.isRecording = false;
+    stopTimer();
+    updateRecordingUI(false);
+}
+
 export function toggleRecording(): void {
     if (state.isRecording) stopRecording();
     else startRecording();
@@ -143,8 +162,13 @@ function stopTimer(): void {
 
 function updateRecordingUI(recording: boolean): void {
     const btn = document.getElementById('btnVoice');
-    if (!btn) return;
-    btn.classList.toggle('recording', recording);
-    btn.textContent = recording ? '⏹' : '🎤';
-    btn.title = recording ? t('voice.stop') : t('voice.start');
+    const cancelBtn = document.getElementById('btnVoiceCancel');
+    if (btn) {
+        btn.classList.toggle('recording', recording);
+        btn.textContent = recording ? '⏹' : '🎤';
+        btn.title = recording ? t('voice.stop') : t('voice.start');
+    }
+    if (cancelBtn) {
+        cancelBtn.style.display = recording ? 'inline-block' : 'none';
+    }
 }
