@@ -17,6 +17,8 @@ export interface ResearchReport {
   unknowns: string[];
 }
 
+type SpawnAgentLike = typeof spawnAgent;
+
 // ─── Ambiguity Detection ────────────────────────────
 
 const AMBIGUOUS_SIGNALS = [
@@ -36,6 +38,11 @@ export function isAmbiguousRequest(text: string): boolean {
   return AMBIGUOUS_SIGNALS.some(re => re.test(t));
 }
 
+export function shouldRunResearch(text: string, meta: Record<string, any> = {}): boolean {
+  if (meta._workerResult || meta._skipResearch || meta._researchInjected) return false;
+  return isAmbiguousRequest(text);
+}
+
 // ─── Research Dispatch ──────────────────────────────
 
 export async function dispatchResearchTask(
@@ -43,11 +50,17 @@ export async function dispatchResearchTask(
   meta: Record<string, any> = {},
 ): Promise<ResearchReport> {
   const emps = getEmployees.all() as Record<string, any>[];
-  const emp = findEmployee(emps, { agent: 'Research' });
+  const configuredEmp = findEmployee(emps, { agent: 'Research' });
+  const injectedEmp = meta._employee;
+  const emp = injectedEmp === undefined
+    ? (configuredEmp || buildFallbackResearchEmployee())
+    : (injectedEmp || buildFallbackResearchEmployee());
+  const runSpawnAgent: SpawnAgentLike = typeof meta._spawnAgent === 'function'
+    ? meta._spawnAgent
+    : spawnAgent;
 
-  if (!emp) {
-    console.warn('[jaw:research] Research employee not found, returning empty report');
-    return { rawText: '', summary: '', options: [], unknowns: ['Research worker not configured'] };
+  if (!configuredEmp) {
+    console.warn('[jaw:research] Research employee not found, using fallback Research worker');
   }
 
   const sysPrompt = getEmployeePromptV2(emp, 'research', 1);
@@ -84,7 +97,7 @@ Respond with this exact structure:
 - Do NOT write implementation code
 - Only read, search, and report`;
 
-  const { promise } = spawnAgent(researchPrompt, {
+  const { promise } = runSpawnAgent(researchPrompt, {
     agentId: emp.id,
     cli: emp.cli,
     model: emp.model,
@@ -104,12 +117,23 @@ Respond with this exact structure:
     status: r.code === 0 ? 'done' : 'error', phase: 1,
   });
 
-  return parseResearchReport(r.text || '');
+  const parsed = parseResearchReport(r.text || '');
+  if (parsed.rawText) return parsed;
+
+  const failureReason = r.code === 127
+    ? 'Research worker CLI not available'
+    : `Research worker failed with code ${r.code ?? 'unknown'}`;
+  return {
+    rawText: '',
+    summary: '',
+    options: [],
+    unknowns: [...parsed.unknowns, failureReason],
+  };
 }
 
 // ─── Report Parsing ─────────────────────────────────
 
-function parseResearchReport(text: string): ResearchReport {
+export function parseResearchReport(text: string): ResearchReport {
   const summary = extractSection(text, 'Context') || extractSection(text, 'Recommendation') || '';
   const optionsRaw = extractSection(text, 'Options') || '';
   const unknownsRaw = extractSection(text, 'Unknowns') || '';
@@ -119,6 +143,16 @@ function parseResearchReport(text: string): ResearchReport {
     summary: summary.trim(),
     options: extractListItems(optionsRaw),
     unknowns: extractListItems(unknownsRaw),
+  };
+}
+
+function buildFallbackResearchEmployee() {
+  return {
+    id: 'research-fallback',
+    name: 'Research',
+    cli: 'claude',
+    model: 'claude-haiku-4-5-20251001',
+    role: 'Search, codebase exploration, uncertainty reduction, read-only reports',
   };
 }
 

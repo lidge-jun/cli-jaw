@@ -1,11 +1,17 @@
 // Research worker unit tests
-import test from 'node:test';
+import test, { beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+    dispatchResearchTask,
     isAmbiguousRequest,
     injectResearchIntoPlanningPrompt,
+    parseResearchReport,
     type ResearchReport,
 } from '../../src/orchestrator/research.ts';
+import { orchestrate } from '../../src/orchestrator/pipeline.ts';
+import { getCtx, resetState, setState } from '../../src/orchestrator/state-machine.ts';
+
+beforeEach(() => { resetState(); });
 
 // ─── isAmbiguousRequest ─────────────────────────────
 
@@ -54,4 +60,127 @@ test('RES-005: returns original prompt when report is empty', () => {
     const report: ResearchReport = { rawText: '', summary: '', options: [], unknowns: [] };
     const result = injectResearchIntoPlanningPrompt('Plan here', report);
     assert.equal(result, 'Plan here');
+});
+
+test('RES-006: parseResearchReport extracts structured sections', () => {
+    const parsed = parseResearchReport(`## Research Report
+### Context
+Current auth flow mixes cookie and bearer modes.
+
+### Options
+1. Keep both modes
+2. Split by route group
+
+### Recommendation
+Split by route group.
+
+### Unknowns
+- Legacy mobile client requirements`);
+
+    assert.equal(parsed.summary, 'Current auth flow mixes cookie and bearer modes.');
+    assert.deepEqual(parsed.options, ['Keep both modes', 'Split by route group']);
+    assert.deepEqual(parsed.unknowns, ['Legacy mobile client requirements']);
+});
+
+test('RES-007: dispatchResearchTask falls back to temporary Research worker', async () => {
+    let seenOpts: Record<string, any> | null = null;
+    const report = await dispatchResearchTask('compare auth patterns', {
+        _employee: null,
+        _spawnAgent: (_prompt: string, opts: Record<string, any>) => {
+            seenOpts = opts;
+            return {
+                promise: Promise.resolve({
+                    text: `## Research Report
+### Context
+Fallback worker executed.
+
+### Options
+1. Use cookies
+2. Use tokens
+
+### Recommendation
+Use tokens.
+
+### Unknowns
+- Session migration path`,
+                    code: 0,
+                    sessionId: 'fallback-session',
+                }),
+            };
+        },
+    });
+
+    assert.equal(seenOpts?.cli, 'claude');
+    assert.equal(seenOpts?.model, 'claude-haiku-4-5-20251001');
+    assert.equal(report.summary, 'Fallback worker executed.');
+    assert.deepEqual(report.options, ['Use cookies', 'Use tokens']);
+});
+
+test('RES-008: initial P request injects research before planning', async () => {
+    const prompts: string[] = [];
+    setState('P', { originalPrompt: '', plan: null, workerResults: [], origin: 'test' });
+
+    await orchestrate('compare auth and session approaches', {
+        origin: 'test',
+        _skipClear: true,
+        _skipInsert: true,
+        _dispatchResearchTask: async () => ({
+            rawText: `## Research Report
+### Context
+Two competing auth flows exist.
+
+### Options
+1. Cookie sessions
+2. Stateless bearer tokens
+
+### Recommendation
+Prefer bearer tokens for new routes.
+
+### Unknowns
+- Mobile compatibility`,
+            summary: 'Two competing auth flows exist.',
+            options: ['Cookie sessions', 'Stateless bearer tokens'],
+            unknowns: ['Mobile compatibility'],
+        }),
+        _spawnAgent: (planningPrompt: string) => {
+            prompts.push(planningPrompt);
+            return { promise: Promise.resolve({ text: 'Plan output', code: 0 }) };
+        },
+    } as any);
+
+    assert.equal(prompts.length, 1);
+    assert.ok(prompts[0]!.includes('## Pre-Planning Research Report'));
+    assert.ok(prompts[0]!.includes('Two competing auth flows exist.'));
+    assert.ok(prompts[0]!.includes('[PABCD — P: PLANNING]'));
+    assert.ok(!prompts[0]!.includes('[PLANNING MODE — User Feedback]'));
+    const ctx = getCtx();
+    assert.equal(ctx?.originalPrompt, 'compare auth and session approaches');
+    assert.equal(ctx?.researchNeeded, true);
+    assert.ok(ctx?.researchReport?.includes('## Research Report'));
+    assert.equal(ctx?.plan, 'Plan output');
+});
+
+test('RES-009: clear implementation request skips pre-planning research', async () => {
+    const prompts: string[] = [];
+    let researchCalls = 0;
+    setState('P', { originalPrompt: '', plan: null, workerResults: [], origin: 'test' });
+
+    await orchestrate('fix the typo in server.ts', {
+        origin: 'test',
+        _skipClear: true,
+        _skipInsert: true,
+        _dispatchResearchTask: async () => {
+            researchCalls++;
+            return { rawText: '', summary: '', options: [], unknowns: [] };
+        },
+        _spawnAgent: (planningPrompt: string) => {
+            prompts.push(planningPrompt);
+            return { promise: Promise.resolve({ text: 'Plan without research', code: 0 }) };
+        },
+    } as any);
+
+    assert.equal(researchCalls, 0);
+    assert.equal(prompts.length, 1);
+    assert.ok(!prompts[0]!.includes('## Pre-Planning Research Report'));
+    assert.ok(prompts[0]!.includes('[PABCD — P: PLANNING]'));
 });

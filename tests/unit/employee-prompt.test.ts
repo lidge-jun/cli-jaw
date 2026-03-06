@@ -107,6 +107,17 @@ test('EMP-023: String phase "2" works same as number 2 (type coercion safety)', 
     assert.ok(v2num.includes('Code Review Guide (Phase 2'), 'Number 2 must inject reviewer');
 });
 
+test('EMP-024: research role injects read-only guide and phase 1 context', () => {
+    const emp = { name: 'Research', cli: 'claude', role: 'research' };
+    clearPromptCache();
+    const v2 = getEmployeePromptV2(emp, 'research', 1);
+    assert.ok(v2.includes('You are a RESEARCH worker'), 'phase 1 worker context should be present');
+    assert.ok(
+        v2.includes('Do NOT create/modify/delete files') || v2.includes('Read-only search'),
+        'research prompt should emphasize read-only behavior',
+    );
+});
+
 // ─── Phase 17: triage AI dispatch ────────────────────
 
 test('EMP-010: needsOrchestration returns false for short messages', () => {

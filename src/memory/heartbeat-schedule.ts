@@ -11,6 +11,22 @@ export interface HeartbeatCronSchedule {
 }
 
 export type HeartbeatSchedule = HeartbeatEverySchedule | HeartbeatCronSchedule;
+export type HeartbeatScheduleValidationCode =
+    | 'invalid_kind'
+    | 'invalid_minutes'
+    | 'invalid_cron'
+    | 'invalid_timezone';
+
+export type HeartbeatScheduleValidationResult =
+    | {
+        ok: true;
+        schedule: HeartbeatSchedule;
+    }
+    | {
+        ok: false;
+        code: HeartbeatScheduleValidationCode;
+        error: string;
+    };
 
 interface CronFieldOptions {
     min: number;
@@ -98,6 +114,65 @@ export function normalizeHeartbeatSchedule(schedule: unknown): HeartbeatSchedule
     return timeZone ? { kind: 'every', minutes, timeZone } : { kind: 'every', minutes };
 }
 
+export function validateHeartbeatScheduleInput(schedule: unknown): HeartbeatScheduleValidationResult {
+    const raw = (schedule && typeof schedule === 'object') ? schedule as Record<string, unknown> : {};
+    const rawKind = raw.kind;
+    const rawTimeZone = typeof raw.timeZone === 'string' ? raw.timeZone.trim() : '';
+    const timeZone = normalizeHeartbeatTimeZone(raw.timeZone);
+    if (rawTimeZone && !timeZone) {
+        return {
+            ok: false,
+            code: 'invalid_timezone',
+            error: `invalid timeZone "${rawTimeZone}"`,
+        };
+    }
+
+    if (rawKind === 'cron') {
+        const cron = typeof raw.cron === 'string' ? raw.cron.trim().replace(/\s+/g, ' ') : '';
+        if (!cron) {
+            return {
+                ok: false,
+                code: 'invalid_cron',
+                error: 'cron expression required',
+            };
+        }
+        const cronError = validateHeartbeatCron(cron);
+        if (cronError) {
+            return {
+                ok: false,
+                code: 'invalid_cron',
+                error: cronError,
+            };
+        }
+        return {
+            ok: true,
+            schedule: timeZone ? { kind: 'cron', cron, timeZone } : { kind: 'cron', cron },
+        };
+    }
+
+    if (rawKind == null || rawKind === 'every') {
+        const minutesValue = typeof raw.minutes === 'number' ? raw.minutes : Number(raw.minutes);
+        if (!Number.isInteger(minutesValue) || minutesValue < 1) {
+            return {
+                ok: false,
+                code: 'invalid_minutes',
+                error: 'minutes must be an integer >= 1',
+            };
+        }
+        const minutes = Math.max(1, Math.floor(minutesValue));
+        return {
+            ok: true,
+            schedule: timeZone ? { kind: 'every', minutes, timeZone } : { kind: 'every', minutes },
+        };
+    }
+
+    return {
+        ok: false,
+        code: 'invalid_kind',
+        error: `invalid heartbeat schedule kind "${String(rawKind)}"`,
+    };
+}
+
 export function getHeartbeatScheduleTimeZone(schedule: unknown): string {
     return normalizeHeartbeatSchedule(schedule).timeZone || getSystemTimeZone();
 }
@@ -161,6 +236,22 @@ export function matchesHeartbeatCron(expression: string, now: Date = new Date(),
     if (domWildcard) return dowMatch;
     if (dowWildcard) return domMatch;
     return domMatch || dowMatch;
+}
+
+export function startHeartbeatCronLoop(runCurrent: () => void, scheduleNext: (tick: () => void) => void): () => void {
+    const tick = () => {
+        try {
+            runCurrent();
+        } finally {
+            scheduleNext(tick);
+        }
+    };
+    try {
+        runCurrent();
+    } finally {
+        scheduleNext(tick);
+    }
+    return tick;
 }
 
 function getZonedDateParts(now: Date, timeZone: string): ZonedDateParts {

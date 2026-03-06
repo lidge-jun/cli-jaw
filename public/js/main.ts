@@ -273,6 +273,7 @@ document.getElementById('hbJobsList')?.addEventListener('change', (e) => {
         const minutes = Math.max(1, Math.floor(Number(tgt.value) || 5));
         const timeZone = typeof current?.timeZone === 'string' ? current.timeZone : undefined;
         state.heartbeatJobs[i].schedule = { kind: 'every', minutes, ...(timeZone ? { timeZone } : {}) };
+        renderHeartbeatJobs();
         saveHeartbeatJobs();
         return;
     }
@@ -281,8 +282,9 @@ document.getElementById('hbJobsList')?.addEventListener('change', (e) => {
         const i = +(cron.dataset.hbCron || '0');
         const current = state.heartbeatJobs[i]?.schedule as Record<string, unknown> | undefined;
         const timeZone = typeof current?.timeZone === 'string' ? current.timeZone : undefined;
-        const cronExpr = tgt.value.trim().replace(/\s+/g, ' ') || '0 9 * * *';
+        const cronExpr = tgt.value.trim().replace(/\s+/g, ' ');
         state.heartbeatJobs[i].schedule = { kind: 'cron', cron: cronExpr, ...(timeZone ? { timeZone } : {}) };
+        renderHeartbeatJobs();
         saveHeartbeatJobs();
         return;
     }
@@ -303,6 +305,7 @@ document.getElementById('hbJobsList')?.addEventListener('change', (e) => {
                 ...(tgt.value.trim() ? { timeZone: tgt.value.trim() } : {}),
             };
         }
+        renderHeartbeatJobs();
         saveHeartbeatJobs();
         return;
     }

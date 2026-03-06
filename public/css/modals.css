@@ -131,6 +131,19 @@
     color: var(--text-dim);
 }
 
+.hb-schedule-meta {
+    font-size: 11px;
+    margin: -2px 0 6px;
+}
+
+.hb-help {
+    color: var(--text-dim);
+}
+
+.hb-error {
+    color: #f87171;
+}
+
 .hb-toggle {
     width: 32px;
     height: 18px;

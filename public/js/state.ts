@@ -38,6 +38,7 @@ export interface AppState {
     currentAgentDiv: HTMLElement | null;
     attachedFiles: File[];
     heartbeatJobs: HeartbeatJob[];
+    heartbeatErrors: Record<string, string>;
     cliStatusCache: CliStatusCache | null;
     cliStatusTs: number;
     isRecording: boolean;
@@ -52,6 +53,7 @@ export const state: AppState = {
     currentAgentDiv: null,
     attachedFiles: [],
     heartbeatJobs: [],
+    heartbeatErrors: {},
     cliStatusCache: null,
     cliStatusTs: 0,
     orcState: 'IDLE',

@@ -64,6 +64,7 @@ import { submitMessage } from './src/orchestrator/gateway.js';
 import { makeCommandCtx } from './src/cli/command-context.js';
 import { initTelegram, telegramBot, telegramActiveChatIds } from './src/telegram/bot.js';
 import { startHeartbeat, stopHeartbeat, watchHeartbeatFile } from './src/memory/heartbeat.js';
+import { validateHeartbeatScheduleInput } from './src/memory/heartbeat-schedule.js';
 import { fetchCopilotQuota, refreshCopilotFromKeychain } from './lib/quota-copilot.js';
 import { startTokenKeepAlive } from './lib/token-keepalive.js';
 import { CLI_REGISTRY } from './src/cli/registry.js';
@@ -790,9 +791,35 @@ app.get('/api/heartbeat', (req, res) => res.json(loadHeartbeatFile()));
 app.put('/api/heartbeat', (req, res) => {
     const data = req.body;
     if (!data || !Array.isArray(data.jobs)) return res.status(400).json({ error: 'jobs array required' });
-    saveHeartbeatFile(data);
+    const normalizedJobs = [];
+    const idPrefix = `hb_${Date.now()}`;
+    for (const [index, rawJob] of data.jobs.entries()) {
+        const job = (rawJob && typeof rawJob === 'object') ? rawJob as Record<string, unknown> : {};
+        const scheduleResult = validateHeartbeatScheduleInput(job.schedule);
+        const jobId = typeof job.id === 'string' && job.id.trim()
+            ? job.id.trim()
+            : `${idPrefix}_${index}`;
+        if (!scheduleResult.ok) {
+            return res.status(400).json({
+                error: 'invalid heartbeat schedule',
+                code: scheduleResult.code,
+                detail: scheduleResult.error,
+                index,
+                jobId,
+            });
+        }
+        normalizedJobs.push({
+            id: jobId,
+            name: typeof job.name === 'string' ? job.name : '',
+            enabled: job.enabled !== false,
+            schedule: scheduleResult.schedule,
+            prompt: typeof job.prompt === 'string' ? job.prompt : '',
+        });
+    }
+    const payload = { jobs: normalizedJobs };
+    saveHeartbeatFile(payload);
     startHeartbeat();
-    res.json(data);
+    res.json(payload);
 });
 
 // ─── Skills API (Phase 6) ────────────────────────────

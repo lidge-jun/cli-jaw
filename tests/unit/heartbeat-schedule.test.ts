@@ -7,6 +7,7 @@ import {
     getHeartbeatScheduleTimeZone,
     matchesHeartbeatCron,
     normalizeHeartbeatSchedule,
+    validateHeartbeatScheduleInput,
     validateHeartbeatCron,
 } from '../../src/memory/heartbeat-schedule.ts';
 
@@ -54,4 +55,19 @@ test('getHeartbeatMinuteSlotKey uses zoned minute, not raw UTC minute', () => {
         getHeartbeatMinuteSlotKey({ kind: 'cron', cron: '* * * * *', timeZone: 'Asia/Seoul' }, now),
         '2026-03-07 09:00 Asia/Seoul',
     );
+});
+
+test('validateHeartbeatScheduleInput returns normalized cron schedule', () => {
+    const result = validateHeartbeatScheduleInput({ kind: 'cron', cron: '0   9   * * *', timeZone: 'Asia/Seoul' });
+    assert.deepEqual(result, {
+        ok: true,
+        schedule: { kind: 'cron', cron: '0 9 * * *', timeZone: 'Asia/Seoul' },
+    });
+});
+
+test('validateHeartbeatScheduleInput rejects invalid timezone', () => {
+    const result = validateHeartbeatScheduleInput({ kind: 'cron', cron: '0 9 * * *', timeZone: 'Mars/Base' });
+    assert.equal(result.ok, false);
+    if (result.ok) assert.fail('expected validation failure');
+    assert.equal(result.code, 'invalid_timezone');
 });

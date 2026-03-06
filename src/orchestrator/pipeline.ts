@@ -17,8 +17,15 @@ import {
 import { findEmployee, runSingleAgent } from './distribute.js';
 import {
     getState, getPrefix, resetState, setState, getStatePrompt,
+    getCtx,
     type OrcStateName,
+    type OrcContext,
 } from './state-machine.js';
+import {
+    dispatchResearchTask,
+    injectResearchIntoPlanningPrompt,
+    shouldRunResearch,
+} from './research.js';
 
 // ─── Parser re-exports ─────────────────────────────
 import {
@@ -44,6 +51,24 @@ const AUTO_APPROVE_NEXT: Partial<Record<OrcStateName, OrcStateName>> = {
     B: 'C',
 };
 
+type SpawnAgentLike = typeof spawnAgent;
+
+function isPabcdActivationPrompt(text: string) {
+    const t = String(text || '').trim();
+    if (!t) return false;
+    return PABCD_ACTIVATE_PATTERNS.some(re => re.test(t));
+}
+
+function pickPlanningTask(userText: string, _prompt: string, ctx: Record<string, any> | null) {
+    const ctxPrompt = String(ctx?.originalPrompt || '').trim();
+    if (ctxPrompt && !isPabcdActivationPrompt(ctxPrompt)) return ctxPrompt;
+
+    const userPrompt = String(userText || '').trim();
+    if (userPrompt && !isPabcdActivationPrompt(userPrompt)) return userPrompt;
+
+    return '';
+}
+
 function shouldAutoActivatePABCD(prompt: string, meta: Record<string, any>) {
     const t = String(prompt || '').trim();
     if (!t) return false;
@@ -61,6 +86,12 @@ export async function orchestrate(
     const origin = meta.origin || 'web';
     const chatId = meta.chatId;
     const userText = String(prompt || '').trim();
+    const runSpawnAgent: SpawnAgentLike = typeof meta._spawnAgent === 'function'
+        ? meta._spawnAgent
+        : spawnAgent;
+    const runDispatchResearch = typeof meta._dispatchResearchTask === 'function'
+        ? meta._dispatchResearchTask
+        : dispatchResearchTask;
     let state = getState();
     let skipPrefix = !!meta._skipPrefix;
 
@@ -99,6 +130,43 @@ export async function orchestrate(
 
     clearPromptCache();
 
+    let ctx = getCtx();
+    const planningTask = pickPlanningTask(userText, prompt, ctx);
+    const isInitialPlanningTurn = state === 'P'
+        && !meta._workerResult
+        && !ctx?.plan
+        && !!planningTask;
+
+    if (isInitialPlanningTurn) {
+        prompt = `${getStatePrompt('P')}\n\nUser request:\n${planningTask}`;
+        skipPrefix = true;
+
+        const nextCtx: OrcContext = {
+            ...(ctx || {
+                originalPrompt: '',
+                plan: null,
+                workerResults: [],
+                origin,
+                chatId,
+            }),
+            originalPrompt: planningTask,
+            origin,
+            chatId,
+        };
+
+        if (shouldRunResearch(planningTask, meta) && !ctx?.researchReport) {
+            const report = await runDispatchResearch(planningTask, { ...meta, origin, _researchInjected: true });
+            if (report.rawText) {
+                prompt = injectResearchIntoPlanningPrompt(prompt, report);
+            }
+            nextCtx.researchNeeded = true;
+            nextCtx.researchReport = report.rawText || null;
+        }
+
+        setState('P', nextCtx);
+        ctx = nextCtx;
+    }
+
     // prefix injection
     const source = meta._workerResult ? 'worker' : 'user';
     const prefix = getPrefix(state, source as 'user' | 'worker');
@@ -108,11 +176,21 @@ export async function orchestrate(
 
     // spawn/resume agent
     console.log(`[jaw:pabcd] state=${state}, spawning/resuming agent`);
-    const { promise } = spawnAgent(prompt, {
+    const { promise } = runSpawnAgent(prompt, {
         origin,
         _skipInsert: !!meta._skipInsert,
     });
     const result = await promise as Record<string, any>;
+
+    if (state === 'P' && !meta._workerResult) {
+        const savedCtx = getCtx();
+        if (savedCtx) {
+            setState('P', {
+                ...savedCtx,
+                plan: stripSubtaskJSON(result.text) || result.text || savedCtx.plan,
+            });
+        }
+    }
 
     // Worker JSON detected → spawn workers → feed results back
     const workerTasks = parseSubtasks(result.text);

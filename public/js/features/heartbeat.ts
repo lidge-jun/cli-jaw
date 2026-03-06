@@ -4,6 +4,10 @@ import type { HeartbeatJob, HeartbeatSchedule } from '../state.js';
 import { t } from './i18n.js';
 import { api, apiJson } from '../api.js';
 import { escapeHtml } from '../render.js';
+import {
+    validateHeartbeatScheduleInput,
+    type HeartbeatScheduleValidationCode,
+} from '../../../src/memory/heartbeat-schedule.js';
 
 interface HeartbeatData {
     jobs: HeartbeatJob[];
@@ -12,6 +16,7 @@ interface HeartbeatData {
 export async function openHeartbeatModal(): Promise<void> {
     const data = await api<HeartbeatData>('/api/heartbeat');
     state.heartbeatJobs = (data?.jobs || []).map(normalizeHeartbeatJob);
+    state.heartbeatErrors = collectHeartbeatErrors(state.heartbeatJobs as HeartbeatJob[]);
     renderHeartbeatJobs();
     document.getElementById('heartbeatModal')?.classList.add('open');
 }
@@ -26,12 +31,16 @@ export function renderHeartbeatJobs(): void {
     if (!container) return;
     const jobs = (state.heartbeatJobs as HeartbeatJob[]).map(normalizeHeartbeatJob);
     state.heartbeatJobs = jobs;
+    state.heartbeatErrors = collectHeartbeatErrors(jobs);
     if (jobs.length === 0) {
         container.innerHTML = `<p style="color:var(--text-dim);font-size:12px;text-align:center">${t('hb.empty')}</p>`;
     } else {
         container.innerHTML = jobs.map((job, i) => {
             const schedule = normalizeSchedule(job.schedule);
             const isCron = schedule.kind === 'cron';
+            const error = state.heartbeatErrors[job.id];
+            const scheduleMeta = error || getHeartbeatScheduleHint(schedule);
+            const scheduleMetaClass = error ? 'hb-schedule-meta hb-error' : 'hb-schedule-meta hb-help';
             const scheduleInput = isCron
                 ? `<input type="text" value="${escapeHtml(schedule.cron)}" placeholder="${escapeHtml(t('hb.cronPlaceholder'))}"
                     data-hb-cron="${i}">`
@@ -58,6 +67,7 @@ export function renderHeartbeatJobs(): void {
                         <input type="text" value="${escapeHtml(schedule.timeZone || '')}" placeholder="${escapeHtml(timeZonePlaceholder())}"
                             data-hb-timezone="${i}">
                     </div>
+                    <p class="${scheduleMetaClass}">${escapeHtml(scheduleMeta)}</p>
                     <textarea class="hb-prompt" rows="2" placeholder="${escapeHtml(t('hb.prompt'))}"
                         data-hb-prompt="${i}">${escapeHtml(String(job.prompt || ''))}</textarea>
                 </div>
@@ -99,7 +109,17 @@ export function toggleHeartbeatJob(i: number): void {
 export async function saveHeartbeatJobs(): Promise<void> {
     const jobs = (state.heartbeatJobs as HeartbeatJob[]).map(normalizeHeartbeatJob);
     state.heartbeatJobs = jobs;
-    await apiJson('/api/heartbeat', 'PUT', { jobs });
+    state.heartbeatErrors = collectHeartbeatErrors(jobs);
+    if (Object.keys(state.heartbeatErrors).length > 0) {
+        renderHeartbeatJobs();
+        return;
+    }
+    const data = await apiJson<HeartbeatData>('/api/heartbeat', 'PUT', { jobs });
+    if (data?.jobs) {
+        state.heartbeatJobs = data.jobs.map(normalizeHeartbeatJob);
+        state.heartbeatErrors = collectHeartbeatErrors(state.heartbeatJobs as HeartbeatJob[]);
+        renderHeartbeatJobs();
+    }
 }
 
 export async function initHeartbeatBadge(): Promise<void> {
@@ -124,7 +144,7 @@ function normalizeHeartbeatJob(job: HeartbeatJob): HeartbeatJob {
 function normalizeSchedule(schedule: HeartbeatJob['schedule']): HeartbeatSchedule {
     const timeZone = normalizeTimeZone(schedule?.timeZone);
     if (schedule?.kind === 'cron') {
-        const cron = typeof schedule.cron === 'string' && schedule.cron.trim()
+        const cron = typeof schedule.cron === 'string'
             ? schedule.cron.trim().replace(/\s+/g, ' ')
             : '0 9 * * *';
         return timeZone ? { kind: 'cron', cron, timeZone } : { kind: 'cron', cron };
@@ -157,4 +177,40 @@ function detectBrowserTimeZone(): string | undefined {
 function timeZonePlaceholder(): string {
     const browserTimeZone = detectBrowserTimeZone();
     return browserTimeZone ? `${t('hb.timezoneAuto')} ${browserTimeZone}` : t('hb.timezoneAuto');
+}
+
+function collectHeartbeatErrors(jobs: HeartbeatJob[]): Record<string, string> {
+    const errors: Record<string, string> = {};
+    for (const job of jobs) {
+        const error = validateHeartbeatDraft(job);
+        if (error) errors[job.id] = error;
+    }
+    return errors;
+}
+
+function validateHeartbeatDraft(job: HeartbeatJob): string | null {
+    const result = validateHeartbeatScheduleInput(job.schedule);
+    if (result.ok) return null;
+    return formatHeartbeatValidationError(result.code, result.error);
+}
+
+function formatHeartbeatValidationError(code: HeartbeatScheduleValidationCode, fallback: string): string {
+    switch (code) {
+        case 'invalid_cron':
+            return t('hb.invalidCron');
+        case 'invalid_timezone':
+            return t('hb.invalidTimeZone');
+        case 'invalid_minutes':
+            return t('hb.invalidMinutes');
+        default:
+            return fallback || t('hb.invalidSchedule');
+    }
+}
+
+function getHeartbeatScheduleHint(schedule: HeartbeatSchedule): string {
+    const timeZone = schedule.timeZone || detectBrowserTimeZone() || 'Asia/Seoul';
+    if (schedule.kind === 'cron') {
+        return t('hb.scheduleHintCron', { cron: '0 9 * * *', timeZone });
+    }
+    return t('hb.scheduleHintEvery', { minutes: schedule.minutes, timeZone });
 }

@@ -12,6 +12,7 @@ import {
     getHeartbeatScheduleTimeZone,
     matchesHeartbeatCron,
     normalizeHeartbeatSchedule,
+    startHeartbeatCronLoop,
     validateHeartbeatCron,
 } from './heartbeat-schedule.js';
 
@@ -114,15 +115,12 @@ async function drainPending() {
 }
 
 function scheduleCronJob(job: Record<string, any>) {
-    const tick = () => {
+    const armNextTick = (tick: () => void) => {
         const timer = setTimeout(tick, msUntilNextMinute());
         timer.unref?.();
         heartbeatTimers.set(job.id, timer);
-        maybeRunCronJob(job);
     };
-    const timer = setTimeout(tick, msUntilNextMinute());
-    timer.unref?.();
-    heartbeatTimers.set(job.id, timer);
+    startHeartbeatCronLoop(() => maybeRunCronJob(job), armNextTick);
 }
 
 function maybeRunCronJob(job: Record<string, any>) {
