@@ -43,3 +43,28 @@ test('unexpected exit check is before killReason consumption', () => {
     assert.ok(unexpectedIdx < consumeIdx,
         'unexpected exit check must come before killReason is consumed (set to null)');
 });
+
+// ─── stderr_activity event ───────────────────────────
+
+test('ACP client emits stderr_activity event', () => {
+    assert.match(acpSrc, /emit\(['"]stderr_activity['"]/,
+        'acp-client must emit stderr_activity event from stderr handler');
+});
+
+test('stderr_activity preserves DEBUG logging', () => {
+    const stderrBlock = acpSrc.slice(acpSrc.indexOf('stderr'));
+    assert.match(stderrBlock, /process\.env\.DEBUG/,
+        'stderr handler must preserve DEBUG-gated console.error');
+});
+
+test('spawn.ts accumulates stderrBuf from stderr_activity', () => {
+    assert.match(spawnSrc, /stderr_activity/,
+        'spawn.ts must listen for stderr_activity event');
+    assert.match(spawnSrc, /stderrBuf/,
+        'spawn.ts must accumulate stderr into ctx.stderrBuf');
+});
+
+test('heartbeat is gated via shouldEmitHeartbeat helper', () => {
+    assert.match(spawnSrc, /shouldEmitHeartbeat/,
+        'spawn.ts must use shouldEmitHeartbeat for conditional heartbeat');
+});

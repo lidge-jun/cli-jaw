@@ -246,6 +246,22 @@ export { buildMediaPrompt };
 import { stripSubtaskJSON } from '../orchestrator/pipeline.js';
 import { AcpClient } from '../cli/acp-client.js';
 
+// ─── ACP Heartbeat Helper ────────────────────────────
+// Pure function for conditional heartbeat gating.
+// "visible" = WebUI + Telegram common baseline. 💭 is WebUI-only
+// (bot.ts:337 hides it), so it's NOT counted as visible.
+const DEFAULT_HEARTBEAT_GATE_MS = 20_000;
+
+export function shouldEmitHeartbeat(
+    lastVisibleTs: number,
+    heartbeatSent: boolean,
+    gateMs: number = DEFAULT_HEARTBEAT_GATE_MS,
+    now: number = Date.now(),
+): boolean {
+    if (heartbeatSent) return false;
+    return (now - lastVisibleTs) > gateMs;
+}
+
 interface SpawnOpts {
     internal?: boolean;
     _isFallback?: boolean;
@@ -425,6 +441,9 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
 
         // session/update → broadcast mapping
         let replayMode = false;  // Phase 17.2: suppress events during loadSession replay
+        let lastVisibleBroadcastTs = Date.now();
+        let heartbeatSent = false;
+
         acp.on('session/update', (params) => {
             if (replayMode) return;  // 리플레이 중 모든 이벤트 무시
             const parsed = extractFromAcpUpdate(params);
@@ -443,11 +462,34 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                     ctx.seenToolKeys.add(key);
                     ctx.toolLog.push(parsed.tool);
                     broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool });
+                    // Reset heartbeat gate on actually visible broadcast (not 💭)
+                    lastVisibleBroadcastTs = Date.now();
+                    heartbeatSent = false;
                 }
             }
             if (parsed.text) {
                 flushThinking();
                 ctx.fullText += parsed.text;
+                // text-only updates are local accumulation, not visible to user — no gate reset
+            }
+        });
+
+        // stderr_activity → stderrBuf accumulation + conditional heartbeat
+        acp.on('stderr_activity', (text: string) => {
+            // Accumulate stderr for diagnostics (capped)
+            if (ctx.stderrBuf.length < 4000) {
+                ctx.stderrBuf += text + '\n';
+            }
+            // Conditional heartbeat: visible progress absent for N seconds
+            if (shouldEmitHeartbeat(lastVisibleBroadcastTs, heartbeatSent)) {
+                heartbeatSent = true;
+                const elapsed = Math.round((Date.now() - lastVisibleBroadcastTs) / 1000);
+                console.log(`  ⏳ agent active (no visible event for ${elapsed}s)`);
+                broadcast('agent_tool', {
+                    agentId: agentLabel,
+                    icon: '⏳',
+                    label: 'working... (no visible progress)',
+                });
             }
         });
 

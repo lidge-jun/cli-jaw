@@ -60,12 +60,13 @@ export class AcpClient extends EventEmitter {
         const rl = createInterface({ input: this.proc.stdout });
         rl.on('line', (line) => this._handleLine(line));
 
-        // Capture stderr for debugging + heartbeat
+        // Capture stderr for debugging + heartbeat + visibility
         this.proc.stderr.on('data', (chunk: any) => {
             this._activityPing?.();  // stderr activity = agent is alive
             const text = chunk.toString().trim();
-            if (text && process.env.DEBUG) {
-                console.error(`[acp:stderr] ${text}`);
+            if (text) {
+                if (process.env.DEBUG) console.error(`[acp:stderr] ${text}`);
+                this.emit('stderr_activity', text);
             }
         });
 
