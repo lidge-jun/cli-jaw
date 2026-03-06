@@ -182,6 +182,23 @@ function setCodexFast(on: boolean) {
 }
 document.getElementById('codexFastOn')?.addEventListener('click', () => setCodexFast(true));
 document.getElementById('codexFastOff')?.addEventListener('click', () => setCodexFast(false));
+
+// Codex 1M context window toggle
+function setCodexCtx(on: boolean) {
+    const onBtn = document.getElementById('codexCtxOn');
+    const offBtn = document.getElementById('codexCtxOff');
+    const valDiv = document.getElementById('codexCtxValues');
+    if (onBtn && offBtn) {
+        onBtn.classList.toggle('active', on);
+        offBtn.classList.toggle('active', !on);
+    }
+    if (valDiv) valDiv.style.display = on ? '' : 'none';
+    savePerCli();
+}
+document.getElementById('codexCtxOn')?.addEventListener('click', () => setCodexCtx(true));
+document.getElementById('codexCtxOff')?.addEventListener('click', () => setCodexCtx(false));
+document.getElementById('codexCtxWindow')?.addEventListener('change', savePerCli);
+document.getElementById('codexCtxCompact')?.addEventListener('change', savePerCli);
 // Per-CLI model selects
 function bindPerCliControlEvents(): void {
     for (const cli of getCliKeys()) {

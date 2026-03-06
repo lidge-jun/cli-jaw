@@ -6,7 +6,7 @@ import { syncStoredLocale } from '../locale.js';
 import { t } from './i18n.js';
 import { api, apiJson, apiFire } from '../api.js';
 
-interface PerCliConfig { model?: string; effort?: string; fastMode?: boolean; }
+interface PerCliConfig { model?: string; effort?: string; fastMode?: boolean; contextWindow?: boolean; contextWindowSize?: number; contextCompactLimit?: number; }
 interface TelegramConfig { enabled?: boolean; token?: string; allowedChatIds?: number[]; forwardAll?: boolean; }
 interface QuotaWindow { label: string; percent: number; resetsAt?: string | number | null; }
 interface QuotaEntry {
@@ -170,6 +170,18 @@ export async function loadSettings(): Promise<void> {
             if (cli === 'codex' && cfg.fastMode !== undefined) {
                 document.getElementById('codexFastOn')?.classList.toggle('active', cfg.fastMode);
                 document.getElementById('codexFastOff')?.classList.toggle('active', !cfg.fastMode);
+            }
+            // Restore Codex context window toggle + values
+            if (cli === 'codex') {
+                const ctxOn = !!cfg.contextWindow;
+                document.getElementById('codexCtxOn')?.classList.toggle('active', ctxOn);
+                document.getElementById('codexCtxOff')?.classList.toggle('active', !ctxOn);
+                const valDiv = document.getElementById('codexCtxValues');
+                if (valDiv) valDiv.style.display = ctxOn ? '' : 'none';
+                const winInput = document.getElementById('codexCtxWindow') as HTMLInputElement | null;
+                const compInput = document.getElementById('codexCtxCompact') as HTMLInputElement | null;
+                if (winInput && cfg.contextWindowSize) winInput.value = String(cfg.contextWindowSize);
+                if (compInput && cfg.contextCompactLimit) compInput.value = String(cfg.contextCompactLimit);
             }
         }
     }
@@ -377,6 +389,13 @@ export async function savePerCli(): Promise<void> {
         if (cli === 'codex') {
             const onBtn = document.getElementById('codexFastOn');
             entry.fastMode = onBtn?.classList.contains('active') ?? false;
+            // Context window toggle + values
+            const ctxOn = document.getElementById('codexCtxOn');
+            entry.contextWindow = ctxOn?.classList.contains('active') ?? false;
+            const winInput = document.getElementById('codexCtxWindow') as HTMLInputElement | null;
+            const compInput = document.getElementById('codexCtxCompact') as HTMLInputElement | null;
+            entry.contextWindowSize = parseInt(winInput?.value || '1000000', 10);
+            entry.contextCompactLimit = parseInt(compInput?.value || '900000', 10);
         }
         perCli[cli] = entry;
     }

@@ -306,6 +306,25 @@
                         <button id="codexFastOn" class="perm-btn" data-i18n="btn.on">켬</button>
                     </div>
                 </div>
+                <div class="settings-row sub-row">
+                    <label>🧠 1M Context</label>
+                    <div>
+                        <button id="codexCtxOff" class="perm-btn active">Off</button>
+                        <button id="codexCtxOn" class="perm-btn">On</button>
+                    </div>
+                </div>
+                <div id="codexCtxValues" style="display:none">
+                    <div class="settings-row sub-row" style="margin-left:24px">
+                        <label style="min-width:120px;font-size:11px">Context Window</label>
+                        <input type="number" id="codexCtxWindow" value="1000000" min="272000" max="1050000" step="1000"
+                            style="width:100px;font-size:11px;padding:3px 6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                    </div>
+                    <div class="settings-row sub-row" style="margin-left:24px">
+                        <label style="min-width:120px;font-size:11px">Auto Compact Limit</label>
+                        <input type="number" id="codexCtxCompact" value="900000" min="100000" max="1000000" step="1000"
+                            style="width:100px;font-size:11px;padding:3px 6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                    </div>
+                </div>
             </div>
 
             <div class="settings-group">
@@ -402,7 +421,8 @@
                         <option value="gemini-2.5-pro">gemini-2.5-pro (accurate)</option>
                         <option value="__custom__">✏️ 직접 입력...</option>
                     </select>
-                    <input type="text" id="sttGeminiModelCustom" placeholder="모델명 입력" style="display:none; margin-top:4px;" />
+                    <input type="text" id="sttGeminiModelCustom" placeholder="모델명 입력"
+                        style="display:none; margin-top:4px;" />
                 </div>
                 <!-- OpenAI Compatible -->
                 <div class="settings-row sub-row stt-openai" style="display:none">
@@ -423,7 +443,8 @@
                 <!-- Vertex AI -->
                 <div class="settings-row sub-row stt-vertex" style="display:none">
                     <label data-i18n="stt.vertexConfig">Vertex AI Config (JSON)</label>
-                    <textarea id="sttVertexJson" rows="4" placeholder='{"project_id":"...","location":"us-central1","credentials":{...}}'
+                    <textarea id="sttVertexJson" rows="4"
+                        placeholder='{"project_id":"...","location":"us-central1","credentials":{...}}'
                         style="width:100%;font-size:11px;padding:4px;font-family:var(--font-mono)"></textarea>
                 </div>
                 <div class="settings-row sub-row stt-whisper">
@@ -572,7 +593,8 @@
             </div>
             <!-- View 2: Editor (hidden by default) -->
             <div id="templateEditorView" style="display:none;flex-direction:column">
-                <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border)">
+                <div
+                    style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border)">
                     <button id="templateBack"
                         style="background:none;border:1px solid var(--border);color:var(--text-dim);padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px">←
                         뒤로</button>
@@ -584,10 +606,9 @@
                 <textarea class="modal-textarea" id="templateEditor" readonly
                     style="flex:1;min-height:350px;font-family:var(--font-mono);font-size:12px"></textarea>
                 <div class="modal-footer">
-                    <span id="templateVars"
-                        style="color:var(--text-dim);font-size:10px;margin-right:auto"></span>
-                    <button class="btn-save" data-action="saveTemplate" style="display:none"
-                        id="templateSaveBtn">💾 저장</button>
+                    <span id="templateVars" style="color:var(--text-dim);font-size:10px;margin-right:auto"></span>
+                    <button class="btn-save" data-action="saveTemplate" style="display:none" id="templateSaveBtn">💾
+                        저장</button>
                 </div>
             </div>
         </div>

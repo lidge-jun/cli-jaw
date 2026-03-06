@@ -26,6 +26,7 @@ import { assertSkillId, assertFilename, safeResolveUnder } from './src/security/
 import { decodeFilenameSafe } from './src/security/decode.js';
 import { ok, fail } from './src/http/response.js';
 import { mergeSettingsPatch } from './src/core/settings-merge.js';
+import { syncCodexContextWindow, readCodexContextWindow } from './src/core/codex-config.js';
 import { setWss, broadcast } from './src/core/bus.js';
 import * as browser from './src/browser/index.js';
 import * as memory from './src/memory/memory.js';
@@ -263,6 +264,17 @@ function applySettingsPatch(rawPatch: Record<string, any> = {}, { restartTelegra
     const merged = mergeSettingsPatch(settings, rawPatch);
     replaceSettings(merged);
     saveSettings(settings);
+
+    // Sync Codex config.toml when contextWindow changes
+    if (rawPatch.perCli?.codex && 'contextWindow' in rawPatch.perCli.codex) {
+        const codexCfg = settings.perCli?.codex || {};
+        syncCodexContextWindow({
+            enabled: !!codexCfg.contextWindow,
+            contextWindow: codexCfg.contextWindowSize || 1000000,
+            compactLimit: codexCfg.contextCompactLimit || 900000,
+        });
+    }
+
     resetFallbackState();
     const session = getSession() as Record<string, any>;
     const ao = settings.activeOverrides?.[settings.cli] || {};
@@ -449,6 +461,11 @@ app.put('/api/settings', (req, res) => {
     ok(res, safe);
 });
 
+// Codex context window config
+app.get('/api/codex-context', (_, res) => {
+    res.json(readCodexContextWindow());
+});
+
 // Prompts (A-2)
 app.get('/api/prompt', (_, res) => {
     const a2 = fs.existsSync(A2_PATH) ? fs.readFileSync(A2_PATH, 'utf8') : '';
@@ -472,10 +489,14 @@ app.get('/api/prompt-templates', (_, res) => {
         content: fs.readFileSync(join(dir, f), 'utf8'),
     }));
     const tree = [
-        { id: 'system', label: 'getSystemPrompt()', emoji: '🟢',
-          children: ['a1-system','a2-default','orchestration','skills','heartbeat-jobs','heartbeat-default','vision-click'] },
-        { id: 'employee', label: 'getEmployeePrompt()', emoji: '🟡',
-          children: ['employee','worker-context'] },
+        {
+            id: 'system', label: 'getSystemPrompt()', emoji: '🟢',
+            children: ['a1-system', 'a2-default', 'orchestration', 'skills', 'heartbeat-jobs', 'heartbeat-default', 'vision-click']
+        },
+        {
+            id: 'employee', label: 'getEmployeePrompt()', emoji: '🟡',
+            children: ['employee', 'worker-context']
+        },
     ];
     res.json({ templates, tree });
 });
