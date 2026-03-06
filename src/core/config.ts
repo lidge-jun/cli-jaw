@@ -136,6 +136,7 @@ function createDefaultSettings() {
             engine: 'auto',
             geminiApiKey: '',
             geminiModel: 'gemini-2.5-flash-lite',
+            promptPath: 'prompts/stt-system.md',
             whisperModel: 'mlx-community/whisper-large-v3-turbo',
             openaiBaseUrl: '',
             openaiApiKey: '',

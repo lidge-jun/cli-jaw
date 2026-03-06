@@ -17,6 +17,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { t, loadLocales, getPromptLocale, getAvailableLocales, normalizeLocale } from '../../src/core/i18n.ts';
 import { COMMANDS } from '../../src/cli/commands.ts';
+import { ROLE_PRESETS } from '../../public/js/constants.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const LOCALES_DIR = join(__dirname, '../../public/locales');
@@ -112,6 +113,24 @@ test('COMMANDS: every command still has desc string (fallback)', () => {
         assert.ok(typeof cmd.desc === 'string' && cmd.desc.length > 0,
             `Command ${cmd.name} missing desc fallback`);
     }
+});
+
+test('ROLE_PRESETS: every labelKey has matching locale entry', () => {
+    const koJson = JSON.parse(fs.readFileSync(join(LOCALES_DIR, 'ko.json'), 'utf8'));
+    const enJson = JSON.parse(fs.readFileSync(join(LOCALES_DIR, 'en.json'), 'utf8'));
+    for (const preset of ROLE_PRESETS) {
+        assert.ok(koJson[preset.labelKey], `Missing ko locale for ${preset.labelKey}`);
+        assert.ok(enJson[preset.labelKey], `Missing en locale for ${preset.labelKey}`);
+    }
+});
+
+test('ROLE_PRESETS: research preset is available', () => {
+    const research = ROLE_PRESETS.find(p => p.value === 'research');
+    assert.ok(research, 'research preset should exist');
+    assert.equal(
+        research?.prompt,
+        'Search, codebase exploration, uncertainty reduction, read-only reports',
+    );
 });
 
 // ─── getPromptLocale ─────────────────────────────────

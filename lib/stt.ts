@@ -6,8 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import https from 'node:https';
-import { fileURLToPath } from 'node:url';
-import { settings } from '../src/core/config.js';
+import { settings, getProjectDir } from '../src/core/config.js';
 
 export interface SttResult {
     text: string;
@@ -15,12 +14,15 @@ export interface SttResult {
     elapsed: number;
 }
 
+const DEFAULT_STT_PROMPT_PATH = 'prompts/stt-system.md';
+
 function getSttSettings() {
     const stt = settings.stt || {};
     return {
         engine: stt.engine || 'auto',
         geminiApiKey: stt.geminiApiKey || process.env.GEMINI_API_KEY || '',
         geminiModel: stt.geminiModel || process.env.GEMINI_STT_MODEL || 'gemini-2.5-flash-lite',
+        promptPath: stt.promptPath || DEFAULT_STT_PROMPT_PATH,
         whisperModel: stt.whisperModel || 'mlx-community/whisper-large-v3-turbo',
         openaiBaseUrl: stt.openaiBaseUrl || '',
         openaiApiKey: stt.openaiApiKey || '',
@@ -29,24 +31,50 @@ function getSttSettings() {
     };
 }
 
+export function resolveSttPromptPath(promptPath: string | undefined, projectDir: string = getProjectDir()): string | null {
+    const trimmed = typeof promptPath === 'string' ? promptPath.trim() : '';
+    const candidates = [trimmed || DEFAULT_STT_PROMPT_PATH];
+    if (candidates[0] !== DEFAULT_STT_PROMPT_PATH) candidates.push(DEFAULT_STT_PROMPT_PATH);
+
+    for (const candidate of candidates) {
+        const absolute = path.isAbsolute(candidate)
+            ? candidate
+            : path.resolve(projectDir, candidate);
+        if (fs.existsSync(absolute)) return absolute;
+    }
+    return null;
+}
+
+export function loadSttPrompt(promptPath: string | undefined, projectDir: string = getProjectDir()): string {
+    const resolved = resolveSttPromptPath(promptPath, projectDir);
+    if (!resolved) {
+        if (promptPath) console.warn(`[stt] prompt file not found: ${promptPath} — continuing without STT prompt`);
+        return '';
+    }
+    try {
+        return fs.readFileSync(resolved, 'utf8').trim();
+    } catch (err) {
+        console.warn(`[stt] failed to read prompt: ${(err as Error).message}`);
+        return '';
+    }
+}
+
 /**
  * Gemini STT via REST API (no SDK dependency).
  * POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent
  */
 export async function sttGemini(audioPath: string, mimeType = 'audio/ogg'): Promise<SttResult> {
-    const { geminiApiKey: apiKey, geminiModel: model } = getSttSettings();
+    const { geminiApiKey: apiKey, geminiModel: model, promptPath } = getSttSettings();
     if (!apiKey) throw new Error('GEMINI_API_KEY not set (settings.json or env)');
 
     const audioB64 = fs.readFileSync(audioPath).toString('base64');
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-
-    const __sttDir = path.dirname(fileURLToPath(import.meta.url));
-    const sttPrompt = fs.readFileSync(path.join(__sttDir, '..', 'prompts', 'stt-system.md'), 'utf8').trim();
+    const sttPrompt = loadSttPrompt(promptPath);
+    const parts = [];
+    if (sttPrompt) parts.push({ text: sttPrompt });
+    parts.push({ inline_data: { mime_type: mimeType, data: audioB64 } });
     const body = JSON.stringify({
-        contents: [{ parts: [
-            { text: sttPrompt },
-            { inline_data: { mime_type: mimeType, data: audioB64 } },
-        ] }],
+        contents: [{ parts }],
     });
 
     const t0 = Date.now();
