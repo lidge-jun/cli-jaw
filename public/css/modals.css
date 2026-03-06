@@ -99,6 +99,38 @@
     width: 50px;
 }
 
+.hb-job-schedule {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+}
+
+.hb-job-schedule select,
+.hb-job-schedule input[type=number],
+.hb-job-schedule input[type=text] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+.hb-job-schedule input[type=number] {
+    width: 72px;
+}
+
+.hb-job-schedule input[type=text] {
+    flex: 1 1 120px;
+}
+
+.hb-chip {
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
 .hb-toggle {
     width: 32px;
     height: 18px;

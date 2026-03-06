@@ -31,7 +31,7 @@ import {
 } from './features/employees.js';
 import {
     openHeartbeatModal, closeHeartbeatModal, addHeartbeatJob,
-    removeHeartbeatJob, toggleHeartbeatJob, saveHeartbeatJobs,
+    removeHeartbeatJob, renderHeartbeatJobs, toggleHeartbeatJob, saveHeartbeatJobs,
     initHeartbeatBadge
 } from './features/heartbeat.js';
 import {
@@ -251,11 +251,61 @@ document.getElementById('hbJobsList')?.addEventListener('click', (e) => {
     if (remove) { removeHeartbeatJob(+(remove.dataset.hbRemove || '0')); return; }
 });
 document.getElementById('hbJobsList')?.addEventListener('change', (e) => {
-    const tgt = e.target as HTMLInputElement;
+    const tgt = e.target as HTMLInputElement | HTMLSelectElement;
     const name = tgt.closest('[data-hb-name]') as HTMLElement | null;
     if (name) { state.heartbeatJobs[+(name.dataset.hbName || '0')].name = tgt.value; saveHeartbeatJobs(); return; }
+    const kind = tgt.closest('[data-hb-kind]') as HTMLElement | null;
+    if (kind) {
+        const i = +(kind.dataset.hbKind || '0');
+        const current = state.heartbeatJobs[i]?.schedule as Record<string, unknown> | undefined;
+        const timeZone = typeof current?.timeZone === 'string' ? current.timeZone : undefined;
+        state.heartbeatJobs[i].schedule = tgt.value === 'cron'
+            ? { kind: 'cron', cron: typeof current?.cron === 'string' && current.cron.trim() ? current.cron : '0 9 * * *', ...(timeZone ? { timeZone } : {}) }
+            : { kind: 'every', minutes: typeof current?.minutes === 'number' && current.minutes > 0 ? Math.floor(current.minutes) : 5, ...(timeZone ? { timeZone } : {}) };
+        renderHeartbeatJobs();
+        saveHeartbeatJobs();
+        return;
+    }
     const min = tgt.closest('[data-hb-minutes]') as HTMLElement | null;
-    if (min) { state.heartbeatJobs[+(min.dataset.hbMinutes || '0')].schedule = { kind: 'every', minutes: +tgt.value }; saveHeartbeatJobs(); return; }
+    if (min) {
+        const i = +(min.dataset.hbMinutes || '0');
+        const current = state.heartbeatJobs[i]?.schedule as Record<string, unknown> | undefined;
+        const minutes = Math.max(1, Math.floor(Number(tgt.value) || 5));
+        const timeZone = typeof current?.timeZone === 'string' ? current.timeZone : undefined;
+        state.heartbeatJobs[i].schedule = { kind: 'every', minutes, ...(timeZone ? { timeZone } : {}) };
+        saveHeartbeatJobs();
+        return;
+    }
+    const cron = tgt.closest('[data-hb-cron]') as HTMLElement | null;
+    if (cron) {
+        const i = +(cron.dataset.hbCron || '0');
+        const current = state.heartbeatJobs[i]?.schedule as Record<string, unknown> | undefined;
+        const timeZone = typeof current?.timeZone === 'string' ? current.timeZone : undefined;
+        const cronExpr = tgt.value.trim().replace(/\s+/g, ' ') || '0 9 * * *';
+        state.heartbeatJobs[i].schedule = { kind: 'cron', cron: cronExpr, ...(timeZone ? { timeZone } : {}) };
+        saveHeartbeatJobs();
+        return;
+    }
+    const timeZone = tgt.closest('[data-hb-timezone]') as HTMLElement | null;
+    if (timeZone) {
+        const i = +(timeZone.dataset.hbTimezone || '0');
+        const current = state.heartbeatJobs[i]?.schedule as Record<string, unknown> | undefined;
+        if (current?.kind === 'cron') {
+            state.heartbeatJobs[i].schedule = {
+                kind: 'cron',
+                cron: typeof current.cron === 'string' && current.cron.trim() ? current.cron : '0 9 * * *',
+                ...(tgt.value.trim() ? { timeZone: tgt.value.trim() } : {}),
+            };
+        } else {
+            state.heartbeatJobs[i].schedule = {
+                kind: 'every',
+                minutes: typeof current?.minutes === 'number' && current.minutes > 0 ? Math.floor(current.minutes) : 5,
+                ...(tgt.value.trim() ? { timeZone: tgt.value.trim() } : {}),
+            };
+        }
+        saveHeartbeatJobs();
+        return;
+    }
     const prompt = tgt.closest('[data-hb-prompt]') as HTMLElement | null;
     if (prompt) { state.heartbeatJobs[+(prompt.dataset.hbPrompt || '0')].prompt = tgt.value; saveHeartbeatJobs(); return; }
 });

@@ -5,6 +5,7 @@ import { join } from 'path';
 import { settings, JAW_HOME, PROMPTS_DIR, SKILLS_DIR, SKILLS_REF_DIR, loadHeartbeatFile, deriveCdpPort } from '../core/config.js';
 import { getSession, getEmployees } from '../core/db.js';
 import { memoryFlushCounter, flushCycleCount } from '../agent/spawn.js';
+import { describeHeartbeatSchedule, normalizeHeartbeatSchedule } from '../memory/heartbeat-schedule.js';
 import { loadAndRender, loadTemplate, renderTemplate, parseWorkerContexts, clearTemplateCache } from './template-loader.js';
 
 const promptCache = new Map();
@@ -256,8 +257,8 @@ export function getSystemPrompt() {
             const activeJobs = hbData.jobs.filter((j: any) => j.enabled);
             const jobList = hbData.jobs.map((job: any) => {
                 const status = job.enabled ? '✅' : '⏸️';
-                const mins = job.schedule?.minutes || '?';
-                return `- ${status} "${job.name}" — every ${mins}min: ${(job.prompt || '').slice(0, 50)}`;
+                const schedule = normalizeHeartbeatSchedule(job.schedule);
+                return `- ${status} "${job.name}" — ${describeHeartbeatSchedule(schedule)}: ${(job.prompt || '').slice(0, 50)}`;
             }).join('\n');
             const vars = getTemplateVars();
             vars.JOB_LIST = jobList;

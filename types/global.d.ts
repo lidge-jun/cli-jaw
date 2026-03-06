@@ -29,10 +29,16 @@ export interface HeartbeatJob {
   id: string;
   name: string;
   enabled: boolean;
-  schedule: {
-    kind: 'every' | 'cron';
-    minutes?: number;
-    cron?: string;
+  schedule:
+  | {
+    kind: 'every';
+    minutes: number;
+    timeZone?: string;
+  }
+  | {
+    kind: 'cron';
+    cron: string;
+    timeZone?: string;
   };
   prompt: string;
 }

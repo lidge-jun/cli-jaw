@@ -2,9 +2,24 @@
 // All modules import this to access/modify shared state.
 // Object reference ensures mutations are seen across modules.
 
+export type HeartbeatSchedule =
+    | {
+        kind: 'every';
+        minutes: number;
+        timeZone?: string;
+    }
+    | {
+        kind: 'cron';
+        cron: string;
+        timeZone?: string;
+    };
+
 export interface HeartbeatJob {
     id: string;
-    [key: string]: unknown;
+    name?: string;
+    enabled?: boolean;
+    schedule?: HeartbeatSchedule;
+    prompt?: string;
 }
 
 export interface CliStatusCache {

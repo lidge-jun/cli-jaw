@@ -5,8 +5,18 @@ import { settings, HEARTBEAT_JOBS_PATH, loadHeartbeatFile, saveHeartbeatFile } f
 import { orchestrateAndCollect } from '../orchestrator/collect.js';
 import { markdownToTelegramHtml, chunkTelegramMessage, telegramBot, telegramActiveChatIds } from '../telegram/bot.js';
 import { broadcast } from '../core/bus.js';
+import {
+    describeHeartbeatSchedule,
+    formatHeartbeatNow,
+    getHeartbeatMinuteSlotKey,
+    getHeartbeatScheduleTimeZone,
+    matchesHeartbeatCron,
+    normalizeHeartbeatSchedule,
+    validateHeartbeatCron,
+} from './heartbeat-schedule.js';
 
-const heartbeatTimers = new Map();
+const heartbeatTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const heartbeatCronSlots = new Map<string, string>();
 let heartbeatBusy = false;
 const pendingJobs: Array<Record<string, any>> = [];
 
@@ -14,8 +24,18 @@ export function startHeartbeat() {
     stopHeartbeat();
     const { jobs } = loadHeartbeatFile();
     for (const job of jobs) {
-        if (!job.enabled || job.schedule?.kind !== 'every') continue;
-        const ms = (job.schedule.minutes || 5) * 60_000;
+        if (!job?.enabled) continue;
+        const schedule = normalizeHeartbeatSchedule(job.schedule);
+        if (schedule.kind === 'cron') {
+            const cronError = validateHeartbeatCron(schedule.cron);
+            if (cronError) {
+                console.warn(`[heartbeat:${job.name}] invalid cron "${schedule.cron}": ${cronError}`);
+                continue;
+            }
+            scheduleCronJob(job);
+            continue;
+        }
+        const ms = schedule.minutes * 60_000;
         const timer = setInterval(() => runHeartbeatJob(job), ms);
         timer.unref?.();
         heartbeatTimers.set(job.id, timer);
@@ -25,8 +45,9 @@ export function startHeartbeat() {
 }
 
 export function stopHeartbeat() {
-    for (const timer of heartbeatTimers.values()) clearInterval(timer);
+    for (const timer of heartbeatTimers.values()) clearTimeout(timer);
     heartbeatTimers.clear();
+    heartbeatCronSlots.clear();
 }
 
 async function runHeartbeatJob(job: Record<string, any>) {
@@ -42,9 +63,11 @@ async function runHeartbeatJob(job: Record<string, any>) {
     }
     heartbeatBusy = true;
     try {
-        const now = new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
-        const prompt = `[heartbeat:${job.name}] 현재 시간: ${now}\n\n${job.prompt || '정기 점검입니다. 할 일 없으면 [SILENT]로 응답.'}`;
-        console.log(`[heartbeat:${job.name}] tick`);
+        const schedule = normalizeHeartbeatSchedule(job.schedule);
+        const timeZone = getHeartbeatScheduleTimeZone(schedule);
+        const now = formatHeartbeatNow(schedule);
+        const prompt = `[heartbeat:${job.name}] 현재 시간: ${now} (${timeZone})\n\n${job.prompt || '정기 점검입니다. 할 일 없으면 [SILENT]로 응답.'}`;
+        console.log(`[heartbeat:${job.name}] tick (${describeHeartbeatSchedule(schedule)})`);
         const result: string = String(await orchestrateAndCollect(prompt));
 
         if (result.includes('[SILENT]')) {
@@ -88,6 +111,35 @@ async function drainPending() {
     broadcast('heartbeat_pending', { pending: pendingJobs.length });
     console.log(`[heartbeat:${next.name}] dequeued (${pendingJobs.length} remaining)`);
     await runHeartbeatJob(next);
+}
+
+function scheduleCronJob(job: Record<string, any>) {
+    const tick = () => {
+        const timer = setTimeout(tick, msUntilNextMinute());
+        timer.unref?.();
+        heartbeatTimers.set(job.id, timer);
+        maybeRunCronJob(job);
+    };
+    const timer = setTimeout(tick, msUntilNextMinute());
+    timer.unref?.();
+    heartbeatTimers.set(job.id, timer);
+}
+
+function maybeRunCronJob(job: Record<string, any>) {
+    const schedule = normalizeHeartbeatSchedule(job.schedule);
+    if (schedule.kind !== 'cron') return;
+    const timeZone = getHeartbeatScheduleTimeZone(schedule);
+    if (!matchesHeartbeatCron(schedule.cron, new Date(), timeZone)) return;
+    const slotKey = getHeartbeatMinuteSlotKey(schedule);
+    if (heartbeatCronSlots.get(job.id) === slotKey) return;
+    heartbeatCronSlots.set(job.id, slotKey);
+    void runHeartbeatJob(job);
+}
+
+function msUntilNextMinute(): number {
+    const now = Date.now();
+    const remainder = now % 60_000;
+    return (remainder === 0 ? 60_000 : 60_000 - remainder) + 250;
 }
 
 // ─── fs.watch — auto-reload on file change ───────────

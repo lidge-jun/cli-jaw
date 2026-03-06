@@ -82,7 +82,9 @@ Rules:
 Recurring tasks via `{{JAW_HOME}}/heartbeat.json` (auto-reloads on save):
 ```json
 { "jobs": [{ "id": "hb_<timestamp>", "name": "Job name", "enabled": true,
-  "schedule": { "kind": "every", "minutes": 5 }, "prompt": "task description" }] }
+  "schedule": { "kind": "every", "minutes": 5 }, "prompt": "task description" },
+  { "id": "hb_morning", "name": "Morning check", "enabled": true,
+  "schedule": { "kind": "cron", "cron": "0 9 * * *", "timeZone": "Asia/Seoul" }, "prompt": "daily check-in" }] }
 ```
 - Results auto-forwarded to Telegram. Nothing to report → respond [SILENT]
 
