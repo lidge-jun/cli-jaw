@@ -16,7 +16,7 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
             return ['exec',
                 ...(model && model !== 'default' ? ['-m', model] : []),
                 ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []),
-                ...(options.fastMode ? ['--enable', 'fast_mode'] : []),
+                ...(options.fastMode ? ['-c', 'service_tier="fast"'] : []),
                 ...(autoPerm ? ['--dangerously-bypass-approvals-and-sandbox'] : []),
                 '--skip-git-repo-check', '--json'];
         case 'gemini':
@@ -48,7 +48,7 @@ export function buildResumeArgs(cli: string, model: string, effort: string, sess
         case 'codex':
             return ['exec', 'resume',
                 ...(model && model !== 'default' ? ['--model', model] : []),
-                ...(options.fastMode ? ['--enable', 'fast_mode'] : []),
+                ...(options.fastMode ? ['-c', 'service_tier="fast"'] : []),
                 ...(autoPerm ? ['--dangerously-bypass-approvals-and-sandbox'] : []),
                 '--skip-git-repo-check',
                 sessionId, prompt || '', '--json'];
