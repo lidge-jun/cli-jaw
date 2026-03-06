@@ -116,14 +116,17 @@ export async function orchestrate(
 
     // Worker JSON detected → spawn workers → feed results back
     const workerTasks = parseSubtasks(result.text);
-    if (workerTasks?.length && state !== 'IDLE') {
-        // Only dispatch workers during active PABCD (P/A/B/C).
-        // In IDLE, subtask JSON is handled by the middleware, not here.
-        console.log(`[jaw:pabcd] worker JSON detected (${workerTasks.length} tasks)`);
+    // Research subtasks use phase 1 and can run from any state (including IDLE).
+    // Non-Research subtasks only dispatch during active PABCD (P/A/B/C).
+    const isResearchOnly = workerTasks?.length && workerTasks.every(
+        (wt: Record<string, any>) => /^research$/i.test(wt.agent || ''),
+    );
+    if (workerTasks?.length && (state !== 'IDLE' || isResearchOnly)) {
+        console.log(`[jaw:pabcd] worker JSON detected (${workerTasks.length} tasks, research=${!!isResearchOnly})`);
 
         // Map PABCD state → worker phase context
         const PABCD_PHASE_MAP: Record<string, number> = { A: 2, B: 3, C: 4 };
-        const workerPhase = PABCD_PHASE_MAP[state] || 3;
+        const defaultPhase = PABCD_PHASE_MAP[state] || 3;
 
         let anyWorkerRan = false;
         for (const wt of workerTasks) {
@@ -135,6 +138,9 @@ export async function orchestrate(
                 console.warn(`[jaw:pabcd] worker not found: ${wt.agent}`);
                 continue;
             }
+            // Research workers always use phase 1 semantics
+            const workerPhase = /^research$/i.test(wt.agent || '') ? 1 : defaultPhase;
+
             // Force fresh session for PABCD workers (prevent context contamination)
             upsertEmployeeSession.run(emp.id, null, emp.cli);
 

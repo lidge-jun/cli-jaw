@@ -17,6 +17,8 @@ export interface OrcContext {
   workerResults: string[];
   origin: string;
   chatId?: string | number;
+  researchReport?: string | null;
+  researchNeeded?: boolean;
 }
 
 // ─── State Read/Write (DB-backed) ───────────────────
@@ -134,7 +136,7 @@ A worker must verify that your plan from P phase is feasible and safe before any
 
 Output this worker JSON now:
 \`\`\`json
-{"subtasks":[{"agent":"Data","task":"⛔ READ-ONLY: Do NOT create, modify, or delete ANY files. You are an auditor, not a builder. Audit the PLAN (not code). Verify: 1) All imports in the plan resolve to real files. 2) Function signatures match actual code. 3) No copy-paste integration risks. Report PASS or FAIL with itemized issues. ⛔ REPEAT: Do NOT touch any files.","priority":1}]}
+{"subtasks":[{"agent":"Research","task":"⛔ READ-ONLY: Do NOT create, modify, or delete ANY files. You are an auditor, not a builder. Audit the PLAN (not code). Verify: 1) All imports in the plan resolve to real files. 2) Function signatures match actual code. 3) No copy-paste integration risks. Report PASS or FAIL with itemized issues. ⛔ REPEAT: Do NOT touch any files.","priority":1}]}
 \`\`\`
 
 The system spawns the worker automatically. Wait for results.
@@ -159,7 +161,7 @@ Steps:
 3. After YOU finish implementing, output a worker JSON to VERIFY (not implement) your work:
 
 \`\`\`json
-{"subtasks":[{"agent":"Data","task":"⛔ READ-ONLY: Do NOT create, modify, or delete ANY files. You are a verifier, not a builder. Verify: 1) Files in plan exist with expected content. 2) No syntax errors (run tsc --noEmit if TS). 3) Imports resolve. 4) No integration conflicts. Report DONE or NEEDS_FIX. ⛔ Do NOT touch any files — READ and REPORT only.","priority":1}]}
+{"subtasks":[{"agent":"Research","task":"⛔ READ-ONLY: Do NOT create, modify, or delete ANY files. You are a verifier, not a builder. Verify: 1) Files in plan exist with expected content. 2) No syntax errors (run tsc --noEmit if TS). 3) Imports resolve. 4) No integration conflicts. Report DONE or NEEDS_FIX. ⛔ Do NOT touch any files — READ and REPORT only.","priority":1}]}
 \`\`\`
 
 Wait for worker verification results.

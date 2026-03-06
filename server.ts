@@ -103,7 +103,7 @@ const PORT = process.env.PORT || 3457;
 const DEFAULT_EMPLOYEES = [
     { name: 'Frontend', role: 'UI/UX, CSS, components' },
     { name: 'Backend', role: 'API, DB, server logic' },
-    { name: 'Data', role: 'Data pipeline, analysis, ML' },
+    { name: 'Research', role: 'Search, codebase exploration, uncertainty reduction, read-only reports' },
     { name: 'Docs', role: 'Documentation, README, API docs' },
 ];
 

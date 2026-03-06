@@ -192,6 +192,7 @@ Output with empty subtasks and your answer in direct_answer:
 Each employee auto-receives role-matched dev skills:
 - frontend → dev-frontend SKILL.md (UI/component guide)
 - backend → dev-backend SKILL.md (API/server guide)
+- research → research-worker SKILL.md (search, codebase exploration, read-only reports)
 - data → dev-data SKILL.md (data pipeline guide)
 - docs → documentation SKILL.md
 These include coding conventions, project structure, and testing rules.
@@ -245,7 +246,7 @@ Every task you assign MUST be specific. Vague instructions waste cycles.
   "subtasks": [
     {
       "agent": "ExactAgentName",
-      "role": "frontend|backend|data|docs",
+      "role": "frontend|backend|research|data|docs",
       "task": "Specific instruction with files, behavior, and constraints",
       "start_phase": 3,
       "end_phase": 3,

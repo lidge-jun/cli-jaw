@@ -364,6 +364,7 @@ export function getEmployeePromptV2(emp: any, role: any, currentPhase: number | 
     const ROLE_SKILL_MAP = {
         frontend: join(SKILLS_DIR, 'dev-frontend', 'SKILL.md'),
         backend: join(SKILLS_DIR, 'dev-backend', 'SKILL.md'),
+        research: join(SKILLS_REF_DIR, 'research-worker', 'SKILL.md'),
         data: join(SKILLS_DIR, 'dev-data', 'SKILL.md'),
         docs: join(SKILLS_DIR, 'documentation', 'SKILL.md'),
         custom: null,
