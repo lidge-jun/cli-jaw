@@ -15,7 +15,7 @@ export const CLI_REGISTRY = {
         defaultModel: 'gpt-5.4',
         defaultEffort: 'medium',
         efforts: ['low', 'medium', 'high', 'xhigh'],
-        models: ['gpt-5.4', 'gpt-5.4-spark', 'gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini'],
+        models: ['gpt-5.4', 'gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini'],
     },
     gemini: {
         label: 'Gemini',
