@@ -15,3 +15,11 @@
 
 ## Working Directory
 - ~/.cli-jaw
+
+## Tool Usage: Non-ASCII Paths
+
+When creating or editing files whose path contains non-ASCII characters (Korean, CJK, etc.):
+
+- **Prefer built-in file editing tools** (write_file, create, edit) over shell commands
+- **Avoid**: bash heredoc (`cat << 'EOF'`), shell redirection (`echo > file`), Python/Node file-write scripts
+- **Reason**: shell quoting, heredoc boundary detection, and escape sequences break with Unicode paths
