@@ -63,7 +63,6 @@ export function submitMessage(
 
     // ── reset intent ──
     if (isResetIntent(trimmed)) {
-        if (isAgentBusy()) return { action: 'rejected', reason: 'busy' };
         insertMessage.run('user', display, meta.origin, '');
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
         if (!meta.skipOrchestrate) {
