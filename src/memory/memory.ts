@@ -78,7 +78,13 @@ export function save(filename: string, content: string) {
     // Unescape \n from CLI
     const unescaped = content.replace(/\\n/g, '\n');
     fs.appendFileSync(filepath, '\n' + unescaped + '\n');
-    void import('./advanced.js').then(m => m.syncLegacyMarkdownShadowImport(filepath)).catch(() => { });
+    void import('./advanced.js').then(m => {
+        if (filename.replace(/\\/g, '/').startsWith('structured/')) {
+            m.reindexIntegratedMemoryFile(filepath);
+        } else {
+            m.syncLegacyMarkdownShadowImport(filepath);
+        }
+    }).catch(() => { });
     return filepath;
 }
 
@@ -110,11 +116,11 @@ export function list() {
 export function appendDaily(content: string) {
     ensureMemoryDir();
     const date = new Date().toISOString().slice(0, 10);
-    const filepath = join(MEMORY_DIR, 'daily', `${date}.md`);
-    fs.mkdirSync(join(MEMORY_DIR, 'daily'), { recursive: true });
+    const filepath = join(MEMORY_DIR, 'structured', 'episodes', 'daily', `${date}.md`);
+    fs.mkdirSync(join(filepath, '..'), { recursive: true });
     const timestamp = new Date().toTimeString().slice(0, 5);
     fs.appendFileSync(filepath, `\n---\n**${timestamp}** ${content}\n`);
-    void import('./advanced.js').then(m => m.syncLegacyMarkdownShadowImport(filepath)).catch(() => { });
+    void import('./advanced.js').then(m => m.reindexIntegratedMemoryFile(filepath)).catch(() => { });
     return filepath;
 }
 

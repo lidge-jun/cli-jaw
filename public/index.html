@@ -503,13 +503,13 @@
             <div style="display:flex;border-bottom:1px solid var(--border);padding:0 12px">
                 <button class="mem-tab active" id="memTabBtnSettings"
                     style="padding:6px 12px;border:none;background:none;color:var(--text);cursor:pointer;font-size:12px;border-bottom:2px solid transparent">⚙️
-                    Basic</button>
+                    Settings</button>
                 <button class="mem-tab" id="memTabBtnAdvSetup"
-                    style="padding:6px 12px;border:none;background:none;color:var(--text-dim);cursor:pointer;font-size:12px;border-bottom:2px solid transparent">🧠
+                    style="display:none;padding:6px 12px;border:none;background:none;color:var(--text-dim);cursor:pointer;font-size:12px;border-bottom:2px solid transparent">🧠
                     Advanced Setup</button>
                 <button class="mem-tab" id="memTabBtnAdvOps"
                     style="padding:6px 12px;border:none;background:none;color:var(--text-dim);cursor:pointer;font-size:12px;border-bottom:2px solid transparent">📊
-                    Advanced Ops</button>
+                    Status</button>
                 <button class="mem-tab" id="memTabBtnFiles"
                     style="padding:6px 12px;border:none;background:none;color:var(--text-dim);cursor:pointer;font-size:12px;border-bottom:2px solid transparent">📂
                     Files</button>
@@ -584,7 +584,7 @@
                     <span id="advEnabledBadge" style="font-size:11px;color:var(--text-dim)">disabled</span>
                 </div>
                 <div class="settings-row">
-                    <label>Provider</label>
+                    <label>Query Provider</label>
                     <select id="advProvider"
                         style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
                         <option value="gemini">gemini</option>
@@ -600,7 +600,7 @@
                         style="width:100%;font-size:11px;padding:4px">
                 </div>
                 <div class="settings-row sub-row adv-gemini">
-                    <label>Gemini Model</label>
+                    <label>Query Model</label>
                     <select id="advGeminiModel">
                         <option value="gemini-3.1-flash-lite-preview" selected>gemini-3.1-flash-lite-preview</option>
                         <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
@@ -618,7 +618,7 @@
                         style="width:100%;font-size:11px;padding:4px;font-family:var(--font-mono)"></textarea>
                 </div>
                 <div class="settings-row sub-row adv-vertex" style="display:none">
-                    <label>Vertex Model</label>
+                    <label>Query Model</label>
                     <input type="text" id="advVertexModel" placeholder="gemini-3.1-flash-lite-preview"
                         style="width:100%;font-size:11px;padding:4px">
                 </div>
@@ -634,7 +634,7 @@
                         style="width:100%;font-size:11px;padding:4px">
                 </div>
                 <div class="settings-row sub-row adv-openai" style="display:none">
-                    <label>Model</label>
+                    <label>Query Model</label>
                     <input type="text" id="advOpenaiModel" placeholder="gpt-4o-mini"
                         style="width:100%;font-size:11px;padding:4px">
                 </div>
@@ -698,7 +698,7 @@
             <div id="memTabFiles" style="padding:12px;display:none">
                 <div style="font-size:12px;font-weight:600;margin-bottom:6px">Basic Memory Files</div>
                 <div id="basicMemoryFiles"></div>
-                <div style="font-size:12px;font-weight:600;margin:12px 0 6px">Advanced Memory Files</div>
+                <div style="font-size:12px;font-weight:600;margin:12px 0 6px">Structured Memory Files</div>
                 <div id="advancedMemoryFiles"></div>
                 <div style="font-size:12px;font-weight:600;margin:12px 0 6px">Corrupted / Quarantined</div>
                 <div id="corruptedMemoryFiles"></div>

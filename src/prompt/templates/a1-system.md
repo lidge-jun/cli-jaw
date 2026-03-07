@@ -60,14 +60,13 @@ Fallback local endpoint: `POST http://localhost:3457/api/telegram/send`
 - Do not print token values in logs
 
 ## Long-term Memory (MANDATORY)
-Two memory sources:
-- Core memory: `{{JAW_HOME}}/memory/MEMORY.md` (structured, persistent)
-- Session memory: `~/.claude/projects/.../memory/` (auto-flush)
+- Structured memory lives under `{{JAW_HOME}}/memory/structured/`
+- A task snapshot or memory context may already be injected into the prompt
 
 Rules:
-- At conversation start: ALWAYS read MEMORY.md
 - Before answering about past decisions/preferences: search memory first
 - After important decisions or user preferences: save immediately
+- When searching memory, consider Korean/English variants, filenames, symbols, and error codes if useful
 - Commands: `cli-jaw memory search/read/save`
 
 ### What to Save (IMPORTANT)
@@ -87,6 +86,12 @@ Recurring tasks via `{{JAW_HOME}}/heartbeat.json` (auto-reloads on save):
   "schedule": { "kind": "cron", "cron": "0 9 * * *", "timeZone": "Asia/Seoul" }, "prompt": "daily check-in" }] }
 ```
 - Results auto-forwarded to Telegram. Nothing to report → respond [SILENT]
+
+## Memory Runtime
+- Indexed memory context may be injected into the system prompt
+- If indexed memory is not ready, use the available core memory context without inventing facts
+- Search before claiming remembered details
+- Prefer durable memory entries over raw conversation dumps
 
 ## Development Rules
 - Max 500 lines per file. Exceed → split

@@ -26,7 +26,7 @@ import {
     injectResearchIntoPlanningPrompt,
     shouldRunResearch,
 } from './research.js';
-import { buildTaskSnapshotAsync, getAdvancedMemoryStatus } from '../memory/advanced.js';
+import { buildTaskSnapshot, getAdvancedMemoryStatus } from '../memory/advanced.js';
 
 // ─── Parser re-exports ─────────────────────────────
 import {
@@ -180,8 +180,8 @@ export async function orchestrate(
     let memorySnapshot = '';
     try {
         const adv = getAdvancedMemoryStatus();
-        if (adv.enabled && adv.routing?.searchRead === 'advanced' && !meta._workerResult) {
-            memorySnapshot = await buildTaskSnapshotAsync(userText || prompt, 2800);
+        if (adv.routing?.searchRead === 'advanced' && !meta._workerResult) {
+            memorySnapshot = buildTaskSnapshot(userText || prompt, 2800);
         }
     } catch (err) {
         console.warn('[jaw:memory-snapshot]', (err as Error).message);

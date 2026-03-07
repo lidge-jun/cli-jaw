@@ -35,6 +35,10 @@ type AdvancedMeta = {
     homeId: string;
     jawHome: string;
     initializedAt: string;
+    migrationVersion?: number;
+    migrationState?: 'pending' | 'running' | 'done' | 'failed';
+    migratedAt?: string | null;
+    sourceLayout?: 'legacy' | 'advanced' | 'structured';
     bootstrapStatus?: 'idle' | 'running' | 'done' | 'failed';
     lastBootstrapAt?: string | null;
     lastError?: string;
@@ -78,8 +82,12 @@ type VertexConfig = {
     credentialsJson?: Record<string, any>;
 };
 
-export function getAdvancedMemoryDir() {
+function getLegacyAdvancedMemoryDir() {
     return join(JAW_HOME, 'memory-advanced');
+}
+
+export function getAdvancedMemoryDir() {
+    return join(JAW_HOME, 'memory', 'structured');
 }
 
 export function getAdvancedMemoryBackupDir() {
@@ -94,6 +102,10 @@ function getAdvancedIndexDbPath() {
     return join(getAdvancedMemoryDir(), 'index.sqlite');
 }
 
+function getMigrationLockPath() {
+    return join(getAdvancedMemoryDir(), '.migration.lock');
+}
+
 export function normalizeOpenAiCompatibleBaseUrl(raw: string) {
     const value = String(raw || '').trim();
     if (!value) return '';
@@ -102,19 +114,18 @@ export function normalizeOpenAiCompatibleBaseUrl(raw: string) {
 }
 
 function getAdvancedConfig(override: Partial<AdvancedConfig> = {}) {
-    const base = settings.memoryAdvanced || {};
     return {
-        enabled: override.enabled ?? base.enabled ?? false,
-        provider: override.provider ?? base.provider ?? 'gemini',
-        model: override.model ?? base.model ?? '',
-        apiKey: override.apiKey ?? base.apiKey ?? '',
-        baseUrl: normalizeOpenAiCompatibleBaseUrl(override.baseUrl ?? base.baseUrl ?? ''),
-        vertexConfig: override.vertexConfig ?? base.vertexConfig ?? '',
+        enabled: true,
+        provider: override.provider ?? 'integrated',
+        model: override.model ?? '',
+        apiKey: override.apiKey ?? '',
+        baseUrl: normalizeOpenAiCompatibleBaseUrl(override.baseUrl ?? ''),
+        vertexConfig: override.vertexConfig ?? '',
         bootstrap: {
-            enabled: override.bootstrap?.enabled ?? base.bootstrap?.enabled ?? true,
-            useActiveCli: override.bootstrap?.useActiveCli ?? base.bootstrap?.useActiveCli ?? true,
-            cli: override.bootstrap?.cli ?? base.bootstrap?.cli ?? '',
-            model: override.bootstrap?.model ?? base.bootstrap?.model ?? '',
+            enabled: override.bootstrap?.enabled ?? true,
+            useActiveCli: override.bootstrap?.useActiveCli ?? true,
+            cli: override.bootstrap?.cli ?? '',
+            model: override.bootstrap?.model ?? '',
         },
     };
 }
@@ -365,47 +376,14 @@ async function expandViaVertex(query: string, override: Partial<AdvancedConfig> 
 export async function expandSearchKeywords(query: string) {
     const q = String(query || '').trim();
     if (!q) return [];
-    const provider = settings.memoryAdvanced?.provider || 'gemini';
-    let expanded: string[] = [];
-    try {
-        if (provider === 'gemini') expanded = await expandViaGemini(q);
-        else if (provider === 'openai-compatible') expanded = await expandViaOpenAiCompatible(q);
-        else if (provider === 'vertex') expanded = await expandViaVertex(q);
-        else expanded = [];
-    } catch {
-        expanded = [];
-    }
-    const merged = sanitizeKeywords(expanded.length ? [q, ...expanded] : heuristicKeywords(q));
+    const merged = sanitizeKeywords(heuristicKeywords(q));
     lastExpansionTerms = merged;
     return merged;
 }
 
 export async function validateAdvancedMemoryConfig(override: Partial<AdvancedConfig> = {}) {
     const cfg = getAdvancedConfig(override);
-    if (cfg.provider === 'local') {
-        return { ok: true, provider: 'local' };
-    }
-    if (cfg.provider === 'gemini') {
-        if (!cfg.apiKey) return { ok: false, error: 'Gemini API key is required.' };
-        const expanded = await expandViaGemini('login auth bug', cfg);
-        if (!expanded.length) return { ok: false, error: 'Gemini validation failed.' };
-        return { ok: true, provider: 'gemini', keywords: expanded };
-    }
-    if (cfg.provider === 'openai-compatible') {
-        if (!cfg.apiKey || !cfg.baseUrl || !cfg.model) {
-            return { ok: false, error: 'OpenAI-compatible requires base URL, API key, and model.' };
-        }
-        const expanded = await expandViaOpenAiCompatible('login auth bug', cfg);
-        if (!expanded.length) return { ok: false, error: 'OpenAI-compatible validation failed.' };
-        return { ok: true, provider: 'openai-compatible', keywords: expanded };
-    }
-    if (cfg.provider === 'vertex') {
-        if (!cfg.vertexConfig) return { ok: false, error: 'Vertex Config JSON is required.' };
-        const expanded = await expandViaVertex('login auth bug', cfg);
-        if (!expanded.length) return { ok: false, error: 'Vertex validation failed.' };
-        return { ok: true, provider: 'vertex', keywords: expanded };
-    }
-    return { ok: false, error: `Unsupported provider: ${cfg.provider}` };
+    return { ok: true, provider: cfg.provider || 'integrated', error: '' };
 }
 
 function slug(value: string) {
@@ -471,6 +449,10 @@ function writeMeta(patch: Partial<AdvancedMeta>) {
         homeId: instanceId(),
         jawHome: JAW_HOME,
         initializedAt: new Date().toISOString(),
+        migrationVersion: 1,
+        migrationState: 'pending',
+        migratedAt: null,
+        sourceLayout: 'legacy',
         bootstrapStatus: 'idle',
         importedCounts: { ...DEFAULT_IMPORTED_COUNTS },
     };
@@ -484,6 +466,34 @@ function writeMeta(patch: Partial<AdvancedMeta>) {
     };
     writeText(getMetaPath(), JSON.stringify(next, null, 2));
     return next;
+}
+
+function withMigrationLock<T>(fn: () => T) {
+    const lockPath = getMigrationLockPath();
+    ensureDir(dirname(lockPath));
+    if (fs.existsSync(lockPath)) return fn();
+    fs.writeFileSync(lockPath, String(process.pid));
+    try {
+        return fn();
+    } finally {
+        try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
+    }
+}
+
+function migrateLegacyAdvancedRoot(root: string) {
+    const oldRoot = getLegacyAdvancedMemoryDir();
+    if (!fs.existsSync(oldRoot) || oldRoot === root) return false;
+    const newExists = fs.existsSync(root) && fs.readdirSync(root).length > 0;
+    if (newExists) return false;
+    ensureDir(dirname(root));
+    fs.cpSync(oldRoot, root, { recursive: true });
+    writeMeta({
+        migrationVersion: 1,
+        migrationState: 'done',
+        migratedAt: new Date().toISOString(),
+        sourceLayout: 'advanced',
+    });
+    return true;
 }
 
 function parseLegacyMemorySections(content: string) {
@@ -878,6 +888,13 @@ function reindexSingleFile(root: string, file: string) {
     return count;
 }
 
+export function reindexIntegratedMemoryFile(file: string) {
+    const root = getAdvancedMemoryDir();
+    if (!fs.existsSync(file)) return 0;
+    if (!file.startsWith(root)) return 0;
+    return reindexSingleFile(root, file);
+}
+
 function buildLikeTerm(term: string) {
     return `%${term.replace(/[%_]/g, (m) => `\\${m}`)}%`;
 }
@@ -992,7 +1009,7 @@ function updateImportedCount(kind: keyof NonNullable<AdvancedMeta['importedCount
 }
 
 function isAdvancedShadowEnabled() {
-    return settings.memoryAdvanced?.enabled === true && fs.existsSync(getMetaPath());
+    return fs.existsSync(getMetaPath());
 }
 
 function importSingleMarkdownFile(root: string, file: string) {
@@ -1048,42 +1065,48 @@ export function syncKvShadowImport() {
 
 export function ensureAdvancedMemoryStructure() {
     const root = getAdvancedMemoryDir();
-    const sharedDir = join(root, 'shared');
-    const episodesDir = join(root, 'episodes');
-    const semanticDir = join(root, 'semantic');
-    const proceduresDir = join(root, 'procedures');
-    const sessionsDir = join(root, 'sessions');
-    const corruptedDir = join(root, 'corrupted');
-    const unmappedDir = join(root, 'legacy-unmapped');
-    ensureDir(root);
-    ensureDir(sharedDir);
-    ensureDir(episodesDir);
-    ensureDir(semanticDir);
-    ensureDir(proceduresDir);
-    ensureDir(sessionsDir);
-    ensureDir(corruptedDir);
-    ensureDir(unmappedDir);
+    return withMigrationLock(() => {
+        const sharedDir = join(root, 'shared');
+        const episodesDir = join(root, 'episodes');
+        const semanticDir = join(root, 'semantic');
+        const proceduresDir = join(root, 'procedures');
+        const sessionsDir = join(root, 'sessions');
+        const corruptedDir = join(root, 'corrupted');
+        const unmappedDir = join(root, 'legacy-unmapped');
+        migrateLegacyAdvancedRoot(root);
+        ensureDir(root);
+        ensureDir(sharedDir);
+        ensureDir(episodesDir);
+        ensureDir(semanticDir);
+        ensureDir(proceduresDir);
+        ensureDir(sessionsDir);
+        ensureDir(corruptedDir);
+        ensureDir(unmappedDir);
 
-    writeMeta({
-        schemaVersion: 1,
-        phase: '1',
-        homeId: instanceId(),
-        jawHome: JAW_HOME,
-        initializedAt: readMeta()?.initializedAt || new Date().toISOString(),
-    });
-
-    const profilePath = join(root, 'profile.md');
-    if (!fs.existsSync(profilePath)) {
-        const fm = frontmatter({
-            id: `profile-${instanceId()}`,
-            home_id: instanceId(),
-            kind: 'profile',
-            source: 'generated',
-            trust_level: 'high',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
+        writeMeta({
+            schemaVersion: 1,
+            phase: '10',
+            homeId: instanceId(),
+            jawHome: JAW_HOME,
+            initializedAt: readMeta()?.initializedAt || new Date().toISOString(),
+            migrationVersion: 1,
+            migrationState: 'done',
+            migratedAt: readMeta()?.migratedAt || new Date().toISOString(),
+            sourceLayout: fs.existsSync(getLegacyAdvancedMemoryDir()) ? 'advanced' : 'legacy',
         });
-        writeText(profilePath, fm + `# Profile
+
+        const profilePath = join(root, 'profile.md');
+        if (!fs.existsSync(profilePath)) {
+            const fm = frontmatter({
+                id: `profile-${instanceId()}`,
+                home_id: instanceId(),
+                kind: 'profile',
+                source: 'generated',
+                trust_level: 'high',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            });
+            writeText(profilePath, fm + `# Profile
 
 ## User Preferences
 
@@ -1091,15 +1114,17 @@ export function ensureAdvancedMemoryStructure() {
 
 ## Active Projects
 `);
-    }
+        }
 
-    return { root, metaPath: getMetaPath(), profilePath };
+        return { root, metaPath: getMetaPath(), profilePath };
+    });
 }
 
 export function bootstrapAdvancedMemory(options: BootstrapOptions = {}) {
     const root = getAdvancedMemoryDir();
     ensureAdvancedMemoryStructure();
     writeMeta({
+        phase: '10',
         bootstrapStatus: 'running',
         lastBootstrapAt: new Date().toISOString(),
         lastError: '',
@@ -1122,6 +1147,7 @@ export function bootstrapAdvancedMemory(options: BootstrapOptions = {}) {
         };
         const { totalFiles, totalChunks } = reindexAll(root);
         const meta = writeMeta({
+            phase: '10',
             bootstrapStatus: 'done',
             importedCounts: counts,
             lastBootstrapAt: new Date().toISOString(),
@@ -1131,12 +1157,35 @@ export function bootstrapAdvancedMemory(options: BootstrapOptions = {}) {
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         writeMeta({
+            phase: '10',
             bootstrapStatus: 'failed',
             lastBootstrapAt: new Date().toISOString(),
             lastError: message,
         });
         throw err;
     }
+}
+
+export function ensureIntegratedMemoryReady() {
+    const created = ensureAdvancedMemoryStructure();
+    const status = getAdvancedMemoryStatus();
+    if (status.indexState === 'ready') return { created, bootstrapped: false, status };
+    const hasLegacy = fs.existsSync(join(JAW_HOME, 'memory', 'MEMORY.md'))
+        || fs.existsSync(join(JAW_HOME, 'memory', 'daily'))
+        || fs.existsSync(getLegacyClaudeMemoryDir())
+        || (getMemory.all() as any[]).length > 0
+        || fs.existsSync(getLegacyAdvancedMemoryDir());
+    if (!hasLegacy) {
+        const result = reindexAdvancedMemory();
+        return { created, bootstrapped: false, status: getAdvancedMemoryStatus(), result };
+    }
+    const result = bootstrapAdvancedMemory({
+        importCore: true,
+        importMarkdown: true,
+        importKv: true,
+        importClaudeSession: true,
+    });
+    return { created, bootstrapped: true, status: getAdvancedMemoryStatus(), result };
 }
 
 export function reindexAdvancedMemory() {
@@ -1162,8 +1211,13 @@ export function listAdvancedMemoryFiles() {
     };
 }
 
-export function searchAdvancedMemory(query: string) {
-    const { hits } = searchIndex(query);
+export function searchAdvancedMemory(query: string | string[]) {
+    const terms = Array.isArray(query as any)
+        ? (query as any[]).map(v => String(v || '').trim()).filter(Boolean)
+        : [String(query || '').trim()].filter(Boolean);
+    const baseQuery = terms[0] || '';
+    const expanded = terms.length > 1 ? terms.slice(1) : undefined;
+    const { hits } = searchIndex(baseQuery, expanded);
     return formatHits(hits);
 }
 
@@ -1176,10 +1230,14 @@ export function loadAdvancedProfileSummary(maxChars = 800) {
     return body.length > maxChars ? body.slice(0, maxChars) + '\n...(truncated)' : body;
 }
 
-export function buildTaskSnapshot(query: string, budget = 2800, expanded?: string[]) {
-    const cleaned = String(query || '').trim();
+export function buildTaskSnapshot(query: string | string[], budget = 2800, expanded?: string[]) {
+    const terms = Array.isArray(query)
+        ? query.map(v => String(v || '').trim()).filter(Boolean)
+        : [String(query || '').trim()].filter(Boolean);
+    const cleaned = terms[0] || '';
     if (!cleaned) return '';
-    const { hits } = searchIndex(cleaned, expanded);
+    const mergedExpanded = expanded?.length ? expanded : (terms.length > 1 ? terms.slice(1) : undefined);
+    const { hits } = searchIndex(cleaned, mergedExpanded);
     if (!hits.length) return '';
 
     const out: string[] = [];
@@ -1200,9 +1258,8 @@ export function buildTaskSnapshot(query: string, budget = 2800, expanded?: strin
     return `## Task Snapshot\n${out.join('\n\n')}`;
 }
 
-export async function buildTaskSnapshotAsync(query: string, budget = 2800) {
-    const expanded = await expandSearchKeywords(query);
-    return buildTaskSnapshot(query, budget, expanded);
+export async function buildTaskSnapshotAsync(query: string | string[], budget = 2800) {
+    return buildTaskSnapshot(query, budget);
 }
 
 export function readAdvancedMemorySnippet(relPath: string, opts: { lines?: string } = {}) {
@@ -1225,23 +1282,23 @@ export function getAdvancedMemoryStatus() {
     const root = getAdvancedMemoryDir();
     const meta = readMeta();
     const initialized = !!meta;
-    const enabled = settings.memoryAdvanced?.enabled === true;
-    const provider = settings.memoryAdvanced?.provider || 'gemini';
+    const enabled = true;
+    const provider = 'integrated';
     const corruptedDir = join(root, 'corrupted');
     const dbPath = getAdvancedIndexDbPath();
     const indexReady = fs.existsSync(dbPath);
     const indexed = indexReady ? reindexIndexCounts(dbPath) : { totalFiles: 0, totalChunks: 0 };
 
     return {
-        phase: meta?.phase || '0a',
+        phase: meta?.phase || '10',
         enabled,
         provider,
-        state: !enabled ? 'disabled' : initialized ? 'configured' : 'not_initialized',
+        state: initialized ? 'configured' : 'not_initialized',
         initialized,
         storageRoot: root,
         routing: {
-            searchRead: enabled && indexReady ? 'advanced' : 'basic',
-            save: 'basic',
+            searchRead: indexReady ? 'advanced' : 'basic',
+            save: 'integrated',
         },
         indexState: initialized ? (indexReady ? 'ready' : 'not_indexed') : 'not_initialized',
         indexedFiles: indexed.totalFiles,

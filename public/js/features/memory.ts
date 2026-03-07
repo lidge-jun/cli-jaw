@@ -47,25 +47,6 @@ interface AdvancedMemoryFiles {
     sections: Record<string, string[]>;
 }
 
-interface AdvancedMemoryConfig {
-    enabled?: boolean;
-    provider?: 'gemini' | 'vertex' | 'openai-compatible' | 'local' | string;
-    model?: string;
-    apiKeySet?: boolean;
-    apiKeyLast4?: string;
-    baseUrl?: string;
-    vertexConfigSet?: boolean;
-    bootstrap?: {
-        useActiveCli?: boolean;
-        cli?: string;
-        model?: string;
-    };
-}
-
-interface SettingsData {
-    memoryAdvanced?: AdvancedMemoryConfig;
-}
-
 function $(id: string) {
     return document.getElementById(id);
 }
@@ -106,14 +87,14 @@ function renderStatusBanner(status: AdvancedMemoryStatus | null) {
     }
     banner.style.display = '';
     if (status.state === 'not_initialized') {
-        banner.textContent = 'Advanced Memory is ON, but not initialized yet. Basic memory path is still active until initialization completes.';
+        banner.textContent = 'Integrated memory is preparing its index. Temporary fallback memory context is active until initialization completes.';
         return;
     }
     if (status.indexState === 'not_indexed') {
-        banner.textContent = 'Advanced Memory is configured. Search/Read will switch to advanced runtime after indexing becomes available.';
+        banner.textContent = 'Integrated memory is configured. Indexed search/read will activate after indexing becomes available.';
         return;
     }
-    banner.textContent = `Advanced Memory active. search/read=${status.routing?.searchRead || 'basic'} / save=${status.routing?.save || 'basic'}`;
+    banner.textContent = `Memory active. search/read=${status.routing?.searchRead || 'basic'} / save=${status.routing?.save || 'basic'}`;
 }
 
 function setAdvBanner(text: string, show = true) {
@@ -147,9 +128,8 @@ function updateBasicVisibility(status: AdvancedMemoryStatus | null) {
     const basicBtn = $('memTabBtnSettings') as HTMLElement | null;
     const basicTab = $('memTabSettings') as HTMLElement | null;
     if (!basicBtn || !basicTab) return;
-    const hideBasic = !!status?.enabled;
-    basicBtn.style.display = hideBasic ? 'none' : '';
-    if (hideBasic) basicTab.style.display = 'none';
+    basicBtn.style.display = '';
+    if (!basicTab.style.display) basicTab.style.display = '';
 }
 
 function toggleAdvancedProviderFields(provider: string) {
@@ -164,51 +144,6 @@ function toggleAdvancedProviderFields(provider: string) {
 function toggleBootstrapFields() {
     const useActive = ($( 'advBootstrapUseActive') as HTMLInputElement | null)?.checked !== false;
     document.querySelectorAll('.adv-bootstrap-manual').forEach(el => (el as HTMLElement).style.display = useActive ? 'none' : '');
-}
-
-function renderAdvancedSetup(settings: SettingsData | null, status: AdvancedMemoryStatus | null) {
-    const cfg = settings?.memoryAdvanced || {};
-    const provider = cfg.provider || status?.provider || 'gemini';
-    $('advOn')?.classList.toggle('active', !!status?.enabled);
-    $('advOff')?.classList.toggle('active', !status?.enabled);
-    setText('advEnabledBadge', status?.enabled ? `${status.state} (${status.indexState || '-'})` : 'disabled');
-    setValue('advProvider', provider);
-    toggleAdvancedProviderFields(String(provider));
-
-    const geminiKey = $('advGeminiKey') as HTMLInputElement | null;
-    if (geminiKey) geminiKey.placeholder = cfg.apiKeySet ? `✅ 입력됨 ····${cfg.apiKeyLast4 || ''}` : 'AIza...';
-    const openaiKey = $('advOpenaiKey') as HTMLInputElement | null;
-    if (openaiKey) openaiKey.placeholder = cfg.apiKeySet ? `✅ 입력됨 ····${cfg.apiKeyLast4 || ''}` : 'sk-...';
-
-    const geminiModel = $('advGeminiModel') as HTMLSelectElement | null;
-    const geminiModelCustom = $('advGeminiModelCustom') as HTMLInputElement | null;
-    const savedGeminiModel = cfg.model || 'gemini-3.1-flash-lite-preview';
-    if (geminiModel) {
-        const hasOption = Array.from(geminiModel.options).some(o => o.value === savedGeminiModel);
-        if (hasOption) {
-            geminiModel.value = savedGeminiModel;
-            if (geminiModelCustom) geminiModelCustom.style.display = 'none';
-        } else {
-            geminiModel.value = '__custom__';
-            if (geminiModelCustom) {
-                geminiModelCustom.value = savedGeminiModel;
-                geminiModelCustom.style.display = '';
-            }
-        }
-    }
-    setValue('advVertexConfig', cfg.vertexConfigSet ? '' : '');
-    setValue('advVertexModel', cfg.model || 'gemini-3.1-flash-lite-preview');
-    setValue('advOpenaiBaseUrl', cfg.baseUrl || '');
-    setValue('advOpenaiModel', cfg.model || '');
-    setChecked('advBootstrapUseActive', cfg.bootstrap?.useActiveCli !== false);
-    setValue('advBootstrapCli', cfg.bootstrap?.cli || '');
-    setValue('advBootstrapModel', cfg.bootstrap?.model || '');
-    toggleBootstrapFields();
-
-    setChecked('advImportCore', true);
-    setChecked('advImportMarkdown', true);
-    setChecked('advImportKv', true);
-    setChecked('advImportClaudeSession', true);
 }
 
 function renderAdvancedOps(status: AdvancedMemoryStatus | null) {
@@ -281,28 +216,26 @@ function getBootstrapOptions() {
 }
 
 async function loadModalData() {
-    const [basic, status, settings, files] = await Promise.all([
+    const [basic, status, files] = await Promise.all([
         api<MemoryData>('/api/memory-files'),
-        api<AdvancedMemoryStatus>('/api/memory-advanced/status'),
-        api<SettingsData>('/api/settings'),
-        api<AdvancedMemoryFiles>('/api/memory-advanced/files'),
+        api<AdvancedMemoryStatus>('/api/memory/status'),
+        api<AdvancedMemoryFiles>('/api/memory/files'),
     ]);
-    return { basic, status, settings, files };
+    return { basic, status, files };
 }
 
 export async function openMemoryModal(): Promise<void> {
-    const { basic, status, settings, files } = await loadModalData();
+    const { basic, status, files } = await loadModalData();
     if (!basic) return;
     renderBasicSettings(basic);
     updateBasicVisibility(status);
     renderStatusBanner(status);
-    renderAdvancedSetup(settings, status);
     renderAdvancedOps(status);
     renderBasicFiles(basic.files);
     renderAdvancedFiles(files);
     syncSidebarBadge(status, basic.files.length);
     $('memoryModal')?.classList.add('open');
-    if (status?.enabled) switchMemTab('adv-ops');
+    switchMemTab('status');
 }
 
 export function closeMemoryModal(e?: Event): void {
@@ -313,8 +246,7 @@ export function closeMemoryModal(e?: Event): void {
 export function switchMemTab(tab: string): void {
     const tabs: Record<string, string> = {
         settings: 'memTabSettings',
-        'adv-setup': 'memTabAdvSetup',
-        'adv-ops': 'memTabAdvOps',
+        status: 'memTabAdvOps',
         files: 'memTabFiles',
     };
     for (const id of Object.values(tabs)) {
@@ -322,8 +254,7 @@ export function switchMemTab(tab: string): void {
         if (el) el.style.display = id === tabs[tab] ? '' : 'none';
     }
     $('memTabBtnSettings')?.classList.toggle('active', tab === 'settings');
-    $('memTabBtnAdvSetup')?.classList.toggle('active', tab === 'adv-setup');
-    $('memTabBtnAdvOps')?.classList.toggle('active', tab === 'adv-ops');
+    $('memTabBtnAdvOps')?.classList.toggle('active', tab === 'status');
     $('memTabBtnFiles')?.classList.toggle('active', tab === 'files');
 }
 
@@ -348,115 +279,35 @@ export async function saveMemSettings(): Promise<void> {
     if (thresholdEl && flushEl) thresholdEl.textContent = flushEl.value;
 }
 
-function buildAdvancedPatch() {
-    const provider = ( $('advProvider') as HTMLSelectElement | null)?.value || 'gemini';
-    const patch: Record<string, any> = {
-        provider,
-        bootstrap: {
-            useActiveCli: ( $('advBootstrapUseActive') as HTMLInputElement | null)?.checked !== false,
-            cli: ( $('advBootstrapCli') as HTMLSelectElement | null)?.value || '',
-            model: ( $('advBootstrapModel') as HTMLInputElement | null)?.value || '',
-        },
-        importCore: ($( 'advImportCore') as HTMLInputElement | null)?.checked !== false,
-        importMarkdown: ($( 'advImportMarkdown') as HTMLInputElement | null)?.checked !== false,
-        importKv: ($( 'advImportKv') as HTMLInputElement | null)?.checked !== false,
-        importClaudeSession: ($( 'advImportClaudeSession') as HTMLInputElement | null)?.checked !== false,
-    };
-    if (provider === 'gemini') {
-        const key = ( $('advGeminiKey') as HTMLInputElement | null)?.value || '';
-        const sel = ( $('advGeminiModel') as HTMLSelectElement | null)?.value || 'gemini-3.1-flash-lite-preview';
-        const custom = ( $('advGeminiModelCustom') as HTMLInputElement | null)?.value || '';
-        patch.model = sel === '__custom__' ? custom : sel;
-        if (key) patch.apiKey = key;
-    } else if (provider === 'vertex') {
-        patch.vertexConfig = ( $('advVertexConfig') as HTMLTextAreaElement | null)?.value || '';
-        patch.model = ( $('advVertexModel') as HTMLInputElement | null)?.value || 'gemini-3.1-flash-lite-preview';
-    } else if (provider === 'openai-compatible') {
-        patch.baseUrl = ( $('advOpenaiBaseUrl') as HTMLInputElement | null)?.value || '';
-        patch.model = ( $('advOpenaiModel') as HTMLInputElement | null)?.value || '';
-        const key = ( $('advOpenaiKey') as HTMLInputElement | null)?.value || '';
-        if (key) patch.apiKey = key;
-    } else {
-        patch.model = '';
-    }
-    return patch;
-}
-
-export async function setAdvEnabled(v: boolean): Promise<void> {
-    if (!v) {
-        setAdvBusy(true);
-        setAdvBanner('Advanced Memory를 비활성화하는 중...', true);
-        $('advOn')?.classList.toggle('active', false);
-        $('advOff')?.classList.toggle('active', true);
-        await apiJson('/api/memory-advanced/settings', 'PUT', { enabled: false });
-        setAdvBusy(false);
-        await openMemoryModal();
-        return;
-    }
-    setAdvBusy(true);
-    setAdvBanner('고급 메모리 설정을 검증하고 초기화하는 중...', true);
-    const result = await apiJson<{ ok?: boolean; error?: string; message?: string }>('/api/memory-advanced/enable', 'POST', buildAdvancedPatch());
-    if (!result) {
-        setAdvBusy(false);
-        alert('Advanced Memory validation failed. Provider/key/model을 확인해주세요.');
-        await openMemoryModal();
-        return;
-    }
-    if (result.message) alert(result.message);
-    setAdvBusy(false);
-    await openMemoryModal();
-}
-
-export async function saveAdvancedMemorySettings(): Promise<void> {
-    setAdvBusy(true);
-    setAdvBanner('고급 메모리 설정을 저장하는 중...', true);
-    const result = await apiJson<{ memoryAdvanced?: AdvancedMemoryConfig }>('/api/memory-advanced/settings', 'PUT', buildAdvancedPatch());
-    const geminiKey = $('advGeminiKey') as HTMLInputElement | null;
-    const openaiKey = $('advOpenaiKey') as HTMLInputElement | null;
-    if (geminiKey?.value) {
-        const l4 = geminiKey.value.slice(-4);
-        geminiKey.value = '';
-        geminiKey.placeholder = `✅ 입력됨 ····${l4}`;
-    }
-    if (openaiKey?.value) {
-        const l4 = openaiKey.value.slice(-4);
-        openaiKey.value = '';
-        openaiKey.placeholder = `✅ 입력됨 ····${l4}`;
-    }
-    setAdvBusy(false);
-    if (!result) return;
-    await openMemoryModal();
-}
-
 export async function initializeAdvancedMemory(): Promise<void> {
     // legacy no-op path kept for compatibility; direct initialize button removed
-    setAdvBanner('Initialize button is removed. Turn Advanced ON to validate + bootstrap automatically.', true);
-    switchMemTab('adv-setup');
+    setAdvBanner('Integrated memory initializes automatically on startup.', true);
+    switchMemTab('status');
 }
 
 export async function rerunAdvancedBootstrap(): Promise<void> {
     setAdvBusy(true);
-    setAdvBanner('고급 메모리 bootstrap을 다시 실행하는 중...', true);
-    const result = await apiJson<{ message?: string }>('/api/memory-advanced/bootstrap', 'POST', getBootstrapOptions());
+    setAdvBanner('메모리 bootstrap을 다시 실행하는 중...', true);
+    const result = await apiJson<{ message?: string }>('/api/memory/bootstrap', 'POST', getBootstrapOptions());
     setAdvBusy(false);
     if (result?.message) alert(result.message);
     await openMemoryModal();
-    switchMemTab('adv-ops');
+    switchMemTab('status');
 }
 
 export async function reindexAdvancedMemory(): Promise<void> {
     setAdvBusy(true);
-    setAdvBanner('고급 메모리 인덱스를 재생성하는 중...', true);
-    const result = await apiJson<{ message?: string }>('/api/memory-advanced/reindex', 'POST', {});
+    setAdvBanner('메모리 인덱스를 재생성하는 중...', true);
+    const result = await apiJson<{ message?: string }>('/api/memory/reindex', 'POST', {});
     setAdvBusy(false);
     if (result?.message) alert(result.message);
     await openMemoryModal();
-    switchMemTab('adv-ops');
+    switchMemTab('status');
 }
 
 export function openCorruptedFolder(): void {
     const text = $('advStorageRoot')?.textContent || '';
-    const path = text ? `${text}/corrupted` : 'JAW_HOME/memory-advanced/corrupted';
+    const path = text ? `${text}/corrupted` : 'JAW_HOME/memory/structured/corrupted';
     if (navigator.clipboard?.writeText) {
         navigator.clipboard.writeText(path).catch(() => { });
     }
@@ -465,12 +316,12 @@ export function openCorruptedFolder(): void {
 
 export async function deleteMemFile(name: string): Promise<void> {
     if (!confirm('Delete ' + name + '?')) return;
-    await apiJson('/api/memory-files/' + name, 'DELETE', {});
+    await apiJson('/api/memory-file?path=' + encodeURIComponent(name), 'DELETE', {});
     openMemoryModal();
 }
 
 export async function viewMemFile(name: string): Promise<void> {
-    const data = await api<MemoryFileContent>('/api/memory-files/' + name);
+    const data = await api<MemoryFileContent>('/api/memory-file?path=' + encodeURIComponent(name));
     if (!data) return;
     const container = $('basicMemoryFiles');
     if (!container) return;
@@ -484,13 +335,5 @@ export async function viewMemFile(name: string): Promise<void> {
 }
 
 export function bindAdvancedProviderUi(): void {
-    const provider = $('advProvider') as HTMLSelectElement | null;
-    provider?.addEventListener('change', () => toggleAdvancedProviderFields(provider.value));
-    const geminiModel = $('advGeminiModel') as HTMLSelectElement | null;
-    const custom = $('advGeminiModelCustom') as HTMLInputElement | null;
-    geminiModel?.addEventListener('change', () => {
-        if (!custom) return;
-        custom.style.display = geminiModel.value === '__custom__' ? '' : 'none';
-    });
-    $('advBootstrapUseActive')?.addEventListener('change', toggleBootstrapFields);
+    return;
 }

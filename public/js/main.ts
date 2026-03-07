@@ -37,7 +37,6 @@ import {
 import {
     openMemoryModal, closeMemoryModal, switchMemTab, setMemEnabled,
     saveMemSettings, deleteMemFile, viewMemFile,
-    setAdvEnabled, saveAdvancedMemorySettings,
     rerunAdvancedBootstrap, reindexAdvancedMemory, openCorruptedFolder,
     bindAdvancedProviderUi
 } from './features/memory.js';
@@ -321,8 +320,7 @@ document.getElementById('memoryModal')?.addEventListener('click', (e) => closeMe
 document.querySelector('#memoryModal .modal-box')?.addEventListener('click', (e) => e.stopPropagation());
 document.querySelector('[data-action="closeMemory"]')?.addEventListener('click', () => closeMemoryModal());
 document.getElementById('memTabBtnSettings')?.addEventListener('click', () => switchMemTab('settings'));
-document.getElementById('memTabBtnAdvSetup')?.addEventListener('click', () => switchMemTab('adv-setup'));
-document.getElementById('memTabBtnAdvOps')?.addEventListener('click', () => switchMemTab('adv-ops'));
+document.getElementById('memTabBtnAdvOps')?.addEventListener('click', () => switchMemTab('status'));
 document.getElementById('memTabBtnFiles')?.addEventListener('click', () => switchMemTab('files'));
 document.getElementById('memOn')?.addEventListener('click', () => setMemEnabled(true));
 document.getElementById('memOff')?.addEventListener('click', () => setMemEnabled(false));
@@ -330,9 +328,6 @@ document.getElementById('memFlushEvery')?.addEventListener('change', saveMemSett
 document.getElementById('memCli')?.addEventListener('change', saveMemSettings);
 document.getElementById('memModel')?.addEventListener('change', saveMemSettings);
 document.getElementById('memRetention')?.addEventListener('change', saveMemSettings);
-document.getElementById('advOn')?.addEventListener('click', () => setAdvEnabled(true));
-document.getElementById('advOff')?.addEventListener('click', () => setAdvEnabled(false));
-document.getElementById('advSaveSettingsBtn')?.addEventListener('click', saveAdvancedMemorySettings);
 document.getElementById('advBootstrapBtn')?.addEventListener('click', rerunAdvancedBootstrap);
 document.getElementById('advReindexBtn')?.addEventListener('click', reindexAdvancedMemory);
 document.getElementById('advReimportBtn')?.addEventListener('click', rerunAdvancedBootstrap);

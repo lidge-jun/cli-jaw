@@ -227,11 +227,11 @@ function appendAdvancedMemoryContext(prompt: string, currentPrompt: string, prov
     let next = prompt;
     const profile = loadAdvancedProfileSummary(800);
     const snapshot = providedSnapshot || buildTaskSnapshot(currentPrompt, 2800);
-    next += '\n\n---\n## Advanced Memory Mode\n';
-    next += '- search/read routed to advanced runtime\n';
-    next += '- save remains on legacy lightweight path\n';
+    next += '\n\n---\n## Memory Runtime\n';
+    next += '- indexed memory context is active\n';
+    next += '- use task snapshot and profile context before assuming missing memory\n';
     if (profile) {
-        next += '\n\n## Advanced Profile\n' + profile;
+        next += '\n\n## Profile Context\n' + profile;
     }
     if (snapshot) {
         next += '\n\n' + snapshot;
@@ -251,15 +251,15 @@ export function getSystemPrompt(opts: { currentPrompt?: string; forDisk?: boolea
     // Phase 15: Telegram guidance is now part of A1_CONTENT (hardcoded)
     // No dynamic injection needed — Bot-First policy with curl examples included
 
-    if (!adv.enabled) {
-        prompt = appendLegacyMemoryContext(prompt);
-    } else if (!forDisk && adv.routing?.searchRead === 'advanced') {
+    if (!forDisk && adv.routing?.searchRead === 'advanced') {
         prompt = appendAdvancedMemoryContext(prompt, currentPrompt, opts.memorySnapshot || '');
     } else if (!forDisk) {
         prompt = appendLegacyMemoryContext(prompt);
-        prompt += '\n\n---\n## Advanced Memory Status\n';
-        prompt += '- advanced memory is enabled but index is not ready yet\n';
-        prompt += '- temporary fallback to legacy memory context is active\n';
+        prompt += '\n\n---\n## Memory Status\n';
+        prompt += '- indexed memory is still initializing\n';
+        prompt += '- temporary fallback memory context is active\n';
+    } else {
+        prompt = appendLegacyMemoryContext(prompt);
     }
 
     try {

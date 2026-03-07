@@ -45,6 +45,28 @@ export function assertFilename(filename: string, { allowExt = ['.md'] }: { allow
 }
 
 /**
+ * Memory relative path validation — nested relative paths allowed, traversal forbidden
+ * @param {string} input
+ * @param {object} opts
+ * @param {string[]} opts.allowExt
+ * @returns {string}
+ * @throws 400 invalid_filename / invalid_extension
+ */
+export function assertMemoryRelPath(input: string, { allowExt = ['.md'] }: { allowExt?: string[] } = {}) {
+    const v = String(input || '').trim().replace(/\\/g, '/');
+    if (!v || v.length > 300) throw badRequest('invalid_filename');
+    if (v.startsWith('/') || v.startsWith('~') || v.includes('..')) throw badRequest('invalid_filename');
+    const segments = v.split('/').filter(Boolean);
+    if (!segments.length) throw badRequest('invalid_filename');
+    for (const seg of segments) {
+        if (!FILE_NAME_RE.test(seg)) throw badRequest('invalid_filename');
+    }
+    const ext = path.extname(v).toLowerCase();
+    if (allowExt.length && !allowExt.includes(ext)) throw badRequest('invalid_extension');
+    return segments.join('/');
+}
+
+/**
  * baseDir 아래로 안전하게 resolve — 탈출 시 403
  * @param {string} baseDir
  * @param {string} unsafeName

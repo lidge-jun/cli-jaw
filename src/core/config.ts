@@ -130,20 +130,6 @@ function createDefaultSettings() {
             model: '',
             retentionDays: 30,
         },
-        memoryAdvanced: {
-            enabled: false,
-            provider: 'gemini',
-            model: 'gemini-3.1-flash-lite-preview',
-            apiKey: '',
-            baseUrl: '',
-            vertexConfig: '',
-            bootstrap: {
-                enabled: true,
-                useActiveCli: true,
-                cli: '',
-                model: '',
-            },
-        },
         employees: [],
         locale: 'ko',
         stt: {

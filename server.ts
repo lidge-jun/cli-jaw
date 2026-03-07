@@ -22,7 +22,7 @@ import {
 
 // ─── src/ modules ────────────────────────────────────
 
-import { assertSkillId, assertFilename, safeResolveUnder } from './src/security/path-guards.js';
+import { assertSkillId, assertFilename, assertMemoryRelPath, safeResolveUnder } from './src/security/path-guards.js';
 import { decodeFilenameSafe } from './src/security/decode.js';
 import { ok, fail } from './src/http/response.js';
 import { mergeSettingsPatch } from './src/core/settings-merge.js';
@@ -30,7 +30,7 @@ import { syncCodexContextWindow, readCodexContextWindow } from './src/core/codex
 import { setWss, broadcast } from './src/core/bus.js';
 import * as browser from './src/browser/index.js';
 import * as memory from './src/memory/memory.js';
-import { bootstrapAdvancedMemory, ensureAdvancedMemoryStructure, getAdvancedMemoryStatus, listAdvancedMemoryFiles, normalizeOpenAiCompatibleBaseUrl, readAdvancedMemorySnippet, reindexAdvancedMemory, searchAdvancedMemory, syncKvShadowImport, validateAdvancedMemoryConfig } from './src/memory/advanced.js';
+import { bootstrapAdvancedMemory, ensureAdvancedMemoryStructure, ensureIntegratedMemoryReady, getAdvancedMemoryStatus, listAdvancedMemoryFiles, normalizeOpenAiCompatibleBaseUrl, readAdvancedMemorySnippet, reindexAdvancedMemory, searchAdvancedMemory, syncKvShadowImport, validateAdvancedMemoryConfig } from './src/memory/advanced.js';
 import { loadLocales, t, normalizeLocale } from './src/core/i18n.js';
 import {
     JAW_HOME, PROMPTS_DIR, DB_PATH, UPLOADS_DIR,
@@ -113,6 +113,11 @@ ensureDirs();
 fs.mkdirSync(join(projectRoot, 'public'), { recursive: true });
 runMigration(projectRoot);
 loadSettings();
+try {
+    ensureIntegratedMemoryReady();
+} catch (e: unknown) {
+    console.warn('[jaw:memory-init]', (e as Error).message);
+}
 
 // Phase 3.1: safe → auto 강제 마이그레이션 (기존 사용자 대응)
 if (settings.permissions === 'safe') {
@@ -312,6 +317,30 @@ function applySettingsPatch(rawPatch: Record<string, any> = {}, { restartTelegra
     return settings;
 }
 
+function sanitizeAdvancedSettingsPatch(raw: Record<string, any> = {}) {
+    const patch = raw && typeof raw === 'object' ? raw : {};
+    const next: Record<string, any> = {};
+    if (patch.enabled !== undefined) next.enabled = !!patch.enabled;
+    if (typeof patch.provider === 'string') next.provider = patch.provider;
+    if (typeof patch.model === 'string') next.model = patch.model;
+    if (typeof patch.apiKey === 'string' && patch.apiKey) next.apiKey = patch.apiKey;
+    if (typeof patch.baseUrl === 'string') next.baseUrl = patch.baseUrl;
+    if (typeof patch.vertexConfig === 'string') next.vertexConfig = patch.vertexConfig;
+    if (patch.bootstrap && typeof patch.bootstrap === 'object') {
+        next.bootstrap = {};
+        if (patch.bootstrap.enabled !== undefined) next.bootstrap.enabled = !!patch.bootstrap.enabled;
+        if (patch.bootstrap.useActiveCli !== undefined) next.bootstrap.useActiveCli = !!patch.bootstrap.useActiveCli;
+        if (typeof patch.bootstrap.cli === 'string') next.bootstrap.cli = patch.bootstrap.cli;
+        if (typeof patch.bootstrap.model === 'string') next.bootstrap.model = patch.bootstrap.model;
+    }
+    return next;
+}
+
+function normalizeAdvancedReadPath(file: string) {
+    const value = String(file || '').replace(/\\/g, '/').replace(/^\/+/, '');
+    return value.startsWith('structured/') ? value.slice('structured/'.length) : value;
+}
+
 function seedDefaultEmployees({ reset = false, notify = false } = {}) {
     const existing = getEmployees.all();
     if (reset) {
@@ -497,7 +526,7 @@ app.get('/api/memory-advanced/status', (_, res) => {
     res.json(getAdvancedMemoryStatus());
 });
 app.put('/api/memory-advanced/settings', (req, res) => {
-    const result = applySettingsPatch({ memoryAdvanced: req.body || {} }, { restartTelegram: false });
+    const result = applySettingsPatch({ memoryAdvanced: sanitizeAdvancedSettingsPatch(req.body || {}) }, { restartTelegram: false });
     const safe = { ...result.memoryAdvanced };
     const key = safe.apiKey || '';
     const vertexConfig = safe.vertexConfig || '';
@@ -515,17 +544,18 @@ app.put('/api/memory-advanced/settings', (req, res) => {
 });
 app.post('/api/memory-advanced/enable', async (req, res) => {
     try {
-        const patch = req.body || {};
-        const validated = await validateAdvancedMemoryConfig(patch);
+        const raw = req.body || {};
+        const settingsPatch = sanitizeAdvancedSettingsPatch(raw);
+        const validated = await validateAdvancedMemoryConfig(settingsPatch);
         if (!validated.ok) {
             return res.status(400).json({ ok: false, error: validated.error || 'Advanced memory validation failed.' });
         }
-        applySettingsPatch({ memoryAdvanced: { ...patch, enabled: true } }, { restartTelegram: false });
+        applySettingsPatch({ memoryAdvanced: { ...settingsPatch, enabled: true } }, { restartTelegram: false });
         const result = bootstrapAdvancedMemory({
-            importCore: patch.importCore !== false,
-            importMarkdown: patch.importMarkdown !== false,
-            importKv: patch.importKv !== false,
-            importClaudeSession: patch.importClaudeSession !== false,
+            importCore: raw.importCore !== false,
+            importMarkdown: raw.importMarkdown !== false,
+            importKv: raw.importKv !== false,
+            importClaudeSession: raw.importClaudeSession !== false,
         });
         res.json({
             ok: true,
@@ -565,6 +595,31 @@ app.post('/api/memory-advanced/reindex', (_req, res) => {
     });
 });
 app.get('/api/memory-advanced/files', (_req, res) => {
+    res.json(listAdvancedMemoryFiles());
+});
+
+app.get('/api/memory/status', (_req, res) => {
+    res.json(getAdvancedMemoryStatus());
+});
+app.post('/api/memory/reindex', (_req, res) => {
+    const result = reindexAdvancedMemory();
+    res.json({
+        ok: true,
+        message: 'Memory reindex completed.',
+        result,
+        status: getAdvancedMemoryStatus(),
+    });
+});
+app.post('/api/memory/bootstrap', (req, res) => {
+    const result = bootstrapAdvancedMemory(req.body || {});
+    res.json({
+        ok: true,
+        message: 'Memory bootstrap completed.',
+        result,
+        status: getAdvancedMemoryStatus(),
+    });
+});
+app.get('/api/memory/files', (_req, res) => {
     res.json(listAdvancedMemoryFiles());
 });
 
@@ -651,17 +706,17 @@ app.delete('/api/memory/:key', (req, res) => {
 // Memory files (Claude native)
 app.get('/api/memory-files', (_, res) => {
     const memDir = getMemoryDir();
-    let files: any[] = [];
-    if (fs.existsSync(memDir)) {
-        files = fs.readdirSync(memDir).filter(f => f.endsWith('.md')).sort().reverse().map(f => {
-            const content = fs.readFileSync(join(memDir, f), 'utf8');
+    const files = memory.list()
+        .sort((a, b) => b.path.localeCompare(a.path))
+        .map(f => {
+            const fullPath = safeResolveUnder(memDir, f.path);
+            const content = fs.existsSync(fullPath) ? fs.readFileSync(fullPath, 'utf8') : '';
             const entries = content.split(/^## /m).filter(Boolean).length;
-            return { name: f, entries, size: content.length };
+            return { name: f.path, entries, size: f.size };
         });
-    }
     res.json({
         enabled: settings.memory?.enabled !== false,
-        flushEvery: settings.memory?.flushEvery ?? 20,
+        flushEvery: settings.memory?.flushEvery ?? 10,
         cli: settings.memory?.cli || '',
         model: settings.memory?.model || '',
         retentionDays: settings.memory?.retentionDays ?? 30,
@@ -669,12 +724,32 @@ app.get('/api/memory-files', (_, res) => {
         counter: memoryFlushCounter,
     });
 });
+app.get('/api/memory-file', (req, res) => {
+    try {
+        const name = assertMemoryRelPath(String(req.query.path || ''), { allowExt: ['.md', '.txt', '.json'] });
+        const fp = safeResolveUnder(getMemoryDir(), name);
+        if (!fs.existsSync(fp)) return res.status(404).json({ error: 'not found' });
+        res.json({ name, content: fs.readFileSync(fp, 'utf8') });
+    } catch (e: unknown) {
+        res.status((e as any).statusCode || 400).json({ error: (e as Error).message });
+    }
+});
 app.get('/api/memory-files/:filename', (req, res) => {
     try {
         const name = assertFilename(req.params.filename);
         const fp = safeResolveUnder(getMemoryDir(), name);
         if (!fs.existsSync(fp)) return res.status(404).json({ error: 'not found' });
         res.json({ name, content: fs.readFileSync(fp, 'utf8') });
+    } catch (e: unknown) {
+        res.status((e as any).statusCode || 400).json({ error: (e as Error).message });
+    }
+});
+app.delete('/api/memory-file', (req, res) => {
+    try {
+        const name = assertMemoryRelPath(String(req.query.path || ''), { allowExt: ['.md', '.txt', '.json'] });
+        const fp = safeResolveUnder(getMemoryDir(), name);
+        if (fs.existsSync(fp)) fs.unlinkSync(fp);
+        res.json({ ok: true });
     } catch (e: unknown) {
         res.status((e as any).statusCode || 400).json({ error: (e as Error).message });
     }
@@ -1017,10 +1092,10 @@ app.get('/api/jaw-memory/search', (req, res) => {
 
 app.get('/api/jaw-memory/read', (req, res) => {
     try {
-        const file = assertFilename(req.query.file as string, { allowExt: ['.md', '.txt', '.json'] });
+        const file = assertMemoryRelPath(String(req.query.file || ''), { allowExt: ['.md', '.txt', '.json'] });
         const adv = getAdvancedMemoryStatus();
         const content = adv.enabled && adv.routing.searchRead === 'advanced'
-            ? readAdvancedMemorySnippet(file, { lines: req.query.lines as any })
+            ? readAdvancedMemorySnippet(normalizeAdvancedReadPath(file), { lines: req.query.lines as any })
             : memory.read(file, { lines: req.query.lines as any });
         res.json({ content });
     } catch (e: unknown) { res.status((e as any).statusCode || 500).json({ error: (e as Error).message }); }
@@ -1028,7 +1103,7 @@ app.get('/api/jaw-memory/read', (req, res) => {
 
 app.post('/api/jaw-memory/save', (req, res) => {
     try {
-        const file = assertFilename(req.body.file, { allowExt: ['.md', '.txt', '.json'] });
+        const file = assertMemoryRelPath(String(req.body.file || ''), { allowExt: ['.md', '.txt', '.json'] });
         const p = memory.save(file, req.body.content);
         res.json({ ok: true, path: p });
     } catch (e: unknown) { res.status((e as any).statusCode || 500).json({ error: (e as Error).message }); }

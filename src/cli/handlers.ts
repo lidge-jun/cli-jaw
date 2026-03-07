@@ -333,34 +333,64 @@ export async function mcpHandler(args: any[], ctx: any) {
 export async function memoryHandler(args: any[], ctx: any) {
     const L = ctx.locale || 'ko';
     const sub = String(args[0] || '').toLowerCase();
+    if (sub === 'status') {
+        const status = await ctx.getAdvancedMemoryStatus?.();
+        const lines = [
+            `🧠 Memory`,
+            `State: ${status?.state || '-'}`,
+            `Storage: ${status?.storageRoot || '-'}`,
+            `Search/Read: ${status?.routing?.searchRead || 'basic'}`,
+            `Save: ${status?.routing?.save || 'basic'}`,
+            `Indexed files: ${status?.indexedFiles || 0}`,
+            `Indexed chunks: ${status?.indexedChunks || 0}`,
+        ];
+        return { ok: true, text: lines.join('\n') };
+    }
+    if (sub === 'bootstrap') {
+        const result = await ctx.bootstrapAdvancedMemory?.({
+            importCore: true,
+            importMarkdown: true,
+            importKv: true,
+            importClaudeSession: true,
+        });
+        return {
+            ok: true,
+            text: [
+                '🧠 Memory bootstrap completed',
+                `Root: ${result?.root || '-'}`,
+                `Imported core=${result?.counts?.core || 0}, markdown=${result?.counts?.markdown || 0}, kv=${result?.counts?.kv || 0}, claude=${result?.counts?.claude || 0}`,
+            ].join('\n'),
+        };
+    }
+    if (sub === 'reindex') {
+        const result = await ctx.reindexAdvancedMemory?.();
+        return {
+            ok: true,
+            text: [
+                '🧠 Memory reindex completed',
+                `Files: ${result?.totalFiles || 0}`,
+                `Chunks: ${result?.totalChunks || 0}`,
+            ].join('\n'),
+        };
+    }
     if (sub === 'adv') {
         const action = String(args[1] || 'status').toLowerCase();
         if (action === 'on') {
-            const settings = await safeCall(ctx.getSettings, null);
-            const ma = settings?.memoryAdvanced || {};
-            const validated = await ctx.validateAdvancedMemoryConfig?.(ma);
-            if (!validated?.ok) {
-                return { ok: false, text: validated?.error || 'Advanced memory validation failed.' };
-            }
-            const r = await ctx.updateSettings({ memoryAdvanced: { enabled: true } });
-            if (r?.ok === false) return r;
             const status = await ctx.getAdvancedMemoryStatus?.();
             return {
                 ok: true,
-                text: `🧠 Advanced Memory: ON\nProvider: ${status?.provider || 'gemini'}\nState: ${status?.state || 'not_initialized'}`,
+                text: `🧠 Memory is integrated by default.\nState: ${status?.state || 'not_initialized'}`,
             };
         }
         if (action === 'off') {
-            const r = await ctx.updateSettings({ memoryAdvanced: { enabled: false } });
-            if (r?.ok === false) return r;
-            return { ok: true, text: '🧠 Advanced Memory: OFF' };
+            return { ok: true, text: '🧠 Memory can no longer be turned off as a separate mode.' };
         }
         if (action === 'init') {
             const created = await ctx.initAdvancedMemory?.();
             const status = await ctx.getAdvancedMemoryStatus?.();
             return {
                 ok: true,
-                text: `🧠 Advanced Memory initialized\nRoot: ${created?.root || status?.storageRoot || '-'}\nState: ${status?.state || 'configured'}`,
+                text: `🧠 Memory initialized\nRoot: ${created?.root || status?.storageRoot || '-'}\nState: ${status?.state || 'configured'}`,
             };
         }
         if (action === 'bootstrap') {
@@ -374,7 +404,7 @@ export async function memoryHandler(args: any[], ctx: any) {
             return {
                 ok: true,
                 text: [
-                    '🧠 Advanced bootstrap completed',
+                    '🧠 Memory bootstrap completed',
                     `Root: ${result?.root || status?.storageRoot || '-'}`,
                     `Imported core=${result?.counts?.core || 0}, markdown=${result?.counts?.markdown || 0}, kv=${result?.counts?.kv || 0}, claude=${result?.counts?.claude || 0}`,
                     `Import status: ${status?.importStatus || '-'}`,
@@ -387,7 +417,7 @@ export async function memoryHandler(args: any[], ctx: any) {
             return {
                 ok: true,
                 text: [
-                    '🧠 Advanced reindex completed',
+                    '🧠 Memory reindex completed',
                     `Files: ${result?.totalFiles || status?.indexedFiles || 0}`,
                     `Chunks: ${result?.totalChunks || status?.indexedChunks || 0}`,
                     `State: ${status?.indexState || '-'}`,
@@ -396,8 +426,7 @@ export async function memoryHandler(args: any[], ctx: any) {
         }
         const status = await ctx.getAdvancedMemoryStatus?.();
         const lines = [
-            `🧠 Advanced Memory: ${status?.enabled ? 'ON' : 'OFF'}`,
-            `Provider: ${status?.provider || '-'}`,
+            `🧠 Memory: ${status?.enabled ? 'ON' : 'OFF'}`,
             `State: ${status?.state || '-'}`,
             `Storage: ${status?.storageRoot || '-'}`,
             `Routing(search/read): ${status?.routing?.searchRead || 'basic'}`,

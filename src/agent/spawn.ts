@@ -869,7 +869,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
 
 async function triggerMemoryFlush() {
     const { getMemoryDir } = await import('../prompt/builder.js');
-    const threshold = settings.memory?.flushEvery ?? 20;
+    const threshold = settings.memory?.flushEvery ?? 10;
     const recent = (getRecentMessages.all(threshold) as any[]).reverse();
     if (recent.length < 4) return;
 
@@ -880,9 +880,8 @@ async function triggerMemoryFlush() {
     const convo = lines.join('\n\n');
     const date = new Date().toISOString().slice(0, 10);
     const time = new Date().toTimeString().slice(0, 5);
-    const adv = getAdvancedMemoryStatus();
     const memDir = getMemoryDir();
-    const memFile = adv.enabled ? getAdvancedFlushFilePath(date) : join(memDir, `${date}.md`);
+    const memFile = getAdvancedFlushFilePath(date);
 
     const flushPrompt = `You are a memory extractor. Summarize the conversation into a short prose paragraph.
 Save by APPENDING to: ${memFile}
@@ -915,5 +914,5 @@ ${convo}`;
         model: flushModel,
         sysPrompt: '',
     });
-    console.log(`[memory] flush triggered (${recent.length} msgs → ${flushCli}/${flushModel})`);
+    console.log(`[memory] auto-append triggered (${recent.length} msgs → ${flushCli}/${flushModel})`);
 }
