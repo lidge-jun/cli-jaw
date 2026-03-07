@@ -332,6 +332,76 @@ export async function mcpHandler(args: any[], ctx: any) {
 
 export async function memoryHandler(args: any[], ctx: any) {
     const L = ctx.locale || 'ko';
+    const sub = String(args[0] || '').toLowerCase();
+    if (sub === 'adv') {
+        const action = String(args[1] || 'status').toLowerCase();
+        if (action === 'on') {
+            const r = await ctx.updateSettings({ memoryAdvanced: { enabled: true } });
+            if (r?.ok === false) return r;
+            const status = await ctx.getAdvancedMemoryStatus?.();
+            return {
+                ok: true,
+                text: `🧠 Advanced Memory: ON\nProvider: ${status?.provider || 'gemini'}\nState: ${status?.state || 'not_initialized'}`,
+            };
+        }
+        if (action === 'off') {
+            const r = await ctx.updateSettings({ memoryAdvanced: { enabled: false } });
+            if (r?.ok === false) return r;
+            return { ok: true, text: '🧠 Advanced Memory: OFF' };
+        }
+        if (action === 'init') {
+            const created = await ctx.initAdvancedMemory?.();
+            const status = await ctx.getAdvancedMemoryStatus?.();
+            return {
+                ok: true,
+                text: `🧠 Advanced Memory initialized\nRoot: ${created?.root || status?.storageRoot || '-'}\nState: ${status?.state || 'configured'}`,
+            };
+        }
+        if (action === 'bootstrap') {
+            const result = await ctx.bootstrapAdvancedMemory?.({
+                importCore: true,
+                importMarkdown: true,
+                importKv: true,
+                importClaudeSession: true,
+            });
+            const status = await ctx.getAdvancedMemoryStatus?.();
+            return {
+                ok: true,
+                text: [
+                    '🧠 Advanced bootstrap completed',
+                    `Root: ${result?.root || status?.storageRoot || '-'}`,
+                    `Imported core=${result?.counts?.core || 0}, markdown=${result?.counts?.markdown || 0}, kv=${result?.counts?.kv || 0}, claude=${result?.counts?.claude || 0}`,
+                    `Import status: ${status?.importStatus || '-'}`,
+                ].join('\n'),
+            };
+        }
+        if (action === 'reindex') {
+            const result = await ctx.reindexAdvancedMemory?.();
+            const status = await ctx.getAdvancedMemoryStatus?.();
+            return {
+                ok: true,
+                text: [
+                    '🧠 Advanced reindex completed',
+                    `Files: ${result?.totalFiles || status?.indexedFiles || 0}`,
+                    `Chunks: ${result?.totalChunks || status?.indexedChunks || 0}`,
+                    `State: ${status?.indexState || '-'}`,
+                ].join('\n'),
+            };
+        }
+        const status = await ctx.getAdvancedMemoryStatus?.();
+        const lines = [
+            `🧠 Advanced Memory: ${status?.enabled ? 'ON' : 'OFF'}`,
+            `Provider: ${status?.provider || '-'}`,
+            `State: ${status?.state || '-'}`,
+            `Storage: ${status?.storageRoot || '-'}`,
+            `Routing(search/read): ${status?.routing?.searchRead || 'basic'}`,
+            `Routing(save): ${status?.routing?.save || 'basic'}`,
+            `Indexed files: ${status?.indexedFiles || 0}`,
+            `Indexed chunks: ${status?.indexedChunks || 0}`,
+            `Imported core/markdown/kv/claude: ${status?.importedCounts?.core || 0}/${status?.importedCounts?.markdown || 0}/${status?.importedCounts?.kv || 0}/${status?.importedCounts?.claude || 0}`,
+        ];
+        return { ok: true, text: lines.join('\n') };
+    }
     if (!args.length || (args.length === 1 && args[0].toLowerCase() === 'list')) {
         const files = await ctx.listMemory();
         if (!files?.length) return { ok: true, text: t('cmd.memory.empty', {}, L) };

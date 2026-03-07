@@ -78,6 +78,7 @@ export function save(filename: string, content: string) {
     // Unescape \n from CLI
     const unescaped = content.replace(/\\n/g, '\n');
     fs.appendFileSync(filepath, '\n' + unescaped + '\n');
+    void import('./advanced.js').then(m => m.syncLegacyMarkdownShadowImport(filepath)).catch(() => { });
     return filepath;
 }
 
@@ -113,6 +114,7 @@ export function appendDaily(content: string) {
     fs.mkdirSync(join(MEMORY_DIR, 'daily'), { recursive: true });
     const timestamp = new Date().toTimeString().slice(0, 5);
     fs.appendFileSync(filepath, `\n---\n**${timestamp}** ${content}\n`);
+    void import('./advanced.js').then(m => m.syncLegacyMarkdownShadowImport(filepath)).catch(() => { });
     return filepath;
 }
 

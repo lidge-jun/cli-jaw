@@ -30,6 +30,7 @@ import { syncCodexContextWindow, readCodexContextWindow } from './src/core/codex
 import { setWss, broadcast } from './src/core/bus.js';
 import * as browser from './src/browser/index.js';
 import * as memory from './src/memory/memory.js';
+import { bootstrapAdvancedMemory, ensureAdvancedMemoryStructure, getAdvancedMemoryStatus, listAdvancedMemoryFiles, normalizeOpenAiCompatibleBaseUrl, readAdvancedMemorySnippet, reindexAdvancedMemory, searchAdvancedMemory, syncKvShadowImport } from './src/memory/advanced.js';
 import { loadLocales, t, normalizeLocale } from './src/core/i18n.js';
 import {
     JAW_HOME, PROMPTS_DIR, DB_PATH, UPLOADS_DIR,
@@ -262,6 +263,14 @@ function applySettingsPatch(rawPatch: Record<string, any> = {}, { restartTelegra
     const prevWorkingDir = settings.workingDir;
     const hasTelegramUpdate = !!(rawPatch || {}).telegram || (rawPatch || {}).locale !== undefined;
 
+    if (rawPatch?.memoryAdvanced && typeof rawPatch.memoryAdvanced === 'object') {
+        const ma = { ...rawPatch.memoryAdvanced };
+        if (typeof ma.baseUrl === 'string') {
+            ma.baseUrl = normalizeOpenAiCompatibleBaseUrl(ma.baseUrl);
+        }
+        rawPatch = { ...rawPatch, memoryAdvanced: ma };
+    }
+
     const merged = mergeSettingsPatch(settings, rawPatch);
     replaceSettings(merged);
     saveSettings(settings);
@@ -441,6 +450,18 @@ app.post('/api/clear', (_, res) => {
 // Settings
 app.get('/api/settings', (_, res) => {
     const safe = { ...settings };
+    if (safe.memoryAdvanced) {
+        const key = safe.memoryAdvanced.apiKey || '';
+        const vertexConfig = safe.memoryAdvanced.vertexConfig || '';
+        safe.memoryAdvanced = {
+            ...safe.memoryAdvanced,
+            apiKey: undefined,
+            apiKeySet: !!key,
+            apiKeyLast4: key.slice(-4) || '',
+            vertexConfig: undefined,
+            vertexConfigSet: !!vertexConfig,
+        };
+    }
     if (safe.stt) {
         const gKey = safe.stt.geminiApiKey || process.env.GEMINI_API_KEY || '';
         const oKey = safe.stt.openaiApiKey || '';
@@ -451,12 +472,75 @@ app.get('/api/settings', (_, res) => {
 app.put('/api/settings', (req, res) => {
     const result = applySettingsPatch(req.body, { restartTelegram: true });
     const safe = { ...result };
+    if (safe.memoryAdvanced) {
+        const key = safe.memoryAdvanced.apiKey || '';
+        const vertexConfig = safe.memoryAdvanced.vertexConfig || '';
+        safe.memoryAdvanced = {
+            ...safe.memoryAdvanced,
+            apiKey: undefined,
+            apiKeySet: !!key,
+            apiKeyLast4: key.slice(-4) || '',
+            vertexConfig: undefined,
+            vertexConfigSet: !!vertexConfig,
+        };
+    }
     if (safe.stt) {
         const gKey2 = safe.stt.geminiApiKey || process.env.GEMINI_API_KEY || '';
         const oKey2 = safe.stt.openaiApiKey || '';
         safe.stt = { ...safe.stt, geminiApiKey: undefined, geminiKeySet: !!gKey2, geminiKeyLast4: gKey2.slice(-4) || '', openaiApiKey: undefined, openaiKeySet: !!oKey2, openaiKeyLast4: oKey2.slice(-4) || '' };
     }
     ok(res, safe);
+});
+
+// Advanced Memory (Phase 0a)
+app.get('/api/memory-advanced/status', (_, res) => {
+    res.json(getAdvancedMemoryStatus());
+});
+app.put('/api/memory-advanced/settings', (req, res) => {
+    const result = applySettingsPatch({ memoryAdvanced: req.body || {} }, { restartTelegram: false });
+    const safe = { ...result.memoryAdvanced };
+    const key = safe.apiKey || '';
+    const vertexConfig = safe.vertexConfig || '';
+    res.json({
+        ok: true,
+        memoryAdvanced: {
+            ...safe,
+            apiKey: undefined,
+            apiKeySet: !!key,
+            apiKeyLast4: key.slice(-4) || '',
+            vertexConfig: undefined,
+            vertexConfigSet: !!vertexConfig,
+        },
+    });
+});
+app.post('/api/memory-advanced/init', (_req, res) => {
+    const created = ensureAdvancedMemoryStructure();
+    res.json({
+        ok: true,
+        created,
+        status: getAdvancedMemoryStatus(),
+    });
+});
+app.post('/api/memory-advanced/bootstrap', (req, res) => {
+    const result = bootstrapAdvancedMemory(req.body || {});
+    res.json({
+        ok: true,
+        message: 'Advanced bootstrap completed.',
+        result,
+        status: getAdvancedMemoryStatus(),
+    });
+});
+app.post('/api/memory-advanced/reindex', (_req, res) => {
+    const result = reindexAdvancedMemory();
+    res.json({
+        ok: true,
+        message: 'Advanced reindex completed.',
+        result,
+        status: getAdvancedMemoryStatus(),
+    });
+});
+app.get('/api/memory-advanced/files', (_req, res) => {
+    res.json(listAdvancedMemoryFiles());
 });
 
 // Codex context window config
@@ -530,10 +614,12 @@ app.post('/api/memory', (req, res) => {
     const { key, value, source = 'manual' } = req.body;
     if (!key || !value) return fail(res, 400, 'key and value required');
     upsertMemory.run(key, value, source);
+    try { syncKvShadowImport(); } catch { /* best-effort */ }
     ok(res, null);
 });
 app.delete('/api/memory/:key', (req, res) => {
     deleteMemory.run(req.params.key);
+    try { syncKvShadowImport(); } catch { /* best-effort */ }
     ok(res, null);
 });
 
@@ -896,14 +982,21 @@ app.post('/api/skills/reset', (req, res) => {
 // ─── Memory API (Phase A) ────────────────────────────
 
 app.get('/api/jaw-memory/search', (req, res) => {
-    try { res.json({ result: memory.search(String(req.query.q || '')) }); }
+    try {
+        const q = String(req.query.q || '');
+        const adv = getAdvancedMemoryStatus();
+        res.json({ result: adv.enabled && adv.routing.searchRead === 'advanced' ? searchAdvancedMemory(q) : memory.search(q) });
+    }
     catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
 });
 
 app.get('/api/jaw-memory/read', (req, res) => {
     try {
         const file = assertFilename(req.query.file as string, { allowExt: ['.md', '.txt', '.json'] });
-        const content = memory.read(file, { lines: req.query.lines as any });
+        const adv = getAdvancedMemoryStatus();
+        const content = adv.enabled && adv.routing.searchRead === 'advanced'
+            ? readAdvancedMemorySnippet(file, { lines: req.query.lines as any })
+            : memory.read(file, { lines: req.query.lines as any });
         res.json({ content });
     } catch (e: unknown) { res.status((e as any).statusCode || 500).json({ error: (e as Error).message }); }
 });
