@@ -130,6 +130,20 @@ function createDefaultSettings() {
             model: '',
             retentionDays: 30,
         },
+        memoryAdvanced: {
+            enabled: false,
+            provider: 'gemini',
+            model: '',
+            apiKey: '',
+            baseUrl: '',
+            vertexConfig: '',
+            bootstrap: {
+                enabled: true,
+                useActiveCli: true,
+                cli: '',
+                model: '',
+            },
+        },
         employees: [],
         locale: 'ko',
         stt: {

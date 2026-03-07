@@ -30,12 +30,22 @@ export function mergeSettingsPatch(current: Record<string, any>, patch: Record<s
         delete remaining.activeOverrides;
     }
 
-    // Deep merge nested objects (heartbeat, telegram, memory)
-    for (const key of ['heartbeat', 'telegram', 'memory', 'stt']) {
+    // Deep merge nested objects (heartbeat, telegram, memory, memoryAdvanced, stt)
+    for (const key of ['heartbeat', 'telegram', 'memory', 'memoryAdvanced', 'stt']) {
         if (remaining[key] && typeof remaining[key] === 'object') {
             result[key] = { ...result[key], ...remaining[key] };
             delete remaining[key];
         }
+    }
+
+    if (result.memoryAdvanced?.bootstrap || remaining.memoryAdvanced?.bootstrap) {
+        result.memoryAdvanced = {
+            ...result.memoryAdvanced,
+            bootstrap: {
+                ...(current.memoryAdvanced?.bootstrap || {}),
+                ...(result.memoryAdvanced?.bootstrap || {}),
+            },
+        };
     }
 
     // Top-level scalar fields
