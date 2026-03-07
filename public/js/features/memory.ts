@@ -116,6 +116,21 @@ function renderStatusBanner(status: AdvancedMemoryStatus | null) {
     banner.textContent = `Advanced Memory active. search/read=${status.routing?.searchRead || 'basic'} / save=${status.routing?.save || 'basic'}`;
 }
 
+function setAdvBanner(text: string, show = true) {
+    const banner = $('advStatusBanner');
+    if (!banner) return;
+    banner.style.display = show ? '' : 'none';
+    banner.textContent = text;
+}
+
+function setAdvBusy(busy: boolean) {
+    const ids = ['advOn', 'advOff', 'advSaveSettingsBtn', 'advBootstrapBtn', 'advReindexBtn', 'advReimportBtn', 'advOpenCorruptedBtn'];
+    for (const id of ids) {
+        const el = $(id) as HTMLButtonElement | null;
+        if (el) el.disabled = busy;
+    }
+}
+
 function renderBasicSettings(data: MemoryData) {
     $('memOn')?.classList.toggle('active', data.enabled);
     $('memOff')?.classList.toggle('active', !data.enabled);
@@ -126,6 +141,15 @@ function renderBasicSettings(data: MemoryData) {
     setText('memPath', data.path);
     setText('memCounter', data.counter);
     setText('memThreshold', data.flushEvery);
+}
+
+function updateBasicVisibility(status: AdvancedMemoryStatus | null) {
+    const basicBtn = $('memTabBtnSettings') as HTMLElement | null;
+    const basicTab = $('memTabSettings') as HTMLElement | null;
+    if (!basicBtn || !basicTab) return;
+    const hideBasic = !!status?.enabled;
+    basicBtn.style.display = hideBasic ? 'none' : '';
+    if (hideBasic) basicTab.style.display = 'none';
 }
 
 function toggleAdvancedProviderFields(provider: string) {
@@ -270,6 +294,7 @@ export async function openMemoryModal(): Promise<void> {
     const { basic, status, settings, files } = await loadModalData();
     if (!basic) return;
     renderBasicSettings(basic);
+    updateBasicVisibility(status);
     renderStatusBanner(status);
     renderAdvancedSetup(settings, status);
     renderAdvancedOps(status);
@@ -277,6 +302,7 @@ export async function openMemoryModal(): Promise<void> {
     renderAdvancedFiles(files);
     syncSidebarBadge(status, basic.files.length);
     $('memoryModal')?.classList.add('open');
+    if (status?.enabled) switchMemTab('adv-ops');
 }
 
 export function closeMemoryModal(e?: Event): void {
@@ -322,14 +348,7 @@ export async function saveMemSettings(): Promise<void> {
     if (thresholdEl && flushEl) thresholdEl.textContent = flushEl.value;
 }
 
-export async function setAdvEnabled(v: boolean): Promise<void> {
-    $('advOn')?.classList.toggle('active', v);
-    $('advOff')?.classList.toggle('active', !v);
-    await apiJson('/api/memory-advanced/settings', 'PUT', { enabled: v });
-    await openMemoryModal();
-}
-
-export async function saveAdvancedMemorySettings(): Promise<void> {
+function buildAdvancedPatch() {
     const provider = ( $('advProvider') as HTMLSelectElement | null)?.value || 'gemini';
     const patch: Record<string, any> = {
         provider,
@@ -338,8 +357,11 @@ export async function saveAdvancedMemorySettings(): Promise<void> {
             cli: ( $('advBootstrapCli') as HTMLSelectElement | null)?.value || '',
             model: ( $('advBootstrapModel') as HTMLInputElement | null)?.value || '',
         },
+        importCore: ($( 'advImportCore') as HTMLInputElement | null)?.checked !== false,
+        importMarkdown: ($( 'advImportMarkdown') as HTMLInputElement | null)?.checked !== false,
+        importKv: ($( 'advImportKv') as HTMLInputElement | null)?.checked !== false,
+        importClaudeSession: ($( 'advImportClaudeSession') as HTMLInputElement | null)?.checked !== false,
     };
-
     if (provider === 'gemini') {
         const key = ( $('advGeminiKey') as HTMLInputElement | null)?.value || '';
         const sel = ( $('advGeminiModel') as HTMLSelectElement | null)?.value || 'gemini-3.1-flash-lite-preview';
@@ -357,8 +379,38 @@ export async function saveAdvancedMemorySettings(): Promise<void> {
     } else {
         patch.model = '';
     }
+    return patch;
+}
 
-    const result = await apiJson<{ memoryAdvanced?: AdvancedMemoryConfig }>('/api/memory-advanced/settings', 'PUT', patch);
+export async function setAdvEnabled(v: boolean): Promise<void> {
+    if (!v) {
+        setAdvBusy(true);
+        setAdvBanner('Advanced Memory를 비활성화하는 중...', true);
+        $('advOn')?.classList.toggle('active', false);
+        $('advOff')?.classList.toggle('active', true);
+        await apiJson('/api/memory-advanced/settings', 'PUT', { enabled: false });
+        setAdvBusy(false);
+        await openMemoryModal();
+        return;
+    }
+    setAdvBusy(true);
+    setAdvBanner('고급 메모리 설정을 검증하고 초기화하는 중...', true);
+    const result = await apiJson<{ ok?: boolean; error?: string; message?: string }>('/api/memory-advanced/enable', 'POST', buildAdvancedPatch());
+    if (!result) {
+        setAdvBusy(false);
+        alert('Advanced Memory validation failed. Provider/key/model을 확인해주세요.');
+        await openMemoryModal();
+        return;
+    }
+    if (result.message) alert(result.message);
+    setAdvBusy(false);
+    await openMemoryModal();
+}
+
+export async function saveAdvancedMemorySettings(): Promise<void> {
+    setAdvBusy(true);
+    setAdvBanner('고급 메모리 설정을 저장하는 중...', true);
+    const result = await apiJson<{ memoryAdvanced?: AdvancedMemoryConfig }>('/api/memory-advanced/settings', 'PUT', buildAdvancedPatch());
     const geminiKey = $('advGeminiKey') as HTMLInputElement | null;
     const openaiKey = $('advOpenaiKey') as HTMLInputElement | null;
     if (geminiKey?.value) {
@@ -371,25 +423,32 @@ export async function saveAdvancedMemorySettings(): Promise<void> {
         openaiKey.value = '';
         openaiKey.placeholder = `✅ 입력됨 ····${l4}`;
     }
+    setAdvBusy(false);
     if (!result) return;
     await openMemoryModal();
 }
 
 export async function initializeAdvancedMemory(): Promise<void> {
-    await apiJson('/api/memory-advanced/init', 'POST', {});
-    await openMemoryModal();
-    switchMemTab('adv-ops');
+    // legacy no-op path kept for compatibility; direct initialize button removed
+    setAdvBanner('Initialize button is removed. Turn Advanced ON to validate + bootstrap automatically.', true);
+    switchMemTab('adv-setup');
 }
 
 export async function rerunAdvancedBootstrap(): Promise<void> {
+    setAdvBusy(true);
+    setAdvBanner('고급 메모리 bootstrap을 다시 실행하는 중...', true);
     const result = await apiJson<{ message?: string }>('/api/memory-advanced/bootstrap', 'POST', getBootstrapOptions());
+    setAdvBusy(false);
     if (result?.message) alert(result.message);
     await openMemoryModal();
     switchMemTab('adv-ops');
 }
 
 export async function reindexAdvancedMemory(): Promise<void> {
+    setAdvBusy(true);
+    setAdvBanner('고급 메모리 인덱스를 재생성하는 중...', true);
     const result = await apiJson<{ message?: string }>('/api/memory-advanced/reindex', 'POST', {});
+    setAdvBusy(false);
     if (result?.message) alert(result.message);
     await openMemoryModal();
     switchMemTab('adv-ops');

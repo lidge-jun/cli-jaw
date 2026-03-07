@@ -37,7 +37,7 @@ import {
 import {
     openMemoryModal, closeMemoryModal, switchMemTab, setMemEnabled,
     saveMemSettings, deleteMemFile, viewMemFile,
-    setAdvEnabled, saveAdvancedMemorySettings, initializeAdvancedMemory,
+    setAdvEnabled, saveAdvancedMemorySettings,
     rerunAdvancedBootstrap, reindexAdvancedMemory, openCorruptedFolder,
     bindAdvancedProviderUi
 } from './features/memory.js';
@@ -333,7 +333,6 @@ document.getElementById('memRetention')?.addEventListener('change', saveMemSetti
 document.getElementById('advOn')?.addEventListener('click', () => setAdvEnabled(true));
 document.getElementById('advOff')?.addEventListener('click', () => setAdvEnabled(false));
 document.getElementById('advSaveSettingsBtn')?.addEventListener('click', saveAdvancedMemorySettings);
-document.getElementById('advInitBtn')?.addEventListener('click', initializeAdvancedMemory);
 document.getElementById('advBootstrapBtn')?.addEventListener('click', rerunAdvancedBootstrap);
 document.getElementById('advReindexBtn')?.addEventListener('click', reindexAdvancedMemory);
 document.getElementById('advReimportBtn')?.addEventListener('click', rerunAdvancedBootstrap);
