@@ -158,7 +158,7 @@ function renderAdvancedSetup(settings: SettingsData | null, status: AdvancedMemo
 
     const geminiModel = $('advGeminiModel') as HTMLSelectElement | null;
     const geminiModelCustom = $('advGeminiModelCustom') as HTMLInputElement | null;
-    const savedGeminiModel = cfg.model || 'gemini-embedding-001';
+    const savedGeminiModel = cfg.model || 'gemini-3.1-flash-lite-preview';
     if (geminiModel) {
         const hasOption = Array.from(geminiModel.options).some(o => o.value === savedGeminiModel);
         if (hasOption) {
@@ -173,7 +173,7 @@ function renderAdvancedSetup(settings: SettingsData | null, status: AdvancedMemo
         }
     }
     setValue('advVertexConfig', cfg.vertexConfigSet ? '' : '');
-    setValue('advVertexModel', cfg.model || 'gemini-embedding-001');
+    setValue('advVertexModel', cfg.model || 'gemini-3.1-flash-lite-preview');
     setValue('advOpenaiBaseUrl', cfg.baseUrl || '');
     setValue('advOpenaiModel', cfg.model || '');
     setChecked('advBootstrapUseActive', cfg.bootstrap?.useActiveCli !== false);
@@ -342,13 +342,13 @@ export async function saveAdvancedMemorySettings(): Promise<void> {
 
     if (provider === 'gemini') {
         const key = ( $('advGeminiKey') as HTMLInputElement | null)?.value || '';
-        const sel = ( $('advGeminiModel') as HTMLSelectElement | null)?.value || 'gemini-embedding-001';
+        const sel = ( $('advGeminiModel') as HTMLSelectElement | null)?.value || 'gemini-3.1-flash-lite-preview';
         const custom = ( $('advGeminiModelCustom') as HTMLInputElement | null)?.value || '';
         patch.model = sel === '__custom__' ? custom : sel;
         if (key) patch.apiKey = key;
     } else if (provider === 'vertex') {
         patch.vertexConfig = ( $('advVertexConfig') as HTMLTextAreaElement | null)?.value || '';
-        patch.model = ( $('advVertexModel') as HTMLInputElement | null)?.value || 'gemini-embedding-001';
+        patch.model = ( $('advVertexModel') as HTMLInputElement | null)?.value || 'gemini-3.1-flash-lite-preview';
     } else if (provider === 'openai-compatible') {
         patch.baseUrl = ( $('advOpenaiBaseUrl') as HTMLInputElement | null)?.value || '';
         patch.model = ( $('advOpenaiModel') as HTMLInputElement | null)?.value || '';

@@ -602,7 +602,9 @@
                 <div class="settings-row sub-row adv-gemini">
                     <label>Gemini Model</label>
                     <select id="advGeminiModel">
-                        <option value="gemini-embedding-001">gemini-embedding-001</option>
+                        <option value="gemini-3.1-flash-lite-preview" selected>gemini-3.1-flash-lite-preview</option>
+                        <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite</option>
+                        <option value="gemini-2.5-flash">gemini-2.5-flash</option>
                         <option value="__custom__">✏️ 직접 입력...</option>
                     </select>
                     <input type="text" id="advGeminiModelCustom" placeholder="모델명 입력"
@@ -617,7 +619,7 @@
                 </div>
                 <div class="settings-row sub-row adv-vertex" style="display:none">
                     <label>Vertex Model</label>
-                    <input type="text" id="advVertexModel" placeholder="gemini-embedding-001"
+                    <input type="text" id="advVertexModel" placeholder="gemini-3.1-flash-lite-preview"
                         style="width:100%;font-size:11px;padding:4px">
                 </div>
 
@@ -633,7 +635,7 @@
                 </div>
                 <div class="settings-row sub-row adv-openai" style="display:none">
                     <label>Model</label>
-                    <input type="text" id="advOpenaiModel" placeholder="text-embedding-3-small"
+                    <input type="text" id="advOpenaiModel" placeholder="gpt-4o-mini"
                         style="width:100%;font-size:11px;padding:4px">
                 </div>
 
