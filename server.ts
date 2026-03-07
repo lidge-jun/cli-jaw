@@ -935,17 +935,12 @@ app.get('/api/skills/:id', (req, res) => {
 });
 
 // ─── Skills Reset API ────────────────────────────────
-app.post('/api/skills/reset', (req, res) => {
+app.post('/api/skills/reset', async (req, res) => {
     try {
-        // Clear before recopy (parity with CLI skill reset)
-        if (fs.existsSync(SKILLS_DIR)) fs.rmSync(SKILLS_DIR, { recursive: true, force: true });
-        if (fs.existsSync(SKILLS_REF_DIR)) fs.rmSync(SKILLS_REF_DIR, { recursive: true, force: true });
-        fs.mkdirSync(SKILLS_DIR, { recursive: true });
-        fs.mkdirSync(SKILLS_REF_DIR, { recursive: true });
-        copyDefaultSkills();
-        const symlinks = ensureSkillsSymlinks(settings.workingDir, { onConflict: 'backup' });
-        regenerateB();
-        res.json({ ok: true, symlinks });
+        const mode = (req.query.mode === 'hard') ? 'hard' as const : 'soft' as const;
+        const ctx = makeWebCommandCtx(req);
+        const result = await ctx.resetSkills(mode);
+        res.json({ ok: true, ...result });
     } catch (e: unknown) {
         res.status(500).json({ error: (e as Error).message });
     }

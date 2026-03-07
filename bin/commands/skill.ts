@@ -185,17 +185,22 @@ switch (sub) {
         console.log(`\n  ${c.dim}cli-jaw skill install <name>  — 스킬 설치${c.reset}`);
         console.log(`  ${c.dim}cli-jaw skill info <name>     — 상세 보기${c.reset}`);
         console.log(`  ${c.dim}cli-jaw skill remove <name>   — 삭제${c.reset}`);
-        console.log(`  ${c.dim}cli-jaw skill reset           — 초기화 (2×3 분류 재실행)${c.reset}\n`);
+        console.log(`  ${c.dim}cli-jaw skill reset           — 초기화 (등록 스킬만 복원, 커스텀 보존)${c.reset}`);
+        console.log(`  ${c.dim}cli-jaw skill reset hard      — 전체 삭제 후 재설치${c.reset}\n`);
         break;
     }
 
     case 'reset': {
+        const isHard = process.argv.includes('hard') || process.argv.includes('--hard');
         const force = process.argv.includes('--force');
         if (!force) {
             const { createInterface } = await import('node:readline');
             const rl = createInterface({ input: process.stdin, output: process.stdout });
+            const msg = isHard
+                ? `\n  ${c.yellow}⚠️  [HARD] 모든 스킬을 삭제하고 재설치합니다.${c.reset}\n  커스텀 스킬도 삭제됩니다. 계속? (y/N): `
+                : `\n  ${c.yellow}⚠️  등록된 스킬을 초기값으로 복원합니다.${c.reset}\n  커스텀 스킬은 보존됩니다. 계속? (y/N): `;
             const answer = await new Promise(r => {
-                rl.question(`\n  ${c.yellow}⚠️  스킬 디렉토리를 초기화합니다.${c.reset}\n  기존 active/ref 스킬이 삭제되고 2×3 분류가 재실행됩니다.\n  계속하시겠습니까? (y/N): `, r);
+                rl.question(msg, r);
             });
             rl.close();
             if ((answer as string).toLowerCase() !== 'y') {
@@ -204,32 +209,33 @@ switch (sub) {
             }
         }
 
-        console.log(`\n  ${c.bold}🔄 스킬 초기화 중...${c.reset}\n`);
-
-        // 1. Clear active skills
-        if (existsSync(SKILLS_DIR)) {
-            rmSync(SKILLS_DIR, { recursive: true, force: true });
-            console.log(`  ${c.dim}✓ cleared ${SKILLS_DIR}${c.reset}`);
-        }
-        mkdirSync(SKILLS_DIR, { recursive: true });
-
-        // 2. Clear ref skills
-        const REF_DIR = join(JAW_HOME, 'skills_ref');
-        if (existsSync(REF_DIR)) {
-            rmSync(REF_DIR, { recursive: true, force: true });
-            console.log(`  ${c.dim}✓ cleared ${REF_DIR}${c.reset}`);
-        }
-        mkdirSync(REF_DIR, { recursive: true });
-
-        // 3. Re-run copyDefaultSkills (2×3 classification)
         try {
-            const { copyDefaultSkills } = await import('../../lib/mcp-sync.js');
-            const count = copyDefaultSkills();
-            console.log(`\n  ${c.green}✅ 초기화 완료!${c.reset}`);
+            if (isHard) {
+                console.log(`\n  ${c.bold}🔄 [HARD] 스킬 전체 초기화 중...${c.reset}\n`);
+                if (existsSync(SKILLS_DIR)) {
+                    rmSync(SKILLS_DIR, { recursive: true, force: true });
+                    console.log(`  ${c.dim}✓ cleared ${SKILLS_DIR}${c.reset}`);
+                }
+                mkdirSync(SKILLS_DIR, { recursive: true });
+                const REF_DIR = join(JAW_HOME, 'skills_ref');
+                if (existsSync(REF_DIR)) {
+                    rmSync(REF_DIR, { recursive: true, force: true });
+                    console.log(`  ${c.dim}✓ cleared ${REF_DIR}${c.reset}`);
+                }
+                mkdirSync(REF_DIR, { recursive: true });
+                const { copyDefaultSkills } = await import('../../lib/mcp-sync.js');
+                copyDefaultSkills();
+            } else {
+                console.log(`\n  ${c.bold}🔄 등록 스킬 복원 중...${c.reset}\n`);
+                const { softResetSkills } = await import('../../lib/mcp-sync.js');
+                const result = softResetSkills();
+                console.log(`  ${c.dim}✓ ${result.restored}개 복원, ${result.added}개 추가${c.reset}`);
+            }
 
-            // Count results
+            console.log(`\n  ${c.green}✅ 초기화 완료!${c.reset}`);
             const activeCount = readdirSync(SKILLS_DIR, { withFileTypes: true })
                 .filter(d => d.isDirectory()).length;
+            const REF_DIR = join(JAW_HOME, 'skills_ref');
             const refCount = readdirSync(REF_DIR, { withFileTypes: true })
                 .filter(d => d.isDirectory()).length;
             console.log(`  ${c.cyan}⚡ Active: ${activeCount}개${c.reset}`);

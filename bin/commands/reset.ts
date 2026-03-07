@@ -74,7 +74,7 @@ if (!hasConfirm) {
 
 const results = [];
 try {
-    await apiJson(baseUrl, '/api/skills/reset', { method: 'POST' });
+    await apiJson(baseUrl, '/api/skills/reset?mode=hard', { method: 'POST' });
     results.push('스킬');
 } catch (e) { console.error(`  ⚠️  스킬 초기화 실패: ${(e as Error).message}`); }
 

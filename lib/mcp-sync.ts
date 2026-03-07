@@ -543,6 +543,16 @@ function loadRegistry(dir: string): Record<string, any> {
     } catch { return { skills: {} }; }
 }
 
+// ─── Skill activation sets (shared by copyDefaultSkills / softResetSkills) ───
+const CODEX_ACTIVE = new Set([
+    'pdf',
+]);
+
+const OPENCLAW_ACTIVE = new Set([
+    'browser', 'notion', 'memory', 'vision-click',
+    'screen-capture', 'docx', 'xlsx', 'github', 'telegram-send',
+]);
+
 function getSkillVersion(id: string, registry: any): string | null {
     return registry?.skills?.[id]?.version ?? null;
 }
@@ -568,19 +578,7 @@ export function copyDefaultSkills() {
     let copied = 0;
 
     // ─── Skill sets ─────────────────────────────────
-    // Keep this baseline aligned with the expected first-install active set.
-    // Phase 1 dedup: screenshot→screen-capture, doc→docx, spreadsheet→xlsx,
-    //   gh-address-comments/gh-fix-ci/yeet→github
-    const CODEX_ACTIVE = new Set([
-        'pdf', 'openai-docs', 'imagegen',
-        // frontend-design → dev-frontend으로 대체됨
-    ]);
-
-    const OPENCLAW_ACTIVE = new Set([
-        'browser', 'notion', 'memory', 'vision-click',
-        'screen-capture', 'docx', 'xlsx', 'github', 'telegram-send',  // Phase 1 통합 결과 + Phase 2.2
-    ]);
-
+    // CODEX_ACTIVE / OPENCLAW_ACTIVE → module scope (shared with softResetSkills)
 
     // Phase 1 dedup: these skills were merged into others — never copy from Codex
     const DEDUP_EXCLUDED = new Set([
@@ -752,6 +750,72 @@ export function copyDefaultSkills() {
     if (autoCount > 0) console.log(`[skills] Total auto-activated/synced: ${autoCount}`);
 
     return copied;
+}
+
+/**
+ * Soft reset: registry에 등록된 스킬만 번들 초기값으로 복원.
+ * 미등록(커스텀) 스킬은 보존.
+ */
+export function softResetSkills() {
+    const activeDir = join(JAW_HOME, 'skills');
+    const refDir = join(JAW_HOME, 'skills_ref');
+    const packageRefDir = join(findPackageRoot(), 'skills_ref');
+
+    // 1. registry 로드 — ref에 등록된 스킬 ID 목록
+    const registry = loadRegistry(packageRefDir);
+    const registeredIds = new Set(Object.keys(registry.skills || {}));
+
+    // 2. skills_ref/ 전체를 번들에서 다시 복사
+    //    skills_ref/는 reference 전용 — 사용자 커스텀이 없다고 가정
+    if (fs.existsSync(packageRefDir)) {
+        for (const entry of fs.readdirSync(packageRefDir, { withFileTypes: true })) {
+            const src = join(packageRefDir, entry.name);
+            const dst = join(refDir, entry.name);
+            if (entry.isDirectory()) {
+                if (fs.existsSync(dst)) fs.rmSync(dst, { recursive: true, force: true });
+                copyDirRecursive(src, dst);
+            } else if (entry.isFile()) {
+                fs.copyFileSync(src, dst);
+            }
+        }
+    }
+
+    // 3. active skills 중 registry 등록된 것만 초기값 복원
+    let restored = 0;
+    if (fs.existsSync(activeDir)) {
+        for (const d of fs.readdirSync(activeDir, { withFileTypes: true })) {
+            if (!d.isDirectory() || d.name.startsWith('.')) continue;
+            if (!registeredIds.has(d.name)) continue;  // 미등록 → 보존
+            const src = join(refDir, d.name);
+            const dst = join(activeDir, d.name);
+            if (!fs.existsSync(src)) continue;
+            fs.rmSync(dst, { recursive: true, force: true });
+            copyDirRecursive(src, dst);
+            restored++;
+        }
+    }
+
+    // 4. AUTO_ACTIVATE 중 아직 active에 없는 것 추가
+    const autoActivate = new Set([...CODEX_ACTIVE, ...OPENCLAW_ACTIVE]);
+    try {
+        const regPath = join(refDir, 'registry.json');
+        if (fs.existsSync(regPath)) {
+            const reg = JSON.parse(fs.readFileSync(regPath, 'utf8'));
+            for (const [id, meta] of Object.entries(reg.skills || {}) as [string, any][]) {
+                if (meta.category === 'orchestration') autoActivate.add(id);
+            }
+        }
+    } catch { /* registry parse error — skip */ }
+    let added = 0;
+    for (const id of autoActivate) {
+        const src = join(refDir, id);
+        const dst = join(activeDir, id);
+        if (!fs.existsSync(src) || fs.existsSync(dst)) continue;
+        copyDirRecursive(src, dst);
+        added++;
+    }
+
+    return { restored, added };
 }
 
 /** Recursively copy a directory (symlink-safe, error-resilient) */
