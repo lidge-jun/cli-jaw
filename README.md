@@ -67,12 +67,12 @@ jaw serve
 <details>
 <summary>🔧 <b>Troubleshooting WSL</b></summary>
 
-| Problem | Fix |
-|---------|-----|
-| `unzip: command not found` | Rerun the installer — it now auto-installs `unzip` |
-| `jaw: command not found` after install | Run `source ~/.bashrc` to reload PATH |
-| Still can't find `jaw` | Run `export PATH="$(npm config get prefix)/bin:$PATH"` |
-| Permission errors with `npm install -g` | Run `sudo chown -R $USER $(npm config get prefix)` |
+| Problem                                 | Fix                                                    |
+| --------------------------------------- | ------------------------------------------------------ |
+| `unzip: command not found`              | Rerun the installer — it now auto-installs `unzip`     |
+| `jaw: command not found` after install  | Run `source ~/.bashrc` to reload PATH                  |
+| Still can't find `jaw`                  | Run `export PATH="$(npm config get prefix)/bin:$PATH"` |
+| Permission errors with `npm install -g` | Run `sudo chown -R $USER $(npm config get prefix)`     |
 
 </details>
 
@@ -153,7 +153,7 @@ Check what's ready: `jaw doctor`
  ✅ OpenCode CLI    installed
  ✅ Copilot CLI     installed
  ✅ Database        jaw.db OK
- ✅ Skills          20 active, 89 reference
+ ✅ Skills          21 active, 88 reference
  ✅ MCP             3 servers configured
  ✅ Memory          MEMORY.md exists
  ✅ Server          port 3457 available
@@ -176,31 +176,31 @@ CLI-JAW is a **personal AI assistant** that lives on your machine and works from
 
 Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, Codex, Gemini, OpenCode, Copilot) through their official CLIs — giving you the best of every provider in one unified experience. If one engine is busy, it automatically falls back to the next. 107 built-in skills handle everything from browser automation to document generation.
 
-|                               | Why CLI-JAW?                                                                                                                     |
-| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 🛡️**TOS-Safe**                 | Uses official CLIs only — no API key scraping, no reverse engineering, no ban risk.                                              |
-| 🤖**Verified Agent Tools**     | 5 battle-tested coding agents (Claude, Codex, Gemini, OpenCode, Copilot) under one roof.                                         |
-| ⚡**Multi-Agent Fallback**     | One engine down? The next picks up automatically. Zero downtime.                                                                 |
-| 🎭**PABCD Orchestration**      | DB-persisted FSM pipeline — Plan → Audit → Build → Check → Done. Workers are read-only. You approve every phase.                 |
-| 📦**107 Built-in Skills**      | Browser automation, document generation, Telegram, memory — ready out of the box.                                                |
-| 🖥️**Cross-Platform**           | macOS, Linux, Windows — ENOENT-safe CLI spawn, auto-detection,`.cmd` shim support, and native install all work across platforms. |
+|                           | Why CLI-JAW?                                                                                                                     |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 🛡️**TOS-Safe**             | Uses official CLIs only — no API key scraping, no reverse engineering, no ban risk.                                              |
+| 🤖**Verified Agent Tools** | 5 battle-tested coding agents (Claude, Codex, Gemini, OpenCode, Copilot) under one roof.                                         |
+| ⚡**Multi-Agent Fallback** | One engine down? The next picks up automatically. Zero downtime.                                                                 |
+| 🎭**PABCD Orchestration**  | DB-persisted FSM pipeline — Plan → Audit → Build → Check → Done. Workers are read-only. You approve every phase.                 |
+| 📦**107 Built-in Skills**  | Browser automation, document generation, Telegram, memory — ready out of the box.                                                |
+| 🖥️**Cross-Platform**       | macOS, Linux, Windows — ENOENT-safe CLI spawn, auto-detection,`.cmd` shim support, and native install all work across platforms. |
 
 ![CLI-JAW Terminal](docs/screenshots/terminal-cli.png)
 
 ---
 
-## 🆕 What's New (v1.3.0)
+## 🆕 What's New (v1.4.0)
 
-| Feature | Description |
-|---------|-------------|
-| 🎤 **Voice & STT** | Web mic button + Telegram voice transcription. Multi-provider STT: OpenAI-compatible, Google Vertex AI, custom endpoints. Settings UI with API key management. |
-| 📝 **Prompt Templates** | Create, edit, and manage prompt templates via the Web UI. Node-map visualization + full CRUD API. |
-| 📊 **Quota Dashboard** | Compact quota bars with reset-time display. Graceful 429 rate-limit handling with cached usage data. |
-| 🔍 **IDE Diff View** | Fingerprint-based change detection. Auto-detects VS Code or Antigravity and opens inline diffs. |
-| 🎭 **PABCD Enhancements** | Live roadmap bar with 🦈 shark runner animation. Glow, pulse, and badge feedback on phase transitions. |
-| 🪟 **WSL Installer v2** | Auto-installs prerequisites (`unzip`, `curl`, `git`), fixes PATH for `jaw` command, adds troubleshooting guide. |
-| 🧪 **639 Tests** | Up from 608 — new coverage for STT, quota caching, orchestration, and CI stability. |
-| 📦 **109 Skills** | 20 active + 89 reference. New: `dev-pabcd`, `dev-scaffolding`, `dev-code-reviewer`. |
+| Feature                      | Description                                                                                                                                                                                                                                                                      |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🧠 **Advanced Memory**        | 5-tier hierarchical storage (Profile, Episodes, Semantic, Procedures, Sessions). Hybrid retrieval: FTS5 + semantic search with query expansion. Gemini Flash-Lite powered embeddings. Full UI ops dashboard with reindex/audit controls.                                         |
+| 🎨 **Modular Dev Skills**     | `dev-frontend` (1,428 lines, 13 files) and `dev-backend` (1,275 lines, 9 files) expanded from single SKILL.md into modular structures with core references (aesthetics, anti-slop, security, architecture) and stack-specific guides (React, Next.js, Node, Python, PostgreSQL). |
+| 📄 **Office Suite Expansion** | HWP (Korean word processor) support added. Enhanced PPTX generation. 21 active skills (up from 18).                                                                                                                                                                              |
+| ⚡ **ACP Progress Heartbeat** | Real-time `stderr_activity` events during long agent runs. Conditional heartbeat scheduling with UI modal controls.                                                                                                                                                              |
+| 🔄 **Skill Reset**            | `jaw skill reset` with `--soft` (reload) and `--hard` (full reinstall) modes. `workingDir` auto-correction when `JAW_HOME` differs from `settings.json`.                                                                                                                         |
+| 🎬 **Video Skill**            | Remotion-based programmatic video rendering from JSON timeline definitions. TTS integration with per-cut narration sync.                                                                                                                                                         |
+| 📐 **1M Context Toggle**      | Enable/disable 1M token context window with `config.toml` injection for supported models.                                                                                                                                                                                        |
+| 🚀 **Preview Releases**       | Automated preview release pipeline with timestamped versions (`v1.4.0-preview.YYYYMMDD`). GitHub prerelease integration.                                                                                                                                                         |
 
 ---
 
@@ -245,8 +245,8 @@ graph LR
 
 | Tier                 | Count | How it works                                              |
 | -------------------- | :---: | --------------------------------------------------------- |
-| **Active Skills**    |  20   | Auto-injected into every AI prompt. Always available.     |
-| **Reference Skills** |  89   | AI reads them on-demand when you ask for a relevant task. |
+| **Active Skills**    |  21   | Auto-injected into every AI prompt. Always available.     |
+| **Reference Skills** |  88   | AI reads them on-demand when you ask for a relevant task. |
 
 #### Active Skills (always on)
 
@@ -261,13 +261,14 @@ graph LR
 | `imagegen`                                                          | Generate/edit images via OpenAI Image API                 |
 | `pdf` / `docx` / `xlsx`                                             | Read, create, edit office documents                       |
 | `screen-capture`                                                    | macOS screenshot and camera capture                       |
+| `video`                                                             | Remotion-based programmatic video rendering from JSON     |
 | `openai-docs`                                                       | Up-to-date OpenAI API documentation                       |
 | `dev` / `dev-frontend` / `dev-backend` / `dev-data` / `dev-testing` | Development guidelines for sub-agents                     |
 | `dev-pabcd` / `dev-scaffolding` / `dev-code-reviewer`               | Orchestration, scaffolding, and code review guides        |
 
 #### Reference Skills (on-demand)
 
-89 more skills ready to use — spotify, weather, deep-research, tts, video-downloader, apple-reminders, 1password, terraform, postgres, jupyter-notebook, sentry, whatsapp, and more.
+88 more skills ready to use — spotify, weather, deep-research, tts, video-downloader, apple-reminders, 1password, terraform, postgres, jupyter-notebook, sentry, whatsapp, and more.
 
 ```bash
 jaw skill install <name>    # Activate a reference skill permanently
@@ -320,11 +321,11 @@ Your assistant isn't tied to your desk. Chat from anywhere via Telegram:
 
 CLI-JAW supports voice input across all interfaces with multi-provider STT:
 
-| Provider | How to enable |
-|----------|--------------|
+| Provider              | How to enable                                 |
+| --------------------- | --------------------------------------------- |
 | **OpenAI-compatible** | Settings UI → STT → OpenAI endpoint + API key |
-| **Google Vertex AI** | Settings UI → STT → Vertex AI credentials |
-| **Custom endpoint** | Any OpenAI-compatible STT API URL |
+| **Google Vertex AI**  | Settings UI → STT → Vertex AI credentials     |
+| **Custom endpoint**   | Any OpenAI-compatible STT API URL             |
 
 **Where you can use voice:**
 
@@ -350,13 +351,13 @@ For complex tasks, CLI-JAW uses **PABCD** — a finite state machine that enforc
  └─────────────────────────────────────────────────────────┘
 ```
 
-| Phase | Name | What happens |
-|:-----:|------|------|
-| **P** | Plan | Boss AI writes a diff-level implementation plan. Stops and waits for your approval. |
+| Phase | Name  | What happens                                                                                                |
+| :---: | ----- | ----------------------------------------------------------------------------------------------------------- |
+| **P** | Plan  | Boss AI writes a diff-level implementation plan. Stops and waits for your approval.                         |
 | **A** | Audit | A read-only worker verifies the plan is feasible — imports resolve, signatures match, no integration risks. |
-| **B** | Build | Boss implements the code directly. A read-only worker verifies the result. Self-heals on failure. |
-| **C** | Check | Final verification — `tsc --noEmit`, docs update, consistency check. |
-| **D** | Done | Summary of all changes. State returns to IDLE. |
+| **B** | Build | Boss implements the code directly. A read-only worker verifies the result. Self-heals on failure.           |
+| **C** | Check | Final verification — `tsc --noEmit`, docs update, consistency check.                                        |
+| **D** | Done  | Summary of all changes. State returns to IDLE.                                                              |
 
 **Key design decisions:**
 - **DB-persisted FSM** — state survives server restarts, CLI and Web UI share the same state
