@@ -762,15 +762,33 @@ export function softResetSkills() {
     const refDir = join(JAW_HOME, 'skills_ref');
     const packageRefDir = join(findPackageRoot(), 'skills_ref');
 
-    // 1. registry 로드 — ref에 등록된 스킬 ID 목록
-    const registry = loadRegistry(packageRefDir);
-    const registeredIds = new Set(Object.keys(registry.skills || {}));
+    // 1. Source for ref update: bundled (dev) or git clone (npm install)
+    let sourceDir = packageRefDir;
+    let tmpCloneDir: string | null = null;
 
-    // 2. skills_ref/ 전체를 번들에서 다시 복사
-    //    skills_ref/는 reference 전용 — 사용자 커스텀이 없다고 가정
-    if (fs.existsSync(packageRefDir)) {
-        for (const entry of fs.readdirSync(packageRefDir, { withFileTypes: true })) {
-            const src = join(packageRefDir, entry.name);
+    if (!fs.existsSync(packageRefDir)) {
+        // npm install — skills_ref excluded from package, clone from GitHub
+        const SKILLS_REPO = 'https://github.com/lidge-jun/cli-jaw-skills.git';
+        tmpCloneDir = join(JAW_HOME, '.skills_clone_tmp');
+        try {
+            if (fs.existsSync(tmpCloneDir)) fs.rmSync(tmpCloneDir, { recursive: true });
+            console.log(`[skills:soft-reset] cloning latest skills from ${SKILLS_REPO}...`);
+            execSync(`git clone --depth 1 ${SKILLS_REPO} "${tmpCloneDir}"`, {
+                stdio: 'pipe', timeout: 120000,
+            });
+            sourceDir = tmpCloneDir;
+        } catch (e) {
+            console.warn(`[skills:soft-reset] ⚠️ clone failed: ${(e as Error).message?.slice(0, 80)}`);
+            console.warn(`[skills:soft-reset] keeping current skills unchanged`);
+            return { restored: 0, added: 0 };
+        }
+    }
+
+    // 2. skills_ref/ 전체를 소스에서 다시 복사 (덮어쓰기)
+    if (fs.existsSync(sourceDir)) {
+        for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+            if (entry.name === '.git') continue;
+            const src = join(sourceDir, entry.name);
             const dst = join(refDir, entry.name);
             if (entry.isDirectory()) {
                 if (fs.existsSync(dst)) fs.rmSync(dst, { recursive: true, force: true });
@@ -781,7 +799,9 @@ export function softResetSkills() {
         }
     }
 
-    // 3. active skills 중 registry 등록된 것만 초기값 복원
+    // 3. active skills 중 registry 등록된 것 → ref에서 덮어쓰기 복원
+    const registry = loadRegistry(sourceDir);
+    const registeredIds = new Set(Object.keys(registry.skills || {}));
     let restored = 0;
     if (fs.existsSync(activeDir)) {
         for (const d of fs.readdirSync(activeDir, { withFileTypes: true })) {
@@ -816,6 +836,12 @@ export function softResetSkills() {
         added++;
     }
 
+    // 5. Cleanup temp clone
+    if (tmpCloneDir && fs.existsSync(tmpCloneDir)) {
+        fs.rmSync(tmpCloneDir, { recursive: true, force: true });
+    }
+
+    console.log(`[skills:soft-reset] restored=${restored}, added=${added}`);
     return { restored, added };
 }
 
