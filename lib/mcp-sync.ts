@@ -799,17 +799,14 @@ export function softResetSkills() {
         }
     }
 
-    // 3. active skills 중 registry 등록된 것 → ref에서 덮어쓰기 복원
-    const registry = loadRegistry(sourceDir);
-    const registeredIds = new Set(Object.keys(registry.skills || {}));
+    // 3. active skills → ref에 같은 이름이 있으면 무조건 덮어쓰기
     let restored = 0;
     if (fs.existsSync(activeDir)) {
         for (const d of fs.readdirSync(activeDir, { withFileTypes: true })) {
             if (!d.isDirectory() || d.name.startsWith('.')) continue;
-            if (!registeredIds.has(d.name)) continue;  // 미등록 → 보존
             const src = join(refDir, d.name);
             const dst = join(activeDir, d.name);
-            if (!fs.existsSync(src)) continue;
+            if (!fs.existsSync(src)) continue;  // ref에 없으면 보존 (순수 커스텀)
             fs.rmSync(dst, { recursive: true, force: true });
             copyDirRecursive(src, dst);
             restored++;
