@@ -5,9 +5,10 @@
 import { parseArgs } from 'node:util';
 import { rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { getServerUrl, JAW_HOME, deriveCdpPort } from '../../src/core/config.js';
+import { getServerUrl, JAW_HOME, deriveCdpPort, loadSettings } from '../../src/core/config.js';
 
-const SERVER = getServerUrl(undefined);
+loadSettings();
+const SERVER = getServerUrl();
 const sub = process.argv[3];
 
 // ─── ANSI ────────────────────────────────────

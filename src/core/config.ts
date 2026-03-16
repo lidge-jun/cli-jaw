@@ -47,11 +47,11 @@ export function deriveCdpPort(serverPort?: number | string): number {
     return cdp > 65535 ? 9240 : cdp;
 }
 
-export function getServerUrl(port: string | number | undefined) {
-    return `http://localhost:${port || process.env.PORT || DEFAULT_PORT}`;
+export function getServerUrl(port?: string | number) {
+    return `http://localhost:${port || process.env.PORT || settings.port || DEFAULT_PORT}`;
 }
-export function getWsUrl(port: string | number | undefined) {
-    return `ws://localhost:${port || process.env.PORT || DEFAULT_PORT}`;
+export function getWsUrl(port?: string | number) {
+    return `ws://localhost:${port || process.env.PORT || settings.port || DEFAULT_PORT}`;
 }
 
 /** Locate the cli-jaw package root (for bundled skills_ref/) */
@@ -106,6 +106,7 @@ export function runMigration(projectDir: string) {
 
 function createDefaultSettings() {
     return {
+        port: '',  // persisted by server on startup; CLI commands use as fallback
         cli: DEFAULT_CLI,
         fallbackOrder: [],
         permissions: 'auto',

@@ -194,6 +194,10 @@ export async function orchestrate(
     });
     const result = await promise as Record<string, any>;
 
+    // Re-read state from DB — it may have changed during agent execution
+    // (phase transitions via CLI commands, user reset, etc.)
+    state = getState();
+
     if (state === 'P' && !meta._workerResult) {
         const savedCtx = getCtx();
         if (savedCtx) {

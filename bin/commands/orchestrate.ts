@@ -2,12 +2,14 @@
 // bin/commands/orchestrate.ts — CLI: jaw orchestrate [P|A|B|C|D|reset]
 // Calls the running server's API so WS broadcast reaches all clients in real-time.
 
-import { settings } from '../../src/core/config.js';
+import { settings, loadSettings, getServerUrl } from '../../src/core/config.js';
 
-// Derive port: --port flag > env > settings > 3457
+loadSettings();  // ensure settings.port is loaded from this instance's settings.json
+
+// Derive port: --port flag > env > settings.port > 3457
 const portIdx = process.argv.indexOf('--port');
-const PORT = (portIdx !== -1 && process.argv[portIdx + 1]) ? process.argv[portIdx + 1] : (process.env.PORT || '3457');
-const BASE = `http://localhost:${PORT}`;
+const PORT = (portIdx !== -1 && process.argv[portIdx + 1]) ? process.argv[portIdx + 1] : undefined;
+const BASE = getServerUrl(PORT);
 
 const target = (process.argv[3] || 'P').toUpperCase();
 const valid = ['P', 'A', 'B', 'C', 'D', 'RESET'];

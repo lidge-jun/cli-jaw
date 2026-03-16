@@ -101,7 +101,7 @@ try {
 
 // ─── Init ────────────────────────────────────────────
 
-const PORT = process.env.PORT || 3457;
+const PORT = process.env.PORT || settings.port || 3457;
 const DEFAULT_EMPLOYEES = [
     { name: 'Frontend', role: 'UI/UX, CSS, components' },
     { name: 'Backend', role: 'API, DB, server logic' },
@@ -146,10 +146,8 @@ app.use(helmet({
 
 // ─── CORS (localhost only) ──────────────────────────
 const ALLOWED_ORIGINS = new Set([
-    'http://localhost:3457',
-    'http://127.0.0.1:3457',
-    `http://localhost:${process.env.PORT || 3457}`,
-    `http://127.0.0.1:${process.env.PORT || 3457}`,
+    `http://localhost:${PORT}`,
+    `http://127.0.0.1:${PORT}`,
 ]);
 app.use((req, res, next) => {
     const origin = req.headers.origin;
@@ -1051,6 +1049,13 @@ process.once('SIGTERM', () => shutdown('SIGTERM'));
 process.once('SIGINT', () => shutdown('SIGINT'));
 
 server.listen(PORT, () => {
+    // Persist port so CLI commands auto-discover the running server
+    const portStr = String(PORT);
+    if (settings.port !== portStr) {
+        settings.port = portStr;
+        saveSettings(settings);
+    }
+
     // Bootstrap i18n locale dictionaries
     loadLocales(join(projectRoot, 'public', 'locales'));
     log.info(`\n  🦈 Jaw Agent — http://localhost:${PORT}\n`);

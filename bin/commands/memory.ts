@@ -2,9 +2,10 @@
  * cli-jaw memory — persistent memory CLI
  */
 import { parseArgs } from 'node:util';
-import { getServerUrl, JAW_HOME } from '../../src/core/config.js';
+import { getServerUrl, JAW_HOME, loadSettings } from '../../src/core/config.js';
 
-const SERVER = getServerUrl(undefined);
+loadSettings();
+const SERVER = getServerUrl();
 const sub = process.argv[3];
 
 async function api(method: string, path: string, body?: any) {
