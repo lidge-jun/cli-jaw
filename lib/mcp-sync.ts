@@ -631,7 +631,8 @@ export function copyDefaultSkills() {
     const packageRefDir = join(findPackageRoot(), 'skills_ref');
     const SKILLS_REPO = 'https://github.com/lidge-jun/cli-jaw-skills.git';
 
-    if (fs.existsSync(packageRefDir)) {
+    const bundledHasContent = fs.existsSync(packageRefDir) && fs.existsSync(join(packageRefDir, 'registry.json'));
+    if (bundledHasContent) {
         // Dev / local: copy from bundled skills_ref/ (version-aware)
         const srcReg = loadRegistry(packageRefDir);
         const dstReg = loadRegistry(refDir);
@@ -766,8 +767,9 @@ export function softResetSkills() {
     let sourceDir = packageRefDir;
     let tmpCloneDir: string | null = null;
 
-    if (!fs.existsSync(packageRefDir)) {
-        // npm install — skills_ref excluded from package, clone from GitHub
+    const bundledReady = fs.existsSync(packageRefDir) && fs.existsSync(join(packageRefDir, 'registry.json'));
+    if (!bundledReady) {
+        // npm install or uninitialized submodule — clone from GitHub
         const SKILLS_REPO = 'https://github.com/lidge-jun/cli-jaw-skills.git';
         tmpCloneDir = join(JAW_HOME, '.skills_clone_tmp');
         try {
