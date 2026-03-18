@@ -235,78 +235,204 @@ export function syncToAll(config: Record<string, any>) {
     return results;
 }
 
-// ─── Skills symlink helper ─────────────────────────
+// ─── Skills symlink helpers (Issue #58: isolated-by-default) ──────
 
-/**
- * Ensure {workingDir}/.agents/skills → ~/.cli-jaw/skills
- * Also ensure ~/.agent/skills → ~/.agents/skills (compat)
- * Also ensure {workingDir}/.claude/skills + ~/.claude/skills (Claude Code CLI)
- */
-export function ensureSkillsSymlinks(workingDir: string, opts: Record<string, any> = {}) {
-    const onConflict = opts.onConflict === 'skip' ? 'skip' : 'backup';
-    const skillsSource = join(JAW_HOME, 'skills');
-    fs.mkdirSync(skillsSource, { recursive: true });
-    const backupContext = createBackupContext();
-    const links = [];
+interface SkillsLinkOpts {
+    onConflict?: 'skip' | 'backup';
+    includeClaude?: boolean;
+    allowReplaceManaged?: boolean;
+    _homedir?: string;   // test DI — default os.homedir()
+    _jawHome?: string;   // test DI — default JAW_HOME
+}
 
-    // 1. {workingDir}/.agents/skills → ~/.cli-jaw/skills
-    const wdLink = join(workingDir, '.agents', 'skills');
-    links.push(ensureSymlinkSafe(skillsSource, wdLink, { onConflict, backupContext, name: 'wdAgents' }));
-
-    // 2. Home fallback: ~/.agents/skills (if different from workingDir)
-    const homeLink = join(os.homedir(), '.agents', 'skills');
-    if (homeLink !== wdLink) {
-        links.push(ensureSymlinkSafe(skillsSource, homeLink, { onConflict, backupContext, name: 'homeAgents' }));
-    } else {
-        links.push({
-            status: 'skip',
-            action: 'same_path',
-            name: 'homeAgents',
-            linkPath: homeLink,
-            target: skillsSource,
-        });
-    }
-
-    // 3. Compat: ~/.agent/skills → ~/.agents/skills
-    const compatLink = join(os.homedir(), '.agent', 'skills');
-    links.push(ensureSymlinkSafe(homeLink, compatLink, { onConflict, backupContext, name: 'compatAgent' }));
-
-    // 4. Claude Code CLI: {workingDir}/.claude/skills → ~/.cli-jaw/skills
-    const wdClaudeSkills = join(workingDir, '.claude', 'skills');
-    links.push(ensureSymlinkSafe(skillsSource, wdClaudeSkills, { onConflict, backupContext, name: 'wdClaude' }));
-
-    // 5. Home Claude Code: ~/.claude/skills → ~/.cli-jaw/skills
-    const homeClaudeSkills = join(os.homedir(), '.claude', 'skills');
-    if (homeClaudeSkills !== wdClaudeSkills) {
-        links.push(ensureSymlinkSafe(skillsSource, homeClaudeSkills, { onConflict, backupContext, name: 'homeClaude' }));
-    } else {
-        links.push({
-            status: 'skip',
-            action: 'same_path',
-            name: 'homeClaude',
-            linkPath: homeClaudeSkills,
-            target: skillsSource,
-        });
-    }
-
+function buildLinkReport(links: any[], extra?: Record<string, any>) {
     const summary = links.reduce((acc, item) => {
         const key = item.action || 'unknown';
         acc[key] = (acc[key] || 0) + 1;
         return acc;
     }, {} as Record<string, any>);
+    return { links, summary, ...extra };
+}
 
-    return {
+/**
+ * Working-dir only: {workingDir}/.agents/skills, optionally .claude/skills.
+ * NEVER touches home shared paths (~/.agents, ~/.agent, ~/.claude).
+ */
+export function ensureWorkingDirSkillsLinks(workingDir: string, opts: SkillsLinkOpts = {}) {
+    const { _homedir = os.homedir(), _jawHome = JAW_HOME, onConflict = 'skip', includeClaude = false } = opts;
+    const skillsSource = join(_jawHome, 'skills');
+    fs.mkdirSync(skillsSource, { recursive: true });
+
+    // CRITICAL: workingDir === homedir → skip to prevent implicit shared path creation
+    const resolvedWd = resolve(workingDir);
+    if (resolvedWd === resolve(_homedir)) {
+        return buildLinkReport([], {
+            skipped: true,
+            reason: 'workingDir is homedir — use ensureSharedHomeSkillsLinks() for explicit opt-in',
+            source: skillsSource,
+        });
+    }
+
+    const { allowReplaceManaged = false } = opts;
+    const backupContext = createBackupContext(_jawHome);
+    const safeOpts = { onConflict, backupContext, allowReplaceManaged, jawHome: _jawHome };
+    const links = [];
+
+    // 1. {workingDir}/.agents/skills → skills source
+    const wdLink = join(workingDir, '.agents', 'skills');
+    links.push(ensureSymlinkSafe(skillsSource, wdLink, { ...safeOpts, name: 'wdAgents' }));
+
+    // 2. Optionally {workingDir}/.claude/skills → skills source
+    if (includeClaude) {
+        const wdClaudeSkills = join(workingDir, '.claude', 'skills');
+        links.push(ensureSymlinkSafe(skillsSource, wdClaudeSkills, { ...safeOpts, name: 'wdClaude' }));
+    }
+
+    return buildLinkReport(links, {
+        skipped: false,
         source: skillsSource,
         strategy: onConflict,
         backupRoot: backupContext.root,
-        links,
-        summary,
-    };
+    });
 }
 
-function createBackupContext() {
+/**
+ * Opt-in only: create shared home symlinks (~/.agents/skills, ~/.agent/skills, ~/.claude/skills).
+ * Must NEVER be called by default — only via explicit env flag or CLI command.
+ */
+export function ensureSharedHomeSkillsLinks(opts: {
+    onConflict?: 'skip' | 'backup';
+    includeAgents?: boolean;
+    includeCompatAgent?: boolean;
+    includeClaude?: boolean;
+    _homedir?: string;
+    _jawHome?: string;
+} = {}) {
+    const {
+        _homedir = os.homedir(),
+        _jawHome = JAW_HOME,
+        onConflict = 'backup',
+        includeAgents = true,
+        includeCompatAgent = true,
+        includeClaude = true,
+    } = opts;
+    const skillsSource = join(_jawHome, 'skills');
+    fs.mkdirSync(skillsSource, { recursive: true });
+    const backupContext = createBackupContext(_jawHome);
+    const links = [];
+
+    if (includeAgents) {
+        const homeLink = join(_homedir, '.agents', 'skills');
+        links.push(ensureSymlinkSafe(skillsSource, homeLink, { onConflict, backupContext, name: 'homeAgents' }));
+    }
+    if (includeCompatAgent) {
+        const homeAgents = join(_homedir, '.agents', 'skills');
+        const compatLink = join(_homedir, '.agent', 'skills');
+        links.push(ensureSymlinkSafe(homeAgents, compatLink, { onConflict, backupContext, name: 'compatAgent' }));
+    }
+    if (includeClaude) {
+        const homeClaudeSkills = join(_homedir, '.claude', 'skills');
+        links.push(ensureSymlinkSafe(skillsSource, homeClaudeSkills, { onConflict, backupContext, name: 'homeClaude' }));
+    }
+
+    return buildLinkReport(links, {
+        source: skillsSource,
+        strategy: onConflict,
+        backupRoot: backupContext.root,
+    });
+}
+
+/**
+ * Detect shared path contamination: check if cli-jaw has taken over home shared paths.
+ */
+export function detectSharedPathContamination(opts?: {
+    _homedir?: string;
+    _jawHome?: string;
+}): SharedPathHealthReport {
+    const homedir = opts?._homedir ?? os.homedir();
+    const jawHome = opts?._jawHome ?? JAW_HOME;
+    const skillsTarget = join(jawHome, 'skills');
+
+    const sharedPaths = [
+        join(homedir, '.agents', 'skills'),
+        join(homedir, '.agent', 'skills'),
+        join(homedir, '.claude', 'skills'),
+    ];
+
+    const paths = sharedPaths.map(p => {
+        const exists = fs.existsSync(p);
+        let isSymlink = false;
+        let target: string | null = null;
+        let isCliJaw = false;
+
+        if (exists) {
+            try {
+                const stat = fs.lstatSync(p);
+                isSymlink = stat.isSymbolicLink();
+                if (isSymlink) {
+                    const rawTarget = fs.readlinkSync(p);
+                    target = resolveSymlinkTarget(p, rawTarget);
+                    isCliJaw = resolve(target) === resolve(skillsTarget);
+                }
+            } catch { /* ignore */ }
+        }
+        return { path: p, exists, isSymlink, target, isCliJaw };
+    });
+
+    // Check backup traces
+    const backupDir = join(jawHome, 'backups', 'skills-conflicts');
+    const backupTraces: string[] = [];
+    if (fs.existsSync(backupDir)) {
+        try {
+            backupTraces.push(...fs.readdirSync(backupDir).map(f => join(backupDir, f)));
+        } catch { /* ignore */ }
+    }
+
+    const contaminated = paths.filter(p => p.isCliJaw);
+    let status: 'clean' | 'resolved' | 'contaminated' | 'unknown' = 'clean';
+    let summary = 'No shared path contamination detected';
+
+    if (contaminated.length > 0) {
+        status = 'contaminated';
+        const pathList = contaminated.map(p => p.path).join(', ');
+        summary = `cli-jaw symlinks found at shared paths: ${pathList}`;
+    } else if (backupTraces.length > 0) {
+        // Backup traces without active symlinks = previously resolved, not active contamination
+        status = 'resolved';
+        summary = `No active symlinks; backup traces preserved for rollback (${backupTraces.length} file(s))`;
+    }
+
+    return { status, paths, backupTraces, summary };
+}
+
+export interface SharedPathHealthReport {
+    status: 'clean' | 'resolved' | 'contaminated' | 'unknown';
+    paths: {
+        path: string;
+        exists: boolean;
+        isSymlink: boolean;
+        target: string | null;
+        isCliJaw: boolean;
+    }[];
+    backupTraces: string[];
+    summary: string;
+}
+
+/**
+ * @deprecated Use ensureWorkingDirSkillsLinks or ensureSharedHomeSkillsLinks instead.
+ * Kept only for backward compatibility during transition — delegates to new helpers.
+ */
+export function ensureSkillsSymlinks(workingDir: string, opts: Record<string, any> = {}) {
+    // Delegate to working-dir-only helper (isolated-by-default)
+    return ensureWorkingDirSkillsLinks(workingDir, {
+        onConflict: opts.onConflict === 'skip' ? 'skip' : 'backup',
+        includeClaude: true,
+    });
+}
+
+function createBackupContext(jawHome?: string) {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-    return { root: join(JAW_HOME, 'backups', 'skills-conflicts', stamp) };
+    return { root: join(jawHome ?? JAW_HOME, 'backups', 'skills-conflicts', stamp) };
 }
 
 function resolveSymlinkTarget(linkPath: string, rawTarget: string) {
@@ -315,8 +441,23 @@ function resolveSymlinkTarget(linkPath: string, rawTarget: string) {
         : resolve(dirname(linkPath), rawTarget);
 }
 
+function isCliJawManaged(linkPath: string, jawHome?: string): boolean {
+    try {
+        const stat = fs.lstatSync(linkPath);
+        if (stat.isSymbolicLink()) {
+            const rawTarget = fs.readlinkSync(linkPath);
+            const currentTarget = resolveSymlinkTarget(linkPath, rawTarget);
+            // Symlink pointing into any .cli-jaw directory is managed
+            return jawHome ? currentTarget.startsWith(resolve(jawHome)) : currentTarget.includes('.cli-jaw');
+        }
+    } catch { /* not a symlink or doesn't exist */ }
+    return false;
+}
+
 function ensureSymlinkSafe(target: string, linkPath: string, opts: Record<string, any> = {}) {
     const onConflict = opts.onConflict === 'skip' ? 'skip' : 'backup';
+    const allowReplaceManaged = opts.allowReplaceManaged === true;
+    const jawHome = opts.jawHome as string | undefined;
     const backupContext = opts.backupContext || createBackupContext();
     const absTarget = resolve(target);
     const baseResult = {
@@ -334,19 +475,34 @@ function ensureSymlinkSafe(target: string, linkPath: string, opts: Record<string
             if (currentTarget === absTarget) {
                 return { ...baseResult, status: 'ok', action: 'noop' };
             }
-            fs.unlinkSync(linkPath);
-            fs.mkdirSync(dirname(linkPath), { recursive: true });
-            fs.symlinkSync(target, linkPath);
-            console.log(`[skills] symlink(updated): ${linkPath} → ${target}`);
-            return {
-                ...baseResult,
-                status: 'ok',
-                action: 'replace_symlink',
-                previousTarget: rawTarget,
-            };
+
+            // Stale symlink: only replace if managed by cli-jaw AND caller opts in
+            const managed = isCliJawManaged(linkPath, jawHome);
+            if (managed && allowReplaceManaged) {
+                fs.unlinkSync(linkPath);
+                fs.mkdirSync(dirname(linkPath), { recursive: true });
+                fs.symlinkSync(target, linkPath);
+                console.log(`[skills] symlink(updated): ${linkPath} → ${target}`);
+                return {
+                    ...baseResult,
+                    status: 'ok',
+                    action: 'replace_symlink',
+                    previousTarget: rawTarget,
+                    managed,
+                };
+            }
+
+            // Not managed, respect onConflict
+            if (onConflict === 'skip') {
+                console.warn(`[skills] conflict(skip): ${linkPath} (unmanaged symlink preserved)`);
+                return { ...baseResult, status: 'skip', action: 'conflict_skip' };
+            }
+            // backup mode: fall through to backup_replace below
         }
 
         if (onConflict === 'skip') {
+            // Non-symlink path: check if allowReplaceManaged applies
+            // (real dirs are never "managed" — only symlinks can be reliably attributed to cli-jaw)
             console.warn(`[skills] conflict(skip): ${linkPath} (existing path preserved)`);
             return { ...baseResult, status: 'skip', action: 'conflict_skip' };
         }
