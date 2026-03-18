@@ -12,22 +12,21 @@ if (major! < 22) {
  * postinstall.js — Phase 12.1
  * Sets up symlink structure and MCP config for agent tool compatibility.
  *
- * Created structure:
+ * Created structure (isolated-by-default):
  *   ~/.cli-jaw/           (config dir)
  *   ~/.cli-jaw/skills/    (default skills source)
  *   ~/.cli-jaw/uploads/   (media uploads)
  *   ~/.cli-jaw/mcp.json   (unified MCP config)
- *   {workingDir}/.agents/skills/ → ~/.cli-jaw/skills/
- *   ~/.agents/skills/ → ~/.cli-jaw/skills/
- *   ~/.agent/skills → ~/.agents/skills
- *   ~/CLAUDE.md → ~/AGENTS.md (if AGENTS.md exists)
+ *
+ * Shared home paths (~/.agents, ~/.agent, ~/.claude) are NOT modified by default.
+ * Opt-in: CLI_JAW_MIGRATE_SHARED_PATHS=1 npm install -g cli-jaw
  */
 
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { execSync, execFileSync } from 'child_process';
-import { ensureSkillsSymlinks, initMcpConfig, copyDefaultSkills, loadUnifiedMcp, saveUnifiedMcp } from '../lib/mcp-sync.js';
+import { ensureSharedHomeSkillsLinks, initMcpConfig, copyDefaultSkills, loadUnifiedMcp, saveUnifiedMcp } from '../lib/mcp-sync.js';
 
 // ─── JAW_HOME inline (config.ts → registry.ts import 체인 제거) ───
 const JAW_HOME = process.env.CLI_JAW_HOME
@@ -272,9 +271,27 @@ export async function runPostinstall() {
     ensureDir(path.join(jawHome, 'skills'));
     ensureDir(path.join(jawHome, 'uploads'));
 
-    // 2. Skills symlinks
-    const skillsSymlinkReport = ensureSkillsSymlinks(home, { onConflict: 'backup' });
-    logSkillsSymlinkReport(skillsSymlinkReport);
+    // 2. Skills symlinks — isolated-by-default (Issue #58)
+    // No workingDir compat links in postinstall.
+    // Postinstall must remain isolated to ~/.cli-jaw/* only.
+    const shouldMigrateSharedPaths =
+        process.env.CLI_JAW_MIGRATE_SHARED_PATHS === '1'
+        || process.env.CLI_JAW_MIGRATE_SHARED_PATHS === 'true'
+        || process.env.npm_config_jaw_migrate_shared_paths === '1'
+        || process.env.npm_config_jaw_migrate_shared_paths === 'true';
+
+    if (shouldMigrateSharedPaths) {
+        const sharedReport = ensureSharedHomeSkillsLinks({
+            onConflict: 'backup',
+            includeAgents: true,
+            includeCompatAgent: true,
+            includeClaude: true,
+        });
+        logSkillsSymlinkReport(sharedReport);
+    } else {
+        console.log('[jaw:init] shared path migration skipped (isolated-by-default)');
+        console.log('[jaw:init] to opt in: CLI_JAW_MIGRATE_SHARED_PATHS=1 npm install -g cli-jaw');
+    }
 
     // 3. CLAUDE.md → AGENTS.md symlink
     const agentsMd = path.join(jawHome, 'AGENTS.md');

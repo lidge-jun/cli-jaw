@@ -8,13 +8,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { JAW_HOME, SETTINGS_PATH, DB_PATH, HEARTBEAT_JOBS_PATH } from '../../src/core/config.js';
+import { detectSharedPathContamination } from '../../lib/mcp-sync.js';
 
 const HEARTBEAT_PATH = HEARTBEAT_JOBS_PATH;
 const PATH_LOOKUP_CMD = process.platform === 'win32' ? 'where' : 'which';
 
 const { values } = parseArgs({
     args: process.argv.slice(3),
-    options: { json: { type: 'boolean', default: false } },
+    options: {
+        json: { type: 'boolean', default: false },
+        'repair-shared-paths': { type: 'boolean', default: false },
+    },
     strict: false,
 });
 
@@ -120,13 +124,39 @@ check('Telegram', () => {
     return `token=...${token.slice(-6)}`;
 });
 
-// 7. Skills symlink
+// 7. Skills directory
 check('Skills directory', () => {
     const skillsDir = settings?.skillsDir || path.join(JAW_HOME, 'skills');
     if (!fs.existsSync(skillsDir)) throw new Error('WARN: not found');
-    const agentsSkills = path.join(os.homedir(), '.agents', 'skills');
-    const hasSymlink = fs.existsSync(agentsSkills);
-    return hasSymlink ? `${skillsDir} (symlinked)` : `${skillsDir} (no symlink)`;
+    return skillsDir;
+});
+
+// 7b. Shared path isolation (Issue #58)
+check('Shared path isolation', () => {
+    const report = detectSharedPathContamination();
+    if (report.status === 'clean') return 'clean';
+    if (report.status === 'resolved') return 'clean (backup traces preserved for rollback)';
+    if (report.status === 'contaminated') {
+        if (values['repair-shared-paths']) {
+            // Repair: remove cli-jaw symlinks from shared paths only
+            // Backup traces are preserved for rollback — not deleted
+            let repaired = 0;
+            for (const p of report.paths) {
+                if (p.isCliJaw && p.isSymlink) {
+                    try {
+                        fs.unlinkSync(p.path);
+                        repaired++;
+                        if (!values.json) console.log(`    🔧 removed: ${p.path}`);
+                    } catch (e: unknown) {
+                        if (!values.json) console.log(`    ❌ failed to remove ${p.path}: ${(e as Error).message}`);
+                    }
+                }
+            }
+            return `repaired (${repaired} symlink${repaired !== 1 ? 's' : ''} removed)`;
+        }
+        throw new Error(`WARN: ${report.summary}\n     Run: jaw doctor --repair-shared-paths`);
+    }
+    throw new Error(`WARN: ${report.summary}`);
 });
 
 // 8. macOS Accessibility (Phase 260223)
