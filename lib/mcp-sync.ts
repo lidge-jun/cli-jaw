@@ -627,32 +627,40 @@ export function copyDefaultSkills() {
     }
 
     // ─── 2. Populate skills_ref/ ─────────────────────
-    // Priority: bundled (dev) → git clone (npm install) → offline fallback
+    // Priority: git clone (always latest) → bundled fallback (dev) → offline
     const packageRefDir = join(findPackageRoot(), 'skills_ref');
     const SKILLS_REPO = 'https://github.com/lidge-jun/cli-jaw-skills.git';
 
-    const bundledHasContent = fs.existsSync(packageRefDir) && fs.existsSync(join(packageRefDir, 'registry.json'));
-    if (bundledHasContent) {
-        // Dev / local: copy from bundled skills_ref/ (version-aware)
-        const srcReg = loadRegistry(packageRefDir);
+    let skillsSourceResolved = false;
+
+    // 2a. Try GitHub clone first (public repo, no auth needed)
+    try {
+        const tmpClone = join(JAW_HOME, '.skills_clone_tmp');
+        if (fs.existsSync(tmpClone)) fs.rmSync(tmpClone, { recursive: true });
+        console.log(`[skills] fetching latest skills from GitHub...`);
+        execSync(`git clone --depth 1 ${SKILLS_REPO} "${tmpClone}"`, {
+            stdio: 'pipe', timeout: 120000,
+        });
+        // Version-aware merge from clone
+        const srcReg = loadRegistry(tmpClone);
         const dstReg = loadRegistry(refDir);
-        const entries = fs.readdirSync(packageRefDir, { withFileTypes: true });
-        let refCopied = 0, refUpdated = 0;
-        for (const entry of entries) {
-            const src = join(packageRefDir, entry.name);
+        const cloned = fs.readdirSync(tmpClone, { withFileTypes: true });
+        let cloneNew = 0, cloneUpdated = 0;
+        for (const entry of cloned) {
+            if (entry.name === '.git') continue;
+            const src = join(tmpClone, entry.name);
             const dst = join(refDir, entry.name);
             if (entry.isDirectory()) {
                 if (!fs.existsSync(dst)) {
                     copyDirRecursive(src, dst);
-                    refCopied++;
+                    cloneNew++;
                 } else {
                     const sv = getSkillVersion(entry.name, srcReg);
                     const dv = getSkillVersion(entry.name, dstReg);
-                    // Migration: dv===null means pre-version install → always update
                     if (sv && (!dv || semverGt(sv, dv))) {
                         fs.rmSync(dst, { recursive: true, force: true });
                         copyDirRecursive(src, dst);
-                        refUpdated++;
+                        cloneUpdated++;
                         console.log(`[skills] updated: ${entry.name} ${dv ?? '(none)'} → ${sv}`);
                     }
                 }
@@ -660,38 +668,35 @@ export function copyDefaultSkills() {
                 fs.copyFileSync(src, dst);
             }
         }
-        if (refCopied > 0) console.log(`[skills] Bundled: ${refCopied} new skills → ref`);
-        if (refUpdated > 0) console.log(`[skills] Bundled: ${refUpdated} skills updated`);
-    } else {
-        // npm install (no bundled dir) → clone or update from GitHub
-        const needsClone = !fs.existsSync(join(refDir, 'registry.json'));
-        try {
-            console.log(`[skills] ${needsClone ? 'cloning' : 'updating'} skills from ${SKILLS_REPO}...`);
-            const tmpClone = join(JAW_HOME, '.skills_clone_tmp');
-            if (fs.existsSync(tmpClone)) fs.rmSync(tmpClone, { recursive: true });
-            execSync(`git clone --depth 1 ${SKILLS_REPO} "${tmpClone}"`, {
-                stdio: 'pipe', timeout: 120000,
-            });
-            // Version-aware merge (same logic as bundled path)
-            const srcReg = loadRegistry(tmpClone);
+        fs.rmSync(tmpClone, { recursive: true, force: true });
+        console.log(`[skills] ✅ GitHub: ${cloneNew} new, ${cloneUpdated} updated`);
+        skillsSourceResolved = true;
+    } catch (e) {
+        console.log(`[skills] GitHub clone skipped: ${(e as Error).message?.slice(0, 60)}`);
+    }
+
+    // 2b. Fallback: bundled skills_ref/ (dev mode with initialized submodule)
+    if (!skillsSourceResolved) {
+        const bundledHasContent = fs.existsSync(packageRefDir) && fs.existsSync(join(packageRefDir, 'registry.json'));
+        if (bundledHasContent) {
+            const srcReg = loadRegistry(packageRefDir);
             const dstReg = loadRegistry(refDir);
-            const cloned = fs.readdirSync(tmpClone, { withFileTypes: true });
-            let cloneNew = 0, cloneUpdated = 0;
-            for (const entry of cloned) {
-                if (entry.name === '.git') continue;
-                const src = join(tmpClone, entry.name);
+            const entries = fs.readdirSync(packageRefDir, { withFileTypes: true });
+            let refCopied = 0, refUpdated = 0;
+            for (const entry of entries) {
+                const src = join(packageRefDir, entry.name);
                 const dst = join(refDir, entry.name);
                 if (entry.isDirectory()) {
                     if (!fs.existsSync(dst)) {
                         copyDirRecursive(src, dst);
-                        cloneNew++;
+                        refCopied++;
                     } else {
                         const sv = getSkillVersion(entry.name, srcReg);
                         const dv = getSkillVersion(entry.name, dstReg);
                         if (sv && (!dv || semverGt(sv, dv))) {
                             fs.rmSync(dst, { recursive: true, force: true });
                             copyDirRecursive(src, dst);
-                            cloneUpdated++;
+                            refUpdated++;
                             console.log(`[skills] updated: ${entry.name} ${dv ?? '(none)'} → ${sv}`);
                         }
                     }
@@ -699,15 +704,17 @@ export function copyDefaultSkills() {
                     fs.copyFileSync(src, dst);
                 }
             }
-            fs.rmSync(tmpClone, { recursive: true, force: true });
-            console.log(`[skills] ✅ ${cloneNew} new, ${cloneUpdated} updated → ${refDir}`);
-        } catch (e) {
-            if (needsClone) {
-                console.warn(`[skills] ⚠️ clone failed: ${(e as Error).message?.slice(0, 80)}`);
-                console.warn(`[skills] offline mode — skills will be available after 'jaw init'`);
-            } else {
-                console.log(`[skills] update check skipped: ${(e as Error).message?.slice(0, 60)}`);
-            }
+            if (refCopied > 0) console.log(`[skills] Bundled fallback: ${refCopied} new skills → ref`);
+            if (refUpdated > 0) console.log(`[skills] Bundled fallback: ${refUpdated} skills updated`);
+            skillsSourceResolved = true;
+        }
+    }
+
+    if (!skillsSourceResolved) {
+        const hasExisting = fs.existsSync(join(refDir, 'registry.json'));
+        if (!hasExisting) {
+            console.warn(`[skills] ⚠️ no source available (no network + no bundled skills)`);
+            console.warn(`[skills] offline mode — skills will be available after 'jaw init'`);
         }
     }
 
@@ -763,42 +770,53 @@ export function softResetSkills() {
     const refDir = join(JAW_HOME, 'skills_ref');
     const packageRefDir = join(findPackageRoot(), 'skills_ref');
 
-    // 1. Source for ref update: bundled (dev) or git clone (npm install)
-    let sourceDir = packageRefDir;
+    // 1. Source for ref update: GitHub clone (latest) → bundled fallback (dev)
+    const SKILLS_REPO = 'https://github.com/lidge-jun/cli-jaw-skills.git';
+    let sourceDir: string | null = null;
     let tmpCloneDir: string | null = null;
 
-    const bundledReady = fs.existsSync(packageRefDir) && fs.existsSync(join(packageRefDir, 'registry.json'));
-    if (!bundledReady) {
-        // npm install or uninitialized submodule — clone from GitHub
-        const SKILLS_REPO = 'https://github.com/lidge-jun/cli-jaw-skills.git';
+    // 1a. Try GitHub clone first (public repo, always latest)
+    try {
         tmpCloneDir = join(JAW_HOME, '.skills_clone_tmp');
-        try {
-            if (fs.existsSync(tmpCloneDir)) fs.rmSync(tmpCloneDir, { recursive: true });
-            console.log(`[skills:soft-reset] cloning latest skills from ${SKILLS_REPO}...`);
-            execSync(`git clone --depth 1 ${SKILLS_REPO} "${tmpCloneDir}"`, {
-                stdio: 'pipe', timeout: 120000,
-            });
-            sourceDir = tmpCloneDir;
-        } catch (e) {
-            console.warn(`[skills:soft-reset] ⚠️ clone failed: ${(e as Error).message?.slice(0, 80)}`);
-            console.warn(`[skills:soft-reset] keeping current skills unchanged`);
+        if (fs.existsSync(tmpCloneDir)) fs.rmSync(tmpCloneDir, { recursive: true });
+        console.log(`[skills:soft-reset] fetching latest skills from GitHub...`);
+        execSync(`git clone --depth 1 ${SKILLS_REPO} "${tmpCloneDir}"`, {
+            stdio: 'pipe', timeout: 120000,
+        });
+        sourceDir = tmpCloneDir;
+    } catch (e) {
+        console.log(`[skills:soft-reset] GitHub clone skipped: ${(e as Error).message?.slice(0, 60)}`);
+        tmpCloneDir = null;
+    }
+
+    // 1b. Fallback: bundled skills_ref/ (dev mode with initialized submodule)
+    if (!sourceDir) {
+        const bundledReady = fs.existsSync(packageRefDir) && fs.existsSync(join(packageRefDir, 'registry.json'));
+        if (bundledReady) {
+            sourceDir = packageRefDir;
+            console.log(`[skills:soft-reset] using bundled fallback`);
+        } else {
+            console.warn(`[skills:soft-reset] ⚠️ no source available — keeping current skills unchanged`);
             return { restored: 0, added: 0 };
         }
     }
 
     // 2. skills_ref/ 전체를 소스에서 다시 복사 (덮어쓰기)
-    if (fs.existsSync(sourceDir)) {
-        for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
-            if (entry.name === '.git') continue;
-            const src = join(sourceDir, entry.name);
-            const dst = join(refDir, entry.name);
-            if (entry.isDirectory()) {
-                if (fs.existsSync(dst)) fs.rmSync(dst, { recursive: true, force: true });
-                copyDirRecursive(src, dst);
-            } else if (entry.isFile()) {
-                fs.copyFileSync(src, dst);
-            }
+    for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+        if (entry.name === '.git') continue;
+        const src = join(sourceDir, entry.name);
+        const dst = join(refDir, entry.name);
+        if (entry.isDirectory()) {
+            if (fs.existsSync(dst)) fs.rmSync(dst, { recursive: true, force: true });
+            copyDirRecursive(src, dst);
+        } else if (entry.isFile()) {
+            fs.copyFileSync(src, dst);
         }
+    }
+
+    // Cleanup temp clone
+    if (tmpCloneDir && fs.existsSync(tmpCloneDir)) {
+        fs.rmSync(tmpCloneDir, { recursive: true, force: true });
     }
 
     // 3. active skills → ref에 같은 이름이 있으면 무조건 덮어쓰기
