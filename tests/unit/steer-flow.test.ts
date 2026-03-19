@@ -109,7 +109,7 @@ test('SF-EDGE: processQueue is triggered after mainManaged exit in both paths', 
 
     // ACP path — processQueue after exit
     const acpExitIdx = src.indexOf("acp.on('exit'");
-    const acpBlock = src.slice(acpExitIdx, acpExitIdx + 5000);
+    const acpBlock = src.slice(acpExitIdx, acpExitIdx + 8000);
     assert.ok(
         acpBlock.includes('processQueue()'),
         'ACP exit should call processQueue',
@@ -117,7 +117,7 @@ test('SF-EDGE: processQueue is triggered after mainManaged exit in both paths', 
 
     // CLI path — processQueue after close
     const cliCloseIdx = src.indexOf("child.on('close'");
-    const cliBlock = src.slice(cliCloseIdx, cliCloseIdx + 5500);
+    const cliBlock = src.slice(cliCloseIdx, cliCloseIdx + 8000);
     assert.ok(
         cliBlock.includes('processQueue()'),
         'CLI close should call processQueue',

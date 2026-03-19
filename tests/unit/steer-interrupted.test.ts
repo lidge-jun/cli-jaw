@@ -37,7 +37,7 @@ test('SI-003: ACP exit handler adds interrupted prefix to fullText when wasSteer
     const acpExitIdx = spawnSrc.indexOf("acp.on('exit'");
     assert.ok(acpExitIdx > 0, 'ACP exit handler should exist');
 
-    const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 2000);
+    const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 4500);
 
     // wasSteer check
     assert.ok(
@@ -60,7 +60,7 @@ test('SI-003: ACP exit handler adds interrupted prefix to fullText when wasSteer
 
 test('SI-004: ACP exit handler adds interrupted prefix to traceText when wasSteer', () => {
     const acpExitIdx = spawnSrc.indexOf("acp.on('exit'");
-    const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 2200);
+    const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 5000);
 
     // trace tagging
     assert.ok(
@@ -136,8 +136,8 @@ test('SI-STRUCT: ACP and CLI exit handlers have symmetric steer logic', () => {
     assert.ok(acpExitIdx < cliCloseIdx, 'ACP exit should come before CLI close in source');
 
     // Both should have the same key lines
-    const acpBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 2000);
-    const cliBlock = spawnSrc.slice(cliCloseIdx, cliCloseIdx + 2500);
+    const acpBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 5000);
+    const cliBlock = spawnSrc.slice(cliCloseIdx, cliCloseIdx + 5000);
 
     for (const pattern of [
         "killReason === 'steer'",

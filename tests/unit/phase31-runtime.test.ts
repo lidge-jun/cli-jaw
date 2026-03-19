@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..');
 const serverSrc = readFileSync(join(projectRoot, 'server.ts'), 'utf8');
+const runtimeSettingsSrc = readFileSync(join(projectRoot, 'src/core/runtime-settings.ts'), 'utf8');
 
 function section(src: string, startMarker: string, endMarker: string) {
     const start = src.indexOf(startMarker);
@@ -24,12 +25,12 @@ test('P31-001: startup migrates permissions safe -> auto', () => {
 });
 
 test('P31-002: applySettingsPatch tracks previous workingDir before merge', () => {
-    const fn = section(serverSrc, 'function applySettingsPatch', 'function seedDefaultEmployees');
+    const fn = section(runtimeSettingsSrc, 'export function applyRuntimeSettingsPatch', 'return settings;');
     assert.ok(fn.includes('const prevWorkingDir = settings.workingDir'));
 });
 
 test('P31-003: workingDir change triggers artifact regeneration pipeline', () => {
-    const fn = section(serverSrc, 'function applySettingsPatch', 'function seedDefaultEmployees');
+    const fn = section(runtimeSettingsSrc, 'export function applyRuntimeSettingsPatch', 'return settings;');
     assert.ok(fn.includes('if (settings.workingDir !== prevWorkingDir)'));
     assert.ok(fn.includes('initMcpConfig(settings.workingDir)'));
     assert.ok(fn.includes('ensureWorkingDirSkillsLinks(settings.workingDir'));

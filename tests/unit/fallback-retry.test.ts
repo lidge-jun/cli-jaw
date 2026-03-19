@@ -84,7 +84,8 @@ test('server.js calls resetFallbackState on settings save', async () => {
     const src = fs.readFileSync(join(__dirname, '../../server.ts'), 'utf8');
 
     assert.ok(src.includes('resetFallbackState'), 'server.js should import/use resetFallbackState');
-    assert.ok(src.includes('resetFallbackState()'), 'server.js should call resetFallbackState()');
+    assert.ok(src.includes('applyRuntimeSettingsPatch'), 'server.js should delegate settings writes to shared helper');
+    assert.ok(src.includes('resetFallbackState,'), 'server.js should pass resetFallbackState into shared helper');
 });
 
 // ─── 429 Retry: helpers ─────────────────────────────
