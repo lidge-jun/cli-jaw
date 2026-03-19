@@ -11,6 +11,20 @@ import { resolve as resolvePath, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCommand, executeCommand, getCompletionItems, getArgumentCompletionItems } from '../../src/cli/commands.js';
 import {
+    appendNewlineToComposer,
+    appendTextToComposer,
+    backspaceComposer,
+    clearComposer,
+    consumePasteProtocol,
+    createComposerState,
+    createPasteCaptureState,
+    flattenComposerForSubmit,
+    getComposerDisplayText,
+    getPlainCommandDraft,
+    getTrailingTextSegment,
+    setBracketedPaste,
+} from '../../src/cli/tui/composer.js';
+import {
     isGitRepo, captureFileSet, diffFileSets,
     detectIde, getIdeCli, openDiffInIde, getDiffStat,
 } from '../../src/ide/diff.js';
@@ -358,7 +372,7 @@ if (values.simple) {
         process.stdout.write('\r');
 
         // Write the prompt + input (handle embedded newlines)
-        const lines = inputBuf.split('\n');
+        const lines = getComposerDisplayText(composer).split('\n');
         const contPrefix = `  ${c.dim}· ${c.reset}`;  // continuation line prefix
         let totalRows = 0;
         for (let i = 0; i < lines.length; i++) {
@@ -373,7 +387,8 @@ if (values.simple) {
     }
 
     // ─── State ───────────────────────────────
-    let inputBuf = '';
+    const composer = createComposerState();
+    const pasteCapture = createPasteCaptureState();
     let inputActive = true;
     let streaming = false;
     let commandRunning = false;
@@ -439,18 +454,19 @@ if (values.simple) {
     }
 
     function resolveAutocompleteState(prevKey: string) {
-        if (!inputBuf.startsWith('/') || inputBuf.includes('\n')) {
+        const draft = getPlainCommandDraft(composer);
+        if (!draft || !draft.startsWith('/')) {
             return { open: false, items: [], selected: 0, visibleRows: 0 };
         }
 
-        const body = inputBuf.slice(1);
+        const body = draft.slice(1);
         const firstSpace = body.indexOf(' ');
         let stage = 'command';
         let contextHeader = '';
         let items = [];
 
         if (firstSpace === -1) {
-            items = getCompletionItems(inputBuf, 'cli');
+            items = getCompletionItems(draft, 'cli');
         } else {
             const commandName = body.slice(0, firstSpace).trim().toLowerCase();
             if (!commandName) return { open: false, items: [], selected: 0, visibleRows: 0 };
@@ -613,6 +629,7 @@ if (values.simple) {
                 exiting = true;
                 cleanupScrollRegion();
                 console.log(`  ${c.dim}Bye! \uD83E\uDD9E${c.reset}\n`);
+                setBracketedPaste(false);
                 ws.close();
                 process.stdin.setRawMode(false);
                 process.exit(0);
@@ -631,6 +648,7 @@ if (values.simple) {
 
     // ─── Raw stdin input ─────────────────────
     process.stdin.setRawMode(true);
+    setBracketedPaste(true);
     process.stdin.resume();
     process.stdin.setEncoding('utf8');
 
@@ -651,8 +669,8 @@ if (values.simple) {
         }
     }
 
-    process.stdin.on('data', (_key) => {
-        let key = _key as unknown as string;
+    function handleKeyInput(rawKey: string) {
+        let key = rawKey;
         if (escPending) {
             if (escTimer) clearTimeout(escTimer);
             escTimer = null;
@@ -673,7 +691,11 @@ if (values.simple) {
         // Phase 12.1.7: Option+Enter (ESC+CR/LF) → insert newline
         if (key === '\x1b\r' || key === '\x1b\n') {
             if (commandRunning) return;
-            inputBuf += '\n';
+            if (!inputActive) {
+                inputActive = true;
+                showPrompt();
+            }
+            appendNewlineToComposer(composer);
             redrawInputWithAutocomplete();
             return;
         }
@@ -735,10 +757,11 @@ if (values.simple) {
             const picked = ac.items[ac.selected];
             const pickedStage = ac.stage;
             if (picked) {
+                clearComposer(composer);
                 if (pickedStage === 'argument') {
-                    inputBuf = picked.insertText || `/${picked.command || ''} ${picked.name}`.trim();
+                    appendTextToComposer(composer, picked.insertText || `/${picked.command || ''} ${picked.name}`.trim());
                 } else {
-                    inputBuf = `/${picked.name}${picked.args ? ' ' : ''}`;
+                    appendTextToComposer(composer, `/${picked.name}${picked.args ? ' ' : ''}`);
                 }
                 closeAutocomplete();
                 redrawPromptLine();
@@ -751,35 +774,39 @@ if (values.simple) {
                 const pickedStage = ac.stage;
                 closeAutocomplete();
                 if (picked) {
+                    clearComposer(composer);
                     if (pickedStage === 'argument') {
-                        inputBuf = picked.insertText || `/${picked.command || ''} ${picked.name}`.trim();
+                        appendTextToComposer(composer, picked.insertText || `/${picked.command || ''} ${picked.name}`.trim());
                         redrawPromptLine();
                         return;
                     }
                     if (picked.args) {
-                        inputBuf = `/${picked.name} `;
+                        appendTextToComposer(composer, `/${picked.name} `);
                         redrawPromptLine();
                         return;
                     }
-                    inputBuf = `/${picked.name}`;
+                    appendTextToComposer(composer, `/${picked.name}`);
                 }
             }
             // Backslash continuation: \ at end → newline instead of submit
-            if (inputBuf.endsWith('\\')) {
-                inputBuf = inputBuf.slice(0, -1) + '\n';
+            const trailing = getTrailingTextSegment(composer);
+            if (trailing.text.endsWith('\\')) {
+                trailing.text = trailing.text.slice(0, -1);
+                appendNewlineToComposer(composer);
                 redrawInputWithAutocomplete();
                 return;
             }
             // Enter — submit
-            const text = inputBuf.trim();
-            inputBuf = '';
+            const draft = getPlainCommandDraft(composer);
+            const text = flattenComposerForSubmit(composer).trim();
+            clearComposer(composer);
             closeAutocomplete();
             prevLineCount = 1;
             console.log('');  // newline after input
 
             if (!text) { showPrompt(); return; }
             // Phase 10: /file command
-            if (text.startsWith('/file ')) {
+            if (draft !== null && text.startsWith('/file ')) {
                 const parts = text.slice(6).trim().split(/\s+/);
                 const fp = resolvePath(parts[0]!);
                 const caption = parts.slice(1).join(' ');
@@ -797,7 +824,7 @@ if (values.simple) {
                 inputActive = false;
                 return;
             }
-            const parsed = parseCommand(text);
+            const parsed = draft !== null ? parseCommand(text) : null;
             if (parsed) {
                 inputActive = false;
                 commandRunning = true;
@@ -812,10 +839,8 @@ if (values.simple) {
             inputActive = false;
         } else if (key === '\x7f' || key === '\b') {
             // Backspace
-            if (inputBuf.length > 0) {
-                inputBuf = inputBuf.slice(0, -1);
-                redrawInputWithAutocomplete();
-            }
+            backspaceComposer(composer);
+            redrawInputWithAutocomplete();
         } else if (key === '\x03') {
             // Ctrl+C — stop agent if running, otherwise exit
             if (!inputActive) {
@@ -827,13 +852,14 @@ if (values.simple) {
             } else {
                 cleanupScrollRegion();
                 console.log(`\n  ${c.dim}Bye! \uD83E\uDD9E${c.reset}\n`);
+                setBracketedPaste(false);
                 ws.close();
                 process.stdin.setRawMode(false);
                 process.exit(0);
             }
         } else if (key === '\x15') {
             // Ctrl+U — clear line
-            inputBuf = '';
+            clearComposer(composer);
             redrawInputWithAutocomplete();
         } else if (key.charCodeAt(0) >= 32 || key.charCodeAt(0) > 127) {
             // Printable chars (including multibyte/Korean)
@@ -843,9 +869,38 @@ if (values.simple) {
                 inputActive = true;
                 showPrompt();  // new separator + prompt before queue input
             }
-            inputBuf += key;
+            appendTextToComposer(composer, key);
             redrawInputWithAutocomplete();
         }
+    }
+
+    process.stdin.on('data', (_key) => {
+        let incoming = _key as unknown as string;
+        if (escPending) {
+            if (escTimer) clearTimeout(escTimer);
+            escTimer = null;
+            escPending = false;
+            if (!incoming.startsWith('\x1b')) incoming = `\x1b${incoming}`;
+        }
+        if (incoming === '\x1b') {
+            escPending = true;
+            escTimer = setTimeout(flushPendingEscape, ESC_WAIT_MS);
+            return;
+        }
+        if (commandRunning && !inputActive) return;
+        const beforeDisplay = getComposerDisplayText(composer);
+        const tokens = consumePasteProtocol(incoming, pasteCapture, composer);
+        const afterDisplay = getComposerDisplayText(composer);
+        if (beforeDisplay !== afterDisplay) {
+            if (!inputActive) {
+                if (commandRunning) return;
+                inputActive = true;
+                showPrompt();
+            }
+            redrawInputWithAutocomplete();
+            if (tokens.length === 0) return;
+        }
+        for (const token of tokens) handleKeyInput(token);
     });
 
     // ─── WS messages ─────────────────────────
@@ -953,6 +1008,7 @@ if (values.simple) {
     ws.on('close', () => {
         cleanupScrollRegion();
         console.log(`\n  ${c.dim}Disconnected${c.reset}\n`);
+        setBracketedPaste(false);
         process.stdin.setRawMode(false);
         process.exit(0);
     });
