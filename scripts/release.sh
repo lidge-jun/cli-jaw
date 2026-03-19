@@ -5,6 +5,9 @@ set -e
 echo "🦈 cli-jaw release script"
 echo "========================="
 
+# cd to project root (parent of scripts/)
+cd "$(dirname "$0")/.."
+
 # 1. TypeScript 빌드
 echo "📦 Building backend (tsc)..."
 ./node_modules/.bin/tsc
