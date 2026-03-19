@@ -131,6 +131,13 @@ function createDefaultSettings() {
             model: '',
             retentionDays: 30,
         },
+        tui: {
+            pasteCollapseLines: 2,
+            pasteCollapseChars: 160,
+            keymapPreset: 'default',
+            diffStyle: 'summary',
+            themeSeed: 'jaw-default',
+        },
         employees: [],
         locale: 'ko',
         stt: {
@@ -179,7 +186,12 @@ export function loadSettings() {
                 mergedPerCli[cli] = { ...(mergedPerCli[cli] || {}), ...cfg };
             }
         }
-        const merged = migrateSettings({ ...defaults, ...raw, perCli: mergedPerCli });
+        const merged = migrateSettings({
+            ...defaults,
+            ...raw,
+            perCli: mergedPerCli,
+            tui: { ...defaults.tui, ...(raw.tui || {}) },
+        });
         // --home (JAW_HOME) always wins over persisted workingDir (#64 hotfix)
         if (merged.workingDir !== JAW_HOME) {
             merged.workingDir = JAW_HOME;

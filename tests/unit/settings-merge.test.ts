@@ -43,3 +43,19 @@ test('SM-005: empty patch returns original', () => {
     const next = mergeSettingsPatch(current, {});
     assert.deepEqual(next, current);
 });
+
+test('SM-006: tui deep merge preserves sibling keys', () => {
+    const current = {
+        tui: {
+            pasteCollapseLines: 2,
+            pasteCollapseChars: 160,
+            keymapPreset: 'default',
+            diffStyle: 'summary',
+            themeSeed: 'jaw-default',
+        },
+    };
+    const next = mergeSettingsPatch(current, { tui: { keymapPreset: 'vim' } });
+    assert.equal(next.tui.keymapPreset, 'vim');
+    assert.equal(next.tui.pasteCollapseLines, 2);
+    assert.equal(next.tui.diffStyle, 'summary');
+});

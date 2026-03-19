@@ -30,8 +30,8 @@ export function mergeSettingsPatch(current: Record<string, any>, patch: Record<s
         delete remaining.activeOverrides;
     }
 
-    // Deep merge nested objects (heartbeat, telegram, memory, stt)
-    for (const key of ['heartbeat', 'telegram', 'memory', 'stt']) {
+    // Deep merge nested objects (heartbeat, telegram, memory, stt, tui)
+    for (const key of ['heartbeat', 'telegram', 'memory', 'stt', 'tui']) {
         if (remaining[key] && typeof remaining[key] === 'object') {
             result[key] = { ...result[key], ...remaining[key] };
             delete remaining[key];
