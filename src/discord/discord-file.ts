@@ -27,18 +27,26 @@ export async function sendDiscordFile(
     filePath: string,
     options?: { caption?: string; replyTo?: string },
 ): Promise<{ ok: boolean; error?: string }> {
-    const fileStat = await stat(filePath);
+    let fileStat;
+    try {
+        fileStat = await stat(filePath);
+    } catch {
+        return { ok: false, error: `File not found: ${filePath}` };
+    }
     validateDiscordFileSize(filePath, fileStat.size);
 
     const channel = await client.channels.fetch(target.targetId);
     if (!channel || !('send' in channel)) {
-        throw new Error('Target channel not text-based');
+        return { ok: false, error: 'Target channel not text-based' };
     }
 
-    await (channel as any).send({
-        content: options?.caption || '',
-        files: [{ attachment: filePath, name: basename(filePath) }],
-    });
-
-    return { ok: true };
+    try {
+        await (channel as any).send({
+            content: options?.caption || '',
+            files: [{ attachment: filePath, name: basename(filePath) }],
+        });
+        return { ok: true };
+    } catch (e) {
+        return { ok: false, error: `Discord file send failed: ${(e as Error).message}` };
+    }
 }

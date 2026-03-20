@@ -72,7 +72,7 @@ function persistTargetsNow() {
     if (!settings.messaging) settings.messaging = { lastActive: {}, latestSeen: {} };
     settings.messaging.lastActive = Object.fromEntries(lastActiveTargets);
     settings.messaging.latestSeen = Object.fromEntries(latestSeenTargets);
-    try { saveSettings(settings); } catch { /* non-critical */ }
+    try { saveSettings(settings); } catch (e) { console.warn('[messaging:persist]', (e as Error).message); }
 }
 
 /** Check if a target has the minimum required shape */

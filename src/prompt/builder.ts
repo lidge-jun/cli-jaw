@@ -168,6 +168,8 @@ export function initPromptFiles() {
                 fs.writeFileSync(hashPath, currentHash);
                 console.log('[prompt] A-1.md updated to new version');
             } else {
+                // User edited — preserve their changes, but advance hash baseline
+                fs.writeFileSync(hashPath, currentHash);
                 console.log('[prompt] A-1.md has user edits — preserved');
             }
         }
