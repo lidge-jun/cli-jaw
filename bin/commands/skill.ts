@@ -210,26 +210,17 @@ switch (sub) {
         }
 
         try {
-            if (isHard) {
-                console.log(`\n  ${c.bold}🔄 [HARD] 스킬 전체 초기화 중...${c.reset}\n`);
-                if (existsSync(SKILLS_DIR)) {
-                    rmSync(SKILLS_DIR, { recursive: true, force: true });
-                    console.log(`  ${c.dim}✓ cleared ${SKILLS_DIR}${c.reset}`);
-                }
-                mkdirSync(SKILLS_DIR, { recursive: true });
-                const REF_DIR = join(JAW_HOME, 'skills_ref');
-                if (existsSync(REF_DIR)) {
-                    rmSync(REF_DIR, { recursive: true, force: true });
-                    console.log(`  ${c.dim}✓ cleared ${REF_DIR}${c.reset}`);
-                }
-                mkdirSync(REF_DIR, { recursive: true });
-                const { copyDefaultSkills } = await import('../../lib/mcp-sync.js');
-                copyDefaultSkills();
-            } else {
-                console.log(`\n  ${c.bold}🔄 등록 스킬 복원 중...${c.reset}\n`);
-                const { softResetSkills } = await import('../../lib/mcp-sync.js');
-                const result = softResetSkills();
-                console.log(`  ${c.dim}✓ ${result.restored}개 복원, ${result.added}개 추가${c.reset}`);
+            console.log(isHard
+                ? `\n  ${c.bold}🔄 [HARD] 스킬 전체 초기화 중...${c.reset}\n`
+                : `\n  ${c.bold}🔄 등록 스킬 복원 중...${c.reset}\n`);
+            const { runSkillReset } = await import('../../lib/mcp-sync.js');
+            const result = runSkillReset({
+                mode: isHard ? 'hard' : 'soft',
+                repairTargetDir: null,
+            });
+            console.log(`  ${c.dim}✓ ${result.restored}개 복원, ${result.added}개 추가${c.reset}`);
+            if (typeof result.copied === 'number') {
+                console.log(`  ${c.dim}✓ ${result.copied}개 기본 스킬 재분류${c.reset}`);
             }
 
             console.log(`\n  ${c.green}✅ 초기화 완료!${c.reset}`);

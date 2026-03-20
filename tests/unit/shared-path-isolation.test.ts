@@ -70,12 +70,12 @@ test('SPI-004: server.ts calls ensureWorkingDirSkillsLinks (not ensureSkillsSyml
     );
 });
 
-// ── SPI-005: command-context.ts resetSkills does not call shared helper ──
+// ── SPI-005: command-context.ts uses centralized reset helper ──
 
-test('SPI-005: command-context.ts uses ensureWorkingDirSkillsLinks', () => {
+test('SPI-005: command-context.ts uses runSkillReset, not inline repair flow', () => {
     assert.ok(
-        commandCtxSrc.includes('ensureWorkingDirSkillsLinks'),
-        'resetSkills must use working-dir-only helper',
+        commandCtxSrc.includes('runSkillReset'),
+        'resetSkills must use the centralized reset helper',
     );
     assert.ok(
         !commandCtxSrc.includes('ensureSkillsSymlinks'),
@@ -83,20 +83,13 @@ test('SPI-005: command-context.ts uses ensureWorkingDirSkillsLinks', () => {
     );
 });
 
-// ── SPI-005b: server and command-context use onConflict skip ──
+// ── SPI-005b: server startup keeps onConflict skip ──
 
-test('SPI-005b: runtime callers use onConflict skip by default', () => {
-    // server.ts startup
+test('SPI-005b: server startup uses onConflict skip by default', () => {
     const serverStartup = serverSrc.slice(serverSrc.indexOf('ensureWorkingDirSkillsLinks'));
     assert.ok(
         serverStartup.includes("onConflict: 'skip'") || serverStartup.includes('onConflict: \'skip\''),
         'server startup must use onConflict skip',
-    );
-    // command-context.ts
-    const cmdCtx = commandCtxSrc.slice(commandCtxSrc.indexOf('ensureWorkingDirSkillsLinks'));
-    assert.ok(
-        cmdCtx.includes("onConflict: 'skip'") || cmdCtx.includes('onConflict: \'skip\''),
-        'command-context must use onConflict skip',
     );
 });
 
@@ -310,6 +303,46 @@ test('SPI-013b: allowReplaceManaged skips unmanaged stale symlink', async () => 
     } finally {
         rmSync(fakeHome, { recursive: true, force: true });
         rmSync(workDir, { recursive: true, force: true });
+    }
+});
+
+// ── SPI-015 (behavioral): reset repair backs up known legacy dir before relinking ──
+
+test('SPI-015: reset repair backs up known legacy managed dir before relinking', async () => {
+    const { repairManagedSkillLinksAfterReset } = await import('../../lib/mcp-sync.js');
+
+    const fakeHome = mkdtempSync(join(tmpdir(), 'jaw-home-'));
+    const jawHome = join(fakeHome, '.cli-jaw');
+    const skillsSource = join(jawHome, 'skills');
+    mkdirSync(skillsSource, { recursive: true });
+
+    const legacyAgentsSkills = join(jawHome, '.agents', 'skills');
+    mkdirSync(join(legacyAgentsSkills, 'legacy-skill'), { recursive: true });
+    writeFileSync(join(legacyAgentsSkills, 'legacy-skill', 'SKILL.md'), '# stale\n');
+
+    try {
+        const report = repairManagedSkillLinksAfterReset(jawHome, {
+            includeClaude: false,
+            _homedir: fakeHome,
+            _jawHome: jawHome,
+        });
+
+        assert.deepEqual(report.repairedPaths, [legacyAgentsSkills], 'legacy dir must be repaired');
+        assert.ok(report.symlinks, 'symlink report must be returned for trusted target');
+        const agentsLink = report.symlinks?.links?.find((l: any) => l.name === 'wdAgents');
+        assert.ok(agentsLink, 'wdAgents link must exist in report');
+        assert.ok(
+            agentsLink.action === 'create' || agentsLink.action === 'replace_symlink',
+            'reset repair must create or refresh the wdAgents symlink',
+        );
+        const actual = readlinkSync(legacyAgentsSkills);
+        assert.strictEqual(resolve(dirname(legacyAgentsSkills), actual), resolve(skillsSource),
+            'legacy directory must be replaced by a symlink to the current skills source');
+
+        const backupDir = join(jawHome, 'backups', 'skills-conflicts');
+        assert.ok(existsSync(backupDir), 'backup directory must exist after repair');
+    } finally {
+        rmSync(fakeHome, { recursive: true, force: true });
     }
 });
 

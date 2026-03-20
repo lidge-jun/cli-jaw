@@ -1018,6 +1018,122 @@ export function softResetSkills() {
     return { restored, added };
 }
 
+export type SkillResetMode = 'soft' | 'hard';
+
+type SkillResetCoreResult = {
+    restored: number;
+    added: number;
+    copied?: number;
+};
+
+export type SkillResetResult = SkillResetCoreResult & {
+    mode: SkillResetMode;
+    symlinks?: ReturnType<typeof ensureWorkingDirSkillsLinks>;
+    repairedPaths?: string[];
+};
+
+function runHardSkillResetCore(): SkillResetCoreResult {
+    const activeDir = join(JAW_HOME, 'skills');
+    const refDir = join(JAW_HOME, 'skills_ref');
+    if (fs.existsSync(activeDir)) fs.rmSync(activeDir, { recursive: true, force: true });
+    if (fs.existsSync(refDir)) fs.rmSync(refDir, { recursive: true, force: true });
+    fs.mkdirSync(activeDir, { recursive: true });
+    fs.mkdirSync(refDir, { recursive: true });
+    const copied = copyDefaultSkills();
+    return { restored: 0, added: copied, copied };
+}
+
+function isTrustedRepairTarget(repairTargetDir: string, jawHome = JAW_HOME): boolean {
+    return resolve(repairTargetDir) === resolve(jawHome);
+}
+
+function looksLikeCliJawLegacySkillsDir(targetPath: string): boolean {
+    if (!fs.existsSync(targetPath)) return false;
+    try {
+        const stat = fs.lstatSync(targetPath);
+        if (stat.isSymbolicLink() || !stat.isDirectory()) return false;
+        const entries = fs.readdirSync(targetPath, { withFileTypes: true });
+        return entries.some(entry =>
+            entry.isDirectory() && fs.existsSync(join(targetPath, entry.name, 'SKILL.md')));
+    } catch {
+        return false;
+    }
+}
+
+function repairLegacyManagedSkillDirs(
+    repairTargetDir: string,
+    opts: { includeClaude?: boolean; _jawHome?: string } = {},
+): string[] {
+    const targets = [
+        join(repairTargetDir, '.agents', 'skills'),
+        ...(opts.includeClaude ? [join(repairTargetDir, '.claude', 'skills')] : []),
+    ];
+    const repairedPaths: string[] = [];
+    const backupContext = createBackupContext(opts._jawHome);
+
+    for (const targetPath of targets) {
+        if (!looksLikeCliJawLegacySkillsDir(targetPath)) continue;
+        movePathToBackup(targetPath, backupContext);
+        repairedPaths.push(targetPath);
+    }
+
+    return repairedPaths;
+}
+
+export function repairManagedSkillLinksAfterReset(
+    repairTargetDir: string,
+    opts: {
+        includeClaude?: boolean;
+        _homedir?: string;
+        _jawHome?: string;
+    } = {},
+): { symlinks?: ReturnType<typeof ensureWorkingDirSkillsLinks>; repairedPaths: string[] } {
+    const jawHome = opts._jawHome ?? JAW_HOME;
+    if (!isTrustedRepairTarget(repairTargetDir, jawHome)) {
+        return { repairedPaths: [] };
+    }
+
+    const repairedPaths = repairLegacyManagedSkillDirs(repairTargetDir, {
+        includeClaude: opts.includeClaude ?? true,
+        _jawHome: jawHome,
+    });
+
+    const symlinks = ensureWorkingDirSkillsLinks(repairTargetDir, {
+        onConflict: 'skip',
+        includeClaude: opts.includeClaude ?? true,
+        allowReplaceManaged: true,
+        _homedir: opts._homedir,
+        _jawHome: jawHome,
+    });
+
+    return { symlinks, repairedPaths };
+}
+
+export function runSkillReset(options: {
+    mode: SkillResetMode;
+    repairTargetDir?: string | null;
+    includeClaude?: boolean;
+    _homedir?: string;
+    _jawHome?: string;
+}): SkillResetResult {
+    const mode = options.mode;
+    const resetResult: SkillResetCoreResult = mode === 'hard'
+        ? runHardSkillResetCore()
+        : softResetSkills();
+
+    if (!options.repairTargetDir) {
+        return { mode, ...resetResult };
+    }
+
+    const repair = repairManagedSkillLinksAfterReset(options.repairTargetDir, {
+        includeClaude: options.includeClaude ?? true,
+        _homedir: options._homedir,
+        _jawHome: options._jawHome,
+    });
+
+    return { mode, ...resetResult, ...repair };
+}
+
 /** Recursively copy a directory (symlink-safe, error-resilient) */
 function copyDirRecursive(src: string, dst: string) {
     fs.mkdirSync(dst, { recursive: true });

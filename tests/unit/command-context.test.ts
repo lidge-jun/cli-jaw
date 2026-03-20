@@ -11,6 +11,7 @@ const __dirname = dirname(__filename);
 const ctxSrc = fs.readFileSync(join(__dirname, '../../src/cli/command-context.ts'), 'utf8');
 const serverSrc = fs.readFileSync(join(__dirname, '../../server.ts'), 'utf8');
 const botSrc = fs.readFileSync(join(__dirname, '../../src/telegram/bot.ts'), 'utf8');
+const skillCmdSrc = fs.readFileSync(join(__dirname, '../../bin/commands/skill.ts'), 'utf8');
 
 // ─── CC-001: makeCommandCtx exports exist ───
 
@@ -72,8 +73,8 @@ test('CC-006: resetSkills available in unified context', () => {
         'resetSkills is defined in makeCommandCtx',
     );
     assert.ok(
-        ctxSrc.includes('copyDefaultSkills'),
-        'resetSkills calls copyDefaultSkills',
+        ctxSrc.includes('runSkillReset'),
+        'resetSkills calls the centralized reset helper',
     );
 });
 
@@ -87,6 +88,17 @@ test('CC-007: getPrompt returns actual file content, not unsupported message', (
     assert.ok(
         !ctxSrc.includes('tg.promptUnsupported'),
         'no unsupported message in unified context',
+    );
+});
+
+test('CC-007b: skill CLI reset core avoids cwd-based repair', () => {
+    assert.ok(
+        !skillCmdSrc.includes('process.cwd()'),
+        'skill CLI reset must not derive repair target from process.cwd()',
+    );
+    assert.ok(
+        skillCmdSrc.includes('repairTargetDir: null'),
+        'skill CLI reset must opt out of trusted-target repair',
     );
 });
 

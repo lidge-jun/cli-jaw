@@ -1,13 +1,13 @@
 # 🧪 CLI-JAW Tests
 
-[![Tests](https://img.shields.io/badge/tests-608%20pass-brightgreen)](#)
+[![Tests](https://img.shields.io/badge/tests-743%20pass%20%2F%201%20skip-brightgreen)](#)
 
 > `node:test` + `node:assert` via `tsx` runner — zero external test dependencies.
 
 ## Run
 
 ```bash
-npm test                            # All 608 tests (~15s)
+npm test                            # All 744 tests (~15s)
 tsx --test tests/unit/*.test.ts    # Unit tests only
 tsx --test tests/integration/*.test.ts  # Integration tests only
 npm run test:watch                  # Watch mode
@@ -37,6 +37,7 @@ npm run check:deps                  # Dependency vulnerability check
 | `async-handler.test.ts`        |   4   | Express async wrapper, error forwarding, statusCode preservation                          |
 | `bus.test.ts`                  |   6   | Broadcast, listener add/remove, WS mock, safety                                           |
 | `cli-registry.test.ts`         |   8   | CLI_KEYS, required fields, `buildDefaultPerCli`, `buildModelChoicesByCli`                 |
+| `command-context.test.ts`      |  12   | `makeCommandCtx` reset wiring, prompt access, TG restrictions, CLI reset path guard       |
 | `commands-parse.test.ts`       |  21   | parseCommand, executeCommand, getCompletions, COMMANDS integrity, i18n                    |
 | `commands-policy.test.ts`      |  10   | Command-contract capability map, `getVisibleCommands`, Telegram menu, readonly, tgDescKey |
 | `decode.test.ts`               |   5   | `decodeFilenameSafe` — URL encoding, traversal prevention                                 |
@@ -51,6 +52,7 @@ npm run check:deps                  # Dependency vulnerability check
 | `path-guards.test.ts`          |  16   | `assertSkillId`, `assertFilename`, `safeResolveUnder` — traversal/injection/overlong      |
 | `render-sanitize.test.ts`      |  11   | XSS regex fallback — script/event/javascript: stripping, content preservation             |
 | `settings-merge.test.ts`       |   5   | `mergeSettingsPatch` — perCli/activeOverrides deep merge                                  |
+| `shared-path-isolation.test.ts`|  18   | startup isolation, centralized reset wiring, stale legacy skill-dir repair                |
 | `employee-prompt.test.ts`      |  14   | `getEmployeePrompt`, `getEmployeePromptV2`, old name exclusion                            |
 | `import-resolve.test.ts`       |   1   | **전체 src/ import 경로 존재 검증** — 리팩토링 후 깨진 경로 탐지                          |
 | `fallback-retry.test.ts`       |  30   | 429 retry state, `isAgentBusy`, `clearRetryTimer`, kill/queue guards, edge + runtime sim  |
@@ -142,7 +144,27 @@ npm run test:coverage    # Node --experimental-test-coverage
 | `test:watch`    | `tsx --test --watch ...`                                        | Watch mode                  |
 | `test:coverage` | `tsx --test --experimental-test-coverage ...`                   | Coverage report             |
 | `test:smoke`    | `TEST_PORT=3457 tsx --test tests/integration/api-smoke.test.ts` | API smoke (needs server)    |
-| `check:deps`    | `node scripts/check-deps-offline.mjs`                           | Offline vulnerability check |
+| `check:deps`    | `tsx scripts/check-deps-offline.ts`                             | Offline vulnerability check |
+
+---
+
+## Issue #67 Rollout Verification
+
+For the soft-reset stale-docs rollout, run these in order:
+
+```bash
+npm run -s typecheck
+npx tsx --test tests/unit/shared-path-isolation.test.ts
+npx tsx --test tests/unit/command-context.test.ts
+npm test
+```
+
+What this covers:
+
+- centralized reset-core wiring in `command-context.ts`
+- standalone CLI opting out of cwd-based repair
+- trusted-target legacy skill-dir backup and relink behavior
+- no regression to startup `onConflict: 'skip'` isolation policy
 
 ---
 

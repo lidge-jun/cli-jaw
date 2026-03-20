@@ -3,8 +3,7 @@
 // Interface-specific behavior is handled via the `interface` parameter.
 
 import fs from 'fs';
-import { join } from 'path';
-import { settings, detectAllCli, APP_VERSION, JAW_HOME, deriveCdpPort } from '../core/config.js';
+import { settings, detectAllCli, APP_VERSION, deriveCdpPort } from '../core/config.js';
 import { getSession, clearMessages, updateSession } from '../core/db.js';
 import { broadcast } from '../core/bus.js';
 import { t, normalizeLocale } from '../core/i18n.js';
@@ -15,7 +14,7 @@ import * as memory from '../memory/memory.js';
 import { bootstrapMemory, ensureMemoryStructure, getMemoryStatus, reindexMemory, searchIndexedMemory } from '../memory/runtime.js';
 import {
     loadUnifiedMcp, saveUnifiedMcp, syncToAll,
-    ensureWorkingDirSkillsLinks, copyDefaultSkills, softResetSkills,
+    runSkillReset,
 } from '../../lib/mcp-sync.js';
 
 export type CommandContextInterface = 'web' | 'telegram' | 'cli';
@@ -107,20 +106,13 @@ export function makeCommandCtx(
 
         // Skills — unified (TG previously missing)
         resetSkills: async (mode: 'soft' | 'hard' = 'soft') => {
-            if (mode === 'hard') {
-                const activeDir = join(JAW_HOME, 'skills');
-                const refDir = join(JAW_HOME, 'skills_ref');
-                if (fs.existsSync(activeDir)) fs.rmSync(activeDir, { recursive: true, force: true });
-                if (fs.existsSync(refDir)) fs.rmSync(refDir, { recursive: true, force: true });
-                fs.mkdirSync(activeDir, { recursive: true });
-                fs.mkdirSync(refDir, { recursive: true });
-                copyDefaultSkills();
-            } else {
-                softResetSkills();
-            }
-            const symlinks = ensureWorkingDirSkillsLinks(settings.workingDir, { onConflict: 'skip', includeClaude: true, allowReplaceManaged: true });
+            const result = runSkillReset({
+                mode,
+                repairTargetDir: settings.workingDir,
+                includeClaude: true,
+            });
             regenerateB();
-            return { symlinks };
+            return result;
         },
 
         // Prompt
