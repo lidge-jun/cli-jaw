@@ -232,10 +232,11 @@ test('CS-016: cliHandler no-arg returns readable text (Telegram/Discord contract
 
 // ─── P1 fix: findPackageRoot locale path resolution ──────────
 
-test('CS-017: public/locales exists at the resolved PROJECT_ROOT (source tree)', () => {
-    const { dirname, join } = require('node:path');
-    const { existsSync } = require('node:fs');
-    const testFileDir = dirname(fileURLToPath(import.meta.url));
+test('CS-017: public/locales exists at the resolved PROJECT_ROOT (source tree)', async () => {
+    const { dirname, join } = await import('node:path');
+    const { existsSync } = await import('node:fs');
+    const { fileURLToPath: toPath } = await import('node:url');
+    const testFileDir = dirname(toPath(import.meta.url));
     // From tests/unit/ walk up — project root should have public/locales
     const projectRoot = join(testFileDir, '../..');
     assert.ok(existsSync(join(projectRoot, 'public', 'locales', 'ko.json')),

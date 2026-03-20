@@ -155,7 +155,7 @@ Check what's ready: `jaw doctor`
  ✅ OpenCode CLI    installed
  ✅ Copilot CLI     installed
  ✅ Database        jaw.db OK
- ✅ Skills          21 active, 88 reference
+ ✅ Skills          22 active, 94 reference
  ✅ MCP             3 servers configured
  ✅ Memory          MEMORY.md exists
  ✅ Server          port 3457 available
@@ -176,7 +176,7 @@ CLI-JAW is a **personal AI assistant** that lives on your machine and works from
 > 💬 *"Refactor this module and write tests"* → sub-agents handle it while you grab coffee
 > 💬 *"Download that PDF and put the key points in Notion"* → browser + Notion skill, done
 
-Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, Codex, Gemini, OpenCode, Copilot) through their official CLIs — giving you the best of every provider in one unified experience. If one engine is busy, it automatically falls back to the next. 107 built-in skills handle everything from browser automation to document generation.
+Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, Codex, Gemini, OpenCode, Copilot) through their official CLIs — giving you the best of every provider in one unified experience. If one engine is busy, it automatically falls back to the next. 116 built-in skills handle everything from browser automation to document generation.
 
 |                           | Why CLI-JAW?                                                                                                                     |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -184,7 +184,7 @@ Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, C
 | 🤖**Verified Agent Tools** | 5 battle-tested coding agents (Claude, Codex, Gemini, OpenCode, Copilot) under one roof.                                         |
 | ⚡**Multi-Agent Fallback** | One engine down? The next picks up automatically. Zero downtime.                                                                 |
 | 🎭**PABCD Orchestration**  | DB-persisted FSM pipeline — Plan → Audit → Build → Check → Done. Workers are read-only. You approve every phase.                 |
-| 📦**107 Built-in Skills**  | Browser automation, document generation, Telegram/Discord, memory — ready out of the box.                                         |
+| 📦**116 Built-in Skills**  | Browser automation, document generation, Telegram/Discord, memory — ready out of the box.                                         |
 | 🖥️**Cross-Platform**       | macOS, Linux, Windows — ENOENT-safe CLI spawn, auto-detection,`.cmd` shim support, and native install all work across platforms. |
 
 ![CLI-JAW Terminal](docs/screenshots/terminal-cli.png)
@@ -228,7 +228,7 @@ graph LR
 - 🎭 **Multi-agent orchestration** — Complex tasks get split across specialized sub-agents automatically.
 - 🎤 **Voice input** — Mic button on the web + Telegram voice messages. Multi-provider STT (OpenAI, Vertex AI).
 - 📝 **Prompt templates** — Create, manage, and reuse prompt templates with a visual node-map editor.
-- 📦 **109 skills** — Browser control, file editing, image generation, web search, and [much more](#-skill-system).
+- 📦 **116 skills** — Browser control, file editing, image generation, web search, and [much more](#-skill-system).
 - 🧠 **Persistent memory** — Your assistant remembers past conversations and preferences across sessions.
 - 📱 **Telegram bot** — Chat with your assistant from your phone, send voice/photos/files.
 - 🌐 **Browser automation** — Your assistant can navigate the web, click, type, and screenshot.
@@ -240,33 +240,31 @@ graph LR
 
 ## 📦 Skill System
 
-**109 skills** out of the box — browser, github, notion, telegram, memory, pdf, image generation, and [much more](#).
+**116 skills** out of the box — browser, github, notion, telegram, memory, pdf, image generation, and [much more](#).
 
 <details>
 <summary>View all skills</summary>
 
 | Tier                 | Count | How it works                                              |
 | -------------------- | :---: | --------------------------------------------------------- |
-| **Active Skills**    |  21   | Auto-injected into every AI prompt. Always available.     |
-| **Reference Skills** |  88   | AI reads them on-demand when you ask for a relevant task. |
+| **Active Skills**    |  22   | Auto-injected into every AI prompt. Always available.     |
+| **Reference Skills** |  94   | AI reads them on-demand when you ask for a relevant task. |
 
 #### Active Skills (always on)
 
 | Skill                                                               | What it does                                              |
 | ------------------------------------------------------------------- | --------------------------------------------------------- |
-| `browser`                                                           | Chrome automation — snapshot, click, navigate, screenshot |
-| `github`                                                            | Issues, PRs, CI, code review via `gh` CLI                 |
-| `notion`                                                            | Create/manage Notion pages and databases                  |
-| `memory`                                                            | Persistent long-term memory across sessions               |
-| `telegram-send`                                                     | Send photos, documents, voice messages to Telegram        |
-| `vision-click`                                                      | Screenshot → AI finds coordinates → clicks (one command)  |
-| `imagegen`                                                          | Generate/edit images via OpenAI Image API                 |
-| `pdf` / `docx` / `xlsx`                                             | Read, create, edit office documents                       |
-| `screen-capture`                                                    | macOS screenshot and camera capture                       |
-| `video`                                                             | Remotion-based programmatic video rendering from JSON     |
-| `openai-docs`                                                       | Up-to-date OpenAI API documentation                       |
-| `dev` / `dev-frontend` / `dev-backend` / `dev-data` / `dev-testing` | Development guidelines for sub-agents                     |
-| `dev-pabcd` / `dev-scaffolding` / `dev-code-reviewer`               | Orchestration, scaffolding, and code review guides        |
+| `browser`                                                           | Chrome automation — snapshot, click, navigate, screenshot  |
+| `github`                                                            | Issues, PRs, CI, code review via `gh` CLI                  |
+| `notion`                                                            | Create/manage Notion pages and databases                   |
+| `memory`                                                            | Persistent long-term memory across sessions                |
+| `telegram-send`                                                     | Send photos, documents, voice messages to Telegram         |
+| `vision-click`                                                      | Screenshot → AI finds coordinates → clicks (one command)   |
+| `pdf` / `pdf-expert` / `docx` / `xlsx` / `pptx` / `hwp`            | Read, create, edit office & PDF documents (incl. Korean HWP) |
+| `screen-capture`                                                    | macOS screenshot and camera capture                        |
+| `video`                                                             | Remotion-based programmatic video rendering from JSON      |
+| `dev` / `dev-frontend` / `dev-backend` / `dev-data` / `dev-testing` | Development guidelines for sub-agents                      |
+| `dev-pabcd` / `dev-scaffolding` / `dev-code-reviewer`               | Orchestration, scaffolding, and code review guides         |
 
 #### Reference Skills (on-demand)
 
