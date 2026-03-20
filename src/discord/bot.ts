@@ -74,7 +74,7 @@ async function dcOrchestrate(msg: Message, prompt: string, displayMsg: string) {
                 removeBroadcastListener(queueHandler);
                 const chunks = chunkDiscordMessage(data.text);
                 for (const chunk of chunks) {
-                    msg.channel.send(chunk).catch(() => { });
+                    (msg.channel as any).send(chunk).catch(() => { });
                 }
             }
         };
@@ -97,7 +97,7 @@ async function dcOrchestrate(msg: Message, prompt: string, displayMsg: string) {
         }));
         const chunks = chunkDiscordMessage(text);
         for (const chunk of chunks) {
-            await msg.channel.send(chunk);
+            await (msg.channel as any).send(chunk);
         }
         console.log(`[discord:out] ${msg.channelId}: ${text.slice(0, 80)}`);
     } catch (err: unknown) {

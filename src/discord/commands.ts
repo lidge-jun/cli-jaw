@@ -86,10 +86,11 @@ export async function handleDiscordSlashCommand(interaction: ChatInputCommandInt
         if (channel && 'send' in channel) {
             const { orchestrateAndCollect } = await import('../orchestrator/collect.js');
             const { setLastActiveTarget } = await import('../messaging/runtime.js');
+            const peerKind = interaction.guildId ? 'channel' as const : 'direct' as const;
             const target = {
                 channel: 'discord' as const,
                 targetKind: 'channel' as const,
-                peerKind: (interaction.guildId ? 'channel' : 'direct') as const,
+                peerKind,
                 targetId: interaction.channelId,
                 guildId: interaction.guildId ?? undefined,
             };

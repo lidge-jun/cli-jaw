@@ -22,7 +22,9 @@ import {
     loadSettings, setPerm, handleModelSelect, applyCustomModel, onCliChange,
     saveActiveCliSettings, savePerCli, updateSettings, openPromptModal,
     closePromptModal, savePromptFromModal, syncMcpServers, installMcpGlobal,
-    loadCliStatus, setTelegram, setForwardAll, saveTelegramSettings, saveFallbackOrder,
+    loadCliStatus, setTelegram, setForwardAll, saveTelegramSettings,
+    setDiscord, setDiscordForwardAll, setDiscordAllowBots, saveDiscordSettings, setActiveChannel,
+    saveFallbackOrder,
     openTemplateModal, saveTemplateFromModal, closeTemplateModal, templateGoBack, toggleDevMode
 } from './features/settings.js';
 import {
@@ -170,6 +172,18 @@ document.getElementById('tgForwardOff')?.addEventListener('click', () => setForw
 document.getElementById('tgForwardOn')?.addEventListener('click', () => setForwardAll(true));
 document.getElementById('tgToken')?.addEventListener('change', saveTelegramSettings);
 document.getElementById('tgChatIds')?.addEventListener('change', saveTelegramSettings);
+// Discord
+document.getElementById('chTelegram')?.addEventListener('click', () => setActiveChannel('telegram'));
+document.getElementById('chDiscord')?.addEventListener('click', () => setActiveChannel('discord'));
+document.getElementById('dcOff')?.addEventListener('click', () => setDiscord(false));
+document.getElementById('dcOn')?.addEventListener('click', () => setDiscord(true));
+document.getElementById('dcForwardOff')?.addEventListener('click', () => setDiscordForwardAll(false));
+document.getElementById('dcForwardOn')?.addEventListener('click', () => setDiscordForwardAll(true));
+document.getElementById('dcAllowBotsOff')?.addEventListener('click', () => setDiscordAllowBots(false));
+document.getElementById('dcAllowBotsOn')?.addEventListener('click', () => setDiscordAllowBots(true));
+document.getElementById('dcToken')?.addEventListener('change', saveDiscordSettings);
+document.getElementById('dcGuildId')?.addEventListener('change', saveDiscordSettings);
+document.getElementById('dcChannelIds')?.addEventListener('change', saveDiscordSettings);
 document.getElementById('fallbackOrderList')?.addEventListener('change', saveFallbackOrder);
 
 // Codex fast mode toggle
