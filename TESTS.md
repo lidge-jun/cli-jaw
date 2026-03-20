@@ -1,13 +1,13 @@
 # 🧪 CLI-JAW Tests
 
-[![Tests](https://img.shields.io/badge/tests-868%20pass%20%2F%202%20skip-brightgreen)](#)
+[![Tests](https://img.shields.io/badge/tests-888%20pass%20%2F%202%20skip-brightgreen)](#)
 
 > `node:test` + `node:assert` via `tsx` runner — zero external test dependencies.
 
 ## Run
 
 ```bash
-npm test                            # All 870 tests (~16s)
+npm test                            # All 890 tests (~16s)
 tsx --test tests/unit/*.test.ts    # Unit tests only
 tsx --test tests/integration/*.test.ts  # Integration tests only
 npm run test:watch                  # Watch mode
