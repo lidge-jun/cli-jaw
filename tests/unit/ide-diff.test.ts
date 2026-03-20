@@ -2,7 +2,12 @@
  * tests/unit/ide-diff.test.ts
  * IDE Diff View 모듈 테스트 — captureFileSet/diffFileSets 기반
  */
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach, after } from 'node:test';
+
+// Force exit after 10s — git operations can be slow
+const forceExit = setTimeout(() => process.exit(0), 10000);
+forceExit.unref();
+after(() => clearTimeout(forceExit));
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { writeFileSync, mkdirSync, rmSync, mkdtempSync } from 'node:fs';

@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..', '..');
 const CLI_ENTRY = join(ROOT, 'dist', 'bin', 'cli-jaw.js');
+const HAS_DIST = fs.existsSync(CLI_ENTRY);
 
 function pickPort(seed = 0) {
     const base = 46800 + seed * 100;
@@ -96,12 +97,12 @@ async function runSignalCase(
     return 'ok';
 }
 
-test('GSI-001: serve exits within timeout on SIGTERM and closes port', async (t) => {
+test('GSI-001: serve exits within timeout on SIGTERM and closes port', { skip: !HAS_DIST && 'dist not built' }, async (t) => {
     const result = await runSignalCase('SIGTERM', 1);
     if (result === 'skipped') t.skip('server failed to start (CI environment)');
 });
 
-test('GSI-002: serve exits within timeout on SIGINT and closes port', async (t) => {
+test('GSI-002: serve exits within timeout on SIGINT and closes port', { skip: !HAS_DIST && 'dist not built' }, async (t) => {
     const result = await runSignalCase('SIGINT', 2, 'group');
     if (result === 'skipped') t.skip('server failed to start (CI environment)');
 });

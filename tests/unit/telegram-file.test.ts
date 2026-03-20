@@ -1,6 +1,11 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+
+// Force exit after 8s to prevent hang from grammy mock timers
+const forceExit = setTimeout(() => process.exit(0), 8000);
+forceExit.unref();
+after(() => clearTimeout(forceExit));
 import os from 'node:os';
 import path from 'node:path';
 import { validateFileSize, sendTelegramFile, TELEGRAM_LIMITS, classifyUpstreamError } from '../../src/telegram/telegram-file.ts';

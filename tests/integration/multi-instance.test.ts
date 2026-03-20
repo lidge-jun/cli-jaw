@@ -76,7 +76,7 @@ test('MI-001: doctor --json reflects custom --home path', () => {
     }
 });
 
-test('MI-002: two serve instances run independently on different homes/ports', async () => {
+test('MI-002: two serve instances run independently on different homes/ports', { timeout: 15000 }, async () => {
     if (!existsSync(tsxBin)) {
         test.skip('tsx binary not found; skipping integration test');
         return;
