@@ -3,7 +3,7 @@
 
 import { settings } from '../core/config.js';
 import type { MessengerChannel, OutboundType, RemoteTarget } from './types.js';
-import { getLastActiveTarget, getLatestSeenTarget } from './runtime.js';
+import { getLastActiveTarget, getLatestSeenTarget, clearTargetState } from './runtime.js';
 
 // ─── Request Model ──────────────────────────────────
 
@@ -79,17 +79,35 @@ function getConfiguredFallbackTarget(channel: MessengerChannel): RemoteTarget | 
     return null;
 }
 
+/**
+ * Validate a cached target against the current channel's configured allowlist.
+ * Returns true if the target is valid for the given channel.
+ */
+export function validateTarget(target: RemoteTarget, channel: MessengerChannel): boolean {
+    if (!target || !target.targetId) return false;
+    if (target.channel !== channel) return false;
+    if (channel === 'discord') {
+        const allowed = settings.discord?.channelIds;
+        if (allowed?.length && !allowed.includes(target.targetId)) return false;
+    } else if (channel === 'telegram') {
+        const allowed = settings.telegram?.allowedChatIds;
+        if (allowed?.length && !allowed.map(String).includes(String(target.targetId))) return false;
+    }
+    return true;
+}
+
 export async function sendChannelOutput(req: ChannelSendRequest): Promise<{ ok: boolean; error?: string; [k: string]: any }> {
     const channel = resolveChannel(req);
 
-    // Resolve target: explicit > lastActive > latestSeen > configured fallback > error
+    // Resolve target: explicit > validated lastActive > validated latestSeen > configured fallback > error
     if (!req.target) {
         const last = getLastActiveTarget(channel);
-        if (last) {
+        if (last && validateTarget(last, channel)) {
             req.target = last;
         } else {
+            if (last) clearTargetState(channel); // stale cached target — clear it
             const seen = getLatestSeenTarget(channel);
-            if (seen) {
+            if (seen && validateTarget(seen, channel)) {
                 req.target = seen;
             } else {
                 const fallback = getConfiguredFallbackTarget(channel);

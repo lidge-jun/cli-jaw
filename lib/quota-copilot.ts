@@ -148,6 +148,11 @@ function getCopilotToken() {
     return null;
 }
 
+/** Sync check: can Copilot auth be resolved by the same local chain used at runtime? */
+export function hasCopilotAuthSync(): boolean {
+    return !!getCopilotToken();
+}
+
 export async function fetchCopilotQuota() {
     const token = getCopilotToken();
     if (!token) return null;

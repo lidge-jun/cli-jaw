@@ -5,6 +5,7 @@ import fs from 'fs';
 import { join, resolve } from 'path';
 import { execFileSync } from 'child_process';
 import { CLI_REGISTRY, CLI_KEYS, DEFAULT_CLI, buildDefaultPerCli } from '../cli/registry.js';
+import { pickFirstReadyCli } from '../cli/readiness.js';
 
 // ─── Version (single source of truth: package.json) ──
 import { dirname } from 'path';
@@ -272,9 +273,12 @@ export function loadSettings() {
         settings = merged;
         return merged;
     } catch { /* expected: settings.json may not exist on first run */
-        settings = createDefaultSettings();
-        applyEnvOverrides(settings);
-        return settings;
+        const next = createDefaultSettings();
+        next.cli = pickFirstReadyCli();
+        applyEnvOverrides(next);
+        settings = next;
+        saveSettings(next);
+        return next;
     }
 }
 

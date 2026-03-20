@@ -4,6 +4,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { isAgentBusy, enqueueMessage, messageQueue } from '../agent/spawn.js';
+import { hasBlockingWorkers, hasPendingWorkerReplays } from './worker-registry.js';
 import { insertMessage } from '../core/db.js';
 import { broadcast } from '../core/bus.js';
 import {
@@ -84,7 +85,7 @@ export function submitMessage(
     // ── busy → enqueue only ──
     // NOTE: insertMessage is NOT called here — processQueue() handles it.
     // This fixes the dual-insert bug where bot.ts called both enqueue + insert.
-    if (isAgentBusy()) {
+    if (isAgentBusy() || hasBlockingWorkers() || hasPendingWorkerReplays()) {
         enqueueMessage(trimmed, meta.origin, { target: meta.target, chatId: meta.chatId, requestId });
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
         return { action: 'queued', pending: messageQueue.length, queued: true, requestId };

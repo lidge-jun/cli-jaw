@@ -2,7 +2,7 @@
 // Active channel runtime lifecycle: init, shutdown, restart.
 // Transport modules register themselves via registerTransport() to avoid circular deps.
 
-import { settings } from '../core/config.js';
+import { settings, saveSettings } from '../core/config.js';
 import type { MessengerChannel, RemoteTarget } from './types.js';
 
 // ─── Transport Registry (push-based, no circular imports) ─────
@@ -29,6 +29,7 @@ export function getLastActiveTarget(channel: MessengerChannel): RemoteTarget | n
 
 export function setLastActiveTarget(channel: MessengerChannel, target: RemoteTarget) {
     lastActiveTargets.set(channel, target);
+    schedulePersistTargets();
 }
 
 export function getLatestSeenTarget(channel: MessengerChannel): RemoteTarget | null {
@@ -37,6 +38,7 @@ export function getLatestSeenTarget(channel: MessengerChannel): RemoteTarget | n
 
 export function setLatestSeenTarget(channel: MessengerChannel, target: RemoteTarget) {
     latestSeenTargets.set(channel, target);
+    schedulePersistTargets();
 }
 
 export function clearTargetState(channel?: MessengerChannel) {
@@ -47,18 +49,49 @@ export function clearTargetState(channel?: MessengerChannel) {
         lastActiveTargets.clear();
         latestSeenTargets.clear();
     }
+    persistTargetsNow();
 }
 
-/** Hydrate target state from persisted settings.messaging */
+// ─── Target Persistence (debounced) ─────────────────
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function schedulePersistTargets() {
+    if (persistTimer) return;
+    persistTimer = setTimeout(() => {
+        persistTimer = null;
+        persistTargetsNow();
+    }, 5000);
+}
+
+function persistTargetsNow() {
+    if (persistTimer) {
+        clearTimeout(persistTimer);
+        persistTimer = null;
+    }
+    if (!settings.messaging) settings.messaging = { lastActive: {}, latestSeen: {} };
+    settings.messaging.lastActive = Object.fromEntries(lastActiveTargets);
+    settings.messaging.latestSeen = Object.fromEntries(latestSeenTargets);
+    try { saveSettings(settings); } catch { /* non-critical */ }
+}
+
+/** Check if a target has the minimum required shape */
+function isValidTarget(t: any): t is RemoteTarget {
+    return t && typeof t === 'object' && typeof t.channel === 'string' && typeof t.targetId === 'string' && t.targetId.length > 0;
+}
+
+/** Hydrate target state from persisted settings.messaging (skip malformed) */
 export function hydrateTargetsFromSettings(s: Record<string, any>) {
     const messaging = s?.messaging;
     if (!messaging) return;
     for (const ch of ['telegram', 'discord'] as MessengerChannel[]) {
-        if (messaging.lastActive?.[ch]) {
-            lastActiveTargets.set(ch, messaging.lastActive[ch]);
+        const la = messaging.lastActive?.[ch];
+        if (isValidTarget(la)) {
+            lastActiveTargets.set(ch, la);
         }
-        if (messaging.latestSeen?.[ch]) {
-            latestSeenTargets.set(ch, messaging.latestSeen[ch]);
+        const ls = messaging.latestSeen?.[ch];
+        if (isValidTarget(ls)) {
+            latestSeenTargets.set(ch, ls);
         }
     }
 }

@@ -62,6 +62,7 @@ import { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, i
 import { getState, getCtx, setState, resetState, canTransition } from './src/orchestrator/state-machine.js';
 import type { OrcStateName } from './src/orchestrator/state-machine.js';
 import { submitMessage } from './src/orchestrator/gateway.js';
+import { getActiveWorkers } from './src/orchestrator/worker-registry.js';
 import { makeCommandCtx } from './src/cli/command-context.js';
 import { initTelegram, telegramBot, telegramActiveChatIds } from './src/telegram/bot.js';
 import './src/discord/bot.js'; // side-effect: registers discord transport
@@ -381,6 +382,10 @@ app.post('/api/orchestrate/reset', (req, res) => {
 
 app.get('/api/orchestrate/state', (_req, res) => {
     res.json({ state: getState(), ctx: getCtx() });
+});
+
+app.get('/api/orchestrate/workers', (_req, res) => {
+    res.json(getActiveWorkers());
 });
 
 app.put('/api/orchestrate/state', (req, res) => {

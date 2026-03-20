@@ -16,6 +16,12 @@ import {
 } from '../memory/worklog.js';
 import { findEmployee, runSingleAgent } from './distribute.js';
 import {
+    claimWorker, finishWorker, failWorker,
+    listPendingWorkerResults, claimWorkerReplay, markWorkerReplayed, releaseWorkerReplay,
+    getActiveWorkers, cancelWorker, clearAllWorkers,
+} from './worker-registry.js';
+import { messageQueue } from '../agent/spawn.js';
+import {
     getState, getPrefix, resetState, setState, getStatePrompt,
     getCtx,
     type OrcStateName,
@@ -89,6 +95,21 @@ export async function orchestrate(
     const target = meta.target;
     const requestId = meta.requestId;
     const userText = String(prompt || '').trim();
+
+    // --- drain pending worker results before normal processing ---
+    if (!meta._skipReplayDrain) {
+        const pendingResults = listPendingWorkerResults();
+        for (const pr of pendingResults) {
+            if (!claimWorkerReplay(pr.agentId)) continue;
+            try {
+                await orchestrate(pr.text, { ...meta, _workerResult: true, _skipInsert: true, _skipReplayDrain: true });
+                markWorkerReplayed(pr.agentId);
+            } catch {
+                releaseWorkerReplay(pr.agentId);
+                break;
+            }
+        }
+    }
     const runSpawnAgent: SpawnAgentLike = typeof meta._spawnAgent === 'function'
         ? meta._spawnAgent
         : spawnAgent;
@@ -240,21 +261,29 @@ export async function orchestrate(
             // Force fresh session for PABCD workers (prevent context contamination)
             upsertEmployeeSession.run(emp.id, null, emp.cli);
 
-            const wResult = await runSingleAgent(
-                {
-                    ...wt,
-                    phaseProfile: [workerPhase],
-                    currentPhaseIdx: 0,
-                    currentPhase: workerPhase,
-                    completed: false,
-                    history: [],
-                },
-                emp,
-                { path: '' },
-                1,
-                { origin },
-                [],  // priorResults (empty — worker runs independently)
-            );
+            claimWorker(emp, wt.task);
+            let wResult;
+            try {
+                wResult = await runSingleAgent(
+                    {
+                        ...wt,
+                        phaseProfile: [workerPhase],
+                        currentPhaseIdx: 0,
+                        currentPhase: workerPhase,
+                        completed: false,
+                        history: [],
+                    },
+                    emp,
+                    { path: '' },
+                    1,
+                    { origin },
+                    [],  // priorResults (empty — worker runs independently)
+                );
+                finishWorker(emp.id, wResult.text || '');
+            } catch (err) {
+                failWorker(emp.id, (err as Error).message || String(err));
+                throw err;
+            }
             anyWorkerRan = true;
             // Feed worker results back to the main agent
             await orchestrate(wResult.text, {
@@ -339,6 +368,13 @@ export async function orchestrateReset(
     const chatId = meta.chatId;
     const target = meta.target;
     const requestId = meta.requestId;
+    // --- cancel running workers and clear replay state on reset ---
+    for (const w of getActiveWorkers()) {
+        cancelWorker(w.agentId);
+    }
+    clearAllWorkers();
+    messageQueue.length = 0;
+
     clearAllEmployeeSessions.run();
     resetState();
     const latest = readLatestWorklog();

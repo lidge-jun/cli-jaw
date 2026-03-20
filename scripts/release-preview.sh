@@ -2,6 +2,8 @@
 # release-preview.sh — build + preview semver bump + npm publish --tag preview
 set -euo pipefail
 
+cd "$(dirname "$0")/.."
+
 BASE_VERSION="${1:-1.4.0}"
 PREID="${PREID:-preview}"
 STAMP="${STAMP:-$(date +%Y%m%d%H%M%S)}"

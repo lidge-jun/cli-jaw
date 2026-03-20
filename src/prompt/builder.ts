@@ -11,6 +11,38 @@ import { loadAndRender, loadTemplate, renderTemplate, parseWorkerContexts, clear
 
 const promptCache = new Map();
 
+// ─── Legacy A1 Source Hashes ─────────────────────────
+// MD5 hashes of source templates (unrendered) for every historical pre-hash version.
+// Used to identify known stock files during pre-hash migration.
+const KNOWN_A1_SOURCE_HASHES = new Set([
+    '98afd313f47c5263e1a575a4771f1f77', // 9d60b47 initial
+    'c7df1da623ca091a90a09528ae50136b', // 1ea5aa6 heartbeat
+    'da324e18813262fde4d1919e02785f11', // c359545 memory
+    'a17912925389b834a570ec2ae2c358ec', // ecc958a sub-agent
+    '0d179e0a3dcaf50bb432cd3487ba2735', // 4b92441 browser
+    'bac7cf8ff85465175c77631011367ffb', // 4f5e91a discord
+]);
+
+// ─── Migration Helpers ───────────────────────────────
+
+function normalizeRenderedContent(content: string): string {
+    return content
+        .replaceAll(JAW_HOME, '{{JAW_HOME}}')
+        .replaceAll(String(deriveCdpPort()), '{{CDP_PORT}}');
+}
+
+type LegacyA1MigrationAction = 'adopt-current-template' | 'preserve-custom-file';
+
+export function resolveLegacyA1Migration(opts: {
+    normalizedFileHash: string;
+    currentSourceHash: string;
+    knownSourceHashes: Set<string>;
+}): LegacyA1MigrationAction {
+    if (opts.normalizedFileHash === opts.currentSourceHash) return 'adopt-current-template';
+    if (opts.knownSourceHashes.has(opts.normalizedFileHash)) return 'adopt-current-template';
+    return 'preserve-custom-file';
+}
+
 // ─── Skill Loading ───────────────────────────────────
 
 /** Read all active skills from JAW_HOME/skills/ */
@@ -140,9 +172,27 @@ export function initPromptFiles() {
             }
         }
     } else {
-        // Pre-hash migration: write hash of current file so next update can detect edits
-        const fileHash = createHash('md5').update(fs.readFileSync(A1_PATH, 'utf8')).digest('hex');
-        fs.writeFileSync(hashPath, fileHash);
+        // Pre-hash migration: distinguish known stock files from customized ones
+        const fileContent = fs.readFileSync(A1_PATH, 'utf8');
+        const normalizedFileHash = createHash('md5')
+            .update(normalizeRenderedContent(fileContent))
+            .digest('hex');
+        const currentSourceHash = createHash('md5')
+            .update(loadTemplate('a1-system.md'))
+            .digest('hex');
+        const action = resolveLegacyA1Migration({
+            normalizedFileHash,
+            currentSourceHash,
+            knownSourceHashes: KNOWN_A1_SOURCE_HASHES,
+        });
+        if (action === 'adopt-current-template') {
+            fs.writeFileSync(A1_PATH, a1Content);
+            fs.writeFileSync(hashPath, currentHash);
+            console.log('[prompt] A-1.md migrated from known stock template');
+        } else {
+            fs.writeFileSync(hashPath, currentHash);
+            console.log('[prompt] A-1.md preserved (customized legacy file)');
+        }
     }
 
     if (!fs.existsSync(A2_PATH)) fs.writeFileSync(A2_PATH, getA2Default());

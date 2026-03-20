@@ -7,7 +7,7 @@ import { settings, replaceSettings, saveSettings } from './config.js';
 import { syncMainSessionToSettings } from './main-session.js';
 import { mergeSettingsPatch } from './settings-merge.js';
 import { regenerateB } from '../prompt/builder.js';
-import { restartMessagingRuntime } from '../messaging/runtime.js';
+import { restartMessagingRuntime, initActiveMessagingRuntime } from '../messaging/runtime.js';
 
 type ApplyRuntimeSettingsOptions = {
     resetFallbackState?: () => void;
@@ -53,10 +53,15 @@ export async function applyRuntimeSettingsPatch(
     try {
         await restartMessagingRuntime(prevSnapshot, settings, rawPatch);
     } catch (e: unknown) {
-        // Rollback: restore previous settings on restart failure
+        // Rollback: restore previous settings AND attempt to re-init previous runtime
         console.error('[runtime-settings] restart failed, rolling back:', (e as Error).message);
         replaceSettings(prevSnapshot);
         saveSettings(prevSnapshot);
+        try {
+            await initActiveMessagingRuntime();
+        } catch (reInitErr: unknown) {
+            console.error('[runtime-settings] rollback re-init also failed:', (reInitErr as Error).message);
+        }
         throw e;
     }
 

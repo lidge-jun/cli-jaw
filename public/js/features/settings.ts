@@ -741,6 +741,21 @@ function renderCliStatus(data: { cliStatus: Record<string, { available: boolean 
 
     if (el) el.innerHTML = html;
 
+    // Onboarding summary: warn if no CLI is ready to use
+    const allEntries = Object.entries(cliStatus);
+    const hasReadyCli = allEntries.some(([name, info]) => {
+        if (!info.available) return false;
+        const q = quota?.[name];
+        return !q || q.authenticated !== false;
+    });
+    if (!hasReadyCli && allEntries.length > 0 && el) {
+        el.insertAdjacentHTML('afterbegin',
+            `<div style="padding:8px 10px;margin-bottom:8px;background:#fbbf2422;border:1px solid #fbbf24;border-radius:6px;font-size:11px;color:#fbbf24">
+                ⚠ ${t('cli.noReadyCli')}
+            </div>`
+        );
+    }
+
     // Copilot keychain refresh handler — shows each token source result
     const kcBtn = document.getElementById('copilotKeychainBtn');
     if (kcBtn) {

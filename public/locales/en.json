@@ -132,6 +132,7 @@
     "cli.fileSentPrompt": "[User sent a file: {path}]\nPlease read and analyze this file.",
     "cli.fileSentWithMsg": "\n\nUser message: {text}",
     "cli.fallbackRetry": "{from} failed → retrying with {to}",
+    "cli.noReadyCli": "No authenticated CLI available — install and authenticate at least one CLI above to get started.",
     "chat.cmd.fail": "❌ Command execution failed: {msg}",
     "chat.file.sent": "[User sent a file: {path}]\nPlease read and analyze this file.",
     "chat.file.sentWithMsg": "\n\nUser message: {text}",
