@@ -69,7 +69,7 @@ async function runHeartbeatJob(job: Record<string, any>) {
         const now = formatHeartbeatNow(schedule);
         const prompt = `[heartbeat:${job.name}] 현재 시간: ${now} (${timeZone})\n\n${job.prompt || '정기 점검입니다. 할 일 없으면 [SILENT]로 응답.'}`;
         console.log(`[heartbeat:${job.name}] tick (${describeHeartbeatSchedule(schedule)})`);
-        const result: string = String(await orchestrateAndCollect(prompt));
+        const result: string = String(await orchestrateAndCollect(prompt, { origin: 'heartbeat' }));
 
         if (result.includes('[SILENT]')) {
             console.log(`[heartbeat:${job.name}] silent`);
