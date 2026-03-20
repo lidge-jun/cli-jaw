@@ -382,3 +382,100 @@ export function renderCommandPalette(opts: PaletteRenderOptions): number {
     write('\x1b[?25h');
     return boxHeight;
 }
+
+// ─── Choice selector overlay ─────────────────
+
+export interface ChoiceSelectorItem {
+    value: string;
+    label: string;
+    current?: boolean;
+}
+
+export interface ChoiceSelectorRenderOptions {
+    write: (chunk: string) => void;
+    cols: number;
+    rows: number;
+    dimCode: string;
+    resetCode: string;
+    title: string;
+    subtitle: string;
+    filter: string;
+    items: ChoiceSelectorItem[];
+    selected: number;
+}
+
+export function filterSelectorItems(items: ChoiceSelectorItem[], filter: string): ChoiceSelectorItem[] {
+    if (!filter) return items;
+    const q = filter.toLowerCase();
+    return items.filter(item =>
+        item.value.toLowerCase().includes(q) || item.label.toLowerCase().includes(q),
+    );
+}
+
+export function renderChoiceSelector(opts: ChoiceSelectorRenderOptions): number {
+    const { write, cols, rows, dimCode, resetCode, title, subtitle, filter, items, selected } = opts;
+
+    const boxWidth = Math.min(60, cols - 4);
+    const maxItems = Math.min(items.length, rows - 10, 14);
+    // title(1) + subtitle(1) + filter(1) + separator(1) + items + footer(1) + border(2) = items + 7
+    const boxHeight = maxItems + 7;
+    const startRow = Math.max(1, Math.floor((rows - boxHeight) / 2));
+    const startCol = Math.max(1, Math.floor((cols - boxWidth) / 2));
+
+    const hLine = '─'.repeat(boxWidth - 2);
+    const innerW = boxWidth - 2;
+
+    const pad = (text: string) => {
+        if (text.length >= innerW) return text.slice(0, innerW);
+        return text + ' '.repeat(innerW - text.length);
+    };
+
+    write('\x1b[?25l');
+
+    // Top border with title
+    const titleStr = ` ${title} `;
+    write(`\x1b[${startRow};${startCol}H┌─${titleStr}${hLine.slice(titleStr.length + 1)}┐`);
+
+    // Subtitle (current state)
+    write(`\x1b[${startRow + 1};${startCol}H│${pad(`  ${dimCode}${subtitle}${resetCode}`)}│`);
+
+    // Filter input
+    const filterText = `  > ${filter}█`;
+    write(`\x1b[${startRow + 2};${startCol}H│${pad(filterText)}│`);
+
+    // Separator
+    write(`\x1b[${startRow + 3};${startCol}H│${pad(`  ${dimCode}${'─'.repeat(innerW - 4)}${resetCode}`)}│`);
+
+    // Items
+    for (let i = 0; i < maxItems; i++) {
+        const r = startRow + 4 + i;
+        const item = items[i];
+        if (!item) {
+            write(`\x1b[${r};${startCol}H│${' '.repeat(innerW)}│`);
+            continue;
+        }
+        const marker = item.current ? '●' : ' ';
+        const valueStr = item.value;
+        const labelStr = item.label ? `  ${dimCode}${item.label}${resetCode}` : '';
+        let line = `  ${marker} ${valueStr}${labelStr}`;
+        // Pad or truncate to innerW
+        if (line.length >= innerW) line = line.slice(0, innerW);
+        else line = line + ' '.repeat(innerW - line.length);
+
+        if (i === selected) {
+            write(`\x1b[${r};${startCol}H│\x1b[7m${line}${resetCode}│`);
+        } else {
+            write(`\x1b[${r};${startCol}H│${line}│`);
+        }
+    }
+
+    // Footer
+    const footerText = ' ↑↓ navigate  Enter select  Esc cancel';
+    write(`\x1b[${startRow + 4 + maxItems};${startCol}H│${dimCode}${pad(footerText)}${resetCode}│`);
+
+    // Bottom border
+    write(`\x1b[${startRow + boxHeight - 1};${startCol}H└${hLine}┘`);
+
+    write('\x1b[?25h');
+    return boxHeight;
+}

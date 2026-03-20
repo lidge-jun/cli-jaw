@@ -7,8 +7,9 @@ import { parseArgs } from 'node:util';
 import WebSocket from 'ws';
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { resolve as resolvePath, dirname } from 'node:path';
+import { resolve as resolvePath, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadLocales } from '../../src/core/i18n.js';
 import { parseCommand, executeCommand, getCompletionItems, getArgumentCompletionItems } from '../../src/cli/commands.js';
 import {
     appendNewlineToComposer,
@@ -36,6 +37,9 @@ import {
     renderHelpOverlay,
     clearOverlayBox,
     renderCommandPalette,
+    renderChoiceSelector,
+    filterSelectorItems,
+    type ChoiceSelectorItem,
 } from '../../src/cli/tui/overlay.js';
 import { clipTextToCols, visualWidth } from '../../src/cli/tui/renderers.js';
 import { cleanupScrollRegion, ensureSpaceBelow, resolveShellLayout, setupScrollRegion } from '../../src/cli/tui/shell.js';
@@ -81,6 +85,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const SKILL_SCRIPT = resolvePath(__dirname, 'skill.js');
 
+// Resolve package root: works both from source tree (bin/commands → root)
+// and from dist layout (dist/bin/commands → root where public/ lives).
+function findPackageRoot(start: string): string {
+    let dir = start;
+    for (let i = 0; i < 5; i++) {
+        if (fs.existsSync(join(dir, 'public', 'locales'))) return dir;
+        const parent = dirname(dir);
+        if (parent === dir) break;
+        dir = parent;
+    }
+    return resolvePath(start, '../..');  // fallback
+}
+const PROJECT_ROOT = findPackageRoot(__dirname);
+loadLocales(join(PROJECT_ROOT, 'public', 'locales'));
+
 let ws: any;
 try {
     ws = await new Promise((resolve, reject) => {
@@ -96,6 +115,7 @@ try {
 
 // ─── Fetch info ──────────────────────────────
 let info = { cli: 'codex', workingDir: '~', model: '' };
+let runtimeLocale = 'ko';
 let tuiConfig = { pasteCollapseLines: 2, pasteCollapseChars: 160, keymapPreset: 'default', diffStyle: 'summary', themeSeed: 'jaw-default' };
 try {
     const r = await fetch(`${apiUrl}/api/settings`, { signal: AbortSignal.timeout(2000) });
@@ -104,6 +124,7 @@ try {
         const s = res.data || res;
         const cli = s.cli || 'codex';
         info = { cli, workingDir: s.workingDir || '~', model: s.perCli?.[cli]?.model || '' };
+        if (s.locale) runtimeLocale = s.locale;
         if (s.tui && typeof s.tui === 'object') tuiConfig = { ...tuiConfig, ...s.tui };
     }
     // Active session model overrides perCli default
@@ -117,9 +138,34 @@ try {
 
 const cliLabel: Record<string, string> = { claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI', opencode: 'OpenCode', copilot: 'Copilot' };
 const cliColor: Record<string, string> = { claude: c.magenta, codex: c.red, gemini: c.blue, opencode: c.yellow, copilot: c.cyan };
-const accent = cliColor[info.cli] || c.red;
-const label = cliLabel[info.cli] || info.cli;
-const dir = info.workingDir.replace(process.env.HOME || '', '~');
+let accent = cliColor[info.cli] || c.red;
+let label = cliLabel[info.cli] || info.cli;
+let dir = info.workingDir.replace(process.env.HOME || '', '~');
+
+/** Re-fetch settings/session from server and rebuild derived display state. */
+async function refreshInfo() {
+    try {
+        const r = await fetch(`${apiUrl}/api/settings`, { signal: AbortSignal.timeout(2000) });
+        if (r.ok) {
+            const res = await r.json() as Record<string, any>;
+            const s = res.data || res;
+            const cli = s.cli || 'codex';
+            info = { cli, workingDir: s.workingDir || '~', model: s.perCli?.[cli]?.model || '' };
+            if (s.locale) runtimeLocale = s.locale;
+            if (s.tui && typeof s.tui === 'object') tuiConfig = { ...tuiConfig, ...s.tui };
+        }
+        const sr = await fetch(`${apiUrl}/api/session`, { signal: AbortSignal.timeout(2000) });
+        if (sr.ok) {
+            const ses = await sr.json() as Record<string, any>;
+            const sd = ses.data || ses;
+            if (sd.model) info.model = sd.model;
+        }
+    } catch { /* keep current info on fetch failure */ }
+    // Rebuild derived display state
+    accent = cliColor[info.cli] || c.red;
+    label = cliLabel[info.cli] || info.cli;
+    dir = info.workingDir.replace(process.env.HOME || '', '~');
+}
 
 // ─── Width helper ────────────────────────────
 const W = () => Math.max(20, Math.min((process.stdout.columns || 60) - 4, 60));
@@ -161,6 +207,7 @@ function runSkillResetLocal() {
 function makeCliCommandCtx() {
     return {
         interface: 'cli',
+        locale: runtimeLocale,
         version: APP_VERSION,
         getSession: () => apiJson('/api/session'),
         getSettings: () => apiJson('/api/settings'),
@@ -306,8 +353,15 @@ if (values.simple) {
     console.log(`  ${c.dim}/quit to exit, /clear to clear screen, /reset confirm to factory reset${c.reset}`);
     console.log(`  ${c.dim}/file <path> to attach${c.reset}`);
 
-    const footer = `  ${c.dim}${accent}${label}${c.reset}${c.dim}  |  /quit  |  /clear${c.reset}`;
-    const promptPrefix = `  ${accent}\u276F${c.reset} `;
+    let footer = `  ${c.dim}${accent}${label}${c.reset}${c.dim}  |  /quit  |  /clear${c.reset}`;
+    let promptPrefix = `  ${accent}\u276F${c.reset} `;
+
+    /** Rebuild footer/prompt strings from current derived state and refresh scroll region. */
+    function rebuildFooter() {
+        footer = `  ${c.dim}${accent}${label}${c.reset}${c.dim}  |  /quit  |  /clear${c.reset}`;
+        promptPrefix = `  ${accent}\u276F${c.reset} `;
+        setupScrollRegion(footer, `  ${c.dim}${hrLine()}${c.reset}`, resolveShellLayout(process.stdout.columns || 80, getRows(), panes));
+    }
 
     // ─── Scroll region: fixed footer at bottom ──
     const getRows = () => process.stdout.rows || 24;
@@ -387,7 +441,7 @@ if (values.simple) {
     const ac = store.autocomplete;
 
     function dismissOverlay() {
-        if (!ov.helpOpen && !ov.paletteOpen) return;
+        if (!ov.helpOpen && !ov.paletteOpen && !ov.selector.open) return;
         if (overlayBoxHeight > 0) {
             clearOverlayBox(
                 (chunk) => process.stdout.write(chunk),
@@ -402,6 +456,12 @@ if (values.simple) {
         ov.paletteFilter = '';
         ov.paletteSelected = 0;
         ov.paletteItems = [];
+        ov.selector.open = false;
+        ov.selector.commandName = '';
+        ov.selector.filter = '';
+        ov.selector.selected = 0;
+        ov.selector.allItems = [];
+        ov.selector.filteredItems = [];
         setupScrollRegion(
             footer,
             `  ${c.dim}${hrLine()}${c.reset}`,
@@ -470,6 +530,75 @@ if (values.simple) {
             inputActive = true;
             return;
         }
+        // No-arg /model → open interactive selector
+        if (parsed.name === 'model' && !parsed.args.length) {
+            const argItems = getArgumentCompletionItems('model', '', 'cli', [], makeCliCommandCtx());
+            const sel = ov.selector;
+            sel.open = true;
+            sel.commandName = 'model';
+            sel.title = 'Model';
+            sel.subtitle = `${info.cli}: ${info.model || 'default'}`;
+            sel.filter = '';
+            sel.selected = 0;
+            sel.allItems = argItems.map((a: any) => ({
+                value: a.name,
+                label: a.desc || '',
+                current: a.name === info.model,
+            }));
+            sel.filteredItems = sel.allItems;
+            // Pre-select current model
+            const curIdx = sel.filteredItems.findIndex(i => i.current);
+            if (curIdx >= 0) sel.selected = curIdx;
+            overlayBoxHeight = renderChoiceSelector({
+                write: (chunk) => process.stdout.write(chunk),
+                cols: process.stdout.columns || 80,
+                rows: getRows(),
+                dimCode: c.dim,
+                resetCode: c.reset,
+                title: sel.title,
+                subtitle: sel.subtitle,
+                filter: sel.filter,
+                items: sel.filteredItems,
+                selected: sel.selected,
+            });
+            commandRunning = false;
+            inputActive = true;
+            return;
+        }
+        // No-arg /cli → open interactive selector
+        if (parsed.name === 'cli' && !parsed.args.length) {
+            const argItems = getArgumentCompletionItems('cli', '', 'cli', [], makeCliCommandCtx());
+            const sel = ov.selector;
+            sel.open = true;
+            sel.commandName = 'cli';
+            sel.title = 'CLI Engine';
+            sel.subtitle = `current: ${info.cli}`;
+            sel.filter = '';
+            sel.selected = 0;
+            sel.allItems = argItems.map((a: any) => ({
+                value: a.name,
+                label: a.desc || '',
+                current: a.name === info.cli,
+            }));
+            sel.filteredItems = sel.allItems;
+            const curIdx = sel.filteredItems.findIndex(i => i.current);
+            if (curIdx >= 0) sel.selected = curIdx;
+            overlayBoxHeight = renderChoiceSelector({
+                write: (chunk) => process.stdout.write(chunk),
+                cols: process.stdout.columns || 80,
+                rows: getRows(),
+                dimCode: c.dim,
+                resetCode: c.reset,
+                title: sel.title,
+                subtitle: sel.subtitle,
+                filter: sel.filter,
+                items: sel.filteredItems,
+                selected: sel.selected,
+            });
+            commandRunning = false;
+            inputActive = true;
+            return;
+        }
         if (parsed.name === 'commands') {
             ov.paletteOpen = true;
             ov.paletteFilter = '';
@@ -509,6 +638,11 @@ if (values.simple) {
                 const ideName = detectedIde ? getIdeCli(detectedIde) : null;
                 console.log(`  ${idePopEnabled ? c.green + '✓' : c.yellow + '✗'}${c.reset} IDE popup: ${idePopEnabled ? 'ON' : 'OFF'}${ideName ? ` (${ideName})` : ` ${c.dim}(IDE 미감지)${c.reset}`}`);
             }
+            // Refresh TUI state after model/cli mutations
+            if (result?.ok && (parsed.name === 'model' || parsed.name === 'cli') && parsed.args.length > 0) {
+                await refreshInfo();
+                rebuildFooter();
+            }
             if (result?.code === 'exit') {
                 exiting = true;
                 cleanupScrollRegion(resolveShellLayout(process.stdout.columns || 80, getRows(), panes));
@@ -539,7 +673,7 @@ if (values.simple) {
     function flushPendingEscape() {
         escPending = false;
         escTimer = null;
-        if (ov.helpOpen || ov.paletteOpen) {
+        if (ov.helpOpen || ov.paletteOpen || ov.selector.open) {
             dismissOverlay();
             return;
         }
@@ -678,6 +812,53 @@ if (values.simple) {
                 filter: ov.paletteFilter,
                 items: ov.paletteItems,
                 selected: ov.paletteSelected,
+            });
+            return;
+        }
+
+        // Choice selector input handling
+        // (ESC dismiss is handled by flushPendingEscape)
+        if (ov.selector.open) {
+            const sel = ov.selector;
+            const itemCount = sel.filteredItems.length;
+            if (action === 'arrow-up') {
+                if (itemCount > 0) sel.selected = Math.max(0, sel.selected - 1);
+            } else if (action === 'arrow-down') {
+                if (itemCount > 0) sel.selected = Math.min(itemCount - 1, sel.selected + 1);
+            } else if (action === 'enter') {
+                if (itemCount === 0) return;  // nothing to select
+                const picked = sel.filteredItems[sel.selected];
+                const cmdName = sel.commandName;
+                dismissOverlay();
+                if (picked) {
+                    // Synthesize the command and execute through normal path
+                    clearComposer(composer);
+                    appendTextToComposer(composer, `/${cmdName} ${picked.value}`);
+                    handleKeyInput('\r');
+                }
+                return;
+            } else if (action === 'backspace') {
+                sel.filter = sel.filter.slice(0, -1);
+                sel.filteredItems = filterSelectorItems(sel.allItems, sel.filter);
+                sel.selected = Math.min(sel.selected, Math.max(0, sel.filteredItems.length - 1));
+            } else if (action === 'printable') {
+                sel.filter += key;
+                sel.filteredItems = filterSelectorItems(sel.allItems, sel.filter);
+                sel.selected = Math.min(sel.selected, Math.max(0, sel.filteredItems.length - 1));
+            } else {
+                return;
+            }
+            overlayBoxHeight = renderChoiceSelector({
+                write: (chunk) => process.stdout.write(chunk),
+                cols: process.stdout.columns || 80,
+                rows: getRows(),
+                dimCode: c.dim,
+                resetCode: c.reset,
+                title: sel.title,
+                subtitle: sel.subtitle,
+                filter: sel.filter,
+                items: sel.filteredItems,
+                selected: sel.selected,
             });
             return;
         }
