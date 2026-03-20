@@ -386,6 +386,31 @@ if (values.simple) {
     let escTimer: ReturnType<typeof setTimeout> | null = null;
     const ac = store.autocomplete;
 
+    function dismissOverlay() {
+        if (!ov.helpOpen && !ov.paletteOpen) return;
+        if (overlayBoxHeight > 0) {
+            clearOverlayBox(
+                (chunk) => process.stdout.write(chunk),
+                process.stdout.columns || 80,
+                getRows(),
+                overlayBoxHeight,
+            );
+            overlayBoxHeight = 0;
+        }
+        ov.helpOpen = false;
+        ov.paletteOpen = false;
+        ov.paletteFilter = '';
+        ov.paletteSelected = 0;
+        ov.paletteItems = [];
+        setupScrollRegion(
+            footer,
+            `  ${c.dim}${hrLine()}${c.reset}`,
+            resolveShellLayout(process.stdout.columns || 80, getRows(), panes),
+        );
+        showPrompt();
+        redrawPromptLine();
+    }
+
     function getMaxPopupRows() {
         // Scroll region ends at rows-2 (rows-1/rows are fixed footer).
         // Prompt baseline at rows-2 can be lifted up to rows-3 lines.
@@ -430,6 +455,40 @@ if (values.simple) {
     });
 
     async function runSlashCommand(parsed: any) {
+        // Overlay intercepts — handle before executeCommand
+        if (parsed.name === 'help') {
+            ov.helpOpen = true;
+            const cmds = getCompletionItems('/', 'cli');
+            overlayBoxHeight = renderHelpOverlay(
+                (chunk) => process.stdout.write(chunk),
+                process.stdout.columns || 80,
+                getRows(),
+                c.dim, c.reset,
+                cmds,
+            );
+            commandRunning = false;
+            inputActive = true;
+            return;
+        }
+        if (parsed.name === 'commands') {
+            ov.paletteOpen = true;
+            ov.paletteFilter = '';
+            ov.paletteSelected = 0;
+            ov.paletteItems = getCompletionItems('/', 'cli');
+            overlayBoxHeight = renderCommandPalette({
+                write: (chunk) => process.stdout.write(chunk),
+                cols: process.stdout.columns || 80,
+                rows: getRows(),
+                dimCode: c.dim,
+                resetCode: c.reset,
+                filter: ov.paletteFilter,
+                items: ov.paletteItems,
+                selected: ov.paletteSelected,
+            });
+            commandRunning = false;
+            inputActive = true;
+            return;
+        }
         let exiting = false;
         try {
             const result = await executeCommand(parsed, makeCliCommandCtx());
@@ -480,6 +539,10 @@ if (values.simple) {
     function flushPendingEscape() {
         escPending = false;
         escTimer = null;
+        if (ov.helpOpen || ov.paletteOpen) {
+            dismissOverlay();
+            return;
+        }
         if (ac.open) {
             closeAutocomplete(ac, (chunk) => process.stdout.write(chunk));
             redrawPromptLine();
@@ -523,6 +586,102 @@ if (values.simple) {
             }
             appendNewlineToComposer(composer);
             redrawInputWithAutocomplete();
+            return;
+        }
+
+        // Help overlay: ? when input is empty
+        if (action === 'printable' && key === '?' && !ac.open && !ov.paletteOpen) {
+            const draft = getPlainCommandDraft(composer);
+            if (draft === '' || draft === null) {
+                if (ov.helpOpen) {
+                    dismissOverlay();
+                    return;
+                }
+                ov.helpOpen = true;
+                closeAutocomplete(ac, (chunk) => process.stdout.write(chunk));
+                const cmds = getCompletionItems('/', 'cli');
+                overlayBoxHeight = renderHelpOverlay(
+                    (chunk) => process.stdout.write(chunk),
+                    process.stdout.columns || 80,
+                    getRows(),
+                    c.dim,
+                    c.reset,
+                    cmds,
+                );
+                return;
+            }
+        }
+
+        // Dismiss help on any key that isn't ?
+        if (ov.helpOpen) {
+            dismissOverlay();
+            if (action === 'escape-alone') return;
+        }
+
+        // Command palette: Ctrl+K
+        if (action === 'ctrl-k' && !ov.helpOpen) {
+            if (ov.paletteOpen) {
+                dismissOverlay();
+                return;
+            }
+            ov.paletteOpen = true;
+            ov.paletteFilter = '';
+            ov.paletteSelected = 0;
+            ov.paletteItems = getCompletionItems('/', 'cli');
+            closeAutocomplete(ac, (chunk) => process.stdout.write(chunk));
+            overlayBoxHeight = renderCommandPalette({
+                write: (chunk) => process.stdout.write(chunk),
+                cols: process.stdout.columns || 80,
+                rows: getRows(),
+                dimCode: c.dim,
+                resetCode: c.reset,
+                filter: ov.paletteFilter,
+                items: ov.paletteItems,
+                selected: ov.paletteSelected,
+            });
+            return;
+        }
+
+        // Palette input handling
+        if (ov.paletteOpen) {
+            if (action === 'escape-alone') {
+                dismissOverlay();
+                return;
+            }
+            if (action === 'arrow-up') {
+                ov.paletteSelected = Math.max(0, ov.paletteSelected - 1);
+            } else if (action === 'arrow-down') {
+                ov.paletteSelected = Math.min(ov.paletteItems.length - 1, ov.paletteSelected + 1);
+            } else if (action === 'enter') {
+                const picked = ov.paletteItems[ov.paletteSelected];
+                dismissOverlay();
+                if (picked) {
+                    clearComposer(composer);
+                    appendTextToComposer(composer, `/${picked.name}`);
+                    handleKeyInput('\r');
+                }
+                return;
+            } else if (action === 'backspace') {
+                ov.paletteFilter = ov.paletteFilter.slice(0, -1);
+                ov.paletteItems = getCompletionItems('/' + ov.paletteFilter, 'cli');
+                ov.paletteSelected = Math.min(ov.paletteSelected, Math.max(0, ov.paletteItems.length - 1));
+            } else if (action === 'printable') {
+                ov.paletteFilter += key;
+                ov.paletteItems = getCompletionItems('/' + ov.paletteFilter, 'cli');
+                ov.paletteSelected = Math.min(ov.paletteSelected, Math.max(0, ov.paletteItems.length - 1));
+            } else {
+                return;
+            }
+            overlayBoxHeight = renderCommandPalette({
+                write: (chunk) => process.stdout.write(chunk),
+                cols: process.stdout.columns || 80,
+                rows: getRows(),
+                dimCode: c.dim,
+                resetCode: c.reset,
+                filter: ov.paletteFilter,
+                items: ov.paletteItems,
+                selected: ov.paletteSelected,
+            });
             return;
         }
 

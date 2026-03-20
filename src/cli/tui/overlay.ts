@@ -223,3 +223,162 @@ export function renderAutocomplete(state: AutocompleteState, options: RenderAuto
     state.renderedRows = headerRows + (end - start);
     options.write('\x1b[u');
 }
+
+// ─── Help overlay ────────────────────────────
+
+export interface HelpEntry {
+    key: string;
+    desc: string;
+}
+
+const HELP_ENTRIES: HelpEntry[] = [
+    { key: 'Enter',        desc: 'submit message' },
+    { key: 'Option+Enter', desc: 'newline' },
+    { key: 'Tab',          desc: 'autocomplete accept' },
+    { key: 'Ctrl+C',       desc: 'stop agent / exit' },
+    { key: 'Ctrl+U',       desc: 'clear line' },
+    { key: 'Ctrl+K',       desc: 'command palette' },
+    { key: '?',            desc: 'this help' },
+    { key: '/',            desc: 'slash commands (type to filter)' },
+    { key: 'Up/Down',      desc: 'autocomplete navigate' },
+    { key: 'Esc',          desc: 'close popup / stop' },
+];
+
+export function renderHelpOverlay(
+    write: (chunk: string) => void,
+    cols: number,
+    rows: number,
+    dimCode: string,
+    resetCode: string,
+    extraCommands?: { name: string; desc: string }[],
+): number {
+    const keyCol = 16;
+    const lines: string[] = [];
+
+    for (const e of HELP_ENTRIES) {
+        lines.push(`  ${e.key.padEnd(keyCol)}${e.desc}`);
+    }
+
+    if (extraCommands?.length) {
+        lines.push('');
+        lines.push('  Slash commands:');
+        for (const cmd of extraCommands.slice(0, 8)) {
+            lines.push(`  ${('/' + cmd.name).padEnd(keyCol)}${cmd.desc || ''}`);
+        }
+        if (extraCommands.length > 8) {
+            lines.push(`  ${dimCode}... +${extraCommands.length - 8} more (use Ctrl+K)${resetCode}`);
+        }
+    }
+
+    lines.push('');
+    lines.push(`  ${dimCode}Press Escape to close${resetCode}`);
+
+    const boxWidth = Math.min(52, cols - 4);
+    const boxHeight = Math.min(lines.length + 2, rows - 4);
+    const startRow = Math.max(1, Math.floor((rows - boxHeight) / 2));
+    const startCol = Math.max(1, Math.floor((cols - boxWidth) / 2));
+
+    const hLine = '─'.repeat(boxWidth - 2);
+
+    write('\x1b[?25l');
+    write(`\x1b[${startRow};${startCol}H┌─ Help ${hLine.slice(7)}┐`);
+
+    const contentRows = boxHeight - 2;
+    for (let i = 0; i < contentRows; i++) {
+        const r = startRow + 1 + i;
+        const text = lines[i] ?? '';
+        const padded = text.length < boxWidth - 2
+            ? text + ' '.repeat(boxWidth - 2 - text.length)
+            : text.slice(0, boxWidth - 2);
+        write(`\x1b[${r};${startCol}H│${padded}│`);
+    }
+
+    write(`\x1b[${startRow + boxHeight - 1};${startCol}H└${hLine}┘`);
+    write('\x1b[?25h');
+
+    return boxHeight;
+}
+
+export function clearOverlayBox(
+    write: (chunk: string) => void,
+    cols: number,
+    rows: number,
+    boxHeight: number,
+): void {
+    const boxWidth = Math.min(52, cols - 4);
+    const startRow = Math.max(1, Math.floor((rows - boxHeight) / 2));
+    const startCol = Math.max(1, Math.floor((cols - boxWidth) / 2));
+    const blank = ' '.repeat(boxWidth);
+    for (let i = 0; i < boxHeight; i++) {
+        write(`\x1b[${startRow + i};${startCol}H${blank}`);
+    }
+}
+
+// ─── Command palette ─────────────────────────
+
+export interface PaletteRenderOptions {
+    write: (chunk: string) => void;
+    cols: number;
+    rows: number;
+    dimCode: string;
+    resetCode: string;
+    filter: string;
+    items: { name: string; desc: string }[];
+    selected: number;
+}
+
+export function renderCommandPalette(opts: PaletteRenderOptions): number {
+    const { write, cols, rows, dimCode, resetCode, filter, items, selected } = opts;
+
+    const boxWidth = Math.min(52, cols - 4);
+    const maxItems = Math.min(items.length, rows - 8, 12);
+    const boxHeight = maxItems + 5;
+    const startRow = Math.max(1, Math.floor((rows - boxHeight) / 2));
+    const startCol = Math.max(1, Math.floor((cols - boxWidth) / 2));
+
+    const hLine = '─'.repeat(boxWidth - 2);
+    const innerW = boxWidth - 2;
+
+    write('\x1b[?25l');
+
+    write(`\x1b[${startRow};${startCol}H┌─ Commands ${hLine.slice(11)}┐`);
+
+    const filterText = `  > ${filter}`;
+    const filterPad = filterText.length < innerW
+        ? filterText + ' '.repeat(innerW - filterText.length)
+        : filterText.slice(0, innerW);
+    write(`\x1b[${startRow + 1};${startCol}H│${filterPad}│`);
+
+    write(`\x1b[${startRow + 2};${startCol}H│${' '.repeat(innerW)}│`);
+
+    for (let i = 0; i < maxItems; i++) {
+        const r = startRow + 3 + i;
+        const item = items[i];
+        if (!item) {
+            write(`\x1b[${r};${startCol}H│${' '.repeat(innerW)}│`);
+            continue;
+        }
+        const nameStr = ('  /' + item.name).padEnd(16);
+        const descStr = item.desc || '';
+        let line = `${nameStr}${descStr}`;
+        if (line.length > innerW) line = line.slice(0, innerW);
+        else line = line + ' '.repeat(innerW - line.length);
+
+        if (i === selected) {
+            write(`\x1b[${r};${startCol}H│\x1b[7m${line}${resetCode}│`);
+        } else {
+            write(`\x1b[${r};${startCol}H│${dimCode}${line}${resetCode}│`);
+        }
+    }
+
+    const footer = ' ↑↓ navigate  Enter select  Esc close';
+    const footerPad = footer.length < innerW
+        ? footer + ' '.repeat(innerW - footer.length)
+        : footer.slice(0, innerW);
+    write(`\x1b[${startRow + 3 + maxItems};${startCol}H│${dimCode}${footerPad}${resetCode}│`);
+
+    write(`\x1b[${startRow + boxHeight - 1};${startCol}H└${hLine}┘`);
+
+    write('\x1b[?25h');
+    return boxHeight;
+}

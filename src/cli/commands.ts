@@ -149,6 +149,7 @@ async function helpHandler(args: any[], ctx: any): Promise<any> {
 
 export const COMMANDS = [
     { name: 'help', aliases: ['h'], descKey: 'cmd.help.desc', tgDescKey: 'cmd.help.tg_desc', desc: 'Command list', args: '[command]', category: 'session', interfaces: ['cli', 'web', 'telegram'], handler: helpHandler },
+    { name: 'commands', aliases: ['cmd'], descKey: '', desc: 'Open command palette', category: 'session', interfaces: ['cli'], handler: async () => ({ code: 'open_palette' }) },
     { name: 'status', descKey: 'cmd.status.desc', tgDescKey: 'cmd.status.tg_desc', desc: 'Current status', category: 'session', interfaces: ['cli', 'web', 'telegram'], handler: statusHandler },
     { name: 'clear', descKey: 'cmd.clear.desc', tgDescKey: 'cmd.clear.tg_desc', desc: 'Clear screen', category: 'session', interfaces: ['cli', 'web', 'telegram'], handler: clearHandler },
     { name: 'reset', descKey: 'cmd.reset.desc', desc: 'Full reset', args: '[confirm]', category: 'session', interfaces: ['cli', 'web'], handler: resetHandler },

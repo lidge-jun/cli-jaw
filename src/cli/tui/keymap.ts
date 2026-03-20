@@ -12,6 +12,7 @@ export type KeyAction =
     | 'backspace'
     | 'ctrl-c'
     | 'ctrl-u'
+    | 'ctrl-k'
     | 'printable'
     | 'other';
 
@@ -29,6 +30,7 @@ export function classifyKeyAction(key: string): KeyAction {
     if (key === '\x7f' || key === '\b') return 'backspace';
     if (key === '\x03') return 'ctrl-c';
     if (key === '\x15') return 'ctrl-u';
+    if (key === '\x0b') return 'ctrl-k';
     if (key.length > 0 && (key.charCodeAt(0) >= 32 || key.charCodeAt(0) > 127)) return 'printable';
     return 'other';
 }
