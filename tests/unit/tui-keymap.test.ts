@@ -19,6 +19,10 @@ test('classifyKeyAction detects enter family and control keys', () => {
     assert.equal(classifyKeyAction('\x15'), 'ctrl-u');
 });
 
+test('classifyKeyAction detects ctrl-k', () => {
+    assert.equal(classifyKeyAction('\x0b'), 'ctrl-k');
+});
+
 test('classifyKeyAction detects printable input and unknown keys', () => {
     assert.equal(classifyKeyAction('a'), 'printable');
     assert.equal(classifyKeyAction('가'), 'printable');
