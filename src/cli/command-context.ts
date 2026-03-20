@@ -30,13 +30,14 @@ export type CommandContextDeps = {
     resetEmployees?: () => any;
 };
 
-// Telegram에서 허용하는 settings patch 키
-const TG_ALLOWED_SETTINGS_KEYS = new Set([
+// Remote interface에서 허용하는 settings patch 키
+const REMOTE_ALLOWED_SETTINGS_KEYS = new Set([
     'fallbackOrder',  // /fallback
     'cli',            // /cli
     'perCli',         // /model
     'memory',         // /flush
-    'telegram',       // /forward
+    'telegram',       // /forward (telegram)
+    'discord',        // /forward (discord)
 ]);
 
 export function makeCommandCtx(
@@ -55,7 +56,7 @@ export function makeCommandCtx(
             if (iface === 'telegram' || iface === 'discord') {
                 const keys = Object.keys(patch);
                 const allAllowed = keys.length > 0
-                    && keys.every(k => TG_ALLOWED_SETTINGS_KEYS.has(k));
+                    && keys.every(k => REMOTE_ALLOWED_SETTINGS_KEYS.has(k));
                 if (allAllowed) {
                     return deps.applySettings(patch);
                 }

@@ -245,6 +245,10 @@ export function loadSettings() {
             merged.discord = merged.discord || {};
             merged.discord.token = process.env.DISCORD_TOKEN;
             merged.discord.enabled = true;
+            // Auto-switch active channel if Discord has token but Telegram doesn't
+            if (!merged.telegram?.token && !merged.telegram?.enabled) {
+                merged.channel = 'discord';
+            }
         }
         if (process.env.DISCORD_GUILD_ID) {
             merged.discord = merged.discord || {};

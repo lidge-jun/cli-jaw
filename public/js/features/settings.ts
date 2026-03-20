@@ -8,6 +8,7 @@ import { api, apiJson, apiFire } from '../api.js';
 
 interface PerCliConfig { model?: string; effort?: string; fastMode?: boolean; contextWindow?: boolean; contextWindowSize?: number; contextCompactLimit?: number; }
 interface TelegramConfig { enabled?: boolean; token?: string; allowedChatIds?: number[]; forwardAll?: boolean; }
+interface DiscordConfig { enabled?: boolean; token?: string; guildId?: string; channelIds?: string[]; forwardAll?: boolean; allowBots?: boolean; }
 interface QuotaWindow { label: string; percent: number; resetsAt?: string | number | null; }
 interface QuotaEntry {
     account?: { email?: string; type?: string; plan?: string; tier?: string };
@@ -21,6 +22,8 @@ interface SettingsData {
     perCli?: Record<string, PerCliConfig>;
     activeOverrides?: Record<string, PerCliConfig>;
     telegram?: TelegramConfig;
+    discord?: DiscordConfig;
+    channel?: 'telegram' | 'discord';
     fallbackOrder?: string[];
     memory?: { cli?: string };
     stt?: { engine?: string; geminiKeySet?: boolean; geminiKeyLast4?: string; geminiModel?: string; whisperModel?: string; openaiKeySet?: boolean; openaiKeyLast4?: string };
@@ -196,6 +199,8 @@ export async function loadSettings(): Promise<void> {
     syncActiveEffortOptions(s.cli, activeEffort);
 
     loadTelegramSettings(s);
+    loadDiscordSettings(s);
+    loadActiveChannel(s);
     loadFallbackOrder(s);
     loadMcpServers();
     initSttSettings(s.stt || {});
@@ -504,6 +509,73 @@ function loadTelegramSettings(s: SettingsData): void {
     const fwdOn = tg.forwardAll !== false;
     document.getElementById('tgForwardOn')?.classList.toggle('active', fwdOn);
     document.getElementById('tgForwardOff')?.classList.toggle('active', !fwdOn);
+}
+
+// ── Discord ──
+export async function saveDiscordSettings(): Promise<void> {
+    const token = (document.getElementById('dcToken') as HTMLInputElement)?.value.trim() || '';
+    const guildId = (document.getElementById('dcGuildId') as HTMLInputElement)?.value.trim() || '';
+    const channelIdsRaw = (document.getElementById('dcChannelIds') as HTMLInputElement)?.value.trim() || '';
+    const channelIds = channelIdsRaw
+        ? channelIdsRaw.split(',').map(s => s.trim()).filter(Boolean)
+        : [];
+    await apiJson('/api/settings', 'PUT', { discord: { token, guildId, channelIds } });
+}
+
+export async function setDiscord(enabled: boolean): Promise<void> {
+    document.getElementById('dcOn')?.classList.toggle('active', enabled);
+    document.getElementById('dcOff')?.classList.toggle('active', !enabled);
+    await apiJson('/api/settings', 'PUT', { discord: { enabled } });
+}
+
+export async function setDiscordForwardAll(enabled: boolean): Promise<void> {
+    document.getElementById('dcForwardOn')?.classList.toggle('active', enabled);
+    document.getElementById('dcForwardOff')?.classList.toggle('active', !enabled);
+    await apiJson('/api/settings', 'PUT', { discord: { forwardAll: enabled } });
+}
+
+export async function setDiscordAllowBots(allow: boolean): Promise<void> {
+    document.getElementById('dcAllowBotsOn')?.classList.toggle('active', allow);
+    document.getElementById('dcAllowBotsOff')?.classList.toggle('active', !allow);
+    await apiJson('/api/settings', 'PUT', { discord: { allowBots: allow } });
+}
+
+function loadDiscordSettings(s: SettingsData): void {
+    if (!s.discord) return;
+    const dc = s.discord;
+    document.getElementById('dcOn')?.classList.toggle('active', !!dc.enabled);
+    document.getElementById('dcOff')?.classList.toggle('active', !dc.enabled);
+    const dcToken = document.getElementById('dcToken') as HTMLInputElement | null;
+    if (dc.token && dcToken) dcToken.value = dc.token;
+    const dcGuildId = document.getElementById('dcGuildId') as HTMLInputElement | null;
+    if (dc.guildId && dcGuildId) dcGuildId.value = dc.guildId;
+    const dcChannelIds = document.getElementById('dcChannelIds') as HTMLInputElement | null;
+    if (dc.channelIds?.length && dcChannelIds) {
+        dcChannelIds.value = dc.channelIds.join(', ');
+    }
+    const fwdOn = dc.forwardAll !== false;
+    document.getElementById('dcForwardOn')?.classList.toggle('active', fwdOn);
+    document.getElementById('dcForwardOff')?.classList.toggle('active', !fwdOn);
+    const allowBots = !!dc.allowBots;
+    document.getElementById('dcAllowBotsOn')?.classList.toggle('active', allowBots);
+    document.getElementById('dcAllowBotsOff')?.classList.toggle('active', !allowBots);
+}
+
+// ── Active Channel ──
+export async function setActiveChannel(ch: 'telegram' | 'discord'): Promise<void> {
+    document.getElementById('chTelegram')?.classList.toggle('active', ch === 'telegram');
+    document.getElementById('chDiscord')?.classList.toggle('active', ch === 'discord');
+    document.getElementById('channelTelegramSettings')?.style.setProperty('display', ch === 'telegram' ? '' : 'none');
+    document.getElementById('channelDiscordSettings')?.style.setProperty('display', ch === 'discord' ? '' : 'none');
+    await apiJson('/api/settings', 'PUT', { channel: ch });
+}
+
+function loadActiveChannel(s: SettingsData): void {
+    const ch = s.channel || 'telegram';
+    document.getElementById('chTelegram')?.classList.toggle('active', ch === 'telegram');
+    document.getElementById('chDiscord')?.classList.toggle('active', ch === 'discord');
+    document.getElementById('channelTelegramSettings')?.style.setProperty('display', ch === 'telegram' ? '' : 'none');
+    document.getElementById('channelDiscordSettings')?.style.setProperty('display', ch === 'discord' ? '' : 'none');
 }
 
 // ── Fallback Order ──

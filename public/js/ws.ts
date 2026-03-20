@@ -216,7 +216,7 @@ export function connect(): void {
                     brand.textContent = msg.title;
                 }
             }
-        } else if (msg.type === 'new_message' && msg.source === 'telegram') {
+        } else if (msg.type === 'new_message' && (msg.source === 'telegram' || msg.source === 'discord')) {
             addMessage(msg.role === 'assistant' ? 'agent' : (msg.role || 'user'), msg.content || '');
         }
     };

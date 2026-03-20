@@ -254,8 +254,12 @@ export async function employeeHandler(args: any[], ctx: any) {
 
 export async function clearHandler(_args: any[], ctx: any) {
     const L = ctx.locale || 'ko';
-    if ((ctx.interface || 'cli') === 'telegram') {
+    const iface = ctx.interface || 'cli';
+    if (iface === 'telegram') {
         return { ok: true, text: t('cmd.clear.telegram', {}, L) };
+    }
+    if (iface === 'discord') {
+        return { ok: true, text: t('cmd.clear.discord', {}, L) };
     }
     return {
         ok: true,
@@ -500,28 +504,40 @@ export async function steerHandler(args: any[], ctx: any) {
     killActiveAgent('steer');
     await waitForProcessEnd(3000);
 
-    // Telegram: return signal for bot.ts to handle with full UX (typing + tool preview)
-    if ((ctx.interface || 'cli') === 'telegram') {
+    // Remote interfaces: return signal for bot.ts to handle with full UX
+    const iface = ctx.interface || 'cli';
+    if (iface === 'telegram' || iface === 'discord') {
         return { ok: true, type: 'steer', text: t('cmd.steer.started', {}, L), steerPrompt: prompt };
     }
 
     // Web/CLI: fire orchestration directly via submitMessage
     const { submitMessage } = await import('../orchestrator/gateway.js');
-    submitMessage(prompt, { origin: (ctx.interface || 'web') as 'web' | 'cli' | 'telegram' });
+    submitMessage(prompt, { origin: iface as any });
     return { ok: true, type: 'success', text: t('cmd.steer.started', {}, L) };
 }
 
 export async function forwardHandler(args: any[], ctx: any) {
+    const iface = ctx.interface || 'cli';
+    const remote = iface === 'discord' ? 'discord'
+        : iface === 'telegram' ? 'telegram'
+        : null;
+    // Determine which channel's forwardAll to modify
+    const settings = await safeCall(ctx.getSettings, null);
+    const channelKey = remote || (settings?.channel || 'telegram');
     const arg = args[0]?.toLowerCase();
     if (arg === 'on' || arg === 'off') {
         const val = arg === 'on';
-        const r = await ctx.updateSettings({ telegram: { forwardAll: val } });
+        const patch = { [channelKey]: { forwardAll: val } };
+        const r = await ctx.updateSettings(patch);
         if (!r?.ok) return { ok: false, text: r?.text || 'Failed' };
-        return { text: `📡 Telegram forwarding: ${val ? 'ON (all)' : 'OFF (TG only)'}` };
+        const label = channelKey === 'discord' ? 'Discord' : 'Telegram';
+        return { text: `📡 ${label} forwarding: ${val ? 'ON (all)' : 'OFF (channel only)'}` };
     }
-    const settings = await safeCall(ctx.getSettings, null);
-    const current = settings?.telegram?.forwardAll !== false;
-    return { text: `📡 Telegram forwarding: ${current ? 'ON (all)' : 'OFF (TG only)'}\nUsage: /forward on|off` };
+    const current = channelKey === 'discord'
+        ? settings?.discord?.forwardAll !== false
+        : settings?.telegram?.forwardAll !== false;
+    const label = channelKey === 'discord' ? 'Discord' : 'Telegram';
+    return { text: `📡 ${label} forwarding: ${current ? 'ON (all)' : 'OFF (channel only)'}\nUsage: /forward on|off` };
 }
 
 export async function fallbackHandler(args: any[], ctx: any) {
