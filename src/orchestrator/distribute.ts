@@ -4,8 +4,9 @@
 import { broadcast } from '../core/bus.js';
 import { getEmployeeSession, upsertEmployeeSession } from '../core/db.js';
 import { getEmployeePromptV2 } from '../prompt/builder.js';
-import { spawnAgent } from '../agent/spawn.js';
+import { spawnAgent, killAgentById } from '../agent/spawn.js';
 import { appendToWorklog } from '../memory/worklog.js';
+import { startWorkerMonitor } from './worker-monitor.js';
 
 // ─── Phase Constants (shared with pipeline.ts) ───────
 
@@ -327,15 +328,38 @@ After completing your task, record results in the Execution Log section.`;
 
     const empSession = getEmployeeSession.get(emp.id) as Record<string, any> | undefined;
     const canResume = !!(empSession?.session_id && empSession?.cli === emp.cli);
-    const { promise } = spawnAgent(taskPrompt, {
-        agentId: emp.id, cli: emp.cli, model: emp.model,
-        forceNew: !canResume,
-        employeeSessionId: canResume ? empSession!.session_id : undefined,
-        sysPrompt: canResume ? undefined : sysPrompt,
-        origin: meta.origin || 'web',
+
+    const monitor = startWorkerMonitor({
+        agentId: emp.id,
+        stallThresholdMs: 120_000,
+        maxDurationMs: 600_000,
+        onStall: (id) => broadcast('worker_stalled', { agentId: id, employeeName: emp.name }),
+        onDisconnect: (id, code) => broadcast('worker_disconnected', { agentId: id, exitCode: code }),
+        onTimeout: (id) => {
+            broadcast('worker_timeout', { agentId: id, employeeName: emp.name });
+            killAgentById(id);
+        },
     });
 
-    const r = await promise as Record<string, any>;
+    let r: Record<string, any>;
+    try {
+        const { promise } = spawnAgent(taskPrompt, {
+            agentId: emp.id, cli: emp.cli, model: emp.model,
+            forceNew: !canResume,
+            employeeSessionId: canResume ? empSession!.session_id : undefined,
+            sysPrompt: canResume ? undefined : sysPrompt,
+            origin: meta.origin || 'web',
+            lifecycle: {
+                onActivity: (source) => monitor.touch(source as 'stdout' | 'stderr' | 'acp' | 'heartbeat'),
+                onExit: (code) => monitor.exit(code),
+            },
+        });
+        r = await promise as Record<string, any>;
+        monitor.stop();
+    } catch (err) {
+        monitor.stop();
+        throw err;
+    }
     if (r.code === 0 && r.sessionId) {
         upsertEmployeeSession.run(emp.id, r.sessionId, emp.cli);
     }

@@ -349,6 +349,7 @@ export async function orchestrateContinue(
             origin,
             chatId,
             target,
+            requestId,
         });
         return;
     }
@@ -384,6 +385,7 @@ export async function orchestrateReset(
             origin,
             chatId,
             target,
+            requestId,
         });
         return;
     }

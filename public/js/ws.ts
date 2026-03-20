@@ -64,6 +64,34 @@ interface WsMessage {
 // Agent phase state (populated by agent_status events from orchestrator)
 const agentPhaseState: Record<string, { phase: string; phaseLabel: string }> = {};
 
+/** Hydrate agent phase cache from snapshot (used after reconnect) */
+export function hydrateAgentPhases(workers: Array<{ agentId: string; state: string; employeeName: string }>) {
+    for (const key of Object.keys(agentPhaseState)) {
+        delete agentPhaseState[key];
+    }
+    for (const w of workers) {
+        if (w.state === 'running') {
+            agentPhaseState[w.agentId] = {
+                phase: 'working',
+                phaseLabel: 'working',
+            };
+        }
+    }
+}
+
+/** Apply orchestration state to UI (shared by WS events and reconnect snapshot) */
+function applyOrcState(orcState: string, _title?: string) {
+    state.orcState = orcState as OrcStateName;
+    const badge = document.getElementById('orcStateBadge');
+    if (badge) {
+        const labels: Record<string, string> = {
+            IDLE: '', P: 'PLAN', A: 'AUDIT', B: 'BUILD', C: 'CHECK', D: 'DONE',
+        };
+        badge.textContent = labels[orcState] || '';
+        badge.style.display = orcState === 'IDLE' ? 'none' : 'inline-block';
+    }
+}
+
 export function connect(): void {
     state.ws = new WebSocket(`ws://${location.host}?lang=${getLang()}`);
     state.ws.onmessage = (e: MessageEvent) => {
@@ -229,6 +257,20 @@ export function connect(): void {
             m.loadMessages();
             m.setStatus('idle');
         });
+
+        // Reconnect: restore orchestration state
+        fetch('/api/orchestrate/snapshot')
+            .then(r => r.json())
+            .then((snap: any) => {
+                applyOrcState(snap.orc.state);
+                hydrateAgentPhases(snap.workers);
+                updateQueueBadge(snap.runtime.queuePending);
+                setStatus(snap.runtime.activeAgent ? 'running' : 'idle');
+                import('./features/employees.js').then(m => {
+                    if (typeof m.renderEmployees === 'function') m.renderEmployees();
+                });
+            })
+            .catch(() => { /* snapshot not critical — UI recovers on next WS event */ });
     };
     state.ws.onclose = () => {
         console.log('[ws] disconnected, reconnecting in 2s...');

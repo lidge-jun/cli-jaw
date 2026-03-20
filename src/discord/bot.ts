@@ -129,6 +129,7 @@ export async function initDiscord() {
 
     // ── Message handler ──
     client.on(Events.MessageCreate, async (msg) => {
+        if (msg.author.id === client.user?.id) return; // never process own messages
         if (msg.author.bot && !settings.discord.allowBots) return;
         if (settings.discord.channelIds?.length && !settings.discord.channelIds.includes(msg.channelId)) return;
 

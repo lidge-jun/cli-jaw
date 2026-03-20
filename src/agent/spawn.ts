@@ -25,6 +25,20 @@ import { groupQueueKey } from '../messaging/session-key.js';
 
 export let activeProcess: any = null;
 export const activeProcesses = new Map<string, any>(); // agentId → child process
+
+export function killAgentById(agentId: string): boolean {
+    const proc = activeProcesses.get(agentId);
+    if (!proc) return false;
+    try {
+        proc.kill('SIGTERM');
+        setTimeout(() => {
+            try { proc.kill('SIGKILL'); } catch { /* already dead */ }
+        }, 3_000);
+        return true;
+    } catch {
+        return false;
+    }
+}
 export let memoryFlushCounter = 0;
 export let flushCycleCount = 0;
 export const messageQueue: any[] = [];
@@ -272,6 +286,11 @@ export function shouldEmitHeartbeat(
     return (now - lastVisibleTs) > gateMs;
 }
 
+export interface SpawnLifecycle {
+    onActivity?: (source: string) => void;
+    onExit?: (code: number | null) => void;
+}
+
 interface SpawnOpts {
     internal?: boolean;
     _isFallback?: boolean;
@@ -287,6 +306,7 @@ interface SpawnOpts {
     effort?: string;
     permissions?: string;
     memorySnapshot?: string;
+    lifecycle?: SpawnLifecycle;
 }
 
 export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
@@ -415,6 +435,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         acp.on('error', (err: Error) => {
             if (acpSettled) return;
             acpSettled = true;
+            opts.lifecycle?.onExit?.(null);
             const msg = `Copilot ACP spawn failed: ${err.message}`;
             console.error(`[acp:error] ${msg}`);
             activeProcesses.delete(agentLabel);
@@ -486,6 +507,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 ctx.fullText += parsed.text;
                 // text-only updates are local accumulation, not visible to user — no gate reset
             }
+            opts.lifecycle?.onActivity?.('acp');
         });
 
         // stderr_activity → stderrBuf accumulation + conditional heartbeat
@@ -494,6 +516,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             if (ctx.stderrBuf.length < 4000) {
                 ctx.stderrBuf += text + '\n';
             }
+            opts.lifecycle?.onActivity?.('stderr');
             // Conditional heartbeat: visible progress absent for N seconds
             if (shouldEmitHeartbeat(lastVisibleBroadcastTs, heartbeatSent)) {
                 heartbeatSent = true;
@@ -573,6 +596,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         acp.on('exit', ({ code, signal }) => {
             if (acpSettled) return;  // error handler already resolved
             acpSettled = true;
+            opts.lifecycle?.onExit?.(code ?? null);
             if (code !== 0 && !killReason) {
                 console.warn(`[acp:unexpected-exit] code=${code} signal=${signal} sessionId=${ctx.sessionId || 'none'}`);
             }
@@ -719,6 +743,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     child.on('error', (err: NodeJS.ErrnoException) => {
         if (stdSettled) return;
         stdSettled = true;
+        opts.lifecycle?.onExit?.(null);
         const msg = err.code === 'ENOENT'
             ? `CLI '${cli}' 실행 실패 (ENOENT). 설치/경로를 확인하세요.`
             : `CLI '${cli}' 실행 실패: ${err.message}`;
@@ -765,6 +790,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     let buffer = '';
 
     child.stdout.on('data', (chunk) => {
+        opts.lifecycle?.onActivity?.('stdout');
         buffer += chunk.toString();
         const lines = buffer.split('\n');
         buffer = lines.pop() ?? '';
@@ -784,6 +810,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     });
 
     child.stderr.on('data', (chunk) => {
+        opts.lifecycle?.onActivity?.('stderr');
         const text = chunk.toString().trim();
         console.error(`[jaw:stderr:${agentLabel}] ${text}`);
         ctx.stderrBuf += text + '\n';
@@ -791,6 +818,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
 
     child.on('close', (code) => {
         if (stdSettled) return;  // error handler already resolved
+        opts.lifecycle?.onExit?.(code ?? null);
         const wasSteer = killReason === 'steer';
         if (mainManaged) killReason = null;  // consume
         activeProcesses.delete(agentLabel);

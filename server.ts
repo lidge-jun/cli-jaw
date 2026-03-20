@@ -388,6 +388,14 @@ app.get('/api/orchestrate/workers', (_req, res) => {
     res.json(getActiveWorkers());
 });
 
+app.get('/api/orchestrate/snapshot', (_req, res) => {
+    res.json({
+        orc: { state: getState(), ctx: getCtx() },
+        runtime: getRuntimeSnapshot(),
+        workers: getActiveWorkers(),
+    });
+});
+
 app.put('/api/orchestrate/state', (req, res) => {
     const target = String(req.body?.state || '').toUpperCase();
     const valid: OrcStateName[] = ['P', 'A', 'B', 'C', 'D'];
