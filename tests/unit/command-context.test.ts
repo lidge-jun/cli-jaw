@@ -26,20 +26,20 @@ test('CC-002: getMcp returns real loadUnifiedMcp, not empty object', () => {
     assert.ok(!ctxSrc.includes("getMcp: () => ({ servers: {} })"), 'no empty MCP stub');
 });
 
-// ─── CC-003: TG settings restriction is in makeCommandCtx ───
+// ─── CC-003: Remote settings restriction is in makeCommandCtx ───
 
-test('CC-003: telegram interface restricts settings via allowlist', () => {
+test('CC-003: remote interface restricts settings via allowlist', () => {
     assert.ok(
-        ctxSrc.includes("iface === 'telegram'"),
-        'makeCommandCtx checks for telegram interface',
+        ctxSrc.includes("iface === 'telegram'") || ctxSrc.includes("iface === 'discord'"),
+        'makeCommandCtx checks for remote interfaces',
     );
     assert.ok(
-        ctxSrc.includes('tg.settingsUnsupported'),
+        ctxSrc.includes('tg.settingsUnsupported') || ctxSrc.includes('dc.settingsUnsupported'),
         'returns unsupported message for disallowed patches',
     );
     assert.ok(
-        ctxSrc.includes('TG_ALLOWED_SETTINGS_KEYS'),
-        'uses Set-based allowlist for telegram settings',
+        ctxSrc.includes('REMOTE_ALLOWED_SETTINGS_KEYS'),
+        'uses Set-based allowlist for remote settings',
     );
 });
 
