@@ -76,7 +76,7 @@ Rollup-based production builds.
    reload after esbuild watch rebuild (16ms) takes under 1 second. HMR saves
    seconds per reload — meaningful for large SPAs, marginal here.
 
-4. **Principle of minimal dependencies.** The project's `dev/SKILL.md` emphasizes
+4. **Principle of minimal dependencies.** The project's `skills/dev/SKILL.md` emphasizes
    keeping dependencies minimal. esbuild is already a devDependency; Vite would
    add another layer on top of the same tool.
 
