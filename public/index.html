@@ -234,8 +234,20 @@
             <button class="btn-clear" style="width:100%;margin:0;padding:8px;font-size:12px" data-action="openPrompt"
                 data-i18n="btn.editPrompt">✏️
                 시스템 프롬프트 편집</button>
-            <!-- Telegram Bot -->
+            <!-- Active Channel Toggle -->
             <div class="settings-group">
+                <h4>📡 Active Channel</h4>
+                <div class="settings-row">
+                    <label>Runtime</label>
+                    <div>
+                        <button id="chTelegram" class="perm-btn active">TG</button>
+                        <button id="chDiscord" class="perm-btn">DC</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Telegram Bot -->
+            <div id="channelTelegramSettings" class="settings-group">
                 <h4>📬 Telegram</h4>
                 <div class="settings-row">
                     <label data-i18n="label.enabled">활성화</label>
@@ -259,6 +271,47 @@
                     <div>
                         <button id="tgForwardOff" class="perm-btn" data-i18n="btn.off">끔</button>
                         <button id="tgForwardOn" class="perm-btn active" data-i18n="btn.on">켬</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Discord Bot -->
+            <div id="channelDiscordSettings" class="settings-group" style="display:none">
+                <h4>🎮 Discord</h4>
+                <div class="settings-row">
+                    <label data-i18n="label.enabled">활성화</label>
+                    <div>
+                        <button id="dcOff" class="perm-btn active" data-i18n="btn.off">끔</button>
+                        <button id="dcOn" class="perm-btn" data-i18n="btn.on">켬</button>
+                    </div>
+                </div>
+                <div class="settings-row sub-row">
+                    <label>Bot Token</label>
+                    <input type="password" id="dcToken" placeholder="Discord bot token..."
+                        style="width:100%;font-size:11px;padding:4px">
+                </div>
+                <div class="settings-row sub-row">
+                    <label>Guild ID</label>
+                    <input type="text" id="dcGuildId" placeholder="Guild (server) ID"
+                        style="width:100%;font-size:11px;padding:4px">
+                </div>
+                <div class="settings-row sub-row">
+                    <label>Channel IDs</label>
+                    <input type="text" id="dcChannelIds" placeholder="콤마 구분 (비워두면 전체 허용)"
+                        style="width:100%;font-size:11px;padding:4px">
+                </div>
+                <div class="settings-row sub-row">
+                    <label data-i18n="label.forwardAll">자동 전송</label>
+                    <div>
+                        <button id="dcForwardOff" class="perm-btn" data-i18n="btn.off">끔</button>
+                        <button id="dcForwardOn" class="perm-btn active" data-i18n="btn.on">켬</button>
+                    </div>
+                </div>
+                <div class="settings-row sub-row">
+                    <label>Allow Bots</label>
+                    <div>
+                        <button id="dcAllowBotsOff" class="perm-btn active" data-i18n="btn.off">끔</button>
+                        <button id="dcAllowBotsOn" class="perm-btn" data-i18n="btn.on">켬</button>
                     </div>
                 </div>
             </div>

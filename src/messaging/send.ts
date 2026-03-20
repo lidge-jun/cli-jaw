@@ -36,6 +36,7 @@ export function normalizeChannelSendRequest(body: Record<string, any>): ChannelS
         text: body.text,
         filePath: body.file_path || body.filePath,
         caption: body.caption,
+        target: body.target,
         chatId: body.chat_id || body.chatId,
     };
 }

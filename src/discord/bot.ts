@@ -122,6 +122,7 @@ export async function initDiscord() {
             GatewayIntentBits.MessageContent,
             GatewayIntentBits.DirectMessages,
         ],
+        partials: [Partials.Channel], // Required for DM events
     });
 
     // ── Message handler ──
@@ -218,8 +219,9 @@ async function discordSendHandler(req: ChannelSendRequest): Promise<{ ok: boolea
     if (!discordClient) return { ok: false, error: 'Discord not connected' };
 
     const channelId = req.chatId || req.target?.targetId
-        || (Array.from(discordActiveChannelIds).at(-1));
-    if (!channelId) return { ok: false, error: 'No discord channelId available' };
+        || (Array.from(discordActiveChannelIds).at(-1))
+        || settings.discord?.channelIds?.[0];
+    if (!channelId) return { ok: false, error: 'No discord channelId available — send a message first or set channelIds' };
 
     if (req.type === 'text') {
         const text = req.text?.trim();
