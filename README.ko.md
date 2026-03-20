@@ -6,7 +6,7 @@
 
 *Claude, Codex, Gemini... 이제 번갈아 쓰지 마세요.*
 
-[![Tests](https://img.shields.io/badge/tests-899%20pass-brightgreen)](#-테스트)
+[![Tests](https://img.shields.io/badge/tests-907%20pass-brightgreen)](#-테스트)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
@@ -147,7 +147,7 @@ gemini                       # Google Gemini — 첫 실행 시 인증
 
 ## CLI-JAW란 무엇인가요?
 
-CLI-JAW는 내 컴퓨터에 상주하며 이미 익숙한 인터페이스인 **웹, 터미널, 텔레그램**에서 작동하는 **개인용 AI 비서**입니다. 궁금한 것을 묻고, 작업을 위임하고, 워크플로우를 자동화하세요.
+CLI-JAW는 내 컴퓨터에 상주하며 이미 익숙한 인터페이스인 **웹, 터미널, 텔레그램, 디스코드**에서 작동하는 **개인용 AI 비서**입니다. 궁금한 것을 묻고, 작업을 위임하고, 워크플로우를 자동화하세요.
 ![CLI-JAW Web UI](image/README/1772128366759.png)
 
 > 💬 *"오늘 일정 정리해줘"* → 텔레그램으로 바로 정리해서 보내줘요
