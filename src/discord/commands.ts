@@ -10,7 +10,6 @@ import { resetFallbackState } from '../agent/spawn.js';
 import { applyRuntimeSettingsPatch } from '../core/runtime-settings.js';
 import { bumpSessionOwnershipGeneration } from '../agent/session-persistence.js';
 import { clearMainSessionState } from '../core/main-session.js';
-import { restartMessagingRuntime } from '../messaging/runtime.js';
 
 // Operational commands exposed as slash commands
 const DISCORD_SLASH_COMMANDS = [
@@ -53,14 +52,10 @@ function makeDiscordCommandCtx() {
     const locale = normalizeLocale(settings.locale, 'ko');
     return makeCommandCtx('discord', locale, {
         applySettings: async (patch) => {
-            const prevSnapshot = { ...settings };
             bumpSessionOwnershipGeneration();
-            const result = applyRuntimeSettingsPatch(patch, {
+            return applyRuntimeSettingsPatch(patch, {
                 resetFallbackState,
-                restartTelegram: true,
-                onRestartTelegram: () => { void restartMessagingRuntime(prevSnapshot, settings, patch); },
             });
-            return result;
         },
         clearSession: () => {
             bumpSessionOwnershipGeneration();

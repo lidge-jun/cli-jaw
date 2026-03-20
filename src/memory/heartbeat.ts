@@ -79,11 +79,14 @@ async function runHeartbeatJob(job: Record<string, any>) {
         console.log(`[heartbeat:${job.name}] response: ${result.slice(0, 80)}`);
 
         // Send heartbeat result via active messaging channel
-        await sendChannelOutput({
+        const sendResult = await sendChannelOutput({
             channel: 'active',
             type: 'text',
             text: result,
         });
+        if (!sendResult.ok) {
+            console.error(`[heartbeat:${job.name}] send failed: ${sendResult.error}`);
+        }
     } catch (err) {
         console.error(`[heartbeat:${job.name}] error:`, (err as Error).message);
     } finally {

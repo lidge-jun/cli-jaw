@@ -207,8 +207,6 @@ function makeTelegramCommandCtx() {
             bumpSessionOwnershipGeneration();
             return applyRuntimeSettingsPatch(patch, {
                 resetFallbackState,
-                restartTelegram: true,
-                onRestartTelegram: () => { void initTelegram(); },
             });
         },
         clearSession: () => {

@@ -65,7 +65,7 @@ import { submitMessage } from './src/orchestrator/gateway.js';
 import { makeCommandCtx } from './src/cli/command-context.js';
 import { initTelegram, telegramBot, telegramActiveChatIds } from './src/telegram/bot.js';
 import './src/discord/bot.js'; // side-effect: registers discord transport
-import { initActiveMessagingRuntime, shutdownMessagingRuntime, restartMessagingRuntime } from './src/messaging/runtime.js';
+import { initActiveMessagingRuntime, shutdownMessagingRuntime, hydrateTargetsFromSettings } from './src/messaging/runtime.js';
 import { sendChannelOutput, normalizeChannelSendRequest } from './src/messaging/send.js';
 import { startHeartbeat, stopHeartbeat, watchHeartbeatFile } from './src/memory/heartbeat.js';
 import { validateHeartbeatScheduleInput } from './src/memory/heartbeat-schedule.js';
@@ -264,15 +264,11 @@ function getLatestTelegramChatId() {
     return ids.at(-1) || null;
 }
 
-function applySettingsPatch(rawPatch: Record<string, any> = {}, { restartTelegram = false } = {}) {
-    const prevSnapshot = { ...settings };
+async function applySettingsPatch(rawPatch: Record<string, any> = {}) {
     bumpSessionOwnershipGeneration();
-    const result = applyRuntimeSettingsPatch(rawPatch, {
+    return applyRuntimeSettingsPatch(rawPatch, {
         resetFallbackState,
-        restartTelegram,
-        onRestartTelegram: () => { void restartMessagingRuntime(prevSnapshot, settings, rawPatch); },
     });
-    return result;
 }
 
 function normalizeAdvancedReadPath(file: string) {
@@ -299,7 +295,7 @@ function seedDefaultEmployees({ reset = false, notify = false } = {}) {
 
 function makeWebCommandCtx(req: any, localeOverride: string | null = null) {
     return makeCommandCtx('web', resolveRequestLocale(req, localeOverride), {
-        applySettings: (patch) => applySettingsPatch(patch, { restartTelegram: true }),
+        applySettings: (patch) => applySettingsPatch(patch),
         clearSession: () => clearSessionState(),
         resetEmployees: () => seedDefaultEmployees({ reset: true, notify: true }),
     });
@@ -425,8 +421,8 @@ app.get('/api/settings', (_, res) => {
     }
     ok(res, safe, safe);
 });
-app.put('/api/settings', (req, res) => {
-    const result = applySettingsPatch(req.body, { restartTelegram: true });
+app.put('/api/settings', async (req, res) => {
+    const result = await applySettingsPatch(req.body);
     const safe = { ...result };
     if (safe.stt) {
         const gKey2 = safe.stt.geminiApiKey || process.env.GEMINI_API_KEY || '';
@@ -1085,6 +1081,7 @@ server.listen(PORT, () => {
         console.log(`  MCP:    ~/.cli-jaw/mcp.json`);
     } catch (e: unknown) { console.error('[mcp-init]', (e as Error).message); }
 
+    hydrateTargetsFromSettings(settings);
     void initActiveMessagingRuntime();
     startHeartbeat();
     startTokenKeepAlive();

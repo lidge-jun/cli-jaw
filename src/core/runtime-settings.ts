@@ -7,21 +7,19 @@ import { settings, replaceSettings, saveSettings } from './config.js';
 import { syncMainSessionToSettings } from './main-session.js';
 import { mergeSettingsPatch } from './settings-merge.js';
 import { regenerateB } from '../prompt/builder.js';
+import { restartMessagingRuntime } from '../messaging/runtime.js';
 
 type ApplyRuntimeSettingsOptions = {
     resetFallbackState?: () => void;
-    restartTelegram?: boolean;
-    onRestartTelegram?: (() => void) | null;
 };
 
-export function applyRuntimeSettingsPatch(
+export async function applyRuntimeSettingsPatch(
     rawPatch: Record<string, any> = {},
     opts: ApplyRuntimeSettingsOptions = {},
-) {
+): Promise<Record<string, any>> {
     const prevCli = settings.cli;
     const prevWorkingDir = settings.workingDir;
-    const hasTelegramUpdate = !!(rawPatch || {}).telegram || !!(rawPatch || {}).discord
-        || !!(rawPatch || {}).channel || (rawPatch || {}).locale !== undefined;
+    const prevSnapshot = { ...settings };
 
     const merged = mergeSettingsPatch(settings, rawPatch);
     replaceSettings(merged);
@@ -51,8 +49,15 @@ export function applyRuntimeSettingsPatch(
         }
     }
 
-    if (opts.restartTelegram && hasTelegramUpdate) {
-        opts.onRestartTelegram?.();
+    // Unified messaging runtime restart (handles both Telegram and Discord)
+    try {
+        await restartMessagingRuntime(prevSnapshot, settings, rawPatch);
+    } catch (e: unknown) {
+        // Rollback: restore previous settings on restart failure
+        console.error('[runtime-settings] restart failed, rolling back:', (e as Error).message);
+        replaceSettings(prevSnapshot);
+        saveSettings(prevSnapshot);
+        throw e;
     }
 
     return settings;
