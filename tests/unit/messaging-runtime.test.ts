@@ -53,10 +53,14 @@ test('loadSettings catch path applies env overrides', () => {
     // The catch block (no settings.json) should still apply DISCORD_TOKEN etc.
     assert.match(configSrc, /applyEnvOverrides/,
         'config should have applyEnvOverrides function');
-    // Verify it's called in the catch path
-    const catchBlock = configSrc.slice(configSrc.lastIndexOf('} catch'));
+    // Verify it's called in the loadSettings catch path
+    const loadSettingsFn = configSrc.slice(
+        configSrc.indexOf('export function loadSettings'),
+        configSrc.indexOf('\nexport function saveSettings'),
+    );
+    const catchBlock = loadSettingsFn.slice(loadSettingsFn.lastIndexOf('} catch'));
     assert.ok(catchBlock.includes('applyEnvOverrides'),
-        'catch path must call applyEnvOverrides');
+        'loadSettings catch path must call applyEnvOverrides');
 });
 
 test('applyEnvOverrides handles DISCORD_TOKEN', () => {

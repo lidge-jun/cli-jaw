@@ -32,7 +32,11 @@ test('restart clears all target state to prevent stale routing', () => {
 
 test('env-only Discord boot works without settings.json', () => {
     // loadSettings catch path must apply env overrides
-    const catchSection = configSrc.slice(configSrc.lastIndexOf('} catch'));
+    const loadSettingsFn = configSrc.slice(
+        configSrc.indexOf('export function loadSettings'),
+        configSrc.indexOf('\nexport function saveSettings'),
+    );
+    const catchSection = loadSettingsFn.slice(loadSettingsFn.lastIndexOf('} catch'));
     assert.ok(catchSection.includes('applyEnvOverrides'),
         'loadSettings catch path must apply env overrides for fresh-home boot');
 });
