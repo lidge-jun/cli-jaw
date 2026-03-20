@@ -39,6 +39,30 @@ export function setLatestSeenTarget(channel: MessengerChannel, target: RemoteTar
     latestSeenTargets.set(channel, target);
 }
 
+export function clearTargetState(channel?: MessengerChannel) {
+    if (channel) {
+        lastActiveTargets.delete(channel);
+        latestSeenTargets.delete(channel);
+    } else {
+        lastActiveTargets.clear();
+        latestSeenTargets.clear();
+    }
+}
+
+/** Hydrate target state from persisted settings.messaging */
+export function hydrateTargetsFromSettings(s: Record<string, any>) {
+    const messaging = s?.messaging;
+    if (!messaging) return;
+    for (const ch of ['telegram', 'discord'] as MessengerChannel[]) {
+        if (messaging.lastActive?.[ch]) {
+            lastActiveTargets.set(ch, messaging.lastActive[ch]);
+        }
+        if (messaging.latestSeen?.[ch]) {
+            latestSeenTargets.set(ch, messaging.latestSeen[ch]);
+        }
+    }
+}
+
 // ─── Lifecycle ──────────────────────────────────────
 
 export function getActiveChannel(): MessengerChannel {
@@ -72,11 +96,18 @@ export async function restartMessagingRuntime(
 ) {
     const prevChannel = prev.channel || 'telegram';
     const nextChannel = next.channel || 'telegram';
-    const changed = prevChannel !== nextChannel
-        || !!patch.telegram
-        || !!patch.discord
-        || patch.locale !== undefined;
-    if (!changed) return;
+
+    // Only restart if active channel changed, or the active channel's config changed
+    const channelSwitched = prevChannel !== nextChannel;
+    const activeChannelPatched = !!patch[nextChannel as string];
+    const localeSwitched = patch.locale !== undefined;
+
+    // Inactive channel config change should NOT trigger restart
+    if (!channelSwitched && !activeChannelPatched && !localeSwitched) return;
+
+    // Clear stale targets on restart to prevent routing to previous channel/thread
+    clearTargetState();
+
     await shutdownMessagingRuntime();
     await initActiveMessagingRuntime();
 }

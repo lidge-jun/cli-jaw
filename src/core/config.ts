@@ -203,6 +203,36 @@ function migrateSettings(s: Record<string, any>) {
     return s;
 }
 
+/** Apply environment variable overrides to a settings object */
+function applyEnvOverrides(s: Record<string, any>) {
+    if (process.env.TELEGRAM_TOKEN) {
+        s.telegram = s.telegram || {};
+        s.telegram.token = process.env.TELEGRAM_TOKEN;
+        s.telegram.enabled = true;
+    }
+    if (process.env.TELEGRAM_ALLOWED_CHAT_IDS) {
+        s.telegram = s.telegram || {};
+        s.telegram.allowedChatIds = process.env.TELEGRAM_ALLOWED_CHAT_IDS.split(',').map((x: string) => x.trim()).filter(Boolean);
+    }
+    if (process.env.DISCORD_TOKEN) {
+        s.discord = s.discord || {};
+        s.discord.token = process.env.DISCORD_TOKEN;
+        s.discord.enabled = true;
+        // Auto-switch active channel if Discord has token but Telegram doesn't
+        if (!s.telegram?.token && !s.telegram?.enabled) {
+            s.channel = 'discord';
+        }
+    }
+    if (process.env.DISCORD_GUILD_ID) {
+        s.discord = s.discord || {};
+        s.discord.guildId = process.env.DISCORD_GUILD_ID;
+    }
+    if (process.env.DISCORD_CHANNEL_IDS) {
+        s.discord = s.discord || {};
+        s.discord.channelIds = process.env.DISCORD_CHANNEL_IDS.split(',').map((x: string) => x.trim()).filter(Boolean);
+    }
+}
+
 /** Mutable settings object — shared across all modules via ESM live binding */
 export let settings: Record<string, any> = createDefaultSettings();
 
@@ -237,32 +267,13 @@ export function loadSettings() {
         if (raw.planning) saveSettings(merged);
 
         // env overrides
-        if (process.env.TELEGRAM_TOKEN) {
-            merged.telegram.token = process.env.TELEGRAM_TOKEN;
-            merged.telegram.enabled = true;
-        }
-        if (process.env.DISCORD_TOKEN) {
-            merged.discord = merged.discord || {};
-            merged.discord.token = process.env.DISCORD_TOKEN;
-            merged.discord.enabled = true;
-            // Auto-switch active channel if Discord has token but Telegram doesn't
-            if (!merged.telegram?.token && !merged.telegram?.enabled) {
-                merged.channel = 'discord';
-            }
-        }
-        if (process.env.DISCORD_GUILD_ID) {
-            merged.discord = merged.discord || {};
-            merged.discord.guildId = process.env.DISCORD_GUILD_ID;
-        }
-        if (process.env.DISCORD_CHANNEL_IDS) {
-            merged.discord = merged.discord || {};
-            merged.discord.channelIds = process.env.DISCORD_CHANNEL_IDS.split(',').map((s: string) => s.trim()).filter(Boolean);
-        }
+        applyEnvOverrides(merged);
 
         settings = merged;
         return merged;
     } catch { /* expected: settings.json may not exist on first run */
         settings = createDefaultSettings();
+        applyEnvOverrides(settings);
         return settings;
     }
 }

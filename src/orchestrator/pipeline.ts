@@ -86,6 +86,7 @@ export async function orchestrate(
 ) {
     const origin = meta.origin || 'web';
     const chatId = meta.chatId;
+    const target = meta.target;
     const userText = String(prompt || '').trim();
     const runSpawnAgent: SpawnAgentLike = typeof meta._spawnAgent === 'function'
         ? meta._spawnAgent
@@ -268,6 +269,7 @@ export async function orchestrate(
                 text: `[Worker dispatch failed — no matching employees]\n${stripped || result.text || ''}`,
                 origin,
                 chatId,
+                target,
             });
         }
         return;
@@ -279,6 +281,7 @@ export async function orchestrate(
         text: stripped || result.text || '',
         origin,
         chatId,
+        target,
     });
 }
 
@@ -289,6 +292,7 @@ export async function orchestrateContinue(
 ) {
     const origin = meta.origin || 'web';
     const chatId = meta.chatId;
+    const target = meta.target;
     const state = getState();
 
     // Active PABCD → resume from current state
@@ -311,6 +315,7 @@ export async function orchestrateContinue(
             text: 'No pending work to continue.',
             origin,
             chatId,
+            target,
         });
         return;
     }
@@ -328,6 +333,7 @@ export async function orchestrateReset(
 ) {
     const origin = meta.origin || 'web';
     const chatId = meta.chatId;
+    const target = meta.target;
     clearAllEmployeeSessions.run();
     resetState();
     const latest = readLatestWorklog();
@@ -336,6 +342,7 @@ export async function orchestrateReset(
             text: 'Reset complete.',
             origin,
             chatId,
+            target,
         });
         return;
     }
@@ -345,5 +352,6 @@ export async function orchestrateReset(
         text: 'Reset complete.',
         origin,
         chatId,
+        target,
     });
 }
