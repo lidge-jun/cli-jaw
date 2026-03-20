@@ -10,6 +10,7 @@ export function setWss(w: any) { wss = w; }
 
 export function addBroadcastListener(fn: BroadcastListener) { broadcastListeners.add(fn); }
 export function removeBroadcastListener(fn: BroadcastListener) { broadcastListeners.delete(fn); }
+export function clearAllBroadcastListeners() { broadcastListeners.clear(); }
 
 export function broadcast(type: string, data: Record<string, any>) {
     const msg = JSON.stringify({ type, ...data, ts: Date.now() });

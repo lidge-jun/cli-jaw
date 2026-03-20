@@ -1,5 +1,7 @@
 // ─── Discord File Send ───────────────────────────────
-// Outbound file delivery for Discord. 10 MiB cap per create-message.
+// Outbound file delivery for Discord.
+// Default 10 MiB cap matches Discord's non-Nitro/non-boosted limit.
+// Boosted servers (Level 2+) allow up to 50 MiB — adjust DISCORD_LIMITS if needed.
 
 import type { Client } from 'discord.js';
 import { stat } from 'node:fs/promises';

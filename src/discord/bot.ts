@@ -158,7 +158,7 @@ export async function initDiscord() {
                 const dl = await downloadDiscordAttachment(first);
                 const filePath = saveUpload(dl.buffer, dl.name);
                 const prompt = buildMediaPrompt(filePath, msg.content || '');
-                dcOrchestrate(msg, prompt, `[📎 ${dl.name}] ${msg.content || ''}`);
+                dcOrchestrate(msg, prompt, `[📎 ${dl.name}] ${msg.content || ''}`).catch(e => console.error('[discord:orchestrate]', (e as Error).message));
             } catch (e) {
                 console.error('[discord:attachment]', (e as Error).message);
                 await msg.reply(`❌ ${(e as Error).message}`).catch(() => { });
@@ -183,7 +183,7 @@ export async function initDiscord() {
             return;
         }
 
-        dcOrchestrate(msg, text, text);
+        dcOrchestrate(msg, text, text).catch(e => console.error('[discord:orchestrate]', (e as Error).message));
     });
 
     // ── Slash command handler ──
