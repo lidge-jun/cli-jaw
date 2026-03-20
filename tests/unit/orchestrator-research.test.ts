@@ -10,8 +10,9 @@ import {
 } from '../../src/orchestrator/research.ts';
 import { orchestrate } from '../../src/orchestrator/pipeline.ts';
 import { getCtx, resetState, setState } from '../../src/orchestrator/state-machine.ts';
+import { clearAllBroadcastListeners } from '../../src/core/bus.ts';
 
-beforeEach(() => { resetState(); });
+beforeEach(() => { resetState(); clearAllBroadcastListeners(); });
 
 // ─── isAmbiguousRequest ─────────────────────────────
 
