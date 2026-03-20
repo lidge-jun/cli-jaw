@@ -22,19 +22,18 @@ test('CP-001: web visible includes help', { skip: !moduleLoaded && 'policy.js no
     assert.ok(cmds.some(c => c.name === 'help'), 'help should be visible on web');
 });
 
-test('CP-002: telegram menu includes model and cli (readonly visible)', { skip: !moduleLoaded && 'policy.js not yet created' }, () => {
+test('CP-002: telegram menu includes model and cli (full writable)', { skip: !moduleLoaded && 'policy.js not yet created' }, () => {
     const cmds = getTelegramMenuCommands();
-    assert.ok(cmds.some(c => c.name === 'model'), 'model should be in telegram menu (readonly)');
-    assert.ok(cmds.some(c => c.name === 'cli'), 'cli should be in telegram menu (readonly)');
+    assert.ok(cmds.some(c => c.name === 'model'), 'model should be in telegram menu');
+    assert.ok(cmds.some(c => c.name === 'cli'), 'cli should be in telegram menu');
 });
 
-test('CP-003: telegram visible includes model (readonly)', { skip: !moduleLoaded && 'policy.js not yet created' }, () => {
+test('CP-003: telegram visible includes model (full)', { skip: !moduleLoaded && 'policy.js not yet created' }, () => {
     const cmds = getVisibleCommands('telegram');
     const model = cmds.find(c => c.name === 'model');
     assert.ok(model, 'model should be visible on telegram');
-    // readonly 확인은 capability 필드가 있을 때만
     if (model.capability) {
-        assert.equal(model.capability.telegram, 'readonly');
+        assert.equal(model.capability.telegram, 'full');
     }
 });
 
@@ -85,22 +84,11 @@ test('CP-009: every telegram command has tgDescKey', { skip: !moduleLoaded && 'p
     }
 });
 
-test('CP-010: readonly commands block write on telegram', { skip: !moduleLoaded && 'policy.js not yet created' }, async () => {
-    // model and cli are readonly on telegram — supplying args should be blocked
-    const { parseCommand, executeCommand } = await import('../../src/cli/commands.ts');
+test('CP-010: model and cli are writable on telegram', { skip: !moduleLoaded && 'policy.js not yet created' }, async () => {
+    const { getCommandCatalog, CAPABILITY } = await import('../../src/command-contract/catalog.ts');
     for (const name of ['model', 'cli']) {
-        const parsed = parseCommand(`/${name} some-arg`);
-        assert.ok(parsed, `parseCommand should parse /${name}`);
-        const result = await executeCommand(parsed, { interface: 'telegram', locale: 'ko' });
-        assert.ok(result, `executeCommand result should not be null for /${name}`);
-        assert.equal(result.ok, false, `/${name} with args should fail on telegram (readonly)`);
-        assert.equal(result.code, 'readonly', `/${name} should return readonly code`);
-    }
-    // Without args, model/cli should succeed (read-only view)
-    for (const name of ['model', 'cli']) {
-        const parsed = parseCommand(`/${name}`);
-        const result = await executeCommand(parsed, { interface: 'telegram', locale: 'ko' });
-        // Should not be blocked by readonly guard (args.length === 0)
-        assert.notEqual(result?.code, 'readonly', `/${name} without args should not be readonly-blocked`);
+        const cmd = getCommandCatalog().find(c => c.name === name);
+        assert.equal(cmd?.capability?.telegram, CAPABILITY.full,
+            `/${name} should be full (writable) on telegram`);
     }
 });
