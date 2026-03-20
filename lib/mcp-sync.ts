@@ -24,6 +24,44 @@ const JAW_HOME = process.env.CLI_JAW_HOME
 
 const MCP_PATH = join(JAW_HOME, 'mcp.json');
 
+// ─── Clone cooldown ─────────────────────────────────
+const CLONE_META_PATH = join(JAW_HOME, '.skills_clone_meta.json');
+const CLONE_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+const CLONE_TIMEOUT_MS = 15_000;           // 15 seconds (down from 120s)
+
+interface CloneMeta {
+    lastAttempt: number;   // epoch ms
+    success: boolean;
+}
+
+function readCloneMeta(): CloneMeta | null {
+    try {
+        const data = JSON.parse(fs.readFileSync(CLONE_META_PATH, 'utf8'));
+        if (typeof data?.lastAttempt === 'number' && typeof data?.success === 'boolean') {
+            return data;
+        }
+    } catch { /* corrupted or missing */ }
+    return null;
+}
+
+function writeCloneMeta(success: boolean): void {
+    try {
+        fs.mkdirSync(JAW_HOME, { recursive: true });
+        const meta: CloneMeta = { lastAttempt: Date.now(), success };
+        fs.writeFileSync(CLONE_META_PATH, JSON.stringify(meta));
+    } catch (e) {
+        console.warn(`[skills] clone meta write failed: ${(e as Error).message}`);
+    }
+}
+
+function shouldSkipClone(): boolean {
+    if (process.env.JAW_FORCE_CLONE === '1') return false;
+    const meta = readCloneMeta();
+    if (!meta) return false;
+    if (meta.success) return false;
+    return (Date.now() - meta.lastAttempt) < CLONE_COOLDOWN_MS;
+}
+
 /** Walk up from current file to find package.json → package root */
 function findPackageRoot(): string {
     let dir = dirname(fileURLToPath(import.meta.url));
@@ -790,45 +828,51 @@ export function copyDefaultSkills() {
     let skillsSourceResolved = false;
 
     // 2a. Try GitHub clone first (public repo, no auth needed)
-    try {
-        const tmpClone = join(JAW_HOME, '.skills_clone_tmp');
-        if (fs.existsSync(tmpClone)) fs.rmSync(tmpClone, { recursive: true });
-        console.log(`[skills] fetching latest skills from GitHub...`);
-        execSync(`git clone --depth 1 ${SKILLS_REPO} "${tmpClone}"`, {
-            stdio: 'pipe', timeout: 120000,
-        });
-        // Version-aware merge from clone
-        const srcReg = loadRegistry(tmpClone);
-        const dstReg = loadRegistry(refDir);
-        const cloned = fs.readdirSync(tmpClone, { withFileTypes: true });
-        let cloneNew = 0, cloneUpdated = 0;
-        for (const entry of cloned) {
-            if (entry.name === '.git') continue;
-            const src = join(tmpClone, entry.name);
-            const dst = join(refDir, entry.name);
-            if (entry.isDirectory()) {
-                if (!fs.existsSync(dst)) {
-                    copyDirRecursive(src, dst);
-                    cloneNew++;
-                } else {
-                    const sv = getSkillVersion(entry.name, srcReg);
-                    const dv = getSkillVersion(entry.name, dstReg);
-                    if (sv && (!dv || semverGt(sv, dv))) {
-                        fs.rmSync(dst, { recursive: true, force: true });
+    if (shouldSkipClone()) {
+        console.log(`[skills] GitHub clone suppressed (cooldown active)`);
+    } else {
+        try {
+            const tmpClone = join(JAW_HOME, '.skills_clone_tmp');
+            if (fs.existsSync(tmpClone)) fs.rmSync(tmpClone, { recursive: true });
+            console.log(`[skills] fetching latest skills from GitHub...`);
+            execSync(`git clone --depth 1 ${SKILLS_REPO} "${tmpClone}"`, {
+                stdio: 'pipe', timeout: CLONE_TIMEOUT_MS,
+            });
+            // Version-aware merge from clone
+            const srcReg = loadRegistry(tmpClone);
+            const dstReg = loadRegistry(refDir);
+            const cloned = fs.readdirSync(tmpClone, { withFileTypes: true });
+            let cloneNew = 0, cloneUpdated = 0;
+            for (const entry of cloned) {
+                if (entry.name === '.git') continue;
+                const src = join(tmpClone, entry.name);
+                const dst = join(refDir, entry.name);
+                if (entry.isDirectory()) {
+                    if (!fs.existsSync(dst)) {
                         copyDirRecursive(src, dst);
-                        cloneUpdated++;
-                        console.log(`[skills] updated: ${entry.name} ${dv ?? '(none)'} → ${sv}`);
+                        cloneNew++;
+                    } else {
+                        const sv = getSkillVersion(entry.name, srcReg);
+                        const dv = getSkillVersion(entry.name, dstReg);
+                        if (sv && (!dv || semverGt(sv, dv))) {
+                            fs.rmSync(dst, { recursive: true, force: true });
+                            copyDirRecursive(src, dst);
+                            cloneUpdated++;
+                            console.log(`[skills] updated: ${entry.name} ${dv ?? '(none)'} → ${sv}`);
+                        }
                     }
+                } else if (entry.isFile()) {
+                    fs.copyFileSync(src, dst);
                 }
-            } else if (entry.isFile()) {
-                fs.copyFileSync(src, dst);
             }
+            fs.rmSync(tmpClone, { recursive: true, force: true });
+            console.log(`[skills] ✅ GitHub: ${cloneNew} new, ${cloneUpdated} updated`);
+            writeCloneMeta(true);
+            skillsSourceResolved = true;
+        } catch (e) {
+            writeCloneMeta(false);
+            console.log(`[skills] GitHub clone skipped: ${(e as Error).message?.slice(0, 60)}`);
         }
-        fs.rmSync(tmpClone, { recursive: true, force: true });
-        console.log(`[skills] ✅ GitHub: ${cloneNew} new, ${cloneUpdated} updated`);
-        skillsSourceResolved = true;
-    } catch (e) {
-        console.log(`[skills] GitHub clone skipped: ${(e as Error).message?.slice(0, 60)}`);
     }
 
     // 2b. Fallback: bundled skills_ref/ (dev mode with initialized submodule)
@@ -932,17 +976,23 @@ export function softResetSkills() {
     let tmpCloneDir: string | null = null;
 
     // 1a. Try GitHub clone first (public repo, always latest)
-    try {
-        tmpCloneDir = join(JAW_HOME, '.skills_clone_tmp');
-        if (fs.existsSync(tmpCloneDir)) fs.rmSync(tmpCloneDir, { recursive: true });
-        console.log(`[skills:soft-reset] fetching latest skills from GitHub...`);
-        execSync(`git clone --depth 1 ${SKILLS_REPO} "${tmpCloneDir}"`, {
-            stdio: 'pipe', timeout: 120000,
-        });
-        sourceDir = tmpCloneDir;
-    } catch (e) {
-        console.log(`[skills:soft-reset] GitHub clone skipped: ${(e as Error).message?.slice(0, 60)}`);
-        tmpCloneDir = null;
+    if (shouldSkipClone()) {
+        console.log(`[skills:soft-reset] GitHub clone suppressed (cooldown active)`);
+    } else {
+        try {
+            tmpCloneDir = join(JAW_HOME, '.skills_clone_tmp');
+            if (fs.existsSync(tmpCloneDir)) fs.rmSync(tmpCloneDir, { recursive: true });
+            console.log(`[skills:soft-reset] fetching latest skills from GitHub...`);
+            execSync(`git clone --depth 1 ${SKILLS_REPO} "${tmpCloneDir}"`, {
+                stdio: 'pipe', timeout: CLONE_TIMEOUT_MS,
+            });
+            writeCloneMeta(true);
+            sourceDir = tmpCloneDir;
+        } catch (e) {
+            writeCloneMeta(false);
+            console.log(`[skills:soft-reset] GitHub clone skipped: ${(e as Error).message?.slice(0, 60)}`);
+            tmpCloneDir = null;
+        }
     }
 
     // 1b. Fallback: bundled skills_ref/ (dev mode with initialized submodule)
@@ -1157,3 +1207,6 @@ function copyDirRecursive(src: string, dst: string) {
         }
     }
 }
+
+// ─── Clone cooldown exports (for testing) ───────────
+export { shouldSkipClone, writeCloneMeta, readCloneMeta, CLONE_META_PATH, CLONE_COOLDOWN_MS, CLONE_TIMEOUT_MS };
