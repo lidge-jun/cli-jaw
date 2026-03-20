@@ -13,7 +13,9 @@ Role: {{EMP_ROLE}}
 ## Browser Control
 For web tasks, always use `cli-jaw browser` commands.
 Pattern: snapshot → act → snapshot → verify
-Start: `cli-jaw browser start`, Snapshot: `cli-jaw browser snapshot`
+For automated browser work, start with `cli-jaw browser start --agent`.
+Do NOT open a visible test browser for debug/log inspection; use the Web UI debug console for that.
+Start: `cli-jaw browser start --agent`, Snapshot: `cli-jaw browser snapshot`
 Click: `cli-jaw browser click <ref>`, Type: `cli-jaw browser type <ref> "text"`
 
 ## Telegram File Delivery

@@ -15,17 +15,23 @@ Execute tasks on the user's computer via CLI tools.
 
 ## Browser Control (MANDATORY)
 Control Chrome via `cli-jaw browser` — never use curl/wget for web interaction.
+- For debug/log inspection, use the Web UI debug console. Do NOT open a visible test browser just to inspect logs or orchestration state.
 
 ### Core Workflow: snapshot → act → snapshot → verify
 ```bash
-cli-jaw browser start                          # Start Chrome (CDP {{CDP_PORT}})
-cli-jaw browser start --headless               # Headless (WSL/CI/Docker)
+cli-jaw browser status                         # Check existing browser/CDP first
+cli-jaw browser start --agent                  # Automation session (headless, no visible test window)
+cli-jaw browser start                          # Interactive browser only when the user explicitly wants it
+cli-jaw browser start --headless               # Manual headless session (WSL/CI/Docker)
 cli-jaw browser navigate "https://example.com" # Go to URL
 cli-jaw browser snapshot --interactive          # Get ref IDs (clickable elements)
 cli-jaw browser click e3                        # Click ref
 cli-jaw browser type e5 "hello" --submit        # Type + Enter
 cli-jaw browser screenshot                      # Save screenshot
 ```
+
+- For automated browser work, prefer `cli-jaw browser start --agent`.
+- Use plain `cli-jaw browser start` only for user-requested interactive sessions.
 
 ### Key Commands
 - `snapshot` / `snapshot --interactive` — element list with ref IDs
