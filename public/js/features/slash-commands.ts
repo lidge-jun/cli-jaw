@@ -2,6 +2,7 @@
 import { getPreferredLocale } from '../locale.js';
 import { t } from './i18n.js';
 import { api } from '../api.js';
+import { escapeHtml } from '../render.js';
 
 interface SlashCommand {
     name: string;
@@ -24,14 +25,6 @@ function looksLikeFilePath(text: string): boolean {
 
 const dropdown = (): HTMLElement | null => document.getElementById('cmdDropdown');
 const input = (): HTMLTextAreaElement | null => document.getElementById('chatInput') as HTMLTextAreaElement | null;
-
-function escapeHtml(str: string): string {
-    return String(str || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
 
 function filterCommands(partial: string): SlashCommand[] {
     const prefix = String(partial || '').toLowerCase();

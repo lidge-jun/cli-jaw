@@ -186,7 +186,17 @@ export function connect(): void {
     const wsBase = import.meta.env?.DEV ? 'ws://localhost:3458' : `ws://${location.host}`;
     state.ws = new WebSocket(`${wsBase}?lang=${getLang()}`);
     state.ws.onmessage = (e: MessageEvent) => {
-        const msg: WsMessage = JSON.parse(e.data as string);
+        let msg: WsMessage;
+        try {
+            msg = JSON.parse(e.data as string);
+        } catch {
+            console.warn('[ws] malformed message:', e.data);
+            return;
+        }
+        if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') {
+            console.warn('[ws] invalid message shape:', msg);
+            return;
+        }
         if (msg.type === 'agent_status') {
             if (msg.running !== undefined) {
                 setStatus(msg.running ? 'running' : 'idle');

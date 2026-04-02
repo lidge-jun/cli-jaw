@@ -70,7 +70,7 @@ export function renderEmployees(): void {
         const p = ps?.phase || a.phase;
         const pl = ps?.phaseLabel || a.phaseLabel;
         const phaseBadge = p
-            ? `<span style="background:${PHASE_COLORS[p] || '#888'};color:#000;padding:1px 6px;border-radius:9px;font-size:9px">${pl || 'P' + p}</span>`
+            ? `<span style="background:${PHASE_COLORS[p] || '#888'};color:#000;padding:1px 6px;border-radius:9px;font-size:9px">${escapeHtml(pl || 'P' + p)}</span>`
             : '';
 
         return `
@@ -79,36 +79,36 @@ export function renderEmployees(): void {
                 <span style="width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block;flex-shrink:0"></span>
                 <input style="flex:1;background:none;border:none;color:var(--text);font-size:12px;font-weight:600;font-family:inherit;outline:none"
                        value="${escapeHtml(a.name || 'Agent')}"
-                       data-emp-name="${a.id}">
-                <button style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px" data-emp-delete="${a.id}" title="${t('emp.delete')}">✕</button>
+                       data-emp-name="${escapeHtml(a.id)}">
+                <button style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:12px" data-emp-delete="${escapeHtml(a.id)}" title="${t('emp.delete')}">✕</button>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px">
                 <div>
                     <label>CLI</label>
-                    <select data-emp-cli="${a.id}">
-                        ${cliKeys.map(c => `<option${a.cli === c ? ' selected' : ''}>${c}</option>`).join('')}
+                    <select data-emp-cli="${escapeHtml(a.id)}">
+                        ${cliKeys.map(c => `<option${a.cli === c ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}
                     </select>
                 </div>
                 <div>
                     <label>Model</label>
-                    <select data-emp-model="${a.id}">
+                    <select data-emp-model="${escapeHtml(a.id)}">
                         <option value="default"${(!a.model || a.model === 'default') ? ' selected' : ''}>default</option>
-                        ${models.map(m => `<option${a.model === m ? ' selected' : ''}>${m}</option>`).join('')}
-                        ${a.model && a.model !== 'default' && !models.includes(a.model) ? `<option selected>${a.model}</option>` : ''}
+                        ${models.map(m => `<option${a.model === m ? ' selected' : ''}>${escapeHtml(m)}</option>`).join('')}
+                        ${a.model && a.model !== 'default' && !models.includes(a.model) ? `<option selected>${escapeHtml(a.model)}</option>` : ''}
                         <option value="__custom__">${t('emp.customModel')}</option>
                     </select>
                 </div>
             </div>
             <div>
                 <label>Role</label>
-                <select data-emp-role="${a.id}">
+                <select data-emp-role="${escapeHtml(a.id)}">
                     ${ROLE_PRESETS.map(r => `<option value="${r.value}"${presetVal === r.value ? ' selected' : ''}>${r.label}</option>`).join('')}
                 </select>
-                <textarea data-emp-custom="${a.id}" style="display:${isCustom ? 'block' : 'none'};margin-top:4px;width:100%;height:40px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:10px;font-family:inherit;resize:vertical"
+                <textarea data-emp-custom="${escapeHtml(a.id)}" style="display:${isCustom ? 'block' : 'none'};margin-top:4px;width:100%;height:40px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 6px;border-radius:4px;font-size:10px;font-family:inherit;resize:vertical"
                           placeholder="${t('emp.customRole')}">${isCustom ? escapeHtml(a.role || '') : ''}</textarea>
             </div>
             <div style="margin-top:4px;font-size:10px;display:flex;align-items:center;gap:6px">
-                <span style="color:${a.status === 'running' ? '#fbbf24' : 'var(--green)'}">● ${a.status || 'idle'}</span>
+                <span style="color:${a.status === 'running' ? '#fbbf24' : 'var(--green)'}">● ${escapeHtml(a.status || 'idle')}</span>
                 ${phaseBadge}
             </div>
         </div>`;

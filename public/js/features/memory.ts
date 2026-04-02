@@ -256,6 +256,9 @@ export function switchMemTab(tab: string): void {
     $('memTabBtnSettings')?.classList.toggle('active', tab === 'settings');
     $('memTabBtnAdvOps')?.classList.toggle('active', tab === 'status');
     $('memTabBtnFiles')?.classList.toggle('active', tab === 'files');
+    $('memTabBtnSettings')?.setAttribute('aria-selected', String(tab === 'settings'));
+    $('memTabBtnAdvOps')?.setAttribute('aria-selected', String(tab === 'status'));
+    $('memTabBtnFiles')?.setAttribute('aria-selected', String(tab === 'files'));
 }
 
 export async function setMemEnabled(v: boolean): Promise<void> {
@@ -327,7 +330,7 @@ export async function viewMemFile(name: string): Promise<void> {
     if (!container) return;
     container.innerHTML = `
         <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
-            <span style="font-size:12px;font-weight:600">${data.name}</span>
+            <span style="font-size:12px;font-weight:600">${escapeHtml(data.name)}</span>
             <button data-mem-back style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:11px">← back</button>
         </div>
         <pre style="background:var(--bg);padding:8px;border-radius:4px;font-size:11px;white-space:pre-wrap;max-height:50vh;overflow-y:auto;color:var(--text)">${escapeHtml(data.content)}</pre>

@@ -1,9 +1,9 @@
 // ── CLI-JAW Service Worker ──
-// Cache-first for static assets, network-only for API/WS
+// Three-tier fetch: navigate→network-first, hashed→cache-first, static→stale-while-revalidate
 
-const CACHE_NAME = 'clijaw-v1';
+const CACHE_NAME = 'clijaw-v2';
 const STATIC_ASSETS = [
-    '/',
+    // Only pre-cache immutable/semi-static assets — NOT '/' (HTML is dynamic)
     '/css/variables.css',
     '/css/layout.css',
     '/css/chat.css',
@@ -24,7 +24,7 @@ self.addEventListener('install', (e) => {
     self.skipWaiting();
 });
 
-// Activate: purge old caches
+// Activate: purge old caches, claim clients
 self.addEventListener('activate', (e) => {
     e.waitUntil(
         caches.keys()
@@ -33,7 +33,7 @@ self.addEventListener('activate', (e) => {
     );
 });
 
-// Fetch: network-first for API, cache-first for static
+// Fetch: three-tier strategy
 self.addEventListener('fetch', (e) => {
     const { request } = e;
     const url = new URL(request.url);
@@ -41,29 +41,64 @@ self.addEventListener('fetch', (e) => {
     // Only handle GET requests from same origin
     if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
-    // API, WebSocket, and Vite HMR → network only
+    // API, WebSocket, Vite HMR, and SW itself → network only (no intercept)
     if (url.pathname.startsWith('/api/') ||
         url.pathname.startsWith('/ws') ||
         url.pathname.startsWith('/@vite') ||
-        url.pathname.startsWith('/__vite')) {
+        url.pathname.startsWith('/__vite') ||
+        url.pathname === '/sw.js') {
         return;
     }
 
-    // Static assets → cache-first with network fallback
-    e.respondWith(
-        caches.match(request).then(cached => {
-            if (cached) return cached;
-            return fetch(request).then(resp => {
-                if (resp.ok) {
+    // Tier 1: Navigation → network-first with cache fallback (any cached page, prefer '/')
+    if (request.mode === 'navigate') {
+        e.respondWith(
+            fetch(request).then(resp => {
+                if (resp.ok && resp.type === 'basic') {
                     const clone = resp.clone();
-                    caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
+                    caches.open(CACHE_NAME).then(cache => cache.put(request, clone)).catch(() => {});
                 }
                 return resp;
-            });
-        }).catch(() => {
-            // Only return cached root for navigation requests
-            if (request.mode === 'navigate') return caches.match('/');
-            return new Response('', { status: 408 });
-        })
+            }).catch(() =>
+                caches.match(request)
+                    .then(c => c || caches.match('/'))
+                    .then(c => c || new Response('Offline', { status: 503 }))
+            )
+        );
+        return;
+    }
+
+    // Tier 2: Hashed assets (/dist/assets/*) → cache-first (immutable by content hash)
+    if (url.pathname.startsWith('/dist/assets/')) {
+        e.respondWith(
+            caches.match(request).then(cached => {
+                if (cached) return cached;
+                return fetch(request).then(resp => {
+                    if (resp.ok && resp.type === 'basic') {
+                        const clone = resp.clone();
+                        caches.open(CACHE_NAME).then(cache => cache.put(request, clone)).catch(() => {});
+                    }
+                    return resp;
+                }).catch(() => new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } }));
+            })
+        );
+        return;
+    }
+
+    // Tier 3: Everything else (CSS, manifest, etc.) → stale-while-revalidate
+    e.respondWith(
+        caches.open(CACHE_NAME).then(cache =>
+            cache.match(request).then(cached => {
+                const networkFetch = fetch(request).then(resp => {
+                    if (resp.ok && resp.type === 'basic') {
+                        cache.put(request, resp.clone()).catch(() => {});
+                    }
+                    return resp;
+                }).catch(() => null);
+                return cached || networkFetch.then(r =>
+                    r || new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/plain' } })
+                );
+            })
+        )
     );
 });

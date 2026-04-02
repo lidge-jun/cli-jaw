@@ -12,7 +12,8 @@ const STORAGE_KEY = 'sidebarState';
 const BREAKPOINT = 900;
 
 export function initSidebar(): void {
-    const saved: SidebarState = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    let saved: SidebarState = {};
+    try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { /* corrupted */ }
     if (saved.left) document.body.classList.add('left-collapsed');
     if (saved.right) document.body.classList.add('right-collapsed');
 
@@ -23,7 +24,8 @@ export function initSidebar(): void {
     window.addEventListener('resize', () => {
         if (window.innerWidth > BREAKPOINT) {
             document.body.classList.remove('left-expanded', 'right-expanded');
-            const s: SidebarState = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            let s: SidebarState = {};
+            try { s = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { /* corrupted */ }
             document.body.classList.toggle('left-collapsed', !!s.left);
             document.body.classList.toggle('right-collapsed', !!s.right);
         } else {

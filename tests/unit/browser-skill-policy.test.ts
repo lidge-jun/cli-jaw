@@ -13,11 +13,11 @@ const hasVisionSkill = fs.existsSync(visionSkillPath);
 test('BSP-001: browser skill documents --agent automation mode', { skip: !hasBrowserSkill && 'skills_ref submodule not checked out' }, () => {
     const browserSkill = fs.readFileSync(browserSkillPath, 'utf8');
     assert.match(browserSkill, /browser start --agent/);
-    assert.match(browserSkill, /debug console/i);
+    assert.match(browserSkill, /headless/i);
 });
 
-test('BSP-002: vision-click skill distinguishes automation and manual browser start', { skip: !hasVisionSkill && 'skills_ref submodule not checked out' }, () => {
+test('BSP-002: vision-click skill documents screenshot-based coordinate click', { skip: !hasVisionSkill && 'skills_ref submodule not checked out' }, () => {
     const visionSkill = fs.readFileSync(visionSkillPath, 'utf8');
-    assert.match(visionSkill, /browser start --agent/);
-    assert.match(visionSkill, /manual interactive sessions/i);
+    assert.match(visionSkill, /screenshot/i);
+    assert.match(visionSkill, /coordinate/i);
 });

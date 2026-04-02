@@ -151,16 +151,16 @@
     <aside class="sidebar-right" role="complementary" aria-label="Settings panel">
         <button class="sidebar-toggle" id="toggleRight" title="Collapse" aria-label="Collapse settings">▶</button>
         <div class="tab-bar" role="tablist">
-            <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="tabAgents" data-i18n="tab.agents">에이전트</button>
-            <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tabSkills" data-i18n="tab.skills">스킬</button>
-            <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tabSettings" data-i18n="tab.settings">설정</button>
+            <button class="tab-btn active" id="tabBtnAgents" role="tab" aria-selected="true" aria-controls="tabAgents" data-i18n="tab.agents">에이전트</button>
+            <button class="tab-btn" id="tabBtnSkills" role="tab" aria-selected="false" aria-controls="tabSkills" data-i18n="tab.skills">스킬</button>
+            <button class="tab-btn" id="tabBtnSettings" role="tab" aria-selected="false" aria-controls="tabSettings" data-i18n="tab.settings">설정</button>
         </div>
         <div class="sidebar-save-bar">
             <button class="btn-save" data-i18n="btn.saveSettings">저장</button>
         </div>
 
         <!-- Agents Tab -->
-        <div id="tabAgents" class="tab-content active">
+        <div id="tabAgents" class="tab-content active" role="tabpanel" aria-labelledby="tabBtnAgents">
             <div>
                 <label data-i18n="label.activeCli">활성 CLI</label>
                 <select id="selCli">
@@ -211,7 +211,7 @@
         </div>
 
         <!-- Skills Tab -->
-        <div id="tabSkills" class="tab-content">
+        <div id="tabSkills" class="tab-content" role="tabpanel" aria-labelledby="tabBtnSkills">
             <div class="flex gap-2 flex-wrap">
                 <button class="skill-filter active" data-filter="all" data-i18n="skill.filter.all">전체</button>
                 <button class="skill-filter" data-filter="installed" data-i18n="skill.filter.installed">📦 설치됨</button>
@@ -230,7 +230,7 @@
         </div>
 
         <!-- Settings Tab -->
-        <div id="tabSettings" class="tab-content">
+        <div id="tabSettings" class="tab-content" role="tabpanel" aria-labelledby="tabBtnSettings">
             <button class="btn-clear btn-action-block"  data-action="openPrompt"
                 data-i18n="btn.editPrompt">✏️
                 시스템 프롬프트 편집</button>
@@ -544,18 +544,18 @@
                     class="btn-modal-close" aria-label="Close">✕</button>
             </div>
             <div class="tab-strip" role="tablist">
-                <button class="mem-tab active mem-tab-btn" id="memTabBtnSettings" role="tab" aria-selected="true"
+                <button class="mem-tab active mem-tab-btn" id="memTabBtnSettings" role="tab" aria-selected="true" aria-controls="memTabSettings"
                     >⚙️
                     Settings</button>
-                <button class="mem-tab mem-tab-btn" id="memTabBtnAdvOps" role="tab" aria-selected="false"
+                <button class="mem-tab mem-tab-btn" id="memTabBtnAdvOps" role="tab" aria-selected="false" aria-controls="memTabAdvOps"
                     >📊
                     Status</button>
-                <button class="mem-tab mem-tab-btn" id="memTabBtnFiles" role="tab" aria-selected="false"
+                <button class="mem-tab mem-tab-btn" id="memTabBtnFiles" role="tab" aria-selected="false" aria-controls="memTabFiles"
                     >📂
                     Files</button>
             </div>
             <div id="advStatusBanner" class="adv-status-banner" style="display:none"></div>
-            <div id="memTabSettings" class="p-3">
+            <div id="memTabSettings" class="p-3" role="tabpanel" aria-labelledby="memTabBtnSettings">
                 <div class="settings-row"><label data-i18n="label.enabled">활성화</label>
                     <div>
                         <button id="memOff" class="perm-btn" data-i18n="btn.off">끔</button>
@@ -611,7 +611,7 @@
                     flush
                 </div>
             </div>
-            <div id="memTabAdvOps" class="p-3" style="display:none">
+            <div id="memTabAdvOps" class="p-3" style="display:none" role="tabpanel" aria-labelledby="memTabBtnAdvOps">
                 <div class="settings-row"><label>Index State</label><span id="advIndexState" class="text-status">-</span></div>
                 <div class="settings-row"><label>Storage Root</label><span id="advStorageRoot" class="text-xs text-dim mono-path">-</span></div>
                 <div class="settings-row"><label>Indexed Files</label><span id="advIndexedFiles" class="text-status">0</span></div>
@@ -641,7 +641,7 @@
                     <button class="btn-clear" id="advOpenCorruptedBtn">📂 Open Corrupted Folder</button>
                 </div>
             </div>
-            <div id="memTabFiles" class="p-3" style="display:none">
+            <div id="memTabFiles" class="p-3" style="display:none" role="tabpanel" aria-labelledby="memTabBtnFiles">
                 <div class="section-header">Basic Memory Files</div>
                 <div id="basicMemoryFiles"></div>
                 <div class="section-header mt-3">Structured Memory Files</div>

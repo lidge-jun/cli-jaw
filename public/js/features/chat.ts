@@ -9,6 +9,8 @@ import { escapeHtml } from '../render.js';
 import { getVirtualScroll } from '../virtual-scroll.js';
 import { clearCache } from './idb-cache.js';
 
+let activeObjectURLs: string[] = [];
+
 interface CommandResult { code?: string; text?: string; type?: string; }
 interface MessageResult { queued?: boolean; pending?: number; continued?: boolean; error?: string; }
 
@@ -66,6 +68,7 @@ export async function sendMessage(): Promise<void> {
             }
             if (!res.ok && !result?.text) throw new Error(`HTTP ${res.status}`);
             if (result?.code === 'clear_screen') {
+                getVirtualScroll().clear();
                 const chatEl = document.getElementById('chatMessages');
                 if (chatEl) chatEl.innerHTML = '';
             }
@@ -146,6 +149,8 @@ export function removeAttachedFile(index: number): void {
 }
 
 export function clearAttachedFiles(): void {
+    activeObjectURLs.forEach(url => URL.revokeObjectURL(url));
+    activeObjectURLs = [];
     state.attachedFiles = [];
     renderFilePreview();
     const fi = document.getElementById('fileInput') as HTMLInputElement | null;
@@ -156,6 +161,9 @@ function renderFilePreview(): void {
     const preview = document.getElementById('filePreview');
     const listEl = document.getElementById('filePreviewList');
     if (!preview) return;
+    // Revoke all previous object URLs before creating new ones
+    activeObjectURLs.forEach(url => URL.revokeObjectURL(url));
+    activeObjectURLs = [];
     if (!state.attachedFiles.length) {
         preview.classList.remove('visible');
         if (listEl) listEl.innerHTML = '';
@@ -166,7 +174,12 @@ function renderFilePreview(): void {
     listEl.innerHTML = state.attachedFiles.map((f: File, i: number) => {
         const size = (f.size / 1024).toFixed(1);
         const isImg = f.type.startsWith('image/');
-        const thumb = isImg ? `<img src="${URL.createObjectURL(f)}" class="file-chip-thumb" alt="" onload="URL.revokeObjectURL(this.src)">` : '';
+        let thumb = '';
+        if (isImg) {
+            const url = URL.createObjectURL(f);
+            activeObjectURLs.push(url);
+            thumb = `<img src="${url}" class="file-chip-thumb" alt="">`;
+        }
         return `<div class="file-chip">
             ${thumb}
             <span class="file-chip-name">📎 ${escapeHtml(f.name)} (${size}KB)</span>

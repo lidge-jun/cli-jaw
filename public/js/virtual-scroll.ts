@@ -36,6 +36,21 @@ export class VirtualScroll {
     get active(): boolean { return this._active; }
     get count(): number { return this.items.length; }
 
+    /** Flush all virtual items to real DOM and deactivate VS.
+     *  Called before live message append to prevent spacer/DOM conflicts. */
+    flushToDOM(): void {
+        if (!this._active) return;
+        this.container.removeEventListener('scroll', this.scrollHandler);
+        if (this.rafId) { cancelAnimationFrame(this.rafId); this.rafId = null; }
+        // Render all items as real DOM nodes
+        this.container.innerHTML = this.items.map(it => it.html).join('');
+        this._active = false;
+        this.firstVisible = 0;
+        this.lastVisible = 0;
+        // Release items to free memory (DOM now owns the content)
+        this.items = [];
+    }
+
     addItem(id: string, html: string): void {
         this.items.push({ id, html, height: EST_HEIGHT });
         if (!this._active && this.items.length >= THRESHOLD) {

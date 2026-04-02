@@ -54,7 +54,7 @@ export function renderHeartbeatJobs(): void {
                         <input type="text" value="${escapeHtml(String(job.name || ''))}" placeholder="${escapeHtml(t('hb.name'))}"
                             data-hb-name="${i}">
                         <button class="hb-toggle ${job.enabled ? 'on' : 'off'}"
-                            data-hb-toggle="${i}"></button>
+                            data-hb-toggle="${i}" aria-label="${escapeHtml(String(job.name || 'job') + ' toggle')}"></button>
                         <button class="hb-del" data-hb-remove="${i}">✕</button>
                     </div>
                     <div class="hb-job-schedule">

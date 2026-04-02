@@ -297,7 +297,7 @@ export async function loadMcpServers(): Promise<void> {
         const names = Object.entries(d.servers || {});
         if (!names.length) { el.textContent = t('mcp.noServers'); return; }
         el.innerHTML = names.map(([n, s]) =>
-            `<div style="padding:2px 0">• <b>${n}</b> <span style="opacity:.6">${s.command} ${(s.args || []).slice(0, 2).join(' ')}</span></div>`
+            `<div style="padding:2px 0">• <b>${escapeHtml(n)}</b> <span style="opacity:.6">${escapeHtml(s.command)} ${(s.args || []).slice(0, 2).map(a => escapeHtml(a)).join(' ')}</span></div>`
         ).join('');
     } catch { }
 }
@@ -312,7 +312,7 @@ export async function syncMcpServers(): Promise<void> {
         if (!d) { resultEl.textContent = '❌ sync failed'; return; }
         const r = d.results || {};
         resultEl.innerHTML = Object.entries(r).map(([k, v]) =>
-            `${v ? '✅' : '⏭️'} ${k}`
+            `${v ? '✅' : '⏭️'} ${escapeHtml(k)}`
         ).join(' &nbsp; ');
     } catch (e) { resultEl.textContent = '❌ ' + (e as Error).message; }
 }
@@ -327,7 +327,7 @@ export async function installMcpGlobal(): Promise<void> {
         if (!d) { resultEl.textContent = '❌ install failed'; return; }
         resultEl.innerHTML = Object.entries(d.results || {}).map(([k, v]) => {
             const icon = v.status === 'installed' ? '✅' : v.status === 'skip' ? '⏭️' : '❌';
-            return `${icon} <b>${k}</b>: ${v.status}${v.bin ? ' → ' + v.bin : ''}`;
+            return `${icon} <b>${escapeHtml(k)}</b>: ${escapeHtml(v.status)}${v.bin ? ' → ' + escapeHtml(v.bin) : ''}`;
         }).join('<br>');
         loadMcpServers();
     } catch (e) { resultEl.textContent = '❌ ' + (e as Error).message; }
@@ -590,7 +590,7 @@ export function loadFallbackOrder(s: SettingsData): void {
     for (let i = 0; i < slotCount; i++) {
         const current = active[i] || '';
         const opts = allClis.map(cli =>
-            `<option value="${cli}" ${cli === current ? 'selected' : ''}>${cli}</option>`
+            `<option value="${escapeHtml(cli)}" ${cli === current ? 'selected' : ''}>${escapeHtml(cli)}</option>`
         ).join('');
         html += `
             <div class="settings-row sub-row">
@@ -712,7 +712,7 @@ function renderCliStatus(data: { cliStatus: Record<string, { available: boolean 
                 }
                 return `
                     <div style="display:flex;align-items:center;gap:4px;margin-left:16px;font-size:10px;color:var(--text-dim)">
-                        <span style="width:18px">${shortLabel}</span>
+                        <span style="width:18px">${escapeHtml(shortLabel)}</span>
                         <div style="flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden">
                             <div style="width:${pct}%;height:100%;background:${barColor};border-radius:2px"></div>
                         </div>
@@ -730,7 +730,7 @@ function renderCliStatus(data: { cliStatus: Record<string, { available: boolean 
             <div class="settings-group" style="margin-bottom:6px;padding:8px 10px">
                 <div class="cli-status-row">
                     <span class="cli-dot ${dotClass}"></span>
-                    <span class="cli-name" style="font-weight:600">${name}</span>${name === 'copilot' ? `<button id="copilotKeychainBtn" style="font-size:9px;margin-left:6px;padding:1px 5px;background:var(--border);color:var(--text-dim);border:1px solid var(--text-dim);border-radius:3px;cursor:pointer;vertical-align:middle;line-height:1" title="${t('copilot.keychainHint')}">🔑</button>` : ''}
+                    <span class="cli-name" style="font-weight:600">${escapeHtml(name)}</span>${name === 'copilot' ? `<button id="copilotKeychainBtn" style="font-size:9px;margin-left:6px;padding:1px 5px;background:var(--border);color:var(--text-dim);border:1px solid var(--text-dim);border-radius:3px;cursor:pointer;vertical-align:middle;line-height:1" title="${t('copilot.keychainHint')}">🔑</button>` : ''}
                 </div>
                 ${accountLine}
                 ${authHint}

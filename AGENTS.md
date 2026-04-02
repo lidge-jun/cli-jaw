@@ -80,3 +80,24 @@ tags: [cli-jaw, ...]
 - Legacy prose forms (`> Status:`, `**Status**:`) remain readable during migration,
   but new/updated phase docs must use YAML frontmatter.
 - 구현 완료된 문서 제목에 `(fin)` 접두사 추가
+
+### OfficeCLI
+
+OfficeCLI is available for Office document operations (.docx, .xlsx, .pptx). Single binary, no Office install needed.
+
+```bash
+officecli create file.docx                                          # create blank
+officecli view file.docx text                                       # view content
+officecli add file.docx /body --type paragraph --prop text="..."    # add content
+officecli set data.xlsx /Sheet1/A1 --prop value="42"                # set cell
+officecli add deck.pptx / --type slide --prop title="Title"         # add slide
+officecli validate file.docx                                        # validate
+officecli get file.docx / --json                                    # JSON output
+echo '[...]' | officecli batch data.xlsx --json                     # batch ops
+```
+
+- Install: `bash scripts/install-officecli.sh`
+- Smoke test: `bash tests/smoke/test_officecli_integration.sh`
+- Binary selection: smoke test prefers `officecli/build-local/officecli`, override with `OFFICECLI_BIN=/path/to/officecli`
+- CJK-enhanced binary: `officecli/build-local/officecli`
+- Full docs: [`docs/officecli-integration.md`](docs/officecli-integration.md)

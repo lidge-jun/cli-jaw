@@ -7,7 +7,7 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     modulePreload: false,
-    rollupOptions: {
+    rolldownOptions: {
       input: 'public/index.html',
       output: {
         manualChunks(id: string) {

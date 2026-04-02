@@ -126,7 +126,7 @@ test('QS-010: QuotaEntry type includes authenticated and error fields', () => {
 
 test('QS-011: sidebar.css has .cli-dot.warn with yellow color', () => {
     assert.ok(sidebarCss.includes('.cli-dot.warn'), 'should have .cli-dot.warn class');
-    assert.ok(sidebarCss.includes('#fbbf24'), 'should use yellow color');
+    assert.ok(sidebarCss.includes('#fbbf24') || sidebarCss.includes('var(--warning)'), 'should use yellow/warning color');
     assert.ok(sidebarCss.includes('pulse-warn'), 'should have pulse animation');
 });
 

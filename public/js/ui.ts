@@ -45,6 +45,8 @@ export function updateQueueBadge(count: number): void {
 function showSkeleton(): void {
     const container = document.getElementById('chatMessages');
     if (!container || container.querySelector('.skeleton-msg')) return;
+    const vs = getVirtualScroll();
+    if (vs.active) vs.flushToDOM();
     hideEmptyState();
     const skel = document.createElement('div');
     skel.className = 'skeleton-msg';
@@ -71,6 +73,8 @@ function showEmptyState(): void {
 export function addSystemMsg(text: string, extraClass?: string, type?: string): void {
     const container = document.getElementById('chatMessages');
     if (!container) return;
+    const vs = getVirtualScroll();
+    if (vs.active) vs.flushToDOM();
     hideEmptyState();
     const div = document.createElement('div');
     const typeClass = type ? ` msg-type-${type}` : '';
@@ -154,6 +158,8 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
 
 export function addMessage(role: string, text: string): HTMLDivElement {
     const container = document.getElementById('chatMessages');
+    const vs = getVirtualScroll();
+    if (vs.active) vs.flushToDOM();
     hideEmptyState();
     removeSkeleton();
 
@@ -162,7 +168,7 @@ export function addMessage(role: string, text: string): HTMLDivElement {
 
     const div = document.createElement('div');
     div.className = `msg msg-${role}`;
-    div.innerHTML = `<div class="msg-label">${label}</div><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy"></button>`;
+    div.innerHTML = `<div class="msg-label">${label}</div><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button>`;
     const contentEl = div.querySelector('.msg-content');
     if (contentEl) contentEl.setAttribute('data-raw', stripOrchestration(text));
     container?.appendChild(div);
@@ -176,11 +182,17 @@ export function scrollToBottom(): void {
 }
 
 export function switchTab(name: string, targetBtn: Element): void {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.remove('active');
+        b.setAttribute('aria-selected', 'false');
+    });
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
     const tabMap: Record<string, string> = { agents: 'tabAgents', settings: 'tabSettings', skills: 'tabSkills' };
     document.getElementById(tabMap[name])?.classList.add('active');
-    if (targetBtn) targetBtn.classList.add('active');
+    if (targetBtn) {
+        targetBtn.classList.add('active');
+        targetBtn.setAttribute('aria-selected', 'true');
+    }
     // Lazy-load tab content
     if (name === 'settings') { import('./features/settings.js').then(m => m.loadSettings()); }
     if (name === 'agents') { import('./features/employees.js').then(m => m.loadEmployees()); }
@@ -214,7 +226,7 @@ export async function loadMessages(): Promise<void> {
                     const role = m.role === 'assistant' ? 'agent' : m.role;
                     const rendered = renderMarkdown(m.content);
                     const label = escapeHtml(role === 'user' ? t('msg.you') : getAppName());
-                    const html = `<div class="msg msg-${role}"><div class="msg-label">${label}</div><div class="msg-content" data-raw="${escapeHtml(stripOrchestration(m.content))}">${rendered}</div><button class="msg-copy" title="Copy"></button></div>`;
+                    const html = `<div class="msg msg-${role}"><div class="msg-label">${label}</div><div class="msg-content" data-raw="${escapeHtml(stripOrchestration(m.content))}">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div>`;
                     vs.addItem(crypto.randomUUID(), html);
                 }
                 vs.scrollToBottom();
