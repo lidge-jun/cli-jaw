@@ -188,6 +188,14 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '1mb' }));
+
+// Serve Vite production build (public/dist/index.html) at root when available
+const distIndex = join(projectRoot, 'public', 'dist', 'index.html');
+app.get('/', (_req, res, next) => {
+    if (fs.existsSync(distIndex)) return res.sendFile(distIndex);
+    next();
+});
+
 app.use(express.static(join(projectRoot, 'public')));
 
 // WebSocket incoming messages

@@ -3,7 +3,9 @@
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
+    background: var(--modal-bg);
+    backdrop-filter: blur(10px) saturate(1.2);
+    -webkit-backdrop-filter: blur(10px) saturate(1.2);
     z-index: 999;
     align-items: center;
     justify-content: center;
@@ -11,17 +13,35 @@
 
 .modal-overlay.open {
     display: flex;
+    animation: overlayIn 0.2s ease-out;
+}
+
+@keyframes overlayIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
 }
 
 .modal-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 10px;
+    background: color-mix(in srgb, var(--surface) 85%, transparent);
+    backdrop-filter: blur(24px) saturate(1.5);
+    -webkit-backdrop-filter: blur(24px) saturate(1.5);
+    border: 1px solid color-mix(in srgb, var(--accent) 10%, var(--border));
+    border-radius: var(--radius-xl);
+    box-shadow:
+        0 16px 48px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+        0 0 60px -20px color-mix(in srgb, var(--accent) 6%, transparent);
     width: 500px;
     max-width: 90vw;
     max-height: 80vh;
     display: flex;
     flex-direction: column;
+    animation: modalBounce 0.35s var(--ease-spring);
+}
+
+@keyframes modalBounce {
+    from { opacity: 0; transform: translateY(24px) scale(0.96); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .modal-header {
@@ -141,13 +161,13 @@
 }
 
 .hb-error {
-    color: #f87171;
+    color: var(--error);
 }
 
 .hb-toggle {
-    width: 32px;
-    height: 18px;
-    border-radius: 9px;
+    width: var(--toggle-w);
+    height: var(--toggle-h);
+    border-radius: calc(var(--toggle-h) / 2);
     border: none;
     cursor: pointer;
     position: relative;
@@ -159,22 +179,22 @@
 }
 
 .hb-toggle.off {
-    background: #555;
+    background: var(--toggle-off);
 }
 
 .hb-toggle::after {
     content: '';
     position: absolute;
-    top: 2px;
-    width: 14px;
-    height: 14px;
+    top: calc((var(--toggle-h) - var(--toggle-knob)) / 2);
+    width: var(--toggle-knob);
+    height: var(--toggle-knob);
     border-radius: 50%;
-    background: #fff;
+    background: var(--toggle-on);
     transition: left .2s;
 }
 
 .hb-toggle.on::after {
-    left: 16px;
+    left: calc(var(--toggle-w) - var(--toggle-knob) - 2px);
 }
 
 .hb-toggle.off::after {
@@ -184,7 +204,7 @@
 .hb-del {
     background: none;
     border: none;
-    color: #f55;
+    color: var(--delete-color);
     cursor: pointer;
     font-size: 14px;
 }

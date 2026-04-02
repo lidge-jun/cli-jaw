@@ -3,7 +3,12 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#22d3ee">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
     <title>CLI-JAW</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,16 +22,8 @@
     <link rel="stylesheet" href="/css/sidebar.css">
     <link rel="stylesheet" href="/css/modals.css">
     <link rel="stylesheet" href="/css/markdown.css">
-    <!-- CDN: markdown rendering -->
-    <link rel="stylesheet" id="hljsTheme"
-        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">
-    <script defer src="https://cdn.jsdelivr.net/npm/marked@14/marked.min.js"></script>
-    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/highlight.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
-    <!-- modulepreload removed: esbuild bundles all modules into dist/bundle.js -->
+    <link rel="stylesheet" href="/css/tool-ui.css">
+    <!-- Vite handles module bundling in dev (HMR) and production (build) -->
 </head>
 
 <body>
@@ -54,12 +51,11 @@
         <!-- CLI Status (moved from Settings tab) -->
         <div>
             <div class="section-title" data-i18n="sidebar.cliStatus">CLI 상태</div>
-            <div id="cliStatusList" style="margin-top:4px">
-                <div style="color:var(--text-dim);font-size:11px">Loading...</div>
+            <div id="cliStatusList" class="mt-1">
+                <div class="text-status">Loading...</div>
             </div>
-            <div style="display:flex;gap:6px;margin-top:8px;align-items:center">
-                <button class="btn-clear"
-                    style="margin:0;flex:1;padding:6px;font-size:11px;display:flex;align-items:center;justify-content:center;gap:4px;height:32px"
+            <div class="flex gap-2 mt-2 items-center">
+                <button class="btn-clear btn-refresh"
                     data-action="refreshCli">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
                         stroke-linecap="round" stroke-linejoin="round">
@@ -70,7 +66,7 @@
                     </svg>
                     Refresh</button>
                 <select id="cliStatusInterval"
-                    style="font-size:11px;padding:6px 8px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;min-width:60px;height:32px">
+                    class="select-sm select-status-interval">
                     <option value="60" data-i18n="time.1m">1분</option>
                     <option value="300" selected data-i18n="time.5m">5분</option>
                     <option value="600" data-i18n="time.10m">10분</option>
@@ -81,11 +77,10 @@
 
         <div class="sidebar-bottom">
             <div class="section-title" data-i18n="sidebar.agentName">에이전트 이름</div>
-            <div style="display:flex;gap:4px;align-items:center">
+            <div class="flex gap-1 items-center">
                 <input type="text" id="appNameInput" value="CLI-JAW"
-                    style="flex:1;font-family:var(--font-display);font-size:13px;font-weight:600;padding:4px 8px">
-                <button class="sidebar-hb-btn" id="appNameSave"
-                    style="width:auto;padding:4px 8px;font-size:11px">✓</button>
+                    class="input-agent-name">
+                <button class="sidebar-hb-btn btn-action-sm w-auto" id="appNameSave">✓</button>
             </div>
             <button class="sidebar-hb-btn" id="btnClearChat">/clear</button>
             <button class="sidebar-hb-btn" id="hbSidebarBtn">💓 Heartbeat (0)</button>
@@ -95,7 +90,7 @@
     </nav>
 
     <!-- Chat Area -->
-    <div class="chat-area" style="position:relative">
+    <div class="chat-area">
         <div class="drag-overlay" id="dragOverlay" data-i18n="drag.drop">📎 파일을 여기에 드랍하세요</div>
         <div class="chat-header">
             <span>CLI-JAW ● <span id="headerCli">claude</span></span>
@@ -119,6 +114,11 @@
             <div class="pabc-dot future" data-phase="C" id="dot-C">C</div>
         </div>
         <div class="chat-messages" id="chatMessages"></div>
+        <div class="empty-state" id="emptyState">
+            <div class="empty-icon">CLI-JAW</div>
+            <div class="empty-title">CLI-JAW</div>
+            <div class="empty-subtitle">메시지를 입력하세요</div>
+        </div>
         <div class="typing-indicator" id="typingIndicator">
             <span class="label" data-i18n="status.responding">응답 중</span>
             <span class="typing-dot"></span>
@@ -143,17 +143,17 @@
             <textarea class="chat-input" id="chatInput" rows="1" data-i18n-placeholder="input.placeholder"
                 placeholder="메시지 입력..." aria-label="Chat message input" aria-haspopup="listbox" aria-expanded="false"
                 aria-controls="cmdDropdown" aria-autocomplete="list" aria-activedescendant=""></textarea>
-            <button class="btn-send" id="btnSend">➤</button>
+            <button class="btn-send" id="btnSend" aria-label="Send message">➤</button>
         </div>
     </div>
 
     <!-- Right Sidebar (Tabbed) -->
     <aside class="sidebar-right" role="complementary" aria-label="Settings panel">
         <button class="sidebar-toggle" id="toggleRight" title="Collapse" aria-label="Collapse settings">▶</button>
-        <div class="tab-bar">
-            <button class="tab-btn active" data-i18n="tab.agents">에이전트</button>
-            <button class="tab-btn" data-i18n="tab.skills">스킬</button>
-            <button class="tab-btn" data-i18n="tab.settings">설정</button>
+        <div class="tab-bar" role="tablist">
+            <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="tabAgents" data-i18n="tab.agents">에이전트</button>
+            <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tabSkills" data-i18n="tab.skills">스킬</button>
+            <button class="tab-btn" role="tab" aria-selected="false" aria-controls="tabSettings" data-i18n="tab.settings">설정</button>
         </div>
         <div class="sidebar-save-bar">
             <button class="btn-save" data-i18n="btn.saveSettings">저장</button>
@@ -189,7 +189,7 @@
             <div>
                 <label data-i18n="label.permissions">권한</label>
                 <div class="perm-toggle">
-                    <span class="perm-btn active" style="cursor:default;width:100%;padding:6px 14px">⚡ Auto</span>
+                    <span class="perm-btn active perm-auto" >⚡ Auto</span>
                 </div>
             </div>
 
@@ -198,21 +198,21 @@
                 <span id="inpCwd" class="cwd-display">~/.cli-jaw</span>
             </div>
 
-            <hr style="border:none;border-top:1px solid var(--border);margin:4px 0">
+            <hr class="hr-divider">
 
-            <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="flex justify-between items-center">
                 <div class="section-title" data-i18n="sidebar.employees">직원</div>
-                <button class="btn-clear" style="margin:0;padding:4px 10px;font-size:11px" data-action="addEmployee"
+                <button class="btn-clear btn-action-sm" data-action="addEmployee"
                     data-i18n="btn.addEmployee">+ 추가</button>
             </div>
             <div id="employeesList">
-                <div style="color:var(--text-dim);font-size:11px" data-i18n="emp.empty">직원이 없습니다</div>
+                <div class="text-status" data-i18n="emp.empty">직원이 없습니다</div>
             </div>
         </div>
 
         <!-- Skills Tab -->
         <div id="tabSkills" class="tab-content">
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <div class="flex gap-2 flex-wrap">
                 <button class="skill-filter active" data-filter="all" data-i18n="skill.filter.all">전체</button>
                 <button class="skill-filter" data-filter="installed" data-i18n="skill.filter.installed">📦 설치됨</button>
                 <button class="skill-filter" data-filter="productivity" data-i18n="skill.filter.productivity">📝
@@ -225,13 +225,13 @@
                 <button class="skill-filter" data-filter="smarthome" data-i18n="skill.filter.smarthome">🏠 홈</button>
                 <button class="skill-filter" data-filter="other" data-i18n="skill.filter.other">📂 기타</button>
             </div>
-            <div style="font-size:10px;color:var(--text-dim)" id="skillsCount" data-i18n="loading">로딩 중...</div>
+            <div class="text-xs text-dim" id="skillsCount" data-i18n="loading">로딩 중...</div>
             <div id="skillsList"></div>
         </div>
 
         <!-- Settings Tab -->
         <div id="tabSettings" class="tab-content">
-            <button class="btn-clear" style="width:100%;margin:0;padding:8px;font-size:12px" data-action="openPrompt"
+            <button class="btn-clear btn-action-block"  data-action="openPrompt"
                 data-i18n="btn.editPrompt">✏️
                 시스템 프롬프트 편집</button>
             <!-- Active Channel Toggle -->
@@ -258,13 +258,12 @@
                 </div>
                 <div class="settings-row sub-row">
                     <label data-i18n="label.botToken">봇 토큰</label>
-                    <input type="password" id="tgToken" placeholder="123456:ABC-DEF..."
-                        style="width:100%;font-size:11px;padding:4px">
+                    <input type="password" id="tgToken" placeholder="123456:ABC-DEF..." class="input-sm">
                 </div>
                 <div class="settings-row sub-row">
                     <label data-i18n="label.chatIds">허용 채팅 ID</label>
                     <input type="text" id="tgChatIds" data-i18n-placeholder="tg.chatIds.placeholder"
-                        placeholder="콤마 구분 (비워두면 전체 허용)" style="width:100%;font-size:11px;padding:4px">
+                        placeholder="콤마 구분 (비워두면 전체 허용)" class="input-sm">
                 </div>
                 <div class="settings-row sub-row">
                     <label data-i18n="label.forwardAll">자동 전송</label>
@@ -287,18 +286,15 @@
                 </div>
                 <div class="settings-row sub-row">
                     <label>Bot Token</label>
-                    <input type="password" id="dcToken" placeholder="Discord bot token..."
-                        style="width:100%;font-size:11px;padding:4px">
+                    <input type="password" id="dcToken" placeholder="Discord bot token..." class="input-sm">
                 </div>
                 <div class="settings-row sub-row">
                     <label>Guild ID</label>
-                    <input type="text" id="dcGuildId" placeholder="Guild (server) ID"
-                        style="width:100%;font-size:11px;padding:4px">
+                    <input type="text" id="dcGuildId" placeholder="Guild (server) ID" class="input-sm">
                 </div>
                 <div class="settings-row sub-row">
                     <label>Channel IDs</label>
-                    <input type="text" id="dcChannelIds" placeholder="콤마 구분 (비워두면 전체 허용)"
-                        style="width:100%;font-size:11px;padding:4px">
+                    <input type="text" id="dcChannelIds" placeholder="콤마 구분 (비워두면 전체 허용)" class="input-sm">
                 </div>
                 <div class="settings-row sub-row">
                     <label data-i18n="label.forwardAll">자동 전송</label>
@@ -367,15 +363,15 @@
                     </div>
                 </div>
                 <div id="codexCtxValues" style="display:none">
-                    <div class="settings-row sub-row" style="margin-left:24px">
-                        <label style="min-width:120px;font-size:11px">Context Window</label>
+                    <div class="settings-row sub-row ml-6" >
+                        <label class="label-wide">Context Window</label>
                         <input type="number" id="codexCtxWindow" value="1000000" min="272000" max="1050000" step="1000"
-                            style="width:100px;font-size:11px;padding:3px 6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                            class="input-compact">
                     </div>
-                    <div class="settings-row sub-row" style="margin-left:24px">
-                        <label style="min-width:120px;font-size:11px">Auto Compact Limit</label>
+                    <div class="settings-row sub-row ml-6" >
+                        <label class="label-wide">Auto Compact Limit</label>
                         <input type="number" id="codexCtxCompact" value="900000" min="100000" max="1000000" step="1000"
-                            style="width:100px;font-size:11px;padding:3px 6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                            class="input-compact">
                     </div>
                 </div>
             </div>
@@ -429,7 +425,7 @@
             <!-- Fallback Order -->
             <div class="settings-group">
                 <h4>⚡ Fallback</h4>
-                <p style="font-size:10px;color:var(--text-dim);margin:2px 0 6px" data-i18n="fallback.desc">CLI 실패 시 자동
+                <p class="text-xs text-dim fallback-desc" data-i18n="fallback.desc">CLI 실패 시 자동
                     재시도 순서</p>
                 <div id="fallbackOrderList"></div>
             </div>
@@ -437,14 +433,14 @@
             <!-- MCP Servers -->
             <div class="settings-group">
                 <h4>🔌 MCP Servers</h4>
-                <div id="mcpServerList" style="font-size:11px;color:var(--text-dim);padding:4px 0">
+                <div id="mcpServerList" class="text-status py-1">
                     Loading...
                 </div>
-                <button class="btn-clear" style="width:100%;margin:4px 0;padding:6px;font-size:11px"
+                <button class="btn-clear btn-action-block" 
                     data-action="syncMcp">🔄 Sync to all CLIs</button>
-                <button class="btn-clear" style="width:100%;margin:0 0 4px;padding:6px;font-size:11px"
+                <button class="btn-clear btn-action-block" 
                     data-action="installMcp">📦 Install Globally (npm i -g)</button>
-                <div id="mcpSyncResult" style="font-size:10px;color:var(--text-dim);padding:2px 0;display:none"></div>
+                <div id="mcpSyncResult" class="text-xs text-dim py-1" style="display:none"></div>
             </div>
 
             <!-- STT Settings -->
@@ -462,8 +458,7 @@
                 </div>
                 <div class="settings-row sub-row stt-gemini">
                     <label data-i18n="stt.geminiKey">Gemini API Key</label>
-                    <input type="password" id="sttGeminiKey" placeholder="AIza..."
-                        style="width:100%;font-size:11px;padding:4px">
+                    <input type="password" id="sttGeminiKey" placeholder="AIza..." class="input-sm">
                 </div>
                 <div class="settings-row sub-row stt-gemini">
                     <label data-i18n="stt.geminiModel">Gemini 모델</label>
@@ -475,37 +470,32 @@
                         <option value="__custom__">✏️ 직접 입력...</option>
                     </select>
                     <input type="text" id="sttGeminiModelCustom" placeholder="모델명 입력"
-                        style="display:none; margin-top:4px;" />
+                        class="mt-1" style="display:none" />
                 </div>
                 <!-- OpenAI Compatible -->
                 <div class="settings-row sub-row stt-openai" style="display:none">
                     <label data-i18n="stt.openaiBaseUrl">Base URL</label>
-                    <input type="text" id="sttOpenaiBaseUrl" placeholder="https://api.groq.com/openai"
-                        style="width:100%;font-size:11px;padding:4px">
+                    <input type="text" id="sttOpenaiBaseUrl" placeholder="https://api.groq.com/openai" class="input-sm">
                 </div>
                 <div class="settings-row sub-row stt-openai" style="display:none">
                     <label data-i18n="stt.openaiKey">API Key</label>
-                    <input type="password" id="sttOpenaiKey" placeholder="sk-..."
-                        style="width:100%;font-size:11px;padding:4px">
+                    <input type="password" id="sttOpenaiKey" placeholder="sk-..." class="input-sm">
                 </div>
                 <div class="settings-row sub-row stt-openai" style="display:none">
                     <label data-i18n="stt.openaiModel">Model</label>
-                    <input type="text" id="sttOpenaiModel" placeholder="whisper-large-v3"
-                        style="width:100%;font-size:11px;padding:4px">
+                    <input type="text" id="sttOpenaiModel" placeholder="whisper-large-v3" class="input-sm">
                 </div>
                 <!-- Vertex AI -->
                 <div class="settings-row sub-row stt-vertex" style="display:none">
                     <label data-i18n="stt.vertexConfig">Vertex AI Config (JSON)</label>
                     <textarea id="sttVertexJson" rows="4"
-                        placeholder='{"project_id":"...","location":"us-central1","credentials":{...}}'
-                        style="width:100%;font-size:11px;padding:4px;font-family:var(--font-mono)"></textarea>
+                        placeholder='{"project_id":"...","location":"us-central1","credentials":{...}}' class="input-sm mono"></textarea>
                 </div>
                 <div class="settings-row sub-row stt-whisper">
                     <label data-i18n="stt.whisperModel">Whisper 모델</label>
-                    <input type="text" id="sttWhisperModel" placeholder="mlx-community/..."
-                        style="width:100%;font-size:11px;padding:4px">
+                    <input type="text" id="sttWhisperModel" placeholder="mlx-community/..." class="input-sm">
                 </div>
-                <small style="font-size:9px;color:var(--text-dim)" data-i18n="stt.shortcutHint">
+                <small class="text-shortcut-hint" data-i18n="stt.shortcutHint">
                     ⌨️ Ctrl+Shift+Space (⌘+Shift+Space on Mac)</small>
             </div>
 
@@ -519,11 +509,11 @@
             <div class="modal-header">
                 <span data-i18n="modal.promptTitle">시스템 프롬프트 (A-2)</span>
                 <button data-action="closePrompt"
-                    style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px">✕</button>
+                    class="btn-modal-close" aria-label="Close">✕</button>
             </div>
             <textarea class="modal-textarea" id="modalPromptEditor"></textarea>
             <div class="modal-footer">
-                <button class="btn-clear" style="margin:0;padding:6px 16px" data-action="cancelPrompt"
+                <button class="btn-clear btn-action-sm px-4" data-action="cancelPrompt"
                     data-i18n="btn.cancel">취소</button>
                 <button class="btn-save" data-action="savePrompt" data-i18n="btn.save">저장</button>
             </div>
@@ -532,14 +522,14 @@
 
     <!-- Heartbeat Jobs Modal -->
     <div class="modal-overlay" id="heartbeatModal" role="dialog" aria-modal="true" aria-label="Heartbeat jobs">
-        <div class="modal-box" style="max-height:80vh;overflow-y:auto">
+        <div class="modal-box modal-scrollable" >
             <div class="modal-header">
                 <span data-i18n="modal.heartbeatTitle">💓 하트비트 작업</span>
                 <button data-action="closeHeartbeat"
-                    style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px">✕</button>
+                    class="btn-modal-close" aria-label="Close">✕</button>
             </div>
-            <div id="hbJobsList" style="padding:12px"></div>
-            <div style="padding:0 12px 12px">
+            <div id="hbJobsList" class="p-3"></div>
+            <div class="px-3 pb-3">
                 <button class="hb-add" data-action="addHeartbeat" data-i18n="hb.add">+ 새 하트비트 추가</button>
             </div>
         </div>
@@ -547,25 +537,25 @@
 
     <!-- Memory Modal -->
     <div class="modal-overlay" id="memoryModal" role="dialog" aria-modal="true" aria-label="Memory files">
-        <div class="modal-box" style="max-height:80vh;overflow-y:auto">
+        <div class="modal-box modal-scrollable" >
             <div class="modal-header">
                 <span data-i18n="modal.memoryTitle">🧠 메모리</span>
                 <button data-action="closeMemory"
-                    style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px">✕</button>
+                    class="btn-modal-close" aria-label="Close">✕</button>
             </div>
-            <div style="display:flex;border-bottom:1px solid var(--border);padding:0 12px">
-                <button class="mem-tab active" id="memTabBtnSettings"
-                    style="padding:6px 12px;border:none;background:none;color:var(--text);cursor:pointer;font-size:12px;border-bottom:2px solid transparent">⚙️
+            <div class="tab-strip" role="tablist">
+                <button class="mem-tab active mem-tab-btn" id="memTabBtnSettings" role="tab" aria-selected="true"
+                    >⚙️
                     Settings</button>
-                <button class="mem-tab" id="memTabBtnAdvOps"
-                    style="padding:6px 12px;border:none;background:none;color:var(--text-dim);cursor:pointer;font-size:12px;border-bottom:2px solid transparent">📊
+                <button class="mem-tab mem-tab-btn" id="memTabBtnAdvOps" role="tab" aria-selected="false"
+                    >📊
                     Status</button>
-                <button class="mem-tab" id="memTabBtnFiles"
-                    style="padding:6px 12px;border:none;background:none;color:var(--text-dim);cursor:pointer;font-size:12px;border-bottom:2px solid transparent">📂
+                <button class="mem-tab mem-tab-btn" id="memTabBtnFiles" role="tab" aria-selected="false"
+                    >📂
                     Files</button>
             </div>
-            <div id="advStatusBanner" style="display:none;padding:10px 12px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text-dim)"></div>
-            <div id="memTabSettings" style="padding:12px">
+            <div id="advStatusBanner" class="adv-status-banner" style="display:none"></div>
+            <div id="memTabSettings" class="p-3">
                 <div class="settings-row"><label data-i18n="label.enabled">활성화</label>
                     <div>
                         <button id="memOff" class="perm-btn" data-i18n="btn.off">끔</button>
@@ -574,7 +564,7 @@
                 </div>
                 <div class="settings-row"><label data-i18n="label.flushEvery">정리 주기</label>
                     <select id="memFlushEvery"
-                        style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                        class="select-sm">
                         <option value="5">5 QA</option>
                         <option value="10" selected>10 QA</option>
                         <option value="20">20 QA</option>
@@ -583,7 +573,7 @@
                 </div>
                 <div class="settings-row"><label>CLI</label>
                     <select id="memCli"
-                        style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                        class="select-sm">
                         <option value="">(active CLI)</option>
                         <option>claude</option>
                         <option>codex</option>
@@ -594,7 +584,7 @@
                 </div>
                 <div class="settings-row"><label>Model</label>
                     <select id="memModel"
-                        style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                        class="select-sm">
                         <option value="">(CLI default)</option>
                         <option>claude-haiku-4-5-20251001</option>
                         <option>claude-sonnet-4-5-20250929</option>
@@ -604,11 +594,11 @@
                 </div>
                 <div class="settings-row"><label>Save Path</label>
                     <span id="memPath"
-                        style="font-size:10px;color:var(--text-dim);font-family:monospace;word-break:break-all"></span>
+                        class="text-xs text-dim mono-path"></span>
                 </div>
                 <div class="settings-row"><label>Retention</label>
                     <select id="memRetention"
-                        style="font-size:11px;padding:4px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:4px">
+                        class="select-sm">
                         <option value="7">7 days</option>
                         <option value="30" selected>30 days</option>
                         <option value="90">90 days</option>
@@ -616,49 +606,49 @@
                     </select>
                 </div>
                 <div
-                    style="margin-top:8px;padding:6px;background:var(--bg);border-radius:4px;font-size:11px;color:var(--text-dim)">
+                    class="info-box">
                     💡 Counter: <span id="memCounter">0</span> / <span id="memThreshold">10</span> responses until next
                     flush
                 </div>
             </div>
-            <div id="memTabAdvOps" style="padding:12px;display:none">
-                <div class="settings-row"><label>Index State</label><span id="advIndexState" style="font-size:11px;color:var(--text-dim)">-</span></div>
-                <div class="settings-row"><label>Storage Root</label><span id="advStorageRoot" style="font-size:10px;color:var(--text-dim);font-family:monospace;word-break:break-all">-</span></div>
-                <div class="settings-row"><label>Indexed Files</label><span id="advIndexedFiles" style="font-size:11px;color:var(--text-dim)">0</span></div>
-                <div class="settings-row"><label>Indexed Chunks</label><span id="advIndexedChunks" style="font-size:11px;color:var(--text-dim)">0</span></div>
-                <div class="settings-row"><label>Last Indexed</label><span id="advLastIndexedAt" style="font-size:11px;color:var(--text-dim)">-</span></div>
-                <div class="settings-row"><label>Import Status</label><span id="advImportStatus" style="font-size:11px;color:var(--text-dim)">-</span></div>
-                <div class="settings-row"><label>Corrupted</label><span id="advCorruptedCount" style="font-size:11px;color:var(--text-dim)">0</span></div>
-                <div class="settings-row"><label>Last Expansion</label><span id="advLastExpansion" style="font-size:11px;color:var(--text-dim)">-</span></div>
-                <div class="settings-row"><label>Last Error</label><span id="advLastError" style="font-size:11px;color:var(--text-dim)">-</span></div>
+            <div id="memTabAdvOps" class="p-3" style="display:none">
+                <div class="settings-row"><label>Index State</label><span id="advIndexState" class="text-status">-</span></div>
+                <div class="settings-row"><label>Storage Root</label><span id="advStorageRoot" class="text-xs text-dim mono-path">-</span></div>
+                <div class="settings-row"><label>Indexed Files</label><span id="advIndexedFiles" class="text-status">0</span></div>
+                <div class="settings-row"><label>Indexed Chunks</label><span id="advIndexedChunks" class="text-status">0</span></div>
+                <div class="settings-row"><label>Last Indexed</label><span id="advLastIndexedAt" class="text-status">-</span></div>
+                <div class="settings-row"><label>Import Status</label><span id="advImportStatus" class="text-status">-</span></div>
+                <div class="settings-row"><label>Corrupted</label><span id="advCorruptedCount" class="text-status">0</span></div>
+                <div class="settings-row"><label>Last Expansion</label><span id="advLastExpansion" class="text-status">-</span></div>
+                <div class="settings-row"><label>Last Error</label><span id="advLastError" class="text-status">-</span></div>
                 <div
-                    style="margin-top:8px;padding:6px;background:var(--bg);border-radius:4px;font-size:11px;color:var(--text-dim)">
+                    class="info-box">
                     Fixed Snapshot Budget: 2800 chars / 4 chunks / 700 chars each
                 </div>
-                <div class="settings-row" style="margin-top:12px">
+                <div class="settings-row mt-3" >
                     <label>Bootstrap Sources</label>
-                    <div style="display:flex;flex-direction:column;gap:4px;font-size:11px">
+                    <div class="flex flex-col gap-1 text-sm">
                         <label><input type="checkbox" id="advImportCore" checked> MEMORY.md</label>
                         <label><input type="checkbox" id="advImportMarkdown" checked> memory/**/*.md</label>
                         <label><input type="checkbox" id="advImportKv" checked> SQLite KV memory</label>
                         <label><input type="checkbox" id="advImportClaudeSession" checked> external .claude session memory (read-only)</label>
                     </div>
                 </div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+                <div class="flex gap-2 flex-wrap mt-3">
                     <button class="btn-clear" id="advBootstrapBtn">🧩 Bootstrap</button>
                     <button class="btn-clear" id="advReindexBtn">🔄 Reindex</button>
                     <button class="btn-clear" id="advReimportBtn">📥 Re-import Legacy</button>
                     <button class="btn-clear" id="advOpenCorruptedBtn">📂 Open Corrupted Folder</button>
                 </div>
             </div>
-            <div id="memTabFiles" style="padding:12px;display:none">
-                <div style="font-size:12px;font-weight:600;margin-bottom:6px">Basic Memory Files</div>
+            <div id="memTabFiles" class="p-3" style="display:none">
+                <div class="section-header">Basic Memory Files</div>
                 <div id="basicMemoryFiles"></div>
-                <div style="font-size:12px;font-weight:600;margin:12px 0 6px">Structured Memory Files</div>
+                <div class="section-header mt-3">Structured Memory Files</div>
                 <div id="advancedMemoryFiles"></div>
-                <div style="font-size:12px;font-weight:600;margin:12px 0 6px">Corrupted / Quarantined</div>
+                <div class="section-header mt-3">Corrupted / Quarantined</div>
                 <div id="corruptedMemoryFiles"></div>
-                <div style="font-size:12px;font-weight:600;margin:12px 0 6px">Legacy Unmapped</div>
+                <div class="section-header mt-3">Legacy Unmapped</div>
                 <div id="legacyUnmappedFiles"></div>
             </div>
         </div>
@@ -672,35 +662,35 @@
 
     <!-- Template Editor Modal (Node Map + Editor 2-view) -->
     <div class="modal-overlay" id="templateModal" role="dialog" aria-modal="true" aria-label="Prompt templates">
-        <div class="modal-box" style="width:640px;max-width:90vw;max-height:85vh;display:flex;flex-direction:column">
+        <div class="modal-box modal-template" >
             <div class="modal-header">
                 <span id="templateModalTitle">📝 프롬프트 구조</span>
                 <button data-action="closeTemplate"
-                    style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:16px">✕</button>
+                    class="btn-modal-close" aria-label="Close">✕</button>
             </div>
             <!-- View 1: Node Map -->
-            <div id="templateTreeView" style="flex:1;overflow-y:auto;padding:12px 16px">
+            <div id="templateTreeView" class="template-tree-area">
                 <div id="templateTree"></div>
-                <div style="padding:8px 0;font-size:11px;color:var(--text-dim)">
+                <div class="template-hint">
                     🔒 클릭하면 프롬프트 내용 확인 · ⚠️ 개발자 모드에서 편집
                 </div>
             </div>
             <!-- View 2: Editor (hidden by default) -->
-            <div id="templateEditorView" style="display:none;flex-direction:column">
+            <div id="templateEditorView" class="template-editor-view" style="display:none">
                 <div
-                    style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--border)">
+                    class="template-editor-bar">
                     <button id="templateBack"
-                        style="background:none;border:1px solid var(--border);color:var(--text-dim);padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px">←
+                        class="btn-back">←
                         뒤로</button>
-                    <span id="templateEditorLabel" style="flex:1;font-size:12px;color:var(--text-dim)"></span>
+                    <span id="templateEditorLabel" class="flex-1 text-sm text-dim"></span>
                     <button id="templateDevToggle"
-                        style="background:var(--bg);border:1px solid var(--border);color:var(--text-dim);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:11px">🔧
+                        class="btn-dev-toggle">🔧
                         개발자 모드</button>
                 </div>
-                <textarea class="modal-textarea" id="templateEditor" readonly
-                    style="flex:1;min-height:350px;font-family:var(--font-mono);font-size:12px"></textarea>
+                <textarea class="modal-textarea template-textarea" id="templateEditor" readonly
+                    ></textarea>
                 <div class="modal-footer">
-                    <span id="templateVars" style="color:var(--text-dim);font-size:10px;margin-right:auto"></span>
+                    <span id="templateVars" class="text-xs text-dim mr-auto"></span>
                     <button class="btn-save" data-action="saveTemplate" style="display:none" id="templateSaveBtn">💾
                         저장</button>
                 </div>
@@ -708,7 +698,7 @@
         </div>
     </div>
 
-    <script type="module" src="/dist/bundle.js"></script>
+    <script type="module" src="/js/main.ts"></script>
 </body>
 
 </html>

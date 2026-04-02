@@ -1,7 +1,8 @@
 // ── WebSocket Connection ──
 import { state } from './state.js';
-import { setStatus, updateQueueBadge, addSystemMsg, appendAgentText, finalizeAgent, addMessage } from './ui.js';
+import { setStatus, updateQueueBadge, addSystemMsg, appendAgentText, finalizeAgent, addMessage, showLiveToolActivity, cleanupToolActivity } from './ui.js';
 import { t, getLang } from './features/i18n.js';
+import { getVirtualScroll } from './virtual-scroll.js';
 import type { OrcStateName } from './state.js';
 
 const ROADMAP_PHASES = ['P', 'A', 'B', 'C'] as const;
@@ -182,7 +183,8 @@ function applyOrcState(orcState: string, title?: string) {
 }
 
 export function connect(): void {
-    state.ws = new WebSocket(`ws://${location.host}?lang=${getLang()}`);
+    const wsBase = import.meta.env?.DEV ? 'ws://localhost:3458' : `ws://${location.host}`;
+    state.ws = new WebSocket(`${wsBase}?lang=${getLang()}`);
     state.ws.onmessage = (e: MessageEvent) => {
         const msg: WsMessage = JSON.parse(e.data as string);
         if (msg.type === 'agent_status') {
@@ -213,7 +215,7 @@ export function connect(): void {
                 addSystemMsg(t('ws.roundRetry', { round: msg.round || 0 }));
             }
         } else if (msg.type === 'agent_tool') {
-            addSystemMsg(`${msg.icon || ''} ${msg.label || ''}`, 'tool-activity');
+            showLiveToolActivity(`${msg.icon || ''} ${msg.label || ''}`);
         } else if (msg.type === 'agent_output') {
             appendAgentText(msg.text || '');
         } else if (msg.type === 'agent_retry') {
@@ -225,6 +227,8 @@ export function connect(): void {
         } else if (msg.type === 'orchestrate_done') {
             finalizeAgent(msg.text || '');
         } else if (msg.type === 'clear') {
+            cleanupToolActivity();
+            getVirtualScroll().clear();
             const el = document.getElementById('chatMessages');
             if (el) el.innerHTML = '';
         } else if (msg.type === 'agent_added' || msg.type === 'agent_updated' || msg.type === 'agent_deleted') {
@@ -238,7 +242,9 @@ export function connect(): void {
     state.ws.onopen = () => {
         console.log('[ws] connected');
         // Restore state: reload messages to stay in sync after reconnect
+        getVirtualScroll().clear();
         import('./ui.js').then(m => {
+            m.cleanupToolActivity();
             const el = document.getElementById('chatMessages');
             if (el) el.innerHTML = '';
             m.loadMessages();
@@ -261,7 +267,9 @@ export function connect(): void {
     };
     state.ws.onclose = () => {
         console.log('[ws] disconnected, reconnecting in 2s...');
+        import('./ui.js').then(m => m.cleanupToolActivity());
         setStatus('idle');
+        addSystemMsg('⚡ 연결 끊김 — 재연결 중...', 'tool-activity');
         setTimeout(connect, 2000);
     };
 }

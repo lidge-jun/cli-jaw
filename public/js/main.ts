@@ -1,6 +1,9 @@
 // ── App Entry Point ──
 // All event bindings happen here (no inline onclick in HTML)
 
+// CSS imports — bundled by Vite
+import 'katex/dist/katex.min.css';
+
 // ── Global Error Boundary ──
 window.addEventListener('unhandledrejection', (e) => {
     console.error('[unhandled]', e.reason);
@@ -47,6 +50,7 @@ import { loadCliRegistry, getCliKeys } from './constants.js';
 import { initAppName } from './features/appname.js';
 import { initSidebar, toggleLeft, toggleRight } from './features/sidebar.js';
 import { initTheme } from './features/theme.js';
+import { initGestures } from './features/gesture.js';
 import { initI18n, setLang, getLang, t } from './features/i18n.js';
 import { toggleRecording, cancelRecording } from './features/voice-recorder.js';
 
@@ -379,6 +383,12 @@ async function bootstrap(): Promise<void> {
     initSidebar();
     initTheme();
     initMsgCopy();
+    initGestures();
+
+    // Register Service Worker (production only — Vite HMR handles dev)
+    if ('serviceWorker' in navigator && !import.meta.env.DEV) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
 }
 
 void bootstrap().catch((err: unknown) => {

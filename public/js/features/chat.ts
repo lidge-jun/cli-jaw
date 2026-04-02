@@ -5,6 +5,9 @@ import { getPreferredLocale } from '../locale.js';
 import { t } from './i18n.js';
 import * as slashCmd from './slash-commands.js';
 import { api, apiJson, apiFire } from '../api.js';
+import { escapeHtml } from '../render.js';
+import { getVirtualScroll } from '../virtual-scroll.js';
+import { clearCache } from './idb-cache.js';
 
 interface CommandResult { code?: string; text?: string; type?: string; }
 interface MessageResult { queued?: boolean; pending?: number; continued?: boolean; error?: string; }
@@ -163,10 +166,10 @@ function renderFilePreview(): void {
     listEl.innerHTML = state.attachedFiles.map((f: File, i: number) => {
         const size = (f.size / 1024).toFixed(1);
         const isImg = f.type.startsWith('image/');
-        const thumb = isImg ? `<img src="${URL.createObjectURL(f)}" class="file-chip-thumb" alt="">` : '';
+        const thumb = isImg ? `<img src="${URL.createObjectURL(f)}" class="file-chip-thumb" alt="" onload="URL.revokeObjectURL(this.src)">` : '';
         return `<div class="file-chip">
             ${thumb}
-            <span class="file-chip-name">📎 ${f.name} (${size}KB)</span>
+            <span class="file-chip-name">📎 ${escapeHtml(f.name)} (${size}KB)</span>
             <button class="file-chip-remove" data-file-idx="${i}" title="Remove">✕</button>
         </div>`;
     }).join('');
@@ -174,8 +177,12 @@ function renderFilePreview(): void {
 
 export async function clearChat(): Promise<void> {
     apiFire('/api/clear', 'POST');
+    getVirtualScroll().clear();
     const chatEl = document.getElementById('chatMessages');
     if (chatEl) chatEl.innerHTML = '';
+    const { cleanupToolActivity } = await import('../ui.js');
+    cleanupToolActivity();
+    clearCache().catch(() => {});
 }
 
 // ── Auto-resize textarea ──

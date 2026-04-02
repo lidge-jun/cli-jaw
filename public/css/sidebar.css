@@ -19,7 +19,7 @@
 }
 
 .cli-dot.warn {
-    background: #fbbf24;
+    background: var(--warning);
     animation: pulse-warn 2s ease-in-out infinite;
 }
 
@@ -36,7 +36,7 @@
 }
 
 .cli-dot.missing {
-    background: #ef4444;
+    background: var(--error);
 }
 
 .cli-name {
@@ -176,9 +176,9 @@ textarea.prompt-editor {
 }
 
 .skill-toggle {
-    width: 36px;
-    height: 20px;
-    border-radius: 10px;
+    width: var(--toggle-w);
+    height: var(--toggle-h);
+    border-radius: calc(var(--toggle-h) / 2);
     border: none;
     cursor: pointer;
     position: relative;
@@ -196,20 +196,20 @@ textarea.prompt-editor {
 .skill-toggle::after {
     content: '';
     position: absolute;
-    top: 3px;
-    width: 14px;
-    height: 14px;
+    top: calc((var(--toggle-h) - var(--toggle-knob)) / 2);
+    width: var(--toggle-knob);
+    height: var(--toggle-knob);
     border-radius: 50%;
     background: var(--toggle-on);
     transition: left .2s;
 }
 
 .skill-toggle.on::after {
-    left: 19px;
+    left: calc(var(--toggle-w) - var(--toggle-knob) - (var(--toggle-h) - var(--toggle-knob)) / 2);
 }
 
 .skill-toggle.off::after {
-    left: 3px;
+    left: calc((var(--toggle-h) - var(--toggle-knob)) / 2);
 }
 
 .skill-desc {
@@ -233,7 +233,7 @@ textarea.prompt-editor {
     color: var(--text);
     border: 1px solid var(--accent);
     border-radius: 4px;
-    font-family: monospace;
+    font-family: var(--font-mono);
 }
 
 .custom-model-input:focus {
@@ -243,7 +243,7 @@ textarea.prompt-editor {
 
 .cwd-display {
     display: block;
-    font-family: monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     color: var(--text-dim);
     padding: 6px 8px;

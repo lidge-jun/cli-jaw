@@ -1,9 +1,74 @@
 // ── Render Helpers ──
-// Modular markdown rendering: marked.js + highlight.js + KaTeX + Mermaid
-// All libs loaded via CDN (defer), graceful fallback if unavailable
+// Modular markdown rendering: marked + highlight.js + KaTeX + Mermaid
+// All libs bundled via npm imports; mermaid lazy-loaded on first use
 
+import { marked, Renderer } from 'marked';
+import hljs from 'highlight.js/lib/core';
+import javascript from 'highlight.js/lib/languages/javascript';
+import typescript from 'highlight.js/lib/languages/typescript';
+import python from 'highlight.js/lib/languages/python';
+import bash from 'highlight.js/lib/languages/bash';
+import shell from 'highlight.js/lib/languages/shell';
+import json from 'highlight.js/lib/languages/json';
+import css from 'highlight.js/lib/languages/css';
+import xml from 'highlight.js/lib/languages/xml';
+import markdown from 'highlight.js/lib/languages/markdown';
+import yaml from 'highlight.js/lib/languages/yaml';
+import sql from 'highlight.js/lib/languages/sql';
+import rust from 'highlight.js/lib/languages/rust';
+import go from 'highlight.js/lib/languages/go';
+import java from 'highlight.js/lib/languages/java';
+import cpp from 'highlight.js/lib/languages/cpp';
+import diff from 'highlight.js/lib/languages/diff';
+import plaintext from 'highlight.js/lib/languages/plaintext';
+import katex from 'katex';
+import DOMPurify from 'dompurify';
 import { t } from './features/i18n.js';
 import { fixCjkPunctuationBoundary } from './cjk-fix.js';
+
+// Register hljs languages (core-only import: ~25KB vs ~1MB full)
+hljs.registerLanguage('javascript', javascript);
+hljs.registerLanguage('js', javascript);
+hljs.registerLanguage('typescript', typescript);
+hljs.registerLanguage('ts', typescript);
+hljs.registerLanguage('python', python);
+hljs.registerLanguage('py', python);
+hljs.registerLanguage('bash', bash);
+hljs.registerLanguage('shell', shell);
+hljs.registerLanguage('sh', shell);
+hljs.registerLanguage('json', json);
+hljs.registerLanguage('css', css);
+hljs.registerLanguage('xml', xml);
+hljs.registerLanguage('html', xml);
+hljs.registerLanguage('markdown', markdown);
+hljs.registerLanguage('md', markdown);
+hljs.registerLanguage('yaml', yaml);
+hljs.registerLanguage('yml', yaml);
+hljs.registerLanguage('sql', sql);
+hljs.registerLanguage('rust', rust);
+hljs.registerLanguage('rs', rust);
+hljs.registerLanguage('go', go);
+hljs.registerLanguage('java', java);
+hljs.registerLanguage('cpp', cpp);
+hljs.registerLanguage('c', cpp);
+hljs.registerLanguage('diff', diff);
+hljs.registerLanguage('plaintext', plaintext);
+hljs.registerLanguage('text', plaintext);
+
+// Lazy mermaid: loaded on first diagram encounter
+let mermaidModule: typeof import('mermaid') | null = null;
+
+async function getMermaid() {
+    if (!mermaidModule) {
+        mermaidModule = await import('mermaid');
+        mermaidModule.default.initialize({
+            startOnLoad: false,
+            theme: document.documentElement.getAttribute('data-theme') === 'light' ? 'default' : 'dark',
+            securityLevel: 'strict',
+        });
+    }
+    return mermaidModule.default;
+}
 
 export function escapeHtml(str: string): string {
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -12,20 +77,13 @@ export function escapeHtml(str: string): string {
 
 // ── XSS sanitization ──
 export function sanitizeHtml(html: string): string {
-    if (typeof DOMPurify !== 'undefined') {
-        return DOMPurify.sanitize(html, {
-            USE_PROFILES: { html: true, svg: true, svgFilters: true },
-            FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form'],
-            FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur'],
-            ADD_TAGS: ['use'],      // Mermaid SVG compatibility
-            ADD_ATTR: ['aria-hidden', 'xmlns', 'viewBox'],  // KaTeX + SVG compat
-        });
-    }
-    // CDN fallback: regex-based stripping
-    return html
-        .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, '')
-        .replace(/\bon\w+\s*=/gi, 'data-removed=')
-        .replace(/javascript\s*:/gi, 'about:blank');
+    return DOMPurify.sanitize(html, {
+        USE_PROFILES: { html: true, svg: true, svgFilters: true },
+        FORBID_TAGS: ['script', 'style', 'iframe', 'object', 'embed', 'form'],
+        FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur'],
+        ADD_TAGS: ['use'],
+        ADD_ATTR: ['aria-hidden', 'xmlns', 'viewBox'],
+    });
 }
 
 // ── Orchestration JSON stripping ──
@@ -87,12 +145,6 @@ export function unshieldMath(html: string, blocks: MathBlock[]): string {
     return html.replace(/\x00MATH-(\d+)\x00/g, (_, i) => {
         const block = blocks[Number(i)];
         if (!block) return `<code title="math placeholder error">[math error]</code>`;
-        if (typeof katex === 'undefined') {
-            // KaTeX CDN 미로드 시 fallback: <code> 표시
-            return block.displayMode
-                ? `<pre><code>${escapeHtml(block.tex)}</code></pre>`
-                : `<code>${escapeHtml(block.tex)}</code>`;
-        }
         try {
             return katex.renderToString(block.tex, {
                 displayMode: block.displayMode,
@@ -106,61 +158,60 @@ export function unshieldMath(html: string, blocks: MathBlock[]): string {
     });
 }
 
-// ── Mermaid deferred rendering ──
+// ── Mermaid deferred rendering (lazy-loaded) ──
 let mermaidId = 0;
 
 function renderMermaidBlocks(): void {
-    if (typeof mermaid === 'undefined') return;
-    document.querySelectorAll('.mermaid-pending').forEach(async (el) => {
+    const pending = document.querySelectorAll('.mermaid-pending');
+    if (!pending.length) return;
+    pending.forEach(async (el) => {
         el.classList.remove('mermaid-pending');
         const code = el.textContent || '';
         const id = `mermaid-${++mermaidId}`;
         try {
-            const { svg } = await mermaid.render(id, code);
+            const mm = await getMermaid();
+            const { svg } = await mm.render(id, code);
             el.innerHTML = sanitizeHtml(svg);
             el.classList.add('mermaid-rendered');
         } catch (err: unknown) {
             const errMsg = (err as { message?: string; str?: string })?.message
                 || (err as { str?: string })?.str || 'Unknown error';
             el.innerHTML = `
-                <div style="border:1px solid #ef4444;border-radius:6px;padding:8px;margin:4px 0">
-                    <div style="color:#ef4444;font-size:11px;margin-bottom:4px">⚠️ ${escapeHtml(t('mermaid.renderFail') || 'Mermaid render failed')}</div>
-                    <div style="color:#fbbf24;font-size:10px;margin-bottom:6px">${escapeHtml(errMsg.slice(0, 200))}</div>
-                    <pre style="margin:0;font-size:11px;overflow-x:auto"><code>${escapeHtml(code)}</code></pre>
+                <div class="mermaid-error">
+                    <div class="mermaid-error-title">⚠️ ${escapeHtml(t('mermaid.renderFail') || 'Mermaid render failed')}</div>
+                    <div class="mermaid-error-msg">${escapeHtml(errMsg.slice(0, 200))}</div>
+                    <pre class="mermaid-error-code"><code>${escapeHtml(code)}</code></pre>
                 </div>`;
         }
     });
 }
 
-// ── marked.js configuration ──
+// ── marked.js configuration (ES module — always available) ──
 let markedReady = false;
 
 function ensureMarked(): boolean {
     if (markedReady) return true;
-    if (typeof marked === 'undefined') return false;
 
-    const renderer = new marked.Renderer();
+    const renderer = new Renderer();
 
     // Code blocks: highlight.js + mermaid detection
     renderer.code = function ({ text, lang }: { text: string; lang?: string }) {
-        // Mermaid
         if (lang === 'mermaid') {
             return `<div class="mermaid-container mermaid-pending">${escapeHtml(text)}</div>`;
         }
-        // Highlight.js
         let highlighted = escapeHtml(text);
-        if (typeof hljs !== 'undefined' && lang && hljs.getLanguage(lang)) {
+        if (lang && hljs.getLanguage(lang)) {
             try {
                 highlighted = hljs.highlight(text, { language: lang }).value;
             } catch { /* fallback to escaped */ }
-        } else if (typeof hljs !== 'undefined') {
+        } else {
             try {
                 highlighted = hljs.highlightAuto(text).value;
             } catch { /* fallback */ }
         }
-        const labelText = lang ? escapeHtml(lang) : t('code.copy');
-        const label = `<span class="code-lang-label" data-lang="${lang ? escapeHtml(lang) : ''}">${labelText}</span>`;
-        return `<div class="code-block-wrapper">${label}<pre><code class="hljs${lang ? ` language-${escapeHtml(lang)}` : ''}">${highlighted}</code></pre></div>`;
+        const langDisplay = lang ? escapeHtml(lang) : '';
+        const copyLabel = t('code.copy') || 'Copy';
+        return `<div class="code-block"><div class="code-header"><span class="code-lang">${langDisplay}</span><button class="code-copy-btn" type="button" aria-label="${escapeHtml(copyLabel)}">${escapeHtml(copyLabel)}</button></div><pre><code class="hljs${lang ? ` language-${escapeHtml(lang)}` : ''}">${highlighted}</code></pre></div>`;
     };
 
     marked.setOptions({
@@ -169,35 +220,13 @@ function ensureMarked(): boolean {
         breaks: true,
     });
 
-    // Init mermaid
-    if (typeof window.mermaid !== 'undefined') {
-        window.mermaid.initialize({
-            startOnLoad: false,
-            theme: 'dark',
-            securityLevel: 'strict',
-        });
-    }
-
     markedReady = true;
     return true;
 }
 
-// ── Fallback regex renderer (CDN 실패 시) ──
-function renderFallback(text: string): string {
-    return escapeHtml(text)
-        .replace(/`{3,}(\w*)\n([\s\S]*?)`{3,}/g, '<pre><code>$2</code></pre>')
-        .replace(/`([^`]+)`/g, '<code>$1</code>')
-        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/^### (.+)$/gm, '<div style="font-weight:700;margin:8px 0 4px">$1</div>')
-        .replace(/^## (.+)$/gm, '<div style="font-weight:700;font-size:14px;margin:10px 0 4px">$1</div>')
-        .replace(/^# (.+)$/gm, '<div style="font-weight:700;font-size:16px;margin:12px 0 4px">$1</div>')
-        .replace(/\n/g, '<br>');
-}
-
-// ── Rehighlight all code blocks (call after hljs loads) ──
+// ── Rehighlight all code blocks ──
 export function rehighlightAll(): void {
-    if (typeof hljs === 'undefined') return;
-    document.querySelectorAll('.code-block-wrapper pre code').forEach(el => {
+    document.querySelectorAll('.code-block pre code, .code-block-wrapper pre code').forEach(el => {
         if ((el as HTMLElement).dataset.highlighted === 'yes') return;
         const lang = [...el.classList].find(c => c.startsWith('language-'))?.replace('language-', '');
         const raw = el.textContent || '';
@@ -212,12 +241,6 @@ export function rehighlightAll(): void {
     });
 }
 
-// Poll for hljs load and auto-rehighlight
-(function waitForHljs(): void {
-    if (typeof hljs !== 'undefined') { rehighlightAll(); return; }
-    setTimeout(waitForHljs, 200);
-})();
-
 // ── Copy button event delegation (one-time setup) ──
 let copyDelegationReady = false;
 
@@ -225,7 +248,27 @@ function ensureCopyDelegation(): void {
     if (copyDelegationReady) return;
     copyDelegationReady = true;
     document.addEventListener('click', (e: MouseEvent) => {
-        const label = (e.target as HTMLElement)?.closest('.code-lang-label') as HTMLElement | null;
+        const target = e.target as HTMLElement;
+        // New structure: .code-copy-btn inside .code-block
+        const copyBtn = target?.closest('.code-copy-btn') as HTMLElement | null;
+        if (copyBtn) {
+            const block = copyBtn.closest('.code-block');
+            if (!block) return;
+            const codeEl = block.querySelector('pre code');
+            if (!codeEl) return;
+            navigator.clipboard.writeText(codeEl.textContent || '').then(() => {
+                const orig = copyBtn.textContent || '';
+                copyBtn.textContent = t('code.copied');
+                copyBtn.classList.add('copied');
+                setTimeout(() => {
+                    copyBtn.textContent = orig;
+                    copyBtn.classList.remove('copied');
+                }, 1500);
+            }).catch(() => { /* clipboard API fail silently */ });
+            return;
+        }
+        // Legacy structure: .code-lang-label inside .code-block-wrapper
+        const label = target?.closest('.code-lang-label') as HTMLElement | null;
         if (!label) return;
         const wrapper = label.closest('.code-block-wrapper');
         if (!wrapper) return;
@@ -246,34 +289,23 @@ function ensureCopyDelegation(): void {
 // ── Main export ──
 export function renderMarkdown(text: string): string {
     const cleaned = stripOrchestration(text);
-    if (!cleaned) return `<em style="color:var(--text-dim)">${escapeHtml(t('orchestrator.dispatching'))}</em>`;
+    if (!cleaned) return `<em class="text-dim">${escapeHtml(t('orchestrator.dispatching'))}</em>`;
 
-    // Shield math before any processing (marked destroys $ delimiters)
     const { text: shielded, blocks: mathBlocks } = shieldMath(cleaned);
 
-    let html: string;
-    if (ensureMarked()) {
-        const fixed = fixCjkPunctuationBoundary(shielded);
-        html = marked.parse(fixed) as string;
-        // Wrap tables for horizontal scrolling
-        html = html.replace(/<table/g, '<div class="table-wrapper"><table').replace(/<\/table>/g, '</table></div>');
-    } else {
-        html = renderFallback(shielded);
-    }
+    ensureMarked();
+    const fixed = fixCjkPunctuationBoundary(shielded);
+    let html = marked.parse(fixed) as string;
+    html = html.replace(/<table/g, '<div class="table-wrapper"><table').replace(/<\/table>/g, '</table></div>');
 
-    // Unshield: restore math placeholders → KaTeX render
     html = unshieldMath(html, mathBlocks);
-
-    // XSS sanitization
     html = sanitizeHtml(html);
 
-    // Schedule mermaid rendering (needs DOM)
     requestAnimationFrame(() => {
         renderMermaidBlocks();
         rehighlightAll();
     });
 
-    // Ensure copy delegation is set up
     ensureCopyDelegation();
 
     return html;

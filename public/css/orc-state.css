@@ -56,7 +56,7 @@ body[data-orc-state].orc-pulse #chatMessages {
 .pabc-roadmap {
     display: none;
     align-items: center;
-    background: linear-gradient(135deg, var(--surface) 0%, #14141f 100%);
+    background: linear-gradient(135deg, var(--surface) 0%, color-mix(in srgb, var(--surface) 90%, #000) 100%);
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 12px 22px;
@@ -89,19 +89,19 @@ body[data-orc-state].orc-pulse #chatMessages {
     letter-spacing: 0.5px;
 }
 .pabc-dot.future {
-    background: var(--surface, #181825);
-    color: var(--text-dim, #6e6e8a);
+    background: var(--surface);
+    color: var(--text-dim);
     border: 1px solid var(--border);
 }
 .pabc-dot.active {
-    color: #fff;
+    color: var(--bg);
     border: 2px solid currentColor;
     box-shadow: 0 0 14px -3px currentColor, 0 0 4px -1px currentColor;
     transform: scale(1.1);
 }
 .pabc-dot.done {
-    color: rgba(255,255,255,0.9);
-    border: 1px solid rgba(255,255,255,0.1);
+    color: color-mix(in srgb, var(--bg) 90%, transparent);
+    border: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
     opacity: 0.65;
 }
 .pabc-dot[data-phase="P"].active, .pabc-dot[data-phase="P"].done { background: var(--orc-glow-P); }
@@ -112,13 +112,13 @@ body[data-orc-state].orc-pulse #chatMessages {
 .pabc-connector {
     flex: 1;
     height: 2px;
-    background: linear-gradient(90deg, var(--border) 0%, #2a2a3e 50%, var(--border) 100%);
+    background: linear-gradient(90deg, var(--border) 0%, color-mix(in srgb, var(--border) 60%, var(--surface)) 50%, var(--border) 100%);
     min-width: 44px;
     transition: all 0.5s ease;
     border-radius: 1px;
 }
 .pabc-connector.done {
-    background: linear-gradient(90deg, var(--text-dim) 0%, #6e6e8a 50%, var(--text-dim) 100%);
+    background: linear-gradient(90deg, var(--text-dim) 0%, color-mix(in srgb, var(--text-dim) 70%, var(--surface)) 50%, var(--text-dim) 100%);
     box-shadow: 0 0 6px -2px var(--text-dim);
 }
 
@@ -143,7 +143,7 @@ body[data-orc-state].orc-pulse #chatMessages {
 .pabc-tagline {
     font-family: var(--font-mono);
     font-size: 7px;
-    color: var(--text-dim, #6e6e8a);
+    color: var(--text-dim);
     letter-spacing: 2px;
     text-transform: uppercase;
     margin-top: 2px;
@@ -184,25 +184,25 @@ body[data-orc-state].orc-pulse #chatMessages {
 
 /* ─── Light Theme Overrides ─── */
 [data-theme="light"] .pabc-roadmap {
-    background: linear-gradient(135deg, var(--surface) 0%, #f0f0f5 100%);
+    background: linear-gradient(135deg, var(--surface) 0%, color-mix(in srgb, var(--surface) 90%, #000) 100%);
     box-shadow: 0 2px 12px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6);
 }
 [data-theme="light"] .pabc-dot.future {
-    background: #eef0f5;
-    color: #9a9ab0;
+    background: var(--surface);
+    color: var(--text-dim);
 }
 [data-theme="light"] .pabc-dot.active {
-    color: #fff;
+    color: var(--bg);
 }
 [data-theme="light"] .pabc-dot.done {
-    color: #fff;
+    color: var(--bg);
     border-color: rgba(0,0,0,0.06);
 }
 [data-theme="light"] .pabc-connector {
-    background: linear-gradient(90deg, #d8d8e4 0%, #e4e4ef 50%, #d8d8e4 100%);
+    background: linear-gradient(90deg, var(--border) 0%, color-mix(in srgb, var(--border) 60%, var(--surface)) 50%, var(--border) 100%);
 }
 [data-theme="light"] .pabc-connector.done {
-    background: linear-gradient(90deg, #b0b0c0 0%, #c0c0d0 50%, #b0b0c0 100%);
+    background: linear-gradient(90deg, var(--text-dim) 0%, color-mix(in srgb, var(--text-dim) 70%, var(--surface)) 50%, var(--text-dim) 100%);
     box-shadow: none;
 }
 [data-theme="light"] .shark-runner {

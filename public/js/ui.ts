@@ -4,6 +4,8 @@ import { renderMarkdown, escapeHtml, stripOrchestration } from './render.js';
 import { getAppName } from './features/appname.js';
 import { t } from './features/i18n.js';
 import { api } from './api.js';
+import { cacheMessages, getCachedMessages, appendCachedMessage, clearCache } from './features/idb-cache.js';
+import { getVirtualScroll, VS_THRESHOLD } from './virtual-scroll.js';
 
 interface ToolLogEntry { icon: string; label: string; }
 interface MessageItem { role: string; content: string; }
@@ -17,9 +19,11 @@ export function setStatus(s: string): void {
     if (s === 'running') {
         if (badge) { badge.className = 'status-badge status-running'; badge.textContent = '⏳ running'; }
         if (btn) { btn.textContent = '■'; btn.title = t('btn.stop'); btn.classList.add('stop-mode'); }
+        showSkeleton();
     } else {
         if (badge) { badge.className = 'status-badge status-idle'; badge.textContent = '⚡ idle'; }
         if (btn) { btn.textContent = '➤'; btn.title = 'Send'; btn.classList.remove('stop-mode'); }
+        removeSkeleton();
         updateQueueBadge(0);
     }
 }
@@ -29,7 +33,7 @@ export function updateQueueBadge(count: number): void {
     if (!el) {
         el = document.createElement('span');
         el.id = 'queueBadge';
-        el.style.cssText = 'position:absolute;top:-6px;right:-6px;background:#f80;color:#fff;border-radius:50%;font-size:11px;min-width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-weight:bold';
+        el.className = 'queue-badge';
         const sendBtn = document.getElementById('btnSend');
         if (sendBtn?.parentElement) sendBtn.parentElement.style.position = 'relative';
         if (sendBtn) { sendBtn.style.position = 'relative'; sendBtn.appendChild(el); }
@@ -38,9 +42,36 @@ export function updateQueueBadge(count: number): void {
     el.style.display = count > 0 ? 'flex' : 'none';
 }
 
+function showSkeleton(): void {
+    const container = document.getElementById('chatMessages');
+    if (!container || container.querySelector('.skeleton-msg')) return;
+    hideEmptyState();
+    const skel = document.createElement('div');
+    skel.className = 'skeleton-msg';
+    skel.innerHTML = '<div class="skeleton-line"></div><div class="skeleton-line"></div><div class="skeleton-line"></div>';
+    container.appendChild(skel);
+    scrollToBottom();
+}
+
+function removeSkeleton(): void {
+    document.querySelectorAll('.skeleton-msg').forEach(el => el.remove());
+}
+
+function hideEmptyState(): void {
+    document.getElementById('emptyState')?.classList.remove('visible');
+}
+
+function showEmptyState(): void {
+    const container = document.getElementById('chatMessages');
+    if (container && container.children.length === 0) {
+        document.getElementById('emptyState')?.classList.add('visible');
+    }
+}
+
 export function addSystemMsg(text: string, extraClass?: string, type?: string): void {
     const container = document.getElementById('chatMessages');
     if (!container) return;
+    hideEmptyState();
     const div = document.createElement('div');
     const typeClass = type ? ` msg-type-${type}` : '';
     div.className = 'msg msg-system' + typeClass + (extraClass ? ' ' + extraClass : '');
@@ -49,9 +80,33 @@ export function addSystemMsg(text: string, extraClass?: string, type?: string): 
     container.scrollTop = container.scrollHeight;
 }
 
+export function cleanupToolActivity(): void {
+    document.querySelectorAll('.tool-activity-live').forEach(el => el.remove());
+    document.querySelectorAll('.msg-system.tool-activity').forEach(el => el.remove());
+    state.currentAgentDiv = null;
+}
+
+export function showLiveToolActivity(label: string): void {
+    removeSkeleton();
+    if (!state.currentAgentDiv || !state.currentAgentDiv.isConnected) {
+        state.currentAgentDiv = addMessage('agent', '');
+    }
+    const msgDiv = state.currentAgentDiv as HTMLElement;
+    let liveEl = msgDiv.querySelector('.tool-activity-live') as HTMLElement | null;
+    if (!liveEl) {
+        liveEl = document.createElement('div');
+        liveEl.className = 'tool-activity-live';
+        const content = msgDiv.querySelector('.msg-content');
+        if (content) content.before(liveEl);
+    }
+    liveEl.innerHTML = `<span class="tool-status-dot running"></span><span>${escapeHtml(label)}</span>`;
+    scrollToBottom();
+}
+
 export function appendAgentText(text: string): void {
     if (!text) return;
-    if (!state.currentAgentDiv) {
+    removeSkeleton();
+    if (!state.currentAgentDiv || !state.currentAgentDiv.isConnected) {
         state.currentAgentDiv = addMessage('agent', '');
     }
     const content = (state.currentAgentDiv as HTMLElement)?.querySelector('.msg-content');
@@ -67,18 +122,24 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
     if (!state.currentAgentDiv && now - lastFinalizeTs < 500) return;
 
     document.querySelectorAll('.msg-system.tool-activity').forEach(el => el.remove());
-    if (text) {
-        if (!state.currentAgentDiv) {
+    document.querySelectorAll('.tool-activity-live').forEach(el => el.remove());
+    removeSkeleton();
+    const hasTools = toolLog && toolLog.length > 0;
+    if (text || hasTools) {
+        if (!state.currentAgentDiv || !state.currentAgentDiv.isConnected) {
             state.currentAgentDiv = addMessage('agent', '');
         }
         const content = (state.currentAgentDiv as HTMLElement)?.querySelector('.msg-content');
         let toolHtml = '';
-        if (toolLog && toolLog.length > 0) {
+        if (hasTools) {
             const counts: Record<string, number> = {};
-            toolLog.forEach(tl => { counts[tl.icon] = (counts[tl.icon] || 0) + 1; });
-            const summaryParts = Object.entries(counts).map(([icon, n]) => `${icon}×${n}`).join(' ');
-            const logLines = toolLog.map(tl => `${tl.icon} ${escapeHtml(tl.label)}`).join('\n');
-            toolHtml = `<details class="tool-summary"><summary>${summaryParts}</summary><div class="tool-log">${logLines}</div></details>`;
+            toolLog!.forEach(tl => { counts[tl.icon] = (counts[tl.icon] || 0) + 1; });
+            const summaryParts = Object.entries(counts).map(([icon, n]) => `${escapeHtml(icon)}×${n}`).join(' ');
+            const toolId = `td-${Date.now()}`;
+            const logLines = toolLog!.map(tl =>
+                `<div class="tool-item"><div class="tool-item-header"><span class="tool-item-icon">${escapeHtml(tl.icon)}</span><span class="tool-item-label">${escapeHtml(tl.label)}</span></div></div>`
+            ).join('');
+            toolHtml = `<div class="tool-group"><button class="tool-group-summary" aria-expanded="false" aria-controls="${toolId}"><span class="tool-status-dot done"></span><span class="tool-group-summary-text">${summaryParts}</span><span class="tool-group-chevron">▾</span></button><div class="tool-details collapsed" id="${toolId}">${logLines}</div></div>`;
         }
         if (content) content.innerHTML = toolHtml + renderMarkdown(text);
         if (content) content.setAttribute('data-raw', stripOrchestration(text));
@@ -87,14 +148,21 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
     lastFinalizeTs = Date.now();
     setStatus('idle');
     loadStats();
+    // Cache agent response for offline
+    if (text) appendCachedMessage('assistant', text).catch(() => {});
 }
 
 export function addMessage(role: string, text: string): HTMLDivElement {
     const container = document.getElementById('chatMessages');
+    hideEmptyState();
+    removeSkeleton();
+
+    const rendered = renderMarkdown(text);
+    const label = escapeHtml(role === 'user' ? t('msg.you') : getAppName());
+
     const div = document.createElement('div');
     div.className = `msg msg-${role}`;
-    const rendered = renderMarkdown(text);
-    div.innerHTML = `<div class="msg-label">${role === 'user' ? t('msg.you') : getAppName()}</div><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy"></button>`;
+    div.innerHTML = `<div class="msg-label">${label}</div><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy"></button>`;
     const contentEl = div.querySelector('.msg-content');
     if (contentEl) contentEl.setAttribute('data-raw', stripOrchestration(text));
     container?.appendChild(div);
@@ -136,9 +204,39 @@ export async function loadStats(): Promise<void> {
 }
 
 export async function loadMessages(): Promise<void> {
-    const msgs = await api<MessageItem[]>('/api/messages');
-    if (!msgs) return;
-    msgs.forEach(m => addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content));
+    try {
+        const msgs = await api<MessageItem[]>('/api/messages');
+        if (msgs && msgs.length > 0) {
+            const vs = getVirtualScroll();
+            if (msgs.length >= VS_THRESHOLD) {
+                // Bulk load via virtual scroll for large histories
+                for (const m of msgs) {
+                    const role = m.role === 'assistant' ? 'agent' : m.role;
+                    const rendered = renderMarkdown(m.content);
+                    const label = escapeHtml(role === 'user' ? t('msg.you') : getAppName());
+                    const html = `<div class="msg msg-${role}"><div class="msg-label">${label}</div><div class="msg-content" data-raw="${escapeHtml(stripOrchestration(m.content))}">${rendered}</div><button class="msg-copy" title="Copy"></button></div>`;
+                    vs.addItem(crypto.randomUUID(), html);
+                }
+                vs.scrollToBottom();
+            } else {
+                msgs.forEach(m => addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content));
+            }
+            // Cache for offline use
+            cacheMessages(msgs.map(m => ({
+                role: m.role, content: m.content, timestamp: Date.now(),
+            }))).catch(() => {});
+            showEmptyState();
+            return;
+        }
+    } catch { /* server unreachable — try cache */ }
+
+    // Offline fallback: load from IndexedDB
+    const cached = await getCachedMessages();
+    if (cached.length > 0) {
+        cached.forEach(m => addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content));
+        addMessage('system', '📴 오프라인 모드 — 캐시된 메시지 표시 중');
+    }
+    showEmptyState();
 }
 
 export async function loadMemory(): Promise<void> {
@@ -159,7 +257,24 @@ export async function loadMemory(): Promise<void> {
 // ── Message copy delegation ──
 export function initMsgCopy(): void {
     document.getElementById('chatMessages')?.addEventListener('click', (e) => {
-        const btn = (e.target as HTMLElement)?.closest('.msg-copy') as HTMLElement | null;
+        const target = e.target as HTMLElement;
+
+        // Tool group toggle (event delegation instead of inline onclick)
+        const summary = target.closest('.tool-group-summary') as HTMLElement | null;
+        if (summary) {
+            const group = summary.closest('.tool-group');
+            const details = summary.nextElementSibling as HTMLElement;
+            if (group && details) {
+                const isExpanding = !group.classList.contains('expanded');
+                group.classList.toggle('expanded');
+                details.classList.toggle('collapsed');
+                summary.setAttribute('aria-expanded', isExpanding ? 'true' : 'false');
+            }
+            return;
+        }
+
+        // Message copy
+        const btn = target.closest('.msg-copy') as HTMLElement | null;
         if (!btn) return;
         const msg = btn.closest('.msg');
         const content = msg?.querySelector('.msg-content') as HTMLElement | null;
@@ -167,7 +282,11 @@ export function initMsgCopy(): void {
         const text = content.getAttribute('data-raw') || content.innerText || content.textContent || '';
         navigator.clipboard.writeText(text).then(() => {
             btn.classList.add('copied');
-            setTimeout(() => btn.classList.remove('copied'), 600);
+            btn.textContent = '✓';
+            setTimeout(() => {
+                btn.classList.remove('copied');
+                btn.textContent = '';
+            }, 600);
         }).catch(() => { });
     });
 }

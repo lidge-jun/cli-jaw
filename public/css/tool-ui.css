@@ -1,0 +1,207 @@
+/* ── Tool Use UI ─────────────────────────────────────
+   Collapsible tool call groups within agent messages.
+   Phase 4 of frontend modernization.
+───────────────────────────────────────────────────── */
+
+/* ── Tool Group Container ── */
+.tool-group {
+    margin: 0 0 var(--space-3);
+    font-size: var(--text-sm);
+}
+
+/* ── Summary Button ── */
+.tool-group-summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    background: none;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: var(--space-1) var(--space-3);
+    font-family: var(--font-ui);
+    font-size: var(--text-xs);
+    transition: color var(--duration-fast), border-color var(--duration-fast);
+    width: 100%;
+    text-align: left;
+}
+
+.tool-group-summary:hover {
+    color: var(--text);
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.tool-group-summary-text { flex: 1; }
+
+.tool-group-duration {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-dim);
+}
+
+.tool-group-chevron {
+    font-size: var(--text-xs);
+    transition: transform var(--duration-fast);
+    display: inline-block;
+}
+
+.tool-group.expanded .tool-group-chevron {
+    transform: rotate(180deg);
+}
+
+/* ── Status Dots ── */
+.tool-status-dot,
+.tool-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: inline-block;
+}
+
+.tool-status-dot.running,
+.tool-dot.running {
+    background: var(--warning);
+    animation: toolDotPulse 1.5s ease-in-out infinite;
+}
+
+.tool-status-dot.done,
+.tool-dot.done {
+    background: var(--success);
+}
+
+.tool-dot.pending {
+    background: var(--text-dim);
+    opacity: 0.5;
+}
+
+.tool-status-dot.error,
+.tool-dot.error {
+    background: var(--error);
+}
+
+@keyframes toolDotPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.3); }
+}
+
+/* ── Collapsible Details ── */
+.tool-details {
+    overflow: hidden;
+    max-height: 2000px;
+    transition: max-height var(--duration-slow) ease-out, opacity var(--duration-base);
+    padding-left: var(--space-4);
+    border-left: 1px solid var(--border);
+    margin-left: var(--space-1);
+    margin-top: var(--space-1);
+}
+
+.tool-details.collapsed {
+    max-height: 0;
+    opacity: 0;
+    pointer-events: none;
+    margin-top: 0;
+}
+
+/* ── Individual Tool Items ── */
+.tool-item {
+    padding: var(--space-1) 0;
+}
+
+.tool-item + .tool-item {
+    border-top: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.tool-item-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+}
+
+.tool-item-icon {
+    flex-shrink: 0;
+}
+
+.tool-item-label {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tool-item-time {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-dim);
+    flex-shrink: 0;
+}
+
+/* ── Live Tool Activity ── */
+.tool-activity-live {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+    color: var(--text-dim);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-2);
+    animation: msgEnterAgent 0.2s ease-out;
+}
+
+.tool-activity-live .tool-status-dot {
+    animation: toolDotPulse 1.5s ease-in-out infinite;
+    background: var(--warning);
+}
+
+/* ── Legacy .tool-summary compat (Phase 2 <details>) ── */
+.tool-summary {
+    font-size: var(--text-xs);
+    color: var(--text-dim);
+    margin-bottom: var(--space-2);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-1) var(--space-3);
+}
+
+.tool-summary summary {
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.tool-summary summary::before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    flex-shrink: 0;
+}
+
+.tool-summary .tool-log {
+    margin-top: var(--space-1);
+    padding-top: var(--space-1);
+    border-top: 1px dashed var(--border);
+    white-space: pre-wrap;
+    line-height: 1.6;
+    font-family: var(--font-mono);
+}
+
+/* ── Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+    .tool-status-dot.running,
+    .tool-dot.running,
+    .tool-activity-live .tool-status-dot {
+        animation: none;
+    }
+}

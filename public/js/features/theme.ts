@@ -1,13 +1,24 @@
 // ── Theme Toggle ──
 // Dark/Light theme switching with localStorage persistence
-// Swaps CSS data-theme attribute + highlight.js stylesheet
+// hljs themes bundled via npm (no CDN dependency)
+
+import githubDark from 'highlight.js/styles/github-dark.css?inline';
+import githubLight from 'highlight.js/styles/github.css?inline';
 
 const STORAGE_KEY = 'theme';
-const HLJS_DARK = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github-dark.min.css';
-const HLJS_LIGHT = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.11.1/styles/github.min.css';
+let hljsStyleEl: HTMLStyleElement | null = null;
+
+function applyHljsTheme(theme: string): void {
+    const css = theme === 'light' ? githubLight : githubDark;
+    if (!hljsStyleEl) {
+        hljsStyleEl = document.createElement('style');
+        hljsStyleEl.id = 'hljsTheme';
+        document.head.appendChild(hljsStyleEl);
+    }
+    hljsStyleEl.textContent = css;
+}
 
 export function initTheme(): void {
-    // Detect: localStorage → OS preference → default dark
     const saved = localStorage.getItem(STORAGE_KEY);
     const prefer = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
     const theme = saved || prefer;
@@ -26,15 +37,10 @@ function toggleTheme(): void {
 function applyTheme(theme: string): void {
     document.documentElement.setAttribute('data-theme', theme);
 
-    // Update button icon (SVG sun/moon swap)
     const btn = document.getElementById('toggleTheme');
     if (btn) {
         btn.classList.toggle('is-light', theme === 'light');
     }
 
-    // Swap highlight.js theme
-    const hljsLink = document.getElementById('hljsTheme') as HTMLLinkElement | null;
-    if (hljsLink) {
-        hljsLink.href = theme === 'dark' ? HLJS_DARK : HLJS_LIGHT;
-    }
+    applyHljsTheme(theme);
 }
