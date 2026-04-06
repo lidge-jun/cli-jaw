@@ -6,8 +6,8 @@ import { t } from './features/i18n.js';
 import { api } from './api.js';
 import { cacheMessages, getCachedMessages, appendCachedMessage, clearCache } from './features/idb-cache.js';
 import { getVirtualScroll, VS_THRESHOLD } from './virtual-scroll.js';
-
-interface ToolLogEntry { icon: string; label: string; }
+import { createStreamRenderer, appendChunk, finalizeStream, type StreamState } from './streaming-render.js';
+import { buildToolGroupHtml, renderLiveToolActivity, cleanupToolElements, type ToolLogEntry } from './features/tool-ui.js';
 interface MessageItem { role: string; content: string; }
 interface MemoryItem { key: string; value: string; }
 
@@ -85,8 +85,7 @@ export function addSystemMsg(text: string, extraClass?: string, type?: string): 
 }
 
 export function cleanupToolActivity(): void {
-    document.querySelectorAll('.tool-activity-live').forEach(el => el.remove());
-    document.querySelectorAll('.msg-system.tool-activity').forEach(el => el.remove());
+    cleanupToolElements();
     state.currentAgentDiv = null;
 }
 
@@ -95,26 +94,24 @@ export function showLiveToolActivity(label: string): void {
     if (!state.currentAgentDiv || !state.currentAgentDiv.isConnected) {
         state.currentAgentDiv = addMessage('agent', '');
     }
-    const msgDiv = state.currentAgentDiv as HTMLElement;
-    let liveEl = msgDiv.querySelector('.tool-activity-live') as HTMLElement | null;
-    if (!liveEl) {
-        liveEl = document.createElement('div');
-        liveEl.className = 'tool-activity-live';
-        const content = msgDiv.querySelector('.msg-content');
-        if (content) content.before(liveEl);
-    }
-    liveEl.innerHTML = `<span class="tool-status-dot running"></span><span>${escapeHtml(label)}</span>`;
+    renderLiveToolActivity(state.currentAgentDiv as HTMLElement, label);
     scrollToBottom();
 }
+
+let currentStream: StreamState | null = null;
 
 export function appendAgentText(text: string): void {
     if (!text) return;
     removeSkeleton();
     if (!state.currentAgentDiv || !state.currentAgentDiv.isConnected) {
         state.currentAgentDiv = addMessage('agent', '');
+        currentStream = null;
     }
     const content = (state.currentAgentDiv as HTMLElement)?.querySelector('.msg-content');
-    if (content) content.textContent += text;
+    if (content) {
+        if (!currentStream) currentStream = createStreamRenderer(content as HTMLElement);
+        appendChunk(currentStream, text);
+    }
     scrollToBottom();
 }
 
@@ -125,8 +122,7 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
     const now = Date.now();
     if (!state.currentAgentDiv && now - lastFinalizeTs < 500) return;
 
-    document.querySelectorAll('.msg-system.tool-activity').forEach(el => el.remove());
-    document.querySelectorAll('.tool-activity-live').forEach(el => el.remove());
+    cleanupToolElements();
     removeSkeleton();
     const hasTools = toolLog && toolLog.length > 0;
     if (text || hasTools) {
@@ -134,20 +130,14 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
             state.currentAgentDiv = addMessage('agent', '');
         }
         const content = (state.currentAgentDiv as HTMLElement)?.querySelector('.msg-content');
-        let toolHtml = '';
-        if (hasTools) {
-            const counts: Record<string, number> = {};
-            toolLog!.forEach(tl => { counts[tl.icon] = (counts[tl.icon] || 0) + 1; });
-            const summaryParts = Object.entries(counts).map(([icon, n]) => `${escapeHtml(icon)}×${n}`).join(' ');
-            const toolId = `td-${Date.now()}`;
-            const logLines = toolLog!.map(tl =>
-                `<div class="tool-item"><div class="tool-item-header"><span class="tool-item-icon">${escapeHtml(tl.icon)}</span><span class="tool-item-label">${escapeHtml(tl.label)}</span></div></div>`
-            ).join('');
-            toolHtml = `<div class="tool-group"><button class="tool-group-summary" aria-expanded="false" aria-controls="${toolId}"><span class="tool-status-dot done"></span><span class="tool-group-summary-text">${summaryParts}</span><span class="tool-group-chevron">▾</span></button><div class="tool-details collapsed" id="${toolId}">${logLines}</div></div>`;
-        }
-        if (content) content.innerHTML = toolHtml + renderMarkdown(text);
-        if (content) content.setAttribute('data-raw', stripOrchestration(text));
+        // Finalize rAF stream if active, otherwise use raw text
+        const finalText = currentStream ? finalizeStream(currentStream) || text : text;
+        currentStream = null;
+        const toolHtml = hasTools ? buildToolGroupHtml(toolLog!) : '';
+        if (content) content.innerHTML = toolHtml + renderMarkdown(finalText);
+        if (content) content.setAttribute('data-raw', stripOrchestration(finalText));
     }
+    currentStream = null;
     state.currentAgentDiv = null;
     lastFinalizeTs = Date.now();
     setStatus('idle');
