@@ -129,7 +129,7 @@ test('ROLE_PRESETS: research preset is available', () => {
     assert.ok(research, 'research preset should exist');
     assert.equal(
         research?.prompt,
-        'Search, codebase exploration, uncertainty reduction, read-only reports',
+        'Research employee — search, codebase exploration, uncertainty reduction, read-only reports',
     );
 });
 

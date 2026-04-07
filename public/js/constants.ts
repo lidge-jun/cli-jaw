@@ -134,10 +134,10 @@ export interface RolePreset {
 }
 
 export const ROLE_PRESETS: readonly RolePreset[] = [
-    { value: 'frontend', labelKey: 'role.label.frontend', label: 'Frontend', prompt: 'UI/UX, CSS, components', skill: 'dev-frontend' },
-    { value: 'backend', labelKey: 'role.label.backend', label: 'Backend', prompt: 'API, DB, server logic', skill: 'dev-backend' },
-    { value: 'research', labelKey: 'role.label.research', label: 'Research', prompt: 'Search, codebase exploration, uncertainty reduction, read-only reports', skill: 'research-worker' },
-    { value: 'data', labelKey: 'role.label.data', label: 'Data', prompt: 'Data pipeline, analysis, ML', skill: 'dev-data' },
-    { value: 'docs', labelKey: 'role.label.docs', label: 'Docs', prompt: 'Documentation, README, API docs', skill: 'documentation' },
+    { value: 'frontend', labelKey: 'role.label.frontend', label: 'Frontend', prompt: 'Frontend employee — UI/UX, CSS, components', skill: 'dev-frontend' },
+    { value: 'backend', labelKey: 'role.label.backend', label: 'Backend', prompt: 'Backend employee — API, DB, server logic', skill: 'dev-backend' },
+    { value: 'research', labelKey: 'role.label.research', label: 'Research', prompt: 'Research employee — search, codebase exploration, uncertainty reduction, read-only reports', skill: 'research-worker' },
+    { value: 'data', labelKey: 'role.label.data', label: 'Data', prompt: 'Data employee — data pipeline, analysis, ML', skill: 'dev-data' },
+    { value: 'docs', labelKey: 'role.label.docs', label: 'Docs', prompt: 'Docs employee — documentation, README, API docs', skill: 'documentation' },
     { value: 'custom', labelKey: 'role.label.custom', label: 'Custom...', prompt: '', skill: null },
 ] as const;

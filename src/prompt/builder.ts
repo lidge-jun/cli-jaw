@@ -480,10 +480,10 @@ export function getEmployeePromptV2(emp: any, role: any, currentPhase: number | 
         }
     }
 
-    // ─── 4. Worker context (PABCD-aware)
+    // ─── 4. Employee context (PABCD-aware)
     const workerContexts = parseWorkerContexts();
     const ctx = workerContexts[phase] || workerContexts[3];
-    prompt += `\n\n## Worker Role\n${ctx}`;
+    prompt += `\n\n## Employee Role\n${ctx}`;
     prompt += `\n\n## Execution Rules`;
     prompt += `\n- Read the worklog first to understand context`;
     prompt += `\n- Do not touch files outside your assigned scope`;

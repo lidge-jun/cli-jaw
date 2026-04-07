@@ -77,25 +77,25 @@ Otherwise revise and present again.
 
 User says:`,
 
-  Ab2: `[PLAN AUDIT — Worker Results]
-Below are the plan audit results from the verification worker.
-If issues found: fix the plan and re-audit (output worker JSON again).
+  Ab2: `[PLAN AUDIT — Employee Results]
+Below are the plan audit results from the verification employee.
+If issues found: fix the plan and re-audit (output employee JSON again).
 If PASS: report results to the user and wait for approval.
 When user approves, run \`cli-jaw orchestrate B\` to advance to Build.
 
 ⛔ STOP after reporting. WAIT for user approval.
 
-Worker results:`,
+Employee results:`,
 
-  Bb2: `[IMPLEMENTATION REVIEW — Worker Results]
+  Bb2: `[IMPLEMENTATION REVIEW — Employee Results]
 Below are verification results for your code.
-If NEEDS_FIX: fix and re-verify (output worker JSON again).
+If NEEDS_FIX: fix and re-verify (output employee JSON again).
 If DONE: report results to the user and wait for approval.
 When user approves, run \`cli-jaw orchestrate C\` to advance to Check.
 
 ⛔ STOP after reporting. WAIT for user approval.
 
-Worker results:`,
+Employee results:`,
 };
 
 export function getPrefix(state: OrcStateName, source: 'user' | 'worker' = 'user'): string | null {
@@ -130,20 +130,20 @@ You will receive user feedback with a [PLANNING MODE] prefix. Revise until appro
   A: `[PABCD — A: PLAN AUDIT]
 
 You are now in Plan Audit mode. This phase audits YOUR PLAN — not the code.
-A worker must verify that your plan from P phase is feasible and safe before any coding begins.
+An employee must verify that your plan from P phase is feasible and safe before any coding begins.
 
-⚠️ You MUST output a worker JSON to audit the plan. Do NOT skip this step.
+⚠️ You MUST output an employee JSON to audit the plan. Do NOT skip this step.
 ⚠️ Do NOT say "audit is unnecessary" — every plan must be verified before coding.
-⚠️ The worker checks: import paths exist, function signatures match real code, no integration risks.
+⚠️ The employee checks: import paths exist, function signatures match real code, no integration risks.
 
-Output this worker JSON now:
+Output this employee JSON now:
 \`\`\`json
 {"subtasks":[{"agent":"Research","task":"⛔ READ-ONLY: Do NOT create, modify, or delete ANY files. You are an auditor, not a builder. Audit the PLAN (not code). Verify: 1) All imports in the plan resolve to real files. 2) Function signatures match actual code. 3) No copy-paste integration risks. Report PASS or FAIL with itemized issues. ⛔ REPEAT: Do NOT touch any files.","priority":1}]}
 \`\`\`
 
-The system spawns the worker automatically. Wait for results.
-After receiving worker results:
-- If FAIL: fix the plan and re-audit (output worker JSON again).
+The system dispatches the employee automatically. Wait for results.
+After receiving employee results:
+- If FAIL: fix the plan and re-audit (output employee JSON again).
 - If PASS: report results to the user.
 
 ⛔ STOP after reporting. WAIT for user approval.
@@ -154,20 +154,20 @@ After receiving worker results:
 You are now in Build mode. The plan has been audited and approved.
 
 ⚠️ YOU (the Boss) must implement the code DIRECTLY. Write every file yourself.
-⚠️ Do NOT delegate implementation to a worker. Workers are READ-ONLY verifiers.
-⚠️ Do NOT output a worker JSON that says "implement", "create", or "write code".
+⚠️ Do NOT delegate implementation to an employee. Employees are READ-ONLY verifiers.
+⚠️ Do NOT output an employee JSON that says "implement", "create", or "write code".
 
 Steps:
 1. Read the approved plan from Phase P.
 2. Implement ALL changes yourself — create/modify/delete files as specified in the plan.
-3. After YOU finish implementing, output a worker JSON to VERIFY (not implement) your work:
+3. After YOU finish implementing, output an employee JSON to VERIFY (not implement) your work:
 
 \`\`\`json
 {"subtasks":[{"agent":"Research","task":"⛔ READ-ONLY: Do NOT create, modify, or delete ANY files. You are a verifier, not a builder. Verify: 1) Files in plan exist with expected content. 2) No syntax errors (run tsc --noEmit if TS). 3) Imports resolve. 4) No integration conflicts. Report DONE or NEEDS_FIX. ⛔ Do NOT touch any files — READ and REPORT only.","priority":1}]}
 \`\`\`
 
-Wait for worker verification results.
-- NEEDS_FIX: YOU fix the issues yourself, then re-verify with another worker.
+Wait for employee verification results.
+- NEEDS_FIX: YOU fix the issues yourself, then re-verify with another employee.
 - DONE: Report results to the user.
 
 ⛔ STOP after reporting. WAIT for user approval.
