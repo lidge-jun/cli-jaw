@@ -23,8 +23,8 @@
     --delete-color: var(--error);
     --code-label-color: #8b949e;
     --modal-bg: rgba(0, 0, 0, 0.6);
-    --font-display: 'Chakra Petch', 'Outfit', system-ui, sans-serif;
-    --font-ui: 'Outfit', -apple-system, system-ui, sans-serif;
+    --font-display: 'Chakra Petch', 'Outfit', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+    --font-ui: 'Outfit', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', -apple-system, system-ui, sans-serif;
     --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
     --sidebar-left-w: 220px;
     --sidebar-right-w: 260px;
@@ -42,14 +42,14 @@
     --space-12: 48px;
 
     /* ─── Font size scale ─── */
-    --text-xs: 10px;
-    --text-sm: 12px;
-    --text-base: 13px;
-    --text-md: 14px;
-    --text-lg: 16px;
-    --text-xl: 20px;
-    --text-2xl: 24px;
-    --text-3xl: 32px;
+    --text-xs: 11px;
+    --text-sm: 13px;
+    --text-base: 15px;
+    --text-md: 16px;
+    --text-lg: 18px;
+    --text-xl: 22px;
+    --text-2xl: 26px;
+    --text-3xl: 34px;
 
     /* ─── Border radius scale ─── */
     --radius-sm: 4px;
