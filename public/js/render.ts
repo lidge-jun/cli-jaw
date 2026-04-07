@@ -289,7 +289,7 @@ function ensureCopyDelegation(): void {
 // ── Main export ──
 export function renderMarkdown(text: string): string {
     const cleaned = stripOrchestration(text);
-    if (!cleaned) return `<em class="text-dim">${escapeHtml(t('orchestrator.dispatching'))}</em>`;
+    if (!cleaned) return `<em class="text-dim orchestrate-placeholder">${escapeHtml(t('orchestrator.dispatching'))}</em>`;
 
     const { text: shielded, blocks: mathBlocks } = shieldMath(cleaned);
 

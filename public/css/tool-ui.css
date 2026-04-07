@@ -208,8 +208,20 @@
 
 /* ── Process Block ── */
 .process-block {
-    margin: 0 0 var(--space-2);
+    margin: 0 0 var(--space-1);
     font-size: var(--text-sm);
+    white-space: normal;
+    line-height: 1.3;
+}
+
+/* Hide dispatching placeholder when process block is showing */
+.process-block + .msg-content .orchestrate-placeholder {
+    display: none;
+}
+
+.orchestrate-placeholder {
+    font-size: var(--text-xs);
+    opacity: 0.6;
 }
 
 .process-summary {
@@ -261,7 +273,7 @@
     padding-left: var(--space-3);
     border-left: 1px solid var(--border);
     margin-left: 3px;
-    margin-top: var(--space-1);
+    margin-top: 2px;
     transition: grid-template-rows var(--duration-slow);
 }
 

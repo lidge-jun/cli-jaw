@@ -248,7 +248,7 @@
     "code.copied": "복사됨 ✓",
     "mcp.noServers": "(서버 미설정)",
     "mermaid.renderFail": "Mermaid 렌더링 실패",
-    "orchestrator.dispatching": "🎯 작업 분배 중...",
+    "orchestrator.dispatching": "처리 중…",
     "cmd.ide.desc": "IDE diff 보기",
     "cmd.ide.toggled": "IDE diff 모드를 전환했습니다",
     "cmd.ide.popToggled": "IDE 팝업을 전환했습니다",

@@ -78,13 +78,7 @@ function updateSummary(pb: ProcessBlockState): void {
 export function createProcessBlock(parentEl: HTMLElement): ProcessBlockState {
     const el = document.createElement('div');
     el.className = 'process-block';
-    el.innerHTML = `<button class="process-summary" aria-expanded="true">
-        <span class="process-dot running"></span>
-        <span class="process-summary-text"></span>
-        <span class="process-duration"></span>
-        <span class="process-chevron">▾</span>
-    </button>
-    <div class="process-details"><div class="process-steps-inner"></div></div>`;
+    el.innerHTML = `<button class="process-summary" aria-expanded="true"><span class="process-dot running"></span><span class="process-summary-text"></span><span class="process-duration"></span><span class="process-chevron">▾</span></button><div class="process-details"><div class="process-steps-inner"></div></div>`;
 
     const btn = el.querySelector('.process-summary') as HTMLButtonElement;
     btn.addEventListener('click', () => {
