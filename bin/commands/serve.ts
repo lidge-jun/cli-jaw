@@ -68,6 +68,7 @@ let exiting = false;
 process.on('SIGINT', () => {
     if (exiting) return;
     exiting = true;
+    child.kill('SIGINT');
 });
 
 process.on('SIGTERM', () => {

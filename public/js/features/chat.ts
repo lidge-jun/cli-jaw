@@ -1,6 +1,6 @@
 // ── Chat Feature ──
 import { state } from '../state.js';
-import { addMessage, addSystemMsg, scrollToBottom } from '../ui.js';
+import { addMessage, addSystemMsg } from '../ui.js';
 import { getPreferredLocale } from '../locale.js';
 import { t } from './i18n.js';
 import * as slashCmd from './slash-commands.js';

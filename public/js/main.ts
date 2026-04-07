@@ -14,26 +14,26 @@ window.addEventListener('error', (e) => {
 });
 
 import { connect } from './ws.js';
-import { switchTab, handleSave, loadStats, loadMessages, loadMemory, initMsgCopy } from './ui.js';
+import { switchTab, handleSave, loadMessages, initMsgCopy } from './ui.js';
 import { sendMessage, handleKey, clearAttachedFiles, removeAttachedFile, clearChat, initDragDrop, initAutoResize } from './features/chat.js';
 import {
     loadCommands, update as updateSlashDropdown, handleKeydown as handleSlashKeydown,
     handleClick as handleSlashClick, handleOutsideClick as handleSlashOutsideClick,
 } from './features/slash-commands.js';
-import { loadSkills, toggleSkill, filterSkills } from './features/skills.js';
+import { toggleSkill, filterSkills } from './features/skills.js';
 import {
-    loadSettings, setPerm, handleModelSelect, applyCustomModel, onCliChange,
-    saveActiveCliSettings, savePerCli, updateSettings, openPromptModal,
+    loadSettings, handleModelSelect, applyCustomModel, onCliChange,
+    saveActiveCliSettings, savePerCli, openPromptModal,
     closePromptModal, savePromptFromModal, syncMcpServers, installMcpGlobal,
     loadCliStatus, setTelegram, setForwardAll, saveTelegramSettings,
     setDiscord, setDiscordForwardAll, setDiscordAllowBots, saveDiscordSettings, setActiveChannel,
     saveFallbackOrder,
     openTemplateModal, saveTemplateFromModal, closeTemplateModal, templateGoBack, toggleDevMode
 } from './features/settings.js';
-import {
+const {
     loadEmployees, addEmployee, deleteEmployee, updateEmployee,
     onEmpCliChange, onEmpRoleChange
-} from './features/employees.js';
+} = await import('./features/employees.js');
 import {
     openHeartbeatModal, closeHeartbeatModal, addHeartbeatJob,
     removeHeartbeatJob, renderHeartbeatJobs, toggleHeartbeatJob, saveHeartbeatJobs,
@@ -375,7 +375,6 @@ async function bootstrap(): Promise<void> {
     await loadCommands();
     await loadSettings();
     loadCliStatus();
-    loadMemory();
     // loadMessages() is handled by ws.js onopen (clear + reload)
     loadEmployees();
     initHeartbeatBadge();

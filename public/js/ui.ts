@@ -4,12 +4,11 @@ import { renderMarkdown, escapeHtml, stripOrchestration } from './render.js';
 import { getAppName } from './features/appname.js';
 import { t } from './features/i18n.js';
 import { api } from './api.js';
-import { cacheMessages, getCachedMessages, appendCachedMessage, clearCache } from './features/idb-cache.js';
+import { cacheMessages, getCachedMessages, appendCachedMessage } from './features/idb-cache.js';
 import { getVirtualScroll, VS_THRESHOLD } from './virtual-scroll.js';
 import { createStreamRenderer, appendChunk, finalizeStream, type StreamState } from './streaming-render.js';
 import { buildToolGroupHtml, renderLiveToolActivity, cleanupToolElements, type ToolLogEntry } from './features/tool-ui.js';
 interface MessageItem { role: string; content: string; }
-interface MemoryItem { key: string; value: string; }
 
 export function setStatus(s: string): void {
     const badge = document.getElementById('statusBadge');
@@ -241,20 +240,8 @@ export async function loadMessages(): Promise<void> {
     showEmptyState();
 }
 
-export async function loadMemory(): Promise<void> {
-    try {
-        const items = await api<MemoryItem[]>('/api/memory');
-        const list = document.getElementById('memoryList');
-        if (!list || !items) return;
-        if (items.length === 0) {
-            list.innerHTML = `<li style="color:var(--text-dim)">${t('mem.empty')}</li>`;
-            return;
-        }
-        list.innerHTML = items.map(m =>
-            `<li><span class="memory-key">${escapeHtml(m.key)}</span>: ${escapeHtml(m.value)}</li>`
-        ).join('');
-    } catch { }
-}
+// loadMemory removed — #memoryList element does not exist in HTML.
+// Memory is now handled by features/memory.ts via the modal UI.
 
 // ── Message copy delegation ──
 export function initMsgCopy(): void {
