@@ -9,10 +9,14 @@ export interface StreamState {
     element: HTMLElement;
     pendingRAF: number | null;
     isFinalized: boolean;
+    lastRenderTime: number;
 }
 
+const FULL_RENDER_THRESHOLD = 2000;
+const THROTTLE_MS = 32;
+
 export function createStreamRenderer(el: HTMLElement): StreamState {
-    return { fullText: '', element: el, pendingRAF: null, isFinalized: false };
+    return { fullText: '', element: el, pendingRAF: null, isFinalized: false, lastRenderTime: 0 };
 }
 
 export function appendChunk(ss: StreamState, chunk: string): void {
@@ -20,9 +24,21 @@ export function appendChunk(ss: StreamState, chunk: string): void {
     if (!ss.pendingRAF && !ss.isFinalized) {
         ss.pendingRAF = requestAnimationFrame(() => {
             ss.pendingRAF = null;
-            if (!ss.isFinalized) {
+            if (ss.isFinalized) return;
+            const now = performance.now();
+            if (ss.fullText.length < FULL_RENDER_THRESHOLD || now - ss.lastRenderTime > THROTTLE_MS) {
                 ss.element.innerHTML = renderMarkdown(ss.fullText) +
                     '<span class="stream-cursor" aria-hidden="true"></span>';
+                ss.lastRenderTime = now;
+            } else {
+                // Throttled — schedule trailing render to ensure latest text paints
+                ss.pendingRAF = requestAnimationFrame(() => {
+                    ss.pendingRAF = null;
+                    if (ss.isFinalized) return;
+                    ss.element.innerHTML = renderMarkdown(ss.fullText) +
+                        '<span class="stream-cursor" aria-hidden="true"></span>';
+                    ss.lastRenderTime = performance.now();
+                });
             }
         });
     }

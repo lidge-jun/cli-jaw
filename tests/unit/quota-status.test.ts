@@ -11,9 +11,13 @@ const quotaSrc = fs.readFileSync(
 const serverSrc = fs.readFileSync(
     path.join(import.meta.dirname, '../../server.ts'), 'utf8'
 );
-const settingsSrc = fs.readFileSync(
-    path.join(import.meta.dirname, '../../public/js/features/settings.ts'), 'utf8'
-);
+// After Phase 4 decomposition, read all settings modules for structural checks
+const settingsDir = path.join(import.meta.dirname, '../../public/js/features');
+const settingsSrc = [
+    'settings.ts', 'settings-types.ts', 'settings-core.ts', 'settings-cli-status.ts',
+    'settings-telegram.ts', 'settings-discord.ts', 'settings-channel.ts',
+    'settings-stt.ts', 'settings-mcp.ts', 'settings-templates.ts',
+].map(f => fs.readFileSync(path.join(settingsDir, f), 'utf8')).join('\n');
 const sidebarCss = fs.readFileSync(
     path.join(import.meta.dirname, '../../public/css/sidebar.css'), 'utf8'
 );

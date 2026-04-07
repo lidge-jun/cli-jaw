@@ -1,0 +1,323 @@
+// ── Settings Core ──
+import { MODEL_MAP, loadCliRegistry, getCliKeys, getCliMeta } from '../constants.js';
+import { escapeHtml } from '../render.js';
+import { syncStoredLocale } from '../locale.js';
+import { t } from './i18n.js';
+import { api, apiJson, apiFire } from '../api.js';
+import type { PerCliConfig, SettingsData } from './settings-types.js';
+import { initSttSettings } from './settings-stt.js';
+import { loadTelegramSettings } from './settings-telegram.js';
+import { loadDiscordSettings } from './settings-discord.js';
+import { loadActiveChannel, loadFallbackOrder } from './settings-channel.js';
+import { loadMcpServers } from './settings-mcp.js';
+
+function toCap(cli: string): string {
+    return cli.charAt(0).toUpperCase() + cli.slice(1);
+}
+
+function getModelSelect(cli: string): HTMLSelectElement | null {
+    return document.getElementById('model' + toCap(cli)) as HTMLSelectElement | null;
+}
+
+function getCustomModelInput(cli: string): HTMLInputElement | null {
+    return document.getElementById('customModel' + toCap(cli)) as HTMLInputElement | null;
+}
+
+function getEffortSelect(cli: string): HTMLSelectElement | null {
+    return document.getElementById('effort' + toCap(cli)) as HTMLSelectElement | null;
+}
+
+function setSelectOptions(selectEl: HTMLSelectElement | null, values: string[], { includeCustom = false, includeDefault = false, selected = '' } = {}): void {
+    if (!selectEl) return;
+    const defaultHtml = includeDefault ? '<option value="default">default</option>' : '';
+    const customHtml = includeCustom ? `<option value="__custom__">${t('model.customOption')}</option>` : '';
+    const opts = (values || []).map(v => `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`).join('');
+    selectEl.innerHTML = defaultHtml + opts + customHtml;
+
+    if (selected && Array.from(selectEl.options).some(o => o.value === selected)) {
+        selectEl.value = selected;
+    }
+}
+
+function appendCustomOption(selectEl: HTMLSelectElement | null, value: string): void {
+    if (!selectEl || !value) return;
+    if (Array.from(selectEl.options).some(o => o.value === value)) return;
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = value;
+    const customOpt = selectEl.querySelector('option[value="__custom__"]');
+    if (customOpt) selectEl.insertBefore(opt, customOpt);
+    else selectEl.appendChild(opt);
+}
+
+function syncCliOptionSelects(settings: SettingsData | null = null): void {
+    const cliKeys = getCliKeys();
+
+    const selCli = document.getElementById('selCli') as HTMLSelectElement | null;
+    if (selCli) {
+        const current = settings?.cli || selCli.value || cliKeys[0] || 'claude';
+        selCli.innerHTML = cliKeys.map(cli => {
+            const label = getCliMeta(cli)?.label || cli;
+            return `<option value="${escapeHtml(cli)}">${escapeHtml(label)}</option>`;
+        }).join('');
+        if (Array.from(selCli.options).some(o => o.value === current)) selCli.value = current;
+    }
+
+    const memCli = document.getElementById('memCli') as HTMLSelectElement | null;
+    if (memCli) {
+        const current = settings?.memory?.cli || memCli.value || '';
+        memCli.innerHTML = '<option value="">(active CLI)</option>' +
+            cliKeys.map(cli => `<option value="${escapeHtml(cli)}">${escapeHtml(cli)}</option>`).join('');
+        if (Array.from(memCli.options).some(o => o.value === current)) memCli.value = current;
+    }
+}
+
+function syncPerCliModelAndEffortControls(settings: SettingsData | null = null): void {
+    for (const cli of getCliKeys()) {
+        const modelSel = getModelSelect(cli);
+        if (modelSel) {
+            const selected = settings?.perCli?.[cli]?.model || modelSel.value || '';
+            setSelectOptions(modelSel, MODEL_MAP[cli] || [], { includeCustom: true, selected });
+            if (selected && !Array.from(modelSel.options).some(o => o.value === selected)) {
+                appendCustomOption(modelSel, selected);
+                modelSel.value = selected;
+            }
+        }
+
+        const effortSel = getEffortSelect(cli);
+        if (effortSel) {
+            const meta = getCliMeta(cli);
+            const options = [''].concat(meta?.efforts || []);
+            const selected = settings?.perCli?.[cli]?.effort || effortSel.value || '';
+            const unique = [...new Set(options)];
+            const noneLabel = (meta?.efforts?.length === 0 && meta?.effortNote) ? meta.effortNote : '— none';
+            effortSel.innerHTML = unique.map(v => {
+                if (!v) return `<option value="">${escapeHtml(noneLabel)}</option>`;
+                return `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
+            }).join('');
+            if (meta?.effortNote) effortSel.title = meta.effortNote;
+            effortSel.disabled = (meta?.efforts?.length === 0 && !!meta?.effortNote);
+            if (Array.from(effortSel.options).some(o => o.value === selected)) effortSel.value = selected;
+        }
+    }
+}
+
+function syncActiveEffortOptions(cli: string, selected = ''): void {
+    const selEffort = document.getElementById('selEffort') as HTMLSelectElement | null;
+    if (!selEffort) return;
+    const meta = getCliMeta(cli);
+    if (meta?.effortNote) {
+        selEffort.innerHTML = `<option value="">${escapeHtml(meta.effortNote)}</option>`;
+        selEffort.title = meta.effortNote;
+        selEffort.disabled = true;
+        return;
+    }
+    const efforts = [''].concat(meta?.efforts || []);
+    const unique = [...new Set(efforts)];
+    selEffort.innerHTML = unique.map(v => {
+        if (!v) return '<option value="">— none</option>';
+        return `<option value="${escapeHtml(v)}">${escapeHtml(v)}</option>`;
+    }).join('');
+    selEffort.disabled = false;
+    selEffort.title = '';
+    if (Array.from(selEffort.options).some(o => o.value === selected)) selEffort.value = selected;
+}
+
+export async function loadSettings(): Promise<void> {
+    await loadCliRegistry();
+    const s = await api<SettingsData>('/api/settings');
+    if (!s) return;
+    syncStoredLocale(s.locale ?? '');
+    syncCliOptionSelects(s);
+    syncPerCliModelAndEffortControls(s);
+
+    const selCli = document.getElementById('selCli') as HTMLSelectElement | null;
+    if (selCli && Array.from(selCli.options).some(o => o.value === s.cli)) {
+        selCli.value = s.cli;
+    }
+    const cwdEl = document.getElementById('inpCwd');
+    if (cwdEl) cwdEl.textContent = s.workingDir;
+    const headerEl = document.getElementById('headerCli');
+    if (headerEl) headerEl.textContent = s.cli;
+    setPerm(s.permissions, false);
+
+    if (s.perCli) {
+        for (const [cli, cfg] of Object.entries(s.perCli) as [string, PerCliConfig][]) {
+            const modelEl = getModelSelect(cli);
+            const effortEl = getEffortSelect(cli);
+            if (modelEl && cfg.model) {
+                appendCustomOption(modelEl, cfg.model);
+                modelEl.value = cfg.model;
+            }
+            if (effortEl) effortEl.value = cfg.effort || '';
+            if (cli === 'codex' && cfg.fastMode !== undefined) {
+                document.getElementById('codexFastOn')?.classList.toggle('active', cfg.fastMode);
+                document.getElementById('codexFastOff')?.classList.toggle('active', !cfg.fastMode);
+            }
+            if (cli === 'codex') {
+                const ctxOn = !!cfg.contextWindow;
+                document.getElementById('codexCtxOn')?.classList.toggle('active', ctxOn);
+                document.getElementById('codexCtxOff')?.classList.toggle('active', !ctxOn);
+                const valDiv = document.getElementById('codexCtxValues');
+                if (valDiv) valDiv.style.display = ctxOn ? '' : 'none';
+                const winInput = document.getElementById('codexCtxWindow') as HTMLInputElement | null;
+                const compInput = document.getElementById('codexCtxCompact') as HTMLInputElement | null;
+                if (winInput && cfg.contextWindowSize) winInput.value = String(cfg.contextWindowSize);
+                if (compInput && cfg.contextCompactLimit) compInput.value = String(cfg.contextCompactLimit);
+            }
+        }
+    }
+
+    onCliChange(false);
+    const ao = s.activeOverrides?.[s.cli] || {};
+    const pc = s.perCli?.[s.cli] || {};
+    const activeModel = ao.model || pc.model;
+    const activeEffort = ao.effort || pc.effort || '';
+    const selModel = document.getElementById('selModel') as HTMLSelectElement | null;
+    if (activeModel && selModel) selModel.value = activeModel;
+    syncActiveEffortOptions(s.cli, activeEffort);
+
+    loadTelegramSettings(s);
+    loadDiscordSettings(s);
+    loadActiveChannel(s);
+    loadFallbackOrder(s);
+    loadMcpServers();
+    initSttSettings(s.stt || {});
+}
+
+export async function updateSettings(): Promise<void> {
+    const s = {
+        cli: (document.getElementById('selCli') as HTMLSelectElement)?.value || 'claude',
+    };
+    const hdr = document.getElementById('headerCli');
+    if (hdr) hdr.textContent = s.cli;
+    await apiJson('/api/settings', 'PUT', s);
+}
+
+export function setPerm(_p: string, save = true): void {
+    if (save) apiFire('/api/settings', 'PUT', { permissions: 'auto' });
+}
+
+export function getModelValue(cli: string): string {
+    const sel = getModelSelect(cli);
+    if (!sel) return 'default';
+    if (sel.value === '__custom__') {
+        const inp = getCustomModelInput(cli);
+        return inp?.value?.trim() || sel.options[0]?.value || 'default';
+    }
+    return sel.value;
+}
+
+export function handleModelSelect(cli: string, selectEl: HTMLSelectElement): void {
+    const customInput = getCustomModelInput(cli);
+    if (!customInput) return;
+    if (selectEl.value === '__custom__') {
+        customInput.style.display = 'block';
+        customInput.focus();
+    } else {
+        customInput.style.display = 'none';
+        savePerCli();
+    }
+}
+
+export function applyCustomModel(cli: string, inputEl: HTMLInputElement): void {
+    const val = inputEl.value.trim();
+    if (!val) return;
+    const select = getModelSelect(cli);
+    if (!select) return;
+    appendCustomOption(select, val);
+    select.value = val;
+    inputEl.style.display = 'none';
+    savePerCli();
+}
+
+export async function savePerCli(): Promise<void> {
+    const perCli: Record<string, PerCliConfig> = {};
+    for (const cli of getCliKeys()) {
+        const modelEl = getModelSelect(cli);
+        if (!modelEl) continue;
+        const effortEl = getEffortSelect(cli);
+        const entry: PerCliConfig = {
+            model: getModelValue(cli),
+            effort: effortEl ? effortEl.value : '',
+        };
+        if (cli === 'codex') {
+            const onBtn = document.getElementById('codexFastOn');
+            entry.fastMode = onBtn?.classList.contains('active') ?? false;
+            const ctxOn = document.getElementById('codexCtxOn');
+            entry.contextWindow = ctxOn?.classList.contains('active') ?? false;
+            const winInput = document.getElementById('codexCtxWindow') as HTMLInputElement | null;
+            const compInput = document.getElementById('codexCtxCompact') as HTMLInputElement | null;
+            entry.contextWindowSize = parseInt(winInput?.value || '1000000', 10);
+            entry.contextCompactLimit = parseInt(compInput?.value || '900000', 10);
+        }
+        perCli[cli] = entry;
+    }
+    await apiJson('/api/settings', 'PUT', { perCli });
+}
+
+export function onCliChange(save = true): void {
+    const cli = (document.getElementById('selCli') as HTMLSelectElement)?.value || 'claude';
+    const models = MODEL_MAP[cli] || [];
+    const modelSel = document.getElementById('selModel') as HTMLSelectElement | null;
+    setSelectOptions(modelSel, models, { includeCustom: true, includeDefault: true });
+    const hdrCli = document.getElementById('headerCli');
+    if (hdrCli) hdrCli.textContent = cli;
+    syncActiveEffortOptions(cli);
+
+    const oldInput = document.getElementById('selModelCustom');
+    if (oldInput) oldInput.remove();
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.id = 'selModelCustom';
+    inp.className = 'custom-model-input';
+    inp.placeholder = t('model.placeholder');
+    inp.style.display = 'none';
+    inp.onchange = function () {
+        const val = (this as HTMLInputElement).value.trim();
+        if (!val || !modelSel) return;
+        appendCustomOption(modelSel, val);
+        modelSel.value = val;
+        (this as HTMLInputElement).style.display = 'none';
+        saveActiveCliSettings();
+    };
+    if (!modelSel) { if (save) updateSettings(); return; }
+    modelSel.parentElement?.appendChild(inp);
+    modelSel.onchange = function () {
+        if ((this as HTMLSelectElement).value === '__custom__') {
+            inp.style.display = 'block';
+            inp.focus();
+        } else {
+            inp.style.display = 'none';
+            saveActiveCliSettings();
+        }
+    };
+
+    api<SettingsData>('/api/settings').then(s => {
+        if (!s) return;
+        const ao = s.activeOverrides?.[cli] || {};
+        const pc = s.perCli?.[cli] || {};
+        const model = ao.model || pc.model;
+        const effort = ao.effort || pc.effort || '';
+        if (model && modelSel) {
+            appendCustomOption(modelSel, model);
+            modelSel.value = model;
+        }
+        syncActiveEffortOptions(cli, effort);
+    });
+
+    if (save) updateSettings();
+}
+
+export async function saveActiveCliSettings(): Promise<void> {
+    const cli = (document.getElementById('selCli') as HTMLSelectElement)?.value || 'claude';
+    const modelSel = document.getElementById('selModel') as HTMLSelectElement | null;
+    let model = modelSel?.value || 'default';
+    if (model === '__custom__') {
+        model = (document.getElementById('selModelCustom') as HTMLInputElement | null)?.value?.trim() || 'default';
+    }
+    const effortEl = document.getElementById('selEffort') as HTMLSelectElement | null;
+    const overrides: Record<string, PerCliConfig> = {};
+    overrides[cli] = { model };
+    if (effortEl && !effortEl.disabled) overrides[cli].effort = effortEl.value || '';
+    await apiJson('/api/settings', 'PUT', { activeOverrides: overrides });
+}

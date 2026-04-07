@@ -82,8 +82,8 @@
 }
 
 @keyframes toolDotPulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(1.3); }
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
 }
 
 /* ── Collapsible Details ── */
@@ -202,6 +202,141 @@
     .tool-status-dot.running,
     .tool-dot.running,
     .tool-activity-live .tool-status-dot {
+        animation: none;
+    }
+}
+
+/* ── Process Block ── */
+.process-block {
+    margin: 0 0 var(--space-2);
+    font-size: var(--text-sm);
+}
+
+.process-summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    background: color-mix(in srgb, var(--surface) 50%, transparent);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: var(--space-1) var(--space-3);
+    font-size: var(--text-xs);
+    transition: border-color var(--duration-fast);
+}
+
+.process-summary:hover {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.process-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.process-dot.running {
+    background: var(--warning);
+    animation: processDotPulse 1.5s ease-in-out infinite;
+    will-change: opacity;
+}
+
+.process-dot.done { background: var(--success); }
+
+@keyframes processDotPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+.process-summary-text { flex: 1; text-align: left; }
+.process-duration { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-dim); }
+.process-chevron { font-size: 10px; color: var(--text-dim); transition: transform var(--duration-fast); }
+
+.process-details {
+    display: grid;
+    grid-template-rows: 1fr;
+    padding-left: var(--space-3);
+    border-left: 1px solid var(--border);
+    margin-left: 3px;
+    margin-top: var(--space-1);
+    transition: grid-template-rows var(--duration-slow);
+}
+
+.process-block.collapsed .process-details {
+    grid-template-rows: 0fr;
+}
+
+.process-details > .process-steps-inner {
+    overflow: hidden;
+}
+
+.process-step {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 2px 0;
+    font-size: var(--text-xs);
+}
+
+.process-step-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.process-step-dot.running {
+    background: var(--warning);
+    animation: processDotPulse 1.5s ease-in-out infinite;
+}
+
+.process-step-dot.done { background: var(--success); }
+.process-step-dot.error { background: var(--error); }
+
+.process-step-badge {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+}
+
+.process-step-badge.thinking {
+    background: color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--accent);
+}
+
+.process-step-badge.tool {
+    background: color-mix(in srgb, var(--warning) 15%, transparent);
+    color: var(--warning);
+}
+
+.process-step-badge.search {
+    background: color-mix(in srgb, var(--success) 15%, transparent);
+    color: var(--success);
+}
+
+.process-step-label { color: var(--text); }
+.process-step-text { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.process-step-detail {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 300px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .process-dot.running,
+    .process-step-dot.running {
         animation: none;
     }
 }

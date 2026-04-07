@@ -195,42 +195,60 @@ function extractToolLabels(cli: string, event: any, ctx: any = null) {
     if (cli === 'codex' && event.type === 'item.completed' && item) {
         if (item.type === 'web_search') {
             const action = item.action?.type || '';
-            if (action === 'search') labels.push({ icon: '🔍', label: (item.query || item.action?.query || 'search').slice(0, 60) });
-            else if (action === 'open_page') { try { labels.push({ icon: '🌐', label: new URL(item.action.url).hostname }); } catch { labels.push({ icon: '🌐', label: 'page' }); } }
-            else labels.push({ icon: '🔍', label: (item.query || 'web').slice(0, 60) });
+            if (action === 'search') labels.push({ icon: '🔍', label: (item.query || item.action?.query || 'search').slice(0, 60), toolType: 'search' });
+            else if (action === 'open_page') { try { labels.push({ icon: '🌐', label: new URL(item.action.url).hostname, toolType: 'search' }); } catch { labels.push({ icon: '🌐', label: 'page', toolType: 'search' }); } }
+            else labels.push({ icon: '🔍', label: (item.query || 'web').slice(0, 60), toolType: 'search' });
         }
-        if (item.type === 'reasoning') labels.push({ icon: '💭', label: (item.text || '').replace(/\*+/g, '').trim().slice(0, 60) });
-        if (item.type === 'command_execution') labels.push({ icon: '⚡', label: (item.command || 'exec').slice(0, 40) });
+        if (item.type === 'reasoning') labels.push({ icon: '💭', label: (item.text || '').replace(/\*+/g, '').trim().slice(0, 60), toolType: 'thinking' });
+        if (item.type === 'command_execution') labels.push({ icon: '⚡', label: (item.command || 'exec').slice(0, 40), toolType: 'tool', detail: (item.command || '').slice(0, 80) });
     }
 
     if (cli === 'claude') {
-        // Real-time streaming first (--include-partial-messages)
         if (event.type === 'stream_event' && event.event?.type === 'content_block_start') {
             if (ctx) ctx.hasClaudeStreamEvents = true;
             const cb = event.event.content_block;
-            if (cb?.type === 'tool_use') pushToolLabel(labels, { icon: '🔧', label: cb.name || 'tool' }, cli, event, ctx);
-            if (cb?.type === 'thinking') pushToolLabel(labels, { icon: '💭', label: 'thinking...' }, cli, event, ctx);
+            if (cb?.type === 'tool_use') pushToolLabel(labels, { icon: '🔧', label: cb.name || 'tool', toolType: 'tool' }, cli, event, ctx);
+            if (cb?.type === 'thinking') pushToolLabel(labels, { icon: '💭', label: 'thinking...', toolType: 'thinking' }, cli, event, ctx);
         }
-        // Fallback path: if no partial stream received, parse assistant bulk blocks.
         if (event.type === 'assistant' && event.message?.content && !ctx?.hasClaudeStreamEvents) {
             for (const block of event.message.content) {
-                if (block.type === 'tool_use') pushToolLabel(labels, { icon: '🔧', label: block.name || 'tool' }, cli, event, ctx);
-                if (block.type === 'thinking') pushToolLabel(labels, { icon: '💭', label: 'thinking...' }, cli, event, ctx);
+                if (block.type === 'tool_use') pushToolLabel(labels, { icon: '🔧', label: block.name || 'tool', toolType: 'tool' }, cli, event, ctx);
+                if (block.type === 'thinking') pushToolLabel(labels, { icon: '💭', label: 'thinking...', toolType: 'thinking' }, cli, event, ctx);
             }
         }
     }
 
     if (cli === 'gemini') {
-        if (event.type === 'tool_use') labels.push({ icon: '🔧', label: `${event.tool_name || 'tool'}${event.parameters?.command ? ': ' + event.parameters.command.slice(0, 40) : ''}` });
-        if (event.type === 'tool_result') labels.push({ icon: event.status === 'success' ? '✅' : '❌', label: `${event.status || 'done'}` });
+        if (event.type === 'tool_use') {
+            const detail = event.parameters?.command ? event.parameters.command.slice(0, 80) : summarizeToolInput(event.tool_name || '', event.parameters || {});
+            labels.push({ icon: '🔧', label: `${event.tool_name || 'tool'}${event.parameters?.command ? ': ' + event.parameters.command.slice(0, 40) : ''}`, toolType: 'tool', detail });
+        }
+        if (event.type === 'tool_result') labels.push({ icon: event.status === 'success' ? '✅' : '❌', label: `${event.status || 'done'}`, toolType: 'tool' });
     }
 
     if (cli === 'opencode') {
-        if (event.type === 'tool_use' && event.part) labels.push({ icon: '🔧', label: event.part.tool || 'tool' });
-        if (event.type === 'tool_result' && event.part) labels.push({ icon: '✅', label: event.part.tool || 'done' });
+        if (event.type === 'tool_use' && event.part) labels.push({ icon: '🔧', label: event.part.tool || 'tool', toolType: 'tool' });
+        if (event.type === 'tool_result' && event.part) labels.push({ icon: '✅', label: event.part.tool || 'done', toolType: 'tool' });
     }
 
     return labels;
+}
+
+/** Summarise a tool's input into a short one-liner for the ProcessBlock UI. */
+export function summarizeToolInput(toolName: string, input: any): string {
+    if (!input) return '';
+    const name = (toolName || '').toLowerCase();
+    if (name.includes('bash') || name.includes('terminal') || name === 'execute_command')
+        return (input.command || input.cmd || '').slice(0, 80);
+    if (name.includes('read') || name === 'read_file' || name === 'view')
+        return (input.path || input.file_path || input.filename || '').split('/').pop() || '';
+    if (name.includes('write') || name.includes('edit') || name === 'create_file')
+        return (input.path || input.file_path || '').split('/').pop() || '';
+    if (name.includes('search') || name.includes('grep') || name === 'codebase_search')
+        return (input.query || input.pattern || input.search_query || '').slice(0, 60);
+    if (name.includes('web') || name === 'web_search')
+        return (input.query || '').slice(0, 60);
+    return '';
 }
 
 // Backward-compat: return first label or null
@@ -280,6 +298,8 @@ export function extractFromAcpUpdate(params: any) {
                 tool: {
                     icon: '💭',
                     label: text.slice(0, 60) + (text.length > 60 ? '...' : '') || 'thinking...',
+                    toolType: 'thinking',
+                    detail: text.slice(0, 80),
                 },
             };
         }
@@ -289,6 +309,8 @@ export function extractFromAcpUpdate(params: any) {
                 tool: {
                     icon: '🔧',
                     label: update.name || 'tool',
+                    toolType: 'tool',
+                    detail: summarizeToolInput(update.name || '', update.input),
                 },
             };
 
@@ -297,6 +319,7 @@ export function extractFromAcpUpdate(params: any) {
                 tool: {
                     icon: '✅',
                     label: update.name || update.id || 'done',
+                    toolType: 'tool',
                 },
             };
 
@@ -310,6 +333,7 @@ export function extractFromAcpUpdate(params: any) {
                 tool: {
                     icon: '📝',
                     label: 'planning...',
+                    toolType: 'thinking',
                 },
             };
 

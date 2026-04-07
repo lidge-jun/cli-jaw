@@ -30,7 +30,7 @@ test('claude stream_event tool labels are deduped', () => {
     const first = extractToolLabelsForTest('claude', evt, ctx);
     const second = extractToolLabelsForTest('claude', evt, ctx);
 
-    assert.deepEqual(first, [{ icon: '🔧', label: 'Bash' }]);
+    assert.deepEqual(first, [{ icon: '🔧', label: 'Bash', toolType: 'tool' }]);
     assert.equal(second.length, 0);
     assert.equal(ctx.hasClaudeStreamEvents, true);
 });
@@ -40,7 +40,7 @@ test('claude assistant fallback works when stream was not seen', () => {
     const evt = readFixture('claude-assistant-tool.json');
 
     const labels = extractToolLabelsForTest('claude', evt, ctx);
-    assert.deepEqual(labels, [{ icon: '🔧', label: 'Read' }]);
+    assert.deepEqual(labels, [{ icon: '🔧', label: 'Read', toolType: 'tool' }]);
 });
 
 test('claude assistant blocks are ignored after stream event', () => {
@@ -66,67 +66,67 @@ test('tool label extraction fixture matrix covers codex, gemini, and opencode va
             name: 'claude stream thinking',
             cli: 'claude',
             fixture: 'claude-stream-thinking.json',
-            expected: [{ icon: '💭', label: 'thinking...' }],
+            expected: [{ icon: '💭', label: 'thinking...', toolType: 'thinking' }],
         },
         {
             name: 'codex web search',
             cli: 'codex',
             fixture: 'codex-web-search.json',
-            expected: [{ icon: '🔍', label: 'node test runner' }],
+            expected: [{ icon: '🔍', label: 'node test runner', toolType: 'search' }],
         },
         {
             name: 'codex open page',
             cli: 'codex',
             fixture: 'codex-open-page.json',
-            expected: [{ icon: '🌐', label: 'example.com' }],
+            expected: [{ icon: '🌐', label: 'example.com', toolType: 'search' }],
         },
         {
             name: 'codex open page invalid fallback',
             cli: 'codex',
             fixture: 'codex-open-page-invalid.json',
-            expected: [{ icon: '🌐', label: 'page' }],
+            expected: [{ icon: '🌐', label: 'page', toolType: 'search' }],
         },
         {
             name: 'codex command execution',
             cli: 'codex',
             fixture: 'codex-command.json',
-            expected: [{ icon: '⚡', label: 'npm run test:events' }],
+            expected: [{ icon: '⚡', label: 'npm run test:events', toolType: 'tool', detail: 'npm run test:events' }],
         },
         {
             name: 'codex reasoning',
             cli: 'codex',
             fixture: 'codex-reasoning.json',
-            expected: [{ icon: '💭', label: 'Plan isolate regression' }],
+            expected: [{ icon: '💭', label: 'Plan isolate regression', toolType: 'thinking' }],
         },
         {
             name: 'gemini tool use',
             cli: 'gemini',
             fixture: 'gemini-tool-use.json',
-            expected: [{ icon: '🔧', label: 'shell: npm run lint' }],
+            expected: [{ icon: '🔧', label: 'shell: npm run lint', toolType: 'tool', detail: 'npm run lint' }],
         },
         {
             name: 'gemini tool result success',
             cli: 'gemini',
             fixture: 'gemini-tool-result-success.json',
-            expected: [{ icon: '✅', label: 'success' }],
+            expected: [{ icon: '✅', label: 'success', toolType: 'tool' }],
         },
         {
             name: 'gemini tool result error',
             cli: 'gemini',
             fixture: 'gemini-tool-result-error.json',
-            expected: [{ icon: '❌', label: 'error' }],
+            expected: [{ icon: '❌', label: 'error', toolType: 'tool' }],
         },
         {
             name: 'opencode tool use',
             cli: 'opencode',
             fixture: 'opencode-tool-use.json',
-            expected: [{ icon: '🔧', label: 'web-search' }],
+            expected: [{ icon: '🔧', label: 'web-search', toolType: 'tool' }],
         },
         {
             name: 'opencode tool result',
             cli: 'opencode',
             fixture: 'opencode-tool-result.json',
-            expected: [{ icon: '✅', label: 'web-search' }],
+            expected: [{ icon: '✅', label: 'web-search', toolType: 'tool' }],
         },
     ];
 
@@ -161,7 +161,7 @@ test('extractFromEvent updates context for each CLI path', () => {
         session_id: 'claude-session',
     }, claudeCtx, 'claude-agent');
     assert.equal(claudeCtx.fullText, 'hello ');
-    assert.deepEqual(claudeCtx.toolLog, [{ icon: '🔧', label: 'Read' }]);
+    assert.deepEqual(claudeCtx.toolLog, [{ icon: '🔧', label: 'Read', toolType: 'tool' }]);
     assert.equal(claudeCtx.cost, 0.12);
     assert.equal(claudeCtx.turns, 3);
     assert.equal(claudeCtx.duration, 777);
@@ -214,7 +214,7 @@ test('extractFromEvent updates context for each CLI path', () => {
 
 test('extractToolLabel keeps backward compatibility and claude keys are deterministic', () => {
     const first = extractToolLabel('gemini', { type: 'tool_result', status: 'failed' });
-    assert.deepEqual(first, { icon: '❌', label: 'failed' });
+    assert.deepEqual(first, { icon: '❌', label: 'failed', toolType: 'tool' });
 
     const keyFromIndex = makeClaudeToolKeyForTest(
         { type: 'stream_event', event: { index: 3 } },

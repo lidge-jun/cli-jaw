@@ -8,6 +8,7 @@ import { cacheMessages, getCachedMessages, appendCachedMessage } from './feature
 import { getVirtualScroll, VS_THRESHOLD } from './virtual-scroll.js';
 import { createStreamRenderer, appendChunk, finalizeStream, type StreamState } from './streaming-render.js';
 import { buildToolGroupHtml, renderLiveToolActivity, cleanupToolElements, type ToolLogEntry } from './features/tool-ui.js';
+import { createProcessBlock, addStep, updateStepStatus, collapseBlock, type ProcessStep } from './features/process-block.js';
 interface MessageItem { role: string; content: string; }
 
 export function setStatus(s: string): void {
@@ -16,11 +17,11 @@ export function setStatus(s: string): void {
     state.agentBusy = s === 'running';
     document.getElementById('typingIndicator')?.classList.toggle('active', state.agentBusy);
     if (s === 'running') {
-        if (badge) { badge.className = 'status-badge status-running'; badge.textContent = '⏳ running'; }
+        if (badge) { badge.className = 'status-badge status-running'; badge.textContent = 'running'; }
         if (btn) { btn.textContent = '■'; btn.title = t('btn.stop'); btn.classList.add('stop-mode'); }
         showSkeleton();
     } else {
-        if (badge) { badge.className = 'status-badge status-idle'; badge.textContent = '⚡ idle'; }
+        if (badge) { badge.className = 'status-badge status-idle'; badge.textContent = 'idle'; }
         if (btn) { btn.textContent = '➤'; btn.title = 'Send'; btn.classList.remove('stop-mode'); }
         removeSkeleton();
         updateQueueBadge(0);
@@ -86,6 +87,7 @@ export function addSystemMsg(text: string, extraClass?: string, type?: string): 
 export function cleanupToolActivity(): void {
     cleanupToolElements();
     state.currentAgentDiv = null;
+    state.currentProcessBlock = null;
 }
 
 export function showLiveToolActivity(label: string): void {
@@ -94,6 +96,43 @@ export function showLiveToolActivity(label: string): void {
         state.currentAgentDiv = addMessage('agent', '');
     }
     renderLiveToolActivity(state.currentAgentDiv as HTMLElement, label);
+    scrollToBottom();
+}
+
+export function showProcessStep(step: ProcessStep): void {
+    removeSkeleton();
+    if (!state.currentAgentDiv || !state.currentAgentDiv.isConnected) {
+        state.currentAgentDiv = addMessage('agent', '');
+        state.currentProcessBlock = null;
+    }
+    if (!state.currentProcessBlock) {
+        const body = state.currentAgentDiv.querySelector('.agent-body') as HTMLElement;
+        if (body) {
+            state.currentProcessBlock = createProcessBlock(body);
+        }
+    }
+    if (state.currentProcessBlock) {
+        // Completion icons (✅/❌) update the last matching running step
+        if (step.icon === '✅' || step.icon === '❌') {
+            const status = step.icon === '✅' ? 'done' : 'error';
+            const match = [...state.currentProcessBlock.steps].reverse()
+                .find(s => s.status === 'running' && s.label === step.label);
+            if (match) {
+                updateStepStatus(state.currentProcessBlock, match.id, status);
+                scrollToBottom();
+                return;
+            }
+            // No matching running step — try any running step as fallback
+            const anyRunning = [...state.currentProcessBlock.steps].reverse()
+                .find(s => s.status === 'running');
+            if (anyRunning) {
+                updateStepStatus(state.currentProcessBlock, anyRunning.id, status);
+                scrollToBottom();
+                return;
+            }
+        }
+        addStep(state.currentProcessBlock, step);
+    }
     scrollToBottom();
 }
 
@@ -123,6 +162,10 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
 
     cleanupToolElements();
     removeSkeleton();
+    if (state.currentProcessBlock) {
+        collapseBlock(state.currentProcessBlock);
+        state.currentProcessBlock = null;
+    }
     const hasTools = toolLog && toolLog.length > 0;
     if (text || hasTools) {
         if (!state.currentAgentDiv || !state.currentAgentDiv.isConnected) {
@@ -156,8 +199,13 @@ export function addMessage(role: string, text: string): HTMLDivElement {
     const label = escapeHtml(role === 'user' ? t('msg.you') : getAppName());
 
     const div = document.createElement('div');
-    div.className = `msg msg-${role}`;
-    div.innerHTML = `<div class="msg-label">${label}</div><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button>`;
+    if (role === 'agent') {
+        div.className = 'msg msg-agent';
+        div.innerHTML = `<div class="agent-icon" aria-hidden="true">🦈</div><div class="agent-body"><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div>`;
+    } else {
+        div.className = `msg msg-${role}`;
+        div.innerHTML = `<div class="msg-label">${label}</div><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button>`;
+    }
     const contentEl = div.querySelector('.msg-content');
     if (contentEl) contentEl.setAttribute('data-raw', stripOrchestration(text));
     container?.appendChild(div);
@@ -165,9 +213,15 @@ export function addMessage(role: string, text: string): HTMLDivElement {
     return div;
 }
 
+let scrollRAF: number | null = null;
+
 export function scrollToBottom(): void {
-    const c = document.getElementById('chatMessages');
-    if (c) c.scrollTop = c.scrollHeight;
+    if (scrollRAF) return;
+    scrollRAF = requestAnimationFrame(() => {
+        scrollRAF = null;
+        const c = document.getElementById('chatMessages');
+        if (c) c.scrollTop = c.scrollHeight;
+    });
 }
 
 export function switchTab(name: string, targetBtn: Element): void {
@@ -215,7 +269,9 @@ export async function loadMessages(): Promise<void> {
                     const role = m.role === 'assistant' ? 'agent' : m.role;
                     const rendered = renderMarkdown(m.content);
                     const label = escapeHtml(role === 'user' ? t('msg.you') : getAppName());
-                    const html = `<div class="msg msg-${role}"><div class="msg-label">${label}</div><div class="msg-content" data-raw="${escapeHtml(stripOrchestration(m.content))}">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div>`;
+                    const html = role === 'agent'
+                        ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">🦈</div><div class="agent-body"><div class="msg-content" data-raw="${escapeHtml(stripOrchestration(m.content))}">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
+                        : `<div class="msg msg-${role}"><div class="msg-label">${label}</div><div class="msg-content" data-raw="${escapeHtml(stripOrchestration(m.content))}">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div>`;
                     vs.addItem(crypto.randomUUID(), html);
                 }
                 vs.scrollToBottom();

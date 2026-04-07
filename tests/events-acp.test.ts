@@ -13,6 +13,7 @@ test('extractFromAcpUpdate handles agent_thought_chunk with truncation', () => {
     assert.equal(out.tool.icon, '💭');
     assert.equal(out.tool.label.endsWith('...'), true);
     assert.equal(out.tool.label.length, 63);
+    assert.equal(out.tool.toolType, 'thinking');
 });
 
 test('extractFromAcpUpdate handles tool_call and tool_call_update fallback', () => {
@@ -22,7 +23,7 @@ test('extractFromAcpUpdate handles tool_call and tool_call_update fallback', () 
             name: 'Read',
         },
     });
-    assert.deepEqual(call, { tool: { icon: '🔧', label: 'Read' } });
+    assert.deepEqual(call, { tool: { icon: '🔧', label: 'Read', toolType: 'tool', detail: '' } });
 
     const updateByName = extractFromAcpUpdate({
         update: {
@@ -31,7 +32,7 @@ test('extractFromAcpUpdate handles tool_call and tool_call_update fallback', () 
             id: 'tool-1',
         },
     });
-    assert.deepEqual(updateByName, { tool: { icon: '✅', label: 'Read' } });
+    assert.deepEqual(updateByName, { tool: { icon: '✅', label: 'Read', toolType: 'tool' } });
 
     const updateById = extractFromAcpUpdate({
         update: {
@@ -39,7 +40,7 @@ test('extractFromAcpUpdate handles tool_call and tool_call_update fallback', () 
             id: 'tool-2',
         },
     });
-    assert.deepEqual(updateById, { tool: { icon: '✅', label: 'tool-2' } });
+    assert.deepEqual(updateById, { tool: { icon: '✅', label: 'tool-2', toolType: 'tool' } });
 });
 
 test('extractFromAcpUpdate handles agent_message_chunk content shapes', () => {
@@ -78,7 +79,7 @@ test('extractFromAcpUpdate handles plan and unknown update types', () => {
             sessionUpdate: 'plan',
         },
     });
-    assert.deepEqual(plan, { tool: { icon: '📝', label: 'planning...' } });
+    assert.deepEqual(plan, { tool: { icon: '📝', label: 'planning...', toolType: 'thinking' } });
 
     assert.equal(extractFromAcpUpdate({ update: { sessionUpdate: 'unknown_type' } }), null);
     assert.equal(extractFromAcpUpdate({}), null);

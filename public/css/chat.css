@@ -107,6 +107,8 @@
     position: relative;
     z-index: 1;
     animation: revealUp 0.4s var(--ease-out-expo) 0.2s both;
+    contain: content;
+    will-change: scroll-position;
 }
 
 /* Depth fade gradients — messages scroll beneath these */
@@ -148,6 +150,7 @@
     white-space: pre-wrap;
     position: relative;
     transition: box-shadow var(--duration-base);
+    contain: layout style;
 }
 
 /* Direction-specific entrance animations */
@@ -176,12 +179,34 @@
 }
 
 .msg-agent {
-    background: var(--agent-bg);
+    background: transparent;
+    border: none;
+    border-radius: 0;
     align-self: flex-start;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) var(--radius-sm);
-    max-width: 90%;
+    max-width: 100%;
+    display: flex;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
     animation: msgEnterAgent 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: padding var(--duration-base);
+}
+
+/* ── Agent icon + body ── */
+.agent-icon {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    font-size: 18px;
+    line-height: 24px;
+    text-align: center;
+    margin-top: 2px;
+    transition: opacity var(--duration-fast);
+}
+
+.agent-body {
+    flex: 1;
+    min-width: 0;
+    position: relative;
 }
 
 .msg-system {
@@ -197,7 +222,6 @@
 }
 
 /* ── Message Hover Glow Bar ── */
-.msg-agent::after,
 .msg-user::after {
     content: '';
     position: absolute;
@@ -210,16 +234,29 @@
     transition: opacity var(--duration-fast);
 }
 
-.msg-agent::after { left: calc(-1 * var(--space-2)); }
+.msg-agent::after {
+    content: '';
+    position: absolute;
+    top: var(--space-2);
+    bottom: var(--space-2);
+    left: -4px;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity var(--duration-fast);
+}
+
 .msg-user::after  { right: calc(-1 * var(--space-2)); }
 
 .msg-agent:hover::after,
-.msg-user:hover::after { opacity: 0.5; }
+.msg-user:hover::after { opacity: 0.3; }
 
-.msg-agent:hover,
 .msg-user:hover {
     box-shadow: 0 2px 12px color-mix(in srgb, var(--bg) 85%, transparent);
 }
+
+.msg-agent:hover { box-shadow: none; }
 
 /* ── Message Label ── */
 .msg-label {
@@ -232,14 +269,6 @@
     display: flex;
     align-items: center;
     gap: var(--space-1);
-}
-
-.msg-agent .msg-label::before {
-    content: '';
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--accent);
 }
 
 .msg-user .msg-label::before {
@@ -296,7 +325,7 @@
 .msg:hover .msg-copy { opacity: 0.7; }
 .msg-copy:hover { opacity: 1; color: var(--text); transform: scale(1.5); }
 
-.msg-agent .msg-copy { right: var(--space-2); }
+.msg-agent .msg-copy { right: 0; top: 0; bottom: auto; }
 .msg-user .msg-copy { left: var(--space-2); }
 
 .msg-copy:active {
@@ -322,7 +351,7 @@
     display: inline-block;
     width: 3px;
     height: 1.1em;
-    background: var(--accent);
+    background: color-mix(in srgb, var(--accent) 40%, transparent);
     border-radius: 2px;
     margin-left: 2px;
     vertical-align: text-bottom;
@@ -330,8 +359,8 @@
 }
 
 @keyframes cursorPulse {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 1; }
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.8; }
 }
 
 /* ── Empty State ── */
@@ -796,24 +825,32 @@
 }
 
 @keyframes bounce {
-
-    0%,
-    60%,
-    100% {
+    0%, 60%, 100% {
         transform: translateY(0);
-        opacity: 0.4;
+        opacity: 0.3;
     }
-
     30% {
-        transform: translateY(-6px);
-        opacity: 1;
+        transform: translateY(-3px);
+        opacity: 0.7;
     }
 }
 
 .status-badge.status-running {
-    animation: dotPing 1.2s ease-in-out infinite;
+    animation: none;
+}
+
+.status-badge.status-running::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--status-running-color, var(--warning));
+    animation: dotPing 1.5s ease-in-out infinite;
+    margin-right: 4px;
 }
 
 .status-badge.status-idle {
-    animation: breathe 3s ease-in-out infinite;
+    animation: none;
+    opacity: 0.7;
 }

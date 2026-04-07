@@ -1,6 +1,6 @@
 // ── WebSocket Connection ──
 import { state } from './state.js';
-import { setStatus, updateQueueBadge, addSystemMsg, appendAgentText, finalizeAgent, addMessage, showLiveToolActivity, cleanupToolActivity } from './ui.js';
+import { setStatus, updateQueueBadge, addSystemMsg, appendAgentText, finalizeAgent, addMessage, showLiveToolActivity, showProcessStep, cleanupToolActivity } from './ui.js';
 import { t, getLang } from './features/i18n.js';
 import { getVirtualScroll } from './virtual-scroll.js';
 import type { OrcStateName } from './state.js';
@@ -49,6 +49,8 @@ interface WsMessage {
     action?: string;
     icon?: string;
     label?: string;
+    toolType?: string;
+    detail?: string;
     text?: string;
     toolLog?: { icon: string; label: string }[];
     from?: string;
@@ -225,7 +227,17 @@ export function connect(): void {
                 addSystemMsg(t('ws.roundRetry', { round: msg.round || 0 }));
             }
         } else if (msg.type === 'agent_tool') {
-            showLiveToolActivity(`${msg.icon || ''} ${msg.label || ''}`);
+            const stepType = msg.toolType === 'thinking' ? 'thinking'
+                : msg.toolType === 'search' ? 'search' : 'tool';
+            showProcessStep({
+                id: `step-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                type: stepType,
+                icon: msg.icon || '🔧',
+                label: msg.label || '',
+                detail: msg.detail || '',
+                status: 'running',
+                startTime: Date.now(),
+            });
         } else if (msg.type === 'agent_output') {
             appendAgentText(msg.text || '');
         } else if (msg.type === 'agent_retry') {

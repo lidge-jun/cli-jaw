@@ -2,6 +2,8 @@
 // All modules import this to access/modify shared state.
 // Object reference ensures mutations are seen across modules.
 
+import type { ProcessBlockState } from './features/process-block.js';
+
 export type HeartbeatSchedule =
     | {
         kind: 'every';
@@ -42,6 +44,7 @@ export interface AppState {
     cliStatusCache: CliStatusCache | null;
     cliStatusTs: number;
     isRecording: boolean;
+    currentProcessBlock: ProcessBlockState | null;
 }
 
 export const state: AppState = {
@@ -58,4 +61,5 @@ export const state: AppState = {
     cliStatusTs: 0,
     orcState: 'IDLE',
     isRecording: false,
+    currentProcessBlock: null,
 };
