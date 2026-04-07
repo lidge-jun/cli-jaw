@@ -385,7 +385,7 @@ body.right-collapsed .sidebar-right {
     }
 
     /* Input area safe area */
-    .input-area {
+    .chat-input-area {
         padding-bottom: env(safe-area-inset-bottom, 0px);
     }
 

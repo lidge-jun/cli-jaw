@@ -90,24 +90,20 @@ test('RC-001: orchestrateContinue checks PABCD state before worklog', () => {
     );
 });
 
-test('RC-002: pipeline auto-enters P from IDLE for orchestration tasks', () => {
+test('RC-002: PABCD requires explicit entry (no auto-activation)', () => {
     assert.ok(
-        pipelineSrc.includes('shouldAutoActivatePABCD'),
-        'pipeline should have auto-activation helper',
+        !pipelineSrc.includes('shouldAutoActivatePABCD'),
+        'auto-activation helper should be removed',
     );
     assert.ok(
-        pipelineSrc.includes("setState('P'"),
-        'pipeline should auto-transition IDLE -> P',
+        !pipelineSrc.includes('PABCD_ACTIVATE_PATTERNS'),
+        'activation patterns should be removed',
     );
 });
 
-test('RC-003: pipeline supports approval-driven auto phase advance', () => {
+test('RC-003: PABCD requires explicit phase advance (no auto-advance)', () => {
     assert.ok(
-        pipelineSrc.includes('AUTO_APPROVE_NEXT'),
-        'pipeline should define approval transition map',
-    );
-    assert.ok(
-        pipelineSrc.includes('isApproveIntent'),
-        'pipeline should evaluate approve intent',
+        !pipelineSrc.includes('AUTO_APPROVE_NEXT'),
+        'auto-approve map should be removed',
     );
 });

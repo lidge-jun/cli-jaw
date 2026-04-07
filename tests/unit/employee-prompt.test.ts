@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getEmployeePrompt, getEmployeePromptV2, clearPromptCache } from '../../src/prompt/builder.ts';
-import { needsOrchestration, parseSubtasks } from '../../src/orchestrator/pipeline.ts';
+import { parseSubtasks } from '../../src/orchestrator/pipeline.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const reviewerPath = join(__dirname, '../../skills_ref/dev-code-reviewer/SKILL.md');
@@ -119,11 +119,6 @@ test('EMP-024: research role injects read-only guide and phase 1 context', () =>
 });
 
 // ─── Phase 17: triage AI dispatch ────────────────────
-
-test('EMP-010: needsOrchestration returns false for short messages', () => {
-    assert.equal(needsOrchestration('안녕'), false);
-    assert.equal(needsOrchestration('ㅎㅇ'), false);
-});
 
 test('EMP-011: parseSubtasks extracts subtask JSON from agent response', () => {
     const text = '직원한테 시킬게요\n```json\n{"subtasks":[{"agent":"Frontend","task":"UI 수정"}]}\n```';

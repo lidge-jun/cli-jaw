@@ -36,52 +36,22 @@ import { buildTaskSnapshot, getMemoryStatus } from '../memory/runtime.js';
 
 // ─── Parser re-exports ─────────────────────────────
 import {
-    isContinueIntent, isResetIntent, isApproveIntent, needsOrchestration,
+    isContinueIntent, isResetIntent, isApproveIntent,
     parseSubtasks, parseDirectAnswer, stripSubtaskJSON,
 } from './parser.js';
 export {
-    isContinueIntent, isResetIntent, isApproveIntent, needsOrchestration,
+    isContinueIntent, isResetIntent, isApproveIntent,
     parseSubtasks, parseDirectAnswer, stripSubtaskJSON,
-};
-
-const PABCD_ACTIVATE_PATTERNS = [
-    /^\/?orchestrate$/i,
-    /^\/?pabcd$/i,
-    /^지휘\s*모드$/i,
-    /^오케스트레이션(?:\s*모드)?$/i,
-    /^orchestration(?:\s*mode)?$/i,
-];
-
-const AUTO_APPROVE_NEXT: Partial<Record<OrcStateName, OrcStateName>> = {
-    P: 'A',
-    A: 'B',
-    B: 'C',
 };
 
 type SpawnAgentLike = typeof spawnAgent;
 
-function isPabcdActivationPrompt(text: string) {
-    const t = String(text || '').trim();
-    if (!t) return false;
-    return PABCD_ACTIVATE_PATTERNS.some(re => re.test(t));
-}
-
 function pickPlanningTask(userText: string, _prompt: string, ctx: Record<string, any> | null) {
     const ctxPrompt = String(ctx?.originalPrompt || '').trim();
-    if (ctxPrompt && !isPabcdActivationPrompt(ctxPrompt)) return ctxPrompt;
-
+    if (ctxPrompt) return ctxPrompt;
     const userPrompt = String(userText || '').trim();
-    if (userPrompt && !isPabcdActivationPrompt(userPrompt)) return userPrompt;
-
+    if (userPrompt) return userPrompt;
     return '';
-}
-
-function shouldAutoActivatePABCD(prompt: string, meta: Record<string, any>) {
-    const t = String(prompt || '').trim();
-    if (!t) return false;
-    if (meta._workerResult || meta._skipAutoP) return false;
-    // Only activate via explicit trigger words — NOT auto for every complex message.
-    return PABCD_ACTIVATE_PATTERNS.some(re => re.test(t));
 }
 
 // ─── orchestrate (PABCD sole entry point) ───────────
@@ -124,33 +94,8 @@ export async function orchestrate(
         clearAllEmployeeSessions.run();
     }
 
-    // Auto-enter P mode from IDLE for orchestration-worthy tasks.
-    if (state === 'IDLE' && shouldAutoActivatePABCD(userText, meta)) {
-        setState('P', {
-            originalPrompt: userText || prompt,
-            plan: null,
-            workerResults: [],
-            origin,
-            chatId,
-        });
-        state = 'P';
-        prompt = `${getStatePrompt('P')}\n\nUser request:\n${userText || prompt}`;
-        skipPrefix = true;
-        console.log('[jaw:pabcd] auto-transition IDLE -> P');
-    }
-
-    // Auto-advance by explicit approval intent (no shell command dependency).
-    if (state !== 'IDLE' && !meta._workerResult && isApproveIntent(userText)) {
-        const next = AUTO_APPROVE_NEXT[state as OrcStateName];
-        if (next) {
-            const prev = state;
-            setState(next);
-            state = next;
-            prompt = `${getStatePrompt(next)}\n\nUser approval:\n${userText}`;
-            skipPrefix = true;
-            console.log(`[jaw:pabcd] auto-transition ${prev} -> ${next} (approve intent)`);
-        }
-    }
+    // PABCD entry is explicit only — via `/orchestrate`, `/pabcd`, or LLM tool call.
+    // Auto-entry and auto-advance removed per user request.
 
     clearPromptCache();
 

@@ -48,7 +48,7 @@ npm run check:deps                  # Dependency vulnerability check
 | `http-response.test.ts`        |   6   | `ok()` / `fail()` standard response format, status codes                                  |
 | `i18n.test.ts`                 |  26   | Locale loading, fallback chains, interpolation, plural rules                              |
 | `orchestrator-parsing.test.ts` |  13   | `parseSubtasks`, `parseDirectAnswer`, `stripSubtaskJSON` — fenced/raw/malformed           |
-| `orchestrator-triage.test.ts`  |  10   | `isContinueIntent`, `needsOrchestration` — signal threshold logic                         |
+| `orchestrator-triage.test.ts`  |   5   | `isContinueIntent` — pattern matching for continue/reset/approve intents                  |
 | `path-guards.test.ts`          |  16   | `assertSkillId`, `assertFilename`, `safeResolveUnder` — traversal/injection/overlong      |
 | `render-sanitize.test.ts`      |  11   | XSS regex fallback — script/event/javascript: stripping, content preservation             |
 | `settings-merge.test.ts`       |   5   | `mergeSettingsPatch` — perCli/activeOverrides deep merge                                  |

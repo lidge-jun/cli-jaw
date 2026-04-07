@@ -716,3 +716,36 @@ export async function ideHandler(args: string[], ctx: any) {
     if (sub === '') return { ok: true, code: 'ide_toggle', text: t('cmd.ide.toggled', {}, L) };
     return { ok: false, text: t('cmd.ide.usage', {}, L) };
 }
+
+export async function orchestrateHandler(args: string[], _ctx: any) {
+    const { getState, setState, resetState, canTransition, getStatePrompt } = await import('../orchestrator/state-machine.js');
+    type OrcStateName = 'IDLE' | 'P' | 'A' | 'B' | 'C' | 'D';
+    const target = (args[0] || 'P').toUpperCase();
+
+    if (target === 'RESET') {
+        resetState();
+        return { ok: true, text: '✅ State → IDLE (reset)' };
+    }
+
+    const valid: OrcStateName[] = ['P', 'A', 'B', 'C', 'D'];
+    if (!valid.includes(target as OrcStateName)) {
+        return { ok: false, text: `Invalid state: ${target}. Must be one of: P, A, B, C, D, reset` };
+    }
+
+    const current = getState();
+    const t = target as OrcStateName;
+    if (!canTransition(current, t)) {
+        return { ok: false, text: `Cannot transition: ${current} → ${t}` };
+    }
+
+    if (t === 'D') {
+        setState(t);
+        resetState();
+        return { ok: true, text: '✅ State → D (Done) → IDLE' };
+    }
+
+    setState(t, t === 'P' ? { originalPrompt: '', plan: null, workerResults: [], origin: 'web' } : undefined);
+    const statePrompt = getStatePrompt(t);
+    const summary = statePrompt.split('\n')[0] || '';
+    return { ok: true, text: `✅ State → ${getState()}${summary ? `\n${summary}` : ''}` };
+}

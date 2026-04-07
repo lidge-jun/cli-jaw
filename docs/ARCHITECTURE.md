@@ -190,12 +190,10 @@ Claude emits overlapping `stream_event` and `assistant` blocks. The `events.ts` 
 ### 3. Orchestration Pipeline
 
 ```
-User Request → needsOrchestration() → triage
+User Request → orchestrate() → triage
   → Simple: Direct agent spawn
   → Complex: Planning agent → subtask JSON → distribute to employees
-     → Phase 1 (Planning) → Phase 2 (Review) → Phase 3 (Dev)
-     → Phase 4 (Debug) → Phase 5 (Integration)
-     → Gate review between each phase
+     → PABCD phases (explicit entry via /orchestrate or LLM tool call)
 ```
 
 Phase 17 addition: Direct response path detects agent-generated subtask JSON → re-enters orchestration.
