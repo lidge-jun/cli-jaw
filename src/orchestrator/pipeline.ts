@@ -8,7 +8,7 @@ import {
     clearAllEmployeeSessions,
     upsertEmployeeSession,
 } from '../core/db.js';
-import { clearMainSessionState } from '../core/main-session.js';
+import { clearMainSessionState, clearBossSessionOnly } from '../core/main-session.js';
 import { clearPromptCache } from '../prompt/builder.js';
 import { spawnAgent } from '../agent/spawn.js';
 import {
@@ -333,8 +333,8 @@ export async function orchestrateReset(
     messageQueue.length = 0;
 
     clearAllEmployeeSessions.run();
-    // Clear boss session to prevent stale context resume after reset
-    clearMainSessionState();
+    // Reset boss session ID (prevents stale --resume) but keep message history
+    clearBossSessionOnly();
     resetState();
     const latest = readLatestWorklog();
     if (!latest) {

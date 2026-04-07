@@ -137,6 +137,14 @@ if (settings.permissions === 'safe') {
 initPromptFiles();
 regenerateB();
 
+// Reset stale orchestration state left by unclean shutdown (kill -9, crash)
+{
+    const staleState = getState();
+    if (staleState !== 'IDLE') {
+        console.log(`[jaw:startup] resetting stale orc_state: ${staleState} → IDLE`);
+        resetState();
+    }
+}
 
 // ─── Express + WebSocket ─────────────────────────────
 
@@ -1034,6 +1042,9 @@ const shutdown = async (sig: string) => {
     console.log(`\n[server] ${sig} received, shutting down...`);
     stopHeartbeat();
     killAllAgents('shutdown');
+
+    // Reset orchestration state so next startup doesn't show stale P/A/B/C
+    resetState();
 
     try {
         await Promise.race([

@@ -99,3 +99,11 @@ export function clearMainSessionState(): MainSessionRow {
     broadcast('clear', {});
     return row;
 }
+
+/** Reset boss session ID (prevents stale --resume) but preserves message history. */
+export function clearBossSessionOnly(): MainSessionRow {
+    const session = getSession() as MainSessionRecord;
+    const row = buildClearedSessionRow(settings, session);
+    writeMainSessionRow(row);
+    return row;
+}
