@@ -45,7 +45,9 @@ echo "🏷️  Creating preview tag..."
 git tag "v$VERSION"
 
 echo "⬆️  Pushing branch + tag..."
-git push origin master
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+git push origin "$CURRENT_BRANCH"
+git push origin "$CURRENT_BRANCH:master"
 git push origin "v$VERSION"
 
 echo "🚀 Publishing preview to npm..."
