@@ -107,3 +107,12 @@ export function clearBossSessionOnly(): MainSessionRow {
     writeMainSessionRow(row);
     return row;
 }
+
+/** Reset session for /reset confirm — clears session ID but preserves messages and notifies frontend. */
+export function resetSessionPreservingHistory(): MainSessionRow {
+    const session = getSession() as MainSessionRecord;
+    const row = buildClearedSessionRow(settings, session);
+    writeMainSessionRow(row);
+    broadcast('session_reset', { cli: row.cli, model: row.model });
+    return row;
+}

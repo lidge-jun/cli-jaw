@@ -75,7 +75,7 @@ import { validateHeartbeatScheduleInput } from './src/memory/heartbeat-schedule.
 import { fetchCopilotQuota, refreshCopilotFromKeychain } from './lib/quota-copilot.js';
 import { startTokenKeepAlive } from './lib/token-keepalive.js';
 import { CLI_REGISTRY } from './src/cli/registry.js';
-import { clearMainSessionState, syncMainSessionToSettings } from './src/core/main-session.js';
+import { clearMainSessionState, syncMainSessionToSettings, resetSessionPreservingHistory } from './src/core/main-session.js';
 import { applyRuntimeSettingsPatch } from './src/core/runtime-settings.js';
 import { getDefaultClaudeModel, migrateLegacyClaudeValue } from './src/cli/claude-models.js';
 
@@ -258,6 +258,11 @@ function clearSessionState() {
     clearMainSessionState();
 }
 
+function resetSessionOnly() {
+    bumpSessionOwnershipGeneration();
+    resetSessionPreservingHistory();
+}
+
 function resolveRequestLocale(req: any, preferred: string | null = null) {
     const fallback = settings.locale || 'ko';
     const direct = typeof preferred === 'string' ? preferred.trim() : '';
@@ -319,6 +324,7 @@ function makeWebCommandCtx(req: any, localeOverride: string | null = null) {
     return makeCommandCtx('web', resolveRequestLocale(req, localeOverride), {
         applySettings: (patch) => applySettingsPatch(patch),
         clearSession: () => clearSessionState(),
+        resetSession: () => resetSessionOnly(),
         resetEmployees: () => seedDefaultEmployees({ reset: true, notify: true }),
     });
 }

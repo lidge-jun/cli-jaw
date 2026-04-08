@@ -254,6 +254,8 @@ export function connect(): void {
             getVirtualScroll().clear();
             const el = document.getElementById('chatMessages');
             if (el) el.innerHTML = '';
+        } else if (msg.type === 'session_reset') {
+            addSystemMsg('🔄 Session reset — history preserved', 'tool-activity');
         } else if (msg.type === 'agent_added' || msg.type === 'agent_updated' || msg.type === 'agent_deleted') {
             import('./features/employees.js').then(m => m.loadEmployees());
         } else if (msg.type === 'orc_state') {

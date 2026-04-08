@@ -290,8 +290,8 @@ export async function resetHandler(args: any[], ctx: any) {
         await ctx.syncMcp();
         results.push('MCP');
     }
-    if (typeof ctx.clearSession === 'function') {
-        await ctx.clearSession();
+    if (typeof ctx.resetSession === 'function') {
+        await ctx.resetSession();
         results.push(t('cmd.reset.sessions', {}, L));
     }
     if (!results.length) {

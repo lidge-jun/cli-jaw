@@ -24,8 +24,10 @@ export type CommandContextInterface = 'web' | 'cli' | RemoteInterface;
 export type CommandContextDeps = {
     /** Apply settings patch (server.ts provides full logic, TG provides restricted subset) */
     applySettings: (patch: Record<string, any>) => any;
-    /** Clear session state callback */
+    /** Clear session state callback (deletes messages + clears UI) */
     clearSession: () => void;
+    /** Reset session without clearing messages (preserves chat history) */
+    resetSession?: () => void;
     /** Seed default employees callback */
     resetEmployees?: () => any;
 };
@@ -72,6 +74,9 @@ export function makeCommandCtx(
         }),
         getSkills: () => getMergedSkills(),
         clearSession: async () => deps.clearSession(),
+        resetSession: deps.resetSession
+            ? async () => deps.resetSession!()
+            : async () => deps.clearSession(),
         getCliStatus: () => detectAllCli(),
 
         // MCP — unified across all interfaces (TG previously returned empty)
