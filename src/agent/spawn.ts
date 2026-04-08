@@ -149,7 +149,7 @@ export function waitForProcessEnd(timeoutMs = 3000) {
 export async function steerAgent(newPrompt: string, source: string) {
     const wasRunning = killActiveAgent('steer');
     if (wasRunning) await waitForProcessEnd(3000);
-    insertMessage.run('user', newPrompt, source, '');
+    insertMessage.run('user', newPrompt, source, '', settings.workingDir || null);
     broadcast('new_message', { role: 'user', content: newPrompt, source });
     const { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
@@ -199,7 +199,7 @@ export async function processQueue() {
     const chatId = batch[0].chatId;
     const requestId = batch[0].requestId;
     console.log(`[queue] processing 1/${batch.length} message(s) for ${groupKey}, ${messageQueue.length} remaining`);
-    insertMessage.run('user', combined, source, '');
+    insertMessage.run('user', combined, source, '', settings.workingDir || null);
     // NOTE: no broadcast('new_message') here — gateway.ts already broadcast at enqueue time
     broadcast('queue_update', { pending: messageQueue.length });
     const { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } = await import('../orchestrator/pipeline.js');
@@ -218,8 +218,8 @@ function makeCleanEnv() {
     return env;
 }
 
-function buildHistoryBlock(currentPrompt: string, maxSessions = 10, maxTotalChars = 8000) {
-    const recent = getRecentMessages.all(Math.max(1, maxSessions * 2)) as any[];
+function buildHistoryBlock(currentPrompt: string, workingDir?: string | null, maxSessions = 10, maxTotalChars = 8000) {
+    const recent = getRecentMessages.all(workingDir || null, Math.max(1, maxSessions * 2)) as any[];
     if (!recent.length) return '';
 
     const promptText = String(currentPrompt || '').trim();
@@ -370,7 +370,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         ? true
         : (!forceNew && session.session_id && session.active_cli === cli);
     const resumeSessionId = empSid || session.session_id;
-    const historyBlock = !isResume ? buildHistoryBlock(prompt) : '';
+    const historyBlock = !isResume ? buildHistoryBlock(prompt, settings.workingDir) : '';
     const promptForArgs = (cli === 'gemini' || cli === 'opencode')
         ? withHistoryPrompt(prompt, historyBlock)
         : prompt;
@@ -458,7 +458,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         });
 
         if (mainManaged && !opts.internal && !opts._skipInsert) {
-            insertMessage.run('user', prompt, cli, model);
+            insertMessage.run('user', prompt, cli, model, settings.workingDir || null);
         }
         broadcast('agent_status', { status: 'running', cli, agentId: agentLabel });
 
@@ -571,7 +571,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
 
                 // If loadSession failed (or not resuming), inject history into prompt
                 const needsHistoryFallback = isResume && !loadSessionOk;
-                const fallbackHistory = needsHistoryFallback ? buildHistoryBlock(prompt) : '';
+                const fallbackHistory = needsHistoryFallback ? buildHistoryBlock(prompt, settings.workingDir) : '';
                 const acpPrompt = needsHistoryFallback
                     ? withHistoryPrompt(prompt, fallbackHistory)
                     : (isResume ? prompt : withHistoryPrompt(prompt, historyBlock));
@@ -660,7 +660,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
 
                 if (mainManaged && !opts.internal) {
                     const toolLogJson = ctx.toolLog.length ? JSON.stringify(ctx.toolLog) : null;
-                    insertMessageWithTrace.run('assistant', finalContent, cli, model, traceText || null, toolLogJson);
+                    insertMessageWithTrace.run('assistant', finalContent, cli, model, traceText || null, toolLogJson, settings.workingDir || null);
                     broadcast('agent_done', { text: finalContent, toolLog: ctx.toolLog, origin });
 
                     memoryFlushCounter++;
@@ -770,7 +770,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     });
 
     if (mainManaged && !opts.internal && !opts._skipInsert) {
-        insertMessage.run('user', prompt, cli, model);
+        insertMessage.run('user', prompt, cli, model, settings.workingDir || null);
     }
 
     if (cli === 'claude') {
@@ -887,7 +887,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
 
             if (mainManaged && !opts.internal) {
                 const toolLogJson = ctx.toolLog.length ? JSON.stringify(ctx.toolLog) : null;
-                insertMessageWithTrace.run('assistant', finalContent, cli, model, traceText || null, toolLogJson);
+                insertMessageWithTrace.run('assistant', finalContent, cli, model, traceText || null, toolLogJson, settings.workingDir || null);
                 broadcast('agent_done', { text: finalContent, toolLog: ctx.toolLog, origin });
 
                 memoryFlushCounter++;
@@ -977,7 +977,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
 async function triggerMemoryFlush() {
     const { getMemoryDir } = await import('../prompt/builder.js');
     const threshold = settings.memory?.flushEvery ?? 10;
-    const recent = (getRecentMessages.all(threshold) as any[]).reverse();
+    const recent = (getRecentMessages.all(settings.workingDir || null, threshold) as any[]).reverse();
     if (recent.length < 4) return;
 
     const lines = [];
