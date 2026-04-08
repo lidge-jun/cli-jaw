@@ -153,7 +153,7 @@ export const COMMANDS = [
     { name: 'commands', aliases: ['cmd'], descKey: '', desc: 'Open command palette', category: 'session', interfaces: ['cli'], handler: async () => ({ code: 'open_palette' }) },
     { name: 'status', descKey: 'cmd.status.desc', tgDescKey: 'cmd.status.tg_desc', desc: 'Current status', category: 'session', interfaces: ['cli', 'web', 'telegram', 'discord'], handler: statusHandler },
     { name: 'clear', descKey: 'cmd.clear.desc', tgDescKey: 'cmd.clear.tg_desc', desc: 'Clear screen', category: 'session', interfaces: ['cli', 'web', 'telegram', 'discord'], handler: clearHandler },
-    { name: 'compact', descKey: '', desc: 'Compact conversation context', args: '[instructions]', category: 'session', interfaces: ['cli', 'web', 'telegram', 'discord'], handler: compactHandler },
+    { name: 'compact', descKey: 'cmd.compact.desc', tgDescKey: 'cmd.compact.tg_desc', desc: 'Compact conversation context', args: '[instructions]', category: 'session', interfaces: ['cli', 'web', 'telegram', 'discord'], handler: compactHandler },
     { name: 'reset', descKey: 'cmd.reset.desc', desc: 'Full reset', args: '[confirm]', category: 'session', interfaces: ['cli', 'web'], handler: resetHandler },
     { name: 'model', descKey: 'cmd.model.desc', tgDescKey: 'cmd.model.tg_desc', desc: 'View/change model', args: '[name]', category: 'model', interfaces: ['cli', 'web', 'telegram', 'discord'], getArgumentCompletions: modelArgumentCompletions, handler: modelHandler },
     { name: 'cli', descKey: 'cmd.cli.desc', tgDescKey: 'cmd.cli.tg_desc', desc: 'View/change CLI', args: '[name]', category: 'model', interfaces: ['cli', 'web', 'telegram', 'discord'], getArgumentCompletions: cliArgumentCompletions, handler: cliHandler },

@@ -18,6 +18,8 @@
     "cmd.quit.desc": "프로세스 종료",
     "cmd.file.desc": "파일 첨부",
     "cmd.steer.desc": "에이전트를 중단하고 새 지시로 전환",
+    "cmd.compact.desc": "대화 컨텍스트 압축",
+    "cmd.compact.tg_desc": "대화 컨텍스트 압축",
     "cmd.help.tg_desc": "사용 가능한 명령어 보기",
     "cmd.status.tg_desc": "모델·CLI·세션 상태 확인",
     "cmd.clear.tg_desc": "대화 초기화 (데이터 유지)",

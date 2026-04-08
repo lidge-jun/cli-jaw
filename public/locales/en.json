@@ -18,6 +18,8 @@
     "cmd.quit.desc": "Quit process",
     "cmd.file.desc": "Attach file",
     "cmd.steer.desc": "Interrupt agent and redirect",
+    "cmd.compact.desc": "Compact conversation context",
+    "cmd.compact.tg_desc": "Compact conversation context",
     "cmd.help.tg_desc": "Show available commands",
     "cmd.status.tg_desc": "Check model, CLI & session status",
     "cmd.clear.tg_desc": "Reset conversation (keep data)",
