@@ -188,6 +188,20 @@ export function addStep(pb: ProcessBlockState, step: ProcessStep): void {
     updateSummary(pb);
 }
 
+export function replaceStep(pb: ProcessBlockState, oldStepId: string, newStep: ProcessStep): void {
+    const idx = pb.steps.findIndex(s => s.id === oldStepId);
+    if (idx === -1) return;
+    pb.steps[idx] = newStep;
+    const oldEl = pb.element.querySelector(`[data-step-id="${oldStepId}"]`);
+    if (oldEl) {
+        const temp = document.createElement('div');
+        temp.innerHTML = renderStep(newStep);
+        const newEl = temp.firstElementChild;
+        if (newEl) oldEl.replaceWith(newEl);
+    }
+    updateSummary(pb);
+}
+
 export function updateStepStatus(pb: ProcessBlockState, stepId: string, status: ProcessStep['status']): void {
     const step = pb.steps.find(s => s.id === stepId);
     if (!step) return;

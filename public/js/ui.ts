@@ -11,6 +11,7 @@ import { renderLiveToolActivity, cleanupToolElements, bindToolItemInteractions, 
 import {
     createProcessBlock,
     addStep,
+    replaceStep,
     updateStepStatus,
     collapseBlock,
     buildProcessBlockHtml,
@@ -162,6 +163,19 @@ export function showProcessStep(step: ProcessStep): void {
                 .find(s => s.status === 'running');
             if (anyRunning) {
                 updateStepStatus(state.currentProcessBlock, anyRunning.id, status);
+                scrollToBottom();
+                return;
+            }
+        }
+        // Dedupe: detail이 있는 재broadcast → 같은 label+type의 detail 없는 유령 교체
+        if (step.detail) {
+            const ghost = [...state.currentProcessBlock.steps].reverse()
+                .find(s => s.status === 'running'
+                    && s.label === step.label
+                    && s.type === step.type
+                    && !s.detail);
+            if (ghost) {
+                replaceStep(state.currentProcessBlock, ghost.id, step);
                 scrollToBottom();
                 return;
             }
