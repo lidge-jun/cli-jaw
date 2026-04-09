@@ -202,7 +202,7 @@ app.use(express.json({ limit: '1mb' }));
 // Serve Vite production build (public/dist/index.html) at root when available
 const distIndex = join(projectRoot, 'public', 'dist', 'index.html');
 app.get('/', (_req, res, next) => {
-    if (fs.existsSync(distIndex)) return res.sendFile(distIndex);
+    if (fs.existsSync(distIndex)) return res.sendFile('dist/index.html', { root: join(projectRoot, 'public') });
     next();
 });
 
