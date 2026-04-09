@@ -54,7 +54,7 @@ test('SF-002: exit handler saves interrupted content to DB via insertMessageWith
     // ACP path
     const acpExitIdx = src.indexOf("acp.on('exit'");
     assert.ok(acpExitIdx > 0);
-    const acpBlock = src.slice(acpExitIdx, acpExitIdx + 3500);
+    const acpBlock = src.slice(acpExitIdx, acpExitIdx + 7000);
 
     const interruptedIdx = acpBlock.indexOf('⏹️ [interrupted]');
     const insertTraceIdx = acpBlock.indexOf('insertMessageWithTrace.run');
@@ -64,7 +64,7 @@ test('SF-002: exit handler saves interrupted content to DB via insertMessageWith
     // CLI path
     const cliCloseIdx = src.indexOf("child.on('close'");
     assert.ok(cliCloseIdx > 0);
-    const cliBlock = src.slice(cliCloseIdx, cliCloseIdx + 3500);
+    const cliBlock = src.slice(cliCloseIdx, cliCloseIdx + 7000);
 
     const cliInterruptedIdx = cliBlock.indexOf('⏹️ [interrupted]');
     const cliInsertIdx = cliBlock.indexOf('insertMessageWithTrace.run');

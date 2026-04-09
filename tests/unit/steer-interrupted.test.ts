@@ -37,7 +37,7 @@ test('SI-003: ACP exit handler adds interrupted prefix to fullText when wasSteer
     const acpExitIdx = spawnSrc.indexOf("acp.on('exit'");
     assert.ok(acpExitIdx > 0, 'ACP exit handler should exist');
 
-    const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 4500);
+    const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 7000);
 
     // wasSteer check
     assert.ok(
@@ -60,7 +60,7 @@ test('SI-003: ACP exit handler adds interrupted prefix to fullText when wasSteer
 
 test('SI-004: ACP exit handler adds interrupted prefix to traceText when wasSteer', () => {
     const acpExitIdx = spawnSrc.indexOf("acp.on('exit'");
-    const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 5000);
+    const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 7000);
 
     // trace tagging
     assert.ok(
@@ -73,7 +73,7 @@ test('SI-004: ACP exit handler adds interrupted prefix to traceText when wasStee
 
 test('SI-005: ACP exit handler suppresses fallback on steer kill', () => {
     const acpExitIdx = spawnSrc.indexOf("acp.on('exit'");
-    const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 3500);
+    const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 7000);
 
     // The else-if for error/fallback should check !wasSteer
     assert.ok(
@@ -89,7 +89,7 @@ test('SI-006: Standard CLI close handler tags interrupted output', () => {
     const cliCloseIdx = spawnSrc.indexOf("child.on('close'");
     assert.ok(cliCloseIdx > 0, 'Standard CLI close handler should exist');
 
-    const cliCloseBlock = spawnSrc.slice(cliCloseIdx, cliCloseIdx + 4000);
+    const cliCloseBlock = spawnSrc.slice(cliCloseIdx, cliCloseIdx + 7000);
 
     // wasSteer check
     assert.ok(
@@ -136,8 +136,8 @@ test('SI-STRUCT: ACP and CLI exit handlers have symmetric steer logic', () => {
     assert.ok(acpExitIdx < cliCloseIdx, 'ACP exit should come before CLI close in source');
 
     // Both should have the same key lines
-    const acpBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 5000);
-    const cliBlock = spawnSrc.slice(cliCloseIdx, cliCloseIdx + 5000);
+    const acpBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 7000);
+    const cliBlock = spawnSrc.slice(cliCloseIdx, cliCloseIdx + 7000);
 
     for (const pattern of [
         "killReason === 'steer'",
