@@ -400,6 +400,29 @@ export function getSystemPrompt(opts: { currentPrompt?: string; forDisk?: boolea
         }
     } catch { /* vision-click not ready */ }
 
+    // ─── Subagent prohibition for pipe-mode CLIs ───
+    // Pipe-mode CLIs (codex, claude, gemini, opencode) exit after a single
+    // session. Internal Agent/subagent tools will fail because the process
+    // terminates before the subagent completes. ACP (copilot) is excluded
+    // because it maintains a persistent session.
+    const pipeActiveCli = opts.activeCli || settings.cli;
+    const PIPE_MODE_CLIS = ['codex', 'claude', 'gemini', 'opencode'];
+    if (!opts.forDisk && PIPE_MODE_CLIS.includes(pipeActiveCli || '')) {
+        prompt += '\n\n---\n## Agent/Subagent Prohibition\n';
+        prompt += 'You are running in non-interactive pipe mode. ';
+        prompt += '**Do NOT use Agent tools, subagent spawning, or delegation tools.** ';
+        prompt += 'These tools will fail because the process exits after your response. ';
+        prompt += 'Instead, do the work directly yourself in this single session. ';
+        prompt += 'If the task is too large, break it into concrete steps and execute them sequentially — ';
+        prompt += 'do NOT delegate to another agent.\n';
+    }
+    if (opts.forDisk) {
+        prompt += '\n\n---\n## Agent/Subagent Prohibition\n';
+        prompt += 'Do NOT use Agent, subagent, or delegation tools. ';
+        prompt += 'This session runs in pipe mode — subprocesses will not complete. ';
+        prompt += 'Do all work directly. Break large tasks into sequential steps.\n';
+    }
+
     return prompt;
 }
 
@@ -489,6 +512,12 @@ export function getEmployeePromptV2(emp: any, role: any, currentPhase: number | 
     prompt += `\n- Do not touch files outside your assigned scope`;
     prompt += `\n- Focus only on your assigned area`;
     prompt += `\n- Report results clearly with specific file paths and line numbers`;
+
+    // ─── Subagent prohibition (employees always run in pipe mode) ───
+    prompt += `\n\n## Agent/Subagent Prohibition`;
+    prompt += `\nYou are running as a worker agent in pipe mode.`;
+    prompt += `\nDo NOT use Agent tools or subagent delegation.`;
+    prompt += `\nComplete all work directly in this session.`;
 
     promptCache.set(cacheKey, prompt);
     return prompt;

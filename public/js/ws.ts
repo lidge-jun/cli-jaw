@@ -246,6 +246,8 @@ export function connect(): void {
             addSystemMsg(t('ws.retry', { cli: msg.cli || '', delay: msg.delay || 10 }), 'tool-activity');
         } else if (msg.type === 'agent_fallback') {
             addSystemMsg(t('ws.fallback', { from: msg.from || '', to: msg.to || '' }), 'tool-activity');
+        } else if (msg.type === 'agent_smoke') {
+            addSystemMsg(`⚠️ ${msg.cli || 'agent'}: smoke response detected — auto-continuing`, 'tool-activity');
         } else if (msg.type === 'agent_done') {
             finalizeAgent(msg.text || '', msg.toolLog);
         } else if (msg.type === 'orchestrate_done') {

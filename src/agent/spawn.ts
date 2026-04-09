@@ -11,6 +11,7 @@ import {
 } from '../core/db.js';
 import { getSystemPrompt, regenerateB } from '../prompt/builder.js';
 import { extractSessionId, extractFromEvent, extractFromAcpUpdate, logEventSummary, flushClaudeBuffers } from './events.js';
+import { detectSmokeResponse, buildContinuationPrompt } from './smoke-detector.js';
 import { saveUpload as _saveUpload, buildMediaPrompt } from '../../lib/upload.js';
 import { getMemoryFlushFilePath, getMemoryStatus } from '../memory/runtime.js';
 import { resolveMainCli } from '../core/main-session.js';
@@ -304,6 +305,7 @@ interface SpawnOpts {
     internal?: boolean;
     _isFallback?: boolean;
     _isRetry?: boolean;      // 429 delay retry 중 여부
+    _isSmokeContinuation?: boolean;  // Auto-retry after smoke response detected
     _skipInsert?: boolean;
     forceNew?: boolean;
     agentId?: string;
@@ -613,6 +615,57 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             const wasSteer = killReason === 'steer';
             if (mainManaged) killReason = null;  // consume
             flushThinking();  // Flush any remaining thinking buffer
+
+            // ─── Smoke response detection + auto-continuation ───
+            const smokeResult = detectSmokeResponse(ctx.fullText, ctx.toolLog, code, cli);
+
+            if (smokeResult.isSmoke
+                && smokeResult.confidence !== 'low'
+                && !opts._isSmokeContinuation
+                && !opts.internal
+                && mainManaged
+                && !wasSteer
+            ) {
+                console.warn(
+                    `[jaw:smoke] ${cli} ACP smoke detected (${smokeResult.confidence}). Auto-continuing.`,
+                );
+                broadcast('agent_smoke', {
+                    cli, confidence: smokeResult.confidence,
+                    reason: smokeResult.reason, agentId: agentLabel,
+                });
+
+                const smokeSessionId = ctx.sessionId;
+                if (smokeSessionId) {
+                    persistMainSession({
+                        ownerGeneration, forceNew, employeeSessionId: empSid,
+                        sessionId: smokeSessionId, isFallback: opts._isFallback,
+                        code, cli, model, effort: cfg.effort || '',
+                    });
+                    console.log(`[jaw:smoke] persisted session ${smokeSessionId.slice(0, 12)}... for continuation`);
+                }
+
+                activeProcesses.delete(agentLabel);
+                activeProcess = null;
+                broadcast('agent_status', { running: false, agentId: agentLabel });
+
+                const contPrompt = buildContinuationPrompt(prompt, ctx.fullText);
+                const { promise: contPromise } = spawnAgent(contPrompt, {
+                    ...opts, _isSmokeContinuation: true, _skipInsert: true,
+                });
+                contPromise.then(r => resolve(r)).catch(() => {
+                    broadcast('agent_done', {
+                        text: `❌ Smoke continuation failed. Original: ${ctx.fullText.slice(0, 200)}`,
+                        error: true, origin,
+                    });
+                    resolve({
+                        text: ctx.fullText, code: code ?? 1,
+                        sessionId: ctx.sessionId, tools: ctx.toolLog, smoke: smokeResult,
+                    });
+                    processQueue();
+                });
+                return;
+            }
+
             activeProcesses.delete(agentLabel);
             if (mainManaged) {
                 activeProcess = null;
@@ -730,7 +783,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             }
 
             broadcast('agent_status', { status: code === 0 ? 'done' : 'error', agentId: agentLabel });
-            resolve({ text: ctx.fullText, code: code ?? 1, sessionId: ctx.sessionId, tools: ctx.toolLog });
+            resolve({ text: ctx.fullText, code: code ?? 1, sessionId: ctx.sessionId, tools: ctx.toolLog, smoke: smokeResult });
             if (mainManaged) processQueue();
         });
 
@@ -831,8 +884,65 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         if (stdSettled) return;  // error handler already resolved
         flushClaudeBuffers(ctx, agentLabel);  // flush any pending thinking/input buffers
         opts.lifecycle?.onExit?.(code ?? null);
+
+        // Consume killReason early (before smoke check to prevent leak to continuation)
         const wasSteer = killReason === 'steer';
-        if (mainManaged) killReason = null;  // consume
+        if (mainManaged) killReason = null;
+
+        // ─── Smoke response detection + auto-continuation ───
+        const smokeResult = detectSmokeResponse(ctx.fullText, ctx.toolLog, code, cli);
+
+        if (smokeResult.isSmoke
+            && smokeResult.confidence !== 'low'
+            && !opts._isSmokeContinuation
+            && !opts.internal
+            && mainManaged
+            && !wasSteer
+        ) {
+            console.warn(
+                `[jaw:smoke] ${cli} smoke response detected (${smokeResult.confidence}). ` +
+                `Auto-continuing with direct-work prompt.`,
+            );
+            broadcast('agent_smoke', {
+                cli, confidence: smokeResult.confidence,
+                reason: smokeResult.reason, agentId: agentLabel,
+            });
+
+            // 1. Persist session BEFORE re-spawn so continuation can --resume
+            const smokeSessionId = ctx.sessionId;
+            if (smokeSessionId) {
+                persistMainSession({
+                    ownerGeneration, forceNew, employeeSessionId: empSid,
+                    sessionId: smokeSessionId, isFallback: opts._isFallback,
+                    code, cli, model, effort: cfg.effort || 'medium',
+                });
+                console.log(`[jaw:smoke] persisted session ${smokeSessionId.slice(0, 12)}... for continuation`);
+            }
+
+            // 2. Clear process state so re-spawn is allowed
+            activeProcesses.delete(agentLabel);
+            activeProcess = null;
+            broadcast('agent_status', { running: false, agentId: agentLabel });
+
+            // 3. Re-spawn with continuation prompt (no forceNew — keep mainManaged=true)
+            const contPrompt = buildContinuationPrompt(prompt, ctx.fullText);
+            const { promise: contPromise } = spawnAgent(contPrompt, {
+                ...opts, _isSmokeContinuation: true, _skipInsert: true,
+            });
+            contPromise.then(r => resolve(r)).catch(() => {
+                broadcast('agent_done', {
+                    text: `❌ Smoke continuation failed. Original: ${ctx.fullText.slice(0, 200)}`,
+                    error: true, origin,
+                });
+                resolve({
+                    text: ctx.fullText, code, sessionId: ctx.sessionId,
+                    cost: ctx.cost, tools: ctx.toolLog, smoke: smokeResult,
+                });
+                processQueue();
+            });
+            return;  // Early exit — skip all normal handling
+        }
+
         activeProcesses.delete(agentLabel);
         if (mainManaged) {
             activeProcess = null;
@@ -964,7 +1074,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         broadcast('agent_status', { status: code === 0 ? 'done' : 'error', agentId: agentLabel });
         console.log(`[jaw:${agentLabel}] exited code=${code}, text=${ctx.fullText.length} chars`);
 
-        resolve({ text: ctx.fullText, code, sessionId: ctx.sessionId, cost: ctx.cost, tools: ctx.toolLog });
+        resolve({ text: ctx.fullText, code, sessionId: ctx.sessionId, cost: ctx.cost, tools: ctx.toolLog, smoke: smokeResult });
 
         if (mainManaged) processQueue();
     });
