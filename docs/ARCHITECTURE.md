@@ -102,8 +102,8 @@ graph LR
 
 ## File Structure & Line Counts
 
-> Verified by `devlog/verify-counts.sh`. Run `bash devlog/verify-counts.sh` to check accuracy.
-> Detailed function-level reference: `devlog/str_func.md` + `devlog/str_func/*.md`
+> Verified by `devlog/structure/verify-counts.sh`. Run `bash devlog/structure/verify-counts.sh` to check accuracy.
+> Detailed function-level reference: `devlog/structure/str_func.md` + `devlog/structure/*.md`
 
 ### Core (`src/`)
 
@@ -273,14 +273,14 @@ main.js (entry)
 
 ## Development Guidelines
 
-> See also: `devlog/str_func.md` for function-level reference.
+> See also: `devlog/structure/str_func.md` for function-level reference.
 
 - **500-line limit** per file — split when exceeded
 - **ESM only** — `import`/`export`, no CommonJS
 - **Never delete exports** — other modules may import them
 - **try/catch mandatory** — no silent failures
 - **Config centralized** — `config.ts` or `settings.json`, never hardcode
-- **Verify with** `bash devlog/verify-counts.sh` — ensures doc/code line count sync
+- **Verify with** `bash devlog/structure/verify-counts.sh` — ensures doc/code line count sync
 
 ---
 
@@ -372,7 +372,7 @@ main.js (entry)
 |----------|-------------|
 | [README.md](../README.md) | User-facing documentation |
 | [TESTS.md](../TESTS.md) | Test coverage details + Phase 20 test plan |
-| [devlog/str_func.md](../devlog/str_func.md) | Full function-level reference |
-| [devlog/str_func/*.md](../devlog/str_func/) | Per-module detailed docs (8 files) |
-| [devlog/verify-counts.sh](../devlog/verify-counts.sh) | Line count verification script |
+| [devlog/structure/str_func.md](../devlog/structure/str_func.md) | Full function-level reference |
+| [devlog/structure/*.md](../devlog/structure/) | Per-module detailed docs |
+| [devlog/structure/verify-counts.sh](../devlog/structure/verify-counts.sh) | Line count verification script |
 | [devlog/260225_finness/](../devlog/260225_finness/) | Phase 0-20 implementation logs |
