@@ -410,19 +410,21 @@ body.right-collapsed .sidebar-right {
 }
 
 /* ── Lucide Icons ── */
-.lucide {
+.lucide,
+[data-icon] svg,
+.icon-hydrated svg,
+.cli-provider-icon svg,
+.skill-emoji svg {
     display: inline-block;
+    width: 1em;
+    height: 1em;
     vertical-align: -0.125em;
     flex-shrink: 0;
 }
 
-[data-icon] {
-    display: inline-flex;
-    align-items: center;
-    line-height: 0;
-}
-
+[data-icon],
 .icon-hydrated {
     display: inline-flex;
     align-items: center;
+    line-height: 1;
 }

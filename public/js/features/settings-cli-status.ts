@@ -4,6 +4,7 @@ import { escapeHtml } from '../render.js';
 import { t } from './i18n.js';
 import { state } from '../state.js';
 import { ICONS } from '../icons.js';
+import { providerIcon } from '../provider-icons.js';
 import type { QuotaEntry } from './settings-types.js';
 
 export async function loadCliStatus(force = false): Promise<void> {
@@ -121,6 +122,7 @@ function renderCliStatus(data: { cliStatus: Record<string, { available: boolean 
             <div class="settings-group" style="margin-bottom:6px;padding:8px 10px">
                 <div class="cli-status-row">
                     <span class="cli-dot ${dotClass}"></span>
+                    <span class="cli-provider-icon" aria-hidden="true">${providerIcon(name) || ''}</span>
                     <span class="cli-name" style="font-weight:600">${escapeHtml(name)}</span>${name === 'copilot' ? `<button id="copilotKeychainBtn" style="font-size:9px;margin-left:6px;padding:1px 5px;background:var(--border);color:var(--text-dim);border:1px solid var(--text-dim);border-radius:3px;cursor:pointer;vertical-align:middle;line-height:1" title="${t('copilot.keychainHint')}">${ICONS.key}</button>` : ''}
                 </div>
                 ${accountLine}

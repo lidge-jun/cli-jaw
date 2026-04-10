@@ -25,9 +25,9 @@ const PROVIDER_ICONS: Record<ProviderSlug, ProviderIcon> = {
     openai:   { color: openaiSvg,  mono: openaiSvg,      label: 'OpenAI' },
     gemini:   { color: geminiSvg,  mono: geminiMonoSvg,   label: 'Gemini' },
     copilot:  { color: copilotSvg, mono: copilotMonoSvg,  label: 'GitHub Copilot' },
-    // Aliases — codex and opencode use OpenAI branding
-    codex:    { color: openaiSvg,  mono: openaiSvg,      label: 'Codex' },
-    opencode: { color: openaiSvg,  mono: openaiSvg,      label: 'OpenCode' },
+    codex:    { color: openaiSvg,  mono: openaiSvg,      label: 'Codex (OpenAI)' },
+    // opencode is its own project (opencode-ai), not OpenAI — no brand icon, use empty
+    opencode: { color: '',         mono: '',              label: 'OpenCode' },
 };
 
 /** Get a provider icon SVG string. Returns color variant by default. */
