@@ -106,6 +106,17 @@ async function dcOrchestrate(msg: Message, prompt: string, displayMsg: string) {
     // result.action === 'started' — orchestrate and collect result
     markChannelActive(msg.channelId);
 
+    // Typing indicator: start + periodic refresh (8s, Discord expires at 10s)
+    const typingChannel = msg.channel as any;
+    typingChannel.sendTyping?.()
+        ?.then(() => console.log('[discord:typing] ✅ sent'))
+        ?.catch((e: Error) => console.log('[discord:typing] ❌', e.message));
+    const typingInterval = setInterval(() => {
+        typingChannel.sendTyping?.()
+            ?.then(() => console.log('[discord:typing] ✅ refresh'))
+            ?.catch((e: Error) => console.log('[discord:typing] ❌ refresh', e.message));
+    }, 8000);
+
     try {
         const text = String(await orchestrateAndCollect(prompt, {
             origin: 'discord', target, chatId, requestId: result.requestId, _skipInsert: true,
@@ -118,6 +129,8 @@ async function dcOrchestrate(msg: Message, prompt: string, displayMsg: string) {
     } catch (err: unknown) {
         console.error('[discord:error]', err);
         await msg.reply(`❌ Error: ${(err as Error).message}`).catch(() => { });
+    } finally {
+        clearInterval(typingInterval);
     }
 }
 
