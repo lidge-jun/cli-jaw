@@ -27,7 +27,7 @@ export function appendChunk(ss: StreamState, chunk: string): void {
             if (ss.isFinalized) return;
             const now = performance.now();
             if (ss.fullText.length < FULL_RENDER_THRESHOLD || now - ss.lastRenderTime > THROTTLE_MS) {
-                ss.element.innerHTML = renderMarkdown(ss.fullText) +
+                ss.element.innerHTML = renderMarkdown(ss.fullText, true) +
                     '<span class="stream-cursor" aria-hidden="true"></span>';
                 ss.lastRenderTime = now;
             } else {
@@ -35,7 +35,7 @@ export function appendChunk(ss: StreamState, chunk: string): void {
                 ss.pendingRAF = requestAnimationFrame(() => {
                     ss.pendingRAF = null;
                     if (ss.isFinalized) return;
-                    ss.element.innerHTML = renderMarkdown(ss.fullText) +
+                    ss.element.innerHTML = renderMarkdown(ss.fullText, true) +
                         '<span class="stream-cursor" aria-hidden="true"></span>';
                     ss.lastRenderTime = performance.now();
                 });

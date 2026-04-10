@@ -1,0 +1,297 @@
+/* public/css/diagram.css — Diagram visualization design system */
+
+/* ── Diagram Containers ── */
+.diagram-container {
+  position: relative;
+  margin: 1rem 0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.diagram-svg {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: var(--space-4);
+}
+
+.diagram-svg svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 680px;
+}
+
+.diagram-widget {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.diagram-widget iframe {
+  display: block;
+  width: 100%;
+  min-height: 60px;
+  border: none;
+}
+
+/* ── Loading & Error ── */
+.diagram-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.diagram-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: diagram-spin 0.8s linear infinite;
+}
+
+@keyframes diagram-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .diagram-spinner { animation: none; }
+}
+
+.diagram-error {
+  padding: var(--space-4);
+  color: var(--text-dim);
+  font-size: 14px;
+  text-align: center;
+}
+
+.diagram-widget-pending {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+/* ── Zoom Button ── */
+.diagram-zoom-btn {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  font-size: 16px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+  z-index: 2;
+}
+
+.diagram-container:hover .diagram-zoom-btn,
+.diagram-container:focus-within .diagram-zoom-btn {
+  opacity: 1;
+}
+
+.diagram-zoom-btn:hover {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ── Zoom Overlay ── */
+.diagram-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+}
+
+.diagram-overlay-content {
+  max-width: 95vw;
+  max-height: 90vh;
+  overflow: auto;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.diagram-overlay-content svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 1200px;
+}
+
+.diagram-overlay-close {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  color: var(--text);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.diagram-overlay-close:hover {
+  background: var(--bg);
+}
+
+/* ═══════════════════════════════════════════
+   COLOR RAMPS — 9 semantic colors
+   Dark = default (:root), Light = [data-theme="light"]
+   Each ramp: fill (background), stroke (border), text (label)
+   ═══════════════════════════════════════════ */
+
+/* ── Blue (Primary) ── */
+.c-blue-fill   { fill: #1e3a5f; }
+.c-blue-stroke { stroke: #3b82f6; fill: none; }
+.c-blue-text   { fill: #93c5fd; }
+.c-blue-bg     { fill: #1e3a5f; stroke: #3b82f6; stroke-width: 1; }
+
+/* ── Purple ── */
+.c-purple-fill   { fill: #3b1f5e; }
+.c-purple-stroke { stroke: #8b5cf6; fill: none; }
+.c-purple-text   { fill: #c4b5fd; }
+.c-purple-bg     { fill: #3b1f5e; stroke: #8b5cf6; stroke-width: 1; }
+
+/* ── Green ── */
+.c-green-fill   { fill: #14532d; }
+.c-green-stroke { stroke: #22c55e; fill: none; }
+.c-green-text   { fill: #86efac; }
+.c-green-bg     { fill: #14532d; stroke: #22c55e; stroke-width: 1; }
+
+/* ── Amber ── */
+.c-amber-fill   { fill: #451a03; }
+.c-amber-stroke { stroke: #f59e0b; fill: none; }
+.c-amber-text   { fill: #fcd34d; }
+.c-amber-bg     { fill: #451a03; stroke: #f59e0b; stroke-width: 1; }
+
+/* ── Red ── */
+.c-red-fill   { fill: #450a0a; }
+.c-red-stroke { stroke: #ef4444; fill: none; }
+.c-red-text   { fill: #fca5a5; }
+.c-red-bg     { fill: #450a0a; stroke: #ef4444; stroke-width: 1; }
+
+/* ── Cyan ── */
+.c-cyan-fill   { fill: #083344; }
+.c-cyan-stroke { stroke: #06b6d4; fill: none; }
+.c-cyan-text   { fill: #67e8f9; }
+.c-cyan-bg     { fill: #083344; stroke: #06b6d4; stroke-width: 1; }
+
+/* ── Pink ── */
+.c-pink-fill   { fill: #500724; }
+.c-pink-stroke { stroke: #ec4899; fill: none; }
+.c-pink-text   { fill: #f9a8d4; }
+.c-pink-bg     { fill: #500724; stroke: #ec4899; stroke-width: 1; }
+
+/* ── Slate (Neutral) ── */
+.c-slate-fill   { fill: #1e293b; }
+.c-slate-stroke { stroke: #64748b; fill: none; }
+.c-slate-text   { fill: #94a3b8; }
+.c-slate-bg     { fill: #1e293b; stroke: #64748b; stroke-width: 1; }
+
+/* ── Orange ── */
+.c-orange-fill   { fill: #431407; }
+.c-orange-stroke { stroke: #f97316; fill: none; }
+.c-orange-text   { fill: #fdba74; }
+.c-orange-bg     { fill: #431407; stroke: #f97316; stroke-width: 1; }
+
+/* ── SVG Primitives ── */
+.node {
+  rx: 8;
+  ry: 8;
+}
+
+.connector {
+  stroke: var(--border);
+  stroke-width: 1.5;
+  fill: none;
+}
+
+.label {
+  font-size: 14px;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.diagram-title {
+  font-size: 16px;
+  font-weight: 600;
+  text-anchor: middle;
+}
+
+/* ═══════════════════════════════════════════
+   LIGHT MODE OVERRIDES
+   ═══════════════════════════════════════════ */
+
+[data-theme="light"] .c-blue-fill   { fill: #dbeafe; }
+[data-theme="light"] .c-blue-stroke { stroke: #2563eb; }
+[data-theme="light"] .c-blue-text   { fill: #1e40af; }
+[data-theme="light"] .c-blue-bg     { fill: #dbeafe; stroke: #2563eb; }
+
+[data-theme="light"] .c-purple-fill   { fill: #ede9fe; }
+[data-theme="light"] .c-purple-stroke { stroke: #7c3aed; }
+[data-theme="light"] .c-purple-text   { fill: #5b21b6; }
+[data-theme="light"] .c-purple-bg     { fill: #ede9fe; stroke: #7c3aed; }
+
+[data-theme="light"] .c-green-fill   { fill: #dcfce7; }
+[data-theme="light"] .c-green-stroke { stroke: #16a34a; }
+[data-theme="light"] .c-green-text   { fill: #15803d; }
+[data-theme="light"] .c-green-bg     { fill: #dcfce7; stroke: #16a34a; }
+
+[data-theme="light"] .c-amber-fill   { fill: #fef3c7; }
+[data-theme="light"] .c-amber-stroke { stroke: #d97706; }
+[data-theme="light"] .c-amber-text   { fill: #92400e; }
+[data-theme="light"] .c-amber-bg     { fill: #fef3c7; stroke: #d97706; }
+
+[data-theme="light"] .c-red-fill   { fill: #fee2e2; }
+[data-theme="light"] .c-red-stroke { stroke: #dc2626; }
+[data-theme="light"] .c-red-text   { fill: #991b1b; }
+[data-theme="light"] .c-red-bg     { fill: #fee2e2; stroke: #dc2626; }
+
+[data-theme="light"] .c-cyan-fill   { fill: #cffafe; }
+[data-theme="light"] .c-cyan-stroke { stroke: #0891b2; }
+[data-theme="light"] .c-cyan-text   { fill: #155e75; }
+[data-theme="light"] .c-cyan-bg     { fill: #cffafe; stroke: #0891b2; }
+
+[data-theme="light"] .c-pink-fill   { fill: #fce7f3; }
+[data-theme="light"] .c-pink-stroke { stroke: #db2777; }
+[data-theme="light"] .c-pink-text   { fill: #9d174d; }
+[data-theme="light"] .c-pink-bg     { fill: #fce7f3; stroke: #db2777; }
+
+[data-theme="light"] .c-slate-fill   { fill: #f1f5f9; }
+[data-theme="light"] .c-slate-stroke { stroke: #475569; }
+[data-theme="light"] .c-slate-text   { fill: #334155; }
+[data-theme="light"] .c-slate-bg     { fill: #f1f5f9; stroke: #475569; }
+
+[data-theme="light"] .c-orange-fill   { fill: #ffedd5; }
+[data-theme="light"] .c-orange-stroke { stroke: #ea580c; }
+[data-theme="light"] .c-orange-text   { fill: #9a3412; }
+[data-theme="light"] .c-orange-bg     { fill: #ffedd5; stroke: #ea580c; }
+
+[data-theme="light"] .connector {
+  stroke: var(--border);
+}

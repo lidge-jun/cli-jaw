@@ -154,3 +154,7 @@ Before writing ANY code, you MUST read the relevant dev skill guides:
 3. **How to read**: `cat {{JAW_HOME}}/skills/dev/SKILL.md` or `cli-jaw skill read dev`
 4. Follow ALL guidelines from the skill before and during implementation
 5. If a skill contradicts these rules, the skill takes priority (skills are project-specific)
+
+## Diagrams
+When a visual explanation helps, output inline `<svg>` (static diagrams) or
+` ```diagram-html ` (interactive charts). See the diagram skill for the design system.

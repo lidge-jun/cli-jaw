@@ -84,7 +84,7 @@ export function sanitizeHtml(html: string): string {
     return DOMPurify.sanitize(html, {
         USE_PROFILES: { html: true, svg: true, svgFilters: true },
         FORBID_TAGS: [
-            'script', 'style', 'iframe', 'object', 'embed', 'form',
+            'script', 'style', 'iframe', 'object', 'embed', 'form', 'input',
             // SVG security: block animation + foreignObject (script injection vectors)
             'foreignObject', 'animate', 'set', 'animateTransform', 'animateMotion',
         ],
@@ -384,7 +384,7 @@ function renderSvgBlock(block: SvgBlock): string {
     // Complete SVG — sanitize individually (extracted SVGs bypass main pipeline)
     const sanitized = sanitizeHtml(block.svg);
     return `<div class="diagram-container diagram-svg" tabindex="0"
-        role="img" aria-label="SVG diagram">
+        role="figure" aria-label="SVG diagram">
         ${sanitized}
         <button class="diagram-zoom-btn" type="button"
             aria-label="Expand diagram" title="Expand">⤢</button>
@@ -420,9 +420,11 @@ export function bindDiagramZoom(): void {
 }
 
 export function openDiagramOverlay(innerHtml: string): void {
+    const previousFocus = document.activeElement as HTMLElement | null;
     const overlay = document.createElement('div');
     overlay.className = 'diagram-overlay';
     overlay.setAttribute('role', 'dialog');
+    overlay.setAttribute('aria-modal', 'true');
     overlay.setAttribute('aria-label', 'Expanded diagram');
     // Re-sanitize to prevent mXSS from double HTML parsing
     const safeHtml = sanitizeHtml(innerHtml);
@@ -433,8 +435,28 @@ export function openDiagramOverlay(innerHtml: string): void {
 
     const closeBtn = overlay.querySelector('.diagram-overlay-close') as HTMLElement;
 
-    const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    const close = () => {
+        overlay.remove();
+        document.removeEventListener('keydown', onKey);
+        // Restore focus to the element that opened the overlay
+        if (previousFocus && previousFocus.isConnected) previousFocus.focus();
+    };
+    const onKey = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') { close(); return; }
+        // Focus trap: Tab cycles within overlay
+        if (e.key === 'Tab') {
+            const focusable = overlay.querySelectorAll<HTMLElement>(
+                'button, [href], [tabindex]:not([tabindex="-1"])');
+            if (focusable.length === 0) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault(); last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault(); first.focus();
+            }
+        }
+    };
 
     closeBtn.addEventListener('click', close);
     document.addEventListener('keydown', onKey);

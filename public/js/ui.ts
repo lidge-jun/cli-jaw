@@ -7,6 +7,7 @@ import { api } from './api.js';
 import { cacheMessages, getCachedMessages, appendCachedMessage } from './features/idb-cache.js';
 import { getVirtualScroll, VS_THRESHOLD } from './virtual-scroll.js';
 import { createStreamRenderer, appendChunk, finalizeStream, type StreamState } from './streaming-render.js';
+import { activateWidgets } from './diagram/iframe-renderer.js';
 import { renderLiveToolActivity, cleanupToolElements, bindToolItemInteractions, type ToolLogEntry } from './features/tool-ui.js';
 import { ICONS, emojiToIcon, emojiToStatus, isCompletionEmoji } from './icons.js';
 import {
@@ -235,6 +236,7 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
         const toolHtml = hasTools && !hadProcessBlock ? buildProcessBlockHtml(toProcessSteps(toolLog!), true) : '';
         if (content) content.innerHTML = toolHtml + renderMarkdown(finalText);
         if (content) content.setAttribute('data-raw', stripOrchestration(finalText));
+        if (content) activateWidgets(content as HTMLElement);
     }
     currentStream = null;
     state.currentAgentDiv = null;
@@ -266,6 +268,7 @@ export function addMessage(role: string, text: string): HTMLDivElement {
     const contentEl = div.querySelector('.msg-content');
     if (contentEl) contentEl.setAttribute('data-raw', stripOrchestration(text));
     container?.appendChild(div);
+    activateWidgets(div);
     scrollToBottom();
     return div;
 }
@@ -339,6 +342,10 @@ export async function loadMessages(): Promise<void> {
                 vs.addItem(crypto.randomUUID(), html);
             }
             vs.scrollToBottom();
+            requestAnimationFrame(() => {
+                const chatElRef = document.getElementById('chatMessages');
+                if (chatElRef) activateWidgets(chatElRef);
+            });
         } else {
             msgs.forEach(m => {
                 const div = addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content);
