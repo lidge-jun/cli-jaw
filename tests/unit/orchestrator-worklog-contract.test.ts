@@ -19,9 +19,10 @@ test('OWC-001: pipeline imports createWorklog and resolves worklog seed', () => 
 
 test('OWC-002: initial planning turn creates worklog before setState', () => {
     const createIdx = pipelineSrc.indexOf('createWorklog(worklogSeed)');
-    const setStateIdx = pipelineSrc.indexOf("setState('P', nextCtx)");
-    assert.notEqual(createIdx, -1);
-    assert.notEqual(setStateIdx, -1);
+    // setState signature now includes scope + title: setState('P', nextCtx, scope, ...)
+    const setStateIdx = pipelineSrc.indexOf("setState('P', nextCtx, scope");
+    assert.notEqual(createIdx, -1, 'createWorklog(worklogSeed) must exist');
+    assert.notEqual(setStateIdx, -1, "setState('P', nextCtx, scope...) must exist");
     assert.ok(createIdx < setStateIdx, 'worklog should be created before setState');
 });
 

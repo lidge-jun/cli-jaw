@@ -10,6 +10,7 @@ import {
 } from '../../src/orchestrator/research.ts';
 import { orchestrate } from '../../src/orchestrator/pipeline.ts';
 import { getCtx, resetState, setState } from '../../src/orchestrator/state-machine.ts';
+import { resolveOrcScope } from '../../src/orchestrator/scope.ts';
 import { clearAllBroadcastListeners } from '../../src/core/bus.ts';
 
 beforeEach(() => { resetState(); clearAllBroadcastListeners(); });
@@ -120,7 +121,8 @@ Use tokens.
 test('RES-008: initial P request injects research before planning', async () => {
     const prompts: string[] = [];
     resetState(); // ensure clean slate (cross-file DB contamination guard)
-    setState('P', { originalPrompt: '', workingDir: null, plan: null, workerResults: [], origin: 'test' });
+    const scope = resolveOrcScope({ origin: 'test' });
+    setState('P', { originalPrompt: '', workingDir: null, plan: null, workerResults: [], origin: 'test' }, scope);
 
     await orchestrate('compare auth and session approaches', {
         origin: 'test',
@@ -157,7 +159,7 @@ Prefer bearer tokens for new routes.
     assert.ok(!prompts[0]!.includes('[PLANNING MODE — User Feedback]'));
     // Verify prompt contains original request (DB ctx may be contaminated by parallel tests)
     assert.ok(prompts[0]!.includes('compare auth and session approaches'));
-    const ctx = getCtx();
+    const ctx = getCtx(scope);
     // ctx assertions guarded: shared DB singleton can be overwritten by concurrent test files
     if (ctx?.originalPrompt === 'compare auth and session approaches') {
         assert.equal(ctx.researchNeeded, true);
@@ -169,7 +171,8 @@ Prefer bearer tokens for new routes.
 test('RES-009: clear implementation request skips pre-planning research', async () => {
     const prompts: string[] = [];
     let researchCalls = 0;
-    setState('P', { originalPrompt: '', workingDir: null, plan: null, workerResults: [], origin: 'test' });
+    const scope = resolveOrcScope({ origin: 'test' });
+    setState('P', { originalPrompt: '', workingDir: null, plan: null, workerResults: [], origin: 'test' }, scope);
 
     await orchestrate('fix the typo in server.ts', {
         origin: 'test',

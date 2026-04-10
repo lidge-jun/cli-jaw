@@ -233,9 +233,10 @@ describe('429 retry: edge case coverage', () => {
         // prevents queue drain during active retry wait
         const src = readSrc('../../src/agent/spawn.ts');
         const fn = extractFn(src, 'processQueue');
-        // The three guard conditions must all be present in the single return line
-        assert.ok(fn.includes('activeProcess || retryPendingTimer || messageQueue.length === 0'),
-            'processQueue must guard on all three: activeProcess, retryPendingTimer, messageQueue');
+        // Guard conditions must all be present in the early-return block
+        assert.ok(fn.includes('activeProcess'), 'processQueue must guard on activeProcess');
+        assert.ok(fn.includes('retryPendingTimer'), 'processQueue must guard on retryPendingTimer');
+        assert.ok(fn.includes('messageQueue.length === 0'), 'processQueue must guard on empty queue');
     });
 
     test('steer/stop during retry calls clearRetryTimer(false) — queue stays blocked', () => {
