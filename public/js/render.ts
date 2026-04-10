@@ -88,7 +88,8 @@ export function sanitizeHtml(html: string): string {
             // SVG security: block animation + foreignObject (script injection vectors)
             'foreignObject', 'animate', 'set', 'animateTransform', 'animateMotion',
         ],
-        FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur'],
+        FORBID_ATTR: ['onerror', 'onclick', 'onload', 'onmouseover', 'onfocus', 'onblur',
+                      'background'],  // legacy HTML attr that triggers remote fetch
         ADD_TAGS: ['use'],
         ADD_ATTR: ['aria-hidden', 'xmlns', 'viewBox', 'role', 'aria-label',
                    'data-jaw-svg', 'data-jaw-kind'],
@@ -97,15 +98,18 @@ export function sanitizeHtml(html: string): string {
 
 // Hook: strip external href/xlink:href on <use> and <image>
 // Only fragment references (#id) allowed — blocks external resource loading.
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const HTML_HREF_ALLOWED = new Set(['a', 'area', 'link']);
+
 DOMPurify.addHook('afterSanitizeAttributes', (node) => {
     const tag = node.tagName.toLowerCase();
 
     // ── href / xlink:href: deny-by-default ──
-    // Only standard HTML elements may carry external href. Everything else
-    // (all SVG elements: use, image, pattern, linearGradient, filter, a[SVG], etc.)
-    // is restricted to fragment-only (#id) references.
-    const HTML_HREF_ALLOWED = new Set(['a', 'area', 'link']);
-    if (!HTML_HREF_ALLOWED.has(tag)) {
+    // Only standard HTML (non-SVG) elements in the allow-set may carry external href.
+    // SVG <a> shares tagName 'a' with HTML <a>, so we also check namespaceURI
+    // to distinguish them — SVG elements always get fragment-only.
+    const isSvgElement = node.namespaceURI === SVG_NS;
+    if (isSvgElement || !HTML_HREF_ALLOWED.has(tag)) {
         const href = node.getAttribute('href') || '';
         if (href && !href.startsWith('#')) {
             node.removeAttribute('href');
