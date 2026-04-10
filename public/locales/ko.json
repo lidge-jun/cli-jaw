@@ -254,5 +254,6 @@
     "cmd.ide.desc": "IDE diff 보기",
     "cmd.ide.toggled": "IDE diff 모드를 전환했습니다",
     "cmd.ide.popToggled": "IDE 팝업을 전환했습니다",
-    "cmd.ide.usage": "사용법: /ide [pop|on|off]"
+    "cmd.ide.usage": "/ide [pop|on|off]",
+    "label.mentionOnly": "@멘션 시에만 응답"
 }

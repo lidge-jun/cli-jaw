@@ -254,5 +254,6 @@
     "cmd.ide.desc": "IDE diff view",
     "cmd.ide.toggled": "IDE diff mode toggled",
     "cmd.ide.popToggled": "IDE popup toggled",
-    "cmd.ide.usage": "Usage: /ide [pop|on|off]"
+    "cmd.ide.usage": "Usage: /ide [pop|on|off]",
+    "label.mentionOnly": "Mention Only"
 }

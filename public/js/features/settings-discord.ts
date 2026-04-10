@@ -30,6 +30,12 @@ export async function setDiscordAllowBots(allow: boolean): Promise<void> {
     await apiJson('/api/settings', 'PUT', { discord: { allowBots: allow } });
 }
 
+export async function setDiscordMentionOnly(enabled: boolean): Promise<void> {
+    document.getElementById('dcMentionOn')?.classList.toggle('active', enabled);
+    document.getElementById('dcMentionOff')?.classList.toggle('active', !enabled);
+    await apiJson('/api/settings', 'PUT', { discord: { mentionOnly: enabled } });
+}
+
 export function loadDiscordSettings(s: SettingsData): void {
     if (!s.discord) return;
     const dc = s.discord;
@@ -49,4 +55,7 @@ export function loadDiscordSettings(s: SettingsData): void {
     const allowBots = !!dc.allowBots;
     document.getElementById('dcAllowBotsOn')?.classList.toggle('active', allowBots);
     document.getElementById('dcAllowBotsOff')?.classList.toggle('active', !allowBots);
+    const mentionOnly = !!dc.mentionOnly;
+    document.getElementById('dcMentionOn')?.classList.toggle('active', mentionOnly);
+    document.getElementById('dcMentionOff')?.classList.toggle('active', !mentionOnly);
 }

@@ -26,7 +26,7 @@ import {
     saveActiveCliSettings, savePerCli, openPromptModal,
     closePromptModal, savePromptFromModal, syncMcpServers, installMcpGlobal,
     loadCliStatus, setTelegram, setForwardAll, saveTelegramSettings,
-    setDiscord, setDiscordForwardAll, setDiscordAllowBots, saveDiscordSettings, setActiveChannel,
+    setDiscord, setDiscordForwardAll, setDiscordAllowBots, setDiscordMentionOnly, saveDiscordSettings, setActiveChannel,
     saveFallbackOrder,
     openTemplateModal, saveTemplateFromModal, closeTemplateModal, templateGoBack, toggleDevMode
 } from './features/settings.js';
@@ -186,6 +186,8 @@ document.getElementById('dcForwardOff')?.addEventListener('click', () => setDisc
 document.getElementById('dcForwardOn')?.addEventListener('click', () => setDiscordForwardAll(true));
 document.getElementById('dcAllowBotsOff')?.addEventListener('click', () => setDiscordAllowBots(false));
 document.getElementById('dcAllowBotsOn')?.addEventListener('click', () => setDiscordAllowBots(true));
+document.getElementById('dcMentionOff')?.addEventListener('click', () => setDiscordMentionOnly(false));
+document.getElementById('dcMentionOn')?.addEventListener('click', () => setDiscordMentionOnly(true));
 document.getElementById('dcToken')?.addEventListener('change', saveDiscordSettings);
 document.getElementById('dcGuildId')?.addEventListener('change', saveDiscordSettings);
 document.getElementById('dcChannelIds')?.addEventListener('change', saveDiscordSettings);
