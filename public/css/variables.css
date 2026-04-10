@@ -23,9 +23,9 @@
     --delete-color: var(--error);
     --code-label-color: oklch(66% 0.01 250);
     --modal-bg: oklch(0% 0 0 / 0.6);
-    --font-display: 'Chakra Petch', 'Outfit', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
-    --font-ui: 'Outfit', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', -apple-system, system-ui, sans-serif;
-    --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+    --font-display: 'Geist', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
+    --font-ui: 'Geist', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', -apple-system, system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, monospace;
     --sidebar-left-w: 220px;
     --sidebar-right-w: 260px;
     --sidebar-collapsed-w: 48px;
