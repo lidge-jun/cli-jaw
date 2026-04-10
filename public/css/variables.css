@@ -1,28 +1,28 @@
 /* ── CSS Custom Properties ── */
 :root {
-    --bg: #0a0a0f;
-    --surface: #12121a;
-    --border: #1e1e2e;
-    --text: #e4e4ef;
-    --text-dim: #6e6e8a;
-    --accent: #22d3ee;
-    --accent2: #06b6d4;
-    --green: #4ade80;
-    --user-bg: #1a1a2e;
-    --agent-bg: #0f0f1a;
-    --status-idle-bg: #1a2e1a;
-    --status-running-bg: #2e2a1a;
-    --status-running-color: #fbbf24;
-    --code-bg: #0d1117;
-    --link-color: #60a5fa;
-    --table-border: #06b6d4;
+    --bg: oklch(7% 0.01 280);
+    --surface: oklch(11% 0.01 280);
+    --border: oklch(17% 0.01 270);
+    --text: oklch(92% 0.01 270);
+    --text-dim: oklch(53% 0.02 270);
+    --accent: oklch(78% 0.14 200);
+    --accent2: oklch(70% 0.13 200);
+    --green: oklch(78% 0.16 150);
+    --user-bg: oklch(15% 0.02 270);
+    --agent-bg: oklch(9% 0.01 270);
+    --status-idle-bg: oklch(15% 0.02 150);
+    --status-running-bg: oklch(17% 0.02 75);
+    --status-running-color: oklch(81% 0.14 85);
+    --code-bg: oklch(9% 0.01 250);
+    --link-color: oklch(72% 0.12 250);
+    --table-border: oklch(70% 0.13 200);
     --stop-btn: var(--error);
-    --stop-btn-hover: #dc2626;
-    --toggle-off: #444;
-    --toggle-on: #fff;
+    --stop-btn-hover: oklch(57% 0.21 25);
+    --toggle-off: oklch(35% 0 0);
+    --toggle-on: oklch(100% 0 0);
     --delete-color: var(--error);
-    --code-label-color: #8b949e;
-    --modal-bg: rgba(0, 0, 0, 0.6);
+    --code-label-color: oklch(66% 0.01 250);
+    --modal-bg: oklch(0% 0 0 / 0.6);
     --font-display: 'Chakra Petch', 'Outfit', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', system-ui, sans-serif;
     --font-ui: 'Outfit', 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', -apple-system, system-ui, sans-serif;
     --font-mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
@@ -66,12 +66,12 @@
     --duration-slow: 400ms;
 
     /* ─── Semantic colors ─── */
-    --error: #ef4444;
-    --error-dim: rgba(239, 68, 68, 0.15);
-    --success: #22c55e;
-    --success-dim: rgba(34, 197, 94, 0.15);
-    --warning: #f59e0b;
-    --warning-dim: rgba(245, 158, 11, 0.15);
+    --error: oklch(63% 0.21 25);
+    --error-dim: oklch(63% 0.21 25 / 0.15);
+    --success: oklch(72% 0.17 150);
+    --success-dim: oklch(72% 0.17 150 / 0.15);
+    --warning: oklch(78% 0.16 75);
+    --warning-dim: oklch(78% 0.16 75 / 0.15);
 
     /* ─── Visual polish tokens ─── */
     --noise-opacity: 0.03;
@@ -85,10 +85,10 @@
 
     /* ─── PABCD State Glow ─── */
     --orc-glow: transparent;
-    --orc-glow-P: #3b82f6;
-    --orc-glow-A: #f59e0b;
-    --orc-glow-B: #22c55e;
-    --orc-glow-C: #a855f7;
+    --orc-glow-P: oklch(63% 0.17 260);
+    --orc-glow-A: oklch(78% 0.16 75);
+    --orc-glow-B: oklch(72% 0.17 150);
+    --orc-glow-C: oklch(60% 0.2 300);
     --orc-glow-D: transparent;
 }
 
@@ -119,42 +119,42 @@ body.right-collapsed {
 
 /* ── Light Theme ── */
 [data-theme="light"] {
-    --bg: #f5f5f7;
-    --surface: #ffffff;
-    --border: #e0e0e6;
-    --text: #1a1a2e;
-    --text-dim: #6e6e8a;
-    --accent: #0891b2;
-    --accent2: #0e7490;
-    --green: #16a34a;
-    --user-bg: #eef0f8;
-    --agent-bg: #f8f8fc;
-    --status-idle-bg: #dcfce7;
-    --status-running-bg: #fef9c3;
-    --status-running-color: #a16207;
-    --code-bg: #f0f2f5;
-    --link-color: #2563eb;
-    --table-border: #2563eb;
+    --bg: oklch(97% 0 0);
+    --surface: oklch(100% 0 0);
+    --border: oklch(90% 0.01 270);
+    --text: oklch(15% 0.02 270);
+    --text-dim: oklch(53% 0.02 270);
+    --accent: oklch(62% 0.11 200);
+    --accent2: oklch(52% 0.1 200);
+    --green: oklch(62% 0.16 150);
+    --user-bg: oklch(95% 0.01 270);
+    --agent-bg: oklch(98% 0.005 270);
+    --status-idle-bg: oklch(96% 0.04 150);
+    --status-running-bg: oklch(97% 0.06 90);
+    --status-running-color: oklch(56% 0.12 70);
+    --code-bg: oklch(96% 0.005 250);
+    --link-color: oklch(56% 0.18 260);
+    --table-border: oklch(56% 0.18 260);
     --stop-btn: var(--error);
-    --stop-btn-hover: #b91c1c;
-    --toggle-off: #c0c0c0;
-    --toggle-on: #ffffff;
+    --stop-btn-hover: oklch(48% 0.19 25);
+    --toggle-off: oklch(80% 0 0);
+    --toggle-on: oklch(100% 0 0);
     --delete-color: var(--error);
-    --code-label-color: #6e6e8a;
-    --modal-bg: rgba(0, 0, 0, 0.3);
-    --error: #dc2626;
-    --error-dim: rgba(220, 38, 38, 0.15);
-    --success: #16a34a;
-    --success-dim: rgba(22, 163, 74, 0.15);
-    --warning: #d97706;
-    --warning-dim: rgba(217, 119, 6, 0.15);
+    --code-label-color: oklch(53% 0.02 270);
+    --modal-bg: oklch(0% 0 0 / 0.3);
+    --error: oklch(57% 0.21 25);
+    --error-dim: oklch(57% 0.21 25 / 0.15);
+    --success: oklch(62% 0.16 150);
+    --success-dim: oklch(62% 0.16 150 / 0.15);
+    --warning: oklch(63% 0.15 70);
+    --warning-dim: oklch(63% 0.15 70 / 0.15);
     --noise-opacity: 0.015;
     --scanline-pct: 0.8%;
     --glow-strength: 3%;
-    --orc-glow-P: #2563eb;
-    --orc-glow-A: #d97706;
-    --orc-glow-B: #16a34a;
-    --orc-glow-C: #9333ea;
+    --orc-glow-P: oklch(56% 0.18 260);
+    --orc-glow-A: oklch(63% 0.15 70);
+    --orc-glow-B: oklch(62% 0.16 150);
+    --orc-glow-C: oklch(53% 0.22 300);
     --orc-glow-D: transparent;
 }
 
@@ -193,7 +193,7 @@ input[type="text"] {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in srgb, var(--accent) 30%, var(--text-dim));
+    background: color-mix(in oklch, var(--accent) 30%, var(--text-dim));
 }
 
 /* Firefox */

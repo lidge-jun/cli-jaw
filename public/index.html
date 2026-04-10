@@ -10,11 +10,10 @@
     <link rel="manifest" href="/manifest.json">
     <link rel="apple-touch-icon" href="/icons/icon-192.png">
     <title>CLI-JAW</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link
-        href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap"
-        rel="stylesheet">
+    <style>
+        @font-face { font-family: 'Geist'; src: url('/assets/fonts/GeistVF.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+        @font-face { font-family: 'JetBrains Mono'; src: url('/assets/fonts/JetBrainsMono-Variable.woff2') format('woff2'); font-weight: 100 800; font-display: swap; }
+    </style>
     <link rel="stylesheet" href="/css/variables.css">
     <link rel="stylesheet" href="/css/layout.css">
     <link rel="stylesheet" href="/css/chat.css">
@@ -144,7 +143,7 @@
             <textarea class="chat-input" id="chatInput" rows="1" data-i18n-placeholder="input.placeholder"
                 placeholder="메시지 입력..." aria-label="Chat message input" aria-haspopup="listbox" aria-expanded="false"
                 aria-controls="cmdDropdown" aria-autocomplete="list" aria-activedescendant=""></textarea>
-            <button class="btn-send" id="btnSend" aria-label="Send message">➤</button>
+            <button class="btn-send" id="btnSend" aria-label="Send message"><span data-icon="send"></span></button>
         </div>
     </div>
 
@@ -277,7 +276,7 @@
 
             <!-- Discord Bot -->
             <div id="channelDiscordSettings" class="settings-group" style="display:none">
-                <h4>🎮 Discord</h4>
+                <h4><span data-icon="gamepad"></span> Discord</h4>
                 <div class="settings-row">
                     <label data-i18n="label.enabled">활성화</label>
                     <div>
@@ -482,7 +481,7 @@
                         <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (fast)</option>
                         <option value="gemini-2.5-flash">gemini-2.5-flash (balanced)</option>
                         <option value="gemini-2.5-pro">gemini-2.5-pro (accurate)</option>
-                        <option value="__custom__">✏️ 직접 입력...</option>
+                        <option value="__custom__">직접 입력...</option>
                     </select>
                     <input type="text" id="sttGeminiModelCustom" placeholder="모델명 입력"
                         class="mt-1" style="display:none" />
@@ -511,7 +510,7 @@
                     <input type="text" id="sttWhisperModel" placeholder="mlx-community/..." class="input-sm">
                 </div>
                 <small class="text-shortcut-hint" data-i18n="stt.shortcutHint">
-                    ⌨️ Ctrl+Shift+Space (⌘+Shift+Space on Mac)</small>
+                    Ctrl+Shift+Space (⌘+Shift+Space on Mac)</small>
             </div>
 
 
@@ -539,7 +538,7 @@
     <div class="modal-overlay" id="heartbeatModal" role="dialog" aria-modal="true" aria-label="Heartbeat jobs">
         <div class="modal-box modal-scrollable" >
             <div class="modal-header">
-                <span data-i18n="modal.heartbeatTitle">💓 하트비트 작업</span>
+                <span data-icon="heartPulse"></span> <span data-i18n="modal.heartbeatTitle">하트비트 작업</span>
                 <button data-action="closeHeartbeat"
                     class="btn-modal-close" aria-label="Close">✕</button>
             </div>
@@ -653,10 +652,10 @@
                     </div>
                 </div>
                 <div class="flex gap-2 flex-wrap mt-3">
-                    <button class="btn-clear" id="advBootstrapBtn">🧩 Bootstrap</button>
-                    <button class="btn-clear" id="advReindexBtn">🔄 Reindex</button>
-                    <button class="btn-clear" id="advReimportBtn">📥 Re-import Legacy</button>
-                    <button class="btn-clear" id="advOpenCorruptedBtn">📂 Open Corrupted Folder</button>
+                    <button class="btn-clear" id="advBootstrapBtn"><span data-icon="settings"></span> Bootstrap</button>
+                    <button class="btn-clear" id="advReindexBtn"><span data-icon="refresh"></span> Reindex</button>
+                    <button class="btn-clear" id="advReimportBtn"><span data-icon="save"></span> Re-import Legacy</button>
+                    <button class="btn-clear" id="advOpenCorruptedBtn"><span data-icon="folder"></span> Open Corrupted Folder</button>
                 </div>
             </div>
             <div id="memTabFiles" class="p-3" style="display:none" role="tabpanel" aria-labelledby="memTabBtnFiles">

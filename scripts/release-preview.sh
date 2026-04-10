@@ -4,7 +4,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-BASE_VERSION="${1:-1.4.0}"
+BASE_VERSION="${1:-1.5.0}"
 PREID="${PREID:-preview}"
 STAMP="${STAMP:-$(date +%Y%m%d%H%M%S)}"
 

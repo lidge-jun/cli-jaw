@@ -24,6 +24,7 @@ import plaintext from 'highlight.js/lib/languages/plaintext';
 import katex from 'katex';
 import DOMPurify from 'dompurify';
 import { t } from './features/i18n.js';
+import { ICONS } from './icons.js';
 import { fixCjkPunctuationBoundary } from './cjk-fix.js';
 import {
     SvgBlock, shieldCodeFenceSvg, unshieldCodeFenceSvg,
@@ -254,7 +255,7 @@ function renderMermaidBlocks(): void {
                 || (err as { str?: string })?.str || 'Unknown error';
             el.innerHTML = `
                 <div class="mermaid-error">
-                    <div class="mermaid-error-title">⚠️ ${escapeHtml(t('mermaid.renderFail') || 'Mermaid render failed')}</div>
+                    <div class="mermaid-error-title">${ICONS.warning} ${escapeHtml(t('mermaid.renderFail') || 'Mermaid render failed')}</div>
                     <div class="mermaid-error-msg">${escapeHtml(errMsg.slice(0, 200))}</div>
                     <pre class="mermaid-error-code"><code>${escapeHtml(code)}</code></pre>
                 </div>`;

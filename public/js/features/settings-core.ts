@@ -10,6 +10,7 @@ import { loadTelegramSettings } from './settings-telegram.js';
 import { loadDiscordSettings } from './settings-discord.js';
 import { loadActiveChannel, loadFallbackOrder } from './settings-channel.js';
 import { loadMcpServers } from './settings-mcp.js';
+import { providerIcon } from '../provider-icons.js';
 
 function toCap(cli: string): string {
     return cli.charAt(0).toUpperCase() + cli.slice(1);
@@ -150,7 +151,10 @@ export async function loadSettings(): Promise<void> {
     const cwdEl = document.getElementById('inpCwd');
     if (cwdEl) cwdEl.textContent = s.workingDir;
     const headerEl = document.getElementById('headerCli');
-    if (headerEl) headerEl.textContent = s.cli;
+    if (headerEl) {
+        const icon = providerIcon(s.cli);
+        headerEl.innerHTML = icon ? `${icon} ${escapeHtml(s.cli)}` : escapeHtml(s.cli);
+    }
     setPerm(s.permissions, false);
 
     if (s.perCli) {
@@ -214,7 +218,10 @@ export async function updateSettings(): Promise<void> {
         cli: (document.getElementById('selCli') as HTMLSelectElement)?.value || 'claude',
     };
     const hdr = document.getElementById('headerCli');
-    if (hdr) hdr.textContent = s.cli;
+    if (hdr) {
+        const ico = providerIcon(s.cli);
+        hdr.innerHTML = ico ? `${ico} ${escapeHtml(s.cli)}` : escapeHtml(s.cli);
+    }
     await apiJson('/api/settings', 'PUT', s);
 }
 
@@ -295,7 +302,10 @@ export function onCliChange(save = true): void {
     const modelSel = document.getElementById('selModel') as HTMLSelectElement | null;
     setSelectOptions(modelSel, models, { includeCustom: true, includeDefault: true });
     const hdrCli = document.getElementById('headerCli');
-    if (hdrCli) hdrCli.textContent = cli;
+    if (hdrCli) {
+        const ico = providerIcon(cli);
+        hdrCli.innerHTML = ico ? `${ico} ${escapeHtml(cli)}` : escapeHtml(cli);
+    }
     syncActiveEffortOptions(cli);
 
     const oldInput = document.getElementById('selModelCustom');

@@ -269,7 +269,7 @@ export function connect(): void {
             if (msg.scope && currentOrcScope && msg.scope !== currentOrcScope) return;
             applyOrcState(typeof msg.state === 'string' ? msg.state : 'IDLE', msg.title);
         } else if (msg.type === 'new_message' && (msg.source === 'telegram' || msg.source === 'discord')) {
-            addMessage(msg.role === 'assistant' ? 'agent' : (msg.role || 'user'), msg.content || '');
+            addMessage(msg.role === 'assistant' ? 'agent' : (msg.role || 'user'), msg.content || '', msg.cli);
         }
     };
     state.ws.onopen = () => {

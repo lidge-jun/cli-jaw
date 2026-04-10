@@ -10,6 +10,7 @@ import { createStreamRenderer, appendChunk, finalizeStream, type StreamState } f
 import { activateWidgets } from './diagram/iframe-renderer.js';
 import { renderLiveToolActivity, cleanupToolElements, bindToolItemInteractions, type ToolLogEntry } from './features/tool-ui.js';
 import { ICONS, emojiToIcon, emojiToStatus, isCompletionEmoji } from './icons.js';
+import { providerIcon } from './provider-icons.js';
 import {
     createProcessBlock,
     addStep,
@@ -20,7 +21,7 @@ import {
     bindProcessBlockInteractions,
     type ProcessStep,
 } from './features/process-block.js';
-interface MessageItem { role: string; content: string; tool_log?: string | null; }
+interface MessageItem { role: string; content: string; tool_log?: string | null; cli?: string | null; }
 
 function parseToolLog(toolLog?: string | null): ToolLogEntry[] {
     if (!toolLog) return [];
@@ -30,6 +31,14 @@ function parseToolLog(toolLog?: string | null): ToolLogEntry[] {
     } catch {
         return [];
     }
+}
+
+function getAgentIcon(cli?: string | null): string {
+    if (cli) {
+        const svg = providerIcon(cli);
+        if (svg) return svg;
+    }
+    return ICONS.shark;
 }
 
 function toProcessSteps(tools: ToolLogEntry[]): ProcessStep[] {
@@ -247,7 +256,7 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
     if (text) appendCachedMessage('assistant', text).catch(() => {});
 }
 
-export function addMessage(role: string, text: string): HTMLDivElement {
+export function addMessage(role: string, text: string, cli?: string | null): HTMLDivElement {
     const container = document.getElementById('chatMessages');
     const vs = getVirtualScroll();
     if (vs.active) vs.flushToDOM();
@@ -260,7 +269,7 @@ export function addMessage(role: string, text: string): HTMLDivElement {
     const div = document.createElement('div');
     if (role === 'agent') {
         div.className = 'msg msg-agent';
-        div.innerHTML = `<div class="agent-icon" aria-hidden="true">${ICONS.shark}</div><div class="agent-body"><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div>`;
+        div.innerHTML = `<div class="agent-icon" aria-hidden="true">${getAgentIcon(cli)}</div><div class="agent-body"><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div>`;
     } else {
         div.className = `msg msg-${role}`;
         div.innerHTML = `<div class="msg-label">${label}</div><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button>`;
@@ -337,7 +346,7 @@ export async function loadMessages(): Promise<void> {
                 const tools = m.role === 'assistant' ? parseToolLog(m.tool_log) : [];
                 const toolHtml = tools.length > 0 ? buildProcessBlockHtml(toProcessSteps(tools), true) : '';
                 const html = role === 'agent'
-                    ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${ICONS.shark}</div><div class="agent-body">${toolHtml}<div class="msg-content" data-raw="${escapeHtml(stripOrchestration(m.content))}">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
+                    ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body">${toolHtml}<div class="msg-content" data-raw="${escapeHtml(stripOrchestration(m.content))}">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
                     : `<div class="msg msg-${role}"><div class="msg-label">${label}</div><div class="msg-content" data-raw="${escapeHtml(stripOrchestration(m.content))}">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div>`;
                 vs.addItem(crypto.randomUUID(), html);
             }
@@ -348,7 +357,7 @@ export async function loadMessages(): Promise<void> {
             });
         } else {
             msgs.forEach(m => {
-                const div = addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content);
+                const div = addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content, m.cli);
                 if (m.role === 'assistant') {
                     const tools = parseToolLog(m.tool_log);
                     if (tools.length > 0) {

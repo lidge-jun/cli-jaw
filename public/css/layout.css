@@ -205,6 +205,9 @@
     text-align: left;
     font-family: var(--font-display);
     transition: border-color 0.15s, box-shadow 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
 }
 
 .sidebar-hb-btn.w-auto {
