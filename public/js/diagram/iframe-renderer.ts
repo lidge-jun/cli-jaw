@@ -70,6 +70,20 @@ function ensureCleanupObserver(): void {
   cleanupObserver.observe(chatEl, { childList: true, subtree: true });
 }
 
+// ── Import Map Builder (ES Module bare specifier resolution) ──
+function buildImportMap(htmlCode: string): string {
+  const imports: Record<string, string> = {};
+  // Three.js: map bare 'three' to full CDN URL so addons (OrbitControls etc.) resolve
+  const threeMatch = htmlCode.match(/cdn\.jsdelivr\.net\/npm\/three@([\d.]+)/);
+  if (threeMatch) {
+    const ver = threeMatch[1];
+    imports['three'] = `https://cdn.jsdelivr.net/npm/three@${ver}/build/three.module.min.js`;
+    imports['three/addons/'] = `https://cdn.jsdelivr.net/npm/three@${ver}/examples/jsm/`;
+  }
+  if (Object.keys(imports).length === 0) return '';
+  return `<script type="importmap">${JSON.stringify({ imports })}<\/script>`;
+}
+
 // ── CSP Meta Builder ──
 function buildCspMeta(htmlCode: string): string {
   let connectSrc = "'none'";
@@ -80,8 +94,11 @@ function buildCspMeta(htmlCode: string): string {
     connectSrc = 'https://cdn.jsdelivr.net';
   }
 
+  // Tone.js creates a blob: Worker for its internal clock
+  const workerSrc = /Tone\.min\.js|tone@/.test(htmlCode) ? "worker-src blob:;" : '';
+
   const scriptSrc = CDN_ALLOWLIST.map(h => `https://${h}`).join(' ');
-  return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' ${scriptSrc}; style-src 'unsafe-inline' https://fonts.googleapis.com; img-src data: blob:; font-src https://fonts.gstatic.com; connect-src ${connectSrc}; base-uri 'none';">`;
+  return `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' ${scriptSrc}; style-src 'unsafe-inline' https://fonts.googleapis.com; img-src data: blob:; font-src https://fonts.gstatic.com; connect-src ${connectSrc}; ${workerSrc} base-uri 'none';">`;
 }
 
 // ── Theme Token Injection ──
@@ -194,6 +211,7 @@ export function createWidgetIframe(htmlCode: string): { iframe: HTMLIFrameElemen
 
   const theme = getThemeTokens();
   const cspMeta = buildCspMeta(htmlCode);
+  const importMap = buildImportMap(htmlCode);
   const bridge = getBridgeScript(nonce);
 
   const cssVars = Object.entries(theme.tokens)
@@ -205,6 +223,7 @@ export function createWidgetIframe(htmlCode: string): { iframe: HTMLIFrameElemen
 <head>
   <meta charset="utf-8">
   ${cspMeta}
+  ${importMap}
   <style>
     :root { ${cssVars} }
     * { margin: 0; box-sizing: border-box; }

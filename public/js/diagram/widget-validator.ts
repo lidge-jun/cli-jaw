@@ -26,10 +26,8 @@ const DANGEROUS_PATTERNS: readonly RegExp[] = [
   /\bimport\s*\(/,
 ];
 
-// innerHTML is common in widgets (e.g. setting container content) — warn only
-const WARN_PATTERNS: readonly RegExp[] = [
-  /\binnerHTML\s*=/,
-];
+// No warn-only patterns currently — innerHTML removed (too common in onerror fallbacks)
+const WARN_PATTERNS: readonly RegExp[] = [];
 
 export interface ValidationResult {
   valid: boolean;
