@@ -118,12 +118,13 @@ test('EMP-024: research role injects read-only guide and phase 1 context', () =>
     );
 });
 
-test('EMP-025: employee prompt uses employee-agent pipe mode wording', () => {
+test('EMP-025: employee prompt uses employee naming and nested agent prohibition', () => {
     const emp = { name: 'Research', cli: 'claude', role: 'research' };
     clearPromptCache();
     const v2 = getEmployeePromptV2(emp, 'research', 1);
-    assert.ok(v2.includes('employee agent in pipe mode'));
-    assert.ok(!v2.includes('worker agent in pipe mode'));
+    assert.ok(v2.includes('jaw employee'), 'should reference jaw employee identity');
+    assert.ok(v2.includes('Nested Agent Prohibition'), 'should include nested agent prohibition section');
+    assert.ok(!v2.includes('worker agent in pipe mode'), 'should not use old worker pipe mode wording');
 });
 
 // ─── Phase 17: triage AI dispatch ────────────────────

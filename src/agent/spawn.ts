@@ -12,7 +12,7 @@ import {
 import { getSystemPrompt, regenerateB } from '../prompt/builder.js';
 import { extractSessionId, extractFromEvent, extractFromAcpUpdate, extractOutputChunk, logEventSummary, flushClaudeBuffers } from './events.js';
 import { detectSmokeResponse, buildContinuationPrompt } from './smoke-detector.js';
-import { saveUpload as _saveUpload, buildMediaPrompt } from '../../lib/upload.js';
+import { saveUpload as _saveUpload, buildMediaPrompt, buildMediaPromptMany } from '../../lib/upload.js';
 import { getMemoryFlushFilePath, getMemoryStatus } from '../memory/runtime.js';
 import { resolveMainCli } from '../core/main-session.js';
 import {
@@ -280,7 +280,7 @@ export { buildArgs, buildResumeArgs };
 // ─── Upload wrapper ──────────────────────────────────
 
 export const saveUpload = (buffer: any, originalName: string) => _saveUpload(UPLOADS_DIR, buffer, originalName);
-export { buildMediaPrompt };
+export { buildMediaPrompt, buildMediaPromptMany };
 
 // ─── Spawn Agent ─────────────────────────────────────
 

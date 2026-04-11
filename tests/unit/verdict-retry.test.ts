@@ -25,11 +25,11 @@ test('VR-001: pipeline imports getState from state-machine', () => {
 test('VR-002: pipeline uses PABCD state check before worker dispatch', () => {
     assert.ok(
         pipelineSrc.includes("ACTIVE_PABCD_DISPATCH_STATES = new Set<OrcStateName>(['P', 'A', 'B', 'C'])"),
-        'worker dispatch should only allow active PABCD states P/A/B/C',
+        'worker dispatch should define active PABCD states P/A/B/C',
     );
     assert.ok(
-        pipelineSrc.includes('const canDispatchWorkers = isResearchOnly || ACTIVE_PABCD_DISPATCH_STATES.has(state);'),
-        'worker dispatch should use explicit phase gating instead of non-IDLE fallback',
+        pipelineSrc.includes("const canDispatchWorkers = isResearchOnly || state !== 'D';"),
+        'worker dispatch should block D state while allowing all other states',
     );
 });
 
