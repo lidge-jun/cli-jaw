@@ -201,10 +201,21 @@ function getBridgeScript(nonce: string): string {
 <\/script>`;
 }
 
+// ── CDN Version Corrections (fix known bad versions in existing messages) ──
+const CDN_VERSION_FIXES: [RegExp, string][] = [
+  [/\/p5\.js\/1\.11\.1[1-9]\//g, '/p5.js/1.11.10/'],
+];
+function fixCdnVersions(html: string): string {
+  for (const [pattern, replacement] of CDN_VERSION_FIXES) html = html.replace(pattern, replacement);
+  return html;
+}
+
 // ── iframe Creator ──
 export function createWidgetIframe(htmlCode: string): { iframe: HTMLIFrameElement; nonce: string } {
   ensureCleanupObserver();
   ensureWidgetObserver();
+
+  htmlCode = fixCdnVersions(htmlCode);
 
   const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)),
     b => b.toString(16).padStart(2, '0')).join('');
