@@ -21,8 +21,9 @@ import { getTelegramMenuCommands } from '../command-contract/policy.js';
 import { getMergedSkills } from '../prompt/builder.js';
 import * as memory from '../memory/memory.js';
 import { downloadTelegramFile } from '../../lib/upload.js';
-import { clearMainSessionState } from '../core/main-session.js';
+import { clearMainSessionState, resetSessionPreservingHistory } from '../core/main-session.js';
 import { applyRuntimeSettingsPatch } from '../core/runtime-settings.js';
+import { seedDefaultEmployees } from '../core/employees.js';
 import { handleVoice } from './voice.js';
 import { registerTransport, setLastActiveTarget, setLatestSeenTarget } from '../messaging/runtime.js';
 import { registerSendTransport } from '../messaging/send.js';
@@ -213,6 +214,11 @@ function makeTelegramCommandCtx() {
             bumpSessionOwnershipGeneration();
             clearMainSessionState();
         },
+        resetSession: () => {
+            bumpSessionOwnershipGeneration();
+            resetSessionPreservingHistory();
+        },
+        resetEmployees: () => seedDefaultEmployees({ reset: true, notify: true }),
     });
 }
 

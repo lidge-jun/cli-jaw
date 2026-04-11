@@ -91,8 +91,8 @@ test('executeCommand: /clear returns info for telegram', async () => {
 });
 
 test('executeCommand: unsupported interface returns error', async () => {
-    // /memory is cli-only
-    const parsed = parseCommand('/memory');
+    // /quit is cli-only
+    const parsed = parseCommand('/quit');
     const r = await executeCommand(parsed, { interface: 'web' });
     assert.equal(r.ok, false);
     assert.equal(r.code, 'unsupported_interface');
@@ -137,8 +137,8 @@ test('getCompletionItems returns structured objects', () => {
 
 test('getCompletions: telegram interface excludes cli-only commands', () => {
     const list = getCompletions('', 'telegram');
-    // /memory is cli-only
-    assert.ok(!list.includes('/memory'));
+    // /quit is cli-only
+    assert.ok(!list.includes('/quit'));
     // /help is available everywhere
     assert.ok(list.includes('/help'));
 });

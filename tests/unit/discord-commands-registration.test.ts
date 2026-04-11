@@ -9,15 +9,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..');
 const commandsSrc = readFileSync(join(projectRoot, 'src/discord/commands.ts'), 'utf8');
 
-// ─── DISCORD_SLASH_COMMANDS list ────────────────────
+// ─── Discord slash commands via getVisibleCommands ───
 
-test('DISCORD_SLASH_COMMANDS includes operational commands', () => {
-    const listMatch = commandsSrc.match(/DISCORD_SLASH_COMMANDS\s*=\s*\[([\s\S]*?)\]/);
-    assert.ok(listMatch, 'should define DISCORD_SLASH_COMMANDS array');
-    const list = listMatch![1];
-    for (const cmd of ['help', 'status', 'model', 'cli', 'forward', 'flush', 'version', 'compact', 'steer']) {
-        assert.ok(list.includes(`'${cmd}'`), `should include '${cmd}'`);
-    }
+test('discord slash commands are auto-generated from getVisibleCommands', () => {
+    assert.match(commandsSrc, /getVisibleCommands\('discord'\)/,
+        'should use getVisibleCommands to derive discord slash commands');
 });
 
 // ─── Registration guard ─────────────────────────────
@@ -37,8 +33,8 @@ test('registerDiscordSlashCommands guards on application id', () => {
 test('slash commands are built with SlashCommandBuilder', () => {
     assert.match(commandsSrc, /new SlashCommandBuilder/,
         'should use SlashCommandBuilder');
-    assert.match(commandsSrc, /setName\(name\)/,
-        'should set command name');
+    assert.match(commandsSrc, /setName\(c\.name\)/,
+        'should set command name from catalog');
     assert.match(commandsSrc, /addStringOption/,
         'should add args string option');
 });

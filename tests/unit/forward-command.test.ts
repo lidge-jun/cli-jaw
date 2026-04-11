@@ -20,9 +20,9 @@ test('/forward is available on Discord interface', () => {
         'forward command should be available on discord interface');
 });
 
-test('/forward is in DISCORD_SLASH_COMMANDS', () => {
-    assert.match(discordCommandsSrc, /DISCORD_SLASH_COMMANDS[\s\S]*?'forward'/,
-        'forward should be in DISCORD_SLASH_COMMANDS list');
+test('/forward is registered for discord via getVisibleCommands', () => {
+    assert.match(discordCommandsSrc, /getVisibleCommands\('discord'\)/,
+        'discord slash commands should be auto-generated from getVisibleCommands');
 });
 
 // ─── Forward command description ─────────────────────

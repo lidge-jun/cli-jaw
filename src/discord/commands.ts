@@ -9,12 +9,9 @@ import { normalizeLocale } from '../core/i18n.js';
 import { resetFallbackState } from '../agent/spawn.js';
 import { applyRuntimeSettingsPatch } from '../core/runtime-settings.js';
 import { bumpSessionOwnershipGeneration } from '../agent/session-persistence.js';
-import { clearMainSessionState } from '../core/main-session.js';
-
-// Operational commands exposed as slash commands
-const DISCORD_SLASH_COMMANDS = [
-    'help', 'status', 'model', 'cli', 'fallback', 'forward', 'flush', 'version', 'clear', 'compact', 'steer',
-];
+import { clearMainSessionState, resetSessionPreservingHistory } from '../core/main-session.js';
+import { getVisibleCommands } from '../command-contract/policy.js';
+import { seedDefaultEmployees } from '../core/employees.js';
 
 export async function registerDiscordSlashCommands(client: Client) {
     if (!settings.discord?.guildId) {
@@ -26,10 +23,11 @@ export async function registerDiscordSlashCommands(client: Client) {
         return;
     }
 
-    const commands = DISCORD_SLASH_COMMANDS.map(name =>
+    const discordCommands = getVisibleCommands('discord');
+    const commands = discordCommands.map(c =>
         new SlashCommandBuilder()
-            .setName(name)
-            .setDescription(`/${name}`)
+            .setName(c.name)
+            .setDescription((c as any).desc || `/${c.name}`)
             .addStringOption(opt =>
                 opt.setName('args').setDescription('Arguments').setRequired(false)
             )
@@ -61,6 +59,11 @@ function makeDiscordCommandCtx() {
             bumpSessionOwnershipGeneration();
             clearMainSessionState();
         },
+        resetSession: () => {
+            bumpSessionOwnershipGeneration();
+            resetSessionPreservingHistory();
+        },
+        resetEmployees: () => seedDefaultEmployees({ reset: true, notify: true }),
     });
 }
 

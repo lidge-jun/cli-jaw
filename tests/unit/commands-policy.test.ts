@@ -46,7 +46,7 @@ test('CP-004: web executable commands are subset of visible', { skip: !moduleLoa
 });
 
 test('CP-005: all interfaces return non-empty lists', { skip: !moduleLoaded && 'policy.js not yet created' }, () => {
-    for (const iface of ['web', 'cli', 'telegram']) {
+    for (const iface of ['web', 'cli', 'telegram', 'discord']) {
         const cmds = getVisibleCommands(iface);
         assert.ok(cmds.length > 0, `${iface} should have visible commands`);
     }
@@ -67,7 +67,7 @@ test('CP-007: telegram menu excludes start/id/settings', { skip: !moduleLoaded &
 test('CP-008: telegram menu has exact expected command set', { skip: !moduleLoaded && 'policy.js not yet created' }, () => {
     const cmds = getTelegramMenuCommands();
     const names = new Set(cmds.map(c => c.name));
-    const expected = new Set(['help', 'status', 'clear', 'model', 'cli', 'fallback', 'flush', 'version', 'skill', 'browser', 'steer']);
+    const expected = new Set(['help', 'status', 'clear', 'compact', 'model', 'cli', 'fallback', 'forward', 'flush', 'version', 'skill', 'browser', 'steer', 'reset', 'employee', 'mcp', 'memory', 'prompt', 'orchestrate']);
     // All expected present
     for (const name of expected) {
         assert.ok(names.has(name), `expected "${name}" in telegram menu`);
@@ -76,11 +76,27 @@ test('CP-008: telegram menu has exact expected command set', { skip: !moduleLoad
     assert.ok(cmds.length >= expected.size, `expected >= ${expected.size} commands, got ${cmds.length}`);
 });
 
-test('CP-009: every telegram command has tgDescKey', { skip: !moduleLoaded && 'policy.js not yet created' }, () => {
+test('CP-009: every telegram command has tgDescKey or descKey fallback', { skip: !moduleLoaded && 'policy.js not yet created' }, () => {
     const cmds = getTelegramMenuCommands();
     for (const c of cmds) {
-        assert.ok(c.tgDescKey, `command "${c.name}" should have tgDescKey`);
-        assert.ok(typeof c.tgDescKey === 'string' && c.tgDescKey.startsWith('cmd.'), `tgDescKey "${c.tgDescKey}" should be a valid i18n key`);
+        const hasDesc = c.tgDescKey || c.descKey || c.desc;
+        assert.ok(hasDesc, `command "${c.name}" should have tgDescKey, descKey, or desc`);
+    }
+});
+
+test('CP-011: discord visible includes promoted commands', { skip: !moduleLoaded && 'policy.js not yet created' }, () => {
+    const cmds = getVisibleCommands('discord');
+    const names = new Set(cmds.map(c => c.name));
+    for (const name of ['reset', 'employee', 'mcp', 'memory', 'prompt', 'orchestrate', 'skill', 'browser']) {
+        assert.ok(names.has(name), `expected "${name}" in discord visible commands`);
+    }
+});
+
+test('CP-012: discord slash command descriptions are <= 100 chars', { skip: !moduleLoaded && 'policy.js not yet created' }, () => {
+    const cmds = getVisibleCommands('discord');
+    for (const c of cmds) {
+        const desc = c.desc || `/${c.name}`;
+        assert.ok(desc.length <= 100, `command "${c.name}" desc is ${desc.length} chars (max 100)`);
     }
 });
 

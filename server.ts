@@ -80,6 +80,7 @@ import { CLI_REGISTRY } from './src/cli/registry.js';
 import { clearMainSessionState, clearBossSessionOnly, syncMainSessionToSettings, resetSessionPreservingHistory } from './src/core/main-session.js';
 import { applyRuntimeSettingsPatch } from './src/core/runtime-settings.js';
 import { getDefaultClaudeModel, migrateLegacyClaudeValue } from './src/cli/claude-models.js';
+import { DEFAULT_EMPLOYEES, seedDefaultEmployees } from './src/core/employees.js';
 
 // ─── Resolve paths ───────────────────────────────────
 
@@ -113,12 +114,7 @@ try {
 // ─── Init ────────────────────────────────────────────
 
 const PORT = process.env.PORT || settings.port || 3457;
-const DEFAULT_EMPLOYEES = [
-    { name: 'Frontend', role: 'UI/UX, CSS, components' },
-    { name: 'Backend', role: 'API, DB, server logic' },
-    { name: 'Research', role: 'Search, codebase exploration, uncertainty reduction, read-only reports' },
-    { name: 'Docs', role: 'Documentation, README, API docs' },
-];
+// DEFAULT_EMPLOYEES + seedDefaultEmployees → src/core/employees.ts
 
 ensureDirs();
 fs.mkdirSync(join(projectRoot, 'public'), { recursive: true });
@@ -305,23 +301,7 @@ function normalizeAdvancedReadPath(file: string) {
     return value.startsWith('structured/') ? value.slice('structured/'.length) : value;
 }
 
-function seedDefaultEmployees({ reset = false, notify = false } = {}) {
-    const existing = getEmployees.all();
-    if (reset) {
-        for (const emp of existing) deleteEmployee.run((emp as any).id);
-    } else if (existing.length > 0) {
-        return { seeded: 0, cli: settings.cli, skipped: true };
-    }
-
-    const cli = settings.cli;
-    const defaultModel = cli === 'claude' ? getDefaultClaudeModel() : 'default';
-    for (const emp of DEFAULT_EMPLOYEES) {
-        insertEmployee.run(crypto.randomUUID(), emp.name, cli, defaultModel, emp.role);
-    }
-    if (notify) broadcast('agent_updated', {});
-    regenerateB();
-    return { seeded: DEFAULT_EMPLOYEES.length, cli, skipped: false };
-}
+// seedDefaultEmployees → src/core/employees.ts
 
 function makeWebCommandCtx(req: any, localeOverride: string | null = null) {
     return makeCommandCtx('web', resolveRequestLocale(req, localeOverride), {
