@@ -2,6 +2,8 @@
 
 [![Tests](https://img.shields.io/badge/tests-888%20pass%20%2F%202%20skip-brightgreen)](#)
 
+> 2026-04-11 로컬 재검증 기준: `npm test`는 **1015 pass / 0 fail / 0 skip**, `npm run -s test:integration`은 **31 pass / 0 fail / 1 skip**. 아래 인벤토리 표는 일부 섹션이 현재 코드보다 늦을 수 있다.
+
 > `node:test` + `node:assert` via `tsx` runner — zero external test dependencies.
 
 ## Run
