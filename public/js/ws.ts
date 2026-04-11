@@ -248,9 +248,9 @@ export function connect(): void {
         } else if (msg.type === 'agent_output') {
             appendAgentText(msg.text || '');
         } else if (msg.type === 'agent_retry') {
-            addSystemMsg(t('ws.retry', { cli: msg.cli || '', delay: msg.delay || 10 }), 'tool-activity');
+            addSystemMsg(t('ws.retry', { cli: escapeHtml(msg.cli || ''), delay: msg.delay || 10 }), 'tool-activity');
         } else if (msg.type === 'agent_fallback') {
-            addSystemMsg(t('ws.fallback', { from: msg.from || '', to: msg.to || '' }), 'tool-activity');
+            addSystemMsg(t('ws.fallback', { from: escapeHtml(msg.from || ''), to: escapeHtml(msg.to || '') }), 'tool-activity');
         } else if (msg.type === 'agent_smoke') {
             addSystemMsg(`${ICONS.warning} ${escapeHtml(msg.cli || 'agent')}: smoke response detected — auto-continuing`, 'tool-activity');
         } else if (msg.type === 'agent_done') {
