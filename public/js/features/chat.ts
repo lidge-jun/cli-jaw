@@ -199,10 +199,15 @@ export async function clearChat(): Promise<void> {
     clearCache().catch(() => {});
 }
 
-// ── Auto-resize textarea ──
+// ── Auto-resize textarea (RAF-batched to avoid blocking input) ──
+let resizeRaf = 0;
 function autoResize(el: HTMLTextAreaElement): void {
-    el.style.height = 'auto';
-    el.style.height = el.scrollHeight + 'px';
+    if (resizeRaf) return;
+    resizeRaf = requestAnimationFrame(() => {
+        resizeRaf = 0;
+        el.style.height = 'auto';
+        el.style.height = el.scrollHeight + 'px';
+    });
 }
 
 export function initAutoResize(): void {
