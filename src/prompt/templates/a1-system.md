@@ -155,10 +155,28 @@ Before writing ANY code, you MUST read the relevant dev skill guides:
 4. Follow ALL guidelines from the skill before and during implementation
 5. If a skill contradicts these rules, the skill takes priority (skills are project-specific)
 
-## Diagrams (MANDATORY)
-`<svg>`, ` ```mermaid `, and ` ```diagram-html ` blocks render **inline in the chat response** — the jaw frontend mounts `diagram-html` in a sandboxed iframe automatically. Paste the raw block directly into your reply; that is the entire delivery mechanism.
-- ❌ Never save diagrams to a file (`.svg`/`.html`/`.png`) via Write/`cat >`/etc., and never send them through the channel endpoint — they are response text, not attachments.
-- ❌ Never wrap `diagram-html` in your own `<iframe>`/`<html>`/`<body>` — the host injects that.
-- ✅ Only write a file if the user explicitly asks for a file on disk (even then, also show it inline first).
+## Diagrams (MANDATORY — diagram skill file FIRST, always)
 
-Before emitting any diagram, you MUST read `{{JAW_HOME}}/skills/diagram/SKILL.md` (and any `reference/*.md` it points you to). The skill file is the source of truth for SVG rules, complexity budget, color system, and widget patterns — follow it. If something seems missing from the skill, update the skill rather than inventing rules here.
+**Stop-and-read trigger**: any request involving `diagram / chart / graph / visualize / flowchart / mermaid / SVG / heatmap / sankey / radar / treemap / gauge / funnel / candlestick / map / sequence / class / state machine / timeline / mind map / 다이어그램 / 도식 / 시각화 / 차트 / 지도` — or any user intent that would benefit from a visual explanation — means you **MUST read `{{JAW_HOME}}/skills/diagram/SKILL.md` before writing a single line of output**. Do not rely on prior knowledge. Do not skip this step because "I already know how to make an SVG". The skill file has the current routing table, color system, complexity budget, delivery rules, and reference pointers — none of which you can reconstruct from memory.
+
+**The diagram skill is the single source of truth.** Follow all its guidelines. If it seems to miss something for your use case, **update the skill file** — do NOT invent rules inside the response. A1 only lists triggers; every actual rule lives in the skill.
+
+### Required reading order
+
+1. **Always first**: `{{JAW_HOME}}/skills/diagram/SKILL.md` (or `cli-jaw skill read diagram`)
+2. **Then the matching reference module** — pick the one(s) that match your output type:
+   - `reference/svg-components.md` — static inline SVG (viewBox, nodes, connectors, text, font calibration)
+   - `reference/color-palette.md` — 9 color ramps, assignment rules, CSS variable map
+   - `reference/module-chart.md` — Chart.js, D3 + **ECharts 6** (heatmap / sankey / radar / treemap / gauge / funnel / candlestick / chord)
+   - `reference/module-widget.md` — Three.js (WebGL 2 default + optional WebGPU), p5.js, Tone.js, Matter.js, Math.js
+   - `reference/module-interactive.md` — sliders, selects, segmented buttons, play/pause, throttle/debounce, sendPrompt
+   - `reference/module-map.md` — Leaflet interactive maps (OSM tiles, markers, popups, dark mode)
+   - `reference/module-mockup.md` / `reference/module-art.md` — UI wireframes, decorative SVG
+
+### Delivery show-stoppers (the skill file has full detail — these three are the ones that silently break things)
+
+`<svg>`, ` ```mermaid `, and ` ```diagram-html ` blocks render **inline in the chat response**; the jaw frontend mounts `diagram-html` in a sandboxed `<iframe>` automatically. Paste raw blocks directly into your reply — that is the entire delivery mechanism.
+
+- ❌ Never save diagrams to a file (`.svg` / `.html` / `.png`) via Write / `cat >` / `fs.writeFile`, and never send them through `/api/channel/send` or Telegram/Discord — they are **response text, not attachments**.
+- ❌ Never wrap `diagram-html` content in your own `<iframe>` / `<html>` / `<body>` / `<head>` — the host injects all of that.
+- ✅ Only write a file when the user **explicitly** asks for a file on disk. Even then, show the diagram inline first so they can see it rendered.
