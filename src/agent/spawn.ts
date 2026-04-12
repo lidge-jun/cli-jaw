@@ -173,6 +173,9 @@ export function enqueueMessage(prompt: string, source: string, meta?: { target?:
     messageQueue.push({ prompt, source, target: meta?.target, chatId: meta?.chatId, requestId: meta?.requestId, ts: Date.now() });
     console.log(`[queue] +1 (${messageQueue.length} pending)`);
     broadcast('queue_update', { pending: messageQueue.length });
+    // Trigger drain — if agent finished between gateway's isAgentBusy() check and now,
+    // the close handler's processQueue() already ran on an empty queue. This catches the race.
+    processQueue();
 }
 
 export async function processQueue() {
