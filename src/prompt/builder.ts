@@ -11,6 +11,14 @@ import { loadAndRender, loadTemplate, renderTemplate, parseWorkerContexts, clear
 
 const promptCache = new Map();
 
+function getRepoBundledSkillPath(...parts: string[]): string {
+    return join(process.cwd(), ...parts);
+}
+
+function findFirstExistingPath(paths: string[]): string | null {
+    return paths.find(p => fs.existsSync(p)) || null;
+}
+
 // ─── Legacy A1 Source Hashes ─────────────────────────
 // MD5 hashes of source templates (unrendered) for every historical pre-hash version.
 // Used to identify known stock files during pre-hash migration.
@@ -462,24 +470,45 @@ export function getEmployeePromptV2(emp: any, role: any, currentPhase: number | 
     let prompt = getEmployeePrompt(emp);
 
     // ─── 1. Common dev skill (always injected)
-    const devCommonPath = join(SKILLS_DIR, 'dev', 'SKILL.md');
-    if (fs.existsSync(devCommonPath)) {
+    const devCommonPath = findFirstExistingPath([
+        join(SKILLS_DIR, 'dev', 'SKILL.md'),
+        getRepoBundledSkillPath('skills', 'dev', 'SKILL.md'),
+    ]);
+    if (devCommonPath) {
         prompt += `\n\n## Development Guide (Common)\n${fs.readFileSync(devCommonPath, 'utf8')}`;
     }
 
     // ─── 1b. Scaffolding guide (always injected)
-    const scaffoldingPath = join(SKILLS_DIR, 'dev-scaffolding', 'SKILL.md');
-    if (fs.existsSync(scaffoldingPath)) {
+    const scaffoldingPath = findFirstExistingPath([
+        join(SKILLS_DIR, 'dev-scaffolding', 'SKILL.md'),
+        getRepoBundledSkillPath('skills', 'dev-scaffolding', 'SKILL.md'),
+    ]);
+    if (scaffoldingPath) {
         prompt += `\n\n## Project Scaffolding Guide\n${fs.readFileSync(scaffoldingPath, 'utf8')}`;
     }
 
     // ─── 2. Role-based dev skill injection
     const ROLE_SKILL_MAP = {
-        frontend: join(SKILLS_DIR, 'dev-frontend', 'SKILL.md'),
-        backend: join(SKILLS_DIR, 'dev-backend', 'SKILL.md'),
-        research: join(SKILLS_REF_DIR, 'research-worker', 'SKILL.md'),
-        data: join(SKILLS_DIR, 'dev-data', 'SKILL.md'),
-        docs: join(SKILLS_DIR, 'documentation', 'SKILL.md'),
+        frontend: findFirstExistingPath([
+            join(SKILLS_DIR, 'dev-frontend', 'SKILL.md'),
+            getRepoBundledSkillPath('skills', 'dev-frontend', 'SKILL.md'),
+        ]),
+        backend: findFirstExistingPath([
+            join(SKILLS_DIR, 'dev-backend', 'SKILL.md'),
+            getRepoBundledSkillPath('skills', 'dev-backend', 'SKILL.md'),
+        ]),
+        research: findFirstExistingPath([
+            join(SKILLS_REF_DIR, 'research-worker', 'SKILL.md'),
+            getRepoBundledSkillPath('skills_ref', 'research-worker', 'SKILL.md'),
+        ]),
+        data: findFirstExistingPath([
+            join(SKILLS_DIR, 'dev-data', 'SKILL.md'),
+            getRepoBundledSkillPath('skills', 'dev-data', 'SKILL.md'),
+        ]),
+        docs: findFirstExistingPath([
+            join(SKILLS_DIR, 'documentation', 'SKILL.md'),
+            getRepoBundledSkillPath('skills', 'documentation', 'SKILL.md'),
+        ]),
         custom: null,
     };
 
@@ -490,7 +519,12 @@ export function getEmployeePromptV2(emp: any, role: any, currentPhase: number | 
 
     // ─── 3a. Plan audit phase(2) → inject dev-code-reviewer
     if (phase === 2) {
-        const reviewerPath = [join(SKILLS_DIR, 'dev-code-reviewer', 'SKILL.md'), join(SKILLS_REF_DIR, 'dev-code-reviewer', 'SKILL.md')].find(p => fs.existsSync(p));
+        const reviewerPath = findFirstExistingPath([
+            join(SKILLS_DIR, 'dev-code-reviewer', 'SKILL.md'),
+            join(SKILLS_REF_DIR, 'dev-code-reviewer', 'SKILL.md'),
+            getRepoBundledSkillPath('skills', 'dev-code-reviewer', 'SKILL.md'),
+            getRepoBundledSkillPath('skills_ref', 'dev-code-reviewer', 'SKILL.md'),
+        ]);
         if (reviewerPath) {
             prompt += `\n\n## Code Review Guide (Phase 2 — Strict Audit)\n${fs.readFileSync(reviewerPath, 'utf8')}`;
         }
@@ -498,7 +532,12 @@ export function getEmployeePromptV2(emp: any, role: any, currentPhase: number | 
 
     // ─── 3b. Debug/check phase(4) → inject dev-testing
     if (phase === 4) {
-        const testingPath = [join(SKILLS_DIR, 'dev-testing', 'SKILL.md'), join(SKILLS_REF_DIR, 'dev-testing', 'SKILL.md')].find(p => fs.existsSync(p));
+        const testingPath = findFirstExistingPath([
+            join(SKILLS_DIR, 'dev-testing', 'SKILL.md'),
+            join(SKILLS_REF_DIR, 'dev-testing', 'SKILL.md'),
+            getRepoBundledSkillPath('skills', 'dev-testing', 'SKILL.md'),
+            getRepoBundledSkillPath('skills_ref', 'dev-testing', 'SKILL.md'),
+        ]);
         if (testingPath) {
             prompt += `\n\n## Testing Guide (Phase 4)\n${fs.readFileSync(testingPath, 'utf8')}`;
         }
