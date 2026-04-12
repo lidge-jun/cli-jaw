@@ -406,7 +406,7 @@ function ensureMarked(): boolean {
             return `<div class="mermaid-container mermaid-pending">${escapeHtml(text)}</div>`;
         }
         // diagram-html: encode as base64, Phase 2 activateWidgets() inflates to sandboxed iframe
-        if (lang === 'diagram-html') {
+        if (lang?.trim().toLowerCase() === 'diagram-html') {
             const encoded = btoa(unescape(encodeURIComponent(text)));
             return `<div class="diagram-widget-pending" data-diagram-html="${encoded}"
                 role="status" aria-label="Interactive widget loading">
