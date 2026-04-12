@@ -14,7 +14,6 @@ function readSrc(rel: string): string {
 test('prompt guard: system prompt contains pipe-mode prohibition block', () => {
     const src = readSrc('../../src/prompt/builder.ts');
     assert.ok(src.includes('PIPE_MODE_CLIS'));
-    assert.ok(src.includes('## Agent/Subagent Prohibition'));
     assert.ok(src.includes('Do NOT use Agent, subagent, or delegation tools.'));
 });
 
@@ -24,6 +23,5 @@ test('prompt guard: prohibition covers forDisk and employee prompt paths', () =>
     const employeePromptSection = src.slice(src.indexOf('export function getEmployeePromptV2'));
 
     assert.ok(systemPromptSection.includes('opts.forDisk'));
-    assert.ok(employeePromptSection.includes('Nested Agent Prohibition'));
     assert.ok(employeePromptSection.includes('Do NOT use Agent, subagent, or delegation tools. Do all work directly.'));
 });

@@ -72,13 +72,17 @@ test('SI-004: ACP exit handler adds interrupted prefix to traceText when wasStee
 // ─── SI-005: ACP exit handler suppresses fallback when wasSteer ───
 
 test('SI-005: ACP exit handler suppresses fallback on steer kill', () => {
+    // wasSteer must exist in ACP exit handler and guard fallback logic
     const acpExitIdx = spawnSrc.indexOf("acp.on('exit'");
     const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 7000);
 
-    // The else-if for error/fallback should check !wasSteer
     assert.ok(
-        acpExitBlock.includes('code !== 0 && !wasSteer'),
-        'ACP exit fallback branch should be guarded by code !== 0 && !wasSteer',
+        acpExitBlock.includes("killReason === 'steer'"),
+        'ACP exit handler should check killReason for steer',
+    );
+    assert.ok(
+        acpExitBlock.includes('!wasSteer'),
+        'ACP exit fallback should be guarded by !wasSteer',
     );
 });
 
@@ -108,8 +112,8 @@ test('SI-006: Standard CLI close handler tags interrupted output', () => {
     );
     // fallback suppression
     assert.ok(
-        cliCloseBlock.includes('code !== 0 && !wasSteer'),
-        'CLI close fallback branch should be guarded by code !== 0 && !wasSteer',
+        cliCloseBlock.includes('code !== 0 && !wasKilled'),
+        'CLI close fallback branch should be guarded by code !== 0 && !wasKilled',
     );
 });
 

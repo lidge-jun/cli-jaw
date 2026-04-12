@@ -490,16 +490,16 @@ export function getEmployeePromptV2(emp: any, role: any, currentPhase: number | 
 
     // ─── 3a. Plan audit phase(2) → inject dev-code-reviewer
     if (phase === 2) {
-        const reviewerPath = join(SKILLS_DIR, 'dev-code-reviewer', 'SKILL.md');
-        if (fs.existsSync(reviewerPath)) {
+        const reviewerPath = [join(SKILLS_DIR, 'dev-code-reviewer', 'SKILL.md'), join(SKILLS_REF_DIR, 'dev-code-reviewer', 'SKILL.md')].find(p => fs.existsSync(p));
+        if (reviewerPath) {
             prompt += `\n\n## Code Review Guide (Phase 2 — Strict Audit)\n${fs.readFileSync(reviewerPath, 'utf8')}`;
         }
     }
 
     // ─── 3b. Debug/check phase(4) → inject dev-testing
     if (phase === 4) {
-        const testingPath = join(SKILLS_DIR, 'dev-testing', 'SKILL.md');
-        if (fs.existsSync(testingPath)) {
+        const testingPath = [join(SKILLS_DIR, 'dev-testing', 'SKILL.md'), join(SKILLS_REF_DIR, 'dev-testing', 'SKILL.md')].find(p => fs.existsSync(p));
+        if (testingPath) {
             prompt += `\n\n## Testing Guide (Phase 4)\n${fs.readFileSync(testingPath, 'utf8')}`;
         }
     }
