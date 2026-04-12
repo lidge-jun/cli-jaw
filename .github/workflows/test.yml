@@ -14,9 +14,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Checkout submodules (optional — needs SUBMODULE_PAT secret)
+      - name: Checkout public submodules
         run: |
-          git submodule update --init --recursive
+          git submodule update --init skills_ref
+          git submodule update --init officecli
+
+      - name: Checkout private submodules (needs SUBMODULE_PAT secret)
+        run: |
+          git submodule update --init devlog
         env:
           GIT_CONFIG_COUNT: 1
           GIT_CONFIG_KEY_0: url.https://x-access-token:${{ secrets.SUBMODULE_PAT }}@github.com/.insteadOf
