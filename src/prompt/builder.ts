@@ -320,7 +320,7 @@ export function getSystemPrompt(opts: { currentPrompt?: string; forDisk?: boolea
         const injected = buildMemoryInjection({
             role: 'boss',
             currentPrompt,
-            providedSnapshot: opts.memorySnapshot || '',
+            providedSnapshot: opts.memorySnapshot,
         });
         if (injected.mode === 'advanced') {
             prompt += '\n\n' + injected.text;

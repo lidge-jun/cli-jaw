@@ -32,6 +32,7 @@ import { setWss, broadcast } from './src/core/bus.js';
 import * as browser from './src/browser/index.js';
 import * as memory from './src/memory/memory.js';
 import { bootstrapMemory, ensureMemoryRuntimeReady, getMemoryStatus, getLastReflectedAt, listMemoryFiles, readIndexedMemorySnippet, reflectMemory, reindexMemory, searchIndexedMemory, syncKvShadowImport } from './src/memory/runtime.js';
+import { getMigrationLockPath, hashText, safeReadFile } from './src/memory/shared.js';
 import { loadLocales, t, normalizeLocale } from './src/core/i18n.js';
 import {
     JAW_HOME, PROMPTS_DIR, DB_PATH, UPLOADS_DIR,
@@ -54,7 +55,7 @@ import {
 } from './src/prompt/builder.js';
 import { clearTemplateCache, getTemplateDir } from './src/prompt/template-loader.js';
 import {
-    activeProcess, isAgentBusy, killActiveAgent, killAllAgents, waitForProcessEnd,
+    activeProcess, activeProcesses, isAgentBusy, killActiveAgent, killAllAgents, waitForProcessEnd,
     steerAgent, enqueueMessage, processQueue, messageQueue,
     saveUpload, memoryFlushCounter, resetFallbackState,
 } from './src/agent/spawn.js';
@@ -554,7 +555,48 @@ app.put('/api/settings', asyncHandler(async (req, res) => {
 }));
 
 app.get('/api/memory/status', (_req, res) => {
-    res.json(getMemoryStatus());
+    const base = getMemoryStatus();
+    // Phase 5-D: extended health fields
+    const lockPath = getMigrationLockPath();
+    const migrationLocked = fs.existsSync(lockPath);
+    const flushRunning = activeProcesses.has('memory-flush');
+    const lastReflectedAt = getLastReflectedAt();
+
+    // Profile freshness: compare MEMORY.md hash to profile source_hash
+    let profileFresh = true;
+    let profileSourceHash = '';
+    let coreSourceHash = '';
+    const staleWarnings: string[] = [];
+    try {
+        const corePath = join(JAW_HOME, 'memory', 'MEMORY.md');
+        if (fs.existsSync(corePath)) {
+            coreSourceHash = hashText(safeReadFile(corePath));
+            const profilePath = join(base.storageRoot, 'profile.md');
+            if (fs.existsSync(profilePath)) {
+                const profileContent = safeReadFile(profilePath);
+                const match = /^source_hash:\s+(\S+)$/m.exec(profileContent);
+                profileSourceHash = match?.[1] || '';
+                profileFresh = profileSourceHash === coreSourceHash;
+            } else {
+                profileFresh = false;
+            }
+        }
+    } catch { /* ignore */ }
+
+    if (!profileFresh) staleWarnings.push('profile out of sync with MEMORY.md');
+    if (migrationLocked) staleWarnings.push('migration lock held');
+    if (flushRunning) staleWarnings.push('memory flush in progress');
+
+    res.json({
+        ...base,
+        profileFresh,
+        profileSourceHash,
+        coreSourceHash,
+        lastReflectedAt,
+        flushRunning,
+        migrationLocked,
+        staleWarnings,
+    });
 });
 app.post('/api/memory/reindex', (_req, res) => {
     const result = reindexMemory();

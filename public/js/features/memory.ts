@@ -41,6 +41,14 @@ interface AdvancedMemoryStatus {
     corruptedCount?: number;
     lastExpansion?: string[];
     lastError?: string;
+    // Phase 5-D: extended health fields
+    profileFresh?: boolean;
+    profileSourceHash?: string;
+    coreSourceHash?: string;
+    lastReflectedAt?: string | null;
+    flushRunning?: boolean;
+    migrationLocked?: boolean;
+    staleWarnings?: string[];
 }
 
 interface AdvancedMemoryFiles {
@@ -159,6 +167,14 @@ function renderAdvancedOps(status: AdvancedMemoryStatus | null) {
     setText('advLastError', status?.lastError || '-');
     const imported = status?.importedCounts || {};
     setText('advImportStatus', `${status?.importStatus || '-'} (core:${imported.core || 0} md:${imported.markdown || 0} kv:${imported.kv || 0} claude:${imported.claude || 0})`);
+
+    // Phase 5-D: extended health fields
+    setText('advProfileFresh', status?.profileFresh === false ? '⚠ stale' : '✓ fresh');
+    setText('advLastReflectedAt', status?.lastReflectedAt || 'never');
+    setText('advFlushRunning', status?.flushRunning ? 'running' : 'idle');
+    setText('advMigrationLock', status?.migrationLocked ? '⚠ locked' : 'none');
+    const warnings = status?.staleWarnings || [];
+    setText('advWarnings', warnings.length ? warnings.join(', ') : 'none');
 }
 
 function renderBasicFiles(files: MemoryFile[]) {
