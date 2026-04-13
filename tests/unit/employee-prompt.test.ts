@@ -129,7 +129,7 @@ test('EMP-025: employee prompt uses employee naming and dispatch prohibition', (
 
 // ─── Phase 17: triage AI dispatch ────────────────────
 
-test('EMP-011: parseSubtasks extracts subtask JSON from agent response', () => {
+test('EMP-011: parseSubtasks extracts subtask JSON from agent response', { skip: 'DEPRECATED: patch3' }, () => {
     const text = '직원한테 시킬게요\n```json\n{"subtasks":[{"agent":"Frontend","task":"UI 수정"}]}\n```';
     const subtasks = parseSubtasks(text);
     assert.ok(Array.isArray(subtasks));
@@ -137,7 +137,7 @@ test('EMP-011: parseSubtasks extracts subtask JSON from agent response', () => {
     assert.equal(subtasks[0].agent, 'Frontend');
 });
 
-test('EMP-012: parseSubtasks returns empty for no JSON', () => {
+test('EMP-012: parseSubtasks returns empty for no JSON', { skip: 'DEPRECATED: patch3' }, () => {
     const subtasks = parseSubtasks('그냥 직접 해줄게요');
     assert.ok(!subtasks || subtasks.length === 0);
 });

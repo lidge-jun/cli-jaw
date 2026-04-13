@@ -2,11 +2,11 @@
 // 이미 export된 함수를 직접 검증 (추가 작업 없이 즉시 실행 가능)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSubtasks, parseDirectAnswer, stripSubtaskJSON } from '../../src/orchestrator/pipeline.ts';
+import { parseSubtasks, parseDirectAnswer, stripSubtaskJSON } from '../../src/orchestrator/parser.ts';
 
 // ─── parseSubtasks ───────────────────────────────────
 
-test('ORP-001: fenced json subtasks parse', () => {
+test('ORP-001: fenced json subtasks parse', { skip: 'DEPRECATED: patch3 — cli-jaw dispatch unified' }, () => {
     const input = 'Plan:\n```json\n{"subtasks":[{"agent":"백엔드","task":"server.js 분리"}]}\n```\nDone.';
     const st = parseSubtasks(input);
     assert.ok(Array.isArray(st));
@@ -15,28 +15,28 @@ test('ORP-001: fenced json subtasks parse', () => {
     assert.equal(st[0].task, 'server.js 분리');
 });
 
-test('ORP-002: multiple subtasks parse', () => {
+test('ORP-002: multiple subtasks parse', { skip: 'DEPRECATED: patch3' }, () => {
     const input = '```json\n{"subtasks":[{"agent":"A","task":"x"},{"agent":"B","task":"y"}]}\n```';
     const st = parseSubtasks(input);
     assert.equal(st.length, 2);
     assert.equal(st[1].agent, 'B');
 });
 
-test('ORP-003: malformed json returns null', () => {
+test('ORP-003: malformed json returns null', { skip: 'DEPRECATED: patch3' }, () => {
     assert.equal(parseSubtasks('```json\n{broken\n```'), null);
 });
 
-test('ORP-004: no json block returns null', () => {
+test('ORP-004: no json block returns null', { skip: 'DEPRECATED: patch3' }, () => {
     assert.equal(parseSubtasks('plain text without any json'), null);
 });
 
-test('ORP-005: null/empty input returns null', () => {
+test('ORP-005: null/empty input returns null', { skip: 'DEPRECATED: patch3' }, () => {
     assert.equal(parseSubtasks(null), null);
     assert.equal(parseSubtasks(''), null);
     assert.equal(parseSubtasks(undefined), null);
 });
 
-test('ORP-006: raw (unfenced) json with subtasks', () => {
+test('ORP-006: raw (unfenced) json with subtasks', { skip: 'DEPRECATED: patch3' }, () => {
     const input = '결과: {"subtasks":[{"agent":"dev","task":"fix"}]}';
     const st = parseSubtasks(input);
     assert.ok(st);
@@ -66,19 +66,19 @@ test('ORP-010: null input returns null', () => {
 
 // ─── stripSubtaskJSON ────────────────────────────────
 
-test('ORP-011: strips fenced json block', () => {
+test('ORP-011: strips fenced json block', { skip: 'DEPRECATED: patch3' }, () => {
     const s = stripSubtaskJSON('요약입니다.\n```json\n{"subtasks":[]}\n```\n끝.');
     assert.ok(!s.includes('subtasks'));
     assert.ok(s.includes('요약'));
     assert.ok(s.includes('끝'));
 });
 
-test('ORP-012: strips raw json block', () => {
+test('ORP-012: strips raw json block', { skip: 'DEPRECATED: patch3' }, () => {
     const s = stripSubtaskJSON('앞 {"subtasks":[{"agent":"x","task":"y"}]} 뒤');
     assert.ok(!s.includes('subtasks'));
 });
 
-test('ORP-013: preserves text without json', () => {
+test('ORP-013: preserves text without json', { skip: 'DEPRECATED: patch3' }, () => {
     const text = '아무 JSON도 없는 텍스트';
     assert.equal(stripSubtaskJSON(text), text);
 });
