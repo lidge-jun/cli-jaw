@@ -201,8 +201,17 @@ export function writeMeta(patch: Partial<AdvancedMeta>) {
 export function withMigrationLock<T>(fn: () => T) {
     const lockPath = getMigrationLockPath();
     ensureDir(dirname(lockPath));
-    if (fs.existsSync(lockPath)) return fn();
-    fs.writeFileSync(lockPath, String(process.pid));
+    let fd: number | null = null;
+    try {
+        fd = fs.openSync(lockPath, 'wx');
+        fs.writeSync(fd, String(process.pid));
+        fs.closeSync(fd);
+        fd = null;
+    } catch (err: any) {
+        if (fd !== null) try { fs.closeSync(fd); } catch { /* ignore */ }
+        if (err.code === 'EEXIST') return fn(); // Another process holds the lock
+        throw err;
+    }
     try {
         return fn();
     } finally {

@@ -51,6 +51,7 @@ export {
 export {
     syncLegacyMarkdownShadowImport,
     syncKvShadowImport,
+    syncCoreProfile,
     ensureAdvancedMemoryStructure,
     bootstrapAdvancedMemory,
 } from './bootstrap.js';
@@ -67,8 +68,9 @@ import {
 } from './shared.js';
 
 import { getLastExpansionTerms } from './keyword-expand.js';
-import { reindexAll, searchIndex, formatHits, reindexIndexCounts } from './indexing.js';
-import { ensureAdvancedMemoryStructure, bootstrapAdvancedMemory } from './bootstrap.js';
+import { reindexAll, searchIndex, formatHits, reindexIndexCounts, reindexIntegratedMemoryFile } from './indexing.js';
+import { ensureAdvancedMemoryStructure, bootstrapAdvancedMemory, syncCoreProfile } from './bootstrap.js';
+import { reflectRecentEpisodes, type ReflectionResult } from './reflect.js';
 
 // ---------- Public API ----------
 
@@ -76,6 +78,11 @@ export function reindexAdvancedMemory() {
     const root = getAdvancedMemoryDir();
     ensureAdvancedMemoryStructure();
     return reindexAll(root);
+}
+
+export function syncIntegratedCoreMemory() {
+    const root = getAdvancedMemoryDir();
+    return syncCoreProfile(root);
 }
 
 export function listAdvancedMemoryFiles() {
@@ -122,6 +129,25 @@ export function loadAdvancedProfileSummary(maxChars = 800) {
     return trimmed.length > maxChars ? trimmed.slice(0, maxChars) + '\n...(truncated)' : trimmed;
 }
 
+function diversifyHits(
+    hits: Array<{ kind: string; relpath: string; [k: string]: any }>,
+    opts: { maxPerKind?: Record<string, number>; maxPerRelpath?: number } = {},
+) {
+    const maxPerKind = opts.maxPerKind || { episode: 2, profile: 1, semantic: 1, shared: 1, procedure: 1 };
+    const maxPerRelpath = opts.maxPerRelpath ?? 1;
+    const kindCount: Record<string, number> = {};
+    const relpathCount: Record<string, number> = {};
+    return hits.filter(hit => {
+        const kc = kindCount[hit.kind] || 0;
+        const rc = relpathCount[hit.relpath] || 0;
+        const kindLimit = maxPerKind[hit.kind] ?? 2;
+        if (kc >= kindLimit || rc >= maxPerRelpath) return false;
+        kindCount[hit.kind] = kc + 1;
+        relpathCount[hit.relpath] = rc + 1;
+        return true;
+    });
+}
+
 export function buildTaskSnapshot(query: string | string[], budget = 2800, expanded?: string[]) {
     const terms = Array.isArray(query)
         ? query.map(v => String(v || '').trim()).filter(Boolean)
@@ -132,10 +158,11 @@ export function buildTaskSnapshot(query: string | string[], budget = 2800, expan
     const { hits } = searchIndex(cleaned, mergedExpanded);
     if (!hits.length) return '';
 
+    const diversified = diversifyHits(hits);
     const out: string[] = [];
     let remaining = Math.max(0, budget);
 
-    for (const hit of hits.slice(0, 4)) {
+    for (const hit of diversified.slice(0, 4)) {
         if (remaining <= 0) break;
         const header = `### ${hit.relpath}:${hit.source_start_line}-${hit.source_end_line}`;
         const snippetBudget = Math.min(700, Math.max(0, remaining - header.length - 4));
@@ -213,6 +240,7 @@ function getLegacyClaudeMemoryDir() {
 
 export function ensureIntegratedMemoryReady() {
     const created = ensureAdvancedMemoryStructure();
+    syncCoreProfile(getAdvancedMemoryDir(), { force: false });
     const status = getAdvancedMemoryStatus();
     if (status.indexState === 'ready') return { created, bootstrapped: false, status };
     const hasLegacy = fs.existsSync(join(JAW_HOME, 'memory', 'MEMORY.md'))
@@ -233,6 +261,32 @@ export function ensureIntegratedMemoryReady() {
     return { created, bootstrapped: true, status: getAdvancedMemoryStatus(), result };
 }
 
+// ---------- Phase 4: Reflection ----------
+
+function writeReflectMeta(meta: { lastReflectedAt: string }) {
+    const metaPath = join(getAdvancedMemoryDir(), '.reflect-meta.json');
+    fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+}
+
+export function getLastReflectedAt(): string | null {
+    const metaPath = join(getAdvancedMemoryDir(), '.reflect-meta.json');
+    try {
+        const raw = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+        return raw.lastReflectedAt || null;
+    } catch { return null; }
+}
+
+export function reflectMemory(options?: { sinceDays?: number; dryRun?: boolean }): ReflectionResult {
+    const result = reflectRecentEpisodes(options);
+    for (const changed of result.changedFiles) {
+        reindexIntegratedMemoryFile(changed);
+    }
+    if (!options?.dryRun && result.changedFiles.length > 0) {
+        writeReflectMeta({ lastReflectedAt: new Date().toISOString() });
+    }
+    return result;
+}
+
 // ---------- Backward-compat aliases ----------
 export {
     getAdvancedMemoryDir as getStructuredMemoryDir,
@@ -248,6 +302,9 @@ export {
 export {
     ensureIntegratedMemoryReady as ensureMemoryRuntimeReady,
     reindexAdvancedMemory as reindexMemory,
+    syncIntegratedCoreMemory,
+    reflectMemory,
+    getLastReflectedAt,
     listAdvancedMemoryFiles as listMemoryFiles,
     searchAdvancedMemory as searchIndexedMemory,
     readAdvancedMemorySnippet as readIndexedMemorySnippet,

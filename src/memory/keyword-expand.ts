@@ -253,12 +253,13 @@ async function expandViaVertex(query: string, override: Partial<AdvancedConfig> 
     return extractJsonArray(text);
 }
 
-export async function expandSearchKeywords(query: string) {
-    const q = String(query || '').trim();
-    if (!q) return [];
-    const merged = sanitizeKeywords(heuristicKeywords(q));
-    lastExpansionTerms = merged;
-    return merged;
+export function expandSearchKeywords(query: string): { exact: string[]; expanded: string[] } {
+    const base = String(query || '').trim();
+    if (!base) return { exact: [], expanded: [] };
+    const heuristic = heuristicKeywords(base);
+    const expanded = sanitizeKeywords(heuristic.filter(term => term !== base));
+    lastExpansionTerms = [base, ...expanded];
+    return { exact: [base], expanded };
 }
 
 export async function validateAdvancedMemoryConfig(override: Partial<{ provider?: string; model?: string; apiKey?: string; baseUrl?: string; vertexConfig?: string }> = {}) {

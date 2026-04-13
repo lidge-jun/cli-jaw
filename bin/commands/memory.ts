@@ -67,6 +67,22 @@ try {
             console.log(`🧠 Memory initialized at ${JAW_HOME}/memory/`);
             break;
         }
+        case 'reflect': {
+            const { values: reflectValues } = parseArgs({
+                args: process.argv.slice(4),
+                options: {
+                    sinceDays: { type: 'string', default: '7' },
+                    dryRun: { type: 'boolean', default: false },
+                },
+                strict: false,
+            });
+            const r = await api('POST', '/reflect', {
+                sinceDays: Number(reflectValues.sinceDays) || 7,
+                dryRun: reflectValues.dryRun === true,
+            }) as Record<string, any>;
+            console.log(JSON.stringify(r, null, 2));
+            break;
+        }
         default:
             console.log(`
   🧠 cli-jaw memory
@@ -77,6 +93,7 @@ try {
     save <file> <content>        Append content to a memory file
     list                         List all memory files
     init                         Initialize memory directory
+    reflect [--sinceDays N]      Promote durable facts from episodes to shared pages
 
   Files:
     MEMORY.md          Core knowledge (auto-injected into prompt)

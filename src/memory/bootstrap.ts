@@ -105,6 +105,56 @@ ${parsed.activeProjects || ''}
     return 1;
 }
 
+// Phase 1: idempotent core sync (replaces one-shot importCoreMemory for ongoing changes)
+export function syncCoreProfile(root: string, opts: { force?: boolean } = {}) {
+    const corePath = join(JAW_HOME, 'memory', 'MEMORY.md');
+    if (!fs.existsSync(corePath)) return { updated: false, reason: 'missing_core' as const };
+
+    const profilePath = join(root, 'profile.md');
+    const coreContent = safeReadFile(corePath);
+    const sourceHash = hashText(coreContent);
+
+    if (!opts.force) {
+        const existing = fs.existsSync(profilePath) ? safeReadFile(profilePath) : '';
+        if (existing.includes(`source_hash: ${sourceHash}`)) {
+            return { updated: false, reason: 'unchanged' as const };
+        }
+    }
+
+    const parsed = parseLegacyMemorySections(coreContent);
+    const body = `# Profile
+
+## User Preferences
+${parsed.userPreferences || ''}
+
+## Key Decisions
+${parsed.keyDecisions || ''}
+
+## Active Projects
+${parsed.activeProjects || ''}
+`;
+
+    const existing = fs.existsSync(profilePath) ? safeReadFile(profilePath) : '';
+    const existingCreatedAt = /^created_at:\s+(.+)$/m.exec(existing)?.[1]?.trim() || '';
+
+    const fm = frontmatter({
+        id: `profile-${instanceId()}`,
+        home_id: instanceId(),
+        kind: 'profile',
+        source: 'legacy-memory-md',
+        trust_level: 'high',
+        source_hash: sourceHash,
+        created_at: existingCreatedAt || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+    });
+
+    writeText(profilePath, fm + body);
+    reindexSingleFile(root, profilePath);
+    updateImportedCount('core', 1);
+
+    return { updated: true, path: profilePath, sourceHash };
+}
+
 function importMarkdownMemory(root: string) {
     const legacyDir = join(JAW_HOME, 'memory');
     if (!fs.existsSync(legacyDir)) return 0;

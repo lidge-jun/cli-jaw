@@ -283,11 +283,49 @@ function tokenizeExpandedQuery(query: string, expanded?: string[]) {
     return tokenizeQuery(query);
 }
 
-export function formatHits(hits: SearchHit[]) {
+// ─── Phase 2: Ranking helpers ───────────────────────
+
+function kindPriority(kind: string): number {
+    if (kind === 'profile') return -4.0;
+    if (kind === 'shared') return -3.0;
+    if (kind === 'procedure') return -2.5;
+    if (kind === 'semantic') return -2.0;
+    if (kind === 'episode') return 0;
+    return 0;
+}
+
+function estimateRecencyBoost(relpath: string): number {
+    const dateMatch = /(\d{4}-\d{2}-\d{2})/.exec(relpath);
+    if (!dateMatch) return 0;
+    const fileDate = new Date(dateMatch[1]!);
+    const now = new Date();
+    const daysDiff = (now.getTime() - fileDate.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysDiff <= 1) return -1.5;
+    if (daysDiff <= 3) return -1.0;
+    if (daysDiff <= 7) return -0.5;
+    return 0;
+}
+
+function computeFinalScore(hit: SearchHit, query: string): number {
+    const q = query.toLowerCase();
+    const snippet = hit.snippet.toLowerCase();
+    const exactMatch = snippet.includes(q);
+    const phraseMatch = snippet.includes(`header: ${q}`) || snippet.includes(`## ${q}`);
+    const kw = kindPriority(hit.kind);
+    const rw = estimateRecencyBoost(hit.relpath);
+    const exactBoost = exactMatch ? -2.0 : 0;
+    const phraseBoost = phraseMatch ? -1.0 : 0;
+    return hit.score + kw + rw + exactBoost + phraseBoost;
+}
+
+export function formatHits(hits: SearchHit[], opts: { includeDebugMeta?: boolean } = {}) {
     if (!hits.length) return '(no results)';
     return hits.map(hit => {
         const loc = `${hit.relpath}:${hit.source_start_line}-${hit.source_end_line}`;
-        return `${loc}\n${hit.snippet}`;
+        const debug = opts.includeDebugMeta
+            ? `\n[kind=${hit.kind} final=${hit.score.toFixed(1)}]`
+            : '';
+        return `${loc}${debug}\n${hit.snippet}`;
     }).join('\n\n---\n\n');
 }
 
@@ -361,7 +399,9 @@ export function searchIndex(query: string, expanded?: string[]) {
         }
     }
     db.close();
+    const baseQuery = searchTerms[0] || query;
     const hits = [...byPathLine.values()]
+        .map(hit => ({ ...hit, score: computeFinalScore(hit, baseQuery) }))
         .sort((a, b) => a.score - b.score)
         .slice(0, 8);
     return { hits };

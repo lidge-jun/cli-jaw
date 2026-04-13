@@ -2,7 +2,7 @@
  * src/memory.js — Phase A: grep-based persistent memory
  */
 import { JAW_HOME } from '../core/config.js';
-import { join } from 'path';
+import { join, resolve, relative } from 'path';
 import fs from 'fs';
 import { spawnSync } from 'child_process';
 
@@ -29,6 +29,15 @@ export function ensureMemoryDir() {
         fs.writeFileSync(memPath, DEFAULT_MEMORY);
     }
     return MEMORY_DIR;
+}
+
+function resolveMemoryPath(filename: string) {
+    const filepath = resolve(MEMORY_DIR, filename);
+    const rel = relative(MEMORY_DIR, filepath).replace(/\\/g, '/');
+    if (rel.startsWith('../') || rel === '..') {
+        throw new Error('memory_path_out_of_root');
+    }
+    return filepath;
 }
 
 // ─── Search (grep) ───────────────────────────────
@@ -59,7 +68,7 @@ export function search(query: string) {
 // ─── Read ────────────────────────────────────────
 
 export function read(filename: string, opts: Record<string, any> = {}) {
-    const filepath = join(MEMORY_DIR, filename);
+    const filepath = resolveMemoryPath(filename);
     if (!fs.existsSync(filepath)) return null;
     const content = fs.readFileSync(filepath, 'utf8');
     if (opts.lines) {
@@ -73,18 +82,25 @@ export function read(filename: string, opts: Record<string, any> = {}) {
 
 export function save(filename: string, content: string) {
     ensureMemoryDir();
-    const filepath = join(MEMORY_DIR, filename);
+    const filepath = resolveMemoryPath(filename);
     fs.mkdirSync(join(filepath, '..'), { recursive: true });
     // Unescape \n from CLI
     const unescaped = content.replace(/\\n/g, '\n');
     fs.appendFileSync(filepath, '\n' + unescaped + '\n');
     void import('./runtime.js').then(m => {
-        if (filename.replace(/\\/g, '/').startsWith('structured/')) {
+        const normalized = filename.replace(/\\/g, '/');
+        if (normalized.startsWith('structured/')) {
             m.reindexIntegratedMemoryFile(filepath);
-        } else {
-            m.syncLegacyMarkdownShadowImport(filepath);
+            return;
         }
-    }).catch(() => { });
+        if (normalized === 'MEMORY.md') {
+            m.syncIntegratedCoreMemory();
+            return;
+        }
+        m.syncLegacyMarkdownShadowImport(filepath);
+    }).catch(err => {
+        console.warn('[jaw:memory-save-sync]', (err as Error).message);
+    });
     return filepath;
 }
 
