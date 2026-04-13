@@ -240,11 +240,11 @@ export async function processQueue() {
 
 // ─── Helpers ─────────────────────────────────────────
 
-function makeCleanEnv() {
+function makeCleanEnv(extraEnv: Record<string, string> = {}) {
     const env = { ...process.env };
     delete env.CLAUDE_CODE_SSE_PORT;
     delete env.GEMINI_SYSTEM_MD;
-    return env;
+    return { ...env, ...extraEnv };
 }
 
 function buildHistoryBlock(currentPrompt: string, workingDir?: string | null, maxSessions = 10, maxTotalChars = 8000) {
@@ -345,6 +345,7 @@ interface SpawnOpts {
     effort?: string;
     permissions?: string;
     memorySnapshot?: string;
+    env?: Record<string, string>;
     lifecycle?: SpawnLifecycle;
 }
 
@@ -432,7 +433,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         console.log(`[jaw:${agentLabel}] Spawning: ${cli} ${args.join(' ').slice(0, 120)}...`);
     }
 
-    const spawnEnv = makeCleanEnv();
+    const spawnEnv = makeCleanEnv(opts.env);
 
     if (cli === 'gemini' && sysPrompt) {
         const tmpSysFile = join(os.tmpdir(), `jaw-gemini-sys-${agentLabel}.md`);
@@ -463,7 +464,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             if (changed) fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
         } catch (e: unknown) { console.warn('[jaw:copilot] config.json sync failed:', (e as Error).message); }
 
-        const acp = new AcpClient({ model, workDir: settings.workingDir, permissions } as any);
+        const acp = new AcpClient({ model, workDir: settings.workingDir, permissions, env: spawnEnv } as any);
         acp.spawn();
         const child = (acp as any).proc;
         if (mainManaged) activeProcess = child;
