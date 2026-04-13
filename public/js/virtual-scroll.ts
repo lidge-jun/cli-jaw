@@ -26,8 +26,9 @@ export class VirtualScroll {
     private firstVisible = 0;
     private lastVisible = 0;
 
-    /** Called after render() mounts items in viewport — for lazy rendering */
+    /** Called after render() mounts items in viewport — for lazy rendering and widget activation */
     onLazyRender: LazyRenderCallback | null = null;
+    onPostRender: ((viewport: HTMLElement) => void) | null = null;
 
     constructor(containerId: string) {
         this.container = document.getElementById(containerId)!;
@@ -77,8 +78,9 @@ export class VirtualScroll {
         const item: VirtualItem = { id, html, height: EST_HEIGHT };
         this.items.push(item);
         this._totalHeight += EST_HEIGHT;
-        this.scheduleRender();
-        this.scrollToBottom();
+        // Render immediately then scroll again after height is remeasured
+        this.render();
+        this.container.scrollTop = this._totalHeight;
     }
 
     /** Update cached HTML for a specific item index (used by lazy render). */
@@ -182,6 +184,11 @@ export class VirtualScroll {
                 this.onLazyRender(Array.from(lazyTargets));
             }
         }
+
+        // Fire post-render callback for widget activation on all mounted items
+        if (this.onPostRender) {
+            this.onPostRender(this.viewport);
+        }
     }
 
     scrollToBottom(): void {
@@ -203,6 +210,7 @@ export class VirtualScroll {
         this.firstVisible = 0;
         this.lastVisible = 0;
         this.onLazyRender = null;
+        this.onPostRender = null;
         if (this.rafId) {
             cancelAnimationFrame(this.rafId);
             this.rafId = null;

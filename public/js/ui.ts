@@ -113,14 +113,17 @@ export function addSystemMsg(text: string, extraClass?: string, type?: string): 
     const container = document.getElementById('chatMessages');
     if (!container) return;
     const vs = getVirtualScroll();
-    if (vs.active) vs.flushToDOM();
     hideEmptyState();
     const div = document.createElement('div');
     const typeClass = type ? ` msg-type-${type}` : '';
     div.className = 'msg msg-system' + typeClass + (extraClass ? ' ' + extraClass : '');
     div.innerHTML = text;
-    container.appendChild(div);
-    container.scrollTop = container.scrollHeight;
+    if (vs.active) {
+        vs.appendLiveItem(div);
+    } else {
+        container.appendChild(div);
+    }
+    scrollToBottom();
 }
 
 export function cleanupToolActivity(): void {
@@ -289,6 +292,21 @@ export function addMessage(role: string, text: string, cli?: string | null): HTM
     } else {
         container?.appendChild(div);
         activateWidgets(div);
+
+        // Check if live growth crossed threshold — activate VS
+        if (!vs.active && !isStreamingPlaceholder && container) {
+            const msgCount = container.querySelectorAll('.msg').length;
+            if (msgCount >= VS_THRESHOLD) {
+                // Feed all existing DOM messages into VS items array
+                container.querySelectorAll('.msg').forEach(el => {
+                    vs.addItem(crypto.randomUUID(), el.outerHTML);
+                });
+                // Wire widget activation for VS-rendered items
+                vs.onPostRender = (viewport: HTMLElement) => {
+                    activateWidgets(viewport);
+                };
+            }
+        }
     }
     scrollToBottom();
     return div;
@@ -382,6 +400,11 @@ export async function loadMessages(): Promise<void> {
                         vs.updateItemHtml(idx, msgEl.outerHTML);
                     }
                 }
+            };
+
+            // Activate widgets on all VS-rendered items (covers live appends too)
+            vs.onPostRender = (viewport: HTMLElement) => {
+                activateWidgets(viewport);
             };
 
             vs.scrollToBottom();
