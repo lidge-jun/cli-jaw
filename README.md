@@ -6,7 +6,7 @@
 
 *One assistant. Five brains. Always on.*
 
-[![Tests](https://img.shields.io/badge/tests-888%20pass-brightgreen)](#-tests)
+[![Tests](https://img.shields.io/badge/tests-rolling%20inventory-blue)](#-tests)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org)
 [![License](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
@@ -184,7 +184,7 @@ CLI-JAW is a **personal AI assistant** that lives on your machine and works from
 > 💬 *"Refactor this module and write tests"* → sub-agents handle it while you grab coffee
 > 💬 *"Download that PDF and put the key points in Notion"* → browser + Notion skill, done
 
-Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, Codex, Gemini, OpenCode, Copilot) through their official CLIs — giving you the best of every provider in one unified experience. If one engine is busy, it automatically falls back to the next. 116 built-in skills handle everything from browser automation to document generation.
+Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, Codex, Gemini, OpenCode, Copilot) through their official CLIs — giving you the best of every provider in one unified experience. If one engine is busy, it automatically falls back to the next. **100+ built-in skills** handle everything from browser automation to document generation.
 
 |                           | Why CLI-JAW?                                                                                                                     |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
@@ -192,25 +192,32 @@ Unlike single-model assistants, CLI-JAW orchestrates **5 AI engines** (Claude, C
 | 🤖**Verified Agent Tools** | 5 battle-tested coding agents (Claude, Codex, Gemini, OpenCode, Copilot) under one roof.                                         |
 | ⚡**Multi-Agent Fallback** | One engine down? The next picks up automatically. Zero downtime.                                                                 |
 | 🎭**PABCD Orchestration**  | DB-persisted FSM pipeline — Plan → Audit → Build → Check → Done. Workers are read-only. You approve every phase.                 |
-| 📦**116 Built-in Skills**  | Browser automation, document generation, Telegram/Discord, memory — ready out of the box.                                         |
+| 📦**100+ Built-in Skills** | Browser automation, document generation, Telegram/Discord, memory — ready out of the box.                                          |
 | 🖥️**Cross-Platform**       | macOS, Linux, Windows — ENOENT-safe CLI spawn, auto-detection,`.cmd` shim support, and native install all work across platforms. |
 
 ![CLI-JAW Terminal](docs/screenshots/terminal-cli.png)
 
 ---
 
-## 🆕 What's New (v1.4.0)
+## 🆕 What's New (v1.6.0)
 
-| Feature                      | Description                                                                                                                                                                                                                                                                      |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 🧠 **Advanced Memory**        | 5-tier hierarchical storage (Profile, Episodes, Semantic, Procedures, Sessions). Hybrid retrieval: FTS5 + semantic search with query expansion. Gemini Flash-Lite powered embeddings. Full UI ops dashboard with reindex/audit controls.                                         |
-| 🎨 **Modular Dev Skills**     | `dev-frontend` (1,428 lines, 13 files) and `dev-backend` (1,275 lines, 9 files) expanded from single SKILL.md into modular structures with core references (aesthetics, anti-slop, security, architecture) and stack-specific guides (React, Next.js, Node, Python, PostgreSQL). |
-| 📄 **Office Suite Expansion** | HWP (Korean word processor) support added. Enhanced PPTX generation. 21 active skills (up from 18).                                                                                                                                                                              |
-| ⚡ **ACP Progress Heartbeat** | Real-time `stderr_activity` events during long agent runs. Conditional heartbeat scheduling with UI modal controls.                                                                                                                                                              |
-| 🔄 **Skill Reset**            | `jaw skill reset` with `--soft` (reload) and `--hard` (full reinstall) modes. `workingDir` auto-correction when `JAW_HOME` differs from `settings.json`.                                                                                                                         |
-| 🎬 **Video Skill**            | Remotion-based programmatic video rendering from JSON timeline definitions. TTS integration with per-cut narration sync.                                                                                                                                                         |
-| 📐 **1M Context Toggle**      | Enable/disable 1M token context window with `config.toml` injection for supported models.                                                                                                                                                                                        |
-| 🚀 **Preview Releases**       | Automated preview release pipeline with timestamped versions (`v1.4.0-preview.YYYYMMDD`). GitHub prerelease integration.                                                                                                                                                         |
+`v1.6.0` is the documentation catch-up release that finally summarizes the major product expansion that happened after `v1.2.0`.
+
+- Full update log: [CHANGELOG.md](CHANGELOG.md#160---2026-04-13)
+- Range covered: `v1.2.0` → `v1.5.1`
+- Scope: `59` commits, `307` files changed, `32,760` insertions, `4,263` deletions
+- Theme: CLI-JAW grew from a capable personal assistant into a broader operating environment with richer orchestration, memory, channels, UI, and release tooling
+
+| Feature | Description |
+| ------- | ----------- |
+| 🎭 **PABCD Orchestration** | Orchestration is now a first-class surface: `jaw dispatch`, `jaw orchestrate`, persisted PABCD state, worker registry, research dispatch, and live orchestration status in the product. |
+| 🧠 **Structured Memory Runtime** | Memory moved beyond plain persistence into a layered indexed subsystem: structured storage, bootstrap/migration, SQLite FTS5 indexing, query expansion, task snapshots, and UI controls for audit/reindex flows. |
+| 💬 **Discord + Voice Channels** | CLI-JAW now works across Web, Terminal, Telegram, and Discord. Voice/STT also became a first-class workflow with web recording, Telegram voice handling, and provider-configurable transcription. |
+| 🖥️ **Major Web UI Expansion** | The web app gained richer settings panes, memory and heartbeat controls, tool UI, provider icons, gesture handling, drag/drop protections, stronger streaming render behavior, and virtual scrolling. |
+| 📊 **Diagram & Widget Rendering** | Inline diagrams and sandboxed widget rendering became visible product features, backed by dedicated iframe rendering, validation, and CSS/runtime updates. |
+| ⌨️ **CLI/TUI Usability Pass** | Terminal workflows now include `/compact`, better overlays and selectors, session persistence, resume classification, readiness checks, and more stable command handling. |
+| 🧪 **Ops, CI, and Installability** | `jaw doctor`, browser launch policy, skill reset/fallback behavior, submodule-safe CI, preview releases, Vite-based frontend delivery, service worker assets, and stronger install troubleshooting all improved. |
+| 📄 **Office Automation Maturity** | OfficeCLI integration, smoke tests, local binaries, and Office/PDF workflows are much more production-ready than they were at `v1.2.0`. |
 
 ---
 
@@ -236,7 +243,7 @@ graph LR
 - 🎭 **Multi-agent orchestration** — Complex tasks get split across specialized sub-agents automatically.
 - 🎤 **Voice input** — Mic button on the web + Telegram voice messages. Multi-provider STT (OpenAI, Vertex AI).
 - 📝 **Prompt templates** — Create, manage, and reuse prompt templates with a visual node-map editor.
-- 📦 **116 skills** — Browser control, file editing, image generation, web search, and [much more](#-skill-system).
+- 📦 **100+ skills** — Browser control, file editing, image generation, web search, and [much more](#-skill-system).
 - 🧠 **Persistent memory** — Your assistant remembers past conversations and preferences across sessions.
 - 📱 **Telegram bot** — Chat with your assistant from your phone, send voice/photos/files.
 - 🌐 **Browser automation** — Your assistant can navigate the web, click, type, and screenshot.
@@ -248,7 +255,7 @@ graph LR
 
 ## 📦 Skill System
 
-**116 skills** out of the box — browser, github, notion, telegram, memory, pdf, image generation, and [much more](#).
+**100+ skills** out of the box — browser, github, notion, telegram, memory, pdf, image generation, and [much more](#).
 
 <details>
 <summary>View all skills</summary>
@@ -589,7 +596,7 @@ src/
 ## 🧪 Tests
 
 <details>
-<summary>888 pass · 2 skipped · zero external dependencies</summary>
+<summary>See TESTS.md for current pass counts and inventory</summary>
 
 ```bash
 npm test
@@ -605,10 +612,12 @@ All tests run via `tsx --test` (native Node.js test runner + TypeScript).
 
 ## 📖 Documentation
 
-| Document                                | What's inside                                         |
-| --------------------------------------- | ----------------------------------------------------- |
+| Document | What's inside |
+| -------- | ------------- |
+| [CHANGELOG.md](CHANGELOG.md) | Long-form release log, including the `v1.6.0` catch-up notes covering `v1.2.0` → `v1.5.1` |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design, module graph, REST API (40+ endpoints) |
-| [TESTS.md](TESTS.md)                    | Test coverage and test plan                           |
+| [TESTS.md](TESTS.md) | Test coverage, current counts, and test plan |
+| [memory-architecture.md](docs/memory-architecture.md) | Structured memory model, indexing, and runtime behavior |
 
 ---
 

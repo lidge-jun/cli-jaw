@@ -1,6 +1,6 @@
 # 🧪 CLI-JAW Tests
 
-[![Tests](https://img.shields.io/badge/tests-888%20pass%20%2F%202%20skip-brightgreen)](#)
+[![Tests](https://img.shields.io/badge/tests-rolling%20inventory-blue)](#)
 
 > 2026-04-11 로컬 재검증 기준: `npm test`는 **1015 pass / 0 fail / 0 skip**, `npm run -s test:integration`은 **31 pass / 0 fail / 1 skip**. 아래 인벤토리 표는 일부 섹션이 현재 코드보다 늦을 수 있다.
 
@@ -9,7 +9,7 @@
 ## Run
 
 ```bash
-npm test                            # All 890 tests (~16s)
+npm test                            # Current full suite
 tsx --test tests/unit/*.test.ts    # Unit tests only
 tsx --test tests/integration/*.test.ts  # Integration tests only
 npm run test:watch                  # Watch mode

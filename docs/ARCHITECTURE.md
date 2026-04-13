@@ -102,7 +102,8 @@ graph LR
 
 ## File Structure & Line Counts
 
-> Verified by `devlog/structure/verify-counts.sh`. Run `bash devlog/structure/verify-counts.sh` to check accuracy.
+> Verified by `devlog/structure/verify-counts.sh` when the private `devlog/` submodule is available.
+> In public or submodule-light checkouts, treat the counts in this section as approximate snapshots rather than a hard source of truth.
 > Detailed function-level reference: `devlog/structure/str_func.md` + `devlog/structure/*.md`
 
 ### Core (`src/`)
@@ -297,7 +298,7 @@ main.js (entry)
 | **Orchestration v2** | Triage → role dispatch → 5-phase pipeline → gate reviews | ⭐⭐⭐⭐⭐ |
 | **AI-Driven Triage** | Agent autonomously decides dispatch vs direct response | ⭐⭐⭐ |
 | **MCP Sync** | `mcp.json` → 5 CLI formats auto-conversion + symlink protection | ⭐⭐⭐⭐ |
-| **Skill System** | 109 bundled skills (20 active + 89 reference), 2-tier classification | ⭐⭐⭐ |
+| **Skill System** | 100+ bundled skills, 2-tier classification | ⭐⭐⭐ |
 | **CLI Registry** | Single source of truth — modify one file, auto-propagate everywhere | ⭐⭐⭐ |
 | **Slash Commands** | Unified across CLI / Web / Telegram with autocomplete + dropdowns | ⭐⭐⭐ |
 | **Command Contract** | Capability-based access control per interface (Web/CLI/Telegram) | ⭐⭐⭐ |
@@ -320,7 +321,7 @@ main.js (entry)
 | **IDE Diff View** | Fingerprint-based change detection, VS Code / Antigravity auto-detect | ⭐⭐⭐ |
 | **PABCD UI** | Live roadmap bar, shark runner animation, glow/pulse/badge feedback | ⭐⭐ |
 | **Cross-Platform Service** | `jaw service install` — auto-detects systemd, launchd, Docker | ⭐⭐⭐ |
-| **639 Tests** | `node:test` — events, ACP, telegram, security, commands, i18n, orchestrator, STT, quota | ⭐⭐⭐ |
+| **Test Coverage** | See `TESTS.md` for the current automated counts and coverage inventory | ⭐⭐⭐ |
 | **Unified AGENTS.md** | `{workDir}/AGENTS.md` — Codex + Copilot + OpenCode unified system prompt | ⭐⭐⭐ |
 | **XSS Hardening** | DOMPurify + escapeHtml (with quote escaping) + Mermaid strict mode | ⭐⭐ |
 | **Auto-Expand Input** | Chat textarea grows up to 8 lines, resets on send | ⭐ |
