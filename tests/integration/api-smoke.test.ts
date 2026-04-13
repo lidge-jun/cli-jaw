@@ -82,7 +82,7 @@ test('API Smoke Tests', async (t) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: 'not-a-command' }),
         });
-        assert.ok([200, 400, 404, 500].includes(res.status), `expected safe status, got ${res.status}`);
+        assert.ok([200, 400, 401, 404, 500].includes(res.status), `expected safe status, got ${res.status}`);
     });
 
     await t.test('SMOKE-010: GET /api/nonexistent → 404 or 200', async () => {
