@@ -350,7 +350,8 @@ interface SpawnOpts {
 
 export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     // Ensure AGENTS.md on disk is fresh before CLI reads it
-    if (!opts.internal && !opts._isFallback) regenerateB();
+    // Skip for employee spawns — distribute.ts manages AGENTS.md isolation
+    if (!opts.internal && !opts._isFallback && !opts.agentId) regenerateB();
 
     const { forceNew = false, agentId, sysPrompt: customSysPrompt, memorySnapshot } = opts;
     const origin = opts.origin || 'web';

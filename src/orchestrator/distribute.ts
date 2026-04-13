@@ -1,7 +1,11 @@
 // ─── Distribute Helpers (parallel/sequential agent execution) ──
 // Extracted from pipeline.ts for 500-line compliance.
 
+import fs from 'fs';
+import os from 'os';
+import { join } from 'path';
 import { broadcast } from '../core/bus.js';
+import { settings } from '../core/config.js';
 import { getEmployeeSession, upsertEmployeeSession } from '../core/db.js';
 import { getEmployeePromptV2 } from '../prompt/builder.js';
 import { spawnAgent, killAgentById } from '../agent/spawn.js';
@@ -346,6 +350,14 @@ ${worklogBlock}`.trim();
         },
     });
 
+    // ─── Employee AGENTS.md isolation: prevent Codex from reading Boss prompt ───
+    const agentsMdPath = join(settings.workingDir || os.homedir(), 'AGENTS.md');
+    let originalAgentsMd: string | null = null;
+    try {
+        originalAgentsMd = fs.readFileSync(agentsMdPath, 'utf8');
+        fs.writeFileSync(agentsMdPath, sysPrompt);
+    } catch { /* AGENTS.md may not exist yet */ }
+
     let r: Record<string, any>;
     try {
         const { promise } = spawnAgent(taskPrompt, {
@@ -364,6 +376,11 @@ ${worklogBlock}`.trim();
     } catch (err) {
         monitor.stop();
         throw err;
+    } finally {
+        // ─── Restore Boss AGENTS.md ───
+        if (originalAgentsMd !== null) {
+            try { fs.writeFileSync(agentsMdPath, originalAgentsMd); } catch { /* ignore */ }
+        }
     }
     if (r.code === 0 && r.sessionId) {
         upsertEmployeeSession.run(emp.id, r.sessionId, emp.cli);

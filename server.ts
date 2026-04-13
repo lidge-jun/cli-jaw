@@ -66,7 +66,7 @@ import { resolveOrcScope } from './src/orchestrator/scope.js';
 import { listActiveOrcStates } from './src/core/db.js';
 import type { OrcStateName } from './src/orchestrator/state-machine.js';
 import { submitMessage } from './src/orchestrator/gateway.js';
-import { getActiveWorkers, claimWorker, finishWorker, failWorker } from './src/orchestrator/worker-registry.js';
+import { getActiveWorkers, claimWorker, finishWorker, failWorker, markWorkerReplayed } from './src/orchestrator/worker-registry.js';
 import { findEmployee, runSingleAgent } from './src/orchestrator/distribute.js';
 import { makeCommandCtx } from './src/cli/command-context.js';
 import { initTelegram, telegramBot, telegramActiveChatIds } from './src/telegram/bot.js';
@@ -76,7 +76,6 @@ import { sendChannelOutput, normalizeChannelSendRequest } from './src/messaging/
 import { startHeartbeat, stopHeartbeat, watchHeartbeatFile } from './src/memory/heartbeat.js';
 import { validateHeartbeatScheduleInput } from './src/memory/heartbeat-schedule.js';
 import { fetchCopilotQuota, refreshCopilotFromKeychain } from './lib/quota-copilot.js';
-import { startTokenKeepAlive } from './lib/token-keepalive.js';
 import { CLI_REGISTRY } from './src/cli/registry.js';
 import { clearMainSessionState, syncMainSessionToSettings, resetSessionPreservingHistory } from './src/core/main-session.js';
 import { applyRuntimeSettingsPatch } from './src/core/runtime-settings.js';
@@ -437,6 +436,7 @@ app.post('/api/orchestrate/dispatch', async (req, res) => {
         };
         const result = await runSingleAgent(ap, emp, {}, 1, { origin: 'api' }, []);
         finishWorker(slot.agentId, result.text || '');
+        markWorkerReplayed(slot.agentId);
         res.json({ ok: true, result });
     } catch (err: any) {
         failWorker(slot.agentId, err.message);
@@ -1170,7 +1170,6 @@ server.listen(PORT, () => {
         console.error('[messaging:boot]', (e as Error).message);
     });
     startHeartbeat();
-    startTokenKeepAlive();
 
     // ─── Seed default employees if none exist ────────
     const seeded = seedDefaultEmployees();
