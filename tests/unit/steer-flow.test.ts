@@ -48,28 +48,27 @@ test('SF-001: steerAgent flow: kill → wait → insert → orchestrate', () => 
 // ─── SF-002: steerAgent saves interrupted output via exit handler ───
 
 test('SF-002: exit handler saves interrupted content to DB via insertMessageWithTrace', () => {
-    const src = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
+    // After Phase 2 decomposition, interrupted tagging + insertMessageWithTrace
+    // moved to lifecycle-handler.ts (handleAgentExit). Verify it there.
+    const lifecycleSrc = fs.readFileSync(join(__dirname, '../../src/agent/lifecycle-handler.ts'), 'utf8');
 
-    // Verify that after interrupted tagging, insertMessageWithTrace is called
-    // ACP path
-    const acpExitIdx = src.indexOf("acp.on('exit'");
-    assert.ok(acpExitIdx > 0);
-    const acpBlock = src.slice(acpExitIdx, acpExitIdx + 7000);
-
-    const interruptedIdx = acpBlock.indexOf('⏹️ [interrupted]');
-    const insertTraceIdx = acpBlock.indexOf('insertMessageWithTrace.run');
-    assert.ok(interruptedIdx > 0, 'ACP exit should have interrupted tagging');
+    const interruptedIdx = lifecycleSrc.indexOf('⏹️ [interrupted]');
+    const insertTraceIdx = lifecycleSrc.indexOf('insertMessageWithTrace.run');
+    assert.ok(interruptedIdx > 0, 'lifecycle-handler should have interrupted tagging');
     assert.ok(insertTraceIdx > interruptedIdx, 'insertMessageWithTrace should come after interrupted tagging');
 
-    // CLI path
-    const cliCloseIdx = src.indexOf("child.on('close'");
-    assert.ok(cliCloseIdx > 0);
-    const cliBlock = src.slice(cliCloseIdx, cliCloseIdx + 7000);
+    // Also verify spawn.ts exit handlers delegate to handleAgentExit
+    const spawnSrc = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
 
-    const cliInterruptedIdx = cliBlock.indexOf('⏹️ [interrupted]');
-    const cliInsertIdx = cliBlock.indexOf('insertMessageWithTrace.run');
-    assert.ok(cliInterruptedIdx > 0, 'CLI close should have interrupted tagging');
-    assert.ok(cliInsertIdx > cliInterruptedIdx, 'CLI insertMessageWithTrace should come after interrupted tagging');
+    const acpExitIdx = spawnSrc.indexOf("acp.on('exit'");
+    assert.ok(acpExitIdx > 0);
+    const acpBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 7000);
+    assert.ok(acpBlock.includes('handleAgentExit'), 'ACP exit should delegate to handleAgentExit');
+
+    const cliCloseIdx = spawnSrc.indexOf("child.on('close'");
+    assert.ok(cliCloseIdx > 0);
+    const cliBlock = spawnSrc.slice(cliCloseIdx, cliCloseIdx + 7000);
+    assert.ok(cliBlock.includes('handleAgentExit'), 'CLI close should delegate to handleAgentExit');
 });
 
 // ─── SF-003: buildHistoryBlock includes trace (which has interrupted tag) ───
@@ -107,19 +106,19 @@ test('SF-003: buildHistoryBlock uses trace for assistant messages, preserving in
 test('SF-EDGE: processQueue is triggered after mainManaged exit in both paths', () => {
     const src = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
 
-    // ACP path — processQueue after exit
+    // ACP path — processQueue passed to handleAgentExit (or called directly)
     const acpExitIdx = src.indexOf("acp.on('exit'");
     const acpBlock = src.slice(acpExitIdx, acpExitIdx + 8000);
     assert.ok(
-        acpBlock.includes('processQueue()'),
-        'ACP exit should call processQueue',
+        acpBlock.includes('processQueue'),
+        'ACP exit should reference processQueue (direct call or handleAgentExit param)',
     );
 
-    // CLI path — processQueue after close
+    // CLI path — processQueue passed to handleAgentExit (or called directly)
     const cliCloseIdx = src.indexOf("child.on('close'");
     const cliBlock = src.slice(cliCloseIdx, cliCloseIdx + 8000);
     assert.ok(
-        cliBlock.includes('processQueue()'),
-        'CLI close should call processQueue',
+        cliBlock.includes('processQueue'),
+        'CLI close should reference processQueue (direct call or handleAgentExit param)',
     );
 });

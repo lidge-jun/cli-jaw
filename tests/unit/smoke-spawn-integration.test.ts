@@ -18,22 +18,25 @@ test('spawn.ts imports smoke-detector helpers', () => {
     assert.ok(src.includes('buildContinuationPrompt'));
 });
 
-test('spawn.ts standard and ACP exit handlers both run smoke detection before retry handling', () => {
+test('smoke detection runs before exit handler delegation in both spawn paths', () => {
     const src = readSrc('../../src/agent/spawn.ts');
     const stdExit = src.slice(src.indexOf("child.on('close'"));
     const acpExit = src.slice(src.indexOf("acp.on('exit'"));
 
+    // In spawn.ts, detectSmokeResponse is called before handleAgentExit (which contains retry logic)
     const stdSmokeIdx = stdExit.indexOf('detectSmokeResponse');
-    const stdRetryIdx = stdExit.indexOf('429 delay retry');
-    assert.ok(stdSmokeIdx > 0 && stdRetryIdx > 0 && stdSmokeIdx < stdRetryIdx);
+    const stdHandleIdx = stdExit.indexOf('handleAgentExit');
+    assert.ok(stdSmokeIdx > 0 && stdHandleIdx > 0 && stdSmokeIdx < stdHandleIdx,
+        'Standard: detectSmokeResponse must come before handleAgentExit');
 
     const acpSmokeIdx = acpExit.indexOf('detectSmokeResponse');
-    const acpRetryIdx = acpExit.indexOf('429 delay retry');
-    assert.ok(acpSmokeIdx > 0 && acpRetryIdx > 0 && acpSmokeIdx < acpRetryIdx);
+    const acpHandleIdx = acpExit.indexOf('handleAgentExit');
+    assert.ok(acpSmokeIdx > 0 && acpHandleIdx > 0 && acpSmokeIdx < acpHandleIdx,
+        'ACP: detectSmokeResponse must come before handleAgentExit');
 });
 
-test('spawn.ts smoke continuation keeps main-managed path and emits smoke event', () => {
-    const src = readSrc('../../src/agent/spawn.ts');
+test('smoke continuation keeps main-managed path and emits smoke event', () => {
+    const src = readSrc('../../src/agent/lifecycle-handler.ts');
     const smokeSection = src.slice(
         src.indexOf('_isSmokeContinuation: true'),
         src.indexOf('_isSmokeContinuation: true') + 320,

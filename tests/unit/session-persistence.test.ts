@@ -71,8 +71,13 @@ test('session persistence blocks non-zero exits', () => {
     assert.equal(ok, false);
 });
 
-test('spawn.ts uses shared persistence and resume-classifier helpers', () => {
-    const src = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
-    assert.ok(src.includes('persistMainSession({'), 'spawn should use shared persistence helper');
-    assert.ok(src.includes('shouldInvalidateResumeSession('), 'spawn should use shared resume classifier');
+test('agent system uses shared persistence and resume-classifier helpers', () => {
+    const spawnSrc = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
+    const lifecycleSrc = fs.readFileSync(join(__dirname, '../../src/agent/lifecycle-handler.ts'), 'utf8');
+    // persistMainSession is called in spawn.ts (ACP pre-shutdown) and lifecycle-handler.ts (exit handler)
+    assert.ok(spawnSrc.includes('persistMainSession(') || lifecycleSrc.includes('persistMainSession('),
+        'system should use shared persistence helper');
+    // shouldInvalidateResumeSession is called in lifecycle-handler.ts (unified exit handler)
+    assert.ok(lifecycleSrc.includes('shouldInvalidateResumeSession('),
+        'lifecycle handler should use shared resume classifier');
 });

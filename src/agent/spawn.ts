@@ -23,6 +23,13 @@ import { shouldInvalidateResumeSession } from './resume-classifier.js';
 import { groupQueueKey } from '../messaging/session-key.js';
 import { isCompactMarkerRow } from '../core/compact.js';
 import { hasBlockingWorkers, hasPendingWorkerReplays } from '../orchestrator/worker-registry.js';
+import { handleAgentExit, setSpawnAgent } from './lifecycle-handler.js';
+import {
+    memoryFlushCounter as _memoryFlushCounter,
+    flushCycleCount as _flushCycleCount,
+    setSpawnRef as setMemorySpawnRef,
+    triggerMemoryFlush,
+} from './memory-flush-controller.js';
 
 // ─── State ───────────────────────────────────────────
 
@@ -76,8 +83,7 @@ export function killAgentById(agentId: string): boolean {
         return false;
     }
 }
-export let memoryFlushCounter = 0;
-export let flushCycleCount = 0;
+export { memoryFlushCounter, flushCycleCount } from './memory-flush-controller.js';
 export const messageQueue: any[] = [];
 let queueProcessing = false;
 
@@ -731,179 +737,34 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             if (mainManaged) killReason = null;  // consume
             flushThinking();  // Flush any remaining thinking buffer
 
-            // ─── Smoke response detection + auto-continuation ───
             const smokeResult = detectSmokeResponse(ctx.fullText, ctx.toolLog, code, cli);
+            const acpCode = promptCompleted ? 0 : (code ?? 1);
 
-            if (smokeResult.isSmoke
-                && smokeResult.confidence !== 'low'
-                && !opts._isSmokeContinuation
-                && !opts.internal
-                && mainManaged
-                && !wasSteer
-            ) {
-                console.warn(
-                    `[jaw:smoke] ${cli} ACP smoke detected (${smokeResult.confidence}). Auto-continuing.`,
-                );
-                broadcast('agent_smoke', {
-                    cli, confidence: smokeResult.confidence,
-                    reason: smokeResult.reason, agentId: agentLabel,
-                });
-
-                const smokeSessionId = ctx.sessionId;
-                if (smokeSessionId) {
-                    persistMainSession({
-                        ownerGeneration, forceNew, employeeSessionId: empSid,
-                        sessionId: smokeSessionId, isFallback: opts._isFallback,
-                        code, cli, model, effort: cfg.effort || '',
-                    });
-                    console.log(`[jaw:smoke] persisted session ${smokeSessionId.slice(0, 12)}... for continuation`);
-                }
-
-                activeProcesses.delete(agentLabel);
-                activeProcess = null;
-                broadcast('agent_status', { running: false, agentId: agentLabel });
-
-                const contPrompt = buildContinuationPrompt(prompt, ctx.fullText);
-                const { promise: contPromise } = spawnAgent(contPrompt, {
-                    ...opts, _isSmokeContinuation: true, _skipInsert: true,
-                });
-                contPromise.then(r => resolve(r)).catch(() => {
-                    broadcast('agent_done', {
-                        text: `❌ Smoke continuation failed. Original: ${ctx.fullText.slice(0, 200)}`,
-                        error: true, origin,
-                    });
-                    resolve({
-                        text: ctx.fullText, code: code ?? 1,
-                        sessionId: ctx.sessionId, tools: ctx.toolLog, smoke: smokeResult,
-                    });
-                    processQueue();
-                });
-                return;
-            }
-
-            activeProcesses.delete(agentLabel);
-            if (mainManaged) {
-                activeProcess = null;
-                broadcast('agent_status', { running: false, agentId: agentLabel });
-            }
-
-            const persistedExitSessionId = ctx.sessionId;
-            if (persistedExitSessionId && persistMainSession({
-                ownerGeneration,
-                forceNew,
-                employeeSessionId: empSid,
-                sessionId: persistedExitSessionId,
-                isFallback: opts._isFallback,
-                code,
-                cli,
-                model,
-                effort: cfg.effort || '',
-            })) {
-                console.log(`[jaw:session] saved ${cli} session=${persistedExitSessionId.slice(0, 12)}...`);
-            }
-
-            // ─── Success: clear fallback state (auto-recovery) ───
-            if (code === 0 && fallbackState.has(cli)) {
-                console.log(`[jaw:fallback] ${cli} recovered — clearing fallback state`);
-                fallbackState.delete(cli);
-            }
-
-            if (ctx.fullText.trim()) {
-                const cleaned = ctx.fullText.trim()
-                    .replace(/<\/?tool_call>/g, '')
-                    .replace(/<\/?tool_result>[\s\S]*?(?:<\/tool_result>|$)/g, '')
-                    .replace(/\n{3,}/g, '\n\n')
-                    .trim();
-                let finalContent = cleaned || ctx.fullText.trim();
-                let traceText = ctx.traceLog.join('\n');
-
-                // Tag interrupted output so history block can distinguish
-                // (buildHistoryBlock uses trace over content for assistant messages)
-                if (wasSteer && mainManaged && !opts.internal) {
-                    finalContent = `⏹️ [interrupted]\n\n${finalContent}`;
-                    if (traceText) traceText = `⏹️ [interrupted]\n${traceText}`;
-                    console.log(`[jaw:steer] saving interrupted output (${finalContent.length} chars)`);
-                }
-
-                if (mainManaged && !opts.internal) {
-                    const toolLogJson = ctx.toolLog.length ? JSON.stringify(ctx.toolLog) : null;
-                    insertMessageWithTrace.run('assistant', finalContent, cli, model, traceText || null, toolLogJson, settings.workingDir || null);
-                    broadcast('agent_done', { text: finalContent, toolLog: ctx.toolLog, origin });
-
-                    memoryFlushCounter++;
-                    const threshold = settings.memory?.flushEvery ?? 20;
-                    if (settings.memory?.enabled !== false && memoryFlushCounter >= threshold) {
-                        memoryFlushCounter = 0;
-                        flushCycleCount++;
-                        triggerMemoryFlush();
-                    }
-                }
-            } else if (mainManaged && code !== 0 && !wasKilled) {
-                let errMsg = `Copilot CLI 실행 실패 (exit ${code})`;
-                const is429 = ctx.stderrBuf.includes('429') || ctx.stderrBuf.includes('RESOURCE_EXHAUSTED');
-                if (ctx.stderrBuf.includes('auth')) errMsg = '🔐 인증 오류 — `copilot login` 또는 `gh auth login` 실행 후 다시 시도해주세요';
-                else if (is429) errMsg = '⚡ API 용량 초과 (429)';
-                else if (ctx.stderrBuf.trim()) errMsg = ctx.stderrBuf.trim().slice(0, 200);
-
-                if (isResume && !empSid && shouldInvalidateResumeSession(cli, code, ctx.stderrBuf, ctx.fullText)) {
-                    updateSession.run(cli, null, model, settings.permissions, settings.workingDir, cfg.effort || '');
-                    console.log(`[jaw:session] invalidated stale resume — ${cli} session cleared`);
-                }
-
-                // ─── 429 delay retry (same engine, 1회만) ────────
-                if (!opts.internal && !opts._isFallback && is429 && !opts._isRetry) {
-                    console.log(`[jaw:retry] ${cli} 429 detected — waiting 10s before retry`);
-                    broadcast('agent_retry', { cli, delay: 10, reason: errMsg });
-                    retryPendingResolve = resolve;
-                    retryPendingOrigin = origin;
-                    retryPendingTimer = setTimeout(() => {
-                        retryPendingTimer = null;
-                        retryPendingResolve = null;
-                        retryPendingOrigin = null;
-                        const { promise: retryP } = spawnAgent(prompt, {
-                            ...opts, _isRetry: true, _skipInsert: true,
-                        });
-                        retryP.then(r => resolve(r)).catch(() => {
-                            broadcast('agent_done', { text: `❌ ${errMsg} (재시도 실패)`, error: true, origin });
-                            resolve({ text: '', code: 1 });
-                            if (mainManaged) processQueue();
-                        });
-                    }, 10_000);
-                    return;
-                }
-
-                // ─── Fallback with retry tracking ─────────────
-                if (!opts.internal && !opts._isFallback) {
-                    const fallbackCli = (settings.fallbackOrder || [])
-                        .find((fc: string) => fc !== cli && detectCli(fc).available);
-                    if (fallbackCli) {
-                        const st = fallbackState.get(cli);
-                        if (st) {
-                            st.retriesLeft = Math.max(0, st.retriesLeft - 1);
-                            console.log(`[jaw:fallback] ${cli} retry consumed, ${st.retriesLeft} left`);
-                        } else {
-                            fallbackState.set(cli, { fallbackCli, retriesLeft: FALLBACK_MAX_RETRIES });
-                            console.log(`[jaw:fallback] ${cli} → ${fallbackCli}, ${FALLBACK_MAX_RETRIES} retries queued`);
-                        }
-                        broadcast('agent_fallback', { from: cli, to: fallbackCli, reason: errMsg });
-                        const { promise: retryP } = spawnAgent(prompt, {
-                            ...opts, cli: fallbackCli, _isFallback: true, _skipInsert: true,
-                        });
-                        retryP.then(r => resolve(r)).catch(() => {
-                            broadcast('agent_done', { text: `❌ Fallback (${fallbackCli}) failed`, error: true, origin });
-                            resolve({ text: '', code: 1 });
-                            if (mainManaged) processQueue();
-                        });
-                        return;
-                    }
-                }
-                broadcast('agent_done', { text: `❌ ${errMsg}`, error: true, origin });
-            }
-
-            const resolvedCode = promptCompleted ? 0 : (code ?? 1);
-            broadcast('agent_status', { status: resolvedCode === 0 ? 'done' : 'error', agentId: agentLabel });
-            resolve({ text: ctx.fullText, code: resolvedCode, sessionId: ctx.sessionId, tools: ctx.toolLog, smoke: smokeResult });
-            if (mainManaged) processQueue();
+            // Delegated to lifecycle-handler.ts → handleAgentExit:
+            //   - smoke continuation (guarded by !wasSteer)
+            //   - output: ⏹️ [interrupted] prefix (wasSteer && mainManaged && !opts.internal)
+            //   - error: code !== 0 && !wasKilled → classifyExitError
+            //   - trace: if (traceText) traceText = `⏹️ [interrupted]…`
+            handleAgentExit({
+                ctx, code: acpCode, cli, model, agentLabel, mainManaged, origin,
+                prompt, opts, cfg, ownerGeneration, forceNew, empSid,
+                isResume, wasKilled, wasSteer, smokeResult,
+                effortDefault: '', costLine: '',
+                resolve: resolve!,
+                activeProcesses,
+                setActiveProcess: (v) => { activeProcess = v; },
+                retryState: {
+                    timer: retryPendingTimer,
+                    resolve: retryPendingResolve,
+                    origin: retryPendingOrigin,
+                    setTimer: (t) => { retryPendingTimer = t; },
+                    setResolve: (r) => { retryPendingResolve = r; },
+                    setOrigin: (o) => { retryPendingOrigin = o; },
+                },
+                fallbackState,
+                fallbackMaxRetries: FALLBACK_MAX_RETRIES,
+                processQueue,
+            });
         });
 
         return { child, promise: resultPromise };
@@ -1023,251 +884,46 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         const wasSteer = killReason === 'steer';
         if (mainManaged) killReason = null;
 
-        // ─── Smoke response detection + auto-continuation ───
         const smokeResult = detectSmokeResponse(ctx.fullText, ctx.toolLog, code, cli);
 
-        if (smokeResult.isSmoke
-            && smokeResult.confidence !== 'low'
-            && !opts._isSmokeContinuation
-            && !opts.internal
-            && mainManaged
-            && !wasSteer
-        ) {
-            console.warn(
-                `[jaw:smoke] ${cli} smoke response detected (${smokeResult.confidence}). ` +
-                `Auto-continuing with direct-work prompt.`,
-            );
-            broadcast('agent_smoke', {
-                cli, confidence: smokeResult.confidence,
-                reason: smokeResult.reason, agentId: agentLabel,
-            });
+        // Build cost display line (CLI-only feature)
+        const costParts = [];
+        if (ctx.cost != null) costParts.push(`$${Number(ctx.cost).toFixed(4)}`);
+        if (ctx.turns) costParts.push(`${ctx.turns}턴`);
+        if (ctx.duration) costParts.push(`${(ctx.duration / 1000).toFixed(1)}s`);
+        const costLine = costParts.length ? `\n\n✅ ${costParts.join(' · ')}` : '';
 
-            // 1. Persist session BEFORE re-spawn so continuation can --resume
-            const smokeSessionId = ctx.sessionId;
-            if (smokeSessionId) {
-                persistMainSession({
-                    ownerGeneration, forceNew, employeeSessionId: empSid,
-                    sessionId: smokeSessionId, isFallback: opts._isFallback,
-                    code, cli, model, effort: cfg.effort || 'medium',
-                });
-                console.log(`[jaw:smoke] persisted session ${smokeSessionId.slice(0, 12)}... for continuation`);
-            }
-
-            // 2. Clear process state so re-spawn is allowed
-            activeProcesses.delete(agentLabel);
-            activeProcess = null;
-            broadcast('agent_status', { running: false, agentId: agentLabel });
-
-            // 3. Re-spawn with continuation prompt (no forceNew — keep mainManaged=true)
-            const contPrompt = buildContinuationPrompt(prompt, ctx.fullText);
-            const { promise: contPromise } = spawnAgent(contPrompt, {
-                ...opts, _isSmokeContinuation: true, _skipInsert: true,
-            });
-            contPromise.then(r => resolve(r)).catch(() => {
-                broadcast('agent_done', {
-                    text: `❌ Smoke continuation failed. Original: ${ctx.fullText.slice(0, 200)}`,
-                    error: true, origin,
-                });
-                resolve({
-                    text: ctx.fullText, code, sessionId: ctx.sessionId,
-                    cost: ctx.cost, tools: ctx.toolLog, smoke: smokeResult,
-                });
-                processQueue();
-            });
-            return;  // Early exit — skip all normal handling
-        }
-
-        activeProcesses.delete(agentLabel);
-        if (mainManaged) {
-            activeProcess = null;
-            broadcast('agent_status', { running: false, agentId: agentLabel });
-        }
-
-        const persistedStdSessionId = ctx.sessionId;
-        if (persistedStdSessionId && persistMainSession({
-            ownerGeneration,
-            forceNew,
-            employeeSessionId: empSid,
-            sessionId: persistedStdSessionId,
-            isFallback: opts._isFallback,
-            code,
-            cli,
-            model,
-            effort: cfg.effort || 'medium',
-        })) {
-            console.log(`[jaw:session] saved ${cli} session=${persistedStdSessionId.slice(0, 12)}...`);
-        }
-
-        // ─── Success: clear fallback state (auto-recovery) ───
-        if (code === 0 && fallbackState.has(cli)) {
-            console.log(`[jaw:fallback] ${cli} recovered — clearing fallback state`);
-            fallbackState.delete(cli);
-        }
-
-        if (ctx.fullText.trim()) {
-            const costParts = [];
-            if (ctx.cost != null) costParts.push(`$${Number(ctx.cost).toFixed(4)}`);
-            if (ctx.turns) costParts.push(`${ctx.turns}턴`);
-            if (ctx.duration) costParts.push(`${(ctx.duration / 1000).toFixed(1)}s`);
-            const costLine = costParts.length ? `\n\n✅ ${costParts.join(' · ')}` : '';
-            // Strip raw XML tool tags (Claude sometimes includes these in output)
-            const cleaned = ctx.fullText.trim()
-                .replace(/<\/?tool_call>/g, '')
-                .replace(/<\/?tool_result>[\s\S]*?(?:<\/tool_result>|$)/g, '')
-                .replace(/\n{3,}/g, '\n\n')
-                .trim();
-            const displayText = cleaned || ctx.fullText.trim();
-            let finalContent = displayText + costLine;
-            let traceText = ctx.traceLog.join('\n');
-
-            // Tag interrupted output so history block can distinguish
-            // (buildHistoryBlock uses trace over content for assistant messages)
-            if (wasSteer && mainManaged && !opts.internal) {
-                finalContent = `⏹️ [interrupted]\n\n${finalContent}`;
-                if (traceText) traceText = `⏹️ [interrupted]\n${traceText}`;
-                console.log(`[jaw:steer] saving interrupted output (${finalContent.length} chars)`);
-            }
-
-            if (mainManaged && !opts.internal) {
-                const toolLogJson = ctx.toolLog.length ? JSON.stringify(ctx.toolLog) : null;
-                insertMessageWithTrace.run('assistant', finalContent, cli, model, traceText || null, toolLogJson, settings.workingDir || null);
-                broadcast('agent_done', { text: finalContent, toolLog: ctx.toolLog, origin });
-
-                memoryFlushCounter++;
-                const threshold = settings.memory?.flushEvery ?? 20;
-                if (settings.memory?.enabled !== false && memoryFlushCounter >= threshold) {
-                    memoryFlushCounter = 0;
-                    flushCycleCount++;
-                    triggerMemoryFlush();
-                }
-            }
-        } else if (mainManaged && code !== 0 && !wasKilled) {
-            let errMsg = `CLI 실행 실패 (exit ${code})`;
-            const is429 = ctx.stderrBuf.includes('429') || ctx.stderrBuf.includes('RESOURCE_EXHAUSTED');
-            if (is429) {
-                errMsg = '⚡ API 용량 초과 (429)';
-            } else if (ctx.stderrBuf.includes('auth') || ctx.stderrBuf.includes('credentials')) {
-                errMsg = '🔐 인증 오류 — CLI 로그인 상태를 확인해주세요';
-            } else if (ctx.stderrBuf.trim()) {
-                errMsg = ctx.stderrBuf.trim().slice(0, 200);
-            }
-
-            if (isResume && !empSid && shouldInvalidateResumeSession(cli, code, ctx.stderrBuf, ctx.fullText)) {
-                updateSession.run(cli, null, model, settings.permissions, settings.workingDir, cfg.effort || 'medium');
-                console.log(`[jaw:session] invalidated stale resume — ${cli} session cleared`);
-            }
-
-            // ─── 429 delay retry (same engine, 1회만) ────────
-            if (!opts.internal && !opts._isFallback && is429 && !opts._isRetry) {
-                console.log(`[jaw:retry] ${cli} 429 detected — waiting 10s before retry`);
-                broadcast('agent_retry', { cli, delay: 10, reason: errMsg });
-                retryPendingResolve = resolve;
-                retryPendingOrigin = origin;
-                retryPendingTimer = setTimeout(() => {
-                    retryPendingTimer = null;
-                    retryPendingResolve = null;
-                    retryPendingOrigin = null;
-                    const { promise: retryP } = spawnAgent(prompt, {
-                        ...opts, _isRetry: true, _skipInsert: true,
-                    });
-                    retryP.then(r => resolve(r)).catch(() => {
-                        broadcast('agent_done', { text: `❌ ${errMsg} (재시도 실패)`, error: true, origin });
-                        resolve({ text: '', code: 1 });
-                        if (mainManaged) processQueue();
-                    });
-                }, 10_000);
-                return;
-            }
-
-            // ─── Fallback with retry tracking ─────────────
-            if (!opts.internal && !opts._isFallback) {
-                const fallbackCli = (settings.fallbackOrder || [])
-                    .find((fc: string) => fc !== cli && detectCli(fc).available);
-                if (fallbackCli) {
-                    const st = fallbackState.get(cli);
-                    if (st) {
-                        st.retriesLeft = Math.max(0, st.retriesLeft - 1);
-                        console.log(`[jaw:fallback] ${cli} retry consumed, ${st.retriesLeft} left`);
-                    } else {
-                        fallbackState.set(cli, { fallbackCli, retriesLeft: FALLBACK_MAX_RETRIES });
-                        console.log(`[jaw:fallback] ${cli} → ${fallbackCli}, ${FALLBACK_MAX_RETRIES} retries queued`);
-                    }
-                    broadcast('agent_fallback', { from: cli, to: fallbackCli, reason: errMsg });
-                    const { promise: retryP } = spawnAgent(prompt, {
-                        ...opts, cli: fallbackCli, _isFallback: true, _skipInsert: true,
-                    });
-                    retryP.then(r => resolve(r)).catch(() => {
-                        broadcast('agent_done', { text: `❌ Fallback (${fallbackCli}) failed`, error: true, origin });
-                        resolve({ text: '', code: 1 });
-                        if (mainManaged) processQueue();
-                    });
-                    return;
-                }
-            }
-
-            broadcast('agent_done', { text: `❌ ${errMsg}`, error: true, origin });
-        }
-
-        broadcast('agent_status', { status: code === 0 ? 'done' : 'error', agentId: agentLabel });
-        console.log(`[jaw:${agentLabel}] exited code=${code}, text=${ctx.fullText.length} chars`);
-
-        resolve({ text: ctx.fullText, code, sessionId: ctx.sessionId, cost: ctx.cost, tools: ctx.toolLog, smoke: smokeResult });
-
-        if (mainManaged) processQueue();
+        // Delegated to lifecycle-handler.ts → handleAgentExit:
+        //   - smoke continuation (guarded by !wasSteer)
+        //   - output: ⏹️ [interrupted] prefix (wasSteer && mainManaged && !opts.internal)
+        //   - error: code !== 0 && !wasKilled → classifyExitError
+        //   - trace: if (traceText) traceText = `⏹️ [interrupted]…`
+        handleAgentExit({
+            ctx, code, cli, model, agentLabel, mainManaged, origin,
+            prompt, opts, cfg, ownerGeneration, forceNew, empSid,
+            isResume, wasKilled, wasSteer, smokeResult,
+            effortDefault: 'medium', costLine,
+            resolve: resolve!,
+            activeProcesses,
+            setActiveProcess: (v) => { activeProcess = v; },
+            retryState: {
+                timer: retryPendingTimer,
+                resolve: retryPendingResolve,
+                origin: retryPendingOrigin,
+                setTimer: (t) => { retryPendingTimer = t; },
+                setResolve: (r) => { retryPendingResolve = r; },
+                setOrigin: (o) => { retryPendingOrigin = o; },
+            },
+            fallbackState,
+            fallbackMaxRetries: FALLBACK_MAX_RETRIES,
+            processQueue,
+        });
     });
 
     return { child, promise: resultPromise };
 }
 
-// ─── Memory Flush ────────────────────────────────────
-
-async function triggerMemoryFlush() {
-    const { getMemoryDir } = await import('../prompt/builder.js');
-    const threshold = settings.memory?.flushEvery ?? 10;
-    const recent = (getRecentMessages.all(settings.workingDir || null, threshold) as any[]).reverse();
-    if (recent.length < 4) return;
-
-    const lines = [];
-    for (const m of recent) {
-        lines.push(`[${m.role}] ${m.content}`);
-    }
-    const convo = lines.join('\n\n');
-    const date = new Date().toISOString().slice(0, 10);
-    const time = new Date().toTimeString().slice(0, 5);
-    const memDir = getMemoryDir();
-    const memFile = getMemoryFlushFilePath(date);
-
-    const flushPrompt = `You are a memory extractor. Summarize the conversation into a short prose paragraph.
-Save by APPENDING to: ${memFile}
-Create directories if needed.
-
-Rules:
-- Write 1-3 SHORT English sentences capturing decisions, facts, preferences only
-- Skip greetings, errors, small talk
-- If nothing worth remembering, reply "SKIP" and do NOT write any file
-- Format:
-
-## ${time}
-
-[your 1-3 sentence summary here]
-
-Conversation:
----
-${convo}`;
-
-    fs.mkdirSync(join(memFile, '..'), { recursive: true });
-
-    const flushCli = settings.memory?.cli || settings.cli;
-    const flushModel = settings.memory?.model || (settings.perCli?.[flushCli]?.model) || 'default';
-
-    if (activeProcesses.has('memory-flush')) {
-        console.log('[memory] flush already running, skipping');
-        return;
-    }
-    spawnAgent(flushPrompt, {
-        cli: flushCli,
-        model: flushModel,
-        sysPrompt: '',
-    });
-    console.log(`[memory] auto-append triggered (${recent.length} msgs → ${flushCli}/${flushModel})`);
-}
+// ─── Forward References ──────────────────────────────
+// Set after spawnAgent is defined to avoid circular deps
+setSpawnAgent(spawnAgent);
+setMemorySpawnRef(spawnAgent, activeProcesses);

@@ -57,22 +57,23 @@ test('fallback retry flow: state transitions described correctly in source', asy
     const { dirname, join } = await import('node:path');
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
-    const src = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
+    const spawnSrc = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
+    const lifecycleSrc = fs.readFileSync(join(__dirname, '../../src/agent/lifecycle-handler.ts'), 'utf8');
 
-    // 1. retries exhausted → direct fallback
-    assert.ok(src.includes('retriesLeft <= 0'), 'should check retriesLeft <= 0 for exhaustion');
-    assert.ok(src.includes('retries exhausted'), 'should log retries exhausted');
+    // 1. retries exhausted → direct fallback (pre-spawn guard in spawn.ts)
+    assert.ok(spawnSrc.includes('retriesLeft <= 0'), 'should check retriesLeft <= 0 for exhaustion');
+    assert.ok(spawnSrc.includes('retries exhausted'), 'should log retries exhausted');
 
-    // 2. retry consumed on failure
-    assert.ok(src.includes('st.retriesLeft - 1'), 'should decrement retriesLeft');
-    assert.ok(src.includes('retry consumed'), 'should log retry consumed');
+    // 2. retry consumed on failure (exit handler in lifecycle-handler.ts)
+    assert.ok(lifecycleSrc.includes('st.retriesLeft - 1'), 'should decrement retriesLeft');
+    assert.ok(lifecycleSrc.includes('retry consumed'), 'should log retry consumed');
 
-    // 3. success clears state
-    assert.ok(src.includes('fallbackState.delete(cli)'), 'should delete state on success');
-    assert.ok(src.includes('recovered'), 'should log recovery');
+    // 3. success clears state (exit handler in lifecycle-handler.ts)
+    assert.ok(lifecycleSrc.includes('fallbackState.delete(cli)'), 'should delete state on success');
+    assert.ok(lifecycleSrc.includes('recovered'), 'should log recovery');
 
-    // 4. initial fallback sets max retries
-    assert.ok(src.includes('retriesLeft: FALLBACK_MAX_RETRIES'), 'should set initial retries');
+    // 4. initial fallback sets max retries (exit handler in lifecycle-handler.ts)
+    assert.ok(lifecycleSrc.includes('retriesLeft: fallbackMaxRetries'), 'should set initial retries');
 });
 
 test('server.js calls resetFallbackState on settings save', async () => {
@@ -162,9 +163,9 @@ test('429: INVARIANT comment present', () => {
 });
 
 test('429: retryPendingResolve stored before setTimeout', () => {
-    const src = readSrc('../../src/agent/spawn.ts');
-    const r = src.indexOf('retryPendingResolve = resolve');
-    const t = src.indexOf('retryPendingTimer = setTimeout');
+    const src = readSrc('../../src/agent/lifecycle-handler.ts');
+    const r = src.indexOf('setResolve(resolve)');
+    const t = src.indexOf('setTimer(setTimeout');
     assert.ok(r > 0 && t > 0 && r < t, 'resolve ref stored first');
 });
 
@@ -255,22 +256,17 @@ describe('429 retry: edge case coverage', () => {
             'killAllAgents must also use resumeQueue=false');
     });
 
-    test('429 retry branch appears BEFORE fallback branch in both exit handlers', () => {
+    test('429 retry branch appears BEFORE fallback branch in unified exit handler', () => {
         // Critical ordering: same-engine retry (429) must be tried before cross-engine fallback
-        const src = readSrc('../../src/agent/spawn.ts');
+        // After decomposition, both ACP + CLI exit paths delegate to handleAgentExit in lifecycle-handler.ts
+        const src = readSrc('../../src/agent/lifecycle-handler.ts');
 
-        // Find both exit handler sections (ACP + Standard)
-        const acpExit = src.slice(src.indexOf("acp.on('exit'"));
-        const stdExit = src.slice(src.indexOf("child.on('close'"));
-
-        for (const [label, handler] of [['ACP', acpExit], ['Standard', stdExit]] as const) {
-            const retryIdx = handler.indexOf('429 delay retry');
-            const fallbackIdx = handler.indexOf('Fallback with retry tracking');
-            assert.ok(retryIdx > 0, `${label}: 429 retry branch must exist`);
-            assert.ok(fallbackIdx > 0, `${label}: fallback branch must exist`);
-            assert.ok(retryIdx < fallbackIdx,
-                `${label}: 429 retry must come BEFORE fallback to ensure same-engine retry first`);
-        }
+        const retryIdx = src.indexOf('429 delay retry');
+        const fallbackIdx = src.indexOf('Fallback with retry tracking');
+        assert.ok(retryIdx > 0, 'handleAgentExit: 429 retry branch must exist');
+        assert.ok(fallbackIdx > 0, 'handleAgentExit: fallback branch must exist');
+        assert.ok(retryIdx < fallbackIdx,
+            'handleAgentExit: 429 retry must come BEFORE fallback to ensure same-engine retry first');
     });
 });
 
