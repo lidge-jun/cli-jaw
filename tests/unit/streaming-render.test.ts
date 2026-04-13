@@ -67,6 +67,7 @@ describe('streaming-render', () => {
         it('returns initial empty state with correct shape', () => {
             const el = makeElement();
             const ss = createStreamRenderer(el);
+            assert.deepEqual(ss.chunks, []);
             assert.equal(ss.fullText, '');
             assert.equal(ss.isFinalized, false);
             assert.equal(ss.pendingRAF, null);
@@ -75,11 +76,14 @@ describe('streaming-render', () => {
     });
 
     describe('appendChunk', () => {
-        it('accumulates text chunks in fullText', () => {
+        it('accumulates text chunks in chunks array', () => {
             const ss = createStreamRenderer(makeElement());
             appendChunk(ss, 'Hello');
-            assert.equal(ss.fullText, 'Hello');
+            assert.deepEqual(ss.chunks, ['Hello']);
             appendChunk(ss, ' World');
+            assert.deepEqual(ss.chunks, ['Hello', ' World']);
+            // fullText is lazily joined — trigger via RAF or finalize
+            flushRAF();
             assert.equal(ss.fullText, 'Hello World');
         });
 
@@ -130,8 +134,8 @@ describe('streaming-render', () => {
             finalizeStream(ss);
             const frozenHtml = el.innerHTML;
             appendChunk(ss, ' After');
-            // fullText still accumulates
-            assert.equal(ss.fullText, 'Before After');
+            // chunks still accumulate but fullText won't be joined for rendering
+            assert.deepEqual(ss.chunks, ['Before', ' After']);
             // But no new rAF should fire
             flushRAF();
             assert.equal(el.innerHTML, frozenHtml, 'innerHTML must not change after finalization');
@@ -140,7 +144,7 @@ describe('streaming-render', () => {
         it('handles empty chunks gracefully', () => {
             const ss = createStreamRenderer(makeElement());
             appendChunk(ss, '');
-            assert.equal(ss.fullText, '');
+            assert.deepEqual(ss.chunks, ['']);
         });
     });
 
