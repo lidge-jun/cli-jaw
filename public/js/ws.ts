@@ -4,7 +4,7 @@ import { setStatus, updateQueueBadge, addSystemMsg, appendAgentText, finalizeAge
 import { t, getLang } from './features/i18n.js';
 import { getVirtualScroll } from './virtual-scroll.js';
 import { ICONS, emojiToIcon } from './icons.js';
-import { escapeHtml } from './render.js';
+import { escapeHtml, cancelPostRender } from './render.js';
 import type { OrcStateName } from './state.js';
 
 const ROADMAP_PHASES = ['P', 'A', 'B', 'C'] as const;
@@ -258,6 +258,7 @@ export function connect(): void {
         } else if (msg.type === 'orchestrate_done') {
             finalizeAgent(msg.text || '');
         } else if (msg.type === 'clear') {
+            cancelPostRender();
             cleanupToolActivity();
             getVirtualScroll().clear();
             const el = document.getElementById('chatMessages');

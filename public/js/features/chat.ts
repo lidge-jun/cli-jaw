@@ -5,7 +5,7 @@ import { getPreferredLocale } from '../locale.js';
 import { t } from './i18n.js';
 import * as slashCmd from './slash-commands.js';
 import { api, apiJson, apiFire } from '../api.js';
-import { escapeHtml } from '../render.js';
+import { escapeHtml, cancelPostRender } from '../render.js';
 import { getVirtualScroll } from '../virtual-scroll.js';
 import { clearCache } from './idb-cache.js';
 import { ICONS } from '../icons.js';
@@ -75,6 +75,7 @@ export async function sendMessage(): Promise<void> {
             }
             if (!res.ok && !result?.text) throw new Error(`HTTP ${res.status}`);
             if (result?.code === 'clear_screen') {
+                cancelPostRender();
                 getVirtualScroll().clear();
                 const chatEl = document.getElementById('chatMessages');
                 if (chatEl) chatEl.innerHTML = '';
@@ -197,6 +198,7 @@ function renderFilePreview(): void {
 
 export async function clearChat(): Promise<void> {
     apiFire('/api/clear', 'POST');
+    cancelPostRender();
     getVirtualScroll().clear();
     const chatEl = document.getElementById('chatMessages');
     if (chatEl) chatEl.innerHTML = '';

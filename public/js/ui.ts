@@ -236,7 +236,7 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
         }
         const content = (state.currentAgentDiv as HTMLElement)?.querySelector('.msg-content');
         // Live stream is preview-only; agent_done text stays authoritative.
-        const streamedText = currentStream ? finalizeStream(currentStream) : '';
+        const streamedText = currentStream ? finalizeStream(currentStream, true) : '';
         const finalText = text || streamedText;
         currentStream = null;
         // Skip static tool HTML when process block already shows tool summary

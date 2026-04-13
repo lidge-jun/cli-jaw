@@ -1,11 +1,14 @@
 // ── Streaming rAF Renderer ──
-// Phase 3/8: throttled markdown rendering during agent streaming
+// Throttled markdown rendering during agent streaming.
 // Prevents flicker by batching renders to 1 per animation frame.
+// Array buffer avoids O(n) string copy per chunk.
 
 import { renderMarkdown } from './render.js';
 
 export interface StreamState {
+    chunks: string[];
     fullText: string;
+    textDirty: boolean;
     element: HTMLElement;
     pendingRAF: number | null;
     isFinalized: boolean;
@@ -16,26 +19,39 @@ const FULL_RENDER_THRESHOLD = 2000;
 const THROTTLE_MS = 80;  // ~12fps — was 32ms (30fps), reduced to avoid blocking input
 
 export function createStreamRenderer(el: HTMLElement): StreamState {
-    return { fullText: '', element: el, pendingRAF: null, isFinalized: false, lastRenderTime: 0 };
+    return {
+        chunks: [], fullText: '', textDirty: false,
+        element: el, pendingRAF: null, isFinalized: false, lastRenderTime: 0,
+    };
+}
+
+function getFullText(ss: StreamState): string {
+    if (ss.textDirty) {
+        ss.fullText = ss.chunks.join('');
+        ss.textDirty = false;
+    }
+    return ss.fullText;
 }
 
 export function appendChunk(ss: StreamState, chunk: string): void {
-    ss.fullText += chunk;
+    ss.chunks.push(chunk);
+    ss.textDirty = true;
+
     if (!ss.pendingRAF && !ss.isFinalized) {
         ss.pendingRAF = requestAnimationFrame(() => {
             ss.pendingRAF = null;
             if (ss.isFinalized) return;
             const now = performance.now();
-            if (ss.fullText.length < FULL_RENDER_THRESHOLD || now - ss.lastRenderTime > THROTTLE_MS) {
-                ss.element.innerHTML = renderMarkdown(ss.fullText, true) +
+            const text = getFullText(ss);
+            if (text.length < FULL_RENDER_THRESHOLD || now - ss.lastRenderTime > THROTTLE_MS) {
+                ss.element.innerHTML = renderMarkdown(text, true) +
                     '<span class="stream-cursor" aria-hidden="true"></span>';
                 ss.lastRenderTime = now;
             } else {
-                // Throttled — schedule trailing render to ensure latest text paints
                 ss.pendingRAF = requestAnimationFrame(() => {
                     ss.pendingRAF = null;
                     if (ss.isFinalized) return;
-                    ss.element.innerHTML = renderMarkdown(ss.fullText, true) +
+                    ss.element.innerHTML = renderMarkdown(getFullText(ss), true) +
                         '<span class="stream-cursor" aria-hidden="true"></span>';
                     ss.lastRenderTime = performance.now();
                 });
@@ -44,12 +60,19 @@ export function appendChunk(ss: StreamState, chunk: string): void {
     }
 }
 
-export function finalizeStream(ss: StreamState): string {
+/**
+ * Finalize streaming session. Returns accumulated text.
+ * @param skipRender true when caller (finalizeAgent) will do its own full render.
+ */
+export function finalizeStream(ss: StreamState, skipRender = false): string {
     ss.isFinalized = true;
     if (ss.pendingRAF) {
         cancelAnimationFrame(ss.pendingRAF);
         ss.pendingRAF = null;
     }
-    ss.element.innerHTML = renderMarkdown(ss.fullText);
-    return ss.fullText;
+    const text = getFullText(ss);
+    if (!skipRender) {
+        ss.element.innerHTML = renderMarkdown(text);
+    }
+    return text;
 }

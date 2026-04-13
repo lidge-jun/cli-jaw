@@ -288,10 +288,18 @@ export function shieldMath(text: string): { text: string; blocks: MathBlock[] } 
     return { text: processed, blocks };
 }
 
-export function unshieldMath(html: string, blocks: MathBlock[]): string {
+export function unshieldMath(html: string, blocks: MathBlock[], isStreaming = false): string {
     return html.replace(/\x00MATH-(\d+)\x00/g, (_, i) => {
         const block = blocks[Number(i)];
         if (!block) return `<code title="math placeholder error">[math error]</code>`;
+
+        // During streaming: lightweight placeholder, defer KaTeX to finalize
+        if (isStreaming) {
+            return block.displayMode
+                ? `<div class="math-placeholder">${escapeHtml(block.tex)}</div>`
+                : `<code class="math-placeholder">${escapeHtml(block.tex)}</code>`;
+        }
+
         try {
             return katex.renderToString(block.tex, {
                 displayMode: block.displayMode,
@@ -397,8 +405,9 @@ async function renderSingleMermaid(el: HTMLElement): Promise<void> {
     }
 }
 
-async function renderMermaidBlocks(): Promise<void> {
-    const pending = document.querySelectorAll('.mermaid-pending');
+async function renderMermaidBlocks(scope?: HTMLElement | Document): Promise<void> {
+    const root = scope || document;
+    const pending = root.querySelectorAll('.mermaid-pending');
     if (!pending.length) return;
     ensureMermaidObserver();
     for (const el of pending) {
@@ -453,8 +462,9 @@ function ensureMarked(): boolean {
 }
 
 // ── Rehighlight all code blocks ──
-export function rehighlightAll(): void {
-    document.querySelectorAll('.code-block pre code, .code-block-wrapper pre code').forEach(el => {
+export function rehighlightAll(scope?: HTMLElement | Document): void {
+    const root = scope || document;
+    root.querySelectorAll('.code-block pre code, .code-block-wrapper pre code').forEach(el => {
         if ((el as HTMLElement).dataset.highlighted === 'yes') return;
         const lang = [...el.classList].find(c => c.startsWith('language-'))?.replace('language-', '');
         const raw = el.textContent || '';
@@ -676,14 +686,14 @@ function unshieldSvgBlocks(html: string, blocks: SvgBlock[]): string {
 
 // ── Diagram Zoom Overlay ──
 
-export function bindDiagramZoom(): void {
-    document.querySelectorAll('.diagram-zoom-btn').forEach(btn => {
+export function bindDiagramZoom(scope?: HTMLElement | Document): void {
+    const root = scope || document;
+    root.querySelectorAll('.diagram-zoom-btn').forEach(btn => {
         if ((btn as HTMLElement).dataset.bound) return;
         (btn as HTMLElement).dataset.bound = '1';
         btn.addEventListener('click', () => {
             const container = btn.closest('.diagram-container');
             if (!container) return;
-            // Clone without zoom button to prevent nesting
             const clone = container.cloneNode(true) as HTMLElement;
             clone.querySelectorAll('.diagram-zoom-btn, .diagram-copy-btn, .diagram-save-btn').forEach(b => b.remove());
             openDiagramOverlay(clone.innerHTML);
@@ -773,7 +783,7 @@ export function renderMarkdown(text: string, isStreaming = false): string {
     html = html.replace(/<table/g, '<div class="table-wrapper"><table').replace(/<\/table>/g, '</table></div>');
 
     // 6. Unshield math
-    html = unshieldMath(html, mathBlocks);
+    html = unshieldMath(html, mathBlocks, isStreaming);
 
     // 7. Sanitize
     html = sanitizeHtml(html);
@@ -781,15 +791,34 @@ export function renderMarkdown(text: string, isStreaming = false): string {
     // 8. Unshield SVGs (after sanitize — SVGs sanitized individually in renderSvgBlock)
     html = unshieldSvgBlocks(html, svgBlocks);
 
-    // 9. Post-render async tasks
-    requestAnimationFrame(() => {
-        renderMermaidBlocks();
-        rehighlightAll();
-        bindDiagramZoom();
-    });
+    // 9. Post-render async tasks — skip during streaming (deferred to finalize)
+    if (!isStreaming) {
+        schedulePostRender();
+    }
 
     ensureCopyDelegation();
     ensureDiagramActionDelegation();
 
     return html;
+}
+
+// ── Batched post-render scheduler ──
+// Coalesces multiple renderMarkdown() calls into a single post-render pass.
+let postRenderRAF: number | null = null;
+
+function schedulePostRender(): void {
+    if (postRenderRAF) return;
+    postRenderRAF = requestAnimationFrame(() => {
+        postRenderRAF = null;
+        renderMermaidBlocks();
+        rehighlightAll();
+        bindDiagramZoom();
+    });
+}
+
+export function cancelPostRender(): void {
+    if (postRenderRAF) {
+        cancelAnimationFrame(postRenderRAF);
+        postRenderRAF = null;
+    }
 }
