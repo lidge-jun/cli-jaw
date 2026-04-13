@@ -3,7 +3,7 @@
 import fs from 'fs';
 import os from 'os';
 import { join } from 'path';
-import { spawn, type ChildProcess } from 'child_process';
+import { spawn, execSync, type ChildProcess } from 'child_process';
 import { broadcast } from '../core/bus.js';
 import { settings, UPLOADS_DIR, detectCli } from '../core/config.js';
 import {
@@ -29,13 +29,47 @@ import { hasBlockingWorkers, hasPendingWorkerReplays } from '../orchestrator/wor
 export let activeProcess: ChildProcess | null = null;
 export const activeProcesses = new Map<string, ChildProcess>(); // agentId → child process
 
+/**
+ * Recursively kill a process tree using pgrep -P.
+ * Codex sub-agents spawn children with separate PGIDs,
+ * so process.kill(-pid) won't reach them.
+ */
+function killProcessTree(pid: number, signal: NodeJS.Signals = 'SIGTERM'): void {
+    if (process.platform === 'win32') {
+        try { execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore' }); } catch { /* best effort */ }
+        return;
+    }
+    let childPids: number[] = [];
+    try {
+        const out = execSync(`pgrep -P ${pid}`, { encoding: 'utf8', timeout: 3000 });
+        childPids = out.trim().split('\n').filter(Boolean).map(Number).filter(n => n > 0);
+    } catch { /* no children or pgrep failed */ }
+    for (const cpid of childPids) {
+        killProcessTree(cpid, signal);
+    }
+    try { process.kill(pid, signal); } catch { /* already dead */ }
+}
+
 export function killAgentById(agentId: string): boolean {
     const proc = activeProcesses.get(agentId);
     if (!proc) return false;
     try {
-        proc.kill('SIGTERM');
+        if (proc.pid) {
+            killProcessTree(proc.pid, 'SIGTERM');
+        } else {
+            proc.kill('SIGTERM');
+        }
         setTimeout(() => {
-            try { proc.kill('SIGKILL'); } catch { /* already dead */ }
+            try {
+                if (proc.pid) {
+                    killProcessTree(proc.pid, 'SIGKILL');
+                } else {
+                    proc.kill('SIGKILL');
+                }
+            } catch { /* already dead */ }
+            proc.stdin?.destroy();
+            proc.stdout?.destroy();
+            proc.stderr?.destroy();
         }, 3_000);
         return true;
     } catch {
@@ -126,10 +160,28 @@ export function killAllAgents(reason = 'user') {
     let killed = 0;
     for (const [id, proc] of activeProcesses) {
         console.log(`[jaw:killAll] killing ${id}, reason=${reason}`);
-        try { proc.kill('SIGTERM'); killed++; } catch (e: unknown) { console.warn(`[agent:killAll] SIGTERM failed for ${id}`, (e as Error).message); }
+        try {
+            if (proc.pid) {
+                killProcessTree(proc.pid, 'SIGTERM');
+            } else {
+                proc.kill('SIGTERM');
+            }
+            killed++;
+        } catch (e: unknown) { console.warn(`[agent:killAll] SIGTERM failed for ${id}`, (e as Error).message); }
         const ref = proc;
         setTimeout(() => {
-            try { if (ref && !ref.killed) ref.kill('SIGKILL'); } catch { /* already dead */ }
+            try {
+                if (ref && !ref.killed) {
+                    if (ref.pid) {
+                        killProcessTree(ref.pid, 'SIGKILL');
+                    } else {
+                        ref.kill('SIGKILL');
+                    }
+                }
+            } catch { /* already dead */ }
+            ref.stdin?.destroy();
+            ref.stdout?.destroy();
+            ref.stderr?.destroy();
         }, 2000);
     }
     // Also kill main activeProcess if not in map
@@ -602,6 +654,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         });
 
         // Run ACP flow
+        let promptCompleted = false;
         (async () => {
             try {
                 const initResult = await acp.initialize();
@@ -638,6 +691,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                     : (isResume ? prompt : withHistoryPrompt(prompt, historyBlock));
                 const { promise: promptPromise } = acp.prompt(acpPrompt);
                 const promptResult = await promptPromise;
+                promptCompleted = true;
                 if (process.env.DEBUG) console.log('[acp:prompt:result]', JSON.stringify(promptResult).slice(0, 200));
 
                 // Save session BEFORE shutdown — acp.shutdown() causes SIGTERM (code=null),
@@ -846,8 +900,9 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 broadcast('agent_done', { text: `❌ ${errMsg}`, error: true, origin });
             }
 
-            broadcast('agent_status', { status: code === 0 ? 'done' : 'error', agentId: agentLabel });
-            resolve({ text: ctx.fullText, code: code ?? 1, sessionId: ctx.sessionId, tools: ctx.toolLog, smoke: smokeResult });
+            const resolvedCode = promptCompleted ? 0 : (code ?? 1);
+            broadcast('agent_status', { status: resolvedCode === 0 ? 'done' : 'error', agentId: agentLabel });
+            resolve({ text: ctx.fullText, code: resolvedCode, sessionId: ctx.sessionId, tools: ctx.toolLog, smoke: smokeResult });
             if (mainManaged) processQueue();
         });
 
@@ -915,6 +970,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         duration: null as number | null,
         tokens: null as any,
         stderrBuf: '',
+        hasActiveSubAgent: false,
     };
     let buffer = '';
 
@@ -934,6 +990,10 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 logEventSummary(agentLabel, cli, event, ctx);
                 if (!ctx.sessionId) ctx.sessionId = extractSessionId(cli, event);
                 extractFromEvent(cli, event, ctx, agentLabel);
+                // Sub-agent wait: keep stall timer alive
+                if (ctx.hasActiveSubAgent) {
+                    opts.lifecycle?.onActivity?.('heartbeat');
+                }
                 const outputChunk = extractOutputChunk(cli, event);
                 if (outputChunk) {
                     broadcast('agent_output', {

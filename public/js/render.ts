@@ -479,6 +479,139 @@ export function rehighlightAll(scope?: HTMLElement | Document): void {
     });
 }
 
+// ── File path linkification (click-to-open in Finder) ──
+
+const FILE_PATH_RE_G = /(?:~\/[^\s)`\]"'<>]+|\/(?:Users|home|tmp|var|opt|private)\/[^\s)`\]"'<>]+)/g;
+const TRAILING_PUNCT_RE = /[.,!?:;]+$/;
+
+/**
+ * Walk text nodes inside container, wrap file paths in clickable spans.
+ * Idempotent — skips already-linkified paths.
+ * Skips: <pre>, <a>, <button>, .file-path-link
+ */
+export function linkifyFilePaths(container: HTMLElement): void {
+    const SKIP_TAGS = new Set(['PRE', 'A', 'BUTTON', 'TEXTAREA', 'INPUT', 'SCRIPT', 'STYLE']);
+
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+        acceptNode(node) {
+            let el = node.parentElement;
+            while (el && el !== container) {
+                if (SKIP_TAGS.has(el.tagName)) return NodeFilter.FILTER_REJECT;
+                if (el.classList.contains('file-path-link')) return NodeFilter.FILTER_REJECT;
+                if (el.tagName === 'CODE' && el.parentElement?.tagName === 'PRE') {
+                    return NodeFilter.FILTER_REJECT;
+                }
+                el = el.parentElement;
+            }
+            return NodeFilter.FILTER_ACCEPT;
+        },
+    });
+
+    // Collect text nodes with matches, grouped by node
+    const nodeMatches = new Map<Text, { index: number; raw: string; clean: string }[]>();
+    let textNode: Text | null;
+    while ((textNode = walker.nextNode() as Text | null)) {
+        const text = textNode.textContent || '';
+        FILE_PATH_RE_G.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        const hits: { index: number; raw: string; clean: string }[] = [];
+        while ((m = FILE_PATH_RE_G.exec(text))) {
+            const raw = m[0];
+            const clean = raw.replace(TRAILING_PUNCT_RE, '');
+            if (clean.length < 4) continue;
+            hits.push({ index: m.index, raw, clean });
+        }
+        if (hits.length) nodeMatches.set(textNode, hits);
+    }
+
+    // Replace each text node once — build full fragment with all matches
+    for (const [node, hits] of nodeMatches) {
+        const text = node.textContent || '';
+        const parent = node.parentNode;
+        if (!parent) continue;
+
+        const frag = document.createDocumentFragment();
+        let cursor = 0;
+
+        for (const { index, raw, clean } of hits) {
+            // Text before this match
+            if (index > cursor) {
+                frag.appendChild(document.createTextNode(text.slice(cursor, index)));
+            }
+            // The clickable span
+            const span = document.createElement('span');
+            span.className = 'file-path-link';
+            span.setAttribute('data-file-path', clean);
+            span.setAttribute('role', 'button');
+            span.setAttribute('tabindex', '0');
+            span.textContent = clean;
+            frag.appendChild(span);
+            // Trailing punctuation that was trimmed
+            const trailingPunct = raw.slice(clean.length);
+            if (trailingPunct) frag.appendChild(document.createTextNode(trailingPunct));
+            cursor = index + raw.length;
+        }
+
+        // Remaining text after last match
+        if (cursor < text.length) {
+            frag.appendChild(document.createTextNode(text.slice(cursor)));
+        }
+
+        parent.replaceChild(frag, node);
+    }
+}
+
+// ── File path click event delegation (one-time setup) ──
+let filePathDelegationReady = false;
+
+function ensureFilePathDelegation(): void {
+    if (filePathDelegationReady) return;
+    filePathDelegationReady = true;
+
+    document.addEventListener('click', (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+        const link = target?.closest('.file-path-link') as HTMLElement | null;
+        if (!link) return;
+
+        const filePath = link.getAttribute('data-file-path');
+        if (!filePath) return;
+
+        link.classList.add('opening');
+
+        fetch('/api/file/open', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: filePath }),
+        })
+            .then(r => r.json())
+            .then(data => {
+                link.classList.remove('opening');
+                if (data.ok) {
+                    link.classList.add('opened');
+                    setTimeout(() => link.classList.remove('opened'), 1500);
+                } else {
+                    link.classList.add('open-failed');
+                    link.title = data.error || 'Failed to open';
+                    setTimeout(() => { link.classList.remove('open-failed'); link.title = ''; }, 2000);
+                }
+            })
+            .catch(() => {
+                link.classList.remove('opening');
+                link.classList.add('open-failed');
+                setTimeout(() => link.classList.remove('open-failed'), 2000);
+            });
+    });
+
+    document.addEventListener('keydown', (e: KeyboardEvent) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const target = e.target as HTMLElement;
+        if (target?.classList.contains('file-path-link')) {
+            e.preventDefault();
+            target.click();
+        }
+    });
+}
+
 // ── Copy button event delegation (one-time setup) ──
 let copyDelegationReady = false;
 
@@ -798,6 +931,7 @@ export function renderMarkdown(text: string, isStreaming = false): string {
 
     ensureCopyDelegation();
     ensureDiagramActionDelegation();
+    ensureFilePathDelegation();
 
     return html;
 }
@@ -813,6 +947,8 @@ function schedulePostRender(): void {
         renderMermaidBlocks();
         rehighlightAll();
         bindDiagramZoom();
+        const msgContainer = document.getElementById('chatMessages');
+        if (msgContainer) linkifyFilePaths(msgContainer);
     });
 }
 

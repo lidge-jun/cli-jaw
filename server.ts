@@ -5,10 +5,10 @@ import express from 'express';
 import helmet from 'helmet';
 import { log } from './src/core/logger.js';
 import { createServer } from 'http';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import { WebSocketServer } from 'ws';
 import { fileURLToPath } from 'url';
-import { dirname, join, basename } from 'path';
+import { dirname, join, basename, resolve, normalize } from 'path';
 import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
@@ -695,6 +695,35 @@ app.post('/api/upload', express.raw({ type: '*/*', limit: '20mb' }), (req, res) 
         res.json({ path: filePath, filename: basename(filePath) });
     } catch (e: unknown) {
         res.status((e as any).statusCode || 400).json({ error: (e as Error).message });
+    }
+});
+
+// Open file in system file manager (Finder reveal)
+// NOTE: cli-jaw is a localhost-only program. No remote access.
+app.post('/api/file/open', (req, res) => {
+    const { path: rawPath } = req.body;
+    if (!rawPath || typeof rawPath !== 'string') {
+        return fail(res, 400, 'path_required');
+    }
+
+    const expanded = rawPath.startsWith('~/') ? os.homedir() + rawPath.slice(1) : rawPath;
+    const normalized = normalize(resolve(expanded));
+
+    if (!fs.existsSync(normalized)) {
+        return fail(res, 404, 'file_not_found');
+    }
+
+    try {
+        if (process.platform === 'darwin') {
+            execFileSync('open', ['-R', normalized]);
+        } else if (process.platform === 'win32') {
+            execFileSync('explorer', ['/select,', normalized]);
+        } else {
+            execFileSync('xdg-open', [dirname(normalized)]);
+        }
+        ok(res, { opened: normalized });
+    } catch {
+        fail(res, 500, 'open_failed');
     }
 });
 

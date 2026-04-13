@@ -209,6 +209,9 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
         case 'codex':
             if (event.type === 'item.completed') {
                 if (event.item?.type === 'agent_message') ctx.fullText += event.item.text || '';
+                if (event.item?.type === 'collab_tool_call') {
+                    ctx.hasActiveSubAgent = (event.item.status === 'in_progress');
+                }
             } else if (event.type === 'turn.completed' && event.usage) {
                 ctx.tokens = event.usage;
             }
@@ -368,6 +371,15 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
             const output = item.aggregated_output ? String(item.aggregated_output) : '';
             const detail = output ? `$ ${command}\n${output}` : command;
             labels.push({ icon: '⚡', label: buildPreview(command, 40) || 'exec', toolType: 'tool', detail, stepRef: `codex:cmd:${command}` });
+        }
+        if (item.type === 'collab_tool_call') {
+            const name = item.name || 'sub-agent';
+            const status = item.status || '';
+            if (status === 'in_progress') {
+                labels.push({ icon: '🔀', label: `waiting: ${name}`, toolType: 'tool' });
+            } else {
+                labels.push({ icon: '✅', label: `sub-agent: ${name}`, toolType: 'tool', status: 'done' });
+            }
         }
     }
 

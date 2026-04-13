@@ -1,6 +1,6 @@
 // ── UI Utilities ──
 import { state } from './state.js';
-import { renderMarkdown, escapeHtml, stripOrchestration } from './render.js';
+import { renderMarkdown, escapeHtml, stripOrchestration, linkifyFilePaths } from './render.js';
 import { getAppName } from './features/appname.js';
 import { t } from './features/i18n.js';
 import { api } from './api.js';
@@ -301,9 +301,10 @@ export function addMessage(role: string, text: string, cli?: string | null): HTM
                 container.querySelectorAll('.msg').forEach(el => {
                     vs.addItem(crypto.randomUUID(), el.outerHTML);
                 });
-                // Wire widget activation for VS-rendered items
+                // Wire widget activation + file path linkification for VS-rendered items
                 vs.onPostRender = (viewport: HTMLElement) => {
                     activateWidgets(viewport);
+                    linkifyFilePaths(viewport);
                 };
             }
         }
@@ -402,9 +403,10 @@ export async function loadMessages(): Promise<void> {
                 }
             };
 
-            // Activate widgets on all VS-rendered items (covers live appends too)
+            // Activate widgets + file path linkification on all VS-rendered items
             vs.onPostRender = (viewport: HTMLElement) => {
                 activateWidgets(viewport);
+                linkifyFilePaths(viewport);
             };
 
             vs.scrollToBottom();

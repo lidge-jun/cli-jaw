@@ -373,13 +373,14 @@ ${worklogBlock}`.trim();
         monitor.stop();
         throw err;
     }
-    if (r.code === 0 && r.sessionId) {
+    const isSuccess = r.code === 0 || (r.code == null && (r.text || '').trim().length > 0);
+    if (isSuccess && r.sessionId) {
         upsertEmployeeSession.run(emp.id, r.sessionId, emp.cli);
     }
     const result = {
         agent: ap.agent, role: ap.role, id: emp.id,
         phase: ap.currentPhase, phaseLabel,
-        status: r.code === 0 ? 'done' : 'error',
+        status: isSuccess ? 'done' : 'error',
         text: r.text || '',
     };
 

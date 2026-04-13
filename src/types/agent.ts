@@ -22,6 +22,7 @@ export interface SpawnContext {
   duration: number | null;
   tokens: Record<string, number> | null;
   stderrBuf: string;
+  hasActiveSubAgent?: boolean;
   thinkingBuf?: string;
   // Claude-specific stream buffers (set by events.ts extractFromEvent)
   claudeThinkingBuf?: string;

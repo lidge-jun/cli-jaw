@@ -900,3 +900,43 @@ div.math-placeholder {
         to   { opacity: 1; transform: translateY(0); }
     }
 }
+
+/* ── File Path Click-to-Open ── */
+.file-path-link {
+    cursor: pointer;
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-style: dotted;
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+    border-radius: 2px;
+    padding: 0 2px;
+    margin: 0 -2px;
+    transition: background 0.15s ease, text-decoration-style 0.15s ease;
+}
+.file-path-link:hover,
+.file-path-link:focus-visible {
+    background: color-mix(in oklch, var(--accent) 12%, transparent);
+    text-decoration-style: solid;
+    outline: none;
+}
+.file-path-link:active {
+    background: color-mix(in oklch, var(--accent) 20%, transparent);
+}
+.file-path-link.opening {
+    opacity: 0.6;
+    animation: file-path-pulse 0.6s ease-in-out infinite alternate;
+}
+.file-path-link.opened {
+    background: color-mix(in oklch, #22c55e 15%, transparent);
+    text-decoration-color: #22c55e;
+}
+.file-path-link.open-failed {
+    background: color-mix(in oklch, #ef4444 15%, transparent);
+    text-decoration-color: #ef4444;
+    text-decoration-style: wavy;
+}
+@keyframes file-path-pulse {
+    from { opacity: 0.6; }
+    to { opacity: 1; }
+}
