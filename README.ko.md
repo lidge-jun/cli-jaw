@@ -9,7 +9,7 @@
 [![Tests](https://img.shields.io/badge/tests-888%20pass-brightgreen)](#-테스트)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://typescriptlang.org)
 [![Node](https://img.shields.io/badge/node-%3E%3D22-blue)](https://nodejs.org)
-[![License](https://img.shields.io/badge/license-ISC-yellow)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 [![npm](https://img.shields.io/npm/v/cli-jaw)](https://npmjs.com/package/cli-jaw)
 [![Docker](https://img.shields.io/badge/Docker-supported-2496ED?logo=docker&logoColor=white)](#-도커--컨테이너-격리)
 [![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20WSL%20%7C%20Docker-lightgrey)](#)
@@ -592,6 +592,6 @@ npm test
 
 Made with ❤️ by the CLI-JAW community
 
-[ISC License](LICENSE)
+[MIT License](LICENSE)
 
 </div>
