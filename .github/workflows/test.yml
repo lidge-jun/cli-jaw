@@ -41,7 +41,10 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
+
+      - name: Build native modules
+        run: npm rebuild better-sqlite3
 
       - name: Build TypeScript
         run: npx tsc

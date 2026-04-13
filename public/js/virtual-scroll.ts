@@ -2,7 +2,7 @@
 // Activates at THRESHOLD messages to prevent DOM bloat
 // Below threshold: standard DOM append (zero overhead)
 
-const THRESHOLD = 200;
+const THRESHOLD = 80;
 const BUFFER = 5;
 const EST_HEIGHT = 80;
 
@@ -12,6 +12,8 @@ export interface VirtualItem {
     height: number;
 }
 
+export type LazyRenderCallback = (targets: HTMLElement[]) => void;
+
 export class VirtualScroll {
     private items: VirtualItem[] = [];
     private container: HTMLElement;
@@ -19,9 +21,13 @@ export class VirtualScroll {
     private spacerBottom: HTMLDivElement;
     private viewport: HTMLDivElement;
     private _active = false;
+    private _totalHeight = 0;
     private rafId: number | null = null;
     private firstVisible = 0;
     private lastVisible = 0;
+
+    /** Called after render() mounts items in viewport — for lazy rendering */
+    onLazyRender: LazyRenderCallback | null = null;
 
     constructor(containerId: string) {
         this.container = document.getElementById(containerId)!;
@@ -37,22 +43,23 @@ export class VirtualScroll {
     get count(): number { return this.items.length; }
 
     /** Flush all virtual items to real DOM and deactivate VS.
-     *  Called before live message append to prevent spacer/DOM conflicts. */
+     *  Called on conversation clear or explicit reset. */
     flushToDOM(): void {
         if (!this._active) return;
         this.container.removeEventListener('scroll', this.scrollHandler);
         if (this.rafId) { cancelAnimationFrame(this.rafId); this.rafId = null; }
-        // Render all items as real DOM nodes
         this.container.innerHTML = this.items.map(it => it.html).join('');
         this._active = false;
         this.firstVisible = 0;
         this.lastVisible = 0;
-        // Release items to free memory (DOM now owns the content)
         this.items = [];
+        this._totalHeight = 0;
     }
 
     addItem(id: string, html: string): void {
-        this.items.push({ id, html, height: EST_HEIGHT });
+        const item: VirtualItem = { id, html, height: EST_HEIGHT };
+        this.items.push(item);
+        this._totalHeight += EST_HEIGHT;
         if (!this._active && this.items.length >= THRESHOLD) {
             this.activate();
         }
@@ -61,18 +68,38 @@ export class VirtualScroll {
         }
     }
 
+    /** Append a live DOM element while keeping VS active.
+     *  Serializes to HTML for virtual storage. */
+    appendLiveItem(div: HTMLElement): void {
+        if (!this._active) return;
+        const html = div.outerHTML;
+        const id = crypto.randomUUID();
+        const item: VirtualItem = { id, html, height: EST_HEIGHT };
+        this.items.push(item);
+        this._totalHeight += EST_HEIGHT;
+        this.scheduleRender();
+        this.scrollToBottom();
+    }
+
+    /** Update cached HTML for a specific item index (used by lazy render). */
+    updateItemHtml(idx: number, html: string): void {
+        if (this.items[idx]) {
+            this.items[idx].html = html;
+        }
+    }
+
     private scrollHandler = () => this.scheduleRender();
 
     private activate(): void {
         this._active = true;
-        // Measure existing DOM nodes
+        this._totalHeight = 0;
         const existing = this.container.querySelectorAll('.msg');
         existing.forEach((el, i) => {
             if (this.items[i]) {
                 this.items[i].height = el.getBoundingClientRect().height;
+                this._totalHeight += this.items[i].height;
             }
         });
-        // Replace DOM with virtual structure
         this.container.innerHTML = '';
         this.container.append(this.spacerTop, this.viewport, this.spacerBottom);
         this.container.addEventListener('scroll', this.scrollHandler, { passive: true });
@@ -91,7 +118,6 @@ export class VirtualScroll {
         const scrollTop = this.container.scrollTop;
         const viewHeight = this.container.clientHeight;
 
-        // Binary-ish search for start index
         let accum = 0;
         let startIdx = 0;
         for (let i = 0; i < this.items.length; i++) {
@@ -112,12 +138,10 @@ export class VirtualScroll {
         }
         const last = Math.min(this.items.length - 1, endIdx + BUFFER);
 
-        // Skip re-render if range unchanged
         if (first === this.firstVisible && last === this.lastVisible) return;
         this.firstVisible = first;
         this.lastVisible = last;
 
-        // Compute spacer heights
         let topSpace = 0;
         for (let i = 0; i < first; i++) topSpace += this.items[i].height;
         let bottomSpace = 0;
@@ -126,7 +150,6 @@ export class VirtualScroll {
         this.spacerTop.style.height = `${topSpace}px`;
         this.spacerBottom.style.height = `${bottomSpace}px`;
 
-        // Render visible items
         const frag = document.createDocumentFragment();
         for (let i = first; i <= last; i++) {
             const item = this.items[i];
@@ -141,26 +164,36 @@ export class VirtualScroll {
         this.viewport.innerHTML = '';
         this.viewport.appendChild(frag);
 
-        // Re-measure rendered heights
+        // Re-measure rendered heights and update totalHeight
         this.viewport.querySelectorAll('[data-vs-idx]').forEach(el => {
             const idx = Number((el as HTMLElement).dataset.vsIdx);
             if (this.items[idx]) {
-                this.items[idx].height = el.getBoundingClientRect().height;
+                const oldH = this.items[idx].height;
+                const newH = el.getBoundingClientRect().height;
+                this.items[idx].height = newH;
+                this._totalHeight += (newH - oldH);
             }
         });
+
+        // Fire lazy render callback for newly visible items
+        if (this.onLazyRender) {
+            const lazyTargets = this.viewport.querySelectorAll<HTMLElement>('.lazy-pending');
+            if (lazyTargets.length > 0) {
+                this.onLazyRender(Array.from(lazyTargets));
+            }
+        }
     }
 
     scrollToBottom(): void {
-        const total = this.items.reduce((sum, it) => sum + it.height, 0);
-        this.container.scrollTop = total;
+        this.container.scrollTop = this._totalHeight;
         this.scheduleRender();
     }
 
     clear(): void {
         this.items = [];
+        this._totalHeight = 0;
         if (this._active) {
             this.container.removeEventListener('scroll', this.scrollHandler);
-            // Restore normal DOM structure
             this.viewport.innerHTML = '';
             this.spacerTop.style.height = '0';
             this.spacerBottom.style.height = '0';
@@ -169,6 +202,7 @@ export class VirtualScroll {
         this._active = false;
         this.firstVisible = 0;
         this.lastVisible = 0;
+        this.onLazyRender = null;
         if (this.rafId) {
             cancelAnimationFrame(this.rafId);
             this.rafId = null;

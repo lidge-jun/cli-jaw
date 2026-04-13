@@ -85,8 +85,7 @@ export function updateQueueBadge(count: number): void {
 function showSkeleton(): void {
     const container = document.getElementById('chatMessages');
     if (!container || container.querySelector('.skeleton-msg')) return;
-    const vs = getVirtualScroll();
-    if (vs.active) vs.flushToDOM();
+    // No flushToDOM — skeleton goes directly into container as overlay
     hideEmptyState();
     const skel = document.createElement('div');
     skel.className = 'skeleton-msg';
@@ -244,6 +243,13 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
         if (content) content.innerHTML = toolHtml + renderMarkdown(finalText);
         if (content) content.setAttribute('data-raw', stripOrchestration(finalText));
         if (content) activateWidgets(content as HTMLElement);
+
+        // Promote streaming div from real DOM into VS if active
+        const vs = getVirtualScroll();
+        if (vs.active && state.currentAgentDiv && state.currentAgentDiv.isConnected) {
+            vs.appendLiveItem(state.currentAgentDiv);
+            state.currentAgentDiv.remove();
+        }
     }
     currentStream = null;
     state.currentAgentDiv = null;
@@ -257,7 +263,6 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
 export function addMessage(role: string, text: string, cli?: string | null): HTMLDivElement {
     const container = document.getElementById('chatMessages');
     const vs = getVirtualScroll();
-    if (vs.active) vs.flushToDOM();
     hideEmptyState();
     removeSkeleton();
 
@@ -274,8 +279,17 @@ export function addMessage(role: string, text: string, cli?: string | null): HTM
     }
     const contentEl = div.querySelector('.msg-content');
     if (contentEl) contentEl.setAttribute('data-raw', stripOrchestration(text));
-    container?.appendChild(div);
-    activateWidgets(div);
+
+    // Streaming placeholder (agent + empty text) must stay in real DOM
+    // so state.currentAgentDiv reference remains valid during streaming.
+    const isStreamingPlaceholder = role === 'agent' && !text;
+
+    if (vs.active && !isStreamingPlaceholder) {
+        vs.appendLiveItem(div);
+    } else {
+        container?.appendChild(div);
+        activateWidgets(div);
+    }
     scrollToBottom();
     return div;
 }
@@ -337,22 +351,40 @@ export async function loadMessages(): Promise<void> {
         if (chatEl) chatEl.innerHTML = '';
 
         if (msgs.length >= VS_THRESHOLD) {
+            // Phase 2: lazy render — store skeleton HTML, render on viewport entry
             for (const m of msgs) {
                 const role = m.role === 'assistant' ? 'agent' : m.role;
-                const rendered = renderMarkdown(m.content);
+                const rawContent = stripOrchestration(m.content);
                 const label = escapeHtml(role === 'user' ? t('msg.you') : getAppName());
                 const tools = m.role === 'assistant' ? parseToolLog(m.tool_log) : [];
                 const toolHtml = tools.length > 0 ? buildProcessBlockHtml(toProcessSteps(tools), true) : '';
+                // Skeleton placeholder — lazy-pending class triggers render on viewport entry
+                const skeletonContent = '<div class="skeleton-line"></div><div class="skeleton-line"></div>';
                 const html = role === 'agent'
-                    ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body">${toolHtml}<div class="msg-content" data-raw="${escapeHtml(stripOrchestration(m.content))}">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
-                    : `<div class="msg msg-${role}"><div class="msg-label">${label}</div><div class="msg-content" data-raw="${escapeHtml(stripOrchestration(m.content))}">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div>`;
+                    ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body">${toolHtml}<div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
+                    : `<div class="msg msg-${role}"><div class="msg-label">${label}</div><div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div>`;
                 vs.addItem(crypto.randomUUID(), html);
             }
+
+            // Register lazy render callback
+            vs.onLazyRender = (targets: HTMLElement[]) => {
+                for (const el of targets) {
+                    if (!el.classList.contains('lazy-pending')) continue;
+                    const raw = el.getAttribute('data-raw') || '';
+                    el.innerHTML = raw ? renderMarkdown(raw) : '';
+                    el.classList.remove('lazy-pending');
+                    activateWidgets(el);
+
+                    // Persist rendered HTML back into VS cache
+                    const msgEl = el.closest('[data-vs-idx]') as HTMLElement | null;
+                    if (msgEl) {
+                        const idx = Number(msgEl.dataset.vsIdx);
+                        vs.updateItemHtml(idx, msgEl.outerHTML);
+                    }
+                }
+            };
+
             vs.scrollToBottom();
-            requestAnimationFrame(() => {
-                const chatElRef = document.getElementById('chatMessages');
-                if (chatElRef) activateWidgets(chatElRef);
-            });
         } else {
             msgs.forEach(m => {
                 const div = addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content, m.cli);
