@@ -94,6 +94,13 @@ export function extractOutputChunk(cli: string, event: any): string {
         }
         return '';
     }
+    // [P0-1.5] Codex: emit agent_message text as live chunk
+    if (cli === 'codex') {
+        if (event.type === 'item.completed' && event.item?.type === 'agent_message') {
+            return String(event.item.text || '');
+        }
+        return '';
+    }
     return '';
 }
 
@@ -101,6 +108,11 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
     // ── Claude stream buffer: thinking_delta + input_json_delta ──
     if (cli === 'claude' && event.type === 'stream_event') {
         const inner = event.event;
+
+        // [P0-1.1] signature_delta: discard silently, do NOT trigger thinking flush
+        if (inner?.type === 'content_block_delta' && inner.delta?.type === 'signature_delta') {
+            return;
+        }
 
         // Buffer thinking deltas
         if (inner?.type === 'content_block_delta' && inner.delta?.type === 'thinking_delta') {
@@ -204,6 +216,22 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                 ctx.turns = event.num_turns;
                 ctx.duration = event.duration_ms;
                 if (event.session_id) ctx.sessionId = event.session_id;
+            // [P0-1.2] Parse user/tool_result feedback (stdout/stderr/is_error)
+            } else if (event.type === 'user' && event.message?.content) {
+                for (const block of event.message.content) {
+                    if (block.type === 'tool_result' && block.tool_use_id) {
+                        const existing = [...ctx.toolLog].reverse().find(
+                            (t: any) => t.stepRef === `claude:tooluse:${block.tool_use_id}`
+                        );
+                        if (existing) {
+                            existing.status = block.is_error ? 'error' : 'done';
+                            existing.icon = block.is_error ? '❌' : '✅';
+                            const resultText = extractText(block.content);
+                            if (resultText) existing.detail = (existing.detail || '') + '\n' + resultText;
+                            broadcast('agent_tool', { agentId: agentLabel, ...existing });
+                        }
+                    }
+                }
             }
             break;
         case 'codex':
@@ -222,6 +250,15 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
             } else if (event.type === 'result') {
                 ctx.duration = event.stats?.duration_ms;
                 ctx.turns = event.stats?.tool_calls;
+                // [P0-1.6] Store Gemini token stats
+                if (event.stats) {
+                    ctx.tokens = {
+                        input_tokens: event.stats.input_tokens ?? event.stats.inputTokens ?? 0,
+                        output_tokens: event.stats.output_tokens ?? event.stats.outputTokens ?? 0,
+                        cached_tokens: event.stats.cached ?? 0,
+                        total_tokens: event.stats.total_tokens ?? event.stats.totalTokens ?? 0,
+                    };
+                }
             }
             break;
         case 'opencode':
@@ -229,10 +266,21 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                 ctx.fullText += event.part.text;
             } else if (event.type === 'step_finish' && event.part) {
                 ctx.sessionId = event.sessionID;
+                // [P0-1.7] Accumulate tokens across steps (not overwrite)
                 if (event.part.tokens) {
-                    ctx.tokens = { input_tokens: event.part.tokens.input, output_tokens: event.part.tokens.output };
+                    if (!ctx.tokens) ctx.tokens = { input_tokens: 0, output_tokens: 0, cached_read: 0, cached_write: 0 };
+                    ctx.tokens.input_tokens += event.part.tokens.input ?? 0;
+                    ctx.tokens.output_tokens += event.part.tokens.output ?? 0;
+                    // [P0-1.8] Cache token accumulation
+                    if (event.part.tokens.cache) {
+                        ctx.tokens.cached_read += event.part.tokens.cache.read ?? 0;
+                        ctx.tokens.cached_write += event.part.tokens.cache.write ?? 0;
+                    }
                 }
-                if (event.part.cost) ctx.cost = event.part.cost;
+                // Accumulate cost across steps
+                if (event.part.cost != null) {
+                    ctx.cost = (ctx.cost ?? 0) + event.part.cost;
+                }
             }
             break;
     }
@@ -370,7 +418,9 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
             const command = String(item.command || 'exec');
             const output = item.aggregated_output ? String(item.aggregated_output) : '';
             const detail = output ? `$ ${command}\n${output}` : command;
-            labels.push({ icon: '⚡', label: buildPreview(command, 40) || 'exec', toolType: 'tool', detail, stepRef: `codex:cmd:${command}` });
+            // [P0-1.4] Use item.id for unique stepRef (not command string)
+            const ref = `codex:item:${item.id || command}`;
+            labels.push({ icon: '⚡', label: buildPreview(command, 40) || 'exec', toolType: 'tool', detail, stepRef: ref, status: 'done' });
         }
         if (item.type === 'collab_tool_call') {
             const name = item.name || 'sub-agent';
