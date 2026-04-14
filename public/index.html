@@ -624,6 +624,21 @@
                         <option value="0">forever</option>
                     </select>
                 </div>
+                <div class="settings-row"><label>Flush Language</label>
+                    <select id="memFlushLang"
+                        class="select-sm">
+                        <option value="en">English</option>
+                        <option value="ko">한국어</option>
+                        <option value="auto">Auto</option>
+                    </select>
+                </div>
+                <div class="settings-row"><label>Manual Flush</label>
+                    <button id="memFlushNowBtn" class="perm-btn" style="font-size:12px">🧠 Flush Now</button>
+                </div>
+                <div class="settings-row">
+                    <label>Custom Prompt</label>
+                    <span class="text-xs text-dim mono-path">~/.cli-jaw/prompts/flush-prompt.md</span>
+                </div>
                 <div
                     class="info-box">
                     <span data-icon="lightbulb"></span> Counter: <span id="memCounter">0</span> / <span id="memThreshold">10</span> responses until next

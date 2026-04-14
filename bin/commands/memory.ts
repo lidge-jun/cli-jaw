@@ -85,6 +85,11 @@ try {
             console.log(JSON.stringify(r, null, 2));
             break;
         }
+        case 'flush': {
+            const r = await api('POST', '/flush', {}) as Record<string, any>;
+            console.log(`🧠 ${r.message || 'Memory flush triggered'}`);
+            break;
+        }
         default:
             console.log(`
   🧠 cli-jaw memory
@@ -96,6 +101,7 @@ try {
     list                         List all memory files
     init                         Initialize memory directory
     reflect [--sinceDays N]      Promote durable facts from episodes to shared pages
+    flush                        Manually trigger memory flush
 
   Files:
     MEMORY.md          Core knowledge (auto-injected into prompt)

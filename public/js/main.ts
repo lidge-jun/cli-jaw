@@ -43,7 +43,7 @@ import {
     openMemoryModal, closeMemoryModal, switchMemTab, setMemEnabled,
     saveMemSettings, deleteMemFile, viewMemFile,
     rerunAdvancedBootstrap, reindexAdvancedMemory, openCorruptedFolder,
-    bindAdvancedProviderUi
+    bindAdvancedProviderUi, triggerFlushNow
 } from './features/memory.js';
 import { state } from './state.js';
 import { loadCliRegistry, getCliKeys } from './constants.js';
@@ -386,6 +386,8 @@ document.getElementById('memFlushEvery')?.addEventListener('change', saveMemSett
 document.getElementById('memCli')?.addEventListener('change', saveMemSettings);
 document.getElementById('memModel')?.addEventListener('change', saveMemSettings);
 document.getElementById('memRetention')?.addEventListener('change', saveMemSettings);
+document.getElementById('memFlushLang')?.addEventListener('change', saveMemSettings);
+document.getElementById('memFlushNowBtn')?.addEventListener('click', triggerFlushNow);
 document.getElementById('advBootstrapBtn')?.addEventListener('click', rerunAdvancedBootstrap);
 document.getElementById('advReindexBtn')?.addEventListener('click', reindexAdvancedMemory);
 document.getElementById('advReimportBtn')?.addEventListener('click', rerunAdvancedBootstrap);

@@ -15,6 +15,7 @@ interface MemoryData {
     cli?: string;
     model?: string;
     retentionDays: number;
+    flushLanguage?: string;
     path: string;
     counter: number;
     files: MemoryFile[];
@@ -128,6 +129,7 @@ function renderBasicSettings(data: MemoryData) {
     setValue('memCli', data.cli || '');
     setValue('memModel', data.model || '');
     setValue('memRetention', data.retentionDays);
+    setValue('memFlushLang', data.flushLanguage || 'en');
     setText('memPath', data.path);
     setText('memCounter', data.counter);
     setText('memThreshold', data.flushEvery);
@@ -289,11 +291,13 @@ export async function saveMemSettings(): Promise<void> {
     const cliEl = $('memCli') as HTMLSelectElement | null;
     const modelEl = $('memModel') as HTMLSelectElement | null;
     const retEl = $('memRetention') as HTMLSelectElement | null;
+    const langEl = $('memFlushLang') as HTMLSelectElement | null;
     await apiJson('/api/memory-files/settings', 'PUT', {
         flushEvery: +(flushEl?.value || 10),
         cli: cliEl?.value || '',
         model: modelEl?.value || '',
         retentionDays: +(retEl?.value || 30),
+        flushLanguage: langEl?.value || 'en',
     });
     const thresholdEl = $('memThreshold');
     if (thresholdEl && flushEl) thresholdEl.textContent = flushEl.value;
@@ -356,4 +360,16 @@ export async function viewMemFile(name: string): Promise<void> {
 
 export function bindAdvancedProviderUi(): void {
     return;
+}
+
+export async function triggerFlushNow(): Promise<void> {
+    const btn = $('memFlushNowBtn') as HTMLButtonElement | null;
+    if (btn) btn.disabled = true;
+    try {
+        await apiJson('/api/jaw-memory/flush', 'POST', {});
+        if (btn) btn.textContent = '✅ Triggered';
+        setTimeout(() => { if (btn) { btn.textContent = '🧠 Flush Now'; btn.disabled = false; } }, 2000);
+    } catch {
+        if (btn) { btn.textContent = '❌ Failed'; btn.disabled = false; }
+    }
 }
