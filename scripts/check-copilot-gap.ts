@@ -21,8 +21,8 @@ const checks: CheckItem[] = [
     },
     {
         name: 'Server exposes /api/cli-registry',
-        file: 'server.ts',
-        needle: "app.get('/api/cli-registry'",
+        file: 'src/routes/settings.ts',
+        needle: "'/api/cli-registry'",
     },
     {
         name: 'Settings page includes copilot model select',
