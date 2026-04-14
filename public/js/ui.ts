@@ -4,7 +4,7 @@ import { renderMarkdown, escapeHtml, stripOrchestration, linkifyFilePaths } from
 import { getAppName } from './features/appname.js';
 import { t } from './features/i18n.js';
 import { api } from './api.js';
-import { cacheMessages, getCachedMessages, appendCachedMessage } from './features/idb-cache.js';
+import { cacheMessages, getCachedMessages, appendCachedMessage, upsertMessage, setMessageScope, getScopedMessages } from './features/idb-cache.js';
 import { getVirtualScroll, VS_THRESHOLD } from './virtual-scroll.js';
 import { createStreamRenderer, appendChunk, finalizeStream, type StreamState } from './streaming-render.js';
 import { activateWidgets } from './diagram/iframe-renderer.js';
@@ -264,14 +264,20 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
             vs.appendLiveItem(state.currentAgentDiv);
             state.currentAgentDiv.remove();
         }
+
+        // Cache agent response for offline (use finalText to capture stream-only responses)
+        if (finalText) upsertMessage({
+            role: 'assistant',
+            content: finalText,
+            tool_log: toolLog ? JSON.stringify(toolLog) : null,
+            timestamp: Date.now(),
+        }).catch(() => {});
     }
     currentStream = null;
     state.currentAgentDiv = null;
     lastFinalizeTs = Date.now();
     setStatus('idle');
     loadStats();
-    // Cache agent response for offline
-    if (text) appendCachedMessage('assistant', text).catch(() => {});
 }
 
 export function addMessage(role: string, text: string, cli?: string | null): HTMLDivElement {
@@ -370,25 +376,30 @@ export async function loadStats(): Promise<void> {
 }
 
 export async function loadMessages(): Promise<void> {
-    // api() returns null on any failure (never throws), so null = server unreachable
+    const vs = getVirtualScroll();
+    const chatEl = document.getElementById('chatMessages');
+
+    // Set scope from server workingDir (localStorage fallback if server is down)
+    try {
+        const settings = await api<{ workingDir?: string }>('/api/settings');
+        if (settings?.workingDir) setMessageScope(settings.workingDir);
+    } catch { /* localStorage fallback already initialized currentScope */ }
+
     const msgs = await api<MessageItem[]>('/api/messages');
 
     if (msgs !== null) {
         // Successful fetch — clear DOM and render (even if empty array after /clear)
-        const vs = getVirtualScroll();
         vs.clear();
-        const chatEl = document.getElementById('chatMessages');
         if (chatEl) chatEl.innerHTML = '';
 
         if (msgs.length >= VS_THRESHOLD) {
-            // Phase 2: lazy render — store skeleton HTML, render on viewport entry
+            // Lazy render — store skeleton HTML, render on viewport entry
             for (const m of msgs) {
                 const role = m.role === 'assistant' ? 'agent' : m.role;
                 const rawContent = stripOrchestration(m.content);
                 const label = escapeHtml(role === 'user' ? t('msg.you') : getAppName());
                 const tools = m.role === 'assistant' ? parseToolLog(m.tool_log) : [];
                 const toolHtml = tools.length > 0 ? buildProcessBlockHtml(toProcessSteps(tools), true) : '';
-                // Skeleton placeholder — lazy-pending class triggers render on viewport entry
                 const skeletonContent = '<div class="skeleton-line"></div><div class="skeleton-line"></div>';
                 const html = role === 'agent'
                     ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body">${toolHtml}<div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
@@ -437,23 +448,70 @@ export async function loadMessages(): Promise<void> {
                 }
             });
         }
+        // Sync to IndexedDB (full replace — server is source of truth)
         cacheMessages(msgs.map(m => ({
-            role: m.role, content: m.content, timestamp: Date.now(),
+            role: m.role, content: m.content, cli: m.cli ?? null, tool_log: m.tool_log ?? null, timestamp: Date.now(),
         }))).catch(() => {});
         showEmptyState();
         return;
     }
 
     // Server unreachable (api() returned null) — preserve existing DOM messages
-    const chatEl = document.getElementById('chatMessages');
     if (chatEl && chatEl.children.length > 0) {
         showEmptyState();
         return;
     }
     // DOM empty + server down — try IndexedDB cache
-    const cached = await getCachedMessages();
+    const cached = await getScopedMessages();
     if (cached.length > 0) {
-        cached.forEach(m => addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content));
+        if (cached.length >= VS_THRESHOLD) {
+            for (const m of cached) {
+                const role = m.role === 'assistant' ? 'agent' : m.role;
+                const rawContent = stripOrchestration(m.content);
+                const label = escapeHtml(role === 'user' ? t('msg.you') : getAppName());
+                const tools = m.role === 'assistant' && m.tool_log ? parseToolLog(m.tool_log) : [];
+                const toolHtml = tools.length > 0 ? buildProcessBlockHtml(toProcessSteps(tools), true) : '';
+                const skeletonContent = '<div class="skeleton-line"></div><div class="skeleton-line"></div>';
+                const html = role === 'agent'
+                    ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body">${toolHtml}<div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
+                    : `<div class="msg msg-${role}"><div class="msg-label">${label}</div><div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div>`;
+                vs.addItem(crypto.randomUUID(), html);
+            }
+            vs.onLazyRender = (targets: HTMLElement[]) => {
+                for (const el of targets) {
+                    if (!el.classList.contains('lazy-pending')) continue;
+                    const raw = el.getAttribute('data-raw') || '';
+                    el.innerHTML = raw ? renderMarkdown(raw) : '';
+                    el.classList.remove('lazy-pending');
+                    activateWidgets(el);
+                    const msgEl = el.closest('[data-vs-idx]') as HTMLElement | null;
+                    if (msgEl) {
+                        const idx = Number(msgEl.dataset.vsIdx);
+                        vs.updateItemHtml(idx, msgEl.outerHTML);
+                    }
+                }
+            };
+            vs.onPostRender = (viewport: HTMLElement) => {
+                activateWidgets(viewport);
+                linkifyFilePaths(viewport);
+            };
+            vs.scrollToBottom();
+        } else {
+            cached.forEach(m => {
+                const div = addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content, m.cli);
+                if (m.role === 'assistant' && m.tool_log) {
+                    const tools = parseToolLog(m.tool_log);
+                    if (tools.length > 0) {
+                        const body = div.querySelector('.agent-body') as HTMLElement;
+                        if (body) {
+                            const pb = createProcessBlock(body);
+                            for (const tool of toProcessSteps(tools)) addStep(pb, tool);
+                            collapseBlock(pb);
+                        }
+                    }
+                }
+            });
+        }
         addSystemMsg(`${ICONS.warning} 오프라인 모드 — 캐시된 메시지 표시 중`);
     }
     showEmptyState();

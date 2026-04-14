@@ -7,7 +7,7 @@ import * as slashCmd from './slash-commands.js';
 import { api, apiJson, apiFire, getAuthToken } from '../api.js';
 import { escapeHtml, cancelPostRender } from '../render.js';
 import { getVirtualScroll } from '../virtual-scroll.js';
-import { clearCache } from './idb-cache.js';
+import { clearCache, upsertMessage } from './idb-cache.js';
 import { ICONS } from '../icons.js';
 
 let activeObjectURLs: string[] = [];
@@ -72,6 +72,7 @@ export async function sendMessage(): Promise<void> {
             // not_command → fall through to normal chat
             if (result?.code === 'not_command') {
                 addMessage('user', text);
+                upsertMessage({ role: 'user', content: text, timestamp: Date.now() });
                 await apiJson('/api/message', 'POST', { prompt: text });
                 return;
             }
@@ -93,6 +94,7 @@ export async function sendMessage(): Promise<void> {
         const names = state.attachedFiles.map((f: File) => f.name).join(', ');
         const displayMsg = `📎 [${names}] ${text}`;
         addMessage('user', displayMsg);
+        upsertMessage({ role: 'user', content: displayMsg, timestamp: Date.now() });
         input.value = '';
         resetInputHeight();
         try {
@@ -108,6 +110,7 @@ export async function sendMessage(): Promise<void> {
         }
     } else {
         addMessage('user', text);
+        upsertMessage({ role: 'user', content: text, timestamp: Date.now() });
         input.value = '';
         resetInputHeight();
         const res = await fetch('/api/message', {
@@ -299,6 +302,7 @@ export async function sendVoiceToServer(blob: Blob, ext: string, mime: string): 
     if (pendingFiles.length) displayParts.push(`📎 [${pendingFiles.map(f => f.name).join(', ')}]`);
     if (pendingText) displayParts.push(pendingText);
     addMessage('user', displayParts.join(' '));
+    upsertMessage({ role: 'user', content: displayParts.join(' '), timestamp: Date.now() });
 
     // Clear input immediately
     if (input && pendingText) { input.value = ''; resetInputHeight(); }
