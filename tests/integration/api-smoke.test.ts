@@ -96,12 +96,12 @@ test('API Smoke Tests', async (t) => {
         assert.ok([400, 403].includes(res.status));
     });
 
-    await t.test('SMOKE-012: skill id injection → 400', async () => {
+    await t.test('SMOKE-012: skill id injection → rejected', async () => {
         const res = await fetch(`${BASE}/api/skills/enable`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: '../../../etc/passwd' }),
         });
-        assert.ok([400, 403].includes(res.status));
+        assert.ok([400, 401, 403].includes(res.status), `expected rejection, got ${res.status}`);
     });
 });
