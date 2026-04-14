@@ -31,7 +31,7 @@ test('claude stream_event tool labels are deduped', () => {
     const first = extractToolLabelsForTest('claude', evt, ctx);
     const second = extractToolLabelsForTest('claude', evt, ctx);
 
-    assert.deepEqual(first, [{ icon: '🔧', label: 'Bash', toolType: 'tool' }]);
+    assert.deepEqual(first, [{ icon: '🔧', label: 'Bash', toolType: 'tool', stepRef: undefined }]);
     assert.equal(second.length, 0);
     assert.equal(ctx.hasClaudeStreamEvents, true);
 });
@@ -41,7 +41,7 @@ test('claude assistant fallback works when stream was not seen', () => {
     const evt = readFixture('claude-assistant-tool.json');
 
     const labels = extractToolLabelsForTest('claude', evt, ctx);
-    assert.deepEqual(labels, [{ icon: '🔧', label: 'Read', toolType: 'tool' }]);
+    assert.deepEqual(labels, [{ icon: '🔧', label: 'Read', toolType: 'tool', stepRef: undefined }]);
 });
 
 test('claude assistant blocks are ignored after stream event', () => {
@@ -106,7 +106,7 @@ test('tool label extraction fixture matrix covers codex, gemini, and opencode va
             name: 'codex command execution',
             cli: 'codex',
             fixture: 'codex-command.json',
-            expected: [{ icon: '⚡', label: 'npm run test:events', toolType: 'tool', detail: 'npm run test:events', stepRef: 'codex:cmd:npm run test:events' }],
+            expected: [{ icon: '⚡', label: 'npm run test:events', toolType: 'tool', detail: 'npm run test:events', stepRef: 'codex:item:npm run test:events', status: 'done' }],
         },
         {
             name: 'codex reasoning',
@@ -137,8 +137,7 @@ test('tool label extraction fixture matrix covers codex, gemini, and opencode va
             cli: 'opencode',
             fixture: 'opencode-tool-use.json',
             expected: [
-                { icon: '🔧', label: 'bash', toolType: 'tool', stepRef: 'opencode:call:call_function_abc', detail: 'pwd' },
-                { icon: '✅', label: 'bash', toolType: 'tool', stepRef: 'opencode:call:call_function_abc', status: 'done' },
+                { icon: '✅', label: 'bash', toolType: 'tool', stepRef: 'opencode:call:call_function_abc', detail: 'pwd', status: 'done' },
             ],
         },
         {
@@ -252,7 +251,7 @@ test('extractFromEvent updates context for each CLI path', () => {
         session_id: 'claude-session',
     }, claudeCtx, 'claude-agent');
     assert.equal(claudeCtx.fullText, 'hello ');
-    assert.deepEqual(claudeCtx.toolLog, [{ icon: '🔧', label: 'Read', toolType: 'tool' }]);
+    assert.deepEqual(claudeCtx.toolLog, [{ icon: '🔧', label: 'Read', toolType: 'tool', stepRef: undefined }]);
     assert.equal(claudeCtx.cost, 0.12);
     assert.equal(claudeCtx.turns, 3);
     assert.equal(claudeCtx.duration, 777);
@@ -299,7 +298,7 @@ test('extractFromEvent updates context for each CLI path', () => {
     }, opencodeCtx, 'opencode-agent');
     assert.equal(opencodeCtx.fullText, 'opencode answer');
     assert.equal(opencodeCtx.sessionId, 'opencode-session');
-    assert.deepEqual(opencodeCtx.tokens, { input_tokens: 11, output_tokens: 22 });
+    assert.deepEqual(opencodeCtx.tokens, { input_tokens: 11, output_tokens: 22, cached_read: 0, cached_write: 0 });
     assert.equal(opencodeCtx.cost, 0.7);
 });
 
@@ -325,7 +324,7 @@ test('extractToolLabel keeps backward compatibility and claude keys are determin
     assert.equal(keyFromType, 'claude:type:assistant:🔧:Read');
 });
 
-test('extractOutputChunk returns live assistant text for gemini and opencode', () => {
+test('extractOutputChunk returns live assistant text for gemini, opencode, and codex', () => {
     assert.equal(
         extractOutputChunk('gemini', { type: 'message', role: 'assistant', content: 'hello', delta: true }),
         'hello',
@@ -334,8 +333,14 @@ test('extractOutputChunk returns live assistant text for gemini and opencode', (
         extractOutputChunk('opencode', { type: 'text', part: { text: 'world' } }),
         'world',
     );
+    // [P0-1.5] Codex now returns agent_message text as live chunk
     assert.equal(
-        extractOutputChunk('codex', { type: 'item.completed', item: { type: 'agent_message', text: 'ignored' } }),
+        extractOutputChunk('codex', { type: 'item.completed', item: { type: 'agent_message', text: 'codex reply' } }),
+        'codex reply',
+    );
+    // Non-agent_message Codex events still return ''
+    assert.equal(
+        extractOutputChunk('codex', { type: 'item.completed', item: { type: 'command_execution' } }),
         '',
     );
 });

@@ -24,24 +24,38 @@ test('extractFromAcpUpdate handles tool_call and tool_call_update fallback', () 
             name: 'Read',
         },
     });
-    assert.deepEqual(call, { tool: { icon: '🔧', label: 'Read', toolType: 'tool', detail: '', stepRef: 'acp:tool:Read' } });
+    assert.deepEqual(call, { tool: { icon: '🔧', label: 'Read', toolType: 'tool', detail: '', stepRef: 'acp:callid:Read' } });
 
+    // tool_call_update with completed status
     const updateByName = extractFromAcpUpdate({
         update: {
             sessionUpdate: 'tool_call_update',
             name: 'Read',
             id: 'tool-1',
+            status: 'completed',
         },
     });
-    assert.deepEqual(updateByName, { tool: { icon: '✅', label: 'Read', toolType: 'tool', stepRef: 'acp:tool:Read', status: 'done' } });
+    assert.deepEqual(updateByName, { tool: { icon: '✅', label: 'Read', toolType: 'tool', stepRef: 'acp:callid:tool-1', status: 'done' } });
 
+    // tool_call_update with failed status
+    const updateFailed = extractFromAcpUpdate({
+        update: {
+            sessionUpdate: 'tool_call_update',
+            name: 'Write',
+            id: 'tool-3',
+            status: 'failed',
+        },
+    });
+    assert.deepEqual(updateFailed, { tool: { icon: '❌', label: 'Write', toolType: 'tool', stepRef: 'acp:callid:tool-3', status: 'error' } });
+
+    // tool_call_update by id only (no name, no status → defaults to ✅/done)
     const updateById = extractFromAcpUpdate({
         update: {
             sessionUpdate: 'tool_call_update',
             id: 'tool-2',
         },
     });
-    assert.deepEqual(updateById, { tool: { icon: '✅', label: 'tool-2', toolType: 'tool', stepRef: 'acp:tool:tool-2', status: 'done' } });
+    assert.deepEqual(updateById, { tool: { icon: '✅', label: 'tool-2', toolType: 'tool', stepRef: 'acp:callid:tool-2', status: 'done' } });
 });
 
 test('extractFromAcpUpdate handles agent_message_chunk content shapes', () => {
