@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const handlersPath = path.join(import.meta.dirname, '../../src/cli/handlers.ts');
+const handlersPath = path.join(import.meta.dirname, '../../src/cli/handlers-runtime.ts');
 const handlersSrc = fs.readFileSync(handlersPath, 'utf8');
 
 const commandsPath = path.join(import.meta.dirname, '../../src/cli/commands.ts');

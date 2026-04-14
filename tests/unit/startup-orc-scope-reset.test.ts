@@ -14,7 +14,8 @@ test('SOS-001: startup resets all active scoped orc_state rows', () => {
 });
 
 test('SOS-002: snapshot endpoint includes scope', () => {
-    assert.ok(serverSrc.includes("orc: { scope, state: getState(scope)"), 'snapshot should include scope');
+    const orchestrateSrc = readFileSync(new URL('../../src/routes/orchestrate.ts', import.meta.url), 'utf8');
+    assert.ok(orchestrateSrc.includes("orc: { scope, state: getState(scope)"), 'snapshot should include scope');
 });
 
 test('SOS-003: WebSocket initial state includes scope', () => {

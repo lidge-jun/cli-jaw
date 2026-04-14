@@ -69,12 +69,15 @@ test('QS-004: readGeminiAccount has cross-platform documentation', () => {
 // ── Server.ts: classify logic ──
 
 test('QS-005: /api/quota classify separates no-creds from API failure', () => {
+    const settingsRouteSrc = fs.readFileSync(
+        path.join(import.meta.dirname, '../../src/routes/settings.ts'), 'utf8'
+    );
     assert.ok(
-        serverSrc.includes('hasCreds'),
+        settingsRouteSrc.includes('hasCreds'),
         'should distinguish creds-present from creds-absent',
     );
     assert.ok(
-        serverSrc.includes("opencode: { authenticated: true }"),
+        settingsRouteSrc.includes("opencode: { authenticated: true }"),
         'opencode should always be authenticated (no quota API)',
     );
 });

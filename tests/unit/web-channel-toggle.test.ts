@@ -8,19 +8,21 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..');
+const settingsRouteSrc = readFileSync(join(projectRoot, 'src/routes/settings.ts'), 'utf8');
 const serverSrc = readFileSync(join(projectRoot, 'server.ts'), 'utf8');
 const runtimeSettingsSrc = readFileSync(join(projectRoot, 'src/core/runtime-settings.ts'), 'utf8');
 
 // ─── PUT /api/settings is async ─────────────────────
 
 test('PUT /api/settings handler is async', () => {
-    assert.match(serverSrc, /app\.put\('\/api\/settings',\s*async/,
+    assert.match(settingsRouteSrc, /app\.put\('\/api\/settings',\s*requireAuth,\s*async/,
         'PUT /api/settings should be async to await restart');
 });
 
 // ─── applySettingsPatch uses transactional runtime patch ─
 
 test('applySettingsPatch calls applyRuntimeSettingsPatch', () => {
+    // applySettingsPatch lives in server.ts, which wires applyRuntimeSettingsPatch
     assert.match(serverSrc, /applyRuntimeSettingsPatch/,
         'applySettingsPatch should use transactional runtime patch');
 });
@@ -42,6 +44,7 @@ test('applyRuntimeSettingsPatch propagates error to caller', () => {
 // ─── Web command context uses applySettingsPatch ─────
 
 test('web command context routes through applySettingsPatch', () => {
-    assert.match(serverSrc, /applySettings.*applySettingsPatch/,
+    // server.ts passes applySettingsPatch to registerSettingsRoutes
+    assert.match(serverSrc, /registerSettingsRoutes.*applySettingsPatch/,
         'web command context should use applySettingsPatch');
 });

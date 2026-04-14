@@ -170,7 +170,7 @@ test('429: retryPendingResolve stored before setTimeout', () => {
 });
 
 test('429: steerHandler uses isAgentBusy not activeProcess', () => {
-    const src = readSrc('../../src/cli/handlers.ts');
+    const src = readSrc('../../src/cli/handlers-runtime.ts');
     const fn = src.slice(src.indexOf('async function steerHandler'));
     assert.ok(fn.includes('isAgentBusy'), 'uses isAgentBusy');
     assert.ok(!fn.includes('if (!activeProcess)'), 'no raw activeProcess guard');

@@ -1,6 +1,7 @@
 // Send validation behavior tests — Phase 9
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 
 // ─── validateTarget behavior ─────────────────────────
 
@@ -47,16 +48,18 @@ test('validateDiscordFileSize accepts 5 MiB', async () => {
 
 test('normalizeChannelSendRequest maps body fields correctly', async () => {
     const { normalizeChannelSendRequest } = await import('../../src/messaging/send.js');
+    const jawHome = process.env.JAW_HOME || path.join(process.env.HOME || '', '.cli-jaw');
+    const testPath = path.join(jawHome, 'output', 'test.png');
     const req = normalizeChannelSendRequest({
         channel: 'discord',
         type: 'photo',
-        file_path: '/tmp/test.png',
+        file_path: testPath,
         caption: 'test',
         chat_id: '123',
     });
     assert.equal(req.channel, 'discord');
     assert.equal(req.type, 'photo');
-    assert.equal(req.filePath, '/tmp/test.png');
+    assert.equal(req.filePath, testPath);
     assert.equal(req.caption, 'test');
     assert.equal(req.chatId, '123');
 });
