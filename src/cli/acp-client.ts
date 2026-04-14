@@ -267,6 +267,8 @@ export class AcpClient extends EventEmitter {
                             },
                     },
                 });
+                // [P2-3.15] Emit notification so spawn.ts can record audit entry
+                this.emit('session/request_permission', msg.params);
                 break;
             }
             default:

@@ -144,14 +144,23 @@ export function getFallbackState() {
 
 // ─── Kill / Steer ────────────────────────────────────
 
-let killReason: string | null = null;
+// [I2] Per-process kill reason map (replaces global variable to avoid cross-process confusion)
+const killReasons = new Map<number, string>();
+
+/** Get kill reason for a process (by PID), consuming it */
+function consumeKillReason(pid: number | undefined): string | null {
+    if (!pid) return null;
+    const reason = killReasons.get(pid) ?? null;
+    if (reason) killReasons.delete(pid);
+    return reason;
+}
 
 export function killActiveAgent(reason = 'user') {
     const hadTimer = !!retryPendingTimer;
     clearRetryTimer(false);  // stop 의도: 큐 재개 안 함
     if (!activeProcess) return hadTimer;  // timer 취소도 "killed" 취급
     console.log(`[jaw:kill] reason=${reason}`);
-    killReason = reason;
+    if (activeProcess.pid) killReasons.set(activeProcess.pid, reason);
     try { activeProcess.kill('SIGTERM'); } catch (e: unknown) { console.warn('[agent:kill] SIGTERM failed', { pid: activeProcess?.pid, error: (e as Error).message }); }
     const proc = activeProcess;
     setTimeout(() => {
@@ -166,6 +175,7 @@ export function killAllAgents(reason = 'user') {
     let killed = 0;
     for (const [id, proc] of activeProcesses) {
         console.log(`[jaw:killAll] killing ${id}, reason=${reason}`);
+        if (proc.pid) killReasons.set(proc.pid, reason);
         try {
             if (proc.pid) {
                 killProcessTree(proc.pid, 'SIGTERM');
@@ -640,7 +650,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 }
                 // Non-💭 tool → flush any pending thinking first
                 flushThinking();
-                const key = `${parsed.tool.icon}:${parsed.tool.label}`;
+                // [I3] Include stepRef + status in dedupe key to allow repeated same-name tool calls
+                const key = `${parsed.tool.icon}:${parsed.tool.label}:${parsed.tool.stepRef || ''}:${parsed.tool.status || ''}`;
                 if (!ctx.seenToolKeys.has(key)) {
                     ctx.seenToolKeys.add(key);
                     ctx.toolLog.push(parsed.tool);
@@ -656,6 +667,28 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 // text-only updates are local accumulation, not visible to user — no gate reset
             }
             opts.lifecycle?.onActivity?.('acp');
+        });
+
+        // [P2-3.14] session/cancelled → route through extractFromAcpUpdate for UI notification
+        acp.on('session/cancelled', (params: any) => {
+            const parsed = extractFromAcpUpdate({
+                update: { sessionUpdate: 'session_cancelled', ...(params || {}) },
+            });
+            if (parsed?.tool) {
+                ctx.toolLog.push(parsed.tool);
+                broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool });
+            }
+        });
+
+        // [P2-3.15] session/request_permission → audit record in toolLog
+        acp.on('session/request_permission', (params: any) => {
+            const parsed = extractFromAcpUpdate({
+                update: { sessionUpdate: 'request_permission', ...(params || {}) },
+            });
+            if (parsed?.tool) {
+                ctx.toolLog.push(parsed.tool);
+                broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool });
+            }
         });
 
         // stderr_activity → stderrBuf accumulation + conditional heartbeat
@@ -748,12 +781,13 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             acpSettled = true;
             cleanupEmployeeTmpDir(spawnCwd, settings.workingDir, agentLabel);
             opts.lifecycle?.onExit?.(code ?? null);
-            if (code !== 0 && !killReason) {
+            // [I2] Consume per-process kill reason
+            const acpKillReason = consumeKillReason(acp.proc?.pid);
+            if (code !== 0 && !acpKillReason) {
                 console.warn(`[acp:unexpected-exit] code=${code} signal=${signal} sessionId=${ctx.sessionId || 'none'}`);
             }
-            const wasKilled = !!killReason;
-            const wasSteer = killReason === 'steer';
-            if (mainManaged) killReason = null;  // consume
+            const wasKilled = !!acpKillReason;
+            const wasSteer = acpKillReason === 'steer';
             flushThinking();  // Flush any remaining thinking buffer
 
             const smokeResult = detectSmokeResponse(ctx.fullText, ctx.toolLog, code, cli);
@@ -895,13 +929,28 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
 
     child.on('close', (code) => {
         if (stdSettled) return;  // error handler already resolved
+        // [I1] Flush residual NDJSON buffer — last event may lack trailing newline
+        if (buffer.trim()) {
+            try {
+                const lastEvent = JSON.parse(buffer);
+                logEventSummary(agentLabel, cli, lastEvent, ctx);
+                if (!ctx.sessionId) ctx.sessionId = extractSessionId(cli, lastEvent);
+                extractFromEvent(cli, lastEvent, ctx, agentLabel);
+                const outputChunk = extractOutputChunk(cli, lastEvent);
+                if (outputChunk) {
+                    broadcast('agent_output', { agentId: agentLabel, cli, text: outputChunk });
+                }
+            } catch { /* incomplete JSON — discard */ }
+            buffer = '';
+        }
         flushClaudeBuffers(ctx, agentLabel);  // flush any pending thinking/input buffers
         cleanupEmployeeTmpDir(spawnCwd, settings.workingDir, agentLabel);
         opts.lifecycle?.onExit?.(code ?? null);
 
-        const wasKilled = !!killReason;
-        const wasSteer = killReason === 'steer';
-        if (mainManaged) killReason = null;
+        // [I2] Consume per-process kill reason
+        const stdKillReason = consumeKillReason(child.pid);
+        const wasKilled = !!stdKillReason;
+        const wasSteer = stdKillReason === 'steer';
 
         const smokeResult = detectSmokeResponse(ctx.fullText, ctx.toolLog, code, cli);
 

@@ -7,6 +7,8 @@ export interface ToolEntry {
   toolType: string;
   detail?: string;
   stepRef?: string;
+  status?: string;
+  exitCode?: number;
 }
 
 /** Context object created per spawnAgent() invocation. */
@@ -24,6 +26,10 @@ export interface SpawnContext {
   stderrBuf: string;
   hasActiveSubAgent?: boolean;
   thinkingBuf?: string;
+  // Phase 3: model/metadata storage
+  model?: string;
+  metadata?: Record<string, any>;
+  finishReason?: string;
   // Claude-specific stream buffers (set by events.ts extractFromEvent)
   claudeThinkingBuf?: string;
   claudeInputJsonBuf?: string;

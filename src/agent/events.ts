@@ -105,6 +105,15 @@ export function extractOutputChunk(cli: string, event: any): string {
 }
 
 export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, agentLabel: string) {
+    // [P2-3.1] Claude system/init metadata: store model, tools, version
+    if (cli === 'claude' && event.type === 'system') {
+        if (event.model) ctx.model = event.model;
+        if (!ctx.metadata) ctx.metadata = {};
+        if (event.tools) ctx.metadata.tools = event.tools;
+        if (event.mcp_servers) ctx.metadata.mcp_servers = event.mcp_servers;
+        if (event.version) ctx.metadata.version = event.version;
+    }
+
     // ── Claude stream buffer: thinking_delta + input_json_delta ──
     if (cli === 'claude' && event.type === 'stream_event') {
         const inner = event.event;
@@ -112,6 +121,12 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
         // [P0-1.1] signature_delta: discard silently, do NOT trigger thinking flush
         if (inner?.type === 'content_block_delta' && inner.delta?.type === 'signature_delta') {
             return;
+        }
+
+        // [P2-3.2] message_start: capture per-message input_tokens
+        if (inner?.type === 'message_start' && inner.message?.usage) {
+            if (!ctx.tokens) ctx.tokens = { input_tokens: 0, output_tokens: 0 };
+            ctx.tokens.input_tokens = inner.message.usage.input_tokens ?? ctx.tokens.input_tokens;
         }
 
         // Buffer thinking deltas
@@ -258,17 +273,34 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
             }
             break;
         case 'codex':
+            // [P2-3.4] turn.started: mark turn boundary
+            if (event.type === 'turn.started') {
+                pushTrace(ctx, `[${agentLabel}] codex turn started`);
+            }
             if (event.type === 'item.completed') {
                 if (event.item?.type === 'agent_message') ctx.fullText += event.item.text || '';
                 if (event.item?.type === 'collab_tool_call') {
                     ctx.hasActiveSubAgent = (event.item.status === 'in_progress');
                 }
             } else if (event.type === 'turn.completed' && event.usage) {
-                ctx.tokens = event.usage;
+                // [P2-3.6] Include cached_input_tokens in token storage
+                ctx.tokens = {
+                    input_tokens: event.usage.input_tokens ?? 0,
+                    output_tokens: event.usage.output_tokens ?? 0,
+                    cached_input_tokens: event.usage.cached_input_tokens ?? 0,
+                };
             }
             break;
         case 'gemini':
+            // [P2-3.7] Store model from init event
+            if (event.type === 'init' && event.model) {
+                ctx.model = event.model;
+            }
             if (event.type === 'message' && event.role === 'assistant') {
+                // [P2-3.8] Track delta vs full message (pre/post tool text)
+                if (event.delta) {
+                    pushTrace(ctx, `[${agentLabel}] gemini delta text`);
+                }
                 ctx.fullText += event.content || '';
             } else if (event.type === 'result') {
                 ctx.duration = event.stats?.duration_ms;
@@ -285,6 +317,12 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
             }
             break;
         case 'opencode':
+            // [P2-3.10] step_start: emit UI indicator for step boundary
+            if (event.type === 'step_start') {
+                const model = event.part?.model || event.model;
+                if (model) ctx.model = model;
+                pushTrace(ctx, `[${agentLabel}] opencode step_start${model ? ` model=${model}` : ''}`);
+            }
             if (event.type === 'text' && event.part?.text) {
                 ctx.fullText += event.part.text;
             } else if (event.type === 'step_finish' && event.part) {
@@ -299,10 +337,23 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                         ctx.tokens.cached_read += event.part.tokens.cache.read ?? 0;
                         ctx.tokens.cached_write += event.part.tokens.cache.write ?? 0;
                     }
+                    // [P2-3.13] Accumulate total tokens across steps
+                    if (event.part.tokens.total != null) {
+                        ctx.tokens.total_tokens = (ctx.tokens.total_tokens ?? 0) + event.part.tokens.total;
+                    }
                 }
                 // Accumulate cost across steps
                 if (event.part.cost != null) {
                     ctx.cost = (ctx.cost ?? 0) + event.part.cost;
+                }
+                // [P2-3.11] Store finish reason (tool-calls vs stop)
+                if (event.part.reason) {
+                    ctx.finishReason = event.part.reason;
+                }
+                // [P2-3.12] Store step timing
+                if (event.part.time) {
+                    if (!ctx.metadata) ctx.metadata = {};
+                    ctx.metadata.lastStepTime = event.part.time;
                 }
             }
             break;
@@ -382,6 +433,28 @@ export function logEventSummary(agentLabel: string, cli: string, event: any, ctx
             const turns = event.num_turns ?? 0;
             const dur = ((event.duration_ms || 0) / 1000).toFixed(1);
             logLine(`[${agentLabel}] result: $${cost} / ${turns} turns / ${dur}s`, ctx);
+            return;
+        }
+    }
+
+    // [P2-3.9] Gemini-specific logEventSummary
+    if (cli === 'gemini') {
+        if (event.type === 'init') {
+            logLine(`[${agentLabel}] gemini init model=${event.model || '?'}`, ctx);
+            return;
+        }
+        if (event.type === 'tool_use') {
+            logLine(`[${agentLabel}] 🔧 ${event.tool_name || 'tool'}${event.parameters?.command ? `: ${String(event.parameters.command).slice(0, 120)}` : ''}`, ctx);
+            return;
+        }
+        if (event.type === 'tool_result') {
+            logLine(`[${agentLabel}] tool ${event.status || 'done'}: ${(event.tool_name || '')}`, ctx);
+            return;
+        }
+        if (event.type === 'result') {
+            const dur = ((event.stats?.duration_ms || 0) / 1000).toFixed(1);
+            const calls = event.stats?.tool_calls ?? 0;
+            logLine(`[${agentLabel}] result: ${calls} tool calls / ${dur}s`, ctx);
             return;
         }
     }
@@ -685,7 +758,7 @@ export function extractFromAcpUpdate(params: any) {
                 completed: { icon: '✅', status: 'done' },
                 failed: { icon: '❌', status: 'error' },
             };
-            const mapped = statusMap[update.status] || { icon: '✅', status: 'done' };
+            const mapped = statusMap[update.status] || { icon: '❔', status: update.status || 'unknown' };
             // [P1-2.9] Extract content from tool result
             const resultText = update.content ? extractText(update.content) : '';
             return {
@@ -713,6 +786,33 @@ export function extractFromAcpUpdate(params: any) {
                     toolType: 'thinking',
                 },
             };
+
+        // [P2-3.14] session/cancelled → UI notification
+        case 'session_cancelled':
+        case 'cancelled': {
+            const reason = update.reason || update.message || 'session cancelled';
+            return {
+                tool: {
+                    icon: '⏹️',
+                    label: buildPreview(reason, 60),
+                    toolType: 'tool',
+                    status: 'cancelled',
+                },
+            };
+        }
+
+        // [P2-3.15] session/request_permission → audit record
+        case 'request_permission': {
+            const perm = update.permission || update.scope || 'unknown';
+            return {
+                tool: {
+                    icon: '🔐',
+                    label: `permission: ${buildPreview(perm, 50)}`,
+                    toolType: 'tool',
+                    status: 'pending',
+                },
+            };
+        }
 
         default:
             if (process.env.DEBUG) {
