@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
     extractFromEvent,
+    extractFromAcpUpdate,
     extractOutputChunk,
     extractSessionId,
     extractToolLabel,
@@ -267,7 +268,7 @@ test('extractFromEvent updates context for each CLI path', () => {
         usage: { input_tokens: 10, output_tokens: 20 },
     }, codexCtx, 'codex-agent');
     assert.equal(codexCtx.fullText, 'done');
-    assert.deepEqual(codexCtx.tokens, { input_tokens: 10, output_tokens: 20 });
+    assert.deepEqual(codexCtx.tokens, { input_tokens: 10, output_tokens: 20, cached_input_tokens: 0 });
 
     const geminiCtx = { toolLog: [], fullText: '' };
     extractFromEvent('gemini', {
@@ -322,6 +323,268 @@ test('extractToolLabel keeps backward compatibility and claude keys are determin
     assert.equal(keyFromIndex, 'claude:idx:3:🔧:Bash');
     assert.equal(keyFromMessageId, 'claude:msg:msg_1:🔧:Read');
     assert.equal(keyFromType, 'claude:type:assistant:🔧:Read');
+});
+
+// ── Phase 3 (P2) tests ──────────────────────────────────────
+
+test('P2-3.1: Claude system event stores model and metadata', () => {
+    const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set() };
+    extractFromEvent('claude', {
+        type: 'system',
+        model: 'claude-sonnet-4-20250514',
+        tools: ['Bash', 'Read'],
+        mcp_servers: ['filesystem'],
+        version: '1.0.34',
+    }, ctx, 'claude');
+    assert.equal(ctx.model, 'claude-sonnet-4-20250514');
+    assert.deepEqual(ctx.metadata.tools, ['Bash', 'Read']);
+    assert.deepEqual(ctx.metadata.mcp_servers, ['filesystem']);
+    assert.equal(ctx.metadata.version, '1.0.34');
+});
+
+test('P2-3.2: Claude message_start captures input_tokens', () => {
+    const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set() };
+    extractFromEvent('claude', {
+        type: 'stream_event',
+        event: { type: 'message_start', message: { usage: { input_tokens: 1234 } } },
+    }, ctx, 'claude');
+    assert.deepEqual(ctx.tokens, { input_tokens: 1234, output_tokens: 0 });
+});
+
+test('P2-3.4: Codex turn.started pushes trace', () => {
+    const ctx = { toolLog: [], fullText: '', traceLog: [] };
+    extractFromEvent('codex', { type: 'turn.started' }, ctx, 'codex');
+    assert.ok(ctx.traceLog.some(l => l.includes('codex turn started')));
+});
+
+test('P2-3.6: Codex turn.completed stores cached_input_tokens', () => {
+    const ctx = { toolLog: [], fullText: '' };
+    extractFromEvent('codex', {
+        type: 'turn.completed',
+        usage: { input_tokens: 100, output_tokens: 50, cached_input_tokens: 30 },
+    }, ctx, 'codex');
+    assert.deepEqual(ctx.tokens, { input_tokens: 100, output_tokens: 50, cached_input_tokens: 30 });
+});
+
+test('P2-3.7: Gemini init stores model', () => {
+    const ctx = { toolLog: [], fullText: '' };
+    extractFromEvent('gemini', { type: 'init', model: 'gemini-3-flash-preview' }, ctx, 'gemini');
+    assert.equal(ctx.model, 'gemini-3-flash-preview');
+});
+
+test('P2-3.8: Gemini delta message pushes trace', () => {
+    const ctx = { toolLog: [], fullText: '', traceLog: [] };
+    extractFromEvent('gemini', {
+        type: 'message', role: 'assistant', content: 'partial', delta: true,
+    }, ctx, 'gemini');
+    assert.equal(ctx.fullText, 'partial');
+    assert.ok(ctx.traceLog.some(l => l.includes('gemini delta text')));
+});
+
+test('P2-3.10: OpenCode step_start stores model', () => {
+    const ctx = { toolLog: [], fullText: '', traceLog: [] };
+    extractFromEvent('opencode', {
+        type: 'step_start', part: { model: 'big-pickle' },
+    }, ctx, 'opencode');
+    assert.equal(ctx.model, 'big-pickle');
+    assert.ok(ctx.traceLog.some(l => l.includes('step_start') && l.includes('big-pickle')));
+});
+
+test('P2-3.11+3.12+3.13: OpenCode step_finish stores reason, timing, and total tokens', () => {
+    const ctx = { toolLog: [], fullText: '' };
+    extractFromEvent('opencode', {
+        type: 'step_finish',
+        sessionID: 'oc-1',
+        part: {
+            tokens: { input: 10, output: 20, total: 30, cache: { read: 5, write: 2 } },
+            cost: 0.05,
+            reason: 'tool-calls',
+            time: { start: 1000, end: 2000 },
+        },
+    }, ctx, 'oc');
+    assert.equal(ctx.finishReason, 'tool-calls');
+    assert.deepEqual(ctx.metadata.lastStepTime, { start: 1000, end: 2000 });
+    assert.equal(ctx.tokens.total_tokens, 30);
+    assert.equal(ctx.tokens.cached_read, 5);
+    assert.equal(ctx.tokens.cached_write, 2);
+});
+
+test('P2-3.14: ACP session_cancelled returns cancel tool entry', () => {
+    const result = extractFromAcpUpdate({
+        update: { sessionUpdate: 'session_cancelled', reason: 'user abort' },
+    });
+    assert.equal(result.tool.icon, '⏹️');
+    assert.ok(result.tool.label.includes('user abort'));
+    assert.equal(result.tool.status, 'cancelled');
+});
+
+test('P2-3.15: ACP request_permission returns audit entry', () => {
+    const result = extractFromAcpUpdate({
+        update: { sessionUpdate: 'request_permission', permission: 'file_write' },
+    });
+    assert.equal(result.tool.icon, '🔐');
+    assert.ok(result.tool.label.includes('file_write'));
+    assert.equal(result.tool.status, 'pending');
+});
+
+test('P0-1.1: Claude signature_delta is discarded without flushing thinking buffer', () => {
+    const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set(), claudeThinkingBuf: 'still thinking' };
+    extractFromEvent('claude', {
+        type: 'stream_event',
+        event: { type: 'content_block_delta', delta: { type: 'signature_delta', signature: 'abc' } },
+    }, ctx, 'claude');
+    // Thinking buffer should NOT be flushed
+    assert.equal(ctx.claudeThinkingBuf, 'still thinking');
+    assert.equal(ctx.toolLog.length, 0);
+});
+
+test('P1-2.2: Claude rate_limit_event emits warning tool entry', () => {
+    const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set() };
+    extractFromEvent('claude', {
+        type: 'rate_limit_event',
+        message: 'Rate limit exceeded',
+    }, ctx, 'claude');
+    assert.equal(ctx.toolLog.length, 1);
+    assert.equal(ctx.toolLog[0].icon, '⚠️');
+    assert.equal(ctx.toolLog[0].status, 'warning');
+});
+
+test('P1-2.3: Claude result stores cache token breakdown', () => {
+    const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set() };
+    extractFromEvent('claude', {
+        type: 'result',
+        total_cost_usd: 0.5,
+        usage: { input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 80, cache_creation_input_tokens: 20 },
+    }, ctx, 'claude');
+    assert.equal(ctx.tokens.cache_read, 80);
+    assert.equal(ctx.tokens.cache_creation, 20);
+});
+
+test('P0-1.7+1.8: OpenCode multi-step token accumulation (including total_tokens)', () => {
+    const ctx = { toolLog: [], fullText: '' };
+    // Step 1
+    extractFromEvent('opencode', {
+        type: 'step_finish', sessionID: 'oc-1',
+        part: { tokens: { input: 10, output: 20, total: 30, cache: { read: 5, write: 1 } }, cost: 0.01 },
+    }, ctx, 'oc');
+    // Step 2
+    extractFromEvent('opencode', {
+        type: 'step_finish', sessionID: 'oc-1',
+        part: { tokens: { input: 15, output: 25, total: 40, cache: { read: 3, write: 2 } }, cost: 0.02 },
+    }, ctx, 'oc');
+    assert.equal(ctx.tokens.input_tokens, 25);
+    assert.equal(ctx.tokens.output_tokens, 45);
+    assert.equal(ctx.tokens.total_tokens, 70);  // 30 + 40, not just 40
+    assert.equal(ctx.tokens.cached_read, 8);
+    assert.equal(ctx.tokens.cached_write, 3);
+    assert.equal(ctx.cost, 0.03);
+});
+
+test('P0-1.2: Claude user/tool_result updates existing tool label', () => {
+    const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set(), hasClaudeStreamEvents: false };
+    // First emit a tool_use label
+    extractFromEvent('claude', {
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', name: 'Bash', id: 'tu_abc' }] },
+    }, ctx, 'claude');
+    assert.equal(ctx.toolLog.length, 1);
+    assert.equal(ctx.toolLog[0].stepRef, 'claude:tooluse:tu_abc');
+
+    // Now receive tool_result feedback (success)
+    extractFromEvent('claude', {
+        type: 'user',
+        message: { content: [{ type: 'tool_result', tool_use_id: 'tu_abc', content: 'output here', is_error: false }] },
+    }, ctx, 'claude');
+    assert.equal(ctx.toolLog[0].icon, '✅');
+    assert.equal(ctx.toolLog[0].status, 'done');
+    assert.ok(ctx.toolLog[0].detail.includes('output here'));
+
+    // Error case
+    const ctx2 = { toolLog: [], fullText: '', seenToolKeys: new Set(), hasClaudeStreamEvents: false };
+    extractFromEvent('claude', {
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', name: 'Write', id: 'tu_def' }] },
+    }, ctx2, 'claude');
+    extractFromEvent('claude', {
+        type: 'user',
+        message: { content: [{ type: 'tool_result', tool_use_id: 'tu_def', content: 'permission denied', is_error: true }] },
+    }, ctx2, 'claude');
+    assert.equal(ctx2.toolLog[0].icon, '❌');
+    assert.equal(ctx2.toolLog[0].status, 'error');
+});
+
+test('P1-2.1: Claude message_delta accumulates output_tokens', () => {
+    const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set() };
+    extractFromEvent('claude', {
+        type: 'stream_event',
+        event: { type: 'message_delta', usage: { output_tokens: 42 } },
+    }, ctx, 'claude');
+    assert.equal(ctx.tokens.output_tokens, 42);
+});
+
+test('P1-2.4: Codex failed command shows error icon and exit code', () => {
+    const labels = extractToolLabelsForTest('codex', {
+        type: 'item.completed',
+        item: { type: 'command_execution', id: 'cmd-1', command: 'npm test', exit_code: 1, aggregated_output: 'FAIL' },
+    }, {});
+    assert.equal(labels[0].icon, '❌');
+    assert.equal(labels[0].status, 'error');
+    assert.equal(labels[0].exitCode, 1);
+    assert.equal(labels[0].stepRef, 'codex:item:cmd-1');
+});
+
+test('P0-1.3+1.4: Codex item.started emits running label with item.id stepRef', () => {
+    const labels = extractToolLabelsForTest('codex', {
+        type: 'item.started',
+        item: { type: 'command_execution', id: 'cmd-42', command: 'ls -la' },
+    }, {});
+    assert.equal(labels[0].icon, '🔧');
+    assert.equal(labels[0].status, 'running');
+    assert.equal(labels[0].stepRef, 'codex:item:cmd-42');
+});
+
+test('P0-1.10: ACP tool_call_update status mapping covers all known + unknown statuses', () => {
+    // running
+    const running = extractFromAcpUpdate({
+        update: { sessionUpdate: 'tool_call_update', name: 'X', id: 'r1', status: 'running' },
+    });
+    assert.equal(running.tool.icon, '🔧');
+    assert.equal(running.tool.status, 'running');
+
+    // in_progress
+    const ip = extractFromAcpUpdate({
+        update: { sessionUpdate: 'tool_call_update', name: 'X', id: 'r2', status: 'in_progress' },
+    });
+    assert.equal(ip.tool.icon, '🔧');
+    assert.equal(ip.tool.status, 'running');
+
+    // pending
+    const pending = extractFromAcpUpdate({
+        update: { sessionUpdate: 'tool_call_update', name: 'X', id: 'r3', status: 'pending' },
+    });
+    assert.equal(pending.tool.icon, '⏳');
+    assert.equal(pending.tool.status, 'pending');
+
+    // unknown status → neutral ❔
+    const unknown = extractFromAcpUpdate({
+        update: { sessionUpdate: 'tool_call_update', name: 'X', id: 'r4', status: 'cancelled' },
+    });
+    assert.equal(unknown.tool.icon, '❔');
+    assert.equal(unknown.tool.status, 'cancelled');
+});
+
+test('P1-2.6: OpenCode failed exit code shows error icon', () => {
+    const labels = extractToolLabelsForTest('opencode', {
+        type: 'tool_use',
+        part: {
+            tool: 'bash',
+            callID: 'call_xyz',
+            state: { status: 'completed', metadata: { exit: 127 }, input: { command: 'bad-cmd' } },
+        },
+    }, {});
+    assert.equal(labels[0].icon, '❌');
+    assert.equal(labels[0].status, 'error');
+    assert.equal(labels[0].exitCode, 127);
 });
 
 test('extractOutputChunk returns live assistant text for gemini, opencode, and codex', () => {
