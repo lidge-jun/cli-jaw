@@ -49,7 +49,21 @@ function openDB(): Promise<IDBDatabase> {
                 }
             }
         };
-        req.onsuccess = () => resolve(req.result);
+        req.onsuccess = () => {
+            const db = req.result;
+            // Handle version upgrades from other tabs — close and invalidate singleton
+            db.onversionchange = () => {
+                db.close();
+                dbPromise = null;
+            };
+            db.onclose = () => {
+                dbPromise = null;
+            };
+            resolve(db);
+        };
+        req.onblocked = () => {
+            console.warn('[idb-cache] DB upgrade blocked by another tab');
+        };
         req.onerror = () => {
             dbPromise = null;
             reject(req.error);
