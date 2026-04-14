@@ -963,20 +963,30 @@ export function renderMarkdown(text: string, isStreaming = false): string {
 // ── Batched post-render scheduler ──
 // Coalesces multiple renderMarkdown() calls into a single post-render pass.
 let postRenderRAF: number | null = null;
+let postRenderTimer: ReturnType<typeof setTimeout> | null = null;
 
 function schedulePostRender(): void {
-    if (postRenderRAF) return;
-    postRenderRAF = requestAnimationFrame(() => {
-        postRenderRAF = null;
-        renderMermaidBlocks();
-        rehighlightAll();
-        bindDiagramZoom();
-        const msgContainer = document.getElementById('chatMessages');
-        if (msgContainer) linkifyFilePaths(msgContainer);
-    });
+    // Debounce: coalesce rapid VS render triggers into a single pass
+    if (postRenderTimer) clearTimeout(postRenderTimer);
+    if (postRenderRAF) { cancelAnimationFrame(postRenderRAF); postRenderRAF = null; }
+    postRenderTimer = setTimeout(() => {
+        postRenderTimer = null;
+        postRenderRAF = requestAnimationFrame(() => {
+            postRenderRAF = null;
+            renderMermaidBlocks();
+            rehighlightAll();
+            bindDiagramZoom();
+            const msgContainer = document.getElementById('chatMessages');
+            if (msgContainer) linkifyFilePaths(msgContainer);
+        });
+    }, 100);
 }
 
 export function cancelPostRender(): void {
+    if (postRenderTimer) {
+        clearTimeout(postRenderTimer);
+        postRenderTimer = null;
+    }
     if (postRenderRAF) {
         cancelAnimationFrame(postRenderRAF);
         postRenderRAF = null;

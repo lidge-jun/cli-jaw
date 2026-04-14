@@ -309,6 +309,10 @@ export function getSystemPrompt(opts: { currentPrompt?: string; forDisk?: boolea
     const a1 = fs.existsSync(A1_PATH) ? fs.readFileSync(A1_PATH, 'utf8') : getA1Content();
     const a2 = fs.existsSync(A2_PATH) ? fs.readFileSync(A2_PATH, 'utf8') : '';
     let prompt = `${a1}\n\n${a2}`;
+    // #99: compact time stamp
+    const _d = new Date(); const _p = (n: number) => String(n).padStart(2, '0');
+    const _h = _d.getHours(); const _h12 = _h % 12 || 12;
+    prompt += `\n${_p(_d.getFullYear() % 100)}${_p(_d.getMonth() + 1)}${_p(_d.getDate())}-${_p(_h12)}:${_p(_d.getMinutes())}${_h < 12 ? 'AM' : 'PM'}.\n`;
     const currentPrompt = String(opts.currentPrompt || '').trim();
     const forDisk = opts.forDisk === true;
     const mem = getMemoryStatus();

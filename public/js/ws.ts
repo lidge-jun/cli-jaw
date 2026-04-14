@@ -72,6 +72,7 @@ interface WsMessage {
 const agentPhaseState: Record<string, { phase: string; phaseLabel: string }> = {};
 
 let currentOrcScope = '';
+let lastLoadTs = 0;
 
 /** Hydrate agent phase cache from snapshot (used after reconnect) */
 export function hydrateAgentPhases(workers: Array<{
@@ -276,11 +277,14 @@ export function connect(): void {
     };
     state.ws.onopen = () => {
         console.log('[ws] connected');
-        // Reload messages — loadMessages() handles DOM clearing internally
-        // (only clears after successful fetch to prevent blank screen)
-        import('./ui.js').then(m => {
+        const now = Date.now();
+        const skipReload = now - lastLoadTs < 3000;
+        import('./ui.js').then(async m => {
             m.cleanupToolActivity();
-            m.loadMessages();
+            if (!skipReload) {
+                await m.loadMessages();
+                lastLoadTs = Date.now();
+            }
             m.setStatus('idle');
         });
 

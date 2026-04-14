@@ -102,8 +102,8 @@ export class VirtualScroll {
                 this._totalHeight += this.items[i].height;
             }
         });
-        this.container.innerHTML = '';
-        this.container.append(this.spacerTop, this.viewport, this.spacerBottom);
+        // Atomic swap — avoids visible blank frame during activation
+        this.container.replaceChildren(this.spacerTop, this.viewport, this.spacerBottom);
         this.container.addEventListener('scroll', this.scrollHandler, { passive: true });
         this.render();
     }
@@ -152,32 +152,50 @@ export class VirtualScroll {
         this.spacerTop.style.height = `${topSpace}px`;
         this.spacerBottom.style.height = `${bottomSpace}px`;
 
-        const frag = document.createDocumentFragment();
-        for (let i = first; i <= last; i++) {
-            const item = this.items[i];
-            const div = document.createElement('div');
-            div.innerHTML = item.html;
-            const el = div.firstElementChild as HTMLElement;
-            if (el) {
-                el.dataset.vsIdx = String(i);
-                frag.appendChild(el);
+        // Build map of currently mounted items by vsIdx
+        const mounted = new Map<number, HTMLElement>();
+        for (const child of Array.from(this.viewport.children) as HTMLElement[]) {
+            const idx = Number(child.dataset.vsIdx);
+            if (!isNaN(idx)) mounted.set(idx, child);
+        }
+
+        // Remove items no longer in range
+        for (const [idx, el] of mounted) {
+            if (idx < first || idx > last) {
+                el.remove();
+                mounted.delete(idx);
             }
         }
-        this.viewport.innerHTML = '';
-        this.viewport.appendChild(frag);
 
-        // Re-measure rendered heights and update totalHeight
-        this.viewport.querySelectorAll('[data-vs-idx]').forEach(el => {
-            const idx = Number((el as HTMLElement).dataset.vsIdx);
-            if (this.items[idx]) {
-                const oldH = this.items[idx].height;
-                const newH = el.getBoundingClientRect().height;
-                this.items[idx].height = newH;
-                this._totalHeight += (newH - oldH);
+        // Build ordered list — reuse existing or create new
+        const ordered: HTMLElement[] = [];
+        for (let i = first; i <= last; i++) {
+            const existing = mounted.get(i);
+            if (existing) {
+                ordered.push(existing);
+            } else {
+                const item = this.items[i];
+                const div = document.createElement('div');
+                div.innerHTML = item.html;
+                const el = div.firstElementChild as HTMLElement;
+                if (el) {
+                    el.dataset.vsIdx = String(i);
+                    ordered.push(el);
+                }
             }
-        });
+        }
 
-        // Fire lazy render callback for newly visible items
+        // Reorder viewport children to match (minimal DOM moves)
+        let nodeRef = this.viewport.firstChild as HTMLElement | null;
+        for (const el of ordered) {
+            if (el !== nodeRef) {
+                this.viewport.insertBefore(el, nodeRef);
+            } else {
+                nodeRef = nodeRef.nextSibling as HTMLElement | null;
+            }
+        }
+
+        // Fire lazy render callback FIRST (replaces skeleton with real content)
         if (this.onLazyRender) {
             const lazyTargets = this.viewport.querySelectorAll<HTMLElement>('.lazy-pending');
             if (lazyTargets.length > 0) {
@@ -185,9 +203,31 @@ export class VirtualScroll {
             }
         }
 
-        // Fire post-render callback for widget activation on all mounted items
+        // Fire post-render callback for widget activation
         if (this.onPostRender) {
             this.onPostRender(this.viewport);
+        }
+
+        // Batch-read heights AFTER lazy render + widget activation
+        this.remeasureVisible();
+    }
+
+    /** Batch-read heights from visible elements, batch-write to items array.
+     *  Separated read/write passes = single forced reflow. */
+    private remeasureVisible(): void {
+        const rects: { idx: number; newH: number }[] = [];
+        this.viewport.querySelectorAll('[data-vs-idx]').forEach(el => {
+            const idx = Number((el as HTMLElement).dataset.vsIdx);
+            if (this.items[idx]) {
+                rects.push({ idx, newH: el.getBoundingClientRect().height });
+            }
+        });
+        for (const { idx, newH } of rects) {
+            const oldH = this.items[idx].height;
+            if (oldH !== newH) {
+                this.items[idx].height = newH;
+                this._totalHeight += (newH - oldH);
+            }
         }
     }
 
