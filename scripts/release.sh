@@ -1,43 +1,69 @@
 #!/usr/bin/env bash
 # release.sh — 빌드 + 버전업 + npm publish + GitHub Release 한 번에 처리
-# Auto-detects the latest npm version to avoid version conflicts.
+# Auto-detects npm latest and bumps patch only (minor/major via explicit arg).
+# Usage:
+#   ./release.sh          → patch bump (1.6.9 → 1.6.10)
+#   ./release.sh minor    → minor bump (1.6.9 → 1.7.0)
+#   ./release.sh major    → major bump (1.6.9 → 2.0.0)
+#   ./release.sh 1.8.0    → explicit version
 set -e
 
 echo "🦈 cli-jaw release script"
 echo "========================="
 
-# cd to project root (parent of scripts/)
 cd "$(dirname "$0")/.."
 
-# Detect current npm latest
+# ─── Version detection ─────────────────────────────────
 NPM_LATEST=$(npm view cli-jaw dist-tags.latest 2>/dev/null || echo "0.0.0")
 PKG_VERSION=$(node -p "require('./package.json').version")
 echo "📡 npm latest:   $NPM_LATEST"
 echo "📦 package.json: $PKG_VERSION"
 
-# Sync package.json to npm latest if behind
-if [ "$PKG_VERSION" != "$NPM_LATEST" ] && [ -n "$NPM_LATEST" ] && [ "$NPM_LATEST" != "0.0.0" ]; then
-  echo "⚠️  package.json ($PKG_VERSION) differs from npm ($NPM_LATEST). Syncing..."
-  npm version "$NPM_LATEST" --no-git-tag-version --allow-same-version
+# Sync package.json to npm latest if behind (strip prerelease)
+CLEAN_NPM=$(echo "$NPM_LATEST" | sed 's/-.*//')
+CLEAN_PKG=$(echo "$PKG_VERSION" | sed 's/-.*//')
+if [ "$CLEAN_PKG" != "$CLEAN_NPM" ] && [ "$CLEAN_NPM" != "0.0.0" ]; then
+  echo "⚠️  package.json ($CLEAN_PKG) differs from npm ($CLEAN_NPM). Syncing..."
+  npm version "$CLEAN_NPM" --no-git-tag-version --allow-same-version
 fi
 
-# 1. TypeScript 빌드
+# ─── Build ─────────────────────────────────────────────
 echo "📦 Building backend (tsc)..."
 ./node_modules/.bin/tsc
 
-# 2. Frontend 번들링 (Vite)
 echo "📦 Building frontend (vite)..."
 npx vite build
 
-# 3. 버전 bump (patch)
-BUMP=${1:-patch}  # 기본 patch, 인자로 minor/major 가능
-echo "⬆️  Version bump: $BUMP"
-npm version "$BUMP" --no-git-tag-version
+# ─── Version bump ──────────────────────────────────────
+BUMP_ARG="${1:-patch}"
+
+# If arg looks like a semver (x.y.z), use it directly
+if [[ "$BUMP_ARG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  npm version "$BUMP_ARG" --no-git-tag-version
+else
+  # patch (default), minor, or major
+  npm version "$BUMP_ARG" --no-git-tag-version
+fi
 
 VERSION=$(node -p "require('./package.json').version")
 echo "📌 New version: $VERSION"
 
-# 4. git commit + tag
+# ─── Collect changelog ─────────────────────────────────
+PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v[0-9]' | head -1)
+if [ -n "$PREV_TAG" ]; then
+  CHANGELOG=$(git log "$PREV_TAG"..HEAD --pretty=format:"- %s" --no-merges | head -50)
+  COMMIT_COUNT=$(git rev-list "$PREV_TAG"..HEAD --count)
+else
+  CHANGELOG=$(git log --oneline -20 --pretty=format:"- %s" --no-merges)
+  COMMIT_COUNT="?"
+fi
+
+echo ""
+echo "📝 Changes since ${PREV_TAG:-'(none)'} ($COMMIT_COUNT commits):"
+echo "$CHANGELOG" | head -15
+echo ""
+
+# ─── Commit + Tag + Push ──────────────────────────────
 echo "🏷️  Creating git tag v$VERSION..."
 git add package.json package-lock.json
 git commit -m "[agent] chore: release v$VERSION" --allow-empty
@@ -45,18 +71,24 @@ git tag "v$VERSION"
 git push origin master
 git push origin "v$VERSION"
 
-# 5. npm publish
+# ─── npm publish ───────────────────────────────────────
 echo "🚀 Publishing to npm..."
 npm publish --access public
 
-# 6. GitHub Release (auto-generate notes from commits since last tag)
+# ─── GitHub Release with changelog ─────────────────────
 echo "📋 Creating GitHub Release..."
-PREV_TAG=$(git tag --sort=-v:refname | grep -E '^v' | sed -n '2p')
+RELEASE_BODY="## Release v$VERSION
+
+**Previous**: ${PREV_TAG:-'(first release)'}
+**Commits**: $COMMIT_COUNT
+
+### Changes
+$CHANGELOG"
+
 if [ -n "$PREV_TAG" ] && command -v gh &>/dev/null; then
     gh release create "v$VERSION" \
         --title "v$VERSION" \
-        --generate-notes \
-        --notes-start-tag "$PREV_TAG" \
+        --notes "$RELEASE_BODY" \
         --latest
     echo "✅ GitHub Release v$VERSION created!"
 else
