@@ -39,9 +39,9 @@ test('ACP unexpected exit is warned', () => {
 test('unexpected exit check is before killReason consumption', () => {
     const exitHandler = spawnSrc.slice(spawnSrc.indexOf("acp.on('exit'"));
     const unexpectedIdx = exitHandler.indexOf('acp:unexpected-exit');
-    const consumeIdx = exitHandler.indexOf('killReason = null');
+    const consumeIdx = exitHandler.indexOf('consumeKillReason(');
     assert.ok(unexpectedIdx < consumeIdx,
-        'unexpected exit check must come before killReason is consumed (set to null)');
+        'unexpected exit check must come before killReason is consumed via consumeKillReason');
 });
 
 // ─── stderr_activity event ───────────────────────────

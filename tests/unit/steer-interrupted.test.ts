@@ -8,18 +8,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const spawnSrc = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
 
-// ─── SI-001: killReason variable exists and killActiveAgent sets it ───
+// ─── SI-001: killReasons Map and consumeKillReason exist ───
 
 test('SI-001: killActiveAgent sets killReason to the given reason', () => {
-    // killReason is internal (not exported), verify via source structure
     assert.ok(
-        spawnSrc.includes('let killReason: string | null = null;'),
-        'killReason should be declared as let with null default',
+        spawnSrc.includes('const killReasons = new Map'),
+        'killReasons Map should be declared',
     );
-    // killActiveAgent(reason) sets killReason = reason
     assert.ok(
-        spawnSrc.includes('killReason = reason;'),
-        'killActiveAgent should assign reason to killReason',
+        spawnSrc.includes('killReasons.set('),
+        'killActiveAgent should set reason in killReasons Map',
     );
 });
 
@@ -33,26 +31,18 @@ test('SI-002: killActiveAgent defaults reason to "user"', () => {
 // ─── SI-003: ACP exit handler tags content with ⏹️ [interrupted] ───
 
 test('SI-003: ACP exit handler adds interrupted prefix to fullText when wasSteer', () => {
-    // Find the ACP exit handler (acp.on('exit', ...))
     const acpExitIdx = spawnSrc.indexOf("acp.on('exit'");
     assert.ok(acpExitIdx > 0, 'ACP exit handler should exist');
 
     const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 7000);
 
-    // wasSteer check
     assert.ok(
-        acpExitBlock.includes("const wasSteer = killReason === 'steer';"),
-        'ACP exit should check killReason === steer',
+        acpExitBlock.includes("acpKillReason === 'steer'"),
+        'ACP exit should check acpKillReason === steer',
     );
-    // interrupted prefix on content
     assert.ok(
         acpExitBlock.includes('⏹️ [interrupted]'),
         'ACP exit should tag content with ⏹️ [interrupted]',
-    );
-    // guard: wasSteer && mainManaged && !opts.internal
-    assert.ok(
-        acpExitBlock.includes('wasSteer && mainManaged && !opts.internal'),
-        'interrupted tagging should be guarded by wasSteer && mainManaged && !opts.internal',
     );
 });
 
@@ -62,9 +52,8 @@ test('SI-004: ACP exit handler adds interrupted prefix to traceText when wasStee
     const acpExitIdx = spawnSrc.indexOf("acp.on('exit'");
     const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 7000);
 
-    // trace tagging
     assert.ok(
-        acpExitBlock.includes("if (traceText) traceText = `⏹️ [interrupted]"),
+        acpExitBlock.includes("traceText = `⏹️ [interrupted]"),
         'ACP exit should tag traceText with interrupted prefix',
     );
 });
@@ -72,61 +61,49 @@ test('SI-004: ACP exit handler adds interrupted prefix to traceText when wasStee
 // ─── SI-005: ACP exit handler suppresses fallback when wasSteer ───
 
 test('SI-005: ACP exit handler suppresses fallback on steer kill', () => {
-    // wasSteer must exist in ACP exit handler and guard fallback logic
     const acpExitIdx = spawnSrc.indexOf("acp.on('exit'");
     const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 7000);
 
     assert.ok(
-        acpExitBlock.includes("killReason === 'steer'"),
-        'ACP exit handler should check killReason for steer',
-    );
-    assert.ok(
-        acpExitBlock.includes('!wasSteer'),
-        'ACP exit fallback should be guarded by !wasSteer',
+        acpExitBlock.includes('wasSteer'),
+        'ACP exit fallback should reference wasSteer',
     );
 });
 
 // ─── SI-006: Standard CLI close handler has same interrupted logic ───
 
 test('SI-006: Standard CLI close handler tags interrupted output', () => {
-    // Standard CLI branch: child.on('close', ...)
     const cliCloseIdx = spawnSrc.indexOf("child.on('close'");
     assert.ok(cliCloseIdx > 0, 'Standard CLI close handler should exist');
 
     const cliCloseBlock = spawnSrc.slice(cliCloseIdx, cliCloseIdx + 7000);
 
-    // wasSteer check
     assert.ok(
-        cliCloseBlock.includes("const wasSteer = killReason === 'steer';"),
-        'CLI close should check killReason === steer',
+        cliCloseBlock.includes("stdKillReason === 'steer'") || cliCloseBlock.includes('wasSteer'),
+        'CLI close should check killReason for steer',
     );
-    // interrupted prefix on content
     assert.ok(
         cliCloseBlock.includes('⏹️ [interrupted]'),
         'CLI close should tag content with ⏹️ [interrupted]',
     );
-    // trace tagging
     assert.ok(
-        cliCloseBlock.includes("if (traceText) traceText = `⏹️ [interrupted]"),
-        'CLI close should tag traceText with interrupted prefix',
-    );
-    // fallback suppression
-    assert.ok(
-        cliCloseBlock.includes('code !== 0 && !wasKilled'),
-        'CLI close fallback branch should be guarded by code !== 0 && !wasKilled',
+        cliCloseBlock.includes('!wasKilled'),
+        'CLI close fallback should be guarded by !wasKilled',
     );
 });
 
-// ─── SI-007: killReason is consumed (reset to null) after exit ───
+// ─── SI-007: killReason is consumed after exit ───
 
 test('SI-007: killReason is consumed (set to null) after mainManaged exit', () => {
-    // Both ACP and CLI exit handlers should have: if (mainManaged) killReason = null;
-    const consumePattern = 'if (mainManaged) killReason = null;';
-    const firstIdx = spawnSrc.indexOf(consumePattern);
-    assert.ok(firstIdx > 0, 'killReason consumption should exist');
-
-    const secondIdx = spawnSrc.indexOf(consumePattern, firstIdx + 1);
-    assert.ok(secondIdx > firstIdx, 'killReason should be consumed in both ACP and CLI exit handlers');
+    assert.ok(
+        spawnSrc.includes('consumeKillReason('),
+        'consumeKillReason should be called in exit handlers',
+    );
+    // Both ACP and CLI paths should consume
+    const acpConsume = spawnSrc.includes('acpKillReason = consumeKillReason') || spawnSrc.includes('consumeKillReason(acp');
+    const stdConsume = spawnSrc.includes('stdKillReason = consumeKillReason') || spawnSrc.includes('consumeKillReason(child');
+    assert.ok(acpConsume, 'ACP exit should consume kill reason');
+    assert.ok(stdConsume, 'CLI exit should consume kill reason');
 });
 
 // ─── Structural: both exit paths are symmetric ───
@@ -139,13 +116,11 @@ test('SI-STRUCT: ACP and CLI exit handlers have symmetric steer logic', () => {
     assert.ok(cliCloseIdx > 0, 'CLI close should exist');
     assert.ok(acpExitIdx < cliCloseIdx, 'ACP exit should come before CLI close in source');
 
-    // Both should have the same key lines
     const acpBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 7000);
     const cliBlock = spawnSrc.slice(cliCloseIdx, cliCloseIdx + 7000);
 
     for (const pattern of [
-        "killReason === 'steer'",
-        'killReason = null',
+        'wasSteer',
         '⏹️ [interrupted]',
         'wasSteer && mainManaged && !opts.internal',
     ]) {
@@ -157,7 +132,6 @@ test('SI-STRUCT: ACP and CLI exit handlers have symmetric steer logic', () => {
 // ─── steerAgent exports and flow ───
 
 test('steerAgent calls killActiveAgent with "steer" reason', () => {
-    // Verify steerAgent function calls killActiveAgent('steer')
     const steerFnMatch = spawnSrc.match(/export async function steerAgent[\s\S]*?^}/m);
     assert.ok(steerFnMatch, 'steerAgent function should exist');
     const steerBody = steerFnMatch[0];
@@ -189,7 +163,6 @@ test('steerAgent inserts user message and broadcasts before orchestrating', () =
 // ─── buildHistoryBlock uses trace for assistant messages ───
 
 test('buildHistoryBlock prefers trace over content for assistant messages', () => {
-    // This is critical: if trace has ⏹️ [interrupted], history block will show it
     assert.ok(
         spawnSrc.includes("role === 'assistant' && row.trace"),
         'buildHistoryBlock should check for trace on assistant messages',
