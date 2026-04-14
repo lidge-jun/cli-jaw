@@ -63,7 +63,9 @@ hljs.registerLanguage('text', plaintext);
 
 // Lazy mermaid: loaded on first diagram encounter
 let mermaidModule: typeof import('mermaid') | null = null;
-let mermaidTheme: string | null = null;
+
+// Serialise all Mermaid render calls — concurrent renders corrupt shared internal state.
+let mermaidQueue: Promise<void> = Promise.resolve();
 
 function getMermaidThemeVars() {
     const isLight = document.documentElement.getAttribute('data-theme') === 'light';
@@ -98,25 +100,27 @@ function getMermaidThemeVars() {
     };
 }
 
-async function getMermaid() {
-    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+async function ensureMermaidLoaded() {
     if (!mermaidModule) {
         mermaidModule = await import('mermaid');
         mermaidModule.default.setParseErrorHandler(() => {
             // Keep Mermaid syntax failures local to the message block fallback UI.
         });
     }
-    if (mermaidTheme !== currentTheme) {
-        mermaidTheme = currentTheme;
-        mermaidModule.default.initialize({
-            startOnLoad: false,
-            theme: 'base',
-            themeVariables: getMermaidThemeVars(),
-            securityLevel: 'strict',
-            suppressErrorRendering: true,
-        });
-    }
     return mermaidModule.default;
+}
+
+// Re-apply theme config immediately before every render() call.
+// Mermaid's internal config can drift after parse()/render() due to
+// directive resets — never cache, always re-initialise.
+function applyMermaidTheme() {
+    mermaidModule!.default.initialize({
+        startOnLoad: false,
+        theme: 'base',
+        themeVariables: getMermaidThemeVars(),
+        securityLevel: 'strict',
+        suppressErrorRendering: true,
+    });
 }
 
 // Mermaid SVG sanitizer — allows <style> (required for Mermaid theming)
@@ -319,15 +323,15 @@ let mermaidId = 0;
 
 /** Re-render all existing Mermaid diagrams (call on theme toggle). */
 export async function rerenderMermaidDiagrams(): Promise<void> {
-    mermaidTheme = null; // force re-init with new theme vars
     const rendered = document.querySelectorAll('.mermaid-rendered');
     if (!rendered.length) return;
-    const mm = await getMermaid();
+    const mm = await ensureMermaidLoaded();
     for (const el of rendered) {
         const code = (el as HTMLElement).dataset.mermaidCode;
         if (!code) continue;
         const id = `mermaid-${++mermaidId}`;
         try {
+            applyMermaidTheme();
             const { svg } = await mm.render(id, code);
             el.innerHTML = svg;
             appendMermaidActionBtns(el as HTMLElement);
@@ -383,18 +387,16 @@ function renderMermaidError(el: HTMLElement, code: string, errMsg: string): void
         </div>`;
 }
 
-async function renderSingleMermaid(el: HTMLElement): Promise<void> {
+async function renderSingleMermaidImpl(el: HTMLElement): Promise<void> {
     el.classList.remove('mermaid-pending');
     const code = el.textContent || '';
     el.dataset.mermaidCode = code;
     const id = `mermaid-${++mermaidId}`;
     try {
-        const mm = await getMermaid();
-        const parsed = await mm.parse(code, { suppressErrors: true });
-        if (parsed === false) {
-            renderMermaidError(el, code, 'Syntax error in Mermaid block');
-            return;
-        }
+        const mm = await ensureMermaidLoaded();
+        // Apply theme immediately before render — no intermediate parse()
+        // that could reset Mermaid's internal config state.
+        applyMermaidTheme();
         const { svg } = await mm.render(id, code);
         el.innerHTML = sanitizeMermaidSvg(svg);
         el.classList.add('mermaid-rendered');
@@ -404,6 +406,12 @@ async function renderSingleMermaid(el: HTMLElement): Promise<void> {
             || (err as { str?: string })?.str || 'Unknown error';
         renderMermaidError(el, code, errMsg);
     }
+}
+
+// Serialise renders to prevent concurrent Mermaid operations from
+// corrupting shared internal state (theme config, diagram registry).
+function renderSingleMermaid(el: HTMLElement): void {
+    mermaidQueue = mermaidQueue.then(() => renderSingleMermaidImpl(el));
 }
 
 async function renderMermaidBlocks(scope?: HTMLElement | Document): Promise<void> {
