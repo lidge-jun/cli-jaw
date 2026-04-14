@@ -2,6 +2,7 @@
 import { state } from './state.js';
 import { renderMarkdown, escapeHtml, stripOrchestration, linkifyFilePaths } from './render.js';
 import { getAppName } from './features/appname.js';
+import { getAgentAvatar, getUserAvatar } from './features/avatar.js';
 import { t } from './features/i18n.js';
 import { api } from './api.js';
 import { cacheMessages, getCachedMessages, appendCachedMessage, upsertMessage, setMessageScope, getScopedMessages } from './features/idb-cache.js';
@@ -34,8 +35,7 @@ function parseToolLog(toolLog?: string | null): ToolLogEntry[] {
 }
 
 function getAgentIcon(_cli?: string | null): string {
-    // Chat mascot is always the shark — provider icons are for header/sidebar only
-    return ICONS.shark;
+    return getAgentAvatar();
 }
 
 function toProcessSteps(tools: ToolLogEntry[]): ProcessStep[] {
@@ -295,7 +295,7 @@ export function addMessage(role: string, text: string, cli?: string | null): HTM
         div.innerHTML = `<div class="agent-icon" aria-hidden="true">${getAgentIcon(cli)}</div><div class="agent-body"><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div>`;
     } else {
         div.className = `msg msg-${role}`;
-        div.innerHTML = `<div class="msg-label">${label}</div><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button>`;
+        div.innerHTML = `<div class="user-body"><div class="msg-label">${label}</div><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div><div class="user-icon" aria-hidden="true">${getUserAvatar()}</div>`;
     }
     const contentEl = div.querySelector('.msg-content');
     if (contentEl) contentEl.setAttribute('data-raw', stripOrchestration(text));
@@ -368,11 +368,15 @@ export function handleSave(): void {
     }
 }
 
+function updateStatMsgs(count: number): void {
+    const el = document.getElementById('statMsgs');
+    if (el) el.textContent = t('stat.messages', { count });
+}
+
 export async function loadStats(): Promise<void> {
     const msgs = await api<MessageItem[]>('/api/messages');
     if (!msgs) return;
-    const el = document.getElementById('statMsgs');
-    if (el) el.textContent = t('stat.messages', { count: msgs.length });
+    updateStatMsgs(msgs.length);
 }
 
 export async function loadMessages(): Promise<void> {
@@ -403,7 +407,7 @@ export async function loadMessages(): Promise<void> {
                 const skeletonContent = '<div class="skeleton-line"></div><div class="skeleton-line"></div>';
                 const html = role === 'agent'
                     ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body">${toolHtml}<div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
-                    : `<div class="msg msg-${role}"><div class="msg-label">${label}</div><div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div>`;
+                    : `<div class="msg msg-${role}"><div class="user-body"><div class="msg-label">${label}</div><div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div><div class="user-icon" aria-hidden="true">${getUserAvatar()}</div></div>`;
                 vs.addItem(crypto.randomUUID(), html);
             }
 
@@ -452,6 +456,7 @@ export async function loadMessages(): Promise<void> {
         cacheMessages(msgs.map(m => ({
             role: m.role, content: m.content, cli: m.cli ?? null, tool_log: m.tool_log ?? null, timestamp: Date.now(),
         }))).catch(() => {});
+        updateStatMsgs(msgs.length);
         showEmptyState();
         return;
     }
@@ -474,7 +479,7 @@ export async function loadMessages(): Promise<void> {
                 const skeletonContent = '<div class="skeleton-line"></div><div class="skeleton-line"></div>';
                 const html = role === 'agent'
                     ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body">${toolHtml}<div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
-                    : `<div class="msg msg-${role}"><div class="msg-label">${label}</div><div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div>`;
+                    : `<div class="msg msg-${role}"><div class="user-body"><div class="msg-label">${label}</div><div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div><div class="user-icon" aria-hidden="true">${getUserAvatar()}</div></div>`;
                 vs.addItem(crypto.randomUUID(), html);
             }
             vs.onLazyRender = (targets: HTMLElement[]) => {
@@ -513,6 +518,7 @@ export async function loadMessages(): Promise<void> {
             });
         }
         addSystemMsg(`${ICONS.warning} 오프라인 모드 — 캐시된 메시지 표시 중`);
+        updateStatMsgs(cached.length);
     }
     showEmptyState();
 }
