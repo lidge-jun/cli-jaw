@@ -3,7 +3,7 @@
 
 import fs from 'fs';
 import { join } from 'path';
-import { settings } from '../core/config.js';
+import { settings, JAW_HOME } from '../core/config.js';
 import { getRecentMessages } from '../core/db.js';
 import { getMemoryFlushFilePath } from '../memory/runtime.js';
 
@@ -28,8 +28,57 @@ export function setSpawnRef(fn: Function, procs: Map<string, any>): void {
     _activeProcesses = procs;
 }
 
+// ─── Flush Prompt Builder (3-A) ──────────────────────
+
+const DEFAULT_FLUSH_PROMPT_TEMPLATE = `You are a memory extractor. Summarize the conversation into a short prose paragraph.
+Save by APPENDING to: {{memFile}}
+Create directories if needed.
+
+Rules:
+- Write 1-3 SHORT English sentences capturing decisions, facts, preferences only
+- Skip greetings, errors, small talk
+- If nothing worth remembering, reply "SKIP" and do NOT write any file
+- Format:
+
+## {{time}}
+
+[your 1-3 sentence summary here]
+
+Conversation:
+---
+{{convo}}`;
+
+export function buildFlushPrompt(vars: { memFile: string; time: string; convo: string }): string {
+    const customPath = join(JAW_HOME, 'prompts', 'flush-prompt.md');
+    let template = DEFAULT_FLUSH_PROMPT_TEMPLATE;
+    if (fs.existsSync(customPath)) {
+        try {
+            template = fs.readFileSync(customPath, 'utf8');
+        } catch (err) {
+            console.warn(`[memory] failed to load custom flush prompt: ${(err as Error).message}`);
+        }
+    }
+    const safeVars: Record<string, string> = { memFile: vars.memFile, time: vars.time, convo: vars.convo };
+    return template.replace(/\{\{(\w+)\}\}/g, (match, key) => safeVars[key] ?? match);
+}
+
+// ─── Flush SysPrompt Loader (3-B) ───────────────────
+
+function loadFlushSysPrompt(): string {
+    const customPath = join(JAW_HOME, 'prompts', 'flush-system.md');
+    if (fs.existsSync(customPath)) {
+        try {
+            return fs.readFileSync(customPath, 'utf8');
+        } catch (err) {
+            console.warn(`[memory] failed to load flush system prompt: ${(err as Error).message}`);
+        }
+    }
+    return '';
+}
+
+// ─── Trigger ─────────────────────────────────────────
+
 export async function triggerMemoryFlush(): Promise<void> {
-    const { getMemoryDir } = await import('../prompt/builder.js');
     const threshold = settings.memory?.flushEvery ?? 10;
     const recent = (getRecentMessages.all(settings.workingDir || null, threshold) as any[]).reverse();
     if (recent.length < 4) return;
@@ -41,26 +90,9 @@ export async function triggerMemoryFlush(): Promise<void> {
     const convo = lines.join('\n\n');
     const date = new Date().toISOString().slice(0, 10);
     const time = new Date().toTimeString().slice(0, 5);
-    const memDir = getMemoryDir();
     const memFile = getMemoryFlushFilePath(date);
 
-    const flushPrompt = `You are a memory extractor. Summarize the conversation into a short prose paragraph.
-Save by APPENDING to: ${memFile}
-Create directories if needed.
-
-Rules:
-- Write 1-3 SHORT English sentences capturing decisions, facts, preferences only
-- Skip greetings, errors, small talk
-- If nothing worth remembering, reply "SKIP" and do NOT write any file
-- Format:
-
-## ${time}
-
-[your 1-3 sentence summary here]
-
-Conversation:
----
-${convo}`;
+    const flushPrompt = buildFlushPrompt({ memFile, time, convo });
 
     fs.mkdirSync(join(memFile, '..'), { recursive: true });
 
@@ -77,7 +109,7 @@ ${convo}`;
         _skipInsert: true,
         cli: flushCli,
         model: flushModel,
-        sysPrompt: '',
+        sysPrompt: loadFlushSysPrompt(),
     });
     console.log(`[memory] auto-append triggered (${recent.length} msgs → ${flushCli}/${flushModel})`);
 }

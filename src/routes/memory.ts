@@ -113,6 +113,7 @@ export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware):
             cli: settings.memory?.cli || '',
             model: settings.memory?.model || '',
             retentionDays: settings.memory?.retentionDays ?? 30,
+            flushLanguage: settings.memory?.flushLanguage || 'en',
             path: memDir, files,
             counter: memoryFlushCounter,
         });

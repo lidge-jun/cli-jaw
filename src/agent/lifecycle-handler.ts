@@ -1,6 +1,7 @@
 // ─── Agent Lifecycle Handler (post-exit logic) ──────
 // Extracted from spawn.ts to unify ACP + CLI exit handling.
 
+import fs from 'fs';
 import { broadcast } from '../core/bus.js';
 import { settings, detectCli } from '../core/config.js';
 import { insertMessageWithTrace, updateSession } from '../core/db.js';
@@ -145,6 +146,11 @@ export function handleAgentExit(params: ExitHandlerParams): void {
         broadcast('agent_status', { running: false, agentId: agentLabel });
     }
 
+    // ─── Post-flush reindex (3-C) ───
+    if (agentLabel === 'memory-flush' && code === 0) {
+        postFlushReindex();
+    }
+
     // ─── Session persistence ───
     const persistedSessionId = ctx.sessionId;
     if (persistedSessionId && persistMainSession({
@@ -270,4 +276,22 @@ export function handleAgentExit(params: ExitHandlerParams): void {
         tools: ctx.toolLog, smoke: smokeResult,
     });
     if (mainManaged) processQueue();
+}
+
+// ─── Post-flush reindex (3-C) ────────────────────────
+
+async function postFlushReindex(): Promise<void> {
+    try {
+        await new Promise(r => setTimeout(r, 200));
+        const { reindexIntegratedMemoryFile } = await import('../memory/indexing.js');
+        const { getMemoryFlushFilePath } = await import('../memory/runtime.js');
+        const today = new Date().toISOString().slice(0, 10);
+        const flushedFile = getMemoryFlushFilePath(today);
+        if (fs.existsSync(flushedFile)) {
+            reindexIntegratedMemoryFile(flushedFile);
+            console.log('[memory:flush] post-flush reindex done');
+        }
+    } catch (err) {
+        console.warn('[memory:flush] post-flush reindex failed:', (err as Error).message);
+    }
 }

@@ -56,4 +56,14 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
             res.status(500).json({ error: (e as Error).message });
         }
     });
+
+    app.post('/api/jaw-memory/flush', requireAuth, async (req, res) => {
+        try {
+            const { triggerMemoryFlush } = await import('../agent/memory-flush-controller.js');
+            await triggerMemoryFlush();
+            res.json({ ok: true, message: 'Memory flush triggered' });
+        } catch (e: unknown) {
+            res.status(500).json({ error: (e as Error).message });
+        }
+    });
 }

@@ -146,6 +146,9 @@ function createDefaultSettings() {
             cli: '',
             model: '',
             retentionDays: 30,
+            flushLanguage: 'en',
+            autoReflectAfterFlush: false,
+            flushMessageWindow: 0,
         },
         tui: {
             pasteCollapseLines: 2,
@@ -296,6 +299,7 @@ export function loadSettings() {
             tui: { ...defaults.tui, ...(raw.tui || {}) },
             telegram: { ...defaults.telegram, ...(raw.telegram || {}) },
             discord: { ...defaults.discord, ...(raw.discord || {}) },
+            memory: { ...defaults.memory, ...(raw.memory || {}) },
             messaging: {
                 latestSeen: { ...defaults.messaging.latestSeen, ...(raw.messaging?.latestSeen || {}) },
                 lastActive: { ...defaults.messaging.lastActive, ...(raw.messaging?.lastActive || {}) },
