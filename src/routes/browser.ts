@@ -1,5 +1,5 @@
 // ─── Browser API Routes (Phase 7) ─────────────────────
-import type { Express, Request, Response } from 'express';
+import type { Express, Request, Response, NextFunction } from 'express';
 import * as browser from '../browser/index.js';
 import { ok } from '../http/response.js';
 import { DEBUG_CONSOLE_ONLY_MESSAGE, normalizeBrowserStartMode, type BrowserStartMode } from '../browser/launch-policy.js';
@@ -23,8 +23,8 @@ export function resolveBrowserStartOptions(req: Request): {
     };
 }
 
-export function registerBrowserRoutes(app: Express) {
-    app.post('/api/browser/start', async (req: Request, res: Response) => {
+export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, res: Response, next: NextFunction) => void) {
+    app.post('/api/browser/start', requireAuth, async (req: Request, res: Response) => {
         try {
             const start = resolveBrowserStartOptions(req);
             if (start.mode === 'debug') {
@@ -35,7 +35,7 @@ export function registerBrowserRoutes(app: Express) {
         } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
-    app.post('/api/browser/stop', async (_: Request, res: Response) => {
+    app.post('/api/browser/stop', requireAuth, async (_: Request, res: Response) => {
         try { await browser.closeBrowser(); res.json({ ok: true }); }
         catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
@@ -55,12 +55,12 @@ export function registerBrowserRoutes(app: Express) {
         } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
-    app.post('/api/browser/screenshot', async (req: Request, res: Response) => {
+    app.post('/api/browser/screenshot', requireAuth, async (req: Request, res: Response) => {
         try { res.json(await browser.screenshot(cdpPort(req), req.body)); }
         catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
-    app.post('/api/browser/act', async (req: Request, res: Response) => {
+    app.post('/api/browser/act', requireAuth, async (req: Request, res: Response) => {
         try {
             const { kind, ref, text, key, submit, doubleClick, x, y } = req.body;
             let result;
@@ -76,7 +76,7 @@ export function registerBrowserRoutes(app: Express) {
         } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
-    app.post('/api/browser/vision-click', async (req: Request, res: Response) => {
+    app.post('/api/browser/vision-click', requireAuth, async (req: Request, res: Response) => {
         try {
             const { target, provider, doubleClick } = req.body;
             if (!target) return res.status(400).json({ error: 'target required' });
@@ -87,7 +87,7 @@ export function registerBrowserRoutes(app: Express) {
         }
     });
 
-    app.post('/api/browser/navigate', async (req: Request, res: Response) => {
+    app.post('/api/browser/navigate', requireAuth, async (req: Request, res: Response) => {
         try { res.json(await browser.navigate(cdpPort(req), req.body.url)); }
         catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
@@ -97,7 +97,7 @@ export function registerBrowserRoutes(app: Express) {
         catch (e: unknown) { console.warn('[browser:tabs] failed', { error: (e as Error).message }); ok(res, { tabs: [] }); }
     });
 
-    app.post('/api/browser/evaluate', async (req: Request, res: Response) => {
+    app.post('/api/browser/evaluate', requireAuth, async (req: Request, res: Response) => {
         try { res.json(await browser.evaluate(cdpPort(req), req.body.expression)); }
         catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
