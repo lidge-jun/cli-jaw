@@ -301,8 +301,12 @@ export async function initTelegram() {
         await next();
     });
 
-    // Group chat @mention gating
+    // Group chat @mention gating (configurable)
     bot.use(async (ctx, next) => {
+        if (settings.telegram.mentionOnly === false) {
+            await next();
+            return;
+        }
         const chatType = ctx.chat?.type;
         if (chatType === 'group' || chatType === 'supergroup') {
             const text = ctx.message?.text || ctx.message?.caption || '';

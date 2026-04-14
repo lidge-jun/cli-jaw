@@ -133,6 +133,14 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
             ctx.claudeCurrentToolName = inner.content_block.name || 'tool';
         }
 
+        // [P1-2.1] message_delta: accumulate output_tokens from streaming usage
+        if (inner?.type === 'message_delta' && inner.usage) {
+            if (inner.usage.output_tokens != null) {
+                if (!ctx.tokens) ctx.tokens = { input_tokens: 0, output_tokens: 0 };
+                ctx.tokens.output_tokens = inner.usage.output_tokens;
+            }
+        }
+
         // content_block_stop → flush both buffers
         if (inner?.type === 'content_block_stop') {
             // Flush thinking
@@ -216,6 +224,21 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                 ctx.turns = event.num_turns;
                 ctx.duration = event.duration_ms;
                 if (event.session_id) ctx.sessionId = event.session_id;
+                // [P1-2.3] Store modelUsage for per-model token/cache breakdown
+                if (event.usage) {
+                    ctx.tokens = {
+                        input_tokens: event.usage.input_tokens ?? 0,
+                        output_tokens: event.usage.output_tokens ?? ctx.tokens?.output_tokens ?? 0,
+                        cache_read: event.usage.cache_read_input_tokens ?? 0,
+                        cache_creation: event.usage.cache_creation_input_tokens ?? 0,
+                    };
+                }
+            // [P1-2.2] rate_limit_event: emit quota warning
+            } else if (event.type === 'rate_limit_event') {
+                const msg = event.message || event.reason || 'rate limited';
+                const tool = { icon: '⚠️', label: buildPreview(msg, 60), toolType: 'tool' as const, status: 'warning' };
+                ctx.toolLog.push(tool);
+                broadcast('agent_tool', { agentId: agentLabel, ...tool });
             // [P0-1.2] Parse user/tool_result feedback (stdout/stderr/is_error)
             } else if (event.type === 'user' && event.message?.content) {
                 for (const block of event.message.content) {
@@ -420,7 +443,18 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
             const detail = output ? `$ ${command}\n${output}` : command;
             // [P0-1.4] Use item.id for unique stepRef (not command string)
             const ref = `codex:item:${item.id || command}`;
-            labels.push({ icon: '⚡', label: buildPreview(command, 40) || 'exec', toolType: 'tool', detail, stepRef: ref, status: 'done' });
+            // [P1-2.4] Include exit_code in label status
+            const exitCode = item.exit_code;
+            const failed = exitCode != null && exitCode !== 0;
+            labels.push({
+                icon: failed ? '❌' : '⚡',
+                label: buildPreview(command, 40) || 'exec',
+                toolType: 'tool',
+                detail,
+                stepRef: ref,
+                status: failed ? 'error' : 'done',
+                ...(exitCode != null ? { exitCode } : {}),
+            });
         }
         if (item.type === 'collab_tool_call') {
             const name = item.name || 'sub-agent';
@@ -430,6 +464,15 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
             } else {
                 labels.push({ icon: '✅', label: `sub-agent: ${name}`, toolType: 'tool', status: 'done' });
             }
+        }
+    }
+
+    // [P0-1.3] Codex item.started: emit running label (paired with 1.4 stepRef)
+    if (cli === 'codex' && event.type === 'item.started' && item) {
+        if (item.type === 'command_execution') {
+            const command = String(item.command || 'exec');
+            const ref = `codex:item:${item.id || command}`;
+            labels.push({ icon: '🔧', label: buildPreview(command, 40) || 'exec', toolType: 'tool', stepRef: ref, status: 'running' });
         }
     }
 
@@ -447,12 +490,12 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
         if (event.type === 'stream_event' && event.event?.type === 'content_block_start') {
             if (ctx) ctx.hasClaudeStreamEvents = true;
             const cb = event.event.content_block;
-            if (cb?.type === 'tool_use') pushToolLabel(labels, { icon: '🔧', label: cb.name || 'tool', toolType: 'tool' }, cli, event, ctx);
+            if (cb?.type === 'tool_use') pushToolLabel(labels, { icon: '🔧', label: cb.name || 'tool', toolType: 'tool', stepRef: cb.id ? `claude:tooluse:${cb.id}` : undefined }, cli, event, ctx);
             // thinking: don't emit placeholder — buffer in extractFromEvent will emit with real content
         }
         if (event.type === 'assistant' && event.message?.content && !ctx?.hasClaudeStreamEvents) {
             for (const block of event.message.content) {
-                if (block.type === 'tool_use') pushToolLabel(labels, { icon: '🔧', label: block.name || 'tool', toolType: 'tool' }, cli, event, ctx);
+                if (block.type === 'tool_use') pushToolLabel(labels, { icon: '🔧', label: block.name || 'tool', toolType: 'tool', stepRef: block.id ? `claude:tooluse:${block.id}` : undefined }, cli, event, ctx);
                 if (block.type === 'thinking') {
                     const text = (block.thinking || '').trim();
                     pushToolLabel(labels, { icon: '💭', label: buildPreview(text, 80) || 'thinking...', toolType: 'thinking', detail: text }, cli, event, ctx);
@@ -474,7 +517,16 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
             const ref = event.tool_id
                 ? `gemini:toolid:${event.tool_id}`
                 : `gemini:tool:${event.tool_name || 'tool'}`;
-            labels.push({ icon: event.status === 'success' ? '✅' : '❌', label: `${event.status || 'done'}`, toolType: 'tool', stepRef: ref, status: event.status === 'success' ? 'done' : 'error' });
+            // [P1-2.5] Include tool result output in detail
+            const output = event.output ? buildPreview(event.output, 200) : '';
+            labels.push({
+                icon: event.status === 'success' ? '✅' : '❌',
+                label: `${event.status || 'done'}`,
+                toolType: 'tool',
+                stepRef: ref,
+                status: event.status === 'success' ? 'done' : 'error',
+                ...(output ? { detail: output } : {}),
+            });
         }
     }
 
@@ -485,10 +537,21 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
                 : `opencode:tool:${event.part.tool || 'tool'}`;
             const detail = summarizeToolInput(event.part.tool || '', event.part.state?.input || {}, 0)
                 || String(event.part.state?.output || '').trim();
-            labels.push({ icon: '🔧', label: event.part.tool || 'tool', toolType: 'tool', stepRef: ref, detail });
-            if (event.part.state?.status === 'completed') {
-                labels.push({ icon: '✅', label: event.part.tool || 'done', toolType: 'tool', stepRef: ref, status: 'done' });
-            }
+            // [P0-1.9] Single label per event: icon reflects actual status
+            const isDone = event.part.state?.status === 'completed';
+            // [P1-2.6] Check exit code from state.metadata
+            const exitCode = event.part.state?.metadata?.exit;
+            const isFailed = exitCode != null && exitCode !== 0;
+            const displayLabel = event.part.state?.title || event.part.tool || 'tool';
+            labels.push({
+                icon: isFailed ? '❌' : (isDone ? '✅' : '🔧'),
+                label: displayLabel,
+                toolType: 'tool',
+                stepRef: ref,
+                detail,
+                status: isFailed ? 'error' : (isDone ? 'done' : undefined),
+                ...(exitCode != null ? { exitCode } : {}),
+            });
         }
         if (event.type === 'tool_result' && event.part) {
             const ref = event.part.callID
@@ -499,6 +562,19 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
     }
 
     return labels;
+}
+
+/** [P1-2.10] Map Copilot ACP tool kind to semantic icon */
+function toolKindIcon(kind: string | undefined): string {
+    if (!kind) return '';
+    const map: Record<string, string> = {
+        read: '📖', view: '📖', file_read: '📖',
+        write: '✏️', edit: '✏️', file_write: '✏️', create: '✏️',
+        execute: '⚡', command: '⚡', bash: '⚡', terminal: '⚡',
+        search: '🔍', grep: '🔍', find: '🔍',
+        web: '🌐', browse: '🌐', fetch: '🌐',
+    };
+    return map[kind.toLowerCase()] || '';
 }
 
 /** Summarise a tool's input into a short one-liner for the ProcessBlock UI. */
@@ -585,27 +661,44 @@ export function extractFromAcpUpdate(params: any) {
             const fullInput = update.input != null
                 ? (typeof update.input === 'object' ? JSON.stringify(update.input, null, 2) : String(update.input))
                 : '';
+            // [P1-2.10] Semantic icon from tool kind/title
+            const kindIcon = toolKindIcon(update.kind);
+            const displayLabel = update.title || toolName;
+            // [P0-1.11] Use toolCallId for unique stepRef
             return {
                 tool: {
-                    icon: '🔧',
-                    label: toolName,
+                    icon: kindIcon || '🔧',
+                    label: displayLabel,
                     toolType: 'tool',
                     detail: fullInput,
-                    stepRef: `acp:tool:${toolName}`,
+                    stepRef: `acp:callid:${update.toolCallId || update.id || toolName}`,
                 },
             };
         }
 
-        case 'tool_call_update':
+        // [P0-1.10] Map actual status instead of hardcoding ✅/done
+        case 'tool_call_update': {
+            const statusMap: Record<string, { icon: string; status: string }> = {
+                pending: { icon: '⏳', status: 'pending' },
+                running: { icon: '🔧', status: 'running' },
+                in_progress: { icon: '🔧', status: 'running' },
+                completed: { icon: '✅', status: 'done' },
+                failed: { icon: '❌', status: 'error' },
+            };
+            const mapped = statusMap[update.status] || { icon: '✅', status: 'done' };
+            // [P1-2.9] Extract content from tool result
+            const resultText = update.content ? extractText(update.content) : '';
             return {
                 tool: {
-                    icon: '✅',
+                    icon: mapped.icon,
                     label: update.name || update.id || 'done',
                     toolType: 'tool',
-                    stepRef: `acp:tool:${update.name || update.id || 'done'}`,
-                    status: 'done',
+                    stepRef: `acp:callid:${update.toolCallId || update.id || update.name || 'done'}`,
+                    status: mapped.status,
+                    ...(resultText ? { detail: buildPreview(resultText, 200) } : {}),
                 },
             };
+        }
 
         case 'agent_message_chunk': {
             const text = extractText(update.content);

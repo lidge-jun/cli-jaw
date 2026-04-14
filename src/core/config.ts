@@ -126,6 +126,7 @@ function createDefaultSettings() {
             token: '',
             allowedChatIds: [],
             forwardAll: true,
+            mentionOnly: true,
         },
         discord: {
             enabled: false,
@@ -238,6 +239,10 @@ export function migrateSettings(s: Record<string, any>) {
             allowBots: false,
             mentionOnly: false,
         };
+    }
+    // Telegram mentionOnly migration — existing users had hardcoded always-on behavior
+    if (s.telegram && s.telegram.mentionOnly === undefined) {
+        s.telegram.mentionOnly = true;
     }
     if (!s.messaging) {
         s.messaging = {

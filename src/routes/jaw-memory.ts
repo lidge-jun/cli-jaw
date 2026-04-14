@@ -66,4 +66,19 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
             res.status(500).json({ error: (e as Error).message });
         }
     });
+
+    app.get('/api/jaw-memory/soul', async (_req, res) => {
+        try {
+            const { readSoul } = await import('../memory/identity.js');
+            res.json({ soul: readSoul() });
+        } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
+    });
+
+    app.post('/api/jaw-memory/soul', requireAuth, async (req, res) => {
+        try {
+            const { applySoulUpdate } = await import('../memory/identity.js');
+            const result = applySoulUpdate(req.body);
+            res.json(result);
+        } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
+    });
 }

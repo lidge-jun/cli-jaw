@@ -6,7 +6,7 @@ import { ok, fail } from '../http/response.js';
 import { getMemory, upsertMemory, deleteMemory } from '../core/db.js';
 import { settings, saveSettings, JAW_HOME } from '../core/config.js';
 import * as memoryModule from '../memory/memory.js';
-import { bootstrapMemory, getMemoryStatus, getLastReflectedAt, listMemoryFiles, reindexMemory, syncKvShadowImport } from '../memory/runtime.js';
+import { bootstrapMemory, getMemoryStatus, getLastReflectedAt, hasSoulFile, listMemoryFiles, reindexMemory, syncKvShadowImport } from '../memory/runtime.js';
 import { getMigrationLockPath, hashText, safeReadFile } from '../memory/shared.js';
 import { activeProcesses, memoryFlushCounter } from '../agent/spawn.js';
 import { getMemoryDir } from '../prompt/builder.js';
@@ -54,6 +54,7 @@ export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware):
             flushRunning,
             migrationLocked,
             staleWarnings,
+            hasSoul: hasSoulFile(),
         });
     });
 

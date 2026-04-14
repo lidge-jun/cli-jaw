@@ -60,6 +60,15 @@ export async function memoryHandler(args: any[], ctx: any) {
             ].join('\n'),
         };
     }
+    if (sub === 'flush') {
+        try {
+            const { triggerMemoryFlush } = await import('../agent/memory-flush-controller.js');
+            await triggerMemoryFlush();
+            return { ok: true, text: '🧠 Memory flush triggered.' };
+        } catch (err) {
+            return { ok: false, text: `❌ Flush failed: ${(err as Error).message}` };
+        }
+    }
     if (sub === 'adv') {
         const action = String(args[1] || 'status').toLowerCase();
         if (action === 'on') {
