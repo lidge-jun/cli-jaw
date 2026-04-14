@@ -14,7 +14,7 @@ jobs:
       SUBMODULE_PAT: ${{ secrets.SUBMODULE_PAT }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Checkout public submodules
         run: |
@@ -35,7 +35,7 @@ jobs:
         run: echo "Skipping private devlog checkout because SUBMODULE_PAT is not configured."
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -74,7 +74,7 @@ jobs:
 
       - name: Upload audit report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: fin-status-audit
           path: devlog/_fin/_status_audit.md

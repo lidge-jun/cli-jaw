@@ -414,6 +414,7 @@ document.getElementById('basicMemoryFiles')?.addEventListener('click', (e) => {
 async function bootstrap(): Promise<void> {
     hydrateIcons();
     hydrateProviderIcons();
+    initTheme();
     await initI18n();
     const langBtn = document.getElementById('langToggle');
     if (langBtn) langBtn.innerHTML = `${ICONS.web} ${t('lang.' + getLang())}`;
@@ -431,7 +432,6 @@ async function bootstrap(): Promise<void> {
     initHeartbeatBadge();
     initAppName();
     initSidebar();
-    initTheme();
     initMsgCopy();
     initGestures();
 
