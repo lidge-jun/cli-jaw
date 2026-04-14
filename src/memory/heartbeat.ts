@@ -67,7 +67,7 @@ async function runHeartbeatJob(job: Record<string, any>) {
         const schedule = normalizeHeartbeatSchedule(job.schedule);
         const timeZone = getHeartbeatScheduleTimeZone(schedule);
         const now = formatHeartbeatNow(schedule);
-        const prompt = `[heartbeat:${job.name}] 현재 시간: ${now} (${timeZone})\n\n${job.prompt || '정기 점검입니다. 할 일 없으면 [SILENT]로 응답.'}`;
+        const prompt = `[heartbeat:${job.name}] 현재 시간: ${now} (${timeZone})\n\nBefore responding, you MUST search memory (cli-jaw memory search) for recent conversation context, user preferences, and ongoing tasks. Use this context to ground your response.\n\n${job.prompt || '정기 점검입니다. 할 일 없으면 [SILENT]로 응답.'}`;
         console.log(`[heartbeat:${job.name}] tick (${describeHeartbeatSchedule(schedule)})`);
         const result: string = String(await orchestrateAndCollect(prompt, { origin: 'heartbeat' }));
 
