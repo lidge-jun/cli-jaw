@@ -329,11 +329,15 @@ export async function processQueue() {
 // ─── Helpers ─────────────────────────────────────────
 
 function makeCleanEnv(extraEnv: Record<string, string> = {}) {
-    const env = { ...process.env };
+    const env: NodeJS.ProcessEnv = { ...process.env };
     delete env.CLAUDE_CODE_SSE_PORT;
     delete env.GEMINI_SYSTEM_MD;
     env.PATH = buildServicePath(env.PATH || '');
-    return { ...env, ...extraEnv, PATH: buildServicePath(extraEnv.PATH || env.PATH || '') };
+    return {
+        ...env,
+        ...extraEnv,
+        PATH: buildServicePath(extraEnv.PATH || env.PATH || ''),
+    } as NodeJS.ProcessEnv;
 }
 
 function buildHistoryBlock(currentPrompt: string, workingDir?: string | null, maxSessions = 10, maxTotalChars = 8000) {

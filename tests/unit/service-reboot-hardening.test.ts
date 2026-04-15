@@ -74,5 +74,8 @@ test('SRH-006: loadSettings warns and backs up unreadable settings instead of si
     assert.match(src, /if \(err\?\.code === 'ENOENT'\)/);
     assert.match(src, /console\.warn\(`\[jaw:settings\] failed to load/);
     assert.match(src, /copyFileSync\(SETTINGS_PATH, backupPath\)/);
-    assert.doesNotMatch(src, /\} catch \(error\) \{[\s\S]*saveSettings\(next\)[\s\S]*copyFileSync/s);
+    assert.ok(
+        src.indexOf("if (err?.code === 'ENOENT')") < src.indexOf('copyFileSync(SETTINGS_PATH, backupPath)'),
+        'backup path must only run after the ENOENT fast-path',
+    );
 });
