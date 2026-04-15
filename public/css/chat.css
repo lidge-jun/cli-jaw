@@ -219,6 +219,24 @@
     transition: opacity var(--duration-fast);
 }
 
+.agent-icon,
+.user-icon {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border-radius: 999px;
+    background: color-mix(in oklch, var(--surface) 88%, var(--accent) 12%);
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--border) 80%, var(--accent) 20%);
+}
+
+.avatar-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    border-radius: inherit;
+}
+
 .agent-body {
     flex: 1;
     min-width: 0;

@@ -432,7 +432,7 @@ async function bootstrap(): Promise<void> {
     loadEmployees();
     initHeartbeatBadge();
     initAppName();
-    initAvatar();
+    await initAvatar();
     initSidebar();
     initMsgCopy();
     initGestures();

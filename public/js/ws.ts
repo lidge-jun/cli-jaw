@@ -284,8 +284,12 @@ export function connect(): void {
         import('./ui.js').then(async m => {
             m.cleanupToolActivity();
             if (!skipReload) {
-                await m.loadMessages();
-                lastLoadTs = Date.now();
+                try {
+                    await m.loadMessages();
+                    lastLoadTs = Date.now();
+                } catch (error) {
+                    console.error('[ws] loadMessages failed', error);
+                }
             }
             m.setStatus('idle');
         });

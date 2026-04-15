@@ -1,8 +1,9 @@
 // ── UI Utilities ──
 import { state } from './state.js';
 import { renderMarkdown, escapeHtml, stripOrchestration, linkifyFilePaths } from './render.js';
+import { generateId } from './uuid.js';
 import { getAppName } from './features/appname.js';
-import { getAgentAvatar, getUserAvatar } from './features/avatar.js';
+import { getAgentAvatarMarkup, getUserAvatarMarkup } from './features/avatar.js';
 import { t } from './features/i18n.js';
 import { api } from './api.js';
 import { cacheMessages, getCachedMessages, appendCachedMessage, upsertMessage, setMessageScope, getScopedMessages } from './features/idb-cache.js';
@@ -35,12 +36,12 @@ function parseToolLog(toolLog?: string | null): ToolLogEntry[] {
 }
 
 function getAgentIcon(_cli?: string | null): string {
-    return getAgentAvatar();
+    return getAgentAvatarMarkup();
 }
 
 function toProcessSteps(tools: ToolLogEntry[]): ProcessStep[] {
     return tools.map((tool: any) => ({
-        id: crypto.randomUUID(),
+        id: generateId(),
         icon: tool.icon ? emojiToIcon(tool.icon) : ICONS.tool,
         label: tool.label || tool.name || 'tool',
         type: tool.toolType || 'tool',
@@ -295,7 +296,7 @@ export function addMessage(role: string, text: string, cli?: string | null): HTM
         div.innerHTML = `<div class="agent-icon" aria-hidden="true">${getAgentIcon(cli)}</div><div class="agent-body"><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div>`;
     } else {
         div.className = `msg msg-${role}`;
-        div.innerHTML = `<div class="user-body"><div class="msg-label">${label}</div><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div><div class="user-icon" aria-hidden="true">${getUserAvatar()}</div>`;
+        div.innerHTML = `<div class="user-body"><div class="msg-label">${label}</div><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div><div class="user-icon" aria-hidden="true">${getUserAvatarMarkup()}</div>`;
     }
     const contentEl = div.querySelector('.msg-content');
     if (contentEl) contentEl.setAttribute('data-raw', stripOrchestration(text));
@@ -316,7 +317,7 @@ export function addMessage(role: string, text: string, cli?: string | null): HTM
             if (msgCount >= VS_THRESHOLD) {
                 // Feed all existing DOM messages into VS items array
                 container.querySelectorAll('.msg').forEach(el => {
-                    vs.addItem(crypto.randomUUID(), el.outerHTML);
+                    vs.addItem(generateId(), el.outerHTML);
                 });
                 // Wire widget activation + file path linkification for VS-rendered items
                 vs.onPostRender = (viewport: HTMLElement) => {
@@ -407,8 +408,8 @@ export async function loadMessages(): Promise<void> {
                 const skeletonContent = '<div class="skeleton-line"></div><div class="skeleton-line"></div>';
                 const html = role === 'agent'
                     ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body">${toolHtml}<div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
-                    : `<div class="msg msg-${role}"><div class="user-body"><div class="msg-label">${label}</div><div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div><div class="user-icon" aria-hidden="true">${getUserAvatar()}</div></div>`;
-                vs.addItem(crypto.randomUUID(), html);
+                    : `<div class="msg msg-${role}"><div class="user-body"><div class="msg-label">${label}</div><div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div><div class="user-icon" aria-hidden="true">${getUserAvatarMarkup()}</div></div>`;
+                vs.addItem(generateId(), html);
             }
 
             // Register lazy render callback
@@ -479,8 +480,8 @@ export async function loadMessages(): Promise<void> {
                 const skeletonContent = '<div class="skeleton-line"></div><div class="skeleton-line"></div>';
                 const html = role === 'agent'
                     ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body">${toolHtml}<div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
-                    : `<div class="msg msg-${role}"><div class="user-body"><div class="msg-label">${label}</div><div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div><div class="user-icon" aria-hidden="true">${getUserAvatar()}</div></div>`;
-                vs.addItem(crypto.randomUUID(), html);
+                    : `<div class="msg msg-${role}"><div class="user-body"><div class="msg-label">${label}</div><div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div><div class="user-icon" aria-hidden="true">${getUserAvatarMarkup()}</div></div>`;
+                vs.addItem(generateId(), html);
             }
             vs.onLazyRender = (targets: HTMLElement[]) => {
                 for (const el of targets) {

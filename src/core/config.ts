@@ -7,6 +7,7 @@ import { execFileSync } from 'child_process';
 import { CLI_REGISTRY, CLI_KEYS, DEFAULT_CLI, buildDefaultPerCli } from '../cli/registry.js';
 import { pickFirstReadyCli } from '../cli/readiness.js';
 import { migrateLegacyClaudeValue } from '../cli/claude-models.js';
+import { buildServicePath } from './runtime-path.js';
 
 // ─── Version (single source of truth: package.json) ──
 import { dirname } from 'path';
@@ -160,6 +161,16 @@ function createDefaultSettings() {
         },
         employees: [],
         locale: 'ko',
+        avatar: {
+            agent: {
+                imagePath: '',
+                updatedAt: null,
+            },
+            user: {
+                imagePath: '',
+                updatedAt: null,
+            },
+        },
         stt: {
             engine: 'auto',
             geminiApiKey: '',
@@ -305,6 +316,10 @@ export function loadSettings() {
             telegram: { ...defaults.telegram, ...(raw.telegram || {}) },
             discord: { ...defaults.discord, ...(raw.discord || {}) },
             memory: { ...defaults.memory, ...(raw.memory || {}) },
+            avatar: {
+                agent: { ...defaults.avatar.agent, ...(raw.avatar?.agent || {}) },
+                user: { ...defaults.avatar.user, ...(raw.avatar?.user || {}) },
+            },
             messaging: {
                 latestSeen: { ...defaults.messaging.latestSeen, ...(raw.messaging?.latestSeen || {}) },
                 lastActive: { ...defaults.messaging.lastActive, ...(raw.messaging?.lastActive || {}) },
@@ -322,12 +337,28 @@ export function loadSettings() {
 
         settings = merged;
         return merged;
-    } catch { /* expected: settings.json may not exist on first run */
+    } catch (error) {
         const next = createDefaultSettings();
         next.cli = pickFirstReadyCli();
         applyEnvOverrides(next);
         settings = next;
-        saveSettings(next);
+
+        const err = error as NodeJS.ErrnoException;
+        if (err?.code === 'ENOENT') {
+            saveSettings(next);
+            return next;
+        }
+
+        console.warn(`[jaw:settings] failed to load ${SETTINGS_PATH}: ${err?.message || String(error)}`);
+        if (fs.existsSync(SETTINGS_PATH)) {
+            const backupPath = `${SETTINGS_PATH}.corrupt-${Date.now()}.bak`;
+            try {
+                fs.copyFileSync(SETTINGS_PATH, backupPath);
+                console.warn(`[jaw:settings] backed up unreadable settings to ${backupPath}`);
+            } catch (backupErr) {
+                console.warn(`[jaw:settings] backup failed: ${(backupErr as Error).message}`);
+            }
+        }
         return next;
     }
 }
@@ -363,7 +394,14 @@ export function detectCli(name: string) {
     if (!/^[a-z0-9_-]+$/i.test(name)) return { available: false, path: null };
     try {
         const cmd = process.platform === 'win32' ? 'where' : 'which';
-        const raw = execFileSync(cmd, [name], { encoding: 'utf8', timeout: 3000 }).trim();
+        const raw = execFileSync(cmd, [name], {
+            encoding: 'utf8',
+            timeout: 3000,
+            env: {
+                ...process.env,
+                PATH: buildServicePath(process.env.PATH || ''),
+            },
+        }).trim();
         const firstLine = raw.split(/\r?\n/).map(x => x.trim()).find(Boolean) || '';
         if (!firstLine) return { available: false, path: null };
         return { available: true, path: firstLine };

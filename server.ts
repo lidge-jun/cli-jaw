@@ -22,6 +22,7 @@ import { registerOrchestrateRoutes } from './src/routes/orchestrate.js';
 import { registerMemoryRoutes } from './src/routes/memory.js';
 import { registerSettingsRoutes } from './src/routes/settings.js';
 import { registerMessagingRoutes } from './src/routes/messaging.js';
+import { registerAvatarRoutes } from './src/routes/avatar.js';
 import {
     ensureWorkingDirSkillsLinks, initMcpConfig, copyDefaultSkills,
 } from './lib/mcp-sync.js';
@@ -47,6 +48,7 @@ import {
 } from './src/core/config.js';
 import {
     db, getSession, getMessages, getMessagesWithTrace, closeDb,
+    clearAllEmployeeSessions,
 } from './src/core/db.js';
 import {
     initPromptFiles, regenerateB,
@@ -76,6 +78,7 @@ import { clearMainSessionState, syncMainSessionToSettings, resetSessionPreservin
 import { applyRuntimeSettingsPatch } from './src/core/runtime-settings.js';
 
 import { seedDefaultEmployees } from './src/core/employees.js';
+import { buildServicePath } from './src/core/instance.js';
 
 // ─── Resolve paths ───────────────────────────────────
 
@@ -106,6 +109,8 @@ try {
     }
 } catch { /* no .env, that's fine */ }
 
+process.env.PATH = buildServicePath(process.env.PATH || '');
+
 // ─── Init ────────────────────────────────────────────
 
 const PORT = process.env.PORT || settings.port || 3457;
@@ -122,6 +127,13 @@ loadSettings();
     if (result !== 'ok') {
         console.error(`[db] ⚠️  INTEGRITY CHECK FAILED: ${result}`);
         console.error('[db] Database may be corrupted. Consider restoring from backup.');
+    }
+}
+
+{
+    const cleared = clearAllEmployeeSessions.run().changes;
+    if (cleared > 0) {
+        console.log(`[jaw:startup] cleared ${cleared} stale employee resume session(s)`);
     }
 }
 
@@ -455,6 +467,7 @@ registerOrchestrateRoutes(app, requireAuth);
 registerMemoryRoutes(app, requireAuth);
 registerSettingsRoutes(app, requireAuth, applySettingsPatch, projectRoot);
 registerMessagingRoutes(app, requireAuth);
+registerAvatarRoutes(app, requireAuth);
 
 // ─── Browser API (Phase 7) — see src/routes/browser.js
 registerBrowserRoutes(app, requireAuth);
@@ -567,13 +580,13 @@ server.listen(PORT, '127.0.0.1', () => {
     initActiveMessagingRuntime().catch((e: unknown) => {
         console.error('[messaging:boot]', (e as Error).message);
     });
-    startHeartbeat();
 
     // ─── Seed default employees if none exist ────────
     const seeded = seedDefaultEmployees();
     if (seeded.seeded > 0) {
         console.log(`  Agents: seeded ${seeded.seeded} default employees (CLI: ${seeded.cli})`);
     }
+    startHeartbeat();
 
     // ─── Migrate Korean agent names → English ────────
     const NAME_MAP = { '프런트': 'Frontend', '프론트': 'Frontend', '백엔드': 'Backend', '데이터': 'Data', '문서': 'Docs', '독스': 'Docs' };

@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { basename } from 'node:path';
 import { createHash } from 'node:crypto';
 import { JAW_HOME } from './config.js';
+import { buildServicePath } from './runtime-path.js';
 
 /**
  * Derive a human-readable instance ID from JAW_HOME.
@@ -19,16 +20,30 @@ export function instanceId(): string {
     return `${base.replace(/^\./, '')}-${hash}`;
 }
 
+export { buildServicePath } from './runtime-path.js';
+
+function whichWithServicePath(binary: string): string {
+    return execFileSync('which', [binary], {
+        encoding: 'utf8',
+        env: {
+            ...process.env,
+            PATH: buildServicePath(process.env.PATH || ''),
+        },
+    }).trim();
+}
+
 /** Resolve absolute path to node binary. */
 export function getNodePath(): string {
-    try { return execFileSync('which', ['node'], { encoding: 'utf8' }).trim(); }
-    catch { return '/usr/local/bin/node'; }
+    try { return whichWithServicePath('node'); }
+    catch { return process.execPath || '/usr/local/bin/node'; }
 }
 
 /** Resolve absolute path to jaw binary. */
 export function getJawPath(): string {
-    try { return execFileSync('which', ['jaw'], { encoding: 'utf8' }).trim(); }
-    catch { return execFileSync('which', ['cli-jaw'], { encoding: 'utf8' }).trim(); }
+    const argvPath = process.argv[1];
+    if (argvPath && /(?:^|\/)(?:cli-jaw|jaw)(?:\.js)?$/.test(argvPath)) return argvPath;
+    try { return whichWithServicePath('jaw'); }
+    catch { return whichWithServicePath('cli-jaw'); }
 }
 
 /**

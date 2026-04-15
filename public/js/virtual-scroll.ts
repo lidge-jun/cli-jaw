@@ -1,4 +1,5 @@
 // ── Virtual Scroll ──
+import { generateId } from './uuid.js';
 // Activates at THRESHOLD messages to prevent DOM bloat
 // Below threshold: standard DOM append (zero overhead)
 
@@ -74,7 +75,7 @@ export class VirtualScroll {
     appendLiveItem(div: HTMLElement): void {
         if (!this._active) return;
         const html = div.outerHTML;
-        const id = crypto.randomUUID();
+        const id = generateId();
         const item: VirtualItem = { id, html, height: EST_HEIGHT };
         this.items.push(item);
         this._totalHeight += EST_HEIGHT;

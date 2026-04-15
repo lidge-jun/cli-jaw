@@ -12,7 +12,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { parseArgs } from 'node:util';
 import { JAW_HOME } from '../../src/core/config.js';
-import { instanceId, getNodePath, getJawPath } from '../../src/core/instance.js';
+import { instanceId, getNodePath, getJawPath, buildServicePath } from '../../src/core/instance.js';
 
 const xmlEsc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -44,6 +44,7 @@ const LOG_DIR = join(JAW_HOME, 'logs');
 function generatePlist(): string {
     const nodePath = getNodePath();
     const jawPath = getJawPath();
+    const servicePath = buildServicePath(process.env.PATH || '', [join(homedir(), '.local', 'bin')]);
     execSync(`mkdir -p "${LOG_DIR}"`);
 
     return `<?xml version="1.0" encoding="UTF-8"?>
@@ -75,7 +76,7 @@ function generatePlist(): string {
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>${xmlEsc(process.env.PATH || '')}</string>
+        <string>${xmlEsc(servicePath)}</string>
         <key>CLI_JAW_HOME</key>
         <string>${xmlEsc(JAW_HOME)}</string>
     </dict>

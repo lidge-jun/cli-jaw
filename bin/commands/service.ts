@@ -9,10 +9,10 @@
  */
 import { execFileSync, spawn as nodeSpawn } from 'node:child_process';
 import { existsSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { JAW_HOME } from '../../src/core/config.js';
-import { instanceId, getNodePath, getJawPath, sanitizeUnitName } from '../../src/core/instance.js';
+import { instanceId, getNodePath, getJawPath, sanitizeUnitName, buildServicePath } from '../../src/core/instance.js';
 
 // ─── Args ────────────────────────────────────────────
 const { values: opts, positionals: pos } = parseArgs({
@@ -154,6 +154,7 @@ function sudo(args: string[]): void {
 function generateUnit(): string {
     const nodePath = getNodePath();
     const jawPath = getJawPath();
+    const servicePath = buildServicePath(process.env.PATH || '', [dirname(nodePath), dirname(jawPath)]);
     let user: string;
     try { user = execFileSync('whoami', { encoding: 'utf8' }).trim(); }
     catch { user = 'nobody'; }
@@ -174,7 +175,7 @@ ExecStart=${q(nodePath)} ${q(jawPath)} --home ${q(JAW_HOME)} serve --port ${PORT
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
-Environment="PATH=${process.env.PATH || '/usr/local/bin:/usr/bin:/bin'}"
+Environment="PATH=${servicePath}"
 Environment=CLI_JAW_HOME=${q(JAW_HOME)}
 StandardOutput=journal
 StandardError=journal
