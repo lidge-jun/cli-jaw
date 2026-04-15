@@ -126,32 +126,46 @@
     overflow-anchor: none;
 }
 
-/* Zero container gap when VS active — prevents gap/height mismatch in JS model */
+/* ── Virtual Scroll (TanStack) ── */
+
+/* Zero container gap when VS active — tanstack handles spacing via gap option */
 .chat-messages.vs-active {
     gap: 0;
 }
 
-/* Spacers & viewport must NOT flex-shrink — flex default shrinks them,
-   collapsing scrollHeight and clamping scrollTop to 0 (RC1 fix) */
-.chat-messages.vs-active > .vs-spacer-top,
-.chat-messages.vs-active > .vs-spacer-bottom,
-.chat-messages.vs-active > .vs-viewport {
+/* Inner container provides scrollbar range via its height */
+.chat-messages.vs-active > .vs-inner {
+    position: relative;
+    width: 100%;
+    /* chat-messages is a flex column. Keep the virtual canvas from shrinking
+       to the viewport height, or scrollHeight collapses and initial bottom
+       scroll clamps back to 0. */
     flex: 0 0 auto;
 }
 
-/* Virtual Scroll viewport — mirrors .chat-messages flex layout so
-   align-self on .msg-user / .msg-agent keeps working inside VS.
-   Gap is via margin-bottom on .msg and is modeled explicitly in JS spacing math. */
-.vs-viewport {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    overflow-anchor: none;
+/* VS items are absolutely positioned by tanstack (translateY from JS).
+   JS only sets transform — all other positioning is here in CSS.
+   margin-bottom is read by JS measureGap() for the tanstack gap option. */
+.vs-active .vs-inner > .msg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    margin-bottom: var(--space-3);
 }
 
-/* Gap between VS items via margin — JS reads this as itemSpacing */
-.vs-active .msg {
-    margin-bottom: var(--space-3);
+/* User messages: right-aligned */
+.vs-active .vs-inner > .msg-user {
+    left: auto; /* undo left:0 → sticks to right:0 */
+}
+
+/* System messages: centered */
+.vs-active .vs-inner > .msg-system {
+    left: 0;
+    right: 0;
+    margin-left: auto;
+    margin-right: auto;
+    width: fit-content;
 }
 
 /* Depth fade gradients removed — caused visible white bars on scroll in light mode */
@@ -954,9 +968,10 @@ div.math-placeholder {
     animation-duration: 200ms;
 }
 
-/* ── Scroll-driven fade-in (progressive enhancement) ── */
+/* ── Scroll-driven fade-in (progressive enhancement) ──
+   Scoped to non-VS mode — absolute positioning in VS breaks view() timeline */
 @supports (animation-timeline: view()) {
-    .msg {
+    .chat-messages:not(.vs-active) .msg {
         animation: scroll-fade-in linear both;
         animation-timeline: view();
         animation-range: entry 0% entry 30%;

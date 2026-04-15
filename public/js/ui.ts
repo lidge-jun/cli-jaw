@@ -8,7 +8,7 @@ import { t } from './features/i18n.js';
 import { api } from './api.js';
 import { cacheMessages, getCachedMessages, appendCachedMessage, upsertMessage, setMessageScope, getScopedMessages } from './features/idb-cache.js';
 import { getVirtualScroll, VS_THRESHOLD, type VirtualItem } from './virtual-scroll.js';
-import { bootstrapVirtualHistory, BOOTSTRAP_SEED_COUNT, type VirtualHistoryBootstrapDeps } from './virtual-scroll-bootstrap.js';
+import { bootstrapVirtualHistory, type VirtualHistoryBootstrapDeps } from './virtual-scroll-bootstrap.js';
 import { createStreamRenderer, appendChunk, finalizeStream, type StreamState } from './streaming-render.js';
 import { activateWidgets } from './diagram/iframe-renderer.js';
 import { renderLiveToolActivity, cleanupToolElements, bindToolItemInteractions, type ToolLogEntry } from './features/tool-ui.js';
@@ -413,20 +413,19 @@ export async function loadStats(): Promise<void> {
 // ── Virtual scroll bootstrap helpers ──
 
 function buildVirtualHistoryItems(msgs: MessageItem[]): VirtualItem[] {
-    const vsItems: VirtualItem[] = [];
-    for (const m of msgs) {
+    return msgs.map((m) => {
         const role = m.role === 'assistant' ? 'agent' : m.role;
         const rawContent = stripOrchestration(m.content);
         const label = escapeHtml(role === 'user' ? t('msg.you') : getAppName());
         const tools = m.role === 'assistant' ? parseToolLog(m.tool_log) : [];
         const toolHtml = tools.length > 0 ? buildProcessBlockHtml(toProcessSteps(tools), true) : '';
-        const skeletonContent = '<div class="skeleton-line"></div><div class="skeleton-line"></div>';
+        // Pre-render markdown so tanstack estimateSize gets accurate initial heights
+        const rendered = rawContent ? renderMarkdown(rawContent) : '';
         const html = role === 'agent'
-            ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body">${toolHtml}<div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
-            : `<div class="msg msg-${role}"><div class="user-body"><div class="msg-label">${label}</div><div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}">${skeletonContent}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div><div class="user-icon" aria-hidden="true">${getUserAvatarMarkup()}</div></div>`;
-        vsItems.push({ id: generateId(), html, height: 80 });
-    }
-    return vsItems;
+            ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body">${toolHtml}<div class="msg-content" data-raw="${escapeHtml(rawContent)}">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
+            : `<div class="msg msg-${role}"><div class="user-body"><div class="msg-label">${label}</div><div class="msg-content" data-raw="${escapeHtml(rawContent)}">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div><div class="user-icon" aria-hidden="true">${getUserAvatarMarkup()}</div></div>`;
+        return { id: generateId(), html, height: 80 };
+    });
 }
 
 function registerVirtualScrollCallbacks(vs: ReturnType<typeof getVirtualScroll>): void {
@@ -450,42 +449,12 @@ function registerVirtualScrollCallbacks(vs: ReturnType<typeof getVirtualScroll>)
     };
 }
 
-function measureTailWindow(
-    chatEl: HTMLElement,
-    items: VirtualItem[],
-    seedCount: number,
-): number[] {
-    const start = Math.max(0, items.length - seedCount);
-    const slice = items.slice(start);
-    if (slice.length === 0) return [];
-
-    // Render tail items temporarily into empty chatEl, measure, then clear
-    const fragment = document.createDocumentFragment();
-    for (const item of slice) {
-        const wrapper = document.createElement('div');
-        wrapper.innerHTML = item.html;
-        const el = wrapper.firstElementChild;
-        if (el) fragment.appendChild(el);
-    }
-    chatEl.appendChild(fragment);
-    const heights: number[] = [];
-    const children = chatEl.children;
-    for (let i = 0; i < children.length; i++) {
-        heights.push(children[i].getBoundingClientRect().height);
-    }
-    chatEl.innerHTML = '';
-    return heights;
-}
-
 function makeBootstrapDeps(
     vs: ReturnType<typeof getVirtualScroll>,
-    chatEl: HTMLElement,
 ): VirtualHistoryBootstrapDeps {
     return {
         registerCallbacks: () => registerVirtualScrollCallbacks(vs),
-        measureTailWindow: (items, seedCount) => measureTailWindow(chatEl, items, seedCount),
         setItems: (items, opts) => vs.setItems(items, opts),
-        seedMeasuredHeights: (start, h) => vs.seedMeasuredHeights(start, h),
         activateIfNeeded: (toBottom) => vs.activateIfNeeded(toBottom),
         scrollToBottom: () => vs.scrollToBottom(),
     };
@@ -510,7 +479,7 @@ export async function loadMessages(): Promise<void> {
 
         if (msgs.length >= VS_THRESHOLD) {
             const vsItems = buildVirtualHistoryItems(msgs);
-            bootstrapVirtualHistory(vsItems, makeBootstrapDeps(vs, chatEl!));
+            bootstrapVirtualHistory(vsItems, makeBootstrapDeps(vs));
         } else {
             msgs.forEach(m => {
                 const div = addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content, m.cli);
@@ -546,7 +515,7 @@ export async function loadMessages(): Promise<void> {
     if (cached.length > 0) {
         if (cached.length >= VS_THRESHOLD) {
             const vsItems = buildVirtualHistoryItems(cached as MessageItem[]);
-            bootstrapVirtualHistory(vsItems, makeBootstrapDeps(vs, chatEl!));
+            bootstrapVirtualHistory(vsItems, makeBootstrapDeps(vs));
         } else {
             cached.forEach(m => {
                 const div = addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content, m.cli);
