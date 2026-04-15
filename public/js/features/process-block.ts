@@ -40,12 +40,6 @@ function previewText(text: string, max = 120): string {
     return singleLine.length > max ? `${singleLine.slice(0, max - 1)}…` : singleLine;
 }
 
-function hasExpandableDetail(step: ProcessStep): boolean {
-    const detail = (step.detail || '').trim();
-    if (!detail) return false;
-    return detail !== (step.label || '').trim();
-}
-
 function renderStep(step: ProcessStep): string {
     const dotClass = `process-step-dot ${step.status}`;
     const badgeClass = `process-step-badge ${step.type}`;
@@ -54,34 +48,25 @@ function renderStep(step: ProcessStep): string {
     const detail = step.detail || '';
     const detailId = `process-detail-${step.id}`;
 
-    // Only create expandable DOM when there's actual detail content
-    // to prevent DOM bloat (50 msgs × 10 steps = 500 extra DOM trees)
-    if (hasExpandableDetail(step)) {
-        const snippetPreview = previewText(detail, step.type === 'thinking' ? 120 : 80);
-        const snippetHtml = snippetPreview
-            ? `<span class="process-step-snippet">${escapeHtml(snippetPreview)}</span>`
-            : '';
-        return `<div class="process-step process-step-expandable" data-step-id="${step.id}" data-type="${step.type}">
-            <button class="process-step-toggle" aria-expanded="false" aria-controls="${detailId}">
-                <span class="${dotClass}"></span>
-                <span class="${badgeClass}">${badgeText}</span>
-                <span class="process-step-main">
-                    <span class="process-step-label">${label}</span>
-                    ${snippetHtml}
-                </span>
-                <span class="process-step-chevron">${ICONS.chevronRight}</span>
-            </button>
-            <div class="process-step-details collapsed" id="${detailId}">
-                <pre class="process-step-full">${escapeHtml(detail)}</pre>
-            </div>
-        </div>`;
-    }
-
-    // Lightweight flat render — no toggle, no hidden detail section
-    return `<div class="process-step" data-step-id="${step.id}" data-type="${step.type}">
-        <span class="${dotClass}"></span>
-        <span class="${badgeClass}">${badgeText}</span>
-        <span class="process-step-label">${label}</span>
+    // Always render expandable — VS (THRESHOLD=1) keeps DOM count low
+    // so the extra elements per step are negligible
+    const snippetPreview = previewText(detail, step.type === 'thinking' ? 120 : 80);
+    const snippetHtml = snippetPreview
+        ? `<span class="process-step-snippet">${escapeHtml(snippetPreview)}</span>`
+        : '';
+    return `<div class="process-step process-step-expandable" data-step-id="${step.id}" data-type="${step.type}">
+        <button class="process-step-toggle" aria-expanded="false" aria-controls="${detailId}">
+            <span class="${dotClass}"></span>
+            <span class="${badgeClass}">${badgeText}</span>
+            <span class="process-step-main">
+                <span class="process-step-label">${label}</span>
+                ${snippetHtml}
+            </span>
+            <span class="process-step-chevron">${ICONS.chevronRight}</span>
+        </button>
+        <div class="process-step-details collapsed" id="${detailId}">
+            <pre class="process-step-full">${escapeHtml(detail)}</pre>
+        </div>
     </div>`;
 }
 

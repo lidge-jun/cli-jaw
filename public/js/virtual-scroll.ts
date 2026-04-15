@@ -303,17 +303,4 @@ export function getVirtualScroll(): VirtualScroll {
     return instance;
 }
 
-// ── Compat exports ──
-
-/** @deprecated Kept for test compat — tanstack handles anchoring internally */
-export function computeAnchoredScrollTop(
-    anchorTop: number,
-    offsetWithinItem: number,
-    containerPadTop: number,
-    maxScrollTop: number,
-): number {
-    const nextScrollTop = containerPadTop + anchorTop + offsetWithinItem;
-    return Math.max(0, Math.min(nextScrollTop, maxScrollTop));
-}
-
 export { THRESHOLD as VS_THRESHOLD };
