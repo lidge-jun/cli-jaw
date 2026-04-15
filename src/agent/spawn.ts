@@ -2,12 +2,14 @@
 
 import fs from 'fs';
 import os from 'os';
+import crypto from 'node:crypto';
 import { join } from 'path';
 import { spawn, execFileSync, type ChildProcess } from 'child_process';
 import { broadcast } from '../core/bus.js';
 import { settings, UPLOADS_DIR, detectCli } from '../core/config.js';
 import {
     clearEmployeeSession, getSession, updateSession, insertMessage, insertMessageWithTrace, getRecentMessages, getEmployees,
+    listQueuedMessages, insertQueuedMessage, deleteQueuedMessage,
 } from '../core/db.js';
 import { getSystemPrompt, regenerateB } from '../prompt/builder.js';
 import { extractSessionId, extractFromEvent, extractFromAcpUpdate, extractOutputChunk, logEventSummary, flushClaudeBuffers } from './events.js';
@@ -21,6 +23,7 @@ import {
 } from './session-persistence.js';
 import { shouldInvalidateResumeSession } from './resume-classifier.js';
 import { groupQueueKey } from '../messaging/session-key.js';
+import type { RuntimeOrigin, RemoteTarget } from '../messaging/types.js';
 import { isCompactMarkerRow } from '../core/compact.js';
 import { hasBlockingWorkers, hasPendingWorkerReplays } from '../orchestrator/worker-registry.js';
 import { handleAgentExit, setSpawnAgent } from './lifecycle-handler.js';
@@ -85,7 +88,31 @@ export function killAgentById(agentId: string): boolean {
     }
 }
 export { memoryFlushCounter, flushCycleCount } from './memory-flush-controller.js';
-export const messageQueue: any[] = [];
+
+type QueueItem = {
+    id: string;
+    prompt: string;
+    source: RuntimeOrigin;
+    target?: RemoteTarget;
+    chatId?: string | number;
+    requestId?: string;
+    ts: number;
+};
+
+function loadPersistedQueue(): QueueItem[] {
+    return (listQueuedMessages.all() as Array<{ id: string; payload: string }>).flatMap(row => {
+        try {
+            return [JSON.parse(row.payload) as QueueItem];
+        } catch {
+            return [];
+        }
+    });
+}
+
+export const messageQueue: QueueItem[] = loadPersistedQueue();
+if (messageQueue.length > 0) {
+    console.log(`[queue] recovered ${messageQueue.length} persisted message(s) from previous session`);
+}
 let queueProcessing = false;
 
 // ─── 429 Retry Timer State ──────────────────────────
@@ -238,12 +265,20 @@ export async function steerAgent(newPrompt: string, source: string) {
 
 // ─── Message Queue ───────────────────────────────────
 
-export function enqueueMessage(prompt: string, source: string, meta?: { target?: any; chatId?: string | number; requestId?: string }) {
-    messageQueue.push({ prompt, source, target: meta?.target, chatId: meta?.chatId, requestId: meta?.requestId, ts: Date.now() });
+export function enqueueMessage(prompt: string, source: RuntimeOrigin, meta?: { target?: RemoteTarget; chatId?: string | number; requestId?: string }) {
+    const item: QueueItem = {
+        id: crypto.randomUUID(),
+        prompt,
+        source,
+        target: meta?.target,
+        chatId: meta?.chatId,
+        requestId: meta?.requestId,
+        ts: Date.now(),
+    };
+    insertQueuedMessage.run(item.id, JSON.stringify(item));
+    messageQueue.push(item);
     console.log(`[queue] +1 (${messageQueue.length} pending)`);
     broadcast('queue_update', { pending: messageQueue.length });
-    // Trigger drain — if agent finished between gateway's isAgentBusy() check and now,
-    // the close handler's processQueue() already ran on an empty queue. This catches the race.
     processQueue();
 }
 
@@ -259,10 +294,10 @@ export async function processQueue() {
     queueProcessing = true;
 
     // Group by source+target — only process the first group, leave rest in queue
-    const first = messageQueue[0];
+    const first = messageQueue[0]!;
     const groupKey = groupQueueKey(first.source, first.target);
-    const batch: typeof messageQueue = [];
-    const remaining: typeof messageQueue = [];
+    const batch: QueueItem[] = [];
+    const remaining: QueueItem[] = [];
 
     for (const m of messageQueue) {
         const key = groupQueueKey(m.source, m.target);
@@ -282,17 +317,19 @@ export async function processQueue() {
         messageQueue.push(...remaining);
     }
 
-    const combined = batch[0].prompt;  // 항상 단일 메시지만 처리
-    const source = batch[0].source;
-    const target = batch[0].target;
-    const chatId = batch[0].chatId;
-    const requestId = batch[0].requestId;
-    const origin = source || 'web';
+    const item = batch[0]!;
+    const combined = item.prompt;
+    const source = item.source;
+    const target = item.target;
+    const chatId = item.chatId;
+    const requestId = item.requestId;
+    const origin: RuntimeOrigin = source || 'web';
     console.log(`[queue] processing 1/${batch.length} message(s) for ${groupKey}, ${messageQueue.length} remaining`);
 
     let inserted = false;
     try {
         insertMessage.run('user', combined, source, '', settings.workingDir || null);
+        deleteQueuedMessage.run(item.id);
         inserted = true;
         // NOTE: no broadcast('new_message') here — gateway.ts already broadcast at enqueue time
         broadcast('queue_update', { pending: messageQueue.length });
@@ -315,7 +352,7 @@ export async function processQueue() {
         console.error('[queue:setup]', setupErr);
         if (!inserted) {
             // insertMessage hasn't run yet — safe to requeue
-            messageQueue.unshift(batch[0]);
+            messageQueue.unshift(item);
         } else {
             // Message is already in DB — broadcast error, don't requeue (would cause duplicate)
             broadcast('orchestrate_done', { text: `[error] setup failed: ${(setupErr as Error).message}`, error: true, origin, chatId, target, requestId });

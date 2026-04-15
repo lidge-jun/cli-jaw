@@ -101,9 +101,12 @@ export class VirtualScroll {
         existing.forEach((el, i) => {
             if (this.items[i]) {
                 this.items[i].height = el.getBoundingClientRect().height;
-                this._totalHeight += this.items[i].height;
             }
         });
+        // Rebuild _totalHeight from items array (covers both DOM-measured and estimated heights)
+        for (const item of this.items) {
+            this._totalHeight += item.height;
+        }
         // Atomic swap — avoids visible blank frame during activation
         this.container.classList.add('vs-active');
         this.container.replaceChildren(this.spacerTop, this.viewport, this.spacerBottom);
@@ -218,6 +221,9 @@ export class VirtualScroll {
     /** Batch-read heights from visible elements, batch-write to items array.
      *  Separated read/write passes = single forced reflow. */
     private remeasureVisible(): void {
+        // Capture bottom-proximity BEFORE heights change
+        const wasAtBottom = this.container.scrollHeight - this.container.scrollTop - this.container.clientHeight < 80;
+
         const rects: { idx: number; newH: number }[] = [];
         this.viewport.querySelectorAll('[data-vs-idx]').forEach(el => {
             const idx = Number((el as HTMLElement).dataset.vsIdx);
@@ -225,17 +231,23 @@ export class VirtualScroll {
                 rects.push({ idx, newH: el.getBoundingClientRect().height });
             }
         });
+        let heightChanged = false;
         for (const { idx, newH } of rects) {
             const oldH = this.items[idx].height;
             if (oldH !== newH) {
                 this.items[idx].height = newH;
                 this._totalHeight += (newH - oldH);
+                heightChanged = true;
             }
+        }
+        // Re-snap to bottom if user was there before heights grew
+        if (heightChanged && wasAtBottom) {
+            this.scrollToBottom();
         }
     }
 
     scrollToBottom(): void {
-        this.container.scrollTop = this._totalHeight;
+        this.container.scrollTop = this.container.scrollHeight;
         this.scheduleRender();
     }
 

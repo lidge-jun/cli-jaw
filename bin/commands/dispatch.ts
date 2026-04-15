@@ -32,17 +32,54 @@ if (!agent || !task) {
     process.exit(1);
 }
 
+const STARTUP_RETRY_DELAYS_MS = [500, 1000, 1500, 2000, 3000];
+
+function isConnRefused(error: any): boolean {
+    return error?.cause?.code === 'ECONNREFUSED' || error?.code === 'ECONNREFUSED';
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 await getCliAuthToken(PORT);
 try {
     console.log(`🚀 Dispatching to ${agent}...`);
-    const res = await cliFetch(`${BASE}/api/orchestrate/dispatch`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Jaw-Dispatch-Source': process.env.JAW_EMPLOYEE_MODE === '1' ? 'employee' : 'boss',
-        },
-        body: JSON.stringify({ agent, task }),
-    });
+
+    let res: Response | undefined;
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= STARTUP_RETRY_DELAYS_MS.length; attempt++) {
+        try {
+            res = await cliFetch(`${BASE}/api/orchestrate/dispatch`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Jaw-Dispatch-Source': process.env.JAW_EMPLOYEE_MODE === '1' ? 'employee' : 'boss',
+                },
+                body: JSON.stringify({ agent, task }),
+            });
+            break;
+        } catch (e: unknown) {
+            lastError = e;
+            if (!isConnRefused(e) || attempt === STARTUP_RETRY_DELAYS_MS.length) break;
+            if (attempt === 0) console.error('⏳ Server starting up, retrying...');
+            await sleep(STARTUP_RETRY_DELAYS_MS[attempt]!);
+        }
+    }
+
+    if (!res) {
+        if (isConnRefused(lastError)) {
+            console.error(
+                `❌ Cannot reach ${BASE}. If running as launchd/systemd, wait a few seconds after reboot. `
+                + 'For foreground mode: jaw serve',
+            );
+        } else {
+            console.error(`❌ Error: ${(lastError as Error)?.message || lastError}`);
+        }
+        process.exit(1);
+    }
+
     const body = await res.json() as any;
     if (!res.ok) {
         console.error(`❌ ${body.error || `Failed: ${res.status}`}`);
@@ -54,10 +91,6 @@ try {
         console.log(body.result.text);
     }
 } catch (e: any) {
-    if (e.cause?.code === 'ECONNREFUSED') {
-        console.error(`❌ Server not running. Start with: jaw serve`);
-    } else {
-        console.error(`❌ Error: ${e.message}`);
-    }
+    console.error(`❌ Error: ${e.message}`);
     process.exit(1);
 }

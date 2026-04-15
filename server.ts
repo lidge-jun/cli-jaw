@@ -137,6 +137,19 @@ loadSettings();
     }
 }
 
+// Clean orphaned employee tmp dirs from previous crashes
+{
+    const { tmpdir } = await import('node:os');
+    const tmpBase = tmpdir();
+    try {
+        const orphans = fs.readdirSync(tmpBase).filter(e => e.startsWith('jaw-emp-'));
+        for (const e of orphans) {
+            fs.rmSync(join(tmpBase, e), { recursive: true, force: true });
+        }
+        if (orphans.length) console.log(`[jaw:startup] cleaned ${orphans.length} orphaned employee tmp dir(s)`);
+    } catch { /* tmpdir read may fail on restricted systems */ }
+}
+
 syncMainSessionToSettings();
 try {
     ensureMemoryRuntimeReady();
@@ -524,7 +537,7 @@ const shutdown = async (sig: string) => {
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 process.once('SIGINT', () => shutdown('SIGINT'));
 
-server.listen(PORT, '127.0.0.1', () => {
+server.listen(PORT, '127.0.0.1', async () => {
     // Persist port so CLI commands auto-discover the running server
     const portStr = String(PORT);
     if (settings.port !== portStr) {
@@ -577,9 +590,11 @@ server.listen(PORT, '127.0.0.1', () => {
     } catch (e: unknown) { console.error('[mcp-init]', (e as Error).message); }
 
     hydrateTargetsFromSettings(settings);
-    initActiveMessagingRuntime().catch((e: unknown) => {
+    try {
+        await initActiveMessagingRuntime();
+    } catch (e: unknown) {
         console.error('[messaging:boot]', (e as Error).message);
-    });
+    }
 
     // ─── Seed default employees if none exist ────────
     const seeded = seedDefaultEmployees();

@@ -198,23 +198,56 @@ export function writeMeta(patch: Partial<AdvancedMeta>) {
     return next;
 }
 
+function isProcessAlive(pid: number): boolean {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (err: any) {
+        return err?.code === 'EPERM';
+    }
+}
+
 export function withMigrationLock<T>(fn: () => T) {
     const lockPath = getMigrationLockPath();
     ensureDir(dirname(lockPath));
-    try {
-        const fd = fs.openSync(lockPath, 'wx');
-        try { fs.writeSync(fd, String(process.pid)); } finally { fs.closeSync(fd); }
-    } catch (err: any) {
-        if (err.code === 'EEXIST') {
-            console.warn('[jaw:migration-lock] lock held by another process, proceeding without lock');
-            return fn();
+    let fd: number | null = null;
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+            fd = fs.openSync(lockPath, 'wx');
+            fs.writeSync(fd, `${process.pid}\n`);
+            break;
+        } catch (err: any) {
+            if (err?.code !== 'EEXIST') {
+                try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
+                throw err;
+            }
+            // Lock exists — check if holder is still alive
+            let ownerPid = NaN;
+            try { ownerPid = parseInt(fs.readFileSync(lockPath, 'utf8').trim(), 10); } catch { /* unreadable */ }
+            if (Number.isFinite(ownerPid) && isProcessAlive(ownerPid)) {
+                console.warn(`[jaw:migration-lock] lock held by live PID ${ownerPid}, proceeding without lock`);
+                return fn();
+            }
+            // Stale lock — remove and retry
+            try {
+                fs.unlinkSync(lockPath);
+                console.warn(`[jaw:migration-lock] removed stale lock${Number.isFinite(ownerPid) ? ` (PID ${ownerPid})` : ''}`);
+            } catch (unlinkErr: any) {
+                if (unlinkErr?.code !== 'ENOENT') throw unlinkErr;
+            }
         }
-        try { fs.unlinkSync(lockPath); } catch { /* ignore cleanup */ }
-        throw err;
     }
+
+    if (fd == null) {
+        console.warn('[jaw:migration-lock] could not acquire lock, proceeding without');
+        return fn();
+    }
+
     try {
         return fn();
     } finally {
+        try { fs.closeSync(fd); } catch { /* ignore */ }
         try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
     }
 }

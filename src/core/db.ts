@@ -86,6 +86,12 @@ db.exec(`
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     INSERT OR IGNORE INTO orc_state (id) VALUES ('default');
+
+    CREATE TABLE IF NOT EXISTS queued_messages (
+        id         TEXT PRIMARY KEY,
+        payload    TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
 `);
 
 // Lightweight migration for existing DBs created before `trace` column existed.
@@ -132,6 +138,12 @@ export const upsertEmployeeSession = db.prepare(
 );
 export const clearEmployeeSession = db.prepare('DELETE FROM employee_sessions WHERE employee_id = ?');
 export const clearAllEmployeeSessions = db.prepare('DELETE FROM employee_sessions');
+
+// ─── Message Queue Persistence ──────────────────────
+export const listQueuedMessages = db.prepare('SELECT id, payload FROM queued_messages ORDER BY created_at ASC');
+export const insertQueuedMessage = db.prepare('INSERT OR REPLACE INTO queued_messages (id, payload) VALUES (?, ?)');
+export const deleteQueuedMessage = db.prepare('DELETE FROM queued_messages WHERE id = ?');
+export const clearQueuedMessages = db.prepare('DELETE FROM queued_messages');
 
 // ─── PABCD State Machine ────────────────────────────
 export const getOrcState = db.prepare(

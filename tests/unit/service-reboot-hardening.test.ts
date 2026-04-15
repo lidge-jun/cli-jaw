@@ -79,3 +79,64 @@ test('SRH-006: loadSettings warns and backs up unreadable settings instead of si
         'backup path must only run after the ENOENT fast-path',
     );
 });
+
+// ─── New tests for findings #6-#10 ─────────────────
+
+const DISPATCH = path.join(ROOT, 'bin/commands/dispatch.ts');
+const SHARED = path.join(ROOT, 'src/memory/shared.ts');
+
+test('SRH-007: messaging init is awaited before heartbeat starts', () => {
+    const src = fs.readFileSync(SERVER, 'utf8');
+    assert.match(src, /await initActiveMessagingRuntime\(\)/,
+        'messaging init must be awaited, not fire-and-forget');
+    const awaitIdx = src.indexOf('await initActiveMessagingRuntime()');
+    const heartbeatIdx = src.indexOf('startHeartbeat();');
+    assert.ok(awaitIdx < heartbeatIdx,
+        'messaging must be initialized before heartbeat starts');
+});
+
+test('SRH-008: dispatch CLI has retry logic for ECONNREFUSED', () => {
+    const src = fs.readFileSync(DISPATCH, 'utf8');
+    assert.match(src, /STARTUP_RETRY_DELAYS_MS/,
+        'dispatch must define retry delays for cold-start scenario');
+    assert.match(src, /isConnRefused/,
+        'dispatch must detect ECONNREFUSED errors');
+    assert.match(src, /Server starting up, retrying/,
+        'dispatch must inform user about retry during startup');
+});
+
+test('SRH-009: message queue is persisted to DB', () => {
+    const spawnSrc = fs.readFileSync(SPAWN, 'utf8');
+    const dbSrc = fs.readFileSync(DB, 'utf8');
+
+    assert.match(dbSrc, /queued_messages/,
+        'queued_messages table must exist in schema');
+    assert.match(dbSrc, /insertQueuedMessage/,
+        'insertQueuedMessage statement must be exported');
+    assert.match(dbSrc, /deleteQueuedMessage/,
+        'deleteQueuedMessage statement must be exported');
+    assert.match(spawnSrc, /insertQueuedMessage\.run\(item\.id/,
+        'enqueueMessage must persist to DB');
+    assert.match(spawnSrc, /deleteQueuedMessage\.run\(item\.id\)/,
+        'processQueue must remove processed items from DB');
+    assert.match(spawnSrc, /loadPersistedQueue/,
+        'queue must be loaded from DB on module init');
+});
+
+test('SRH-010: orphaned employee tmp dirs are cleaned on startup', () => {
+    const src = fs.readFileSync(SERVER, 'utf8');
+    assert.match(src, /jaw-emp-/,
+        'startup must reference jaw-emp- prefix for cleanup');
+    assert.match(src, /orphaned employee tmp dir/,
+        'startup must log cleanup of orphaned dirs');
+});
+
+test('SRH-011: migration lock has PID staleness check', () => {
+    const src = fs.readFileSync(SHARED, 'utf8');
+    assert.match(src, /isProcessAlive/,
+        'migration lock must check if holding process is alive');
+    assert.match(src, /process\.kill\(.*0\)/,
+        'must use signal 0 to check PID existence');
+    assert.match(src, /stale lock/,
+        'must log when removing stale lock');
+});
