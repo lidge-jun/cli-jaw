@@ -100,15 +100,12 @@ export class VirtualScroll {
     private totalEffectiveHeight(): number {
         const n = this.items.length;
         if (n === 0) return 0;
-        return this.offsetForIndex(n) + (n - 1) * this.itemSpacing;
+        return this.offsetForIndex(n) + n * this.itemSpacing;
     }
 
-    /** Spacer height needed after the last rendered item.
-     *  Viewport DOM omits margin after its last child, so add the boundary gap
-     *  back when there are still off-screen items below. */
+    /** Spacer height below the last rendered item. */
     private bottomSpacerHeight(lastVisible: number): number {
-        const remaining = this.totalEffectiveHeight() - this.effectiveOffset(lastVisible + 1);
-        return remaining + (lastVisible < this.items.length - 1 ? this.itemSpacing : 0);
+        return Math.max(0, this.totalEffectiveHeight() - this.effectiveOffset(lastVisible + 1));
     }
 
     /** Binary search: find item index at given scroll offset */
@@ -134,17 +131,13 @@ export class VirtualScroll {
         this.containerPadTop = parseFloat(containerStyle.paddingTop) || 0;
         this.containerPadBottom = parseFloat(containerStyle.paddingBottom) || 0;
         const msgs = Array.from(this.viewport.querySelectorAll<HTMLElement>('.msg'));
-        // Do not learn spacing from the viewport's last child.
-        // `.vs-active .msg:last-child` has margin-bottom: 0, which is a DOM-window
-        // artifact, not the global spacing between virtual items.
-        const sample = msgs.find((el) => el !== this.viewport.lastElementChild) ?? null;
+        const sample = msgs[0] ?? null;
         if (sample) {
             const spacing = parseFloat(getComputedStyle(sample).marginBottom) || 0;
             if (spacing > 0) this.itemSpacing = spacing;
             return;
         }
-        // Fallback: when the viewport currently contains only one large item,
-        // there is no non-last-child sample to learn spacing from. Probe the
+        // Fallback: when the viewport currently contains no messages, probe the
         // active CSS rule directly instead of collapsing spacing to 0.
         if (this._active && this.viewport.isConnected) {
             const probe = document.createElement('div');

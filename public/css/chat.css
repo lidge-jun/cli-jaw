@@ -153,9 +153,6 @@
 .vs-active .msg {
     margin-bottom: var(--space-3);
 }
-.vs-active .msg:last-child {
-    margin-bottom: 0;
-}
 
 /* Depth fade gradients removed — caused visible white bars on scroll in light mode */
 
