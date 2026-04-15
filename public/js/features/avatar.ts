@@ -99,7 +99,10 @@ async function authorizedFetch(path: string, init: RequestInit): Promise<Respons
 async function uploadAvatar(role: AvatarRole, file: File): Promise<void> {
     const res = await authorizedFetch(`/api/avatar/${role}/upload`, {
         method: 'POST',
-        headers: { 'X-Filename': encodeURIComponent(file.name) },
+        headers: {
+            'Content-Type': file.type || 'image/png',
+            'X-Filename': encodeURIComponent(file.name),
+        },
         body: file,
     });
     const json = await res.json().catch(() => null);

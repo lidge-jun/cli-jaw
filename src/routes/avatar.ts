@@ -56,7 +56,8 @@ function parseTarget(raw: string): AvatarTarget | null {
 }
 
 function validateUpload(contentType: string, filename: string, body: unknown): void {
-    if (!contentType.startsWith('image/')) {
+    // Accept image/* or octet-stream (browser may not send correct type)
+    if (!contentType.startsWith('image/') && contentType !== 'application/octet-stream') {
         throw Object.assign(new Error('invalid_image_type'), { statusCode: 400 });
     }
     const ext = extname(filename).toLowerCase();
@@ -101,7 +102,7 @@ export function registerAvatarRoutes(app: Express, requireAuth: AuthMiddleware):
         });
     });
 
-    app.post('/api/avatar/:target/upload', requireAuth, express.raw({ type: 'image/*', limit: '5mb' }), (req, res) => {
+    app.post('/api/avatar/:target/upload', requireAuth, express.raw({ type: ['image/*', 'application/octet-stream'], limit: '5mb' }), (req, res) => {
         const target = parseTarget(String(req.params.target || ''));
         if (!target) return fail(res, 400, 'invalid_avatar_target');
 
