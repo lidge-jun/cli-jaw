@@ -260,11 +260,22 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
         if (content) content.setAttribute('data-raw', stripOrchestration(finalText));
         if (content) activateWidgets(content as HTMLElement);
 
-        // Promote streaming div from real DOM into VS if active
+        // Promote streaming div from real DOM into VS if active.
+        // Revert activated widgets back to pending state so VS can
+        // re-activate them after recreating the DOM from stored HTML.
         const vs = getVirtualScroll();
         if (vs.active && state.currentAgentDiv && state.currentAgentDiv.isConnected) {
-            vs.appendLiveItem(state.currentAgentDiv);
-            state.currentAgentDiv.remove();
+            const div = state.currentAgentDiv;
+            div.querySelectorAll('.diagram-widget').forEach(widget => {
+                const encoded = (widget as HTMLElement).dataset.widgetHtml;
+                if (!encoded) return;
+                const pending = document.createElement('div');
+                pending.className = 'diagram-widget-pending';
+                pending.dataset.diagramHtml = encoded;
+                widget.replaceWith(pending);
+            });
+            vs.appendLiveItem(div);
+            div.remove();
         }
 
         // Cache agent response for offline (use finalText to capture stream-only responses)
