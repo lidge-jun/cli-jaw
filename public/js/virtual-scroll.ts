@@ -9,7 +9,7 @@ const EST_HEIGHT = 80;
 
 interface ScrollAnchor {
     index: number;
-    offsetWithinItem: number;
+    top: number;
 }
 
 export function computeAnchoredScrollTop(
@@ -37,7 +37,6 @@ export class VirtualScroll {
     private spacerBottom: HTMLDivElement;
     private viewport: HTMLDivElement;
     private _active = false;
-    private _totalHeight = 0;
     private rafId: number | null = null;
     private firstVisible = -1;
     private lastVisible = -1;
@@ -167,6 +166,7 @@ export class VirtualScroll {
         if (this.rafId) { cancelAnimationFrame(this.rafId); this.rafId = null; }
         this.container.innerHTML = this.items.map(it => it.html).join('');
         this._active = false;
+        this._totalHeight = 0; // TODO: remove if _totalHeight is dead
         this.firstVisible = -1;
         this.lastVisible = -1;
         this.items = [];
@@ -311,7 +311,7 @@ export class VirtualScroll {
         }
         this.firstVisible = first;
         this.lastVisible = last;
-        const anchor = this.captureScrollAnchor(contentScrollTop);
+        const anchor = this.captureScrollAnchor();
 
         // Build map of currently mounted items by vsIdx
         const mounted = new Map<number, HTMLElement>();
@@ -376,12 +376,17 @@ export class VirtualScroll {
         this.remeasureVisible(anchor);
     }
 
-    private captureScrollAnchor(contentScrollTop: number): ScrollAnchor | null {
-        if (this.items.length === 0) return null;
-        const index = this.indexForOffset(contentScrollTop);
+    private captureScrollAnchor(): ScrollAnchor | null {
+        const containerRect = this.container.getBoundingClientRect();
+        const visibleTop = containerRect.top + this.containerPadTop;
+        const candidates = Array.from(this.viewport.querySelectorAll<HTMLElement>('[data-vs-idx]'));
+        const anchorEl = candidates.find((el) => el.getBoundingClientRect().bottom > visibleTop) ?? candidates[0] ?? null;
+        if (!anchorEl) return null;
+        const index = Number(anchorEl.dataset.vsIdx);
+        if (!Number.isFinite(index)) return null;
         return {
             index,
-            offsetWithinItem: Math.max(0, contentScrollTop - this.effectiveOffset(index)),
+            top: anchorEl.getBoundingClientRect().top - containerRect.top,
         };
     }
 
@@ -399,16 +404,14 @@ export class VirtualScroll {
 
     private restoreScrollAnchor(anchor: ScrollAnchor | null): void {
         if (!anchor) return;
+        const containerRect = this.container.getBoundingClientRect();
+        const anchorEl = this.viewport.querySelector<HTMLElement>(`[data-vs-idx="${anchor.index}"]`);
+        if (!anchorEl) return;
+        const currentTop = anchorEl.getBoundingClientRect().top - containerRect.top;
+        const delta = currentTop - anchor.top;
+        if (Math.abs(delta) <= 1) return;
         const maxScrollTop = Math.max(0, this.container.scrollHeight - this.container.clientHeight);
-        const nextScrollTop = computeAnchoredScrollTop(
-            this.effectiveOffset(anchor.index),
-            anchor.offsetWithinItem,
-            this.containerPadTop,
-            maxScrollTop,
-        );
-        if (Math.abs(this.container.scrollTop - nextScrollTop) > 1) {
-            this.container.scrollTop = nextScrollTop;
-        }
+        this.container.scrollTop = Math.max(0, Math.min(this.container.scrollTop + delta, maxScrollTop));
     }
 
     private remeasureVisible(anchor: ScrollAnchor | null): void {
