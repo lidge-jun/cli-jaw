@@ -126,12 +126,12 @@ export class VirtualScroll {
     }
 
     scrollToBottom(): void {
-        if (this.virtualizer && this.items.length > 0) {
-            // TanStack API — syncs internal scrollState + DOM together
-            this.virtualizer.scrollToIndex(this.items.length - 1, { align: 'end' });
-        }
-        // Also set DOM scrollTop for non-VS content below innerEl
-        // (streaming placeholder lives outside VS as direct container child)
+        // Single source: DOM scrollTop only.
+        // tanstack picks up the new position via its scroll event listener
+        // (1 frame delay — fine for ongoing streaming/chat).
+        // This also reaches streaming placeholder content that lives
+        // outside VS as a direct container child.
+        // Note: activate(toBottom) uses scrollToIndex for immediate sync.
         this.container.scrollTop = this.container.scrollHeight;
     }
 

@@ -282,13 +282,42 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
     loadStats();
 }
 
+/** Convert server-stored prompts back to display format on reload.
+ *  Handles: file uploads, multi-file, voice+file combos (ko + en patterns) */
+function formatUserPrompt(text: string): string {
+    // Multi-file: "[사용자가 파일 3개를 보냈습니다]" or "[User sent 3 files]"
+    const multiMatch = text.match(/^\[(?:사용자가 파일 (\d+)개를 보냈습니다|User sent (\d+) files)\]/);
+    if (multiMatch) {
+        const count = multiMatch[1] || multiMatch[2];
+        const userMsgMatch = text.match(/(?:사용자 메시지|User message): (.+)$/s);
+        const userMsg = userMsgMatch ? ' ' + userMsgMatch[1].trim() : '';
+        return `📎 [${count} files]${userMsg}`;
+    }
+
+    // Single file: "[사용자가 파일을 보냈습니다: /path/to/file.md]"
+    const fileMatch = text.match(/^\[(?:사용자가 파일을 보냈습니다|User sent a file): ([^\]]+)\]/);
+    if (fileMatch) {
+        const fileName = fileMatch[1].split('/').pop() || fileMatch[1];
+        // Check if voice is also present (🎤 after file block)
+        const voiceMatch = text.match(/🎤\s*(.{0,80})/);
+        const voicePart = voiceMatch ? `🎤 [음성 메시지] ` : '';
+        const userMsgMatch = text.match(/(?:사용자 메시지|User message): (.+)$/s);
+        const userMsg = userMsgMatch ? ' ' + userMsgMatch[1].trim() : '';
+        return `${voicePart}📎 [${fileName}]${userMsg}`;
+    }
+
+    return text;
+}
+
 export function addMessage(role: string, text: string, cli?: string | null): HTMLDivElement {
     const container = document.getElementById('chatMessages');
     const vs = getVirtualScroll();
     hideEmptyState();
     removeSkeleton();
 
-    const rendered = renderMarkdown(text);
+    // For user messages: convert file-upload prompts to clean display format
+    const displayText = role === 'user' ? formatUserPrompt(text) : text;
+    const rendered = renderMarkdown(displayText);
     const label = escapeHtml(role === 'user' ? t('msg.you') : getAppName());
 
     const div = document.createElement('div');
@@ -415,11 +444,12 @@ export async function loadStats(): Promise<void> {
 function buildVirtualHistoryItems(msgs: MessageItem[]): VirtualItem[] {
     return msgs.map((m) => {
         const role = m.role === 'assistant' ? 'agent' : m.role;
-        const rawContent = stripOrchestration(m.content);
+        const rawContent = stripOrchestration(
+            role === 'user' ? formatUserPrompt(m.content) : m.content,
+        );
         const label = escapeHtml(role === 'user' ? t('msg.you') : getAppName());
         const tools = m.role === 'assistant' ? parseToolLog(m.tool_log) : [];
         const toolHtml = tools.length > 0 ? buildProcessBlockHtml(toProcessSteps(tools), true) : '';
-        // Pre-render markdown so tanstack estimateSize gets accurate initial heights
         const rendered = rawContent ? renderMarkdown(rawContent) : '';
         const html = role === 'agent'
             ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body">${toolHtml}<div class="msg-content" data-raw="${escapeHtml(rawContent)}">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
