@@ -38,6 +38,7 @@ export class VirtualScroll {
     private viewport: HTMLDivElement;
     private _active = false;
     private rafId: number | null = null;
+    private suppressScroll = false;
     private firstVisible = -1;
     private lastVisible = -1;
 
@@ -235,7 +236,10 @@ export class VirtualScroll {
         }
     }
 
-    private scrollHandler = () => this.scheduleRender();
+    private scrollHandler = () => {
+        if (this.suppressScroll) return;
+        this.scheduleRender();
+    };
 
     private activate(toBottom = false): void {
         this._active = true;
@@ -400,7 +404,11 @@ export class VirtualScroll {
         const delta = currentTop - anchor.top;
         if (Math.abs(delta) <= 1) return;
         const maxScrollTop = Math.max(0, this.container.scrollHeight - this.container.clientHeight);
+        // Suppress scroll events during anchor correction to prevent
+        // a redundant render cycle that causes visual flicker
+        this.suppressScroll = true;
         this.container.scrollTop = Math.max(0, Math.min(this.container.scrollTop + delta, maxScrollTop));
+        this.suppressScroll = false;
     }
 
     private remeasureVisible(anchor: ScrollAnchor | null): void {
