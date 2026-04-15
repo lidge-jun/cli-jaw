@@ -196,9 +196,12 @@ export async function steerHandler(args: any[], ctx: any) {
     killActiveAgent('steer');
     await waitForProcessEnd(3000);
 
-    // Remote interfaces: return signal for bot.ts to handle with full UX
+    // Remote interfaces: clear stale session before re-orchestrate
     const iface = ctx.interface || 'cli';
     if (iface === 'telegram' || iface === 'discord') {
+        if (typeof ctx.clearSession === 'function') {
+            await ctx.clearSession();
+        }
         return { ok: true, type: 'steer', text: t('cmd.steer.started', {}, L), steerPrompt: prompt };
     }
 

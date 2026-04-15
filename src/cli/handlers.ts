@@ -256,11 +256,13 @@ export async function employeeHandler(args: any[], ctx: any) {
 export async function clearHandler(_args: any[], ctx: any) {
     const L = ctx.locale || 'ko';
     const iface = ctx.interface || 'cli';
-    if (iface === 'telegram') {
-        return { ok: true, text: t('cmd.clear.telegram', {}, L) };
+
+    if (typeof ctx.clearSession === 'function') {
+        await ctx.clearSession();
     }
-    if (iface === 'discord') {
-        return { ok: true, text: t('cmd.clear.discord', {}, L) };
+
+    if (iface === 'telegram' || iface === 'discord') {
+        return { ok: true, text: t('cmd.clear.remote', {}, L) };
     }
     return {
         ok: true,

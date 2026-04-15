@@ -83,11 +83,16 @@ test('executeCommand: /clear returns clear_screen for cli', async () => {
     assert.equal(r.code, 'clear_screen');
 });
 
-test('executeCommand: /clear returns info for telegram', async () => {
+test('executeCommand: /clear actually clears session on telegram', async () => {
     const parsed = parseCommand('/clear');
-    const r = await executeCommand(parsed, { interface: 'telegram' });
+    let cleared = false;
+    const r = await executeCommand(parsed, {
+        interface: 'telegram',
+        clearSession: async () => { cleared = true; },
+    });
     assert.equal(r.ok, true);
-    assert.ok(r.text.toLowerCase().includes('telegram'));
+    assert.equal(cleared, true, 'clearSession should be invoked');
+    assert.ok(r.text, 'should return a confirmation text');
 });
 
 test('executeCommand: unsupported interface returns error', async () => {
