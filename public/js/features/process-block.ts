@@ -53,34 +53,30 @@ function renderStep(step: ProcessStep): string {
     const label = escapeHtml(step.label || step.icon || '');
     const detail = step.detail || '';
     const detailId = `process-detail-${step.id}`;
-    const detailPreview = hasExpandableDetail(step)
-        ? previewText(detail, step.type === 'thinking' ? 120 : 100)
-        : '';
-    const snippetHtml = detailPreview
-        ? `<span class="process-step-snippet">${escapeHtml(detailPreview)}</span>`
-        : '';
 
-    if (hasExpandableDetail(step)) {
-        return `<div class="process-step process-step-expandable" data-step-id="${step.id}" data-type="${step.type}">
-            <button class="process-step-toggle" aria-expanded="false" aria-controls="${detailId}">
-                <span class="${dotClass}"></span>
-                <span class="${badgeClass}">${badgeText}</span>
-                <span class="process-step-main">
-                    <span class="process-step-label">${label}</span>
-                    ${snippetHtml}
-                </span>
-                <span class="process-step-chevron">${ICONS.chevronRight}</span>
-            </button>
-            <div class="process-step-details collapsed" id="${detailId}">
-                <pre class="process-step-full">${escapeHtml(detail)}</pre>
-            </div>
-        </div>`;
-    }
+    // All steps are expandable — shows label as short preview line,
+    // full detail (or label) in collapsible section
+    const hasDetail = hasExpandableDetail(step);
+    const snippetSource = hasDetail ? detail : (step.label || '');
+    const snippetPreview = previewText(snippetSource, step.type === 'thinking' ? 120 : 80);
+    const snippetHtml = snippetPreview
+        ? `<span class="process-step-snippet">${escapeHtml(snippetPreview)}</span>`
+        : '';
+    const fullContent = hasDetail ? detail : (step.label || '');
 
-    return `<div class="process-step" data-step-id="${step.id}" data-type="${step.type}">
-        <span class="${dotClass}"></span>
-        <span class="${badgeClass}">${badgeText}</span>
-        <span class="process-step-label">${label}</span>
+    return `<div class="process-step process-step-expandable" data-step-id="${step.id}" data-type="${step.type}">
+        <button class="process-step-toggle" aria-expanded="false" aria-controls="${detailId}">
+            <span class="${dotClass}"></span>
+            <span class="${badgeClass}">${badgeText}</span>
+            <span class="process-step-main">
+                <span class="process-step-label">${label}</span>
+                ${snippetHtml}
+            </span>
+            <span class="process-step-chevron">${ICONS.chevronRight}</span>
+        </button>
+        <div class="process-step-details collapsed" id="${detailId}">
+            <pre class="process-step-full">${escapeHtml(fullContent)}</pre>
+        </div>
     </div>`;
 }
 
