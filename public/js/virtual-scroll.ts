@@ -95,16 +95,19 @@ export class VirtualScroll {
         return this.offsetForIndex(index) + index * this.itemSpacing;
     }
 
-    /** Total effective height of all items with spacing */
+    /** Total effective height of all items with spacing.
+     *  N items have N-1 gaps (last item's margin is 0 via :last-child). */
     private totalEffectiveHeight(): number {
         const n = this.items.length;
         if (n === 0) return 0;
-        return this.offsetForIndex(n) + n * this.itemSpacing;
+        return this.offsetForIndex(n) + (n - 1) * this.itemSpacing;
     }
 
-    /** Spacer height below the last rendered item. */
+    /** Spacer height below the last rendered item.
+     *  effectiveOffset(N) includes one extra spacing that compensates for
+     *  :last-child removing the viewport's last element's margin-bottom. */
     private bottomSpacerHeight(lastVisible: number): number {
-        return Math.max(0, this.totalEffectiveHeight() - this.effectiveOffset(lastVisible + 1));
+        return Math.max(0, this.effectiveOffset(this.items.length) - this.effectiveOffset(lastVisible + 1));
     }
 
     /** Binary search: find item index at given scroll offset */
@@ -166,11 +169,9 @@ export class VirtualScroll {
         if (this.rafId) { cancelAnimationFrame(this.rafId); this.rafId = null; }
         this.container.innerHTML = this.items.map(it => it.html).join('');
         this._active = false;
-        this._totalHeight = 0; // TODO: remove if _totalHeight is dead
         this.firstVisible = -1;
         this.lastVisible = -1;
         this.items = [];
-        this._totalHeight = 0;
         this.prefixHeights = [0];
         this.prefixDirtyFrom = 0;
         this.itemSpacing = 0;
@@ -182,7 +183,6 @@ export class VirtualScroll {
         options?: { autoActivate?: boolean; toBottom?: boolean },
     ): void {
         this.items = items;
-        this._totalHeight = items.reduce((sum, it) => sum + it.height, 0);
         this.prefixHeights = new Array(items.length + 1).fill(0);
         this.prefixDirtyFrom = 0;
         if (options?.autoActivate === false) return;
@@ -201,7 +201,6 @@ export class VirtualScroll {
             const nextH = heights[offset];
             if (oldH === nextH) continue;
             item.height = nextH;
-            this._totalHeight += nextH - oldH;
             this.markPrefixDirty(idx);
         }
     }
@@ -216,7 +215,6 @@ export class VirtualScroll {
     addItem(id: string, html: string): void {
         const item: VirtualItem = { id, html, height: EST_HEIGHT };
         this.items.push(item);
-        this._totalHeight += EST_HEIGHT;
         this.markPrefixDirty(this.items.length - 1);
         if (!this._active && this.items.length >= THRESHOLD) {
             this.activate(true);
@@ -232,7 +230,6 @@ export class VirtualScroll {
         const id = generateId();
         const item: VirtualItem = { id, html, height: EST_HEIGHT };
         this.items.push(item);
-        this._totalHeight += EST_HEIGHT;
         this.markPrefixDirty(this.items.length - 1);
         this.scrollToBottom();
     }
@@ -247,7 +244,6 @@ export class VirtualScroll {
 
     private activate(toBottom = false): void {
         this._active = true;
-        this._totalHeight = 0;
         const existing = this.container.querySelectorAll('.msg');
         this.primeSpacingFromExisting(existing[0] as HTMLElement | null);
         existing.forEach((el, i) => {
@@ -255,9 +251,6 @@ export class VirtualScroll {
                 this.items[i].height = el.getBoundingClientRect().height;
             }
         });
-        for (const item of this.items) {
-            this._totalHeight += item.height;
-        }
         this.prefixHeights = new Array(this.items.length + 1).fill(0);
         this.prefixDirtyFrom = 0;
 
@@ -429,7 +422,6 @@ export class VirtualScroll {
             const oldH = this.items[idx].height;
             if (oldH !== newH) {
                 this.items[idx].height = newH;
-                this._totalHeight += (newH - oldH);
                 this.markPrefixDirty(idx);
                 heightChanged = true;
             }
@@ -457,7 +449,6 @@ export class VirtualScroll {
 
     clear(): void {
         this.items = [];
-        this._totalHeight = 0;
         this.prefixHeights = [0];
         this.prefixDirtyFrom = 0;
         this.itemSpacing = 0;
