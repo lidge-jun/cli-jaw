@@ -50,6 +50,7 @@ interface AdvancedMemoryStatus {
     migrationLocked?: boolean;
     staleWarnings?: string[];
     hasSoul?: boolean;
+    soulSynthesized?: boolean;
 }
 
 interface AdvancedMemoryFiles {
@@ -83,6 +84,10 @@ function syncSidebarBadge(status: AdvancedMemoryStatus | null, basicCount: numbe
         sideBtn.innerHTML = `${ICONS.brain} Memory · <span style="color:var(--accent)">${t('updateNeeded')}</span>`;
         return;
     }
+    if (status?.enabled && status?.hasSoul && !status?.soulSynthesized) {
+        sideBtn.innerHTML = `${ICONS.brain} Memory · <span style="color:var(--accent)">Soul 최적화</span>`;
+        return;
+    }
     const state = status?.indexState === 'ready'
         ? 'Ready'
         : status?.state === 'not_initialized'
@@ -103,6 +108,11 @@ function renderStatusBanner(status: AdvancedMemoryStatus | null) {
     if (status.hasSoul === false) {
         banner.innerHTML = `<span>Memory structure upgrade available.</span>
             <button id="advUpgradeSoulBtn" class="btn-sm" style="margin-left:8px">${t('memoryUpdateBtn')}</button>`;
+        return;
+    }
+    if (status.hasSoul && !status.soulSynthesized) {
+        banner.innerHTML = `<span>Soul identity can be personalized with your active CLI.</span>
+            <button id="advSynthesizeSoulBtn" class="btn-sm" style="margin-left:8px">Soul 최적화</button>`;
         return;
     }
     if (status.state === 'not_initialized') {
@@ -337,6 +347,32 @@ export async function upgradeSoulMemory(): Promise<void> {
     } else {
         setAdvBanner('✓ Soul already active.');
     }
+    await openMemoryModal();
+    switchMemTab('status');
+    const freshStatus = await apiJson<any>('/api/memory/status');
+    syncSidebarBadge(freshStatus, 0);
+    renderStatusBanner(freshStatus);
+}
+
+export async function synthesizeSoul(): Promise<void> {
+    setAdvBusy(true);
+    setAdvBanner('Soul 최적화 중... (활성 CLI가 작업합니다)', true);
+    const result = await apiJson<{
+        ok: boolean;
+        reason?: string;
+        action?: string;
+    }>('/api/soul/bootstrap', 'POST', {});
+    setAdvBusy(false);
+    if (!result?.ok) {
+        const msg = result?.reason === 'already_synthesized'
+            ? '✓ Soul already optimized.'
+            : result?.reason === 'no_active_agent'
+                ? 'No active CLI agent. Please start an agent first.'
+                : `Soul optimization failed: ${result?.reason || 'unknown'}`;
+        setAdvBanner(msg);
+        return;
+    }
+    setAdvBanner('✓ Soul 최적화 프롬프트 전송됨. 채팅창을 확인하세요.');
     await openMemoryModal();
     switchMemTab('status');
     const freshStatus = await apiJson<any>('/api/memory/status');

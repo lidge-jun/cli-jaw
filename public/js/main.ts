@@ -43,7 +43,7 @@ import {
 import {
     openMemoryModal, closeMemoryModal, switchMemTab, setMemEnabled,
     saveMemSettings, deleteMemFile, viewMemFile,
-    rerunAdvancedBootstrap, reindexAdvancedMemory, upgradeSoulMemory, openCorruptedFolder,
+    rerunAdvancedBootstrap, reindexAdvancedMemory, upgradeSoulMemory, synthesizeSoul, openCorruptedFolder,
     bindAdvancedProviderUi, triggerFlushNow
 } from './features/memory.js';
 import { state } from './state.js';
@@ -398,6 +398,7 @@ document.getElementById('advReimportBtn')?.addEventListener('click', rerunAdvanc
 document.getElementById('advOpenCorruptedBtn')?.addEventListener('click', openCorruptedFolder);
 document.getElementById('advStatusBanner')?.addEventListener('click', (e) => {
     if ((e.target as HTMLElement)?.id === 'advUpgradeSoulBtn') upgradeSoulMemory();
+    if ((e.target as HTMLElement)?.id === 'advSynthesizeSoulBtn') synthesizeSoul();
 });
 bindAdvancedProviderUi();
 
