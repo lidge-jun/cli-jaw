@@ -12,9 +12,9 @@ import {
 
 // ─── Canonical set ───────────────────────────────────
 
-test('CM-001: canonical set contains exactly 5 aliases', () => {
-    assert.equal(CLAUDE_CANONICAL_MODELS.length, 5);
-    assert.deepEqual([...CLAUDE_CANONICAL_MODELS].sort(), ['haiku', 'opus', 'opus[1m]', 'sonnet', 'sonnet[1m]']);
+test('CM-001: canonical set contains exactly 7 models', () => {
+    assert.equal(CLAUDE_CANONICAL_MODELS.length, 7);
+    assert.deepEqual([...CLAUDE_CANONICAL_MODELS].sort(), ['claude-opus-4-6', 'claude-opus-4-6[1m]', 'haiku', 'opus', 'opus[1m]', 'sonnet', 'sonnet[1m]']);
 });
 
 test('CM-002: isClaudeCanonicalModel accepts all canonical values', () => {
@@ -33,12 +33,14 @@ test('CM-003: isClaudeCanonicalModel rejects non-canonical values', () => {
 
 test('CM-004: migrateLegacyClaudeValue maps historical 1M values to aliases', () => {
     assert.equal(migrateLegacyClaudeValue('claude-sonnet-4-6[1m]'), 'sonnet[1m]');
-    assert.equal(migrateLegacyClaudeValue('claude-opus-4-6[1m]'), 'opus[1m]');
+    // claude-opus-4-6[1m] is now canonical — no longer migrated
+    assert.equal(migrateLegacyClaudeValue('claude-opus-4-6[1m]'), 'claude-opus-4-6[1m]');
 });
 
-test('CM-005: migrateLegacyClaudeValue maps historical non-1M full names to aliases', () => {
+test('CM-005: migrateLegacyClaudeValue maps historical sonnet full names to aliases', () => {
     assert.equal(migrateLegacyClaudeValue('claude-sonnet-4-6'), 'sonnet');
-    assert.equal(migrateLegacyClaudeValue('claude-opus-4-6'), 'opus');
+    // claude-opus-4-6 is now canonical — no longer migrated
+    assert.equal(migrateLegacyClaudeValue('claude-opus-4-6'), 'claude-opus-4-6');
 });
 
 test('CM-006: migrateLegacyClaudeValue preserves pinned Haiku', () => {
@@ -63,12 +65,13 @@ test('CM-008: migrateLegacyClaudeValue is idempotent on canonical values', () =>
 
 // ─── Legacy map ──────────────────────────────────────
 
-test('CM-009: legacy map covers exactly 4 historical values', () => {
-    assert.equal(Object.keys(CLAUDE_LEGACY_VALUE_MAP).length, 4);
+test('CM-009: legacy map covers exactly 2 historical values', () => {
+    assert.equal(Object.keys(CLAUDE_LEGACY_VALUE_MAP).length, 2);
     assert.ok('claude-sonnet-4-6' in CLAUDE_LEGACY_VALUE_MAP);
-    assert.ok('claude-opus-4-6' in CLAUDE_LEGACY_VALUE_MAP);
     assert.ok('claude-sonnet-4-6[1m]' in CLAUDE_LEGACY_VALUE_MAP);
-    assert.ok('claude-opus-4-6[1m]' in CLAUDE_LEGACY_VALUE_MAP);
+    // claude-opus-4-6 variants are now canonical — not in legacy map
+    assert.ok(!('claude-opus-4-6' in CLAUDE_LEGACY_VALUE_MAP));
+    assert.ok(!('claude-opus-4-6[1m]' in CLAUDE_LEGACY_VALUE_MAP));
 });
 
 test('CM-010: Haiku is intentionally excluded from legacy map', () => {
@@ -83,7 +86,7 @@ test('CM-011: getDefaultClaudeModel returns sonnet', () => {
 
 test('CM-012: getDefaultClaudeChoices returns all canonical values', () => {
     const choices = getDefaultClaudeChoices();
-    assert.deepEqual([...choices].sort(), ['haiku', 'opus', 'opus[1m]', 'sonnet', 'sonnet[1m]']);
+    assert.deepEqual([...choices].sort(), ['claude-opus-4-6', 'claude-opus-4-6[1m]', 'haiku', 'opus', 'opus[1m]', 'sonnet', 'sonnet[1m]']);
 });
 
 test('CM-013: getClaudeModelKind classifies correctly', () => {

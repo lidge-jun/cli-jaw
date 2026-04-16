@@ -42,7 +42,7 @@ test('EG-001: spawnAgent calls detectCli() before any spawn', () => {
 test('EG-002: standard CLI branch has child.on(\'error\') listener', () => {
     const stdBranchIdx = spawnSrc.indexOf('// ─── Standard CLI branch');
     assert.ok(stdBranchIdx > 0, 'Standard CLI branch comment should exist');
-    const block = spawnSrc.slice(stdBranchIdx, stdBranchIdx + 800);
+    const block = spawnSrc.slice(stdBranchIdx, stdBranchIdx + 1200);
 
     assert.ok(
         block.includes("child.on('error'"),
@@ -59,7 +59,7 @@ test('EG-002: standard CLI branch has child.on(\'error\') listener', () => {
 test('EG-003: ACP branch has acp.on(\'error\') listener', () => {
     const acpBranchIdx = spawnSrc.indexOf('// ─── Copilot ACP branch');
     assert.ok(acpBranchIdx > 0, 'ACP branch should exist');
-    const block = spawnSrc.slice(acpBranchIdx, acpBranchIdx + 1800);
+    const block = spawnSrc.slice(acpBranchIdx, acpBranchIdx + 2400);
 
     assert.ok(
         block.includes("acp.on('error'"),

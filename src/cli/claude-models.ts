@@ -14,9 +14,7 @@ export type ClaudeCanonicalModel = (typeof CLAUDE_CANONICAL_MODELS)[number];
 
 export const CLAUDE_LEGACY_VALUE_MAP: Record<string, ClaudeCanonicalModel> = {
   'claude-sonnet-4-6': 'sonnet',
-  'claude-opus-4-6': 'opus',
   'claude-sonnet-4-6[1m]': 'sonnet[1m]',
-  'claude-opus-4-6[1m]': 'opus[1m]',
 };
 
 export function isClaudeCli(cli: string): boolean {

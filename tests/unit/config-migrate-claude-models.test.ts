@@ -15,7 +15,7 @@ test('CfgM-001: migrateSettings normalizes legacy Claude perCli model values', (
     assert.equal(s.perCli.codex.model, 'gpt-5.4');
 });
 
-test('CfgM-002: migrateSettings normalizes legacy Claude activeOverrides model values', () => {
+test('CfgM-002: migrateSettings preserves canonical Claude activeOverrides model values', () => {
     const s = migrateSettings({
         cli: 'claude',
         perCli: {},
@@ -23,7 +23,8 @@ test('CfgM-002: migrateSettings normalizes legacy Claude activeOverrides model v
             claude: { model: 'claude-opus-4-6' },
         },
     });
-    assert.equal(s.activeOverrides.claude.model, 'opus');
+    // claude-opus-4-6 is now canonical — not migrated to alias
+    assert.equal(s.activeOverrides.claude.model, 'claude-opus-4-6');
 });
 
 test('CfgM-003: migrateSettings normalizes Claude memory.model when cli is claude', () => {
@@ -70,7 +71,7 @@ test('CfgM-006: migrateSettings is idempotent on already-canonical values', () =
     assert.equal(s.memory.model, 'haiku');
 });
 
-test('CfgM-007: migrateSettings normalizes all 4 legacy values across perCli', () => {
+test('CfgM-007: migrateSettings normalizes sonnet legacy values, preserves opus canonical', () => {
     const s = migrateSettings({
         cli: 'claude',
         perCli: {
@@ -81,7 +82,8 @@ test('CfgM-007: migrateSettings normalizes all 4 legacy values across perCli', (
         },
     });
     assert.equal(s.perCli.claude.model, 'sonnet');
-    assert.equal(s.activeOverrides.claude.model, 'opus[1m]');
+    // claude-opus-4-6[1m] is now canonical — not migrated
+    assert.equal(s.activeOverrides.claude.model, 'claude-opus-4-6[1m]');
 });
 
 test('CfgM-008: migrateSettings rewrites deprecated Copilot fast opus model', () => {
