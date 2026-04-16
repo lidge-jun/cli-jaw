@@ -23,8 +23,8 @@ test('TQ-002: busy path forwards target+chatId+requestId into enqueueMessage', (
     const busyEnd = gatewaySrc.indexOf('// ── idle');
     const busyBlock = gatewaySrc.slice(busyStart, busyEnd);
     assert.ok(
-        busyBlock.includes('enqueueMessage(trimmed, meta.origin, { target: meta.target, chatId: meta.chatId, requestId })'),
-        'busy path should enqueue with target+chatId+requestId metadata',
+        busyBlock.includes('enqueueMessage(trimmed, meta.origin, { target: meta.target, chatId: meta.chatId, requestId, scope })'),
+        'busy path should enqueue with target+chatId+requestId+scope metadata',
     );
 });
 

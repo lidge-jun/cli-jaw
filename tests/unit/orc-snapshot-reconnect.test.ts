@@ -28,3 +28,10 @@ test('OSR-003: ws source tracks current orc scope and ignores foreign orc_state 
     assert.ok(wsSrc.includes('currentOrcScope'), 'ws should track current orc scope');
     assert.ok(wsSrc.includes('msg.scope !== currentOrcScope'), 'ws should filter foreign scope events');
 });
+
+test('OSR-004: orchestrate snapshot returns queued overlay detail and active run payload', () => {
+    const routePath = join(__dirname, '../../src/routes/orchestrate.ts');
+    const routeSrc = readFileSync(routePath, 'utf8');
+    assert.ok(routeSrc.includes('queued: getQueuedMessageSnapshotForScope(scope)'), 'snapshot route should include queued overlay detail');
+    assert.ok(routeSrc.includes('activeRun: getLiveRun(scope)'), 'snapshot route should include active run payload');
+});
