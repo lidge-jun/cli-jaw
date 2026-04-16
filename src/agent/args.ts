@@ -16,6 +16,8 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
             return ['exec',
                 ...(model && model !== 'default' ? ['-m', model] : []),
                 ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []),
+                '-c', 'model_reasoning_summary="detailed"',
+                '-c', 'hide_agent_reasoning=false',
                 ...(options.fastMode ? ['-c', 'service_tier="fast"'] : []),
                 ...(autoPerm ? ['--dangerously-bypass-approvals-and-sandbox'] : []),
                 '--skip-git-repo-check', '--json'];
@@ -48,6 +50,8 @@ export function buildResumeArgs(cli: string, model: string, effort: string, sess
         case 'codex':
             return ['exec', 'resume',
                 ...(model && model !== 'default' ? ['--model', model] : []),
+                '-c', 'model_reasoning_summary="detailed"',
+                '-c', 'hide_agent_reasoning=false',
                 ...(options.fastMode ? ['-c', 'service_tier="fast"'] : []),
                 ...(autoPerm ? ['--dangerously-bypass-approvals-and-sandbox'] : []),
                 '--skip-git-repo-check',

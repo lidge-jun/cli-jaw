@@ -59,6 +59,21 @@ test('AG-009: codex includes --json', () => {
     assert.ok(args.includes('--json'));
 });
 
+test('AG-009b: codex forces model_reasoning_summary="detailed" so UI receives reasoning items', () => {
+    const args = buildArgs('codex', 'default', '', 'x', '', 'auto');
+    const cIdxs = args.reduce<number[]>((acc, v, i) => (v === '-c' ? [...acc, i] : acc), []);
+    const cVals = cIdxs.map(i => args[i + 1]);
+    assert.ok(cVals.includes('model_reasoning_summary="detailed"'), 'must inject reasoning summary override');
+    assert.ok(cVals.includes('hide_agent_reasoning=false'), 'must keep reasoning visible');
+});
+
+test('AG-009c: codex resume also injects reasoning summary override', () => {
+    const args = buildResumeArgs('codex', 'default', '', 'sess-xyz', 'continue', 'auto');
+    const cIdxs = args.reduce<number[]>((acc, v, i) => (v === '-c' ? [...acc, i] : acc), []);
+    const cVals = cIdxs.map(i => args[i + 1]);
+    assert.ok(cVals.includes('model_reasoning_summary="detailed"'), 'resume must also force detailed');
+});
+
 // ─── buildArgs: gemini ───────────────────────────────
 
 test('AG-010: gemini includes prompt payload via -p', () => {
