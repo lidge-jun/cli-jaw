@@ -1,6 +1,6 @@
 // ── WebSocket Connection ──
 import { state } from './state.js';
-import { setStatus, updateQueueBadge, addSystemMsg, appendAgentText, finalizeAgent, addMessage, showProcessStep, cleanupToolActivity } from './ui.js';
+import { setStatus, updateQueueBadge, addSystemMsg, appendAgentText, finalizeAgent, addMessage, showProcessStep, cleanupToolActivity, applyQueuedOverlay, hydrateActiveRun } from './ui.js';
 import { t, getLang } from './features/i18n.js';
 import { getVirtualScroll } from './virtual-scroll.js';
 import { ICONS, emojiToIcon } from './icons.js';
@@ -74,6 +74,21 @@ const agentPhaseState: Record<string, { phase: string; phaseLabel: string }> = {
 
 let currentOrcScope = '';
 let lastLoadTs = 0;
+
+async function refreshRuntimeSnapshot(options: { hydrateRun?: boolean } = {}): Promise<void> {
+    const response = await fetch('/api/orchestrate/snapshot');
+    const snap = await response.json();
+    currentOrcScope = String(snap.orc.scope || '');
+    applyOrcState(snap.orc.state);
+    hydrateAgentPhases(snap.workers);
+    updateQueueBadge(snap.runtime.queuePending);
+    applyQueuedOverlay(snap.queued || []);
+    if (options.hydrateRun) hydrateActiveRun(snap.activeRun);
+    setStatus(snap.runtime.busy ? 'running' : 'idle');
+    import('./features/employees.js').then(m => {
+        if (typeof m.renderEmployees === 'function') m.renderEmployees();
+    });
+}
 
 /** Hydrate agent phase cache from snapshot (used after reconnect) */
 export function hydrateAgentPhases(workers: Array<{
@@ -220,6 +235,7 @@ export function connect(): void {
             }
         } else if (msg.type === 'queue_update') {
             updateQueueBadge(msg.pending || 0);
+            refreshRuntimeSnapshot().catch(() => { /* snapshot not critical — UI recovers on next event */ });
         } else if (msg.type === 'worklog_created') {
             addSystemMsg(`${ICONS.clipboard} Worklog: ${escapeHtml(msg.path || '')}`);
         } else if (msg.type === 'round_start') {
@@ -275,6 +291,8 @@ export function connect(): void {
         } else if (msg.type === 'orc_state') {
             if (msg.scope && currentOrcScope && msg.scope !== currentOrcScope) return;
             applyOrcState(typeof msg.state === 'string' ? msg.state : 'IDLE', msg.title);
+        } else if (msg.type === 'memory_status') {
+            import('./features/memory.js').then(m => m.refreshMemorySidebar());
         } else if (msg.type === 'new_message' && (msg.source === 'telegram' || msg.source === 'discord')) {
             addMessage(msg.role === 'assistant' ? 'agent' : (msg.role || 'user'), msg.content || '', msg.cli);
         }
@@ -293,23 +311,9 @@ export function connect(): void {
                     console.error('[ws] loadMessages failed', error);
                 }
             }
-            m.setStatus('idle');
+            refreshRuntimeSnapshot({ hydrateRun: true })
+                .catch(() => { /* snapshot not critical — UI recovers on next WS event */ });
         });
-
-        // Reconnect: restore orchestration state
-        fetch('/api/orchestrate/snapshot')
-            .then(r => r.json())
-            .then((snap: any) => {
-                currentOrcScope = String(snap.orc.scope || '');
-                applyOrcState(snap.orc.state);
-                hydrateAgentPhases(snap.workers);
-                updateQueueBadge(snap.runtime.queuePending);
-                setStatus(snap.runtime.busy ? 'running' : 'idle');
-                import('./features/employees.js').then(m => {
-                    if (typeof m.renderEmployees === 'function') m.renderEmployees();
-                });
-            })
-            .catch(() => { /* snapshot not critical — UI recovers on next WS event */ });
     };
     state.ws.onclose = () => {
         console.log('[ws] disconnected, reconnecting in 2s...');

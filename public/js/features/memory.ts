@@ -423,6 +423,18 @@ export function bindAdvancedProviderUi(): void {
     return;
 }
 
+/** Lightweight sidebar-only refresh triggered by WS memory_status events */
+export async function refreshMemorySidebar(): Promise<void> {
+    try {
+        const [basic, status] = await Promise.all([
+            api<MemoryData>('/api/memory-files'),
+            api<AdvancedMemoryStatus>('/api/memory/status'),
+        ]);
+        syncSidebarBadge(status, basic?.files?.length || 0);
+        renderStatusBanner(status);
+    } catch { /* best effort */ }
+}
+
 export async function triggerFlushNow(): Promise<void> {
     const btn = $('memFlushNowBtn') as HTMLButtonElement | null;
     if (btn) btn.disabled = true;

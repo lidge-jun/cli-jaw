@@ -25,6 +25,20 @@ export function createStreamRenderer(el: HTMLElement): StreamState {
     };
 }
 
+export function hydrateStreamRenderer(el: HTMLElement, text = ''): StreamState {
+    const ss = createStreamRenderer(el);
+    if (text) {
+        ss.chunks = [text];
+        ss.fullText = text;
+        ss.textDirty = false;
+        ss.element.innerHTML = renderMarkdown(text, true) +
+            '<span class="stream-cursor" aria-hidden="true"></span>';
+    } else {
+        ss.element.innerHTML = '<span class="stream-cursor" aria-hidden="true"></span>';
+    }
+    return ss;
+}
+
 function getFullText(ss: StreamState): string {
     if (ss.textDirty) {
         ss.fullText = ss.chunks.join('');

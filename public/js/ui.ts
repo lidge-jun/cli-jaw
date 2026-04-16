@@ -9,7 +9,7 @@ import { api } from './api.js';
 import { cacheMessages, getCachedMessages, appendCachedMessage, upsertMessage, setMessageScope, getScopedMessages } from './features/idb-cache.js';
 import { getVirtualScroll, VS_THRESHOLD, type VirtualItem } from './virtual-scroll.js';
 import { bootstrapVirtualHistory, type VirtualHistoryBootstrapDeps } from './virtual-scroll-bootstrap.js';
-import { createStreamRenderer, appendChunk, finalizeStream, type StreamState } from './streaming-render.js';
+import { createStreamRenderer, appendChunk, finalizeStream, hydrateStreamRenderer, type StreamState } from './streaming-render.js';
 import { activateWidgets } from './diagram/iframe-renderer.js';
 import { renderLiveToolActivity, cleanupToolElements, bindToolItemInteractions, type ToolLogEntry } from './features/tool-ui.js';
 import { ICONS, emojiToIcon, emojiToStatus, isCompletionEmoji } from './icons.js';
@@ -25,6 +25,8 @@ import {
     type ProcessStep,
 } from './features/process-block.js';
 interface MessageItem { role: string; content: string; tool_log?: string | null; cli?: string | null; }
+interface QueuedOverlayItem { id: string; prompt: string; source?: string; ts?: number; }
+interface ActiveRunSnapshot { running?: boolean; cli?: string; text?: string; toolLog?: ToolLogEntry[]; }
 
 function parseToolLog(toolLog?: string | null): ToolLogEntry[] {
     if (!toolLog) return [];
@@ -66,7 +68,6 @@ export function setStatus(s: string): void {
         if (badge) { badge.className = 'status-badge status-idle'; badge.textContent = 'idle'; }
         if (btn) { btn.innerHTML = ICONS.send; btn.title = 'Send'; btn.classList.remove('stop-mode'); }
         removeSkeleton();
-        updateQueueBadge(0);
     }
 }
 
@@ -87,6 +88,7 @@ export function updateQueueBadge(count: number): void {
 function showSkeleton(): void {
     const container = document.getElementById('chatMessages');
     if (!container || container.querySelector('.skeleton-msg')) return;
+    if (state.currentAgentDiv && state.currentAgentDiv.isConnected) return;
     // No flushToDOM — skeleton goes directly into container as overlay
     hideEmptyState();
     const skel = document.createElement('div');
@@ -132,6 +134,7 @@ export function cleanupToolActivity(): void {
     cleanupToolElements();
     state.currentAgentDiv = null;
     state.currentProcessBlock = null;
+    currentStream = null;
 }
 
 export function showLiveToolActivity(label: string): void {
@@ -214,6 +217,36 @@ export function showProcessStep(step: ProcessStep): void {
 }
 
 let currentStream: StreamState | null = null;
+
+export function applyQueuedOverlay(items: QueuedOverlayItem[] = []): void {
+    document.querySelectorAll('[data-queued-overlay="true"]').forEach(el => el.remove());
+    for (const item of items) {
+        const queuedId = String(item.id || '');
+        if (!queuedId) continue;
+        if (document.querySelector(`[data-queued-id="${queuedId}"]`)) continue;
+        const div = addMessage('user', item.prompt || '');
+        div.setAttribute('data-queued-overlay', 'true');
+        div.setAttribute('data-queued-id', queuedId);
+    }
+}
+
+export function hydrateActiveRun(snapshot?: ActiveRunSnapshot | null): void {
+    if (!snapshot?.running) return;
+    cleanupToolElements();
+    removeSkeleton();
+    state.currentAgentDiv = addMessage('agent', '', snapshot.cli || null);
+    state.currentProcessBlock = null;
+    const body = state.currentAgentDiv.querySelector('.agent-body') as HTMLElement | null;
+    if (body && snapshot.toolLog?.length) {
+        const pb = createProcessBlock(body);
+        for (const tool of toProcessSteps(snapshot.toolLog)) addStep(pb, tool);
+        state.currentProcessBlock = pb;
+    }
+    const content = state.currentAgentDiv.querySelector('.msg-content') as HTMLElement | null;
+    if (content) {
+        currentStream = hydrateStreamRenderer(content, snapshot.text || '');
+    }
+}
 
 export function appendAgentText(text: string): void {
     if (!text) return;

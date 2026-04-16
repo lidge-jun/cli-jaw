@@ -152,6 +152,7 @@
     left: 0;
     right: 0;
     margin-bottom: var(--space-3);
+    contain: style; /* drop layout containment — RO needs height propagation */
 }
 
 /* User messages: right-aligned */
