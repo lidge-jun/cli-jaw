@@ -127,7 +127,7 @@ const CODEx_COMPUTER_USE_APP_NAME = 'Codex Computer Use.app';
 const APPLICATIONS_DIR = '/Applications';
 const LSREGISTER_PATH = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister';
 
-function findLatestCodexComputerUseApp(): string | null {
+export function findLatestCodexComputerUseApp(): string | null {
     if (process.platform !== 'darwin' || !fs.existsSync(CODEx_COMPUTER_USE_CACHE_ROOT)) return null;
 
     try {
@@ -147,12 +147,26 @@ function findLatestCodexComputerUseApp(): string | null {
     return null;
 }
 
-function ensureCodexComputerUseAppInstall() {
-    if (process.platform !== 'darwin') return;
+const SKIP_CUA = process.env.CLI_JAW_SKIP_CUA === '1' || process.env.CLI_JAW_SKIP_CUA === 'true';
 
-    const sourceApp = findLatestCodexComputerUseApp();
+export function ensureCodexComputerUseAppInstall() {
+    if (process.platform !== 'darwin') return;
+    if (SKIP_CUA) {
+        console.log('[jaw:init] ⏭️  CUA install skipped (CLI_JAW_SKIP_CUA)');
+        return;
+    }
+
+    let sourceApp = findLatestCodexComputerUseApp();
+
     if (!sourceApp) {
-        console.log('[jaw:init] ⏭️  Codex Computer Use.app not found in cache — skipped');
+        // 캐시 없음 → codex CLI 설치 여부 확인
+        const codexBin = findBinaryPath('codex');
+        if (!codexBin) {
+            console.log('[jaw:init] ⏭️  Codex CLI 미설치 — CUA 설치 스킵');
+            console.log('[jaw:init]    설치: npm i -g @openai/codex && jaw doctor --tcc --fix');
+            return;
+        }
+        console.log('[jaw:init] ⏭️  Codex Computer Use 번들 없음 — codex 첫 실행 후 jaw doctor --tcc --fix');
         return;
     }
 
@@ -172,21 +186,91 @@ function ensureCodexComputerUseAppInstall() {
             }
         }
 
-        fs.cpSync(sourceApp, targetApp, { recursive: true, dereference: true });
+        // 1) 복사 (권한/경쟁 이슈 대비 retry)
+        let copied = false;
+        let lastErr: any = null;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                fs.cpSync(sourceApp, targetApp, { recursive: true, dereference: true, force: true });
+                copied = true;
+                break;
+            } catch (e: any) {
+                lastErr = e;
+                console.warn(`[jaw:init] copy attempt ${attempt}/3 failed: ${e?.message || 'unknown'}`);
+                if (attempt < 3) {
+                    try { execSync('sleep 1'); } catch { /* ok */ }
+                }
+            }
+        }
+        if (!copied) {
+            console.error(`[jaw:init] ❌ CUA 복사 실패 — 수동 진행 필요 (${lastErr?.message || 'unknown'})`);
+            console.error(`   cp -R "${sourceApp}" "${targetApp}"`);
+            return;
+        }
         console.log(`[jaw:init] copied ${CODEx_COMPUTER_USE_APP_NAME} to ${targetApp}`);
 
+        // 2) quarantine 제거
         try {
             execFileSync('xattr', ['-dr', 'com.apple.quarantine', targetApp], { stdio: 'pipe', timeout: 10000 });
-        } catch {
-            // The app is typically notarized already; quarantine may not be present.
+        } catch { /* quarantine 없을 수 있음 */ }
+
+        // 3) codesign 검증 (손상된 앱은 TCC가 거부)
+        try {
+            execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', targetApp], {
+                stdio: 'pipe', timeout: 15000,
+            });
+            console.log('[jaw:init] ✅ CUA codesign 검증 통과');
+        } catch (error: any) {
+            console.warn('[jaw:init] ⚠️  CUA codesign 검증 실패 — TCC 권한 거부 가능성');
+            const detail = (error?.stderr?.toString?.() || error?.message || '').slice(0, 160);
+            if (detail) console.warn(`   ${detail}`);
         }
 
+        // 4) Launch Services 재등록 (bundleID 노출)
         if (fs.existsSync(LSREGISTER_PATH)) {
-            execFileSync(LSREGISTER_PATH, ['-f', '-R', targetApp], { stdio: 'pipe', timeout: 15000 });
-            console.log(`[jaw:init] registered ${CODEx_COMPUTER_USE_APP_NAME} with Launch Services`);
+            try {
+                execFileSync(LSREGISTER_PATH, ['-f', '-R', targetApp], { stdio: 'pipe', timeout: 15000 });
+                console.log(`[jaw:init] registered ${CODEx_COMPUTER_USE_APP_NAME} with Launch Services`);
+            } catch (e: any) {
+                console.warn(`[jaw:init] ⚠️  lsregister 실패: ${e?.message || 'unknown'}`);
+            }
         }
     } catch (error: any) {
         console.warn(`[jaw:init] ⚠️  failed to install ${CODEx_COMPUTER_USE_APP_NAME} (${error?.message || 'unknown'})`);
+    }
+}
+
+/**
+ * 업그레이드 유저의 launchd plist가 ProcessType 키 없으면 새 format으로 재등록.
+ * Fresh install(plist 없음)은 skip — jaw launchd 명시 실행 시점에 생성됨.
+ */
+async function maybeReregisterLaunchd() {
+    if (process.platform !== 'darwin') return;
+    const label = 'com.cli-jaw.default';
+    const plistPath = path.join(home, 'Library', 'LaunchAgents', `${label}.plist`);
+    if (!fs.existsSync(plistPath)) return;
+
+    try {
+        const content = fs.readFileSync(plistPath, 'utf8');
+        if (content.includes('<key>ProcessType</key>')) {
+            console.log('[jaw:init] ⏭️  launchd plist 이미 최신 포맷');
+            return;
+        }
+    } catch {
+        return;
+    }
+
+    console.log('[jaw:init] 🔄 launchd plist 구 포맷 감지 — 새 포맷으로 재등록 시도');
+    const jawBin = findBinaryPath('jaw') || findBinaryPath('cli-jaw');
+    if (!jawBin) {
+        console.warn('[jaw:init] ⚠️  jaw 바이너리 탐색 실패 — 수동: jaw launchd');
+        return;
+    }
+    try {
+        execFileSync(jawBin, ['launchd'], { stdio: 'inherit', timeout: 30000 });
+    } catch (e: any) {
+        console.warn(`[jaw:init] ⚠️  launchd 재등록 실패 — 수동: jaw launchd`);
+        if (e?.message) console.warn(`   ${e.message.slice(0, 120)}`);
     }
 }
 
@@ -552,6 +636,7 @@ export async function runPostinstall() {
     await installSkillDeps();
     await installOfficeCli();
     ensureCodexComputerUseAppInstall();
+    await maybeReregisterLaunchd();
     console.log('[jaw:init] setup complete ✅');
 }
 
