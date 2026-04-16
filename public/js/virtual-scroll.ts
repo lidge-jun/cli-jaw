@@ -190,6 +190,55 @@ export class VirtualScroll {
         });
 
         this.cleanupFn = this.virtualizer._didMount();
+
+        // ── Resize invalidation ──
+        // When viewport width changes, message text reflows and heights change.
+        // TanStack's ResizeObserver watches individual items, but not the
+        // container width — a window resize doesn't trigger item RO callbacks
+        // because items are position:absolute (width from left:0 + right:0).
+        let resizeRaf = 0;
+        const onResize = () => {
+            cancelAnimationFrame(resizeRaf);
+            resizeRaf = requestAnimationFrame(() => {
+                if (!this.virtualizer) return;
+                this.itemGap = 0;
+                const newGap = this.measureGap();
+                this.virtualizer.setOptions({
+                    ...this.virtualizer.options,
+                    gap: newGap,
+                });
+                this.virtualizer.measure();
+            });
+        };
+        window.addEventListener('resize', onResize);
+        const prevCleanup = this.cleanupFn;
+        this.cleanupFn = () => {
+            window.removeEventListener('resize', onResize);
+            cancelAnimationFrame(resizeRaf);
+            prevCleanup?.();
+        };
+
+        // ── bfcache restoration ──
+        // pageshow fires when page is restored from bfcache (persisted=true).
+        // Regular reload goes through normal activate() flow, but bfcache
+        // restores the JS heap with stale cached measurements.
+        const onPageShow = (e: PageTransitionEvent) => {
+            if (!e.persisted || !this.virtualizer) return;
+            this.itemGap = 0;
+            const newGap = this.measureGap();
+            this.virtualizer.setOptions({
+                ...this.virtualizer.options,
+                gap: newGap,
+            });
+            this.virtualizer.measure();
+        };
+        window.addEventListener('pageshow', onPageShow);
+        const prevCleanup2 = this.cleanupFn;
+        this.cleanupFn = () => {
+            window.removeEventListener('pageshow', onPageShow);
+            prevCleanup2?.();
+        };
+
         this.virtualizer._willUpdate();
 
         if (toBottom && this.items.length > 0) {
@@ -271,13 +320,11 @@ export class VirtualScroll {
             el.style.transform = `translateY(${vItem.start}px)`;
         }
 
-        // Let tanstack measure real heights via ResizeObserver —
-        // only for newly mounted elements (already-observed ones are tracked)
-        for (const el of newlyMounted) {
-            this.virtualizer!.measureElement(el);
-        }
-
-        // Lazy render: process any lazy-pending elements
+        // Lazy render BEFORE measuring — onLazyRender processes markdown,
+        // code blocks, math which dramatically changes element heights.
+        // Measuring first would record pre-render heights (e.g. 50px),
+        // then lazy render expands to 300px+, causing overlap until the
+        // deferred ResizeObserver catches up (1+ frames later).
         if (this.onLazyRender) {
             const lazyTargets = this.innerEl.querySelectorAll<HTMLElement>('.lazy-pending');
             if (lazyTargets.length > 0) {
@@ -288,6 +335,12 @@ export class VirtualScroll {
         // Post render: activate widgets, linkify paths
         if (this.onPostRender) {
             this.onPostRender(this.innerEl);
+        }
+
+        // Now measure real heights — elements have their final rendered content.
+        // Only for newly mounted elements (already-observed ones are tracked).
+        for (const el of newlyMounted) {
+            this.virtualizer!.measureElement(el);
         }
     }
 }
