@@ -1,6 +1,8 @@
 // ─── Claude Model Normalization (single source of truth) ──────────
 
 export const CLAUDE_CANONICAL_MODELS = [
+  'claude-opus-4-6',
+  'claude-opus-4-6[1m]',
   'sonnet',
   'opus',
   'sonnet[1m]',

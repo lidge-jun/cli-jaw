@@ -89,7 +89,7 @@ export function submitMessage(
     // NOTE: insertMessage is NOT called here — processQueue() handles it.
     // This fixes the dual-insert bug where bot.ts called both enqueue + insert.
     if (isAgentBusy() || hasBlockingWorkers() || hasPendingWorkerReplays()) {
-        enqueueMessage(trimmed, meta.origin, { target: meta.target, chatId: meta.chatId, requestId });
+        enqueueMessage(trimmed, meta.origin, { target: meta.target, chatId: meta.chatId, requestId, scope });
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
         return { action: 'queued', pending: messageQueue.length, queued: true, requestId };
     }

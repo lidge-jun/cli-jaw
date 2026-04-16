@@ -8,7 +8,7 @@ export const CLI_REGISTRY = {
         binary: 'claude',
         defaultModel: getDefaultClaudeModel(),
         defaultEffort: 'medium',
-        efforts: ['low', 'medium', 'high'],
+        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
         models: getDefaultClaudeChoices(),
     },
     codex: {
@@ -17,7 +17,7 @@ export const CLI_REGISTRY = {
         defaultModel: 'gpt-5.4',
         defaultEffort: 'medium',
         efforts: ['low', 'medium', 'high', 'xhigh'],
-        models: ['gpt-5.4', 'gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini'],
+        models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini'],
     },
     gemini: {
         label: 'Gemini',
@@ -64,6 +64,7 @@ export const CLI_REGISTRY = {
         efforts: ['low', 'medium', 'high'],
         effortNote: '→ ~/.copilot/config.json',
         models: [
+            'gpt-5.5',
             'claude-sonnet-4.6',
             'claude-opus-4.6',
             'claude-haiku-4.5',

@@ -9,6 +9,7 @@ import { persistMainSession } from './session-persistence.js';
 import { buildContinuationPrompt } from './smoke-detector.js';
 import { shouldInvalidateResumeSession } from './resume-classifier.js';
 import { classifyExitError } from './error-classifier.js';
+import { clearLiveRun } from './live-run-state.js';
 import {
     incrementMemoryFlush,
     resetMemoryFlushCounter,
@@ -28,6 +29,7 @@ export interface ExitContext {
     toolLog: any[];
     traceLog: any[];
     stderrBuf: string;
+    liveScope?: string;
     cost?: { input?: number; output?: number } | number | null;
     turns?: number | null;
     duration?: number | null;
@@ -91,6 +93,7 @@ export function handleAgentExit(params: ExitHandlerParams): void {
     const effortVal = cfg.effort || effortDefault;
     const isEmployee = !mainManaged;
     const empTag = isEmployee ? { isEmployee: true } : {};
+    const liveScope = ctx.liveScope || 'default';
 
     // ─── Smoke response auto-continuation ───
     if (
@@ -278,6 +281,7 @@ export function handleAgentExit(params: ExitHandlerParams): void {
 
     // ─── Final resolve ───
     const resolvedCode = code;
+    if (mainManaged) clearLiveRun(liveScope);
     broadcast('agent_status', {
         status: (resolvedCode === 0 || resolvedCode === null) ? 'done' : 'error',
         agentId: agentLabel,

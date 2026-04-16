@@ -13,13 +13,13 @@ export type CliRegistry = Record<string, CliEntry>;
 const FALLBACK_CLI_REGISTRY: CliRegistry = {
     claude: {
         label: 'Claude',
-        efforts: ['low', 'medium', 'high'],
-        models: ['sonnet', 'opus', 'sonnet[1m]', 'opus[1m]', 'haiku'],
+        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+        models: ['claude-opus-4-6', 'claude-opus-4-6[1m]', 'sonnet', 'opus', 'sonnet[1m]', 'opus[1m]', 'haiku'],
     },
     codex: {
         label: 'Codex',
         efforts: ['low', 'medium', 'high', 'xhigh'],
-        models: ['gpt-5.4', 'gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini'],
+        models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini'],
     },
     gemini: {
         label: 'Gemini',
@@ -57,6 +57,7 @@ const FALLBACK_CLI_REGISTRY: CliRegistry = {
         efforts: ['low', 'medium', 'high'],
         effortNote: '-> ~/.copilot/config.json',
         models: [
+            'gpt-5.5',
             'claude-sonnet-4.6',
             'claude-opus-4.6',
             'claude-haiku-4.5',

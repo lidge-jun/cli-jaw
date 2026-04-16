@@ -1,7 +1,8 @@
 import type { Express } from 'express';
 import type { AuthMiddleware } from './types.js';
 import { ok, fail } from '../http/response.js';
-import { isAgentBusy, messageQueue } from '../agent/spawn.js';
+import { isAgentBusy, messageQueue, getQueuedMessageSnapshotForScope } from '../agent/spawn.js';
+import { getLiveRun } from '../agent/live-run-state.js';
 import { orchestrateContinue, orchestrateReset } from '../orchestrator/pipeline.js';
 import { getState, getCtx, setState, resetState, canTransition } from '../orchestrator/state-machine.js';
 import type { OrcStateName } from '../orchestrator/state-machine.js';
@@ -57,6 +58,8 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
                 busy: runtime.activeAgent || getActiveWorkers().some(w => w.state === 'running'),
             },
             workers: getActiveWorkers(),
+            queued: getQueuedMessageSnapshotForScope(scope),
+            activeRun: getLiveRun(scope),
         });
     });
 

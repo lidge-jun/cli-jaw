@@ -2,6 +2,15 @@
 
 import { broadcast } from '../core/bus.js';
 import type { SpawnContext } from '../types/agent.js';
+import { appendLiveRunText, replaceLiveRunTools } from './live-run-state.js';
+
+function liveScopeOf(ctx: SpawnContext): string {
+    return ctx.liveScope || 'default';
+}
+
+function syncLiveTools(ctx: SpawnContext): void {
+    replaceLiveRunTools(liveScopeOf(ctx), ctx.toolLog);
+}
 
 /** Flush Claude-specific stream buffers (thinking + input_json).
  *  Call on stream close to avoid data loss if content_block_stop never arrives. */
@@ -16,6 +25,7 @@ export function flushClaudeBuffers(ctx: SpawnContext, agentLabel?: string, empTa
                 detail: merged,
             };
             ctx.toolLog.push(tool);
+            syncLiveTools(ctx);
             broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
             pushTrace(ctx, `[${agentLabel || 'agent'}] 💭 ${merged.slice(0, 200)}`);
         }
@@ -32,6 +42,7 @@ export function flushClaudeBuffers(ctx: SpawnContext, agentLabel?: string, empTa
                 );
                 if (existing) {
                     existing.detail = detail;
+                    syncLiveTools(ctx);
                     broadcast('agent_tool', { agentId: agentLabel, ...existing, ...empTag });
                 }
             }
@@ -176,6 +187,7 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                         detail: merged,
                     };
                     ctx.toolLog.push(tool);
+                    syncLiveTools(ctx);
                     broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
                 }
                 ctx.claudeThinkingBuf = '';
@@ -193,6 +205,7 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                         );
                         if (existing) {
                             existing.detail = detail;
+                            syncLiveTools(ctx);
                             // Re-broadcast with detail
                             broadcast('agent_tool', { agentId: agentLabel, ...existing, ...empTag });
                         }
@@ -214,6 +227,7 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                     detail: merged,
                 };
                 ctx.toolLog.push(tool);
+                syncLiveTools(ctx);
                 broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
             }
             ctx.claudeThinkingBuf = '';
@@ -239,12 +253,14 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
             );
             if (runIdx !== -1) {
                 ctx.toolLog[runIdx] = toolLabel;
+                syncLiveTools(ctx);
                 broadcast('agent_tool', { agentId: agentLabel, ...toolLabel, ...empTag });
                 continue;
             }
         }
 
         ctx.toolLog.push(toolLabel);
+        syncLiveTools(ctx);
         broadcast('agent_tool', { agentId: agentLabel, ...toolLabel, ...empTag });
     }
 
@@ -252,7 +268,10 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
         case 'claude':
             if (event.type === 'assistant' && event.message?.content) {
                 for (const block of event.message.content) {
-                    if (block.type === 'text') ctx.fullText += block.text;
+                    if (block.type === 'text') {
+                        ctx.fullText += block.text;
+                        appendLiveRunText(liveScopeOf(ctx), block.text);
+                    }
                 }
             } else if (event.type === 'result') {
                 ctx.cost = event.total_cost_usd;
@@ -273,6 +292,7 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                 const msg = event.message || event.reason || 'rate limited';
                 const tool = { icon: '⚠️', label: buildPreview(msg, 60), toolType: 'tool' as const, status: 'warning' };
                 ctx.toolLog.push(tool);
+                syncLiveTools(ctx);
                 broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
             // [P0-1.2] Parse user/tool_result feedback (stdout/stderr/is_error)
             } else if (event.type === 'user' && event.message?.content) {
@@ -286,6 +306,7 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                             existing.icon = block.is_error ? '❌' : '✅';
                             const resultText = extractText(block.content);
                             if (resultText) existing.detail = (existing.detail || '') + '\n' + resultText;
+                            syncLiveTools(ctx);
                             broadcast('agent_tool', { agentId: agentLabel, ...existing, ...empTag });
                         }
                     }

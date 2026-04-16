@@ -28,6 +28,8 @@ import { isCompactMarkerRow } from '../core/compact.js';
 import { hasBlockingWorkers, hasPendingWorkerReplays } from '../orchestrator/worker-registry.js';
 import { handleAgentExit, setSpawnAgent } from './lifecycle-handler.js';
 import { buildServicePath } from '../core/runtime-path.js';
+import { resolveOrcScope } from '../orchestrator/scope.js';
+import { beginLiveRun, appendLiveRunText, clearLiveRun, replaceLiveRunTools } from './live-run-state.js';
 import {
     memoryFlushCounter as _memoryFlushCounter,
     flushCycleCount as _flushCycleCount,
@@ -93,20 +95,36 @@ type QueueItem = {
     id: string;
     prompt: string;
     source: RuntimeOrigin;
+    scope: string;
     target?: RemoteTarget;
     chatId?: string | number;
     requestId?: string;
     ts: number;
 };
 
-function loadPersistedQueue(): QueueItem[] {
-    return (listQueuedMessages.all() as Array<{ id: string; payload: string }>).flatMap(row => {
-        try {
-            return [JSON.parse(row.payload) as QueueItem];
-        } catch {
+function normalizeQueueItem(row: { id: string; payload: string }): QueueItem[] {
+    try {
+        const parsed = JSON.parse(row.payload) as Partial<QueueItem>;
+        if (typeof parsed?.id !== 'string' || typeof parsed?.prompt !== 'string' || typeof parsed?.source !== 'string') {
             return [];
         }
-    });
+        return [{
+            id: parsed.id,
+            prompt: parsed.prompt,
+            source: parsed.source,
+            scope: typeof parsed.scope === 'string' ? parsed.scope : 'default',
+            target: parsed.target,
+            chatId: parsed.chatId,
+            requestId: parsed.requestId,
+            ts: typeof parsed.ts === 'number' ? parsed.ts : Date.now(),
+        }];
+    } catch {
+        return [];
+    }
+}
+
+function loadPersistedQueue(): QueueItem[] {
+    return (listQueuedMessages.all() as Array<{ id: string; payload: string }>).flatMap(normalizeQueueItem);
 }
 
 export const messageQueue: QueueItem[] = loadPersistedQueue();
@@ -268,11 +286,28 @@ export async function steerAgent(newPrompt: string, source: string) {
 
 // ─── Message Queue ───────────────────────────────────
 
-export function enqueueMessage(prompt: string, source: RuntimeOrigin, meta?: { target?: RemoteTarget; chatId?: string | number; requestId?: string }) {
+export function getQueuedMessageSnapshotForScope(scope: string): Array<{
+    id: string;
+    prompt: string;
+    source: RuntimeOrigin;
+    ts: number;
+}> {
+    return messageQueue
+        .filter(item => item.scope === scope)
+        .map(item => ({
+            id: item.id,
+            prompt: item.prompt,
+            source: item.source,
+            ts: item.ts,
+        }));
+}
+
+export function enqueueMessage(prompt: string, source: RuntimeOrigin, meta?: { target?: RemoteTarget; chatId?: string | number; requestId?: string; scope?: string }) {
     const item: QueueItem = {
         id: crypto.randomUUID(),
         prompt,
         source,
+        scope: meta?.scope || 'default',
         target: meta?.target,
         chatId: meta?.chatId,
         requestId: meta?.requestId,
@@ -472,6 +507,7 @@ interface SpawnOpts {
     sysPrompt?: string;
     origin?: string;
     employeeSessionId?: string;
+    chatId?: string | number;
     cli?: string;
     model?: string;
     effort?: string;
@@ -499,6 +535,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     const mainManaged = !forceNew && !empSid;
     const isEmployee = !mainManaged;
     const empTag = isEmployee ? { isEmployee: true } : {};
+    const liveScope = resolveOrcScope({ origin, chatId: opts.chatId, workingDir: settings.workingDir || null });
 
     // INVARIANT: 모든 외부 호출은 gateway.ts isAgentBusy()를 거침.
     // 직접 spawnAgent 호출 시 retryPendingTimer도 확인할 것.
@@ -583,6 +620,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     if (!detected.available) {
         const msg = `CLI '${cli}' not found in PATH. Run \`jaw doctor --json\`.`;
         console.error(`[jaw:${agentLabel}] ${msg}`);
+        if (mainManaged) clearLiveRun(liveScope);
         broadcast('agent_done', { text: `❌ ${msg}`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
         resolve!({ text: '', code: 127 });
         if (mainManaged) processQueue();
@@ -633,6 +671,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         if (mainManaged) activeProcess = child;
         activeProcesses.set(agentLabel, child);
         broadcast('agent_status', { running: true, agentId: agentLabel, cli, ...empTag });
+        if (mainManaged) beginLiveRun(liveScope, cli);
 
         // ─── DIFF-C: ACP error guard — prevent uncaught EventEmitter crash ───
         let acpSettled = false;  // guard: error→exit can fire sequentially
@@ -646,6 +685,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             activeProcesses.delete(agentLabel);
             if (mainManaged) {
                 activeProcess = null;
+                clearLiveRun(liveScope);
                 broadcast('agent_status', { running: false, agentId: agentLabel });
             }
             broadcast('agent_done', { text: `❌ ${msg}`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
@@ -663,6 +703,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             hasClaudeStreamEvents: false, sessionId: null as string | null, cost: null as number | null,
             turns: null as number | null, duration: null as number | null, tokens: null as any, stderrBuf: '',
             thinkingBuf: '',
+            liveScope,
         };
 
         // Flush accumulated 💭 thinking buffer as a single merged event
@@ -675,6 +716,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 console.log(`  💭 ${label}`);
                 const tool = { icon: '💭', label, toolType: 'thinking' as const, detail: merged };
                 ctx.toolLog.push(tool);
+                replaceLiveRunTools(ctx.liveScope || 'default', ctx.toolLog);
                 broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
             }
             ctx.thinkingBuf = '';
@@ -703,6 +745,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 if (!ctx.seenToolKeys.has(key)) {
                     ctx.seenToolKeys.add(key);
                     ctx.toolLog.push(parsed.tool);
+                    replaceLiveRunTools(ctx.liveScope || 'default', ctx.toolLog);
                     broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool, ...empTag });
                     // Reset heartbeat gate on actually visible broadcast (not 💭)
                     lastVisibleBroadcastTs = Date.now();
@@ -712,6 +755,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             if (parsed.text) {
                 flushThinking();
                 ctx.fullText += parsed.text;
+                appendLiveRunText(ctx.liveScope || 'default', parsed.text);
                 // text-only updates are local accumulation, not visible to user — no gate reset
             }
             opts.lifecycle?.onActivity?.('acp');
@@ -724,6 +768,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             });
             if (parsed?.tool) {
                 ctx.toolLog.push(parsed.tool);
+                replaceLiveRunTools(ctx.liveScope || 'default', ctx.toolLog);
                 broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool, ...empTag });
             }
         });
@@ -735,6 +780,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             });
             if (parsed?.tool) {
                 ctx.toolLog.push(parsed.tool);
+                replaceLiveRunTools(ctx.liveScope || 'default', ctx.toolLog);
                 broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool, ...empTag });
             }
         });
@@ -793,6 +839,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 ctx.toolLog = [];
                 ctx.seenToolKeys.clear();
                 ctx.thinkingBuf = '';  // Phase 17.2: clear replay thinking too
+                if (mainManaged) beginLiveRun(liveScope, cli);
 
                 // If loadSession failed (or not resuming), inject history into prompt
                 const needsHistoryFallback = isResume && !loadSessionOk;
@@ -889,6 +936,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     if (mainManaged) activeProcess = child;
     activeProcesses.set(agentLabel, child);
     broadcast('agent_status', { running: true, agentId: agentLabel, cli, ...empTag });
+    if (mainManaged) beginLiveRun(liveScope, cli);
 
     // ─── DIFF-A: error guard — prevent uncaught ENOENT crash ───
     let stdSettled = false;  // guard: error→close can fire sequentially
@@ -904,6 +952,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         activeProcesses.delete(agentLabel);
         if (mainManaged) {
             activeProcess = null;
+            clearLiveRun(liveScope);
             broadcast('agent_status', { running: false, agentId: agentLabel });
         }
         broadcast('agent_done', { text: `❌ ${msg}`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
@@ -940,6 +989,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         tokens: null as any,
         stderrBuf: '',
         hasActiveSubAgent: false,
+        liveScope,
     };
     let buffer = '';
 
@@ -965,6 +1015,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 }
                 const outputChunk = extractOutputChunk(cli, event);
                 if (outputChunk) {
+                    appendLiveRunText(ctx.liveScope || 'default', outputChunk);
                     broadcast('agent_output', {
                         agentId: agentLabel,
                         cli,
@@ -994,6 +1045,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 extractFromEvent(cli, lastEvent, ctx, agentLabel, empTag);
                 const outputChunk = extractOutputChunk(cli, lastEvent);
                 if (outputChunk) {
+                    appendLiveRunText(ctx.liveScope || 'default', outputChunk);
                     broadcast('agent_output', { agentId: agentLabel, cli, text: outputChunk, ...empTag }, isEmployee ? 'internal' : 'public');
                 }
             } catch { /* incomplete JSON — discard */ }
