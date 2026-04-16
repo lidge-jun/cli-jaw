@@ -12,6 +12,14 @@ if (process.env.JAW_EMPLOYEE_MODE === '1') {
     process.exit(2);
 }
 
+// Phase 8: boss-only dispatch. Token must be inherited from the server process.
+const bossToken = process.env.JAW_BOSS_TOKEN || '';
+if (!bossToken) {
+    console.error('❌ JAW_BOSS_TOKEN missing. This session is not authorized to dispatch employees.');
+    console.error('   Employees cannot dispatch. If you are the boss, ensure cli-jaw serve is running and this process inherited its env.');
+    process.exit(2);
+}
+
 const portIdx = process.argv.indexOf('--port');
 const PORT = (portIdx !== -1 && process.argv[portIdx + 1]) ? process.argv[portIdx + 1] : undefined;
 const BASE = getServerUrl(PORT);
@@ -55,7 +63,7 @@ try {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Jaw-Dispatch-Source': process.env.JAW_EMPLOYEE_MODE === '1' ? 'employee' : 'boss',
+                    'X-Jaw-Boss-Token': bossToken,
                 },
                 body: JSON.stringify({ agent, task }),
             });

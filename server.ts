@@ -35,6 +35,7 @@ import { ok, fail } from './src/http/response.js';
 import { errorHandler } from './src/http/error-middleware.js';
 
 import { setWss, broadcast } from './src/core/bus.js';
+import { initBossToken } from './src/core/boss-auth.js';
 import * as browser from './src/browser/index.js';
 
 import { ensureMemoryRuntimeReady, hasSoulFile } from './src/memory/runtime.js';
@@ -242,6 +243,10 @@ app.use((req, res, next) => {
 
 // ─── Bearer Token Auth (CRITICAL endpoints) ─────────
 const JAW_AUTH_TOKEN = process.env.JAW_AUTH_TOKEN || crypto.randomBytes(32).toString('hex');
+
+// Boss-only dispatch token (phase 8). Server generates and stores in process.env;
+// main-agent spawns inherit it, employee spawns strip it in makeCleanEnv.
+initBossToken();
 
 function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
     // Localhost (same-origin Web UI) — allow without token

@@ -407,6 +407,13 @@ function makeCleanEnv(extraEnv: Record<string, string> = {}) {
     const env: NodeJS.ProcessEnv = { ...process.env };
     delete env.CLAUDE_CODE_SSE_PORT;
     delete env.GEMINI_SYSTEM_MD;
+    // Phase 8: strip boss-only dispatch token from employee spawns so employees
+    // cannot authenticate against /api/orchestrate/dispatch even via localhost.
+    // Detect employee spawn by the explicit JAW_EMPLOYEE_MODE flag; main spawns
+    // pass an empty extraEnv and keep the token inherited from process.env.
+    if (extraEnv.JAW_EMPLOYEE_MODE === '1') {
+        delete env.JAW_BOSS_TOKEN;
+    }
     env.PATH = buildServicePath(env.PATH || '');
     return {
         ...env,

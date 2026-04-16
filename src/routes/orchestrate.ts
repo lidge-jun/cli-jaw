@@ -66,8 +66,12 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
 
     // Pipe-mode employee dispatch
     app.post('/api/orchestrate/dispatch', requireAuth, async (req, res) => {
-        if (String(req.headers['x-jaw-dispatch-source'] || '').toLowerCase() === 'employee') {
-            return fail(res, 409, 'Employee self-dispatch is blocked in employee sessions');
+        // Phase 8: server-authoritative dispatch guard. Boss-only token required.
+        // Employees do not have this token (stripped in spawn.ts makeCleanEnv).
+        const bossToken = String(req.headers['x-jaw-boss-token'] || '');
+        if (!verifyBossToken(bossToken)) {
+            console.warn(`[dispatch:deny] ip=${req.ip} ua=${String(req.headers['user-agent'] || '').slice(0, 80)}`);
+            return fail(res, 403, 'Dispatch requires boss-scoped token. Employees cannot dispatch.');
         }
         const { agent: agentName, task, phase } = req.body || {};
         if (!agentName || !task) return fail(res, 400, 'Missing agent or task');
