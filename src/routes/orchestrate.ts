@@ -12,6 +12,7 @@ import { findEmployee, runSingleAgent } from '../orchestrator/distribute.js';
 import { getEmployees } from '../core/db.js';
 import { settings } from '../core/config.js';
 import { verifyBossToken } from '../core/boss-auth.js';
+import { resolveDispatchableEmployee, checkRuntimeHints } from '../core/employees.js';
 
 function getRuntimeSnapshot() {
     return {
@@ -82,8 +83,27 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         const resolvedPhase = phase ?? PABCD_PHASE_MAP[currentOrcState] ?? 3;
 
         const emps = getEmployees.all() as Record<string, any>[];
-        const emp = findEmployee(emps, { agent: agentName });
+        // Try DB first (preserves existing id-based matching), then fall
+        // through to static employees for entries like Control.
+        let emp = findEmployee(emps, { agent: agentName });
+        let staticSpec: ReturnType<typeof resolveDispatchableEmployee> = null;
+        if (!emp) {
+            staticSpec = resolveDispatchableEmployee(agentName, emps);
+            if (staticSpec) emp = staticSpec.row;
+        } else {
+            staticSpec = resolveDispatchableEmployee(emp.name, emps);
+        }
         if (!emp) return fail(res, 404, `Employee not found: ${agentName}`);
+
+        // Runtime preflight for static employees (darwin/CUA/Jaw.app).
+        // Hard-fail on missing prerequisites; warn-only on optional ones.
+        if (staticSpec?.spec) {
+            const checks = checkRuntimeHints(staticSpec.spec);
+            if (checks.fail.length > 0) {
+                return fail(res, 412, `Preconditions not met: ${checks.fail.join('; ')}`);
+            }
+            for (const w of checks.warn) console.warn(`[dispatch] ⚠️  ${w}`);
+        }
 
         // Phase 7-2: reject concurrent dispatch of the same employee.
         // Caller should poll GET /api/orchestrate/worker/:agentId/result.
