@@ -89,11 +89,11 @@ gemini               # Google Gemini Advanced
 
 | CLI | 默认模型 | 认证 | 费用 |
 |---|---|---|---|
-| **Claude** | `claude-sonnet-4-6` | `claude auth` | Claude Max 订阅 |
-| **Codex** | `gpt-5.3-codex` | `codex login` | ChatGPT Pro 订阅 |
-| **Gemini** | `gemini-2.5-pro` | `gemini` | Gemini Advanced 订阅 |
-| **OpenCode** | `claude-opus-4-6-thinking` | `opencode` | 提供免费模型 |
-| **Copilot** | `gpt-4.1` | `copilot login` | 提供免费套餐 |
+| **Claude** | `opus-4-6` | `claude auth` | Claude Max 订阅 |
+| **Codex** | `gpt-5.5` | `codex login` | ChatGPT Pro 订阅 |
+| **Gemini** | `gemini-3.1-pro-preview` | `gemini` | Gemini Advanced 订阅 |
+| **OpenCode** | `minimax-m2.7` | `opencode` | 提供免费模型 |
+| **Copilot** | `gpt-5.5` | `copilot login` | 提供免费套餐 |
 
 **回退链**：一个引擎受限或宕机时，下一个自动接管。用 `/fallback [cli1 cli2...]` 配置。
 

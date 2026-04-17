@@ -166,11 +166,11 @@ Five CLI backends, routed through OAuth subscriptions you already pay for. No pe
 
 | CLI | Default model | Auth | Cost model |
 |---|---|---|---|
-| **Claude** | `claude-sonnet-4-6` | `claude auth` | Claude Max subscription |
-| **Codex** | `gpt-5.3-codex` | `codex login` | ChatGPT Pro subscription |
-| **Gemini** | `gemini-2.5-pro` | `gemini` | Gemini Advanced subscription |
-| **OpenCode** | `claude-opus-4-6-thinking` | `opencode` | Free models available |
-| **Copilot** | `gpt-4.1` | `copilot login` | Free tier available |
+| **Claude** | `opus-4-6` | `claude auth` | Claude Max subscription |
+| **Codex** | `gpt-5.5` | `codex login` | ChatGPT Pro subscription |
+| **Gemini** | `gemini-3.1-pro-preview` | `gemini` | Gemini Advanced subscription |
+| **OpenCode** | `minimax-m2.7` | `opencode` | Free models available |
+| **Copilot** | `gpt-5.5` | `copilot login` | Free tier available |
 
 **Fallback chain**: if one engine is rate-limited or down, the next picks up automatically. Configure with `/fallback [cli1 cli2...]`.
 

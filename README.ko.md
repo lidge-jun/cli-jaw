@@ -89,11 +89,11 @@ gemini               # Google Gemini Advanced
 
 | CLI | 기본 모델 | 인증 | 비용 |
 |---|---|---|---|
-| **Claude** | `claude-sonnet-4-6` | `claude auth` | Claude Max 구독 |
-| **Codex** | `gpt-5.3-codex` | `codex login` | ChatGPT Pro 구독 |
-| **Gemini** | `gemini-2.5-pro` | `gemini` | Gemini Advanced 구독 |
-| **OpenCode** | `claude-opus-4-6-thinking` | `opencode` | 무료 모델 제공 |
-| **Copilot** | `gpt-4.1` | `copilot login` | 무료 티어 제공 |
+| **Claude** | `opus-4-6` | `claude auth` | Claude Max 구독 |
+| **Codex** | `gpt-5.5` | `codex login` | ChatGPT Pro 구독 |
+| **Gemini** | `gemini-3.1-pro-preview` | `gemini` | Gemini Advanced 구독 |
+| **OpenCode** | `minimax-m2.7` | `opencode` | 무료 모델 제공 |
+| **Copilot** | `gpt-5.5` | `copilot login` | 무료 티어 제공 |
 
 **폴백 체인**: 하나가 제한되거나 다운되면 다음 엔진이 자동으로 이어받음. `/fallback [cli1 cli2...]`로 설정.
 
