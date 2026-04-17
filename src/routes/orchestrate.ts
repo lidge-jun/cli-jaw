@@ -95,14 +95,12 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         }
         if (!emp) return fail(res, 404, `Employee not found: ${agentName}`);
 
-        // Runtime preflight for static employees (darwin/CUA/Jaw.app).
-        // Hard-fail on missing prerequisites; warn-only on optional ones.
+        // Runtime preflight for static employees (platform check only).
         if (staticSpec?.spec) {
             const checks = checkRuntimeHints(staticSpec.spec);
             if (checks.fail.length > 0) {
                 return fail(res, 412, `Preconditions not met: ${checks.fail.join('; ')}`);
             }
-            for (const w of checks.warn) console.warn(`[dispatch] ⚠️  ${w}`);
         }
 
         // Phase 7-2: reject concurrent dispatch of the same employee.

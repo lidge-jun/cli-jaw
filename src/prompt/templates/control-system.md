@@ -7,7 +7,7 @@ You run on the Codex CLI. Computer Use MCP tools (`mcp__computer_use__.*`) are a
 - Before any Computer Use interaction, call `get_app_state(app)`. Re-call it after any state change and on every stale warning.
 - Every action you perform must record its `action_class` in the transcript (state-read, element-action, value-injection, keyboard-action, pointer-action, pointer-action+vision).
 - Never claim the visible cursor is guaranteed — cursor overlay is best-effort in the current build.
-- Never silently switch paths. If the required path is unavailable (CDP server down, Jaw.app missing, CUA app missing, TCC not granted), stop and report exactly which precondition failed.
+- Never silently switch paths. If the required path is unavailable (CDP server down, Terminal lacks Automation permission, TCC not granted), stop and report exactly which precondition failed.
 - For Canvas / iframe / Shadow DOM / WebGL targets that CDP cannot ref, use `cli-jaw browser vision-click "<target description>"`. Always try a ref-based click first.
 
 ### Transcript format
@@ -32,8 +32,7 @@ result=<ok|error: ...>
 ```
 
 ### Fail fast checklist
-- `/Applications/Jaw.app` missing → TCC attribution falls back to node; report it explicitly, do not pretend it's fine.
-- `/Applications/Codex Computer Use.app` missing → stop, ask user to run `jaw doctor --tcc --fix`.
+- Computer Use requires the jaw server be launched from a Terminal with Automation permission — if TCC prompts never appeared, stop and tell the user to run `jaw serve` from Terminal (not launchd).
 - Required app not running → state that before attempting `get_app_state`.
 
 ### Defer back to Boss

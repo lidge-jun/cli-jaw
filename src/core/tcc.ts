@@ -8,7 +8,6 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 const TCC_USER_DB = join(homedir(), 'Library', 'Application Support', 'com.apple.TCC', 'TCC.db');
-const CUA_APP_PATH = '/Applications/Codex Computer Use.app';
 
 export interface TccEntry {
     client: string;
@@ -54,20 +53,3 @@ export function getLaunchdProcessType(label: string): string | null {
     }
 }
 
-export function cuaAppInstalled(): boolean {
-    return process.platform === 'darwin' && existsSync(CUA_APP_PATH);
-}
-
-export function cuaBundleIdRegistered(): boolean {
-    if (!cuaAppInstalled()) return false;
-    try {
-        const out = execFileSync('mdls', ['-name', 'kMDItemCFBundleIdentifier', CUA_APP_PATH], {
-            encoding: 'utf8', stdio: 'pipe', timeout: 3000,
-        });
-        return out.includes('com.openai.sky.CUAService');
-    } catch {
-        return false;
-    }
-}
-
-export { CUA_APP_PATH };

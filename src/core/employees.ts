@@ -2,7 +2,6 @@
 // Shared employee seeding logic for web, telegram, discord contexts.
 
 import crypto from 'node:crypto';
-import fs from 'node:fs';
 import { getEmployees, deleteEmployee, insertEmployee } from './db.js';
 import { settings } from './config.js';
 import { broadcast } from './bus.js';
@@ -18,17 +17,13 @@ export const DEFAULT_EMPLOYEES = [
 
 // ─── Static (code-defined) employees ─────────────────────────────
 // Defined in code, not stored in the DB. Avoids a schema migration for
-// employees that have fixed CLIs, runtime preconditions, or baked system
-// prompts (e.g. Control needs Codex + Jaw.app + TCC). See
-// devlog/_plan/computeruse/37_revisions_and_integration.md §C.
+// employees that have fixed CLIs or baked system prompts (e.g. Control
+// needs Codex + darwin).
 
 export type EmployeeCli = 'codex' | 'gemini' | 'claude' | 'opencode' | 'copilot';
 
 export interface StaticEmployeeRuntimeHints {
     requiresDarwin?: boolean;
-    requiresJawApp?: boolean;
-    requiresCUApp?: boolean;
-    requiresPathPin?: boolean;
 }
 
 export interface StaticEmployee {
@@ -61,9 +56,6 @@ export const STATIC_EMPLOYEES: StaticEmployee[] = [
         systemPromptPatchFile: 'control-system.md',
         runtimeHints: {
             requiresDarwin: true,
-            requiresJawApp: true,
-            requiresCUApp: true,
-            requiresPathPin: true,
         },
         delegation: {
             mode: 'preferred_for_long_sessions',
@@ -98,8 +90,8 @@ export interface RuntimeHintCheckResult {
 
 /**
  * Evaluate runtime preconditions for a static employee on the current host.
- * Pure (besides platform + filesystem probes). Caller decides how to react:
- * dispatch returns 4xx on fail, warn on missing-but-optional Jaw.app.
+ * Pure (platform probe only). Caller decides how to react: dispatch returns
+ * 4xx on fail.
  */
 export function checkRuntimeHints(
     spec: StaticEmployee,
@@ -110,18 +102,6 @@ export function checkRuntimeHints(
     if (!hints) return out;
     if (hints.requiresDarwin && platform !== 'darwin') {
         out.fail.push(`${spec.name} requires macOS (current: ${platform})`);
-    }
-    if (hints.requiresCUApp && platform === 'darwin'
-        && !fs.existsSync('/Applications/Codex Computer Use.app')) {
-        out.fail.push(
-            `${spec.name} requires /Applications/Codex Computer Use.app — run: jaw doctor --tcc --fix`,
-        );
-    }
-    if (hints.requiresJawApp && platform === 'darwin'
-        && !fs.existsSync('/Applications/Jaw.app')) {
-        out.warn.push(
-            `${spec.name}: /Applications/Jaw.app missing — TCC attribution will fall back to node`,
-        );
     }
     return out;
 }

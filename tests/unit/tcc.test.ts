@@ -1,7 +1,7 @@
 // P04C: macOS TCC utilities (darwin-only, skip on other platforms)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readTccAppleEventsGrants, getLaunchdProcessType, cuaAppInstalled, cuaBundleIdRegistered }
+import { readTccAppleEventsGrants, getLaunchdProcessType }
     from '../../src/core/tcc.js';
 
 const skip = process.platform !== 'darwin';
@@ -14,14 +14,6 @@ test('P04C-020: readTccAppleEventsGrants returns array', { skip }, () => {
 test('P04C-021: getLaunchdProcessType returns null for unknown label', { skip }, () => {
     const result = getLaunchdProcessType('com.nonexistent.label.' + Date.now());
     assert.equal(result, null);
-});
-
-test('P04C-022: cuaAppInstalled returns boolean', { skip }, () => {
-    assert.equal(typeof cuaAppInstalled(), 'boolean');
-});
-
-test('P04C-023: cuaBundleIdRegistered returns boolean', { skip }, () => {
-    assert.equal(typeof cuaBundleIdRegistered(), 'boolean');
 });
 
 test('P04C-024: readTccAppleEventsGrants entries have expected shape', { skip }, () => {
@@ -39,6 +31,5 @@ test('P04C-025: non-darwin platforms return safely', () => {
     // This test runs on all platforms — sanity check that non-darwin doesn't crash
     if (process.platform === 'darwin') return;
     assert.deepEqual(readTccAppleEventsGrants(), []);
-    assert.equal(cuaAppInstalled(), false);
     assert.equal(getLaunchdProcessType('anything'), null);
 });

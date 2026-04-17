@@ -346,47 +346,16 @@ if (headless) {
 }
 
 // ─── macOS TCC diagnostics ──────────────────────────
-async function runTccDiagnostics(opts: { fix: boolean; prime: boolean }) {
+async function runTccDiagnostics(_opts: { fix: boolean; prime: boolean }) {
     if (process.platform !== 'darwin') return;
 
-    const { readTccAppleEventsGrants, getLaunchdProcessType, cuaAppInstalled, cuaBundleIdRegistered }
-        = await import('../../src/core/tcc.js');
-    const { findLegacyCliJawLabels } = await import('../../src/core/launchd-cleanup.js');
+    const { readTccAppleEventsGrants } = await import('../../src/core/tcc.js');
 
     if (!values.json) console.log('\n  🔐 TCC 진단\n');
 
-    check('CUA 앱 설치', () => {
-        if (!cuaAppInstalled()) {
-            throw new Error('WARN: /Applications/Codex Computer Use.app 없음 (복구: jaw doctor --tcc --fix)');
-        }
-        return '/Applications/Codex Computer Use.app';
-    });
-
-    check('CUA bundleID (Launch Services)', () => {
-        if (!cuaBundleIdRegistered()) throw new Error('WARN: bundleID 미등록 — lsregister 재실행 필요');
-        return 'com.openai.sky.CUAService';
-    });
-
-    check('launchd ProcessType', () => {
-        const pt = getLaunchdProcessType('com.cli-jaw.default');
-        if (!pt) throw new Error('WARN: launchd에 등록되지 않음 — jaw launchd 실행');
-        if (pt.toLowerCase() !== 'interactive') {
-            throw new Error(`WARN: ProcessType=${pt} (기대값: Interactive) — jaw launchd 재실행`);
-        }
-        return 'Interactive';
-    });
-
-    check('legacy plist 정리', () => {
-        const dir = path.join(os.homedir(), 'Library', 'LaunchAgents');
-        if (!fs.existsSync(dir)) return 'no LaunchAgents dir';
-        const legacy = findLegacyCliJawLabels(fs.readdirSync(dir), 'com.cli-jaw.default');
-        if (legacy.length === 0) return 'clean';
-        throw new Error(`WARN: ${legacy.length}개 — 정리: jaw launchd cleanup\n       ${legacy.join(', ')}`);
-    });
-
     check('TCC AppleEvents grants', () => {
         const grants = readTccAppleEventsGrants();
-        if (grants.length === 0) return 'empty (첫 실행 전)';
+        if (grants.length === 0) return 'empty (run jaw serve from Terminal to trigger prompts)';
         const denied = grants.filter(g => g.authValue === 0);
         const allowed = grants.filter(g => g.authValue === 2);
         let detail = `allowed=${allowed.length}, denied=${denied.length}`;
@@ -408,40 +377,9 @@ async function runTccDiagnostics(opts: { fix: boolean; prime: boolean }) {
         }
     });
 
-    if (opts.fix) {
-        if (!values.json) console.log('\n  🔧 자동 복구...\n');
-        try {
-            const { ensureCodexComputerUseAppInstall } = await import('../postinstall.js') as any;
-            ensureCodexComputerUseAppInstall?.();
-        } catch (e: any) {
-            if (!values.json) console.log(`  ⚠️  CUA 재설치 실패: ${e?.message || 'unknown'}`);
-        }
-        try {
-            execSync('jaw launchd', { stdio: 'inherit', timeout: 30000 });
-        } catch { /* ok */ }
-    }
-
-    if (opts.prime) {
-        check('TCC 프롬프트 트리거', () => {
-            // 소스 및 설치 경로 모두 탐색
-            const candidates = [
-                path.join(path.dirname(process.argv[1] || ''), '..', '..', 'scripts', 'darwin', 'prime-tcc.sh'),
-                path.join(os.homedir(), '.local', 'share', 'cli-jaw', 'scripts', 'darwin', 'prime-tcc.sh'),
-            ];
-            try {
-                const globalRoot = execSync('npm root -g', { encoding: 'utf8', stdio: 'pipe' }).trim();
-                candidates.push(path.join(globalRoot, 'cli-jaw', 'scripts', 'darwin', 'prime-tcc.sh'));
-            } catch { /* ok */ }
-
-            const script = candidates.find(p => fs.existsSync(p));
-            if (!script) throw new Error('WARN: prime-tcc.sh 위치 탐색 실패');
-            try {
-                execSync(`bash "${script}"`, { stdio: 'inherit', timeout: 30000 });
-                return 'prompted + verified';
-            } catch {
-                throw new Error('WARN: 프롬프트 거부 또는 실패 — 시스템 설정 → 자동화');
-            }
-        });
+    if (!values.json) {
+        console.log('\n  ℹ️  Computer Use는 Terminal responsibility로 동작합니다.');
+        console.log('     Terminal에서 직접 `jaw serve` 실행 시 AppleEvents 권한이 상속됩니다.\n');
     }
 }
 

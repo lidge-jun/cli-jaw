@@ -16,12 +16,6 @@ import { JAW_HOME } from '../../src/core/config.js';
 import { instanceId, getNodePath, getJawPath, buildServicePath } from '../../src/core/instance.js';
 import { generateLaunchdPlist } from '../../src/core/launchd-plist.js';
 import { findLegacyCliJawLabels } from '../../src/core/launchd-cleanup.js';
-import { cuaAppInstalled } from '../../src/core/tcc.js';
-
-if (process.platform === 'darwin') {
-    console.warn('⚠️  jaw launchd는 deprecated입니다. jaw service를 사용하세요.');
-    console.warn('   jaw service는 Jaw.app 경유로 TCC 권한을 상속합니다.\n');
-}
 
 // parseArgs is safe here — launchd is a leaf command (no subcommands to absorb)
 const { values: launchdOpts, positionals: launchdPos } = parseArgs({
@@ -116,7 +110,6 @@ switch (sub) {
             console.log(`   log:         ${LOG_DIR}/jaw-serve.log`);
             console.log(`   domain:      ${GUI_DOMAIN}`);
             console.log(`   ProcessType: ${processType}`);
-            console.log(`   Codex CUA:   ${cuaAppInstalled() ? '✅ 설치됨' : '❌ 없음 (jaw doctor --tcc --fix)'}`);
             const legacy = scanLegacyLabels();
             if (legacy.length > 0) {
                 console.log(`   ⚠️  legacy plist ${legacy.length}개 — 정리: jaw launchd cleanup`);
@@ -226,9 +219,6 @@ switch (sub) {
                 console.log(`   instance: ${INSTANCE}`);
                 console.log(`   http://localhost:${PORT}`);
                 console.log(`   로그: ${LOG_DIR}/jaw-serve.log`);
-                if (process.platform === 'darwin' && !cuaAppInstalled()) {
-                    console.log('\n   ⚠️  Codex CUA 앱 미설치 — jaw doctor --tcc --fix');
-                }
                 console.log('\n   해제: jaw launchd unset');
             } else {
                 console.log('⚠️  시작되지 않았습니다. 로그를 확인하세요:');

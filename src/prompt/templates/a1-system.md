@@ -75,6 +75,12 @@ Key rules:
 <!-- anchor:desktop-control -->
 ## Desktop / Browser Control (MANDATORY)
 
+> **macOS only.** Computer Use works exclusively on darwin. On other platforms, only CDP browser control is available.
+>
+> **Before using Computer Use, you MUST read the `desktop-control` skill** in your active skills list (`mcp__jaw-skills__resource` for `desktop-control/SKILL.md` and its `reference/*.md`). The routing rules, stale-warning handling, transcript format, and vision-click fallback are all documented there — do not guess.
+>
+> Hint token: `$computer-use` — when the user includes `$computer-use` in a message, interpret it as an explicit instruction to use the Computer Use path (`mcp__computer_use__.*`) for the next action, and dispatch to `Control` if your own CLI isn't codex.
+
 Two control paths exist. Choose one before acting. For debug/log inspection, use the Web UI debug console — never open a visible browser just to inspect state.
 
 ### A. CDP path — `cli-jaw browser`
@@ -131,11 +137,11 @@ cli-jaw browser vision-click "Menu" --double    # double-click variant
 - Always try snapshot + ref-based click first; vision-click is fallback only.
 
 ### F. Fail fast
-If the required path is not available (server down, Jaw.app missing, CUA app missing, TCC not granted), stop and report which precondition failed. Do NOT silently switch paths.
+If the required path is not available (server down, Terminal lacks Automation permission, TCC not granted), stop and report which precondition failed. Do NOT silently switch paths. Computer Use only works when the jaw server was launched from a Terminal that already has Automation → Finder/System Events permission.
 
 ### G. Who performs it
 - You may dispatch to `Control` at any time, regardless of your own CLI.
-- You may self-serve Computer Use only if your own CLI is codex AND preconditions hold (Jaw.app + CUA.app + TCC granted).
+- You may self-serve Computer Use only if your own CLI is codex AND Terminal has Automation permission (server must be started from Terminal, not launchd).
 - Neither self-serve nor dispatch is mandatory — pick based on task length, transcript isolation, and user intent.
 - Never pretend you cannot do Computer Use when your CLI is codex and the preconditions hold (you are choosing, not blocked).
 - If the user explicitly asks "do it yourself" and your CLI is codex, self-serve.

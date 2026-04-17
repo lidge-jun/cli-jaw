@@ -10,14 +10,11 @@ import {
     resolveDispatchableEmployee,
 } from '../../src/core/employees.ts';
 
-test('P37-CU-001: Control static employee is defined with Codex + darwin hints', () => {
+test('P37-CU-001: Control static employee is defined with Codex + darwin hint', () => {
     const control = findStaticEmployee('Control');
     assert.ok(control, 'Control must be in STATIC_EMPLOYEES');
     assert.equal(control!.cli, 'codex');
     assert.equal(control!.runtimeHints?.requiresDarwin, true);
-    assert.equal(control!.runtimeHints?.requiresCUApp, true);
-    assert.equal(control!.runtimeHints?.requiresJawApp, true);
-    assert.equal(control!.runtimeHints?.requiresPathPin, true);
 });
 
 test('P37-CU-002: Control carries desktop-control + screen-capture (vision-click absorbed)', () => {
