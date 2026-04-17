@@ -57,7 +57,10 @@ export const CODEX_ACTIVE = new Set([
 ]);
 
 export const OPENCLAW_ACTIVE = new Set([
-    'browser', 'notion', 'memory', 'vision-click',
+    // vision-click is absorbed into desktop-control (reference/vision-click.md)
+    // and stays as a reference skill; users who want the low-level recipe
+    // can opt in with: cli-jaw skill install vision-click
+    'browser', 'notion', 'memory',
     'screen-capture', 'docx', 'xlsx', 'pptx', 'hwp', 'github', 'telegram-send',
     'video', 'pdf-vision', 'diagram',
     'desktop-control',
