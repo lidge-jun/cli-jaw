@@ -20,6 +20,11 @@ function getCommandTimeoutMs(text: string): number {
     return /^\/compact(?:\s|$)/i.test(String(text || '').trim()) ? 5 * 60 * 1000 : 10_000;
 }
 
+// In-flight guard: prevents double-send from rapid clicks / Enter-bursts while the
+// POST to /api/message is outstanding. Server-side dedup in gateway.ts is the
+// second line of defense. See devlog/_plan/260417_message_duplication/.
+let __chatSending = false;
+
 export async function sendMessage(): Promise<void> {
     const input = document.getElementById('chatInput') as HTMLTextAreaElement | null;
     const btn = document.getElementById('btnSend');
@@ -33,102 +38,120 @@ export async function sendMessage(): Promise<void> {
         return;
     }
 
+    // Double-submit guard: if a previous send is still in flight, drop this call.
+    if (__chatSending) return;
+
     const text = input.value.trim();
     if (!text && !state.attachedFiles.length) return;
 
-    // File paths like /Users/junny/... or /tmp/foo — not commands
-    const afterSlash = text.slice(1).trim();
-    const firstToken = afterSlash.split(/\s+/)[0] || '';
-    const isFilePath = firstToken.includes('/') || firstToken.includes('\\');
+    // Mark in-flight AND disable send button for visual feedback.
+    __chatSending = true;
+    const sendBtn = btn as HTMLButtonElement;
+    const prevDisabled = sendBtn.disabled;
+    sendBtn.disabled = true;
+    try {
+        // File paths like /Users/junny/... or /tmp/foo — not commands
+        const afterSlash = text.slice(1).trim();
+        const firstToken = afterSlash.split(/\s+/)[0] || '';
+        const isFilePath = firstToken.includes('/') || firstToken.includes('\\');
 
-    if (text.startsWith('/') && !state.attachedFiles.length && !isFilePath) {
-        input.value = '';
-        resetInputHeight();
-        slashCmd.close();
-        try {
-            let signal: AbortSignal; let timer: ReturnType<typeof setTimeout> | undefined;
-            const timeoutMs = getCommandTimeoutMs(text);
-            if (typeof AbortSignal?.timeout === 'function') {
-                signal = AbortSignal.timeout(timeoutMs);
-            } else {
-                const ac = new AbortController();
-                signal = ac.signal;
-                timer = setTimeout(() => ac.abort(), timeoutMs);
+        if (text.startsWith('/') && !state.attachedFiles.length && !isFilePath) {
+            input.value = '';
+            resetInputHeight();
+            slashCmd.close();
+            try {
+                let signal: AbortSignal; let timer: ReturnType<typeof setTimeout> | undefined;
+                const timeoutMs = getCommandTimeoutMs(text);
+                if (typeof AbortSignal?.timeout === 'function') {
+                    signal = AbortSignal.timeout(timeoutMs);
+                } else {
+                    const ac = new AbortController();
+                    signal = ac.signal;
+                    timer = setTimeout(() => ac.abort(), timeoutMs);
+                }
+                const locale = getPreferredLocale();
+                const token = await getAuthToken();
+                const res = await fetch('/api/command', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept-Language': locale,
+                        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                    },
+                    body: JSON.stringify({ text, locale }),
+                    signal,
+                });
+                if (timer) clearTimeout(timer);
+                const result: CommandResult = await res.json().catch(() => ({}));
+                // not_command → fall through to normal chat
+                if (result?.code === 'not_command') {
+                    addMessage('user', text);
+                    upsertMessage({ role: 'user', content: text, timestamp: Date.now() });
+                    await apiJson('/api/message', 'POST', { prompt: text });
+                    return;
+                }
+                if (!res.ok && !result?.text) throw new Error(`HTTP ${res.status}`);
+                if (result?.code === 'clear_screen') {
+                    cancelPostRender();
+                    getVirtualScroll().clear();
+                    const chatEl = document.getElementById('chatMessages');
+                    if (chatEl) chatEl.innerHTML = '';
+                }
+                if (result?.text) addSystemMsg(escapeHtml(result.text), '', result.type);
+            } catch (err) {
+                addSystemMsg(t('chat.cmd.fail', { msg: (err as Error).message }), '', 'error');
             }
-            const locale = getPreferredLocale();
-            const token = await getAuthToken();
-            const res = await fetch('/api/command', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept-Language': locale,
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-                },
-                body: JSON.stringify({ text, locale }),
-                signal,
-            });
-            if (timer) clearTimeout(timer);
-            const result: CommandResult = await res.json().catch(() => ({}));
-            // not_command → fall through to normal chat
-            if (result?.code === 'not_command') {
-                addMessage('user', text);
-                upsertMessage({ role: 'user', content: text, timestamp: Date.now() });
-                await apiJson('/api/message', 'POST', { prompt: text });
-                return;
-            }
-            if (!res.ok && !result?.text) throw new Error(`HTTP ${res.status}`);
-            if (result?.code === 'clear_screen') {
-                cancelPostRender();
-                getVirtualScroll().clear();
-                const chatEl = document.getElementById('chatMessages');
-                if (chatEl) chatEl.innerHTML = '';
-            }
-            if (result?.text) addSystemMsg(escapeHtml(result.text), '', result.type);
-        } catch (err) {
-            addSystemMsg(t('chat.cmd.fail', { msg: (err as Error).message }), '', 'error');
-        }
-        return;
-    }
-
-    if (state.attachedFiles.length) {
-        const names = state.attachedFiles.map((f: File) => f.name).join(', ');
-        const displayMsg = `📎 [${names}] ${text}`;
-        addMessage('user', displayMsg);
-        upsertMessage({ role: 'user', content: displayMsg, timestamp: Date.now() });
-        input.value = '';
-        resetInputHeight();
-        try {
-            // Upload all files in parallel
-            const paths = await Promise.all(state.attachedFiles.map((f: File) => uploadFile(f)));
-            let prompt = paths.map(p => t('chat.file.sent', { path: p })).join('\n');
-            if (text) prompt += t('chat.file.sentWithMsg', { text });
-            clearAttachedFiles();
-            await apiJson('/api/message', 'POST', { prompt });
-        } catch (err) {
-            addSystemMsg(t('chat.file.uploadFail', { msg: (err as Error).message }));
-            clearAttachedFiles();
-        }
-    } else {
-        addMessage('user', text);
-        upsertMessage({ role: 'user', content: text, timestamp: Date.now() });
-        input.value = '';
-        resetInputHeight();
-        const res = await fetch('/api/message', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: text }),
-        });
-        const data: MessageResult = await res.json().catch(() => ({}));
-        if (!res.ok) {
-            addSystemMsg(`${ICONS.error} ${escapeHtml(data.error || t('chat.requestFail', { status: res.status }))}`, '', 'error');
             return;
         }
-        if (data.queued) {
-            const { updateQueueBadge } = await import('../ui.js');
-            updateQueueBadge(data.pending || 1);
-        } else if (data.continued) {
-            addSystemMsg(t('chat.continue'));
+
+        if (state.attachedFiles.length) {
+            const names = state.attachedFiles.map((f: File) => f.name).join(', ');
+            const displayMsg = `📎 [${names}] ${text}`;
+            addMessage('user', displayMsg);
+            upsertMessage({ role: 'user', content: displayMsg, timestamp: Date.now() });
+            input.value = '';
+            resetInputHeight();
+            try {
+                // Upload all files in parallel
+                const paths = await Promise.all(state.attachedFiles.map((f: File) => uploadFile(f)));
+                let prompt = paths.map(p => t('chat.file.sent', { path: p })).join('\n');
+                if (text) prompt += t('chat.file.sentWithMsg', { text });
+                clearAttachedFiles();
+                await apiJson('/api/message', 'POST', { prompt });
+            } catch (err) {
+                addSystemMsg(t('chat.file.uploadFail', { msg: (err as Error).message }));
+                clearAttachedFiles();
+            }
+        } else {
+            addMessage('user', text);
+            upsertMessage({ role: 'user', content: text, timestamp: Date.now() });
+            input.value = '';
+            resetInputHeight();
+            const res = await fetch('/api/message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: text }),
+            });
+            const data: MessageResult = await res.json().catch(() => ({}));
+            // Server-side 5s dedup returns 409 with reason='duplicate'. Absorb silently —
+            // the optimistic UI bubble is already rendered; no need to double-notify.
+            if (res.status === 409 && (data as any)?.error === 'duplicate') {
+                return;
+            }
+            if (!res.ok) {
+                addSystemMsg(`${ICONS.error} ${escapeHtml(data.error || t('chat.requestFail', { status: res.status }))}`, '', 'error');
+                return;
+            }
+            if (data.queued) {
+                const { updateQueueBadge } = await import('../ui.js');
+                updateQueueBadge(data.pending || 1);
+            } else if (data.continued) {
+                addSystemMsg(t('chat.continue'));
+            }
         }
+    } finally {
+        __chatSending = false;
+        sendBtn.disabled = prevDisabled;
     }
 }
 

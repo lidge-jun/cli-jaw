@@ -26,6 +26,31 @@ export type SubmitResult = {
     continued?: true;
 };
 
+// ── 5s dedup window ──
+// L2 defense against duplicate inserts caused by:
+//   (a) rapid user re-submit (impatience / button double-click)
+//   (b) dispatch Bash-tool timeout → Boss hallucinates "in progress" → user retypes
+// See devlog/_plan/260417_message_duplication/.
+const DEDUP_WINDOW_MS = 5000;
+const recentSubmissions = new Map<string, { ts: number; requestId: string }>();
+
+function dedupKey(origin: string, text: string, chatId?: string | number): string {
+    const normalized = text.trim().replace(/\s+/g, ' ');
+    return `${origin}:${chatId ?? ''}:${normalized}`;
+}
+
+function gcRecentSubmissions(now: number): void {
+    if (recentSubmissions.size < 32) return; // amortize GC
+    for (const [k, v] of recentSubmissions) {
+        if (now - v.ts > DEDUP_WINDOW_MS * 2) recentSubmissions.delete(k);
+    }
+}
+
+/** Exposed for tests. Clears the dedup cache. */
+export function __resetSubmitDedupForTest(): void {
+    recentSubmissions.clear();
+}
+
 function runDetached(
     task: Promise<unknown>,
     label: string,
@@ -52,8 +77,20 @@ export function submitMessage(
     const trimmed = text.trim();
     if (!trimmed) return { action: 'rejected', reason: 'empty' };
 
+    // Dedup: same (origin, chatId, normalized text) within 5s → reject as duplicate
+    // and return the earlier requestId so the client can absorb it silently.
+    const now = Date.now();
+    const key = dedupKey(meta.origin, trimmed, meta.chatId);
+    const prior = recentSubmissions.get(key);
+    if (prior && now - prior.ts < DEDUP_WINDOW_MS) {
+        console.log(`[gateway:dedup] suppressed duplicate (${now - prior.ts}ms window) origin=${meta.origin}`);
+        return { action: 'rejected', reason: 'duplicate', requestId: prior.requestId };
+    }
+    gcRecentSubmissions(now);
+
     const display = meta.displayText || trimmed;
     const requestId = randomUUID();
+    recentSubmissions.set(key, { ts: now, requestId });
 
     // ── continue intent (only when IDLE) ──
     const scope = resolveOrcScope({ origin: meta.origin, chatId: meta.chatId, workingDir: settings.workingDir || null });

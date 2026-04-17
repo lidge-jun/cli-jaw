@@ -458,8 +458,9 @@ app.post('/api/message', requireAuth, (req, res) => {
 
     const result = submitMessage(prompt.trim(), { origin: 'web' });
     if (result.action === 'rejected') {
-        return res.status(result.reason === 'busy' ? 409 : 400)
-            .json({ error: result.reason });
+        // 'busy' / 'duplicate' both return 409 so the client absorbs them silently.
+        const status = (result.reason === 'busy' || result.reason === 'duplicate') ? 409 : 400;
+        return res.status(status).json({ ok: false, error: result.reason, ...result });
     }
     res.json({ ok: true, ...result });
 });

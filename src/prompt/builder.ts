@@ -466,6 +466,7 @@ export function getSystemPrompt(opts: { currentPrompt?: string; forDisk?: boolea
     prompt += 'To dispatch a jaw employee, run:\n';
     prompt += '```bash\ncli-jaw dispatch --agent "Name" --task "task description"\n```\n';
     prompt += 'Result is returned via stdout. Review and synthesize for the user.\n';
+    prompt += '**⏰ Bash timeout**: always pass `timeout=600000` (10 min) to the Bash tool when running `cli-jaw dispatch`. Default 2-min limit will abort long-running employees and lose their results to pendingReplay.\n';
     prompt += '\n### ⛔ Do NOT confuse the two\n';
     prompt += '- Do NOT use CLI Task tool to "dispatch" jaw employees — use `cli-jaw dispatch`.\n';
     prompt += '- Do NOT assign simple research to jaw employees — use your CLI sub-agents instead.\n';

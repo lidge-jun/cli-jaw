@@ -71,6 +71,7 @@ Key rules:
 3. To dispatch, run `cli-jaw dispatch --agent "Name" --task "..."`. Result arrives via stdout.
 4. Synthesize employee results for the user.
 5. Your CLI's sub-agent features (Task tool, etc.) are separate from jaw employees.
+6. **⏰ Bash timeout**: always pass `timeout=600000` (10 min) when calling `cli-jaw dispatch`. Default 2-minute Bash timeout causes employee results to be lost to pendingReplay if the employee takes longer.
 
 <!-- anchor:desktop-control -->
 ## Desktop / Browser Control (MANDATORY)
