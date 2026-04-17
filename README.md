@@ -170,13 +170,13 @@ Five CLI backends, routed through OAuth subscriptions you already pay for. No pe
 | **Codex** | `gpt-5.5` | `codex login` | ChatGPT Pro subscription |
 | **Gemini** | `gemini-3.1-pro-preview` | `gemini` | Gemini Advanced subscription |
 | **OpenCode** | `minimax-m2.7` | `opencode` | Free models available |
-| **Copilot** | `gpt-5.5` | `copilot login` | Free tier available |
+| **Copilot** | `gpt-5-mini` | `copilot login` | Free tier available |
 
 **Fallback chain**: if one engine is rate-limited or down, the next picks up automatically. Configure with `/fallback [cli1 cli2...]`.
 
 **OpenCode wildcard**: connect any model endpoint — OpenRouter, local LLMs, or any OpenAI-compatible API.
 
-> Switch engines: `/cli codex`. Switch models: `/model gpt-5.4`. All from Web, Terminal, Telegram, or Discord.
+> Switch engines: `/cli codex`. Switch models: `/model gpt-5.5`. All from Web, Terminal, Telegram, or Discord.
 
 ---
 
