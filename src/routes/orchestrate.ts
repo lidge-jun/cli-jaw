@@ -2,9 +2,9 @@ import type { Express } from 'express';
 import type { AuthMiddleware } from './types.js';
 import { ok, fail } from '../http/response.js';
 import { isAgentBusy, messageQueue, getQueuedMessageSnapshotForScope, removeQueuedMessage, killActiveAgent, waitForProcessEnd } from '../agent/spawn.js';
-import { submitMessage } from '../orchestrator/gateway.js';
 import { getLiveRun } from '../agent/live-run-state.js';
-import { orchestrateContinue, orchestrateReset } from '../orchestrator/pipeline.js';
+import { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } from '../orchestrator/pipeline.js';
+import { insertMessage } from '../core/db.js';
 import { getState, getCtx, setState, resetState, canTransition } from '../orchestrator/state-machine.js';
 import type { OrcStateName } from '../orchestrator/state-machine.js';
 import { resolveOrcScope } from '../orchestrator/scope.js';
@@ -78,14 +78,32 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
     app.post('/api/orchestrate/queue/:id/steer', requireAuth, async (req, res) => {
         const id = String(req.params.id || '');
         if (!id) return fail(res, 400, 'missing id');
-        const result = removeQueuedMessage(id);
-        if (!result.removed) return fail(res, 404, 'queued item not found');
-        const prompt = result.removed.prompt;
+        // Fix B (W-1+W-2): peek 먼저 → kill+wait → remove → DB insert (processQueue 미러)
+        // → orchestrate(_skipInsert). submitMessage idle 분기를 거치지 않아 두 번째
+        // insertMessage / broadcast('new_message')가 발생하지 않는다.
+        const peek = messageQueue.find(item => item.id === id);
+        if (!peek) return fail(res, 404, 'queued item not found');
+        const prompt = peek.prompt;
+        const origin = peek.source || 'web';
         if (isAgentBusy()) {
             killActiveAgent('steer');
             await waitForProcessEnd(3000);
         }
-        submitMessage(prompt, { origin: 'web' });
+        const result = removeQueuedMessage(id);
+        if (!result.removed) return fail(res, 404, 'queued item disappeared during steer');
+        // gateway.ts:130에서 enqueue 시점에 이미 broadcast('new_message') 했으므로
+        // 여기서는 broadcast하지 않는다 (processQueue 정책과 동일).
+        try {
+            insertMessage.run('user', prompt, origin, '', settings.workingDir || null);
+        } catch (err) {
+            console.warn('[steer:insert]', (err as Error).message);
+        }
+        const task = isResetIntent(prompt)
+            ? orchestrateReset({ origin, _skipInsert: true })
+            : isContinueIntent(prompt)
+                ? orchestrateContinue({ origin, _skipInsert: true })
+                : orchestrate(prompt, { origin, _skipInsert: true });
+        task.catch((err: Error) => console.error('[steer:orchestrate]', err.message));
         return res.json({ ok: true, pending: result.pending });
     });
 

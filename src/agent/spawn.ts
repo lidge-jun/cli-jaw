@@ -205,9 +205,26 @@ function consumeKillReason(pid: number | undefined): string | null {
     return reason;
 }
 
+/**
+ * Fix A: 사용자 stop은 메모리 큐 + DB persisted_queue + frontend pending row를
+ * 모두 폐기한다. exit handler의 processQueue() 자동 드레인이 stop 직후 잔존
+ * 메시지를 "스스로 steer" 처럼 실행하던 회귀를 차단.
+ */
+function purgeQueueOnStop(reason: string) {
+    if (messageQueue.length === 0) return;
+    const dropped = messageQueue.length;
+    for (const item of messageQueue.splice(0)) {
+        try { deleteQueuedMessage.run(item.id); } catch { /* best-effort */ }
+    }
+    console.log(`[jaw:stop] cleared ${dropped} pending message(s) (reason=${reason})`);
+    broadcast('queue_update', { pending: 0 });
+}
+
 export function killActiveAgent(reason = 'user') {
     const hadTimer = !!retryPendingTimer;
     clearRetryTimer(false);  // stop 의도: 큐 재개 안 함
+    // Fix A: 사용자 stop은 큐도 폐기. steer/internal kill은 큐 보존.
+    if (reason === 'api' || reason === 'user') purgeQueueOnStop(reason);
     if (!activeProcess) return hadTimer;  // timer 취소도 "killed" 취급
     console.log(`[jaw:kill] reason=${reason}`);
     if (activeProcess.pid) killReasons.set(activeProcess.pid, reason);
@@ -216,12 +233,20 @@ export function killActiveAgent(reason = 'user') {
     setTimeout(() => {
         try { if (proc && !proc.killed) proc.kill('SIGKILL'); } catch (e: unknown) { console.warn('[agent:kill] SIGKILL failed', { pid: proc?.pid, error: (e as Error).message }); }
     }, 2000);
+    // Fix C1: 사용자 stop 시 isAgentBusy()가 즉시 false가 되도록 참조를 동기 해제.
+    // 실제 child 종료는 위 setTimeout SIGKILL이 백그라운드에서 마무리.
+    // exit handler의 setActiveProcess(null) / activeProcesses.delete 는 idempotent.
+    if (reason === 'api' || reason === 'user') {
+        activeProcess = null;
+    }
     return true;
 }
 
 export function killAllAgents(reason = 'user') {
     const hadTimer = !!retryPendingTimer;
     clearRetryTimer(false);  // stop 의도: 큐 재개 안 함
+    // Fix A: 사용자 stop은 큐도 폐기.
+    if (reason === 'api' || reason === 'user') purgeQueueOnStop(reason);
     let killed = 0;
     for (const [id, proc] of activeProcesses) {
         console.log(`[jaw:killAll] killing ${id}, reason=${reason}`);
@@ -253,6 +278,11 @@ export function killAllAgents(reason = 'user') {
     // Also kill main activeProcess if not in map
     if (activeProcess && !activeProcesses.has('main')) {
         killActiveAgent(reason);
+    }
+    // Fix C1: 사용자 stop 시 isAgentBusy() 즉시 false. 실제 종료는 백그라운드 SIGKILL.
+    if (reason === 'api' || reason === 'user') {
+        activeProcess = null;
+        activeProcesses.clear();
     }
     return killed > 0 || !!activeProcess || hadTimer;
 }
