@@ -18,6 +18,11 @@ import { generateLaunchdPlist } from '../../src/core/launchd-plist.js';
 import { findLegacyCliJawLabels } from '../../src/core/launchd-cleanup.js';
 import { cuaAppInstalled } from '../../src/core/tcc.js';
 
+if (process.platform === 'darwin') {
+    console.warn('⚠️  jaw launchd는 deprecated입니다. jaw service를 사용하세요.');
+    console.warn('   jaw service는 Jaw.app 경유로 TCC 권한을 상속합니다.\n');
+}
+
 // parseArgs is safe here — launchd is a leaf command (no subcommands to absorb)
 const { values: launchdOpts, positionals: launchdPos } = parseArgs({
     args: process.argv.slice(3),
