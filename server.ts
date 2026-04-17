@@ -35,6 +35,7 @@ import { ok, fail } from './src/http/response.js';
 import { errorHandler } from './src/http/error-middleware.js';
 
 import { setWss, broadcast } from './src/core/bus.js';
+import { isAllowedHost, isAllowedOrigin, isPrivateIP } from './src/security/network-acl.js';
 import { initBossToken } from './src/core/boss-auth.js';
 import * as browser from './src/browser/index.js';
 
@@ -188,11 +189,11 @@ const wss = new WebSocketServer({
     server,
     verifyClient: (info, cb) => {
         const host = info.req.headers.host;
-        if (host && !ALLOWED_HOSTS.has(host)) {
-            return cb(false, 403, 'Host not allowed');
+        if (host && !isAllowedHost(host, lanAllowed())) {
+            return cb(false, 403, 'Host not allowed (LAN bypass disabled)');
         }
         const origin = info.origin || (info.req.headers.origin as string);
-        if (origin && !ALLOWED_ORIGINS.has(origin)) {
+        if (origin && !isAllowedOrigin(origin, host, lanAllowed())) {
             return cb(false, 403, 'Origin not allowed');
         }
         cb(true);
@@ -207,29 +208,23 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false,
 }));
 
-// ─── CORS (localhost only) ──────────────────────────
-const ALLOWED_ORIGINS = new Set([
-    `http://localhost:${PORT}`,
-    `http://127.0.0.1:${PORT}`,
-]);
-const ALLOWED_HOSTS = new Set([
-    `localhost:${PORT}`, `127.0.0.1:${PORT}`,
-    'localhost', '127.0.0.1',
-]);
+// ─── CORS (loopback always, LAN opt-in) ─────────────
+const lanAllowed = () => settings.network?.lanBypass === true;
+const LAN_HINT = 'Set settings.network.bindHost="0.0.0.0" and lanBypass=true to allow LAN access.';
 
 // Host header validation (DNS rebinding defense)
 app.use((req, res, next) => {
     const host = req.headers.host;
-    if (host && !ALLOWED_HOSTS.has(host)) {
-        return res.status(403).json({ error: 'Host not allowed' });
+    if (host && !isAllowedHost(host, lanAllowed())) {
+        return res.status(403).json({ error: 'Host not allowed', hint: LAN_HINT });
     }
     next();
 });
 
 app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin && !ALLOWED_ORIGINS.has(origin)) {
-        return res.status(403).json({ error: 'Origin not allowed' });
+    if (origin && !isAllowedOrigin(origin, req.headers.host, lanAllowed())) {
+        return res.status(403).json({ error: 'Origin not allowed', hint: LAN_HINT });
     }
     if (origin) {
         res.setHeader('Access-Control-Allow-Origin', origin);
@@ -249,9 +244,10 @@ const JAW_AUTH_TOKEN = process.env.JAW_AUTH_TOKEN || crypto.randomBytes(32).toSt
 initBossToken();
 
 function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
-    // Localhost (same-origin Web UI) — allow without token
     const host = req.hostname || req.ip || '';
-    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
+    const isLoopback = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    const isLanBypass = lanAllowed() && isPrivateIP(host);
+    if (isLoopback || isLanBypass) {
         return next();
     }
     const token = (req.headers.authorization || '').replace('Bearer ', '');
@@ -548,7 +544,8 @@ const shutdown = async (sig: string) => {
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 process.once('SIGINT', () => shutdown('SIGINT'));
 
-server.listen(PORT, '127.0.0.1', async () => {
+const bindHost: string = settings.network?.bindHost || '127.0.0.1';
+server.listen(PORT, bindHost, async () => {
     // Persist port so CLI commands auto-discover the running server
     const portStr = String(PORT);
     if (settings.port !== portStr) {
@@ -562,6 +559,22 @@ server.listen(PORT, '127.0.0.1', async () => {
     log.info(`  CLI:    ${settings.cli}`);
     log.info(`  Perms:  ${settings.permissions}`);
     log.info(`  CWD:    ${settings.workingDir}`);
+
+    // LAN URL hints + security warnings
+    if (bindHost === '0.0.0.0') {
+        const { networkInterfaces } = await import('node:os');
+        const nets = networkInterfaces();
+        const urls: string[] = [];
+        for (const iface of Object.values(nets)) {
+            for (const net of iface || []) {
+                if (net.family === 'IPv4' && !net.internal) urls.push(`http://${net.address}:${PORT}`);
+            }
+        }
+        if (urls.length) log.info(`  LAN:    ${urls.join(', ')}`);
+        if (settings.network?.lanBypass === true) {
+            log.warn('  ⚠ LAN auth bypass enabled — only enable on trusted networks.');
+        }
+    }
     log.info(`  DB:     ${DB_PATH}`);
     log.info(`  Prompts: ${PROMPTS_DIR}`);
     log.info(`  Auth:   ${JAW_AUTH_TOKEN.slice(0, 8)}...\n`);

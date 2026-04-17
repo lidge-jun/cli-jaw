@@ -182,6 +182,10 @@ function createDefaultSettings() {
             openaiModel: '',
             vertexConfig: '',
         },
+        network: {
+            bindHost: '127.0.0.1',  // '0.0.0.0' → LAN accessible (opt-in)
+            lanBypass: false,        // true → RFC1918 clients skip Bearer token
+        },
     };
 }
 
@@ -324,6 +328,7 @@ export function loadSettings() {
                 latestSeen: { ...defaults.messaging.latestSeen, ...(raw.messaging?.latestSeen || {}) },
                 lastActive: { ...defaults.messaging.lastActive, ...(raw.messaging?.lastActive || {}) },
             },
+            network: { ...defaults.network, ...(raw.network || {}) },
         });
         // --home (JAW_HOME) always wins over persisted workingDir (#64 hotfix)
         if (merged.workingDir !== JAW_HOME) {
