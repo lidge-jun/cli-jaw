@@ -60,6 +60,7 @@ export const OPENCLAW_ACTIVE = new Set([
     'browser', 'notion', 'memory', 'vision-click',
     'screen-capture', 'docx', 'xlsx', 'pptx', 'hwp', 'github', 'telegram-send',
     'video', 'pdf-vision', 'diagram',
+    'desktop-control',
 ]);
 
 /** Walk up from current file to find package.json → package root */
