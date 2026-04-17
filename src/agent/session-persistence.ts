@@ -1,5 +1,6 @@
 import { settings } from '../core/config.js';
-import { updateSession } from '../core/db.js';
+import { updateSession, upsertSessionBucket } from '../core/db.js';
+import { resolveSessionBucket } from './args.js';
 
 export type SessionPersistenceInput = {
     ownerGeneration: number;
@@ -8,6 +9,7 @@ export type SessionPersistenceInput = {
     sessionId?: string | null;
     isFallback?: boolean;
     code?: number | null;
+    wasKilled?: boolean;
     cli: string;
     model: string;
     effort: string;
@@ -36,7 +38,13 @@ export function isCurrentSessionOwner(ownerGeneration: number): boolean {
 
 export function shouldPersistMainSession(input: SessionPersistenceInput): boolean {
     if (input.forceNew || input.employeeSessionId || !input.sessionId || input.isFallback) return false;
-    if (input.code !== undefined && input.code !== null && input.code !== 0) return false;
+    // User-initiated kill (SIGTERM/SIGKILL) yields exit codes like 143/137/1 depending on
+    // the CLI's signal handler. Allow persistence when wasKilled=true so resume works for
+    // CLIs (claude, copilot) that don't translate SIGTERM to exit 0.
+    if (
+        input.code !== undefined && input.code !== null && input.code !== 0
+        && !input.wasKilled
+    ) return false;
     return isCurrentSessionOwner(input.ownerGeneration);
 }
 
@@ -50,5 +58,12 @@ export function persistMainSession(input: SessionPersistenceInput): boolean {
         input.workingDir || settings.workingDir || '~',
         input.effort,
     );
+    // Mirror into per-bucket table so codex-spark keeps a session independent from
+    // plain codex (gpt-5.4 etc.) — avoids 'thread/resume failed: no rollout found'
+    // on cross-model toggles.
+    const bucket = resolveSessionBucket(input.cli, input.model);
+    if (bucket && input.sessionId) {
+        upsertSessionBucket.run(bucket, input.sessionId, input.model);
+    }
     return true;
 }

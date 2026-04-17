@@ -2,7 +2,7 @@
 // 이미 export된 함수를 직접 검증 (추가 작업 없이 즉시 실행 가능)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildArgs, buildResumeArgs } from '../../src/agent/spawn.ts';
+import { buildArgs, buildResumeArgs, resolveSessionBucket } from '../../src/agent/spawn.ts';
 
 // ─── buildArgs: claude ───────────────────────────────
 
@@ -81,6 +81,54 @@ test('AG-009d: codex Spark model strips ALL reasoning config (effort + summary +
     assert.ok(!cVals.some(v => v.includes('model_reasoning_summary')), 'spark must drop model_reasoning_summary');
     assert.ok(!cVals.some(v => v.includes('hide_agent_reasoning')), 'spark must drop hide_agent_reasoning');
     assert.ok(args.includes('gpt-5.3-spark'), 'model arg still present');
+});
+
+test('AG-009g: codex Spark model pins context_window=128k + auto_compact_limit=110k', () => {
+    const args = buildArgs('codex', 'gpt-5.3-codex-spark', 'high', 'x', '', 'auto');
+    const cVals = args.reduce<string[]>((acc, v, i) => (v === '-c' ? [...acc, args[i + 1]] : acc), []);
+    assert.ok(cVals.includes('model_context_window=128000'), 'spark must pin 230k context window');
+    assert.ok(cVals.includes('model_auto_compact_token_limit=110000'), 'spark must pin 200k auto-compact threshold');
+});
+
+test('AG-009h: non-spark codex does NOT pin context_window / auto_compact (let user config decide)', () => {
+    const args = buildArgs('codex', 'gpt-5.4', 'high', 'x', '', 'auto');
+    const cVals = args.reduce<string[]>((acc, v, i) => (v === '-c' ? [...acc, args[i + 1]] : acc), []);
+    assert.ok(!cVals.some(v => v.includes('model_context_window')), 'non-spark must not override context_window');
+    assert.ok(!cVals.some(v => v.includes('model_auto_compact_token_limit')), 'non-spark must not override compact limit');
+});
+
+test('AG-009i: codex Spark resume also pins context_window + auto_compact', () => {
+    const args = buildResumeArgs('codex', 'gpt-5.3-codex-spark', 'high', 'sess-xyz', 'continue', 'auto');
+    const cVals = args.reduce<string[]>((acc, v, i) => (v === '-c' ? [...acc, args[i + 1]] : acc), []);
+    assert.ok(cVals.includes('model_context_window=128000'));
+    assert.ok(cVals.includes('model_auto_compact_token_limit=110000'));
+});
+
+// ─── resolveSessionBucket: spark gets its own bucket ───
+
+test('AG-009j: resolveSessionBucket — codex + spark model → codex-spark bucket', () => {
+    assert.equal(resolveSessionBucket('codex', 'gpt-5.3-codex-spark'), 'codex-spark');
+    assert.equal(resolveSessionBucket('codex', 'GPT-5-Spark'), 'codex-spark');
+    assert.equal(resolveSessionBucket('codex', 'codex-spark-mini'), 'codex-spark');
+});
+
+test('AG-009k: resolveSessionBucket — non-spark codex stays in codex bucket', () => {
+    assert.equal(resolveSessionBucket('codex', 'gpt-5.4'), 'codex');
+    assert.equal(resolveSessionBucket('codex', 'gpt-5.3-codex'), 'codex');
+    assert.equal(resolveSessionBucket('codex', 'default'), 'codex');
+    assert.equal(resolveSessionBucket('codex', ''), 'codex');
+});
+
+test('AG-009l: resolveSessionBucket — non-codex CLI returns cli unchanged', () => {
+    assert.equal(resolveSessionBucket('claude', 'sonnet-spark-fake'), 'claude', 'spark check is codex-scoped');
+    assert.equal(resolveSessionBucket('gemini', 'gemini-3-flash'), 'gemini');
+    assert.equal(resolveSessionBucket('opencode', 'anything'), 'opencode');
+});
+
+test('AG-009m: resolveSessionBucket — null/undefined cli returns empty string', () => {
+    assert.equal(resolveSessionBucket(null, 'gpt-5.4'), '');
+    assert.equal(resolveSessionBucket(undefined, 'gpt-5.4'), '');
+    assert.equal(resolveSessionBucket('', null), '');
 });
 
 test('AG-009e: codex Spark resume also strips reasoning config', () => {

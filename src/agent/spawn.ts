@@ -10,6 +10,7 @@ import { settings, UPLOADS_DIR, detectCli } from '../core/config.js';
 import {
     clearEmployeeSession, getSession, updateSession, insertMessage, insertMessageWithTrace, getRecentMessages, getEmployees,
     listQueuedMessages, insertQueuedMessage, deleteQueuedMessage,
+    getSessionBucket, upsertSessionBucket, clearSessionBucket,
 } from '../core/db.js';
 import { getSystemPrompt, regenerateB } from '../prompt/builder.js';
 import { extractSessionId, extractFromEvent, extractFromAcpUpdate, extractOutputChunk, logEventSummary, flushClaudeBuffers } from './events.js';
@@ -482,8 +483,8 @@ function withHistoryPrompt(prompt: string, historyBlock: string) {
     return `${historyBlock}\n\n---\n[Current Message]\n${body}`;
 }
 
-import { buildArgs, buildResumeArgs } from './args.js';
-export { buildArgs, buildResumeArgs };
+import { buildArgs, buildResumeArgs, resolveSessionBucket } from './args.js';
+export { buildArgs, buildResumeArgs, resolveSessionBucket };
 
 // ─── Upload wrapper ──────────────────────────────────
 
@@ -574,6 +575,12 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     // Vendor-agnostic: compact handler reset session_id and stored bootstrap.
     // Inject only on fresh main spawns (not employee/fallback/internal/resume).
     if (!opts.agentId && !opts._isFallback && !opts.internal) {
+        // NOTE: this pre-check runs before `model` is resolved, so we can't use
+        // the per-bucket lookup yet. Fall back to the legacy heuristic — if a
+        // session exists under the same cli, assume it's a resume and skip the
+        // bootstrap. The bucket-aware decision below is what actually gates the
+        // spawn args. This over-suppresses bootstrap in rare cross-model toggle
+        // cases, which is the safer failure mode (no duplicate bootstrap).
         const isResumeGuess = !forceNew && session.session_id && session.active_cli === cli;
         if (!isResumeGuess) {
             const pending = consumePendingBootstrapPrompt();
@@ -609,10 +616,16 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         ? customSysPrompt
         : getSystemPrompt({ currentPrompt: prompt, forDisk: false, memorySnapshot, activeCli: cli });
 
+    // Bucket-aware resume: codex-spark is kept in its own session bucket so
+    // cross-model resume (gpt-5.4 ↔ gpt-5.3-codex-spark) doesn't send a
+    // mismatched session_id to the server.
+    const currentBucket = resolveSessionBucket(cli, model);
+    const bucketRow: any = currentBucket ? getSessionBucket.get(currentBucket) : null;
+    const bucketSessionId = bucketRow?.session_id || null;
     const isResume = empSid
         ? true
-        : (!forceNew && session.session_id && session.active_cli === cli);
-    const resumeSessionId = empSid || session.session_id;
+        : (!forceNew && !!bucketSessionId);
+    const resumeSessionId = empSid || bucketSessionId;
     const historyBlock = !isResume ? buildHistoryBlock(prompt, settings.workingDir) : '';
     const promptForArgs = (cli === 'gemini' || cli === 'opencode')
         ? withHistoryPrompt(prompt, historyBlock)

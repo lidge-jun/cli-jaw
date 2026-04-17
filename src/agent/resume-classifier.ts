@@ -17,6 +17,8 @@ const CLI_STALE_MATCHERS: MatcherMap = {
     codex: [
         /\bconversation\b.*\bnot found\b/i,
         /\bresume\b.*\bnot found\b/i,
+        /\bno rollout found\b/i,              // codex: thread/resume failed when rollout missing / cross-bucket
+        /\bthread\/resume failed\b/i,
     ],
     gemini: [
         /\bsession\b.*\bnot found\b/i,

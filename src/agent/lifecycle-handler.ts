@@ -4,8 +4,9 @@
 import fs from 'fs';
 import { broadcast } from '../core/bus.js';
 import { settings, detectCli } from '../core/config.js';
-import { clearEmployeeSession, insertMessageWithTrace, updateSession } from '../core/db.js';
+import { clearEmployeeSession, insertMessageWithTrace, updateSession, clearSessionBucket } from '../core/db.js';
 import { persistMainSession } from './session-persistence.js';
+import { resolveSessionBucket } from './args.js';
 import { buildContinuationPrompt } from './smoke-detector.js';
 import { shouldInvalidateResumeSession } from './resume-classifier.js';
 import { classifyExitError } from './error-classifier.js';
@@ -164,9 +165,9 @@ export function handleAgentExit(params: ExitHandlerParams): void {
     if (persistedSessionId && persistMainSession({
         ownerGeneration, forceNew, employeeSessionId: empSid,
         sessionId: persistedSessionId, isFallback: opts._isFallback,
-        code, cli, model, effort: effortVal,
+        code, wasKilled, cli, model, effort: effortVal,
     })) {
-        console.log(`[jaw:session] saved ${cli} session=${persistedSessionId.slice(0, 12)}...`);
+        console.log(`[jaw:session] saved ${cli} session=${persistedSessionId.slice(0, 12)}...${wasKilled ? ' (post-kill)' : ''}`);
     }
 
     // ─── Success: clear fallback state (auto-recovery) ───
@@ -221,7 +222,10 @@ export function handleAgentExit(params: ExitHandlerParams): void {
                 console.log(`[jaw:session] invalidated stale employee resume — ${cli} agent=${opts.agentId}`);
             } else {
                 updateSession.run(cli, null, model, settings.permissions, settings.workingDir, effortVal);
-                console.log(`[jaw:session] invalidated stale resume — ${cli} session cleared`);
+                // Also clear the per-bucket entry so the next turn doesn't pick the dead session_id again.
+                const bucket = resolveSessionBucket(cli, model);
+                if (bucket) clearSessionBucket.run(bucket);
+                console.log(`[jaw:session] invalidated stale resume — ${cli}/${bucket} session cleared`);
             }
         }
 

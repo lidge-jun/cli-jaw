@@ -92,6 +92,17 @@ db.exec(`
         payload    TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    -- Per-bucket resumable session storage. Bucket key is a stable CLI+model-family
+    -- identifier (e.g. 'codex', 'codex-spark', 'claude'). Prevents cross-model resume
+    -- errors like 'thread/resume failed: no rollout found' when the user toggles
+    -- between gpt-5.4 and gpt-5.3-codex-spark on the same codex CLI.
+    CREATE TABLE IF NOT EXISTS session_buckets (
+        bucket      TEXT PRIMARY KEY,
+        session_id  TEXT NOT NULL,
+        model       TEXT NOT NULL,
+        updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
 `);
 
 // Lightweight migration for existing DBs created before `trace` column existed.
@@ -138,6 +149,18 @@ export const upsertEmployeeSession = db.prepare(
 );
 export const clearEmployeeSession = db.prepare('DELETE FROM employee_sessions WHERE employee_id = ?');
 export const clearAllEmployeeSessions = db.prepare('DELETE FROM employee_sessions');
+
+// ─── Session Buckets (per-bucket resume storage) ─────
+export const getSessionBucket = db.prepare('SELECT bucket, session_id, model, updated_at FROM session_buckets WHERE bucket = ?');
+export const upsertSessionBucket = db.prepare(`
+    INSERT INTO session_buckets (bucket, session_id, model, updated_at)
+    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(bucket) DO UPDATE SET
+        session_id=excluded.session_id,
+        model=excluded.model,
+        updated_at=CURRENT_TIMESTAMP
+`);
+export const clearSessionBucket = db.prepare('DELETE FROM session_buckets WHERE bucket = ?');
 
 // ─── Message Queue Persistence ──────────────────────
 export const listQueuedMessages = db.prepare('SELECT id, payload FROM queued_messages ORDER BY created_at ASC');
