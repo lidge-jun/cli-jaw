@@ -520,6 +520,28 @@ export function getEmployeePromptV2(emp: any, role: any, currentPhase: number | 
         }
     }
 
+    // Static-employee declared skills are injected INLINE so the employee never
+    // needs to read skill files from disk. Previously `skills: [...]` was metadata
+    // only — employees tried `sed`/`cat` on absolute paths (often wrong), wasting
+    // a turn and sometimes failing entirely. The skill content now lives in the
+    // system prompt; reference files (`reference/*.md`) stay on disk for deep
+    // lookups the employee can do with `cli-jaw skill read <name> <ref>`.
+    if (staticSpec?.skills?.length) {
+        for (const skillName of staticSpec.skills) {
+            const skillPath = findFirstExistingPath([
+                join(SKILLS_DIR, skillName, 'SKILL.md'),
+                join(SKILLS_REF_DIR, skillName, 'SKILL.md'),
+                getRepoBundledSkillPath('skills', skillName, 'SKILL.md'),
+                getRepoBundledSkillPath('skills_ref', skillName, 'SKILL.md'),
+            ]);
+            if (skillPath && fs.existsSync(skillPath)) {
+                prompt += `\n\n## Skill: ${skillName} (inlined — do NOT read from disk)\n${fs.readFileSync(skillPath, 'utf8')}`;
+            } else {
+                console.warn(`[prompt] ${staticSpec.name}: skill '${skillName}' not found on disk — check SKILLS_DIR/SKILLS_REF_DIR`);
+            }
+        }
+    }
+
     // ─── 1. Common dev skill (always injected)
     const devCommonPath = findFirstExistingPath([
         join(SKILLS_DIR, 'dev', 'SKILL.md'),

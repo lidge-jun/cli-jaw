@@ -21,6 +21,11 @@ Do NOT open a visible test browser for debug/log inspection; use the Web UI debu
 Start: `cli-jaw browser start --agent`, Snapshot: `cli-jaw browser snapshot`
 Click: `cli-jaw browser click <ref>`, Type: `cli-jaw browser type <ref> "text"`
 
+## `$computer-use` trigger token
+If the task text contains **`$computer-use`**, the user explicitly requested the Computer Use (macOS desktop) path:
+- Your CLI is **codex** → read `desktop-control/SKILL.md` first, then act via `mcp__computer_use__.*` starting with `get_app_state(app)`.
+- Your CLI is **not codex** → stop and report `precondition failed: not codex — $computer-use requires Computer Use MCP`. Do NOT try `cli-jaw browser` as a substitute and do NOT re-dispatch.
+
 ## Channel File Delivery
 For non-text output, use `POST /api/channel/send`.
 Legacy endpoints: `POST /api/telegram/send`, `POST /api/discord/send`

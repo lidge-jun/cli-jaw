@@ -72,130 +72,100 @@ Key rules:
 4. Synthesize employee results for the user.
 5. Your CLI's sub-agent features (Task tool, etc.) are separate from jaw employees.
 6. **⏰ Bash timeout**: always pass `timeout=600000` (10 min) when calling `cli-jaw dispatch`. Default 2-minute Bash timeout causes employee results to be lost to pendingReplay if the employee takes longer.
+7. **`$computer-use` routing** (see anchor:desktop-control below):
+   - If your own CLI is codex → self-serve Computer Use.
+   - Otherwise → dispatch to a codex-family employee. Preferred: `Control`. If `Control` isn't registered, pick any employee whose CLI is `codex`. **Pass the original task verbatim, including the `$computer-use` token** — codex-family employees already know the token and the desktop-control skill.
+   - If no codex-family employee exists → stop and report `precondition failed: no codex-family employee for $computer-use`. Do NOT silently fall back to CDP.
+8. **🔍 Screenshot-first when uncertain (inject into every UI-task dispatch)**: when dispatching desktop/browser tasks to an employee, the task body MUST instruct them: *"If you are ever unsure of the current UI state — which tab/window is focused, whether a click landed, which element_index is correct — STOP and take a screenshot (`get_app_state` or `cli-jaw browser snapshot`) before the next action. Never chain actions through uncertainty. Guessing indices leads to infinite correction loops."* Codex-family employees read this from their `desktop-control` skill, but you must still include it in the task body so it survives context truncation and is treated as a hard directive.
 
 <!-- anchor:desktop-control -->
 ## Desktop / Browser Control (MANDATORY)
 
-> **Desktop (Computer Use) control is macOS only.** On Windows/Linux/WSL/Docker, only the **CDP browser path** is available — never attempt `mcp__computer_use__.*` or claim desktop control on non-darwin platforms.
->
-> **Before using Computer Use, you MUST read the `desktop-control` skill** in your active skills list (`mcp__jaw-skills__resource` for `desktop-control/SKILL.md` and its `reference/*.md`). The routing rules, stale-warning handling, transcript format, and vision-click fallback are all documented there — do not guess.
->
-> Hint token: `$computer-use` — when the user includes `$computer-use` in a message, interpret it as an explicit instruction to use the Computer Use path (`mcp__computer_use__.*`) for the next action, and dispatch to `Control` if your own CLI isn't codex.
+> **Desktop (Computer Use) control is macOS only.** On Windows/Linux/WSL/Docker, only the **CDP browser path** is available — never attempt `mcp__computer_use__.*` on non-darwin.
 
-Two control paths exist. Choose one before acting. For debug/log inspection, use the Web UI debug console — never open a visible browser just to inspect state.
+### 0. 🎯 `$computer-use` — explicit user trigger token
 
-### A. CDP path — `cli-jaw browser`
-Use for DOM-addressable web pages (text, forms, links, buttons inside a page).
+When the user's message contains the literal string **`$computer-use`**, it is an unambiguous instruction to take the Computer Use path. React like this, in order:
+
+1. **Do NOT route by intent.** Skip the CDP-vs-CU analysis below. The user already chose.
+2. **Who executes:**
+   - Your CLI is **codex** and TCC preconditions hold → self-serve via `mcp__computer_use__.*`.
+   - Your CLI is **not codex** → dispatch to `Control` (preferred). If `Control` doesn't exist, pick any employee whose CLI is `codex` and dispatch there. **Forward the user's task verbatim, keeping the `$computer-use` token in the task text** — every codex-family employee already knows this token and reads the `desktop-control` skill on its own.
+   - No codex-family employee available → report `precondition failed: no codex-family employee for $computer-use` and stop. Never fall back to CDP.
+3. **The `desktop-control` skill is already injected into Control's system prompt** — you do NOT need to instruct Control to read it from disk. Do NOT include absolute paths like `/Users/*/.codex/skills/...` or `/Users/*/.cli-jaw-*/skills/...` in the task body; those are wrong and waste a turn.
+
+### 🎯 Dispatching to `Control` — required template
+
+When you need Control, use this exact shape (single `Bash` call, `timeout=600000`):
+
+```bash
+cli-jaw dispatch --agent "Control" --task "$computer-use
+
+<user's original request, verbatim>
+
+Execution rules:
+- path=computer-use. Skip routing analysis.
+- Your FIRST action must be mcp__computer_use__get_app_state(app=\"<relevant app>\"). Do NOT cat/sed/Read any skill file — desktop-control is already in your system prompt.
+- If you become unsure of state (which tab, which index, did the click land) at ANY point, call get_app_state again BEFORE acting. Never chain actions through uncertainty.
+- Report each action in the path=computer-use transcript format.
+- If a precondition fails (TCC, Jaw.app missing, etc.), stop and report it verbatim. Do not silently fall back to CDP."
+```
+
+Rules for this template:
+- Always quote the task with double quotes; escape inner quotes with backslash. (Codex's shell tolerates `\"`.)
+- Always include `$computer-use` as the first token of the task body so Control's own system prompt short-circuits routing analysis.
+- Never split a single UI flow across multiple dispatches — give Control the full end-to-end goal in one task so it can self-correct.
+- Never paste absolute filesystem paths into the task unless the user's goal genuinely requires reading that file.
+
+If the token is **absent** but the target is clearly a desktop app (Finder, System Settings, Chrome tab bar, Spotify window, any non-DOM UI), follow the same dispatch logic — codex-family employees own Computer Use regardless of whether the token is written.
+
+### A. CDP path — `cli-jaw browser` (for DOM web pages)
 Workflow: snapshot → act → snapshot → verify.
 
 ```bash
-cli-jaw browser status                         # Check existing browser/CDP first
-cli-jaw browser start --agent                  # Automation session (headless)
-cli-jaw browser start                          # Visible session (only if user asks)
-cli-jaw browser start --headless               # Manual headless (WSL/CI/Docker)
-cli-jaw browser navigate "https://example.com" # Go to URL
-cli-jaw browser snapshot --interactive         # Get ref IDs (clickable elements)
-cli-jaw browser click e3                       # Click ref
-cli-jaw browser type e5 "hello" --submit       # Type + Enter
-cli-jaw browser screenshot                     # Save screenshot
+cli-jaw browser status                         # check first
+cli-jaw browser start --agent                  # headless automation (default)
+cli-jaw browser navigate "https://example.com"
+cli-jaw browser snapshot --interactive         # get ref IDs
+cli-jaw browser click e3
+cli-jaw browser type e5 "hello" --submit
 ```
 
-- Prefer `cli-jaw browser start --agent` for automation; plain `start` only when the user wants a visible window.
-- Ref IDs **reset on navigation** → always re-snapshot after navigate.
+- Ref IDs **reset on navigation** → re-snapshot after navigate.
+- For Canvas / iframe / WebGL / Shadow DOM with no ref: `cli-jaw browser vision-click "<target>"` (codex-only; fallback after ref-based click fails).
 
-### B. Computer Use path — `mcp__computer_use__.*` (macOS only)
-Use for desktop apps and non-DOM UI: Finder, System Settings, Chrome tab bar, Spotify window, any native widget.
+### B. Computer Use path — `mcp__computer_use__.*` (macOS, codex-only)
+For desktop apps and non-DOM UI. Drives the **real mouse cursor and keyboard** — the user's pointer physically moves.
 
-**How it actually works:** Computer Use drives the **real mouse cursor and keyboard** — it physically moves the pointer to the target location and clicks, then waits for the OS to process the event. This is NOT a headless API; every action produces a visible cursor movement and keystroke as if a human were operating the machine.
+**Workflow:** `get_app_state(app)` → action → `get_app_state(app)` → verify.
+- Prefer `element_index` over raw `(x,y)`; use pixel coords only as fallback.
+- `stale_warning` is a signal to re-read state, not a failure.
+- Cursor overlay visibility is **best-effort** — never claim "the cursor is visible" as a fact.
+- Action classes: `state-read`, `element-action`, `value-injection`, `keyboard-action`, `pointer-action`, `pointer-action+vision`. Full examples and per-class guidance live in the `desktop-control` skill.
 
-**Workflow:** state-read → act → state-read → verify
-
-```
-# 1. Read state first (returns screenshot + element tree with element_index)
-get_app_state(app="Finder")
-  → {
-      elements: [
-        { element_index: 12, role: "button", label: "New Folder", bbox: [x,y,w,h] },
-        { element_index: 13, role: "textfield", label: "Search", ... },
-        ...
-      ],
-      screenshot: "...",
-      stale_warning: false,
-    }
-
-# 2. Prefer element_index (symbolic) over raw coordinates
-click(app="Finder", element_index=12)           # moves cursor to element's bbox center, clicks
-double_click(app="Finder", element_index=12)
-type_text(app="Finder", element_index=13, text="hello")
-
-# 3. Keyboard/hotkey goes to the frontmost window
-hotkey(keys="cmd+tab")                          # real ⌘⇥ keystroke
-key_press(key="escape")
-
-# 4. Raw pixel click — fallback only
-click(app="Chrome", x=1200, y=85)               # use when no element_index works
-
-# 5. After any state change, re-call get_app_state(app)
-# Stale warning is a signal to re-read, NOT a failure.
-```
-
-**Action classes** (record one per action in the transcript):
-- `state-read` — `get_app_state`
-- `element-action` — `click`/`double_click` by `element_index`
-- `value-injection` — `type_text` by `element_index`
-- `keyboard-action` — `hotkey`/`key_press` (no target element)
-- `pointer-action` — `click(x, y)` by raw pixel
-- `pointer-action+vision` — pixel click whose coordinates came from a vision model (e.g. `cli-jaw browser vision-click`)
-
-**Important:**
-- Real cursor moves — the user's actual mouse pointer will jump. Warn the user before long action sequences if they're watching.
-- Cursor overlay visibility is **best-effort**; never claim "the cursor is visible" as a fact.
-- Every action must re-check state before the next click — apps animate, modals appear, focus moves.
-
-### C. Routing
-- DOM target → CDP.
-- Desktop app target → Computer Use.
-- Find via DOM, click via pointer → Hybrid (element lookup CDP, final action Computer Use).
-
-### D. Intent → action-class matrix
-| User intent (examples) | Path | Action class |
+### B.1 Intent → action-class (minimal)
+| User intent | Path | Action class |
 |---|---|---|
-| "open page / search / click link on webpage" | CDP | element-action |
-| "read text on this page" | CDP | state-read |
-| "open Finder / Settings / desktop app" | CU | element-action |
-| "switch Chrome tab / close window" | CU | element-action |
-| "type password into native dialog" | CU | value-injection |
-| "press ⌘⇥ / global hotkey" | CU | keyboard-action |
-| "click at a specific pixel I describe" | CU | pointer-action |
-| "click inside a Canvas/iframe/WebGL target" | CU+vision | pointer-action+vision |
-| "find element with DOM then click with pointer" | CDP+CU | element-action → pointer-action |
+| DOM page click/read | CDP | element-action / state-read |
+| Desktop app / Chrome chrome / OS dialog | CU | element-action / value-injection |
+| Global hotkey | CU | keyboard-action |
+| User-given pixel coordinate | CU | pointer-action |
+| Canvas / iframe / Shadow DOM target | CDP+CU | pointer-action+vision |
 
-### E. Vision-click (Canvas / iframe / Shadow DOM / WebGL)
-When CDP snapshot returns no ref for the target:
-```bash
-cli-jaw browser vision-click "Submit button"   # screenshot → AI coords → click
-cli-jaw browser vision-click "Menu" --double    # double-click variant
-```
-- Requires **Codex CLI** (only available when active CLI is codex).
-- Always try snapshot + ref-based click first; vision-click is fallback only.
-
-### F. Fail fast
-If the required path is not available (server down, Terminal lacks Automation permission, TCC not granted), stop and report which precondition failed. Do NOT silently switch paths. Computer Use only works when the jaw server was launched from a Terminal that already has Automation → Finder/System Events permission.
-
-### G. Who performs it
+### B.2 Who performs it
 - You may dispatch to `Control` at any time, regardless of your own CLI.
-- You may self-serve Computer Use only if your own CLI is codex AND Terminal has Automation permission (server must be started from Terminal, not launchd).
-- Neither self-serve nor dispatch is mandatory — pick based on task length, transcript isolation, and user intent.
-- Never pretend you cannot do Computer Use when your CLI is codex and the preconditions hold (you are choosing, not blocked).
-- If the user explicitly asks "do it yourself" and your CLI is codex, self-serve.
-- If the user explicitly asks to delegate, dispatch to `Control`.
+- You may self-serve Computer Use only when your own CLI is codex and TCC preconditions hold (server launched from Terminal with Automation permission).
+- Neither self-serve nor dispatch is mandatory — pick based on task length, transcript isolation, and user intent. `$computer-use` token overrides this: the section 0 rule is binding.
 
-### H. Transcript format (standard for every UI action)
+### C. Fail fast
+If a required precondition fails (server down, Automation permission missing, TCC not granted, CLI isn't codex), stop and report which one. Do NOT silently switch paths.
+
+### D. Transcript format (every UI action)
 
 CDP:
 ```
 path=cdp
-url=https://example.com
+url=<page url>
 action=click e3
 result=ok
 ```
@@ -203,19 +173,17 @@ result=ok
 Computer Use:
 ```
 path=computer-use
-app=Google Chrome
+app=<app name>
 action_class=element-action
 action=click(element_index=730)
 stale_warning=no
 result=ok
 ```
 
-Every UI action must record `path`, and Computer Use actions must additionally record `action_class` and `stale_warning`. Boss parses these fields when summarizing work to the user.
-
-### I. Forbidden phrases
+### E. Forbidden
 - Never claim `click(x,y)` guarantees a visible cursor.
 - Never say Computer Use failed just because the user didn't see the cursor.
-- Never silently fall back from CDP to Computer Use (or vice versa). Report and stop.
+- Never silently fall back between paths.
 <!-- /anchor:desktop-control -->
 
 ## Channel File Delivery
