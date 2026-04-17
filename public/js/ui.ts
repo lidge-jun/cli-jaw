@@ -218,16 +218,15 @@ export function showProcessStep(step: ProcessStep): void {
 
 let currentStream: StreamState | null = null;
 
-export function applyQueuedOverlay(items: QueuedOverlayItem[] = []): void {
+/**
+ * Queued items are surfaced exclusively by the pending-queue panel
+ * (renderPendingQueue) — they do NOT appear as chat bubbles until they
+ * actually start running. This function exists only to clean up legacy
+ * overlay bubbles from older builds that may still be in the DOM after
+ * a soft reload, and to drop stale snapshots silently.
+ */
+export function applyQueuedOverlay(_items: QueuedOverlayItem[] = []): void {
     document.querySelectorAll('[data-queued-overlay="true"]').forEach(el => el.remove());
-    for (const item of items) {
-        const queuedId = String(item.id || '');
-        if (!queuedId) continue;
-        if (document.querySelector(`[data-queued-id="${queuedId}"]`)) continue;
-        const div = addMessage('user', item.prompt || '');
-        div.setAttribute('data-queued-overlay', 'true');
-        div.setAttribute('data-queued-id', queuedId);
-    }
 }
 
 export function hydrateActiveRun(snapshot?: ActiveRunSnapshot | null): void {

@@ -36,8 +36,18 @@ test('WRS-003: hydrateActiveRun keeps live process block expanded', { skip: !has
     assert.ok(!hydrateBlock.includes('collapseBlock('), 'hydrateActiveRun should not collapse in-flight process blocks');
 });
 
-test('WRS-004: queued overlays are keyed by queued id to avoid duplicate bubbles', { skip: !hasUi && 'public/js/ui source not found' }, () => {
+test('WRS-004: applyQueuedOverlay no longer renders chat bubbles for queued items (pending-queue panel owns them)', { skip: !hasUi && 'public/js/ui source not found' }, () => {
     const uiSrc = readFileSync(uiPath, 'utf8');
-    assert.ok(uiSrc.includes('data-queued-id'), 'queued overlay markup should preserve queued ids');
-    assert.ok(uiSrc.includes('data-queued-overlay="true"'), 'queued overlay cleanup should target only queued overlays');
+    // New policy (Fix B4): queued items live exclusively in the pending-queue panel.
+    // Chat bubble appears only when backend broadcasts new_message with fromQueue=true
+    // (= the item actually started running). applyQueuedOverlay only cleans up legacy
+    // overlay nodes from older builds during a soft reload.
+    const fnIdx = uiSrc.indexOf('export function applyQueuedOverlay');
+    assert.ok(fnIdx > 0, 'applyQueuedOverlay must still exist for legacy overlay cleanup');
+    // Cap the inspected block at the next export so the next function's body doesn't leak in.
+    const tail = uiSrc.slice(fnIdx);
+    const nextExportRel = tail.slice(40).search(/\nexport (function|const|let|class)/);
+    const fnBlock = nextExportRel > 0 ? tail.slice(0, nextExportRel + 40) : tail.slice(0, 1000);
+    assert.ok(!fnBlock.includes('addMessage('), 'applyQueuedOverlay must NOT call addMessage — queued items live only in pending-queue panel');
+    assert.ok(fnBlock.includes('data-queued-overlay="true"'), 'must still clean up legacy overlay nodes from older builds');
 });

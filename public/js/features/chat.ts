@@ -13,7 +13,7 @@ import { ICONS } from '../icons.js';
 let activeObjectURLs: string[] = [];
 
 interface CommandResult { code?: string; text?: string; type?: string; }
-interface MessageResult { queued?: boolean; pending?: number; continued?: boolean; error?: string; }
+interface MessageResult { queued?: boolean; pending?: number; continued?: boolean; error?: string; queuedId?: string; }
 
 function getCommandTimeoutMs(text: string): number {
     // Native compaction can take materially longer than the default command round-trip.
@@ -123,8 +123,11 @@ export async function sendMessage(): Promise<void> {
                 clearAttachedFiles();
             }
         } else {
-            addMessage('user', text);
-            upsertMessage({ role: 'user', content: text, timestamp: Date.now() });
+            // Option A (no-optimistic): clear the input immediately for snappy
+            // feedback, but wait for the backend response before rendering any
+            // chat bubble. Eliminates every duplicate-bubble class of bug
+            // (WS-vs-HTTP race, VS stored-HTML capture, mounted reindex, etc.)
+            // because we only addMessage when we know for sure what happened.
             input.value = '';
             resetInputHeight();
             const res = await fetch('/api/message', {
@@ -133,8 +136,7 @@ export async function sendMessage(): Promise<void> {
                 body: JSON.stringify({ prompt: text }),
             });
             const data: MessageResult = await res.json().catch(() => ({}));
-            // Server-side 5s dedup returns 409 with reason='duplicate'. Absorb silently —
-            // the optimistic UI bubble is already rendered; no need to double-notify.
+            // Server-side 5s dedup returns 409 with reason='duplicate'.
             if (res.status === 409 && (data as any)?.error === 'duplicate') {
                 return;
             }
@@ -143,10 +145,19 @@ export async function sendMessage(): Promise<void> {
                 return;
             }
             if (data.queued) {
+                // Queued — pending-queue panel owns the visual; nothing in chat yet.
+                // The fromQueue broadcast (processQueue / steer route) renders the
+                // bubble when the message actually starts running.
                 const { updateQueueBadge } = await import('../ui.js');
                 updateQueueBadge(data.pending || 1);
             } else if (data.continued) {
+                addMessage('user', text);
+                upsertMessage({ role: 'user', content: text, timestamp: Date.now() });
                 addSystemMsg(t('chat.continue'));
+            } else {
+                // started: backend already inserted the row; render now.
+                addMessage('user', text);
+                upsertMessage({ role: 'user', content: text, timestamp: Date.now() });
             }
         }
     } finally {

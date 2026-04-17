@@ -62,7 +62,7 @@ test('TQ-004: processQueue isolates queue by groupQueueKey', () => {
 
 test('TQ-005: processQueue uses batch head source/chatId (no last-item leakage)', () => {
     const queueStart = spawnSrc.indexOf('export async function processQueue()');
-    const queueBlock = spawnSrc.slice(queueStart, queueStart + 2200);
+    const queueBlock = spawnSrc.slice(queueStart, queueStart + 3000);
     assert.ok(
         queueBlock.includes('batch[0]') && queueBlock.includes('source'),
         'source should come from batch head',
@@ -77,7 +77,7 @@ test('TQ-005: processQueue uses batch head source/chatId (no last-item leakage)'
     );
 });
 
-test('TQ-006: processQueue no longer emits duplicate new_message broadcast', () => {
+test('TQ-006: processQueue broadcasts new_message with fromQueue=true (web client renders here, not at enqueue)', () => {
     const queueStart = spawnSrc.indexOf('export async function processQueue()');
     const queueEnd = spawnSrc.indexOf('// ─── Helpers');
     const queueBlock = spawnSrc.slice(queueStart, queueEnd);
@@ -85,10 +85,9 @@ test('TQ-006: processQueue no longer emits duplicate new_message broadcast', () 
         .split('\n')
         .map(line => line.trim())
         .filter(line => line && !line.startsWith('//'));
-    assert.ok(
-        !executableLines.some(line => line.includes("broadcast('new_message'")),
-        'processQueue should not re-broadcast new_message',
-    );
+    const broadcastLine = executableLines.find(line => line.includes("broadcast('new_message'"));
+    assert.ok(broadcastLine, 'processQueue must broadcast new_message when draining (web client renders here)');
+    assert.ok(broadcastLine.includes('fromQueue: true'), 'broadcast must include fromQueue: true so web ws.ts gates rendering correctly');
 });
 
 test('TQ-006b: processQueue respects worker busy guards', () => {

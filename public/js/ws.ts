@@ -295,7 +295,9 @@ export function connect(): void {
             applyOrcState(typeof msg.state === 'string' ? msg.state : 'IDLE', msg.title);
         } else if (msg.type === 'memory_status') {
             import('./features/memory.js').then(m => m.refreshMemorySidebar());
-        } else if (msg.type === 'new_message' && (msg.source === 'telegram' || msg.source === 'discord')) {
+        } else if (msg.type === 'new_message' && (msg.source === 'telegram' || msg.source === 'discord' || msg.fromQueue === true)) {
+            // fromQueue=true: backend just drained a queued message (processQueue or steer route)
+            // → render user bubble now (chat.ts dropped the optimistic one at enqueue time).
             addMessage(msg.role === 'assistant' ? 'agent' : (msg.role || 'user'), msg.content || '', msg.cli);
         }
     };
