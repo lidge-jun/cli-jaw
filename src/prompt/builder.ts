@@ -9,6 +9,7 @@ import { describeHeartbeatSchedule, normalizeHeartbeatSchedule } from '../memory
 import { buildTaskSnapshot, getMemoryStatus, loadProfileSummary } from '../memory/runtime.js';
 import { buildMemoryInjection } from '../memory/injection.js';
 import { loadAndRender, loadTemplate, renderTemplate, parseWorkerContexts, clearTemplateCache } from './template-loader.js';
+import { findStaticEmployee } from '../core/employees.js';
 
 const promptCache = new Map();
 
@@ -155,6 +156,33 @@ export const A1_PATH = join(PROMPTS_DIR, 'A-1.md');
 export const A2_PATH = join(PROMPTS_DIR, 'A-2.md');
 export const HEARTBEAT_PATH = join(PROMPTS_DIR, 'HEARTBEAT.md');
 
+const DESKTOP_CONTROL_ANCHOR_OPEN = '<!-- anchor:desktop-control -->';
+const DESKTOP_CONTROL_ANCHOR_CLOSE = '<!-- /anchor:desktop-control -->';
+
+/**
+ * Extract the Desktop/Browser Control anchor block from the rendered A1
+ * template. Returns null when the template lacks the anchor pair (keeps
+ * future refactors from silently producing empty appends).
+ */
+function extractDesktopControlAnchor(rendered: string): string | null {
+    const start = rendered.indexOf(DESKTOP_CONTROL_ANCHOR_OPEN);
+    const end = rendered.indexOf(DESKTOP_CONTROL_ANCHOR_CLOSE);
+    if (start === -1 || end === -1 || end <= start) return null;
+    return rendered.slice(start, end + DESKTOP_CONTROL_ANCHOR_CLOSE.length);
+}
+
+/**
+ * Safely append the Desktop/Browser Control anchor block to a user-edited
+ * A1 file when the anchor is missing. Returns true when an append was made.
+ */
+function ensureDesktopControlAnchor(fileContent: string, rendered: string): string | null {
+    if (fileContent.includes(DESKTOP_CONTROL_ANCHOR_OPEN)) return null;
+    const block = extractDesktopControlAnchor(rendered);
+    if (!block) return null;
+    const sep = fileContent.endsWith('\n') ? '\n' : '\n\n';
+    return fileContent + sep + block + '\n';
+}
+
 // ─── Initialize prompt files ─────────────────────────
 
 export function initPromptFiles() {
@@ -177,9 +205,17 @@ export function initPromptFiles() {
                 fs.writeFileSync(hashPath, currentHash);
                 console.log('[prompt] A-1.md updated to new version');
             } else {
-                // User edited — preserve their changes, but advance hash baseline
+                // User edited — preserve their changes, but advance hash baseline.
+                // Safe-append new anchor blocks the user hasn't opted in to yet.
+                const userText = fs.readFileSync(A1_PATH, 'utf8');
+                const appended = ensureDesktopControlAnchor(userText, a1Content);
+                if (appended) {
+                    fs.writeFileSync(A1_PATH, appended);
+                    console.log('[prompt] A-1.md: appended desktop-control anchor (user edits preserved)');
+                } else {
+                    console.log('[prompt] A-1.md has user edits — preserved');
+                }
                 fs.writeFileSync(hashPath, currentHash);
-                console.log('[prompt] A-1.md has user edits — preserved');
             }
         }
     } else {
@@ -470,6 +506,18 @@ export function getEmployeePromptV2(emp: any, role: any, currentPhase: number | 
     if (promptCache.has(cacheKey)) return promptCache.get(cacheKey);
 
     let prompt = getEmployeePrompt(emp);
+
+    // Static-employee system prompt patch (Control etc.) injected near the top
+    // so role-specific guidance downstream can still override style/tone.
+    const staticSpec = findStaticEmployee(emp?.name || '');
+    if (staticSpec?.systemPromptPatchFile) {
+        try {
+            const patch = loadTemplate(staticSpec.systemPromptPatchFile);
+            if (patch) prompt += `\n\n${patch}`;
+        } catch (e) {
+            console.warn(`[prompt] ${staticSpec.name} system patch load failed:`, (e as Error).message);
+        }
+    }
 
     // ─── 1. Common dev skill (always injected)
     const devCommonPath = findFirstExistingPath([

@@ -72,42 +72,102 @@ Key rules:
 4. Synthesize employee results for the user.
 5. Your CLI's sub-agent features (Task tool, etc.) are separate from jaw employees.
 
-## Browser Control (MANDATORY)
-Control Chrome via `cli-jaw browser` — never use curl/wget for web interaction.
-- For debug/log inspection, use the Web UI debug console. Do NOT open a visible test browser just to inspect logs or orchestration state.
+<!-- anchor:desktop-control -->
+## Desktop / Browser Control (MANDATORY)
 
-### Core Workflow: snapshot → act → snapshot → verify
+Two control paths exist. Choose one before acting. For debug/log inspection, use the Web UI debug console — never open a visible browser just to inspect state.
+
+### A. CDP path — `cli-jaw browser`
+Use for DOM-addressable web pages (text, forms, links, buttons inside a page).
+Workflow: snapshot → act → snapshot → verify.
+
 ```bash
 cli-jaw browser status                         # Check existing browser/CDP first
-cli-jaw browser start --agent                  # Automation session (headless, no visible test window)
-cli-jaw browser start                          # Interactive browser only when the user explicitly wants it
-cli-jaw browser start --headless               # Manual headless session (WSL/CI/Docker)
+cli-jaw browser start --agent                  # Automation session (headless)
+cli-jaw browser start                          # Visible session (only if user asks)
+cli-jaw browser start --headless               # Manual headless (WSL/CI/Docker)
 cli-jaw browser navigate "https://example.com" # Go to URL
-cli-jaw browser snapshot --interactive          # Get ref IDs (clickable elements)
-cli-jaw browser click e3                        # Click ref
-cli-jaw browser type e5 "hello" --submit        # Type + Enter
-cli-jaw browser screenshot                      # Save screenshot
+cli-jaw browser snapshot --interactive         # Get ref IDs (clickable elements)
+cli-jaw browser click e3                       # Click ref
+cli-jaw browser type e5 "hello" --submit       # Type + Enter
+cli-jaw browser screenshot                     # Save screenshot
 ```
 
-- For automated browser work, prefer `cli-jaw browser start --agent`.
-- Use plain `cli-jaw browser start` only for user-requested interactive sessions.
+- Prefer `cli-jaw browser start --agent` for automation; plain `start` only when the user wants a visible window.
+- Ref IDs **reset on navigation** → always re-snapshot after navigate.
 
-### Key Commands
-- `snapshot` / `snapshot --interactive` — element list with ref IDs
-- `click <ref>` / `type <ref> "text"` / `press Enter` — interact
-- `navigate <url>` / `open <url>` (new tab) / `tabs` — navigation
-- `screenshot` / `screenshot --full-page` / `text` — observe
-- Ref IDs **reset on navigation** → always re-snapshot after navigate
+### B. Computer Use path — `mcp__computer_use__.*`
+Use for desktop apps and non-DOM UI: Finder, System Settings, Chrome tab bar, Spotify window, any native widget.
+- First call must be `get_app_state(app)`. Re-call after any state change.
+- Treat stale warnings as a signal to re-read state, not as failure.
+- Action classes: state-read, element-action, value-injection, keyboard-action, pointer-action, pointer-action+vision.
+- Do NOT claim visible cursor is guaranteed — it is best-effort in the current build.
 
-### Vision Click Fallback (Codex Only)
-If `snapshot` returns **no ref** for target (Canvas, iframe, Shadow DOM, WebGL):
+### C. Routing
+- DOM target → CDP.
+- Desktop app target → Computer Use.
+- Find via DOM, click via pointer → Hybrid (element lookup CDP, final action Computer Use).
+
+### D. Intent → action-class matrix
+| User intent (examples) | Path | Action class |
+|---|---|---|
+| "open page / search / click link on webpage" | CDP | element-action |
+| "read text on this page" | CDP | state-read |
+| "open Finder / Settings / desktop app" | CU | element-action |
+| "switch Chrome tab / close window" | CU | element-action |
+| "type password into native dialog" | CU | value-injection |
+| "press ⌘⇥ / global hotkey" | CU | keyboard-action |
+| "click at a specific pixel I describe" | CU | pointer-action |
+| "click inside a Canvas/iframe/WebGL target" | CU+vision | pointer-action+vision |
+| "find element with DOM then click with pointer" | CDP+CU | element-action → pointer-action |
+
+### E. Vision-click (Canvas / iframe / Shadow DOM / WebGL)
+When CDP snapshot returns no ref for the target:
 ```bash
 cli-jaw browser vision-click "Submit button"   # screenshot → AI coords → click
 cli-jaw browser vision-click "Menu" --double    # double-click variant
 ```
-- Requires **Codex CLI** — only available when active CLI is codex
-- Always try `snapshot` + ref-based click first, vision-click is fallback only
-- If vision-click skill is in your Active Skills list, use it
+- Requires **Codex CLI** (only available when active CLI is codex).
+- Always try snapshot + ref-based click first; vision-click is fallback only.
+
+### F. Fail fast
+If the required path is not available (server down, Jaw.app missing, CUA app missing, TCC not granted), stop and report which precondition failed. Do NOT silently switch paths.
+
+### G. Who performs it
+- You may dispatch to `Control` at any time, regardless of your own CLI.
+- You may self-serve Computer Use only if your own CLI is codex AND preconditions hold (Jaw.app + CUA.app + TCC granted).
+- Neither self-serve nor dispatch is mandatory — pick based on task length, transcript isolation, and user intent.
+- Never pretend you cannot do Computer Use when your CLI is codex and the preconditions hold (you are choosing, not blocked).
+- If the user explicitly asks "do it yourself" and your CLI is codex, self-serve.
+- If the user explicitly asks to delegate, dispatch to `Control`.
+
+### H. Transcript format (standard for every UI action)
+
+CDP:
+```
+path=cdp
+url=https://example.com
+action=click e3
+result=ok
+```
+
+Computer Use:
+```
+path=computer-use
+app=Google Chrome
+action_class=element-action
+action=click(element_index=730)
+stale_warning=no
+result=ok
+```
+
+Every UI action must record `path`, and Computer Use actions must additionally record `action_class` and `stale_warning`. Boss parses these fields when summarizing work to the user.
+
+### I. Forbidden phrases
+- Never claim `click(x,y)` guarantees a visible cursor.
+- Never say Computer Use failed just because the user didn't see the cursor.
+- Never silently fall back from CDP to Computer Use (or vice versa). Report and stop.
+<!-- /anchor:desktop-control -->
 
 ## Channel File Delivery
 For non-text output, use the canonical channel send endpoint:
