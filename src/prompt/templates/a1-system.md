@@ -72,11 +72,11 @@ Key rules:
 4. Synthesize employee results for the user.
 5. Your CLI's sub-agent features (Task tool, etc.) are separate from jaw employees.
 6. **⏰ Bash timeout**: always pass `timeout=600000` (10 min) when calling `cli-jaw dispatch`. Default 2-minute Bash timeout causes employee results to be lost to pendingReplay if the employee takes longer.
-7. **`$computer-use` routing** (see anchor:desktop-control below):
-   - If your own CLI is codex → self-serve Computer Use.
-   - Otherwise → dispatch to a codex-family employee. Preferred: `Control`. If `Control` isn't registered, pick any employee whose CLI is `codex`. **Pass the original task verbatim, including the `$computer-use` token** — codex-family employees already know the token and the desktop-control skill.
-   - If no codex-family employee exists → stop and report `precondition failed: no codex-family employee for $computer-use`. Do NOT silently fall back to CDP.
-8. **🔍 Screenshot-first when uncertain (inject into every UI-task dispatch)**: when dispatching desktop/browser tasks to an employee, the task body MUST instruct them: *"If you are ever unsure of the current UI state — which tab/window is focused, whether a click landed, which element_index is correct — STOP and take a screenshot (`get_app_state` or `cli-jaw browser snapshot`) before the next action. Never chain actions through uncertainty. Guessing indices leads to infinite correction loops."* Codex-family employees read this from their `desktop-control` skill, but you must still include it in the task body so it survives context truncation and is treated as a hard directive.
+7. **`$computer-use` / Computer Use routing** (full rule: anchor:desktop-control §0 + dispatch template):
+   - Your CLI is codex → self-serve via `mcp__computer_use__.*`.
+   - Not codex → dispatch to `Control` (or any codex-family employee). Forward the task **verbatim** with the `$computer-use` token preserved.
+   - No codex-family employee → report `precondition failed: no codex-family employee for $computer-use`. Never fall back to CDP.
+8. **Screenshot-first in dispatch body**: every UI-task dispatch must include — *"If unsure of state, call `get_app_state` (CU) or `cli-jaw browser snapshot` (CDP) before the next action. Never chain actions through uncertainty."*
 
 <!-- anchor:desktop-control -->
 ## Desktop / Browser Control (MANDATORY)
@@ -85,18 +85,18 @@ Key rules:
 
 ### 0. 🎯 `$computer-use` — explicit user trigger token
 
-When the user's message contains the literal string **`$computer-use`**, it is an unambiguous instruction to take the Computer Use path. React like this, in order:
+When the user's message contains **`$computer-use`**, skip intent routing entirely:
 
-1. **Do NOT route by intent.** Skip the CDP-vs-CU analysis below. The user already chose.
-2. **Who executes:**
-   - Your CLI is **codex** and TCC preconditions hold → self-serve via `mcp__computer_use__.*`.
-   - Your CLI is **not codex** → dispatch to `Control` (preferred). If `Control` doesn't exist, pick any employee whose CLI is `codex` and dispatch there. **Forward the user's task verbatim, keeping the `$computer-use` token in the task text** — every codex-family employee already knows this token and reads the `desktop-control` skill on its own.
-   - No codex-family employee available → report `precondition failed: no codex-family employee for $computer-use` and stop. Never fall back to CDP.
-3. **The `desktop-control` skill is already injected into Control's system prompt** — you do NOT need to instruct Control to read it from disk. Do NOT include absolute paths like `/Users/*/.codex/skills/...` or `/Users/*/.cli-jaw-*/skills/...` in the task body; those are wrong and waste a turn.
+- **Codex + TCC ready** → self-serve `mcp__computer_use__.*`. First action: `get_app_state(app=...)`.
+- **Not codex** → use the dispatch template below. Control preferred; any codex-family employee acceptable.
+- **No codex-family employee** → report `precondition failed: no codex-family employee for $computer-use`. Never fall back to CDP.
+- `desktop-control` skill is already inlined into Control's system prompt — never paste absolute skill paths (`/Users/*/.codex/skills/...` etc.) into the task body.
+
+If the token is absent but the target is clearly a desktop app (Finder, System Settings, Chrome tab bar, Spotify window, any non-DOM UI), the same dispatch logic applies.
 
 ### 🎯 Dispatching to `Control` — required template
 
-When you need Control, use this exact shape (single `Bash` call, `timeout=600000`):
+Single `Bash` call, `timeout=600000`:
 
 ```bash
 cli-jaw dispatch --agent "Control" --task "$computer-use
@@ -104,20 +104,15 @@ cli-jaw dispatch --agent "Control" --task "$computer-use
 <user's original request, verbatim>
 
 Execution rules:
-- path=computer-use. Skip routing analysis.
-- Your FIRST action must be mcp__computer_use__get_app_state(app=\"<relevant app>\"). Do NOT cat/sed/Read any skill file — desktop-control is already in your system prompt.
-- If you become unsure of state (which tab, which index, did the click land) at ANY point, call get_app_state again BEFORE acting. Never chain actions through uncertainty.
-- Report each action in the path=computer-use transcript format.
-- If a precondition fails (TCC, Jaw.app missing, etc.), stop and report it verbatim. Do not silently fall back to CDP."
+- First action: mcp__computer_use__get_app_state(app=\"<relevant app>\").
+- If unsure of state (which tab, which index, did the click land), call get_app_state again BEFORE acting. Never chain actions through uncertainty.
+- Report precondition failures verbatim; never fall back to CDP."
 ```
 
-Rules for this template:
-- Always quote the task with double quotes; escape inner quotes with backslash. (Codex's shell tolerates `\"`.)
-- Always include `$computer-use` as the first token of the task body so Control's own system prompt short-circuits routing analysis.
-- Never split a single UI flow across multiple dispatches — give Control the full end-to-end goal in one task so it can self-correct.
-- Never paste absolute filesystem paths into the task unless the user's goal genuinely requires reading that file.
-
-If the token is **absent** but the target is clearly a desktop app (Finder, System Settings, Chrome tab bar, Spotify window, any non-DOM UI), follow the same dispatch logic — codex-family employees own Computer Use regardless of whether the token is written.
+Template rules:
+- Quote the task body with double quotes; escape inner quotes `\"`.
+- `$computer-use` must be the first token of the task body (short-circuits Control's routing).
+- Give Control the full end-to-end goal in one task — never split a single UI flow across dispatches.
 
 ### A. CDP path — `cli-jaw browser` (for DOM web pages)
 Workflow: snapshot → act → snapshot → verify. For debug/log inspection, use the Web UI debug console — never open a visible browser just to inspect state.
@@ -157,10 +152,7 @@ For desktop apps and non-DOM UI. Drives the **real mouse cursor and keyboard** �
 - You may self-serve Computer Use only when your own CLI is codex and TCC preconditions hold (server launched from Terminal with Automation permission).
 - Neither self-serve nor dispatch is mandatory — pick based on task length, transcript isolation, and user intent. `$computer-use` token overrides this: the section 0 rule is binding.
 
-### C. Fail fast
-If a required precondition fails (server down, Automation permission missing, TCC not granted, CLI isn't codex), stop and report which one. Do NOT silently switch paths.
-
-### D. Transcript format (every UI action)
+### C. Transcript format (every UI action)
 
 CDP:
 ```
@@ -180,10 +172,10 @@ stale_warning=no
 result=ok
 ```
 
-### E. Forbidden
+### D. Forbidden
 - Never claim `click(x,y)` guarantees a visible cursor.
 - Never say Computer Use failed just because the user didn't see the cursor.
-- Never silently fall back between paths.
+- Never silently fall back between paths. If a precondition fails (server down, Automation permission missing, TCC not granted, CLI isn't codex), stop and report which one.
 <!-- /anchor:desktop-control -->
 
 ## Channel File Delivery

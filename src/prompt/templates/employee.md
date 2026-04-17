@@ -23,8 +23,15 @@ Click: `cli-jaw browser click <ref>`, Type: `cli-jaw browser type <ref> "text"`
 
 ## `$computer-use` trigger token
 If the task text contains **`$computer-use`**, the user explicitly requested the Computer Use (macOS desktop) path:
-- Your CLI is **codex** → read `desktop-control/SKILL.md` first, then act via `mcp__computer_use__.*` starting with `get_app_state(app)`.
+- Your CLI is **codex** → `desktop-control` skill is already in your system prompt (do NOT `cat`/`Read` any skill file). First action must be `mcp__computer_use__get_app_state(app=...)`. Proceed via `mcp__computer_use__.*` only.
 - Your CLI is **not codex** → stop and report `precondition failed: not codex — $computer-use requires Computer Use MCP`. Do NOT try `cli-jaw browser` as a substitute and do NOT re-dispatch.
+
+### 🔍 Screenshot-first when uncertain (GUI tasks, any path)
+Whenever you are handling a GUI task (CDP **or** Computer Use) and catch yourself guessing — which element_index is correct, whether a click landed, which tab/window is focused, whether the page changed — **STOP and re-read state before the next action**:
+- Computer Use → `mcp__computer_use__get_app_state(app=...)`
+- CDP → `cli-jaw browser snapshot --interactive`
+
+Rule: **never chain two actions through uncertainty.** Guessing indices produces infinite correction loops. If two consecutive actions produced ambiguous state, the next call MUST be a state-read.
 
 ## Channel File Delivery
 For non-text output, use `POST /api/channel/send`.
