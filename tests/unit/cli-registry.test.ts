@@ -65,6 +65,21 @@ test('copilot registry excludes deprecated claude-opus-4.6-fast', () => {
     assert.ok(!CLI_REGISTRY.copilot.models.includes('claude-opus-4.6-fast'));
 });
 
+test('codex and copilot registries include gpt-5.4-mini', () => {
+    assert.ok(CLI_REGISTRY.codex.models.includes('gpt-5.4-mini'), 'codex must expose gpt-5.4-mini');
+    assert.ok(CLI_REGISTRY.copilot.models.includes('gpt-5.4-mini'), 'copilot must expose gpt-5.4-mini');
+});
+
+test('codex/copilot gpt-5.4-mini is listed right after gpt-5.4 (sensible ordering)', () => {
+    for (const key of ['codex', 'copilot'] as const) {
+        const models = CLI_REGISTRY[key].models;
+        const idx54 = models.indexOf('gpt-5.4');
+        const idxMini = models.indexOf('gpt-5.4-mini');
+        assert.ok(idx54 >= 0 && idxMini >= 0, `${key} must include both gpt-5.4 and gpt-5.4-mini`);
+        assert.equal(idxMini, idx54 + 1, `${key}: gpt-5.4-mini should follow gpt-5.4`);
+    }
+});
+
 // ─── buildDefaultPerCli ──────────────────────────────
 
 test('buildDefaultPerCli returns correct shape', () => {
