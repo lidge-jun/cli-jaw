@@ -1,6 +1,7 @@
 // ── WebSocket Connection ──
 import { state } from './state.js';
 import { setStatus, updateQueueBadge, addSystemMsg, appendAgentText, finalizeAgent, addMessage, showProcessStep, cleanupToolActivity, applyQueuedOverlay, hydrateActiveRun } from './ui.js';
+import { renderPendingQueue } from './features/pending-queue.js';
 import { t, getLang } from './features/i18n.js';
 import { getVirtualScroll } from './virtual-scroll.js';
 import { ICONS, emojiToIcon } from './icons.js';
@@ -83,6 +84,7 @@ async function refreshRuntimeSnapshot(options: { hydrateRun?: boolean } = {}): P
     hydrateAgentPhases(snap.workers);
     updateQueueBadge(snap.runtime.queuePending);
     applyQueuedOverlay(snap.queued || []);
+    renderPendingQueue(snap.queued || []);
     if (options.hydrateRun) hydrateActiveRun(snap.activeRun);
     setStatus(snap.runtime.busy ? 'running' : 'idle');
     import('./features/employees.js').then(m => {

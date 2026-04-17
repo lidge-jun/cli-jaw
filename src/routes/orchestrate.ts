@@ -1,7 +1,8 @@
 import type { Express } from 'express';
 import type { AuthMiddleware } from './types.js';
 import { ok, fail } from '../http/response.js';
-import { isAgentBusy, messageQueue, getQueuedMessageSnapshotForScope } from '../agent/spawn.js';
+import { isAgentBusy, messageQueue, getQueuedMessageSnapshotForScope, removeQueuedMessage, killActiveAgent, waitForProcessEnd } from '../agent/spawn.js';
+import { submitMessage } from '../orchestrator/gateway.js';
 import { getLiveRun } from '../agent/live-run-state.js';
 import { orchestrateContinue, orchestrateReset } from '../orchestrator/pipeline.js';
 import { getState, getCtx, setState, resetState, canTransition } from '../orchestrator/state-machine.js';
@@ -66,6 +67,28 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
     });
 
     // Pipe-mode employee dispatch
+    app.delete('/api/orchestrate/queue/:id', requireAuth, (req, res) => {
+        const id = String(req.params.id || '');
+        if (!id) return fail(res, 400, 'missing id');
+        const result = removeQueuedMessage(id);
+        if (!result.removed) return fail(res, 404, 'queued item not found');
+        return res.json({ ok: true, pending: result.pending });
+    });
+
+    app.post('/api/orchestrate/queue/:id/steer', requireAuth, async (req, res) => {
+        const id = String(req.params.id || '');
+        if (!id) return fail(res, 400, 'missing id');
+        const result = removeQueuedMessage(id);
+        if (!result.removed) return fail(res, 404, 'queued item not found');
+        const prompt = result.removed.prompt;
+        if (isAgentBusy()) {
+            killActiveAgent('steer');
+            await waitForProcessEnd(3000);
+        }
+        submitMessage(prompt, { origin: 'web' });
+        return res.json({ ok: true, pending: result.pending });
+    });
+
     app.post('/api/orchestrate/dispatch', requireAuth, async (req, res) => {
         // Phase 8: server-authoritative dispatch guard. Boss-only token required.
         // Employees do not have this token (stripped in spawn.ts makeCleanEnv).

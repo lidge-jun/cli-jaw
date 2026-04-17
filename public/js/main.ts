@@ -57,6 +57,7 @@ import { initI18n, setLang, getLang, t } from './features/i18n.js';
 import { toggleRecording, cancelRecording } from './features/voice-recorder.js';
 import { ICONS, hydrateIcons } from './icons.js';
 import { hydrateProviderIcons } from './provider-icons.js';
+import { initPendingQueue } from './features/pending-queue.js';
 
 // ── Chat Actions ──
 document.getElementById('btnSend')?.addEventListener('click', sendMessage);
@@ -79,6 +80,7 @@ chatInput?.addEventListener('cmd-execute', () => {
 });
 document.getElementById('cmdDropdown')?.addEventListener('click', handleSlashClick);
 document.addEventListener('click', handleSlashOutsideClick);
+initPendingQueue();
 document.getElementById('filePreviewClear')?.addEventListener('click', clearAttachedFiles);
 document.getElementById('filePreviewList')?.addEventListener('click', (e) => {
     const btn = (e.target as HTMLElement)?.closest('[data-file-idx]') as HTMLElement | null;

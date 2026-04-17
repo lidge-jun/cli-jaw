@@ -302,6 +302,18 @@ export function getQueuedMessageSnapshotForScope(scope: string): Array<{
         }));
 }
 
+export function removeQueuedMessage(id: string): { removed: QueueItem | null; pending: number } {
+    const idx = messageQueue.findIndex(item => item.id === id);
+    if (idx === -1) return { removed: null, pending: messageQueue.length };
+    const [removed] = messageQueue.splice(idx, 1);
+    try { deleteQueuedMessage.run(id); } catch (err) {
+        console.warn(`[queue] DB delete failed for ${id}:`, (err as Error).message);
+    }
+    console.log(`[queue] -1 (${messageQueue.length} pending) removed=${id}`);
+    broadcast('queue_update', { pending: messageQueue.length });
+    return { removed: removed!, pending: messageQueue.length };
+}
+
 export function enqueueMessage(prompt: string, source: RuntimeOrigin, meta?: { target?: RemoteTarget; chatId?: string | number; requestId?: string; scope?: string }) {
     const item: QueueItem = {
         id: crypto.randomUUID(),

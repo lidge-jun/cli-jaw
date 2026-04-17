@@ -648,6 +648,190 @@ div.math-placeholder {
     display: flex;
 }
 
+.pending-queue {
+    display: none;
+    padding: 4px 12px 6px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    flex-direction: column;
+    gap: 2px;
+    font-size: 12px;
+    color: var(--text-dim);
+    max-height: 35vh;
+    overflow-y: auto;
+}
+
+.pending-queue.visible {
+    display: flex;
+}
+
+.pending-queue-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 4px;
+}
+
+.pending-queue-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.pending-queue-title svg {
+    width: 12px;
+    height: 12px;
+}
+
+.pending-queue-count {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0 6px;
+    font-size: 10px;
+    line-height: 1.4;
+    color: var(--text);
+}
+
+.pending-queue-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pending-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    line-height: 1.4;
+    animation: msgEnterSystem 0.15s ease-out;
+    min-height: 26px;
+}
+
+.pending-row--busy {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.pending-row-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text);
+    font-size: 12px;
+}
+
+.pending-row-source {
+    flex: 0 0 auto;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    padding: 0 5px;
+    border-radius: 8px;
+}
+
+.pending-row-btn {
+    position: relative;
+    overflow: hidden;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--text-dim);
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+    isolation: isolate;
+}
+
+.pending-row-btn svg {
+    width: 14px;
+    height: 14px;
+}
+
+.pending-btn-content {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pending-steer-label {
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.pending-steer-arrow {
+    font-size: 12px;
+    line-height: 1;
+}
+
+.pending-row-steer:hover {
+    color: var(--accent);
+    background: var(--surface);
+}
+
+.pending-row-delete:hover {
+    color: var(--delete-color);
+    background: var(--error-dim);
+}
+
+.pending-arm-fill {
+    position: absolute;
+    inset: 0;
+    transform-origin: left center;
+    transform: scaleX(0);
+    pointer-events: none;
+    opacity: 0;
+    z-index: 0;
+}
+
+.pending-row-btn.armed {
+    border-color: currentColor;
+}
+
+.pending-row-steer.armed {
+    color: var(--accent);
+}
+
+.pending-row-delete.armed {
+    color: var(--delete-color);
+}
+
+.pending-row-steer.armed .pending-arm-fill {
+    background: color-mix(in oklch, var(--accent) 28%, transparent);
+}
+
+.pending-row-delete.armed .pending-arm-fill {
+    background: color-mix(in oklch, var(--delete-color) 28%, transparent);
+}
+
+.pending-row-btn.armed .pending-arm-fill {
+    opacity: 1;
+    animation: pendingArmFill 3s linear forwards;
+}
+
+@keyframes pendingArmFill {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
+}
+
 .file-preview {
     display: none;
     padding: 6px 20px;
