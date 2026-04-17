@@ -11,17 +11,31 @@ test('P04C-010: detects com.cli-jaw.local as legacy', () => {
     );
 });
 
-test('P04C-011: detects cli-jaw-<port>-<hash> as legacy', () => {
+test('P04C-011: detects hashless cli-jaw-<port> as legacy, preserves hashed multi-instance', () => {
     const files = [
         'com.cli-jaw.default.plist',
-        'com.cli-jaw.cli-jaw-3458-7ff0583f.plist',
-        'com.cli-jaw.cli-jaw-3459.plist',
+        'com.cli-jaw.cli-jaw-3458-7ff0583f.plist',  // 현재 포맷 — 보존
+        'com.cli-jaw.cli-jaw-3459.plist',           // 해시 없는 구버전 — legacy
     ];
     const result = findLegacyCliJawLabels(files, 'com.cli-jaw.default').sort();
     assert.deepEqual(result, [
-        'com.cli-jaw.cli-jaw-3458-7ff0583f',
         'com.cli-jaw.cli-jaw-3459',
     ]);
+});
+
+test('P04C-011b: multi-instance hashed labels do not clean up each other', () => {
+    // jaw --home ~/.cli-jaw-3459 launchd --port 3459 가 실행될 때,
+    // 이미 떠 있는 3458/3460/3461 인스턴스를 legacy로 오판해선 안 됨.
+    const files = [
+        'com.cli-jaw.cli-jaw-3458-7ff0583f.plist',
+        'com.cli-jaw.cli-jaw-3459-d3f87f85.plist',
+        'com.cli-jaw.cli-jaw-3460-6b2fff7f.plist',
+        'com.cli-jaw.cli-jaw-3461-07866642.plist',
+    ];
+    assert.deepEqual(
+        findLegacyCliJawLabels(files, 'com.cli-jaw.cli-jaw-3459-d3f87f85'),
+        []
+    );
 });
 
 test('P04C-012: preserves current label', () => {
