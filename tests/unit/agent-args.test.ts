@@ -74,6 +74,30 @@ test('AG-009c: codex resume also injects reasoning summary override', () => {
     assert.ok(cVals.includes('model_reasoning_summary="detailed"'), 'resume must also force detailed');
 });
 
+test('AG-009d: codex Spark model strips ALL reasoning config (effort + summary + hide)', () => {
+    const args = buildArgs('codex', 'gpt-5.3-spark', 'high', 'x', '', 'auto');
+    const cVals = args.reduce<string[]>((acc, v, i) => (v === '-c' ? [...acc, args[i + 1]] : acc), []);
+    assert.ok(!cVals.some(v => v.includes('model_reasoning_effort')), 'spark must drop model_reasoning_effort');
+    assert.ok(!cVals.some(v => v.includes('model_reasoning_summary')), 'spark must drop model_reasoning_summary');
+    assert.ok(!cVals.some(v => v.includes('hide_agent_reasoning')), 'spark must drop hide_agent_reasoning');
+    assert.ok(args.includes('gpt-5.3-spark'), 'model arg still present');
+});
+
+test('AG-009e: codex Spark resume also strips reasoning config', () => {
+    const args = buildResumeArgs('codex', 'gpt-5.3-spark', 'high', 'sess-123', 'continue', 'auto');
+    const cVals = args.reduce<string[]>((acc, v, i) => (v === '-c' ? [...acc, args[i + 1]] : acc), []);
+    assert.ok(!cVals.some(v => v.includes('model_reasoning_summary')), 'spark resume must drop summary');
+    assert.ok(!cVals.some(v => v.includes('hide_agent_reasoning')), 'spark resume must drop hide flag');
+});
+
+test('AG-009f: spark detection is case-insensitive and matches substring', () => {
+    for (const m of ['gpt-5.3-spark', 'GPT-5-Spark', 'codex-spark-mini', 'Spark']) {
+        const args = buildArgs('codex', m, 'high', '', '', 'auto');
+        const cVals = args.reduce<string[]>((acc, v, i) => (v === '-c' ? [...acc, args[i + 1]] : acc), []);
+        assert.ok(!cVals.some(v => v.includes('reasoning')), `${m} should drop reasoning config`);
+    }
+});
+
 // ─── buildArgs: gemini ───────────────────────────────
 
 test('AG-010: gemini includes prompt payload via -p', () => {

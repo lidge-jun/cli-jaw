@@ -16,11 +16,14 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
                 ...(sysPrompt ? ['--append-system-prompt', sysPrompt] : [])];
         case 'codex': {
             const spark = isCodexSparkModel(model);
+            const reasoningArgs = spark ? [] : [
+                ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []),
+                '-c', 'model_reasoning_summary="detailed"',
+                '-c', 'hide_agent_reasoning=false',
+            ];
             return ['exec',
                 ...(model && model !== 'default' ? ['-m', model] : []),
-                ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []),
-                ...(spark ? [] : ['-c', 'model_reasoning_summary="detailed"']),
-                ...(spark ? [] : ['-c', 'hide_agent_reasoning=false']),
+                ...reasoningArgs,
                 ...(options.fastMode ? ['-c', 'service_tier="fast"'] : []),
                 ...(autoPerm ? ['--dangerously-bypass-approvals-and-sandbox'] : []),
                 '--skip-git-repo-check', '--json'];
