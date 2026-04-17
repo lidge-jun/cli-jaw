@@ -46,7 +46,7 @@ int main(int argc, const char *argv[]) {
             return 127;
         }
 
-        NSMutableArray<NSString *> *args = [NSMutableArray arrayWithObjects:cliJaw, @"serve", nil];
+        NSMutableArray<NSString *> *args = [NSMutableArray arrayWithObjects:cliJaw, @"serve-manager", nil];
         for (int i = 1; i < argc; i++) {
             [args addObject:[NSString stringWithUTF8String:argv[i]]];
         }
