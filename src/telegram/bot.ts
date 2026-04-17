@@ -54,6 +54,9 @@ export { orchestrateAndCollect };
 export let telegramBot: any = null;
 export const telegramActiveChatIds = new Set();
 let tgRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let tgInitLock = false;
+let tg409RetryCount = 0;
+const TG_MAX_RETRIES = 3;
 let botUsername: string | null = null;
 const telegramForwarderLifecycle = createForwarderLifecycle({
     addListener: addBroadcastListener,
@@ -225,6 +228,15 @@ function makeTelegramCommandCtx() {
 // ─── Init ────────────────────────────────────────────
 
 export async function initTelegram() {
+    if (tgInitLock) {
+        console.warn('[tg] initTelegram already in progress, skipping');
+        return;
+    }
+    tgInitLock = true;
+    try { await _initTelegramInner(); } finally { tgInitLock = false; }
+}
+
+async function _initTelegramInner() {
     // Dedupe retry timer — cancel pending retry if initTelegram called again
     if (tgRetryTimer) { clearTimeout(tgRetryTimer); tgRetryTimer = null; }
 
@@ -232,7 +244,12 @@ export async function initTelegram() {
     if (telegramBot) {
         const old = telegramBot;
         telegramBot = null;
-        try { await old.stop(); } catch (e: unknown) { console.warn('[telegram:stop]', (e as Error).message); }
+        try {
+            await old.stop();
+        } catch (e: unknown) {
+            console.warn('[telegram:stop]', (e as Error).message);
+            await new Promise(r => setTimeout(r, 2000));
+        }
     }
     const envToken = process.env.TELEGRAM_TOKEN;
     if (envToken) settings.telegram.token = envToken;
@@ -574,15 +591,28 @@ export async function initTelegram() {
         botUsername = me.username || null;
     } catch { /* noop */ }
 
+    try {
+        await bot.api.raw.deleteWebhook({ drop_pending_updates: true });
+    } catch { /* best effort */ }
+
     bot.start({
         drop_pending_updates: true,
-        onStart: (info) => console.log(`[tg] ✅ @${info.username} polling active`),
+        onStart: (info) => {
+            tg409RetryCount = 0;
+            console.log(`[tg] ✅ @${info.username} polling active`);
+        },
     }).catch((err) => {
         const is409 = err?.error_code === 409 || err?.message?.includes('409');
         if (is409) {
-            console.warn('[tg:409] Polling conflict — retrying in 5s...');
+            tg409RetryCount++;
+            if (tg409RetryCount > TG_MAX_RETRIES) {
+                console.error(`[tg:409] Max retries (${TG_MAX_RETRIES}) exceeded. Restart server to retry.`);
+                return;
+            }
+            const delay = Math.min(5000 * Math.pow(2, tg409RetryCount - 1), 30000);
+            console.warn(`[tg:409] Polling conflict — retry ${tg409RetryCount}/${TG_MAX_RETRIES} in ${delay / 1000}s...`);
             if (!tgRetryTimer) {
-                tgRetryTimer = setTimeout(() => { tgRetryTimer = null; void initTelegram(); }, 5000);
+                tgRetryTimer = setTimeout(() => { tgRetryTimer = null; void initTelegram(); }, delay);
             }
         } else {
             console.error('[tg:fatal]', err);
