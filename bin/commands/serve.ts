@@ -20,6 +20,7 @@ const { values } = parseArgs({
         port: { type: 'string', default: process.env.PORT || '3457' },
         host: { type: 'string', default: '0.0.0.0' },
         open: { type: 'boolean', default: true },
+        lan: { type: 'boolean', default: false },
     },
     strict: false,
 });
@@ -31,7 +32,7 @@ const isDistMode = fs.existsSync(serverJs);
 const serverPath = isDistMode ? serverJs : serverTs;
 const envFile = join(projectRoot, '.env');
 
-console.log(`\n  🦈 cli-jaw serve — port ${values.port}\n`);
+console.log(`\n  🦈 cli-jaw serve — port ${values.port}${values.lan ? ' (LAN mode)' : ''}\n`);
 
 let child;
 if (isDistMode) {
@@ -42,7 +43,7 @@ if (isDistMode) {
         [...nodeArgs, serverPath],
         {
             stdio: 'inherit',
-            env: { ...process.env, PORT: values.port as string, HOST: values.host as string, ...(values.open ? { JAW_OPEN_BROWSER: '1' } : {}) },
+            env: { ...process.env, PORT: values.port as string, HOST: values.host as string, ...(values.open ? { JAW_OPEN_BROWSER: '1' } : {}), ...(values.lan ? { JAW_LAN_MODE: '1' } : {}) },
         }
     );
 } else {
@@ -56,7 +57,7 @@ if (isDistMode) {
         tsxArgs,
         {
             stdio: 'inherit',
-            env: { ...process.env, PORT: values.port as string, HOST: values.host as string, ...(values.open ? { JAW_OPEN_BROWSER: '1' } : {}) },
+            env: { ...process.env, PORT: values.port as string, HOST: values.host as string, ...(values.open ? { JAW_OPEN_BROWSER: '1' } : {}), ...(values.lan ? { JAW_LAN_MODE: '1' } : {}) },
         }
     );
 }

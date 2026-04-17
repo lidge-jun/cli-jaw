@@ -41,20 +41,24 @@ test('AB-003: WebSocket verifyClient uses predicate', () => {
     assert.ok(block.includes('isAllowedOrigin'), 'verifyClient must use isAllowedOrigin');
 });
 
-test('AB-004: lanAllowed() reads settings.network.lanBypass', () => {
+test('AB-004: lanAllowed() reads lanMode OR settings.network.lanBypass', () => {
     const lan = serverSrc.indexOf('const lanAllowed');
     assert.ok(lan >= 0, 'lanAllowed should be defined');
-    const line = serverSrc.slice(lan, lan + 120);
+    const line = serverSrc.slice(lan, lan + 150);
     assert.ok(line.includes('settings.network?.lanBypass'),
         'lanAllowed must read settings.network.lanBypass');
+    assert.ok(line.includes('lanMode'),
+        'lanAllowed must include lanMode override');
 });
 
-test('AB-005: listen bind uses settings.network.bindHost', () => {
+test('AB-005: listen bind uses lanMode or settings.network.bindHost', () => {
     const listenIdx = serverSrc.indexOf('server.listen(PORT,');
     assert.ok(listenIdx >= 0, 'server.listen should exist');
-    const block = serverSrc.slice(listenIdx - 200, listenIdx + 100);
+    const block = serverSrc.slice(listenIdx - 300, listenIdx + 100);
     assert.ok(block.includes('settings.network?.bindHost'),
         'bind host must read settings.network.bindHost');
+    assert.ok(block.includes('lanMode'),
+        'bind host must consider lanMode override');
     assert.ok(!/server\.listen\(PORT,\s*['"]127\.0\.0\.1['"]/.test(serverSrc),
         'server.listen must not hardcode 127.0.0.1 anymore');
 });

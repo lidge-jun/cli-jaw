@@ -209,7 +209,8 @@ app.use(helmet({
 }));
 
 // ─── CORS (loopback always, LAN opt-in) ─────────────
-const lanAllowed = () => settings.network?.lanBypass === true;
+const lanMode = process.env.JAW_LAN_MODE === '1';
+const lanAllowed = () => lanMode || settings.network?.lanBypass === true;
 const LAN_HINT = 'Set settings.network.bindHost="0.0.0.0" and lanBypass=true to allow LAN access.';
 
 // Host header validation (DNS rebinding defense)
@@ -544,7 +545,7 @@ const shutdown = async (sig: string) => {
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 process.once('SIGINT', () => shutdown('SIGINT'));
 
-const bindHost: string = settings.network?.bindHost || '127.0.0.1';
+const bindHost: string = lanMode ? '0.0.0.0' : (settings.network?.bindHost || '127.0.0.1');
 server.listen(PORT, bindHost, async () => {
     // Persist port so CLI commands auto-discover the running server
     const portStr = String(PORT);
@@ -559,6 +560,12 @@ server.listen(PORT, bindHost, async () => {
     log.info(`  CLI:    ${settings.cli}`);
     log.info(`  Perms:  ${settings.permissions}`);
     log.info(`  CWD:    ${settings.workingDir}`);
+
+    // Warn: lanBypass=true but bindHost=127.0.0.1 → LAN unreachable
+    if (settings.network?.lanBypass === true && bindHost === '127.0.0.1' && !lanMode) {
+        log.warn('  ⚠ lanBypass is enabled but bindHost is 127.0.0.1 — LAN devices cannot connect.');
+        log.warn('    → Set network.bindHost to "0.0.0.0" in settings.json, or use: cli-jaw serve --lan');
+    }
 
     // LAN URL hints + security warnings
     if (bindHost === '0.0.0.0') {

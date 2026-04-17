@@ -422,9 +422,34 @@ if (process.platform === 'darwin' && (values.tcc || values.fix || values.prime))
 }
 
 // Output
+// Network
+if (!values.json) {
+    const netCfg = (settings as Record<string, any> | null)?.network || {};
+    const bh = netCfg.bindHost || '127.0.0.1';
+    const lb = netCfg.lanBypass === true;
+    const tokenEnv = !!process.env.JAW_AUTH_TOKEN;
+    console.log('\n  Network');
+    console.log(`    bindHost          : ${bh}${bh === '0.0.0.0' ? '  (LAN accessible)' : '  (loopback only — LAN blocked)'}`);
+    console.log(`    lanBypass         : ${lb}`);
+    console.log(`    JAW_AUTH_TOKEN env: ${tokenEnv ? 'persisted' : 'ephemeral (regenerated each start)'}`);
+    if (lb && bh === '127.0.0.1') {
+        console.log('    ⚠️  lanBypass is true but bindHost is 127.0.0.1 — LAN devices cannot connect');
+        console.log('      Fix: set network.bindHost to "0.0.0.0" in settings.json, or use: cli-jaw serve --lan');
+    }
+    if (bh === '0.0.0.0' && !lb) {
+        console.log('    ℹ️  bindHost=0.0.0.0 without lanBypass: LAN clients need Bearer token');
+    }
+}
+
 if (values.json) {
+    const netCfg = (settings as Record<string, any> | null)?.network || {};
+    const bh = netCfg.bindHost || '127.0.0.1';
+    const lb = netCfg.lanBypass === true;
+    const networkIssues: string[] = [];
+    if (lb && bh === '127.0.0.1') networkIssues.push('lanBypass enabled but bindHost is loopback');
     const output: Record<string, any> = {
         checks: results,
+        network: { bindHost: bh, lanBypass: lb, authTokenPersisted: !!process.env.JAW_AUTH_TOKEN, issues: networkIssues },
         activeChannel: (settings as Record<string, any> | null)?.channel || 'telegram',
         discord: buildDiscordStatus(),
         wsl: isWSL() ? {
