@@ -8,7 +8,7 @@ import {
     findStaticEmployee,
     checkRuntimeHints,
     resolveDispatchableEmployee,
-} from '../../src/core/employees.js';
+} from '../../src/core/employees.ts';
 
 test('P37-CU-001: Control static employee is defined with Codex + darwin hints', () => {
     const control = findStaticEmployee('Control');
@@ -20,12 +20,18 @@ test('P37-CU-001: Control static employee is defined with Codex + darwin hints',
     assert.equal(control!.runtimeHints?.requiresPathPin, true);
 });
 
-test('P37-CU-002: Control carries desktop-control + vision-click + screen-capture skills', () => {
+test('P37-CU-002: Control carries desktop-control + screen-capture (vision-click absorbed)', () => {
+    // vision-click is no longer a separate active skill for Control — the
+    // desktop-control skill's reference/vision-click.md covers routing, and
+    // the `cli-jaw browser vision-click` command encapsulates the
+    // low-level recipe. See 37_revisions_and_integration.md §G.
     const control = findStaticEmployee('control'); // case-insensitive
     assert.ok(control);
-    for (const skill of ['desktop-control', 'vision-click', 'screen-capture']) {
+    for (const skill of ['desktop-control', 'screen-capture']) {
         assert.ok(control!.skills.includes(skill), `missing skill: ${skill}`);
     }
+    assert.ok(!control!.skills.includes('vision-click'),
+        'vision-click should be absorbed into desktop-control, not a separate Control skill');
 });
 
 test('P37-CU-003: Control is preferred-for-long-sessions, NOT exclusive', () => {

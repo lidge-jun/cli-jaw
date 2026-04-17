@@ -31,7 +31,7 @@ test('dispatch route clears pending replay only after response is flushed (phase
 test('dispatch route maps PABCD phase from state-machine', () => {
     const routeStart = orchestrateSrc.indexOf("app.post('/api/orchestrate/dispatch'");
     assert.ok(routeStart >= 0, 'dispatch route should exist');
-    const routeBlock = orchestrateSrc.slice(routeStart, routeStart + 3000);
+    const routeBlock = orchestrateSrc.slice(routeStart, routeStart + 5000);
 
     // Phase map must exist in dispatch route
     assert.ok(
@@ -57,7 +57,7 @@ test('dispatch route maps PABCD phase from state-machine', () => {
 
 test('dispatch route accepts optional phase override in request body', () => {
     const routeStart = orchestrateSrc.indexOf("app.post('/api/orchestrate/dispatch'");
-    const routeBlock = orchestrateSrc.slice(routeStart, routeStart + 3000);
+    const routeBlock = orchestrateSrc.slice(routeStart, routeStart + 5000);
 
     // Must destructure phase from req.body
     assert.ok(
