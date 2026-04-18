@@ -220,55 +220,55 @@
 .c-blue-fill   { fill: #1e3a5f; }
 .c-blue-stroke { stroke: #3b82f6; fill: none; }
 .c-blue-text   { fill: #93c5fd; }
-.c-blue-bg     { fill: #1e3a5f; stroke: #3b82f6; stroke-width: 1; }
+.c-blue-bg     { fill: #1e3a5f; stroke: #3b82f6; stroke-width: 0.5; }
 
 /* ── Purple ── */
 .c-purple-fill   { fill: #3b1f5e; }
 .c-purple-stroke { stroke: #8b5cf6; fill: none; }
 .c-purple-text   { fill: #c4b5fd; }
-.c-purple-bg     { fill: #3b1f5e; stroke: #8b5cf6; stroke-width: 1; }
+.c-purple-bg     { fill: #3b1f5e; stroke: #8b5cf6; stroke-width: 0.5; }
 
 /* ── Green ── */
 .c-green-fill   { fill: #14532d; }
 .c-green-stroke { stroke: #22c55e; fill: none; }
 .c-green-text   { fill: #86efac; }
-.c-green-bg     { fill: #14532d; stroke: #22c55e; stroke-width: 1; }
+.c-green-bg     { fill: #14532d; stroke: #22c55e; stroke-width: 0.5; }
 
 /* ── Amber ── */
 .c-amber-fill   { fill: #451a03; }
 .c-amber-stroke { stroke: #f59e0b; fill: none; }
 .c-amber-text   { fill: #fcd34d; }
-.c-amber-bg     { fill: #451a03; stroke: #f59e0b; stroke-width: 1; }
+.c-amber-bg     { fill: #451a03; stroke: #f59e0b; stroke-width: 0.5; }
 
 /* ── Red ── */
 .c-red-fill   { fill: #450a0a; }
 .c-red-stroke { stroke: #ef4444; fill: none; }
 .c-red-text   { fill: #fca5a5; }
-.c-red-bg     { fill: #450a0a; stroke: #ef4444; stroke-width: 1; }
+.c-red-bg     { fill: #450a0a; stroke: #ef4444; stroke-width: 0.5; }
 
 /* ── Cyan ── */
 .c-cyan-fill   { fill: #083344; }
 .c-cyan-stroke { stroke: #06b6d4; fill: none; }
 .c-cyan-text   { fill: #67e8f9; }
-.c-cyan-bg     { fill: #083344; stroke: #06b6d4; stroke-width: 1; }
+.c-cyan-bg     { fill: #083344; stroke: #06b6d4; stroke-width: 0.5; }
 
 /* ── Pink ── */
 .c-pink-fill   { fill: #500724; }
 .c-pink-stroke { stroke: #ec4899; fill: none; }
 .c-pink-text   { fill: #f9a8d4; }
-.c-pink-bg     { fill: #500724; stroke: #ec4899; stroke-width: 1; }
+.c-pink-bg     { fill: #500724; stroke: #ec4899; stroke-width: 0.5; }
 
 /* ── Slate (Neutral) ── */
 .c-slate-fill   { fill: #1e293b; }
 .c-slate-stroke { stroke: #64748b; fill: none; }
 .c-slate-text   { fill: #94a3b8; }
-.c-slate-bg     { fill: #1e293b; stroke: #64748b; stroke-width: 1; }
+.c-slate-bg     { fill: #1e293b; stroke: #64748b; stroke-width: 0.5; }
 
 /* ── Orange ── */
 .c-orange-fill   { fill: #431407; }
 .c-orange-stroke { stroke: #f97316; fill: none; }
 .c-orange-text   { fill: #fdba74; }
-.c-orange-bg     { fill: #431407; stroke: #f97316; stroke-width: 1; }
+.c-orange-bg     { fill: #431407; stroke: #f97316; stroke-width: 0.5; }
 
 /* ── SVG Primitives (scoped to .diagram-svg to avoid Mermaid class collision) ── */
 .diagram-svg .node {
@@ -278,13 +278,19 @@
 
 .diagram-svg .connector {
   stroke: var(--border);
-  stroke-width: 1.5;
+  stroke-width: 0.5;
   fill: none;
 }
 
 .diagram-svg .label {
   font-size: 14px;
   text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.diagram-svg .label-start {
+  font-size: 14px;
+  text-anchor: start;
   dominant-baseline: central;
 }
 
