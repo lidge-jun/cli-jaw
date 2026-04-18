@@ -63,7 +63,7 @@ import {
 import { bumpSessionOwnershipGeneration } from './src/agent/session-persistence.js';
 import { parseCommand, executeCommand, COMMANDS } from './src/cli/commands.js';
 
-import { getState, resetState } from './src/orchestrator/state-machine.js';
+import { getState, resetState, resetAllStaleStates } from './src/orchestrator/state-machine.js';
 import { resolveOrcScope } from './src/orchestrator/scope.js';
 import { listActiveOrcStates } from './src/core/db.js';
 
@@ -560,6 +560,9 @@ server.listen(PORT, bindHost, async () => {
     log.info(`  CLI:    ${settings.cli}`);
     log.info(`  Perms:  ${settings.permissions}`);
     log.info(`  CWD:    ${settings.workingDir}`);
+
+    // Clear stale PABCD states from previous sessions
+    resetAllStaleStates();
 
     // Warn: lanBypass=true but bindHost=127.0.0.1 → LAN unreachable
     if (settings.network?.lanBypass === true && bindHost === '127.0.0.1' && !lanMode) {

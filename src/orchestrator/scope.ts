@@ -44,7 +44,7 @@ export function resolveOrcScope(input: OrcScopeInput = {}): string {
  * This is a best-effort heuristic: if a user runs concurrent PABCD flows
  * from different directories, the most-recently-active flow wins.
  */
-export function findActiveScope(origin: string, chatId?: string | number): string | null {
+export function findActiveScope(origin: string, chatId?: string | number, meta?: { workingDir?: string }): string | null {
     const activeRows = listActiveOrcStates.all() as Array<{ id: string; updated_at: string }>;
     if (!activeRows.length) return null;
 
@@ -55,13 +55,18 @@ export function findActiveScope(origin: string, chatId?: string | number): strin
         const prefix = `${origin}:${chatKey}:`;
         matches = activeRows.filter(r => r.id.startsWith(prefix));
     } else {
-        matches = activeRows.filter(r => r.id.startsWith('local:'));
+        const localAll = activeRows.filter(r => r.id.startsWith('local:'));
+        if (meta?.workingDir) {
+            const exact = localAll.filter(r => r.id === `local:${meta.workingDir}`);
+            matches = exact.length ? exact : localAll;
+        } else {
+            matches = localAll;
+        }
     }
 
     if (matches.length === 0) return null;
     if (matches.length === 1) return matches[0]!.id;
 
-    // Multiple active scopes for this origin — pick most recently updated
     matches.sort((a, b) => (b.updated_at > a.updated_at ? 1 : -1));
     return matches[0]!.id;
 }

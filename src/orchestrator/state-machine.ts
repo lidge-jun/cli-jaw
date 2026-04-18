@@ -3,7 +3,7 @@
 // State persisted in jaw.db orc_state table.
 // CLI (bin/commands/orchestrate.ts) and server share the same DB.
 
-import { getOrcState, setOrcState, resetOrcState } from '../core/db.js';
+import { getOrcState, setOrcState, resetOrcState, resetAllOrcStates } from '../core/db.js';
 import { broadcast } from '../core/bus.js';
 import { readLatestWorklog } from '../memory/worklog.js';
 import type { RemoteTarget } from '../messaging/types.js';
@@ -75,6 +75,16 @@ export function setState(
 export function resetState(scope = 'default'): void {
   resetOrcState.run(scope);
   broadcast('orc_state', { state: 'IDLE', title: '', scope });
+}
+
+export function resetAllStaleStates(): number {
+  const result = resetAllOrcStates.run();
+  const cleared = result.changes;
+  if (cleared > 0) {
+    console.log(`[jaw:pabcd] cleared ${cleared} stale orchestration state(s)`);
+    broadcast('orc_state', { state: 'IDLE', title: '', scope: 'all' });
+  }
+  return cleared;
 }
 
 // ─── Prefix Map ─────────────────────────────────────

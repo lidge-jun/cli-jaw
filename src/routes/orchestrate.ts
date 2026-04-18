@@ -5,7 +5,7 @@ import { isAgentBusy, messageQueue, getQueuedMessageSnapshotForScope, removeQueu
 import { getLiveRun } from '../agent/live-run-state.js';
 import { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent, drainPendingReplays } from '../orchestrator/pipeline.js';
 import { insertMessage } from '../core/db.js';
-import { getState, getCtx, setState, resetState, canTransition } from '../orchestrator/state-machine.js';
+import { getState, getCtx, setState, resetState, canTransition, resetAllStaleStates } from '../orchestrator/state-machine.js';
 import type { OrcStateName } from '../orchestrator/state-machine.js';
 import { resolveOrcScope } from '../orchestrator/scope.js';
 import { getActiveWorkers, claimWorker, finishWorker, failWorker, markWorkerReplayed, getWorkerSlot, WorkerBusyError } from '../orchestrator/worker-registry.js';
@@ -34,6 +34,11 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
 
     app.post('/api/orchestrate/reset', requireAuth, async (req, res) => {
         try {
+            const all = req.query.all === 'true' || req.body?.all === true;
+            if (all) {
+                const cleared = resetAllStaleStates();
+                return res.json({ ok: true, cleared, message: `Cleared ${cleared} stale state(s)` });
+            }
             await orchestrateReset({ origin: 'web' });
             res.json({ ok: true });
         } catch (err) {

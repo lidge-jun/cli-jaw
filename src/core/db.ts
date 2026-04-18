@@ -195,6 +195,10 @@ export const listActiveOrcStates = db.prepare(
     "SELECT id, state, ctx, updated_at FROM orc_state WHERE state != 'IDLE'"
 );
 
+export const resetAllOrcStates = db.prepare(
+    "UPDATE orc_state SET state = 'IDLE', ctx = NULL WHERE state != 'IDLE'"
+);
+
 /** Checkpoint WAL and close the database. Call once during graceful shutdown. */
 export function closeDb(): void {
     try {

@@ -181,7 +181,7 @@ export async function orchestrate(
     });
     let ctx = getCtx(candidateScope);
     // If candidate scope has no active ctx, check if an existing active scope matches this origin
-    const scope = ctx?.scopeId || (ctx ? candidateScope : (findActiveScope(origin, chatId) || candidateScope));
+    const scope = ctx?.scopeId || (ctx ? candidateScope : (findActiveScope(origin, chatId, { workingDir: settings.workingDir }) || candidateScope));
 
     let state = getState(scope);
     let skipPrefix = !!meta._skipPrefix;
@@ -310,7 +310,7 @@ export async function orchestrateContinue(
         workingDir: settings.workingDir || null,
     });
     const ctxCandidate = getCtx(candidateScope);
-    const scope = ctxCandidate?.scopeId || (ctxCandidate ? candidateScope : (findActiveScope(origin, chatId) || candidateScope));
+    const scope = ctxCandidate?.scopeId || (ctxCandidate ? candidateScope : (findActiveScope(origin, chatId, { workingDir: settings.workingDir }) || candidateScope));
     const state = getState(scope);
 
     // Active PABCD → resume from current state
@@ -372,7 +372,7 @@ export async function orchestrateReset(
         workingDir: settings.workingDir || null,
     });
     const ctxReset = getCtx(candidateScope);
-    const scope = ctxReset?.scopeId || (ctxReset ? candidateScope : (findActiveScope(origin, chatId) || candidateScope));
+    const scope = ctxReset?.scopeId || (ctxReset ? candidateScope : (findActiveScope(origin, chatId, { workingDir: settings.workingDir }) || candidateScope));
     resetState(scope);
     const latest = readLatestWorklog();
     if (!latest) {
