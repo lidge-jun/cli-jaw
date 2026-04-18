@@ -183,8 +183,15 @@ function createDefaultSettings() {
             vertexConfig: '',
         },
         network: {
-            bindHost: '127.0.0.1',  // '0.0.0.0' → LAN accessible (opt-in)
-            lanBypass: false,        // true → RFC1918 clients skip Bearer token
+            bindHost: '127.0.0.1',
+            lanBypass: false,
+            remoteAccess: {
+                mode: 'off' as const,
+                trustProxies: false,
+                trustForwardedFor: false,
+                publicOriginHint: '',
+                requireAuth: true,
+            },
         },
     };
 }

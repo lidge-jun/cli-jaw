@@ -1,5 +1,5 @@
-// Auth bypass contract — issue #108
-// Verifies that requireAuth in server.ts allows loopback + (lanBypass && isPrivateIP).
+// Auth contract — issue #108 + PR#2 auth hardening
+// Verifies requireAuth in server.ts uses token-only auth (no loopback/LAN bypass).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -8,21 +8,16 @@ import { join } from 'node:path';
 const projectRoot = join(import.meta.dirname, '../..');
 const serverSrc = fs.readFileSync(join(projectRoot, 'server.ts'), 'utf8');
 
-test('AB-001: requireAuth uses isLoopback || isLanBypass branch', () => {
+test('AB-001: requireAuth checks token for ALL requests (no loopback bypass)', () => {
     const fnStart = serverSrc.indexOf('function requireAuth(');
     assert.ok(fnStart >= 0, 'requireAuth should exist in server.ts');
     const fnEnd = serverSrc.indexOf('\n}\n', fnStart);
     const fnBody = serverSrc.slice(fnStart, fnEnd);
 
-    assert.ok(fnBody.includes('remoteIp'), 'requireAuth must use remoteIp (not hostname)');
-    assert.ok(fnBody.includes('req.ip'), 'requireAuth must read req.ip');
-    assert.ok(fnBody.includes('::ffff:127.0.0.1'), 'must handle IPv4-mapped loopback');
-    assert.ok(fnBody.includes('isLoopback'), 'requireAuth must define isLoopback');
-    assert.ok(fnBody.includes('isLanBypass'), 'requireAuth must define isLanBypass');
-    assert.ok(fnBody.includes('lanAllowed()'), 'isLanBypass must gate on lanAllowed()');
-    assert.ok(fnBody.includes('isPrivateIP'), 'isLanBypass must call isPrivateIP');
-    assert.ok(/if\s*\(\s*isLoopback\s*\|\|\s*isLanBypass\s*\)/.test(fnBody),
-        'requireAuth must short-circuit on isLoopback || isLanBypass');
+    assert.ok(!fnBody.includes('isLoopback'), 'requireAuth must NOT bypass loopback');
+    assert.ok(!fnBody.includes('isLanBypass'), 'requireAuth must NOT bypass LAN');
+    assert.ok(fnBody.includes('JAW_AUTH_TOKEN'), 'requireAuth must check token');
+    assert.ok(fnBody.includes('401'), 'requireAuth must return 401 on failure');
 });
 
 test('AB-002: CORS + Host middlewares use predicate (not Set.has)', () => {
@@ -57,11 +52,13 @@ test('AB-004: lanAllowed() reads lanMode OR settings.network.lanBypass', () => {
 test('AB-005: listen bind uses lanMode or settings.network.bindHost', () => {
     const listenIdx = serverSrc.indexOf('server.listen(PORT,');
     assert.ok(listenIdx >= 0, 'server.listen should exist');
-    const block = serverSrc.slice(listenIdx - 300, listenIdx + 100);
+    const block = serverSrc.slice(listenIdx - 500, listenIdx + 100);
     assert.ok(block.includes('settings.network?.bindHost'),
         'bind host must read settings.network.bindHost');
     assert.ok(block.includes('lanMode'),
         'bind host must consider lanMode override');
+    assert.ok(block.includes('remoteMode'),
+        'bind host must consider remoteMode for upgrade');
     assert.ok(!/server\.listen\(PORT,\s*['"]127\.0\.0\.1['"]/.test(serverSrc),
         'server.listen must not hardcode 127.0.0.1 anymore');
 });
@@ -90,4 +87,37 @@ test('AB-008: settings-merge includes network in nested merge list', () => {
     const arrayLine = mergeSrc.slice(arrayIdx, mergeSrc.indexOf(']', arrayIdx) + 1);
     assert.ok(arrayLine.includes("'network'"),
         'settings-merge nested array must include network');
+});
+
+// ─── Security Hardening (PR#2) ─────────────────────────
+
+test('SC-001: requireAuth has no loopback/LAN short-circuit', () => {
+    const fnStart = serverSrc.indexOf('function requireAuth(');
+    const fnEnd = serverSrc.indexOf('\n}\n', fnStart);
+    const fnBody = serverSrc.slice(fnStart, fnEnd);
+    assert.ok(!/isLoopback\s*\|\|\s*isLanBypass/.test(fnBody),
+        'requireAuth must not short-circuit on isLoopback || isLanBypass');
+});
+
+test('SC-002: trust proxy only enabled with both trustProxies + trustForwardedFor', () => {
+    assert.ok(serverSrc.includes("app.set('trust proxy'"),
+        'server.ts must have trust proxy setting');
+    assert.ok(serverSrc.includes('trustProxies') && serverSrc.includes('trustForwardedFor'),
+        'trust proxy gate must check both flags');
+});
+
+test('SC-003: config defaults remoteAccess.requireAuth=true', () => {
+    const configSrc = fs.readFileSync(join(projectRoot, 'src/core/config.ts'), 'utf8');
+    assert.ok(configSrc.includes('requireAuth: true'),
+        'default remoteAccess.requireAuth must be true');
+});
+
+test('SC-004: server startup log includes curl example (token NOT hardcoded in output)', () => {
+    assert.ok(serverSrc.includes('cat ~/.cli-jaw/token'),
+        'startup log curl example must read token from file, not print raw token');
+});
+
+test('SC-005: bindHost upgrade respects non-loopback settings', () => {
+    assert.ok(serverSrc.includes('isLoopbackBind'),
+        'bindHost upgrade must check if current bind is loopback before overriding');
 });

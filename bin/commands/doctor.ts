@@ -448,6 +448,20 @@ if (!values.json) {
     if (bh === '0.0.0.0' && !lb) {
         console.log('    ℹ️  bindHost=0.0.0.0 without lanBypass: LAN clients need Bearer token');
     }
+    const ra = {
+        mode: netCfg.remoteAccess?.mode || 'off',
+        trustProxies: netCfg.remoteAccess?.trustProxies === true,
+        trustForwardedFor: netCfg.remoteAccess?.trustForwardedFor === true,
+        requireAuth: netCfg.remoteAccess?.requireAuth !== false,
+    };
+    console.log(`    remoteAccess.mode : ${ra.mode}`);
+    console.log(`    trustProxies      : ${ra.trustProxies}`);
+    console.log(`    trustForwardedFor : ${ra.trustForwardedFor}`);
+    console.log(`    requireAuth       : ${ra.requireAuth}`);
+    if (ra.trustForwardedFor && !ra.trustProxies) {
+        console.log('    ⚠️  KR: 프록시를 신뢰하지 않으면 X-Forwarded-For는 쓰면 안 돼.');
+        console.log('       EN: Do not enable forwarded client IP parsing without trusting the proxy hop.');
+    }
 }
 
 if (values.json) {

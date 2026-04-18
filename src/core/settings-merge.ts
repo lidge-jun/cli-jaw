@@ -38,6 +38,13 @@ export function mergeSettingsPatch(current: Record<string, any>, patch: Record<s
         }
     }
 
+    // Deep merge nested network.remoteAccess
+    if (remaining.network?.remoteAccess && typeof remaining.network.remoteAccess === 'object') {
+        result.network = result.network || {};
+        result.network.remoteAccess = { ...result.network.remoteAccess, ...remaining.network.remoteAccess };
+        delete remaining.network.remoteAccess;
+    }
+
     // Top-level scalar fields
     Object.assign(result, remaining);
 

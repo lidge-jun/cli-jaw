@@ -21,6 +21,9 @@ const { values } = parseArgs({
         host: { type: 'string', default: '0.0.0.0' },
         open: { type: 'boolean', default: true },
         lan: { type: 'boolean', default: false },
+        remote: { type: 'boolean', default: false },
+        'trust-proxy': { type: 'boolean', default: false },
+        'trust-forwarded': { type: 'boolean', default: false },
     },
     strict: false,
 });
@@ -32,7 +35,13 @@ const isDistMode = fs.existsSync(serverJs);
 const serverPath = isDistMode ? serverJs : serverTs;
 const envFile = join(projectRoot, '.env');
 
-console.log(`\n  🦈 cli-jaw serve — port ${values.port}${values.lan ? ' (LAN mode)' : ''}\n`);
+const modeLabels = [
+    values.lan ? 'LAN mode' : '',
+    values.remote ? 'Remote mode' : '',
+    values['trust-proxy'] ? 'trust proxy' : '',
+    values['trust-forwarded'] ? 'trust forwarded' : '',
+].filter(Boolean);
+console.log(`\n  🦈 cli-jaw serve — port ${values.port}${modeLabels.length ? ` (${modeLabels.join(', ')})` : ''}\n`);
 
 let child;
 if (isDistMode) {
@@ -43,7 +52,7 @@ if (isDistMode) {
         [...nodeArgs, serverPath],
         {
             stdio: 'inherit',
-            env: { ...process.env, PORT: values.port as string, HOST: values.host as string, ...(values.open ? { JAW_OPEN_BROWSER: '1' } : {}), ...(values.lan ? { JAW_LAN_MODE: '1' } : {}) },
+            env: { ...process.env, PORT: values.port as string, HOST: values.host as string, ...(values.open ? { JAW_OPEN_BROWSER: '1' } : {}), ...(values.lan ? { JAW_LAN_MODE: '1' } : {}), ...(values.remote ? { JAW_REMOTE_ACCESS_MODE: 'direct' } : {}), ...(values['trust-proxy'] ? { JAW_TRUST_PROXY: '1' } : {}), ...(values['trust-forwarded'] ? { JAW_TRUST_FORWARDED: '1' } : {}) },
         }
     );
 } else {
@@ -57,7 +66,7 @@ if (isDistMode) {
         tsxArgs,
         {
             stdio: 'inherit',
-            env: { ...process.env, PORT: values.port as string, HOST: values.host as string, ...(values.open ? { JAW_OPEN_BROWSER: '1' } : {}), ...(values.lan ? { JAW_LAN_MODE: '1' } : {}) },
+            env: { ...process.env, PORT: values.port as string, HOST: values.host as string, ...(values.open ? { JAW_OPEN_BROWSER: '1' } : {}), ...(values.lan ? { JAW_LAN_MODE: '1' } : {}), ...(values.remote ? { JAW_REMOTE_ACCESS_MODE: 'direct' } : {}), ...(values['trust-proxy'] ? { JAW_TRUST_PROXY: '1' } : {}), ...(values['trust-forwarded'] ? { JAW_TRUST_FORWARDED: '1' } : {}) },
         }
     );
 }

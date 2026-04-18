@@ -183,7 +183,11 @@ regenerateB();
 
 // ─── Express + WebSocket ─────────────────────────────
 
+const remoteAccess = settings.network?.remoteAccess || {} as Record<string, any>;
 const app = express();
+if ((remoteAccess as any).mode === 'reverse-proxy' && (remoteAccess as any).trustProxies && (remoteAccess as any).trustForwardedFor) {
+    app.set('trust proxy', 'loopback');
+}
 const server = createServer(app);
 const wss = new WebSocketServer({
     server,
@@ -245,17 +249,9 @@ const JAW_AUTH_TOKEN = process.env.JAW_AUTH_TOKEN || crypto.randomBytes(32).toSt
 initBossToken();
 
 function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
-    const remoteIp = req.ip || req.socket?.remoteAddress || '';
-    const isLoopback = remoteIp === '127.0.0.1' || remoteIp === '::1' || remoteIp === '::ffff:127.0.0.1';
-    const isLanBypass = lanAllowed() && isPrivateIP(remoteIp);
-    if (isLoopback || isLanBypass) {
-        return next();
-    }
     const token = (req.headers.authorization || '').replace('Bearer ', '');
-    if (token !== JAW_AUTH_TOKEN) {
-        return res.status(401).json({ error: 'Unauthorized' });
-    }
-    next();
+    if (token === JAW_AUTH_TOKEN) return next();
+    return res.status(401).json({ error: 'Unauthorized' });
 }
 
 // ─── Rate Limiting (in-memory, API only, 120/min) ─────────────
@@ -545,7 +541,12 @@ const shutdown = async (sig: string) => {
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 process.once('SIGINT', () => shutdown('SIGINT'));
 
-const bindHost: string = lanMode ? '0.0.0.0' : (settings.network?.bindHost || '127.0.0.1');
+const cfgBind = settings.network?.bindHost || '127.0.0.1';
+const isLoopbackBind = cfgBind === '127.0.0.1' || cfgBind === '::1' || cfgBind === 'localhost';
+const remoteMode = (remoteAccess as any).mode && (remoteAccess as any).mode !== 'off';
+const bindHost: string = lanMode ? '0.0.0.0'
+    : (remoteMode && isLoopbackBind) ? '0.0.0.0'
+    : cfgBind;
 server.listen(PORT, bindHost, async () => {
     // Persist port so CLI commands auto-discover the running server
     const portStr = String(PORT);
@@ -587,7 +588,8 @@ server.listen(PORT, bindHost, async () => {
     }
     log.info(`  DB:     ${DB_PATH}`);
     log.info(`  Prompts: ${PROMPTS_DIR}`);
-    log.info(`  Auth:   ${JAW_AUTH_TOKEN.slice(0, 8)}...\n`);
+    log.info(`  Auth:   ${JAW_AUTH_TOKEN.slice(0, 8)}... (token required for ALL requests)`);
+    log.info(`  curl:   curl -H "Authorization: Bearer $(cat ~/.cli-jaw/token)" http://localhost:${PORT}/api/status\n`);
 
     // Auto-open browser (opt-in via JAW_OPEN_BROWSER=1, set by `jaw serve --open`)
     // Skip in test environments to prevent browser tabs during npm test
