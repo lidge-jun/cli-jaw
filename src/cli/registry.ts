@@ -65,6 +65,7 @@ export const CLI_REGISTRY = {
         effortNote: '→ ~/.copilot/config.json',
         models: [
             'gpt-5.5',
+            'claude-opus-4.7',
             'claude-sonnet-4.6',
             'claude-opus-4.6',
             'claude-haiku-4.5',
