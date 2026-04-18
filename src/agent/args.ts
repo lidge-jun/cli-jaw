@@ -60,7 +60,7 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
     }
 }
 
-export function buildResumeArgs(cli: string, model: string, effort: string, sessionId: string, prompt: string, permissions = 'auto', options: { fastMode?: boolean } = {}) {
+export function buildResumeArgs(cli: string, model: string, effort: string, sessionId: string, prompt: string, permissions = 'auto', options: { fastMode?: boolean; sysPrompt?: string } = {}) {
     const autoPerm = permissions === 'auto';
     switch (cli) {
         case 'claude':
@@ -70,7 +70,8 @@ export function buildResumeArgs(cli: string, model: string, effort: string, sess
                 '--resume', sessionId,
                 '--max-turns', '50',
                 ...(model && model !== 'default' ? ['--model', model] : []),
-                ...(effort && effort !== 'medium' ? ['--effort', effort] : [])];
+                ...(effort && effort !== 'medium' ? ['--effort', effort] : []),
+                ...(options.sysPrompt ? ['--append-system-prompt', options.sysPrompt] : [])];
         case 'codex': {
             const spark = isCodexSparkModel(model);
             return ['exec', 'resume',
