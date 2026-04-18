@@ -370,6 +370,7 @@ ${worklogBlock}`.trim();
             JAW_EMPLOYEE_MODE: '1',
             JAW_EMPLOYEE_NAME: String(emp.name || ''),
             JAW_EMPLOYEE_ROLE: String(ap.role || emp.role || ''),
+            PORT: String(process.env.PORT || ''),
         },
         lifecycle: {
             onActivity: (source) => monitor.touch(source as 'stdout' | 'stderr' | 'acp' | 'heartbeat'),
