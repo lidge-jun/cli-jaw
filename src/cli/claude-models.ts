@@ -1,20 +1,23 @@
 // ─── Claude Model Normalization (single source of truth) ──────────
 
 export const CLAUDE_CANONICAL_MODELS = [
-  'claude-opus-4-6',
   'claude-opus-4-6[1m]',
-  'sonnet',
-  'opus',
-  'sonnet[1m]',
-  'opus[1m]',
-  'haiku',
+  'claude-opus-4-6',
+  'claude-opus-4-7[1m]',
+  'claude-opus-4-7',
+  'claude-sonnet-4-6[1m]',
+  'claude-sonnet-4-6',
+  'claude-haiku-4-5',
 ] as const;
 
 export type ClaudeCanonicalModel = (typeof CLAUDE_CANONICAL_MODELS)[number];
 
 export const CLAUDE_LEGACY_VALUE_MAP: Record<string, ClaudeCanonicalModel> = {
-  'claude-sonnet-4-6': 'sonnet',
-  'claude-sonnet-4-6[1m]': 'sonnet[1m]',
+  'sonnet': 'claude-sonnet-4-6',
+  'sonnet[1m]': 'claude-sonnet-4-6[1m]',
+  'opus': 'claude-opus-4-6',
+  'opus[1m]': 'claude-opus-4-6[1m]',
+  'haiku': 'claude-haiku-4-5',
 };
 
 export function isClaudeCli(cli: string): boolean {
@@ -36,7 +39,7 @@ export function migrateLegacyClaudeValue(model: string): string {
 }
 
 export function getDefaultClaudeModel(): ClaudeCanonicalModel {
-  return 'sonnet';
+  return 'claude-sonnet-4-6';
 }
 
 export function getDefaultClaudeChoices(): string[] {
