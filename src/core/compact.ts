@@ -252,6 +252,29 @@ export function harvestBootstrapSlots(input: HarvestInput): BootstrapSlots {
     return { goal, recent_turns, memory_hits, grep_hits, task_snapshot };
 }
 
+export async function autoCompactRefresh(opts: {
+    workDir: string;
+    instructions: string;
+    cli: string;
+    model: string;
+}) {
+    const slots = harvestBootstrapSlots({ workingDir: opts.workDir, instructions: opts.instructions });
+    const bootstrap = renderBootstrapPrompt(slots);
+    const trace = `${BOOTSTRAP_TRACE_PREFIX}\n${bootstrap}`;
+
+    const { insertMessageWithTrace } = await import('./db.js');
+    const { bumpSessionOwnershipGeneration } = await import('../agent/session-persistence.js');
+    const { clearBossSessionOnly, setPendingBootstrapPrompt } = await import('./main-session.js');
+    const { broadcast } = await import('./bus.js');
+
+    insertMessageWithTrace.run('assistant', COMPACT_MARKER_CONTENT, opts.cli, opts.model, trace, null, opts.workDir);
+    setPendingBootstrapPrompt(bootstrap);
+    bumpSessionOwnershipGeneration();
+    clearBossSessionOnly();
+
+    broadcast('system_notice', { code: 'auto_compact_refresh', text: 'compact detected — session refreshed' }, 'public');
+}
+
 export function renderBootstrapPrompt(slots: BootstrapSlots): string {
     const sections: string[] = [];
     const push = (tag: string, body: string) => {

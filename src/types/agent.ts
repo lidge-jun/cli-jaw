@@ -41,6 +41,7 @@ export interface SpawnContext {
   claudeThinkingBlockOpen?: boolean;
   claudeThinkingHadDelta?: boolean;
   claudeSignatureLen?: number;
+  cliNativeCompactDetected?: boolean;
 }
 
 export interface SpawnResult {

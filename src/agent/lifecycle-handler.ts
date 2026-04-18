@@ -40,6 +40,7 @@ export interface ExitContext {
     cost?: { input?: number; output?: number } | number | null;
     turns?: number | null;
     duration?: number | null;
+    cliNativeCompactDetected?: boolean;
 }
 
 export interface ExitHandlerParams {
@@ -167,6 +168,19 @@ export function handleAgentExit(params: ExitHandlerParams): void {
     // ─── Post-flush reindex (3-C) ───
     if (agentLabel === 'memory-flush' && code === 0) {
         postFlushReindex();
+    }
+
+    // ─── CLI-native compact → auto session refresh ───
+    if (ctx.cliNativeCompactDetected && mainManaged && !opts.internal) {
+        console.log('[jaw:compact] CLI-native compaction detected — auto-refreshing session');
+        import('../core/compact.js').then(({ autoCompactRefresh }) => {
+            autoCompactRefresh({
+                workDir: settings.workingDir || '',
+                instructions: prompt || '',
+                cli,
+                model,
+            }).catch(e => console.warn('[jaw:compact] auto-refresh failed:', e.message));
+        });
     }
 
     // ─── Session persistence ───

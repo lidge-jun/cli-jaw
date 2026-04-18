@@ -702,6 +702,7 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
             }
             if (status === 'compact_boundary' || subtype === 'compact_boundary' || event.compact_boundary === true) {
                 pushToolLabel(labels, { icon: '✅', label: 'conversation compacted', toolType: 'tool', status: 'done' }, cli, event, ctx);
+                if (ctx) ctx.cliNativeCompactDetected = true;
             }
         }
         if (event.type === 'stream_event' && event.event?.type === 'content_block_start') {
