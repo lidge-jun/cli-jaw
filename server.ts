@@ -249,9 +249,17 @@ const JAW_AUTH_TOKEN = process.env.JAW_AUTH_TOKEN || crypto.randomBytes(32).toSt
 initBossToken();
 
 function requireAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+    const remoteIp = req.ip || req.socket?.remoteAddress || '';
+    const isLoopback = remoteIp === '127.0.0.1' || remoteIp === '::1' || remoteIp === '::ffff:127.0.0.1';
+    const isLanBypass = lanAllowed() && isPrivateIP(remoteIp);
+    if (isLoopback || isLanBypass) {
+        return next();
+    }
     const token = (req.headers.authorization || '').replace('Bearer ', '');
-    if (token === JAW_AUTH_TOKEN) return next();
-    return res.status(401).json({ error: 'Unauthorized' });
+    if (token !== JAW_AUTH_TOKEN) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    next();
 }
 
 // ─── Rate Limiting (in-memory, API only, 120/min) ─────────────

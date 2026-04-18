@@ -1,5 +1,5 @@
-// Auth contract — issue #108 + PR#2 auth hardening
-// Verifies requireAuth in server.ts uses token-only auth (no loopback/LAN bypass).
+// Auth bypass contract — issue #108
+// Verifies that requireAuth in server.ts allows loopback + (lanBypass && isPrivateIP).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -8,16 +8,21 @@ import { join } from 'node:path';
 const projectRoot = join(import.meta.dirname, '../..');
 const serverSrc = fs.readFileSync(join(projectRoot, 'server.ts'), 'utf8');
 
-test('AB-001: requireAuth checks token for ALL requests (no loopback bypass)', () => {
+test('AB-001: requireAuth uses isLoopback || isLanBypass branch', () => {
     const fnStart = serverSrc.indexOf('function requireAuth(');
     assert.ok(fnStart >= 0, 'requireAuth should exist in server.ts');
     const fnEnd = serverSrc.indexOf('\n}\n', fnStart);
     const fnBody = serverSrc.slice(fnStart, fnEnd);
 
-    assert.ok(!fnBody.includes('isLoopback'), 'requireAuth must NOT bypass loopback');
-    assert.ok(!fnBody.includes('isLanBypass'), 'requireAuth must NOT bypass LAN');
-    assert.ok(fnBody.includes('JAW_AUTH_TOKEN'), 'requireAuth must check token');
-    assert.ok(fnBody.includes('401'), 'requireAuth must return 401 on failure');
+    assert.ok(fnBody.includes('remoteIp'), 'requireAuth must use remoteIp (not hostname)');
+    assert.ok(fnBody.includes('req.ip'), 'requireAuth must read req.ip');
+    assert.ok(fnBody.includes('::ffff:127.0.0.1'), 'must handle IPv4-mapped loopback');
+    assert.ok(fnBody.includes('isLoopback'), 'requireAuth must define isLoopback');
+    assert.ok(fnBody.includes('isLanBypass'), 'requireAuth must define isLanBypass');
+    assert.ok(fnBody.includes('lanAllowed()'), 'isLanBypass must gate on lanAllowed()');
+    assert.ok(fnBody.includes('isPrivateIP'), 'isLanBypass must call isPrivateIP');
+    assert.ok(/if\s*\(\s*isLoopback\s*\|\|\s*isLanBypass\s*\)/.test(fnBody),
+        'requireAuth must short-circuit on isLoopback || isLanBypass');
 });
 
 test('AB-002: CORS + Host middlewares use predicate (not Set.has)', () => {
@@ -91,12 +96,12 @@ test('AB-008: settings-merge includes network in nested merge list', () => {
 
 // ─── Security Hardening (PR#2) ─────────────────────────
 
-test('SC-001: requireAuth has no loopback/LAN short-circuit', () => {
+test('SC-001: requireAuth preserves loopback/LAN bypass', () => {
     const fnStart = serverSrc.indexOf('function requireAuth(');
     const fnEnd = serverSrc.indexOf('\n}\n', fnStart);
     const fnBody = serverSrc.slice(fnStart, fnEnd);
-    assert.ok(!/isLoopback\s*\|\|\s*isLanBypass/.test(fnBody),
-        'requireAuth must not short-circuit on isLoopback || isLanBypass');
+    assert.ok(/isLoopback\s*\|\|\s*isLanBypass/.test(fnBody),
+        'requireAuth must short-circuit on isLoopback || isLanBypass');
 });
 
 test('SC-002: trust proxy only enabled with both trustProxies + trustForwardedFor', () => {
