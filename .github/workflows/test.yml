@@ -5,7 +5,17 @@ on:
     branches:
       - main
       - master
+    paths-ignore:
+      - 'README*.md'
+      - 'docs/**'
   pull_request:
+    paths-ignore:
+      - 'README*.md'
+      - 'docs/**'
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   node-tests:
