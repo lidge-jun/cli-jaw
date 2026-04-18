@@ -127,13 +127,13 @@ cli-jaw browser type e5 "hello" --submit
 ```
 
 - Ref IDs **reset on navigation** → re-snapshot after navigate.
-- For Canvas / iframe / WebGL / Shadow DOM with no ref: `cli-jaw browser vision-click "<target>"` (codex-only; fallback after ref-based click fails).
+- For Canvas / iframe / WebGL / Shadow DOM with no ref: if the target is visible in the `get_app_state` screenshot, use `click(x, y)` pointer-action directly. `cli-jaw browser vision-click` is legacy and Codex-only — do not rely on it.
 
 ### B. Computer Use path — `mcp__computer_use__.*` (macOS, codex-only)
 For desktop apps and non-DOM UI. Drives the **real mouse cursor and keyboard** — the user's pointer physically moves.
 
 **Workflow:** `get_app_state(app)` → action → `get_app_state(app)` → verify.
-- Prefer `element_index` over raw `(x,y)`; use pixel coords only as fallback.
+- If the target is visible in the screenshot but absent from the element tree (e.g. map labels, canvas text), use `click(x, y)` pointer-action **immediately** — do not search the element tree. Use `element_index` when the target IS in the element tree.
 - `stale_warning` is a signal to re-read state, not a failure.
 - Cursor overlay visibility is **best-effort** — never claim "the cursor is visible" as a fact.
 - Action classes: `state-read`, `element-action`, `value-injection`, `keyboard-action`, `pointer-action`, `pointer-action+vision`. Full examples and per-class guidance live in the `desktop-control` skill.
