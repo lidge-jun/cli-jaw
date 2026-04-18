@@ -1150,7 +1150,9 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         stderrBuf: '',
         hasActiveSubAgent: false,
         liveScope,
+        geminiResultSeen: false,
     };
+    let geminiWatchdog: ReturnType<typeof setTimeout> | null = null;
     let buffer = '';
 
     child.stdout.on('data', (chunk) => {
@@ -1167,6 +1169,13 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                     console.log(`[jaw:raw:${agentLabel}] ${line.slice(0, 300)}`);
                 }
                 logEventSummary(agentLabel, cli, event, ctx);
+                // Gemini watchdog: after result event, start kill timer if close doesn't come
+                if (cli === 'gemini' && ctx.geminiResultSeen && !geminiWatchdog) {
+                    geminiWatchdog = setTimeout(() => {
+                        console.warn(`[jaw:gemini-watchdog] ${agentLabel} — result seen but close not received after 10s, killing`);
+                        try { child.kill('SIGTERM'); } catch { /* already dead */ }
+                    }, 10000);
+                }
                 if (!ctx.sessionId) ctx.sessionId = extractSessionId(cli, event);
                 extractFromEvent(cli, event, ctx, agentLabel, empTag);
                 // Sub-agent wait: keep stall timer alive
@@ -1195,6 +1204,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     });
 
     child.on('close', (code) => {
+        if (geminiWatchdog) { clearTimeout(geminiWatchdog); geminiWatchdog = null; }
         if (stdSettled) return;  // error handler already resolved
         // [I1] Flush residual NDJSON buffer — last event may lack trailing newline
         if (buffer.trim()) {

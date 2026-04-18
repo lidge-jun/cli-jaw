@@ -124,13 +124,9 @@ test('ROLE_PRESETS: every labelKey has matching locale entry', () => {
     }
 });
 
-test('ROLE_PRESETS: research preset is available', () => {
+test('ROLE_PRESETS: research preset removed (dispatch unified)', () => {
     const research = ROLE_PRESETS.find(p => p.value === 'research');
-    assert.ok(research, 'research preset should exist');
-    assert.equal(
-        research?.prompt,
-        'Research employee — search, codebase exploration, uncertainty reduction, read-only reports',
-    );
+    assert.equal(research, undefined, 'research preset should not exist after removal');
 });
 
 // ─── getPromptLocale ─────────────────────────────────

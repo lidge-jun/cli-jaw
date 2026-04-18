@@ -11,7 +11,6 @@ import { regenerateB } from '../prompt/builder.js';
 export const DEFAULT_EMPLOYEES = [
     { name: 'Frontend', role: 'UI/UX, CSS, components' },
     { name: 'Backend', role: 'API, DB, server logic' },
-    { name: 'Research', role: 'Search, codebase exploration, uncertainty reduction, read-only reports' },
     { name: 'Docs', role: 'Documentation, README, API docs' },
 ];
 

@@ -31,11 +31,6 @@ import {
     type OrcContext,
 } from './state-machine.js';
 import { resolveOrcScope, findActiveScope } from './scope.js';
-import {
-    dispatchResearchTask,
-    injectResearchIntoPlanningPrompt,
-    shouldRunResearch,
-} from './research.js';
 import { buildTaskSnapshot, getMemoryStatus } from '../memory/runtime.js';
 import { buildMemoryInjection } from '../memory/injection.js';
 
@@ -176,10 +171,6 @@ export async function orchestrate(
     const runSpawnAgent: SpawnAgentLike = typeof meta._spawnAgent === 'function'
         ? meta._spawnAgent
         : spawnAgent;
-    const runDispatchResearch = typeof meta._dispatchResearchTask === 'function'
-        ? meta._dispatchResearchTask
-        : dispatchResearchTask;
-
     // Resolve scope: compute candidate from params, check for active scope (handles workingDir changes)
     const candidateScope = resolveOrcScope({
         persistedScopeId: null,
@@ -235,15 +226,6 @@ export async function orchestrate(
             origin,
             chatId,
         };
-
-        if (shouldRunResearch(planningTask, meta) && !ctx?.researchReport) {
-            const report = await runDispatchResearch(planningTask, { ...meta, origin, _researchInjected: true });
-            if (report.rawText) {
-                prompt = injectResearchIntoPlanningPrompt(prompt, report);
-            }
-            nextCtx.researchNeeded = true;
-            nextCtx.researchReport = report.rawText || null;
-        }
 
         // Create a fresh worklog before setState() so state/title reads the new latest worklog.
         const worklogSeed = pickWorklogSeed(nextCtx.originalPrompt, planningTask, userText);

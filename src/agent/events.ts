@@ -442,6 +442,7 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                 }
                 ctx.fullText += event.content || '';
             } else if (event.type === 'result') {
+                ctx.geminiResultSeen = true;
                 ctx.duration = event.stats?.duration_ms;
                 ctx.turns = event.stats?.tool_calls;
                 // [P0-1.6] Store Gemini token stats

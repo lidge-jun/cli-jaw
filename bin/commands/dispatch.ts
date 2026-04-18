@@ -35,7 +35,7 @@ const task = getFlag('--task');
 
 if (!agent || !task) {
     console.error('Usage: jaw dispatch --agent <name> --task <task>');
-    console.error('  --agent   Employee name (e.g., Frontend, Backend, Research, Docs)');
+    console.error('  --agent   Employee name (e.g., Frontend, Backend, Data, Docs)');
     console.error('  --task    Task description to assign');
     process.exit(1);
 }
