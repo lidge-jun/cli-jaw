@@ -730,6 +730,17 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     const isResume = empSid
         ? true
         : (!forceNew && !!bucketSessionId);
+
+    // ─── User prompt wrapper (boss main only) ───
+    // #99: compact timestamp (moved from builder.ts system prompt → user prompt)
+    // + memory search nudge
+    if (!opts.agentId && !opts.internal && !opts._isSmokeContinuation) {
+        const _d = new Date(); const _p = (n: number) => String(n).padStart(2, '0');
+        const _h = _d.getHours(); const _h12 = _h % 12 || 12;
+        const ts = `${_p(_d.getFullYear() % 100)}${_p(_d.getMonth() + 1)}${_p(_d.getDate())}-${_p(_h12)}:${_p(_d.getMinutes())}${_h < 12 ? 'AM' : 'PM'}.`;
+        prompt = `${ts}\n${prompt}\n(need project history? cli-jaw memory search "<keywords>")`;
+    }
+
     const resumeSessionId = empSid || bucketSessionId;
     const historyBlock = !isResume ? buildHistoryBlock(prompt, settings.workingDir) : '';
     const promptForArgs = (cli === 'gemini' || cli === 'opencode')
