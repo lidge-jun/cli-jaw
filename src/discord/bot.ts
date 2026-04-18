@@ -23,6 +23,7 @@ import type { Attachment, Message } from 'discord.js';
 export let discordClient: Client | null = null;
 export const discordActiveChannelIds = new Set<string>();
 let forwarderHandler: BroadcastListener | null = null;
+let dcInitLock = false;
 
 type SavedDiscordAttachment = { name: string; filePath: string };
 type FailedDiscordAttachment = { name: string; reason: string };
@@ -175,6 +176,12 @@ async function dcOrchestrate(msg: Message, prompt: string, displayMsg: string) {
 // ─── Init / Shutdown ────────────────────────────────
 
 export async function initDiscord() {
+    if (dcInitLock) {
+        console.warn('[discord] initDiscord already in progress, skipping');
+        return;
+    }
+    dcInitLock = true;
+    try {
     await shutdownDiscord();
     if (!settings.discord?.enabled || !settings.discord?.token) {
         console.log('[discord] ⏭️  Discord pending (disabled or no token)');
@@ -305,6 +312,7 @@ export async function initDiscord() {
 
     // Register slash commands after login
     await registerDiscordSlashCommands(client);
+    } finally { dcInitLock = false; }
 }
 
 export async function shutdownDiscord() {
@@ -316,8 +324,11 @@ export async function shutdownDiscord() {
     if (!discordClient) return;
     const old = discordClient;
     discordClient = null;
-    try { await old.destroy(); } catch (e) {
+    try {
+        await old.destroy();
+    } catch (e) {
         console.warn('[discord:stop]', (e as Error).message);
+        await new Promise(r => setTimeout(r, 2000));
     }
     console.log('[discord] stopped');
 }
