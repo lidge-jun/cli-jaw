@@ -101,7 +101,7 @@ function buildCspMeta(htmlCode: string): string {
   }
 
   // Tone.js creates a blob: Worker for its internal clock
-  const workerSrc = /Tone\.min\.js|tone@/.test(htmlCode) ? "worker-src blob:;" : '';
+  const workerSrc = /Tone(\.min)?\.js|tone@/.test(htmlCode) ? "worker-src blob:;" : '';
 
   // Base src lists — start from CDN_ALLOWLIST to prevent drift when allowlist changes
   const allowlistUrls = CDN_ALLOWLIST.map(h => `https://${h}`);
