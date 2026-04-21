@@ -63,9 +63,8 @@ import {
 import { bumpSessionOwnershipGeneration } from './src/agent/session-persistence.js';
 import { parseCommand, executeCommand, COMMANDS } from './src/cli/commands.js';
 
-import { getState, resetState, resetAllStaleStates } from './src/orchestrator/state-machine.js';
+import { getState, resetAllStaleStates } from './src/orchestrator/state-machine.js';
 import { resolveOrcScope } from './src/orchestrator/scope.js';
-import { listActiveOrcStates } from './src/core/db.js';
 
 import { submitMessage } from './src/orchestrator/gateway.js';
 
@@ -170,16 +169,8 @@ if (settings.permissions === 'safe') {
 initPromptFiles();
 regenerateB();
 
-// Reset stale orchestration state left by unclean shutdown (kill -9, crash)
-// Only reset states older than 15 minutes to avoid wiping active orchestrations
-{
-    const staleRows = (listActiveOrcStates.all() as Array<{ id: string; state: string; updated_at: string }>)
-        .filter(row => Date.now() - new Date(row.updated_at).getTime() > 15 * 60_000);
-    for (const row of staleRows) {
-        console.log(`[jaw:startup] resetting stale orc_state(${row.id}): ${row.state} → IDLE`);
-        resetState(row.id);
-    }
-}
+// Reset stale orchestration state left by unclean shutdown (single-scope: default only)
+resetAllStaleStates();
 
 // ─── Express + WebSocket ─────────────────────────────
 
@@ -513,8 +504,7 @@ const shutdown = async (sig: string) => {
     killAllAgents('shutdown');
 
     // Reset orchestration state so next startup doesn't show stale P/A/B/C
-    const staleRows = listActiveOrcStates.all() as Array<{ id: string }>;
-    for (const row of staleRows) resetState(row.id);
+    resetAllStaleStates();
 
     try {
         await Promise.race([

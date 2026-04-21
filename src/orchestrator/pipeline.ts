@@ -30,7 +30,7 @@ import {
     type OrcStateName,
     type OrcContext,
 } from './state-machine.js';
-import { resolveOrcScope, findActiveScope } from './scope.js';
+// scope is globally 'default' — resolveOrcScope/findActiveScope no longer needed here
 import { buildTaskSnapshot, getMemoryStatus } from '../memory/runtime.js';
 import { buildMemoryInjection } from '../memory/injection.js';
 
@@ -171,17 +171,8 @@ export async function orchestrate(
     const runSpawnAgent: SpawnAgentLike = typeof meta._spawnAgent === 'function'
         ? meta._spawnAgent
         : spawnAgent;
-    // Resolve scope: compute candidate from params, check for active scope (handles workingDir changes)
-    const candidateScope = resolveOrcScope({
-        persistedScopeId: null,
-        origin,
-        target,
-        chatId,
-        workingDir: settings.workingDir || null,
-    });
-    let ctx = getCtx(candidateScope);
-    // If candidate scope has no active ctx, check if an existing active scope matches this origin
-    const scope = ctx?.scopeId || (ctx ? candidateScope : (findActiveScope(origin, chatId, { workingDir: settings.workingDir }) || candidateScope));
+    const scope = 'default';
+    let ctx = getCtx(scope);
 
     let state = getState(scope);
     let skipPrefix = !!meta._skipPrefix;
@@ -302,15 +293,7 @@ export async function orchestrateContinue(
     const chatId = meta.chatId;
     const target = meta.target;
     const requestId = meta.requestId;
-    const candidateScope = resolveOrcScope({
-        persistedScopeId: null,
-        origin,
-        target,
-        chatId,
-        workingDir: settings.workingDir || null,
-    });
-    const ctxCandidate = getCtx(candidateScope);
-    const scope = ctxCandidate?.scopeId || (ctxCandidate ? candidateScope : (findActiveScope(origin, chatId, { workingDir: settings.workingDir }) || candidateScope));
+    const scope = 'default';
     const state = getState(scope);
 
     // Active PABCD → resume from current state
@@ -361,15 +344,7 @@ export async function orchestrateReset(
     }
     clearAllWorkers();
     clearAllEmployeeSessions.run();
-    const candidateScope = resolveOrcScope({
-        persistedScopeId: null,
-        origin,
-        target,
-        chatId,
-        workingDir: settings.workingDir || null,
-    });
-    const ctxReset = getCtx(candidateScope);
-    const scope = ctxReset?.scopeId || (ctxReset ? candidateScope : (findActiveScope(origin, chatId, { workingDir: settings.workingDir }) || candidateScope));
+    const scope = 'default';
     resetState(scope);
     const latest = readLatestWorklog();
     if (!latest) {

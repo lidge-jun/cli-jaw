@@ -20,7 +20,7 @@ test('PS-001: resetAllStaleStates exists in state-machine.ts', () => {
 test('PS-002: server.ts calls resetAllStaleStates on startup', () => {
     assert.ok(serverSrc.includes('resetAllStaleStates()'),
         'server must call resetAllStaleStates during startup');
-    assert.ok(serverSrc.includes("import { getState, resetState, resetAllStaleStates }"),
+    assert.ok(serverSrc.includes("import { getState, resetAllStaleStates }"),
         'server must import resetAllStaleStates');
 });
 
@@ -31,9 +31,7 @@ test('PS-003: orchestrate reset route supports ?all=true', () => {
         'reset route must check all parameter');
 });
 
-test('PS-004: findActiveScope accepts workingDir parameter', () => {
-    assert.ok(scopeSrc.includes('meta?: { workingDir?: string }'),
-        'findActiveScope must accept workingDir in meta');
-    assert.ok(scopeSrc.includes('meta.workingDir'),
-        'must use workingDir for exact matching');
+test('PS-004: findActiveScope always returns default (single-scope)', () => {
+    assert.ok(scopeSrc.includes("return 'default'"),
+        'findActiveScope must return default for single-scope design');
 });
