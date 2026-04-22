@@ -545,6 +545,15 @@ const remoteMode = (remoteAccess as any).mode && (remoteAccess as any).mode !== 
 const bindHost: string = lanMode ? '0.0.0.0'
     : (remoteMode && isLoopbackBind) ? '0.0.0.0'
     : cfgBind;
+server.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EADDRINUSE') {
+        console.error(`[server] port ${PORT} already in use — exiting`);
+    } else {
+        console.error('[server] listen error:', err.message);
+    }
+    closeDb();
+    process.exit(1);
+});
 server.listen(PORT, bindHost, async () => {
     // Persist port so CLI commands auto-discover the running server
     const portStr = String(PORT);

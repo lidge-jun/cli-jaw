@@ -2,7 +2,7 @@
 // Shared employee seeding logic for web, telegram, discord contexts.
 
 import crypto from 'node:crypto';
-import { getEmployees, deleteEmployee, insertEmployee } from './db.js';
+import { getEmployees, deleteEmployee, insertEmployee, db } from './db.js';
 import { settings } from './config.js';
 import { broadcast } from './bus.js';
 import { getDefaultClaudeModel } from '../cli/claude-models.js';
@@ -213,6 +213,7 @@ export function listEmployees(): EmployeeListing[] {
 }
 
 export function seedDefaultEmployees({ reset = false, notify = false } = {}) {
+    if (!db.open) return { seeded: 0, cli: settings.cli, skipped: true };
     const existing = getEmployees.all();
     if (reset) {
         for (const emp of existing) deleteEmployee.run((emp as any).id);

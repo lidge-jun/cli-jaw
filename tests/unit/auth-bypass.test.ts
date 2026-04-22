@@ -57,7 +57,7 @@ test('AB-004: lanAllowed() reads lanMode OR settings.network.lanBypass', () => {
 test('AB-005: listen bind uses lanMode or settings.network.bindHost', () => {
     const listenIdx = serverSrc.indexOf('server.listen(PORT,');
     assert.ok(listenIdx >= 0, 'server.listen should exist');
-    const block = serverSrc.slice(listenIdx - 500, listenIdx + 100);
+    const block = serverSrc.slice(listenIdx - 800, listenIdx + 100);
     assert.ok(block.includes('settings.network?.bindHost'),
         'bind host must read settings.network.bindHost');
     assert.ok(block.includes('lanMode'),
