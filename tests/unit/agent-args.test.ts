@@ -146,7 +146,15 @@ test('AG-009p: shouldResumeBucketSession — Copilot normalizes deprecated fast 
 test('AG-009q: shouldResumeBucketSession — non-Copilot CLIs keep current resume behavior', () => {
     assert.equal(shouldResumeBucketSession('claude', 'claude-opus-4-6', 'claude-sonnet-4-6'), true);
     assert.equal(shouldResumeBucketSession('gemini', 'gemini-2.5-pro', 'gemini-2.5-flash'), true);
-    assert.equal(shouldResumeBucketSession('opencode', 'kimi-k2.6', 'kimi-k2.5'), true);
+});
+
+test('AG-009r: shouldResumeBucketSession — OpenCode stale resume key forces fresh session', () => {
+    assert.equal(shouldResumeBucketSession('opencode', 'opencode-go/kimi-k2.6', 'opencode-go/kimi-k2.6', 'exa=1', null), false);
+    assert.equal(shouldResumeBucketSession('opencode', 'opencode-go/kimi-k2.6', 'opencode-go/kimi-k2.6', 'exa=1', 'exa=0'), false);
+});
+
+test('AG-009s: shouldResumeBucketSession — OpenCode matching resume key still resumes', () => {
+    assert.equal(shouldResumeBucketSession('opencode', 'opencode-go/kimi-k2.6', 'opencode-go/kimi-k2.6', 'exa=1', 'exa=1'), true);
 });
 
 test('AG-009e: codex Spark resume also strips reasoning config', () => {
@@ -209,4 +217,24 @@ test('AG-016: gemini resume includes --resume', () => {
     const args = buildResumeArgs('gemini', 'default', '', 'sess-456', 'go', 'safe');
     assert.ok(args.includes('--resume'));
     assert.ok(args.includes('sess-456'));
+});
+
+test('AG-017: opencode auto permissions include dangerously-skip-permissions', () => {
+    const args = buildArgs('opencode', 'opencode-go/kimi-k2.6', 'high', 'hi', '', 'auto');
+    assert.ok(args.includes('--dangerously-skip-permissions'));
+});
+
+test('AG-018: opencode yolo permissions also include dangerously-skip-permissions', () => {
+    const args = buildArgs('opencode', 'opencode-go/kimi-k2.6', 'high', 'hi', '', 'yolo');
+    assert.ok(args.includes('--dangerously-skip-permissions'));
+});
+
+test('AG-019: opencode safe permissions exclude dangerously-skip-permissions', () => {
+    const args = buildArgs('opencode', 'opencode-go/kimi-k2.6', 'high', 'hi', '', 'safe');
+    assert.ok(!args.includes('--dangerously-skip-permissions'));
+});
+
+test('AG-020: opencode resume auto permissions include dangerously-skip-permissions', () => {
+    const args = buildResumeArgs('opencode', 'opencode-go/kimi-k2.6', 'high', 'sess-oc-1', 'continue', 'auto');
+    assert.ok(args.includes('--dangerously-skip-permissions'));
 });

@@ -101,6 +101,7 @@ db.exec(`
         bucket      TEXT PRIMARY KEY,
         session_id  TEXT NOT NULL,
         model       TEXT NOT NULL,
+        resume_key  TEXT DEFAULT NULL,
         updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 `);
@@ -119,6 +120,11 @@ if (!(messageCols as Record<string, unknown>[]).some(c => c.name === 'working_di
     db.exec('ALTER TABLE messages ADD COLUMN working_dir TEXT DEFAULT NULL');
 }
 db.exec('CREATE INDEX IF NOT EXISTS idx_messages_wd ON messages(working_dir)');
+
+const sessionBucketCols = db.prepare('PRAGMA table_info(session_buckets)').all();
+if (!(sessionBucketCols as Record<string, unknown>[]).some(c => c.name === 'resume_key')) {
+    db.exec('ALTER TABLE session_buckets ADD COLUMN resume_key TEXT DEFAULT NULL');
+}
 
 // ─── Prepared Statements ─────────────────────────────
 
@@ -151,13 +157,14 @@ export const clearEmployeeSession = db.prepare('DELETE FROM employee_sessions WH
 export const clearAllEmployeeSessions = db.prepare('DELETE FROM employee_sessions');
 
 // ─── Session Buckets (per-bucket resume storage) ─────
-export const getSessionBucket = db.prepare('SELECT bucket, session_id, model, updated_at FROM session_buckets WHERE bucket = ?');
+export const getSessionBucket = db.prepare('SELECT bucket, session_id, model, resume_key, updated_at FROM session_buckets WHERE bucket = ?');
 export const upsertSessionBucket = db.prepare(`
-    INSERT INTO session_buckets (bucket, session_id, model, updated_at)
-    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    INSERT INTO session_buckets (bucket, session_id, model, resume_key, updated_at)
+    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(bucket) DO UPDATE SET
         session_id=excluded.session_id,
         model=excluded.model,
+        resume_key=excluded.resume_key,
         updated_at=CURRENT_TIMESTAMP
 `);
 export const clearSessionBucket = db.prepare('DELETE FROM session_buckets WHERE bucket = ?');

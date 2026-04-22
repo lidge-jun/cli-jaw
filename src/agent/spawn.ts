@@ -37,6 +37,7 @@ import {
     setSpawnRef as setMemorySpawnRef,
     triggerMemoryFlush,
 } from './memory-flush-controller.js';
+import { applyCliEnvDefaults, buildSessionResumeKey } from './spawn-env.js';
 
 // ─── State ───────────────────────────────────────────
 
@@ -606,9 +607,16 @@ export function shouldResumeBucketSession(
     cli: string,
     requestedModel: string,
     bucketModel: string | null | undefined,
+    requestedResumeKey?: string | null,
+    bucketResumeKey?: string | null,
 ): boolean {
-    if (cli !== 'copilot' || !bucketModel) return true;
-    return normalizeModelForCli(cli, requestedModel) === normalizeModelForCli(cli, bucketModel);
+    if (cli === 'copilot' && bucketModel) {
+        return normalizeModelForCli(cli, requestedModel) === normalizeModelForCli(cli, bucketModel);
+    }
+    if (cli === 'opencode' && requestedResumeKey) {
+        return requestedResumeKey === (bucketResumeKey ?? null);
+    }
+    return true;
 }
 
 export interface SpawnLifecycle {
@@ -734,16 +742,29 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     // cross-model resume (gpt-5.4 ↔ gpt-5.3-codex-spark) doesn't send a
     // mismatched session_id to the server.
     const currentBucket = resolveSessionBucket(cli, model);
+    const cliEnv = applyCliEnvDefaults(cli, opts.env);
     const bucketRow: any = currentBucket ? getSessionBucket.get(currentBucket) : null;
     const bucketSessionId = bucketRow?.session_id || null;
     const bucketModel = typeof bucketRow?.model === 'string' ? bucketRow.model : null;
-    const canResumeBucketSession = !bucketSessionId || shouldResumeBucketSession(cli, model, bucketModel);
+    const bucketResumeKey = typeof bucketRow?.resume_key === 'string' ? bucketRow.resume_key : null;
+    const resumeKey = buildSessionResumeKey(cli, makeCleanEnv(cliEnv));
+    const canResumeBucketSession = !bucketSessionId || shouldResumeBucketSession(
+        cli,
+        model,
+        bucketModel,
+        resumeKey,
+        bucketResumeKey,
+    );
     const isResume = empSid
         ? true
         : (!forceNew && !!bucketSessionId && canResumeBucketSession);
 
     if (!empSid && !forceNew && bucketSessionId && !canResumeBucketSession) {
-        console.log(`[jaw:resume] ${cli} model changed ${bucketModel} → ${model}; starting fresh session`);
+        if (cli === 'opencode' && resumeKey !== (bucketResumeKey ?? null)) {
+            console.log(`[jaw:resume] ${cli} resume key changed ${bucketResumeKey ?? 'none'} → ${resumeKey}; starting fresh session`);
+        } else {
+            console.log(`[jaw:resume] ${cli} model changed ${bucketModel} → ${model}; starting fresh session`);
+        }
     }
 
     // ─── User prompt wrapper (boss main only) ───
@@ -811,7 +832,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         console.log(`[jaw:${agentLabel}] Spawning: ${cli} ${args.join(' ').slice(0, 120)}...`);
     }
 
-    const spawnEnv = makeCleanEnv(opts.env);
+    const spawnEnv = makeCleanEnv(cliEnv);
 
     if (cli === 'gemini' && sysPrompt) {
         const tmpSysFile = join(os.tmpdir(), `jaw-gemini-sys-${agentLabel}.md`);
@@ -1045,6 +1066,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                     isFallback: opts._isFallback,
                     cli,
                     model,
+                    resumeKey,
                     effort: cfg.effort || '',
                 })) {
                     console.log(`[jaw:session] saved ${cli} session=${persistedAcpSessionId.slice(0, 12)}... (pre-shutdown)`);
@@ -1082,6 +1104,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             //   - trace: if (traceText) traceText = `⏹️ [interrupted]…`
             handleAgentExit({
                 ctx, code: acpCode, cli, model, agentLabel, mainManaged, origin,
+                resumeKey,
                 prompt, opts, cfg, ownerGeneration, forceNew, empSid,
                 isResume, wasKilled, wasSteer, smokeResult,
                 effortDefault: '', costLine: '',
@@ -1272,6 +1295,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         //   - trace: if (traceText) traceText = `⏹️ [interrupted]…`
         handleAgentExit({
             ctx, code, cli, model, agentLabel, mainManaged, origin,
+            resumeKey,
             prompt, opts, cfg, ownerGeneration, forceNew, empSid,
             isResume, wasKilled, wasSteer, smokeResult,
             effortDefault: 'medium', costLine,

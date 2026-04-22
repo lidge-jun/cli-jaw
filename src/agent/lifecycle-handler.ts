@@ -48,6 +48,7 @@ export interface ExitHandlerParams {
     code: number | null;
     cli: string;
     model: string;
+    resumeKey: string | null;
     agentLabel: string;
     mainManaged: boolean;
     origin: string;
@@ -126,7 +127,7 @@ export function handleAgentExit(params: ExitHandlerParams): void {
             persistMainSession({
                 ownerGeneration, forceNew, employeeSessionId: empSid,
                 sessionId: smokeSessionId, isFallback: opts._isFallback,
-                code, cli, model, effort: effortVal,
+                code, cli, model, resumeKey: params.resumeKey, effort: effortVal,
             });
             console.log(`[jaw:smoke] persisted session ${smokeSessionId.slice(0, 12)}... for continuation`);
         }
@@ -188,7 +189,7 @@ export function handleAgentExit(params: ExitHandlerParams): void {
     if (persistedSessionId && persistMainSession({
         ownerGeneration, forceNew, employeeSessionId: empSid,
         sessionId: persistedSessionId, isFallback: opts._isFallback,
-        code, wasKilled, cli, model, effort: effortVal,
+        code, wasKilled, cli, model, resumeKey: params.resumeKey, effort: effortVal,
     })) {
         console.log(`[jaw:session] saved ${cli} session=${persistedSessionId.slice(0, 12)}...${wasKilled ? ' (post-kill)' : ''}`);
     }

@@ -82,6 +82,36 @@ function toIndentedPreview(text: any, max = 200) {
     return clipped.replace(/\n/g, '\n  ');
 }
 
+function isOpencodeToolFailure(part: any): boolean {
+    const exitCode = part?.state?.metadata?.exit;
+    if (exitCode != null && exitCode !== 0) return true;
+    const status = String(part?.state?.status || '').toLowerCase();
+    return status === 'error'
+        || status === 'failed'
+        || status === 'denied'
+        || status === 'cancelled';
+}
+
+function finalizeOpencodePendingTools(
+    ctx: SpawnContext,
+    agentLabel: string,
+    empTag: Record<string, any>,
+): void {
+    const pendingRefs = ctx.opencodePendingToolRefs || [];
+    if (!pendingRefs.length) return;
+    const failed = !!ctx.opencodeHadToolErrorInStep;
+    for (const ref of pendingRefs) {
+        const existing = [...ctx.toolLog].reverse().find(
+            (t: any) => t.stepRef === ref && (!t.status || t.status === 'running')
+        );
+        if (!existing) continue;
+        existing.status = failed ? 'error' : 'done';
+        existing.icon = failed ? '❌' : '✅';
+        syncLiveTools(ctx);
+        broadcast('agent_tool', { agentId: agentLabel, ...existing, ...empTag });
+    }
+}
+
 export function extractSessionId(cli: string, event: any) {
     switch (cli) {
         case 'claude': return event.type === 'system' ? event.session_id : null;
@@ -290,6 +320,9 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
             );
             if (runIdx !== -1) {
                 ctx.toolLog[runIdx] = toolLabel;
+                if (cli === 'opencode' && ctx.opencodePendingToolRefs) {
+                    ctx.opencodePendingToolRefs = ctx.opencodePendingToolRefs.filter(ref => ref !== toolLabel.stepRef);
+                }
                 syncLiveTools(ctx);
                 broadcast('agent_tool', { agentId: agentLabel, ...toolLabel, ...empTag });
                 continue;
@@ -297,6 +330,10 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
         }
 
         ctx.toolLog.push(toolLabel);
+        if (cli === 'opencode' && toolLabel.stepRef && (!toolLabel.status || toolLabel.status === 'running')) {
+            if (!ctx.opencodePendingToolRefs) ctx.opencodePendingToolRefs = [];
+            if (!ctx.opencodePendingToolRefs.includes(toolLabel.stepRef)) ctx.opencodePendingToolRefs.push(toolLabel.stepRef);
+        }
         syncLiveTools(ctx);
         broadcast('agent_tool', { agentId: agentLabel, ...toolLabel, ...empTag });
     }
@@ -466,6 +503,8 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                 ctx.opencodeStepText = '';
                 ctx.opencodeSawToolInStep = false;
                 ctx.opencodeTextAfterLastTool = false;
+                ctx.opencodeHadToolErrorInStep = false;
+                ctx.opencodePendingToolRefs = [];
                 pushTrace(ctx, `[${agentLabel}] opencode step_start${model ? ` model=${model}` : ''}`);
             }
             if (event.type === 'text' && event.part?.text) {
@@ -474,6 +513,7 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
             } else if (event.type === 'tool_use') {
                 ctx.opencodeSawToolInStep = true;
                 ctx.opencodeTextAfterLastTool = false;
+                if (isOpencodeToolFailure(event.part)) ctx.opencodeHadToolErrorInStep = true;
             } else if (event.type === 'step_finish' && event.part) {
                 ctx.sessionId = event.sessionID;
                 // [P0-1.7] Accumulate tokens across steps (not overwrite)
@@ -502,20 +542,36 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                 const stepText = ctx.opencodeStepText || '';
                 const shouldCommitText = stepText && (
                     event.part.reason !== 'tool-calls'
-                    || !!ctx.opencodeTextAfterLastTool
+                    || (!!ctx.opencodeTextAfterLastTool && !!ctx.opencodeHadToolErrorInStep)
                 );
                 if (shouldCommitText) {
                     ctx.fullText += stepText;
                     ctx.pendingOutputChunk = (ctx.pendingOutputChunk || '') + stepText;
                 } else if (stepText) {
-                    pushTrace(
-                        ctx,
-                        `[${agentLabel}] opencode buffered text discarded before tool call (${stepText.length} chars)`,
-                    );
+                    if (!ctx.opencodeTextAfterLastTool) {
+                        const thinkingTool = {
+                            icon: '💭',
+                            label: buildPreview(stepText, 80) || 'thinking...',
+                            toolType: 'thinking' as const,
+                            detail: stepText,
+                        };
+                        ctx.toolLog.push(thinkingTool);
+                        syncLiveTools(ctx);
+                        broadcast('agent_tool', { agentId: agentLabel, ...thinkingTool, ...empTag });
+                        pushTrace(ctx, `[${agentLabel}] opencode pre-tool thinking (${stepText.length} chars)`);
+                    } else {
+                        pushTrace(
+                            ctx,
+                            `[${agentLabel}] opencode buffered text discarded before tool call (${stepText.length} chars)`,
+                        );
+                    }
                 }
+                finalizeOpencodePendingTools(ctx, agentLabel, empTag);
                 ctx.opencodeStepText = '';
                 ctx.opencodeSawToolInStep = false;
                 ctx.opencodeTextAfterLastTool = false;
+                ctx.opencodeHadToolErrorInStep = false;
+                ctx.opencodePendingToolRefs = [];
                 // [P2-3.12] Store step timing
                 if (event.part.time) {
                     if (!ctx.metadata) ctx.metadata = {};
@@ -781,11 +837,9 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
                 : `opencode:tool:${event.part.tool || 'tool'}`;
             const detail = summarizeToolInput(event.part.tool || '', event.part.state?.input || {}, 0)
                 || String(event.part.state?.output || '').trim();
-            // [P0-1.9] Single label per event: icon reflects actual status
             const isDone = event.part.state?.status === 'completed';
-            // [P1-2.6] Check exit code from state.metadata
             const exitCode = event.part.state?.metadata?.exit;
-            const isFailed = exitCode != null && exitCode !== 0;
+            const isFailed = isOpencodeToolFailure(event.part);
             const displayLabel = event.part.state?.title || event.part.tool || 'tool';
             labels.push({
                 icon: isFailed ? '❌' : (isDone ? '✅' : '🔧'),

@@ -35,6 +35,8 @@ export interface SpawnContext {
   opencodeStepText?: string;
   opencodeSawToolInStep?: boolean;
   opencodeTextAfterLastTool?: boolean;
+  opencodeHadToolErrorInStep?: boolean;
+  opencodePendingToolRefs?: string[];
   // Gemini watchdog flag (set on 'result' event, triggers kill timer in spawn.ts)
   geminiResultSeen?: boolean;
   // Claude-specific stream buffers (set by events.ts extractFromEvent)

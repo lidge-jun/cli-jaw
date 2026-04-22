@@ -755,15 +755,39 @@ test('extractOutputChunk returns live assistant text for gemini, opencode final 
 });
 
 test('opencode buffers pre-tool text until step_finish and discards tool-call chatter', () => {
-    const ctx = { toolLog: [], fullText: '', traceLog: [], pendingOutputChunk: '', opencodeStepText: '' };
+    const ctx = {
+        toolLog: [],
+        fullText: '',
+        traceLog: [],
+        pendingOutputChunk: '',
+        opencodeStepText: '',
+        opencodeSawToolInStep: false,
+        opencodeTextAfterLastTool: false,
+        opencodeHadToolErrorInStep: false,
+        opencodePendingToolRefs: [],
+    };
 
     extractFromEvent('opencode', { type: 'step_start', part: { model: 'kimi-k2.6' } }, ctx, 'oc');
     extractFromEvent('opencode', { type: 'text', part: { text: 'Let me check that first.' } }, ctx, 'oc');
+    extractFromEvent('opencode', {
+        type: 'tool_use',
+        part: {
+            tool: 'bash',
+            callID: 'bash:plan-0',
+            state: { input: { command: 'pwd' } },
+        },
+    }, ctx, 'oc');
     assert.equal(ctx.fullText, '');
     assert.equal(extractOutputChunk('opencode', { type: 'text', part: { text: 'Let me check that first.' } }, ctx), '');
 
     extractFromEvent('opencode', { type: 'step_finish', sessionID: 'oc-1', part: { reason: 'tool-calls' } }, ctx, 'oc');
     assert.equal(ctx.fullText, '');
+    assert.equal(ctx.toolLog.length, 2);
+    assert.equal(ctx.toolLog[0].status, 'done');
+    assert.equal(ctx.toolLog[0].icon, '✅');
+    assert.equal(ctx.toolLog[1].toolType, 'thinking');
+    assert.equal(ctx.toolLog[1].icon, '💭');
+    assert.equal(ctx.toolLog[1].detail, 'Let me check that first.');
     assert.equal(
         extractOutputChunk('opencode', { type: 'step_finish', sessionID: 'oc-1', part: { reason: 'tool-calls' } }, ctx),
         '',
@@ -789,6 +813,8 @@ test('opencode keeps text emitted after tool_use even when step_finish reason is
         opencodeStepText: '',
         opencodeSawToolInStep: false,
         opencodeTextAfterLastTool: false,
+        opencodeHadToolErrorInStep: false,
+        opencodePendingToolRefs: [],
     };
 
     extractFromEvent('opencode', { type: 'step_start', part: { model: 'kimi-k2.6' } }, ctx, 'oc');
@@ -819,6 +845,93 @@ test('opencode keeps text emitted after tool_use even when step_finish reason is
         }, ctx),
         'I could not read that file because permission was denied.',
     );
+});
+
+test('opencode discards post-tool progress text after successful tool_use when step_finish reason is tool-calls', () => {
+    const ctx = {
+        toolLog: [],
+        fullText: '',
+        traceLog: [],
+        pendingOutputChunk: '',
+        opencodeStepText: '',
+        opencodeSawToolInStep: false,
+        opencodeTextAfterLastTool: false,
+        opencodeHadToolErrorInStep: false,
+        opencodePendingToolRefs: [],
+    };
+
+    extractFromEvent('opencode', { type: 'step_start', part: { model: 'kimi-k2.6' } }, ctx, 'oc');
+    extractFromEvent('opencode', {
+        type: 'tool_use',
+        part: {
+            tool: 'bash',
+            callID: 'bash:0',
+            state: {
+                status: 'completed',
+                metadata: { exit: 0 },
+                input: { command: 'cat /tmp/example.txt' },
+            },
+        },
+    }, ctx, 'oc');
+    extractFromEvent('opencode', {
+        type: 'text',
+        part: { text: '좋아요! 파일 있네요! 내용 확인하고 websearch 추가할게요!' },
+    }, ctx, 'oc');
+    extractFromEvent('opencode', {
+        type: 'step_finish',
+        sessionID: 'oc-1',
+        part: { reason: 'tool-calls' },
+    }, ctx, 'oc');
+
+    assert.equal(ctx.fullText, '');
+    assert.equal(
+        extractOutputChunk('opencode', {
+            type: 'step_finish',
+            sessionID: 'oc-1',
+            part: { reason: 'tool-calls' },
+        }, ctx),
+        '',
+    );
+    assert.equal(ctx.toolLog[0].status, 'done');
+    assert.equal(ctx.toolLog[0].icon, '✅');
+});
+
+test('opencode marks unresolved bash exec as done when the step finishes cleanly', () => {
+    const ctx = {
+        toolLog: [],
+        fullText: '',
+        traceLog: [],
+        pendingOutputChunk: '',
+        opencodeStepText: '',
+        opencodeSawToolInStep: false,
+        opencodeTextAfterLastTool: false,
+        opencodeHadToolErrorInStep: false,
+        opencodePendingToolRefs: [],
+    };
+
+    extractFromEvent('opencode', { type: 'step_start', part: { model: 'kimi-k2.6' } }, ctx, 'oc');
+    extractFromEvent('opencode', {
+        type: 'tool_use',
+        part: {
+            tool: 'bash',
+            callID: 'bash:pending-0',
+            state: {
+                input: { command: 'cat /tmp/example.txt | head -20' },
+            },
+        },
+    }, ctx, 'oc');
+
+    assert.equal(ctx.toolLog[0].status, undefined);
+    assert.equal(ctx.toolLog[0].icon, '🔧');
+
+    extractFromEvent('opencode', {
+        type: 'step_finish',
+        sessionID: 'oc-1',
+        part: { reason: 'tool-calls' },
+    }, ctx, 'oc');
+
+    assert.equal(ctx.toolLog[0].status, 'done');
+    assert.equal(ctx.toolLog[0].icon, '✅');
 });
 
 // ─── #107 Gemini thought/thinking filtering ───

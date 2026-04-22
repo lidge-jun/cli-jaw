@@ -12,6 +12,7 @@ export type SessionPersistenceInput = {
     wasKilled?: boolean;
     cli: string;
     model: string;
+    resumeKey?: string | null;
     effort: string;
     permissions?: string;
     workingDir?: string;
@@ -63,7 +64,7 @@ export function persistMainSession(input: SessionPersistenceInput): boolean {
     // on cross-model toggles.
     const bucket = resolveSessionBucket(input.cli, input.model);
     if (bucket && input.sessionId) {
-        upsertSessionBucket.run(bucket, input.sessionId, input.model);
+        upsertSessionBucket.run(bucket, input.sessionId, input.model, input.resumeKey || null);
     }
     return true;
 }

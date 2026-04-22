@@ -15,6 +15,7 @@ export function resolveSessionBucket(cli: string | null | undefined, model: stri
 
 export function buildArgs(cli: string, model: string, effort: string, prompt: string, sysPrompt: string, permissions = 'auto', options: { fastMode?: boolean } = {}) {
     const autoPerm = permissions === 'auto';
+    const unattendedPerm = permissions === 'auto' || permissions === 'yolo';
     switch (cli) {
         case 'claude':
             return ['--print', '--verbose', '--output-format', 'stream-json',
@@ -51,6 +52,7 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
                 '-y', '-o', 'stream-json'];
         case 'opencode':
             return ['run',
+                ...(unattendedPerm ? ['--dangerously-skip-permissions'] : []),
                 ...(model && model !== 'default' ? ['-m', model] : []),
                 ...(effort ? ['--variant', effort] : []),
                 '--format', 'json',
@@ -62,6 +64,7 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
 
 export function buildResumeArgs(cli: string, model: string, effort: string, sessionId: string, prompt: string, permissions = 'auto', options: { fastMode?: boolean; sysPrompt?: string } = {}) {
     const autoPerm = permissions === 'auto';
+    const unattendedPerm = permissions === 'auto' || permissions === 'yolo';
     switch (cli) {
         case 'claude':
             return ['--print', '--verbose', '--output-format', 'stream-json',
@@ -92,6 +95,7 @@ export function buildResumeArgs(cli: string, model: string, effort: string, sess
                 '-y', '-o', 'stream-json'];
         case 'opencode':
             return ['run', '-s', sessionId,
+                ...(unattendedPerm ? ['--dangerously-skip-permissions'] : []),
                 ...(model && model !== 'default' ? ['-m', model] : []),
                 ...(effort ? ['--variant', effort] : []),
                 '--format', 'json',
