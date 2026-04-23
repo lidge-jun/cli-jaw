@@ -60,13 +60,29 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         const runtime = getRuntimeSnapshot();
         const scope = resolveOrcScope({ origin: 'web', workingDir: settings.workingDir || null });
         const ctx = getCtx(scope);
+        // Phase 56.1: whitelist-sanitize ctx so legacy fields (e.g. sharedPlanPath)
+        // from pre-56.1 DB rows don't leak through the snapshot API.
+        const safeCtx = ctx ? {
+            originalPrompt: ctx.originalPrompt,
+            workingDir: ctx.workingDir,
+            scopeId: ctx.scopeId,
+            plan: ctx.plan,
+            workerResults: ctx.workerResults,
+            origin: ctx.origin,
+            target: ctx.target,
+            chatId: ctx.chatId,
+            worklogPath: ctx.worklogPath,
+            planHash: ctx.planHash,
+            planUpdatedAt: ctx.planUpdatedAt,
+            auditStatus: ctx.auditStatus,
+            verificationStatus: ctx.verificationStatus,
+            userApproved: ctx.userApproved,
+        } : null;
         res.json({
             orc: {
                 scope,
                 state: getState(scope),
-                ctx,
-                // Phase 56: explicit plan metadata for UI/worker reference
-                sharedPlanPath: ctx?.sharedPlanPath || null,
+                ctx: safeCtx,
                 planHash: ctx?.planHash || null,
                 planUpdatedAt: ctx?.planUpdatedAt || null,
             },
@@ -156,12 +172,17 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
             }
         }
 
-        // Phase 57: Auto-prepend Shared Plan reference so workers (in isolated dirs) can read the plan.
+        // Phase 56.1: Auto-inject the full approved plan inline at the top of every
+        // dispatch task body. Workers no longer need to read any plan file — the plan
+        // is kept only in the worklog (## Plan section) and in ctx.plan.
         let enrichedTask: string = String(task);
-        if (dispatchCtx?.sharedPlanPath) {
-            enrichedTask = `IMPORTANT: First read the approved plan at: ${dispatchCtx.sharedPlanPath}\n\n${enrichedTask}`;
-        } else if (dispatchCtx?.plan) {
-            enrichedTask = `## Shared Plan (truncated to 3000 chars)\n${dispatchCtx.plan.slice(0, 3000)}\n\n---\n\n${enrichedTask}`;
+        if (dispatchCtx?.plan) {
+            enrichedTask = [
+                `## Approved Plan (auto-injected by orchestrator — do not ask user to repeat)`,
+                dispatchCtx.plan,
+                `---`,
+                enrichedTask,
+            ].join('\n\n');
         }
 
         const emps = getEmployees.all() as Record<string, any>[];

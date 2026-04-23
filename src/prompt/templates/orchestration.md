@@ -73,11 +73,11 @@ LLM advances phases by running `cli-jaw orchestrate A/B/C/D` — there is no aut
 
 **All code must pass static analysis (`tsc --noEmit`, `mypy`, `go vet`, etc.) before claiming completion.**
 
-### Shared Plan (`.shared_plan.md`)
-- When P phase completes (plan captured), the orchestrator writes `.shared_plan.md` to the project root. This is the **single source of truth** for the approved plan.
-- In A and B phases, **every dispatch task MUST reference `.shared_plan.md`**. Workers run in isolated directories and cannot see Boss context — they rely on this file.
-- Example dispatch body: `"Read .shared_plan.md first for the approved plan. Then verify: ..."`
-- If `.shared_plan.md` is missing (no plan captured), do not dispatch — return to P.
+### Shared Plan (auto-injected)
+- When P phase completes, the plan is saved to the **worklog `## Plan` section** (via `upsertWorklogSection`, single source of truth) and kept in `ctx.plan`.
+- In A and B phases, the orchestrator **auto-injects the full plan body** at the top of every `cli-jaw dispatch` task, prefixed with `## Approved Plan`.
+- Workers never need to read a file. Do NOT write `"Read .shared_plan.md"` in dispatch tasks — the plan is already inline.
+- If `ctx.plan` is missing (no plan captured), dispatch is blocked by the transition gate — return to P.
 
 ### Pitfalls (반드시 피해야 할 행동)
 
@@ -87,7 +87,7 @@ LLM advances phases by running `cli-jaw orchestrate A/B/C/D` — there is no aut
 - ✅ Only dispatch verification tasks: `"verify src/x.ts compiles and imports resolve"`.
 
 **Context Drift**
-- If a worker says "I'll proceed based on my assumption of the plan" → STOP and re-dispatch with `.shared_plan.md` path.
+- If a worker says "I'll proceed based on my assumption of the plan" → STOP and verify the dispatch call actually went through `/api/orchestrate/dispatch` (auto-injection only works on that path).
 - Never let workers reconstruct the plan from task description alone.
 
 **Phase Skip**

@@ -6,7 +6,7 @@ import { getMemoryStatus, searchIndexedMemory, readIndexedMemorySnippet, reflect
 import { ensureAdvancedMemoryStructure, scanSystemProfile } from '../memory/bootstrap.js';
 import { reindexSingleFile } from '../memory/indexing.js';
 import { getMemory } from '../core/db.js';
-import { settings } from '../core/config.js';
+import { settings, getServerUrl, JAW_HOME } from '../core/config.js';
 import { broadcast } from '../core/bus.js';
 import { submitMessage } from '../orchestrator/gateway.js';
 import { buildSoulBootstrapPrompt } from '../prompt/soul-bootstrap-prompt.js';
@@ -218,6 +218,8 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
                 profileContent,
                 kvEntries,
                 lang,
+                serverUrl: getServerUrl(),
+                instanceHome: JAW_HOME,
             });
 
             const result = submitMessage(prompt, {
