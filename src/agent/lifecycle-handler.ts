@@ -197,6 +197,49 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         console.log(`[jaw:session] saved ${cli} session=${persistedSessionId.slice(0, 12)}...${wasKilled ? ' (post-kill)' : ''}`);
     }
 
+    // ─── Phase 54-A: Proactive compact by turn count (Codex/Gemini) ───
+    // Non-Claude CLIs lack compact events. Suggest at 25 turns; force refresh at 35.
+    if (mainManaged && !opts.internal && code === 0 && !ctx.cliNativeCompactDetected) {
+        const turns = ctx.turns ?? memoryFlushCounter;
+        const isNonClaude = cli !== 'claude';
+        if (isNonClaude && turns >= 35) {
+            console.log(`[jaw:compact] ${cli} reached ${turns} turns — forcing auto-refresh`);
+            try {
+                const { autoCompactRefresh } = await import('../core/compact.js');
+                await autoCompactRefresh({
+                    workDir: settings.workingDir || '',
+                    instructions: prompt || '',
+                    cli,
+                    model,
+                });
+            } catch (e) {
+                console.warn('[jaw:compact] turn-count auto-refresh failed:', (e as Error).message);
+            }
+        } else if (isNonClaude && turns >= 25) {
+            console.log(`[jaw:compact] ${cli} at ${turns} turns — suggesting compact`);
+            broadcast('system_notice', {
+                code: 'compact_suggest',
+                text: `Session is at ${turns} turns. Consider running /compact to preserve context.`,
+            }, 'public');
+        }
+    }
+
+    // ─── Phase 54-C: Codex high-turn auto-compact coordination ───
+    // Codex may internally compact at high turn counts without notifying jaw.
+    // Force a fresh session on next spawn to avoid stale resume.
+    if (mainManaged && !opts.internal && code === 0 && !ctx.cliNativeCompactDetected) {
+        const turns = ctx.turns ?? memoryFlushCounter;
+        if ((cli === 'codex' || cli === 'opencode') && turns > 15) {
+            console.log(`[jaw:compact] ${cli} exited after ${turns} turns — clearing session bucket for fresh start`);
+            try {
+                const bucket = resolveSessionBucket(cli, model);
+                clearSessionBucket.run(bucket);
+            } catch (e) {
+                console.warn('[jaw:compact] session bucket clear failed:', (e as Error).message);
+            }
+        }
+    }
+
     // ─── Success: clear fallback state (auto-recovery) ───
     if (code === 0 && fallbackState.has(cli)) {
         console.log(`[jaw:fallback] ${cli} recovered — clearing fallback state`);

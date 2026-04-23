@@ -288,7 +288,9 @@ function appendLegacyMemoryContext(prompt: string) {
     try {
         const threshold = settings.memory?.flushEvery ?? 10;
         const injectInterval = Math.ceil(threshold / 2);
-        const shouldInject = memoryFlushCounter % injectInterval === 0;
+        // Phase 53-A: Always inject memory in the first 3 turns of a session
+        // so short conversations never miss context.
+        const shouldInject = memoryFlushCounter < 3 || memoryFlushCounter % injectInterval === 0;
         if (shouldInject) {
             const memories = loadRecentMemories();
             if (memories) {
@@ -367,7 +369,18 @@ export function getSystemPrompt(opts: { currentPrompt?: string; forDisk?: boolea
             prompt += '- temporary fallback memory context is active\n';
         }
     } else {
+        // Phase 54-B: forDisk (AGENTS.md) — include a minimal memory block
+        // so Codex/OpenCode sessions have soul, profile, and snapshot context.
         prompt = appendLegacyMemoryContext(prompt);
+        try {
+            const profile = loadProfileSummary(600);
+            const snapshot = buildTaskSnapshot('current session context', 1500);
+            if (profile || snapshot) {
+                prompt += '\n\n---\n## Core Memory\n';
+                if (profile) prompt += profile + '\n';
+                if (snapshot) prompt += '\n' + snapshot;
+            }
+        } catch { /* memory not ready for disk generation */ }
     }
 
     try {

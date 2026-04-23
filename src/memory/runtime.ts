@@ -4,7 +4,7 @@ import { join, relative } from 'path';
 import Database from 'better-sqlite3';
 import { JAW_HOME, settings } from '../core/config.js';
 import { instanceId } from '../core/instance.js';
-import { getMemory } from '../core/db.js';
+import { getMemory, getRecentMessages } from '../core/db.js';
 
 // Re-export everything from sub-modules for backward compatibility
 export {
@@ -169,8 +169,26 @@ export function buildTaskSnapshot(query: string | string[], budget = 2800, expan
     const terms = Array.isArray(query)
         ? query.map(v => String(v || '').trim()).filter(Boolean)
         : [String(query || '').trim()].filter(Boolean);
-    const cleaned = terms[0] || '';
+    let cleaned = terms[0] || '';
     if (!cleaned) return '';
+
+    // Phase 53-B: When the prompt is very short (e.g. "okay", "go", "yes"),
+    // supplement with keywords from recent DB messages so the snapshot
+    // returns meaningful context instead of empty.
+    if (cleaned.length < 20) {
+        try {
+            const wd = settings.workingDir || null;
+            const rows = (getRecentMessages.all(wd, 5) as Array<{ role?: string; content?: string }>) || [];
+            const recentText = rows
+                .filter(r => r.role === 'user' || r.role === 'assistant')
+                .map(r => String(r.content || '').slice(0, 200))
+                .join(' ');
+            if (recentText.length > 10) {
+                cleaned = `${cleaned} ${recentText}`.slice(0, 500);
+            }
+        } catch { /* DB not ready */ }
+    }
+
     const mergedExpanded = expanded?.length ? expanded : (terms.length > 1 ? terms.slice(1) : undefined);
     const { hits } = searchIndex(cleaned, mergedExpanded);
     if (!hits.length) return '';

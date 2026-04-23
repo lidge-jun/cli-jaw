@@ -173,12 +173,17 @@ function harvestRecentTurns(rows: MessageRow[]): string {
         })
         .slice(-10);
     const lines: string[] = [];
-    for (const row of windowRows) {
+    const totalRows = windowRows.length;
+    for (let i = 0; i < totalRows; i++) {
+        const row = windowRows[i]!;
         const role = safeText(row.role) || 'user';
         const body = role === 'assistant'
             ? safeText(row.content) || safeText(row.trace)
             : safeText(row.content);
-        const clipped = clipSlot(normalizeSummaryText(body), 380);
+        // Phase 53-C: Last 3 turns get 800 char budget to preserve recent agreements;
+        // older turns get 600 (up from 380) for better context.
+        const charLimit = (totalRows - i) <= 3 ? 800 : 600;
+        const clipped = clipSlot(normalizeSummaryText(body), charLimit);
         if (clipped) lines.push(`- [${role}] ${clipped}`);
     }
     let joined = lines.join('\n');
