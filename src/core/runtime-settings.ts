@@ -3,7 +3,7 @@ import {
     ensureWorkingDirSkillsLinks, initMcpConfig,
 } from '../../lib/mcp-sync.js';
 import { syncCodexContextWindow } from './codex-config.js';
-import { settings, replaceSettings, saveSettings } from './config.js';
+import { settings, replaceSettings, saveSettings, migrateSettings } from './config.js';
 import { syncMainSessionToSettings } from './main-session.js';
 import { mergeSettingsPatch } from './settings-merge.js';
 import { regenerateB } from '../prompt/builder.js';
@@ -22,7 +22,8 @@ export async function applyRuntimeSettingsPatch(
     const prevSnapshot = { ...settings };
 
     const merged = mergeSettingsPatch(settings, rawPatch);
-    replaceSettings(merged);
+    const migrated = migrateSettings(merged);
+    replaceSettings(migrated);
     saveSettings(settings);
 
     if (rawPatch.perCli?.codex && 'contextWindow' in rawPatch.perCli.codex) {

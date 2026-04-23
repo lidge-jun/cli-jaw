@@ -1,23 +1,26 @@
 // ─── Claude Model Normalization (single source of truth) ──────────
 
 export const CLAUDE_CANONICAL_MODELS = [
-  'claude-opus-4-6[1m]',
-  'claude-opus-4-6',
-  'claude-opus-4-7[1m]',
-  'claude-opus-4-7',
-  'claude-sonnet-4-6[1m]',
-  'claude-sonnet-4-6',
-  'claude-haiku-4-5',
+  'opus',
+  'sonnet',
+  'sonnet[1m]',
+  'haiku',
 ] as const;
 
 export type ClaudeCanonicalModel = (typeof CLAUDE_CANONICAL_MODELS)[number];
 
 export const CLAUDE_LEGACY_VALUE_MAP: Record<string, ClaudeCanonicalModel> = {
-  'sonnet': 'claude-sonnet-4-6',
-  'sonnet[1m]': 'claude-sonnet-4-6[1m]',
-  'opus': 'claude-opus-4-6',
-  'opus[1m]': 'claude-opus-4-6[1m]',
-  'haiku': 'claude-haiku-4-5',
+  // Reversal: full IDs → short aliases (Claude Code resolves aliases internally)
+  'claude-opus-4-6[1m]': 'opus',
+  'claude-opus-4-6': 'opus',
+  'claude-opus-4-7[1m]': 'opus',
+  'claude-opus-4-7': 'opus',
+  'claude-sonnet-4-6[1m]': 'sonnet[1m]',
+  'claude-sonnet-4-6': 'sonnet',
+  'claude-sonnet-4-5': 'sonnet',
+  'claude-haiku-4-5': 'haiku',
+  'claude-haiku-4-5-20251001': 'haiku',
+  'opus[1m]': 'opus',
 };
 
 export function isClaudeCli(cli: string): boolean {
@@ -39,7 +42,7 @@ export function migrateLegacyClaudeValue(model: string): string {
 }
 
 export function getDefaultClaudeModel(): ClaudeCanonicalModel {
-  return 'claude-sonnet-4-6';
+  return 'sonnet';
 }
 
 export function getDefaultClaudeChoices(): string[] {

@@ -666,6 +666,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     const isEmployee = !mainManaged;
     const empTag = isEmployee ? { isEmployee: true } : {};
     const liveScope = resolveOrcScope({ origin, chatId: opts.chatId, workingDir: settings.workingDir || null });
+    // Employee must not pollute boss's liveRun (see devlog 260423_employee_liverun_contamination)
+    const effectiveLiveScope = mainManaged ? liveScope : null;
 
     // INVARIANT: 모든 외부 호출은 gateway.ts isAgentBusy()를 거침.
     // 직접 spawnAgent 호출 시 retryPendingTimer도 확인할 것.
@@ -906,7 +908,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             hasClaudeStreamEvents: false, sessionId: null as string | null, cost: null as number | null,
             turns: null as number | null, duration: null as number | null, tokens: null as any, stderrBuf: '',
             thinkingBuf: '',
-            liveScope,
+            liveScope: effectiveLiveScope,
         };
 
         // Flush accumulated 💭 thinking buffer as a single merged event
@@ -919,7 +921,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 console.log(`  💭 ${label}`);
                 const tool = { icon: '💭', label, toolType: 'thinking' as const, detail: merged };
                 ctx.toolLog.push(tool);
-                replaceLiveRunTools(ctx.liveScope || 'default', ctx.toolLog);
+                if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
                 broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
             }
             ctx.thinkingBuf = '';
@@ -948,7 +950,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 if (!ctx.seenToolKeys.has(key)) {
                     ctx.seenToolKeys.add(key);
                     ctx.toolLog.push(parsed.tool);
-                    replaceLiveRunTools(ctx.liveScope || 'default', ctx.toolLog);
+                    if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
                     broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool, ...empTag });
                     // Reset heartbeat gate on actually visible broadcast (not 💭)
                     lastVisibleBroadcastTs = Date.now();
@@ -958,7 +960,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             if (parsed.text) {
                 flushThinking();
                 ctx.fullText += parsed.text;
-                appendLiveRunText(ctx.liveScope || 'default', parsed.text);
+                if (ctx.liveScope) appendLiveRunText(ctx.liveScope, parsed.text);
                 // text-only updates are local accumulation, not visible to user — no gate reset
             }
             opts.lifecycle?.onActivity?.('acp');
@@ -971,7 +973,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             });
             if (parsed?.tool) {
                 ctx.toolLog.push(parsed.tool);
-                replaceLiveRunTools(ctx.liveScope || 'default', ctx.toolLog);
+                if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
                 broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool, ...empTag });
             }
         });
@@ -983,7 +985,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             });
             if (parsed?.tool) {
                 ctx.toolLog.push(parsed.tool);
-                replaceLiveRunTools(ctx.liveScope || 'default', ctx.toolLog);
+                if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
                 broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool, ...empTag });
             }
         });
@@ -1123,6 +1125,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 fallbackState,
                 fallbackMaxRetries: FALLBACK_MAX_RETRIES,
                 processQueue,
+            }).catch((err: Error) => {
+                console.error('[jaw:lifecycle] handleAgentExit failed (ACP):', err.message);
             });
         });
 
@@ -1198,7 +1202,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
         tokens: null as any,
         stderrBuf: '',
         hasActiveSubAgent: false,
-        liveScope,
+        liveScope: effectiveLiveScope,
         geminiResultSeen: false,
     };
     let geminiWatchdog: ReturnType<typeof setTimeout> | null = null;
@@ -1233,7 +1237,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 }
                 const outputChunk = extractOutputChunk(cli, event, ctx);
                 if (outputChunk) {
-                    appendLiveRunText(ctx.liveScope || 'default', outputChunk);
+                    if (ctx.liveScope) appendLiveRunText(ctx.liveScope, outputChunk);
                     broadcast('agent_output', {
                         agentId: agentLabel,
                         cli,
@@ -1264,7 +1268,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
                 extractFromEvent(cli, lastEvent, ctx, agentLabel, empTag);
                 const outputChunk = extractOutputChunk(cli, lastEvent, ctx);
                 if (outputChunk) {
-                    appendLiveRunText(ctx.liveScope || 'default', outputChunk);
+                    if (ctx.liveScope) appendLiveRunText(ctx.liveScope, outputChunk);
                     broadcast('agent_output', { agentId: agentLabel, cli, text: outputChunk, ...empTag }, isEmployee ? 'internal' : 'public');
                 }
             } catch { /* incomplete JSON — discard */ }
@@ -1314,6 +1318,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
             fallbackState,
             fallbackMaxRetries: FALLBACK_MAX_RETRIES,
             processQueue,
+        }).catch((err: Error) => {
+            console.error('[jaw:lifecycle] handleAgentExit failed (CLI):', err.message);
         });
     });
 

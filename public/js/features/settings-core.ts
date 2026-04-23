@@ -75,12 +75,19 @@ function syncCliOptionSelects(settings: SettingsData | null = null): void {
 
 function normalizeModelForDisplay(cli: string, model: string): string {
     if (cli !== 'claude') return model;
-    switch ((model || '').trim()) {
-        case 'sonnet': return 'claude-sonnet-4-6';
-        case 'opus': return 'claude-opus-4-6';
-        case 'sonnet[1m]': return 'claude-sonnet-4-6[1m]';
-        case 'opus[1m]': return 'claude-opus-4-6[1m]';
-        default: return model;
+    const trimmed = (model || '').trim();
+    switch (trimmed) {
+        case 'claude-opus-4-6[1m]':
+        case 'claude-opus-4-6':
+        case 'claude-opus-4-7[1m]':
+        case 'claude-opus-4-7':
+        case 'opus[1m]': return 'opus';
+        case 'claude-sonnet-4-6[1m]': return 'sonnet[1m]';
+        case 'claude-sonnet-4-6':
+        case 'claude-sonnet-4-5': return 'sonnet';
+        case 'claude-haiku-4-5':
+        case 'claude-haiku-4-5-20251001': return 'haiku';
+        default: return trimmed;
     }
 }
 

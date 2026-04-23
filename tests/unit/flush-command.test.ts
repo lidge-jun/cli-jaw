@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { join, delimiter } from 'node:path';
 import { tmpdir } from 'node:os';
 import { flushHandler } from '../../src/cli/handlers.ts';
+import { migrateSettings } from '../../src/core/config.ts';
 
 // ─── Mock helpers ────────────────────────────────────
 // Note: locales are NOT loaded in test context, so t() falls back to key name.
@@ -26,7 +27,10 @@ function makeCtx(overrides: Record<string, any> = {}) {
         settings,
         getSettings: async () => settings,
         updateSettings: async (patch: any) => {
-            if (patch.memory) settings.memory = { ...settings.memory, ...patch.memory };
+            // Mirror production runtime-settings path: mergeSettingsPatch + migrateSettings
+            const merged = { ...settings, ...patch, memory: { ...settings.memory, ...(patch.memory || {}) } };
+            const migrated = migrateSettings(merged);
+            Object.assign(settings, migrated);
             return { ok: true };
         },
     };
@@ -185,16 +189,17 @@ test('FC-009: /flush <legacy-full-name> infers claude via LEGACY_MODEL_CLI_HINTS
         const result = await flushHandler(['claude-opus-4-6[1m]'], ctx);
         assert.equal(result.ok, true);
         assert.equal(ctx.settings.memory.cli, 'claude');
-        assert.equal(ctx.settings.memory.model, 'claude-opus-4-6[1m]');
+        // Runtime migrateSettings normalizes full ID → alias on save
+        assert.equal(ctx.settings.memory.model, 'opus');
     });
 });
 
-test('FC-010: /flush claude <legacy-full-name> preserves explicit model literally', async () => {
+test('FC-010: /flush claude <legacy-full-name> normalizes model to alias via migration', async () => {
     await withIsolatedPath(['claude'], async () => {
         const ctx = makeCtx();
         const result = await flushHandler(['claude', 'claude-opus-4-6[1m]'], ctx);
         assert.equal(result.ok, true);
         assert.equal(ctx.settings.memory.cli, 'claude');
-        assert.equal(ctx.settings.memory.model, 'claude-opus-4-6[1m]');
+        assert.equal(ctx.settings.memory.model, 'opus');
     });
 });

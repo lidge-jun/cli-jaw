@@ -26,7 +26,7 @@ export interface SpawnContext {
   stderrBuf: string;
   hasActiveSubAgent?: boolean;
   thinkingBuf?: string;
-  liveScope?: string;
+  liveScope?: string | null;
   // Phase 3: model/metadata storage
   model?: string;
   metadata?: Record<string, any>;

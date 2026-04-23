@@ -45,18 +45,25 @@ const PHASE_COLORS: Record<string, string> = {
 
 function normalizeEmployeeModel(cli: string, model?: string): string {
     if (cli !== 'claude') return model || 'default';
-    switch ((model || '').trim()) {
-        case 'sonnet': return 'claude-sonnet-4-6';
-        case 'opus': return 'claude-opus-4-6';
-        case 'sonnet[1m]': return 'claude-sonnet-4-6[1m]';
-        case 'opus[1m]': return 'claude-opus-4-6[1m]';
-        default: return model || 'default';
+    const trimmed = (model || '').trim();
+    switch (trimmed) {
+        case 'claude-opus-4-6[1m]':
+        case 'claude-opus-4-6':
+        case 'claude-opus-4-7[1m]':
+        case 'claude-opus-4-7':
+        case 'opus[1m]': return 'opus';
+        case 'claude-sonnet-4-6[1m]': return 'sonnet[1m]';
+        case 'claude-sonnet-4-6':
+        case 'claude-sonnet-4-5': return 'sonnet';
+        case 'claude-haiku-4-5':
+        case 'claude-haiku-4-5-20251001': return 'haiku';
+        default: return trimmed || 'default';
     }
 }
 
 function getDefaultEmployeeModel(cli: string, models: string[]): string {
     if (cli !== 'claude') return 'default';
-    if (models.includes('claude-sonnet-4-6')) return 'claude-sonnet-4-6';
+    if (models.includes('sonnet')) return 'sonnet';
     return models[0] || 'default';
 }
 

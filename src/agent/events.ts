@@ -4,12 +4,13 @@ import { broadcast } from '../core/bus.js';
 import type { SpawnContext } from '../types/agent.js';
 import { appendLiveRunText, replaceLiveRunTools } from './live-run-state.js';
 
-function liveScopeOf(ctx: SpawnContext): string {
-    return ctx.liveScope || 'default';
+function liveScopeOf(ctx: SpawnContext): string | null {
+    return ctx.liveScope ?? null;
 }
 
 function syncLiveTools(ctx: SpawnContext): void {
-    replaceLiveRunTools(liveScopeOf(ctx), ctx.toolLog);
+    const scope = liveScopeOf(ctx);
+    if (scope) replaceLiveRunTools(scope, ctx.toolLog);
 }
 
 /** Flush Claude-specific stream buffers (thinking + input_json).
@@ -344,7 +345,8 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                 for (const block of event.message.content) {
                     if (block.type === 'text') {
                         ctx.fullText += block.text;
-                        appendLiveRunText(liveScopeOf(ctx), block.text);
+                        const scope = liveScopeOf(ctx);
+                        if (scope) appendLiveRunText(scope, block.text);
                     }
                 }
             } else if (event.type === 'result') {

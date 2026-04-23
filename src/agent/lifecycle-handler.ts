@@ -36,7 +36,7 @@ export interface ExitContext {
     toolLog: any[];
     traceLog: any[];
     stderrBuf: string;
-    liveScope?: string;
+    liveScope?: string | null;
     cost?: { input?: number; output?: number } | number | null;
     turns?: number | null;
     duration?: number | null;
@@ -89,7 +89,7 @@ export interface ExitHandlerParams {
  * Handles: smoke continuation, process cleanup, session persistence,
  * fallback recovery, output save, error classification, 429 retry, fallback.
  */
-export function handleAgentExit(params: ExitHandlerParams): void {
+export async function handleAgentExit(params: ExitHandlerParams): Promise<void> {
     const {
         ctx, code, cli, model, agentLabel, mainManaged, origin,
         prompt, opts, cfg, ownerGeneration, forceNew, empSid,
@@ -171,17 +171,20 @@ export function handleAgentExit(params: ExitHandlerParams): void {
         postFlushReindex();
     }
 
-    // ─── CLI-native compact → auto session refresh ───
+    // ─── CLI-native compact → auto session refresh (awaited to avoid race with processQueue) ───
     if (ctx.cliNativeCompactDetected && mainManaged && !opts.internal) {
         console.log('[jaw:compact] CLI-native compaction detected — auto-refreshing session');
-        import('../core/compact.js').then(({ autoCompactRefresh }) => {
-            autoCompactRefresh({
+        try {
+            const { autoCompactRefresh } = await import('../core/compact.js');
+            await autoCompactRefresh({
                 workDir: settings.workingDir || '',
                 instructions: prompt || '',
                 cli,
                 model,
-            }).catch(e => console.warn('[jaw:compact] auto-refresh failed:', e.message));
-        });
+            });
+        } catch (e) {
+            console.warn('[jaw:compact] auto-refresh failed:', (e as Error).message);
+        }
     }
 
     // ─── Session persistence ───

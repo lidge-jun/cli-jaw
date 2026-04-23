@@ -306,8 +306,14 @@ export async function flushHandler(args: any[], ctx: any) {
         const modelName = args.join(' ').trim();
         const modelKey = modelName.toLowerCase();
 
-        // Legacy full-name hints for old Claude values
+        // Hints for inferring the claude CLI from a bare model name
         const LEGACY_MODEL_CLI_HINTS: Record<string, string> = {
+            // New short aliases (canonical)
+            'opus': 'claude',
+            'sonnet': 'claude',
+            'sonnet[1m]': 'claude',
+            'haiku': 'claude',
+            // Legacy full IDs (preserved for backward compat)
             'claude-sonnet-4-6': 'claude',
             'claude-opus-4-6': 'claude',
             'claude-sonnet-4-6[1m]': 'claude',
@@ -372,10 +378,14 @@ export async function ideHandler(args: string[], ctx: any) {
 }
 
 export async function orchestrateHandler(args: string[], ctx: any) {
-    const { getState, setState, resetState, canTransition, getStatePrompt } = await import('../orchestrator/state-machine.js');
+    const { getState, setState, resetState, canTransition, getStatePrompt, getCtx } = await import('../orchestrator/state-machine.js');
     const { resolveOrcScope } = await import('../orchestrator/scope.js');
     type OrcStateName = 'IDLE' | 'P' | 'A' | 'B' | 'C' | 'D';
-    const target = (args[0] || 'P').toUpperCase();
+
+    // Phase 58: --force overrides audit/verification gates by setting userApproved.
+    const force = args.includes('--force');
+    const positional = args.filter(a => !a.startsWith('--'));
+    const target = (positional[0] || 'P').toUpperCase();
 
     const origin = ctx?.interface || 'web';
     const scope = resolveOrcScope({ origin, workingDir: settings.workingDir || null });
@@ -392,8 +402,15 @@ export async function orchestrateHandler(args: string[], ctx: any) {
 
     const current = getState(scope);
     const t = target as OrcStateName;
-    if (!canTransition(current, t)) {
-        return { ok: false, text: `Cannot transition: ${current} → ${t}` };
+    const currentCtx = getCtx(scope);
+    // Phase 58: Apply --force by stamping userApproved on ctx before gate check.
+    const gateCtx = force && currentCtx ? { ...currentCtx, userApproved: true } : currentCtx;
+    if (force && currentCtx) {
+        setState(current, gateCtx, scope);
+    }
+    const gate = canTransition(current, t, gateCtx);
+    if (!gate.ok) {
+        return { ok: false, text: `Cannot transition: ${gate.reason}` };
     }
 
     if (t === 'D') {
