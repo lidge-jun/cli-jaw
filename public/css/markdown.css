@@ -280,6 +280,31 @@
     max-width: 100%;
 }
 
+/* Phase 127-F1: skeleton placeholder while mermaid renders */
+.mermaid-skeleton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 24px 12px;
+    color: var(--text-dim);
+}
+.mermaid-skeleton-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid color-mix(in oklch, var(--text) 15%, transparent);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: mermaid-spin 0.8s linear infinite;
+}
+.mermaid-skeleton-text {
+    font-size: 13px;
+    font-style: italic;
+}
+@keyframes mermaid-spin {
+    to { transform: rotate(360deg); }
+}
+
 /* Mermaid popup button */
 .mermaid-zoom-btn {
     position: absolute;

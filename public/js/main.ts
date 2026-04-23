@@ -39,6 +39,7 @@ window.addEventListener('error', (e) => {
 
 import { connect } from './ws.js';
 import { switchTab, handleSave, loadMessages, initMsgCopy } from './ui.js';
+import { prewarmMermaid } from './render.js';
 import { sendMessage, handleKey, clearAttachedFiles, removeAttachedFile, clearChat, initDragDrop, initAutoResize } from './features/chat.js';
 import {
     loadCommands, update as updateSlashDropdown, handleKeydown as handleSlashKeydown,
@@ -465,6 +466,9 @@ async function bootstrap(): Promise<void> {
     initMsgCopy();
     initGestures();
     try { sessionStorage.removeItem(STALE_BUNDLE_RELOAD_KEY); } catch {}
+
+    // Phase 127-F2: prewarm Mermaid at idle so first diagram renders fast
+    prewarmMermaid();
 
     // Register Service Worker (production only — Vite HMR handles dev)
     if ('serviceWorker' in navigator && !import.meta.env.DEV) {

@@ -169,7 +169,7 @@ export function sanitizeHtml(html: string): string {
                       'background'],  // legacy HTML attr that triggers remote fetch
         ADD_TAGS: ['use'],
         ADD_ATTR: ['aria-hidden', 'xmlns', 'viewBox', 'role', 'aria-label',
-                   'data-jaw-svg', 'data-jaw-kind'],
+                   'data-jaw-svg', 'data-jaw-kind', 'data-mermaid-code-raw'],
     });
 }
 
@@ -390,7 +390,9 @@ function renderMermaidError(el: HTMLElement, code: string, errMsg: string): void
 
 async function renderSingleMermaidImpl(el: HTMLElement): Promise<void> {
     el.classList.remove('mermaid-pending');
-    const code = el.textContent || '';
+    // Phase 127-F1: raw source lives in data attribute (skeleton DOM has no source text).
+    const encoded = el.dataset.mermaidCodeRaw || '';
+    const code = encoded ? decodeURIComponent(encoded) : (el.textContent || '');
     el.dataset.mermaidCode = code;
     const id = `mermaid-${++mermaidId}`;
     try {
@@ -412,16 +414,64 @@ async function renderSingleMermaidImpl(el: HTMLElement): Promise<void> {
 // Serialise renders to prevent concurrent Mermaid operations from
 // corrupting shared internal state (theme config, diagram registry).
 function renderSingleMermaid(el: HTMLElement): void {
-    mermaidQueue = mermaidQueue.then(() => renderSingleMermaidImpl(el));
+    // Phase 127-N2: synchronous queued guard prevents duplicate enqueueing when
+    // renderMermaidBlocks immediate mode fires repeatedly (e.g. VS onPostRender
+    // on every scroll). Class/dataset is set right away so the next pass skips.
+    if (el.dataset.mermaidQueued === '1') return;
+    el.dataset.mermaidQueued = '1';
+    // Phase 127-F6: .catch tail keeps the queue alive after any rejection so
+    // one bad render cannot permanently block subsequent diagrams.
+    mermaidQueue = mermaidQueue
+        .then(() => renderSingleMermaidImpl(el))
+        .catch(err => {
+            console.error('[mermaid:queue] render failed, keeping queue alive:', err);
+        });
 }
 
-async function renderMermaidBlocks(scope?: HTMLElement | Document): Promise<void> {
+/**
+ * Phase 127-F5: exposed so streaming finalize / virtual-scroll hooks can push
+ * new mermaid blocks through the pipeline without waiting for schedulePostRender.
+ *
+ * @param scope DOM subtree to scan (defaults to whole document)
+ * @param opts.immediate if true, render blocks already in (or near) viewport
+ *                       right now instead of waiting for the observer.
+ */
+export async function renderMermaidBlocks(
+    scope?: HTMLElement | Document,
+    opts: { immediate?: boolean } = {},
+): Promise<void> {
     const root = scope || document;
-    const pending = root.querySelectorAll('.mermaid-pending');
+    const pending = root.querySelectorAll<HTMLElement>('.mermaid-pending');
     if (!pending.length) return;
     ensureMermaidObserver();
     for (const el of pending) {
+        if (el.dataset.mermaidQueued === '1') continue;   // N2 guard
+        if (opts.immediate) {
+            const rect = el.getBoundingClientRect();
+            const vh = window.innerHeight || document.documentElement.clientHeight;
+            const inView = rect.bottom >= -200 && rect.top <= vh + 200;
+            if (inView) {
+                mermaidObserver!.unobserve(el);
+                renderSingleMermaid(el);
+                continue;
+            }
+        }
         mermaidObserver!.observe(el);
+    }
+}
+
+/**
+ * Phase 127-F2: prewarm Mermaid module at idle time so the first diagram's
+ * cold-start does not block rendering. Safe to call multiple times.
+ */
+export function prewarmMermaid(): void {
+    if (mermaidModule) return;
+    const run = () => { void ensureMermaidLoaded().catch(() => { /* silent */ }); };
+    if (typeof (window as unknown as { requestIdleCallback?: unknown }).requestIdleCallback === 'function') {
+        (window as unknown as { requestIdleCallback: (cb: () => void, opts?: { timeout?: number }) => void })
+            .requestIdleCallback(run, { timeout: 2000 });
+    } else {
+        setTimeout(run, 500);
     }
 }
 
@@ -436,7 +486,15 @@ function ensureMarked(): boolean {
     // Code blocks: highlight.js + mermaid + diagram-html detection
     renderer.code = function ({ text, lang }: { text: string; lang?: string }) {
         if (lang === 'mermaid') {
-            return `<div class="mermaid-container mermaid-pending">${escapeHtml(text)}</div>`;
+            // Phase 127-F1: store raw source in data attribute, render a skeleton
+            // placeholder so users never see raw Mermaid syntax while the diagram loads.
+            const encodedCode = encodeURIComponent(text);
+            return `<div class="mermaid-container mermaid-pending" data-mermaid-code-raw="${encodedCode}" role="status" aria-label="Diagram loading">
+                <div class="mermaid-skeleton">
+                    <div class="mermaid-skeleton-spinner"></div>
+                    <div class="mermaid-skeleton-text">Rendering diagram…</div>
+                </div>
+            </div>`;
         }
         // diagram-html: encode as base64, Phase 2 activateWidgets() inflates to sandboxed iframe
         if (lang?.trim().toLowerCase() === 'diagram-html') {

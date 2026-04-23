@@ -1,6 +1,7 @@
 // ── UI Utilities ──
 import { state } from './state.js';
 import { renderMarkdown, escapeHtml, stripOrchestration, linkifyFilePaths } from './render.js';
+import { renderMermaidBlocks } from './render.js';
 import { generateId } from './uuid.js';
 import { getAppName } from './features/appname.js';
 import { getAgentAvatarMarkup, getUserAvatarMarkup } from './features/avatar.js';
@@ -291,6 +292,12 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
         if (content) content.innerHTML = toolHtml + renderMarkdown(finalText);
         if (content) content.setAttribute('data-raw', stripOrchestration(finalText));
         if (content) activateWidgets(content as HTMLElement);
+        // Phase 127-F5: kick off mermaid render immediately for this message's scope —
+        // bypasses the 100ms postRender debounce so the just-finished answer doesn't
+        // sit in the "Rendering diagram…" skeleton longer than needed.
+        if (content) {
+            void renderMermaidBlocks(content as HTMLElement, { immediate: true });
+        }
 
         // Promote streaming div from real DOM into VS if active.
         // Revert activated widgets back to pending state so VS can
@@ -396,6 +403,8 @@ export function addMessage(role: string, text: string, cli?: string | null): HTM
                 vs.onPostRender = (viewport: HTMLElement) => {
                     activateWidgets(viewport);
                     linkifyFilePaths(viewport);
+                    // Phase 127-F7b: render mermaid in newly mounted VS viewport
+                    void renderMermaidBlocks(viewport, { immediate: true });
                 };
             }
         }
@@ -509,6 +518,8 @@ function registerVirtualScrollCallbacks(vs: ReturnType<typeof getVirtualScroll>)
             el.innerHTML = raw ? renderMarkdown(raw) : '';
             el.classList.remove('lazy-pending');
             activateWidgets(el);
+            // Phase 127-F7a: lazy-rendered blocks (fresh markdown just converted)
+            void renderMermaidBlocks(el, { immediate: true });
             const msgEl = el.closest('[data-vs-idx]') as HTMLElement | null;
             if (msgEl) {
                 const idx = Number(msgEl.dataset.vsIdx);
@@ -519,6 +530,10 @@ function registerVirtualScrollCallbacks(vs: ReturnType<typeof getVirtualScroll>)
     vs.onPostRender = (viewport: HTMLElement) => {
         activateWidgets(viewport);
         linkifyFilePaths(viewport);
+        // Phase 127-F7b: mounted viewport scope — handles VS items that arrive
+        // pre-rendered with .mermaid-pending (buildVirtualHistoryItems path,
+        // addMessage append path). These are NOT .lazy-pending so F7a misses them.
+        void renderMermaidBlocks(viewport, { immediate: true });
     };
 }
 
