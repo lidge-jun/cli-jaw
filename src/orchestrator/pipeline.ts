@@ -2,8 +2,6 @@
 // Old round-loop pipeline fully removed.
 // PABCD state machine is the sole orchestration system.
 
-import fs from 'fs';
-import { join } from 'path';
 import crypto from 'crypto';
 import { broadcast } from '../core/bus.js';
 import { settings } from '../core/config.js';
@@ -18,7 +16,7 @@ import { spawnAgent, killAgentById } from '../agent/spawn.js';
 import {
     createWorklog,
     readLatestWorklog,
-    appendToWorklog, updateWorklogStatus,
+    appendToWorklog, upsertWorklogSection, updateWorklogStatus,
 } from '../memory/worklog.js';
 import { findEmployee, runSingleAgent, validateParallelSafety } from './distribute.js';
 import {
@@ -270,39 +268,21 @@ export async function orchestrate(
                 // Re-derive title from this scope's original prompt to avoid cross-scope worklog bleed
                 const title = pickWorklogSeed(savedCtx.originalPrompt);
 
-                // Phase 56: Write .shared_plan.md so workers (in isolated dirs) can read the plan.
-                let sharedPlanPath: string | undefined;
-                let planHash: string | undefined;
+                // Phase 56.1: plan persists in worklog + ctx only. No project-root file.
                 const updatedAt = new Date().toISOString();
-                try {
-                    const planDir = savedCtx.workingDir || settings.workingDir || process.cwd();
-                    sharedPlanPath = join(planDir, '.shared_plan.md');
-                    const content = [
-                        `# Shared Plan`,
-                        `> Generated: ${updatedAt}`,
-                        `> Scope: ${scope}`,
-                        ``,
-                        newPlan,
-                    ].join('\n');
-                    fs.writeFileSync(sharedPlanPath, content);
-                    planHash = crypto.createHash('sha256').update(content).digest('hex').slice(0, 12);
-                } catch (err) {
-                    console.warn('[jaw:shared-plan] write failed:', (err as Error).message);
-                }
+                const planHash = crypto.createHash('sha256').update(newPlan).digest('hex').slice(0, 12);
 
-                // Phase 56: append plan body to worklog ## Plan section (replaces "(대기 중)")
+                // Worklog ## Plan section (upsert — replaces "(대기 중)" and never accumulates)
                 if (savedCtx.worklogPath) {
-                    try {
-                        appendToWorklog(savedCtx.worklogPath, 'Plan', newPlan);
-                    } catch (err) {
-                        console.warn('[jaw:shared-plan] worklog append failed:', (err as Error).message);
-                    }
+                    upsertWorklogSection(savedCtx.worklogPath, 'Plan', newPlan);
                 }
 
+                // Phase 56.1: explicitly omit legacy sharedPlanPath from DB row carry-over.
+                const { sharedPlanPath: _legacy, ...restCtx } = savedCtx as typeof savedCtx & { sharedPlanPath?: string };
+                void _legacy;
                 setState('P', {
-                    ...savedCtx,
+                    ...restCtx,
                     plan: newPlan,
-                    sharedPlanPath,
                     planHash,
                     planUpdatedAt: updatedAt,
                 }, scope, title);

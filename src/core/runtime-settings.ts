@@ -36,7 +36,35 @@ export async function applyRuntimeSettingsPatch(
     }
 
     opts.resetFallbackState?.();
-    syncMainSessionToSettings(prevCli);
+
+    // CLI-changed branch delegates main-session clearing to cliSwitchRefresh
+    // (which writes a cleared row inside its DB transaction). On refresh failure
+    // we revert settings; the original session row is preserved because nothing
+    // touched it on this branch (no syncMainSessionToSettings call).
+    const cliChanged = !!(prevCli && settings.cli && prevCli !== settings.cli);
+    if (cliChanged) {
+        const toCli = settings.cli;
+        const toModel = settings.activeOverrides?.[toCli]?.model
+            || settings.perCli?.[toCli]?.model
+            || 'default';
+        try {
+            const { cliSwitchRefresh } = await import('./compact.js');
+            await cliSwitchRefresh({
+                sourceWorkDir: prevWorkingDir || '',
+                targetWorkDir: settings.workingDir || '',
+                fromCli: prevCli,
+                toCli,
+                toModel,
+            });
+        } catch (e: unknown) {
+            console.error('[runtime-settings] cli switch refresh failed, rolling back:', (e as Error).message);
+            replaceSettings(prevSnapshot);
+            saveSettings(prevSnapshot);
+            throw e;
+        }
+    } else {
+        syncMainSessionToSettings(prevCli);
+    }
 
     if (settings.workingDir !== prevWorkingDir) {
         try {

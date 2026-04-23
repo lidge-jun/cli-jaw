@@ -24,9 +24,8 @@ export interface OrcContext {
   origin: string;
   target?: RemoteTarget;
   chatId?: string | number;
-  // ─── Phase 56: Shared Plan persistence ────────────
+  // ─── Phase 56.1: Plan lives in worklog ## Plan, not in project-root file ──
   worklogPath?: string;
-  sharedPlanPath?: string;
   planHash?: string;
   planUpdatedAt?: string;
   // ─── Phase 58: Phase-transition gates ─────────────
@@ -117,9 +116,9 @@ User says:`,
   // Phase 59: A-phase user (non-worker) message — e.g. first entry after P approval.
   // Was previously reusing Ab2 ("Employee Results") which misled the model.
   Ap: `[PLAN AUDIT — User Message]
-You are in PLAN AUDIT phase. The approved plan is in \`.shared_plan.md\` at project root.
-If you have not dispatched an audit worker yet, do so now. Every dispatch task
-MUST instruct the worker to read \`.shared_plan.md\` first.
+You are in PLAN AUDIT phase. The approved plan is auto-injected at the top of every
+dispatch task body under \`## Approved Plan\` — you do not need to read any file.
+Do NOT tell the worker to read a plan file; just write the audit task itself.
 
 ⛔ STOP after dispatching and reporting audit results. WAIT for user approval.
 
@@ -184,15 +183,15 @@ An employee must verify that your plan from P phase is feasible and safe before 
 ⚠️ You MUST dispatch an audit employee. Do NOT skip this step.
 ⚠️ Do NOT say "audit is unnecessary" — every plan must be verified before coding.
 
-FIRST: The approved plan has been written to \`.shared_plan.md\` in the project root.
-Every dispatch task in this phase MUST reference this file so the worker can read it
-in their isolated directory.
+FIRST: The approved plan is auto-injected at the top of every \`cli-jaw dispatch\`
+task body under \`## Approved Plan\`. Do NOT tell the worker to read any file —
+just write the audit task itself.
 
 Run this command now:
 \`\`\`bash
 cli-jaw dispatch --agent "Backend" --task "⛔ READ-ONLY: Do NOT create, modify, or delete ANY files. You are an auditor, not a builder.
 
-FIRST: Read .shared_plan.md in the project root — this is the approved plan.
+The approved plan is already injected above under \`## Approved Plan\` — read it there.
 
 Audit the PLAN (not code). Verify:
 1) All imports in the plan resolve to real files.
@@ -220,14 +219,14 @@ You are now in Build mode. The plan has been audited and approved.
 ✅ Allowed dispatch examples: "verify src/x.ts compiles", "check integration of Y reports DONE/NEEDS_FIX".
 
 Steps:
-1. Read the approved plan: the full body is in \`.shared_plan.md\` at project root.
+1. Read the approved plan: the full body is auto-injected at the top of this task body (under \`## Approved Plan\`).
 2. Implement ALL changes yourself — create/modify/delete files as specified in the plan.
 3. After YOU finish implementing, dispatch a verification employee:
 
 \`\`\`bash
 cli-jaw dispatch --agent "Backend" --task "⛔ READ-ONLY: Do NOT create, modify, or delete ANY files. You are a verifier, not a builder.
 
-FIRST: Read .shared_plan.md in the project root — this is the approved plan.
+The approved plan is already injected above under \`## Approved Plan\` — read it there.
 
 Verify:
 1) Files in plan exist with expected content.

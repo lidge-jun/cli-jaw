@@ -8,7 +8,7 @@ import { JAW_HOME } from '../core/config.js';
 // ─── Write Lock (prevents race condition in parallel agent writes) ──
 const writeLocks = new Map<string, Promise<void>>();
 
-function withWriteLock(filePath: string, fn: () => void): void {
+function withWriteLock(filePath: string, fn: () => void): Promise<void> {
     const prev = writeLocks.get(filePath) || Promise.resolve();
     const next = prev.then(() => {
         fn();
@@ -16,6 +16,7 @@ function withWriteLock(filePath: string, fn: () => void): void {
         console.error(`[worklog:lock] write error for ${filePath}:`, (e as Error).message);
     });
     writeLocks.set(filePath, next);
+    return next;
 }
 
 export const WORKLOG_DIR = join(JAW_HOME, 'worklogs');
@@ -84,10 +85,10 @@ export function readLatestWorklog() {
 
 // ─── Append ──────────────────────────────────────────
 
-export function appendToWorklog(wlPath: string, section: string, content: string) {
-    if (!wlPath || !fs.existsSync(wlPath)) return;
+export function appendToWorklog(wlPath: string, section: string, content: string): Promise<void> {
+    if (!wlPath || !fs.existsSync(wlPath)) return Promise.resolve();
 
-    withWriteLock(wlPath, () => {
+    return withWriteLock(wlPath, () => {
         const file = fs.readFileSync(wlPath, 'utf8');
         const marker = `## ${section}`;
         const idx = file.indexOf(marker);
@@ -102,6 +103,32 @@ export function appendToWorklog(wlPath: string, section: string, content: string
             const updated = file.slice(0, insertPos) + '\n' + content + '\n' + file.slice(insertPos);
             fs.writeFileSync(wlPath, updated);
         }
+    });
+}
+
+// ─── Upsert (Phase 56.1 — replace section body instead of appending) ──
+
+export function upsertWorklogSection(wlPath: string, section: string, content: string): Promise<void> {
+    if (!wlPath || !fs.existsSync(wlPath)) return Promise.resolve();
+
+    return withWriteLock(wlPath, () => {
+        const file = fs.readFileSync(wlPath, 'utf8');
+        const marker = `## ${section}`;
+        const idx = file.indexOf(marker);
+        const body = `\n${content}\n`;
+
+        if (idx === -1) {
+            // 섹션이 없으면 파일 끝에 신규 추가
+            fs.appendFileSync(wlPath, `\n## ${section}${body}`);
+            return;
+        }
+
+        // 기존 섹션 body 전체를 교체 (다음 `\n## ` 또는 EOF 직전까지)
+        const headerEnd = idx + marker.length;
+        const nextSection = file.indexOf('\n## ', headerEnd);
+        const end = nextSection === -1 ? file.length : nextSection;
+        const updated = file.slice(0, headerEnd) + body + file.slice(end);
+        fs.writeFileSync(wlPath, updated);
     });
 }
 

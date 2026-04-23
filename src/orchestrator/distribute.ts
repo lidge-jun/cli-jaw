@@ -298,10 +298,13 @@ export async function runSingleAgent(
         .join('→');
 
     const worklogPath = String(worklog?.path || '').trim();
+    // Phase 56.1: plan is auto-injected at the top of the task body via ## Approved Plan.
+    // The worklog is now an optional reference for prior execution context; the worker
+    // does NOT need to read it to find the plan.
     const worklogBlock = worklogPath
-        ? `## Worklog
-Read this file first: ${worklogPath}
-After completing your task, record results in the Execution Log section.`
+        ? `## Worklog (optional reference)
+The approved plan has already been injected above as \`## Approved Plan\` — you do NOT need to read the worklog for the plan.
+If you want to review prior execution context or record your progress, the worklog lives at: ${worklogPath}`
         : '';
 
     const taskPrompt = `## Task Instruction [${phaseLabel}]

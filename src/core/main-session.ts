@@ -161,6 +161,16 @@ export function setPendingBootstrapPrompt(text: string | null): void {
     }
 }
 
+// Strict variant: throws on DB failure. Use inside transactions where the caller
+// must know about persistence loss so the surrounding tx can roll back.
+export function setPendingBootstrapPromptStrict(text: string | null): void {
+    if (text && text.trim()) {
+        upsertMemory.run(BOOTSTRAP_KEY, text, BOOTSTRAP_SOURCE);
+    } else {
+        deleteMemory.run(BOOTSTRAP_KEY);
+    }
+}
+
 export function consumePendingBootstrapPrompt(): string | null {
     const out = readBootstrapRow();
     if (out) {

@@ -263,6 +263,66 @@ export function harvestBootstrapSlots(input: HarvestInput): BootstrapSlots {
     return { goal, recent_turns, memory_hits, grep_hits, task_snapshot };
 }
 
+// CLI-switch refresh: when settings.cli changes, harvest the prior conversation
+// from sourceWorkDir, persist a bootstrap handoff for the next spawn, clear the
+// target CLI's session bucket so spawn.ts doesn't resume a stale per-CLI session,
+// and broadcast a notice. All four DB ops run in a single better-sqlite3
+// transaction so any failure rolls back atomically — the caller (runtime-settings)
+// then reverts the settings file, leaving DB and config consistent.
+export async function cliSwitchRefresh(opts: {
+    sourceWorkDir: string;
+    targetWorkDir: string;
+    fromCli: string;
+    toCli: string;
+    toModel: string;
+}): Promise<{ refreshed: boolean }> {
+    const slots = harvestBootstrapSlots({ workingDir: opts.sourceWorkDir, instructions: '' });
+    const hasAnyContent = Boolean(
+        slots.recent_turns || slots.memory_hits || slots.grep_hits || slots.task_snapshot,
+    );
+    if (!hasAnyContent) return { refreshed: false };
+
+    const bootstrap = renderBootstrapPrompt(slots);
+    const trace = `${BOOTSTRAP_TRACE_PREFIX}\n${bootstrap}`;
+
+    const { db, insertMessageWithTrace, clearSessionBucket } = await import('./db.js');
+    const { resolveSessionBucket } = await import('../agent/args.js');
+    const {
+        writeMainSessionRow,
+        buildClearedSessionRow,
+        setPendingBootstrapPromptStrict,
+    } = await import('./main-session.js');
+
+    const targetBucket = resolveSessionBucket(opts.toCli, opts.toModel);
+    const clearedRow = buildClearedSessionRow();
+
+    const tx = db.transaction(() => {
+        insertMessageWithTrace.run(
+            'assistant', COMPACT_MARKER_CONTENT,
+            opts.toCli, opts.toModel, trace, null, opts.targetWorkDir,
+        );
+        setPendingBootstrapPromptStrict(bootstrap);
+        writeMainSessionRow(clearedRow);
+        if (targetBucket) clearSessionBucket.run(targetBucket);
+    });
+    tx();
+
+    const { bumpSessionOwnershipGeneration } = await import('../agent/session-persistence.js');
+    bumpSessionOwnershipGeneration();
+
+    try {
+        const { broadcast } = await import('./bus.js');
+        broadcast('system_notice', {
+            code: 'cli_switch_refresh',
+            text: `CLI switched ${opts.fromCli} → ${opts.toCli} — session refreshed`,
+        }, 'public');
+    } catch (e) {
+        console.warn('[jaw:cli-switch] notice broadcast failed:', (e as Error).message);
+    }
+
+    return { refreshed: true };
+}
+
 export async function autoCompactRefresh(opts: {
     workDir: string;
     instructions: string;
