@@ -1,0 +1,74 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+// Phase 127 (#127) mermaid render latency — source-string contract for ui.ts.
+
+const uiSrc = readFileSync(
+    join(import.meta.dirname, '../../public/js/ui.ts'),
+    'utf8',
+);
+const mainSrc = readFileSync(
+    join(import.meta.dirname, '../../public/js/main.ts'),
+    'utf8',
+);
+
+test('F5: finalizeAgent triggers immediate mermaid render after innerHTML', () => {
+    const idx = uiSrc.indexOf('export function finalizeAgent');
+    assert.ok(idx >= 0, 'finalizeAgent must exist');
+    const block = uiSrc.slice(idx, idx + 3500);
+    assert.ok(block.includes('renderMermaidBlocks('),
+        'finalizeAgent must call renderMermaidBlocks to bypass the 100ms debounce');
+    assert.ok(block.includes('immediate: true'),
+        'finalizeAgent mermaid call must use immediate mode');
+});
+
+test('F7a: VS onLazyRender triggers immediate mermaid render', () => {
+    const idx = uiSrc.indexOf('vs.onLazyRender = ');
+    assert.ok(idx >= 0, 'onLazyRender assignment must exist');
+    const block = uiSrc.slice(idx, idx + 1800);
+    assert.ok(block.includes('renderMermaidBlocks('),
+        'onLazyRender must trigger mermaid render on fresh markdown');
+    assert.ok(block.includes('immediate: true'),
+        'onLazyRender mermaid call must use immediate mode');
+});
+
+test('F7b: VS onPostRender triggers immediate mermaid render for mounted scope', () => {
+    const idx = uiSrc.indexOf('vs.onPostRender = ');
+    assert.ok(idx >= 0, 'onPostRender assignment must exist');
+    const block = uiSrc.slice(idx, idx + 800);
+    assert.ok(block.includes('renderMermaidBlocks('),
+        'onPostRender must trigger mermaid render for pre-rendered pending blocks');
+    assert.ok(block.includes('immediate: true'),
+        'onPostRender mermaid call must use immediate mode');
+    assert.ok(/renderMermaidBlocks\(\s*viewport/.test(block),
+        'onPostRender must scope the mermaid render to the viewport argument');
+});
+
+test('imports: renderMermaidBlocks is imported in ui.ts without touching existing render import', () => {
+    assert.ok(uiSrc.includes("import { renderMermaidBlocks } from './render.js';"),
+        'renderMermaidBlocks must be imported on its own line from ./render.js');
+    // Existing import must remain intact
+    assert.ok(
+        uiSrc.includes("import { renderMarkdown, escapeHtml, stripOrchestration, linkifyFilePaths } from './render.js';"),
+        'original render.js import line must be preserved untouched',
+    );
+    // activateWidgets must still come from iframe-renderer
+    assert.ok(
+        uiSrc.includes("import { activateWidgets } from './diagram/iframe-renderer.js';"),
+        'activateWidgets must stay imported from ./diagram/iframe-renderer.js',
+    );
+});
+
+test('F2: main.ts imports prewarmMermaid and calls it in bootstrap', () => {
+    assert.ok(
+        mainSrc.includes("import { prewarmMermaid } from './render.js';"),
+        'main.ts must import prewarmMermaid from ./render.js',
+    );
+    const bootstrapIdx = mainSrc.indexOf('async function bootstrap()');
+    assert.ok(bootstrapIdx >= 0, 'bootstrap function must exist');
+    const bootstrapBlock = mainSrc.slice(bootstrapIdx, bootstrapIdx + 2500);
+    assert.ok(bootstrapBlock.includes('prewarmMermaid();'),
+        'bootstrap must call prewarmMermaid()');
+});
