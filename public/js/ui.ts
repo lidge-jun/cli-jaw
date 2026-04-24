@@ -479,6 +479,33 @@ function ensureScrollTracking(): void {
     }, { passive: true });
 }
 
+export function isChatNearBottom(): boolean {
+    ensureScrollTracking();
+    const c = document.getElementById('chatMessages');
+    if (!c) return userNearBottom;
+    const vs = getVirtualScroll();
+    if (vs.active) return vs.isNearBottom(SCROLL_BOTTOM_THRESHOLD);
+    const dist = c.scrollHeight - c.scrollTop - c.clientHeight;
+    return dist < SCROLL_BOTTOM_THRESHOLD;
+}
+
+export function reconcileChatBottomAfterLayout(shouldFollow = isChatNearBottom()): void {
+    ensureScrollTracking();
+    if (!shouldFollow) return;
+    userNearBottom = true;
+    const vs = getVirtualScroll();
+    if (vs.active) {
+        vs.reconcileBottomAfterLayout('reconnect', true);
+        return;
+    }
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            const c = document.getElementById('chatMessages');
+            if (c) c.scrollTop = c.scrollHeight;
+        });
+    });
+}
+
 /** Scroll chat to bottom.
  *  @param force - bypass user-scroll detection (use for explicit user actions) */
 export function scrollToBottom(force = false): void {

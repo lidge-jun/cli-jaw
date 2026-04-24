@@ -1,6 +1,6 @@
 // ── WebSocket Connection ──
 import { state } from './state.js';
-import { setStatus, updateQueueBadge, addSystemMsg, appendAgentText, finalizeAgent, addMessage, showProcessStep, cleanupToolActivity, applyQueuedOverlay, hydrateActiveRun } from './ui.js';
+import { setStatus, updateQueueBadge, addSystemMsg, appendAgentText, finalizeAgent, addMessage, showProcessStep, cleanupToolActivity, applyQueuedOverlay, hydrateActiveRun, isChatNearBottom, reconcileChatBottomAfterLayout } from './ui.js';
 import { renderPendingQueue } from './features/pending-queue.js';
 import { t, getLang } from './features/i18n.js';
 import { getVirtualScroll } from './virtual-scroll.js';
@@ -307,6 +307,7 @@ export function connect(): void {
         console.log('[ws] connected');
         const now = Date.now();
         const skipReload = now - lastLoadTs < 10000;
+        const shouldFollowBottom = isChatNearBottom();
         import('./ui.js').then(async m => {
             m.cleanupToolActivity();
             if (!skipReload) {
@@ -318,7 +319,8 @@ export function connect(): void {
                 }
             }
             refreshRuntimeSnapshot({ hydrateRun: true })
-                .catch(() => { /* snapshot not critical — UI recovers on next WS event */ });
+                .catch(() => { /* snapshot not critical — UI recovers on next WS event */ })
+                .finally(() => reconcileChatBottomAfterLayout(shouldFollowBottom));
         });
     };
     state.ws.onclose = () => {

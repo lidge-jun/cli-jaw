@@ -13,6 +13,7 @@ import { generateId } from './uuid.js';
 const THRESHOLD = 1;
 const EST_HEIGHT = 80;
 const OVERSCAN = 5;
+const BOTTOM_THRESHOLD = 80;
 
 export interface VirtualItem {
     id: string;
@@ -168,13 +169,28 @@ export class VirtualScroll {
     }
 
     scrollToBottom(): void {
-        // Single source: DOM scrollTop only.
-        // tanstack picks up the new position via its scroll event listener
-        // (1 frame delay — fine for ongoing streaming/chat).
-        // This also reaches streaming placeholder content that lives
-        // outside VS as a direct container child.
-        // Note: activate(toBottom) uses scrollToIndex for immediate sync.
+        if (this._active && this.virtualizer && this.items.length > 0) {
+            this.virtualizer.scrollToIndex(this.items.length - 1, { align: 'end' });
+        }
+        // Keep DOM scrollTop as the final source so streaming placeholder
+        // content outside VS is still reachable.
         this.container.scrollTop = this.container.scrollHeight;
+    }
+
+    isNearBottom(threshold = BOTTOM_THRESHOLD): boolean {
+        const dist = this.container.scrollHeight - this.container.scrollTop - this.container.clientHeight;
+        return dist < threshold;
+    }
+
+    reconcileBottomAfterLayout(reason: 'pageshow' | 'visibility' | 'focus' | 'reconnect' | 'manual', shouldFollow = this.isNearBottom()): void {
+        if (!shouldFollow) return;
+        void reason;
+        requestAnimationFrame(() => {
+            this.invalidateLayout();
+            requestAnimationFrame(() => {
+                this.scrollToBottom();
+            });
+        });
     }
 
     flushToDOM(): void {
@@ -274,13 +290,27 @@ export class VirtualScroll {
         // pageshow fires when page is restored from bfcache (persisted=true).
         // Regular reload goes through normal activate() flow, but bfcache
         // restores the JS heap with stale cached measurements.
+        const restoreBottomAfterLayout = (reason: 'pageshow' | 'visibility' | 'focus') => {
+            if (!this.virtualizer) return;
+            const shouldFollow = this.isNearBottom();
+            this.reconcileBottomAfterLayout(reason, shouldFollow);
+        };
         const onPageShow = (e: PageTransitionEvent) => {
-            if (!e.persisted || !this.virtualizer) return;
-            scheduleInvalidateLayout();
+            if (!e.persisted) return;
+            restoreBottomAfterLayout('pageshow');
         };
         window.addEventListener('pageshow', onPageShow);
+        const onVisibilityChange = () => {
+            if (document.visibilityState !== 'visible') return;
+            restoreBottomAfterLayout('visibility');
+        };
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        const onFocus = () => restoreBottomAfterLayout('focus');
+        window.addEventListener('focus', onFocus);
         this.cleanupFn = () => {
             window.removeEventListener('pageshow', onPageShow);
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+            window.removeEventListener('focus', onFocus);
             for (const cleanup of cleanupFns.reverse()) cleanup();
         };
 
