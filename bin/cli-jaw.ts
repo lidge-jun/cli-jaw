@@ -8,6 +8,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
+import { maybePromptGithubStar } from './star-prompt.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let pkg: any;
@@ -47,6 +48,14 @@ if (_homeIdx !== -1 && process.argv[_homeIdx + 1]) {
 }
 
 const command = process.argv[2];
+
+async function maybePromptForStarOnLaunch(): Promise<void> {
+    try {
+        await maybePromptGithubStar();
+    } catch (err) {
+        console.error(`[jaw] Star prompt skipped: ${err instanceof Error ? err.message : String(err)}`);
+    }
+}
 
 function printHelp() {
     const c = { cyan: '\x1b[36m', dim: '\x1b[2m', bold: '\x1b[1m', reset: '\x1b[0m' };
@@ -95,6 +104,7 @@ ${c.bold}   🦈 v${pkg.version}${c.reset}  ${c.dim}AI Agent Orchestration Platf
 
 switch (command) {
     case 'serve':
+        await maybePromptForStarOnLaunch();
         await import('./commands/serve.js');
         break;
     case 'init':
@@ -104,6 +114,7 @@ switch (command) {
         await import('./commands/doctor.js');
         break;
     case 'chat':
+        await maybePromptForStarOnLaunch();
         await import('./commands/chat.js');
         break;
     case 'employee':
