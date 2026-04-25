@@ -349,7 +349,7 @@ export async function upgradeSoulMemory(): Promise<void> {
     }
     await openMemoryModal();
     switchMemTab('status');
-    const freshStatus = await apiJson<any>('/api/memory/status');
+    const freshStatus = await api<any>('/api/memory/status');
     syncSidebarBadge(freshStatus, 0);
     renderStatusBanner(freshStatus);
 }
@@ -375,7 +375,7 @@ export async function synthesizeSoul(): Promise<void> {
     setAdvBanner('✓ Soul 최적화 프롬프트 전송됨. 채팅창을 확인하세요.');
     await openMemoryModal();
     switchMemTab('status');
-    const freshStatus = await apiJson<any>('/api/memory/status');
+    const freshStatus = await api<any>('/api/memory/status');
     syncSidebarBadge(freshStatus, 0);
     renderStatusBanner(freshStatus);
 }

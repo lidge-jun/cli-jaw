@@ -9,6 +9,7 @@ import { escapeHtml, cancelPostRender } from '../render.js';
 import { getVirtualScroll } from '../virtual-scroll.js';
 import { clearCache, upsertMessage } from './idb-cache.js';
 import { ICONS } from '../icons.js';
+import { clearUnreadResponses } from './attention-badge.js';
 
 let activeObjectURLs: string[] = [];
 
@@ -43,6 +44,7 @@ export async function sendMessage(): Promise<void> {
 
     const text = input.value.trim();
     if (!text && !state.attachedFiles.length) return;
+    clearUnreadResponses();
 
     // Mark in-flight AND disable send button for visual feedback.
     __chatSending = true;
@@ -244,6 +246,7 @@ export async function clearChat(): Promise<void> {
     const { cleanupToolActivity } = await import('../ui.js');
     cleanupToolActivity();
     clearCache().catch(() => {});
+    clearUnreadResponses();
 }
 
 // ── Auto-resize textarea (RAF-batched to avoid blocking input) ──

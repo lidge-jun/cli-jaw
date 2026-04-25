@@ -7,6 +7,7 @@ import { getVirtualScroll } from './virtual-scroll.js';
 import { ICONS, emojiToIcon } from './icons.js';
 import { escapeHtml, cancelPostRender } from './render.js';
 import type { OrcStateName } from './state.js';
+import { notifyUnreadResponse } from './features/attention-badge.js';
 
 const ROADMAP_PHASES = ['P', 'A', 'B', 'C'] as const;
 
@@ -68,6 +69,7 @@ interface WsMessage {
     state?: string;
     title?: string;
     isEmployee?: boolean;
+    fromQueue?: boolean;
 }
 
 // Agent phase state (populated by agent_status events from orchestrator)
@@ -278,8 +280,10 @@ export function connect(): void {
             addSystemMsg(`${ICONS.warning} ${escapeHtml(msg.cli || 'agent')}: smoke response detected — auto-continuing`, 'tool-activity');
         } else if (msg.type === 'agent_done') {
             finalizeAgent(msg.text || '', msg.toolLog);
+            notifyUnreadResponse();
         } else if (msg.type === 'orchestrate_done') {
             finalizeAgent(msg.text || '');
+            notifyUnreadResponse();
         } else if (msg.type === 'clear') {
             cancelPostRender();
             cleanupToolActivity();
