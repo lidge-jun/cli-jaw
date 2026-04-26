@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
 
 export default defineConfig({
+  plugins: [react()],
   root: 'public',
   base: '/dist/',
   build: {
@@ -8,7 +10,10 @@ export default defineConfig({
     emptyOutDir: true,
     modulePreload: false,
     rolldownOptions: {
-      input: 'public/index.html',
+      input: {
+        app: 'public/index.html',
+        manager: 'public/manager/index.html',
+      },
       output: {
         manualChunks(id: string) {
           if (id.includes('node_modules/@lucide/icons/')) {

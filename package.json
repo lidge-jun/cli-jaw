@@ -91,6 +91,8 @@
     "mermaid": "^11.14.0",
     "node-fetch": "^3.3.2",
     "playwright-core": "^1.58.2",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
     "ws": "^8.18.0"
   },
   "devDependencies": {
@@ -98,7 +100,10 @@
     "@types/dompurify": "^3.0.5",
     "@types/express": "^5.0.6",
     "@types/node": "^25.5.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.5.0",
+    "@vitejs/plugin-react": "^5.2.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",
     "vite": "^8.0.3"

@@ -9,6 +9,7 @@
             "DOM.Iterable"
         ],
         "types": ["vite/client"],
+        "jsx": "react-jsx",
         "strict": true,
         "noEmit": true,
         "isolatedModules": true,
@@ -19,6 +20,8 @@
     },
     "include": [
         "public/js/**/*.ts",
+        "public/manager/src/**/*.ts",
+        "public/manager/src/**/*.tsx",
         "types/frontend.d.ts"
     ]
 }
