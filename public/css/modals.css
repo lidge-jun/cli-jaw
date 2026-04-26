@@ -98,12 +98,14 @@
 }
 
 .help-trigger {
-    width: 22px;
-    height: 22px;
-    min-width: 22px;
+    --help-trigger-visual-size: 20px;
+    --help-trigger-hit-size: 44px;
+    width: var(--help-trigger-visual-size);
+    height: var(--help-trigger-visual-size);
+    min-width: var(--help-trigger-visual-size);
     border: 1px solid var(--border);
     border-radius: 999px;
-    background: color-mix(in oklch, var(--surface) 80%, transparent);
+    background: var(--surface);
     color: var(--text-dim);
     cursor: pointer;
     font-size: 11px;
@@ -113,24 +115,30 @@
     justify-content: center;
     margin: 0;
     padding: 0;
-    transition: border-color 0.15s, color 0.15s, background 0.15s;
+    opacity: 0.78;
+    transition: border-color 0.15s, color 0.15s, background 0.15s, opacity 0.15s;
 }
 
 .help-trigger:hover {
     border-color: var(--accent);
     color: var(--accent);
     background: color-mix(in oklch, var(--accent) 8%, transparent);
+    opacity: 1;
 }
 
 .help-trigger:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+    opacity: 1;
 }
 
 .help-dialog-box {
     width: 500px;
     max-width: calc(100vw - 32px);
     max-height: min(80vh, 640px);
+    background: var(--surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .help-dialog-body {
@@ -160,8 +168,14 @@
     color: var(--text-dim);
 }
 
+.help-effect-text,
+.help-example-list {
+    margin: 0;
+}
+
 .help-dialog-list,
-.help-related-list {
+.help-related-list,
+.help-example-list {
     margin: 0;
     padding-left: 18px;
 }
@@ -173,9 +187,16 @@
 
 @media (max-width: 768px) {
     .help-trigger {
-        width: 44px;
-        height: 44px;
-        min-width: 44px;
+        position: relative;
+        width: var(--help-trigger-visual-size);
+        height: var(--help-trigger-visual-size);
+        min-width: var(--help-trigger-visual-size);
+    }
+
+    .help-trigger::before {
+        content: "";
+        position: absolute;
+        inset: calc((var(--help-trigger-visual-size) - var(--help-trigger-hit-size)) / 2);
     }
 
     .help-dialog-box {

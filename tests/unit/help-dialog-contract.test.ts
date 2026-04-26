@@ -34,7 +34,10 @@ function uniqueMatches(source: string, pattern: RegExp): string[] {
 function flattenHelpKeys(): string[] {
     const keys = new Set([
         'help.section.what',
+        'help.section.effect',
         'help.section.useWhen',
+        'help.section.howTo',
+        'help.section.example',
         'help.section.avoidWhen',
         'help.section.related',
         'help.close',
@@ -44,7 +47,10 @@ function flattenHelpKeys(): string[] {
         keys.add(`help.${id}.aria`);
         keys.add(topic.titleKey);
         keys.add(topic.introKey);
+        keys.add(topic.effectKey);
         for (const key of topic.useWhenKeys) keys.add(key);
+        for (const key of topic.howToKeys) keys.add(key);
+        for (const key of topic.exampleKeys) keys.add(key);
         for (const key of topic.avoidWhenKeys ?? []) keys.add(key);
         for (const key of topic.relatedKeys ?? []) keys.add(key);
     }
@@ -118,6 +124,9 @@ test('HD-006: help dialog uses safe text rendering and focus-aware modal behavio
 
     assert.ok(!src.includes('innerHTML'), 'help-dialog.ts should not use innerHTML');
     assert.ok(src.includes('textContent'), 'help-dialog.ts should render translated content with textContent');
+    assert.ok(src.includes("t('help.section.effect')"), 'effect section should render');
+    assert.ok(src.includes("t('help.section.howTo')"), 'how-to section should render');
+    assert.ok(src.includes("t('help.section.example')"), 'example section should render');
     assert.ok(src.includes("setAttribute('role', 'dialog')"), 'dialog role should be set');
     assert.ok(src.includes("setAttribute('aria-modal', 'true')"), 'aria-modal should be set');
     assert.ok(src.includes("setAttribute('aria-labelledby'"), 'aria-labelledby should be set');
@@ -136,7 +145,11 @@ test('HD-007: help styles provide restrained desktop controls and mobile hit tar
     }
 
     assert.ok(css.includes('@media (max-width: 768px)'), 'mobile rules should exist');
+    assert.ok(css.includes('--help-trigger-visual-size'), 'visible help trigger size should use a token');
+    assert.ok(css.includes('--help-trigger-hit-size'), 'mobile hit target should use a token');
     assert.ok(css.includes('44px'), 'mobile help trigger should provide 44px hit targets');
+    assert.ok(css.includes('.help-trigger::before'), 'mobile hit target should be separated from visible icon size');
+    assert.ok(css.includes('backdrop-filter: none'), 'help dialog surface should disable translucent backdrop blur');
 });
 
 test('HD-008: plan records audit-sensitive integration requirements', () => {

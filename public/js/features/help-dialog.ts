@@ -122,25 +122,29 @@ function renderTopic(topic: HelpTopic): void {
     bodyEl.replaceChildren();
 
     appendTextSection(t('help.section.what'), t(topic.introKey));
+    appendTextSection(t('help.section.effect'), t(topic.effectKey), 'help-effect-text');
     appendListSection(t('help.section.useWhen'), topic.useWhenKeys);
+    appendListSection(t('help.section.howTo'), topic.howToKeys);
+    appendListSection(t('help.section.example'), topic.exampleKeys, false, 'help-example-list');
     if (topic.avoidWhenKeys?.length) appendListSection(t('help.section.avoidWhen'), topic.avoidWhenKeys);
     if (topic.relatedKeys?.length) appendListSection(t('help.section.related'), topic.relatedKeys, true);
 }
 
-function appendTextSection(heading: string, text: string): void {
+function appendTextSection(heading: string, text: string, className?: string): void {
     if (!bodyEl) return;
     const section = createSection(heading);
     const p = document.createElement('p');
+    if (className) p.className = className;
     p.textContent = text;
     section.append(p);
     bodyEl.append(section);
 }
 
-function appendListSection(heading: string, keys: string[], related = false): void {
+function appendListSection(heading: string, keys: string[], related = false, className?: string): void {
     if (!bodyEl) return;
     const section = createSection(heading);
     const list = document.createElement('ul');
-    list.className = related ? 'help-related-list' : 'help-dialog-list';
+    list.className = className ?? (related ? 'help-related-list' : 'help-dialog-list');
     for (const key of keys) {
         const item = document.createElement('li');
         item.textContent = t(key);

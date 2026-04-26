@@ -20,7 +20,10 @@ export type HelpTopicId =
 export interface HelpTopic {
     titleKey: string;
     introKey: string;
+    effectKey: string;
     useWhenKeys: string[];
+    howToKeys: string[];
+    exampleKeys: string[];
     avoidWhenKeys?: string[];
     relatedKeys?: string[];
 }
@@ -47,11 +50,21 @@ export function isHelpTopicId(value: string | null | undefined): value is HelpTo
     return typeof value === 'string' && Object.prototype.hasOwnProperty.call(HELP_TOPICS, value);
 }
 
-function topic(id: HelpTopicId, useCount: number, avoidCount: number, relatedCount: number): HelpTopic {
+function topic(
+    id: HelpTopicId,
+    useCount: number,
+    avoidCount: number,
+    relatedCount: number,
+    howToCount = 2,
+    exampleCount = 1,
+): HelpTopic {
     return {
         titleKey: `help.${id}.title`,
         introKey: `help.${id}.intro`,
+        effectKey: `help.${id}.effect`,
         useWhenKeys: rangeKeys(`help.${id}.use`, useCount),
+        howToKeys: rangeKeys(`help.${id}.howTo`, howToCount),
+        exampleKeys: rangeKeys(`help.${id}.example`, exampleCount),
         avoidWhenKeys: rangeKeys(`help.${id}.avoid`, avoidCount),
         relatedKeys: rangeKeys(`help.${id}.related`, relatedCount),
     };
