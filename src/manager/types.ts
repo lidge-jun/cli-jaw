@@ -5,8 +5,10 @@ export type DashboardInstanceStatus =
     | 'error'
     | 'unknown';
 
-export type DashboardServiceMode = 'unknown' | 'ad-hoc' | 'service';
+export type DashboardServiceMode = 'unknown' | 'ad-hoc' | 'service' | 'manager';
 export type DashboardPreviewMode = 'direct' | 'proxy';
+export type DashboardLifecycleAction = 'start' | 'stop' | 'restart';
+export type DashboardLifecycleOwner = 'none' | 'external' | 'manager';
 
 export type DashboardProxyInfo = {
     enabled: boolean;
@@ -28,8 +30,33 @@ export type DashboardInstance = {
     currentCli: string | null;
     currentModel: string | null;
     serviceMode: DashboardServiceMode;
+    lifecycle?: DashboardLifecycleCapability;
     lastCheckedAt: string;
     healthReason: string | null;
+};
+
+export type DashboardLifecycleCapability = {
+    owner: DashboardLifecycleOwner;
+    canStart: boolean;
+    canStop: boolean;
+    canRestart: boolean;
+    reason: string;
+    defaultHome: string;
+    commandPreview: string[];
+    pid: number | null;
+};
+
+export type DashboardLifecycleResult = {
+    ok: boolean;
+    action: DashboardLifecycleAction;
+    port: number;
+    status: 'started' | 'stopped' | 'restarted' | 'rejected' | 'error';
+    message: string;
+    home: string | null;
+    pid: number | null;
+    command: string[];
+    stderr?: string;
+    stdout?: string;
 };
 
 export type DashboardScanOptions = {

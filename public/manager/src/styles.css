@@ -133,6 +133,10 @@ button:disabled {
     min-width: 220px;
 }
 
+.toolbar .home-input {
+    min-width: 280px;
+}
+
 .state {
     padding: 18px;
     color: #aab3c2;
@@ -141,6 +145,12 @@ button:disabled {
 .error-state {
     border-color: #6c2d35;
     color: #ffb9c0;
+}
+
+.lifecycle-state {
+    margin-bottom: 12px;
+    border-color: #236987;
+    color: #d7f4ff;
 }
 
 .instance-table {
@@ -158,7 +168,7 @@ button:disabled {
 .table-head,
 .instance-row {
     display: grid;
-    grid-template-columns: 150px minmax(180px, 1.4fr) minmax(180px, 1fr) minmax(160px, 0.9fr) 90px;
+    grid-template-columns: 150px minmax(180px, 1.4fr) minmax(180px, 1fr) minmax(160px, 0.9fr) minmax(240px, 0.8fr);
     gap: 12px;
     align-items: center;
     padding: 10px 12px;
@@ -175,9 +185,16 @@ button:disabled {
 }
 
 .instance-actions {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
-    flex-wrap: wrap;
+}
+
+.instance-actions button,
+.instance-actions .open-link {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 8px;
 }
 
 .status {

@@ -33,6 +33,7 @@ test('manager frontend has API entry and Open action', () => {
     const app = read('public/manager/src/App.tsx');
 
     assert.ok(api.includes('/api/dashboard/instances'), 'manager API must call dashboard instances endpoint');
+    assert.ok(api.includes('/api/dashboard/lifecycle/'), 'manager API must call dashboard lifecycle endpoint');
     assert.ok(app.includes('Open'), 'manager UI must expose Open action');
     assert.ok(app.includes('Search port, home, CLI, model'), 'manager UI must include search');
 });
@@ -50,4 +51,18 @@ test('manager frontend exposes one-instance preview controls', () => {
     assert.ok(preview.includes('Direct iframe'), 'preview component must expose direct mode');
     assert.ok(helper.includes('buildPreviewState'), 'preview helper must centralize URL state');
     assert.ok(helper.includes('/i'), 'preview helper must support manager proxy base path');
+});
+
+test('manager frontend exposes lifecycle controls without hiding discovery actions', () => {
+    const app = read('public/manager/src/App.tsx');
+    const types = read('public/manager/src/types.ts');
+
+    assert.ok(types.includes('DashboardLifecycleCapability'), 'frontend types must include lifecycle capability');
+    assert.ok(types.includes("'manager'"), 'frontend service mode must represent manager-owned instances');
+    assert.ok(app.includes('Custom home, default ~/.cli-jaw-<port>'), 'manager UI must expose custom home policy');
+    assert.ok(app.includes("handleLifecycle('start'"), 'manager UI must expose Start action');
+    assert.ok(app.includes("handleLifecycle('stop'"), 'manager UI must expose Stop action');
+    assert.ok(app.includes("handleLifecycle('restart'"), 'manager UI must expose Restart action');
+    assert.ok(app.includes('Preview'), 'manager UI must keep Preview action');
+    assert.ok(app.includes('Open'), 'manager UI must keep Open action');
 });

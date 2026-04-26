@@ -11,6 +11,8 @@ import {
 } from './constants.js';
 import { scanDashboardInstances } from './scan.js';
 import { installDashboardProxy } from './proxy.js';
+import { DashboardLifecycleManager } from './lifecycle.js';
+import type { DashboardLifecycleAction } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const serverRoot = join(__dirname, '..', '..');
@@ -22,11 +24,13 @@ const app = express();
 const port = Number(process.env.DASHBOARD_PORT || DASHBOARD_DEFAULT_PORT);
 const scanFrom = Number(process.env.DASHBOARD_SCAN_FROM || MANAGED_INSTANCE_PORT_FROM);
 const scanCount = Number(process.env.DASHBOARD_SCAN_COUNT || MANAGED_INSTANCE_PORT_COUNT);
+const lifecycle = new DashboardLifecycleManager({ from: scanFrom, count: scanCount });
 
 app.use(helmet({
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
 }));
+app.use(express.json({ limit: '64kb' }));
 
 app.get('/api/dashboard/health', (_req, res) => {
     res.json({
@@ -42,9 +46,59 @@ app.get('/api/dashboard/instances', async (req, res) => {
         const from = Number(req.query.from || scanFrom);
         const count = Number(req.query.count || scanCount);
         const result = await scanDashboardInstances({ from, count, managerPort: port });
-        res.json(result);
+        res.json(lifecycle.decorateScanResult(result));
     } catch (error) {
         res.status(500).json({ ok: false, error: (error as Error).message });
+    }
+});
+
+app.post('/api/dashboard/lifecycle/:action', async (req, res) => {
+    const action = String(req.params.action || '') as DashboardLifecycleAction;
+    const portValue = Number(req.body?.port);
+    const home = typeof req.body?.home === 'string' ? req.body.home : undefined;
+    if (!['start', 'stop', 'restart'].includes(action)) {
+        return res.status(400).json({
+            ok: false,
+            action,
+            port: portValue,
+            status: 'rejected',
+            message: `Unsupported lifecycle action: ${action}`,
+            home: null,
+            pid: null,
+            command: [],
+        });
+    }
+    if (!Number.isInteger(portValue)) {
+        return res.status(400).json({
+            ok: false,
+            action,
+            port: portValue,
+            status: 'rejected',
+            message: 'port must be an integer',
+            home: null,
+            pid: null,
+            command: [],
+        });
+    }
+
+    try {
+        const result = action === 'start'
+            ? await lifecycle.start(portValue, home)
+            : action === 'stop'
+                ? await lifecycle.stop(portValue)
+                : await lifecycle.restart(portValue);
+        res.status(result.ok ? 200 : 409).json(result);
+    } catch (error) {
+        res.status(500).json({
+            ok: false,
+            action,
+            port: portValue,
+            status: 'error',
+            message: (error as Error).message,
+            home: null,
+            pid: null,
+            command: [],
+        });
     }
 });
 

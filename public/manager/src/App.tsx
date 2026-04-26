@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchInstances } from './api';
+import { fetchInstances, runLifecycleAction } from './api';
 import { InstancePreview } from './InstancePreview';
-import type { DashboardInstance, DashboardInstanceStatus, DashboardPreviewMode, DashboardScanResult } from './types';
+import type {
+    DashboardInstance,
+    DashboardInstanceStatus,
+    DashboardLifecycleAction,
+    DashboardPreviewMode,
+    DashboardScanResult,
+} from './types';
 
 const STATUS_OPTIONS: Array<'all' | DashboardInstanceStatus> = ['all', 'online', 'offline', 'timeout', 'error', 'unknown'];
 
@@ -31,6 +37,9 @@ export function App() {
     const [selectedPort, setSelectedPort] = useState<number | null>(null);
     const [previewMode, setPreviewMode] = useState<DashboardPreviewMode>('proxy');
     const [previewEnabled, setPreviewEnabled] = useState(true);
+    const [customHome, setCustomHome] = useState('');
+    const [lifecycleBusyPort, setLifecycleBusyPort] = useState<number | null>(null);
+    const [lifecycleMessage, setLifecycleMessage] = useState<string | null>(null);
 
     async function load(): Promise<void> {
         setLoading(true);
@@ -80,6 +89,27 @@ export function App() {
         return instances.find(instance => instance.port === selectedPort) || null;
     }, [filtered, instances, selectedPort]);
 
+    async function handleLifecycle(action: DashboardLifecycleAction, instance: DashboardInstance): Promise<void> {
+        const lifecycle = instance.lifecycle;
+        if (!lifecycle) return;
+        if ((action === 'stop' || action === 'restart') && !window.confirm(`${action} :${instance.port}?`)) {
+            return;
+        }
+        setLifecycleBusyPort(instance.port);
+        setLifecycleMessage(null);
+        try {
+            const home = action === 'start' ? customHome : undefined;
+            const result = await runLifecycleAction(action, instance.port, home);
+            setLifecycleMessage(result.message);
+            await load();
+            setSelectedPort(instance.port);
+        } catch (err) {
+            setLifecycleMessage((err as Error).message);
+        } finally {
+            setLifecycleBusyPort(null);
+        }
+    }
+
     return (
         <main className="dashboard-shell">
             <header className="dashboard-topbar">
@@ -117,9 +147,17 @@ export function App() {
                 >
                     {STATUS_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
                 </select>
+                <input
+                    className="home-input"
+                    value={customHome}
+                    onChange={event => setCustomHome(event.target.value)}
+                    placeholder="Custom home, default ~/.cli-jaw-<port>"
+                    aria-label="Custom home for started instances"
+                />
             </section>
 
             {error && <section className="state error-state">Scan failed: {error}</section>}
+            {lifecycleMessage && <section className="state lifecycle-state">{lifecycleMessage}</section>}
             {!error && loading && <section className="state">Scanning local Jaw instances...</section>}
             {!error && !loading && filtered.length === 0 && (
                 <section className="state">No matching instances found.</section>
@@ -133,7 +171,7 @@ export function App() {
                             <span>Instance</span>
                             <span>Runtime</span>
                             <span>Last checked</span>
-                            <span>Action</span>
+                            <span>Actions</span>
                         </div>
                         {filtered.map(instance => (
                             <article
@@ -154,7 +192,7 @@ export function App() {
                                 </div>
                                 <div>
                                     <span>{new Date(instance.lastCheckedAt).toLocaleTimeString()}</span>
-                                    <span>{instance.healthReason || 'ok'}</span>
+                                    <span>{instance.lifecycle?.reason || instance.healthReason || 'ok'}</span>
                                 </div>
                                 <div className="instance-actions">
                                     <button
@@ -165,6 +203,28 @@ export function App() {
                                         Preview
                                     </button>
                                     <a className="open-link" href={instance.url} target="_blank" rel="noreferrer">Open</a>
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleLifecycle('start', instance)}
+                                        disabled={!instance.lifecycle?.canStart || lifecycleBusyPort === instance.port}
+                                        title={instance.lifecycle?.commandPreview.join(' ')}
+                                    >
+                                        Start
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleLifecycle('stop', instance)}
+                                        disabled={!instance.lifecycle?.canStop || lifecycleBusyPort === instance.port}
+                                    >
+                                        Stop
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => void handleLifecycle('restart', instance)}
+                                        disabled={!instance.lifecycle?.canRestart || lifecycleBusyPort === instance.port}
+                                    >
+                                        Restart
+                                    </button>
                                 </div>
                             </article>
                         ))}
