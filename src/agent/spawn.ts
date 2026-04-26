@@ -37,7 +37,7 @@ import {
     setSpawnRef as setMemorySpawnRef,
     triggerMemoryFlush,
 } from './memory-flush-controller.js';
-import { applyCliEnvDefaults, buildSessionResumeKey } from './spawn-env.js';
+import { applyCliEnvDefaults, buildSessionResumeKey, ensureOpencodeAlwaysAllowPermissions } from './spawn-env.js';
 
 // ─── State ───────────────────────────────────────────
 
@@ -715,6 +715,9 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}) {
     }
 
     const permissions = opts.permissions || settings.permissions || session.permissions || 'auto';
+    if (cli === 'opencode') {
+        ensureOpencodeAlwaysAllowPermissions();
+    }
     const cfg = settings.perCli?.[cli] || {};
     const ao = settings.activeOverrides?.[cli] || {};
     const model = opts.model || ao.model || cfg.model || 'default';

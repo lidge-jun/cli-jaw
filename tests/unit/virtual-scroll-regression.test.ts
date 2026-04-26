@@ -5,6 +5,9 @@
  */
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
     bootstrapVirtualHistory,
     type VirtualHistoryBootstrapDeps,
@@ -13,6 +16,9 @@ import {
     remeasureMountedVirtualItems,
     type VirtualItem,
 } from '../../public/js/virtual-scroll.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const virtualScrollSource = readFileSync(join(__dirname, '../../public/js/virtual-scroll.ts'), 'utf8');
 
 function makeMessageFixture(count: number): VirtualItem[] {
     return Array.from({ length: count }, (_, i) => ({
@@ -108,5 +114,16 @@ describe('bootstrapVirtualHistory', () => {
         assert.equal(items[1]?.height, 80);
         assert.equal(items[2]?.height, 212);
         assert.deepEqual(calls, measured);
+    });
+
+    it('forced restore bottom path schedules delayed remeasure passes', () => {
+        assert.ok(virtualScrollSource.includes('forceBottomAfterRestore('), 'VirtualScroll should expose forced restore API');
+        assert.ok(virtualScrollSource.includes('scheduleRestoreReconcile('), 'forced restore should use a dedicated scheduler');
+        assert.ok(virtualScrollSource.includes('runRestoreReconcilePass('), 'restore scheduler should run a remeasure pass');
+        assert.ok(virtualScrollSource.includes('remeasureMountedVirtualItems(this.items, this.mounted, this.virtualizer)'), 'restore pass should remeasure mounted items');
+        assert.ok(virtualScrollSource.includes('document.fonts?.ready'), 'restore pass should wait for font layout when available');
+        assert.ok(virtualScrollSource.includes('this.scheduleRestoreTimer(reason, 250)'), 'restore should run a delayed 250ms pass');
+        assert.ok(virtualScrollSource.includes('this.scheduleRestoreTimer(reason, 1000)'), 'restore should run a delayed 1000ms pass');
+        assert.ok(virtualScrollSource.includes('clearRestoreTimers()'), 'restore timers should be cleaned up');
     });
 });

@@ -37,7 +37,11 @@ test('dispatch route reports verdict persistence diagnostics', () => {
     assert.ok(routeBlock.includes('const orchestration = {'), 'dispatch route should build orchestration diagnostics');
     assert.ok(routeBlock.includes('verdict: verdict || null'), 'diagnostics should include parsed verdict');
     assert.ok(routeBlock.includes('currentState: currentOrcState'), 'diagnostics should include current PABCD state');
+    assert.ok(routeBlock.includes('stateAtDispatch'), 'diagnostics should include state at dispatch start');
+    assert.ok(routeBlock.includes('stateAtCompletion'), 'diagnostics should include state after worker completion');
     assert.ok(routeBlock.includes('ctxPresent: Boolean(dispatchCtx)'), 'diagnostics should include ctx presence');
+    assert.ok(routeBlock.includes('statusPersistReason'), 'diagnostics should include verdict persistence reason');
+    assert.ok(routeBlock.includes("statusPersistReason = 'state_changed'"), 'state changes during dispatch should be reported');
     assert.ok(routeBlock.includes("persistedField = 'auditStatus'"), 'PASS/FAIL in A should persist to auditStatus');
     assert.ok(routeBlock.includes("persistedField = 'verificationStatus'"), 'DONE/NEEDS_FIX in B should persist to verificationStatus');
 });

@@ -8,7 +8,7 @@ import { getAgentAvatarMarkup, getUserAvatarMarkup } from './features/avatar.js'
 import { t } from './features/i18n.js';
 import { api } from './api.js';
 import { cacheMessages, getCachedMessages, appendCachedMessage, upsertMessage, setMessageScope, getScopedMessages } from './features/idb-cache.js';
-import { getVirtualScroll, VS_THRESHOLD, type VirtualItem } from './virtual-scroll.js';
+import { getVirtualScroll, VS_THRESHOLD, type RestoreReason, type VirtualItem } from './virtual-scroll.js';
 import { bootstrapVirtualHistory, type VirtualHistoryBootstrapDeps } from './virtual-scroll-bootstrap.js';
 import { createStreamRenderer, appendChunk, finalizeStream, hydrateStreamRenderer, type StreamState } from './streaming-render.js';
 import { activateWidgets } from './diagram/iframe-renderer.js';
@@ -504,6 +504,26 @@ export function reconcileChatBottomAfterLayout(shouldFollow = isChatNearBottom()
             if (c) c.scrollTop = c.scrollHeight;
         });
     });
+}
+
+export function reconcileChatBottomAfterRestore(reason: string): void {
+    ensureScrollTracking();
+    userNearBottom = true;
+    const vs = getVirtualScroll();
+    if (vs.active) {
+        vs.forceBottomAfterRestore(reason as RestoreReason);
+        return;
+    }
+    const scroll = () => {
+        const c = document.getElementById('chatMessages');
+        if (c) c.scrollTop = c.scrollHeight;
+    };
+    scroll();
+    requestAnimationFrame(scroll);
+    requestAnimationFrame(() => requestAnimationFrame(scroll));
+    window.setTimeout(scroll, 250);
+    window.setTimeout(scroll, 1000);
+    void document.fonts?.ready.then(scroll);
 }
 
 /** Scroll chat to bottom.

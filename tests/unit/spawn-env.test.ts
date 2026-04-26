@@ -1,26 +1,44 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { applyCliEnvDefaults, buildSessionResumeKey } from '../../src/agent/spawn-env.ts';
+import { mkdtempSync, readFileSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import {
+    applyCliEnvDefaults,
+    buildSessionResumeKey,
+    ensureOpencodeAlwaysAllowPermissions,
+    withOpencodeAlwaysAllowPermissions,
+} from '../../src/agent/spawn-env.ts';
+
+function withoutPath(env: Record<string, string>): Record<string, string> {
+    const { PATH: _path, ...rest } = env;
+    return rest;
+}
 
 test('enables Exa by default for opencode when unset', () => {
     assert.deepEqual(
-        applyCliEnvDefaults('opencode', {}, {}),
+        withoutPath(applyCliEnvDefaults('opencode', {}, {})),
         { OPENCODE_ENABLE_EXA: 'true' },
     );
 });
 
 test('preserves explicit opencode override', () => {
     assert.deepEqual(
-        applyCliEnvDefaults('opencode', { OPENCODE_ENABLE_EXA: 'false' }, {}),
+        withoutPath(applyCliEnvDefaults('opencode', { OPENCODE_ENABLE_EXA: 'false' }, {})),
         { OPENCODE_ENABLE_EXA: 'false' },
     );
 });
 
 test('preserves inherited opencode env when already set', () => {
     assert.deepEqual(
-        applyCliEnvDefaults('opencode', { OTHER_FLAG: '1' }, { OPENCODE_ENABLE_EXA: '1' }),
+        withoutPath(applyCliEnvDefaults('opencode', { OTHER_FLAG: '1' }, { OPENCODE_ENABLE_EXA: '1' })),
         { OTHER_FLAG: '1' },
     );
+});
+
+test('prefers bun-installed opencode before older path entries', () => {
+    const next = applyCliEnvDefaults('opencode', {}, { PATH: '/opt/homebrew/bin:/usr/bin' });
+    assert.ok(next.PATH?.startsWith(`${process.env.HOME}/.bun/bin:`));
 });
 
 test('does not modify non-opencode env', () => {
@@ -35,4 +53,35 @@ test('builds opencode resume key from effective Exa env', () => {
     assert.equal(buildSessionResumeKey('opencode', { OPENCODE_ENABLE_EXA: '1' }), 'exa=1');
     assert.equal(buildSessionResumeKey('opencode', { OPENCODE_ENABLE_EXA: 'false' }), 'exa=0');
     assert.equal(buildSessionResumeKey('claude', {}), null);
+});
+
+test('opencode permission config always allows dynamic jaw homes', () => {
+    const next = withOpencodeAlwaysAllowPermissions({
+        permission: { websearch: 'ask' },
+        provider: { lidge: true },
+    });
+
+    assert.equal(next.$schema, 'https://opencode.ai/config.json');
+    assert.deepEqual(next.provider, { lidge: true });
+    assert.equal((next.permission as Record<string, unknown>)['*'], 'allow');
+    assert.equal((next.permission as Record<string, unknown>).external_directory, 'allow');
+    assert.equal((next.permission as Record<string, unknown>).websearch, 'allow');
+    assert.equal((next.permission as Record<string, unknown>).bash, 'allow');
+});
+
+test('writes opencode always-allow permissions without dropping existing config', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jaw-opencode-'));
+    const configPath = join(dir, 'opencode.json');
+    writeFileSync(configPath, JSON.stringify({
+        permission: { webfetch: 'allow' },
+        provider: { lidge: { models: { test: true } } },
+    }, null, 2));
+
+    ensureOpencodeAlwaysAllowPermissions(configPath);
+
+    const next = JSON.parse(readFileSync(configPath, 'utf8'));
+    assert.equal(next.permission.external_directory, 'allow');
+    assert.equal(next.permission.webfetch, 'allow');
+    assert.equal(next.permission.question, 'allow');
+    assert.deepEqual(next.provider, { lidge: { models: { test: true } } });
 });

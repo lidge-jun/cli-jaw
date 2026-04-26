@@ -1,9 +1,11 @@
-import test from 'node:test';
+import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { getState, setState, resetAllStaleStates } from '../../src/orchestrator/state-machine.ts';
 
 const serverSrc = readFileSync(new URL('../../server.ts', import.meta.url), 'utf8');
+
+afterEach(() => { resetAllStaleStates(); });
 
 test('SOS-001: startup calls resetAllStaleStates (single-scope)', () => {
     assert.ok(serverSrc.includes('resetAllStaleStates()'),

@@ -1,8 +1,10 @@
-import test from 'node:test';
+import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolveOrcScope, findActiveScope } from '../../src/orchestrator/scope.ts';
 import { getCtx, setState, resetState } from '../../src/orchestrator/state-machine.ts';
+
+afterEach(() => { resetState('default'); });
 
 test('SSD-001: resolveOrcScope always returns default regardless of input', () => {
     assert.equal(resolveOrcScope(), 'default');

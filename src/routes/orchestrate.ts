@@ -279,24 +279,38 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
             // 'A' phase verdicts → auditStatus; 'B' phase verdicts → verificationStatus.
             const verdict = parseWorkerVerdict(result.text || '');
             let statusPersisted = false;
+            let statusPersistReason: 'persisted' | 'state_changed' | 'not_applicable' | null = null;
             let persistedField: 'auditStatus' | 'verificationStatus' | null = null;
+            const stateAtDispatch = currentOrcState;
+            const stateAtCompletion = getState(dispatchScope);
             if (verdict && dispatchCtx) {
-                const freshCtx = getCtx(dispatchScope) || dispatchCtx;
-                if (currentOrcState === 'A' && (verdict === 'pass' || verdict === 'fail')) {
+                if (stateAtCompletion !== stateAtDispatch) {
+                    statusPersistReason = 'state_changed';
+                } else {
+                    const freshCtx = getCtx(dispatchScope) || dispatchCtx;
+                    if (currentOrcState === 'A' && (verdict === 'pass' || verdict === 'fail')) {
                     setState('A', { ...freshCtx, auditStatus: verdict }, dispatchScope);
                     statusPersisted = true;
+                    statusPersistReason = 'persisted';
                     persistedField = 'auditStatus';
-                } else if (currentOrcState === 'B' && (verdict === 'done' || verdict === 'needs_fix')) {
+                    } else if (currentOrcState === 'B' && (verdict === 'done' || verdict === 'needs_fix')) {
                     setState('B', { ...freshCtx, verificationStatus: verdict }, dispatchScope);
                     statusPersisted = true;
+                    statusPersistReason = 'persisted';
                     persistedField = 'verificationStatus';
+                    } else {
+                        statusPersistReason = 'not_applicable';
+                    }
                 }
             }
             const orchestration = {
                 verdict: verdict || null,
                 currentState: currentOrcState,
+                stateAtDispatch,
+                stateAtCompletion,
                 ctxPresent: Boolean(dispatchCtx),
                 statusPersisted,
+                statusPersistReason,
                 persistedField,
             };
             if (clientDisconnected) {

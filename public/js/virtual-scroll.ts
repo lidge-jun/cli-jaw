@@ -15,6 +15,17 @@ const EST_HEIGHT = 80;
 const OVERSCAN = 5;
 const BOTTOM_THRESHOLD = 80;
 
+export type RestoreReason =
+    | 'pageshow'
+    | 'visibility'
+    | 'focus'
+    | 'pagehide'
+    | 'freeze'
+    | 'resume'
+    | 'discard'
+    | 'reconnect'
+    | 'manual';
+
 export interface VirtualItem {
     id: string;
     html: string;
@@ -60,6 +71,7 @@ export class VirtualScroll {
     private cleanupFn: (() => void) | null = null;
     private mounted = new Map<number, HTMLElement>();
     private itemGap = 0;
+    private restorePassTimers = new Set<number>();
 
     onLazyRender: LazyRenderCallback | null = null;
     onPostRender: ((viewport: HTMLElement) => void) | null = null;
@@ -182,7 +194,7 @@ export class VirtualScroll {
         return dist < threshold;
     }
 
-    reconcileBottomAfterLayout(reason: 'pageshow' | 'visibility' | 'focus' | 'reconnect' | 'manual', shouldFollow = this.isNearBottom()): void {
+    reconcileBottomAfterLayout(reason: RestoreReason, shouldFollow = this.isNearBottom()): void {
         if (!shouldFollow) return;
         void reason;
         requestAnimationFrame(() => {
@@ -191,6 +203,44 @@ export class VirtualScroll {
                 this.scrollToBottom();
             });
         });
+    }
+
+    forceBottomAfterRestore(reason: RestoreReason): void {
+        this.scheduleRestoreReconcile(reason);
+    }
+
+    private scheduleRestoreReconcile(reason: RestoreReason): void {
+        this.runRestoreReconcilePass(reason);
+        requestAnimationFrame(() => this.runRestoreReconcilePass(reason));
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => this.runRestoreReconcilePass(reason));
+        });
+        this.scheduleRestoreTimer(reason, 250);
+        this.scheduleRestoreTimer(reason, 1000);
+        void document.fonts?.ready.then(() => this.runRestoreReconcilePass(reason));
+    }
+
+    private scheduleRestoreTimer(reason: RestoreReason, delayMs: number): void {
+        const timer = window.setTimeout(() => {
+            this.restorePassTimers.delete(timer);
+            this.runRestoreReconcilePass(reason);
+        }, delayMs);
+        this.restorePassTimers.add(timer);
+    }
+
+    private runRestoreReconcilePass(reason: RestoreReason): void {
+        if (!this.virtualizer) return;
+        void reason;
+        this.invalidateLayout();
+        remeasureMountedVirtualItems(this.items, this.mounted, this.virtualizer);
+        this.scrollToBottom();
+    }
+
+    private clearRestoreTimers(): void {
+        for (const timer of this.restorePassTimers) {
+            window.clearTimeout(timer);
+        }
+        this.restorePassTimers.clear();
     }
 
     flushToDOM(): void {
@@ -286,14 +336,12 @@ export class VirtualScroll {
             cleanupFns.push(() => containerObserver.disconnect());
         }
 
-        // ── bfcache restoration ──
-        // pageshow fires when page is restored from bfcache (persisted=true).
-        // Regular reload goes through normal activate() flow, but bfcache
-        // restores the JS heap with stale cached measurements.
-        const restoreBottomAfterLayout = (reason: 'pageshow' | 'visibility' | 'focus') => {
+        // ── Browser restore reconciliation ──
+        // Resume/discard paths can restore stale virtualizer measurements.
+        // Product policy: browser restore/reconnect forces the newest message.
+        const restoreBottomAfterLayout = (reason: RestoreReason) => {
             if (!this.virtualizer) return;
-            const shouldFollow = this.isNearBottom();
-            this.reconcileBottomAfterLayout(reason, shouldFollow);
+            this.forceBottomAfterRestore(reason);
         };
         const onPageShow = (e: PageTransitionEvent) => {
             if (!e.persisted) return;
@@ -307,11 +355,21 @@ export class VirtualScroll {
         document.addEventListener('visibilitychange', onVisibilityChange);
         const onFocus = () => restoreBottomAfterLayout('focus');
         window.addEventListener('focus', onFocus);
+        const onResume = () => restoreBottomAfterLayout('resume');
+        document.addEventListener('resume', onResume);
+        const onPageHide = () => { /* diagnostic hook: restore happens on pageshow/resume */ };
+        window.addEventListener('pagehide', onPageHide);
+        const onFreeze = () => { /* diagnostic hook: restore happens on resume */ };
+        document.addEventListener('freeze', onFreeze);
         this.cleanupFn = () => {
             window.removeEventListener('pageshow', onPageShow);
             document.removeEventListener('visibilitychange', onVisibilityChange);
             window.removeEventListener('focus', onFocus);
+            document.removeEventListener('resume', onResume);
+            window.removeEventListener('pagehide', onPageHide);
+            document.removeEventListener('freeze', onFreeze);
             for (const cleanup of cleanupFns.reverse()) cleanup();
+            this.clearRestoreTimers();
         };
 
         this.virtualizer._willUpdate();
@@ -334,9 +392,15 @@ export class VirtualScroll {
         } else {
             this.renderItems();
         }
+        const wasDiscarded = 'wasDiscarded' in document
+            && Boolean((document as Document & { wasDiscarded?: boolean }).wasDiscarded);
+        if (wasDiscarded) {
+            this.forceBottomAfterRestore('discard');
+        }
     }
 
     private deactivate(): void {
+        this.clearRestoreTimers();
         if (this.cleanupFn) {
             this.cleanupFn();
             this.cleanupFn = null;

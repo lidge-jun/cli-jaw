@@ -59,7 +59,9 @@ export function setState(
 ): void {
   const ctxJson = ctx !== undefined
     ? (ctx ? JSON.stringify(ctx) : null)
-    : ((getOrcState.get(scope) as { ctx?: string | null } | undefined)?.ctx || null);
+    : (s === 'P'
+      ? null
+      : ((getOrcState.get(scope) as { ctx?: string | null } | undefined)?.ctx || null));
   setOrcState.run(scope, s, ctxJson);
 
   // Parse worklog title (max 2 words + …)

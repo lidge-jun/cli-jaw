@@ -35,9 +35,10 @@ export interface SpawnContext {
   metadata?: Record<string, any>;
   finishReason?: string;
   pendingOutputChunk?: string;
-  opencodeStepText?: string;
+  geminiDeltaActive?: boolean;
+  opencodePreToolText?: string;
+  opencodePostToolText?: string;
   opencodeSawToolInStep?: boolean;
-  opencodeTextAfterLastTool?: boolean;
   opencodeHadToolErrorInStep?: boolean;
   opencodePendingToolRefs?: string[];
   opencodeTaskCallIds?: Set<string>;

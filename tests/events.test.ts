@@ -865,8 +865,17 @@ test('assistant output segments use a single markdown line break boundary', () =
     extractFromEvent('gemini', firstGemini, geminiCtx, 'gemini');
     assert.equal(extractOutputChunk('gemini', firstGemini, geminiCtx), 'a답변');
     extractFromEvent('gemini', secondGemini, geminiCtx, 'gemini');
-    assert.equal(extractOutputChunk('gemini', secondGemini, geminiCtx), '\n- b답변');
-    assert.equal(geminiCtx.fullText, 'a답변\n- b답변');
+    assert.equal(extractOutputChunk('gemini', secondGemini, geminiCtx), 'b답변');
+    assert.equal(geminiCtx.fullText, 'a답변b답변');
+
+    const koreanCtx = { toolLog: [], fullText: '', traceLog: [] };
+    const firstKorean = { type: 'message', role: 'assistant', content: '정', delta: true };
+    const secondKorean = { type: 'message', role: 'assistant', content: '확도', delta: true };
+    extractFromEvent('gemini', firstKorean, koreanCtx, 'gemini');
+    assert.equal(extractOutputChunk('gemini', firstKorean, koreanCtx), '정');
+    extractFromEvent('gemini', secondKorean, koreanCtx, 'gemini');
+    assert.equal(extractOutputChunk('gemini', secondKorean, koreanCtx), '확도');
+    assert.equal(koreanCtx.fullText, '정확도');
 
     const splitCtx = { toolLog: [], fullText: '', traceLog: [] };
     const firstSplit = { type: 'message', role: 'assistant', content: 'BETA /tmp/cli', delta: true };
@@ -876,6 +885,13 @@ test('assistant output segments use a single markdown line break boundary', () =
     extractFromEvent('gemini', secondSplit, splitCtx, 'gemini');
     assert.equal(extractOutputChunk('gemini', secondSplit, splitCtx), '-jaw');
     assert.equal(splitCtx.fullText, 'BETA /tmp/cli-jaw');
+
+    const boundaryCtx = { toolLog: [], fullText: '', traceLog: [] };
+    extractFromEvent('gemini', { type: 'message', role: 'assistant', content: 'I will check.', delta: true }, boundaryCtx, 'gemini');
+    extractFromEvent('gemini', { type: 'tool_use', tool_name: 'run_shell_command', tool_id: 't1', parameters: { command: 'pwd' } }, boundaryCtx, 'gemini');
+    extractFromEvent('gemini', { type: 'tool_result', tool_id: 't1', status: 'success', output: '/tmp' }, boundaryCtx, 'gemini');
+    extractFromEvent('gemini', { type: 'message', role: 'assistant', content: 'Done.', delta: true }, boundaryCtx, 'gemini');
+    assert.equal(boundaryCtx.fullText, 'I will check.\n- Done.');
 
     const codexCtx = { toolLog: [], fullText: '', seenToolKeys: new Set() };
     extractFromEvent('codex', { type: 'item.completed', item: { type: 'agent_message', id: 'm1', text: 'first' } }, codexCtx, 'codex');
@@ -891,9 +907,9 @@ test('opencode buffers pre-tool text until step_finish and discards tool-call ch
         fullText: '',
         traceLog: [],
         pendingOutputChunk: '',
-        opencodeStepText: '',
+        opencodePreToolText: '',
+        opencodePostToolText: '',
         opencodeSawToolInStep: false,
-        opencodeTextAfterLastTool: false,
         opencodeHadToolErrorInStep: false,
         opencodePendingToolRefs: [],
     };
@@ -935,15 +951,15 @@ test('opencode buffers pre-tool text until step_finish and discards tool-call ch
     );
 });
 
-test('opencode keeps text emitted after tool_use even when step_finish reason is tool-calls', () => {
+test('opencode keeps post-tool text during tool-calls steps', () => {
     const ctx = {
         toolLog: [],
         fullText: '',
         traceLog: [],
         pendingOutputChunk: '',
-        opencodeStepText: '',
+        opencodePreToolText: '',
+        opencodePostToolText: '',
         opencodeSawToolInStep: false,
-        opencodeTextAfterLastTool: false,
         opencodeHadToolErrorInStep: false,
         opencodePendingToolRefs: [],
     };
@@ -978,15 +994,15 @@ test('opencode keeps text emitted after tool_use even when step_finish reason is
     );
 });
 
-test('opencode discards post-tool progress text after successful tool_use when step_finish reason is tool-calls', () => {
+test('opencode keeps post-tool progress text after successful tool_use when step_finish reason is tool-calls', () => {
     const ctx = {
         toolLog: [],
         fullText: '',
         traceLog: [],
         pendingOutputChunk: '',
-        opencodeStepText: '',
+        opencodePreToolText: '',
+        opencodePostToolText: '',
         opencodeSawToolInStep: false,
-        opencodeTextAfterLastTool: false,
         opencodeHadToolErrorInStep: false,
         opencodePendingToolRefs: [],
     };
@@ -1014,19 +1030,68 @@ test('opencode discards post-tool progress text after successful tool_use when s
         part: { reason: 'tool-calls' },
     }, ctx, 'oc');
 
-    assert.equal(ctx.fullText, '');
+    assert.equal(ctx.fullText, '좋아요! 파일 있네요! 내용 확인하고 websearch 추가할게요!');
     assert.equal(
         extractOutputChunk('opencode', {
             type: 'step_finish',
             sessionID: 'oc-1',
             part: { reason: 'tool-calls' },
         }, ctx),
-        '',
+        '좋아요! 파일 있네요! 내용 확인하고 websearch 추가할게요!',
     );
     assert.equal(ctx.toolLog[0].status, 'done');
     assert.equal(ctx.toolLog[0].icon, '✅');
+});
+
+test('opencode commits only post-tool text during tool-calls step and suppresses pre-tool chatter', () => {
+    const ctx = {
+        toolLog: [],
+        fullText: '',
+        traceLog: [],
+        pendingOutputChunk: '',
+        opencodePreToolText: '',
+        opencodePostToolText: '',
+        opencodeSawToolInStep: false,
+        opencodeHadToolErrorInStep: false,
+        opencodePendingToolRefs: [],
+    };
+
+    extractFromEvent('opencode', { type: 'step_start', part: { model: 'kimi-k2.6' } }, ctx, 'oc');
+    extractFromEvent('opencode', { type: 'text', part: { text: 'Let me check first.' } }, ctx, 'oc');
+    extractFromEvent('opencode', {
+        type: 'tool_use',
+        part: {
+            tool: 'bash',
+            callID: 'bash:1',
+            state: {
+                status: 'completed',
+                metadata: { exit: 0 },
+                input: { command: 'pwd' },
+            },
+        },
+    }, ctx, 'oc');
+    extractFromEvent('opencode', {
+        type: 'text',
+        part: { text: 'The repo is available; I will inspect the parser next.' },
+    }, ctx, 'oc');
+    extractFromEvent('opencode', {
+        type: 'step_finish',
+        sessionID: 'oc-1',
+        part: { reason: 'tool-calls' },
+    }, ctx, 'oc');
+
+    assert.equal(ctx.fullText, 'The repo is available; I will inspect the parser next.');
+    assert.ok(!ctx.fullText.includes('Let me check first.'));
     assert.equal(ctx.toolLog[1].toolType, 'thinking');
-    assert.ok(ctx.toolLog[1].detail.includes('파일 있네요'));
+    assert.equal(ctx.toolLog[1].detail, 'Let me check first.');
+    assert.equal(
+        extractOutputChunk('opencode', {
+            type: 'step_finish',
+            sessionID: 'oc-1',
+            part: { reason: 'tool-calls' },
+        }, ctx),
+        'The repo is available; I will inspect the parser next.',
+    );
 });
 
 test('opencode marks unresolved bash exec as done when the step finishes cleanly', () => {
@@ -1035,9 +1100,9 @@ test('opencode marks unresolved bash exec as done when the step finishes cleanly
         fullText: '',
         traceLog: [],
         pendingOutputChunk: '',
-        opencodeStepText: '',
+        opencodePreToolText: '',
+        opencodePostToolText: '',
         opencodeSawToolInStep: false,
-        opencodeTextAfterLastTool: false,
         opencodeHadToolErrorInStep: false,
         opencodePendingToolRefs: [],
     };

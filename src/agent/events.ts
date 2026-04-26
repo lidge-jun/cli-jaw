@@ -109,6 +109,18 @@ function appendAssistantTextSegment(ctx: SpawnContext, text: any): string {
     return segment;
 }
 
+function appendGeminiAssistantTextSegment(ctx: SpawnContext, text: any, isDelta: boolean): string {
+    const raw = String(text || '');
+    if (!raw) return '';
+    if (isDelta && ctx.geminiDeltaActive) {
+        ctx.fullText += raw;
+        return raw;
+    }
+    const segment = appendAssistantTextSegment(ctx, raw);
+    ctx.geminiDeltaActive = isDelta;
+    return segment;
+}
+
 function emitGeminiThought(
     ctx: SpawnContext,
     agentLabel: string,
@@ -564,6 +576,9 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
             if (event.type === 'init' && event.model) {
                 ctx.model = event.model;
             }
+            if (event.type === 'tool_use' || event.type === 'tool_result') {
+                ctx.geminiDeltaActive = false;
+            }
             // [#107/#121] Thought content never enters fullText; optional visibility uses process steps.
             if (event.type === 'thought' || event.thought === true) {
                 if (ctx.showReasoning) {
@@ -585,7 +600,7 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                         .map((p: any) => String(p?.text || ''))
                         .join('');
                     if (textOnly) {
-                        const segment = appendAssistantTextSegment(ctx, textOnly);
+                        const segment = appendGeminiAssistantTextSegment(ctx, textOnly, !!event.delta);
                         ctx.pendingOutputChunk = (ctx.pendingOutputChunk || '') + segment;
                         pushTrace(ctx, `[${agentLabel}] gemini text (filtered)`);
                     }
@@ -595,9 +610,10 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                 if (event.delta) {
                     pushTrace(ctx, `[${agentLabel}] gemini delta text`);
                 }
-                const segment = appendAssistantTextSegment(ctx, event.content || '');
+                const segment = appendGeminiAssistantTextSegment(ctx, event.content || '', !!event.delta);
                 ctx.pendingOutputChunk = (ctx.pendingOutputChunk || '') + segment;
             } else if (event.type === 'result') {
+                ctx.geminiDeltaActive = false;
                 ctx.geminiResultSeen = true;
                 ctx.duration = event.stats?.duration_ms;
                 ctx.turns = event.stats?.tool_calls;
@@ -617,19 +633,21 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
             if (event.type === 'step_start') {
                 const model = event.part?.model || event.model;
                 if (model) ctx.model = model;
-                ctx.opencodeStepText = '';
+                ctx.opencodePreToolText = '';
+                ctx.opencodePostToolText = '';
                 ctx.opencodeSawToolInStep = false;
-                ctx.opencodeTextAfterLastTool = false;
                 ctx.opencodeHadToolErrorInStep = false;
                 ctx.opencodePendingToolRefs = [];
                 pushTrace(ctx, `[${agentLabel}] opencode step_start${model ? ` model=${model}` : ''}`);
             }
             if (event.type === 'text' && event.part?.text) {
-                ctx.opencodeStepText = (ctx.opencodeStepText || '') + String(event.part.text);
-                if (ctx.opencodeSawToolInStep) ctx.opencodeTextAfterLastTool = true;
+                if (ctx.opencodeSawToolInStep) {
+                    ctx.opencodePostToolText = (ctx.opencodePostToolText || '') + String(event.part.text);
+                } else {
+                    ctx.opencodePreToolText = (ctx.opencodePreToolText || '') + String(event.part.text);
+                }
             } else if (event.type === 'tool_use') {
                 ctx.opencodeSawToolInStep = true;
-                ctx.opencodeTextAfterLastTool = false;
                 if (isOpencodeToolFailure(event.part)) ctx.opencodeHadToolErrorInStep = true;
             } else if (event.type === 'step_finish' && event.part) {
                 ctx.sessionId = event.sessionID;
@@ -656,31 +674,32 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                 if (event.part.reason) {
                     ctx.finishReason = event.part.reason;
                 }
-                const stepText = ctx.opencodeStepText || '';
-                const shouldCommitText = stepText && (
-                    event.part.reason !== 'tool-calls'
-                    || (!!ctx.opencodeTextAfterLastTool && !!ctx.opencodeHadToolErrorInStep)
-                );
-                if (shouldCommitText) {
-                    const segment = appendAssistantTextSegment(ctx, stepText);
+                const preToolText = ctx.opencodePreToolText || '';
+                const postToolText = ctx.opencodePostToolText || '';
+                const textToCommit = event.part.reason === 'tool-calls'
+                    ? postToolText
+                    : `${preToolText}${postToolText}`;
+                const suppressedText = event.part.reason === 'tool-calls' ? preToolText : '';
+                if (textToCommit) {
+                    const segment = appendAssistantTextSegment(ctx, textToCommit);
                     ctx.pendingOutputChunk = (ctx.pendingOutputChunk || '') + segment;
-                } else if (stepText) {
+                }
+                if (suppressedText) {
                     const thinkingTool = {
                         icon: '💭',
-                        label: buildPreview(stepText, 80) || 'thinking...',
+                        label: buildPreview(suppressedText, 80) || 'thinking...',
                         toolType: 'thinking' as const,
-                        detail: stepText,
+                        detail: suppressedText,
                     };
                     ctx.toolLog.push(thinkingTool);
                     syncLiveTools(ctx);
                     broadcast('agent_tool', { agentId: agentLabel, ...thinkingTool, ...empTag });
-                    const phase = ctx.opencodeTextAfterLastTool ? 'post-tool' : 'pre-tool';
-                    pushTrace(ctx, `[${agentLabel}] opencode ${phase} intermediate text (${stepText.length} chars)`);
+                    pushTrace(ctx, `[${agentLabel}] opencode pre-tool intermediate text (${suppressedText.length} chars)`);
                 }
                 finalizeOpencodePendingTools(ctx, agentLabel, empTag);
-                ctx.opencodeStepText = '';
+                ctx.opencodePreToolText = '';
+                ctx.opencodePostToolText = '';
                 ctx.opencodeSawToolInStep = false;
-                ctx.opencodeTextAfterLastTool = false;
                 ctx.opencodeHadToolErrorInStep = false;
                 ctx.opencodePendingToolRefs = [];
                 // [P2-3.12] Store step timing

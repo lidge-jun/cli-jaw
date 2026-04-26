@@ -85,27 +85,33 @@ test('WRS-004: applyQueuedOverlay no longer renders chat bubbles for queued item
     assert.ok(fnBlock.includes('data-queued-overlay="true"'), 'must still clean up legacy overlay nodes from older builds');
 });
 
-test('WRS-005: virtual scroll restore hooks preserve bottom intent after browser restore', { skip: !hasVirtualScroll && 'public/js/virtual-scroll source not found' }, () => {
+test('WRS-005: virtual scroll restore hooks force bottom after browser restore', { skip: !hasVirtualScroll && 'public/js/virtual-scroll source not found' }, () => {
     const src = readFileSync(virtualScrollPath, 'utf8');
     assert.ok(src.includes('isNearBottom('), 'VirtualScroll should expose near-bottom intent detection');
     assert.ok(src.includes('reconcileBottomAfterLayout('), 'VirtualScroll should expose post-layout bottom reconciliation');
+    assert.ok(src.includes('forceBottomAfterRestore('), 'VirtualScroll should expose forced restore bottom reconciliation');
     assert.ok(src.includes("window.addEventListener('pageshow'"), 'bfcache restore should be handled');
     assert.ok(src.includes("document.addEventListener('visibilitychange'"), 'sleep/wake visible restore should be handled');
     assert.ok(src.includes("window.addEventListener('focus'"), 'Chrome reopen/focus restore should be handled');
+    assert.ok(src.includes("document.addEventListener('resume'"), 'Chrome resume restore should be handled');
+    assert.ok(src.includes('wasDiscarded'), 'Chrome tab discard restore should be detected');
 });
 
-test('WRS-006: reconnect snapshot reapplies bottom anchor only when already following tail', { skip: !hasWs && 'public/js/ws source not found' }, () => {
+test('WRS-006: reconnect snapshot reapplies bottom anchor without stale near-bottom gate', { skip: !hasWs && 'public/js/ws source not found' }, () => {
     const wsSrc = readFileSync(wsPath, 'utf8');
     const openIdx = wsSrc.indexOf('state.ws.onopen');
     assert.ok(openIdx > 0, 'ws onopen handler should exist');
     const openBlock = wsSrc.slice(openIdx, wsSrc.indexOf('state.ws.onclose', openIdx));
-    assert.ok(openBlock.includes('const shouldFollowBottom = isChatNearBottom()'), 'reconnect should capture bottom intent before hydration');
-    assert.ok(openBlock.includes('reconcileChatBottomAfterLayout(shouldFollowBottom)'), 'reconnect should reconcile bottom after hydration');
+    assert.ok(!openBlock.includes('const shouldFollowBottom = isChatNearBottom()'), 'reconnect should not capture stale near-bottom geometry before hydration');
+    assert.ok(!openBlock.includes('reconcileChatBottomAfterLayout(shouldFollowBottom)'), 'reconnect should not gate restore on stale geometry');
+    assert.ok(openBlock.includes("reconcileChatBottomAfterRestore('reconnect')"), 'reconnect should force restore bottom after hydration');
 });
 
-test('WRS-007: ui exposes bottom intent helpers used by restore and reconnect paths', { skip: !hasUi && 'public/js/ui source not found' }, () => {
+test('WRS-007: ui exposes forced restore helper used by restore and reconnect paths', { skip: !hasUi && 'public/js/ui source not found' }, () => {
     const uiSrc = readFileSync(uiPath, 'utf8');
     assert.ok(uiSrc.includes('export function isChatNearBottom'), 'ui should export bottom intent reader');
     assert.ok(uiSrc.includes('export function reconcileChatBottomAfterLayout'), 'ui should export reconnect reconciliation helper');
+    assert.ok(uiSrc.includes('export function reconcileChatBottomAfterRestore'), 'ui should export forced restore reconciliation helper');
     assert.ok(uiSrc.includes("vs.reconcileBottomAfterLayout('reconnect', true)"), 'virtual-scroll reconnect should use the same reconciliation path');
+    assert.ok(uiSrc.includes('vs.forceBottomAfterRestore'), 'restore helper should delegate to virtual scroll forced restore');
 });

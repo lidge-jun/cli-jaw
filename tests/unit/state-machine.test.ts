@@ -1,4 +1,4 @@
-import { describe, test, beforeEach } from 'node:test';
+import { describe, test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
     getState, setState, getCtx, resetState,
@@ -7,6 +7,7 @@ import {
 } from '../../src/orchestrator/state-machine.ts';
 
 beforeEach(() => { resetState('default'); });
+afterEach(() => { resetState('default'); });
 
 describe('PABCD state-machine', () => {
     test('1. getState() = IDLE initially', () => {
@@ -75,5 +76,14 @@ describe('PABCD state-machine', () => {
         const saved = getCtx('default');
         assert.equal(saved!.originalPrompt, 'build settings');
         assert.equal(saved!.origin, 'web');
+    });
+    test('18. setState P without ctx clears stale context', () => {
+        const ctx = { originalPrompt: 'stale build', workingDir: null, plan: 'stale plan', workerResults: [], origin: 'web' };
+        setState('B', ctx, 'default');
+
+        setState('P', undefined, 'default');
+
+        assert.equal(getState('default'), 'P');
+        assert.equal(getCtx('default'), null);
     });
 });
