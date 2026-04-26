@@ -27,7 +27,7 @@ const _homeEqArg = process.argv.find(a => a.startsWith('--home='));
 if (_homeIdx !== -1 && process.argv[_homeIdx + 1]) {
     const _homeVal = process.argv[_homeIdx + 1]!;
     // Guard: if the "value" looks like a known subcommand, user forgot the path
-    const _knownCmds = ['serve', 'init', 'doctor', 'chat', 'employee', 'reset', 'mcp', 'skill', 'status', 'browser', 'memory', 'launchd', 'clone', 'service', 'orchestrate', 'dispatch'];
+    const _knownCmds = ['serve', 'init', 'doctor', 'chat', 'employee', 'reset', 'mcp', 'skill', 'status', 'browser', 'memory', 'launchd', 'clone', 'service', 'dashboard', 'orchestrate', 'dispatch'];
     if (_knownCmds.includes(_homeVal)) {
         console.error(`  ❌ --home requires a path argument (got subcommand '${_homeVal}')`);
         console.error(`  Usage: jaw --home <path> ${_homeVal}`);
@@ -86,6 +86,7 @@ ${c.bold}   🦈 v${pkg.version}${c.reset}  ${c.dim}AI Agent Orchestration Platf
     launchd    macOS 자동 실행 관리 (install/uninstall/status)
     service    크로스 플랫폼 자동 실행 (systemd/launchd/docker)
     clone      인스턴스 복제 (독립 에이전트 생성)
+    dashboard  다중 Jaw 인스턴스 manager 대시보드
     orchestrate PABCD 상태 전환 (P|A|B|C|D)
     dispatch   직원 호출 (pipe 모드 호환)
 
@@ -152,6 +153,9 @@ switch (command) {
         break;
     case 'service':
         await import('./commands/service.js');
+        break;
+    case 'dashboard':
+        await import('./commands/dashboard.js');
         break;
     case '--version':
     case '-v':
