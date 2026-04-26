@@ -112,6 +112,7 @@ export async function scanDashboardInstances(options: DashboardScanOptions = {})
     const checkedAt = new Date().toISOString();
     const timeoutMs = toPositiveInt(options.timeoutMs, DASHBOARD_SCAN_TIMEOUT_MS);
     const fetchImpl = options.fetchImpl || fetch;
+    const managerPort = toPositiveInt(options.managerPort, Number(DASHBOARD_DEFAULT_PORT));
     const ports = Array.from({ length: count }, (_, index) => from + index);
 
     const instances = await Promise.all(
@@ -120,12 +121,17 @@ export async function scanDashboardInstances(options: DashboardScanOptions = {})
 
     return {
         manager: {
-            port: toPositiveInt(options.managerPort, Number(DASHBOARD_DEFAULT_PORT)),
+            port: managerPort,
             rangeFrom: from,
             rangeTo: to,
             checkedAt,
+            proxy: {
+                enabled: true,
+                basePath: '/i',
+                allowedFrom: from,
+                allowedTo: to,
+            },
         },
         instances,
     };
 }
-

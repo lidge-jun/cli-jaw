@@ -28,6 +28,26 @@ test('manager scan defaults to 3457-3506 range', async () => {
     assert.ok(seen[49]?.includes('127.0.0.1:3506/api/health'));
 });
 
+test('manager scan returns proxy metadata for the scanned range', async () => {
+    const fetchImpl: FetchLike = async () => {
+        throw new Error('offline');
+    };
+
+    const result = await scanDashboardInstances({
+        from: 3457,
+        count: 2,
+        fetchImpl,
+        managerPort: 24576,
+    });
+
+    assert.deepEqual(result.manager.proxy, {
+        enabled: true,
+        basePath: '/i',
+        allowedFrom: 3457,
+        allowedTo: 3458,
+    });
+});
+
 test('manager scan keeps health row when metadata fetch fails', async () => {
     const fetchImpl: FetchLike = async (url) => {
         if (url.includes('/api/health')) return response({ ok: true, version: '1.7.34', uptime: 12 });

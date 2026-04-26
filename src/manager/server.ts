@@ -10,6 +10,7 @@ import {
     MANAGED_INSTANCE_PORT_FROM,
 } from './constants.js';
 import { scanDashboardInstances } from './scan.js';
+import { installDashboardProxy } from './proxy.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const serverRoot = join(__dirname, '..', '..');
@@ -56,18 +57,6 @@ const managerHtmlCandidates = [
     join(sourceRoot, 'manager', 'index.html'),
 ];
 
-app.use('/dist', express.static(distRoot));
-app.use('/assets', express.static(join(distRoot, 'assets')));
-app.use('/manager', express.static(join(sourceRoot, 'manager')));
-
-app.get('/{*splat}', (_req, res) => {
-    const htmlPath = managerHtmlCandidates.find(candidate => existsSync(candidate));
-    if (!htmlPath) {
-        return res.status(500).send('manager dashboard has not been built');
-    }
-    res.sendFile(htmlPath);
-});
-
 const server = app.listen(port, '127.0.0.1', () => {
     const url = `http://localhost:${port}`;
     console.log(`\n  Jaw Manager — ${url}`);
@@ -83,6 +72,20 @@ const server = app.listen(port, '127.0.0.1', () => {
         const opener = spawn(openCmd, openArgs, { detached: true, stdio: 'ignore' });
         opener.unref();
     }
+});
+
+installDashboardProxy(app, server, { from: scanFrom, count: scanCount });
+
+app.use('/dist', express.static(distRoot));
+app.use('/assets', express.static(join(distRoot, 'assets')));
+app.use('/manager', express.static(join(sourceRoot, 'manager')));
+
+app.get('/{*splat}', (_req, res) => {
+    const htmlPath = managerHtmlCandidates.find(candidate => existsSync(candidate));
+    if (!htmlPath) {
+        return res.status(500).send('manager dashboard has not been built');
+    }
+    res.sendFile(htmlPath);
 });
 
 server.on('error', (error: NodeJS.ErrnoException) => {

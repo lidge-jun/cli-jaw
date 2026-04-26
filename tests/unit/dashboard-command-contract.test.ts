@@ -39,3 +39,11 @@ test('dashboard implementation does not mount into existing serve path', () => {
     assert.equal(server.includes('/api/dashboard'), false, 'server.ts must not mount dashboard routes');
 });
 
+test('dashboard proxy is installed only in manager server', () => {
+    const managerServer = read('src/manager/server.ts');
+    const rootServer = read('server.ts');
+
+    assert.ok(managerServer.includes('installDashboardProxy'), 'manager server must install dashboard proxy');
+    assert.equal(rootServer.includes('installDashboardProxy'), false, 'root server.ts must not install dashboard proxy');
+    assert.equal(rootServer.includes('/i/:port'), false, 'root server.ts must not mount proxy routes');
+});
