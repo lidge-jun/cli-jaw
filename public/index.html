@@ -49,7 +49,11 @@
         </div>
 
         <div>
-            <div class="section-title" data-i18n="sidebar.memory">메모리</div>
+            <div class="section-title-row">
+                <div class="section-title" data-i18n="sidebar.memory">메모리</div>
+                <button class="help-trigger" type="button" data-help-topic="memory"
+                    data-i18n-aria="help.memory.aria" aria-label="메모리 도움말">?</button>
+            </div>
             <button class="sidebar-hb-btn" id="memorySidebarBtn" aria-label="Open memory panel"><span data-icon="brain"></span> Memory (0)</button>
         </div>
 
@@ -124,7 +128,11 @@
             </div>
             <button class="sidebar-hb-btn" id="btnClearChat">/clear</button>
             <button class="sidebar-hb-btn" id="hbSidebarBtn"><span data-icon="heartPulse"></span> Heartbeat (0)</button>
-            <button class="sidebar-hb-btn" data-action="openTemplates"><span data-icon="plan"></span> 프롬프트 템플릿</button>
+            <div class="sidebar-action-row">
+                <button class="sidebar-hb-btn" data-action="openTemplates"><span data-icon="plan"></span> 프롬프트 템플릿</button>
+                <button class="help-trigger" type="button" data-help-topic="promptTemplates"
+                    data-i18n-aria="help.promptTemplates.aria" aria-label="프롬프트 템플릿 도움말">?</button>
+            </div>
             <button class="sidebar-hb-btn" id="langToggle" title="한국어 ⇄ English"><span data-icon="web"></span> 한국어</button>
         </div>
     </nav>
@@ -203,7 +211,11 @@
         <!-- Agents Tab -->
         <div id="tabAgents" class="tab-content active" role="tabpanel" aria-labelledby="tabBtnAgents">
             <div>
-                <label data-i18n="label.activeCli">활성 CLI</label>
+                <label class="label-with-help">
+                    <span data-i18n="label.activeCli">활성 CLI</span>
+                    <button class="help-trigger" type="button" data-help-topic="activeCli"
+                        data-i18n-aria="help.activeCli.aria" aria-label="활성 CLI 도움말">?</button>
+                </label>
                 <select id="selCli">
                     <option value="claude">Claude</option>
                     <option value="codex">Codex</option>
@@ -214,11 +226,19 @@
             </div>
 
             <div>
-                <label data-i18n="label.model">모델</label>
+                <label class="label-with-help">
+                    <span data-i18n="label.model">모델</span>
+                    <button class="help-trigger" type="button" data-help-topic="model"
+                        data-i18n-aria="help.model.aria" aria-label="모델 도움말">?</button>
+                </label>
                 <select id="selModel"></select>
             </div>
             <div>
-                <label data-i18n="label.effort">추론 강도</label>
+                <label class="label-with-help">
+                    <span data-i18n="label.effort">추론 강도</span>
+                    <button class="help-trigger" type="button" data-help-topic="effort"
+                        data-i18n-aria="help.effort.aria" aria-label="추론 강도 도움말">?</button>
+                </label>
                 <select id="selEffort">
                     <option value="">— none</option>
                     <option value="low">🟢 low</option>
@@ -228,7 +248,11 @@
             </div>
 
             <div>
-                <label data-i18n="label.permissions">권한</label>
+                <label class="label-with-help">
+                    <span data-i18n="label.permissions">권한</span>
+                    <button class="help-trigger" type="button" data-help-topic="permissions"
+                        data-i18n-aria="help.permissions.aria" aria-label="권한 도움말">?</button>
+                </label>
                 <div class="perm-toggle">
                     <span class="perm-btn active perm-auto" ><span data-icon="exec"></span> Auto</span>
                 </div>
@@ -244,6 +268,8 @@
             <details id="flushAgentDetails" class="flush-agent-section">
                 <summary class="section-title" style="cursor:pointer; user-select:none;">
                     <span data-icon="lightbulb"></span> Flush Agent
+                    <button class="help-trigger" type="button" data-help-topic="flushAgent"
+                        data-i18n-aria="help.flushAgent.aria" aria-label="Flush Agent 도움말">?</button>
                     <span id="flushAgentBadge" class="text-xs text-dim" style="margin-left:4px"></span>
                 </summary>
                 <div class="flush-agent-fields" style="margin-top:6px">
@@ -270,7 +296,11 @@
             <hr class="hr-divider">
 
             <div class="flex justify-between items-center">
-                <div class="section-title" data-i18n="sidebar.employees">직원</div>
+                <div class="label-with-help">
+                    <div class="section-title" data-i18n="sidebar.employees">직원</div>
+                    <button class="help-trigger" type="button" data-help-topic="employees"
+                        data-i18n-aria="help.employees.aria" aria-label="직원 도움말">?</button>
+                </div>
                 <button class="btn-clear btn-action-sm" data-action="addEmployee"
                     data-i18n="btn.addEmployee">+ 추가</button>
             </div>
@@ -281,6 +311,11 @@
 
         <!-- Skills Tab -->
         <div id="tabSkills" class="tab-content" role="tabpanel" aria-labelledby="tabBtnSkills">
+            <div class="section-title-row">
+                <div class="section-title" data-i18n="tab.skills">스킬</div>
+                <button class="help-trigger" type="button" data-help-topic="skills"
+                    data-i18n-aria="help.skills.aria" aria-label="스킬 도움말">?</button>
+            </div>
             <div class="flex gap-2 flex-wrap">
                 <button class="skill-filter active" data-filter="all" data-i18n="skill.filter.all">전체</button>
                 <button class="skill-filter" data-filter="installed" data-i18n="skill.filter.installed"><span data-icon="compacting"></span> 설치됨</button>
@@ -305,7 +340,11 @@
                 시스템 프롬프트 편집</button>
             <!-- Active Channel Toggle -->
             <div class="settings-group">
-                <h4><span data-icon="radio"></span> Active Channel</h4>
+                <h4 class="section-title-row">
+                    <span><span data-icon="radio"></span> Active Channel</span>
+                    <button class="help-trigger" type="button" data-help-topic="activeChannel"
+                        data-i18n-aria="help.activeChannel.aria" aria-label="Active Channel 도움말">?</button>
+                </h4>
                 <div class="settings-row">
                     <label>Runtime</label>
                     <div>
@@ -317,7 +356,11 @@
 
             <!-- Telegram Bot -->
             <div id="channelTelegramSettings" class="settings-group">
-                <h4><span data-provider="telegram"></span> Telegram</h4>
+                <h4 class="section-title-row">
+                    <span><span data-provider="telegram"></span> Telegram</span>
+                    <button class="help-trigger" type="button" data-help-topic="telegram"
+                        data-i18n-aria="help.telegram.aria" aria-label="Telegram 도움말">?</button>
+                </h4>
                 <div class="settings-row">
                     <label data-i18n="label.enabled">활성화</label>
                     <div>
@@ -352,7 +395,11 @@
 
             <!-- Discord Bot -->
             <div id="channelDiscordSettings" class="settings-group" style="display:none">
-                <h4><span data-provider="discord"></span> Discord</h4>
+                <h4 class="section-title-row">
+                    <span><span data-provider="discord"></span> Discord</span>
+                    <button class="help-trigger" type="button" data-help-topic="discord"
+                        data-i18n-aria="help.discord.aria" aria-label="Discord 도움말">?</button>
+                </h4>
                 <div class="settings-row">
                     <label data-i18n="label.enabled">활성화</label>
                     <div>
@@ -514,7 +561,11 @@
 
             <!-- Fallback Order -->
             <div class="settings-group">
-                <h4><span data-icon="exec"></span> Fallback</h4>
+                <h4 class="section-title-row">
+                    <span><span data-icon="exec"></span> Fallback</span>
+                    <button class="help-trigger" type="button" data-help-topic="fallbackOrder"
+                        data-i18n-aria="help.fallbackOrder.aria" aria-label="Fallback 도움말">?</button>
+                </h4>
                 <p class="text-xs text-dim fallback-desc" data-i18n="fallback.desc">CLI 실패 시 자동
                     재시도 순서</p>
                 <div id="fallbackOrderList"></div>
@@ -522,7 +573,11 @@
 
             <!-- MCP Servers -->
             <div class="settings-group">
-                <h4><span data-icon="link"></span> MCP Servers</h4>
+                <h4 class="section-title-row">
+                    <span><span data-icon="link"></span> MCP Servers</span>
+                    <button class="help-trigger" type="button" data-help-topic="mcp"
+                        data-i18n-aria="help.mcp.aria" aria-label="MCP 도움말">?</button>
+                </h4>
                 <div id="mcpServerList" class="text-status py-1">
                     Loading...
                 </div>
@@ -535,7 +590,11 @@
 
             <!-- STT Settings -->
             <div class="settings-group">
-                <h4 data-i18n="stt.title"><span data-icon="mic"></span> 음성 인식 (STT)</h4>
+                <h4 class="section-title-row">
+                    <span><span data-icon="mic"></span> <span data-i18n="stt.title">음성 인식 (STT)</span></span>
+                    <button class="help-trigger" type="button" data-help-topic="stt"
+                        data-i18n-aria="help.stt.aria" aria-label="STT 도움말">?</button>
+                </h4>
                 <div class="settings-row">
                     <label data-i18n="stt.engine">엔진</label>
                     <select id="sttEngine">

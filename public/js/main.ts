@@ -84,6 +84,7 @@ import { ICONS, hydrateIcons } from './icons.js';
 import { hydrateProviderIcons } from './provider-icons.js';
 import { initPendingQueue } from './features/pending-queue.js';
 import { initAttentionBadge } from './features/attention-badge.js';
+import { initHelpDialog } from './features/help-dialog.js';
 
 // ── Chat Actions ──
 document.getElementById('btnSend')?.addEventListener('click', sendMessage);
@@ -450,6 +451,7 @@ async function bootstrap(): Promise<void> {
     if (langBtn) langBtn.innerHTML = `${ICONS.web} ${t('lang.' + getLang())}`;
     await loadCliRegistry();
     bindPerCliControlEvents();
+    initHelpDialog();
     initAttentionBadge();
     connect();
     initDragDrop();

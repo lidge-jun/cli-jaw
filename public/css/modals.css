@@ -79,6 +79,111 @@
     padding: 6px 20px;
 }
 
+/* ── Contextual help dialog ── */
+.label-with-help,
+.section-title-row,
+.sidebar-action-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.label-with-help,
+.section-title-row {
+    justify-content: space-between;
+}
+
+.sidebar-action-row .sidebar-hb-btn {
+    flex: 1;
+}
+
+.help-trigger {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: color-mix(in oklch, var(--surface) 80%, transparent);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 11px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.help-trigger:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 8%, transparent);
+}
+
+.help-trigger:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.help-dialog-box {
+    width: 500px;
+    max-width: calc(100vw - 32px);
+    max-height: min(80vh, 640px);
+}
+
+.help-dialog-body {
+    padding: 14px 16px;
+    overflow-y: auto;
+}
+
+.help-dialog-section {
+    margin-bottom: 14px;
+}
+
+.help-dialog-section:last-child {
+    margin-bottom: 0;
+}
+
+.help-dialog-section h3 {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.help-dialog-section p,
+.help-dialog-section li {
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-dim);
+}
+
+.help-dialog-list,
+.help-related-list {
+    margin: 0;
+    padding-left: 18px;
+}
+
+.help-dialog-done {
+    width: auto;
+    padding: 6px 18px;
+}
+
+@media (max-width: 768px) {
+    .help-trigger {
+        width: 44px;
+        height: 44px;
+        min-width: 44px;
+    }
+
+    .help-dialog-box {
+        max-width: calc(100vw - 24px);
+        max-height: min(84vh, 640px);
+    }
+}
+
 /* ── Heartbeat popup ── */
 .hb-job-card {
     background: var(--surface);
