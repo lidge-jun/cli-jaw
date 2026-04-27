@@ -1,6 +1,8 @@
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import './styles.css';
+import './manager-layout.css';
+import './manager-components.css';
 import './manager-persistence.css';
 
 const root = document.getElementById('manager-root');

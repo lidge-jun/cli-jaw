@@ -7,6 +7,8 @@ type InstanceRowProps = {
     busy: boolean;
     label: string;
     uptime: string;
+    density?: 'compact' | 'comfortable' | 'rail';
+    priority?: 'active' | 'pinned' | 'normal' | 'hidden';
     onSelect: (instance: DashboardInstance) => void;
     onPreview: (instance: DashboardInstance) => void;
     onLifecycle: (action: DashboardLifecycleAction, instance: DashboardInstance) => void;
@@ -25,7 +27,7 @@ export function InstanceRow(props: InstanceRowProps) {
     }
 
     return (
-        <article className={`instance-row ${props.selected ? 'is-selected' : ''}`}>
+        <article className={`instance-row density-${props.density || 'comfortable'} priority-${props.priority || 'normal'} ${props.selected ? 'is-selected' : ''}`}>
             <button
                 className="instance-row-select"
                 type="button"

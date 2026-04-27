@@ -5,6 +5,7 @@ import { CommandBar } from './components/CommandBar';
 import { InstanceDetailPanel } from './components/InstanceDetailPanel';
 import { InstanceDrawer } from './components/InstanceDrawer';
 import { InstanceGroups } from './components/InstanceGroups';
+import { InstanceNavigator } from './components/InstanceNavigator';
 import { ManagerShell } from './components/ManagerShell';
 import { MobileNav } from './components/MobileNav';
 import { SidebarRail } from './components/SidebarRail';
@@ -192,13 +193,18 @@ export function App() {
         }
     }
 
-    const instanceListContent = (
+    function renderInstanceListContent(excludeActive = false) {
+        const listInstances = excludeActive && selectedInstance
+            ? filtered.filter(instance => instance.port !== selectedInstance.port)
+            : filtered;
+
+        return (
         <>
             {error && <section className="state error-state">Scan failed: {error}</section>}
             {!error && loading && <section className="state">Scanning local Jaw instances...</section>}
             {!error && (
                 <InstanceGroups
-                    instances={filtered}
+                    instances={listInstances}
                     selectedPort={selectedInstance?.port || null}
                     lifecycleBusyPort={lifecycleBusyPort}
                     getLabel={instanceLabel}
@@ -209,7 +215,8 @@ export function App() {
                 />
             )}
         </>
-    );
+        );
+    }
 
     const workbenchHeader = (
         <div className="detail-header">
@@ -277,7 +284,21 @@ export function App() {
                                 onSelectActivity={() => view.setActivityDockCollapsed(false)}
                                 onToggleSidebar={handleSidebarToggle}
                             />
-                            <div className="manager-sidebar-list">{instanceListContent}</div>
+                            <div className="manager-sidebar-list">
+                                <InstanceNavigator
+                                    active={selectedInstance}
+                                    hiddenCount={instances.filter(instance => instance.hidden).length}
+                                    collapsed={view.sidebarCollapsed}
+                                    busyPort={lifecycleBusyPort}
+                                    getLabel={instanceLabel}
+                                    formatUptime={formatUptime}
+                                    onSelect={handleSelectInstance}
+                                    onPreview={handlePreview}
+                                    onLifecycle={(action, instance) => void handleLifecycle(action, instance)}
+                                >
+                                    {renderInstanceListContent(true)}
+                                </InstanceNavigator>
+                            </div>
                         </>
                     )}
                     workbench={(
@@ -322,12 +343,15 @@ export function App() {
                             activeTab={view.activeDetailTab}
                             onOpenInstances={() => view.setDrawerOpen(true)}
                             onSelectTab={handleTabChange}
-                            onToggleActivity={handleActivityToggle}
+                            onToggleActivity={() => {
+                                view.setActivityDockCollapsed(false);
+                                void saveUi({ activityDockCollapsed: false });
+                            }}
                         />
                     )}
                     drawer={(
                         <InstanceDrawer open={view.drawerOpen} onClose={() => view.setDrawerOpen(false)}>
-                            {instanceListContent}
+                            {renderInstanceListContent(false)}
                         </InstanceDrawer>
                     )}
                 />

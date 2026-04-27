@@ -11,6 +11,15 @@ function read(path: string): string {
     return readFileSync(join(projectRoot, path), 'utf8');
 }
 
+function readManagerCss(): string {
+    return [
+        'public/manager/src/styles.css',
+        'public/manager/src/manager-layout.css',
+        'public/manager/src/manager-components.css',
+        'public/manager/src/manager-persistence.css',
+    ].map(read).join('\n');
+}
+
 function cssBlock(css: string, mediaQuery: string): string {
     const start = css.indexOf(mediaQuery);
     assert.notEqual(start, -1, `${mediaQuery} media query must exist`);
@@ -45,6 +54,7 @@ test('manager responsive components exist', () => {
         'CommandFilters',
         'CommandBar',
         'InstanceGroups',
+        'InstanceNavigator',
         'InstanceRow',
         'InstanceDetailPanel',
         'ActivityDock',
@@ -60,7 +70,7 @@ test('manager responsive components exist', () => {
 });
 
 test('manager responsive CSS defines shell regions and breakpoints', () => {
-    const css = read('public/manager/src/styles.css');
+    const css = readManagerCss();
 
     assert.ok(css.includes('manager-shell'), 'CSS must define manager shell');
     assert.ok(css.includes('grid-template-areas'), 'CSS must use named shell regions');
@@ -78,10 +88,11 @@ test('manager responsive CSS defines shell regions and breakpoints', () => {
     assert.ok(css.includes('command-primary'), 'command center primary row must exist');
     assert.ok(css.includes('command-secondary'), 'command center secondary row must exist');
     assert.ok(css.includes('command-filter-strip'), 'command filters must have an isolated secondary area');
+    assert.ok(css.includes('instance-navigator-active'), 'navigator must keep the active instance outside the scroll body');
 });
 
 test('manager tablet and mobile breakpoints override desktop sidebar state', () => {
-    const css = read('public/manager/src/styles.css');
+    const css = readManagerCss();
     const laptop = cssBlock(css, '@media (max-width: 1279px) and (min-width: 1024px)');
     const tablet = cssBlock(css, '@media (max-width: 1023px)');
     const mobile = cssBlock(css, '@media (max-width: 767px)');
@@ -112,7 +123,7 @@ test('manager desktop layout uses one unified sidebar', () => {
     const app = read('public/manager/src/App.tsx');
     const shell = read('public/manager/src/components/ManagerShell.tsx');
     const workspace = read('public/manager/src/components/WorkspaceLayout.tsx');
-    const css = read('public/manager/src/styles.css');
+    const css = readManagerCss();
 
     assert.ok(app.includes('<WorkspaceLayout'), 'App must assemble navigator/workbench/inspector through WorkspaceLayout');
     assert.ok(app.includes('navigator={'), 'App must pass one navigator surface to WorkspaceLayout');
@@ -157,7 +168,7 @@ test('manager activity dock is vertically resizable', () => {
     const app = read('public/manager/src/App.tsx');
     const shell = read('public/manager/src/components/ManagerShell.tsx');
     const dock = read('public/manager/src/components/ActivityDock.tsx');
-    const css = read('public/manager/src/styles.css');
+    const css = readManagerCss();
 
     assert.ok(app.includes('activityHeight={view.activityDockCollapsed ? 48 : view.activityDockHeight}'), 'App must drive shell activity height');
     assert.ok(app.includes('onHeightChange={handleActivityHeight}'), 'App must wire activity resize state');
