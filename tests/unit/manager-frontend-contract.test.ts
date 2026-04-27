@@ -62,12 +62,12 @@ test('manager frontend exposes one-instance preview controls', () => {
 test('manager frontend exposes lifecycle controls without hiding discovery actions', () => {
     const app = read('public/manager/src/App.tsx');
     const row = read('public/manager/src/components/InstanceRow.tsx');
-    const command = read('public/manager/src/components/CommandBar.tsx');
+    const commandFilters = read('public/manager/src/components/CommandFilters.tsx');
     const types = read('public/manager/src/types.ts');
 
     assert.ok(types.includes('DashboardLifecycleCapability'), 'frontend types must include lifecycle capability');
     assert.ok(types.includes("'manager'"), 'frontend service mode must represent manager-owned instances');
-    assert.ok(command.includes('Custom home, default ~/.cli-jaw-<port>'), 'manager UI must expose custom home policy');
+    assert.ok(commandFilters.includes('Custom home, default ~/.cli-jaw-<port>'), 'manager UI must expose custom home policy');
     assert.ok(app.includes('handleLifecycle'), 'manager UI must keep lifecycle controller');
     assert.ok(row.includes("onLifecycle('start'"), 'manager UI must expose Start action');
     assert.ok(row.includes("onLifecycle('stop'"), 'manager UI must expose Stop action');
