@@ -69,7 +69,7 @@ function buildBaseRow(port: number, status: DashboardInstanceStatus, checkedAt: 
     };
 }
 
-async function scanPort(port: number, fetchImpl: FetchLike, timeoutMs: number, checkedAt: string): Promise<DashboardInstance> {
+export async function scanPort(port: number, fetchImpl: FetchLike, timeoutMs: number, checkedAt: string): Promise<DashboardInstance> {
     const baseUrl = `http://${MANAGED_INSTANCE_HOST}:${port}`;
     try {
         const health = await readJson(fetchImpl, `${baseUrl}/api/health`, timeoutMs);
@@ -105,6 +105,13 @@ async function scanPort(port: number, fetchImpl: FetchLike, timeoutMs: number, c
         const status: DashboardInstanceStatus = isAbortError(error) ? 'timeout' : 'offline';
         return buildBaseRow(port, status, checkedAt, (error as Error).message || status);
     }
+}
+
+export async function scanSinglePort(port: number, options: DashboardScanOptions = {}): Promise<DashboardInstance> {
+    const checkedAt = new Date().toISOString();
+    const timeoutMs = toPositiveInt(options.timeoutMs, DASHBOARD_SCAN_TIMEOUT_MS);
+    const fetchImpl = options.fetchImpl || fetch;
+    return scanPort(port, fetchImpl, timeoutMs, checkedAt);
 }
 
 export async function scanDashboardInstances(options: DashboardScanOptions = {}): Promise<DashboardScanResult> {

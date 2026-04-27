@@ -12,6 +12,7 @@
  */
 
 import { useMemo } from 'react';
+import type { ManagerEvent } from '../types';
 
 export type ActivityEntry = {
     at: string;            // ISO timestamp; missing → treated as Older
@@ -20,9 +21,28 @@ export type ActivityEntry = {
 };
 
 type ActivityTimelineProps = {
-    entries: Array<ActivityEntry | string>;
+    entries: Array<ActivityEntry | ManagerEvent | string>;
     emptyMessage?: string;
 };
+
+function eventToEntry(event: ManagerEvent): ActivityEntry {
+    switch (event.kind) {
+        case 'scan-completed':
+            return { at: event.at, source: 'scan', message: `range ${event.from}-${event.to}, ${event.reachable} reachable` };
+        case 'scan-failed':
+            return { at: event.at, source: 'error', message: event.reason };
+        case 'lifecycle-result':
+            return { at: event.at, source: event.action, message: `:${event.port} ${event.status}` };
+        case 'health-changed':
+            return { at: event.at, source: 'health', message: `:${event.port} ${event.from} → ${event.to}` };
+        case 'version-mismatch':
+            return { at: event.at, source: 'version', message: `:${event.port} ${event.expected || '?'} → ${event.seen}` };
+        case 'port-collision':
+            return { at: event.at, source: 'collision', message: `:${event.port} pids ${event.pids.join(', ')}` };
+        default:
+            return { at: new Date().toISOString(), source: 'event', message: 'unknown event' };
+    }
+}
 
 type Bucket = 'now' | 'earlier' | 'yesterday' | 'older';
 
@@ -36,9 +56,12 @@ const BUCKET_LABELS: Record<Bucket, string> = {
 const BUCKET_ORDER: Bucket[] = ['now', 'earlier', 'yesterday', 'older'];
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
 
-function normalize(entry: ActivityEntry | string, fallbackAt: string): ActivityEntry {
+function normalize(entry: ActivityEntry | ManagerEvent | string, fallbackAt: string): ActivityEntry {
     if (typeof entry === 'string') {
         return { at: fallbackAt, source: undefined, message: entry };
+    }
+    if ('kind' in entry) {
+        return eventToEntry(entry);
     }
     return entry;
 }

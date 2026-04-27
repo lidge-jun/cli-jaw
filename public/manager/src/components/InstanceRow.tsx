@@ -9,9 +9,16 @@ type InstanceRowProps = {
     uptime: string;
     density?: 'compact' | 'comfortable' | 'rail';
     priority?: 'active' | 'pinned' | 'normal' | 'hidden';
+    transitioning?: DashboardLifecycleAction | null;
     onSelect: (instance: DashboardInstance) => void;
     onPreview: (instance: DashboardInstance) => void;
     onLifecycle: (action: DashboardLifecycleAction, instance: DashboardInstance) => void;
+};
+
+const TRANSITION_LABELS: Record<DashboardLifecycleAction, string> = {
+    start: 'starting…',
+    stop: 'stopping…',
+    restart: 'restarting…',
 };
 
 function statusClass(status: DashboardInstance['status']): string {
@@ -26,8 +33,11 @@ export function InstanceRow(props: InstanceRowProps) {
         event.stopPropagation();
     }
 
+    const transitionLabel = props.transitioning ? TRANSITION_LABELS[props.transitioning] : null;
+    const dotClass = `${statusClass(props.instance.status)}${transitionLabel ? ' is-transitioning' : ''}`;
+
     return (
-        <article className={`instance-row density-${props.density || 'comfortable'} priority-${props.priority || 'normal'} ${props.selected ? 'is-selected' : ''}`}>
+        <article className={`instance-row density-${props.density || 'comfortable'} priority-${props.priority || 'normal'} ${props.selected ? 'is-selected' : ''}${transitionLabel ? ' is-transitioning-row' : ''}`}>
             <button
                 className="instance-row-select"
                 type="button"
@@ -35,10 +45,14 @@ export function InstanceRow(props: InstanceRowProps) {
                 onClick={() => props.onSelect(props.instance)}
             >
                 <div className="instance-row-main">
-                    <span className={statusClass(props.instance.status)} aria-label={props.instance.status} />
+                    <span className={dotClass} aria-label={props.instance.status} />
                     <div className="instance-row-title">
                         <strong>{props.instance.favorite ? `Pinned ${props.label}` : props.label}</strong>
-                        <span>{props.instance.group ? `${props.instance.group} · ${props.instance.workingDir || props.instance.url}` : props.instance.workingDir || props.instance.url}</span>
+                        <span>
+                            {transitionLabel
+                                ? <em className="instance-row-transition">{transitionLabel}</em>
+                                : (props.instance.group ? `${props.instance.group} · ${props.instance.workingDir || props.instance.url}` : props.instance.workingDir || props.instance.url)}
+                        </span>
                     </div>
                     <span className="port">:{props.instance.port}</span>
                 </div>

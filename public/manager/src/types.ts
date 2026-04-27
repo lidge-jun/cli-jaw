@@ -52,6 +52,8 @@ export type DashboardLifecycleCapability = {
     pid: number | null;
 };
 
+export type DashboardLifecycleExpectedState = 'online' | 'offline' | 'restart-detected';
+
 export type DashboardLifecycleResult = {
     ok: boolean;
     action: DashboardLifecycleAction;
@@ -61,8 +63,40 @@ export type DashboardLifecycleResult = {
     home: string | null;
     pid: number | null;
     command: string[];
+    expectedStateAfter?: DashboardLifecycleExpectedState;
     stderr?: string;
     stdout?: string;
+};
+
+export type ManagerEvent =
+    | { kind: 'scan-completed'; from: number; to: number; reachable: number; at: string }
+    | { kind: 'scan-failed'; reason: string; at: string }
+    | { kind: 'lifecycle-result'; port: number; action: DashboardLifecycleAction; status: string; message: string; at: string }
+    | { kind: 'health-changed'; port: number; from: DashboardInstanceStatus; to: DashboardInstanceStatus; reason: string | null; at: string }
+    | { kind: 'version-mismatch'; port: number; expected: string | null; seen: string; at: string }
+    | { kind: 'port-collision'; port: number; pids: number[]; at: string };
+
+export type HealthEvent = {
+    port: number;
+    at: string;
+    status: DashboardInstanceStatus;
+    reason: string | null;
+    versionSeen: string | null;
+};
+
+export type InstanceLogLine = {
+    ts: string;
+    level: 'info' | 'warn' | 'error';
+    text: string;
+};
+
+export type InstanceLogSnapshot = {
+    port: number;
+    fetchedAt: string;
+    lines: InstanceLogLine[];
+    truncated: boolean;
+    source: 'runtime' | 'health' | 'none';
+    reason?: string;
 };
 
 export type DashboardScanResult = {

@@ -202,6 +202,7 @@ export class DashboardLifecycleManager {
                 home,
                 pid: entry.pid || null,
                 command,
+                expectedStateAfter: 'online',
             };
         } catch (error) {
             return this.errorResult(action, port, home, command, error);
@@ -236,6 +237,7 @@ export class DashboardLifecycleManager {
                 home,
                 pid: entry.pid || null,
                 command,
+                expectedStateAfter: 'offline',
                 stdout: entry.stdout,
                 stderr: entry.stderr,
             };
@@ -265,6 +267,7 @@ export class DashboardLifecycleManager {
             message: startResult.ok
                 ? `Restarted dashboard-owned Jaw on port ${port}.`
                 : startResult.message,
+            expectedStateAfter: startResult.ok ? 'restart-detected' : startResult.expectedStateAfter,
         };
     }
 

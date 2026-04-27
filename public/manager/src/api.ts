@@ -1,9 +1,13 @@
 import type {
+    DashboardInstance,
     DashboardLifecycleAction,
     DashboardLifecycleResult,
     DashboardRegistryLoadResult,
     DashboardRegistryPatch,
     DashboardScanResult,
+    HealthEvent,
+    InstanceLogSnapshot,
+    ManagerEvent,
 } from './types';
 
 export async function fetchInstances(showHidden = false): Promise<DashboardScanResult> {
@@ -44,4 +48,34 @@ export async function runLifecycleAction(
         throw new Error(result.message || `${action} failed: ${response.status}`);
     }
     return result;
+}
+
+export async function fetchInstanceStatus(port: number, options: { signal?: AbortSignal } = {}): Promise<DashboardInstance | null> {
+    const response = await fetch(`/api/dashboard/instances/${port}`, { signal: options.signal });
+    if (!response.ok) throw new Error(`status fetch failed: ${response.status}`);
+    const body = await response.json() as { ok: boolean; instance: DashboardInstance | null };
+    return body.instance;
+}
+
+export async function fetchManagerEvents(since: string | null = null): Promise<ManagerEvent[]> {
+    const path = since ? `/api/manager/events?since=${encodeURIComponent(since)}` : '/api/manager/events';
+    const response = await fetch(path);
+    if (!response.ok) throw new Error(`events fetch failed: ${response.status}`);
+    const body = await response.json() as { ok: boolean; events: ManagerEvent[] };
+    return body.events;
+}
+
+export async function fetchHealthHistory(port: number, limit?: number): Promise<HealthEvent[]> {
+    const path = limit ? `/api/manager/health-history/${port}?limit=${limit}` : `/api/manager/health-history/${port}`;
+    const response = await fetch(path);
+    if (!response.ok) throw new Error(`health history fetch failed: ${response.status}`);
+    const body = await response.json() as { ok: boolean; events: HealthEvent[] };
+    return body.events;
+}
+
+export async function fetchInstanceLogSnapshot(port: number): Promise<InstanceLogSnapshot> {
+    const response = await fetch(`/api/manager/instance-logs/${port}`);
+    if (!response.ok) throw new Error(`logs fetch failed: ${response.status}`);
+    const body = await response.json() as { ok: boolean; snapshot: InstanceLogSnapshot };
+    return body.snapshot;
 }

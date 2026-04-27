@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import type { DashboardInstance } from '../types';
+import type { DashboardInstance, ManagerEvent } from '../types';
 import { ActivityTimeline, type ActivityEntry } from './ActivityTimeline';
 
 const MIN_ACTIVITY_HEIGHT = 88;
@@ -15,6 +15,7 @@ type ActivityDockProps = {
     registryMessage: string | null;
     selectedInstance: DashboardInstance | null;
     previewMode: string;
+    events?: ManagerEvent[];
     onToggle: () => void;
     onHeightChange: (height: number) => void;
 };
@@ -79,35 +80,26 @@ export function ActivityDock(props: ActivityDockProps) {
     );
 }
 
-function useEntries(props: ActivityDockProps): ActivityEntry[] {
+function useEntries(props: ActivityDockProps): Array<ActivityEntry | ManagerEvent> {
     return useMemo(() => {
+        const out: Array<ActivityEntry | ManagerEvent> = [];
+        if (props.events && props.events.length > 0) {
+            // Show newest first; ActivityTimeline groups bucketize chronologically.
+            for (const event of props.events) out.push(event);
+        }
         const now = new Date().toISOString();
-        const out: ActivityEntry[] = [];
-        out.push({
-            at: now,
-            source: 'scan',
-            message: props.loading ? 'scanning local ports' : 'latest scan loaded',
-        });
         if (props.error) out.push({ at: now, source: 'error', message: props.error });
         if (props.registryMessage) out.push({ at: now, source: 'registry', message: props.registryMessage });
         if (props.lifecycleMessage) out.push({ at: now, source: 'lifecycle', message: props.lifecycleMessage });
-        out.push({
-            at: now,
-            source: 'selected',
-            message: props.selectedInstance ? `:${props.selectedInstance.port}` : 'none',
-        });
-        out.push({
-            at: now,
-            source: 'preview',
-            message: props.previewMode === 'proxy' ? 'proxy path is primary' : 'direct iframe is best-effort',
-        });
+        if (out.length === 0) {
+            out.push({ at: now, source: 'scan', message: props.loading ? 'scanning local ports' : 'no recent activity' });
+        }
         return out;
     }, [
+        props.events,
         props.loading,
         props.error,
         props.registryMessage,
         props.lifecycleMessage,
-        props.selectedInstance,
-        props.previewMode,
     ]);
 }

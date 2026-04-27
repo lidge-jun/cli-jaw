@@ -81,3 +81,21 @@
     min-height: 0;
 }
 .empty-navigator-action:hover { text-decoration: underline; background: transparent; border-color: transparent; }
+
+/* 10.7.4 — transitioning row state */
+.instance-status.is-transitioning {
+    animation: jaw-pulse 1.2s ease-in-out infinite;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.instance-row.is-transitioning-row {
+    border-color: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+.instance-row-transition {
+    color: var(--accent);
+    font-style: normal;
+    font-weight: 500;
+}
+@keyframes jaw-pulse {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+}

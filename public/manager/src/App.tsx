@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { fetchInstances, runLifecycleAction } from './api';
+import { fetchInstances, fetchInstanceStatus, runLifecycleAction } from './api';
+import { pollUntilSettled } from './lifecycle-poll';
 import { ActivityDock } from './components/ActivityDock';
 import { CommandBar } from './components/CommandBar';
 import { CommandPalette } from './components/CommandPalette';
@@ -18,6 +19,7 @@ import { useDashboardRegistry } from './hooks/useDashboardRegistry';
 import { useDashboardView } from './hooks/useDashboardView';
 import { useTheme, syncThemeFromRegistry } from './hooks/useTheme';
 import { useCommandPalette } from './hooks/useCommandPalette';
+import { useManagerEvents } from './hooks/useManagerEvents';
 import type {
     DashboardDetailTab,
     DashboardInstance,
@@ -52,6 +54,8 @@ export function App() {
     const [hydrated, setHydrated] = useState(false);
     const [lifecycleBusyPort, setLifecycleBusyPort] = useState<number | null>(null);
     const [lifecycleMessage, setLifecycleMessage] = useState<string | null>(null);
+    const [transitioningPort, setTransitioningPort] = useState<number | null>(null);
+    const [transitionAction, setTransitionAction] = useState<DashboardLifecycleAction | null>(null);
     const registry = useDashboardRegistry();
     const view = useDashboardView();
     const theme = useTheme((next) => {
@@ -59,6 +63,7 @@ export function App() {
         void registry.save({ ui: { uiTheme: next } });
     });
     const palette = useCommandPalette();
+    const managerEvents = useManagerEvents();
 
     function cycleTheme(): void {
         const order: ('auto' | 'light' | 'dark')[] = ['auto', 'light', 'dark'];
@@ -213,18 +218,34 @@ export function App() {
         if ((action === 'stop' || action === 'restart') && !window.confirm(`${action} :${instance.port}?`)) {
             return;
         }
+        const previousUptime = instance.uptime;
         setLifecycleBusyPort(instance.port);
         setLifecycleMessage(null);
+        setTransitioningPort(instance.port);
+        setTransitionAction(action);
         try {
             const home = action === 'start' ? customHome : undefined;
             const result = await runLifecycleAction(action, instance.port, home);
             setLifecycleMessage(result.message);
+            const expected = result.expectedStateAfter
+                || (action === 'start' ? 'online' : action === 'stop' ? 'offline' : 'restart-detected');
+            const polled = await pollUntilSettled({
+                port: instance.port,
+                expected,
+                previousUptime,
+                fetchOnce: (port, signal) => fetchInstanceStatus(port, { signal }),
+            });
+            if (!polled.settled) {
+                setLifecycleMessage(`${result.message} (not yet reachable, refresh manually if needed)`);
+            }
             await load();
             view.setSelectedPort(instance.port);
         } catch (err) {
             setLifecycleMessage((err as Error).message);
         } finally {
             setLifecycleBusyPort(null);
+            setTransitioningPort(null);
+            setTransitionAction(null);
         }
     }
 
@@ -251,6 +272,8 @@ export function App() {
                     instances={listInstances}
                     selectedPort={selectedInstance?.port || null}
                     lifecycleBusyPort={lifecycleBusyPort}
+                    transitioningPort={transitioningPort}
+                    transitionAction={transitionAction}
                     getLabel={instanceLabel}
                     formatUptime={formatUptime}
                     onSelect={handleSelectInstance}
@@ -383,7 +406,8 @@ export function App() {
                             lifecycleMessage={lifecycleMessage}
                             selectedInstance={selectedInstance}
                             previewMode={view.previewMode}
-                            registryMessage={registry.error}
+                            registryMessage={registry.error || managerEvents.error}
+                            events={managerEvents.events}
                             onToggle={handleActivityToggle}
                             onHeightChange={handleActivityHeight}
                         />

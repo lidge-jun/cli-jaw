@@ -9,6 +9,8 @@ type InstanceGroupsProps = {
     instances: DashboardInstance[];
     selectedPort: number | null;
     lifecycleBusyPort: number | null;
+    transitioningPort?: number | null;
+    transitionAction?: DashboardLifecycleAction | null;
     getLabel: (instance: DashboardInstance) => string;
     formatUptime: (seconds: number | null) => string;
     onSelect: (instance: DashboardInstance) => void;
@@ -79,6 +81,7 @@ export function InstanceGroups(props: InstanceGroupsProps) {
                             instance={instance}
                             selected={props.selectedPort === instance.port}
                             busy={props.lifecycleBusyPort === instance.port}
+                            transitioning={props.transitioningPort === instance.port ? props.transitionAction || null : null}
                             label={props.getLabel(instance)}
                             uptime={props.formatUptime(instance.uptime)}
                             onSelect={props.onSelect}

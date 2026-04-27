@@ -52,6 +52,8 @@ export type DashboardLifecycleCapability = {
     pid: number | null;
 };
 
+export type DashboardLifecycleExpectedState = 'online' | 'offline' | 'restart-detected';
+
 export type DashboardLifecycleResult = {
     ok: boolean;
     action: DashboardLifecycleAction;
@@ -61,6 +63,7 @@ export type DashboardLifecycleResult = {
     home: string | null;
     pid: number | null;
     command: string[];
+    expectedStateAfter?: DashboardLifecycleExpectedState;
     stderr?: string;
     stdout?: string;
 };
