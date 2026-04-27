@@ -32,7 +32,7 @@ export function InstancePreview(props: InstancePreviewProps) {
                             checked={props.previewEnabled}
                             onChange={event => props.onPreviewEnabledChange(event.target.checked)}
                         />
-                        Enable
+                        Enable preview
                     </label>
 
                     <select

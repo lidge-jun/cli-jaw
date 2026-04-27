@@ -85,7 +85,11 @@ test('manager instance rows are selectable independently from preview availabili
     assert.ok(row.includes('type="button"'), 'instance row selection must be button-based and keyboard reachable');
     assert.ok(row.includes('onSelect(props.instance)'), 'row click/key must select the row instance');
     assert.ok(groups.includes('onSelect={props.onSelect}'), 'group list must forward row selection');
-    assert.ok(app.includes("view.setActiveDetailTab('overview')"), 'row selection must switch detail to overview');
+    // 10.6.10 — row selection must preserve the active workbench tab (no
+    // forced reset to overview) so users keep their Preview/Logs/Settings
+    // context when hopping between instances. Explicit jumps stay on
+    // handlePreview.
+    assert.ok(!app.includes("view.setActiveDetailTab('overview')"), 'row selection must NOT force-reset detail tab');
     assert.ok(app.includes('view.setDrawerOpen(false)'), 'row selection must close the mobile drawer');
 });
 

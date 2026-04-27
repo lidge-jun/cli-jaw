@@ -65,6 +65,7 @@ export function SidebarRail(props: SidebarRailProps) {
                 onClick={props.onToggleSidebar}
                 aria-label={toggleLabel}
                 aria-expanded={expanded}
+                aria-pressed={props.collapsed}
                 aria-controls="manager-sidebar-list"
                 title={toggleLabel}
             >
