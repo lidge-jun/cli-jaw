@@ -8,8 +8,10 @@ import { InstanceGroups } from './components/InstanceGroups';
 import { ManagerShell } from './components/ManagerShell';
 import { MobileNav } from './components/MobileNav';
 import { SidebarRail } from './components/SidebarRail';
+import { useDashboardRegistry } from './hooks/useDashboardRegistry';
 import { useDashboardView } from './hooks/useDashboardView';
 import type {
+    DashboardDetailTab,
     DashboardInstance,
     DashboardInstanceStatus,
     DashboardLifecycleAction,
@@ -26,7 +28,7 @@ function formatUptime(seconds: number | null): string {
 }
 
 function instanceLabel(instance: DashboardInstance): string {
-    return instance.instanceId || instance.homeDisplay || `port-${instance.port}`;
+    return instance.label || instance.instanceId || instance.homeDisplay || `port-${instance.port}`;
 }
 
 export function App() {
@@ -36,15 +38,25 @@ export function App() {
     const [query, setQuery] = useState('');
     const [status, setStatus] = useState<'all' | DashboardInstanceStatus>('all');
     const [customHome, setCustomHome] = useState('');
+    const [showHidden, setShowHidden] = useState(false);
+    const [scanFromInput, setScanFromInput] = useState('');
+    const [scanCountInput, setScanCountInput] = useState('');
+    const [hydrated, setHydrated] = useState(false);
     const [lifecycleBusyPort, setLifecycleBusyPort] = useState<number | null>(null);
     const [lifecycleMessage, setLifecycleMessage] = useState<string | null>(null);
+    const registry = useDashboardRegistry();
     const view = useDashboardView();
 
-    async function load(): Promise<void> {
+    async function load(nextShowHidden = showHidden): Promise<void> {
         setLoading(true);
         setError(null);
         try {
-            setData(await fetchInstances());
+            const result = await fetchInstances(nextShowHidden);
+            setData(result);
+            if (result.manager.registry) {
+                setScanFromInput(String(result.manager.rangeFrom));
+                setScanCountInput(String(result.manager.rangeTo - result.manager.rangeFrom + 1));
+            }
         } catch (err) {
             setError((err as Error).message);
         } finally {
@@ -53,8 +65,37 @@ export function App() {
     }
 
     useEffect(() => {
-        void load();
+        async function initialize(): Promise<void> {
+            try {
+                const loaded = await registry.refresh();
+                const ui = loaded.registry.ui;
+                view.setSelectedPort(ui.selectedPort);
+                view.setActiveDetailTab(ui.selectedTab);
+                view.setSidebarCollapsed(ui.sidebarCollapsed);
+                view.setActivityDockCollapsed(ui.activityDockCollapsed);
+                view.setActivityDockHeight(ui.activityDockHeight);
+                setScanFromInput(String(loaded.registry.scan.from));
+                setScanCountInput(String(loaded.registry.scan.count));
+            } finally {
+                setHydrated(true);
+                await load();
+            }
+        }
+        void initialize();
     }, []);
+
+    async function saveUi(ui: Parameters<typeof registry.save>[0]['ui']): Promise<void> {
+        if (!hydrated) return;
+        await registry.save({ ui });
+    }
+
+    async function commitScanRange(fromValue = scanFromInput, countValue = scanCountInput): Promise<void> {
+        const from = Number(fromValue);
+        const count = Number(countValue);
+        if (!Number.isInteger(from) || !Number.isInteger(count)) return;
+        await registry.save({ scan: { from, count } });
+        await load();
+    }
 
     const instances = data?.instances || [];
     const summary = useMemo(() => {
@@ -79,6 +120,8 @@ export function App() {
                 instance.currentCli,
                 instance.currentModel,
                 instance.healthReason,
+                instance.label,
+                instance.group,
             ].some(value => String(value || '').toLowerCase().includes(needle));
         });
     }, [instances, query, status]);
@@ -93,12 +136,36 @@ export function App() {
         view.setActiveDetailTab('preview');
         view.setPreviewEnabled(true);
         view.setDrawerOpen(false);
+        void saveUi({ selectedPort: instance.port, selectedTab: 'preview' });
     }
 
     function handleSelectInstance(instance: DashboardInstance): void {
         view.setSelectedPort(instance.port);
         view.setActiveDetailTab('overview');
         view.setDrawerOpen(false);
+        void saveUi({ selectedPort: instance.port, selectedTab: 'overview' });
+    }
+
+    function handleTabChange(tab: DashboardDetailTab): void {
+        view.setActiveDetailTab(tab);
+        void saveUi({ selectedTab: tab });
+    }
+
+    function handleSidebarToggle(): void {
+        const next = !view.sidebarCollapsed;
+        view.setSidebarCollapsed(next);
+        void saveUi({ sidebarCollapsed: next });
+    }
+
+    function handleActivityToggle(): void {
+        const next = !view.activityDockCollapsed;
+        view.setActivityDockCollapsed(next);
+        void saveUi({ activityDockCollapsed: next });
+    }
+
+    function handleActivityHeight(height: number): void {
+        view.setActivityDockHeight(height);
+        void saveUi({ activityDockHeight: height });
     }
 
     async function handleLifecycle(action: DashboardLifecycleAction, instance: DashboardInstance): Promise<void> {
@@ -122,28 +189,40 @@ export function App() {
         }
     }
 
-    const instanceList = (
-        <InstanceGroups
-            instances={filtered}
-            selectedPort={selectedInstance?.port || null}
-            lifecycleBusyPort={lifecycleBusyPort}
-            getLabel={instanceLabel}
-            formatUptime={formatUptime}
-            onSelect={handleSelectInstance}
-            onPreview={handlePreview}
-            onLifecycle={(action, instance) => void handleLifecycle(action, instance)}
-        />
+    const instanceListContent = (
+        <>
+            {error && <section className="state error-state">Scan failed: {error}</section>}
+            {!error && loading && <section className="state">Scanning local Jaw instances...</section>}
+            {!error && (
+                <InstanceGroups
+                    instances={filtered}
+                    selectedPort={selectedInstance?.port || null}
+                    lifecycleBusyPort={lifecycleBusyPort}
+                    getLabel={instanceLabel}
+                    formatUptime={formatUptime}
+                    onSelect={handleSelectInstance}
+                    onPreview={handlePreview}
+                    onLifecycle={(action, instance) => void handleLifecycle(action, instance)}
+                />
+            )}
+        </>
     );
 
     return (
         <ManagerShell
-            rail={(
-                <SidebarRail
-                    onlineCount={summary.online || 0}
-                    onSelectInstances={() => view.setDrawerOpen(true)}
-                    onSelectPreview={() => view.setActiveDetailTab('preview')}
-                    onSelectActivity={() => view.setActivityDockCollapsed(false)}
-                />
+            sidebarCollapsed={view.sidebarCollapsed}
+            sidebar={(
+                <>
+                    <SidebarRail
+                        onlineCount={summary.online || 0}
+                        collapsed={view.sidebarCollapsed}
+                        onSelectInstances={() => view.setActiveDetailTab('overview')}
+                        onSelectPreview={() => view.setActiveDetailTab('preview')}
+                        onSelectActivity={() => view.setActivityDockCollapsed(false)}
+                        onToggleSidebar={handleSidebarToggle}
+                    />
+                    <div className="manager-sidebar-list">{instanceListContent}</div>
+                </>
             )}
             commandBar={(
                 <CommandBar
@@ -153,19 +232,23 @@ export function App() {
                     loading={loading}
                     summary={summary}
                     manager={data?.manager || null}
+                    showHidden={showHidden}
+                    registryMessage={registry.saving ? 'Saving' : registry.error}
+                    scanFrom={scanFromInput}
+                    scanCount={scanCountInput}
                     onQueryChange={setQuery}
                     onStatusChange={setStatus}
                     onCustomHomeChange={setCustomHome}
+                    onShowHiddenChange={(value) => {
+                        setShowHidden(value);
+                        void load(value);
+                    }}
+                    onScanFromChange={setScanFromInput}
+                    onScanCountChange={setScanCountInput}
+                    onScanRangeCommit={(from, count) => void commitScanRange(from, count)}
                     onRefresh={() => void load()}
                     onOpenDrawer={() => view.setDrawerOpen(true)}
                 />
-            )}
-            list={(
-                <>
-                    {error && <section className="state error-state">Scan failed: {error}</section>}
-                    {!error && loading && <section className="state">Scanning local Jaw instances...</section>}
-                    {!error && instanceList}
-                </>
             )}
             detail={(
                 <>
@@ -176,9 +259,12 @@ export function App() {
                         activeTab={view.activeDetailTab}
                         previewMode={view.previewMode}
                         previewEnabled={view.previewEnabled}
-                        onTabChange={view.setActiveDetailTab}
+                        onTabChange={handleTabChange}
                         onPreviewModeChange={view.setPreviewMode}
                         onPreviewEnabledChange={view.setPreviewEnabled}
+                        onRegistryPatch={(port, patch) => {
+                            void registry.save({ instances: { [String(port)]: patch } }).then(() => load());
+                        }}
                     />
                 </>
             )}
@@ -191,8 +277,9 @@ export function App() {
                     lifecycleMessage={lifecycleMessage}
                     selectedInstance={selectedInstance}
                     previewMode={view.previewMode}
-                    onToggle={() => view.setActivityDockCollapsed(!view.activityDockCollapsed)}
-                    onHeightChange={view.setActivityDockHeight}
+                    registryMessage={registry.error}
+                    onToggle={handleActivityToggle}
+                    onHeightChange={handleActivityHeight}
                 />
             )}
             activityHeight={view.activityDockCollapsed ? 48 : view.activityDockHeight}
@@ -201,12 +288,12 @@ export function App() {
                     activeTab={view.activeDetailTab}
                     onOpenInstances={() => view.setDrawerOpen(true)}
                     onSelectTab={view.setActiveDetailTab}
-                    onToggleActivity={() => view.setActivityDockCollapsed(!view.activityDockCollapsed)}
+                    onToggleActivity={handleActivityToggle}
                 />
             )}
             drawer={(
                 <InstanceDrawer open={view.drawerOpen} onClose={() => view.setDrawerOpen(false)}>
-                    {instanceList}
+                    {instanceListContent}
                 </InstanceDrawer>
             )}
         />

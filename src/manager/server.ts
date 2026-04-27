@@ -12,7 +12,12 @@ import {
 import { scanDashboardInstances } from './scan.js';
 import { installDashboardProxy } from './proxy.js';
 import { DashboardLifecycleManager } from './lifecycle.js';
-import type { DashboardLifecycleAction } from './types.js';
+import {
+    applyDashboardRegistry,
+    loadDashboardRegistry,
+    patchDashboardRegistry,
+} from './registry.js';
+import type { DashboardLifecycleAction, DashboardRegistryPatch } from './types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const serverRoot = join(__dirname, '..', '..');
@@ -43,12 +48,34 @@ app.get('/api/dashboard/health', (_req, res) => {
 
 app.get('/api/dashboard/instances', async (req, res) => {
     try {
-        const from = Number(req.query.from || scanFrom);
-        const count = Number(req.query.count || scanCount);
+        const loaded = loadDashboardRegistry({ from: scanFrom, count: scanCount });
+        const from = Number(req.query.from || loaded.registry.scan.from);
+        const count = Number(req.query.count || loaded.registry.scan.count);
+        const showHidden = req.query.showHidden === '1' || req.query.showHidden === 'true';
         const result = await scanDashboardInstances({ from, count, managerPort: port });
-        res.json(lifecycle.decorateScanResult(result));
+        const decorated = lifecycle.decorateScanResult(result);
+        res.json(applyDashboardRegistry(decorated, loaded.registry, loaded.status, { showHidden }));
     } catch (error) {
         res.status(500).json({ ok: false, error: (error as Error).message });
+    }
+});
+
+app.get('/api/dashboard/registry', (_req, res) => {
+    const loaded = loadDashboardRegistry({ from: scanFrom, count: scanCount });
+    res.json(loaded);
+});
+
+app.patch('/api/dashboard/registry', (req, res) => {
+    try {
+        const patch = req.body && typeof req.body === 'object'
+            ? req.body as DashboardRegistryPatch
+            : {};
+        res.json(patchDashboardRegistry(patch, { from: scanFrom, count: scanCount }));
+    } catch (error) {
+        res.status(500).json({
+            ok: false,
+            error: (error as Error).message,
+        });
     }
 });
 

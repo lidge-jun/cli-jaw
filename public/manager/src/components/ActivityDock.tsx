@@ -11,6 +11,7 @@ type ActivityDockProps = {
     loading: boolean;
     error: string | null;
     lifecycleMessage: string | null;
+    registryMessage: string | null;
     selectedInstance: DashboardInstance | null;
     previewMode: string;
     onToggle: () => void;
@@ -73,6 +74,7 @@ export function ActivityDock(props: ActivityDockProps) {
                 <div className="activity-list">
                     <p><strong>scan</strong> {props.loading ? 'scanning local ports' : 'latest scan loaded'}</p>
                     {props.error && <p><strong>error</strong> {props.error}</p>}
+                    {props.registryMessage && <p><strong>registry</strong> {props.registryMessage}</p>}
                     {props.lifecycleMessage && <p><strong>lifecycle</strong> {props.lifecycleMessage}</p>}
                     <p><strong>selected</strong> {props.selectedInstance ? `:${props.selectedInstance.port}` : 'none'}</p>
                     <p><strong>preview</strong> {props.previewMode === 'proxy' ? 'proxy path is primary' : 'direct iframe is best-effort'}</p>

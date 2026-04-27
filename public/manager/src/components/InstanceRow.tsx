@@ -35,8 +35,8 @@ export function InstanceRow(props: InstanceRowProps) {
                 <div className="instance-row-main">
                     <span className={statusClass(props.instance.status)} aria-label={props.instance.status} />
                     <div className="instance-row-title">
-                        <strong>{props.label}</strong>
-                        <span>{props.instance.workingDir || props.instance.url}</span>
+                        <strong>{props.instance.favorite ? `Pinned ${props.label}` : props.label}</strong>
+                        <span>{props.instance.group ? `${props.instance.group} · ${props.instance.workingDir || props.instance.url}` : props.instance.workingDir || props.instance.url}</span>
                     </div>
                     <span className="port">:{props.instance.port}</span>
                 </div>

@@ -51,21 +51,18 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 .dashboard-shell.manager-shell {
     height: 100dvh; max-height: 100dvh; overflow: hidden;
-    display: grid; grid-template-columns: 56px 320px minmax(0, 1fr);
+    display: grid; grid-template-columns: 340px minmax(0, 1fr);
     grid-template-rows: 68px minmax(0, 1fr) var(--activity-dock-height, 150px);
-    grid-template-areas: "rail command command" "rail list detail" "rail list activity";
+    grid-template-areas: "sidebar command" "sidebar detail" "sidebar activity";
     background: rgba(8, 11, 15, 0.84);
 }
-.manager-rail { grid-area: rail; border-right: 1px solid var(--border-subtle); background: #0b1016; }
+.manager-shell.is-sidebar-collapsed { grid-template-columns: 56px minmax(0, 1fr); }
+.manager-sidebar { grid-area: sidebar; min-width: 0; min-height: 0; overflow: hidden; border-right: 1px solid var(--border-subtle); background: #0b1016; }
 .manager-command {
     grid-area: command;
     min-width: 0;
     border-bottom: 1px solid var(--border-subtle);
     background: rgba(16, 22, 29, 0.94);
-}
-.manager-list {
-    grid-area: list; min-width: 0; min-height: 0; overflow: auto;
-    border-right: 1px solid var(--border-subtle); background: #0b1016;
 }
 .manager-detail { grid-area: detail; min-width: 0; min-height: 0; overflow: hidden; background: var(--bg-panel); }
 .manager-activity {
@@ -74,13 +71,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 .manager-mobile-nav { display: none; grid-area: mobile-nav; }
 .sidebar-rail {
-    height: 100%;
+    min-height: 54px;
     display: flex;
-    flex-direction: column;
     align-items: center;
     gap: 10px;
-    padding: 12px 8px;
+    border-bottom: 1px solid var(--border-subtle);
+    padding: 10px;
 }
+.manager-sidebar-list { height: calc(100% - 54px); min-height: 0; overflow: auto; }
+.manager-shell.is-sidebar-collapsed .manager-sidebar-list { display: none; }
+.manager-shell.is-sidebar-collapsed .sidebar-rail { height: 100%; min-height: 0; flex-direction: column; border-bottom: 0; padding: 10px 8px; }
+.manager-shell.is-sidebar-collapsed .rail-spacer { flex: 1; }
 .rail-button {
     width: 34px;
     min-height: 34px;
@@ -90,6 +91,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     font-weight: 600;
 }
 .rail-button.is-active { background: var(--bg-raised); border-color: var(--border-strong); color: var(--text-primary); }
+.rail-collapse-button { margin-left: auto; }
+.manager-shell.is-sidebar-collapsed .rail-collapse-button { margin-left: 0; }
 .rail-spacer { flex: 1; }
 .rail-status-dot, .instance-status {
     width: 9px;
@@ -431,13 +434,13 @@ h2 { font-size: 20px; }
 }
 .drawer-body { min-height: 0; overflow: auto; }
 @media (min-width: 1440px) {
-    .dashboard-shell.manager-shell {
-        grid-template-columns: 56px 340px minmax(0, 1fr);
+    .dashboard-shell.manager-shell:not(.is-sidebar-collapsed) {
+        grid-template-columns: 360px minmax(0, 1fr);
     }
 }
 @media (max-width: 1279px) {
-    .dashboard-shell.manager-shell {
-        grid-template-columns: 56px 280px minmax(0, 1fr);
+    .dashboard-shell.manager-shell:not(.is-sidebar-collapsed) {
+        grid-template-columns: 300px minmax(0, 1fr);
         grid-template-rows: 92px minmax(0, 1fr) var(--activity-dock-height, 150px);
     }
     .command-bar {
@@ -452,11 +455,11 @@ h2 { font-size: 20px; }
 }
 @media (max-width: 1023px) {
     .dashboard-shell.manager-shell {
-        grid-template-columns: 56px minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr);
         grid-template-rows: 92px minmax(0, 1fr) var(--activity-dock-height, 150px);
-        grid-template-areas: "rail command" "rail detail" "rail activity";
+        grid-template-areas: "command" "detail" "activity";
     }
-    .manager-list { display: none; }
+    .manager-sidebar { display: none; }
     .drawer-trigger { display: inline-flex; grid-area: drawer; }
     .command-bar {
         grid-template-columns: auto minmax(0, 1fr);
@@ -473,7 +476,7 @@ h2 { font-size: 20px; }
         grid-template-rows: 108px minmax(0, 1fr) 60px;
         grid-template-areas: "command" "detail" "mobile-nav";
     }
-    .manager-rail, .manager-activity { display: none; }
+    .manager-sidebar, .manager-activity { display: none; }
 .manager-mobile-nav { display: block; border-top: 1px solid var(--border-subtle); }
     .command-bar {
         grid-template-columns: auto minmax(0, 1fr);

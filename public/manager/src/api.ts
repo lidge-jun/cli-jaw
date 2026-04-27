@@ -1,9 +1,32 @@
-import type { DashboardLifecycleAction, DashboardLifecycleResult, DashboardScanResult } from './types';
+import type {
+    DashboardLifecycleAction,
+    DashboardLifecycleResult,
+    DashboardRegistryLoadResult,
+    DashboardRegistryPatch,
+    DashboardScanResult,
+} from './types';
 
-export async function fetchInstances(): Promise<DashboardScanResult> {
-    const response = await fetch('/api/dashboard/instances');
+export async function fetchInstances(showHidden = false): Promise<DashboardScanResult> {
+    const path = showHidden ? '/api/dashboard/instances?showHidden=1' : '/api/dashboard/instances';
+    const response = await fetch(path);
     if (!response.ok) throw new Error(`scan failed: ${response.status}`);
     return await response.json() as DashboardScanResult;
+}
+
+export async function fetchRegistry(): Promise<DashboardRegistryLoadResult> {
+    const response = await fetch('/api/dashboard/registry');
+    if (!response.ok) throw new Error(`registry load failed: ${response.status}`);
+    return await response.json() as DashboardRegistryLoadResult;
+}
+
+export async function patchDashboardRegistry(patch: DashboardRegistryPatch): Promise<DashboardRegistryLoadResult> {
+    const response = await fetch('/api/dashboard/registry', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(patch),
+    });
+    if (!response.ok) throw new Error(`registry save failed: ${response.status}`);
+    return await response.json() as DashboardRegistryLoadResult;
 }
 
 export async function runLifecycleAction(

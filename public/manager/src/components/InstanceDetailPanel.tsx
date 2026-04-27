@@ -2,6 +2,7 @@ import { InstancePreview } from '../InstancePreview';
 import type {
     DashboardDetailTab,
     DashboardInstance,
+    DashboardRegistryInstance,
     DashboardPreviewMode,
     DashboardScanResult,
 } from '../types';
@@ -15,6 +16,7 @@ type InstanceDetailPanelProps = {
     onTabChange: (tab: DashboardDetailTab) => void;
     onPreviewModeChange: (mode: DashboardPreviewMode) => void;
     onPreviewEnabledChange: (enabled: boolean) => void;
+    onRegistryPatch: (port: number, patch: Partial<DashboardRegistryInstance>) => void;
 };
 
 const TABS: DashboardDetailTab[] = ['overview', 'preview', 'logs', 'settings'];
@@ -60,6 +62,7 @@ export function InstanceDetailPanel(props: InstanceDetailPanelProps) {
                         <div><span>Model</span><strong>{instance?.currentModel || 'n/a'}</strong></div>
                         <div><span>Owner</span><strong>{instance?.lifecycle?.owner || 'n/a'}</strong></div>
                         <div><span>Version</span><strong>{instance?.version || 'n/a'}</strong></div>
+                        <div><span>Group</span><strong>{instance?.group || 'ungrouped'}</strong></div>
                         <div><span>Reason</span><strong>{instance?.lifecycle?.reason || instance?.healthReason || 'ok'}</strong></div>
                     </div>
                 )}
@@ -81,9 +84,44 @@ export function InstanceDetailPanel(props: InstanceDetailPanelProps) {
                     </div>
                 )}
 
-                {props.activeTab === 'settings' && (
+                {props.activeTab === 'settings' && instance && (
+                    <form className="settings-form" key={instance.port} onSubmit={event => event.preventDefault()}>
+                        <label>
+                            Label
+                            <input
+                                defaultValue={instance.label || ''}
+                                onBlur={event => props.onRegistryPatch(instance.port, { label: event.target.value })}
+                            />
+                        </label>
+                        <label>
+                            Group
+                            <input
+                                defaultValue={instance.group || ''}
+                                onBlur={event => props.onRegistryPatch(instance.port, { group: event.target.value })}
+                            />
+                        </label>
+                        <label className="toggle-control">
+                            <input
+                                type="checkbox"
+                                checked={instance.favorite === true}
+                                onChange={event => props.onRegistryPatch(instance.port, { favorite: event.target.checked })}
+                            />
+                            Pin favorite
+                        </label>
+                        <label className="toggle-control">
+                            <input
+                                type="checkbox"
+                                checked={instance.hidden === true}
+                                onChange={event => props.onRegistryPatch(instance.port, { hidden: event.target.checked })}
+                            />
+                            Hide by default
+                        </label>
+                    </form>
+                )}
+
+                {props.activeTab === 'settings' && !instance && (
                     <div className="detail-empty">
-                        Labels, favorites, hidden ports, groups, and saved selection are planned for phase 10.6.
+                        Select an instance to edit labels, pinned state, hidden state, and groups.
                     </div>
                 )}
             </div>

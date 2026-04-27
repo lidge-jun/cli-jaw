@@ -35,6 +35,7 @@ test('manager frontend has API entry and Open action', () => {
 
     assert.ok(api.includes('/api/dashboard/instances'), 'manager API must call dashboard instances endpoint');
     assert.ok(api.includes('/api/dashboard/lifecycle/'), 'manager API must call dashboard lifecycle endpoint');
+    assert.ok(api.includes('/api/dashboard/registry'), 'manager API must call dashboard registry endpoint');
     assert.ok(row.includes('Open'), 'manager UI must expose Open action');
     assert.ok(command.includes('Search port, home, CLI, model'), 'manager UI must include search');
 });
@@ -99,4 +100,22 @@ test('manager frontend routes layout through responsive shell components', () =>
     assert.ok(detail.includes("'preview'"), 'detail panel must expose Preview tab');
     assert.ok(detail.includes("'logs'"), 'detail panel must expose Logs tab');
     assert.ok(detail.includes("'settings'"), 'detail panel must expose Settings tab');
+});
+
+test('manager frontend exposes 10.6 persistence controls', () => {
+    const app = read('public/manager/src/App.tsx');
+    const hook = read('public/manager/src/hooks/useDashboardRegistry.ts');
+    const detail = read('public/manager/src/components/InstanceDetailPanel.tsx');
+    const groups = read('public/manager/src/components/InstanceGroups.tsx');
+    const command = read('public/manager/src/components/CommandBar.tsx');
+    const main = read('public/manager/src/main.tsx');
+
+    assert.ok(hook.includes('patchDashboardRegistry'), 'registry hook must save dashboard registry patches');
+    assert.ok(app.includes('useDashboardRegistry'), 'App must hydrate and save registry state');
+    assert.ok(detail.includes('Pin favorite'), 'Settings tab must expose favorite pinning');
+    assert.ok(detail.includes('Hide by default'), 'Settings tab must expose hidden state');
+    assert.ok(groups.includes("id: 'active'"), 'InstanceGroups must keep active row in a top group');
+    assert.ok(groups.includes("id: 'favorites'"), 'InstanceGroups must keep pinned favorites near the top');
+    assert.ok(command.includes('onScanRangeCommit'), 'CommandBar must support committed scan range changes');
+    assert.ok(main.includes('./manager-persistence.css'), 'manager persistence styling must be split into its own CSS module');
 });

@@ -9,6 +9,7 @@ export type DashboardServiceMode = 'unknown' | 'ad-hoc' | 'service' | 'manager';
 export type DashboardPreviewMode = 'direct' | 'proxy';
 export type DashboardLifecycleAction = 'start' | 'stop' | 'restart';
 export type DashboardLifecycleOwner = 'none' | 'external' | 'manager';
+export type DashboardDetailTab = 'overview' | 'preview' | 'logs' | 'settings';
 
 export type DashboardProxyInfo = {
     enabled: boolean;
@@ -30,6 +31,10 @@ export type DashboardInstance = {
     currentCli: string | null;
     currentModel: string | null;
     serviceMode: DashboardServiceMode;
+    label?: string | null;
+    favorite?: boolean;
+    group?: string | null;
+    hidden?: boolean;
     lifecycle?: DashboardLifecycleCapability;
     lastCheckedAt: string;
     healthReason: string | null;
@@ -74,8 +79,48 @@ export type DashboardScanResult = {
         rangeTo: number;
         checkedAt: string;
         proxy: DashboardProxyInfo;
+        registry?: DashboardRegistryStatus;
     };
     instances: DashboardInstance[];
 };
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
+
+export type DashboardRegistryScan = {
+    from: number;
+    count: number;
+};
+
+export type DashboardRegistryUi = {
+    selectedPort: number | null;
+    selectedTab: DashboardDetailTab;
+    sidebarCollapsed: boolean;
+    activityDockCollapsed: boolean;
+    activityDockHeight: number;
+};
+
+export type DashboardRegistryInstance = {
+    label: string | null;
+    favorite: boolean;
+    group: string | null;
+    hidden: boolean;
+};
+
+export type DashboardRegistry = {
+    scan: DashboardRegistryScan;
+    ui: DashboardRegistryUi;
+    instances: Record<string, DashboardRegistryInstance>;
+};
+
+export type DashboardRegistryStatus = {
+    path: string;
+    loaded: boolean;
+    error: string | null;
+    ui: DashboardRegistryUi;
+};
+
+export type DashboardRegistryPatch = {
+    scan?: Partial<DashboardRegistryScan>;
+    ui?: Partial<DashboardRegistryUi>;
+    instances?: Record<string, Partial<DashboardRegistryInstance> | null>;
+};

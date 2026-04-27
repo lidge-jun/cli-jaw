@@ -31,6 +31,10 @@ export type DashboardInstance = {
     currentCli: string | null;
     currentModel: string | null;
     serviceMode: DashboardServiceMode;
+    label?: string | null;
+    favorite?: boolean;
+    group?: string | null;
+    hidden?: boolean;
     lifecycle?: DashboardLifecycleCapability;
     lastCheckedAt: string;
     healthReason: string | null;
@@ -67,12 +71,57 @@ export type DashboardScanResult = {
         rangeTo: number;
         checkedAt: string;
         proxy: DashboardProxyInfo;
+        registry?: DashboardRegistryStatus;
     };
     instances: DashboardInstance[];
 };
 
 export type DashboardInstanceGroup = {
-    id: 'running' | 'attention' | 'offline';
+    id: string;
     label: string;
     instances: DashboardInstance[];
+};
+
+export type DashboardRegistryScan = {
+    from: number;
+    count: number;
+};
+
+export type DashboardRegistryUi = {
+    selectedPort: number | null;
+    selectedTab: DashboardDetailTab;
+    sidebarCollapsed: boolean;
+    activityDockCollapsed: boolean;
+    activityDockHeight: number;
+};
+
+export type DashboardRegistryInstance = {
+    label: string | null;
+    favorite: boolean;
+    group: string | null;
+    hidden: boolean;
+};
+
+export type DashboardRegistry = {
+    scan: DashboardRegistryScan;
+    ui: DashboardRegistryUi;
+    instances: Record<string, DashboardRegistryInstance>;
+};
+
+export type DashboardRegistryStatus = {
+    path: string;
+    loaded: boolean;
+    error: string | null;
+    ui: DashboardRegistryUi;
+};
+
+export type DashboardRegistryPatch = {
+    scan?: Partial<DashboardRegistryScan>;
+    ui?: Partial<DashboardRegistryUi>;
+    instances?: Record<string, Partial<DashboardRegistryInstance> | null>;
+};
+
+export type DashboardRegistryLoadResult = {
+    registry: DashboardRegistry;
+    status: DashboardRegistryStatus;
 };

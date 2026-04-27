@@ -1,8 +1,10 @@
 type SidebarRailProps = {
     onlineCount: number;
+    collapsed: boolean;
     onSelectInstances: () => void;
     onSelectPreview: () => void;
     onSelectActivity: () => void;
+    onToggleSidebar: () => void;
 };
 
 export function SidebarRail(props: SidebarRailProps) {
@@ -19,6 +21,16 @@ export function SidebarRail(props: SidebarRailProps) {
             </button>
             <button className="rail-button" type="button" aria-label="Settings">
                 S
+            </button>
+            <button
+                className="rail-button rail-collapse-button"
+                type="button"
+                onClick={props.onToggleSidebar}
+                aria-label={props.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                aria-pressed={props.collapsed}
+                title={props.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+                {props.collapsed ? '>' : '<'}
             </button>
             <div className="rail-spacer" />
             <span className="rail-status-dot" aria-label={`${props.onlineCount} online instances`} />

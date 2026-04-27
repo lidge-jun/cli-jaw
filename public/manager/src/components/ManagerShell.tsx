@@ -1,12 +1,12 @@
 import type { CSSProperties, ReactNode } from 'react';
 
 type ManagerShellProps = {
-    rail: ReactNode;
+    sidebar: ReactNode;
     commandBar: ReactNode;
-    list: ReactNode;
     detail: ReactNode;
     activity: ReactNode;
     activityHeight: number;
+    sidebarCollapsed: boolean;
     mobileNav: ReactNode;
     drawer: ReactNode;
 };
@@ -21,10 +21,9 @@ export function ManagerShell(props: ManagerShellProps) {
     };
 
     return (
-        <main className="dashboard-shell manager-shell" style={style}>
-            <aside className="manager-rail">{props.rail}</aside>
+        <main className={`dashboard-shell manager-shell${props.sidebarCollapsed ? ' is-sidebar-collapsed' : ''}`} style={style}>
+            <aside className="manager-sidebar" aria-label="Jaw instances">{props.sidebar}</aside>
             <header className="manager-command">{props.commandBar}</header>
-            <section className="manager-list" aria-label="Jaw instances">{props.list}</section>
             <section className="manager-detail">{props.detail}</section>
             <section className="manager-activity">{props.activity}</section>
             <nav className="manager-mobile-nav" aria-label="Mobile dashboard navigation">
