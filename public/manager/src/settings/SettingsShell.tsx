@@ -30,7 +30,7 @@ const PAGE_REGISTRY: Record<
     'channels-telegram': lazy(() => import('./pages/ChannelsTelegram')),
     'channels-discord': lazy(() => import('./pages/ChannelsDiscord')),
     speech: lazy(() => import('./pages/SpeechKeys')),
-    heartbeat: undefined,
+    heartbeat: lazy(() => import('./pages/Heartbeat')),
     memory: undefined,
     employees: undefined,
     network: undefined,

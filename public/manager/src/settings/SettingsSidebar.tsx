@@ -14,7 +14,8 @@ const CATEGORIES: SidebarEntry[] = [
     { id: 'channels-telegram', label: 'Channels — Telegram', group: 'channels' },
     { id: 'channels-discord', label: 'Channels — Discord', group: 'channels' },
     { id: 'speech', label: 'Speech & keys', group: 'integrations' },
-    // Phases 5–9 will register their entries here.
+    { id: 'heartbeat', label: 'Heartbeat & schedules', group: 'automation' },
+    // Phases 6–9 will register their entries here.
 ];
 
 type Props = {
