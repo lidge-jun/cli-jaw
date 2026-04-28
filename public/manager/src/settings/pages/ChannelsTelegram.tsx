@@ -1,0 +1,277 @@
+// Phase 3 — Channels (Telegram) page.
+//
+// Settings keys:
+//   channel                   (shared across telegram + discord pages)
+//   telegram.enabled
+//   telegram.token            (SecretField, masked, never logged)
+//   telegram.allowedChatIds   (number[], rendered as numeric chips)
+//   telegram.forwardAll
+//   telegram.mentionOnly
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { SettingsPageProps, DirtyEntry } from '../types';
+import { ToggleField, SecretField, ChipListField } from '../fields';
+import {
+    SettingsSection,
+    PageError,
+    PageLoading,
+    PageOffline,
+    usePageSnapshot,
+} from './page-shell';
+import { expandPatch } from './path-utils';
+import { ActiveChannelToggle } from './components/ActiveChannelToggle';
+import type { ActiveChannel } from './components/ActiveChannelToggle';
+import { HealthBadge, interpretTelegramProbe } from './components/HealthBadge';
+
+type TelegramBlock = {
+    enabled?: boolean;
+    token?: string;
+    allowedChatIds?: number[];
+    forwardAll?: boolean;
+    mentionOnly?: boolean;
+};
+
+type TelegramSnapshot = {
+    channel?: ActiveChannel;
+    telegram?: TelegramBlock;
+    [key: string]: unknown;
+};
+
+const TELEGRAM_KEYS = [
+    'channel',
+    'telegram.enabled',
+    'telegram.token',
+    'telegram.allowedChatIds',
+    'telegram.forwardAll',
+    'telegram.mentionOnly',
+] as const;
+
+// ── pure helpers (exported for tests) ────────────────────────────────
+
+/** Strict numeric-string check: digits, optional leading minus. No floats, no "1e9". */
+export function isValidChatId(chip: string): boolean {
+    if (!chip) return false;
+    return /^-?\d+$/.test(chip.trim());
+}
+
+/** Filter chips that fail validation; keep order. Returns { valid, invalid }. */
+export function partitionChatIds(chips: ReadonlyArray<string>): {
+    valid: string[];
+    invalid: string[];
+} {
+    const valid: string[] = [];
+    const invalid: string[] = [];
+    for (const chip of chips) {
+        if (isValidChatId(chip)) valid.push(chip.trim());
+        else invalid.push(chip);
+    }
+    return { valid, invalid };
+}
+
+/** Format `number[] → string[]` for the chip list UI. */
+export function chatIdsToChips(ids: ReadonlyArray<number> | undefined): string[] {
+    if (!ids) return [];
+    return ids.filter((n) => Number.isFinite(n)).map((n) => String(n));
+}
+
+/** Parse `string[] → number[]` for save. Drops invalid chips defensively. */
+export function chipsToChatIds(chips: ReadonlyArray<string>): number[] {
+    const out: number[] = [];
+    for (const chip of chips) {
+        if (!isValidChatId(chip)) continue;
+        const parsed = Number(chip);
+        if (Number.isFinite(parsed)) out.push(parsed);
+    }
+    return out;
+}
+
+// ── component ────────────────────────────────────────────────────────
+
+export default function ChannelsTelegram({ port, client, dirty, registerSave }: SettingsPageProps) {
+    const { state, refresh, setData } = usePageSnapshot<TelegramSnapshot>(client, '/api/settings');
+
+    const [enabled, setEnabled] = useState(false);
+    const [token, setToken] = useState('');
+    const [chips, setChips] = useState<string[]>([]);
+    const [forwardAll, setForwardAll] = useState(true);
+    const [mentionOnly, setMentionOnly] = useState(true);
+
+    useEffect(() => {
+        if (state.kind !== 'ready') return;
+        const tg = state.data.telegram || {};
+        setEnabled(Boolean(tg.enabled));
+        // Token field starts empty — we never seed the actual secret into the
+        // input. The placeholder shows "••••last4" so the user sees that one
+        // exists; typing replaces it on save, leaving blank keeps original.
+        setToken('');
+        setChips(chatIdsToChips(tg.allowedChatIds));
+        setForwardAll(tg.forwardAll !== false);
+        setMentionOnly(tg.mentionOnly !== false);
+    }, [state]);
+
+    useEffect(() => {
+        return () => {
+            for (const key of TELEGRAM_KEYS) dirty.remove(key);
+        };
+    }, [dirty]);
+
+    const setEntry = useCallback(
+        (key: string, entry: DirtyEntry) => dirty.set(key, entry),
+        [dirty],
+    );
+
+    const original = useMemo<TelegramBlock>(() => {
+        if (state.kind !== 'ready') return {};
+        return state.data.telegram || {};
+    }, [state]);
+
+    const originalChannel = state.kind === 'ready' ? state.data.channel : undefined;
+
+    const onSave = useCallback(async () => {
+        const bundle = dirty.saveBundle();
+        if (Object.keys(bundle).length === 0) return;
+        const patch = expandPatch(bundle);
+        const updated = await client.put<TelegramSnapshot>('/api/settings', patch);
+        const fresh = (updated && typeof updated === 'object' && 'data' in updated
+            ? (updated as { data: TelegramSnapshot }).data
+            : updated) as TelegramSnapshot;
+        dirty.clear();
+        setData(fresh);
+        const tg = fresh.telegram || {};
+        setEnabled(Boolean(tg.enabled));
+        setToken('');
+        setChips(chatIdsToChips(tg.allowedChatIds));
+        setForwardAll(tg.forwardAll !== false);
+        setMentionOnly(tg.mentionOnly !== false);
+        await refresh();
+    }, [client, dirty, refresh, setData]);
+
+    useEffect(() => {
+        if (!registerSave) return;
+        registerSave(onSave);
+        return () => registerSave(null);
+    }, [registerSave, onSave]);
+
+    if (state.kind === 'loading') return <PageLoading />;
+    if (state.kind === 'offline') return <PageOffline port={port} />;
+    if (state.kind === 'error') return <PageError message={state.message} />;
+
+    const last4 = original.token ? original.token.slice(-4) : '';
+    const tokenPlaceholder = original.token ? `••••••••${last4}` : '(empty)';
+    const { invalid } = partitionChatIds(chips);
+    const chipsError = invalid.length > 0
+        ? `Numeric chat IDs only — invalid: ${invalid.join(', ')}`
+        : null;
+
+    return (
+        <form
+            className="settings-page-form"
+            onSubmit={(event) => {
+                event.preventDefault();
+                void onSave();
+            }}
+        >
+            <SettingsSection
+                title="Channels"
+                hint="Choose which channel forwards bot replies to you."
+            >
+                <ActiveChannelToggle
+                    original={originalChannel}
+                    dirty={dirty}
+                    idPrefix="tg-channel"
+                />
+            </SettingsSection>
+
+            <SettingsSection title="Telegram" hint="Bot token, allow-list, and forwarding rules.">
+                <ToggleField
+                    id="tg-enabled"
+                    label="Telegram enabled"
+                    value={enabled}
+                    onChange={(next) => {
+                        setEnabled(next);
+                        setEntry('telegram.enabled', {
+                            value: next,
+                            original: Boolean(original.enabled),
+                            valid: true,
+                        });
+                    }}
+                />
+                <SecretField
+                    id="tg-token"
+                    label="Bot token"
+                    value={token}
+                    placeholder={tokenPlaceholder}
+                    onChange={(next) => {
+                        setToken(next);
+                        // Empty input means "leave existing token alone"; only
+                        // emit a dirty entry once the user has typed something.
+                        if (next.length === 0) {
+                            dirty.remove('telegram.token');
+                            return;
+                        }
+                        setEntry('telegram.token', {
+                            value: next,
+                            original: original.token ?? '',
+                            valid: true,
+                        });
+                    }}
+                />
+                <ChipListField
+                    id="tg-allowedChatIds"
+                    label="Allowed chat IDs"
+                    value={chips}
+                    placeholder="123456789"
+                    error={chipsError}
+                    onChange={(next) => {
+                        setChips(next);
+                        const allValid = next.every(isValidChatId);
+                        setEntry('telegram.allowedChatIds', {
+                            value: chipsToChatIds(next),
+                            original: original.allowedChatIds ?? [],
+                            valid: allValid,
+                        });
+                    }}
+                />
+                <ToggleField
+                    id="tg-forwardAll"
+                    label="Forward all responses"
+                    value={forwardAll}
+                    onChange={(next) => {
+                        setForwardAll(next);
+                        setEntry('telegram.forwardAll', {
+                            value: next,
+                            original: original.forwardAll !== false,
+                            valid: true,
+                        });
+                    }}
+                />
+                <ToggleField
+                    id="tg-mentionOnly"
+                    label="Mention only"
+                    value={mentionOnly}
+                    onChange={(next) => {
+                        setMentionOnly(next);
+                        setEntry('telegram.mentionOnly', {
+                            value: next,
+                            original: original.mentionOnly !== false,
+                            valid: true,
+                        });
+                    }}
+                />
+            </SettingsSection>
+
+            <SettingsSection
+                title="Health"
+                hint="Probe the bot to confirm token + connectivity. 404 means the instance hasn't shipped the probe endpoint yet."
+            >
+                <HealthBadge
+                    client={client}
+                    label="Telegram"
+                    endpoint="/api/telegram/probe"
+                    method="POST"
+                    interpret={interpretTelegramProbe}
+                />
+            </SettingsSection>
+        </form>
+    );
+}

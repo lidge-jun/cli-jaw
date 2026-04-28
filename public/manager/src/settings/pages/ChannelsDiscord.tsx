@@ -1,0 +1,281 @@
+// Phase 3 — Channels (Discord) page.
+//
+// Settings keys:
+//   channel                   (shared across telegram + discord pages)
+//   discord.enabled
+//   discord.token             (SecretField, masked, never logged)
+//   discord.guildId
+//   discord.channelIds        (string[])
+//   discord.forwardAll
+//   discord.allowBots
+//   discord.mentionOnly
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { SettingsPageProps, DirtyEntry } from '../types';
+import { ToggleField, SecretField, ChipListField, TextField } from '../fields';
+import {
+    SettingsSection,
+    PageError,
+    PageLoading,
+    PageOffline,
+    usePageSnapshot,
+} from './page-shell';
+import { expandPatch } from './path-utils';
+import { ActiveChannelToggle } from './components/ActiveChannelToggle';
+import type { ActiveChannel } from './components/ActiveChannelToggle';
+import { HealthBadge, interpretDiscordHealth } from './components/HealthBadge';
+
+type DiscordBlock = {
+    enabled?: boolean;
+    token?: string;
+    guildId?: string;
+    channelIds?: string[];
+    forwardAll?: boolean;
+    allowBots?: boolean;
+    mentionOnly?: boolean;
+};
+
+type DiscordSnapshot = {
+    channel?: ActiveChannel;
+    discord?: DiscordBlock;
+    [key: string]: unknown;
+};
+
+const DISCORD_KEYS = [
+    'channel',
+    'discord.enabled',
+    'discord.token',
+    'discord.guildId',
+    'discord.channelIds',
+    'discord.forwardAll',
+    'discord.allowBots',
+    'discord.mentionOnly',
+] as const;
+
+/** Discord IDs are snowflakes — long numeric strings. Be lenient: 16+ digits typical. */
+export function isValidSnowflake(chip: string): boolean {
+    if (!chip) return false;
+    return /^\d{5,32}$/.test(chip.trim());
+}
+
+export default function ChannelsDiscord({ port, client, dirty, registerSave }: SettingsPageProps) {
+    const { state, refresh, setData } = usePageSnapshot<DiscordSnapshot>(client, '/api/settings');
+
+    const [enabled, setEnabled] = useState(false);
+    const [token, setToken] = useState('');
+    const [guildId, setGuildId] = useState('');
+    const [channelIds, setChannelIds] = useState<string[]>([]);
+    const [forwardAll, setForwardAll] = useState(true);
+    const [allowBots, setAllowBots] = useState(false);
+    const [mentionOnly, setMentionOnly] = useState(false);
+
+    useEffect(() => {
+        if (state.kind !== 'ready') return;
+        const dc = state.data.discord || {};
+        setEnabled(Boolean(dc.enabled));
+        setToken('');
+        setGuildId(dc.guildId ?? '');
+        setChannelIds(Array.isArray(dc.channelIds) ? [...dc.channelIds] : []);
+        setForwardAll(dc.forwardAll !== false);
+        setAllowBots(Boolean(dc.allowBots));
+        setMentionOnly(Boolean(dc.mentionOnly));
+    }, [state]);
+
+    useEffect(() => {
+        return () => {
+            for (const key of DISCORD_KEYS) dirty.remove(key);
+        };
+    }, [dirty]);
+
+    const setEntry = useCallback(
+        (key: string, entry: DirtyEntry) => dirty.set(key, entry),
+        [dirty],
+    );
+
+    const original = useMemo<DiscordBlock>(() => {
+        if (state.kind !== 'ready') return {};
+        return state.data.discord || {};
+    }, [state]);
+
+    const originalChannel = state.kind === 'ready' ? state.data.channel : undefined;
+
+    const onSave = useCallback(async () => {
+        const bundle = dirty.saveBundle();
+        if (Object.keys(bundle).length === 0) return;
+        const patch = expandPatch(bundle);
+        const updated = await client.put<DiscordSnapshot>('/api/settings', patch);
+        const fresh = (updated && typeof updated === 'object' && 'data' in updated
+            ? (updated as { data: DiscordSnapshot }).data
+            : updated) as DiscordSnapshot;
+        dirty.clear();
+        setData(fresh);
+        const dc = fresh.discord || {};
+        setEnabled(Boolean(dc.enabled));
+        setToken('');
+        setGuildId(dc.guildId ?? '');
+        setChannelIds(Array.isArray(dc.channelIds) ? [...dc.channelIds] : []);
+        setForwardAll(dc.forwardAll !== false);
+        setAllowBots(Boolean(dc.allowBots));
+        setMentionOnly(Boolean(dc.mentionOnly));
+        await refresh();
+    }, [client, dirty, refresh, setData]);
+
+    useEffect(() => {
+        if (!registerSave) return;
+        registerSave(onSave);
+        return () => registerSave(null);
+    }, [registerSave, onSave]);
+
+    if (state.kind === 'loading') return <PageLoading />;
+    if (state.kind === 'offline') return <PageOffline port={port} />;
+    if (state.kind === 'error') return <PageError message={state.message} />;
+
+    const last4 = original.token ? original.token.slice(-4) : '';
+    const tokenPlaceholder = original.token ? `••••••••${last4}` : '(empty)';
+    const guildError = guildId && !isValidSnowflake(guildId)
+        ? 'Guild ID must be a numeric snowflake.'
+        : null;
+    const invalidChannelIds = channelIds.filter((c) => !isValidSnowflake(c));
+    const channelIdsError = invalidChannelIds.length > 0
+        ? `Snowflake IDs only — invalid: ${invalidChannelIds.join(', ')}`
+        : null;
+
+    return (
+        <form
+            className="settings-page-form"
+            onSubmit={(event) => {
+                event.preventDefault();
+                void onSave();
+            }}
+        >
+            <SettingsSection
+                title="Channels"
+                hint="Choose which channel forwards bot replies to you."
+            >
+                <ActiveChannelToggle
+                    original={originalChannel}
+                    dirty={dirty}
+                    idPrefix="dc-channel"
+                />
+            </SettingsSection>
+
+            <SettingsSection title="Discord" hint="Bot token, guild + channels, forwarding rules.">
+                <ToggleField
+                    id="dc-enabled"
+                    label="Discord enabled"
+                    value={enabled}
+                    onChange={(next) => {
+                        setEnabled(next);
+                        setEntry('discord.enabled', {
+                            value: next,
+                            original: Boolean(original.enabled),
+                            valid: true,
+                        });
+                    }}
+                />
+                <SecretField
+                    id="dc-token"
+                    label="Bot token"
+                    value={token}
+                    placeholder={tokenPlaceholder}
+                    onChange={(next) => {
+                        setToken(next);
+                        if (next.length === 0) {
+                            dirty.remove('discord.token');
+                            return;
+                        }
+                        setEntry('discord.token', {
+                            value: next,
+                            original: original.token ?? '',
+                            valid: true,
+                        });
+                    }}
+                />
+                <TextField
+                    id="dc-guildId"
+                    label="Guild ID"
+                    value={guildId}
+                    placeholder="123456789012345678"
+                    error={guildError}
+                    onChange={(next) => {
+                        setGuildId(next);
+                        const valid = next.length === 0 || isValidSnowflake(next);
+                        setEntry('discord.guildId', {
+                            value: next,
+                            original: original.guildId ?? '',
+                            valid,
+                        });
+                    }}
+                />
+                <ChipListField
+                    id="dc-channelIds"
+                    label="Channel IDs"
+                    value={channelIds}
+                    placeholder="987654321098765432"
+                    error={channelIdsError}
+                    onChange={(next) => {
+                        setChannelIds(next);
+                        const allValid = next.every(isValidSnowflake);
+                        setEntry('discord.channelIds', {
+                            value: next,
+                            original: original.channelIds ?? [],
+                            valid: allValid,
+                        });
+                    }}
+                />
+                <ToggleField
+                    id="dc-forwardAll"
+                    label="Forward all"
+                    value={forwardAll}
+                    onChange={(next) => {
+                        setForwardAll(next);
+                        setEntry('discord.forwardAll', {
+                            value: next,
+                            original: original.forwardAll !== false,
+                            valid: true,
+                        });
+                    }}
+                />
+                <ToggleField
+                    id="dc-allowBots"
+                    label="Allow other bots"
+                    value={allowBots}
+                    onChange={(next) => {
+                        setAllowBots(next);
+                        setEntry('discord.allowBots', {
+                            value: next,
+                            original: Boolean(original.allowBots),
+                            valid: true,
+                        });
+                    }}
+                />
+                <ToggleField
+                    id="dc-mentionOnly"
+                    label="Mention only"
+                    value={mentionOnly}
+                    onChange={(next) => {
+                        setMentionOnly(next);
+                        setEntry('discord.mentionOnly', {
+                            value: next,
+                            original: Boolean(original.mentionOnly),
+                            valid: true,
+                        });
+                    }}
+                />
+            </SettingsSection>
+
+            <SettingsSection
+                title="Health"
+                hint="Probes /api/health for Discord readiness. Degraded mode means the bot is missing the MESSAGE_CONTENT intent (slash commands only)."
+            >
+                <HealthBadge
+                    client={client}
+                    label="Discord"
+                    endpoint="/api/health"
+                    method="GET"
+                    interpret={interpretDiscordHealth}
+                />
+            </SettingsSection>
+        </form>
+    );
+}
