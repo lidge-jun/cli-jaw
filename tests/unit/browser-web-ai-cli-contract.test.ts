@@ -10,20 +10,20 @@ const routeSrc = fs.readFileSync(join(root, 'src/routes/browser.ts'), 'utf8');
 const indexSrc = fs.readFileSync(join(root, 'src/browser/index.ts'), 'utf8');
 
 test('BWCLI-001: CLI exposes closed web-ai command surface', () => {
-    assert.match(cliSrc, /const WEB_AI_COMMANDS = new Set\(\['render', 'status', 'send', 'poll', 'query', 'stop'\]\)/);
+    assert.match(cliSrc, /const WEB_AI_COMMANDS = new Set\(\['render', 'status', 'send', 'poll', 'query', 'stop', 'diagnose'\]\)/);
     assert.match(cliSrc, /case 'web-ai'/);
     assert.match(cliSrc, /runWebAiCommand/);
 });
 
-test('BWCLI-002: send and query require inline-only', () => {
+test('BWCLI-002: send and query require inline-only; future flags fail closed', () => {
     assert.match(cliSrc, /send\/query require --inline-only/);
-    assert.match(cliSrc, /--file is future scope/);
-    assert.match(cliSrc, /--model is future scope/);
-    assert.match(cliSrc, /--thinking-time is future scope/);
+    assert.match(cliSrc, /--file is fail-closed/);
+    assert.match(cliSrc, /--model is rejected-until-verified/);
+    assert.match(cliSrc, /--thinking-time is reserved/);
 });
 
 test('BWCLI-003: web-ai routes are authenticated', () => {
-    for (const route of ['render', 'status', 'send', 'poll', 'query', 'stop']) {
+    for (const route of ['render', 'status', 'send', 'poll', 'query', 'stop', 'diagnose']) {
         assert.match(routeSrc, new RegExp(`/api/browser/web-ai/${route}', requireAuth`));
     }
 });
