@@ -15,7 +15,9 @@ const CATEGORIES: SidebarEntry[] = [
     { id: 'channels-discord', label: 'Channels — Discord', group: 'channels' },
     { id: 'speech', label: 'Speech & keys', group: 'integrations' },
     { id: 'heartbeat', label: 'Heartbeat & schedules', group: 'automation' },
-    // Phases 6–9 will register their entries here.
+    { id: 'memory', label: 'Memory', group: 'integrations' },
+    { id: 'employees', label: 'Employees', group: 'integrations' },
+    // Phases 7–9 will register their entries here.
 ];
 
 type Props = {
