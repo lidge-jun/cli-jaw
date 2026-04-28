@@ -78,6 +78,18 @@ test('manager frontend exposes lifecycle controls without hiding discovery actio
     assert.ok(row.includes('Open'), 'manager UI must keep Open action');
 });
 
+test('manager frontend keeps rows compact while preserving model visibility', () => {
+    const row = read('public/manager/src/components/InstanceRow.tsx');
+    const polish = read('public/manager/src/manager-polish.css');
+
+    assert.ok(row.includes('instance-row-runtime'), 'instance rows must expose CLI/model as a stable runtime line');
+    assert.ok(row.includes('instance-row-version'), 'instance rows must keep version metadata addressable');
+    assert.ok(row.includes('instance-row-reason'), 'instance rows must keep reason metadata addressable');
+    assert.ok(polish.includes('.manager-sidebar .instance-row-version'), 'sidebar polish must hide secondary row metadata in compact mode');
+    assert.ok(polish.includes('.manager-sidebar .instance-actions'), 'sidebar polish must control action-row density');
+    assert.ok(polish.includes('.manager-shell.is-sidebar-collapsed .manager-workspace'), 'sidebar collapse must reclaim detail width');
+});
+
 test('manager instance rows are selectable independently from preview availability', () => {
     const app = read('public/manager/src/App.tsx');
     const groups = read('public/manager/src/components/InstanceGroups.tsx');

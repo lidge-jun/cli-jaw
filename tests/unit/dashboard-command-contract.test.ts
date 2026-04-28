@@ -70,3 +70,13 @@ test('dashboard noisy browser probe routes are handled before SPA fallback', () 
     assert.ok(wellKnownIndex < fallbackIndex, 'Chrome DevTools probe route must be before SPA fallback');
     assert.ok(faviconIndex < fallbackIndex, 'favicon route must be before SPA fallback');
 });
+
+test('dashboard serves manager favicon from packaged icons', () => {
+    const managerServer = read('src/manager/server.ts');
+    const html = read('public/manager/index.html');
+
+    assert.ok(managerServer.includes("app.use('/icons', express.static(join(sourceRoot, 'icons')))"), 'manager server must expose packaged icons');
+    assert.ok(managerServer.includes("res.sendFile('icon-192.png'"), 'favicon route must serve the packaged icon');
+    assert.ok(html.includes('rel="icon"'), 'manager HTML must declare a favicon');
+    assert.ok(html.includes('/icons/icon-192.png'), 'manager HTML favicon must use the packaged icon route');
+});

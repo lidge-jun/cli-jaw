@@ -75,7 +75,12 @@ import { initActiveMessagingRuntime, shutdownMessagingRuntime, hydrateTargetsFro
 
 import { startHeartbeat, stopHeartbeat, watchHeartbeatFile } from './src/memory/heartbeat.js';
 
-import { clearMainSessionState, syncMainSessionToSettings, resetSessionPreservingHistory } from './src/core/main-session.js';
+import {
+    clearMainSessionState,
+    getCliModelAndEffort,
+    syncMainSessionToSettings,
+    resetSessionPreservingHistory,
+} from './src/core/main-session.js';
 import { applyRuntimeSettingsPatch } from './src/core/runtime-settings.js';
 
 import { seedDefaultEmployees } from './src/core/employees.js';
@@ -333,10 +338,15 @@ wss.on('connection', (ws) => {
 // ─── API Routes ──────────────────────────────────────
 
 function getRuntimeSnapshot() {
+    const cli = settings.cli || null;
+    const model = cli ? getCliModelAndEffort(cli, settings).model : 'default';
+
     return {
         uptimeSec: Math.floor(process.uptime()),
         activeAgent: isAgentBusy(),
         queuePending: messageQueue.length,
+        cli,
+        model,
     };
 }
 

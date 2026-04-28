@@ -57,9 +57,9 @@ export function InstanceRow(props: InstanceRowProps) {
                     <span className="port">:{props.instance.port}</span>
                 </div>
                 <div className="instance-row-meta">
-                    <span>{props.instance.currentCli || 'cli n/a'} / {props.instance.currentModel || 'model n/a'}</span>
-                    <span>v{props.instance.version || 'n/a'} · {props.uptime}</span>
-                    <span>{new Date(props.instance.lastCheckedAt).toLocaleTimeString()} · {reason}</span>
+                    <span className="instance-row-runtime">{props.instance.currentCli || 'cli n/a'} / {props.instance.currentModel || 'model n/a'}</span>
+                    <span className="instance-row-version">v{props.instance.version || 'n/a'} · {props.uptime}</span>
+                    <span className="instance-row-reason">{new Date(props.instance.lastCheckedAt).toLocaleTimeString()} · {reason}</span>
                 </div>
             </button>
             <div className="instance-actions">
