@@ -270,11 +270,7 @@ export function App() {
         }
     }
 
-    function renderInstanceListContent(excludeActive = false) {
-        const listInstances = excludeActive && selectedInstance
-            ? filtered.filter(instance => instance.port !== selectedInstance.port)
-            : filtered;
-
+    function renderInstanceListContent() {
         const showEmpty = !error && !loading && instances.length === 0
             && !instances.some(instance => instance.hidden);
 
@@ -290,7 +286,7 @@ export function App() {
             )}
             {!error && !showEmpty && (
                 <InstanceGroups
-                    instances={listInstances}
+                    instances={filtered}
                     selectedPort={selectedInstance?.port || null}
                     lifecycleBusyPort={lifecycleBusyPort}
                     transitioningPort={transitioningPort}
@@ -403,7 +399,7 @@ export function App() {
                                     hiddenCount={instances.filter(instance => instance.hidden).length}
                                     collapsed={view.sidebarCollapsed}
                                 >
-                                    {renderInstanceListContent(true)}
+                                    {renderInstanceListContent()}
                                 </InstanceNavigator>
                             </div>
                         </>
@@ -463,7 +459,7 @@ export function App() {
                             profileFilters={profileChipStrip(profiles)}
                             onClose={() => view.setDrawerOpen(false)}
                         >
-                            {renderInstanceListContent(false)}
+                            {renderInstanceListContent()}
                         </InstanceDrawer>
                     )}
                 />

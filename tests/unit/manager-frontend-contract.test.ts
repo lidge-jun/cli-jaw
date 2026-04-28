@@ -109,6 +109,15 @@ test('manager instance rows are selectable independently from preview availabili
     assert.ok(app.includes('view.setDrawerOpen(false)'), 'row selection must close the mobile drawer');
 });
 
+test('manager navigator does not exclude the selected instance from profile groups', () => {
+    const app = read('public/manager/src/App.tsx');
+    const navigator = read('public/manager/src/components/InstanceNavigator.tsx');
+
+    assert.equal(app.includes('renderInstanceListContent(true)'), false, 'selected instance must remain in the grouped list after removing duplicate active card');
+    assert.equal(app.includes('filtered.filter(instance => instance.port !== selectedInstance.port)'), false, 'App must not remove selected instances from sidebar groups');
+    assert.equal(navigator.includes('InstanceRow'), false, 'InstanceNavigator must not render a second selected instance card');
+});
+
 test('manager frontend routes layout through responsive shell components', () => {
     const app = read('public/manager/src/App.tsx');
     const detail = read('public/manager/src/components/InstanceDetailPanel.tsx');
