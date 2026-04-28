@@ -4,6 +4,7 @@ import type {
     DashboardRegistryInstance,
     DashboardScanResult,
 } from '../types';
+import { SettingsShell } from '../settings/SettingsShell';
 
 type InstanceDetailPanelProps = {
     instance: DashboardInstance | null;
@@ -36,43 +37,16 @@ export function InstanceDetailPanel(props: InstanceDetailPanelProps) {
                 )}
 
                 {props.activeTab === 'settings' && instance && (
-                    <form className="settings-form" key={instance.port} onSubmit={event => event.preventDefault()}>
-                        <label>
-                            Label
-                            <input
-                                defaultValue={instance.label || ''}
-                                onBlur={event => props.onRegistryPatch(instance.port, { label: event.target.value })}
-                            />
-                        </label>
-                        <label>
-                            Group
-                            <input
-                                defaultValue={instance.group || ''}
-                                onBlur={event => props.onRegistryPatch(instance.port, { group: event.target.value })}
-                            />
-                        </label>
-                        <label className="toggle-control">
-                            <input
-                                type="checkbox"
-                                checked={instance.favorite === true}
-                                onChange={event => props.onRegistryPatch(instance.port, { favorite: event.target.checked })}
-                            />
-                            Pin favorite
-                        </label>
-                        <label className="toggle-control">
-                            <input
-                                type="checkbox"
-                                checked={instance.hidden === true}
-                                onChange={event => props.onRegistryPatch(instance.port, { hidden: event.target.checked })}
-                            />
-                            Hide by default
-                        </label>
-                    </form>
+                    <SettingsShell
+                        key={instance.port}
+                        port={instance.port}
+                        instanceUrl={`http://localhost:${instance.port}`}
+                    />
                 )}
 
                 {props.activeTab === 'settings' && !instance && (
                     <div className="detail-empty">
-                        Select an instance to edit labels, pinned state, hidden state, and groups.
+                        Select an instance to configure it.
                     </div>
                 )}
         </section>
