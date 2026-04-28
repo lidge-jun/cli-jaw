@@ -6,6 +6,7 @@ import {
     observeElementOffset,
 } from '@tanstack/virtual-core';
 import { generateId } from './uuid.js';
+import { releaseMermaidNodes } from './render.js';
 
 // Activates at THRESHOLD messages to prevent DOM bloat
 // Activate immediately — tanstack virtualizes DOM so only visible
@@ -163,6 +164,7 @@ export class VirtualScroll {
 
     appendLiveItem(div: HTMLElement): void {
         if (!this._active) return;
+        releaseMermaidNodes(div);
         const html = div.outerHTML;
         const id = generateId();
         this.items.push({ id, html, height: EST_HEIGHT });
@@ -407,6 +409,7 @@ export class VirtualScroll {
         }
         this.virtualizer = null;
         this._active = false;
+        for (const el of this.mounted.values()) releaseMermaidNodes(el);
         this.mounted.clear();
         this.container.classList.remove('vs-active');
         this.container.innerHTML = '';
@@ -430,6 +433,7 @@ export class VirtualScroll {
         // Remove items no longer in range
         for (const [idx, el] of this.mounted) {
             if (!wantedSet.has(idx)) {
+                releaseMermaidNodes(el);
                 el.remove();
                 this.mounted.delete(idx);
             }

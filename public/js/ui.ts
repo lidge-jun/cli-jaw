@@ -24,6 +24,7 @@ import {
     buildProcessBlockHtml,
     bindProcessBlockInteractions,
     type ProcessStep,
+    type ProcessBlockState,
 } from './features/process-block.js';
 interface MessageItem { role: string; content: string; tool_log?: string | null; cli?: string | null; }
 interface QueuedOverlayItem { id: string; prompt: string; source?: string; ts?: number; }
@@ -61,6 +62,55 @@ function toProcessSteps(tools: ToolLogEntry[]): ProcessStep[] {
         status: tool.status || 'done',
         startTime: Date.now(),
     }));
+}
+
+const TOOL_BLOCK_SELECTOR =
+    ':scope > .process-block, :scope > .tool-group, ' +
+    ':scope > .msg-content > .process-block, :scope > .msg-content > .tool-group';
+
+function agentBody(agentMsg: HTMLElement): HTMLElement | null {
+    return agentMsg.querySelector('.agent-body') as HTMLElement | null;
+}
+
+function agentToolBlocks(agentMsg: HTMLElement): HTMLElement[] {
+    const body = agentBody(agentMsg);
+    return body ? Array.from(body.querySelectorAll<HTMLElement>(TOOL_BLOCK_SELECTOR)) : [];
+}
+
+function normalizeAgentToolBlocks(agentMsg: HTMLElement): void {
+    const body = agentBody(agentMsg);
+    if (!body) return;
+
+    const content = body.querySelector('.msg-content') as HTMLElement | null;
+    const blocks = agentToolBlocks(agentMsg);
+    if (blocks.length === 0) return;
+
+    const keep = blocks.find((block) => block.parentElement === body) ?? blocks[0];
+    if (content && keep.parentElement !== body) {
+        body.insertBefore(keep, content);
+    }
+
+    for (const block of blocks) {
+        if (block !== keep) block.remove();
+    }
+}
+
+function hasAgentToolBlock(agentMsg: HTMLElement): boolean {
+    return agentToolBlocks(agentMsg).length > 0;
+}
+
+function currentProcessBlockFromDom(agentMsg: HTMLElement): ProcessBlockState | null {
+    const block = agentBody(agentMsg)?.querySelector(':scope > .process-block') as HTMLElement | null;
+    if (!block) return null;
+    return {
+        element: block,
+        steps: [],
+        collapsed: block.classList.contains('collapsed'),
+    };
+}
+
+function removeAgentToolBlocks(agentMsg: HTMLElement): void {
+    for (const block of agentToolBlocks(agentMsg)) block.remove();
 }
 
 export function setStatus(s: string): void {
@@ -160,9 +210,15 @@ export function showProcessStep(step: ProcessStep): void {
         state.currentAgentDiv = addMessage('agent', '');
         state.currentProcessBlock = null;
     }
+    const agentDiv = state.currentAgentDiv;
+    normalizeAgentToolBlocks(agentDiv);
     if (!state.currentProcessBlock) {
-        const body = state.currentAgentDiv.querySelector('.agent-body') as HTMLElement;
+        const body = agentDiv.querySelector('.agent-body') as HTMLElement;
         if (body) {
+            state.currentProcessBlock = currentProcessBlockFromDom(agentDiv);
+        }
+        if (!state.currentProcessBlock && body) {
+            removeAgentToolBlocks(agentDiv);
             state.currentProcessBlock = createProcessBlock(body);
         }
     }
@@ -295,9 +351,14 @@ export function hydrateActiveRun(snapshot?: ActiveRunSnapshot | null): void {
     state.currentProcessBlock = null;
     const body = state.currentAgentDiv.querySelector('.agent-body') as HTMLElement | null;
     if (body && snapshot.toolLog?.length) {
+        normalizeAgentToolBlocks(state.currentAgentDiv);
+        removeAgentToolBlocks(state.currentAgentDiv);
         const pb = createProcessBlock(body);
         for (const tool of toProcessSteps(snapshot.toolLog)) addStep(pb, tool);
         state.currentProcessBlock = pb;
+    } else {
+        normalizeAgentToolBlocks(state.currentAgentDiv);
+        state.currentProcessBlock = currentProcessBlockFromDom(state.currentAgentDiv);
     }
     const content = state.currentAgentDiv.querySelector('.msg-content') as HTMLElement | null;
     if (content) {
@@ -336,7 +397,10 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
 
     cleanupToolElements();
     removeSkeleton();
-    const hadProcessBlock = !!state.currentProcessBlock;
+    if (state.currentAgentDiv) normalizeAgentToolBlocks(state.currentAgentDiv);
+    const hadProcessBlock =
+        Boolean(state.currentProcessBlock) ||
+        Boolean(state.currentAgentDiv && hasAgentToolBlock(state.currentAgentDiv));
     if (state.currentProcessBlock) {
         collapseBlock(state.currentProcessBlock);
         state.currentProcessBlock = null;
@@ -352,9 +416,17 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
         const streamedText = currentStream ? finalizeStream(currentStream, true) : '';
         const finalText = text || streamedText;
         currentStream = null;
-        // Skip static tool HTML when process block already shows tool summary
-        const toolHtml = hasTools && !hadProcessBlock ? buildProcessBlockHtml(toProcessSteps(toolLog!), true) : '';
-        if (content) content.innerHTML = toolHtml + renderMarkdown(finalText);
+        if (content) content.innerHTML = renderMarkdown(finalText);
+        if (hasTools && state.currentAgentDiv && !hadProcessBlock && !hasAgentToolBlock(state.currentAgentDiv)) {
+            const contentEl = state.currentAgentDiv.querySelector('.msg-content') as HTMLElement | null;
+            if (contentEl) {
+                contentEl.insertAdjacentHTML(
+                    'beforebegin',
+                    buildProcessBlockHtml(toProcessSteps(toolLog!), true),
+                );
+            }
+        }
+        if (state.currentAgentDiv) normalizeAgentToolBlocks(state.currentAgentDiv);
         if (content) content.setAttribute('data-raw', stripOrchestration(finalText));
         if (content) activateWidgets(content as HTMLElement);
 
@@ -457,6 +529,7 @@ export function addMessage(role: string, text: string, cli?: string | null): HTM
     const isStreamingPlaceholder = role === 'agent' && !text;
 
     if (vs.active && !isStreamingPlaceholder) {
+        if (div.classList.contains('msg-agent')) normalizeAgentToolBlocks(div);
         vs.appendLiveItem(div);
     } else {
         container?.appendChild(div);
@@ -468,6 +541,7 @@ export function addMessage(role: string, text: string, cli?: string | null): HTM
             if (msgCount >= VS_THRESHOLD) {
                 // Feed all existing DOM messages into VS items array
                 container.querySelectorAll('.msg').forEach(el => {
+                    if (el.classList.contains('msg-agent')) normalizeAgentToolBlocks(el as HTMLElement);
                     vs.addItem(generateId(), el.outerHTML);
                 });
                 // Wire widget activation + file path linkification for VS-rendered items
@@ -660,12 +734,12 @@ function buildVirtualHistoryItems(msgs: MessageItem[]): VirtualItem[] {
             role === 'user' ? formatUserPrompt(m.content) : m.content,
         );
         const label = escapeHtml(role === 'user' ? t('msg.you') : getAppName());
-        const tools = m.role === 'assistant' ? parseToolLog(m.tool_log) : [];
-        const toolHtml = tools.length > 0 ? buildProcessBlockHtml(toProcessSteps(tools), true) : '';
-        const rendered = rawContent ? renderMarkdown(rawContent) : '';
+        const rawToolLog = m.role === 'assistant' && m.tool_log ? escapeHtml(m.tool_log) : '';
+        const toolAttr = rawToolLog ? ` data-tool-log="${rawToolLog}"` : '';
+        const contentHtml = `<div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}"></div>`;
         const html = role === 'agent'
-            ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body">${toolHtml}<div class="msg-content" data-raw="${escapeHtml(rawContent)}">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
-            : `<div class="msg msg-${role}"><div class="user-body"><div class="msg-label">${label}</div><div class="msg-content" data-raw="${escapeHtml(rawContent)}">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div><div class="user-icon" aria-hidden="true">${getUserAvatarMarkup()}</div></div>`;
+            ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body"${toolAttr}>${contentHtml}<button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
+            : `<div class="msg msg-${role}"><div class="user-body"><div class="msg-label">${label}</div>${contentHtml}<button class="msg-copy" title="Copy" aria-label="Copy message"></button></div><div class="user-icon" aria-hidden="true">${getUserAvatarMarkup()}</div></div>`;
         return { id: generateId(), html, height: 80 };
     });
 }
@@ -675,16 +749,25 @@ function registerVirtualScrollCallbacks(vs: ReturnType<typeof getVirtualScroll>)
         for (const el of targets) {
             if (!el.classList.contains('lazy-pending')) continue;
             const raw = el.getAttribute('data-raw') || '';
+            const msgEl = el.closest('.msg-agent') as HTMLElement | null;
+            const body = msgEl?.querySelector('.agent-body') as HTMLElement | null;
+            const rawToolLog = body?.dataset.toolLog || '';
+            if (msgEl && body && rawToolLog && !hasAgentToolBlock(msgEl)) {
+                const tools = parseToolLog(rawToolLog);
+                if (tools.length > 0) {
+                    el.insertAdjacentHTML(
+                        'beforebegin',
+                        buildProcessBlockHtml(toProcessSteps(tools), true),
+                    );
+                }
+                delete body.dataset.toolLog;
+                normalizeAgentToolBlocks(msgEl);
+            }
             el.innerHTML = raw ? renderMarkdown(raw) : '';
             el.classList.remove('lazy-pending');
             activateWidgets(el);
             // Phase 127-F7a: lazy-rendered blocks (fresh markdown just converted)
             void renderMermaidBlocks(el, { immediate: true });
-            const msgEl = el.closest('[data-vs-idx]') as HTMLElement | null;
-            if (msgEl) {
-                const idx = Number(msgEl.dataset.vsIdx);
-                vs.updateItemHtml(idx, msgEl.outerHTML);
-            }
         }
     };
     vs.onPostRender = (viewport: HTMLElement) => {

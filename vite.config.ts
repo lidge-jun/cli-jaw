@@ -22,17 +22,16 @@ export default defineConfig({
           if (id.includes('node_modules/marked/') ||
               id.includes('node_modules/highlight.js/') ||
               id.includes('node_modules/katex/') ||
-              id.includes('node_modules/dompurify/')) {
+              id.includes('node_modules/dompurify/') ||
+              id.includes('dompurify')) {
             return 'vendor-render';
           }
-          if (id.includes('node_modules/mermaid/') ||
-              id.includes('node_modules/chevrotain/') ||
-              id.includes('node_modules/lodash-es/') ||
-              id.includes('node_modules/dagre-d3-es/') ||
+          // Mermaid stays behind public/js/mermaid-loader.ts. Forcing a
+          // manual vendor-mermaid chunk hoists preload helpers into app.
+          if (id.includes('node_modules/lodash-es/') ||
               id.includes('node_modules/d3') ||
-              id.includes('node_modules/elkjs/') ||
-              id.includes('node_modules/cytoscape/')) {
-            return 'vendor-mermaid';
+              id.includes('node_modules/chevrotain/')) {
+            return 'vendor-utils';
           }
         },
       },

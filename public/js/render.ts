@@ -23,7 +23,7 @@ import cpp from 'highlight.js/lib/languages/cpp';
 import diff from 'highlight.js/lib/languages/diff';
 import plaintext from 'highlight.js/lib/languages/plaintext';
 import katex from 'katex';
-import DOMPurify from 'dompurify';
+import DOMPurify from '../../node_modules/dompurify/dist/purify.cjs.js';
 import { t } from './features/i18n.js';
 import { ICONS } from './icons.js';
 import { fixCjkPunctuationBoundary } from './cjk-fix.js';
@@ -61,8 +61,13 @@ hljs.registerLanguage('diff', diff);
 hljs.registerLanguage('plaintext', plaintext);
 hljs.registerLanguage('text', plaintext);
 
+interface MermaidApi {
+    initialize(config: Record<string, unknown>): void;
+    render(id: string, code: string): Promise<{ svg: string }>;
+}
+
 // Lazy mermaid: loaded on first diagram encounter
-let mermaidModule: typeof import('mermaid') | null = null;
+let mermaidModule: MermaidApi | null = null;
 
 // Serialise all Mermaid render calls — concurrent renders corrupt shared internal state.
 let mermaidQueue: Promise<void> = Promise.resolve();
@@ -102,19 +107,17 @@ function getMermaidThemeVars() {
 
 async function ensureMermaidLoaded() {
     if (!mermaidModule) {
-        mermaidModule = await import('mermaid');
-        mermaidModule.default.setParseErrorHandler(() => {
-            // Keep Mermaid syntax failures local to the message block fallback UI.
-        });
+        const loader = await import('./mermaid-loader.js');
+        mermaidModule = loader.loadMermaid();
     }
-    return mermaidModule.default;
+    return mermaidModule;
 }
 
 // Re-apply theme config immediately before every render() call.
 // Mermaid's internal config can drift after parse()/render() due to
 // directive resets — never cache, always re-initialise.
 function applyMermaidTheme() {
-    mermaidModule!.default.initialize({
+    mermaidModule!.initialize({
         startOnLoad: false,
         theme: 'base',
         htmlLabels: false,
@@ -416,6 +419,7 @@ async function renderSingleMermaidImpl(el: HTMLElement): Promise<void> {
     const encoded = el.dataset.mermaidCodeRaw || '';
     const code = encoded ? decodeURIComponent(encoded) : (el.textContent || '');
     el.dataset.mermaidCode = code;
+    delete el.dataset.mermaidCodeRaw;
     const id = `mermaid-${++mermaidId}`;
     try {
         const mm = await ensureMermaidLoaded();
@@ -484,6 +488,18 @@ export async function renderMermaidBlocks(
             }
         }
         mermaidObserver!.observe(el);
+    }
+}
+
+export function releaseMermaidNodes(scope: HTMLElement): void {
+    if (!mermaidObserver) return;
+    const nodes: HTMLElement[] = [];
+    if (scope.classList.contains('mermaid-pending')) nodes.push(scope);
+    scope.querySelectorAll<HTMLElement>('.mermaid-pending').forEach((el) => nodes.push(el));
+    for (const el of nodes) {
+        mermaidObserver.unobserve(el);
+        delete el.dataset.mermaidQueued;
+        delete el.dataset.mermaidQueuedAt;
     }
 }
 
