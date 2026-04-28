@@ -1,17 +1,21 @@
 import express from 'express';
 import helmet from 'helmet';
 import { existsSync } from 'node:fs';
+import http from 'node:http';
 import { basename, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import {
     DASHBOARD_DEFAULT_PORT,
+    DASHBOARD_PREVIEW_PORT_FROM,
     MANAGED_INSTANCE_PORT_COUNT,
     MANAGED_INSTANCE_PORT_FROM,
 } from './constants.js';
 import { scanDashboardInstances, scanSinglePort } from './scan.js';
 import { installDashboardProxy } from './proxy.js';
+import { createPreviewOriginProxyController } from './preview-origin-proxy.js';
 import { DashboardLifecycleManager } from './lifecycle.js';
+import { parsePositiveCount, parsePositivePort } from './security.js';
 import {
     applyDashboardRegistry,
     loadDashboardRegistry,
@@ -34,12 +38,24 @@ const projectRoot = existsSync(join(serverRoot, 'package.json'))
     : join(serverRoot, '..');
 const app = express();
 
-const port = Number(process.env.DASHBOARD_PORT || DASHBOARD_DEFAULT_PORT);
-const scanFrom = Number(process.env.DASHBOARD_SCAN_FROM || MANAGED_INSTANCE_PORT_FROM);
-const scanCount = Number(process.env.DASHBOARD_SCAN_COUNT || MANAGED_INSTANCE_PORT_COUNT);
+const port = parsePositivePort(process.env.DASHBOARD_PORT, Number(DASHBOARD_DEFAULT_PORT));
+const scanFrom = parsePositivePort(process.env.DASHBOARD_SCAN_FROM, MANAGED_INSTANCE_PORT_FROM);
+const scanCount = parsePositiveCount(
+    process.env.DASHBOARD_SCAN_COUNT,
+    MANAGED_INSTANCE_PORT_COUNT,
+    MANAGED_INSTANCE_PORT_COUNT,
+);
+const previewFrom = parsePositivePort(process.env.DASHBOARD_PREVIEW_FROM, DASHBOARD_PREVIEW_PORT_FROM);
 const lifecycle = new DashboardLifecycleManager({ from: scanFrom, count: scanCount });
 const healthHistory = createHealthHistory();
 const observability = createObservability();
+const previewProxy = createPreviewOriginProxyController({
+    scanFrom,
+    scanCount,
+    previewFrom,
+    managerPort: port,
+    bindHost: '127.0.0.1',
+});
 const previousStatusByPort = new Map<number, { status: string; version: string | null }>();
 
 function recordScanEvents(result: DashboardScanResult): void {
@@ -86,6 +102,11 @@ function recordScanEvents(result: DashboardScanResult): void {
     });
 }
 
+function attachPreviewSnapshot(result: DashboardScanResult): DashboardScanResult {
+    result.manager.proxy.preview = previewProxy.snapshot();
+    return result;
+}
+
 app.use(helmet({
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
@@ -109,8 +130,11 @@ app.get('/api/dashboard/instances', async (req, res) => {
         const showHidden = req.query.showHidden === '1' || req.query.showHidden === 'true';
         const result = await scanDashboardInstances({ from, count, managerPort: port });
         recordScanEvents(result);
+        await previewProxy.reconcileOnlineTargets(
+            result.instances.filter(instance => instance.ok).map(instance => instance.port)
+        );
         const decorated = lifecycle.decorateScanResult(result);
-        res.json(applyDashboardRegistry(decorated, loaded.registry, loaded.status, { showHidden }));
+        res.json(applyDashboardRegistry(attachPreviewSnapshot(decorated), loaded.registry, loaded.status, { showHidden }));
     } catch (error) {
         observability.publish({ kind: 'scan-failed', reason: (error as Error).message, at: new Date().toISOString() });
         res.status(500).json({ ok: false, error: (error as Error).message });
@@ -125,6 +149,7 @@ app.get('/api/dashboard/instances/:port', async (req, res) => {
     try {
         const loaded = loadDashboardRegistry({ from: scanFrom, count: scanCount });
         const instance = await scanSinglePort(portValue);
+        if (instance.ok) await previewProxy.ensureTarget(instance.port);
         const decorated = lifecycle.decorateScanResult({
             manager: {
                 port,
@@ -135,7 +160,7 @@ app.get('/api/dashboard/instances/:port', async (req, res) => {
             },
             instances: [instance],
         });
-        const applied = applyDashboardRegistry(decorated, loaded.registry, loaded.status, { showHidden: true });
+        const applied = applyDashboardRegistry(attachPreviewSnapshot(decorated), loaded.registry, loaded.status, { showHidden: true });
         res.json({ ok: true, instance: applied.instances[0] || null, manager: applied.manager });
     } catch (error) {
         res.status(500).json({ ok: false, error: (error as Error).message });
@@ -267,25 +292,6 @@ function sendManagerHtml(res: express.Response, htmlPath: string): void {
     });
 }
 
-const server = app.listen(port, '127.0.0.1', () => {
-    const url = `http://localhost:${port}`;
-    console.log(`\n  Jaw Manager — ${url}`);
-    console.log(`  Scanning: ${scanFrom}-${scanFrom + scanCount - 1}\n`);
-
-    if (process.env.JAW_DASHBOARD_OPEN === '1') {
-        const openCmd = process.platform === 'darwin' ? 'open'
-            : process.platform === 'win32' ? 'cmd'
-                : 'xdg-open';
-        const openArgs = process.platform === 'win32'
-            ? ['/c', 'start', '', url]
-            : [url];
-        const opener = spawn(openCmd, openArgs, { detached: true, stdio: 'ignore' });
-        opener.unref();
-    }
-});
-
-installDashboardProxy(app, server, { from: scanFrom, count: scanCount });
-
 app.use('/dist', express.static(distRoot));
 app.use('/assets', express.static(join(distRoot, 'assets')));
 app.use('/manager', express.static(join(sourceRoot, 'manager')));
@@ -306,11 +312,55 @@ app.get('/{*splat}', (_req, res) => {
     sendManagerHtml(res, htmlPath);
 });
 
+const server = http.createServer(app);
+installDashboardProxy(app, server, { from: scanFrom, count: scanCount });
+
 server.on('error', (error: NodeJS.ErrnoException) => {
+    void previewProxy.close();
     if (error.code === 'EADDRINUSE') {
         console.error(`[dashboard] port ${port} already in use`);
     } else {
         console.error(`[dashboard] listen error: ${error.message}`);
     }
+    process.exit(1);
+});
+
+let shuttingDown = false;
+
+async function shutdown(): Promise<void> {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    await previewProxy.close();
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    process.exit(0);
+}
+
+process.once('SIGINT', () => void shutdown());
+process.once('SIGTERM', () => void shutdown());
+
+async function main(): Promise<void> {
+    previewProxy.validate();
+    server.listen(port, '127.0.0.1', () => {
+        const url = `http://localhost:${port}`;
+        console.log(`\n  Jaw Manager — ${url}`);
+        console.log(`  Scanning: ${scanFrom}-${scanFrom + scanCount - 1}`);
+        console.log(`  Preview: ${previewFrom}-${previewFrom + scanCount - 1}\n`);
+
+        if (process.env.JAW_DASHBOARD_OPEN === '1') {
+            const openCmd = process.platform === 'darwin' ? 'open'
+                : process.platform === 'win32' ? 'cmd'
+                    : 'xdg-open';
+            const openArgs = process.platform === 'win32'
+                ? ['/c', 'start', '', url]
+                : [url];
+            const opener = spawn(openCmd, openArgs, { detached: true, stdio: 'ignore' });
+            opener.unref();
+        }
+    });
+}
+
+void main().catch(async (error: Error) => {
+    await previewProxy.close();
+    console.error(`[dashboard] startup failed: ${error.message}`);
     process.exit(1);
 });

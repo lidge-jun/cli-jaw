@@ -18,6 +18,25 @@ export type DashboardProxyInfo = {
     basePath: string;
     allowedFrom: number;
     allowedTo: number;
+    preview?: DashboardOriginPreviewProxyInfo;
+};
+
+export type DashboardPreviewProxyStatus = 'ready' | 'unavailable';
+
+export type DashboardPreviewProxyInstance = {
+    targetPort: number;
+    previewPort: number;
+    url: string;
+    status: DashboardPreviewProxyStatus;
+    reason: string | null;
+};
+
+export type DashboardOriginPreviewProxyInfo = {
+    enabled: boolean;
+    kind: 'origin-port';
+    previewFrom: number;
+    previewTo: number;
+    instances: Record<string, DashboardPreviewProxyInstance>;
 };
 
 export type DashboardInstance = {

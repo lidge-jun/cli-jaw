@@ -8,6 +8,8 @@ import {
     dashboardProxyRange,
     isDashboardProxyPortAllowed,
     parseDashboardProxyUrl,
+    rewriteUpstreamRequestHeaders,
+    sanitizeProxyResponseHeaders,
 } from '../../src/manager/proxy.js';
 import type { IncomingMessage } from 'node:http';
 
@@ -63,6 +65,8 @@ test('dashboard proxy builds websocket upgrade request for target instance', () 
             host: 'localhost:24576',
             connection: 'Upgrade',
             upgrade: 'websocket',
+            origin: 'http://localhost:24576',
+            referer: 'http://localhost:24576/manager',
         },
     } as IncomingMessage;
 
@@ -72,12 +76,55 @@ test('dashboard proxy builds websocket upgrade request for target instance', () 
     assert.match(request, /Host: 127\.0\.0\.1:3457\r\n/);
     assert.match(request, /connection: Upgrade\r\n/);
     assert.match(request, /upgrade: websocket\r\n/);
+    assert.match(request, /origin: http:\/\/127\.0\.0\.1:3457\r\n/);
+    assert.match(request, /referer: http:\/\/127\.0\.0\.1:3457\/manager\r\n/);
+});
+
+test('dashboard proxy response headers strip frame policy and rewrite absolute location', () => {
+    const headers = sanitizeProxyResponseHeaders({
+        'x-frame-options': 'DENY',
+        'content-security-policy': "frame-ancestors 'none'",
+        location: 'http://127.0.0.1:3457/next',
+    }, {
+        targetOrigin: 'http://127.0.0.1:3457',
+        publicBase: '/i/3457',
+    });
+
+    assert.equal(headers['x-frame-options'], undefined);
+    assert.equal(headers['content-security-policy'], undefined);
+    assert.equal(headers.location, '/i/3457/next');
+});
+
+test('dashboard proxy leaves relative location unchanged', () => {
+    const headers = sanitizeProxyResponseHeaders({ location: '/next' }, {
+        targetOrigin: 'http://127.0.0.1:3457',
+        publicBase: '/i/3457',
+    });
+
+    assert.equal(headers.location, '/next');
+});
+
+test('dashboard proxy rewrites upstream headers without synthesizing origin or referer', () => {
+    assert.deepEqual(rewriteUpstreamRequestHeaders({ host: 'localhost:24576' }, 3457), {
+        host: '127.0.0.1:3457',
+    });
+
+    const headers = rewriteUpstreamRequestHeaders({
+        host: 'localhost:24576',
+        origin: 'http://localhost:24576',
+        referer: 'http://localhost:24576/manager',
+    }, 3457);
+
+    assert.equal(headers.host, '127.0.0.1:3457');
+    assert.equal(headers.origin, 'http://127.0.0.1:3457');
+    assert.equal(headers.referer, 'http://127.0.0.1:3457/manager');
 });
 
 test('dashboard proxy exposes websocket upgrade routing contract', () => {
     const proxy = read('src/manager/proxy.ts');
 
     assert.ok(proxy.includes("server.on('upgrade'"));
+    assert.ok(proxy.includes("if (!req.url?.startsWith('/i/')) return"));
     assert.ok(proxy.includes('proxyWebSocketUpgrade'));
     assert.ok(proxy.includes('parseDashboardProxyUrl'));
     assert.ok(proxy.includes('buildProxyUpgradeRequest'));

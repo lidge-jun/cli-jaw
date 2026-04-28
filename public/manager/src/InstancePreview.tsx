@@ -62,11 +62,6 @@ export function InstancePreview(props: InstancePreviewProps) {
                 />
             )}
 
-            {props.mode === 'direct' && (
-                <p className="preview-note">
-                    Preview may be blocked by frame policy. Open the instance in a new tab or use proxy preview.
-                </p>
-            )}
         </aside>
     );
 }

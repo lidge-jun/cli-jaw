@@ -49,8 +49,10 @@ test('manager frontend exposes one-instance preview controls', () => {
 
     assert.ok(hook.includes('selectedPort'), 'manager UI must track a selected preview instance');
     assert.ok(app.includes('handleSelectInstance'), 'manager UI must allow selecting any instance row');
+    assert.ok(app.includes('view.setPreviewEnabled(true)'), 'explicit preview action must enable iframe preview');
     assert.ok(app.includes('InstancePreview'), 'manager UI must render preview component');
     assert.ok(workbench.includes('preview: props.preview'), 'workbench must route preview slot content');
+    assert.ok(hook.includes('useState(false)'), 'preview iframe must not be enabled by default');
     assert.ok(preview.includes('<iframe'), 'preview component must mount iframe');
     assert.ok(preview.includes('Enable preview'), 'preview component must expose enable toggle');
     assert.ok(preview.includes('Proxy preview'), 'preview component must expose proxy mode');

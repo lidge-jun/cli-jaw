@@ -4,7 +4,7 @@ import type { DashboardDetailTab, DashboardPreviewMode } from '../types';
 export function useDashboardView() {
     const [selectedPort, setSelectedPort] = useState<number | null>(null);
     const [previewMode, setPreviewMode] = useState<DashboardPreviewMode>('proxy');
-    const [previewEnabled, setPreviewEnabled] = useState(true);
+    const [previewEnabled, setPreviewEnabled] = useState(false);
     const [activeDetailTab, setActiveDetailTab] = useState<DashboardDetailTab>('overview');
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);

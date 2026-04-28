@@ -7,6 +7,12 @@ import {
 } from './constants.js';
 import { deriveDashboardInstanceId, normalizeSettingsMetadata } from './metadata.js';
 import { deriveProfiles } from './profiles.js';
+import {
+    assertRangeDoesNotContainPort,
+    parsePositiveCount,
+    parsePositivePort,
+    toPortRange,
+} from './security.js';
 import type {
     DashboardInstance,
     DashboardScanOptions,
@@ -17,15 +23,9 @@ import type {
 
 type JsonRecord = Record<string, unknown>;
 
-function toPositiveInt(value: unknown, fallback: number): number {
-    const parsed = Number(value);
-    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
-
 function scanRange(options: DashboardScanOptions): { from: number; count: number; to: number } {
-    const from = toPositiveInt(options.from, MANAGED_INSTANCE_PORT_FROM);
-    const rawCount = toPositiveInt(options.count, MANAGED_INSTANCE_PORT_COUNT);
-    const count = Math.min(rawCount, MANAGED_INSTANCE_PORT_COUNT);
+    const from = parsePositivePort(options.from, MANAGED_INSTANCE_PORT_FROM);
+    const count = parsePositiveCount(options.count, MANAGED_INSTANCE_PORT_COUNT, MANAGED_INSTANCE_PORT_COUNT);
     return { from, count, to: from + count - 1 };
 }
 
@@ -110,7 +110,7 @@ export async function scanPort(port: number, fetchImpl: FetchLike, timeoutMs: nu
 
 export async function scanSinglePort(port: number, options: DashboardScanOptions = {}): Promise<DashboardInstance> {
     const checkedAt = new Date().toISOString();
-    const timeoutMs = toPositiveInt(options.timeoutMs, DASHBOARD_SCAN_TIMEOUT_MS);
+    const timeoutMs = parsePositivePort(options.timeoutMs, DASHBOARD_SCAN_TIMEOUT_MS);
     const fetchImpl = options.fetchImpl || fetch;
     return scanPort(port, fetchImpl, timeoutMs, checkedAt);
 }
@@ -118,9 +118,10 @@ export async function scanSinglePort(port: number, options: DashboardScanOptions
 export async function scanDashboardInstances(options: DashboardScanOptions = {}): Promise<DashboardScanResult> {
     const { from, count, to } = scanRange(options);
     const checkedAt = new Date().toISOString();
-    const timeoutMs = toPositiveInt(options.timeoutMs, DASHBOARD_SCAN_TIMEOUT_MS);
+    const timeoutMs = parsePositivePort(options.timeoutMs, DASHBOARD_SCAN_TIMEOUT_MS);
     const fetchImpl = options.fetchImpl || fetch;
-    const managerPort = toPositiveInt(options.managerPort, Number(DASHBOARD_DEFAULT_PORT));
+    const managerPort = parsePositivePort(options.managerPort, Number(DASHBOARD_DEFAULT_PORT));
+    assertRangeDoesNotContainPort(toPortRange(from, count), managerPort, 'scan range');
     const ports = Array.from({ length: count }, (_, index) => from + index);
 
     const scanned = await Promise.all(

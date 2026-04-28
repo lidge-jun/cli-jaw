@@ -19,6 +19,11 @@ export type ProxyPortRange = {
     to: number;
 };
 
+export type ProxyHeaderRewriteOptions = {
+    targetOrigin: string;
+    publicBase: string;
+};
+
 type ParsedProxyUrl = {
     ok: true;
     port: number;
@@ -32,6 +37,10 @@ type ParsedProxyUrl = {
 function positiveInt(value: unknown, fallback: number): number {
     const parsed = Number(value);
     return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export function targetOriginForPort(port: number): string {
+    return `http://${MANAGED_INSTANCE_HOST}:${port}`;
 }
 
 export function dashboardProxyRange(options: DashboardProxyOptions = {}): ProxyPortRange {
@@ -81,16 +90,60 @@ export function parseDashboardProxyUrl(originalUrl: string, range: ProxyPortRang
     return { ok: true, port, targetPath };
 }
 
-function sanitizeResponseHeaders(headers: http.IncomingHttpHeaders, port: number): http.OutgoingHttpHeaders {
+export function rewriteAbsoluteLocationHeader(value: string, options: ProxyHeaderRewriteOptions): string {
+    return value.startsWith(options.targetOrigin)
+        ? `${options.publicBase}${value.slice(options.targetOrigin.length)}`
+        : value;
+}
+
+export function sanitizeProxyResponseHeaders(
+    headers: http.IncomingHttpHeaders,
+    options: ProxyHeaderRewriteOptions,
+): http.OutgoingHttpHeaders {
     const next: http.OutgoingHttpHeaders = {};
     for (const [key, value] of Object.entries(headers)) {
         const lower = key.toLowerCase();
         if (lower === 'x-frame-options' || lower === 'content-security-policy') continue;
         if (lower === 'location' && typeof value === 'string') {
-            next[key] = value.replace(`http://${MANAGED_INSTANCE_HOST}:${port}`, `/i/${port}`);
+            next[key] = rewriteAbsoluteLocationHeader(value, options);
             continue;
         }
         next[key] = value;
+    }
+    return next;
+}
+
+function rewriteHeaderUrl(value: string, targetPort: number): string {
+    try {
+        const parsed = new URL(value);
+        parsed.protocol = 'http:';
+        parsed.hostname = MANAGED_INSTANCE_HOST;
+        parsed.port = String(targetPort);
+        return parsed.toString();
+    } catch {
+        return targetOriginForPort(targetPort);
+    }
+}
+
+export function rewriteUpstreamRequestHeaders(
+    headers: IncomingMessage['headers'],
+    targetPort: number,
+): http.OutgoingHttpHeaders {
+    const next: http.OutgoingHttpHeaders = { ...headers };
+    next.host = `${MANAGED_INSTANCE_HOST}:${targetPort}`;
+    if (headers.origin) {
+        next.origin = Array.isArray(headers.origin)
+            ? headers.origin.map(() => targetOriginForPort(targetPort)).join(', ')
+            : targetOriginForPort(targetPort);
+    } else {
+        delete next.origin;
+    }
+    if (headers.referer) {
+        next.referer = Array.isArray(headers.referer)
+            ? headers.referer.map(value => rewriteHeaderUrl(value, targetPort)).join(', ')
+            : rewriteHeaderUrl(headers.referer, targetPort);
+    } else {
+        delete next.referer;
     }
     return next;
 }
@@ -107,17 +160,15 @@ function proxyHttpRequest(req: Request, res: Response, range: ProxyPortRange): v
         port: parsed.port,
         method: req.method,
         path: parsed.targetPath,
-        headers: {
-            ...req.headers,
-            host: `${MANAGED_INSTANCE_HOST}:${parsed.port}`,
-            origin: `http://${MANAGED_INSTANCE_HOST}:${parsed.port}`,
-            referer: `http://${MANAGED_INSTANCE_HOST}:${parsed.port}/`,
-        },
+        headers: rewriteUpstreamRequestHeaders(req.headers, parsed.port),
     }, (upstreamRes) => {
         res.writeHead(
             upstreamRes.statusCode || 502,
             upstreamRes.statusMessage,
-            sanitizeResponseHeaders(upstreamRes.headers, parsed.port)
+            sanitizeProxyResponseHeaders(upstreamRes.headers, {
+                targetOrigin: targetOriginForPort(parsed.port),
+                publicBase: `/i/${parsed.port}`,
+            })
         );
         upstreamRes.pipe(res);
     });
@@ -135,11 +186,12 @@ function proxyHttpRequest(req: Request, res: Response, range: ProxyPortRange): v
 
 export function buildProxyUpgradeRequest(req: IncomingMessage, targetPath: string, targetPort: number): string {
     const lines = [`${req.method || 'GET'} ${targetPath} HTTP/${req.httpVersion}`];
-    for (const [key, value] of Object.entries(req.headers)) {
+    const headers = rewriteUpstreamRequestHeaders(req.headers, targetPort);
+    for (const [key, value] of Object.entries(headers)) {
         if (value == null) continue;
         const headerValue = Array.isArray(value) ? value.join(', ') : value;
         const headerName = key.toLowerCase() === 'host' ? 'Host' : key;
-        lines.push(`${headerName}: ${key.toLowerCase() === 'host' ? `${MANAGED_INSTANCE_HOST}:${targetPort}` : headerValue}`);
+        lines.push(`${headerName}: ${headerValue}`);
     }
     lines.push('', '');
     return lines.join('\r\n');
@@ -173,6 +225,7 @@ export function installDashboardProxy(app: Express, server: Server, options: Das
     });
 
     server.on('upgrade', (req, socket, head) => {
+        if (!req.url?.startsWith('/i/')) return;
         proxyWebSocketUpgrade(req, socket, head, range);
     });
 }

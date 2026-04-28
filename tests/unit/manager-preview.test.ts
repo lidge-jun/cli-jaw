@@ -41,11 +41,81 @@ test('preview helper builds proxy preview url', () => {
         canPreview: true,
         src: '/i/3457/',
         reason: null,
+        transport: 'legacy-path',
+        warning: 'Using legacy path proxy. Root-relative assets, API calls, or WebSockets may fail.',
     });
 });
 
+test('preview helper prefers origin-port preview url', () => {
+    assert.deepEqual(buildPreviewState(online, {
+        ...data,
+        manager: {
+            ...data.manager,
+            proxy: {
+                ...data.manager.proxy,
+                preview: {
+                    enabled: true,
+                    kind: 'origin-port',
+                    previewFrom: 24602,
+                    previewTo: 24651,
+                    instances: {
+                        '3457': {
+                            targetPort: 3457,
+                            previewPort: 24602,
+                            url: 'http://127.0.0.1:24602/',
+                            status: 'ready',
+                            reason: null,
+                        },
+                    },
+                },
+            },
+        },
+    }, 'proxy'), {
+        canPreview: true,
+        src: 'http://127.0.0.1:24602/',
+        reason: null,
+        transport: 'origin-port',
+        warning: 'Origin proxy. Root paths are preserved through a dedicated loopback preview port.',
+    });
+});
+
+test('preview helper falls back when origin-port preview is unavailable', () => {
+    const state = buildPreviewState(online, {
+        ...data,
+        manager: {
+            ...data.manager,
+            proxy: {
+                ...data.manager.proxy,
+                preview: {
+                    enabled: true,
+                    kind: 'origin-port',
+                    previewFrom: 24602,
+                    previewTo: 24651,
+                    instances: {
+                        '3457': {
+                            targetPort: 3457,
+                            previewPort: 24602,
+                            url: 'http://127.0.0.1:24602/',
+                            status: 'unavailable',
+                            reason: 'EADDRINUSE',
+                        },
+                    },
+                },
+            },
+        },
+    }, 'proxy');
+
+    assert.equal(state.src, '/i/3457/');
+    assert.equal(state.transport, 'legacy-path');
+});
+
 test('preview helper builds direct iframe url', () => {
-    assert.equal(buildPreviewState(online, data, 'direct').src, 'http://localhost:3457');
+    const state = buildPreviewState(online, data, 'direct');
+
+    assert.equal(state.src, 'http://localhost:3457');
+    assert.equal(state.transport, 'direct');
+    assert.match(state.warning || '', /frame policy/);
+    assert.doesNotMatch(state.warning || '', /disable/i);
 });
 
 test('preview helper rejects offline instances', () => {
@@ -54,4 +124,5 @@ test('preview helper rejects offline instances', () => {
 
     assert.equal(state.canPreview, false);
     assert.match(state.reason || '', /online/);
+    assert.equal(state.transport, 'none');
 });
