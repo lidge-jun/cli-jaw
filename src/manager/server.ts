@@ -47,7 +47,11 @@ const scanCount = parsePositiveCount(
     MANAGED_INSTANCE_PORT_COUNT,
 );
 const previewFrom = parsePositivePort(process.env.DASHBOARD_PREVIEW_FROM, DASHBOARD_PREVIEW_PORT_FROM);
-const lifecycle = new DashboardLifecycleManager({ from: scanFrom, count: scanCount });
+const lifecycle = new DashboardLifecycleManager({
+    managerPort: port,
+    from: scanFrom,
+    count: scanCount,
+});
 const healthHistory = createHealthHistory();
 const observability = createObservability();
 const previewProxy = createPreviewOriginProxyController({
@@ -342,6 +346,14 @@ process.once('SIGTERM', () => void shutdown());
 
 async function main(): Promise<void> {
     previewProxy.validate();
+    try {
+        const hydrated = await lifecycle.hydrate();
+        if (hydrated.adopted > 0 || hydrated.pruned > 0) {
+            console.log(`[dashboard] adopted ${hydrated.adopted} child instance(s), pruned ${hydrated.pruned} stale entry(ies)`);
+        }
+    } catch (error) {
+        console.error(`[dashboard] hydrate failed: ${(error as Error).message}`);
+    }
     server.listen(port, '127.0.0.1', () => {
         const url = `http://localhost:${port}`;
         console.log(`\n  Jaw Manager — ${url}`);

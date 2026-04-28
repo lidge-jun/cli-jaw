@@ -1,9 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { Socket } from 'node:net';
-import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { getJawPath } from '../core/instance.js';
-import { MANAGED_INSTANCE_HOST } from './constants.js';
 import type {
     DashboardInstance,
     DashboardLifecycleAction,
@@ -11,108 +8,87 @@ import type {
     DashboardLifecycleResult,
     DashboardScanResult,
 } from './types.js';
+import {
+    LifecycleStore,
+    type PersistedEntry,
+} from './lifecycle-store.js';
+import {
+    defaultProcessVerify,
+    waitForPortFree,
+    type ProcessVerifyImpl,
+} from './process-verify.js';
+import {
+    DETACHED_EXIT_POLL_MS,
+    PORT_FREE_TIMEOUT_MS,
+    STOP_WAIT_TIMEOUT_MS,
+    appendBounded,
+    buildCapability,
+    defaultHomeForPort,
+    errorResultBuilder,
+    isPositivePort,
+    rejectResult,
+    waitForChildExit,
+    waitForStartupGrace,
+} from './lifecycle-helpers.js';
 
-const DEFAULT_PORT_CHECK_TIMEOUT_MS = 300;
-const START_FAILURE_GRACE_MS = 250;
-const STOP_WAIT_TIMEOUT_MS = 3000;
-const OUTPUT_LIMIT = 4000;
-
-type ManagedProcess = {
+type ManagedProcessBase = {
     port: number;
     home: string;
     pid: number;
     startedAt: string;
     command: string[];
-    child: ChildProcessWithoutNullStreams;
+    token: string;
     stdout: string;
     stderr: string;
     exited: boolean;
 };
 
+type AttachedManagedProcess = ManagedProcessBase & {
+    mode: 'attached';
+    child: ChildProcessWithoutNullStreams;
+};
+
+type DetachedManagedProcess = ManagedProcessBase & {
+    mode: 'detached';
+};
+
+type ManagedProcess = AttachedManagedProcess | DetachedManagedProcess;
+
 export type DashboardLifecycleManagerOptions = {
+    managerPort: number;
     from: number;
     count: number;
     jawPath?: string;
     homeRoot?: string;
+    storageRoot?: string;
     spawnImpl?: typeof spawn;
-    isPortOccupied?: (port: number) => Promise<boolean>;
+    processVerify?: Partial<ProcessVerifyImpl>;
 };
 
-function appendBounded(current: string, chunk: Buffer | string): string {
-    const next = current + String(chunk);
-    return next.length > OUTPUT_LIMIT ? next.slice(-OUTPUT_LIMIT) : next;
-}
-
-function isPositivePort(port: number): boolean {
-    return Number.isInteger(port) && port > 0 && port <= 65535;
-}
-
-function defaultHomeForPort(port: number, root = homedir()): string {
-    return join(root, `.cli-jaw-${port}`);
-}
-
-async function defaultPortOccupied(port: number): Promise<boolean> {
-    return await new Promise<boolean>((resolve) => {
-        const socket = new Socket();
-        let settled = false;
-        const finish = (occupied: boolean): void => {
-            if (settled) return;
-            settled = true;
-            socket.destroy();
-            resolve(occupied);
-        };
-        socket.setTimeout(DEFAULT_PORT_CHECK_TIMEOUT_MS);
-        socket.once('connect', () => finish(true));
-        socket.once('timeout', () => finish(false));
-        socket.once('error', () => finish(false));
-        socket.connect(port, MANAGED_INSTANCE_HOST);
-    });
-}
-
-function waitForExit(child: ChildProcessWithoutNullStreams, timeoutMs = STOP_WAIT_TIMEOUT_MS): Promise<boolean> {
-    return new Promise((resolve) => {
-        let settled = false;
-        const done = (exited: boolean): void => {
-            if (settled) return;
-            settled = true;
-            clearTimeout(timer);
-            resolve(exited);
-        };
-        const timer = setTimeout(() => done(false), timeoutMs);
-        child.once('exit', () => done(true));
-    });
-}
-
-function waitForStartupGrace(entry: ManagedProcess, timeoutMs = START_FAILURE_GRACE_MS): Promise<boolean> {
-    return new Promise((resolve) => {
-        const timer = setTimeout(() => resolve(true), timeoutMs);
-        entry.child.once('exit', () => {
-            clearTimeout(timer);
-            resolve(false);
-        });
-        entry.child.once('error', () => {
-            clearTimeout(timer);
-            resolve(false);
-        });
-    });
-}
-
 export class DashboardLifecycleManager {
+    private readonly managerPort: number;
     private readonly from: number;
     private readonly to: number;
     private readonly jawPath: string;
     private readonly homeRoot: string;
     private readonly spawnImpl: typeof spawn;
-    private readonly isPortOccupied: (port: number) => Promise<boolean>;
+    private readonly verify: ProcessVerifyImpl;
+    private readonly store: LifecycleStore;
     private readonly registry = new Map<number, ManagedProcess>();
+    private readonly locks = new Map<number, Promise<unknown>>();
 
     constructor(options: DashboardLifecycleManagerOptions) {
+        this.managerPort = options.managerPort;
         this.from = options.from;
         this.to = options.from + options.count - 1;
         this.jawPath = options.jawPath || getJawPath();
         this.homeRoot = options.homeRoot || homedir();
         this.spawnImpl = options.spawnImpl || spawn;
-        this.isPortOccupied = options.isPortOccupied || defaultPortOccupied;
+        this.verify = { ...defaultProcessVerify, ...(options.processVerify || {}) };
+        this.store = new LifecycleStore({
+            managerPort: options.managerPort,
+            storageRoot: options.storageRoot,
+        });
     }
 
     defaultHome(port: number): string {
@@ -120,45 +96,114 @@ export class DashboardLifecycleManager {
     }
 
     buildStartCommand(port: number, home = this.defaultHome(port)): string[] {
-        return [
-            this.jawPath,
-            '--home',
-            home,
-            'serve',
-            '--port',
-            String(port),
-            '--no-open',
-        ];
+        return [this.jawPath, '--home', home, 'serve', '--port', String(port), '--no-open'];
     }
 
     decorateScanResult(result: DashboardScanResult): DashboardScanResult {
-        return {
-            ...result,
-            instances: result.instances.map(instance => this.decorateInstance(instance)),
-        };
+        const decorated = result.instances.map((instance) => {
+            if (instance.status === 'offline') {
+                const stale = this.registry.get(instance.port);
+                if (stale && stale.mode === 'detached') {
+                    this.registry.delete(instance.port);
+                    void this.persistRegistry().catch(() => undefined);
+                    void this.store.deleteMarker(stale.home).catch(() => undefined);
+                }
+            }
+            return this.decorateInstance(instance);
+        });
+        return { ...result, instances: decorated };
     }
 
     decorateInstance(instance: DashboardInstance): DashboardInstance {
         const managed = this.activeEntry(instance.port);
-        const lifecycle = this.capabilityFor(instance, managed);
         return {
             ...instance,
             serviceMode: managed ? 'manager' : instance.serviceMode,
-            lifecycle,
+            lifecycle: this.capabilityFor(instance, managed),
         };
     }
 
+    async hydrate(): Promise<{ adopted: number; pruned: number }> {
+        const persisted = await this.store.load();
+        const survivors: PersistedEntry[] = [];
+        let adopted = 0;
+        let pruned = 0;
+        for (const entry of persisted.entries) {
+            if (!(await this.validatePersistedEntry(entry))) {
+                pruned += 1;
+                continue;
+            }
+            this.registry.set(entry.port, {
+                mode: 'detached',
+                port: entry.port,
+                home: entry.home,
+                pid: entry.pid,
+                startedAt: entry.startedAt,
+                command: entry.command,
+                token: entry.token,
+                stdout: '',
+                stderr: '',
+                exited: false,
+            });
+            survivors.push(entry);
+            adopted += 1;
+        }
+        if (pruned > 0) await this.store.save(survivors);
+        return { adopted, pruned };
+    }
+
     async start(port: number, customHome?: string): Promise<DashboardLifecycleResult> {
+        return this.withLock(port, () => this.startLocked(port, customHome));
+    }
+
+    async stop(port: number): Promise<DashboardLifecycleResult> {
+        return this.withLock(port, () => this.stopLocked(port));
+    }
+
+    async restart(port: number): Promise<DashboardLifecycleResult> {
+        return this.withLock(port, () => this.restartLocked(port));
+    }
+
+    async stopAll(): Promise<DashboardLifecycleResult[]> {
+        const ports = [...this.registry.keys()];
+        const results: DashboardLifecycleResult[] = [];
+        for (const port of ports) {
+            if (!this.registry.has(port)) continue;
+            results.push(await this.stop(port));
+        }
+        return results;
+    }
+
+    private async validatePersistedEntry(entry: PersistedEntry): Promise<boolean> {
+        if (!isPositivePort(entry.port)) return false;
+        if (entry.port < this.from || entry.port > this.to) return false;
+        if (!Number.isInteger(entry.pid) || entry.pid <= 0) return false;
+        if (!this.verify.isPidAlive(entry.pid)) return false;
+        const owningPid = await this.verify.resolveListeningPid(entry.port);
+        if (owningPid !== entry.pid) return false;
+        const marker = await this.store.readMarker(entry.home);
+        if (!marker) return false;
+        if (marker.token !== entry.token) return false;
+        if (marker.pid !== entry.pid) return false;
+        if (marker.port !== entry.port) return false;
+        if (marker.managerPort !== this.managerPort) return false;
+        return true;
+    }
+
+    private async startLocked(
+        port: number,
+        customHome?: string,
+    ): Promise<DashboardLifecycleResult> {
         const action: DashboardLifecycleAction = 'start';
         const home = customHome?.trim() || this.defaultHome(port);
         const command = this.buildStartCommand(port, home);
         const rejected = this.validatePort(action, port, home, command);
         if (rejected) return rejected;
         if (this.activeEntry(port)) {
-            return this.reject(action, port, home, command, 'Port is already manager-owned.');
+            return rejectResult(action, port, home, command, 'Port is already manager-owned.');
         }
-        if (await this.isPortOccupied(port)) {
-            return this.reject(action, port, home, command, 'Port is already occupied.');
+        if (await this.verify.isPortOccupied(port)) {
+            return rejectResult(action, port, home, command, 'Port is already occupied.');
         }
 
         try {
@@ -166,50 +211,100 @@ export class DashboardLifecycleManager {
                 env: process.env,
                 stdio: 'pipe',
             }) as ChildProcessWithoutNullStreams;
-            const entry: ManagedProcess = {
+            const token = LifecycleStore.newToken();
+            const attached: AttachedManagedProcess = {
+                mode: 'attached',
                 port,
                 home,
                 pid: child.pid || 0,
                 startedAt: new Date().toISOString(),
                 command,
+                token,
                 child,
                 stdout: '',
                 stderr: '',
                 exited: false,
             };
-            child.stdout.on('data', chunk => { entry.stdout = appendBounded(entry.stdout, chunk); });
-            child.stderr.on('data', chunk => { entry.stderr = appendBounded(entry.stderr, chunk); });
+            child.stdout.on('data', (chunk) => {
+                attached.stdout = appendBounded(attached.stdout, chunk);
+            });
+            child.stderr.on('data', (chunk) => {
+                attached.stderr = appendBounded(attached.stderr, chunk);
+            });
             child.once('exit', () => {
-                entry.exited = true;
-                if (this.registry.get(port) === entry) this.registry.delete(port);
+                attached.exited = true;
+                if (this.registry.get(port) === attached) {
+                    this.registry.delete(port);
+                    void this.persistRegistry().catch(() => undefined);
+                    void this.store.deleteMarker(attached.home).catch(() => undefined);
+                }
             });
-            child.once('error', error => {
-                entry.exited = true;
-                entry.stderr = appendBounded(entry.stderr, error.message);
-                if (this.registry.get(port) === entry) this.registry.delete(port);
+            child.once('error', (error) => {
+                attached.exited = true;
+                attached.stderr = appendBounded(attached.stderr, error.message);
+                if (this.registry.get(port) === attached) {
+                    this.registry.delete(port);
+                    void this.persistRegistry().catch(() => undefined);
+                    void this.store.deleteMarker(attached.home).catch(() => undefined);
+                }
             });
-            this.registry.set(port, entry);
-            const stillRunning = await waitForStartupGrace(entry);
+            this.registry.set(port, attached);
+            await this.persistRegistry();
+            await this.store.writeMarker(attached.home, {
+                schemaVersion: 1,
+                managedBy: 'cli-jaw-dashboard',
+                managerPort: this.managerPort,
+                port,
+                pid: attached.pid,
+                token,
+                startedAt: attached.startedAt,
+            });
+
+            // The child may have already emitted 'error'/'exit' during the awaited
+            // persist+marker writes — handlers consume those events and waitForStartupGrace
+            // would never see them. Also: writeMarker may have re-written a file that the
+            // exit handler already deleted, so we must re-clean here regardless.
+            const sweepFailedSpawn = async (): Promise<void> => {
+                if (this.registry.get(port) === attached) {
+                    this.registry.delete(port);
+                    await this.persistRegistry();
+                }
+                await this.store.deleteMarker(attached.home);
+            };
+
+            if (attached.exited) {
+                await sweepFailedSpawn();
+                return errorResultBuilder(
+                    action, port, home, command,
+                    new Error(attached.stderr || 'Process exited before startup completed.'),
+                    attached,
+                );
+            }
+
+            const stillRunning = await waitForStartupGrace(attached);
             if (!stillRunning) {
-                return this.errorResult(action, port, home, command, new Error(entry.stderr || 'Process exited before startup completed.'), entry);
+                await sweepFailedSpawn();
+                return errorResultBuilder(
+                    action, port, home, command,
+                    new Error(attached.stderr || 'Process exited before startup completed.'),
+                    attached,
+                );
             }
             return {
-                ok: true,
-                action,
-                port,
+                ok: true, action, port,
                 status: 'started',
                 message: `Started Jaw on port ${port}.`,
                 home,
-                pid: entry.pid || null,
+                pid: attached.pid || null,
                 command,
                 expectedStateAfter: 'online',
             };
         } catch (error) {
-            return this.errorResult(action, port, home, command, error);
+            return errorResultBuilder(action, port, home, command, error);
         }
     }
 
-    async stop(port: number): Promise<DashboardLifecycleResult> {
+    private async stopLocked(port: number): Promise<DashboardLifecycleResult> {
         const action: DashboardLifecycleAction = 'stop';
         const entry = this.activeEntry(port);
         const home = entry?.home || this.defaultHome(port);
@@ -217,46 +312,47 @@ export class DashboardLifecycleManager {
         const rejected = this.validatePort(action, port, home, command);
         if (rejected) return rejected;
         if (!entry) {
-            return this.reject(action, port, home, command, 'Only dashboard-owned instances can be stopped.');
+            return rejectResult(action, port, home, command, 'Only dashboard-owned instances can be stopped.');
         }
 
         try {
-            entry.child.kill('SIGTERM');
-            const exited = await waitForExit(entry.child);
+            await this.signal(entry, 'SIGTERM');
+            const exited = await this.waitForEntryExit(entry, STOP_WAIT_TIMEOUT_MS);
             if (!exited) {
-                entry.stderr = appendBounded(entry.stderr, `Timed out waiting for port ${port} to stop.`);
-                return this.errorResult(action, port, home, command, new Error('Timed out waiting for process exit.'), entry);
+                if (await this.stillSameOwner(entry)) {
+                    await this.signal(entry, 'SIGKILL');
+                    await this.waitForEntryExit(entry, STOP_WAIT_TIMEOUT_MS);
+                } else {
+                    this.registry.delete(port);
+                    await this.persistRegistry();
+                    await this.store.deleteMarker(entry.home);
+                    return {
+                        ok: true, action, port, status: 'stopped',
+                        message: `Stopped (port ${port} ownership changed during stop).`,
+                        home: entry.home, pid: entry.pid || null, command: entry.command,
+                        expectedStateAfter: 'offline',
+                    };
+                }
             }
+            await waitForPortFree(port, PORT_FREE_TIMEOUT_MS, {
+                isPortOccupied: this.verify.isPortOccupied,
+            });
             this.registry.delete(port);
+            await this.persistRegistry();
+            await this.store.deleteMarker(entry.home);
             return {
-                ok: true,
-                action,
-                port,
-                status: 'stopped',
+                ok: true, action, port, status: 'stopped',
                 message: `Stopped dashboard-owned Jaw on port ${port}.`,
-                home,
-                pid: entry.pid || null,
-                command,
+                home: entry.home, pid: entry.pid || null, command: entry.command,
                 expectedStateAfter: 'offline',
-                stdout: entry.stdout,
-                stderr: entry.stderr,
+                stdout: entry.stdout, stderr: entry.stderr,
             };
         } catch (error) {
-            return this.errorResult(action, port, home, command, error, entry);
+            return errorResultBuilder(action, port, home, command, error, entry);
         }
     }
 
-    async stopAll(): Promise<DashboardLifecycleResult[]> {
-        const entries = [...this.registry.entries()];
-        const results: DashboardLifecycleResult[] = [];
-        for (const [managedPort] of entries) {
-            if (!this.activeEntry(managedPort)) continue;
-            results.push(await this.stop(managedPort));
-        }
-        return results;
-    }
-
-    async restart(port: number): Promise<DashboardLifecycleResult> {
+    private async restartLocked(port: number): Promise<DashboardLifecycleResult> {
         const action: DashboardLifecycleAction = 'restart';
         const entry = this.activeEntry(port);
         const home = entry?.home || this.defaultHome(port);
@@ -264,12 +360,12 @@ export class DashboardLifecycleManager {
         const rejected = this.validatePort(action, port, home, command);
         if (rejected) return rejected;
         if (!entry) {
-            return this.reject(action, port, home, command, 'Only dashboard-owned instances can be restarted.');
+            return rejectResult(action, port, home, command, 'Only dashboard-owned instances can be restarted.');
         }
 
-        const stopResult = await this.stop(port);
+        const stopResult = await this.stopLocked(port);
         if (!stopResult.ok) return { ...stopResult, action };
-        const startResult = await this.start(port, home);
+        const startResult = await this.startLocked(port, home);
         return {
             ...startResult,
             action,
@@ -281,48 +377,91 @@ export class DashboardLifecycleManager {
         };
     }
 
-    private activeEntry(port: number): ManagedProcess | null {
-        const entry = this.registry.get(port);
-        return entry && !entry.exited ? entry : null;
+    private withLock<T>(port: number, fn: () => Promise<T>): Promise<T> {
+        const prev = this.locks.get(port) || Promise.resolve();
+        const next = prev.then(fn, fn);
+        this.locks.set(port, next.catch(() => undefined));
+        return next;
     }
 
-    private capabilityFor(instance: DashboardInstance, managed: ManagedProcess | null): DashboardLifecycleCapability {
-        const defaultHome = this.defaultHome(instance.port);
-        const commandPreview = this.buildStartCommand(instance.port, defaultHome);
-        if (managed) {
-            return {
-                owner: 'manager',
-                canStart: false,
-                canStop: true,
-                canRestart: true,
-                reason: 'dashboard-owned',
-                defaultHome,
-                commandPreview,
-                pid: managed.pid || null,
-            };
+    private async signal(entry: ManagedProcess, sig: NodeJS.Signals): Promise<void> {
+        if (entry.mode === 'attached') {
+            entry.child.kill(sig);
+            return;
         }
-        if (instance.status === 'offline') {
-            return {
-                owner: 'none',
-                canStart: true,
-                canStop: false,
-                canRestart: false,
-                reason: 'free port',
-                defaultHome,
-                commandPreview,
-                pid: null,
-            };
+        if (this.verify.isPidAlive(entry.pid)) {
+            try {
+                this.verify.killPid(entry.pid, sig);
+            } catch {
+                // PID disappeared between alive-check and signal — treat as already exited.
+            }
         }
-        return {
-            owner: 'external',
-            canStart: false,
-            canStop: false,
-            canRestart: false,
-            reason: 'not dashboard-owned',
-            defaultHome,
-            commandPreview,
-            pid: null,
-        };
+    }
+
+    private waitForEntryExit(entry: ManagedProcess, timeoutMs: number): Promise<boolean> {
+        if (entry.mode === 'attached') return waitForChildExit(entry.child, timeoutMs);
+        return new Promise<boolean>((resolve) => {
+            const start = Date.now();
+            const check = (): void => {
+                if (!this.verify.isPidAlive(entry.pid)) {
+                    entry.exited = true;
+                    resolve(true);
+                    return;
+                }
+                if (Date.now() - start >= timeoutMs) { resolve(false); return; }
+                setTimeout(check, DETACHED_EXIT_POLL_MS);
+            };
+            check();
+        });
+    }
+
+    private async stillSameOwner(entry: ManagedProcess): Promise<boolean> {
+        if (!this.verify.isPidAlive(entry.pid)) return false;
+        const owning = await this.verify.resolveListeningPid(entry.port);
+        return owning === entry.pid;
+    }
+
+    private activeEntry(port: number): ManagedProcess | null {
+        const entry = this.registry.get(port);
+        if (!entry || entry.exited) return null;
+        if (entry.mode === 'detached' && !this.verify.isPidAlive(entry.pid)) {
+            entry.exited = true;
+            this.registry.delete(port);
+            void this.persistRegistry().catch(() => undefined);
+            void this.store.deleteMarker(entry.home).catch(() => undefined);
+            return null;
+        }
+        return entry;
+    }
+
+    private capabilityFor(
+        instance: DashboardInstance,
+        managed: ManagedProcess | null,
+    ): DashboardLifecycleCapability {
+        return buildCapability({
+            instance,
+            managed: managed ? { mode: managed.mode, pid: managed.pid } : null,
+            defaultHome: this.defaultHome(instance.port),
+            commandPreview: this.buildStartCommand(instance.port, this.defaultHome(instance.port)),
+        });
+    }
+
+    private async persistRegistry(): Promise<void> {
+        const entries: PersistedEntry[] = [];
+        for (const e of this.registry.values()) {
+            if (e.exited) continue;
+            entries.push({
+                schemaVersion: 1,
+                managerPort: this.managerPort,
+                port: e.port,
+                pid: e.pid,
+                home: e.home,
+                startedAt: e.startedAt,
+                command: e.command,
+                token: e.token,
+            });
+        }
+        await this.store.save(entries);
     }
 
     private validatePort(
@@ -331,51 +470,13 @@ export class DashboardLifecycleManager {
         home: string,
         command: string[],
     ): DashboardLifecycleResult | null {
-        if (!isPositivePort(port)) return this.reject(action, port, home, command, 'Invalid port.');
+        if (!isPositivePort(port)) return rejectResult(action, port, home, command, 'Invalid port.');
         if (port < this.from || port > this.to) {
-            return this.reject(action, port, home, command, `Port ${port} is outside dashboard scan range ${this.from}-${this.to}.`);
+            return rejectResult(
+                action, port, home, command,
+                `Port ${port} is outside dashboard scan range ${this.from}-${this.to}.`,
+            );
         }
         return null;
-    }
-
-    private reject(
-        action: DashboardLifecycleAction,
-        port: number,
-        home: string | null,
-        command: string[],
-        message: string,
-    ): DashboardLifecycleResult {
-        return {
-            ok: false,
-            action,
-            port,
-            status: 'rejected',
-            message,
-            home,
-            pid: null,
-            command,
-        };
-    }
-
-    private errorResult(
-        action: DashboardLifecycleAction,
-        port: number,
-        home: string,
-        command: string[],
-        error: unknown,
-        entry?: ManagedProcess,
-    ): DashboardLifecycleResult {
-        return {
-            ok: false,
-            action,
-            port,
-            status: 'error',
-            message: error instanceof Error ? error.message : String(error),
-            home,
-            pid: entry?.pid || null,
-            command,
-            stdout: entry?.stdout,
-            stderr: entry?.stderr,
-        };
     }
 }

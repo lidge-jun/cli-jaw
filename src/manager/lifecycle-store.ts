@@ -1,0 +1,152 @@
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { randomBytes } from 'node:crypto';
+
+export const REGISTRY_SCHEMA_VERSION = 1;
+export const MARKER_SCHEMA_VERSION = 1;
+export const MARKER_FILENAME = '.dashboard-managed.json';
+
+export type PersistedEntry = {
+    schemaVersion: 1;
+    managerPort: number;
+    port: number;
+    pid: number;
+    home: string;
+    startedAt: string;
+    command: string[];
+    token: string;
+};
+
+export type PersistedRegistry = {
+    schemaVersion: 1;
+    managerPort: number;
+    entries: PersistedEntry[];
+};
+
+export type HomeMarker = {
+    schemaVersion: 1;
+    managedBy: 'cli-jaw-dashboard';
+    managerPort: number;
+    port: number;
+    pid: number;
+    token: string;
+    startedAt: string;
+};
+
+export type LifecycleStoreFs = {
+    readFile: typeof readFile;
+    writeFile: typeof writeFile;
+    rename: typeof rename;
+    mkdir: typeof mkdir;
+    rm: typeof rm;
+    existsSync: typeof existsSync;
+};
+
+export type LifecycleStoreOptions = {
+    managerPort: number;
+    storageRoot?: string;
+    fsImpl?: LifecycleStoreFs;
+};
+
+const DEFAULT_FS: LifecycleStoreFs = {
+    readFile,
+    writeFile,
+    rename,
+    mkdir,
+    rm,
+    existsSync,
+};
+
+export class LifecycleStore {
+    private readonly managerPort: number;
+    private readonly registryDir: string;
+    private readonly registryPath: string;
+    private readonly fs: LifecycleStoreFs;
+    private writeQueue: Promise<void> = Promise.resolve();
+
+    constructor(options: LifecycleStoreOptions) {
+        this.managerPort = options.managerPort;
+        const root = options.storageRoot || homedir();
+        this.registryDir = join(root, `.cli-jaw-manager-${options.managerPort}`);
+        this.registryPath = join(this.registryDir, 'dashboard-managed.json');
+        this.fs = options.fsImpl || DEFAULT_FS;
+    }
+
+    static newToken(): string {
+        return randomBytes(16).toString('hex');
+    }
+
+    path(): string {
+        return this.registryPath;
+    }
+
+    async load(): Promise<PersistedRegistry> {
+        const empty: PersistedRegistry = {
+            schemaVersion: 1,
+            managerPort: this.managerPort,
+            entries: [],
+        };
+        if (!this.fs.existsSync(this.registryPath)) return empty;
+        try {
+            const raw = await this.fs.readFile(this.registryPath, 'utf8');
+            const parsed = JSON.parse(String(raw)) as PersistedRegistry;
+            if (parsed.schemaVersion !== REGISTRY_SCHEMA_VERSION) return empty;
+            if (parsed.managerPort !== this.managerPort) return empty;
+            return {
+                schemaVersion: 1,
+                managerPort: this.managerPort,
+                entries: Array.isArray(parsed.entries) ? parsed.entries : [],
+            };
+        } catch {
+            return empty;
+        }
+    }
+
+    save(entries: PersistedEntry[]): Promise<void> {
+        const next = this.writeQueue.then(() => this.writeAtomic(entries));
+        this.writeQueue = next.catch(() => undefined);
+        return next;
+    }
+
+    private async writeAtomic(entries: PersistedEntry[]): Promise<void> {
+        await this.fs.mkdir(this.registryDir, { recursive: true });
+        const tmp = `${this.registryPath}.tmp-${process.pid}`;
+        const payload: PersistedRegistry = {
+            schemaVersion: 1,
+            managerPort: this.managerPort,
+            entries,
+        };
+        await this.fs.writeFile(tmp, JSON.stringify(payload, null, 2));
+        await this.fs.rename(tmp, this.registryPath);
+    }
+
+    async writeMarker(home: string, marker: HomeMarker): Promise<void> {
+        await this.fs.mkdir(home, { recursive: true });
+        const tmp = join(home, `${MARKER_FILENAME}.tmp-${process.pid}`);
+        const dst = join(home, MARKER_FILENAME);
+        await this.fs.writeFile(tmp, JSON.stringify(marker, null, 2));
+        await this.fs.rename(tmp, dst);
+    }
+
+    async readMarker(home: string): Promise<HomeMarker | null> {
+        const dst = join(home, MARKER_FILENAME);
+        if (!this.fs.existsSync(dst)) return null;
+        try {
+            const raw = await this.fs.readFile(dst, 'utf8');
+            const parsed = JSON.parse(String(raw)) as HomeMarker;
+            if (parsed.schemaVersion !== MARKER_SCHEMA_VERSION) return null;
+            if (parsed.managedBy !== 'cli-jaw-dashboard') return null;
+            return parsed;
+        } catch {
+            return null;
+        }
+    }
+
+    async deleteMarker(home: string): Promise<void> {
+        const dst = join(home, MARKER_FILENAME);
+        if (!this.fs.existsSync(dst)) return;
+        await this.fs.rm(dst, { force: true });
+    }
+}

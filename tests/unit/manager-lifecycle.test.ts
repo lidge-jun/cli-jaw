@@ -2,8 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DashboardLifecycleManager } from '../../src/manager/lifecycle.js';
 import type { DashboardInstance } from '../../src/manager/types.js';
+
+const MANAGER_PORT = 24576;
 
 class FakeChild extends EventEmitter {
     stdout = new PassThrough();
@@ -16,6 +21,11 @@ class FakeChild extends EventEmitter {
         queueMicrotask(() => this.emit('exit', 0, signal || null));
         return true;
     }
+}
+
+function setupTmpStorage(): { dir: string; cleanup: () => void } {
+    const dir = mkdtempSync(join(tmpdir(), 'jaw-mgr-test-'));
+    return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
 }
 
 function makeOffline(port = 3457): DashboardInstance {
@@ -38,20 +48,18 @@ function makeOffline(port = 3457): DashboardInstance {
 }
 
 function makeOnline(port = 3457): DashboardInstance {
-    return {
-        ...makeOffline(port),
-        status: 'online',
-        ok: true,
-        healthReason: null,
-    };
+    return { ...makeOffline(port), status: 'online', ok: true, healthReason: null };
 }
 
 test('lifecycle builds start command with top-level home flag', () => {
+    const { dir, cleanup } = setupTmpStorage();
     const manager = new DashboardLifecycleManager({
+        managerPort: MANAGER_PORT,
         from: 3457,
         count: 50,
         jawPath: '/usr/local/bin/jaw',
         homeRoot: '/Users/jun',
+        storageRoot: dir,
     });
 
     assert.deepEqual(manager.buildStartCommand(3458), [
@@ -63,14 +71,19 @@ test('lifecycle builds start command with top-level home flag', () => {
         '3458',
         '--no-open',
     ]);
+    cleanup();
 });
 
-test('lifecycle rejects ports outside scan range', async () => {
+test('lifecycle rejects ports outside scan range', async (t) => {
+    const { dir, cleanup } = setupTmpStorage();
+    t.after(cleanup);
     const manager = new DashboardLifecycleManager({
+        managerPort: MANAGER_PORT,
         from: 3457,
         count: 2,
         jawPath: '/usr/local/bin/jaw',
-        isPortOccupied: async () => false,
+        storageRoot: dir,
+        processVerify: { isPortOccupied: async () => false },
     });
 
     const result = await manager.start(3500);
@@ -79,11 +92,15 @@ test('lifecycle rejects ports outside scan range', async () => {
     assert.match(result.message, /outside dashboard scan range/);
 });
 
-test('lifecycle marks external online instances as visible but not stoppable', () => {
+test('lifecycle marks external online instances as visible but not stoppable', (t) => {
+    const { dir, cleanup } = setupTmpStorage();
+    t.after(cleanup);
     const manager = new DashboardLifecycleManager({
+        managerPort: MANAGER_PORT,
         from: 3457,
         count: 50,
         jawPath: '/usr/local/bin/jaw',
+        storageRoot: dir,
     });
 
     const row = manager.decorateInstance(makeOnline(3457));
@@ -94,12 +111,16 @@ test('lifecycle marks external online instances as visible but not stoppable', (
     assert.equal(row.lifecycle?.canRestart, false);
 });
 
-test('lifecycle marks offline ports as startable with port-derived default home', () => {
+test('lifecycle marks offline ports as startable with port-derived default home', (t) => {
+    const { dir, cleanup } = setupTmpStorage();
+    t.after(cleanup);
     const manager = new DashboardLifecycleManager({
+        managerPort: MANAGER_PORT,
         from: 3457,
         count: 50,
         jawPath: '/usr/local/bin/jaw',
         homeRoot: '/Users/jun',
+        storageRoot: dir,
     });
 
     const row = manager.decorateInstance(makeOffline(3460));
@@ -109,16 +130,21 @@ test('lifecycle marks offline ports as startable with port-derived default home'
     assert.equal(row.lifecycle?.defaultHome, '/Users/jun/.cli-jaw-3460');
 });
 
-test('lifecycle stop/restart are limited to manager-owned child processes', async () => {
+test('lifecycle stop/restart are limited to manager-owned child processes', async (t) => {
+    const { dir, cleanup } = setupTmpStorage();
+    t.after(cleanup);
     const children: FakeChild[] = [];
     const manager = new DashboardLifecycleManager({
+        managerPort: MANAGER_PORT,
         from: 3457,
         count: 50,
         jawPath: '/usr/local/bin/jaw',
-        isPortOccupied: async () => false,
+        homeRoot: dir,
+        storageRoot: dir,
+        processVerify: { isPortOccupied: async () => false },
         spawnImpl: ((command: string, args: string[]) => {
             assert.equal(command, '/usr/local/bin/jaw');
-            assert.deepEqual(args.slice(0, 2), ['--home', '/Users/jun/.cli-jaw-3457']);
+            assert.deepEqual(args.slice(0, 2), ['--home', join(dir, '.cli-jaw-3457')]);
             const child = new FakeChild();
             children.push(child);
             return child;
@@ -129,7 +155,7 @@ test('lifecycle stop/restart are limited to manager-owned child processes', asyn
     assert.equal(rejected.ok, false);
     assert.match(rejected.message, /dashboard-owned/);
 
-    const started = await manager.start(3457, '/Users/jun/.cli-jaw-3457');
+    const started = await manager.start(3457, join(dir, '.cli-jaw-3457'));
     assert.equal(started.ok, true);
     const owned = manager.decorateInstance(makeOnline(3457));
     assert.equal(owned.lifecycle?.owner, 'manager');
@@ -141,23 +167,32 @@ test('lifecycle stop/restart are limited to manager-owned child processes', asyn
     assert.equal(children[0]?.killed, true);
 });
 
-test('lifecycle stopAll returns empty when no child is managed', async () => {
+test('lifecycle stopAll returns empty when no child is managed', async (t) => {
+    const { dir, cleanup } = setupTmpStorage();
+    t.after(cleanup);
     const manager = new DashboardLifecycleManager({
+        managerPort: MANAGER_PORT,
         from: 3457,
         count: 50,
         jawPath: '/usr/local/bin/jaw',
+        storageRoot: dir,
     });
 
     assert.deepEqual(await manager.stopAll(), []);
 });
 
-test('lifecycle stopAll stops all manager-owned children and is idempotent', async () => {
+test('lifecycle stopAll stops all manager-owned children and is idempotent', async (t) => {
+    const { dir, cleanup } = setupTmpStorage();
+    t.after(cleanup);
     const children: FakeChild[] = [];
     const manager = new DashboardLifecycleManager({
+        managerPort: MANAGER_PORT,
         from: 3457,
         count: 50,
         jawPath: '/usr/local/bin/jaw',
-        isPortOccupied: async () => false,
+        homeRoot: dir,
+        storageRoot: dir,
+        processVerify: { isPortOccupied: async () => false },
         spawnImpl: (() => {
             const child = new FakeChild();
             children.push(child);
@@ -177,11 +212,15 @@ test('lifecycle stopAll stops all manager-owned children and is idempotent', asy
     assert.deepEqual(await manager.stopAll(), []);
 });
 
-test('lifecycle stopAll ignores external online instances', async () => {
+test('lifecycle stopAll ignores external online instances', async (t) => {
+    const { dir, cleanup } = setupTmpStorage();
+    t.after(cleanup);
     const manager = new DashboardLifecycleManager({
+        managerPort: MANAGER_PORT,
         from: 3457,
         count: 50,
         jawPath: '/usr/local/bin/jaw',
+        storageRoot: dir,
     });
 
     const row = manager.decorateInstance(makeOnline(3457));
@@ -190,12 +229,17 @@ test('lifecycle stopAll ignores external online instances', async () => {
     assert.deepEqual(await manager.stopAll(), []);
 });
 
-test('lifecycle start reports immediate child process failures', async () => {
+test('lifecycle start reports immediate child process failures', async (t) => {
+    const { dir, cleanup } = setupTmpStorage();
+    t.after(cleanup);
     const manager = new DashboardLifecycleManager({
+        managerPort: MANAGER_PORT,
         from: 3457,
         count: 50,
         jawPath: '/missing/jaw',
-        isPortOccupied: async () => false,
+        homeRoot: dir,
+        storageRoot: dir,
+        processVerify: { isPortOccupied: async () => false },
         spawnImpl: (() => {
             const child = new FakeChild();
             queueMicrotask(() => child.emit('error', new Error('spawn ENOENT')));
