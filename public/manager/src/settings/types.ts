@@ -32,11 +32,20 @@ export type SettingsCategory = {
     page: LazyExoticComponent<ComponentType<SettingsPageProps>>;
 };
 
+export type SaveHandler = () => Promise<void>;
+
 export type SettingsPageProps = {
     port: number;
     instanceUrl: string;
     client: SettingsClient;
     dirty: DirtyStore;
+    /**
+     * Phase 2+: a page may register a save handler. The shell exposes a single
+     * Save/Discard action row driven by the dirty store; when the user clicks
+     * Save, the registered handler is invoked. Pages must call
+     * `registerSave(null)` on unmount to release the slot.
+     */
+    registerSave?: (handler: SaveHandler | null) => void;
 };
 
 export type SettingsClient = {

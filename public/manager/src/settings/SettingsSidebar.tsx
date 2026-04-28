@@ -7,8 +7,11 @@ type SidebarEntry = {
 };
 
 const CATEGORIES: SidebarEntry[] = [
+    { id: 'profile', label: 'Profile', group: 'core' },
+    { id: 'display', label: 'Display', group: 'core' },
+    { id: 'model', label: 'Model & provider', group: 'core' },
     { id: 'identity-preview', label: 'Identity (preview)', group: 'core' },
-    // Phases 2–9 will register their entries here.
+    // Phases 3–9 will register their entries here.
 ];
 
 type Props = {
@@ -18,17 +21,23 @@ type Props = {
 
 export function SettingsSidebar({ activeId, onSelect }: Props) {
     return (
-        <nav className="settings-sidebar" aria-label="Settings categories">
-            {CATEGORIES.map((c) => (
-                <button
-                    key={c.id}
-                    type="button"
-                    className={`settings-sidebar-item${c.id === activeId ? ' is-active' : ''}`}
-                    onClick={() => onSelect(c.id)}
-                >
-                    {c.label}
-                </button>
-            ))}
+        <nav className="settings-sidebar" aria-label="Settings categories" role="tablist">
+            {CATEGORIES.map((c) => {
+                const isActive = c.id === activeId;
+                return (
+                    <button
+                        key={c.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        aria-current={isActive ? 'page' : undefined}
+                        className={`settings-sidebar-item${isActive ? ' is-active' : ''}`}
+                        onClick={() => onSelect(c.id)}
+                    >
+                        {c.label}
+                    </button>
+                );
+            })}
         </nav>
     );
 }

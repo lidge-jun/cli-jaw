@@ -2,13 +2,19 @@ import {
     Suspense,
     lazy,
     useCallback,
+    useEffect,
     useMemo,
     useRef,
     useState,
     useSyncExternalStore,
 } from 'react';
 import type { ComponentType, LazyExoticComponent } from 'react';
-import type { SettingsCategoryId, SettingsPageProps, DirtyStore } from './types';
+import type {
+    SettingsCategoryId,
+    SettingsPageProps,
+    DirtyStore,
+    SaveHandler,
+} from './types';
 import { SettingsSidebar } from './SettingsSidebar';
 import { createDirtyStore } from './dirty-store';
 import { createSettingsClient } from './settings-client';
@@ -18,9 +24,9 @@ const PAGE_REGISTRY: Record<
     LazyExoticComponent<ComponentType<SettingsPageProps>> | undefined
 > = {
     'identity-preview': lazy(() => import('./pages/IdentityPreview')),
-    profile: undefined,
-    display: undefined,
-    model: undefined,
+    profile: lazy(() => import('./pages/Profile')),
+    display: lazy(() => import('./pages/Display')),
+    model: lazy(() => import('./pages/ModelProvider')),
     'channels-telegram': undefined,
     'channels-discord': undefined,
     speech: undefined,
@@ -57,25 +63,60 @@ export function SettingsShell({ port, instanceUrl }: Props) {
     const isDirty = useDirtyFlag(dirty);
     const client = useMemo(() => createSettingsClient(port), [port]);
 
+    const saveHandlerRef = useRef<SaveHandler | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
+
+    const registerSave = useCallback((handler: SaveHandler | null) => {
+        saveHandlerRef.current = handler;
+    }, []);
+
+    // Phase 2: switching instances mid-edit must not carry dirty state across.
+    // The dirty store is owned by the shell (useRef) so without this effect
+    // pending edits from instance A would silently surface on instance B.
+    useEffect(() => {
+        dirty.clear();
+        saveHandlerRef.current = null;
+        setSaveError(null);
+    }, [port, dirty]);
+
     const onSelect = useCallback(
         (next: SettingsCategoryId) => {
             if (next === activeId) return;
+            if (saving) return;
             if (dirty.isDirty() && !window.confirm('Discard unsaved changes?')) return;
             dirty.clear();
+            setSaveError(null);
+            saveHandlerRef.current = null;
             setActiveId(next);
         },
-        [activeId, dirty],
+        [activeId, dirty, saving],
     );
 
     const onDiscard = useCallback(() => {
+        if (saving) return;
         dirty.clear();
-    }, [dirty]);
+        setSaveError(null);
+    }, [dirty, saving]);
 
-    const onSave = useCallback(() => {
-        // Phase 1 has no editable fields; placeholder for the action row.
-        // Phase 2+ will collect dirty.saveBundle() and PUT through the client.
-        dirty.clear();
-    }, [dirty]);
+    const onSave = useCallback(async () => {
+        if (saving) return;
+        const handler = saveHandlerRef.current;
+        setSaveError(null);
+        if (!handler) {
+            // No page-level handler registered (e.g. Phase 1 placeholder).
+            dirty.clear();
+            return;
+        }
+        setSaving(true);
+        try {
+            await handler();
+        } catch (err: unknown) {
+            setSaveError(err instanceof Error ? err.message : String(err));
+        } finally {
+            setSaving(false);
+        }
+    }, [dirty, saving]);
 
     const Page = PAGE_REGISTRY[activeId];
 
@@ -90,6 +131,7 @@ export function SettingsShell({ port, instanceUrl }: Props) {
                             instanceUrl={instanceUrl}
                             client={client}
                             dirty={dirty}
+                            registerSave={registerSave}
                         />
                     ) : (
                         <div className="settings-placeholder">
@@ -97,16 +139,22 @@ export function SettingsShell({ port, instanceUrl }: Props) {
                         </div>
                     )}
                 </Suspense>
-                {isDirty && (
+                {(isDirty || saving || saveError) && (
                     <div
                         className="settings-action-row"
                         role="group"
                         aria-label="Unsaved changes"
                     >
+                        {saveError ? (
+                            <span className="settings-action-error" role="alert">
+                                {saveError}
+                            </span>
+                        ) : null}
                         <button
                             type="button"
                             className="settings-action settings-action-discard"
                             onClick={onDiscard}
+                            disabled={saving || !isDirty}
                         >
                             Discard
                         </button>
@@ -114,8 +162,9 @@ export function SettingsShell({ port, instanceUrl }: Props) {
                             type="button"
                             className="settings-action settings-action-save"
                             onClick={onSave}
+                            disabled={saving || !isDirty}
                         >
-                            Save
+                            {saving ? 'Saving…' : 'Save'}
                         </button>
                     </div>
                 )}
