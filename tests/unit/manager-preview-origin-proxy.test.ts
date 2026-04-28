@@ -30,6 +30,15 @@ async function canListen(port: number): Promise<boolean> {
     });
 }
 
+async function canListenRange(start: number, count: number): Promise<boolean> {
+    for (let offset = 0; offset < count; offset += 1) {
+        if (usedTestPorts.has(start + offset) || !(await canListen(start + offset))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 async function freePortFrom(start: number, end: number): Promise<number> {
     for (let port = start; port <= end; port += 1) {
         if (!usedTestPorts.has(port) && await canListen(port)) {
@@ -42,7 +51,17 @@ async function freePortFrom(start: number, end: number): Promise<number> {
 
 async function freePortPair(scanCount = 1): Promise<{ targetPort: number; previewFrom: number }> {
     const targetPort = await freePortFrom(21000, 22000);
-    const previewFrom = await freePortFrom(24602, 24665 - scanCount + 1);
+    let previewFrom = 0;
+    for (let port = 24602; port <= 24665 - scanCount + 1; port += 1) {
+        if (await canListenRange(port, scanCount)) {
+            previewFrom = port;
+            break;
+        }
+    }
+    if (!previewFrom) throw new Error(`could not allocate a free preview range for ${scanCount} ports`);
+    for (let port = previewFrom; port < previewFrom + scanCount; port += 1) {
+        usedTestPorts.add(port);
+    }
     return { targetPort, previewFrom };
 }
 

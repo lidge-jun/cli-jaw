@@ -23,7 +23,7 @@ import cpp from 'highlight.js/lib/languages/cpp';
 import diff from 'highlight.js/lib/languages/diff';
 import plaintext from 'highlight.js/lib/languages/plaintext';
 import katex from 'katex';
-import DOMPurify from '../../node_modules/dompurify/dist/purify.cjs.js';
+import createDOMPurify from '../../node_modules/dompurify/dist/purify.cjs.js';
 import { t } from './features/i18n.js';
 import { ICONS } from './icons.js';
 import { fixCjkPunctuationBoundary } from './cjk-fix.js';
@@ -31,6 +31,24 @@ import {
     SvgBlock, shieldCodeFenceSvg, unshieldCodeFenceSvg,
     extractTopLevelSvg,
 } from './diagram/types.js';
+
+type DOMPurifyLike = {
+    sanitize(input: string, config?: Record<string, unknown>): string;
+    addHook(name: string, callback: (node: Element) => void): void;
+};
+
+const DOMPurify = (() => {
+    const purify = createDOMPurify as unknown as Partial<DOMPurifyLike> &
+        ((win?: Window) => DOMPurifyLike);
+    if (typeof purify.sanitize === 'function' && typeof purify.addHook === 'function') {
+        return purify as DOMPurifyLike;
+    }
+    if (typeof window !== 'undefined') return purify(window);
+    return {
+        sanitize: (input: string) => input,
+        addHook: () => undefined,
+    };
+})();
 
 // Register hljs languages (core-only import: ~25KB vs ~1MB full)
 hljs.registerLanguage('javascript', javascript);

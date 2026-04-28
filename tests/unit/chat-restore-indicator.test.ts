@@ -57,14 +57,14 @@ test('ws restore hooks route through one wrapper and reconcile in finally', () =
     const wrapperEnd = wsSrc.indexOf('function registerOrchestrateRestoreHooks', wrapperStart);
     const wrapper = wsSrc.slice(wrapperStart, wrapperEnd);
     assert.ok(wrapper.includes('showChatRestoreIndicator(reason)'), 'wrapper should show before sync');
-    assert.ok(wrapper.includes('syncOrchestrateSnapshot(reason)'), 'wrapper should refresh snapshot');
+    assert.ok(wrapper.includes('syncOrchestrateSnapshot(reason'), 'wrapper should refresh snapshot');
     assert.ok(wrapper.includes('.finally(() =>'), 'wrapper should reconcile even when snapshot sync fails');
     assert.ok(wrapper.includes('reconcileChatBottomAfterRestore(reason)'), 'wrapper should trigger bottom restore after sync');
-    assert.ok(wsSrc.includes("syncAfterBrowserRestore('focus')"));
-    assert.ok(wsSrc.includes("syncAfterBrowserRestore('pageshow')"));
-    assert.ok(wsSrc.includes("syncAfterBrowserRestore('visibilitychange')"));
-    assert.ok(wsSrc.includes("syncAfterBrowserRestore('resume')"));
-    assert.ok(wsSrc.includes("syncAfterBrowserRestore('discard')"));
+    assert.ok(wsSrc.includes("requestBrowserRestoreSync('focus')"));
+    assert.ok(wsSrc.includes("requestBrowserRestoreSync('pageshow')"));
+    assert.ok(wsSrc.includes("requestBrowserRestoreSync('visibilitychange')"));
+    assert.ok(wsSrc.includes("requestBrowserRestoreSync('resume')"));
+    assert.ok(wsSrc.includes("requestBrowserRestoreSync('discard')"));
 });
 
 test('restore indicator CSS does not block input', () => {
@@ -74,4 +74,3 @@ test('restore indicator CSS does not block input', () => {
     assert.ok(block.includes('pointer-events: none'), 'restore indicator must not block scroll or pointer input');
     assert.ok(block.includes('position: absolute'), 'indicator should be viewport-level, not row-flow content');
 });
-
