@@ -19,7 +19,10 @@ const CATEGORIES: SidebarEntry[] = [
     { id: 'employees', label: 'Employees', group: 'integrations' },
     { id: 'network', label: 'Network', group: 'core' },
     { id: 'permissions', label: 'Permissions', group: 'core' },
-    // Phases 8–9 will register their entries here.
+    { id: 'prompts', label: 'Prompts', group: 'integrations' },
+    { id: 'mcp', label: 'MCP servers', group: 'integrations' },
+    { id: 'browser', label: 'Browser / CDP', group: 'integrations' },
+    // Phase 9 will register its entries here.
 ];
 
 type Props = {

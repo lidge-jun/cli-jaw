@@ -35,9 +35,9 @@ const PAGE_REGISTRY: Record<
     employees: lazy(() => import('./pages/Employees')),
     network: lazy(() => import('./pages/Network')),
     permissions: lazy(() => import('./pages/Permissions')),
-    prompts: undefined,
-    mcp: undefined,
-    browser: undefined,
+    prompts: lazy(() => import('./pages/Prompts')),
+    mcp: lazy(() => import('./pages/Mcp')),
+    browser: lazy(() => import('./pages/Browser')),
     'dashboard-meta': undefined,
 };
 
