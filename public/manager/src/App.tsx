@@ -140,6 +140,12 @@ export function App() {
         void initialize();
     }, []);
 
+    useEffect(() => {
+        if (view.activeDetailTab !== 'preview') return;
+        if (view.selectedPort == null) return;
+        activityUnread.markPortSeen(view.selectedPort);
+    }, [messageEvents, view.activeDetailTab, view.selectedPort]);
+
     async function saveUi(ui: Parameters<typeof registry.save>[0]['ui']): Promise<void> {
         if (!hydrated) return;
         await registry.save({ ui });
@@ -275,7 +281,6 @@ export function App() {
         try {
             const home = action === 'start' ? customHome : undefined;
             const result = await runLifecycleAction(action, instance.port, home);
-            setLifecycleMessage(result.message);
             const expected = result.expectedStateAfter
                 || (action === 'start' ? 'online' : action === 'stop' ? 'offline' : 'restart-detected');
             const polled = await pollUntilSettled({

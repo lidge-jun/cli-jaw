@@ -21,7 +21,8 @@ export function InstancePreview(props: InstancePreviewProps) {
                     title={`Jaw instance ${props.instance?.port} preview`}
                     className="preview-frame"
                     src={state.src}
-                    sandbox="allow-forms allow-modals allow-popups allow-same-origin allow-scripts"
+                    sandbox="allow-forms allow-modals allow-popups allow-same-origin allow-scripts allow-downloads"
+                    allow="clipboard-read; clipboard-write; web-share"
                 />
             )}
 
