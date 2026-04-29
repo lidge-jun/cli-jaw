@@ -1,0 +1,85 @@
+import { SelectField, TextField } from '../../../fields';
+import { metaFor, optionList } from './agent-meta';
+import {
+    isStaticEmployee,
+    runtimeEmployeeError,
+    type RuntimeEmployeeRecord,
+} from './runtime-employees-helpers';
+
+type RuntimeEmployeeRowProps = {
+    employee: RuntimeEmployeeRecord;
+    index: number;
+    cliOptions: ReadonlyArray<string>;
+    onChange(patch: Partial<RuntimeEmployeeRecord>): void;
+    onRemove(): void;
+};
+
+export function RuntimeEmployeeRow({
+    employee,
+    index,
+    cliOptions,
+    onChange,
+    onRemove,
+}: RuntimeEmployeeRowProps) {
+    const locked = isStaticEmployee(employee);
+    const meta = metaFor(employee.cli);
+    const modelOptions = optionList(meta.models, employee.model);
+    const error = runtimeEmployeeError(employee);
+    const cliChoices = Array.from(new Set([...cliOptions, employee.cli, 'claude'])).filter(Boolean);
+
+    return (
+        <fieldset className="settings-runtime-employee-row">
+            <legend>
+                {employee.name || `Employee ${index + 1}`}
+                {locked ? <span>static</span> : null}
+            </legend>
+            <div className="settings-runtime-employee-grid">
+                <TextField
+                    id={`runtime-employee-${employee.id}-name`}
+                    label="Name"
+                    value={employee.name}
+                    disabled={locked}
+                    error={error === 'Name is required' ? error : null}
+                    onChange={(next) => onChange({ name: next })}
+                />
+                <SelectField
+                    id={`runtime-employee-${employee.id}-cli`}
+                    label="CLI"
+                    value={employee.cli}
+                    disabled={locked}
+                    options={cliChoices.map((value) => ({ value, label: value }))}
+                    onChange={(next) => {
+                        const nextModel = metaFor(next).models[0] || 'default';
+                        onChange({ cli: next, model: nextModel });
+                    }}
+                />
+                <SelectField
+                    id={`runtime-employee-${employee.id}-model`}
+                    label="Model"
+                    value={employee.model}
+                    options={modelOptions.length > 0 ? modelOptions : [{ value: 'default', label: 'default' }]}
+                    onChange={(next) => onChange({ model: next })}
+                />
+                <TextField
+                    id={`runtime-employee-${employee.id}-role`}
+                    label="Role"
+                    value={employee.role}
+                    disabled={locked}
+                    onChange={(next) => onChange({ role: next })}
+                />
+            </div>
+            <div className="settings-runtime-employee-footer">
+                <span>{employee.source}{employee.status ? ` / ${employee.status}` : ''}</span>
+                <button
+                    type="button"
+                    className="settings-action settings-action-discard"
+                    disabled={locked}
+                    onClick={onRemove}
+                    aria-label={`Remove employee ${employee.name || index + 1}`}
+                >
+                    Remove
+                </button>
+            </div>
+        </fieldset>
+    );
+}

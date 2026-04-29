@@ -49,7 +49,13 @@ export function createSettingsClient(port: number): SettingsClient {
             if (ct.includes('application/json')) {
                 return (await response.json()) as T;
             }
-            return (await response.text()) as unknown as T;
+            const detail = await response.text().catch(() => '');
+            throw new SettingsRequestError(
+                method,
+                path,
+                response.status,
+                `expected JSON, received ${ct || 'unknown content-type'}: ${detail.slice(0, 120)}`,
+            );
         } finally {
             clearTimeout(timer);
         }
@@ -59,5 +65,6 @@ export function createSettingsClient(port: number): SettingsClient {
         get: (path, init) => request('GET', path, undefined, init),
         put: (path, body, init) => request('PUT', path, body, init),
         post: (path, body, init) => request('POST', path, body, init),
+        delete: (path, init) => request('DELETE', path, undefined, init),
     };
 }

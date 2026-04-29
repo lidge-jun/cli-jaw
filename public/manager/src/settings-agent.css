@@ -1,0 +1,108 @@
+.settings-agent-runtime-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
+    align-items: end;
+}
+
+.settings-agent-note {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.settings-agent-flush summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    cursor: pointer;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.settings-agent-flush summary code {
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.settings-agent-flush[open] summary {
+    margin-bottom: 12px;
+}
+
+.settings-runtime-employee-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.settings-runtime-employee-summary span {
+    padding: 2px 6px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    background: var(--surface-raised);
+}
+
+.settings-runtime-employee-summary strong {
+    color: var(--text-danger, #c83232);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.settings-runtime-employee-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.settings-runtime-employee-row {
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 10px;
+    margin: 0;
+}
+
+.settings-runtime-employee-row legend {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 4px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.settings-runtime-employee-row legend span {
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.settings-runtime-employee-grid {
+    display: grid;
+    grid-template-columns: minmax(120px, 1fr) minmax(100px, 0.8fr) minmax(160px, 1.2fr) minmax(120px, 1fr);
+    gap: 10px;
+    align-items: end;
+}
+
+.settings-runtime-employee-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 4px;
+    color: var(--text-secondary);
+    font-size: 11px;
+}
+
+@media (max-width: 900px) {
+    .settings-agent-runtime-grid,
+    .settings-runtime-employee-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

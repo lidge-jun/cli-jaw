@@ -12,21 +12,23 @@ export type SidebarEntry = {
 };
 
 export const SIDEBAR_GROUP_ORDER: ReadonlyArray<SettingsCategoryGroup> = [
-    'core',
+    'runtime',
+    'identity',
     'channels',
     'automation',
     'integrations',
-    'security',
-    'meta',
+    'network-security',
+    'advanced',
 ];
 
 export const SIDEBAR_GROUP_LABELS: Record<SettingsCategoryGroup, string> = {
-    core: 'Core',
+    runtime: 'Runtime',
+    identity: 'Identity',
     channels: 'Channels',
     automation: 'Automation',
     integrations: 'Integrations',
-    security: 'Security',
-    meta: 'Meta',
+    'network-security': 'Network & security',
+    advanced: 'Advanced',
 };
 
 export function filterEntries(

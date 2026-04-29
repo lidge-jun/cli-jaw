@@ -46,17 +46,24 @@ test('manager frontend exposes one-instance preview controls', () => {
     const hook = read('public/manager/src/hooks/useDashboardView.ts');
     const preview = read('public/manager/src/InstancePreview.tsx');
     const helper = read('public/manager/src/preview.ts');
+    const components = read('public/manager/src/manager-components.css');
 
     assert.ok(hook.includes('selectedPort'), 'manager UI must track a selected preview instance');
     assert.ok(app.includes('handleSelectInstance'), 'manager UI must allow selecting any instance row');
-    assert.ok(app.includes('view.setPreviewEnabled(true)'), 'explicit preview action must enable iframe preview');
     assert.ok(app.includes('InstancePreview'), 'manager UI must render preview component');
-    assert.ok(workbench.includes('preview: props.preview'), 'workbench must route preview slot content');
-    assert.ok(hook.includes('useState(false)'), 'preview iframe must not be enabled by default');
+    assert.equal(workbench.includes('contentByMode'), false, 'workbench must not unmount preview through contentByMode switching');
+    assert.ok(workbench.includes('workbench-panel-preview'), 'workbench must render preview in a dedicated panel');
+    assert.ok(workbench.includes("hidden={props.mode !== 'preview'}"), 'preview panel must hide without unmounting across tab changes');
+    assert.ok(workbench.includes('data-preview-host="persistent"'), 'preview host must be explicitly persistent');
+    assert.ok(workbench.includes('{props.preview}'), 'persistent preview panel must render the preview slot');
+    assert.ok(components.includes('.workbench-panel'), 'workbench panels must have stable sizing');
+    assert.ok(components.includes('.workbench-panel[hidden]'), 'inactive persistent preview panel must not reserve space');
     assert.ok(preview.includes('<iframe'), 'preview component must mount iframe');
-    assert.ok(preview.includes('Enable preview'), 'preview component must expose enable toggle');
-    assert.ok(preview.includes('Proxy preview'), 'preview component must expose proxy mode');
-    assert.ok(preview.includes('Direct iframe'), 'preview component must expose direct mode');
+    assert.ok(app.includes('preview-inline-status'), 'workbench header must expose compact preview status');
+    assert.equal(preview.includes('preview-status-row'), false, 'preview iframe area must not spend a row on status');
+    assert.equal(preview.includes('Enable preview'), false, 'preview tab must not require a second enable toggle');
+    assert.equal(preview.includes('<select'), false, 'preview mode dropdown must be removed');
+    assert.equal(helper.includes("transport: 'direct'"), false, 'preview helper must not expose direct iframe mode');
     assert.ok(helper.includes('buildPreviewState'), 'preview helper must centralize URL state');
     assert.ok(helper.includes('/i'), 'preview helper must support manager proxy base path');
 });
@@ -64,18 +71,83 @@ test('manager frontend exposes one-instance preview controls', () => {
 test('manager frontend exposes lifecycle controls without hiding discovery actions', () => {
     const app = read('public/manager/src/App.tsx');
     const row = read('public/manager/src/components/InstanceRow.tsx');
-    const commandFilters = read('public/manager/src/components/CommandFilters.tsx');
     const types = read('public/manager/src/types.ts');
 
     assert.ok(types.includes('DashboardLifecycleCapability'), 'frontend types must include lifecycle capability');
     assert.ok(types.includes("'manager'"), 'frontend service mode must represent manager-owned instances');
-    assert.ok(commandFilters.includes('Custom home, default ~/.cli-jaw-<port>'), 'manager UI must expose custom home policy');
     assert.ok(app.includes('handleLifecycle'), 'manager UI must keep lifecycle controller');
     assert.ok(row.includes("onLifecycle('start'"), 'manager UI must expose Start action');
     assert.ok(row.includes("onLifecycle('stop'"), 'manager UI must expose Stop action');
     assert.ok(row.includes("onLifecycle('restart'"), 'manager UI must expose Restart action');
     assert.ok(row.includes('Preview'), 'manager UI must keep Preview action');
     assert.ok(row.includes('Open'), 'manager UI must keep Open action');
+});
+
+test('manager instance activity unread badges are row-scoped and registry-backed', () => {
+    const app = read('public/manager/src/App.tsx');
+    const groups = read('public/manager/src/components/InstanceGroups.tsx');
+    const row = read('public/manager/src/components/InstanceRow.tsx');
+    const rail = read('public/manager/src/components/SidebarRail.tsx');
+    const helper = read('public/manager/src/activity-unread.ts');
+    const hook = read('public/manager/src/hooks/useActivityUnread.ts');
+    const messageHook = read('public/manager/src/hooks/useInstanceMessageEvents.ts');
+    const types = read('public/manager/src/types.ts');
+
+    assert.ok(helper.includes('isUnreadActivityEvent'), 'activity unread helper must classify response events');
+    assert.ok(helper.includes('countUnreadActivityEvents'), 'activity unread helper must expose count derivation');
+    assert.ok(helper.includes('countUnreadActivityEventsByPort'), 'activity unread helper must expose per-instance count derivation');
+    assert.ok(helper.includes('latestManagerEventAt'), 'activity unread helper must expose mark-seen timestamp derivation');
+    assert.ok(helper.includes('latestManagerEventAtForPort'), 'activity unread helper must expose per-port mark-seen timestamp derivation');
+    assert.ok(helper.includes('activityEventDedupeKey'), 'activity unread helper must dedupe repeated events');
+    assert.ok(helper.includes("event.kind === 'instance-message' && event.role === 'assistant'"), 'only assistant messages must count for unread activity');
+    assert.equal(helper.includes("event.kind === 'health-changed'"), false, 'health changes must not inflate response unread counts');
+    assert.equal(helper.includes("event.kind === 'lifecycle-result'"), false, 'lifecycle events must not inflate response unread counts');
+    assert.equal(helper.includes("event.kind === 'port-collision'"), false, 'port collisions must not inflate response unread counts');
+    assert.ok(hook.includes('seenActivityAt'), 'activity unread hook must track the last seen activity timestamp');
+    assert.ok(hook.includes('seenActivityByPort'), 'activity unread hook must track per-port seen timestamps');
+    assert.ok(hook.includes('markPortSeen'), 'activity unread hook must expose click-to-clear behavior for one row');
+    assert.ok(app.includes('activitySeenAt'), 'App must hydrate/persist activitySeenAt through registry UI');
+    assert.ok(app.includes('activitySeenByPort'), 'App must hydrate/persist per-port activity seen state');
+    assert.ok(hook.includes('if (!options.activityDockCollapsed) return {}'), 'App must hide row unread counts while Activity is open');
+    assert.ok(app.includes('activityUnread.unreadByPort'), 'App must pass per-port unread counts into instance groups');
+    assert.ok(app.includes('useInstanceMessageEvents(instances)'), 'App must poll instance messages without dashboard refresh');
+    assert.ok(app.includes('activityUnread.markPortSeen'), 'App must mark the selected instance as seen when clicked');
+    assert.ok(app.includes('onToggleActivity={activityUnread.openAndMarkSeen}'), 'mobile Activity open path must mark events as seen');
+    assert.ok(types.includes('activitySeenAt: string | null'), 'frontend registry UI type must include activitySeenAt');
+    assert.ok(types.includes('activitySeenByPort: Record<string, string>'), 'frontend registry UI type must include per-port seen state');
+    assert.ok(groups.includes('activityUnreadByPort'), 'InstanceGroups must accept per-port unread counts');
+    assert.ok(row.includes('activityUnreadCount'), 'InstanceRow must accept unread count');
+    assert.ok(row.includes('onMarkActivitySeen'), 'InstanceRow must clear the clicked instance unread count');
+    assert.ok(row.includes('instance-unread-badge'), 'InstanceRow must render the compact row badge');
+    assert.ok(row.includes('99+'), 'InstanceRow badge must cap large counts');
+    assert.equal(rail.includes('activityUnreadCount'), false, 'SidebarRail must not show the unread count on the top Activity item');
+    assert.equal(rail.includes('rail-badge'), false, 'SidebarRail must not render the Activity unread badge');
+    assert.equal(app.includes('attention-badge'), false, 'manager dashboard must not import legacy chat attention badge');
+    assert.equal(app.includes('setAppBadge'), false, 'manager dashboard must not use browser app badge APIs');
+    assert.equal(app.includes('document.title'), false, 'manager dashboard must not mutate document title for unread activity');
+    assert.ok(messageHook.includes('/i/${port}/api/messages/latest'), 'message unread hook must poll only the latest proxied instance message');
+    assert.equal(messageHook.includes('api/messages`'), false, 'message unread hook must not poll full message history');
+    assert.ok(messageHook.includes('POLL_INTERVAL_MS = 5_000'), 'message unread hook must refresh without manual dashboard reload');
+    assert.ok(messageHook.includes('previousId == null'), 'message unread hook must baseline existing messages without backfilling badges');
+});
+
+test('manager process control panel exposes safe managed-process actions only', () => {
+    const panel = read('public/manager/src/components/ProcessControlPanel.tsx');
+    const detail = read('public/manager/src/components/InstanceDetailPanel.tsx');
+    const api = read('public/manager/src/api.ts');
+    const types = read('public/manager/src/types.ts');
+    const server = read('src/manager/server.ts');
+
+    assert.ok(detail.includes('ProcessControlPanel'), 'overview must render the process control panel');
+    assert.ok(panel.includes('Stop all managed'), 'panel must expose Stop all managed');
+    assert.ok(panel.includes('Adopt/recover'), 'panel must expose Adopt/recover');
+    assert.ok(panel.includes('Force release port'), 'panel must show force release as a planned control');
+    assert.ok(panel.includes('<button type="button" disabled'), 'force release must not be clickable in this slice');
+    assert.ok(api.includes('/api/dashboard/process-control/stop-managed'), 'frontend API must call stop-managed');
+    assert.ok(api.includes('/api/dashboard/process-control/adopt'), 'frontend API must call adopt');
+    assert.ok(types.includes('DashboardProcessControlState'), 'frontend types must include process control state');
+    assert.ok(server.includes('/api/dashboard/process-control/force-release'), 'backend must explicitly reject force release for now');
+    assert.ok(server.includes('501'), 'force release route must be unsupported until strict proof exists');
 });
 
 test('manager frontend keeps rows compact while preserving model visibility', () => {
@@ -130,8 +202,8 @@ test('manager profile rows merge profile headers into the instance row', () => {
     assert.ok(groups.includes('is-profile-merged'), 'profile instance groups must expose merged-row styling');
     assert.ok(groups.includes('profile={profile}'), 'profile context must be forwarded into the row');
     assert.ok(row.includes('props.profile?.label'), 'instance row must use the profile label as the primary merged label');
-    assert.ok(row.includes('instanceSecondaryLine'), 'instance row must keep exact instance id/path metadata after merging');
-    assert.ok(compact.includes('.profile-instance-groups.is-profile-merged .instance-row-title span'), 'merged sidebar rows must keep the exact identity line visible');
+    assert.equal(row.includes('instanceSecondaryLine'), false, 'instance row must not add path metadata under compact sidebar labels');
+    assert.ok(row.includes('instance-row-transition'), 'instance row may still show transition state under the primary label');
     assert.ok(compact.includes('.profile-instance-groups.is-profile-merged .instance-row-main'), 'merged sidebar rows must align primary labels from the top-left row area');
     assert.ok(components.includes('.instance-row-select'), 'base row select styling must exist');
     assert.ok(components.includes('justify-self: stretch'), 'all selected rows must keep the same left alignment width');
@@ -162,30 +234,30 @@ test('manager frontend exposes 10.6 persistence controls', () => {
     const app = read('public/manager/src/App.tsx');
     const hook = read('public/manager/src/hooks/useDashboardRegistry.ts');
     const detail = read('public/manager/src/components/InstanceDetailPanel.tsx');
+    const dashboardMeta = read('public/manager/src/settings/pages/DashboardMeta.tsx');
     const groups = read('public/manager/src/components/InstanceGroups.tsx');
     const command = read('public/manager/src/components/CommandBar.tsx');
     const main = read('public/manager/src/main.tsx');
 
     assert.ok(hook.includes('patchDashboardRegistry'), 'registry hook must save dashboard registry patches');
     assert.ok(app.includes('useDashboardRegistry'), 'App must hydrate and save registry state');
-    assert.ok(detail.includes('Pin favorite'), 'Settings tab must expose favorite pinning');
-    assert.ok(detail.includes('Hide by default'), 'Settings tab must expose hidden state');
+    assert.ok(detail.includes('SettingsShell'), 'Settings tab must mount the settings shell');
+    assert.ok(dashboardMeta.includes('Pin favorite'), 'Settings tab must expose favorite pinning');
+    assert.ok(dashboardMeta.includes('Hide by default'), 'Settings tab must expose hidden state');
     assert.ok(groups.includes("id: 'active'"), 'InstanceGroups must keep active row in a top group');
     assert.ok(groups.includes("id: 'favorites'"), 'InstanceGroups must keep pinned favorites near the top');
-    assert.ok(command.includes('onScanRangeCommit'), 'CommandBar must support committed scan range changes');
+    assert.equal(command.includes('onScanRangeCommit'), false, 'CommandBar must not carry scan controls in the top row');
     assert.ok(main.includes('./manager-persistence.css'), 'manager persistence styling must be split into its own CSS module');
 });
 
 test('manager frontend exposes 10.8 profile controls', () => {
     const app = read('public/manager/src/App.tsx');
-    const filters = read('public/manager/src/components/CommandFilters.tsx');
     const groups = read('public/manager/src/components/InstanceGroups.tsx');
     const drawer = read('public/manager/src/components/InstanceDrawer.tsx');
     const main = read('public/manager/src/main.tsx');
 
     assert.ok(existsSync(join(projectRoot, 'public/manager/src/components/ProfileChip.tsx')), 'ProfileChip must exist');
     assert.ok(existsSync(join(projectRoot, 'public/manager/src/components/ProfileSection.tsx')), 'ProfileSection must exist');
-    assert.ok(filters.includes('profile-chip-strip'), 'CommandFilters must expose profile chips');
     assert.ok(app.includes('activeProfileIds'), 'App must own active profile filter state');
     assert.ok(app.includes('activeProfileFilter'), 'App must persist active profile filters through registry');
     assert.ok(groups.includes('is-profile-merged'), 'InstanceGroups must merge profile sections into instance rows');

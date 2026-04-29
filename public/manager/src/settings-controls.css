@@ -1,0 +1,151 @@
+/* Settings control polish lives outside settings-shell.css to keep shell
+ * structure and field skins independently maintainable. */
+
+.settings-field {
+    position: relative;
+}
+
+.settings-field-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.settings-field input:not([type="checkbox"]):not([type="file"]),
+.settings-field textarea,
+.settings-field-select > select,
+.settings-select-trigger {
+    width: 100%;
+    min-height: 38px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 7px;
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.42)),
+        var(--surface-raised);
+    color: var(--text-primary);
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.55),
+        0 1px 2px rgba(15, 23, 42, 0.05);
+    transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.settings-field input:not([type="checkbox"]):not([type="file"]),
+.settings-field textarea,
+.settings-field-select > select {
+    padding: 8px 10px;
+}
+
+.settings-field input:not([type="checkbox"]):not([type="file"]):hover:not(:disabled),
+.settings-field textarea:hover:not(:disabled),
+.settings-field-select > select:hover:not(:disabled),
+.settings-select-trigger:hover:not(:disabled) {
+    border-color: var(--border-strong);
+    background: var(--surface-base);
+}
+
+.settings-field input:not([type="checkbox"]):not([type="file"]):focus,
+.settings-field textarea:focus,
+.settings-field-select > select:focus,
+.settings-select-trigger:focus-visible {
+    border-color: var(--ring);
+    box-shadow:
+        0 0 0 3px color-mix(in srgb, var(--ring) 18%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    outline: none;
+}
+
+.settings-field input:disabled,
+.settings-field textarea:disabled,
+.settings-select-trigger:disabled {
+    cursor: not-allowed;
+    opacity: 0.56;
+}
+
+.settings-field-select {
+    max-width: 100%;
+}
+
+.settings-select-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px 8px 12px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.settings-select-trigger.is-open {
+    border-color: var(--ring);
+    border-bottom-left-radius: 5px;
+    border-bottom-right-radius: 5px;
+}
+
+.settings-select-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.settings-select-caret {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 auto;
+    border-right: 1.8px solid currentColor;
+    border-bottom: 1.8px solid currentColor;
+    opacity: 0.7;
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform 150ms ease, opacity 150ms ease;
+}
+
+.settings-select-trigger.is-open .settings-select-caret {
+    opacity: 1;
+    transform: translateY(2px) rotate(225deg);
+}
+
+.settings-select-menu {
+    position: absolute;
+    z-index: 12;
+    top: calc(100% + 4px);
+    left: 0;
+    width: min(100%, 560px);
+    max-height: 240px;
+    overflow: auto;
+    padding: 4px;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--surface-base);
+    box-shadow:
+        0 18px 40px rgba(15, 23, 42, 0.14),
+        0 2px 8px rgba(15, 23, 42, 0.08);
+}
+
+.settings-select-option {
+    width: 100%;
+    min-height: 32px;
+    justify-content: space-between;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    padding: 7px 9px;
+    color: var(--text-primary);
+}
+
+.settings-select-option.is-active,
+.settings-select-option:hover {
+    background: var(--surface-raised);
+}
+
+.settings-select-option.is-selected {
+    color: var(--accent-strong, var(--text-primary));
+    font-weight: 600;
+}
+
+@media (max-width: 720px) {
+    .settings-field-select,
+    .settings-select-menu {
+        max-width: none;
+        width: 100%;
+    }
+}

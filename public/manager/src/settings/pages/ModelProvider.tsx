@@ -12,7 +12,8 @@ import {
     usePageSnapshot,
 } from './page-shell';
 import { PerCliRow } from './components/PerCliRow';
-import type { CliMeta, PerCliEntry } from './components/PerCliRow';
+import { metaFor } from './components/agent/agent-meta';
+import type { PerCliEntry } from './components/agent/agent-meta';
 import { expandPatch } from './path-utils';
 
 type ModelSnapshot = {
@@ -21,41 +22,6 @@ type ModelSnapshot = {
     activeOverrides?: Record<string, { model?: string; effort?: string }>;
     [key: string]: unknown;
 };
-
-// Curated per-CLI metadata. Mirrors src/cli/registry.ts so the page works even
-// when the instance can't expose its registry. Pages do not import server
-// modules — Vite would bundle them into the browser.
-const CLI_META: Record<string, CliMeta> = {
-    claude: {
-        label: 'Claude',
-        models: ['claude-opus-4.7', 'claude-sonnet-4.6', 'claude-haiku-4.5'],
-        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-    },
-    codex: {
-        label: 'Codex',
-        models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex'],
-        efforts: ['low', 'medium', 'high', 'xhigh'],
-    },
-    gemini: {
-        label: 'Gemini',
-        models: ['gemini-3-pro-preview', 'gemini-2.5-pro', 'gemini-3-flash-preview'],
-        efforts: [],
-    },
-    opencode: {
-        label: 'OpenCode',
-        models: ['opencode-go/kimi-k2.6', 'opencode-go/glm-5.1'],
-        efforts: ['minimal', 'low', 'high', 'max'],
-    },
-    copilot: {
-        label: 'Copilot',
-        models: ['gpt-5.5', 'claude-opus-4.7', 'claude-sonnet-4.6', 'gpt-5.4'],
-        efforts: ['low', 'medium', 'high'],
-    },
-};
-
-function metaFor(cli: string): CliMeta {
-    return CLI_META[cli] || { label: cli, models: [], efforts: [] };
-}
 
 // Build a patch that clears every active override. Backend `mergeSettingsPatch`
 // shallow-merges per-cli, so we must enumerate known cli keys (current
@@ -166,7 +132,10 @@ export default function ModelProvider({ port, client, dirty, registerSave }: Set
                 void onSave();
             }}
         >
-            <SettingsSection title="Model & provider" hint="Per-CLI defaults applied at session start.">
+            <SettingsSection
+                title="Model defaults"
+                hint="Per-CLI defaults applied when no active override is set on the Agent page."
+            >
                 {cliKeys.length === 0 ? (
                     <p className="settings-empty">No CLIs registered for this instance.</p>
                 ) : (

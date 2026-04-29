@@ -27,6 +27,7 @@ const PAGE_REGISTRY: Record<
     SettingsCategoryId,
     LazyExoticComponent<ComponentType<SettingsPageProps>>
 > = {
+    agent: lazy(() => import('./pages/Agent')),
     profile: lazy(() => import('./pages/Profile')),
     display: lazy(() => import('./pages/Display')),
     model: lazy(() => import('./pages/ModelProvider')),
@@ -45,7 +46,11 @@ const PAGE_REGISTRY: Record<
     'advanced-export': lazy(() => import('./pages/AdvancedExport')),
 };
 
-type Props = { port: number; instanceUrl: string };
+type Props = {
+    port: number;
+    instanceUrl: string;
+    onDirtyChange?: (dirty: boolean) => void;
+};
 
 function useDirtyStore(): DirtyStore {
     const ref = useRef<DirtyStore | null>(null);
@@ -69,8 +74,8 @@ function usePendingCount(store: DirtyStore): number {
     );
 }
 
-export function SettingsShell({ port, instanceUrl }: Props) {
-    const [activeId, setActiveId] = useState<SettingsCategoryId>('profile');
+export function SettingsShell({ port, instanceUrl, onDirtyChange }: Props) {
+    const [activeId, setActiveId] = useState<SettingsCategoryId>('agent');
     const dirty = useDirtyStore();
     const isDirty = useDirtyFlag(dirty);
     const pendingCount = usePendingCount(dirty);
@@ -94,6 +99,14 @@ export function SettingsShell({ port, instanceUrl }: Props) {
         setSaveError(null);
         setToast(null);
     }, [port, dirty]);
+
+    useEffect(() => {
+        onDirtyChange?.(isDirty);
+    }, [isDirty, onDirtyChange]);
+
+    useEffect(() => {
+        return () => onDirtyChange?.(false);
+    }, [onDirtyChange]);
 
     const onSelect = useCallback(
         (next: SettingsCategoryId) => {

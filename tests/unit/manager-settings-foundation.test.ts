@@ -69,6 +69,31 @@ test('SettingsRequestError surfaces method, path, status, and detail', async () 
     }
 });
 
+test('createSettingsClient rejects non-JSON success responses', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+        new Response('<!doctype html><title>fallback</title>', {
+            status: 200,
+            headers: { 'content-type': 'text/html; charset=utf-8' },
+        })) as typeof fetch;
+
+    try {
+        const client = createSettingsClient(3464);
+        await assert.rejects(
+            () => client.get('/api/settings'),
+            (err: unknown) => {
+                assert.ok(err instanceof SettingsRequestError);
+                assert.equal(err.status, 200);
+                assert.match(err.detail, /expected JSON/);
+                assert.match(err.detail, /text\/html/);
+                return true;
+            },
+        );
+    } finally {
+        globalThis.fetch = originalFetch;
+    }
+});
+
 // ─── dirty-store ─────────────────────────────────────────────────────
 
 test('dirtyStore.set on equal value clears the entry', () => {

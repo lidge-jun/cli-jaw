@@ -90,8 +90,7 @@ test('manager responsive CSS defines shell regions and breakpoints', () => {
     assert.ok(css.includes('manager-mobile-nav'), 'mobile nav styling must exist');
     assert.ok(css.includes('drawer-backdrop'), 'drawer styling must exist');
     assert.ok(css.includes('command-primary'), 'command center primary row must exist');
-    assert.ok(css.includes('command-secondary'), 'command center secondary row must exist');
-    assert.ok(css.includes('command-filter-strip'), 'command filters must have an isolated secondary area');
+    assert.equal(css.includes('command-secondary'), false, 'command center must not allocate a second command row');
     assert.equal(css.includes('instance-navigator-active'), false, 'navigator must not duplicate the selected instance outside the scroll body');
     assert.ok(css.includes('profile-chip-strip'), 'profile filters must have a stable horizontal strip');
 });
@@ -149,6 +148,7 @@ test('manager UI state is persisted through 10.6 registry without localStorage',
     const registryHook = read('public/manager/src/hooks/useDashboardRegistry.ts');
     const drawer = read('public/manager/src/components/InstanceDrawer.tsx');
     const detail = read('public/manager/src/components/InstanceDetailPanel.tsx');
+    const dashboardMeta = read('public/manager/src/settings/pages/DashboardMeta.tsx');
     const rail = read('public/manager/src/components/SidebarRail.tsx');
 
     assert.ok(hook.includes('activeDetailTab'), 'view hook must own detail tab state');
@@ -162,11 +162,21 @@ test('manager UI state is persisted through 10.6 registry without localStorage',
     assert.ok(drawer.includes('previousFocusRef'), 'drawer must restore focus');
     assert.ok(drawer.includes('role="dialog"'), 'drawer must expose dialog semantics');
     assert.ok(detail.includes('Logs stream is planned for phase 10.7'), 'Logs tab must have explicit empty state');
-    assert.ok(detail.includes('settings-form'), 'Settings tab must expose 10.6 persistence controls');
+    assert.ok(detail.includes('SettingsShell'), 'Settings tab must mount the settings shell');
+    assert.ok(dashboardMeta.includes('settings-form'), 'Settings tab must expose 10.6 persistence controls');
     assert.equal(app.includes('localStorage'), false, '10.5.x UI must not introduce localStorage persistence');
     assert.equal(hook.includes('localStorage'), false, 'view hook must not persist UI state yet');
     assert.equal(registryHook.includes('localStorage'), false, 'registry hook must not use localStorage');
     assert.ok(app.includes('saveUi'), 'App must persist selected UI state through the registry API');
+});
+
+test('manager instance activity unread badge has compact row styling', () => {
+    const css = readManagerCss();
+
+    assert.ok(css.includes('.instance-row-title-line'), 'instance row title line must align label and unread count');
+    assert.ok(css.includes('.instance-unread-badge'), 'per-instance Activity unread badge styling must exist');
+    assert.ok(css.includes('font-variant-numeric: tabular-nums'), 'Activity unread badge must keep counts stable');
+    assert.equal(css.includes('.rail-badge'), false, 'Activity unread badge must not attach to the top rail');
 });
 
 test('manager activity dock is vertically resizable', () => {

@@ -13,22 +13,22 @@ import {
 } from './components/sidebar-filter';
 
 const CATEGORIES: SidebarEntry[] = [
-    { id: 'profile', label: 'Profile', group: 'core' },
-    { id: 'display', label: 'Display', group: 'core' },
-    { id: 'model', label: 'Model & provider', group: 'core' },
+    { id: 'agent', label: 'Agent', group: 'runtime' },
+    { id: 'model', label: 'Model defaults', group: 'runtime' },
+    { id: 'profile', label: 'Profile', group: 'identity' },
+    { id: 'display', label: 'Display', group: 'identity' },
     { id: 'channels-telegram', label: 'Channels — Telegram', group: 'channels' },
     { id: 'channels-discord', label: 'Channels — Discord', group: 'channels' },
-    { id: 'speech', label: 'Speech & keys', group: 'integrations' },
     { id: 'heartbeat', label: 'Heartbeat & schedules', group: 'automation' },
     { id: 'memory', label: 'Memory', group: 'automation' },
-    { id: 'employees', label: 'Employees', group: 'automation' },
+    { id: 'speech', label: 'Speech & keys', group: 'integrations' },
     { id: 'prompts', label: 'Prompts', group: 'integrations' },
     { id: 'mcp', label: 'MCP servers', group: 'integrations' },
     { id: 'browser', label: 'Browser / CDP', group: 'integrations' },
-    { id: 'network', label: 'Network', group: 'security' },
-    { id: 'permissions', label: 'Permissions', group: 'security' },
-    { id: 'dashboard-meta', label: 'Dashboard meta', group: 'meta' },
-    { id: 'advanced-export', label: 'Export / import', group: 'meta' },
+    { id: 'network', label: 'Network', group: 'network-security' },
+    { id: 'permissions', label: 'Permissions', group: 'network-security' },
+    { id: 'dashboard-meta', label: 'Dashboard meta', group: 'advanced' },
+    { id: 'advanced-export', label: 'Export / import', group: 'advanced' },
 ];
 
 type Props = {

@@ -2,19 +2,7 @@
 
 import { TextField, SelectField, ToggleField } from '../../fields';
 import type { DirtyEntry } from '../../types';
-
-type CliMeta = {
-    label: string;
-    models: ReadonlyArray<string>;
-    efforts: ReadonlyArray<string>;
-};
-
-type PerCliEntry = {
-    model?: string;
-    effort?: string;
-    fastMode?: boolean;
-    [key: string]: unknown;
-};
+import type { CliMeta, PerCliEntry } from './agent/agent-meta';
 
 type Props = {
     cli: string;
@@ -83,5 +71,3 @@ export function PerCliRow({ cli, meta, original, value, setValue, setEntry }: Pr
         </div>
     );
 }
-
-export type { CliMeta, PerCliEntry };

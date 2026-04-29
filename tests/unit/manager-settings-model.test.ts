@@ -6,11 +6,13 @@
 // patch instead).
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { createDirtyStore } from '../../public/manager/src/settings/dirty-store';
 import { expandPatch } from '../../public/manager/src/settings/pages/path-utils';
 import { buildResetOverridesPatch } from '../../public/manager/src/settings/pages/ModelProvider';
+import { metaFor, runtimeModelFor } from '../../public/manager/src/settings/pages/components/agent/agent-meta';
 
 // ─── ChipListField / fallback order ──────────────────────────────────
 
@@ -105,4 +107,20 @@ test('buildResetOverridesPatch result PUTs to /api/settings cleanly', () => {
     // Each CLI from perCli is also enumerated so a future override can't
     // survive the reset just because it's not currently in activeOverrides.
     assert.ok('claude' in patch.activeOverrides);
+});
+
+test('Model defaults imports canonical CLI metadata from agent-meta', () => {
+    const source = readFileSync('public/manager/src/settings/pages/ModelProvider.tsx', 'utf8');
+    assert.ok(source.includes("from './components/agent/agent-meta'"));
+    assert.ok(source.includes('Model defaults'));
+    assert.equal(metaFor('codex').models.includes('gpt-5.5'), true);
+});
+
+test('active runtime override wins over per-CLI defaults', () => {
+    const model = runtimeModelFor(
+        'codex',
+        { codex: { model: 'gpt-5.4' } },
+        { codex: { model: 'gpt-5.5' } },
+    );
+    assert.equal(model, 'gpt-5.5');
 });

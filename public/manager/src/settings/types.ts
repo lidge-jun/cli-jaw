@@ -1,6 +1,7 @@
 import type { ComponentType, LazyExoticComponent } from 'react';
 
 export type SettingsCategoryId =
+    | 'agent'
     | 'profile'
     | 'display'
     | 'model'
@@ -19,12 +20,13 @@ export type SettingsCategoryId =
     | 'advanced-export';
 
 export type SettingsCategoryGroup =
-    | 'core'
+    | 'runtime'
+    | 'identity'
     | 'channels'
     | 'automation'
     | 'integrations'
-    | 'security'
-    | 'meta';
+    | 'network-security'
+    | 'advanced';
 
 export type SettingsCategory = {
     id: SettingsCategoryId;
@@ -53,6 +55,7 @@ export type SettingsClient = {
     get<T>(path: string, init?: RequestInit): Promise<T>;
     put<T>(path: string, body: unknown, init?: RequestInit): Promise<T>;
     post<T>(path: string, body: unknown, init?: RequestInit): Promise<T>;
+    delete<T>(path: string, init?: RequestInit): Promise<T>;
 };
 
 export type DirtyEntry = {

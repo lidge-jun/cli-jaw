@@ -5,6 +5,7 @@
 // is exercised against a fake KeyboardEvent via the function it builds.
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import {
@@ -29,23 +30,43 @@ test('Phase 1 placeholder identity-preview is gone from sidebar', () => {
     assert.equal(ids.includes('identity-preview' as never), false);
 });
 
-test('SETTINGS_CATEGORIES includes Phase 9 dashboard-meta and advanced-export', () => {
+test('SETTINGS_CATEGORIES includes runtime Agent and advanced pages', () => {
     const ids = SETTINGS_CATEGORIES.map((c) => c.id);
+    assert.ok(ids.includes('agent'));
     assert.ok(ids.includes('dashboard-meta'));
     assert.ok(ids.includes('advanced-export'));
+    assert.equal(ids.includes('employees'), false, 'Employees should be managed from Agent, not sidebar');
+    assert.ok(ids.indexOf('agent') < ids.indexOf('model'), 'Agent should lead Model defaults');
+    const model = SETTINGS_CATEGORIES.find((c) => c.id === 'model');
+    assert.equal(model?.label, 'Model defaults');
 });
 
-test('Sidebar group order has security after integrations and meta last', () => {
+test('Sidebar group order starts with runtime and keeps advanced last', () => {
     assert.deepEqual(SIDEBAR_GROUP_ORDER, [
-        'core',
+        'runtime',
+        'identity',
         'channels',
         'automation',
         'integrations',
-        'security',
-        'meta',
+        'network-security',
+        'advanced',
     ]);
-    assert.equal(SIDEBAR_GROUP_LABELS.security, 'Security');
-    assert.equal(SIDEBAR_GROUP_LABELS.meta, 'Meta');
+    assert.equal(SIDEBAR_GROUP_LABELS.runtime, 'Runtime');
+    assert.equal(SIDEBAR_GROUP_LABELS['network-security'], 'Network & security');
+    assert.equal(SIDEBAR_GROUP_LABELS.advanced, 'Advanced');
+});
+
+test('Settings SelectField uses polished custom listbox controls', () => {
+    const source = readFileSync('public/manager/src/settings/fields/SelectField.tsx', 'utf8');
+    const css = readFileSync('public/manager/src/settings-controls.css', 'utf8');
+
+    assert.ok(source.includes('settings-select-trigger'), 'SelectField must expose a styled trigger');
+    assert.ok(source.includes('role="combobox"'), 'SelectField trigger must expose combobox semantics');
+    assert.ok(source.includes('role="listbox"'), 'SelectField menu must use listbox semantics');
+    assert.ok(source.includes('role="option"'), 'SelectField options must be semantic options');
+    assert.equal(source.includes('<select'), false, 'Settings SelectField must not fall back to native select chrome');
+    assert.ok(css.includes('.settings-select-menu'), 'custom dropdown menu skin must be present');
+    assert.ok(css.includes('.settings-select-caret'), 'custom dropdown caret must be present');
 });
 
 test('Every category belongs to one of the known groups', () => {

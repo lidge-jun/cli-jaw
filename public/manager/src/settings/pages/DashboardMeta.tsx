@@ -189,7 +189,7 @@ export default function DashboardMeta({
 
     return (
         <form
-            className="settings-page-form"
+            className="settings-page-form settings-form"
             onSubmit={(event) => {
                 event.preventDefault();
                 void onSave();
@@ -229,7 +229,7 @@ export default function DashboardMeta({
                 />
                 <ToggleField
                     id="dashmeta-favorite"
-                    label="Favorite"
+                    label="Pin favorite"
                     value={draft.favorite}
                     onChange={(next) => {
                         setDraft({ ...draft, favorite: next });
@@ -242,7 +242,7 @@ export default function DashboardMeta({
                 />
                 <ToggleField
                     id="dashmeta-hidden"
-                    label="Hidden"
+                    label="Hide by default"
                     description="Hide from the default instance list."
                     value={draft.hidden}
                     onChange={(next) => {

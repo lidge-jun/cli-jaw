@@ -55,7 +55,6 @@ function instanceLabel(instance: DashboardInstance): string {
     const rawName = rawLabel.split('/').filter(Boolean).pop() || rawLabel;
     return compactGeneratedInstanceName(rawName, instance.port);
 }
-
 export function App() {
     const [data, setData] = useState<DashboardScanResult | null>(null);
     const [loading, setLoading] = useState(true);
@@ -72,6 +71,7 @@ export function App() {
     const [transitioningPort, setTransitioningPort] = useState<number | null>(null);
     const [transitionAction, setTransitionAction] = useState<DashboardLifecycleAction | null>(null);
     const [activeProfileIds, setActiveProfileIds] = useState<string[]>([]);
+    const [settingsDirty, setSettingsDirty] = useState(false);
     const registry = useDashboardRegistry();
     const view = useDashboardView();
     const theme = useTheme((next) => {
@@ -203,7 +203,14 @@ export function App() {
         return instances.find(instance => instance.port === view.selectedPort) || null;
     }, [filtered, instances, view.selectedPort]);
 
+    function canLeaveDirtySettings(): boolean {
+        if (view.activeDetailTab !== 'settings' || !settingsDirty) return true;
+        return window.confirm('Discard unsaved Settings changes?');
+    }
+
     function handlePreview(instance: DashboardInstance): void {
+        if (!canLeaveDirtySettings()) return;
+        setSettingsDirty(false);
         activityUnread.markPortSeen(instance.port);
         view.setSelectedPort(instance.port);
         view.setActiveDetailTab('preview');
@@ -213,6 +220,8 @@ export function App() {
     }
 
     function handleSelectInstance(instance: DashboardInstance): void {
+        if (!canLeaveDirtySettings()) return;
+        setSettingsDirty(false);
         activityUnread.markPortSeen(instance.port);
         view.setSelectedPort(instance.port);
         view.setDrawerOpen(false);
@@ -220,6 +229,8 @@ export function App() {
     }
 
     function handleTabChange(tab: DashboardDetailTab): void {
+        if (tab !== 'settings' && !canLeaveDirtySettings()) return;
+        if (tab !== 'settings') setSettingsDirty(false);
         view.setActiveDetailTab(tab);
         if (tab === 'preview') {
             view.setActivityDockCollapsed(true);
@@ -254,6 +265,8 @@ export function App() {
         if ((action === 'stop' || action === 'restart') && !window.confirm(`${action} :${instance.port}?`)) {
             return;
         }
+        if (!canLeaveDirtySettings()) return;
+        setSettingsDirty(false);
         const previousUptime = instance.uptime;
         setLifecycleBusyPort(instance.port);
         setLifecycleMessage(null);
@@ -303,17 +316,17 @@ export function App() {
                 <InstanceGroups
                     instances={filtered}
                     selectedPort={selectedInstance?.port || null}
-                    lifecycleBusyPort={lifecycleBusyPort}
-                    transitioningPort={transitioningPort}
-                    transitionAction={transitionAction}
-                    activityUnreadByPort={activityUnread.unreadByPort}
-                    profiles={profiles}
+                                    lifecycleBusyPort={lifecycleBusyPort}
+                                    transitioningPort={transitioningPort}
+                                    transitionAction={transitionAction}
+                                    activityUnreadByPort={activityUnread.unreadByPort}
+                                    profiles={profiles}
                     getLabel={instanceLabel}
                     formatUptime={formatUptime}
-                    onSelect={handleSelectInstance}
-                    onPreview={handlePreview}
-                    onMarkActivitySeen={activityUnread.markPortSeen}
-                    onLifecycle={(action, instance) => void handleLifecycle(action, instance)}
+                                    onSelect={handleSelectInstance}
+                                    onPreview={handlePreview}
+                                    onMarkActivitySeen={activityUnread.markPortSeen}
+                                    onLifecycle={(action, instance) => void handleLifecycle(action, instance)}
                 />
             )}
         </>
@@ -359,6 +372,7 @@ export function App() {
             instance={selectedInstance}
             data={data}
             activeTab={tab}
+            onSettingsDirtyChange={setSettingsDirty}
             onRegistryPatch={(port, patch) => {
                 void registry.save({ instances: { [String(port)]: patch } }).then(() => load());
             }}
@@ -367,120 +381,120 @@ export function App() {
 
     return (
         <>
-        <ManagerShell
-            sidebarCollapsed={view.sidebarCollapsed}
-            commandBar={(
-                <CommandBar
-                    query={query}
-                    loading={loading}
-                    onQueryChange={setQuery}
-                    onRefresh={() => void load()}
-                    onOpenDrawer={() => view.setDrawerOpen(true)}
-                    theme={theme.theme}
-                    onThemeChange={theme.setTheme}
-                    onOpenPalette={palette.toggle}
-                />
-            )}
-            workspace={(
-                <WorkspaceLayout
-                    sidebarCollapsed={view.sidebarCollapsed}
-                    inspectorCollapsed={view.activityDockCollapsed}
-                    inspectorHeight={view.activityDockCollapsed ? 48 : view.activityDockHeight}
-                    navigator={(
-                        <>
-                            <SidebarRail
-                                onlineCount={summary.online || 0}
-                                collapsed={view.sidebarCollapsed}
-                                activeTab={view.activeDetailTab}
-                                activityOpen={!view.activityDockCollapsed}
-                                onSelectInstances={() => handleTabChange('overview')}
-                                onSelectPreview={() => handleTabChange('preview')}
-                                onSelectActivity={handleActivityToggle}
-                                onToggleSidebar={handleSidebarToggle}
-                            />
-                            <div id="manager-sidebar-list" className="manager-sidebar-list">
-                                <InstanceNavigator
-                                    active={selectedInstance}
-                                    hiddenCount={instances.filter(instance => instance.hidden).length}
+            <ManagerShell
+                sidebarCollapsed={view.sidebarCollapsed}
+                commandBar={(
+                    <CommandBar
+                        query={query}
+                        loading={loading}
+                        onQueryChange={setQuery}
+                        onRefresh={() => void load()}
+                        onOpenDrawer={() => view.setDrawerOpen(true)}
+                        theme={theme.theme}
+                        onThemeChange={theme.setTheme}
+                        onOpenPalette={palette.toggle}
+                    />
+                )}
+                workspace={(
+                    <WorkspaceLayout
+                        sidebarCollapsed={view.sidebarCollapsed}
+                        inspectorCollapsed={view.activityDockCollapsed}
+                        inspectorHeight={view.activityDockCollapsed ? 48 : view.activityDockHeight}
+                        navigator={(
+                            <>
+                                <SidebarRail
+                                    onlineCount={summary.online || 0}
                                     collapsed={view.sidebarCollapsed}
-                                >
-                                    {renderInstanceListContent()}
-                                </InstanceNavigator>
-                            </div>
-                        </>
-                    )}
-                    workbench={(
-                        <>
-                            {lifecycleMessage && <section className="state lifecycle-state">{lifecycleMessage}</section>}
-                            <Workbench
-                                mode={view.activeDetailTab}
-                                onModeChange={handleTabChange}
-                                header={workbenchHeader}
-                                overview={detailContent('overview')}
-                                preview={(
-                                    <InstancePreview
-                                        instance={selectedInstance}
-                                        data={data}
-                                    />
-                                )}
-                                logs={detailContent('logs')}
-                                settings={detailContent('settings')}
+                                    activeTab={view.activeDetailTab}
+                                    activityOpen={!view.activityDockCollapsed}
+                                    onSelectInstances={() => handleTabChange('overview')}
+                                    onSelectPreview={() => handleTabChange('preview')}
+                                    onSelectActivity={handleActivityToggle}
+                                    onToggleSidebar={handleSidebarToggle}
+                                />
+                                <div id="manager-sidebar-list" className="manager-sidebar-list">
+                                    <InstanceNavigator
+                                        active={selectedInstance}
+                                        hiddenCount={instances.filter(instance => instance.hidden).length}
+                                        collapsed={view.sidebarCollapsed}
+                                    >
+                                        {renderInstanceListContent()}
+                                    </InstanceNavigator>
+                                </div>
+                            </>
+                        )}
+                        workbench={(
+                            <>
+                                {lifecycleMessage && <section className="state lifecycle-state">{lifecycleMessage}</section>}
+                                <Workbench
+                                    mode={view.activeDetailTab}
+                                    onModeChange={handleTabChange}
+                                    header={workbenchHeader}
+                                    overview={detailContent('overview')}
+                                    preview={(
+                                        <InstancePreview
+                                            instance={selectedInstance}
+                                            data={data}
+                                        />
+                                    )}
+                                    logs={detailContent('logs')}
+                                    settings={detailContent('settings')}
+                                />
+                            </>
+                        )}
+                        inspector={(
+                            <ActivityDock
+                                collapsed={view.activityDockCollapsed}
+                                height={view.activityDockHeight}
+                                loading={loading}
+                                error={error}
+                                lifecycleMessage={lifecycleMessage}
+                                selectedInstance={selectedInstance}
+                                registryMessage={registry.error || managerEvents.error}
+                                events={managerEvents.events}
+                                onToggle={handleActivityToggle}
+                                onHeightChange={handleActivityHeight}
                             />
-                        </>
-                    )}
-                    inspector={(
-                        <ActivityDock
-                            collapsed={view.activityDockCollapsed}
-                            height={view.activityDockHeight}
-                            loading={loading}
-                            error={error}
-                            lifecycleMessage={lifecycleMessage}
-                            selectedInstance={selectedInstance}
-                            registryMessage={registry.error || managerEvents.error}
-                            events={managerEvents.events}
-                            onToggle={handleActivityToggle}
-                            onHeightChange={handleActivityHeight}
-                        />
-                    )}
-                    mobileNav={(
-                        <MobileNav
-                            activeTab={view.activeDetailTab}
-                            onOpenInstances={() => view.setDrawerOpen(true)}
-                            onSelectTab={handleTabChange}
-                            onToggleActivity={activityUnread.openAndMarkSeen}
-                        />
-                    )}
-                    drawer={(
-                        <InstanceDrawer
-                            open={view.drawerOpen}
-                            profileFilters={profileChipStrip(profiles)}
-                            onClose={() => view.setDrawerOpen(false)}
-                        >
-                            {renderInstanceListContent()}
-                        </InstanceDrawer>
-                    )}
-                />
-            )}
-            activityHeight={view.activityDockCollapsed ? 48 : view.activityDockHeight}
-        />
-        <CommandPalette
-            open={palette.open}
-            onClose={palette.close}
-            instances={instances}
-            getLabel={instanceLabel}
-            onSelectInstance={handleSelectInstance}
-            theme={theme.theme}
-            onCycleTheme={cycleTheme}
-            onRefresh={() => void load()}
-            onToggleHidden={() => {
-                const next = !showHidden;
-                setShowHidden(next);
-                void load(next);
-            }}
-            showHidden={showHidden}
-            onOpenSelected={openSelectedInBrowser}
-            selectedInstance={selectedInstance}
-        />
+                        )}
+                        mobileNav={(
+                            <MobileNav
+                                activeTab={view.activeDetailTab}
+                                onOpenInstances={() => view.setDrawerOpen(true)}
+                                onSelectTab={handleTabChange}
+                                onToggleActivity={activityUnread.openAndMarkSeen}
+                            />
+                        )}
+                        drawer={(
+                            <InstanceDrawer
+                                open={view.drawerOpen}
+                                profileFilters={profileChipStrip(profiles)}
+                                onClose={() => view.setDrawerOpen(false)}
+                            >
+                                {renderInstanceListContent()}
+                            </InstanceDrawer>
+                        )}
+                    />
+                )}
+                activityHeight={view.activityDockCollapsed ? 48 : view.activityDockHeight}
+            />
+            <CommandPalette
+                open={palette.open}
+                onClose={palette.close}
+                instances={instances}
+                getLabel={instanceLabel}
+                onSelectInstance={handleSelectInstance}
+                theme={theme.theme}
+                onCycleTheme={cycleTheme}
+                onRefresh={() => void load()}
+                onToggleHidden={() => {
+                    const next = !showHidden;
+                    setShowHidden(next);
+                    void load(next);
+                }}
+                showHidden={showHidden}
+                onOpenSelected={openSelectedInBrowser}
+                selectedInstance={selectedInstance}
+            />
         </>
     );
 }

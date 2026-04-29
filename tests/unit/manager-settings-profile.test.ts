@@ -6,6 +6,7 @@
 // /api/settings PUT endpoint.
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 import { createDirtyStore } from '../../public/manager/src/settings/dirty-store';
@@ -87,4 +88,19 @@ test('SaveBar dirty signal: not dirty until first edit', () => {
     assert.equal(store.isDirty(), false, 'no-op edit should not mark dirty');
     store.set('cli', { value: 'codex', original: 'claude', valid: true });
     assert.equal(store.isDirty(), true);
+});
+
+test('Profile no longer owns active CLI or working directory controls', () => {
+    const profile = readFileSync('public/manager/src/settings/pages/Profile.tsx', 'utf8');
+    const agent = readFileSync('public/manager/src/settings/pages/Agent.tsx', 'utf8');
+    const runtimeHeader = readFileSync(
+        'public/manager/src/settings/pages/components/agent/RuntimeHeader.tsx',
+        'utf8',
+    );
+
+    assert.equal(profile.includes('profile-cli'), false);
+    assert.equal(profile.includes('profile-workingDir'), false);
+    assert.ok(agent.includes('RuntimeHeader'), 'Agent page renders the runtime header');
+    assert.ok(runtimeHeader.includes('agent-cli'), 'Agent runtime header owns active CLI');
+    assert.ok(runtimeHeader.includes('agent-workingDir'), 'Agent runtime header owns working directory');
 });
