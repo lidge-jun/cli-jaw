@@ -227,6 +227,32 @@ test('lifecycle stopAll ignores external online instances', async (t) => {
 
     assert.equal(row.lifecycle?.owner, 'external');
     assert.deepEqual(await manager.stopAll(), []);
+    assert.deepEqual(manager.processControlState().managed, []);
+});
+
+test('lifecycle process control inventory lists only dashboard-managed entries', async (t) => {
+    const { dir, cleanup } = setupTmpStorage();
+    t.after(cleanup);
+    const manager = new DashboardLifecycleManager({
+        managerPort: MANAGER_PORT,
+        from: 3457,
+        count: 50,
+        jawPath: '/usr/local/bin/jaw',
+        homeRoot: dir,
+        storageRoot: dir,
+        processVerify: { isPortOccupied: async () => false },
+        spawnImpl: (() => new FakeChild()) as never,
+    });
+
+    assert.equal((await manager.start(3457)).ok, true);
+
+    const state = manager.processControlState();
+    assert.equal(state.managed.length, 1);
+    assert.equal(state.managed[0]?.port, 3457);
+    assert.equal(state.managed[0]?.proof, 'child');
+    assert.equal(state.managed[0]?.canStop, true);
+    assert.equal(state.managed[0]?.canForceRelease, false);
+    assert.equal(state.unsupported.forceRelease, true);
 });
 
 test('lifecycle start reports immediate child process failures', async (t) => {

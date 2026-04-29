@@ -6,6 +6,7 @@ import type {
     DashboardLifecycleAction,
     DashboardLifecycleCapability,
     DashboardLifecycleResult,
+    DashboardProcessControlState,
     DashboardScanResult,
 } from './types.js';
 import {
@@ -172,6 +173,22 @@ export class DashboardLifecycleManager {
             results.push(await this.stop(port));
         }
         return results;
+    }
+
+    processControlState(): DashboardProcessControlState {
+        const managed = [...this.registry.values()]
+            .filter(entry => !entry.exited)
+            .map(entry => ({
+                port: entry.port, pid: entry.pid || null, home: entry.home,
+                proof: entry.mode === 'attached' ? 'child' as const : 'registry' as const,
+                canStop: true, canForceRelease: false,
+                reason: entry.mode === 'attached' ? 'Dashboard-owned child process.' : 'Recovered from dashboard lifecycle registry.',
+            }))
+            .sort((a, b) => a.port - b.port);
+        return {
+            managed,
+            unsupported: { dashboardService: true, forceRelease: true, reason: 'Force release is planned but disabled until strict command/home ownership proof is implemented.' },
+        };
     }
 
     private async validatePersistedEntry(entry: PersistedEntry): Promise<boolean> {
