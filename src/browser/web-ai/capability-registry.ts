@@ -1,53 +1,33 @@
-/**
- * PRD32.3 — Oracle Browser Parity Capability Registry
- *
- * Single source of truth for what the cli-jaw web-ai layer claims about each
- * Oracle browser capability. Every entry must be either implemented, planned,
- * fail-closed, or out-of-scope. The registry is fail-closed by default: any
- * lookup of an unknown capability returns `unknown` and callers must reject
- * before any browser mutation.
- */
+import type {
+    CapabilityEntry,
+    CapabilityFamily,
+    CapabilitySchemaRow,
+    FrontendObservationStatus,
+    WebAiVendorScope,
+} from './capability-types.js';
+import {
+    CHATGPT_ATTACHMENT_OBSERVATION,
+    CHATGPT_IMAGE_GENERATION_OBSERVATION,
+    CHATGPT_MODEL_SELECTOR_OBSERVATION,
+    CHATGPT_WEB_SEARCH_OBSERVATION,
+    GEMINI_DEEP_THINK_OBSERVATION,
+    GEMINI_IMAGE_GENERATION_OBSERVATION,
+    GEMINI_MODEL_PICKER_OBSERVATION,
+} from './capability-observation-presets.js';
+import { OBSERVED_TOOL_CAPABILITY_ENTRIES } from './capability-observed-tool-entries.js';
+import { BrowserCapabilityError } from '../primitives.js';
+export type {
+    CapabilityEntry,
+    CapabilityFamily,
+    CapabilitySchemaRow,
+    CapabilityStatus,
+    FrontendCapabilityObservation,
+    FrontendObservationStatus,
+    MutationRisk,
+    WebAiVendorScope,
+} from './capability-types.js';
+export { validateFreshnessGate, type FreshnessGateRecord } from './capability-freshness.js';
 
-export type WebAiVendorScope = 'chatgpt' | 'gemini' | 'shared';
-
-export type CapabilityStatus =
-    | 'implemented-30_browser'
-    | 'ported-cli-jaw'
-    | 'planned'
-    | 'fail-closed'
-    | 'rejected-until-verified'
-    | 'deferred'
-    | 'out-of-scope'
-    | 'unknown';
-
-export interface CapabilityEntry {
-    /** Stable id, lowercase kebab. */
-    id: string;
-    /** Vendor scope this entry applies to. */
-    vendor: WebAiVendorScope;
-    /** Current status in cli-jaw. */
-    status: CapabilityStatus;
-    /** PRD32.n that owns this capability (or '32.3' for the registry itself). */
-    ownerPrd: string;
-    /** What the public command should currently do. */
-    commandBehavior: string;
-    /** Whether browser mutation is allowed today. */
-    browserMutationAllowed: boolean;
-    /** Stage at which to fail closed when not yet implemented. */
-    failClosedStage?: string;
-    /** Required official docs URLs. */
-    requiredOfficialDocs: string[];
-    /** Whether 30_browser already has this. */
-    browserGate: 'present' | 'partial' | 'absent';
-    /** Whether cli-jaw has ported this. */
-    cliJawPortGate: 'present' | 'partial' | 'absent';
-}
-
-/**
- * Authoritative registry. Order is documentation-meaningful: it mirrors the
- * Oracle 2nd-audit implementation order from PRD32.3. Do not reorder without
- * updating the PRD.
- */
 const REGISTRY: CapabilityEntry[] = [
     {
         id: 'chatgpt-question-envelope',
@@ -59,6 +39,7 @@ const REGISTRY: CapabilityEntry[] = [
         requiredOfficialDocs: ['https://help.openai.com/en/articles/8983675'],
         browserGate: 'present',
         cliJawPortGate: 'present',
+        family: 'tools',
     },
     {
         id: 'chatgpt-active-tab-verification',
@@ -71,6 +52,7 @@ const REGISTRY: CapabilityEntry[] = [
         requiredOfficialDocs: [],
         browserGate: 'present',
         cliJawPortGate: 'present',
+        family: 'sessionReattach',
     },
     {
         id: 'chatgpt-composer-insert',
@@ -82,6 +64,7 @@ const REGISTRY: CapabilityEntry[] = [
         requiredOfficialDocs: ['https://help.openai.com/en/articles/8983675'],
         browserGate: 'present',
         cliJawPortGate: 'present',
+        family: 'tools',
     },
     {
         id: 'chatgpt-send-button',
@@ -93,6 +76,7 @@ const REGISTRY: CapabilityEntry[] = [
         requiredOfficialDocs: [],
         browserGate: 'present',
         cliJawPortGate: 'present',
+        family: 'tools',
     },
     {
         id: 'chatgpt-prompt-commit',
@@ -104,11 +88,12 @@ const REGISTRY: CapabilityEntry[] = [
         requiredOfficialDocs: [],
         browserGate: 'present',
         cliJawPortGate: 'present',
+        family: 'responseCapture',
     },
     {
         id: 'chatgpt-answer-polling',
         vendor: 'chatgpt',
-        status: 'planned',
+        status: 'ported-cli-jaw',
         ownerPrd: '32.4',
         commandBehavior: 'capture only assistant turn after committed baseline',
         browserMutationAllowed: false,
@@ -116,6 +101,7 @@ const REGISTRY: CapabilityEntry[] = [
         requiredOfficialDocs: ['https://help.openai.com/en/articles/8983675'],
         browserGate: 'partial',
         cliJawPortGate: 'partial',
+        family: 'responseCapture',
     },
     {
         id: 'chatgpt-stop-generation',
@@ -127,6 +113,7 @@ const REGISTRY: CapabilityEntry[] = [
         requiredOfficialDocs: [],
         browserGate: 'partial',
         cliJawPortGate: 'partial',
+        family: 'stopGeneration',
     },
     {
         id: 'chatgpt-copy-markdown-fallback',
@@ -139,6 +126,7 @@ const REGISTRY: CapabilityEntry[] = [
         requiredOfficialDocs: [],
         browserGate: 'absent',
         cliJawPortGate: 'absent',
+        family: 'copyOrExport',
     },
     {
         id: 'web-ai-failure-diagnostics',
@@ -150,6 +138,7 @@ const REGISTRY: CapabilityEntry[] = [
         requiredOfficialDocs: [],
         browserGate: 'partial',
         cliJawPortGate: 'partial',
+        family: 'diagnostics',
     },
     {
         id: 'web-ai-session-lifecycle',
@@ -161,57 +150,66 @@ const REGISTRY: CapabilityEntry[] = [
         requiredOfficialDocs: [],
         browserGate: 'partial',
         cliJawPortGate: 'partial',
+        family: 'sessionReattach',
     },
     {
         id: 'chatgpt-attachment-policy',
         vendor: 'chatgpt',
-        status: 'fail-closed',
+        status: 'ported-cli-jaw',
         ownerPrd: '32.7',
-        commandBehavior: 'reject --file before any browser mutation',
-        browserMutationAllowed: false,
+        commandBehavior: 'preflight --file, upload, wait for visible chip, verify sent user turn evidence',
+        browserMutationAllowed: true,
         failClosedStage: 'attachment-preflight',
         requiredOfficialDocs: [
             'https://help.openai.com/en/articles/8983675',
             'https://help.openai.com/en/articles/8555545-file-uploads-with-gpts-and-advanced-data-analysis-in-chatgpt',
         ],
-        browserGate: 'absent',
-        cliJawPortGate: 'absent',
+        browserGate: 'present',
+        cliJawPortGate: 'present',
+        family: 'attachments',
+        observation: CHATGPT_ATTACHMENT_OBSERVATION,
     },
     {
         id: 'chatgpt-file-input',
         vendor: 'chatgpt',
-        status: 'fail-closed',
+        status: 'ported-cli-jaw',
         ownerPrd: '32.7',
-        commandBehavior: 'composer-scoped file input not enabled until 32.7-B',
-        browserMutationAllowed: false,
+        commandBehavior: 'locate composer-scoped file input and set local file',
+        browserMutationAllowed: true,
         failClosedStage: 'attachment-preflight',
         requiredOfficialDocs: [],
-        browserGate: 'absent',
-        cliJawPortGate: 'absent',
+        browserGate: 'present',
+        cliJawPortGate: 'present',
+        family: 'attachments',
+        observation: CHATGPT_ATTACHMENT_OBSERVATION,
     },
     {
         id: 'chatgpt-upload-chip-wait',
         vendor: 'chatgpt',
-        status: 'fail-closed',
+        status: 'ported-cli-jaw',
         ownerPrd: '32.7',
         commandBehavior: 'visible chip + accepted state required',
-        browserMutationAllowed: false,
+        browserMutationAllowed: true,
         failClosedStage: 'attachment-upload',
         requiredOfficialDocs: [],
-        browserGate: 'absent',
-        cliJawPortGate: 'absent',
+        browserGate: 'present',
+        cliJawPortGate: 'present',
+        family: 'attachments',
+        observation: CHATGPT_ATTACHMENT_OBSERVATION,
     },
     {
         id: 'chatgpt-sent-turn-attachment-evidence',
         vendor: 'chatgpt',
-        status: 'fail-closed',
+        status: 'ported-cli-jaw',
         ownerPrd: '32.7',
         commandBehavior: 'sent user-turn must include attachment evidence',
-        browserMutationAllowed: false,
+        browserMutationAllowed: true,
         failClosedStage: 'attachment-upload',
         requiredOfficialDocs: [],
-        browserGate: 'absent',
-        cliJawPortGate: 'absent',
+        browserGate: 'present',
+        cliJawPortGate: 'present',
+        family: 'attachments',
+        observation: CHATGPT_ATTACHMENT_OBSERVATION,
     },
     {
         id: 'web-ai-model-selection',
@@ -223,18 +221,101 @@ const REGISTRY: CapabilityEntry[] = [
         requiredOfficialDocs: [],
         browserGate: 'absent',
         cliJawPortGate: 'absent',
+        family: 'modelSelection',
+        observation: {
+            status: 'unsupported',
+            source: 'planning',
+            selectorCandidates: [],
+            textCandidates: [],
+            activationPath: [],
+            activeStateSignals: [],
+            mutationRisk: 'medium',
+            notes: ['Generic cross-provider model selection is rejected; model selection must be provider-specific.'],
+        },
+    },
+    {
+        id: 'chatgpt-model-selection',
+        vendor: 'chatgpt',
+        status: 'ported-cli-jaw',
+        ownerPrd: '32.8/32.9',
+        commandBehavior: 'support --model instant|thinking|pro via ChatGPT model switcher and aria-checked verification',
+        browserMutationAllowed: true,
+        failClosedStage: 'provider-select-model',
+        requiredOfficialDocs: [],
+        browserGate: 'present',
+        cliJawPortGate: 'present',
+        family: 'modelSelection',
+        observation: CHATGPT_MODEL_SELECTOR_OBSERVATION,
+    },
+    {
+        id: 'chatgpt-web-search-toggle',
+        vendor: 'chatgpt',
+        status: 'planned',
+        ownerPrd: '260429-phase-01/02',
+        commandBehavior: 'schema-ready only; runtime activation remains fail-closed until a dedicated --web-search option is wired',
+        browserMutationAllowed: false,
+        failClosedStage: 'capability-preflight',
+        requiredOfficialDocs: ['https://help.openai.com/en/'],
+        browserGate: 'present',
+        cliJawPortGate: 'absent',
+        family: 'webSearch',
+        observation: CHATGPT_WEB_SEARCH_OBSERVATION,
+    },
+    {
+        id: 'chatgpt-image-generation-tool',
+        vendor: 'chatgpt',
+        status: 'planned',
+        ownerPrd: '260429-phase-01/02',
+        commandBehavior: 'schema-ready only; runtime activation and output artifact capture remain fail-closed',
+        browserMutationAllowed: false,
+        failClosedStage: 'capability-preflight',
+        requiredOfficialDocs: ['https://help.openai.com/en/'],
+        browserGate: 'present',
+        cliJawPortGate: 'absent',
+        family: 'imageGeneration',
+        observation: CHATGPT_IMAGE_GENERATION_OBSERVATION,
     },
     {
         id: 'gemini-deep-think',
         vendor: 'gemini',
-        status: 'fail-closed',
+        status: 'ported-cli-jaw',
         ownerPrd: '32.8',
-        commandBehavior: 'contract-only; mutation rejects before browser action',
-        browserMutationAllowed: false,
+        commandBehavior: 'Gemini live adapter opens a fresh chat, selects Tools > Deep think, verifies the Deep think chip, then sends with Gemini composer',
+        browserMutationAllowed: true,
         failClosedStage: 'provider-select-mode',
         requiredOfficialDocs: ['https://support.google.com/gemini/answer/16345172'],
-        browserGate: 'absent',
+        browserGate: 'present',
+        cliJawPortGate: 'present',
+        family: 'deepThink',
+        observation: GEMINI_DEEP_THINK_OBSERVATION,
+    },
+    {
+        id: 'gemini-model-picker',
+        vendor: 'gemini',
+        status: 'planned',
+        ownerPrd: '260429-phase-01/02',
+        commandBehavior: 'schema-ready only; runtime mode switching remains fail-closed until helper + smoke are added',
+        browserMutationAllowed: false,
+        failClosedStage: 'capability-preflight',
+        requiredOfficialDocs: ['https://support.google.com/gemini/'],
+        browserGate: 'present',
         cliJawPortGate: 'absent',
+        family: 'modelSelection',
+        observation: GEMINI_MODEL_PICKER_OBSERVATION,
+    },
+    {
+        id: 'gemini-image-generation-tool',
+        vendor: 'gemini',
+        status: 'planned',
+        ownerPrd: '260429-phase-01/02',
+        commandBehavior: 'schema-ready only; Gemini Tools > Create image observed, output capture remains fail-closed',
+        browserMutationAllowed: false,
+        failClosedStage: 'capability-preflight',
+        requiredOfficialDocs: ['https://support.google.com/gemini/'],
+        browserGate: 'present',
+        cliJawPortGate: 'absent',
+        family: 'imageGeneration',
+        observation: GEMINI_IMAGE_GENERATION_OBSERVATION,
     },
     {
         id: 'gemini-file-context',
@@ -337,6 +418,7 @@ const REGISTRY: CapabilityEntry[] = [
         browserGate: 'absent',
         cliJawPortGate: 'absent',
     },
+    ...OBSERVED_TOOL_CAPABILITY_ENTRIES,
 ];
 
 const UNKNOWN: CapabilityEntry = {
@@ -356,6 +438,25 @@ export function listCapabilities(): readonly CapabilityEntry[] {
     return REGISTRY;
 }
 
+export function listCapabilitySchemas(input: {
+    vendor?: WebAiVendorScope;
+    family?: CapabilityFamily;
+    frontendStatus?: FrontendObservationStatus;
+} = {}): CapabilitySchemaRow[] {
+    return REGISTRY
+        .filter((entry) => !input.vendor || entry.vendor === input.vendor || entry.vendor === 'shared')
+        .filter((entry) => !input.family || entry.family === input.family)
+        .filter((entry) => !input.frontendStatus || entry.observation?.status === input.frontendStatus)
+        .map(toCapabilitySchemaRow);
+}
+
+export function listFrontendObservedCapabilities(vendor?: WebAiVendorScope): CapabilityEntry[] {
+    return REGISTRY
+        .filter((entry) => !vendor || entry.vendor === vendor || entry.vendor === 'shared')
+        .filter((entry) => Boolean(entry.observation))
+        .map((entry) => ({ ...entry, observation: entry.observation ? { ...entry.observation } : undefined }));
+}
+
 export function lookupCapability(id: string): CapabilityEntry {
     const found = REGISTRY.find(entry => entry.id === id);
     return found ? { ...found } : { ...UNKNOWN, id };
@@ -373,52 +474,26 @@ export function requireCapabilityOrFailClosed(id: string): CapabilityEntry {
     const reason = entry.status === 'unknown'
         ? `unknown capability "${id}"; fail closed`
         : `capability "${id}" is ${entry.status} (PRD${entry.ownerPrd}); not enabled`;
-    const error = new Error(`${reason}. stage=${stage}`);
-    (error as any).capabilityId = id;
-    (error as any).stage = stage;
+    const error = new BrowserCapabilityError(`${reason}. stage=${stage}`, {
+        capabilityId: id,
+        stage,
+        mutationAllowed: entry.browserMutationAllowed,
+    });
     (error as any).ownerPrd = entry.ownerPrd;
     throw error;
 }
 
-export interface FreshnessGateRecord {
-    retrievalDate: string;
-    vendorDocsSearched: string[];
-    officialSourcesUsed: string[];
-    visibleUpdatedDates: Record<string, string>;
-    featureChangesSincePriorPrd: string[];
-    contradictionsOrUnstableLimits: string[];
-    uiAuthoritativeForPlanLimits: boolean;
-    implementationImpact: string[];
-    testsUpdatedBecauseOfDocs: string[];
-}
-
-/**
- * Validate a freshness gate record. Throws when required fields are missing.
- * Used by PRD-touching code paths to make sure no implementation lands without
- * an official-docs review trail.
- */
-export function validateFreshnessGate(record: Partial<FreshnessGateRecord>): FreshnessGateRecord {
-    const required: (keyof FreshnessGateRecord)[] = [
-        'retrievalDate',
-        'vendorDocsSearched',
-        'officialSourcesUsed',
-        'visibleUpdatedDates',
-        'featureChangesSincePriorPrd',
-        'contradictionsOrUnstableLimits',
-        'uiAuthoritativeForPlanLimits',
-        'implementationImpact',
-        'testsUpdatedBecauseOfDocs',
-    ];
-    for (const key of required) {
-        if (record[key] === undefined || record[key] === null) {
-            throw new Error(`freshness gate missing field: ${String(key)}`);
-        }
-    }
-    if (!Array.isArray(record.officialSourcesUsed) || record.officialSourcesUsed.length === 0) {
-        throw new Error('freshness gate requires at least one official source');
-    }
-    if (!record.uiAuthoritativeForPlanLimits) {
-        throw new Error('freshness gate requires uiAuthoritativeForPlanLimits=true');
-    }
-    return record as FreshnessGateRecord;
+function toCapabilitySchemaRow(entry: CapabilityEntry): CapabilitySchemaRow {
+    const observation = entry.observation;
+    return {
+        providerId: entry.vendor,
+        capabilityId: entry.id,
+        family: entry.family || 'unclassified',
+        status: entry.status,
+        frontendStatus: observation?.status || 'not-observed',
+        mutationAllowed: entry.browserMutationAllowed,
+        activationPath: observation?.activationPath || [],
+        activeStateSignals: observation?.activeStateSignals || [],
+        failureStage: entry.failClosedStage || 'status',
+    };
 }

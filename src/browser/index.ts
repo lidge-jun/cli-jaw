@@ -5,6 +5,7 @@ export {
     markBrowserStateChanged, getBrowserStateVersion,
 } from './connection.js';
 export type { BrowserTabInfo, ActiveTabResult } from './connection.js';
+export * from './primitives.js';
 
 export {
     snapshot, screenshot, click, type, press,

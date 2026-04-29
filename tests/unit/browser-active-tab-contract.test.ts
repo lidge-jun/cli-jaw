@@ -30,9 +30,21 @@ test('BAT-002b: active-tab resolution does not use getActivePage array-order fal
     assert.doesNotMatch(block, /pages\.length - 1/);
 });
 
+test('BAT-002c: getActivePage resolves verified target before array-order fallback', () => {
+    const start = connectionSrc.indexOf('export async function getActivePage');
+    const end = connectionSrc.indexOf('async function readCdpPageTargets', start);
+    const block = connectionSrc.slice(start, end);
+    assert.match(block, /verifiedActiveTargetId/);
+    assert.match(block, /tabs\.find\(\(t\) => t\.id === verifiedActiveTargetId\)/);
+    assert.ok(
+        block.indexOf('verifiedActiveTargetId') < block.indexOf('pages[pages.length - 1]'),
+        'verified target lookup must happen before array-order fallback',
+    );
+});
+
 test('BAT-003: tab-switch verifies target and invalidates browser state', () => {
     assert.match(connectionSrc, /export async function switchTab/);
-    assert.match(connectionSrc, /bringToFront\(\)/);
+    assert.match(connectionSrc, /Target\.activateTarget/);
     assert.match(connectionSrc, /markBrowserStateChanged\(\)/);
     assert.match(routesSrc, /\/api\/browser\/tab-switch', requireAuth/);
 });

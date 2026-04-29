@@ -1,4 +1,5 @@
 import type { PromptCommitBaseline, PromptCommitResult, PromptSubmitResult, VendorEditorAdapterOptions } from './vendor-editor-contract.js';
+import { findVisibleCandidate } from '../primitives.js';
 
 declare const document: any;
 declare const window: any;
@@ -13,7 +14,8 @@ export const INPUT_SELECTORS = [
     'textarea[data-id="prompt-textarea"]',
     'textarea[placeholder*="Send a message"]',
     'textarea[aria-label="Message ChatGPT"]',
-    'textarea:not([disabled])',
+    'main textarea:not([disabled])',
+    'form textarea:not([disabled])',
     'textarea[name="prompt-textarea"]',
     '#prompt-textarea',
     '.ProseMirror',
@@ -24,9 +26,9 @@ export const INPUT_SELECTORS = [
 export const SEND_BUTTON_SELECTORS = [
     'button[data-testid="send-button"]',
     'button[data-testid*="composer-send"]',
-    'form button[type="submit"]',
     'button[type="submit"][data-testid*="send"]',
-    'button[aria-label*="Send"]',
+    'button[aria-label*="Send prompt" i]',
+    'button[aria-label*="Send message" i]',
 ] as const;
 
 export const STOP_BUTTON_SELECTOR = '[data-testid="stop-button"]';
@@ -58,21 +60,8 @@ type ComposerCandidate = {
 };
 
 export async function findComposerCandidate(page: any): Promise<ComposerCandidate> {
-    let firstCandidate: ComposerCandidate | null = null;
-    for (const selector of INPUT_SELECTORS) {
-        const baseLocator = page.locator(selector);
-        const count = await baseLocator.count().catch(() => 0);
-        if (!count) continue;
-        for (let index = 0; index < count; index += 1) {
-            const locator = typeof baseLocator.nth === 'function' ? baseLocator.nth(index) : baseLocator.first();
-            const candidate = { selector, locator };
-            firstCandidate ??= candidate;
-            if (await isLocatorVisible(locator)) {
-                return candidate;
-            }
-        }
-    }
-    if (firstCandidate) return firstCandidate;
+    const candidate = await findVisibleCandidate(page, INPUT_SELECTORS, { allowFirstCandidateFallback: true });
+    if (candidate) return { selector: candidate.selector, locator: candidate.locator };
     throw new Error(`ChatGPT composer not found. Tried: ${INPUT_SELECTORS.join(', ')}`);
 }
 
@@ -170,23 +159,9 @@ async function insertTextLikeOracle(page: any, text: string, options: VendorEdit
     await page.keyboard.insertText(text);
 }
 
-async function isLocatorVisible(locator: any): Promise<boolean> {
-    const waited = await locator.waitFor?.({ state: 'visible', timeout: 500 }).then(() => true).catch(() => false);
-    if (waited) return true;
-    const box = await locator.boundingBox?.().catch(() => null);
-    if (box && box.width > 0 && box.height > 0) return true;
-    return Boolean(await locator.evaluate?.((node: any) => {
-        if (!node || typeof node.getBoundingClientRect !== 'function') return false;
-        const rect = node.getBoundingClientRect();
-        if (rect.width <= 0 || rect.height <= 0) return false;
-        const style = window.getComputedStyle?.(node);
-        return !style || (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0');
-    }).catch(() => false));
-}
-
 async function writeComposerFallback(page: any, locator: any, text: string): Promise<void> {
     if (typeof page.evaluate === 'function') {
-        const wrote = await page.evaluate((selectors: readonly string[], value: string) => {
+        const wrote = await page.evaluate(({ selectors, value }: { selectors: readonly string[]; value: string }) => {
             const write = (node: any): boolean => {
                 if (!node) return false;
                 if ('value' in node) {
@@ -207,7 +182,7 @@ async function writeComposerFallback(page: any, locator: any, text: string): Pro
                 wroteAny = write(node) || wroteAny;
             }
             return wroteAny;
-        }, INPUT_SELECTORS, text).catch(() => false);
+        }, { selectors: INPUT_SELECTORS, value: text }).catch(() => false);
         if (wrote) return;
     }
     await locator.evaluate((node: any, value: string) => {
@@ -256,7 +231,7 @@ async function readComposerState(page: any, fallbackLocator?: any): Promise<Comp
 async function clickEnabledSendButton(page: any): Promise<boolean> {
     const deadline = Date.now() + 8_000;
     while (Date.now() < deadline) {
-        const result = await page.evaluate((inputSelectors: readonly string[], sendSelectors: readonly string[]) => {
+        const result = await page.evaluate(({ inputSelectors, sendSelectors }: { inputSelectors: readonly string[]; sendSelectors: readonly string[] }) => {
             const dispatchClickSequence = (target: any): boolean => {
                 if (!target || !(target instanceof EventTarget)) return false;
                 for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
@@ -303,7 +278,7 @@ async function clickEnabledSendButton(page: any): Promise<boolean> {
                 return 'clicked';
             }
             return candidates.length > 0 ? 'disabled' : 'missing';
-        }, INPUT_SELECTORS, SEND_BUTTON_SELECTORS).catch(() => 'missing');
+        }, { inputSelectors: INPUT_SELECTORS, sendSelectors: SEND_BUTTON_SELECTORS }).catch(() => 'missing');
         if (result === 'clicked') return true;
         if (result === 'missing') return false;
         await page.waitForTimeout?.(100);

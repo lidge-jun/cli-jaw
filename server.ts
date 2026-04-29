@@ -665,6 +665,14 @@ server.listen(PORT, bindHost, async () => {
         console.log(`  Agents: seeded ${seeded.seeded} default employees (CLI: ${seeded.cli})`);
     }
     startHeartbeat();
+    try {
+        const resumed = browser.webAi.resumeStoredWatchers(browser.getActivePort());
+        if (resumed.watchers?.length) {
+            log.info(`  WebAI: resumed ${resumed.watchers.length} stored watcher(s)`);
+        }
+    } catch (e: unknown) {
+        log.warn(`  WebAI: watcher resume skipped (${(e as Error).message})`);
+    }
 
     // ─── Migrate Korean agent names → English ────────
     const NAME_MAP = { '프런트': 'Frontend', '프론트': 'Frontend', '백엔드': 'Backend', '데이터': 'Data', '문서': 'Docs', '독스': 'Docs' };

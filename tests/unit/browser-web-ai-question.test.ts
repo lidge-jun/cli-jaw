@@ -24,9 +24,17 @@ test('BWAQ-002: rejects empty and over-budget prompts', () => {
     assert.throws(() => renderQuestionEnvelope({ vendor: 'chatgpt', prompt: 'x'.repeat(50001) }), /inline prompt too large/);
 });
 
-test('BWAQ-003: rejects unsupported vendors and upload policy', () => {
-    assert.throws(() => normalizeEnvelope({ vendor: 'gemini', prompt: 'hello' }), /unsupported vendor/);
-    assert.throws(() => normalizeEnvelope({ vendor: 'chatgpt', prompt: 'hello', attachmentPolicy: 'future-upload-disabled' }), /future scope/);
+test('BWAQ-003: supports Gemini/upload and rejects unknown vendors/policies', () => {
+    assert.equal(normalizeEnvelope({ vendor: 'gemini', prompt: 'hello' }).vendor, 'gemini');
+    assert.equal(normalizeEnvelope({ vendor: 'chatgpt', prompt: 'hello', attachmentPolicy: 'upload' }).attachmentPolicy, 'upload');
+    assert.throws(() => normalizeEnvelope({ vendor: 'claude', prompt: 'hello' }), /unsupported vendor/);
+    assert.throws(() => normalizeEnvelope({ vendor: 'chatgpt', prompt: 'hello', attachmentPolicy: 'drive' }), /unsupported attachment policy/);
+});
+
+test('BWAQ-003b: preserves optional live runtime hints outside rendered prompt', () => {
+    const envelope = normalizeEnvelope({ vendor: 'chatgpt', prompt: 'hello', attachmentPolicy: 'inline-only', model: 'pro' });
+    assert.equal(envelope.vendor, 'chatgpt');
+    assert.equal(envelope.prompt, 'hello');
 });
 
 test('BWAQ-004: prompt hash does not expose raw prompt text', () => {

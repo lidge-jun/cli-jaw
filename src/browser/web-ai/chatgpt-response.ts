@@ -8,6 +8,9 @@
  */
 
 import type { ResponseCaptureResult } from './provider-adapter.js';
+import { ActionTranscript, captureTextBaseline } from '../primitives.js';
+
+declare const document: any;
 
 export const ASSISTANT_TURN_SELECTORS = [
     '[data-message-author-role="assistant"]',
@@ -36,7 +39,13 @@ const PLACEHOLDER_PATTERNS: RegExp[] = [
     /^pro thinking/i,
     /^finalizing answer$/i,
     /^thinking…?$/i,
+    /^instant$/i,
+    /^thinking$/i,
+    /^pro$/i,
+    /^configure\.{0,3}$/i,
     /^searching the web…?$/i,
+    /^reading documents?$/i,
+    /^analyzing files?$/i,
     /^\s*$/,
 ];
 
@@ -81,16 +90,7 @@ export interface CaptureOptions {
 }
 
 export async function readAssistantSnapshot(page: any, minTurnIndex: number, promptText = ''): Promise<AssistantSnapshot> {
-    const allTexts: string[] = [];
-    for (const selector of ASSISTANT_TURN_SELECTORS) {
-        const locators = await safeAll(page, selector);
-        for (const loc of locators) {
-            const raw = await loc.innerText().catch(() => '');
-            const normalized = normalizeAssistantText(raw);
-            if (normalized) allTexts.push(normalized);
-        }
-        if (allTexts.length > 0) break;
-    }
+    const allTexts = await readAssistantTexts(page);
     const streaming = await isStreaming(page);
     const canvasOpened = await isCanvasOpened(page);
     const newTexts = allTexts.slice(minTurnIndex);
@@ -103,9 +103,25 @@ export async function readAssistantSnapshot(page: any, minTurnIndex: number, pro
     };
 }
 
+async function readAssistantTexts(page: any): Promise<string[]> {
+    const baseline = await captureTextBaseline(page, ASSISTANT_TURN_SELECTORS);
+    if (baseline.texts.length) return baseline.texts.map(normalizeAssistantText).filter(Boolean);
+
+    const allTexts: string[] = [];
+    for (const selector of ASSISTANT_TURN_SELECTORS) {
+        const locators = await safeAll(page, selector);
+        for (const loc of locators) {
+            const raw = await loc.innerText().catch(() => '');
+            const normalized = normalizeAssistantText(raw);
+            if (normalized) allTexts.push(normalized);
+        }
+        if (allTexts.length > 0) break;
+    }
+    return allTexts;
+}
+
 export async function captureAssistantResponse(page: any, options: CaptureOptions): Promise<ResponseCaptureResult> {
-    const usedFallbacks: string[] = [];
-    const warnings: string[] = [];
+    const transcript = new ActionTranscript();
     const stableWindowMs = Math.max(250, options.stableWindowMs ?? 1500);
     const pollIntervalMs = Math.max(100, options.pollIntervalMs ?? 500);
     const deadline = Date.now() + Math.max(1000, options.timeoutMs);
@@ -119,14 +135,14 @@ export async function captureAssistantResponse(page: any, options: CaptureOption
                 ok: true,
                 canvas: { kind: 'opened', reason: 'ChatGPT routed answer into Canvas' },
                 answerText: snap.latestNewText,
-                usedFallbacks,
-                warnings,
+                usedFallbacks: transcript.usedFallbacks,
+                warnings: transcript.warnings,
             };
         }
         if (!snap.streaming && snap.latestNewText) {
             if (snap.latestNewText === stableText) {
                 if (stableSince !== null && Date.now() - stableSince >= stableWindowMs) {
-                    return { ok: true, answerText: snap.latestNewText, usedFallbacks, warnings };
+                    return { ok: true, answerText: snap.latestNewText, usedFallbacks: transcript.usedFallbacks, warnings: transcript.warnings };
                 }
             } else {
                 stableText = snap.latestNewText;
@@ -142,12 +158,12 @@ export async function captureAssistantResponse(page: any, options: CaptureOption
     if (options.allowCopyMarkdownFallback) {
         const fallbackText = await tryCopyMarkdownFallback(page);
         if (fallbackText) {
-            usedFallbacks.push('copy-markdown');
-            return { ok: true, answerText: fallbackText, usedFallbacks, warnings };
+            transcript.fallback('copy-markdown');
+            return { ok: true, answerText: fallbackText, usedFallbacks: transcript.usedFallbacks, warnings: transcript.warnings };
         }
-        warnings.push('copy-markdown-fallback-unavailable');
+        transcript.warn('copy-markdown-fallback-unavailable');
     }
-    return { ok: false, answerText: stableText, usedFallbacks, warnings };
+    return { ok: false, answerText: stableText, usedFallbacks: transcript.usedFallbacks, warnings: transcript.warnings };
 }
 
 function pickLatestRealAnswer(texts: string[], promptText: string): string | undefined {

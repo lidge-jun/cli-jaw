@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const composerSrc = fs.readFileSync(join(root, 'src/browser/web-ai/chatgpt-composer.ts'), 'utf8');
 const chatgptSrc = fs.readFileSync(join(root, 'src/browser/web-ai/chatgpt.ts'), 'utf8');
+const modelSrc = fs.readFileSync(join(root, 'src/browser/web-ai/chatgpt-model.ts'), 'utf8');
 
 test('BWCOMP-001: ChatGPT composer uses user-input insertion path', () => {
     assert.match(chatgptSrc, /Input\.insertText/);
@@ -33,9 +34,8 @@ test('BWCOMP-003: composer verification reads multiple paths', () => {
 });
 
 test('BWCOMP-004: composer selection prefers visible candidates like Oracle', () => {
-    assert.match(composerSrc, /isLocatorVisible/);
-    assert.match(composerSrc, /firstCandidate/);
-    assert.match(composerSrc, /baseLocator\.nth/);
+    assert.match(composerSrc, /findVisibleCandidate/);
+    assert.match(composerSrc, /allowFirstCandidateFallback: true/);
 });
 
 test('BWCOMP-005: prompt commit verification checks post-send conversation state', () => {
@@ -45,8 +45,18 @@ test('BWCOMP-005: prompt commit verification checks post-send conversation state
     assert.match(composerSrc, /composerCleared/);
 });
 
-test('BWCOMP-006: file upload remains explicit fail-closed until PRD32.7 Phase B', () => {
-    const cliSrc = fs.readFileSync(join(root, 'bin/commands/browser.ts'), 'utf8');
-    assert.match(cliSrc, /--file is fail-closed/);
-    assert.match(cliSrc, /Use --inline-only/);
+test('BWCOMP-006: file upload Phase B live runtime is exported', () => {
+    const attSrc = fs.readFileSync(join(root, 'src/browser/web-ai/chatgpt-attachments.ts'), 'utf8');
+    assert.match(attSrc, /attachLocalFileLive/);
+    assert.match(attSrc, /waitForAttachmentAcceptedLive/);
+    assert.match(attSrc, /verifySentTurnAttachmentLive/);
+});
+
+test('BWCOMP-007: ChatGPT model selector uses observed radio menu fallbacks', () => {
+    assert.match(modelSrc, /model-switcher-dropdown-button/);
+    assert.match(modelSrc, /model-switcher-gpt-5-3/);
+    assert.match(modelSrc, /model-switcher-gpt-5-5-thinking/);
+    assert.match(modelSrc, /model-switcher-gpt-5-5-pro/);
+    assert.match(modelSrc, /aria-checked="true"/);
+    assert.match(chatgptSrc, /selectChatGptModel/);
 });

@@ -16,6 +16,6 @@ test('BWVEC-002: Gemini response constraints do not reuse ChatGPT conversation-t
 
 test('BWVEC-003: Deep Think remains future scope but documented as adapter constraints', () => {
     assert.equal(GEMINI_DEEP_THINK_CONSTRAINTS.modeSelectors.includes('button.toolbox-drawer-button'), true);
-    assert.equal(GEMINI_DEEP_THINK_CONSTRAINTS.modeSelectors.includes('[role="menuitemcheckbox"]'), true);
-    assert.equal(GEMINI_DEEP_THINK_CONSTRAINTS.modeSelectors.includes('button[aria-label*="Deselect Deep Think"]'), true);
+    assert.equal(GEMINI_DEEP_THINK_CONSTRAINTS.modeSelectors.includes('[role="menuitemcheckbox"]:has-text("Deep think")'), true);
+    assert.equal(GEMINI_DEEP_THINK_CONSTRAINTS.modeSelectors.includes('button[aria-label*="Deselect Deep think"]'), true);
 });

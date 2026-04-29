@@ -221,6 +221,16 @@ export async function connectCdp(port = getActivePort(), retries = 3) {
 export async function getActivePage(port = getActivePort()) {
     const { browser } = await connectCdp(port);
     const pages = browser.contexts().flatMap((c: any) => c.pages());
+    if (verifiedActiveTargetId) {
+        const tabs = await readCdpPageTargets(port).catch(() => []);
+        const tab = tabs.find((t) => t.id === verifiedActiveTargetId);
+        if (tab) {
+            for (const page of pages) {
+                const title = await page.title().catch(() => '');
+                if (page.url() === tab.url && title === (tab.title || '')) return page;
+            }
+        }
+    }
     return pages[pages.length - 1] || null;
 }
 
@@ -273,15 +283,12 @@ export async function switchTab(port = getActivePort(), target: string): Promise
     if (!wanted?.id) return { ok: false, reason: 'not-found' };
 
     const { browser } = await connectCdp(port);
-    const pages = browser.contexts().flatMap((c: any) => c.pages());
-    const matches = [];
-    for (const page of pages) {
-        const title = await page.title().catch(() => '');
-        if (page.url() === wanted.url && title === (wanted.title || '')) matches.push(page);
+    const cdp = await browser.newBrowserCDPSession();
+    try {
+        await cdp.send('Target.activateTarget', { targetId: wanted.id });
+    } finally {
+        await cdp.detach().catch(() => undefined);
     }
-    if (matches.length !== 1) return { ok: false, reason: matches.length ? 'ambiguous' : 'not-found' };
-
-    await matches[0].bringToFront();
     verifiedActiveTargetId = wanted.id;
     markBrowserStateChanged();
     const active = await getActiveTab(port);

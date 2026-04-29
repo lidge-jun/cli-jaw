@@ -1,6 +1,12 @@
 import { getActivePage, getCdpSession } from '../connection.js';
 import { getActiveTab, type ActiveTabResult, type BrowserTabInfo } from '../connection.js';
+import { basename } from 'node:path';
+import { statSync } from 'node:fs';
 import { countConversationTurns } from './chatgpt-composer.js';
+import {
+    attachLocalFileLive,
+    verifySentTurnAttachmentLive,
+} from './chatgpt-attachments.js';
 import { createChatGptEditorAdapter } from './vendor-editor-contract.js';
 import { normalizeEnvelope, renderQuestionEnvelope } from './question.js';
 import {
@@ -9,15 +15,20 @@ import {
     findSessionByTarget,
     getBaseline,
     getSession,
+    listSessions,
     saveBaseline,
+    updateSessionResult,
     updateSessionStatus,
 } from './session.js';
 import { captureAssistantResponse } from './chatgpt-response.js';
+import { selectChatGptModel } from './chatgpt-model.js';
+import { listActiveWebAiWatchers, resumeStoredWebAiWatchers, startWebAiWatcher } from './watcher.js';
 import {
     captureWebAiDiagnostics,
     type WebAiFailureStage,
 } from './diagnostics.js';
 import { reportGeminiContractOnlyStatus, GEMINI_DEEP_THINK_OFFICIAL_SOURCES } from './gemini-contract.js';
+import { geminiSend, geminiPoll, geminiStop, geminiStatus } from './gemini-live.js';
 import { ProviderRuntimeDisabledError } from './provider-adapter.js';
 import type {
     QuestionEnvelopeInput,
@@ -25,13 +36,24 @@ import type {
     WebAiVendor,
 } from './types.js';
 
+declare const document: any;
+
 const CHATGPT_HOSTS = new Set(['chatgpt.com', 'chat.openai.com']);
 const ASSISTANT_SELECTORS = [
     '[data-message-author-role="assistant"]',
     '[data-turn="assistant"]',
     'article[data-testid^="conversation-turn"]',
 ];
-const PLACEHOLDER_PATTERNS = [/^answer now$/i, /^pro thinking/i, /^finalizing answer$/i, /^\s*$/];
+const PLACEHOLDER_PATTERNS = [
+    /^answer now$/i,
+    /^pro thinking/i,
+    /^finalizing answer$/i,
+    /^instant$/i,
+    /^thinking$/i,
+    /^pro$/i,
+    /^configure\.{0,3}$/i,
+    /^\s*$/,
+];
 
 export function isChatGptUrl(url: string): boolean {
     try {
@@ -51,14 +73,7 @@ export async function render(input: QuestionEnvelopeInput = {}): Promise<WebAiOu
 export async function status(port: number, input: { vendor?: string } = {}): Promise<WebAiOutput> {
     const vendor = parseVendor(input.vendor);
     if (vendor === 'gemini') {
-        const report = reportGeminiContractOnlyStatus();
-        return {
-            ok: false,
-            vendor: 'gemini',
-            status: 'blocked',
-            warnings: [...report.notes, `sources: ${report.sources.join(' ')}`],
-            error: `gemini runtime disabled (PRD32.8A contract-only). docs: ${GEMINI_DEEP_THINK_OFFICIAL_SOURCES[0]}`,
-        };
+        return await geminiStatus(port);
     }
     const active = await requireVerifiedChatGptTab(port, vendor);
     return { ok: true, vendor: 'chatgpt', status: 'ready', url: active.url, warnings: [] };
@@ -67,15 +82,19 @@ export async function status(port: number, input: { vendor?: string } = {}): Pro
 export async function send(port: number, input: QuestionEnvelopeInput = {}): Promise<WebAiOutput> {
     const requestedVendor = parseVendor(input.vendor);
     if (requestedVendor === 'gemini') {
-        throw stageError(
-            new ProviderRuntimeDisabledError('gemini', 'send-click'),
-            'send-click',
-        );
+        try {
+            return await geminiSend(port, input);
+        } catch (e) {
+            throw stageError(e, 'send-click');
+        }
     }
+    await navigateRequestedConversation(port, input.url, 'chatgpt');
     const envelope = normalizeEnvelope(input);
     const active = await requireVerifiedChatGptTab(port, envelope.vendor);
     const page = await requireActivePage(port);
     const rendered = renderQuestionEnvelope(envelope);
+    const selectedModel = await selectChatGptModel(page, input.model);
+    await waitForStableAssistantCount(page);
     const assistantCount = await countAssistantMessages(page);
     const baseline = saveBaseline({
         vendor: envelope.vendor,
@@ -109,8 +128,17 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
         await adapter.waitForReady();
         const commitBaseline = { turnsCount: await countConversationTurns(page).catch(() => assistantCount) };
         await adapter.insertPrompt(rendered.composerText);
+        if (input.filePath) {
+            const info = localFileInfo(input.filePath);
+            const uploaded = await attachLocalFileLive(page, info);
+            if (!uploaded.ok) throw new Error(uploaded.error);
+        }
         await adapter.submitPrompt();
         await adapter.verifyPromptCommitted(rendered.composerText, commitBaseline);
+        if (input.filePath) {
+            const sentAttachment = await verifySentTurnAttachmentLive(page, localFileInfo(input.filePath));
+            if (!sentAttachment.ok) throw new Error(sentAttachment.error);
+        }
         updateSessionStatus(session.sessionId, 'streaming');
     } catch (e) {
         updateSessionStatus(session.sessionId, 'error');
@@ -123,17 +151,28 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
         url: active.url,
         baseline,
         sessionId: session.sessionId,
-        warnings: rendered.warnings,
+        usedFallbacks: selectedModel?.usedFallbacks,
+        warnings: [
+            ...rendered.warnings,
+            ...(selectedModel ? [`model selected: ${selectedModel.selected}${selectedModel.alreadySelected ? ' (already selected)' : ''}`] : []),
+        ],
     };
+}
+
+function localFileInfo(filePath: string): { path: string; basename: string; sizeBytes: number } {
+    const stat = statSync(filePath);
+    if (!stat.isFile()) throw new Error(`not a regular file: ${filePath}`);
+    return { path: filePath, basename: basename(filePath), sizeBytes: stat.size };
 }
 
 export async function poll(port: number, input: { vendor?: string; timeout?: number | string; session?: string; allowCopyMarkdownFallback?: boolean } = {}): Promise<WebAiOutput> {
     const vendor = parseVendor(input.vendor);
     if (vendor === 'gemini') {
-        throw stageError(
-            new ProviderRuntimeDisabledError('gemini', 'poll-timeout'),
-            'poll-timeout',
-        );
+        try {
+            return await geminiPoll(port, { timeout: input.timeout, session: input.session });
+        } catch (e) {
+            throw stageError(e, 'poll-timeout');
+        }
     }
     const active = await requireVerifiedChatGptTab(port, vendor);
     let session = input.session ? getSession(input.session) : findSessionByTarget(vendor, active.targetId);
@@ -152,6 +191,7 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
     if (session && result.ok) updateSessionStatus(session.sessionId, 'complete');
     if (session && !result.ok) updateSessionStatus(session.sessionId, 'timeout');
     if (result.canvas) {
+        if (session) updateSessionResult({ sessionId: session.sessionId, status: 'complete', url: active.url, conversationUrl: active.url, answerText: result.answerText });
         return {
             ok: true,
             vendor,
@@ -166,6 +206,7 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
         };
     }
     if (result.ok) {
+        if (session) updateSessionResult({ sessionId: session.sessionId, status: 'complete', url: active.url, conversationUrl: active.url, answerText: result.answerText });
         return {
             ok: true,
             vendor,
@@ -193,18 +234,87 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
 
 export async function query(port: number, input: QuestionEnvelopeInput & { timeout?: number | string; allowCopyMarkdownFallback?: boolean } = {}): Promise<WebAiOutput> {
     const sent = await send(port, input);
-    return poll(port, {
+    const result = await poll(port, {
         vendor: sent.vendor,
         timeout: input.timeout,
         session: sent.sessionId,
         allowCopyMarkdownFallback: input.allowCopyMarkdownFallback,
     });
+    return {
+        ...result,
+        usedFallbacks: [...(sent.usedFallbacks || []), ...(result.usedFallbacks || [])],
+        warnings: [...(sent.warnings || []), ...(result.warnings || [])],
+    };
+}
+
+export async function watch(port: number, input: { vendor?: string; timeout?: number | string; session?: string; url?: string; notify?: boolean; pollIntervalSeconds?: number | string; allowCopyMarkdownFallback?: boolean } = {}): Promise<WebAiOutput> {
+    if (input.url) await navigateRequestedConversation(port, input.url, parseVendor(input.vendor));
+    if (input.session && input.notify !== false) {
+        const vendor = parseVendor(input.vendor);
+        const watcher = startWebAiWatcher({
+            port,
+            vendor,
+            sessionId: input.session,
+            timeoutMs: Math.max(1, Number(input.timeout || 600)) * 1000,
+            pollIntervalSeconds: Number(input.pollIntervalSeconds || 30),
+            allowCopyMarkdownFallback: input.allowCopyMarkdownFallback,
+            pollOnce: (pollInput) => poll(port, pollInput),
+        });
+        return {
+            ok: true,
+            vendor,
+            status: 'streaming',
+            sessionId: input.session,
+            next: 'poll',
+            warnings: [`watcher ${watcher.status}: ${watcher.sessionId}`],
+        };
+    }
+    return poll(port, input);
+}
+
+export function watchers(): WebAiOutput {
+    return {
+        ok: true,
+        vendor: 'chatgpt',
+        status: 'ready',
+        watchers: listActiveWebAiWatchers() as any,
+        warnings: [],
+    } as WebAiOutput;
+}
+
+export function resumeStoredWatchers(port: number, input: { vendor?: string; pollIntervalSeconds?: number | string } = {}): WebAiOutput {
+    const vendor = input.vendor ? parseVendor(input.vendor) : undefined;
+    const resumed = resumeStoredWebAiWatchers({
+        port,
+        vendor,
+        pollIntervalSeconds: Number(input.pollIntervalSeconds || 30),
+        pollOnce: (pollInput) => poll(port, pollInput),
+    });
+    return {
+        ok: true,
+        vendor: vendor || 'chatgpt',
+        status: 'ready',
+        watchers: resumed as any,
+        warnings: resumed.length ? [`resumed ${resumed.length} web-ai watcher(s)`] : [],
+    } as WebAiOutput;
+}
+
+export async function sessions(input: { vendor?: string; status?: string } = {}): Promise<WebAiOutput> {
+    const vendor = input.vendor ? parseVendor(input.vendor) : undefined;
+    const status = input.status as any;
+    return {
+        ok: true,
+        vendor: vendor || 'chatgpt',
+        status: 'ready',
+        sessions: listSessions({ vendor, status }),
+        warnings: [],
+    };
 }
 
 export async function stop(port: number, input: { vendor?: string } = {}): Promise<WebAiOutput> {
     const vendor = parseVendor(input.vendor);
     if (vendor === 'gemini') {
-        throw stageError(new ProviderRuntimeDisabledError('gemini', 'send-click'), 'send-click');
+        try { return await geminiStop(port); } catch (e) { throw stageError(e, 'send-click'); }
     }
     const active = await requireVerifiedChatGptTab(port, vendor);
     const page = await requireActivePage(port);
@@ -218,13 +328,10 @@ export async function stop(port: number, input: { vendor?: string } = {}): Promi
 export async function diagnose(port: number, input: { vendor?: string; stage?: string } = {}): Promise<{ ok: boolean; diagnostics?: ReturnType<typeof toJsonDiagnostics> }> {
     const vendor = parseVendor(input.vendor);
     const stage = (input.stage as WebAiFailureStage) || 'unknown';
-    if (vendor === 'gemini') {
-        return { ok: false, diagnostics: undefined };
-    }
     const page = await requireActivePage(port).catch(() => null);
     if (!page) return { ok: false };
     const diagnostics = await captureWebAiDiagnostics({ stage, page });
-    return { ok: true, diagnostics: toJsonDiagnostics(diagnostics) };
+    return { ok: true, diagnostics: toJsonDiagnostics({ ...diagnostics, vendor }) };
 }
 
 function toJsonDiagnostics<T>(d: T): T { return d; }
@@ -262,6 +369,16 @@ async function requireVerifiedChatGptTab(port: number, vendor?: string): Promise
     return active.tab;
 }
 
+async function navigateRequestedConversation(port: number, url: string | undefined, vendor: WebAiVendor): Promise<void> {
+    if (!url) return;
+    const page = await requireActivePage(port);
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    const loadedUrl = page.url();
+    if (vendor === 'chatgpt' && !isChatGptUrl(loadedUrl)) {
+        throw stageError(new Error(`requested URL did not load ChatGPT: ${loadedUrl}`), 'status');
+    }
+}
+
 async function requireActivePage(port: number): Promise<any> {
     const page = await getActivePage(port);
     if (!page) throw new Error('No active page');
@@ -272,7 +389,32 @@ async function countAssistantMessages(page: any): Promise<number> {
     return (await readAssistantMessages(page)).length;
 }
 
+async function waitForStableAssistantCount(page: any, timeoutMs = 8_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    let previous = -1;
+    let stableReads = 0;
+    while (Date.now() < deadline) {
+        const count = await countAssistantMessages(page).catch(() => 0);
+        if (count === previous) stableReads++;
+        else stableReads = 0;
+        previous = count;
+        if (stableReads >= 2) return;
+        await page.waitForTimeout(500).catch(() => undefined);
+    }
+}
+
 async function readAssistantMessages(page: any): Promise<string[]> {
+    const evaluated = await page.evaluate?.((selectors: readonly string[]) => {
+        for (const selector of selectors) {
+            const texts = Array.from(document.querySelectorAll(selector))
+                .map((el: any) => String(el.innerText || el.textContent || '').trim())
+                .filter(Boolean);
+            if (texts.length) return texts;
+        }
+        return [];
+    }, ASSISTANT_SELECTORS).catch(() => []);
+    if (evaluated?.length) return evaluated.map(cleanAssistantText).filter(Boolean);
+
     const messages: string[] = [];
     for (const selector of ASSISTANT_SELECTORS) {
         const locators = await page.locator(selector).all().catch(() => []);

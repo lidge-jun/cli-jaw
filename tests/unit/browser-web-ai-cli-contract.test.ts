@@ -10,22 +10,39 @@ const routeSrc = fs.readFileSync(join(root, 'src/routes/browser.ts'), 'utf8');
 const indexSrc = fs.readFileSync(join(root, 'src/browser/index.ts'), 'utf8');
 
 test('BWCLI-001: CLI exposes closed web-ai command surface', () => {
-    assert.match(cliSrc, /const WEB_AI_COMMANDS = new Set\(\['render', 'status', 'send', 'poll', 'query', 'stop', 'diagnose'\]\)/);
+    assert.match(cliSrc, /const WEB_AI_COMMANDS = new Set\(\['render', 'status', 'send', 'poll', 'query', 'watch', 'watchers', 'sessions', 'notifications', 'capabilities', 'stop', 'diagnose'\]\)/);
     assert.match(cliSrc, /case 'web-ai'/);
     assert.match(cliSrc, /runWebAiCommand/);
 });
 
-test('BWCLI-002: send and query require inline-only; future flags fail closed', () => {
-    assert.match(cliSrc, /send\/query require --inline-only/);
-    assert.match(cliSrc, /--file is fail-closed/);
-    assert.match(cliSrc, /--model is rejected-until-verified/);
-    assert.match(cliSrc, /--thinking-time is reserved/);
+test('BWCLI-002: send and query gating + flag rejection (32.7B live)', () => {
+    assert.match(cliSrc, /require --inline-only or --file/);
+    assert.match(cliSrc, /--model is currently supported only for --vendor chatgpt/);
 });
 
 test('BWCLI-003: web-ai routes are authenticated', () => {
-    for (const route of ['render', 'status', 'send', 'poll', 'query', 'stop', 'diagnose']) {
+    for (const route of ['render', 'status', 'send', 'poll', 'watch', 'watchers', 'sessions', 'notifications', 'capabilities', 'query', 'stop', 'diagnose']) {
         assert.match(routeSrc, new RegExp(`/api/browser/web-ai/${route}', requireAuth`));
     }
+});
+
+test('BWCLI-005: web-ai CLI supports durable watcher commands and URL reattach', () => {
+    assert.match(cliSrc, /url: \{ type: 'string' \}/);
+    assert.match(cliSrc, /notify: \{ type: 'boolean', default: true \}/);
+    assert.match(cliSrc, /if \(command === 'sessions'\)/);
+    assert.match(cliSrc, /if \(command === 'notifications'\)/);
+    assert.match(cliSrc, /if \(command === 'watchers'\)/);
+    assert.match(cliSrc, /if \(command === 'capabilities'\)/);
+    assert.match(cliSrc, /if \(command === 'watch'\)/);
+    assert.match(cliSrc, /'poll-interval': \{ type: 'string' \}/);
+    assert.match(routeSrc, /\/api\/browser\/web-ai\/watch', requireAuth/);
+    assert.match(routeSrc, /req\.query\.url/);
+    assert.match(routeSrc, /req\.query\.notify/);
+    assert.match(routeSrc, /req\.query\.pollIntervalSeconds/);
+    assert.match(routeSrc, /\/api\/browser\/web-ai\/watchers', requireAuth/);
+    assert.match(routeSrc, /\/api\/browser\/web-ai\/sessions', requireAuth/);
+    assert.match(routeSrc, /\/api\/browser\/web-ai\/notifications', requireAuth/);
+    assert.match(routeSrc, /\/api\/browser\/web-ai\/capabilities', requireAuth/);
 });
 
 test('BWCLI-004: browser index exports webAi namespace', () => {

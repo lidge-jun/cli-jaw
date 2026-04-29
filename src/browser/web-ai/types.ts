@@ -1,9 +1,10 @@
 export type WebAiVendor = 'chatgpt' | 'gemini';
 export type WebAiStatus = 'ready' | 'rendered' | 'sent' | 'streaming' | 'complete' | 'blocked' | 'timeout' | 'error';
+export type WebAiNotificationStatus = 'pending' | 'sent' | 'failed' | 'skipped';
 /**
- * `inline-only` is the only executable policy until PRD32.7 Phase B lands.
- * `upload` and `auto` are reserved type literals that allow callers to declare
- * intent without bypassing the fail-closed guard.
+ * ChatGPT supports the `upload` runtime after PRD32.7-B. Gemini upload remains
+ * fail-closed until a Gemini-specific frontend capability schema and runtime
+ * adapter exist.
  */
 export type AttachmentPolicy = 'inline-only' | 'upload' | 'auto';
 
@@ -22,6 +23,7 @@ export interface QuestionEnvelope {
 
 export interface QuestionEnvelopeInput {
     vendor?: string;
+    url?: string;
     system?: string;
     prompt?: string;
     project?: string;
@@ -31,6 +33,9 @@ export interface QuestionEnvelopeInput {
     output?: string;
     constraints?: string;
     attachmentPolicy?: string;
+    filePath?: string;
+    thinkingTime?: string;
+    model?: string;
 }
 
 export interface RenderedQuestionBundle {
@@ -64,8 +69,34 @@ export interface WebAiSessionRecord {
     committedTurnCount?: number;
     status: WebAiSessionStatus;
     timeoutMs: number;
+    notifyOnComplete?: boolean;
+    capabilityMode?: string;
+    answerText?: string;
+    lastSeenTextHash?: string;
+    completedAt?: string;
+    failedAt?: string;
+    staleAt?: string;
+    lastError?: string;
     createdAt: string;
     updatedAt: string;
+}
+
+export interface WebAiNotificationEvent {
+    eventId: string;
+    type: 'web-ai.answer.completed' | 'web-ai.answer.failed' | 'web-ai.session.stale' | 'web-ai.capability.unsupported' | 'web-ai.provider.login-required';
+    vendor: WebAiVendor;
+    sessionId: string;
+    url?: string;
+    conversationUrl?: string;
+    status: WebAiNotificationStatus;
+    answerExcerpt?: string;
+    answerHash?: string;
+    capabilityMode?: string;
+    elapsedMs?: number;
+    reason?: string;
+    createdAt: string;
+    deliveredAt?: string;
+    error?: string;
 }
 
 export interface WebAiOutput {
@@ -77,6 +108,15 @@ export interface WebAiOutput {
     rendered?: RenderedQuestionBundle;
     baseline?: CommittedTurnBaseline;
     sessionId?: string;
+    sessions?: WebAiSessionRecord[];
+    notifications?: WebAiNotificationEvent[];
+    watchers?: Array<{
+        sessionId: string;
+        vendor: WebAiVendor;
+        startedAt: string;
+        deadlineAt: string;
+        status: 'running' | 'complete' | 'timeout' | 'error';
+    }>;
     next?: 'poll' | 'reattach' | 'stop';
     canvas?: { kind: 'opened'; reason?: string };
     usedFallbacks?: string[];

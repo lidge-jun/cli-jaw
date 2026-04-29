@@ -6,6 +6,8 @@
  * `usedFallbacks` so silent fallback is impossible.
  */
 
+import { captureBrowserDiagnostics } from '../primitives.js';
+
 export type WebAiFailureStage =
     | 'status'
     | 'composer-focus'
@@ -16,6 +18,8 @@ export type WebAiFailureStage =
     | 'poll-timeout'
     | 'attachment-preflight'
     | 'attachment-upload'
+    | 'capability-preflight'
+    | 'provider-select-model'
     | 'provider-select-mode'
     | 'session-reattach'
     | 'unknown';
@@ -60,6 +64,8 @@ const KNOWN_STAGES: ReadonlySet<WebAiFailureStage> = new Set([
     'poll-timeout',
     'attachment-preflight',
     'attachment-upload',
+    'capability-preflight',
+    'provider-select-model',
     'provider-select-mode',
     'session-reattach',
     'unknown',
@@ -150,31 +156,28 @@ export async function captureWebAiDiagnostics(
         out.promptLengthOnly = Math.max(0, Math.floor(options.promptLength));
     }
     const page = options.page;
-    if (!page) {
-        out.warnings.push('no-page');
-        return out;
-    }
-    try {
-        out.url = String(await page.url?.() ?? page.url ?? '');
-    } catch (e) {
-        out.warnings.push(`url:${(e as Error).message}`);
-    }
-    try {
-        out.title = redactDiagnosticText(await page.title?.(), { maxChars: 256 });
-    } catch (e) {
-        out.warnings.push(`title:${(e as Error).message}`);
-    }
+    const browserDiagnostics = await captureBrowserDiagnostics({
+        page,
+        selectors: [...COMPOSER_SELECTORS, ...SEND_BUTTON_SELECTORS, ...STOP_BUTTON_SELECTORS, ASSISTANT_SELECTORS.join(','), 'article[data-testid^="conversation-turn"]'],
+        visibleSelectors: [...COMPOSER_SELECTORS, ...STOP_BUTTON_SELECTORS],
+        redactText: redactDiagnosticText,
+    });
+    out.warnings.push(...browserDiagnostics.warnings);
+    out.url = browserDiagnostics.url;
+    out.title = browserDiagnostics.title;
+    if (!page) return out;
     for (const selector of COMPOSER_SELECTORS) {
-        const count = await safeCount(page, selector);
-        out.selectorCounts[selector] = count;
+        out.selectorCounts[selector] = browserDiagnostics.selectorCounts[selector] ?? 0;
     }
-    out.visibleComposerCandidates = await safeVisibleCount(page, COMPOSER_SELECTORS);
+    out.visibleComposerCandidates = COMPOSER_SELECTORS
+        .map((selector) => browserDiagnostics.visibleCounts[selector] ?? 0)
+        .reduce((sum, count) => sum + count, 0);
     for (const selector of SEND_BUTTON_SELECTORS) {
         out.sendButtonStates.push(await readButtonState(page, selector));
     }
-    out.stopVisible = await safeVisibleCount(page, STOP_BUTTON_SELECTORS) > 0;
-    out.assistantTurnCount = await safeCount(page, ASSISTANT_SELECTORS.join(','));
-    out.conversationTurnCount = await safeCount(page, 'article[data-testid^="conversation-turn"]');
+    out.stopVisible = STOP_BUTTON_SELECTORS.some((selector) => (browserDiagnostics.visibleCounts[selector] ?? 0) > 0);
+    out.assistantTurnCount = browserDiagnostics.selectorCounts[ASSISTANT_SELECTORS.join(',')] ?? 0;
+    out.conversationTurnCount = browserDiagnostics.selectorCounts['article[data-testid^="conversation-turn"]'] ?? 0;
     out.uploadSignals = {
         composerFileInputs: await safeCount(page, 'input[type="file"]'),
         chipNodes: await safeCount(page, '[data-testid*="attachment" i], [aria-label*="attachment" i]'),

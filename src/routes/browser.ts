@@ -196,6 +196,66 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
         } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
 
+    app.get('/api/browser/web-ai/watch', requireAuth, async (req: Request, res: Response) => {
+        try {
+            res.json(await browser.webAi.watch(cdpPort(req), {
+                vendor: String(req.query.vendor || 'chatgpt'),
+                timeout: String(req.query.timeout || '600'),
+                ...(req.query.session ? { session: String(req.query.session) } : {}),
+                ...(req.query.url ? { url: String(req.query.url) } : {}),
+                ...(req.query.notify !== undefined ? { notify: String(req.query.notify) !== 'false' } : {}),
+                ...(req.query.pollIntervalSeconds ? { pollIntervalSeconds: String(req.query.pollIntervalSeconds) } : {}),
+                ...(req.query.allowCopyMarkdownFallback === 'true' ? { allowCopyMarkdownFallback: true } : {}),
+            }));
+        } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
+    });
+
+    app.get('/api/browser/web-ai/watchers', requireAuth, async (_req: Request, res: Response) => {
+        try { res.json(browser.webAi.watchers()); }
+        catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
+    });
+
+    app.get('/api/browser/web-ai/sessions', requireAuth, async (req: Request, res: Response) => {
+        try {
+            res.json(await browser.webAi.sessions({
+                ...(req.query.vendor ? { vendor: String(req.query.vendor) } : {}),
+                ...(req.query.status ? { status: String(req.query.status) } : {}),
+            }));
+        } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
+    });
+
+    app.get('/api/browser/web-ai/notifications', requireAuth, async (req: Request, res: Response) => {
+        try {
+            res.json({
+                ok: true,
+                vendor: String(req.query.vendor || 'chatgpt'),
+                status: 'ready',
+                notifications: browser.webAi.listNotifications({
+                    ...(req.query.vendor ? { vendor: String(req.query.vendor) as any } : {}),
+                    ...(req.query.status ? { status: String(req.query.status) as any } : {}),
+                    ...(req.query.session ? { sessionId: String(req.query.session) } : {}),
+                }),
+                warnings: [],
+            });
+        } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
+    });
+
+    app.get('/api/browser/web-ai/capabilities', requireAuth, async (req: Request, res: Response) => {
+        try {
+            res.json({
+                ok: true,
+                vendor: String(req.query.vendor || 'chatgpt'),
+                status: 'ready',
+                capabilities: browser.webAi.listCapabilitySchemas({
+                    ...(req.query.vendor ? { vendor: String(req.query.vendor) as any } : {}),
+                    ...(req.query.family ? { family: String(req.query.family) as any } : {}),
+                    ...(req.query.frontendStatus ? { frontendStatus: String(req.query.frontendStatus) as any } : {}),
+                }),
+                warnings: [],
+            });
+        } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
+    });
+
     app.post('/api/browser/web-ai/query', requireAuth, async (req: Request, res: Response) => {
         try { res.json(await browser.webAi.query(cdpPort(req), req.body)); }
         catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }

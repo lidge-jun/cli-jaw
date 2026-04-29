@@ -14,13 +14,26 @@ export const GEMINI_DEEP_THINK_SELECTORS = {
         '[role="textbox"][aria-label*="prompt" i]',
         'div[contenteditable="true"]',
     ],
+    newChat: [
+        'button[aria-label="New chat"]:not([aria-disabled="true"]):not(.disabled)',
+        '.side-nav-action-collapsed-button[aria-label="New chat"]:not([aria-disabled="true"]):not(.disabled)',
+        'a[aria-label="New chat"]:not([aria-disabled="true"]):not(.disabled)',
+    ],
     toolsButton: [
-        'button.toolbox-drawer-button',
+        'button[aria-label="Tools"]',
         'button[aria-label*="Tools" i]',
+        'button.toolbox-drawer-button',
     ],
     deepThinkMenuItem: [
-        '[role="menuitem"]:has-text("Deep Think")',
+        '[role="menuitemcheckbox"]:has-text("Deep think")',
         '[role="menuitemcheckbox"]:has-text("Deep Think")',
+        '[role="menuitem"]:has-text("Deep think")',
+        '[role="menuitem"]:has-text("Deep Think")',
+    ],
+    deepThinkActive: [
+        'button[aria-label*="Deselect Deep think" i]',
+        'button[aria-label*="Deselect Deep Think" i]',
+        '.toolbox-drawer-item-deselect-button:has-text("Deep think")',
     ],
     sendButton: [
         'button.send-button',

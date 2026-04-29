@@ -12,7 +12,7 @@ loadSettings();
 const SERVER = getServerUrl();
 await getCliAuthToken();
 const sub = process.argv[3];
-const WEB_AI_COMMANDS = new Set(['render', 'status', 'send', 'poll', 'query', 'stop', 'diagnose']);
+const WEB_AI_COMMANDS = new Set(['render', 'status', 'send', 'poll', 'query', 'watch', 'watchers', 'sessions', 'notifications', 'capabilities', 'stop', 'diagnose']);
 
 // ─── ANSI ────────────────────────────────────
 const c = {
@@ -53,9 +53,13 @@ function parseClip(values: Record<string, any>) {
 function rejectFutureWebAiFlags(values: Record<string, any>) {
     const vendor = values.vendor ?? 'chatgpt';
     if (vendor !== 'chatgpt' && vendor !== 'gemini') throw new Error(`unsupported vendor: ${vendor}`);
-    if (values.file) throw new Error('--file is fail-closed (PRD32.7 Phase B pending). Use --inline-only.');
-    if (values.model) throw new Error('--model is rejected-until-verified per capability registry.');
-    if (values['thinking-time']) throw new Error('--thinking-time is reserved for 32.8B Gemini Deep Think.');
+    if (values.model && vendor !== 'chatgpt') throw new Error('--model is currently supported only for --vendor chatgpt.');
+    if (values.model && !isSupportedChatGptModel(values.model)) throw new Error(`unsupported ChatGPT model selection: ${values.model}`);
+}
+
+function isSupportedChatGptModel(model: unknown): boolean {
+    return new Set(['instant', 'fast', 'gpt-5-3', 'gpt-5.3', 'thinking', 'think', 'gpt-5-5-thinking', 'gpt-5.5-thinking', 'pro', 'gpt-5-5-pro', 'gpt-5.5-pro'])
+        .has(String(model || '').trim().toLowerCase());
 }
 
 async function runWebAiCommand(args: string[]) {
@@ -68,6 +72,7 @@ async function runWebAiCommand(args: string[]) {
         options: {
             vendor: { type: 'string', default: 'chatgpt' },
             prompt: { type: 'string' },
+            url: { type: 'string' },
             system: { type: 'string' },
             project: { type: 'string' },
             goal: { type: 'string' },
@@ -78,8 +83,13 @@ async function runWebAiCommand(args: string[]) {
             timeout: { type: 'string' },
             session: { type: 'string' },
             stage: { type: 'string' },
+            status: { type: 'string' },
+            family: { type: 'string' },
+            'frontend-status': { type: 'string' },
+            'poll-interval': { type: 'string' },
             'inline-only': { type: 'boolean', default: false },
             'allow-copy-markdown-fallback': { type: 'boolean', default: false },
+            notify: { type: 'boolean', default: true },
             file: { type: 'string' },
             model: { type: 'string' },
             'thinking-time': { type: 'string' },
@@ -89,14 +99,12 @@ async function runWebAiCommand(args: string[]) {
     });
     rejectFutureWebAiFlags(values);
     const vendor = values.vendor ?? 'chatgpt';
-    if (vendor === 'gemini' && command !== 'status' && command !== 'diagnose') {
-        throw new Error('gemini runtime is contract-only (PRD32.8A). Use --vendor chatgpt or web-ai status --vendor gemini.');
-    }
-    if (['send', 'query'].includes(command) && !values['inline-only']) {
-        throw new Error('web-ai send/query require --inline-only until PRD32.7 Phase B lands');
+    if (['send', 'query'].includes(command) && !values['inline-only'] && !values.file) {
+        throw new Error('web-ai send/query require --inline-only or --file=<path>');
     }
     const body = {
         vendor: values.vendor,
+        url: values.url,
         prompt: values.prompt,
         system: values.system,
         project: values.project,
@@ -106,7 +114,10 @@ async function runWebAiCommand(args: string[]) {
         output: values.output,
         constraints: values.constraints,
         timeout: values.timeout,
-        attachmentPolicy: 'inline-only',
+        attachmentPolicy: values.file ? 'upload' : 'inline-only',
+        ...(values.file ? { filePath: values.file } : {}),
+        ...(values['thinking-time'] ? { thinkingTime: values['thinking-time'] } : {}),
+        ...(values.model ? { model: values.model } : {}),
     };
     const result = await callWebAiEndpoint(command, body, values);
     if (values.json) console.log(JSON.stringify(result, null, 2));
@@ -115,7 +126,12 @@ async function runWebAiCommand(args: string[]) {
 
 async function callWebAiEndpoint(command: string, body: Record<string, any>, values: Record<string, any>) {
     if (command === 'status') return api('GET', `/web-ai/status${qs({ vendor: values.vendor })}`);
+    if (command === 'sessions') return api('GET', `/web-ai/sessions${qs({ vendor: values.vendor, status: values.status })}`);
+    if (command === 'notifications') return api('GET', `/web-ai/notifications${qs({ vendor: values.vendor, status: values.status, session: values.session })}`);
+    if (command === 'watchers') return api('GET', '/web-ai/watchers');
+    if (command === 'capabilities') return api('GET', `/web-ai/capabilities${qs({ vendor: values.vendor, family: values.family, frontendStatus: values['frontend-status'] })}`);
     if (command === 'poll') return api('GET', `/web-ai/poll${qs({ vendor: values.vendor, timeout: values.timeout, session: values.session, allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'] })}`);
+    if (command === 'watch') return api('GET', `/web-ai/watch${qs({ vendor: values.vendor, timeout: values.timeout, session: values.session, url: values.url, notify: values.notify, pollIntervalSeconds: values['poll-interval'], allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'] })}`);
     if (command === 'diagnose') return api('GET', `/web-ai/diagnose${qs({ vendor: values.vendor, stage: values.stage })}`);
     return api('POST', `/web-ai/${command}`, body);
 }
@@ -128,6 +144,22 @@ function printWebAiHuman(command: string, result: Record<string, any>) {
     }
     if (result.answerText) {
         console.log(result.answerText);
+        return;
+    }
+    if (Array.isArray(result.sessions)) {
+        console.log(JSON.stringify(result.sessions, null, 2));
+        return;
+    }
+    if (Array.isArray(result.notifications)) {
+        console.log(JSON.stringify(result.notifications, null, 2));
+        return;
+    }
+    if (Array.isArray(result.watchers)) {
+        console.log(JSON.stringify(result.watchers, null, 2));
+        return;
+    }
+    if (Array.isArray(result.capabilities)) {
+        console.log(JSON.stringify(result.capabilities, null, 2));
         return;
     }
     console.log(`${result.status}: ${result.url || result.vendor || 'web-ai'}`);
@@ -510,7 +542,13 @@ try {
     evaluate <js>          Execute JavaScript
     web-ai render           Render Oracle-style ChatGPT prompt envelope
     web-ai status           Check verified ChatGPT active tab (or Gemini contract-only status)
-    web-ai send             Send inline-only prompt to ChatGPT
+    web-ai send             Send inline-only prompt to ChatGPT/Gemini
+      --url <url>           Navigate active tab to an existing conversation before send
+    web-ai watch            Poll a saved web-ai session
+    web-ai watchers         List active long-running web-ai watchers
+    web-ai sessions         List saved web-ai sessions
+    web-ai notifications    List pending/sent web-ai completion notification events
+    web-ai capabilities     List observed/provider capability schemas
     web-ai poll             Poll for answer after baseline (--session optional, --allow-copy-markdown-fallback opt-in)
     web-ai query            Send and poll in one command
     web-ai stop             Stop current generation with Escape

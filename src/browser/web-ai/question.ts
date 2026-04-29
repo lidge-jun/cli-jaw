@@ -1,26 +1,27 @@
-import type { QuestionEnvelope, QuestionEnvelopeInput, RenderedQuestionBundle, WebAiVendor } from './types.js';
+import type { AttachmentPolicy, QuestionEnvelope, QuestionEnvelopeInput, RenderedQuestionBundle, WebAiVendor } from './types.js';
 
 const INLINE_CHAR_LIMIT = 50000;
-const SUPPORTED_VENDOR: WebAiVendor = 'chatgpt';
+const SUPPORTED_VENDORS = new Set<WebAiVendor>(['chatgpt', 'gemini']);
+const SUPPORTED_ATTACHMENT_POLICIES = new Set<AttachmentPolicy>(['inline-only', 'upload', 'auto']);
 
 export function normalizeEnvelope(input: QuestionEnvelopeInput = {}): QuestionEnvelope {
-    const vendor = input.vendor || SUPPORTED_VENDOR;
-    if (vendor !== SUPPORTED_VENDOR) {
-        throw new Error(`unsupported vendor: ${vendor}. PRD32 first slice supports chatgpt only.`);
+    const vendor = (input.vendor || 'chatgpt') as WebAiVendor;
+    if (!SUPPORTED_VENDORS.has(vendor)) {
+        throw new Error(`unsupported vendor: ${vendor}`);
     }
 
     const prompt = cleanOptional(input.prompt || input.question);
     if (!prompt) throw new Error('prompt required');
 
-    const attachmentPolicy = input.attachmentPolicy || 'inline-only';
-    if (attachmentPolicy !== 'inline-only') {
-        throw new Error('file upload is future scope. Use --inline-only.');
+    const attachmentPolicy = (input.attachmentPolicy || 'inline-only') as AttachmentPolicy;
+    if (!SUPPORTED_ATTACHMENT_POLICIES.has(attachmentPolicy)) {
+        throw new Error(`unsupported attachment policy: ${attachmentPolicy}`);
     }
 
     return {
-        vendor: SUPPORTED_VENDOR,
+        vendor,
         prompt,
-        attachmentPolicy: 'inline-only',
+        attachmentPolicy,
         ...(cleanOptional(input.system) ? { system: cleanOptional(input.system) } : {}),
         ...(cleanOptional(input.project) ? { project: cleanOptional(input.project) } : {}),
         ...(cleanOptional(input.goal) ? { goal: cleanOptional(input.goal) } : {}),

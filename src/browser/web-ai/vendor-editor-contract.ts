@@ -63,9 +63,9 @@ export const GEMINI_DEEP_THINK_CONSTRAINTS = {
     responseSelectors: ['model-response', 'message-content', '.model-response-text message-content'],
     completionSignals: ['.response-footer.complete', '[role="progressbar"]'],
     modeSelectors: [
+        'button[aria-label="New chat"]:not([aria-disabled="true"]):not(.disabled)',
         'button.toolbox-drawer-button',
-        '[role="menuitemcheckbox"]',
-        '.toolbox-drawer-item-deselect-button',
-        'button[aria-label*="Deselect Deep Think"]',
+        '[role="menuitemcheckbox"]:has-text("Deep think")',
+        'button[aria-label*="Deselect Deep think"]',
     ],
 } as const;

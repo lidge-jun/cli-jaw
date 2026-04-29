@@ -1,7 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { JAW_HOME } from '../../core/config.js';
 import type {
     CommittedTurnBaseline,
     QuestionEnvelope,
+    WebAiNotificationEvent,
+    WebAiNotificationStatus,
     WebAiSessionRecord,
     WebAiSessionStatus,
     WebAiVendor,
@@ -9,7 +14,17 @@ import type {
 
 const baselines = new Map<string, CommittedTurnBaseline>();
 const sessions = new Map<string, WebAiSessionRecord>();
+const notifications = new Map<string, WebAiNotificationEvent>();
 const sessionsByTarget = new Map<string, string>();
+let loadedPersistentStore = false;
+const STORE_PATH = join(JAW_HOME, 'web-ai-sessions.json');
+const ANSWER_EXCERPT_LIMIT = 400;
+
+interface PersistentWebAiStore {
+    baselines: CommittedTurnBaseline[];
+    sessions: WebAiSessionRecord[];
+    notifications?: WebAiNotificationEvent[];
+}
 
 export class WrongTargetError extends Error {
     readonly stage = 'session-reattach' as const;
@@ -50,6 +65,7 @@ export function saveBaseline(input: {
     assistantCount: number;
     textHash?: string;
 }): CommittedTurnBaseline {
+    loadPersistentStore();
     const baseline: CommittedTurnBaseline = {
         vendor: input.vendor,
         targetId: input.targetId,
@@ -60,15 +76,19 @@ export function saveBaseline(input: {
         ...(input.textHash ? { textHash: input.textHash } : {}),
     };
     baselines.set(makeBaselineKey(input.vendor, input.targetId), baseline);
+    savePersistentStore();
     return baseline;
 }
 
 export function getBaseline(vendor: WebAiVendor, targetId: string): CommittedTurnBaseline | null {
+    loadPersistentStore();
     return baselines.get(makeBaselineKey(vendor, targetId)) || null;
 }
 
 export function clearBaseline(vendor: WebAiVendor, targetId: string): void {
+    loadPersistentStore();
     baselines.delete(makeBaselineKey(vendor, targetId));
+    savePersistentStore();
 }
 
 export interface CreateSessionInput {
@@ -80,9 +100,12 @@ export interface CreateSessionInput {
     assistantCount: number;
     committedTurnCount?: number;
     timeoutMs: number;
+    notifyOnComplete?: boolean;
+    capabilityMode?: string;
 }
 
 export function createSession(input: CreateSessionInput): WebAiSessionRecord {
+    loadPersistentStore();
     const now = new Date().toISOString();
     const record: WebAiSessionRecord = {
         vendor: input.vendor,
@@ -95,38 +118,127 @@ export function createSession(input: CreateSessionInput): WebAiSessionRecord {
         ...(input.committedTurnCount !== undefined ? { committedTurnCount: input.committedTurnCount } : {}),
         status: 'sent',
         timeoutMs: input.timeoutMs,
+        ...(input.notifyOnComplete !== undefined ? { notifyOnComplete: input.notifyOnComplete } : {}),
+        ...(input.capabilityMode ? { capabilityMode: input.capabilityMode } : {}),
         createdAt: now,
         updatedAt: now,
     };
     sessions.set(record.sessionId, record);
     sessionsByTarget.set(makeBaselineKey(record.vendor, record.targetId), record.sessionId);
+    savePersistentStore();
     return record;
 }
 
 export function getSession(sessionId: string): WebAiSessionRecord | null {
+    loadPersistentStore();
     return sessions.get(sessionId) || null;
 }
 
 export function findSessionByTarget(vendor: WebAiVendor, targetId: string): WebAiSessionRecord | null {
+    loadPersistentStore();
     const id = sessionsByTarget.get(makeBaselineKey(vendor, targetId));
     if (!id) return null;
     return sessions.get(id) || null;
 }
 
+export function listSessions(input: { vendor?: WebAiVendor; status?: WebAiSessionStatus } = {}): WebAiSessionRecord[] {
+    loadPersistentStore();
+    return [...sessions.values()]
+        .filter((session) => !input.vendor || session.vendor === input.vendor)
+        .filter((session) => !input.status || session.status === input.status)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
 export function updateSessionStatus(sessionId: string, status: WebAiSessionStatus): WebAiSessionRecord | null {
+    loadPersistentStore();
     const record = sessions.get(sessionId);
     if (!record) return null;
     record.status = status;
     record.updatedAt = new Date().toISOString();
+    savePersistentStore();
     return record;
 }
 
+export function setSessionNotifyOnComplete(sessionId: string, notifyOnComplete: boolean): WebAiSessionRecord | null {
+    loadPersistentStore();
+    const record = sessions.get(sessionId);
+    if (!record) return null;
+    record.notifyOnComplete = notifyOnComplete;
+    record.updatedAt = new Date().toISOString();
+    savePersistentStore();
+    return record;
+}
+
+export function updateSessionResult(input: {
+    sessionId: string;
+    status: WebAiSessionStatus;
+    url?: string;
+    conversationUrl?: string;
+    answerText?: string;
+    error?: string;
+    capabilityMode?: string;
+}): WebAiSessionRecord | null {
+    loadPersistentStore();
+    const record = sessions.get(input.sessionId);
+    if (!record) return null;
+    const now = new Date().toISOString();
+    record.status = input.status;
+    record.updatedAt = now;
+    if (input.url) record.url = input.url;
+    if (input.conversationUrl) record.conversationUrl = input.conversationUrl;
+    if (input.capabilityMode) record.capabilityMode = input.capabilityMode;
+    if (input.error) record.lastError = input.error;
+    if (input.answerText !== undefined) {
+        record.answerText = input.answerText;
+        record.lastSeenTextHash = createHash('sha256').update(input.answerText).digest('hex');
+    }
+    if (input.status === 'complete') record.completedAt = now;
+    if (input.status === 'error') record.failedAt = now;
+    if (input.status === 'timeout') record.staleAt = now;
+    if (record.notifyOnComplete && input.status === 'complete' && input.answerText) {
+        enqueueSessionNotification({
+            record,
+            type: 'web-ai.answer.completed',
+            answerText: input.answerText,
+        });
+    }
+    savePersistentStore();
+    return record;
+}
+
+export function enqueueWebAiSessionNotification(input: {
+    sessionId: string;
+    type: WebAiNotificationEvent['type'];
+    answerText?: string;
+    reason?: string;
+    error?: string;
+    capabilityMode?: string;
+    elapsedMs?: number;
+}): WebAiNotificationEvent | null {
+    loadPersistentStore();
+    const record = sessions.get(input.sessionId);
+    if (!record) return null;
+    const event = enqueueSessionNotification({
+        record,
+        type: input.type,
+        answerText: input.answerText,
+        reason: input.reason,
+        error: input.error,
+        capabilityMode: input.capabilityMode,
+        elapsedMs: input.elapsedMs,
+    });
+    savePersistentStore();
+    return event;
+}
+
 export function clearSession(sessionId: string): void {
+    loadPersistentStore();
     const record = sessions.get(sessionId);
     if (!record) return;
     sessions.delete(sessionId);
     const targetKey = makeBaselineKey(record.vendor, record.targetId);
     if (sessionsByTarget.get(targetKey) === sessionId) sessionsByTarget.delete(targetKey);
+    savePersistentStore();
 }
 
 export function assertSameTarget(record: WebAiSessionRecord, actualTargetId: string): void {
@@ -135,9 +247,117 @@ export function assertSameTarget(record: WebAiSessionRecord, actualTargetId: str
     }
 }
 
+export function listNotifications(input: {
+    vendor?: WebAiVendor;
+    status?: WebAiNotificationStatus;
+    sessionId?: string;
+} = {}): WebAiNotificationEvent[] {
+    loadPersistentStore();
+    return [...notifications.values()]
+        .filter((event) => !input.vendor || event.vendor === input.vendor)
+        .filter((event) => !input.status || event.status === input.status)
+        .filter((event) => !input.sessionId || event.sessionId === input.sessionId)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function markNotificationDelivered(input: {
+    eventId: string;
+    status: WebAiNotificationStatus;
+    error?: string;
+}): WebAiNotificationEvent | null {
+    loadPersistentStore();
+    const event = notifications.get(input.eventId);
+    if (!event) return null;
+    event.status = input.status;
+    event.deliveredAt = new Date().toISOString();
+    if (input.error) event.error = input.error;
+    savePersistentStore();
+    return event;
+}
+
 /** Test-only — clear all in-memory state. */
 export function __resetSessionState(): void {
     baselines.clear();
     sessions.clear();
+    notifications.clear();
     sessionsByTarget.clear();
+    loadedPersistentStore = true;
+    savePersistentStore();
+}
+
+function enqueueSessionNotification(input: {
+    record: WebAiSessionRecord;
+    type: WebAiNotificationEvent['type'];
+    answerText?: string;
+    reason?: string;
+    error?: string;
+    capabilityMode?: string;
+    elapsedMs?: number;
+}): WebAiNotificationEvent {
+    const answerHash = input.answerText ? createHash('sha256').update(input.answerText).digest('hex') : undefined;
+    const eventId = `${input.record.sessionId}:${input.type}`;
+    const existing = notifications.get(eventId);
+    if (existing) return existing;
+    const record = input.record;
+    const now = new Date().toISOString();
+    const event: WebAiNotificationEvent = {
+        eventId,
+        type: input.type,
+        vendor: record.vendor,
+        sessionId: record.sessionId,
+        url: record.url,
+        ...(record.conversationUrl ? { conversationUrl: record.conversationUrl } : {}),
+        status: 'pending',
+        ...(input.answerText ? { answerExcerpt: excerptAnswer(input.answerText) } : {}),
+        ...(answerHash ? { answerHash } : {}),
+        ...(input.capabilityMode || record.capabilityMode ? { capabilityMode: input.capabilityMode || record.capabilityMode } : {}),
+        elapsedMs: Math.max(0, input.elapsedMs ?? (Date.parse(now) - Date.parse(record.createdAt))),
+        ...(input.reason ? { reason: input.reason } : {}),
+        ...(input.error ? { error: input.error } : {}),
+        createdAt: now,
+    };
+    notifications.set(eventId, event);
+    return event;
+}
+
+function excerptAnswer(answerText: string): string {
+    const compact = answerText.replace(/\s+/g, ' ').trim();
+    return compact.length > ANSWER_EXCERPT_LIMIT ? `${compact.slice(0, ANSWER_EXCERPT_LIMIT - 1)}…` : compact;
+}
+
+function loadPersistentStore(): void {
+    if (loadedPersistentStore) return;
+    loadedPersistentStore = true;
+    if (!existsSync(STORE_PATH)) return;
+    try {
+        const parsed = JSON.parse(readFileSync(STORE_PATH, 'utf8')) as Partial<PersistentWebAiStore>;
+        for (const baseline of parsed.baselines || []) {
+            if (baseline.vendor && baseline.targetId) baselines.set(makeBaselineKey(baseline.vendor, baseline.targetId), baseline);
+        }
+        for (const session of parsed.sessions || []) {
+            if (!session.sessionId || !session.vendor || !session.targetId) continue;
+            sessions.set(session.sessionId, session);
+            sessionsByTarget.set(makeBaselineKey(session.vendor, session.targetId), session.sessionId);
+        }
+        for (const event of parsed.notifications || []) {
+            if (!event.eventId || !event.vendor || !event.sessionId) continue;
+            notifications.set(event.eventId, event);
+        }
+    } catch {
+        // Corrupt store must not silently create a false session; start empty and let callers fail closed.
+        baselines.clear();
+        sessions.clear();
+        notifications.clear();
+        sessionsByTarget.clear();
+    }
+}
+
+function savePersistentStore(): void {
+    mkdirSync(dirname(STORE_PATH), { recursive: true });
+    const payload: PersistentWebAiStore = {
+        baselines: [...baselines.values()],
+        sessions: [...sessions.values()],
+        notifications: [...notifications.values()],
+    };
+    writeFileSync(STORE_PATH, `${JSON.stringify(payload, null, 2)}\n`);
 }
