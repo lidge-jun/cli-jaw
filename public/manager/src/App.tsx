@@ -31,6 +31,7 @@ import { useInstanceLabelEditor } from './hooks/useInstanceLabelEditor';
 import { useInstanceMessageEvents } from './hooks/useInstanceMessageEvents';
 import { useManagerEvents } from './hooks/useManagerEvents';
 import { formatUptime, instanceLabel } from './instance-label';
+import { reconcileActiveProfileFilter } from './profile-filter';
 import type {
     DashboardDetailTab,
     DashboardInstance,
@@ -81,7 +82,43 @@ export function App() {
     const instances = data?.instances || [];
     const messageActivity = useInstanceMessageEvents(instances);
     const labelEditor = useInstanceLabelEditor(registry.save, setData);
-    const activePreviewPort = view.activeDetailTab === 'preview' && view.sidebarMode === 'instances' ? (view.selectedPort ?? null) : null;
+
+    const profiles = useMemo(() => data?.manager.profiles || [], [data]);
+    const effectiveProfileIds = useMemo(() => {
+        const known = new Set(profiles.map(profile => profile.profileId));
+        return activeProfileIds.filter(profileId => known.has(profileId));
+    }, [activeProfileIds, profiles]);
+    const filtered = useMemo(() => {
+        const needle = query.trim().toLowerCase();
+        return instances.filter((instance) => {
+            if (status !== 'all' && instance.status !== status) return false;
+            if (effectiveProfileIds.length > 0 && (!instance.profileId || !effectiveProfileIds.includes(instance.profileId))) return false;
+            if (!needle) return true;
+            return [
+                String(instance.port),
+                instance.url,
+                instanceLabel(instance),
+                instance.version,
+                instance.workingDir,
+                instance.currentCli,
+                instance.currentModel,
+                instance.healthReason,
+                instance.label,
+                instance.group,
+                instance.profileId,
+            ].some(value => String(value || '').toLowerCase().includes(needle));
+        });
+    }, [effectiveProfileIds, instances, query, status]);
+    const selectedInstance = useMemo(() => {
+        if (view.selectedPort == null) return filtered.find(instance => instance.ok) || null;
+        return instances.find(instance => instance.port === view.selectedPort) || null;
+    }, [filtered, instances, view.selectedPort]);
+
+    // activity-unread must see the *resolved* selected port so the
+    // auto-fallback instance (selectedPort == null) is also suppressed.
+    const activePreviewPort = view.activeDetailTab === 'preview' && view.sidebarMode === 'instances'
+        ? (selectedInstance?.port ?? null)
+        : null;
     const activityUnread = useActivityUnread({
         events: [...managerEvents.events, ...messageActivity.events],
         activityDockCollapsed: view.activityDockCollapsed,
@@ -106,6 +143,8 @@ export function App() {
         setError(null);
         try {
             const result = await fetchInstances(nextShowHidden);
+            const nextProfileIds = reconcileActiveProfileFilter(activeProfileIds, result.manager.profiles || []);
+            if (nextProfileIds !== activeProfileIds) { setActiveProfileIds(nextProfileIds); void registry.save({ activeProfileFilter: nextProfileIds }); }
             setData(result);
         } catch (err) {
             setError((err as Error).message);
@@ -159,11 +198,6 @@ export function App() {
         await registry.save({ ui });
     }
 
-    const profiles = useMemo(() => data?.manager.profiles || [], [data]);
-    const effectiveProfileIds = useMemo(() => {
-        const known = new Set(profiles.map(profile => profile.profileId));
-        return activeProfileIds.filter(profileId => known.has(profileId));
-    }, [activeProfileIds, profiles]);
     const profileCounts = useMemo(() => {
         return instances.reduce((acc, instance) => {
             if (instance.profileId) acc[instance.profileId] = (acc[instance.profileId] || 0) + 1;
@@ -178,28 +212,6 @@ export function App() {
         }, { total: 0 } as Record<string, number>);
     }, [instances]);
 
-    const filtered = useMemo(() => {
-        const needle = query.trim().toLowerCase();
-        return instances.filter((instance) => {
-            if (status !== 'all' && instance.status !== status) return false;
-            if (effectiveProfileIds.length > 0 && (!instance.profileId || !effectiveProfileIds.includes(instance.profileId))) return false;
-            if (!needle) return true;
-            return [
-                String(instance.port),
-                instance.url,
-                instanceLabel(instance),
-                instance.version,
-                instance.workingDir,
-                instance.currentCli,
-                instance.currentModel,
-                instance.healthReason,
-                instance.label,
-                instance.group,
-                instance.profileId,
-            ].some(value => String(value || '').toLowerCase().includes(needle));
-        });
-    }, [effectiveProfileIds, instances, query, status]);
-
     function toggleProfile(profileId: string): void {
         const next = activeProfileIds.includes(profileId)
             ? activeProfileIds.filter(id => id !== profileId)
@@ -207,11 +219,6 @@ export function App() {
         setActiveProfileIds(next);
         void registry.save({ activeProfileFilter: next });
     }
-
-    const selectedInstance = useMemo(() => {
-        if (view.selectedPort == null) return filtered.find(instance => instance.ok) || null;
-        return instances.find(instance => instance.port === view.selectedPort) || null;
-    }, [filtered, instances, view.selectedPort]);
 
     function canLeaveDirtySettings(): boolean {
         if (view.activeDetailTab !== 'settings' || !settingsDirty) return true;
