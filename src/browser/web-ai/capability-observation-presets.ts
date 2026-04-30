@@ -5,15 +5,23 @@ export const CHATGPT_MODEL_SELECTOR_OBSERVATION: FrontendCapabilityObservation =
     source: 'live-frontend',
     selectorCandidates: [
         '[data-testid="model-switcher-dropdown-button"]',
+        'button.__composer-pill[aria-haspopup="menu"]',
         '[data-testid="model-switcher-gpt-5-3"]',
         '[data-testid="model-switcher-gpt-5-5-thinking"]',
         '[data-testid="model-switcher-gpt-5-5-pro"]',
+        '[data-testid="model-switcher-gpt-5-5-thinking-thinking-effort"]',
+        '[data-testid="model-switcher-gpt-5-5-pro-thinking-effort"]',
     ],
-    textCandidates: ['Instant', 'Thinking', 'Pro', 'Configure...'],
-    activationPath: ['open model switcher', 'select menuitemradio', 'verify aria-checked=true'],
-    activeStateSignals: ['role=menuitemradio', 'aria-checked=true'],
+    textCandidates: ['Latest', 'Instant', 'Thinking', 'Thinking • Heavy', 'Pro', 'Effort', 'Configure...'],
+    activationPath: ['open model switcher or composer model pill', 'select menuitemradio', 'verify aria-checked=true'],
+    activeStateSignals: ['composer model pill text', 'role=menuitemradio', 'aria-checked=true'],
     mutationRisk: 'low',
-    notes: ['Codex Cloud is out of scope.', 'Model label text must be filtered from response capture.'],
+    notes: [
+        'Codex Cloud is out of scope.',
+        'Model label text must be filtered from response capture.',
+        '2026-04-30 headed UI moved the visible model opener to the composer pill; top data-testid opener may be absent.',
+        'Thinking/Pro effort controls are schema-observed but runtime selection remains model-level.',
+    ],
 };
 
 export const CHATGPT_ATTACHMENT_OBSERVATION: FrontendCapabilityObservation = {

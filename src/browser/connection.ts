@@ -1,15 +1,30 @@
 import { JAW_HOME, deriveCdpPort, settings } from '../core/config.js';
-import { spawn } from 'child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { join } from 'path';
 import fs from 'node:fs';
 import net from 'node:net';
-import { chromium } from 'playwright-core';
+import { chromium, type Browser } from 'playwright-core';
 import { resolveLaunchPolicy, type BrowserStartMode } from './launch-policy.js';
+import {
+    browserReaperIntervalMs,
+    createEmptyBrowserRuntime,
+    createExternalBrowserRuntime,
+    createJawOwnedBrowserRuntime,
+    decideBrowserCloseAction,
+    shouldCloseIdleRuntime,
+    type BrowserRuntimeOwner,
+    type BrowserRuntimeStatus,
+} from './runtime-owner.js';
 
 const PROFILE_DIR = join(JAW_HOME, 'browser-profile');
-let cached: any = null;   // { browser, cdpUrl }
-let chromeProc: any = null;
+type BrowserConnectionCache = { browser: Browser; cdpUrl: string };
+
+let cached: BrowserConnectionCache | null = null;
+let chromeProc: ChildProcess | null = null;
 let activePort: number | null = null;
+let runtimeOwner: BrowserRuntimeOwner | null = null;
+let activeCommandCount = 0;
+let idleReaper: ReturnType<typeof setInterval> | null = null;
 let verifiedActiveTargetId: string | null = null;
 let browserStateVersion = 0;
 
@@ -123,6 +138,112 @@ function findChrome() {
     throw new Error('Chrome not found — install Google Chrome');
 }
 
+function touchBrowserRuntime(): void {
+    if (!runtimeOwner) return;
+    runtimeOwner = { ...runtimeOwner, lastUsedAt: new Date().toISOString() };
+}
+
+export function beginBrowserActivity(): () => void {
+    activeCommandCount++;
+    touchBrowserRuntime();
+    let ended = false;
+    return () => {
+        if (ended) return;
+        ended = true;
+        activeCommandCount = Math.max(0, activeCommandCount - 1);
+        touchBrowserRuntime();
+    };
+}
+
+export async function withBrowserActivity<T>(fn: () => Promise<T>): Promise<T> {
+    const end = beginBrowserActivity();
+    try {
+        return await fn();
+    } finally {
+        end();
+    }
+}
+
+function readProcessCommandLine(pid: number): Promise<string | null> {
+    if (process.platform === 'win32') return Promise.resolve(null);
+    if (process.platform === 'linux') {
+        try {
+            return Promise.resolve(fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ').trim());
+        } catch {
+            return Promise.resolve(null);
+        }
+    }
+    return new Promise((resolve) => {
+        execFile('ps', ['-p', String(pid), '-o', 'command='], (error, stdout) => {
+            if (error) {
+                resolve(null);
+                return;
+            }
+            resolve(stdout.trim() || null);
+        });
+    });
+}
+
+async function isRecordedChromeStillOwned(owner: BrowserRuntimeOwner | null): Promise<boolean> {
+    if (!owner || owner.ownership !== 'jaw-owned') return false;
+    if (!owner.pid || !owner.port || !owner.userDataDir) return false;
+    if (process.platform === 'win32') return false;
+    const command = await readProcessCommandLine(owner.pid);
+    if (!command) return false;
+    return command.includes(`--remote-debugging-port=${owner.port}`)
+        && command.includes(`--user-data-dir=${owner.userDataDir}`);
+}
+
+function disconnectLocalBrowserCache(): void {
+    cached = null;
+}
+
+async function closeOwnedChrome(reason: 'manual' | 'idle'): Promise<boolean> {
+    const owner = runtimeOwner;
+    const proofOk = await isRecordedChromeStillOwned(owner);
+    const action = decideBrowserCloseAction(owner, reason, proofOk);
+    if (action === 'disconnect-only') {
+        disconnectLocalBrowserCache();
+        return true;
+    }
+    if (action !== 'close-owned') return false;
+
+    if (cached?.browser) {
+        await cached.browser.close().catch(() => undefined);
+        cached = null;
+    }
+    if (chromeProc && !chromeProc.killed) {
+        chromeProc.kill('SIGTERM');
+    } else if (owner?.pid) {
+        try {
+            process.kill(owner.pid, 'SIGTERM');
+        } catch {
+            // Process already exited or proof was stale after verification.
+        }
+    }
+    chromeProc = null;
+    runtimeOwner = null;
+    activePort = null;
+    verifiedActiveTargetId = null;
+    markBrowserStateChanged();
+    return true;
+}
+
+async function closeIfIdle(): Promise<void> {
+    if (!shouldCloseIdleRuntime(runtimeOwner, Date.now(), activeCommandCount)) return;
+    await closeOwnedChrome('idle');
+}
+
+function ensureIdleReaperStarted(): void {
+    if (idleReaper) return;
+    idleReaper = setInterval(() => {
+        void closeIfIdle().catch((error) => {
+            console.warn('[browser] idle auto-close failed', { error: (error as Error).message });
+        });
+    }, browserReaperIntervalMs());
+    idleReaper.unref?.();
+}
+
 export async function launchChrome(
     port = deriveCdpPort(),
     opts: { headless?: boolean; mode?: BrowserStartMode } = {},
@@ -136,6 +257,8 @@ export async function launchChrome(
             if (resp.ok) {
                 console.log(`[browser] CDP already listening on port ${port} — reusing existing instance`);
                 activePort = port;
+                runtimeOwner = createExternalBrowserRuntime(port);
+                ensureIdleReaperStarted();
                 return;
             }
         } catch {
@@ -176,6 +299,13 @@ export async function launchChrome(
     const ready = await waitForCdpReady(port);
     if (ready) {
         activePort = port;
+        runtimeOwner = createJawOwnedBrowserRuntime({
+            port,
+            pid: chromeProc.pid ?? null,
+            userDataDir: PROFILE_DIR,
+            headless,
+        });
+        ensureIdleReaperStarted();
     } else {
         if (chromeProc && !chromeProc.killed) {
             chromeProc.kill('SIGTERM');
@@ -299,8 +429,19 @@ export async function switchTab(port = getActivePort(), target: string): Promise
 export async function getBrowserStatus(port = getActivePort()) {
     try {
         const tabs = await listTabs(port);
-        return { running: true, tabs: tabs.length, cdpUrl: `http://127.0.0.1:${port}` };
-    } catch { return { running: false, tabs: 0 }; }
+        return {
+            running: true,
+            tabs: tabs.length,
+            cdpUrl: `http://127.0.0.1:${port}`,
+            runtime: getBrowserRuntimeStatus(),
+        };
+    } catch { return { running: false, tabs: 0, runtime: getBrowserRuntimeStatus() }; }
+}
+
+export function getBrowserRuntimeStatus(): BrowserRuntimeStatus {
+    return runtimeOwner
+        ? { ...runtimeOwner, activeCommandCount }
+        : createEmptyBrowserRuntime(activeCommandCount);
 }
 
 export async function getCdpSession(port = getActivePort()) {
@@ -310,9 +451,27 @@ export async function getCdpSession(port = getActivePort()) {
 }
 
 export async function closeBrowser() {
-    if (cached?.browser) { await cached.browser.close().catch(() => { }); cached = null; }
-    if (chromeProc && !chromeProc.killed) { chromeProc.kill('SIGTERM'); chromeProc = null; }
+    if (runtimeOwner?.ownership === 'external') {
+        disconnectLocalBrowserCache();
+        runtimeOwner = null;
+        activePort = null;
+        verifiedActiveTargetId = null;
+        markBrowserStateChanged();
+        return;
+    }
+    await closeOwnedChrome('manual');
+}
+
+export function resetBrowserRuntimeForTests(): void {
+    cached = null;
+    chromeProc = null;
     activePort = null;
+    runtimeOwner = null;
+    activeCommandCount = 0;
     verifiedActiveTargetId = null;
-    markBrowserStateChanged();
+    browserStateVersion = 0;
+    if (idleReaper) {
+        clearInterval(idleReaper);
+        idleReaper = null;
+    }
 }

@@ -125,3 +125,48 @@ test('CDP-012: blind 2s sleep removed', () => {
         'connection.ts should not have the old blind 2000ms sleep in launchChrome',
     );
 });
+
+test('CDP-013: runtime ownership is tracked separately from activePort', () => {
+    assert.match(
+        connectionSrc,
+        /let\s+runtimeOwner:\s*BrowserRuntimeOwner\s*\|\s*null\s*=\s*null/,
+        'connection.ts should track runtime ownership separately from activePort',
+    );
+    assert.match(
+        connectionSrc,
+        /createExternalBrowserRuntime\(port\)/,
+        'reused CDP ports should be classified as external',
+    );
+    assert.match(
+        connectionSrc,
+        /createJawOwnedBrowserRuntime\(\{[\s\S]*pid:\s*chromeProc\.pid\s*\?\?\s*null[\s\S]*headless/,
+        'spawned Chrome should be classified as current-process Jaw-owned',
+    );
+});
+
+test('CDP-014: browser status includes runtime metadata without activity touch', () => {
+    const statusFn = connectionSrc.match(/export async function getBrowserStatus[\s\S]*?\n}\n\nexport function getBrowserRuntimeStatus/)?.[0] || '';
+    assert.match(statusFn, /runtime:\s*getBrowserRuntimeStatus\(\)/);
+    assert.doesNotMatch(statusFn, /touchBrowserRuntime|beginBrowserActivity|withBrowserActivity/);
+});
+
+test('CDP-015: route-level activity covers browser work but excludes status/start/stop', () => {
+    const activityList = routesSrc.match(/const BROWSER_ACTIVITY_PATHS = \[[\s\S]*?\];/)?.[0] || '';
+    for (const path of [
+        '/api/browser/snapshot',
+        '/api/browser/tabs',
+        '/api/browser/web-ai/status',
+        '/api/browser/web-ai/send',
+        '/api/browser/web-ai/diagnose',
+    ]) {
+        assert.match(activityList, new RegExp(path.replace(/[/-]/g, '\\$&')));
+    }
+    assert.doesNotMatch(activityList, /\/api\/browser\/status['"]/);
+    assert.doesNotMatch(activityList, /\/api\/browser\/start['"]/);
+    assert.doesNotMatch(activityList, /\/api\/browser\/stop['"]/);
+});
+
+test('CDP-016: CLI status prints runtime owner and idle close policy', () => {
+    assert.match(cliBrowserSrc, /owner:\s*\$\{runtime\.ownership \|\| 'none'\}/);
+    assert.match(cliBrowserSrc, /idleClose:/);
+});

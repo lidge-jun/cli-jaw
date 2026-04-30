@@ -15,6 +15,11 @@ export const CHATGPT_MODEL_SELECTOR_BUTTONS = [
     'button[aria-label*="model selector" i]',
 ] as const;
 
+const CHATGPT_COMPOSER_MODEL_PILL_SELECTORS = [
+    'button.__composer-pill[aria-haspopup="menu"]',
+    '[role="button"].__composer-pill[aria-haspopup="menu"]',
+] as const;
+
 export const CHATGPT_MODEL_OPTIONS: Record<ChatGptModelChoice, { testIds: string[]; labels: string[] }> = {
     instant: {
         testIds: ['model-switcher-gpt-5-3'],
@@ -89,12 +94,23 @@ async function closeModelMenu(page: Page): Promise<void> {
 async function openModelMenu(page: Page, usedFallbacks: string[]): Promise<void> {
     const alreadyOpen = await page.locator('[role="menuitemradio"][data-testid^="model-switcher-"]').first().isVisible().catch(() => false);
     if (alreadyOpen) return;
-    for (const selector of CHATGPT_MODEL_SELECTOR_BUTTONS) {
-        const loc = page.locator(selector).first();
-        if (!(await loc.isVisible().catch(() => false))) continue;
-        await loc.click({ timeout: 5_000 });
-        await page.waitForTimeout(400).catch(() => undefined);
-        if (await page.locator('[role="menuitemradio"][data-testid^="model-switcher-"]').first().isVisible().catch(() => false)) return;
+    const deadline = Date.now() + 8_000;
+    while (Date.now() < deadline) {
+        for (const selector of CHATGPT_MODEL_SELECTOR_BUTTONS) {
+            const loc = page.locator(selector).first();
+            if (!(await loc.isVisible().catch(() => false))) continue;
+            await loc.click({ timeout: 5_000 });
+            await page.waitForTimeout(400).catch(() => undefined);
+            if (await page.locator('[role="menuitemradio"][data-testid^="model-switcher-"]').first().isVisible().catch(() => false)) return;
+        }
+        const composerPill = await findComposerModelPill(page);
+        if (composerPill) {
+            usedFallbacks.push('composer-model-pill');
+            await composerPill.click({ timeout: 5_000 });
+            await page.waitForTimeout(400).catch(() => undefined);
+            if (await page.locator('[role="menuitemradio"][data-testid^="model-switcher-"]').first().isVisible().catch(() => false)) return;
+        }
+        await page.waitForTimeout(250).catch(() => undefined);
     }
     usedFallbacks.push('model-menu-text-button');
     const textButton = page.locator('button').filter({ hasText: /^ChatGPT$|^GPT-/i }).first();
@@ -103,7 +119,21 @@ async function openModelMenu(page: Page, usedFallbacks: string[]): Promise<void>
         await page.waitForTimeout(400).catch(() => undefined);
         if (await page.locator('[role="menuitemradio"][data-testid^="model-switcher-"]').first().isVisible().catch(() => false)) return;
     }
-    throw new Error(`ChatGPT model selector not found. Tried: ${CHATGPT_MODEL_SELECTOR_BUTTONS.join(', ')}`);
+    throw new Error(`ChatGPT model selector not found. Tried: ${[...CHATGPT_MODEL_SELECTOR_BUTTONS, ...CHATGPT_COMPOSER_MODEL_PILL_SELECTORS].join(', ')}`);
+}
+
+async function findComposerModelPill(page: Page): Promise<ReturnType<Page['locator']> | null> {
+    const labelPattern = /^(Instant|Thinking|Pro)\b/i;
+    for (const selector of CHATGPT_COMPOSER_MODEL_PILL_SELECTORS) {
+        const candidates = await page.locator(selector).count().catch(() => 0);
+        for (let index = candidates - 1; index >= 0; index -= 1) {
+            const loc = page.locator(selector).nth(index);
+            if (!(await loc.isVisible().catch(() => false))) continue;
+            const text = await loc.innerText({ timeout: 1_000 }).catch(() => '');
+            if (labelPattern.test(text.trim())) return loc;
+        }
+    }
+    return null;
 }
 
 async function findModelOption(page: Page, choice: ChatGptModelChoice): Promise<ReturnType<Page['locator']> | null> {

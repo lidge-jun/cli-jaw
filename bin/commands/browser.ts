@@ -7,12 +7,12 @@ import { rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { getServerUrl, JAW_HOME, deriveCdpPort, loadSettings } from '../../src/core/config.js';
 import { getCliAuthToken, authHeaders } from '../../src/cli/api-auth.js';
+import { runWebAiCommand } from './browser-web-ai.js';
 
 loadSettings();
 const SERVER = getServerUrl();
 await getCliAuthToken();
 const sub = process.argv[3];
-const WEB_AI_COMMANDS = new Set(['render', 'status', 'send', 'poll', 'query', 'watch', 'watchers', 'sessions', 'notifications', 'capabilities', 'stop', 'diagnose']);
 
 // ─── ANSI ────────────────────────────────────
 const c = {
@@ -50,125 +50,10 @@ function parseClip(values: Record<string, any>) {
     return { x, y, width, height };
 }
 
-function rejectFutureWebAiFlags(values: Record<string, any>) {
-    const vendor = values.vendor ?? 'chatgpt';
-    if (vendor !== 'chatgpt' && vendor !== 'gemini') throw new Error(`unsupported vendor: ${vendor}`);
-    if (values.model && vendor !== 'chatgpt') throw new Error('--model is currently supported only for --vendor chatgpt.');
-    if (values.model && !isSupportedChatGptModel(values.model)) throw new Error(`unsupported ChatGPT model selection: ${values.model}`);
-}
-
-function isSupportedChatGptModel(model: unknown): boolean {
-    return new Set(['instant', 'fast', 'gpt-5-3', 'gpt-5.3', 'thinking', 'think', 'gpt-5-5-thinking', 'gpt-5.5-thinking', 'pro', 'gpt-5-5-pro', 'gpt-5.5-pro'])
-        .has(String(model || '').trim().toLowerCase());
-}
-
-async function runWebAiCommand(args: string[]) {
-    const command = args[0];
-    if (!command || !WEB_AI_COMMANDS.has(command)) {
-        throw new Error(`Usage: cli-jaw browser web-ai <${[...WEB_AI_COMMANDS].join('|')}> --vendor chatgpt`);
-    }
-    const { values } = parseArgs({
-        args: args.slice(1),
-        options: {
-            vendor: { type: 'string', default: 'chatgpt' },
-            prompt: { type: 'string' },
-            url: { type: 'string' },
-            system: { type: 'string' },
-            project: { type: 'string' },
-            goal: { type: 'string' },
-            context: { type: 'string' },
-            question: { type: 'string' },
-            output: { type: 'string' },
-            constraints: { type: 'string' },
-            timeout: { type: 'string' },
-            session: { type: 'string' },
-            stage: { type: 'string' },
-            status: { type: 'string' },
-            family: { type: 'string' },
-            'frontend-status': { type: 'string' },
-            'poll-interval': { type: 'string' },
-            'inline-only': { type: 'boolean', default: false },
-            'allow-copy-markdown-fallback': { type: 'boolean', default: false },
-            notify: { type: 'boolean', default: true },
-            file: { type: 'string' },
-            model: { type: 'string' },
-            'thinking-time': { type: 'string' },
-            json: { type: 'boolean', default: false },
-        },
-        strict: false,
-    });
-    rejectFutureWebAiFlags(values);
-    const vendor = values.vendor ?? 'chatgpt';
-    if (['send', 'query'].includes(command) && !values['inline-only'] && !values.file) {
-        throw new Error('web-ai send/query require --inline-only or --file=<path>');
-    }
-    const body = {
-        vendor: values.vendor,
-        url: values.url,
-        prompt: values.prompt,
-        system: values.system,
-        project: values.project,
-        goal: values.goal,
-        context: values.context,
-        question: values.question,
-        output: values.output,
-        constraints: values.constraints,
-        timeout: values.timeout,
-        attachmentPolicy: values.file ? 'upload' : 'inline-only',
-        ...(values.file ? { filePath: values.file } : {}),
-        ...(values['thinking-time'] ? { thinkingTime: values['thinking-time'] } : {}),
-        ...(values.model ? { model: values.model } : {}),
-    };
-    const result = await callWebAiEndpoint(command, body, values);
-    if (values.json) console.log(JSON.stringify(result, null, 2));
-    else printWebAiHuman(command, result as Record<string, any>);
-}
-
-async function callWebAiEndpoint(command: string, body: Record<string, any>, values: Record<string, any>) {
-    if (command === 'status') return api('GET', `/web-ai/status${qs({ vendor: values.vendor })}`);
-    if (command === 'sessions') return api('GET', `/web-ai/sessions${qs({ vendor: values.vendor, status: values.status })}`);
-    if (command === 'notifications') return api('GET', `/web-ai/notifications${qs({ vendor: values.vendor, status: values.status, session: values.session })}`);
-    if (command === 'watchers') return api('GET', '/web-ai/watchers');
-    if (command === 'capabilities') return api('GET', `/web-ai/capabilities${qs({ vendor: values.vendor, family: values.family, frontendStatus: values['frontend-status'] })}`);
-    if (command === 'poll') return api('GET', `/web-ai/poll${qs({ vendor: values.vendor, timeout: values.timeout, session: values.session, allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'] })}`);
-    if (command === 'watch') return api('GET', `/web-ai/watch${qs({ vendor: values.vendor, timeout: values.timeout, session: values.session, url: values.url, notify: values.notify, pollIntervalSeconds: values['poll-interval'], allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'] })}`);
-    if (command === 'diagnose') return api('GET', `/web-ai/diagnose${qs({ vendor: values.vendor, stage: values.stage })}`);
-    return api('POST', `/web-ai/${command}`, body);
-}
-
-function printWebAiHuman(command: string, result: Record<string, any>) {
-    if (command === 'render') {
-        console.log(result.rendered?.composerText || result.rendered?.markdown || '');
-        if (result.warnings?.length) console.error(`[warnings] ${result.warnings.join(', ')}`);
-        return;
-    }
-    if (result.answerText) {
-        console.log(result.answerText);
-        return;
-    }
-    if (Array.isArray(result.sessions)) {
-        console.log(JSON.stringify(result.sessions, null, 2));
-        return;
-    }
-    if (Array.isArray(result.notifications)) {
-        console.log(JSON.stringify(result.notifications, null, 2));
-        return;
-    }
-    if (Array.isArray(result.watchers)) {
-        console.log(JSON.stringify(result.watchers, null, 2));
-        return;
-    }
-    if (Array.isArray(result.capabilities)) {
-        console.log(JSON.stringify(result.capabilities, null, 2));
-        return;
-    }
-    console.log(`${result.status}: ${result.url || result.vendor || 'web-ai'}`);
-}
-
 try {
     switch (sub) {
         case 'web-ai':
-            await runWebAiCommand(process.argv.slice(4));
+            await runWebAiCommand(process.argv.slice(4), { api, qs });
             break;
         case 'start': {
             const { values } = parseArgs({
@@ -193,7 +78,18 @@ try {
             break;
         case 'status': {
             const r = await api('GET', '/status') as Record<string, any>;
-            console.log(`running: ${r.running}\ntabs: ${r.tabs}\ncdpUrl: ${r.cdpUrl || 'n/a'}`);
+            const runtime = r.runtime || {};
+            const idleMs = Number(runtime.idleTimeoutMs);
+            const idleClose = runtime.autoCloseEnabled
+                ? `enabled after ${Number.isFinite(idleMs) ? `${Math.round(idleMs / 60000)}m` : 'configured timeout'}`
+                : 'disabled';
+            console.log([
+                `running: ${r.running}`,
+                `tabs: ${r.tabs}`,
+                `cdpUrl: ${r.cdpUrl || 'n/a'}`,
+                `owner: ${runtime.ownership || 'none'}`,
+                `idleClose: ${idleClose}`,
+            ].join('\n'));
             break;
         }
         case 'snapshot': {

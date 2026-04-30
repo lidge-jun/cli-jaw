@@ -11,6 +11,33 @@ const cdpPort = (req: Request) => {
     return browser.getActivePort();
 };
 
+const BROWSER_ACTIVITY_PATHS = [
+    '/api/browser/snapshot',
+    '/api/browser/screenshot',
+    '/api/browser/act',
+    '/api/browser/vision-click',
+    '/api/browser/navigate',
+    '/api/browser/reload',
+    '/api/browser/resize',
+    '/api/browser/tabs',
+    '/api/browser/active-tab',
+    '/api/browser/tab-switch',
+    '/api/browser/evaluate',
+    '/api/browser/text',
+    '/api/browser/dom',
+    '/api/browser/console',
+    '/api/browser/network',
+    '/api/browser/wait-for-selector',
+    '/api/browser/wait-for-text',
+    '/api/browser/web-ai/status',
+    '/api/browser/web-ai/send',
+    '/api/browser/web-ai/poll',
+    '/api/browser/web-ai/watch',
+    '/api/browser/web-ai/query',
+    '/api/browser/web-ai/stop',
+    '/api/browser/web-ai/diagnose',
+];
+
 export function resolveBrowserStartOptions(req: Request): {
     port: number;
     mode: BrowserStartMode;
@@ -24,6 +51,13 @@ export function resolveBrowserStartOptions(req: Request): {
 }
 
 export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, res: Response, next: NextFunction) => void) {
+    app.use(BROWSER_ACTIVITY_PATHS, requireAuth, (_req: Request, res: Response, next: NextFunction) => {
+        const endActivity = browser.beginBrowserActivity();
+        res.once('finish', endActivity);
+        res.once('close', endActivity);
+        next();
+    });
+
     app.post('/api/browser/start', requireAuth, async (req: Request, res: Response) => {
         try {
             const start = resolveBrowserStartOptions(req);

@@ -54,6 +54,9 @@ test('BWCOMP-006: file upload Phase B live runtime is exported', () => {
 
 test('BWCOMP-007: ChatGPT model selector uses observed radio menu fallbacks', () => {
     assert.match(modelSrc, /model-switcher-dropdown-button/);
+    assert.match(modelSrc, /__composer-pill/);
+    assert.match(modelSrc, /composer-model-pill/);
+    assert.match(modelSrc, /Instant\|Thinking\|Pro/);
     assert.match(modelSrc, /model-switcher-gpt-5-3/);
     assert.match(modelSrc, /model-switcher-gpt-5-5-thinking/);
     assert.match(modelSrc, /model-switcher-gpt-5-5-pro/);

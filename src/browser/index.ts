@@ -1,10 +1,13 @@
 export {
     launchChrome, connectCdp, getActivePage, getActivePort,
     listTabs, getBrowserStatus, closeBrowser,
+    getBrowserRuntimeStatus, beginBrowserActivity, withBrowserActivity,
+    resetBrowserRuntimeForTests,
     getCdpSession, getActiveTab, switchTab,
     markBrowserStateChanged, getBrowserStateVersion,
 } from './connection.js';
 export type { BrowserTabInfo, ActiveTabResult } from './connection.js';
+export type { BrowserRuntimeOwner, BrowserRuntimeStatus } from './runtime-owner.js';
 export * from './primitives.js';
 
 export {

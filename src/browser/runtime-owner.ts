@@ -24,6 +24,10 @@ export interface BrowserRuntimeStatus extends BrowserRuntimeOwner {
     activeCommandCount: number;
 }
 
+function nowIso(): string {
+    return new Date().toISOString();
+}
+
 export function parseBrowserRuntimeTimeout(
     value: string | undefined,
     fallback: number,
@@ -49,6 +53,42 @@ export function createEmptyBrowserRuntime(
         autoCloseEnabled: false,
         verified: false,
         activeCommandCount,
+    };
+}
+
+export function createJawOwnedBrowserRuntime(options: {
+    port: number;
+    pid: number | null;
+    userDataDir: string;
+    headless: boolean;
+}): BrowserRuntimeOwner {
+    const now = nowIso();
+    return {
+        ownership: 'jaw-owned',
+        pid: options.pid,
+        port: options.port,
+        userDataDir: options.userDataDir,
+        startedAt: now,
+        lastUsedAt: now,
+        headless: options.headless,
+        idleTimeoutMs: browserIdleTimeoutMs(),
+        autoCloseEnabled: true,
+        verified: true,
+    };
+}
+
+export function createExternalBrowserRuntime(port: number): BrowserRuntimeOwner {
+    return {
+        ownership: 'external',
+        pid: null,
+        port,
+        userDataDir: null,
+        startedAt: null,
+        lastUsedAt: null,
+        headless: null,
+        idleTimeoutMs: browserIdleTimeoutMs(),
+        autoCloseEnabled: false,
+        verified: false,
     };
 }
 
@@ -93,4 +133,3 @@ export function decideBrowserCloseAction(
     if (owner.ownership !== 'jaw-owned') return 'skip';
     return proofOk ? 'close-owned' : 'skip';
 }
-
