@@ -61,6 +61,8 @@ test('manager registry defaults when file is missing', () => {
     assert.deepEqual(loaded.registry.activeProfileFilter, []);
     assert.equal(loaded.status.loaded, true);
     assert.equal(loaded.status.error, null);
+    assert.equal(loaded.status.path, path);
+    assert.equal(loaded.status.migratedFrom, null);
 });
 
 test('manager registry falls back safely on invalid JSON', () => {
@@ -70,6 +72,8 @@ test('manager registry falls back safely on invalid JSON', () => {
     const loaded = loadDashboardRegistry({ path });
 
     assert.equal(loaded.status.loaded, false);
+    assert.equal(loaded.status.path, path);
+    assert.equal(loaded.status.migratedFrom, null);
     assert.match(String(loaded.status.error), /JSON/);
     assert.deepEqual(loaded.registry, defaultDashboardRegistry());
 });

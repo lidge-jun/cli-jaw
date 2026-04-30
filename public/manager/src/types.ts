@@ -209,6 +209,8 @@ export type DashboardRegistryStatus = {
     loaded: boolean;
     error: string | null;
     ui: DashboardRegistryUi;
+    dashboardHome?: string;
+    migratedFrom?: string | null;
 };
 
 export type DashboardRegistryPatch = {

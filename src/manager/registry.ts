@@ -5,6 +5,7 @@ import {
     MANAGED_INSTANCE_PORT_COUNT,
     MANAGED_INSTANCE_PORT_FROM,
 } from './constants.js';
+import { dashboardPath, resolveDashboardHome } from './dashboard-home.js';
 import { deriveProfiles, mergeProfiles } from './profiles.js';
 import type {
     DashboardDetailTab,
@@ -42,13 +43,22 @@ type ApplyOptions = {
     showHidden?: boolean;
 };
 
-function managerHome(): string {
+type StatusOptions = {
+    dashboardHome?: string;
+    migratedFrom?: string | null;
+};
+
+function legacyManagerHome(): string {
     const home = process.env.CLI_JAW_HOME || join(homedir(), '.cli-jaw');
     return resolve(home.replace(/^~(?=\/|$)/, homedir()));
 }
 
+function legacyRegistryPath(): string {
+    return join(legacyManagerHome(), REGISTRY_FILE);
+}
+
 export function dashboardRegistryPath(): string {
-    return join(managerHome(), REGISTRY_FILE);
+    return dashboardPath(REGISTRY_FILE);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -196,24 +206,66 @@ export function normalizeDashboardRegistry(value: unknown, options: RegistryOpti
     return { scan: { from, count }, ui: normalizeUi(input.ui), instances, profiles, activeProfileFilter };
 }
 
-function statusFor(path: string, loaded: boolean, error: string | null, registry: DashboardRegistry): DashboardRegistryStatus {
-    return { path, loaded, error, ui: registry.ui };
+function statusFor(path: string, loaded: boolean, error: string | null, registry: DashboardRegistry, options: StatusOptions = {}): DashboardRegistryStatus {
+    return {
+        path,
+        loaded,
+        error,
+        ui: registry.ui,
+        dashboardHome: options.dashboardHome,
+        migratedFrom: options.migratedFrom ?? null,
+    };
+}
+
+function readRegistryFile(path: string, options: RegistryOptions, statusOptions: StatusOptions = {}): DashboardRegistryLoadResult {
+    try {
+        const registry = normalizeDashboardRegistry(JSON.parse(readFileSync(path, 'utf8')), options);
+        return { registry, status: statusFor(path, true, null, registry, statusOptions) };
+    } catch (error) {
+        const registry = defaultDashboardRegistry(options);
+        return { registry, status: statusFor(path, false, (error as Error).message, registry, statusOptions) };
+    }
+}
+
+function migrateLegacyRegistry(path: string, legacyPath: string, options: RegistryOptions, dashboardHome: string): DashboardRegistryLoadResult {
+    try {
+        const registry = normalizeDashboardRegistry(JSON.parse(readFileSync(legacyPath, 'utf8')), options);
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, `${JSON.stringify(registry, null, 2)}\n`);
+        return {
+            registry,
+            status: statusFor(path, true, null, registry, { dashboardHome, migratedFrom: legacyPath }),
+        };
+    } catch (error) {
+        const registry = defaultDashboardRegistry(options);
+        return {
+            registry,
+            status: statusFor(path, false, (error as Error).message, registry, { dashboardHome, migratedFrom: null }),
+        };
+    }
 }
 
 export function loadDashboardRegistry(options: RegistryOptions = {}): DashboardRegistryLoadResult {
     const path = options.path || dashboardRegistryPath();
-    if (!existsSync(path)) {
-        const registry = defaultDashboardRegistry(options);
-        return { registry, status: statusFor(path, true, null, registry) };
+    if (options.path) {
+        if (!existsSync(path)) {
+            const registry = defaultDashboardRegistry(options);
+            return { registry, status: statusFor(path, true, null, registry) };
+        }
+        return readRegistryFile(path, options);
     }
 
-    try {
-        const registry = normalizeDashboardRegistry(JSON.parse(readFileSync(path, 'utf8')), options);
-        return { registry, status: statusFor(path, true, null, registry) };
-    } catch (error) {
+    const dashboardHome = resolveDashboardHome();
+    if (!existsSync(path)) {
+        const legacyPath = legacyRegistryPath();
+        if (existsSync(legacyPath)) {
+            return migrateLegacyRegistry(path, legacyPath, options, dashboardHome);
+        }
         const registry = defaultDashboardRegistry(options);
-        return { registry, status: statusFor(path, false, (error as Error).message, registry) };
+        return { registry, status: statusFor(path, true, null, registry, { dashboardHome, migratedFrom: null }) };
     }
+
+    return readRegistryFile(path, options, { dashboardHome, migratedFrom: null });
 }
 
 export function saveDashboardRegistry(registry: DashboardRegistry, options: RegistryOptions = {}): DashboardRegistryLoadResult {
@@ -221,7 +273,10 @@ export function saveDashboardRegistry(registry: DashboardRegistry, options: Regi
     const normalized = normalizeDashboardRegistry(registry, options);
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, `${JSON.stringify(normalized, null, 2)}\n`);
-    return { registry: normalized, status: statusFor(path, true, null, normalized) };
+    const statusOptions = options.path
+        ? {}
+        : { dashboardHome: resolveDashboardHome(), migratedFrom: null };
+    return { registry: normalized, status: statusFor(path, true, null, normalized, statusOptions) };
 }
 
 export function patchDashboardRegistry(patch: DashboardRegistryPatch, options: RegistryOptions = {}): DashboardRegistryLoadResult {
