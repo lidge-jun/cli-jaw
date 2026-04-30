@@ -62,6 +62,15 @@ test('lifecycle builds start command with top-level home flag', () => {
         storageRoot: dir,
     });
 
+    assert.deepEqual(manager.buildStartCommand(3457), [
+        '/usr/local/bin/jaw',
+        '--home',
+        '/Users/jun/.cli-jaw',
+        'serve',
+        '--port',
+        '3457',
+        '--no-open',
+    ]);
     assert.deepEqual(manager.buildStartCommand(3458), [
         '/usr/local/bin/jaw',
         '--home',
@@ -111,7 +120,7 @@ test('lifecycle marks external online instances as visible but not stoppable', (
     assert.equal(row.lifecycle?.canRestart, false);
 });
 
-test('lifecycle marks offline ports as startable with port-derived default home', (t) => {
+test('lifecycle marks offline ports as startable with default home policy', (t) => {
     const { dir, cleanup } = setupTmpStorage();
     t.after(cleanup);
     const manager = new DashboardLifecycleManager({
@@ -123,8 +132,10 @@ test('lifecycle marks offline ports as startable with port-derived default home'
         storageRoot: dir,
     });
 
+    const defaultRow = manager.decorateInstance(makeOffline(3457));
     const row = manager.decorateInstance(makeOffline(3460));
 
+    assert.equal(defaultRow.lifecycle?.defaultHome, '/Users/jun/.cli-jaw');
     assert.equal(row.lifecycle?.owner, 'none');
     assert.equal(row.lifecycle?.canStart, true);
     assert.equal(row.lifecycle?.defaultHome, '/Users/jun/.cli-jaw-3460');
@@ -144,7 +155,7 @@ test('lifecycle stop/restart are limited to manager-owned child processes', asyn
         processVerify: { isPortOccupied: async () => false },
         spawnImpl: ((command: string, args: string[]) => {
             assert.equal(command, '/usr/local/bin/jaw');
-            assert.deepEqual(args.slice(0, 2), ['--home', join(dir, '.cli-jaw-3457')]);
+            assert.deepEqual(args.slice(0, 2), ['--home', join(dir, '.cli-jaw')]);
             const child = new FakeChild();
             children.push(child);
             return child;
@@ -155,7 +166,7 @@ test('lifecycle stop/restart are limited to manager-owned child processes', asyn
     assert.equal(rejected.ok, false);
     assert.match(rejected.message, /dashboard-owned/);
 
-    const started = await manager.start(3457, join(dir, '.cli-jaw-3457'));
+    const started = await manager.start(3457);
     assert.equal(started.ok, true);
     const owned = manager.decorateInstance(makeOnline(3457));
     assert.equal(owned.lifecycle?.owner, 'manager');

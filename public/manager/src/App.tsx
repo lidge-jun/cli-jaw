@@ -23,6 +23,7 @@ import { useTheme, syncThemeFromRegistry } from './hooks/useTheme';
 import { useCommandPalette } from './hooks/useCommandPalette';
 import { useInstanceMessageEvents } from './hooks/useInstanceMessageEvents';
 import { useManagerEvents } from './hooks/useManagerEvents';
+import { instanceLabel } from './instance-label';
 import type {
     DashboardDetailTab,
     DashboardInstance,
@@ -41,20 +42,6 @@ function formatUptime(seconds: number | null): string {
     return `${hours}h ${minutes % 60}m`;
 }
 
-function compactGeneratedInstanceName(value: string, port: number): string {
-    const rawName = value.split('/').filter(Boolean).pop() || value;
-    const withoutHash = rawName
-        .replace(/^\.?cli-jaw-(\d+)-[a-f0-9]{7,}$/i, 'cli-jaw $1')
-        .replace(/^\.?cli-jaw-(\d+)$/i, 'cli-jaw $1');
-    return withoutHash || `cli-jaw ${port}`;
-}
-
-function instanceLabel(instance: DashboardInstance): string {
-    if (instance.label) return instance.label;
-    const rawLabel = instance.instanceId || instance.homeDisplay || '';
-    const rawName = rawLabel.split('/').filter(Boolean).pop() || rawLabel;
-    return compactGeneratedInstanceName(rawName, instance.port);
-}
 export function App() {
     const [data, setData] = useState<DashboardScanResult | null>(null);
     const [loading, setLoading] = useState(true);
@@ -140,12 +127,6 @@ export function App() {
         void initialize();
     }, []);
 
-    useEffect(() => {
-        if (view.activeDetailTab !== 'preview') return;
-        if (view.selectedPort == null) return;
-        activityUnread.markPortSeen(view.selectedPort);
-    }, [messageEvents, view.activeDetailTab, view.selectedPort]);
-
     async function saveUi(ui: Parameters<typeof registry.save>[0]['ui']): Promise<void> {
         if (!hydrated) return;
         await registry.save({ ui });
@@ -208,6 +189,14 @@ export function App() {
         if (view.selectedPort == null) return filtered.find(instance => instance.ok) || null;
         return instances.find(instance => instance.port === view.selectedPort) || null;
     }, [filtered, instances, view.selectedPort]);
+
+    useEffect(() => {
+        if (view.activeDetailTab !== 'preview') return;
+        if (view.selectedPort == null) return;
+        if (!selectedInstance?.ok) return;
+        if (selectedInstance.port !== view.selectedPort) return;
+        activityUnread.markPortSeen(selectedInstance.port);
+    }, [messageEvents, managerEvents.events, selectedInstance, view.activeDetailTab, view.selectedPort]);
 
     function canLeaveDirtySettings(): boolean {
         if (view.activeDetailTab !== 'settings' || !settingsDirty) return true;

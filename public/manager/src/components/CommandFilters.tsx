@@ -64,7 +64,7 @@ export function CommandFilters(props: CommandFiltersProps) {
                     onChange={event => props.onCustomHomeChange(event.target.value)}
                     placeholder="Launch home (e.g. ~/.cli-jaw-custom)"
                     aria-label="Custom home for started instances"
-                    title="Custom home, default ~/.cli-jaw-<port>"
+                    title="Custom home, default ~/.cli-jaw for 3457 and ~/.cli-jaw-<port> for others"
                 />
             </div>
             <label className="toggle-control compact-toggle" title="Show hidden instances">

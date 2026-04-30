@@ -59,6 +59,7 @@ test('manager frontend exposes one-instance preview controls', () => {
     assert.ok(components.includes('.workbench-panel'), 'workbench panels must have stable sizing');
     assert.ok(components.includes('.workbench-panel[hidden]'), 'inactive persistent preview panel must not reserve space');
     assert.ok(preview.includes('<iframe'), 'preview component must mount iframe');
+    assert.ok(preview.includes('clipboard-read; clipboard-write'), 'preview iframe must explicitly allow clipboard read/write');
     assert.ok(app.includes('preview-inline-status'), 'workbench header must expose compact preview status');
     assert.equal(preview.includes('preview-status-row'), false, 'preview iframe area must not spend a row on status');
     assert.equal(preview.includes('Enable preview'), false, 'preview tab must not require a second enable toggle');
@@ -106,12 +107,17 @@ test('manager instance activity unread badges are row-scoped and registry-backed
     assert.ok(hook.includes('seenActivityAt'), 'activity unread hook must track the last seen activity timestamp');
     assert.ok(hook.includes('seenActivityByPort'), 'activity unread hook must track per-port seen timestamps');
     assert.ok(hook.includes('markPortSeen'), 'activity unread hook must expose click-to-clear behavior for one row');
+    assert.ok(hook.includes('Date.parse(latest) <= Date.parse(portSeenAt)'), 'markPortSeen must avoid redundant per-port seen saves');
+    assert.ok(hook.includes('Date.parse(latest) <= Date.parse(seenActivityAt)'), 'markPortSeen must respect global seen timestamps before saving');
     assert.ok(app.includes('activitySeenAt'), 'App must hydrate/persist activitySeenAt through registry UI');
     assert.ok(app.includes('activitySeenByPort'), 'App must hydrate/persist per-port activity seen state');
     assert.ok(hook.includes('if (!options.activityDockCollapsed) return {}'), 'App must hide row unread counts while Activity is open');
     assert.ok(app.includes('activityUnread.unreadByPort'), 'App must pass per-port unread counts into instance groups');
     assert.ok(app.includes('useInstanceMessageEvents(instances)'), 'App must poll instance messages without dashboard refresh');
     assert.ok(app.includes('activityUnread.markPortSeen'), 'App must mark the selected instance as seen when clicked');
+    assert.ok(app.includes("view.activeDetailTab !== 'preview'"), 'App must only auto-clear unread state while Preview is active');
+    assert.ok(app.includes('!selectedInstance?.ok'), 'App must not auto-clear unread state for offline or missing preview targets');
+    assert.ok(app.includes('selectedInstance.port !== view.selectedPort'), 'App must not auto-clear unread state for fallback selected instances');
     assert.ok(app.includes('onToggleActivity={activityUnread.openAndMarkSeen}'), 'mobile Activity open path must mark events as seen');
     assert.ok(types.includes('activitySeenAt: string | null'), 'frontend registry UI type must include activitySeenAt');
     assert.ok(types.includes('activitySeenByPort: Record<string, string>'), 'frontend registry UI type must include per-port seen state');

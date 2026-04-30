@@ -45,6 +45,9 @@ export function useActivityUnread(options: UseActivityUnreadOptions): UseActivit
     function markPortSeen(port: number): void {
         const latest = latestManagerEventAtForPort(options.events, port);
         if (!latest) return;
+        const portSeenAt = seenActivityByPort[port] || null;
+        if (portSeenAt && Date.parse(latest) <= Date.parse(portSeenAt)) return;
+        if (seenActivityAt && Date.parse(latest) <= Date.parse(seenActivityAt)) return;
         const next = { ...seenActivityByPort, [port]: latest };
         setSeenActivityByPort(next);
         void options.saveUi({

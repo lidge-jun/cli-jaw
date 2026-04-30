@@ -7,6 +7,7 @@ import type {
     DashboardLifecycleCapability,
     DashboardLifecycleResult,
 } from './types.js';
+import { MANAGED_INSTANCE_PORT_FROM } from './constants.js';
 
 export const START_FAILURE_GRACE_MS = 250;
 export const STOP_WAIT_TIMEOUT_MS = 3000;
@@ -24,6 +25,7 @@ export function isPositivePort(port: number): boolean {
 }
 
 export function defaultHomeForPort(port: number, root = homedir()): string {
+    if (port === MANAGED_INSTANCE_PORT_FROM) return join(root, '.cli-jaw');
     return join(root, `.cli-jaw-${port}`);
 }
 
