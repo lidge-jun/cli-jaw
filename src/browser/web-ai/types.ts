@@ -45,6 +45,7 @@ export interface QuestionEnvelopeInput {
     contextTransport?: 'inline' | 'upload' | 'auto' | 'none';
     inlineOnly?: boolean;
     allowCopyMarkdownFallback?: boolean;
+    allowGrokContextPack?: boolean;
 }
 
 export interface RenderedQuestionBundle {

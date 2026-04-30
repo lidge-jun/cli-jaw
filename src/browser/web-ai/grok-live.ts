@@ -13,7 +13,9 @@ import {
     updateSessionResult,
     updateSessionStatus,
 } from './session.js';
-import { prepareContextForBrowser, summarizeContextPack } from './context-pack/index.js';
+import { hasContextPackaging, prepareContextForBrowser, summarizeContextPack } from './context-pack/index.js';
+
+export const GROK_CONTEXT_PACK_WARNING = 'grok-context-pack-not-recommended: prefer inline prompts plus optional --file uploads for Grok; ChatGPT or Gemini handle context packages more reliably.';
 import type { QuestionEnvelopeInput, WebAiOutput } from './types.js';
 import { attachLocalFileLive } from './chatgpt-attachments.js';
 import { captureCopiedResponseText, GROK_COPY_SELECTORS, preferCopiedText } from './copy-markdown.js';
@@ -74,6 +76,11 @@ export async function grokSend(port: number, input: QuestionEnvelopeInput = {}):
     if (!isGrokUrl(page.url())) throw new Error(`active tab is not grok.com (${page.url()})`);
 
     const envelope = normalizeEnvelope({ ...input, vendor: 'grok' });
+    if (hasContextPackaging(input) && input.allowGrokContextPack !== true) {
+        const err = new Error('grok context-pack disabled by default; pass --allow-grok-context-pack to override');
+        (err as any).stage = 'grok-context-pack-not-allowed';
+        throw err;
+    }
     const contextPack = await prepareContextForBrowser({ ...input, vendor: 'grok' });
     if (contextPack?.attachments?.[0] && input.filePath) {
         throw new Error('context package upload and --file upload cannot be combined yet');
@@ -89,6 +96,9 @@ export async function grokSend(port: number, input: QuestionEnvelopeInput = {}):
             : renderQuestionEnvelope(envelope)
         : renderQuestionEnvelope(envelope);
     const warnings = [...rendered.warnings, ...(contextPack?.warnings || [])];
+    if (hasContextPackaging(input) && input.allowGrokContextPack === true) {
+        warnings.push(GROK_CONTEXT_PACK_WARNING);
+    }
 
     await openFreshGrokChat(page, warnings);
     const composerSel = await findFirstSelector(page, GROK_SELECTORS.composer, 10_000);

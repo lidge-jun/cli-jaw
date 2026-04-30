@@ -60,6 +60,7 @@ export async function runWebAiCommand(
             'poll-interval': { type: 'string' },
             'inline-only': { type: 'boolean', default: false },
             'allow-copy-markdown-fallback': { type: 'boolean', default: false },
+            'allow-grok-context-pack': { type: 'boolean', default: false },
             notify: { type: 'boolean', default: true },
             file: { type: 'string' },
             model: { type: 'string' },
@@ -107,6 +108,7 @@ export async function runWebAiCommand(
         ...(values['context-transport'] ? { contextTransport: values['context-transport'] } : {}),
         ...(values['inline-only'] ? { inlineOnly: true } : {}),
         ...(values['allow-copy-markdown-fallback'] ? { allowCopyMarkdownFallback: true } : {}),
+        ...(values['allow-grok-context-pack'] ? { allowGrokContextPack: true } : {}),
     };
     const result = await callWebAiEndpoint(command, body, values, deps) as Record<string, unknown>;
     const fullContextOutput = values.full === true || command === 'context-render';

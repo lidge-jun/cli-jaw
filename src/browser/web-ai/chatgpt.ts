@@ -233,7 +233,7 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
     if (session) assertSameTarget(session, active.targetId);
 
     const page = await requireActivePage(port);
-    const timeoutMs = Math.max(1, Number(input.timeout || 600)) * 1000;
+    const timeoutMs = Math.max(1, Number(input.timeout || 1200)) * 1000;
     const result = await captureAssistantResponse(page, {
         minTurnIndex: baseline.assistantCount,
         timeoutMs,
@@ -307,7 +307,7 @@ export async function watch(port: number, input: { vendor?: string; timeout?: nu
             port,
             vendor,
             sessionId: input.session,
-            timeoutMs: Math.max(1, Number(input.timeout || 600)) * 1000,
+            timeoutMs: Math.max(1, Number(input.timeout || 1200)) * 1000,
             pollIntervalSeconds: Number(input.pollIntervalSeconds || 30),
             allowCopyMarkdownFallback: input.allowCopyMarkdownFallback,
             pollOnce: (pollInput) => poll(port, pollInput),

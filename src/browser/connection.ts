@@ -255,6 +255,7 @@ export async function launchChrome(
                 signal: AbortSignal.timeout(2000),
             });
             if (resp.ok) {
+                console.warn(`[browser] warning: CDP port ${port} appears foreign — cli-jaw is attaching to an existing Chrome it did not start; verify --user-data-dir matches if you depend on profile state, and avoid sharing the same userDataDir between two CDP-controlled processes.`);
                 console.log(`[browser] CDP already listening on port ${port} — reusing existing instance`);
                 activePort = port;
                 runtimeOwner = createExternalBrowserRuntime(port);

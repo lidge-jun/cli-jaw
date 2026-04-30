@@ -47,3 +47,15 @@ test('BWAG-005: Grok supports observed model picker choices', () => {
     assert.match(grokLiveSrc, /selectGrokModel/);
     assert.match(grokLiveSrc, /model selected:/);
 });
+
+test('BWAG-006: Grok hard-gates context packaging unless --allow-grok-context-pack is passed', () => {
+    assert.match(grokLiveSrc, /hasContextPackaging\(input\) && input\.allowGrokContextPack !== true/);
+    assert.match(grokLiveSrc, /grok context-pack disabled by default/);
+    assert.match(grokLiveSrc, /'grok-context-pack-not-allowed'/);
+});
+
+test('BWAG-007: Grok soft warning fires only when override flag is set', () => {
+    assert.match(grokLiveSrc, /grok-context-pack-not-recommended/);
+    assert.match(grokLiveSrc, /hasContextPackaging\(input\) && input\.allowGrokContextPack === true/);
+    assert.match(grokLiveSrc, /warnings\.push\(GROK_CONTEXT_PACK_WARNING\)/);
+});

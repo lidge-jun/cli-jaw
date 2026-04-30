@@ -466,7 +466,7 @@ export async function geminiPoll(port: number, input: { timeout?: number | strin
     if (!baseline) throw new Error('baseline required. Run web-ai send --vendor gemini first.');
     const timeoutMs = Math.max(
         GEMINI_DEEP_THINK_CONSTRAINTS.minimumWaitMs,
-        Number(input.timeout || 900) * 1000,
+        Number(input.timeout || 1200) * 1000,
     );
     const deadline = Date.now() + timeoutMs;
     const completionSel = GEMINI_DEEP_THINK_SELECTORS.completionSignal[0];
