@@ -421,7 +421,7 @@ export function App() {
                                 <SidebarRail onlineCount={summary.online || 0} collapsed={view.sidebarCollapsed} mode={view.sidebarMode} onModeChange={handleSidebarModeChange} onToggleSidebar={handleSidebarToggle} />
                                 <div id="manager-sidebar-list" className="manager-sidebar-list">
                                     {view.sidebarMode === 'settings' ? (
-                                        <DashboardSettingsSidebar activeSection={dashboardSettingsSection} onSectionChange={setDashboardSettingsSection} />
+                                        <DashboardSettingsSidebar activeSection={dashboardSettingsSection} locale={view.locale} onSectionChange={setDashboardSettingsSection} />
                                     ) : view.sidebarMode === 'notes' ? (
                                         <NotesSidebar selectedPath={view.notesSelectedPath} dirtyPath={notesDirtyPath} treeWidth={view.notesTreeWidth} onSelectedPathChange={handleNotesSelectedPathChange} />
                                     ) : (

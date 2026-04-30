@@ -1,33 +1,55 @@
+import type { DashboardLocale } from '../types';
+
 type DashboardSettingsSection = 'display' | 'activity';
 
 type DashboardSettingsSidebarProps = {
     activeSection: DashboardSettingsSection;
+    locale: DashboardLocale;
     onSectionChange: (section: DashboardSettingsSection) => void;
 };
 
-const SECTIONS: Array<{ id: DashboardSettingsSection; label: string; hint: string }> = [
-    { id: 'display', label: 'Sidebar rows', hint: 'Density and inline controls' },
-    { id: 'activity', label: 'Preview & activity', hint: 'Title source and defaults' },
-];
+const COPY = {
+    ko: {
+        navLabel: '대시보드 설정 섹션',
+        eyebrow: '대시보드',
+        title: '설정',
+        sections: {
+            display: { label: '사이드바 행', hint: '밀도와 행 안 컨트롤' },
+            activity: { label: '미리보기와 활동', hint: '제목 출처와 기본값' },
+        },
+    },
+    en: {
+        navLabel: 'Dashboard settings sections',
+        eyebrow: 'Dashboard',
+        title: 'Settings',
+        sections: {
+            display: { label: 'Sidebar rows', hint: 'Density and inline controls' },
+            activity: { label: 'Preview & activity', hint: 'Title source and defaults' },
+        },
+    },
+} as const;
+
+const SECTION_IDS: DashboardSettingsSection[] = ['display', 'activity'];
 
 export function DashboardSettingsSidebar(props: DashboardSettingsSidebarProps) {
+    const copy = COPY[props.locale] || COPY.ko;
     return (
-        <nav className="dashboard-settings-sidebar" aria-label="Dashboard settings sections">
+        <nav className="dashboard-settings-sidebar" aria-label={copy.navLabel}>
             <div className="dashboard-settings-sidebar-header">
-                <span className="eyebrow">Dashboard</span>
-                <strong>Settings</strong>
+                <span className="eyebrow">{copy.eyebrow}</span>
+                <strong>{copy.title}</strong>
             </div>
             <div className="dashboard-settings-sidebar-list">
-                {SECTIONS.map(section => (
+                {SECTION_IDS.map(section => (
                     <button
-                        key={section.id}
-                        className={`dashboard-settings-sidebar-button${props.activeSection === section.id ? ' is-active' : ''}`}
+                        key={section}
+                        className={`dashboard-settings-sidebar-button${props.activeSection === section ? ' is-active' : ''}`}
                         type="button"
-                        aria-pressed={props.activeSection === section.id}
-                        onClick={() => props.onSectionChange(section.id)}
+                        aria-pressed={props.activeSection === section}
+                        onClick={() => props.onSectionChange(section)}
                     >
-                        <span>{section.label}</span>
-                        <small>{section.hint}</small>
+                        <span>{copy.sections[section].label}</span>
+                        <small>{copy.sections[section].hint}</small>
                     </button>
                 ))}
             </div>

@@ -327,7 +327,12 @@ test('manager dashboard settings workspace controls sidebar display preferences'
     assert.ok(workspace.includes('Expanded row actions'), 'settings workspace must expose selected actions toggle with clear copy');
     assert.ok(workspace.includes('Left instance list'), 'settings workspace must show setting scope labels');
     assert.ok(workspace.includes('Language'), 'settings workspace must expose a saved language menu');
+    assert.ok(workspace.includes('인스턴스 목록 표시'), 'settings workspace must render Korean copy when locale=ko');
+    assert.ok(workspace.includes('최근 작업 미리보기'), 'settings workspace must localize row labels');
+    assert.ok(workspace.includes('언어'), 'settings workspace must localize the language row');
     assert.ok(workspace.includes('LOCALE_OPTIONS'), 'settings workspace must define supported locale options');
+    assert.ok(sidebar.includes('사이드바 행'), 'settings sidebar must render Korean section copy when locale=ko');
+    assert.ok(app.includes('locale={view.locale}'), 'settings sidebar must receive the saved dashboard locale');
     assert.ok(workspace.includes("props.onUiPatch({ locale: next })"), 'settings workspace must save dashboard locale through manager registry UI');
     assert.equal(workspace.includes('fetchDashboardRuntimeSettings'), false, 'manager dashboard must not call missing root /api/settings for locale');
     assert.equal(workspace.includes('updateDashboardRuntimeSettings'), false, 'manager dashboard must not PUT missing root /api/settings for locale');
