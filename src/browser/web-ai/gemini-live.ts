@@ -14,7 +14,7 @@
 import type { Page } from 'playwright-core';
 import { getActivePage, getActiveTab } from '../connection.js';
 import { GEMINI_DEEP_THINK_SELECTORS, GEMINI_DEEP_THINK_OFFICIAL_SOURCES, GEMINI_DEEP_THINK_CONSTRAINTS, type GeminiAccountStatus, type GeminiStatusReport } from './gemini-contract.js';
-import { normalizeEnvelope, renderQuestionEnvelope } from './question.js';
+import { normalizeEnvelope, renderQuestionEnvelopeWithContext } from './question.js';
 import {
     createSession,
     findSessionByTarget,
@@ -26,6 +26,7 @@ import {
     assertSameTarget,
 } from './session.js';
 import type { QuestionEnvelopeInput, WebAiOutput } from './types.js';
+import { buildInlineContextOrFail, summarizeContextPack } from './context-pack/index.js';
 
 const GEMINI_HOSTS = new Set(['gemini.google.com']);
 
@@ -231,9 +232,10 @@ export async function geminiSend(port: number, input: QuestionEnvelopeInput = {}
         (err as any).stage = 'attachment-preflight';
         throw err;
     }
-    const rendered = renderQuestionEnvelope(envelope);
+    const contextPack = await buildInlineContextOrFail({ ...input, vendor: 'gemini' });
+    const rendered = renderQuestionEnvelopeWithContext(envelope, contextPack?.composerText);
     const usedFallbacks: string[] = [];
-    const warnings: string[] = [...rendered.warnings];
+    const warnings: string[] = [...rendered.warnings, ...(contextPack?.warnings || [])];
 
     await openFreshGeminiChat(page, warnings);
     const inputSel = await findFirstSelector(page, GEMINI_DEEP_THINK_SELECTORS.input, 10_000);
@@ -281,6 +283,7 @@ export async function geminiSend(port: number, input: QuestionEnvelopeInput = {}
         url: page.url(),
         baseline,
         sessionId: session.sessionId,
+        ...(contextPack ? { contextPack: summarizeContextPack(contextPack) } : {}),
         usedFallbacks,
         warnings: [...warnings, 'deep-think activated'],
     };

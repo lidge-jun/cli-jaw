@@ -86,6 +86,7 @@
     "discord.js": "^14.25.1",
     "dompurify": "^3.3.3",
     "express": "^5.2.1",
+    "fast-glob": "^3.3.3",
     "grammy": "^1.40.0",
     "helmet": "^8.1.0",
     "highlight.js": "^11.11.1",

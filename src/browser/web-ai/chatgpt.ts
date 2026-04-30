@@ -8,7 +8,7 @@ import {
     verifySentTurnAttachmentLive,
 } from './chatgpt-attachments.js';
 import { createChatGptEditorAdapter } from './vendor-editor-contract.js';
-import { normalizeEnvelope, renderQuestionEnvelope } from './question.js';
+import { normalizeEnvelope, renderQuestionEnvelope, renderQuestionEnvelopeWithContext } from './question.js';
 import {
     assertSameTarget,
     createSession,
@@ -30,6 +30,7 @@ import {
 import { reportGeminiContractOnlyStatus, GEMINI_DEEP_THINK_OFFICIAL_SOURCES } from './gemini-contract.js';
 import { geminiSend, geminiPoll, geminiStop, geminiStatus } from './gemini-live.js';
 import { ProviderRuntimeDisabledError } from './provider-adapter.js';
+import { buildInlineContextOrFail, summarizeContextPack } from './context-pack/index.js';
 import type {
     QuestionEnvelopeInput,
     WebAiOutput,
@@ -66,8 +67,18 @@ export function isChatGptUrl(url: string): boolean {
 
 export async function render(input: QuestionEnvelopeInput = {}): Promise<WebAiOutput> {
     const envelope = normalizeEnvelope(input);
-    const rendered = renderQuestionEnvelope(envelope);
-    return { ok: true, vendor: envelope.vendor, status: 'rendered', rendered, warnings: rendered.warnings };
+    const contextPack = await buildInlineContextOrFail(input);
+    const rendered = contextPack
+        ? renderQuestionEnvelopeWithContext(envelope, contextPack.composerText)
+        : renderQuestionEnvelope(envelope);
+    return {
+        ok: true,
+        vendor: envelope.vendor,
+        status: 'rendered',
+        rendered,
+        ...(contextPack ? { contextPack: summarizeContextPack(contextPack) } : {}),
+        warnings: [...rendered.warnings, ...(contextPack?.warnings || [])],
+    };
 }
 
 export async function status(port: number, input: { vendor?: string } = {}): Promise<WebAiOutput> {
@@ -92,7 +103,10 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
     const envelope = normalizeEnvelope(input);
     const active = await requireVerifiedChatGptTab(port, envelope.vendor);
     const page = await requireActivePage(port);
-    const rendered = renderQuestionEnvelope(envelope);
+    const contextPack = await buildInlineContextOrFail(input);
+    const rendered = contextPack
+        ? renderQuestionEnvelopeWithContext(envelope, contextPack.composerText)
+        : renderQuestionEnvelope(envelope);
     const selectedModel = await selectChatGptModel(page, input.model);
     await waitForStableAssistantCount(page);
     const assistantCount = await countAssistantMessages(page);
@@ -151,9 +165,11 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
         url: active.url,
         baseline,
         sessionId: session.sessionId,
+        ...(contextPack ? { contextPack: summarizeContextPack(contextPack) } : {}),
         usedFallbacks: selectedModel?.usedFallbacks,
         warnings: [
             ...rendered.warnings,
+            ...(contextPack?.warnings || []),
             ...(selectedModel ? [`model selected: ${selectedModel.selected}${selectedModel.alreadySelected ? ' (already selected)' : ''}`] : []),
         ],
     };

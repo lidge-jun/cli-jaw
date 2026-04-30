@@ -31,6 +31,14 @@ test('WAIS-003: web-ai skill keeps PRD32 first-slice scope narrow', () => {
     assert.match(skill, /file upload/);
 });
 
+test('WAIS-003b: web-ai skill documents Oracle-style context packaging before upload', () => {
+    const skill = fs.readFileSync(skillPath, 'utf8');
+    assert.match(skill, /context-dry-run/);
+    assert.match(skill, /context-render/);
+    assert.match(skill, /--context-from-files/);
+    assert.match(skill, /--file` still means live browser upload/);
+});
+
 test('WAIS-004: browser skill delegates AI workflows to web-ai skill', () => {
     const browserSkill = fs.readFileSync(browserSkillPath, 'utf8');
     assert.match(browserSkill, /For ChatGPT web-ai workflows, use the `web-ai` skill/);

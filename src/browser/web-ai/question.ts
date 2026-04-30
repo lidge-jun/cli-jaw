@@ -34,6 +34,23 @@ export function normalizeEnvelope(input: QuestionEnvelopeInput = {}): QuestionEn
 
 export function renderQuestionEnvelope(input: QuestionEnvelopeInput = {}): RenderedQuestionBundle {
     const envelope = normalizeEnvelope(input);
+    return renderNormalizedEnvelope(envelope);
+}
+
+export function renderQuestionEnvelopeWithContext(
+    input: QuestionEnvelopeInput = {},
+    contextComposerText = '',
+): RenderedQuestionBundle {
+    const envelope = normalizeEnvelope(input);
+    const contextText = String(contextComposerText || '').trim();
+    if (!contextText) return renderNormalizedEnvelope(envelope);
+    return renderNormalizedEnvelope({
+        ...envelope,
+        question: contextText,
+    });
+}
+
+function renderNormalizedEnvelope(envelope: QuestionEnvelope): RenderedQuestionBundle {
     const blocks: string[] = [];
     const warnings: string[] = [];
 

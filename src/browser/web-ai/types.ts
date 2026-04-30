@@ -36,6 +36,12 @@ export interface QuestionEnvelopeInput {
     filePath?: string;
     thinkingTime?: string;
     model?: string;
+    contextFromFiles?: string[];
+    contextExclude?: string[];
+    contextFile?: string;
+    maxInput?: string | number;
+    maxFileSize?: string | number;
+    filesReport?: boolean;
 }
 
 export interface RenderedQuestionBundle {
@@ -119,6 +125,7 @@ export interface WebAiOutput {
     }>;
     next?: 'poll' | 'reattach' | 'stop';
     canvas?: { kind: 'opened'; reason?: string };
+    contextPack?: import('./context-pack/index.js').ContextPackSummary;
     usedFallbacks?: string[];
     warnings: string[];
     error?: string;

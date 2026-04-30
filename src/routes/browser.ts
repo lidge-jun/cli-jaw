@@ -209,6 +209,16 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
         catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
 
+    app.post('/api/browser/web-ai/context-dry-run', requireAuth, async (req: Request, res: Response) => {
+        try { res.json(await browser.webAi.contextDryRun(req.body)); }
+        catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
+    });
+
+    app.post('/api/browser/web-ai/context-render', requireAuth, async (req: Request, res: Response) => {
+        try { res.json(await browser.webAi.contextRender(req.body)); }
+        catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
+    });
+
     app.get('/api/browser/web-ai/status', requireAuth, async (req: Request, res: Response) => {
         try { res.json(await browser.webAi.status(cdpPort(req), { vendor: String(req.query.vendor || 'chatgpt') })); }
         catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }

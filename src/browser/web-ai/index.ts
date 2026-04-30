@@ -23,5 +23,6 @@ export * from './chatgpt-response.js';
 export * from './chatgpt-attachments.js';
 export * from './chatgpt-model.js';
 export * from './product-surfaces.js';
+export * from './context-pack/index.js';
 export type * from './vendor-editor-contract.js';
 export { GEMINI_DEEP_THINK_CONSTRAINTS as GEMINI_DEEP_THINK_LEGACY_CONSTRAINTS } from './vendor-editor-contract.js';

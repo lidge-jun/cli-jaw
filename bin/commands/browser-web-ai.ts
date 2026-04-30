@@ -1,9 +1,10 @@
 import { parseArgs } from 'node:util';
+import { renderContextDryRunReport } from '../../src/browser/web-ai/context-pack/index.js';
 
 type BrowserApi = (method: string, path: string, body?: unknown) => Promise<unknown>;
 type QueryString = (params: Record<string, unknown>) => string;
 
-const WEB_AI_COMMANDS = new Set(['render', 'status', 'send', 'poll', 'query', 'watch', 'watchers', 'sessions', 'notifications', 'capabilities', 'stop', 'diagnose']);
+const WEB_AI_COMMANDS = new Set(['render', 'status', 'send', 'poll', 'query', 'watch', 'watchers', 'sessions', 'notifications', 'capabilities', 'stop', 'diagnose', 'context-dry-run', 'context-render']);
 
 function rejectFutureWebAiFlags(values: Record<string, unknown>): void {
     const vendor = values.vendor ?? 'chatgpt';
@@ -51,6 +52,14 @@ export async function runWebAiCommand(
             file: { type: 'string' },
             model: { type: 'string' },
             'thinking-time': { type: 'string' },
+            'context-from-files': { type: 'string', multiple: true },
+            'context-exclude': { type: 'string', multiple: true },
+            'context-file': { type: 'string' },
+            'max-input': { type: 'string' },
+            'max-file-size': { type: 'string' },
+            'files-report': { type: 'boolean', default: false },
+            'dry-run': { type: 'string' },
+            full: { type: 'boolean', default: false },
             json: { type: 'boolean', default: false },
         },
         strict: false,
@@ -75,9 +84,29 @@ export async function runWebAiCommand(
         ...(values.file ? { filePath: values.file } : {}),
         ...(values['thinking-time'] ? { thinkingTime: values['thinking-time'] } : {}),
         ...(values.model ? { model: values.model } : {}),
+        contextFromFiles: values['context-from-files'] || [],
+        contextExclude: values['context-exclude'] || [],
+        ...(values['context-file'] ? { contextFile: values['context-file'] } : {}),
+        ...(values['max-input'] ? { maxInput: values['max-input'] } : {}),
+        ...(values['max-file-size'] ? { maxFileSize: values['max-file-size'] } : {}),
+        ...(values['files-report'] ? { filesReport: values['files-report'] } : {}),
     };
     const result = await callWebAiEndpoint(command, body, values, deps) as Record<string, unknown>;
-    if (values.json) console.log(JSON.stringify(result, null, 2));
+    const fullContextOutput = values.full === true || command === 'context-render';
+    if (isContextCommand(command) && values.json) {
+        console.log(renderContextDryRunReport(result as any, {
+            mode: 'json',
+            full: fullContextOutput,
+            json: true,
+            includeComposerText: fullContextOutput,
+        }));
+    } else if (values.json) console.log(JSON.stringify(result, null, 2));
+    else if (isContextCommand(command)) {
+        console.log(renderContextDryRunReport(result as any, {
+            mode: fullContextOutput ? 'full' : String(values['dry-run'] || 'summary') as any,
+            full: fullContextOutput,
+        }));
+    }
     else printWebAiHuman(command, result);
 }
 
@@ -95,7 +124,12 @@ async function callWebAiEndpoint(
     if (command === 'poll') return deps.api('GET', `/web-ai/poll${deps.qs({ vendor: values.vendor, timeout: values.timeout, session: values.session, allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'] })}`);
     if (command === 'watch') return deps.api('GET', `/web-ai/watch${deps.qs({ vendor: values.vendor, timeout: values.timeout, session: values.session, url: values.url, notify: values.notify, pollIntervalSeconds: values['poll-interval'], allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'] })}`);
     if (command === 'diagnose') return deps.api('GET', `/web-ai/diagnose${deps.qs({ vendor: values.vendor, stage: values.stage })}`);
+    if (command === 'context-dry-run' || command === 'context-render') return deps.api('POST', `/web-ai/${command}`, body);
     return deps.api('POST', `/web-ai/${command}`, body);
+}
+
+function isContextCommand(command: string): boolean {
+    return command === 'context-dry-run' || command === 'context-render';
 }
 
 function printWebAiHuman(command: string, result: Record<string, unknown>): void {
