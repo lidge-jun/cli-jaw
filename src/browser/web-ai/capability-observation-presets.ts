@@ -12,15 +12,15 @@ export const CHATGPT_MODEL_SELECTOR_OBSERVATION: FrontendCapabilityObservation =
         '[data-testid="model-switcher-gpt-5-5-thinking-thinking-effort"]',
         '[data-testid="model-switcher-gpt-5-5-pro-thinking-effort"]',
     ],
-    textCandidates: ['Latest', 'Instant', 'Thinking', 'Thinking • Heavy', 'Pro', 'Effort', 'Configure...'],
-    activationPath: ['open model switcher or composer model pill', 'select menuitemradio', 'verify aria-checked=true'],
-    activeStateSignals: ['composer model pill text', 'role=menuitemradio', 'aria-checked=true'],
+    textCandidates: ['Latest', 'Instant', 'Fast', 'Thinking', 'Thinking • Heavy', 'Pro', 'Heavy', 'Effort', 'Configure...'],
+    activationPath: ['open model switcher or composer model pill', 'select menuitemradio or model-switcher effort menuitem', 'verify aria-checked=true or active pill text'],
+    activeStateSignals: ['composer model pill text', 'role=menuitemradio', 'aria-checked=true', 'Heavy pill for Pro/Heavy'],
     mutationRisk: 'low',
     notes: [
         'Codex Cloud is out of scope.',
         'Model label text must be filtered from response capture.',
         '2026-04-30 headed UI moved the visible model opener to the composer pill; top data-testid opener may be absent.',
-        'Thinking/Pro effort controls are schema-observed but runtime selection remains model-level.',
+        'Thinking/Pro effort controls are runtime selectors; Pro can appear as a Heavy composer pill in the headed UI.',
     ],
 };
 

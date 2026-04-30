@@ -56,10 +56,12 @@ test('BWCOMP-007: ChatGPT model selector uses observed radio menu fallbacks', ()
     assert.match(modelSrc, /model-switcher-dropdown-button/);
     assert.match(modelSrc, /__composer-pill/);
     assert.match(modelSrc, /composer-model-pill/);
-    assert.match(modelSrc, /Instant\|Thinking\|Pro/);
+    assert.match(modelSrc, /Instant\|Fast\|Thinking\|Pro\|Heavy/);
     assert.match(modelSrc, /model-switcher-gpt-5-3/);
     assert.match(modelSrc, /model-switcher-gpt-5-5-thinking/);
     assert.match(modelSrc, /model-switcher-gpt-5-5-pro/);
+    assert.match(modelSrc, /model-switcher-gpt-5-5-pro-thinking-effort/);
+    assert.match(modelSrc, /Heavy/);
     assert.match(modelSrc, /aria-checked="true"/);
     assert.match(chatgptSrc, /selectChatGptModel/);
 });
