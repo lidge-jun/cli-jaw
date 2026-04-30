@@ -19,6 +19,10 @@ type InstanceListContentProps = {
     transitionAction: DashboardLifecycleAction | null;
     activityUnreadByPort: Record<string, number>;
     latestTitleByPort: Record<number, string>;
+    showLatestActivityTitles: boolean;
+    showInlineLabelEditor: boolean;
+    showSidebarRuntimeLine: boolean;
+    showSelectedRowActions: boolean;
     profiles: DashboardProfile[];
     getLabel: (instance: DashboardInstance) => string;
     formatUptime: (seconds: number | null) => string;
@@ -55,6 +59,10 @@ export function InstanceListContent(props: InstanceListContentProps) {
                     transitionAction={props.transitionAction}
                     activityUnreadByPort={props.activityUnreadByPort}
                     latestTitleByPort={props.latestTitleByPort}
+                    showLatestActivityTitles={props.showLatestActivityTitles}
+                    showInlineLabelEditor={props.showInlineLabelEditor}
+                    showSidebarRuntimeLine={props.showSidebarRuntimeLine}
+                    showSelectedRowActions={props.showSelectedRowActions}
                     profiles={props.profiles}
                     getLabel={props.getLabel}
                     formatUptime={props.formatUptime}

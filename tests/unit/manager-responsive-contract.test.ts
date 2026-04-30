@@ -19,6 +19,7 @@ function readManagerCss(): string {
         'public/manager/src/manager-persistence.css',
         'public/manager/src/manager-profiles.css',
         'public/manager/src/manager-notes.css',
+        'public/manager/src/manager-dashboard-settings.css',
     ].map(read).join('\n');
 }
 
@@ -95,6 +96,7 @@ test('manager responsive CSS defines shell regions and breakpoints', () => {
     assert.equal(css.includes('instance-navigator-active'), false, 'navigator must not duplicate the selected instance outside the scroll body');
     assert.ok(css.includes('profile-chip-strip'), 'profile filters must have a stable horizontal strip');
     assert.ok(css.includes('notes-workspace'), 'notes workspace styling must exist');
+    assert.ok(css.includes('dashboard-settings-workspace'), 'dashboard settings workspace styling must exist');
 });
 
 test('manager tablet and mobile breakpoints override desktop sidebar state', () => {
@@ -132,6 +134,20 @@ test('manager Notes workspace has a mobile path without desktop sidebar forcing'
     assert.ok(mobile.includes('.notes-workspace'), 'mobile breakpoint must include Notes workspace rules');
     assert.ok(mobile.includes('grid-template-columns: 1fr'), 'mobile Notes layout must collapse to one column');
     assert.ok(mobile.includes('.notes-tree'), 'mobile Notes tree must not be forced into the desktop sidebar column');
+});
+
+test('manager Dashboard settings workspace has a compact mobile path', () => {
+    const css = read('public/manager/src/manager-dashboard-settings.css');
+    const mobile = cssBlock(css, '@media (max-width: 767px)');
+
+    assert.ok(css.includes('.dashboard-settings-workspace'), 'settings workspace must have a scoped layout root');
+    assert.ok(css.includes('.dashboard-settings-row'), 'settings workspace must use aligned row controls');
+    assert.ok(css.includes('.dashboard-settings-row-control'), 'settings workspace must keep controls aligned with labels');
+    assert.ok(css.includes('.dashboard-settings-status-grid'), 'settings workspace must style title support status cards');
+    assert.ok(mobile.includes('.dashboard-settings-workspace'), 'mobile breakpoint must include Dashboard settings workspace rules');
+    assert.ok(mobile.includes('.dashboard-settings-row'), 'mobile breakpoint must include Dashboard settings row collapse');
+    assert.ok(mobile.includes('.dashboard-settings-row-control'), 'mobile breakpoint must realign Dashboard settings controls');
+    assert.ok(mobile.includes('grid-template-columns: 1fr'), 'mobile Dashboard settings status grid must collapse to one column');
 });
 
 test('manager desktop layout uses one unified sidebar', () => {

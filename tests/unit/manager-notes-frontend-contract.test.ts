@@ -20,6 +20,7 @@ test('Notes workspace frontend files and API wrapper exist', () => {
         'public/manager/src/notes/NotesEmptyState.tsx',
         'public/manager/src/notes/useNoteDocument.ts',
         'public/manager/src/notes/notes-api.ts',
+        'public/manager/src/notes/editor-theme.ts',
         'public/manager/src/manager-notes.css',
     ].forEach(path => {
         assert.equal(existsSync(join(projectRoot, path)), true, `${path} must exist`);
@@ -74,29 +75,54 @@ test('Notes API and create actions surface backend/fallback failures without unc
     assert.ok(workspace.includes('onDirtyPathChange'), 'workspace must report dirty note path to the navigator tree');
     assert.equal(tree.includes('title="New folder">/</button>'), false, 'new folder control must not use a slash fallback');
     assert.ok(workspace.includes('event.metaKey || event.ctrlKey'), 'notes workspace must support Cmd/Ctrl+S save');
+    assert.ok(workspace.includes('if (!props.active) return;'), 'hidden persistent Notes workspace must not keep the global save shortcut active');
     assert.ok(workspace.includes("event.key.toLowerCase() !== 's'"), 'notes save shortcut must be limited to the S key');
     assert.ok(workspace.includes('event.preventDefault()'), 'notes save shortcut must suppress browser Save Page');
     assert.ok(workspace.includes('void document.save()'), 'notes save shortcut must call the existing manual save path');
 });
 
-test('SidebarRail exposes Instances and Notes workspace modes', () => {
+test('Notes markdown editor uses Manager-token CodeMirror theme', () => {
+    const editor = read('public/manager/src/notes/MarkdownEditor.tsx');
+    const theme = read('public/manager/src/notes/editor-theme.ts');
+
+    assert.ok(editor.includes("import { notesEditorTheme, notesSyntaxHighlighting } from './editor-theme'"), 'MarkdownEditor must import the shared notes editor theme');
+    assert.ok(editor.includes('notesEditorTheme, notesSyntaxHighlighting, markdown'), 'CodeMirror extensions must include the token-driven theme before markdown support');
+    assert.ok(theme.includes('EditorView.theme'), 'editor theme must use CodeMirror EditorView.theme');
+    assert.ok(theme.includes('syntaxHighlighting(notesHighlightStyle)'), 'syntax highlighting must be exported as a CodeMirror extension');
+    assert.ok(theme.includes('HighlightStyle.define'), 'editor theme must define syntax token colors');
+    assert.ok(theme.includes('var(--text-primary)'), 'editor theme must use Manager text tokens');
+    assert.ok(theme.includes('var(--canvas-deep)'), 'editor theme must use Manager canvas tokens');
+    assert.ok(theme.includes('var(--border-subtle)'), 'editor theme must use Manager border tokens');
+    assert.ok(theme.includes('var(--accent-soft)'), 'editor theme must use Manager accent tokens for selection/matching states');
+    assert.equal(theme.includes('@uiw/codemirror-theme'), false, 'Notes must not add a separate CodeMirror theme dependency');
+    assert.equal(theme.includes('#ffffff'), false, 'editor theme must not hardcode light backgrounds');
+    assert.equal(theme.includes('#000000'), false, 'editor theme must not hardcode pure black backgrounds');
+});
+
+test('SidebarRail exposes Instances, Notes, and Dashboard settings workspace modes', () => {
     const rail = read('public/manager/src/components/SidebarRail.tsx');
 
     assert.ok(rail.includes('DashboardSidebarMode'), 'rail props must use the sidebar mode type');
     assert.ok(rail.includes("onModeChange('instances')"), 'rail must switch to instances mode');
     assert.ok(rail.includes("onModeChange('notes')"), 'rail must switch to notes mode');
+    assert.ok(rail.includes("onModeChange('settings')"), 'rail must switch to Dashboard settings mode');
     assert.ok(rail.includes('aria-label="Instances"'), 'rail must label Instances mode');
     assert.ok(rail.includes('aria-label="Notes"'), 'rail must label Notes mode');
+    assert.ok(rail.includes('aria-label="Dashboard settings"'), 'rail must label Dashboard settings mode');
     assert.ok(rail.includes('rail-button'), 'rail mode controls must keep the existing compact rail button styling');
     assert.ok(rail.includes('rail-workspace-button'), 'rail mode controls must stay compact and must not become navigator text tabs');
     assert.ok(rail.includes('function MonitorIcon()'), 'rail must use an SVG icon for Instances instead of emoji or uppercase fallback');
     assert.ok(rail.includes('function NoteIcon()'), 'rail must use an SVG icon for Notes instead of emoji or uppercase fallback');
+    assert.ok(rail.includes('function SettingsIcon()'), 'rail must use an SVG icon for Dashboard settings instead of text fallback');
+    assert.ok(rail.includes('M9.671 4.136'), 'Dashboard settings rail icon must use a gear/cog shape');
+    assert.equal(rail.includes('M10 2.8v2'), false, 'Dashboard settings rail icon must not use a brightness/sun ray shape');
     assert.ok(
         rail.indexOf('rail-collapse-button') < rail.indexOf("onModeChange('instances')"),
         'collapse control must stay at the leading edge before mode buttons',
     );
     assert.equal(rail.includes('>I<'), false, 'rail must not use uppercase I as the collapsed Instances icon');
     assert.equal(rail.includes('>N<'), false, 'rail must not use uppercase N as the collapsed Notes icon');
+    assert.equal(rail.includes('>S<'), false, 'rail must not use uppercase S as the collapsed Dashboard settings icon');
     assert.equal(rail.includes('🖥️'), false, 'rail must not use emoji for Instances');
     assert.equal(rail.includes('📝'), false, 'rail must not use emoji for Notes');
     assert.equal(rail.includes('rail-button-label'), false, 'workspace mode controls must not render large text labels above Navigator');
@@ -109,9 +135,18 @@ test('App renders NotesWorkspace outside Workbench and imports notes CSS', () =>
 
     assert.ok(app.includes('import { NotesWorkspace }'), 'App must import NotesWorkspace');
     assert.ok(app.includes('import { NotesSidebar }'), 'App must import NotesSidebar for the existing navigator column');
+    assert.ok(app.includes('import { DashboardSettingsWorkspace }'), 'App must import Dashboard settings workspace');
+    assert.ok(app.includes('import { DashboardSettingsSidebar'), 'App must import Dashboard settings sidebar');
     assert.ok(app.includes("view.sidebarMode === 'notes'"), 'App must branch by sidebar mode');
+    assert.ok(app.includes("view.sidebarMode === 'settings'"), 'App must branch by Dashboard settings mode');
+    assert.ok(app.includes('workspace-surface-stack'), 'App must keep workspace mode surfaces mounted');
+    assert.ok(app.includes("active={view.sidebarMode === 'notes'}"), 'App must pass active state to NotesWorkspace and its persistent surface');
     assert.ok(app.includes('<NotesSidebar'), 'App must render the Notes file tree in the manager sidebar');
     assert.ok(app.includes('<NotesWorkspace'), 'App must render NotesWorkspace');
+    assert.ok(app.includes('<DashboardSettingsSidebar'), 'App must render Dashboard settings nav in the manager sidebar');
+    assert.ok(app.includes('<DashboardSettingsWorkspace'), 'App must render Dashboard settings workspace');
     assert.ok(main.includes('./manager-notes.css'), 'manager notes CSS must be loaded');
+    assert.ok(main.includes('./manager-dashboard-settings.css'), 'manager dashboard settings CSS must be loaded');
     assert.equal(workbench.includes("'notes'"), false, 'Workbench tabs must not include Notes');
+    assert.equal(workbench.includes("'dashboard-settings'"), false, 'Workbench tabs must not include Dashboard settings');
 });

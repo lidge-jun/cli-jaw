@@ -14,6 +14,10 @@ type InstanceRowProps = {
     transitioning?: DashboardLifecycleAction | null;
     activityUnreadCount?: number;
     latestActivityTitle?: string | null;
+    showLatestActivityTitle?: boolean;
+    showInlineLabelEditor?: boolean;
+    showRuntimeLine?: boolean;
+    showSelectedActions?: boolean;
     onSelect: (instance: DashboardInstance) => void;
     onPreview: (instance: DashboardInstance) => void;
     onMarkActivitySeen: (port: number) => void;
@@ -88,13 +92,13 @@ export function InstanceRow(props: InstanceRowProps) {
                     <span className="port">:{props.instance.port}</span>
                 </div>
                 <div className="instance-row-meta">
-                    {props.latestActivityTitle && <span className="instance-row-activity-title">{props.latestActivityTitle}</span>}
-                    <span className="instance-row-runtime">{props.instance.currentCli || 'cli n/a'} / {props.instance.currentModel || 'model n/a'}</span>
+                    {props.showLatestActivityTitle !== false && props.latestActivityTitle && <span className="instance-row-activity-title">{props.latestActivityTitle}</span>}
+                    {props.showRuntimeLine !== false && <span className="instance-row-runtime">{props.instance.currentCli || 'cli n/a'} / {props.instance.currentModel || 'model n/a'}</span>}
                     <span className="instance-row-version">v{props.instance.version || 'n/a'} · {props.uptime}</span>
                     <span className="instance-row-reason">{new Date(props.instance.lastCheckedAt).toLocaleTimeString()} · {reason}</span>
                 </div>
             </button>
-            {editing ? (
+            {props.showInlineLabelEditor !== false && editing ? (
                 <form className="instance-label-edit-form" onSubmit={(event) => void submitLabel(event)} onClick={stopAction}>
                     <input
                         className="instance-label-input"
@@ -118,7 +122,7 @@ export function InstanceRow(props: InstanceRowProps) {
                     </button>
                     {labelError && <span className="instance-label-error">{labelError}</span>}
                 </form>
-            ) : (
+            ) : props.showInlineLabelEditor !== false ? (
                 <button
                     className="instance-label-edit-button"
                     type="button"
@@ -136,7 +140,8 @@ export function InstanceRow(props: InstanceRowProps) {
                         <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
                     </svg>
                 </button>
-            )}
+            ) : null}
+            {props.showSelectedActions !== false && (
             <div className="instance-actions">
                 <button
                     type="button"
@@ -199,6 +204,7 @@ export function InstanceRow(props: InstanceRowProps) {
                     Restart
                 </button>
             </div>
+            )}
         </article>
     );
 }

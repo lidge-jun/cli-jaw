@@ -57,6 +57,11 @@ test('manager registry defaults when file is missing', () => {
     assert.equal(loaded.registry.ui.selectedTab, 'overview');
     assert.equal(loaded.registry.ui.activitySeenAt, null);
     assert.deepEqual(loaded.registry.ui.activitySeenByPort, {});
+    assert.equal(loaded.registry.ui.sidebarMode, 'instances');
+    assert.equal(loaded.registry.ui.showLatestActivityTitles, true);
+    assert.equal(loaded.registry.ui.showInlineLabelEditor, true);
+    assert.equal(loaded.registry.ui.showSidebarRuntimeLine, true);
+    assert.equal(loaded.registry.ui.showSelectedRowActions, true);
     assert.deepEqual(loaded.registry.profiles, {});
     assert.deepEqual(loaded.registry.activeProfileFilter, []);
     assert.equal(loaded.status.loaded, true);
@@ -94,6 +99,11 @@ test('manager registry clamps scan and UI values', () => {
                 bad: '2026-04-29T04:40:00.000Z',
                 3463: 'bad-date',
             },
+            sidebarMode: 'settings',
+            showLatestActivityTitles: false,
+            showInlineLabelEditor: 'bad',
+            showSidebarRuntimeLine: false,
+            showSelectedRowActions: 'bad',
         },
         instances: {
             3457: { label: ' main ', favorite: true, group: 'daily', hidden: false },
@@ -116,6 +126,11 @@ test('manager registry clamps scan and UI values', () => {
     assert.equal(loaded.registry.ui.activityDockHeight, 320);
     assert.equal(loaded.registry.ui.activitySeenAt, null);
     assert.deepEqual(loaded.registry.ui.activitySeenByPort, { 3462: '2026-04-29T04:40:00.000Z' });
+    assert.equal(loaded.registry.ui.sidebarMode, 'settings');
+    assert.equal(loaded.registry.ui.showLatestActivityTitles, false);
+    assert.equal(loaded.registry.ui.showInlineLabelEditor, true);
+    assert.equal(loaded.registry.ui.showSidebarRuntimeLine, false);
+    assert.equal(loaded.registry.ui.showSelectedRowActions, true);
     assert.equal(loaded.registry.instances['3457']?.label, 'main');
     assert.equal(loaded.registry.instances.bad, undefined);
     assert.equal(loaded.registry.profiles.default?.label, 'Default');
@@ -129,8 +144,13 @@ test('manager registry patch persists instance preferences', () => {
         ui: {
             selectedPort: 3461,
             selectedTab: 'settings',
+            sidebarMode: 'settings',
             activitySeenAt: '2026-04-29T04:40:00.000Z',
             activitySeenByPort: { 3461: '2026-04-29T04:41:00.000Z' },
+            showLatestActivityTitles: false,
+            showInlineLabelEditor: false,
+            showSidebarRuntimeLine: false,
+            showSelectedRowActions: false,
         },
         instances: { 3461: { label: 'worker', favorite: true, hidden: true } },
         profiles: { default: { label: 'Default', homePath: '/Users/jun/.cli-jaw', pinned: true } },
@@ -140,8 +160,13 @@ test('manager registry patch persists instance preferences', () => {
     assert.equal(saved.registry.scan.from, 3460);
     assert.equal(saved.registry.scan.count, 8);
     assert.equal(saved.registry.ui.selectedTab, 'settings');
+    assert.equal(saved.registry.ui.sidebarMode, 'settings');
     assert.equal(saved.registry.ui.activitySeenAt, '2026-04-29T04:40:00.000Z');
     assert.deepEqual(saved.registry.ui.activitySeenByPort, { 3461: '2026-04-29T04:41:00.000Z' });
+    assert.equal(saved.registry.ui.showLatestActivityTitles, false);
+    assert.equal(saved.registry.ui.showInlineLabelEditor, false);
+    assert.equal(saved.registry.ui.showSidebarRuntimeLine, false);
+    assert.equal(saved.registry.ui.showSelectedRowActions, false);
     assert.equal(saved.registry.instances['3461']?.label, 'worker');
     assert.equal(saved.registry.instances['3461']?.favorite, true);
     assert.equal(saved.registry.instances['3461']?.hidden, true);

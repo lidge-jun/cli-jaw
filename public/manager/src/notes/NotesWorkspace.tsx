@@ -7,6 +7,7 @@ import { useNoteDocument } from './useNoteDocument';
 import type { NotesViewMode } from './notes-types';
 
 type NotesWorkspaceProps = {
+    active: boolean;
     selectedPath: string | null;
     viewMode: NotesViewMode;
     wordWrap: boolean;
@@ -31,6 +32,7 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
     }, [document.dirty, props.selectedPath]);
 
     useEffect(() => {
+        if (!props.active) return;
         function handleSaveShortcut(event: KeyboardEvent): void {
             if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 's') return;
             event.preventDefault();
@@ -39,7 +41,7 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
 
         window.addEventListener('keydown', handleSaveShortcut);
         return () => window.removeEventListener('keydown', handleSaveShortcut);
-    }, [document.save]);
+    }, [document.save, props.active]);
 
     const showEditor = props.viewMode === 'raw' || props.viewMode === 'split';
     const showPreview = props.viewMode === 'preview' || props.viewMode === 'split';

@@ -12,13 +12,15 @@
 
 [English](README.md) / **한국어** / [中文](README.zh-CN.md)
 
-<video src="https://github.com/user-attachments/assets/a7cf17c9-bfb3-44f0-b7fd-d001a39643fd" autoplay loop muted playsinline width="100%"></video>
+![CLI-JAW manager dashboard](docs/screenshots/manager-dashboard-light.png)
 
 </div>
 
 <table>
 <tr><td><b>기존 구독을 그대로 활용</b></td><td>Claude Max, ChatGPT Pro, Copilot, Gemini Advanced — OAuth 라우팅. OpenCode로 아무 모델이나 추가 가능. 토큰 과금 없음.</td></tr>
-<tr><td><b>어디서든 접근</b></td><td>웹 PWA(가상 스크롤, WS 스트리밍) + Mac WebView 앱 + 터미널 TUI + Telegram(음성) + Discord — 5개 인터페이스, 하나의 대화.</td></tr>
+<tr><td><b>매니저 대시보드</b></td><td>로컬 JAW 인스턴스를 한 곳에서 추적하고, live Web UI preview, 라이트/다크 테마, 런타임 설정, 시작/중지/열기 작업을 관리합니다.</td></tr>
+<tr><td><b>Notes 워크스페이스</b></td><td>대시보드 홈 아래 markdown vault. 폴더, 이름 변경/이동, dirty 표시, Raw/Split/Preview, KaTeX, Mermaid, 코드블럭 하이라이트를 지원합니다.</td></tr>
+<tr><td><b>어디서든 접근</b></td><td>매니저 대시보드 + 웹 PWA + Mac WebView 앱 + 터미널 TUI + Telegram(음성) + Discord — 모든 인터페이스가 하나의 메모리를 공유합니다.</td></tr>
 <tr><td><b>3계층 메모리</b></td><td>History Block(최근 세션) + Memory Flush(에피소드, 일일 로그) + Soul & Task Snapshot(정체성, 시맨틱 검색). SQLite FTS5 전문 검색.</td></tr>
 <tr><td><b>멀티에이전트 오케스트레이션</b></td><td>PABCD — DB 기반 5단계 FSM. Employee 시스템과 Worker 레지스트리. 파일 충돌 감지 병렬 실행. 모든 단계에서 사용자 승인 필요.</td></tr>
 <tr><td><b>브라우저 및 데스크톱 자동화</b></td><td>Chrome CDP, vision-click, ChatGPT/Grok/Gemini DOM 레퍼런스, Codex App Computer Use 통합, diagram 스킬로 SVG/인터랙티브 시각화.</td></tr>
@@ -34,6 +36,25 @@
 - [엔진 라우팅](#-엔진-라우팅) · [메모리](#-메모리) · [PABCD](#-오케스트레이션--pabcd) · [스킬](#-스킬)
 - [브라우저 자동화](#-브라우저--데스크톱-자동화) · [MCP](#-mcp) · [메시징](#-메시징)
 - [CLI 명령어](#️-cli-명령어) · [Docker](#-docker) · [문서](#-문서) · [비교](#️-비교)
+
+---
+
+## 매니저 대시보드
+
+대시보드는 이제 로컬 CLI-JAW 실행을 관리하는 기본 화면입니다. 인스턴스 탐색, preview, 설정, 직원, Notes를 한 화면에 묶되 각 인스턴스는 자기 home, DB, memory, lifecycle metadata, 작업 디렉터리를 유지합니다.
+
+| 영역 | 기능 |
+|---|---|
+| **Navigator** | Active/Running/Offline 인스턴스 그룹, CLI/model 라벨, 커스텀 이름, 포트, Preview/Open/Start/Stop/Restart 액션 |
+| **Live preview** | 선택한 인스턴스의 Web UI를 manager preview proxy로 임베드하고 Refresh/Open/Preview-on 제어 제공 |
+| **Runtime settings** | 선택 인스턴스의 활성 CLI, 모델, 추론 강도, 권한 모드, 작업 디렉터리, 직원, 스킬, 설정 확인 |
+| **Notes** | 대시보드 로컬 markdown vault. 폴더 트리, 수동 저장, drag-to-folder 이동, rename, split preview, KaTeX, Mermaid, 코드블럭 하이라이트 |
+
+릴리스 문서 완성에 추가로 필요한 캡처:
+
+1. 같은 3-pane 레이아웃의 다크 테마 대시보드.
+2. 폴더 트리, split editor/preview, KaTeX/Mermaid/code block이 보이는 Notes 화면.
+3. 모바일 또는 좁은 viewport에서 반응형 navigation이 보이는 화면.
 
 ---
 

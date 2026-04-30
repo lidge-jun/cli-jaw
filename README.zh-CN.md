@@ -12,13 +12,15 @@
 
 [English](README.md) / [한국어](README.ko.md) / **中文**
 
-<video src="https://github.com/user-attachments/assets/a7cf17c9-bfb3-44f0-b7fd-d001a39643fd" autoplay loop muted playsinline width="100%"></video>
+![CLI-JAW manager dashboard](docs/screenshots/manager-dashboard-light.png)
 
 </div>
 
 <table>
 <tr><td><b>直接用你的订阅</b></td><td>Claude Max、ChatGPT Pro、Copilot、Gemini Advanced — OAuth 路由。通过 OpenCode 添加任意模型。无按量计费。</td></tr>
-<tr><td><b>随处访问</b></td><td>Web PWA（虚拟滚动、WS 流）+ Mac WebView 应用 + 终端 TUI + Telegram（语音）+ Discord — 五个界面，一段对话。</td></tr>
+<tr><td><b>Manager dashboard</b></td><td>在一个浏览器工作区追踪本地 JAW 实例、预览实时 Web UI、切换亮/暗主题、查看运行时设置，并启动或停止托管会话。</td></tr>
+<tr><td><b>Notes 工作区</b></td><td>位于 dashboard home 下的 markdown vault，支持文件夹、重命名/移动、未保存标记、Raw/Split/Preview、KaTeX、Mermaid 和代码高亮。</td></tr>
+<tr><td><b>随处访问</b></td><td>Manager dashboard、Web PWA、Mac WebView 应用、终端 TUI、Telegram（语音）、Discord — 所有界面共享同一个助手和记忆。</td></tr>
 <tr><td><b>三层记忆</b></td><td>History Block（近期会话）+ Memory Flush（事件、日志）+ Soul & Task Snapshot（身份、语义检索）。SQLite FTS5 全文搜索。</td></tr>
 <tr><td><b>多智能体编排</b></td><td>PABCD — 数据库持久化的五阶段 FSM。Employee 系统和 Worker 注册表。文件冲突检测的并行执行。每个阶段都需用户批准。</td></tr>
 <tr><td><b>浏览器与桌面自动化</b></td><td>Chrome CDP、vision-click、ChatGPT/Grok/Gemini DOM 参考、Codex App Computer Use 集成、diagram 技能生成 SVG 和交互式可视化。</td></tr>
@@ -34,6 +36,25 @@
 - [引擎路由](#-引擎路由) · [记忆](#-记忆) · [PABCD](#-编排--pabcd) · [技能](#-技能)
 - [浏览器自动化](#-浏览器与桌面自动化) · [MCP](#-mcp) · [消息](#-消息)
 - [CLI 命令](#️-cli-命令) · [Docker](#-docker) · [文档](#-文档) · [对比](#️-对比)
+
+---
+
+## Manager dashboard
+
+Dashboard 现在是本地运行 CLI-JAW 的主控制台。它把实例发现、实时预览、设置、员工和 Notes 放在同一个界面中，同时每个实例仍保留自己的 home、数据库、记忆、生命周期元数据和工作目录。
+
+| 区域 | 功能 |
+|---|---|
+| **Navigator** | 按 Active/Running/Offline 分组实例，显示 CLI/model 标签、自定义名称、端口，以及 Preview/Open/Start/Stop/Restart 操作 |
+| **Live preview** | 通过 manager preview proxy 嵌入所选实例的 Web UI，并提供 Refresh/Open/Preview-on 控制 |
+| **Runtime settings** | 查看所选实例的 active CLI、model、reasoning effort、permission mode、working directory、employees、skills 和 settings |
+| **Notes** | Dashboard-local markdown vault，支持文件夹树、手动保存、拖拽到文件夹、重命名、split preview、KaTeX、Mermaid 和代码块高亮 |
+
+发布文档还需要这些截图：
+
+1. 同样三栏布局的 dark theme dashboard。
+2. 显示文件夹树、split editor/preview、KaTeX/Mermaid/code block 的 Notes 画面。
+3. 移动端或窄视口下的 responsive navigation 画面。
 
 ---
 

@@ -15,6 +15,10 @@ type InstanceGroupsProps = {
     transitionAction?: DashboardLifecycleAction | null;
     activityUnreadByPort?: Record<number, number>;
     latestTitleByPort?: Record<number, string>;
+    showLatestActivityTitles?: boolean;
+    showInlineLabelEditor?: boolean;
+    showSidebarRuntimeLine?: boolean;
+    showSelectedRowActions?: boolean;
     getLabel: (instance: DashboardInstance) => string;
     formatUptime: (seconds: number | null) => string;
     onSelect: (instance: DashboardInstance) => void;
@@ -80,6 +84,10 @@ function renderInstanceRow(
             transitioning={props.transitioningPort === instance.port ? props.transitionAction || null : null}
             activityUnreadCount={props.activityUnreadByPort?.[instance.port] || 0}
             latestActivityTitle={props.latestTitleByPort?.[instance.port] || null}
+            showLatestActivityTitle={props.showLatestActivityTitles}
+            showInlineLabelEditor={props.showInlineLabelEditor}
+            showRuntimeLine={props.showSidebarRuntimeLine}
+            showSelectedActions={props.showSelectedRowActions}
             label={props.getLabel(instance)}
             uptime={props.formatUptime(instance.uptime)}
             onSelect={props.onSelect}

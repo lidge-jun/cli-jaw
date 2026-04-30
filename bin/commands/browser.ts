@@ -395,60 +395,145 @@ try {
         }
         default:
             console.log(`
-  🌐 cli-jaw browser
+  🌐 cli-jaw browser — CDP browser control and web-ai workflows
 
-  Commands:
-    start [--port <auto>] [--headless] [--agent]  Start Chrome
-    stop                   Stop Chrome
-    status                 Connection status
-    reset [--force]        Reset (clear profile + screenshots)
+  Usage:
+    cli-jaw browser <command> [args] [--flags]
 
-    snapshot               Page snapshot with ref IDs
-      --interactive        Interactive elements only
-    screenshot             Capture screenshot
-      --full-page          Full page
-      --ref <ref>          Specific element only
-      --clip x y w h       Screenshot clip
-      --json               Print metadata as JSON
-    click <ref>            Click element [--double]
-      --right              Right-click element
-    mouse-click <x> <y>   Click at pixel coordinates [--double] (vision-click)
-    vision-click <target>  Vision AI click [--provider codex] [--double]
-    type <ref> <text>      Type text [--submit]
-    press <key>            Press key (Enter, Tab, Escape...)
-    hover <ref>            Hover element
-    navigate <url>         Go to URL
-    open <url>             Open URL (alias for navigate)
-    tabs [--json]          List tabs
-    active-tab --json      Show active tab contract
-    tab-switch <target>    Bring tab index or targetId to front
-    text                   Page text [--format text|html]
-    get-dom                DOM HTML [--selector <css>] [--max-chars <n>] [--json]
-    wait-for-selector      Wait for CSS selector
-    wait-for-text          Wait for visible text
-    reload                 Reload active page
-    resize <w> <h>         Resize viewport
-    scroll                 Scroll page [--x <dx>] [--y <dy>] [--ref <ref>]
-    select <ref> <value>   Select option(s)
-    drag <fromRef> <toRef> Drag element to element
-    move-mouse <x> <y>     Move mouse pointer
-    mouse-down/up          Low-level mouse buttons [--right]
-    console                Read bounded console entries [--json]
-    network                Read redacted network entries [--json]
-    evaluate <js>          Execute JavaScript
-    web-ai render           Render Oracle-style ChatGPT prompt envelope
-    web-ai status           Check verified ChatGPT active tab (or Gemini contract-only status)
-    web-ai send             Send inline-only prompt to ChatGPT/Gemini
-      --url <url>           Navigate active tab to an existing conversation before send
-    web-ai watch            Poll a saved web-ai session
-    web-ai watchers         List active long-running web-ai watchers
-    web-ai sessions         List saved web-ai sessions
-    web-ai notifications    List pending/sent web-ai completion notification events
-    web-ai capabilities     List observed/provider capability schemas
-    web-ai poll             Poll for answer after baseline (--session optional, --allow-copy-markdown-fallback opt-in)
-    web-ai query            Send and poll in one command
-    web-ai stop             Stop current generation with Escape
-    web-ai diagnose         Capture redacted diagnostics for the active web-ai page
+  Quick start:
+    cli-jaw browser status
+    cli-jaw browser start --agent
+    cli-jaw browser navigate "https://example.com"
+    cli-jaw browser snapshot --interactive
+    cli-jaw browser click e3
+
+  Runtime model:
+    cli-jaw browser talks to the cli-jaw server browser API.
+    Browser profile, screenshots, web-ai sessions, and state live under JAW_HOME.
+    Default automation mode uses a stable CDP browser unless --port overrides it.
+
+  Lifecycle:
+    start [--port <auto>] [--headless] [--agent]
+      Start Chrome. --agent is the default automation path for headless/agent work.
+    stop
+      Stop Chrome.
+    status
+      Print running state, tab count, and CDP URL.
+    reset [--force]
+      Clear browser profile, screenshots, and CDP cache.
+
+  Observe:
+    snapshot [--interactive] [--max-nodes <n>]
+      Print accessibility refs. Use --interactive before click/type.
+    screenshot [--full-page] [--ref <ref>] [--clip x y w h] [--json]
+      Capture viewport, full page, element ref, or CSS-pixel clip.
+    text [--format text|html]
+      Print page text or HTML.
+    get-dom [--selector <css>] [--max-chars <n>] [--json]
+      Print bounded DOM HTML for debugging selectors.
+
+  Interact:
+    click <ref> [--double] [--right]
+      Click a ref from the last snapshot.
+    type <ref> <text> [--submit]
+      Type into an element and optionally press Enter.
+    press <key>
+      Press Enter, Tab, Escape, or another Playwright key.
+    hover <ref>
+      Hover an element ref.
+    select <ref> <value>
+      Select dropdown option(s).
+    drag <fromRef> <toRef>
+      Drag one ref to another.
+    mouse-click <x> <y> [--double]
+      Click CSS pixel coordinates.
+    vision-click <target> [--provider codex] [--double]
+      Use screenshot-to-coordinate AI click when no DOM ref exists.
+    move-mouse <x> <y>
+      Move the mouse pointer without clicking.
+    mouse-down [--right] / mouse-up [--right]
+      Low-level mouse button control.
+
+  Navigation:
+    navigate <url>
+      Go to a URL.
+    open <url>
+      Alias for navigate.
+    reload
+      Reload the active page.
+    resize <w> <h> [--fullscreen]
+      Resize viewport/window.
+    tabs [--json]
+      List tabs.
+    active-tab --json
+      Show active tab target-id contract.
+    tab-switch <index-or-targetId>
+      Bring a tab to front and persist the active CDP target id.
+    scroll [--x <dx>] [--y <dy>] [--ref <ref>]
+      Scroll page or a specific element.
+
+  Wait:
+    wait-for-selector <css> [--timeout <ms>]
+      Wait for a CSS selector.
+    wait-for-text <text> [--timeout <ms>]
+      Wait for visible text.
+
+  Diagnostics:
+    console [--json] [--clear] [--reload] [--duration <ms>] [--limit <n>]
+      Read bounded console entries.
+    network [--json] [--clear] [--reload] [--duration <ms>] [--filter <text>]
+      Read redacted network entries.
+    evaluate <js>
+      Execute JavaScript in the active page.
+
+  Web AI:
+    web-ai render
+      Render Oracle-style prompt envelope without sending.
+    web-ai status
+      Check verified provider tab state.
+    web-ai send
+      Send a prompt and store baseline/session.
+    web-ai poll
+      Poll for answer after baseline; supports --session and --allow-copy-markdown-fallback.
+    web-ai query
+      Send and poll in one command.
+    web-ai watch
+      Start long-running polling for a saved web-ai session.
+    web-ai watchers
+      List active long-running web-ai watchers.
+    web-ai sessions
+      List saved web-ai sessions.
+    web-ai notifications
+      List pending/sent web-ai completion notification events.
+    web-ai capabilities
+      List observed/provider capability schemas.
+    web-ai diagnose
+      Capture redacted diagnostics for the active web-ai page.
+    web-ai stop
+      Stop current provider generation with Escape.
+
+    Common web-ai flags:
+      --vendor <chatgpt|gemini|grok>
+      --url <url>
+      --model <alias>
+      --inline-only
+      --file <path>
+      --context-from-files <glob|path>
+      --context-transport <upload|inline>
+      --allow-copy-markdown-fallback
+      --json
+
+    Examples:
+      cli-jaw browser web-ai render --vendor chatgpt --prompt "hello" --json
+      cli-jaw browser web-ai query --vendor grok --inline-only --prompt "Reply OK"
+      cli-jaw browser web-ai query --vendor gemini --model thinking --inline-only --prompt "Reply OK"
+      cli-jaw browser web-ai query --vendor chatgpt --context-from-files "src/**/*.ts" --context-transport upload --prompt "Review this"
+
+  Notes:
+    - Re-run snapshot after navigation; ref ids are snapshot-local.
+    - Prefer tab-switch <targetId> before mutating when multiple provider tabs are open.
+    - Use headed Chrome for live web-ai provider login/captcha flows.
+    - Do not expose the CDP port to untrusted networks.
 `);
     }
 } catch (e) {

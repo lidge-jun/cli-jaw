@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CLI-JAW — All Your AI Subscriptions. One Assistant.</title>
     <meta name="description"
-        content="All your AI subscriptions. One assistant. CLI-JAW routes Claude Max, ChatGPT Pro, Copilot, and Gemini through OAuth — Web PWA, Terminal, Telegram, and Discord. No per-token billing.">
+        content="All your AI subscriptions. One assistant. CLI-JAW routes Claude Max, ChatGPT Pro, Copilot, and Gemini through OAuth, with a manager dashboard, Notes workspace, Web PWA, Terminal, Telegram, and Discord.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -377,6 +377,62 @@
             width: 100%;
             display: block;
             margin-top: 34px;
+        }
+
+        /* ═══════════════════════════════════════
+   MANAGER DASHBOARD
+   ═══════════════════════════════════════ */
+        .dashboard-showcase {
+            padding: 40px 0 100px;
+        }
+
+        .dashboard-shell {
+            display: grid;
+            grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.45fr);
+            gap: 28px;
+            align-items: center;
+        }
+
+        .dashboard-frame {
+            border: 1px solid rgba(34, 211, 238, 0.22);
+            border-radius: 16px;
+            overflow: hidden;
+            background: var(--surface);
+            box-shadow: 0 28px 80px rgba(0, 0, 0, 0.5), 0 0 50px var(--accent-glow2);
+        }
+
+        .dashboard-frame img {
+            display: block;
+            width: 100%;
+        }
+
+        .dashboard-copy {
+            display: grid;
+            gap: 16px;
+        }
+
+        .dashboard-copy h2 {
+            font-family: var(--font-display);
+            font-size: clamp(26px, 4vw, 44px);
+            line-height: 1.1;
+        }
+
+        .dashboard-copy p {
+            color: var(--text-dim);
+            font-size: 15px;
+        }
+
+        .dashboard-points {
+            display: grid;
+            gap: 10px;
+            list-style: none;
+        }
+
+        .dashboard-points li {
+            border-left: 2px solid var(--accent);
+            padding-left: 12px;
+            color: var(--text);
+            font-size: 14px;
         }
 
         /* ═══════════════════════════════════════
@@ -761,6 +817,10 @@
             .quickstart-steps {
                 grid-template-columns: 1fr;
             }
+
+            .dashboard-shell {
+                grid-template-columns: 1fr;
+            }
         }
 
         @media (max-width: 600px) {
@@ -950,7 +1010,7 @@
             </a>
         </div>
         <div class="hero-badges">
-            <img src="https://img.shields.io/badge/tests-445%20pass-brightgreen" alt="Tests">
+            <img src="https://img.shields.io/badge/tests-2085%20pass-brightgreen" alt="Tests">
             <img src="https://img.shields.io/npm/v/cli-jaw" alt="npm">
             <img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript">
             <img src="https://img.shields.io/badge/node-%3E%3D22-blue" alt="Node">
@@ -959,6 +1019,26 @@
                 alt="Platforms">
         </div>
         <div class="scroll-hint">Scroll</div>
+    </section>
+
+    <!-- ═══════════════ MANAGER DASHBOARD ═══════════════ -->
+    <section class="dashboard-showcase">
+        <div class="container dashboard-shell reveal">
+            <div class="dashboard-frame">
+                <img src="screenshots/manager-dashboard-light.png" alt="CLI-JAW manager dashboard showing instance navigator, live preview, and runtime settings">
+            </div>
+            <div class="dashboard-copy">
+                <span class="section-label">// manager</span>
+                <h2>One control plane for every local AI session.</h2>
+                <p>The manager dashboard tracks running JAW homes, previews selected Web UIs, exposes runtime settings, and keeps employees visible without leaving the browser.</p>
+                <ul class="dashboard-points">
+                    <li>Instance navigator with active, running, and offline groups.</li>
+                    <li>Live preview proxy with Preview-on, Refresh, and Open controls.</li>
+                    <li>Settings workspace for active CLI, model, effort, permissions, employees, and skills.</li>
+                    <li>Notes workspace for markdown folders, split preview, KaTeX, Mermaid, and highlighted code.</li>
+                </ul>
+            </div>
+        </div>
     </section>
 
     <!-- ═══════════════ DEMO ═══════════════ -->
@@ -1025,14 +1105,24 @@
             <div class="features-grid">
                 <div class="feature-card">
                     <span class="feature-icon"></span>
-                    <div class="feature-title">3-layer memory</div>
-                    <p class="feature-desc">History Block (session context) + Memory Flush (episodes, daily logs) + Soul and Task Snapshot (identity, semantic recall). SQLite FTS5 search.</p>
+                    <div class="feature-title">Manager dashboard</div>
+                    <p class="feature-desc">Track local instances, preview live Web UIs, switch themes, inspect runtime settings, and manage employees from one browser workspace.</p>
                 </div>
                 <div class="feature-card">
                     <span class="feature-icon"></span>
                     <div class="feature-title">PABCD orchestration</div>
                     <p class="feature-desc">DB-persisted 5-phase FSM — Plan, Audit, Build, Check, Done. Workers
                         are read-only. You approve every phase.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon"></span>
+                    <div class="feature-title">Notes workspace</div>
+                    <p class="feature-desc">Dashboard-local markdown vault with folders, rename and move, dirty markers, split preview, KaTeX, Mermaid, and highlighted code blocks.</p>
+                </div>
+                <div class="feature-card">
+                    <span class="feature-icon"></span>
+                    <div class="feature-title">3-layer memory</div>
+                    <p class="feature-desc">History Block (session context) + Memory Flush (episodes, daily logs) + Soul and Task Snapshot (identity, semantic recall). SQLite FTS5 search.</p>
                 </div>
                 <div class="feature-card">
                     <span class="feature-icon"></span>
@@ -1056,8 +1146,8 @@
                 </div>
                 <div class="feature-card">
                     <span class="feature-icon"></span>
-                    <div class="feature-title">5 surfaces</div>
-                    <p class="feature-desc">Web PWA with virtual scroll, Mac WebView app, terminal TUI, Telegram, Discord. Same memory across all of them.</p>
+                    <div class="feature-title">6 surfaces</div>
+                    <p class="feature-desc">Manager dashboard, Web PWA, Mac WebView app, terminal TUI, Telegram, Discord. Same memory across all of them.</p>
                 </div>
             </div>
         </div>
@@ -1178,15 +1268,18 @@
         <div class="container reveal">
             <span class="section-label">// interfaces</span>
             <h2 class="section-title">Five ways to connect</h2>
-            <p class="section-desc">Web PWA, Mac app, Terminal TUI, Telegram, or Discord. Same assistant, same memory, same skills.</p>
+            <p class="section-desc">Manager dashboard, Web PWA, Mac app, Terminal TUI, Telegram, or Discord. Same assistant, same memory, same skills.</p>
             <div class="screenshots-tabs">
-                <button class="tab-btn active" onclick="showTab('web')">Web</button>
+                <button class="tab-btn active" onclick="showTab('dashboard')">Dashboard</button>
+                <button class="tab-btn" onclick="showTab('web')">Chat</button>
                 <button class="tab-btn" onclick="showTab('terminal')">Terminal</button>
                 <button class="tab-btn" onclick="showTab('telegram')">Telegram</button>
-                <button class="tab-btn" onclick="showTab('discord')">Discord</button>
                 <button class="tab-btn" onclick="showTab('orchestration')">PABCD</button>
             </div>
-            <div class="screenshot-panel active" id="tab-web">
+            <div class="screenshot-panel active" id="tab-dashboard">
+                <img src="screenshots/manager-dashboard-light.png" alt="CLI-JAW manager dashboard">
+            </div>
+            <div class="screenshot-panel" id="tab-web">
                 <img src="screenshots/web-ui.png" alt="CLI-JAW Web UI">
             </div>
             <div class="screenshot-panel" id="tab-terminal">
@@ -1195,9 +1288,6 @@
             <div class="screenshot-panel" id="tab-telegram">
                 <img src="screenshots/telegram-bot.png" alt="CLI-JAW Telegram Bot"
                     style="max-width: 400px; margin: 0 auto;">
-            </div>
-            <div class="screenshot-panel" id="tab-discord">
-                <img src="screenshots/discord-bot.png" alt="CLI-JAW Discord Bot">
             </div>
             <div class="screenshot-panel" id="tab-orchestration">
                 <img src="screenshots/orchestration-log.png" alt="CLI-JAW Orchestration">

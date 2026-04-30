@@ -74,12 +74,20 @@ test('manager frontend exposes one-instance preview controls', () => {
     assert.ok(header.includes('role="switch"'), 'workbench header must expose a compact preview on/off switch');
     assert.ok(header.includes('onPreviewRefresh'), 'workbench header must expose iframe preview refresh');
     assert.ok(app.includes('previewRefreshKey'), 'App must track a preview refresh key');
+    assert.ok(app.includes('function WorkspaceSurface'), 'App must wrap top-level workspaces in persistent surfaces');
+    assert.ok(app.includes('workspace-surface-stack'), 'App must keep the top-level workspace stack mounted across sidebar mode changes');
+    assert.ok(app.includes('workspace-surface-layer'), 'App must separate persistent workspace surfaces from lifecycle messages');
+    assert.ok(app.includes("<WorkspaceSurface active={view.sidebarMode === 'instances'}>"), 'Instances workbench must hide without unmounting across sidebar mode changes');
+    assert.ok(app.includes("<WorkspaceSurface active={view.sidebarMode === 'notes'}>"), 'Notes workspace must hide without unmounting across sidebar mode changes');
+    assert.ok(app.includes("<WorkspaceSurface active={view.sidebarMode === 'settings'}>"), 'Dashboard settings workspace must hide without unmounting across sidebar mode changes');
+    assert.ok(app.includes('hidden={!props.active}'), 'inactive persistent workspace surfaces must use hidden instead of conditional unmounting');
     assert.ok(app.includes('theme.resolved'), 'App must pass the concrete resolved dashboard theme to preview');
     assert.ok(app.includes('theme.syncFromRegistry'), 'App must hydrate registry theme through hook state');
     assert.ok(themeHook.includes('syncFromRegistry'), 'theme hook must expose registry sync that updates React state');
     assert.ok(themeHook.includes('setThemeState(next)'), 'registry theme sync must update React state');
     assert.ok(preview.includes('props.enabled'), 'InstancePreview must obey the header preview on/off switch');
     assert.ok(preview.includes('props.refreshKey'), 'InstancePreview must remount the iframe when refreshed');
+    assert.equal(preview.includes('sidebarMode'), false, 'InstancePreview iframe key must not include sidebarMode');
     assert.ok(preview.includes('jaw-preview-theme-sync'), 'InstancePreview must post dashboard theme to iframe');
     assert.ok(preview.includes('previewTargetOrigin(state.src)'), 'InstancePreview must target the preview origin instead of using wildcard postMessage');
     assert.equal(preview.includes("postMessage(\n            { type: 'jaw-preview-theme-sync', theme: props.theme },\n            '*',"), false, 'InstancePreview must not post preview theme with wildcard origin');
@@ -96,6 +104,10 @@ test('manager frontend exposes one-instance preview controls', () => {
     assert.ok(settingsShell.includes('onSaved?.()'), 'SettingsShell must emit a save-complete callback');
     assert.ok(components.includes('.workbench-panel'), 'workbench panels must have stable sizing');
     assert.ok(components.includes('.workbench-panel[hidden]'), 'inactive persistent preview panel must not reserve space');
+    const layout = read('public/manager/src/manager-layout.css');
+    assert.ok(layout.includes('.workspace-surface-stack'), 'layout CSS must size the persistent workspace stack');
+    assert.ok(layout.includes('.workspace-surface-layer'), 'layout CSS must size the persistent workspace layer');
+    assert.ok(layout.includes('.workspace-surface[hidden]'), 'hidden workspace surfaces must not reserve visible space');
     assert.ok(components.includes('.preview-switch'), 'preview switch must have compact header styling');
     assert.ok(components.includes('.preview-refresh-button'), 'preview refresh button must have compact header styling');
     assert.ok(preview.includes('<iframe'), 'preview component must mount iframe');
@@ -155,9 +167,11 @@ test('manager instance activity unread badges are row-scoped and registry-backed
     assert.ok(app.includes('activityUnread.unreadByPort'), 'App must pass per-port unread counts into instance groups');
     assert.ok(app.includes('useInstanceMessageEvents(instances)'), 'App must poll instance messages without dashboard refresh');
     assert.ok(app.includes('activityUnread.markPortSeen'), 'App must mark the selected instance as seen when clicked');
-    assert.ok(app.includes("view.activeDetailTab !== 'preview'"), 'App must only auto-clear unread state while Preview is active');
-    assert.ok(app.includes('!selectedInstance?.ok'), 'App must not auto-clear unread state for offline or missing preview targets');
-    assert.ok(app.includes('selectedInstance.port !== view.selectedPort'), 'App must not auto-clear unread state for fallback selected instances');
+    assert.equal(
+        app.includes('messageActivity.events, managerEvents.events, selectedInstance, view.activeDetailTab, view.selectedPort'),
+        false,
+        'new message events must not auto-clear sidebar unread badges while Preview is selected',
+    );
     assert.ok(app.includes('onToggleActivity={activityUnread.openAndMarkSeen}'), 'mobile Activity open path must mark events as seen');
     assert.ok(types.includes('activitySeenAt: string | null'), 'frontend registry UI type must include activitySeenAt');
     assert.ok(types.includes('activitySeenByPort: Record<string, string>'), 'frontend registry UI type must include per-port seen state');
@@ -168,6 +182,8 @@ test('manager instance activity unread badges are row-scoped and registry-backed
     assert.ok(row.includes('99+'), 'InstanceRow badge must cap large counts');
     assert.ok(rail.includes('aria-label="Instances"'), 'SidebarRail must expose the Instances workspace mode');
     assert.ok(rail.includes('aria-label="Notes"'), 'SidebarRail must expose the Notes workspace mode');
+    assert.ok(rail.includes("onModeChange('settings')"), 'SidebarRail must switch to Dashboard settings mode');
+    assert.ok(rail.includes('aria-label="Dashboard settings"'), 'SidebarRail must expose Dashboard settings without duplicating Workbench Settings');
     assert.equal(rail.includes('label="Preview"'), false, 'SidebarRail must not duplicate the Workbench preview tab');
     assert.equal(rail.includes('label="Activity"'), false, 'SidebarRail must not duplicate the Activity dock toggle');
     assert.equal(rail.includes('label="Settings"'), false, 'SidebarRail must not duplicate the Workbench settings tab');
@@ -198,8 +214,13 @@ test('manager instance rows support custom labels and latest activity titles', (
 
     assert.ok(app.includes('useInstanceLabelEditor'), 'App must use a focused hook for custom label persistence');
     assert.ok(app.includes('messageActivity.titlesByPort'), 'App must pass latest activity titles into the instance list');
+    assert.ok(app.includes('messageActivity.titleSupportByPort'), 'App must summarize latest-title endpoint support by instance');
     assert.ok(app.includes('messageActivity.events'), 'App must keep message events in the unread derivation');
     assert.ok(list.includes('latestTitleByPort'), 'InstanceListContent must accept latest title map');
+    assert.ok(list.includes('showLatestActivityTitles'), 'InstanceListContent must accept latest title visibility preference');
+    assert.ok(list.includes('showInlineLabelEditor'), 'InstanceListContent must accept label editor visibility preference');
+    assert.ok(list.includes('showSidebarRuntimeLine'), 'InstanceListContent must accept runtime line visibility preference');
+    assert.ok(list.includes('showSelectedRowActions'), 'InstanceListContent must accept selected action visibility preference');
     assert.ok(list.includes('onInstanceLabelSave'), 'InstanceListContent must accept custom label save callback');
     assert.ok(groups.includes('latestActivityTitle={props.latestTitleByPort?.[instance.port] || null}'), 'InstanceGroups must attach titles to matching ports');
     assert.ok(groups.includes('onInstanceLabelSave={props.onInstanceLabelSave}'), 'InstanceGroups must forward label save callback');
@@ -211,7 +232,10 @@ test('manager instance rows support custom labels and latest activity titles', (
     assert.ok(labelHook.includes('label?.trim() || null'), 'blank label must clear to fallback');
     assert.ok(messageHook.includes('InstanceMessageActivityState'), 'message hook must return both unread events and titles');
     assert.ok(messageHook.includes('titlesByPort'), 'message hook must derive titles by port');
+    assert.ok(messageHook.includes('titleSupportByPort'), 'message hook must expose per-port title support status');
+    assert.ok(messageHook.includes("nextSupport[instance.port] = 'offline'"), 'message hook must clear title support for offline instances');
     assert.ok(messageHook.includes('latestAssistantFromEnvelope'), 'message hook must preserve legacy assistant unread baseline');
+    assert.ok(messageHook.includes('notifiableAssistantFromEnvelope'), 'message hook must wait for assistant activity before unread notification on new endpoint envelopes');
     assert.ok(latestRoute.includes("app.get('/api/messages/latest'"), 'backend must extend the existing latest endpoint');
     assert.ok(latestRoute.includes('latestAssistant'), 'latest endpoint must preserve latest assistant field');
     assert.ok(latestRoute.includes('activity:'), 'latest endpoint must include latest activity title payload');
@@ -224,7 +248,9 @@ test('manager workbench modes remain instance-only while Notes renders outside W
     const workbench = read('public/manager/src/components/Workbench.tsx');
 
     assert.ok(app.includes('NotesWorkspace'), 'App must render the Notes workspace');
+    assert.ok(app.includes('DashboardSettingsWorkspace'), 'App must render Dashboard settings outside Workbench');
     assert.ok(app.includes("view.sidebarMode === 'notes'"), 'Notes must be selected by workspace mode, not a Workbench tab');
+    assert.ok(app.includes("view.sidebarMode === 'settings'"), 'Dashboard settings must be selected by workspace mode, not a Workbench tab');
     assert.ok(workbench.includes("const MODES: DashboardDetailTab[] = ['overview', 'preview', 'logs', 'settings']"), 'Workbench tabs must stay Overview/Preview/Logs/Settings only');
     assert.equal(workbench.includes("'notes'"), false, 'Workbench must not add Notes as a detail tab');
     assert.ok(app.includes('notesSelectedPath'), 'App must hydrate and persist selected note path');
@@ -258,10 +284,57 @@ test('manager frontend keeps rows compact while preserving model visibility', ()
     assert.ok(row.includes('instance-row-runtime'), 'instance rows must expose CLI/model as a stable runtime line');
     assert.ok(row.includes('instance-row-version'), 'instance rows must keep version metadata addressable');
     assert.ok(row.includes('instance-row-reason'), 'instance rows must keep reason metadata addressable');
-    assert.ok(main.includes('./manager-p0-1-1.css'), 'P0-1.1 compact manager CSS must be loaded last');
+    assert.ok(main.includes('./manager-p0-1-1.css'), 'P0-1.1 compact manager CSS must stay loaded');
+    assert.ok(main.includes('./manager-dashboard-settings.css'), 'dashboard settings styling must be split into its own CSS module');
+    assert.ok(
+        main.indexOf('./manager-p0-1-1.css') < main.indexOf('./manager-dashboard-settings.css'),
+        'dashboard settings CSS may layer after compact row polish',
+    );
     assert.ok(compact.includes('.manager-sidebar .instance-row-version'), 'sidebar polish must hide secondary row metadata in compact mode');
     assert.ok(compact.includes('.manager-sidebar .instance-actions'), 'sidebar polish must control action-row density');
     assert.ok(compact.includes('.manager-shell.is-sidebar-collapsed .manager-workspace'), 'sidebar collapse must reclaim detail width');
+});
+
+test('manager dashboard settings workspace controls sidebar display preferences', () => {
+    const app = read('public/manager/src/App.tsx');
+    const view = read('public/manager/src/hooks/useDashboardView.ts');
+    const registry = read('src/manager/registry.ts');
+    const workspace = read('public/manager/src/dashboard-settings/DashboardSettingsWorkspace.tsx');
+    const sidebar = read('public/manager/src/dashboard-settings/DashboardSettingsSidebar.tsx');
+    const helper = read('public/manager/src/dashboard-settings/activity-title-support.ts');
+    const css = read('public/manager/src/manager-dashboard-settings.css');
+    const types = read('public/manager/src/types.ts');
+    const api = read('public/manager/src/api.ts');
+
+    assert.ok(app.includes('dashboardSettingsUiFromView'), 'App must derive settings UI from live view state');
+    assert.ok(app.includes('handleDashboardSettingsPatch'), 'App must patch dashboard settings through registry UI');
+    assert.ok(view.includes('showLatestActivityTitles'), 'view hook must own latest title visibility');
+    assert.ok(view.includes('showInlineLabelEditor'), 'view hook must own inline label editor visibility');
+    assert.ok(view.includes('showSidebarRuntimeLine'), 'view hook must own runtime line visibility');
+    assert.ok(view.includes('showSelectedRowActions'), 'view hook must own selected row action visibility');
+    assert.ok(registry.includes("'settings'"), 'registry sidebar mode must support Dashboard settings mode');
+    assert.ok(registry.includes('showLatestActivityTitles: true'), 'registry defaults must enable latest activity titles');
+    assert.ok(types.includes("DashboardActivityTitleSupportStatus = 'ready' | 'legacy' | 'offline'"), 'frontend types must name latest-title support states');
+    assert.equal(workspace.includes('ToggleField'), false, 'dashboard settings must not reuse the instance settings toggle layout');
+    assert.ok(workspace.includes('Instance list display'), 'settings workspace must clarify the affected surface');
+    assert.ok(workspace.includes('Recent activity preview'), 'settings workspace must expose latest title toggle with clear copy');
+    assert.ok(workspace.includes('Rename control'), 'settings workspace must expose label editor toggle with clear copy');
+    assert.ok(workspace.includes('Runtime line'), 'settings workspace must expose runtime line toggle with clear copy');
+    assert.ok(workspace.includes('Expanded row actions'), 'settings workspace must expose selected actions toggle with clear copy');
+    assert.ok(workspace.includes('Left instance list'), 'settings workspace must show setting scope labels');
+    assert.ok(workspace.includes('Language'), 'settings workspace must expose a saved language menu');
+    assert.ok(workspace.includes('LOCALE_OPTIONS'), 'settings workspace must define supported locale options');
+    assert.ok(workspace.includes('fetchDashboardRuntimeSettings'), 'settings workspace must load runtime locale from settings API');
+    assert.ok(workspace.includes('updateDashboardRuntimeSettings({ locale: next })'), 'settings workspace must save language changes to settings API');
+    assert.ok(workspace.includes('TitleSupportSummary'), 'settings workspace must summarize endpoint readiness');
+    assert.ok(sidebar.includes('Sidebar rows'), 'settings sidebar must include display settings section');
+    assert.ok(helper.includes('summarizeActivityTitleSupport'), 'support helper must aggregate per-port support status');
+    assert.ok(api.includes("fetch('/api/settings'"), 'manager API must read runtime settings for dashboard language menu');
+    assert.ok(api.includes("method: 'PUT'"), 'manager API must save runtime settings patches');
+    assert.ok(css.includes('.dashboard-settings-workspace'), 'settings CSS must use dashboard-settings prefix');
+    assert.ok(css.includes('.dashboard-settings-row'), 'settings CSS must align each setting in a scoped row');
+    assert.ok(css.includes('.dashboard-settings-select'), 'settings CSS must style dashboard language select');
+    assert.equal(css.includes('.settings-workspace'), false, 'settings CSS must not collide with existing settings-shell prefix');
 });
 
 test('manager instance rows are selectable independently from preview availability', () => {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { fetchInstances, fetchInstanceStatus, runLifecycleAction } from './api';
 import { pollUntilSettled } from './lifecycle-poll';
 import { ActivityDock } from './components/ActivityDock';
@@ -16,6 +16,10 @@ import { Workbench } from './components/Workbench';
 import { WorkbenchHeader } from './components/WorkbenchHeader';
 import { WorkspaceLayout } from './components/WorkspaceLayout';
 import { InstancePreview } from './InstancePreview';
+import { DashboardSettingsSidebar, type DashboardSettingsSection } from './dashboard-settings/DashboardSettingsSidebar';
+import { DashboardSettingsWorkspace } from './dashboard-settings/DashboardSettingsWorkspace';
+import { summarizeActivityTitleSupport } from './dashboard-settings/activity-title-support';
+import { dashboardSettingsUiFromView } from './dashboard-settings/dashboard-settings-ui';
 import { NotesSidebar } from './notes/NotesSidebar';
 import { NotesWorkspace } from './notes/NotesWorkspace';
 import { useDashboardRegistry } from './hooks/useDashboardRegistry';
@@ -38,6 +42,15 @@ import type {
     DashboardSidebarMode,
 } from './types';
 
+type WorkspaceSurfaceProps = {
+    active: boolean;
+    children: ReactNode;
+};
+
+function WorkspaceSurface(props: WorkspaceSurfaceProps) {
+    return <section className={`workspace-surface${props.active ? ' is-active' : ''}`} hidden={!props.active} aria-hidden={!props.active}>{props.children}</section>;
+}
+
 export function App() {
     const [data, setData] = useState<DashboardScanResult | null>(null);
     const [loading, setLoading] = useState(true);
@@ -54,6 +67,7 @@ export function App() {
     const [activeProfileIds, setActiveProfileIds] = useState<string[]>([]);
     const [settingsDirty, setSettingsDirty] = useState(false);
     const [notesDirtyPath, setNotesDirtyPath] = useState<string | null>(null);
+    const [dashboardSettingsSection, setDashboardSettingsSection] = useState<DashboardSettingsSection>('display');
     const [previewEnabled, setPreviewEnabled] = useState(true);
     const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
     const registry = useDashboardRegistry();
@@ -122,6 +136,10 @@ export function App() {
                 view.setNotesViewMode(ui.notesViewMode);
                 view.setNotesWordWrap(ui.notesWordWrap);
                 view.setNotesTreeWidth(ui.notesTreeWidth);
+                view.setShowLatestActivityTitles(ui.showLatestActivityTitles);
+                view.setShowInlineLabelEditor(ui.showInlineLabelEditor);
+                view.setShowSidebarRuntimeLine(ui.showSidebarRuntimeLine);
+                view.setShowSelectedRowActions(ui.showSelectedRowActions);
                 activityUnread.hydrateSeenAt(ui.activitySeenAt ?? null, ui.activitySeenByPort || {});
                 setActiveProfileIds(loaded.registry.activeProfileFilter || []);
                 theme.syncFromRegistry(ui.uiTheme);
@@ -191,14 +209,6 @@ export function App() {
         if (view.selectedPort == null) return filtered.find(instance => instance.ok) || null;
         return instances.find(instance => instance.port === view.selectedPort) || null;
     }, [filtered, instances, view.selectedPort]);
-
-    useEffect(() => {
-        if (view.activeDetailTab !== 'preview') return;
-        if (view.selectedPort == null) return;
-        if (!selectedInstance?.ok) return;
-        if (selectedInstance.port !== view.selectedPort) return;
-        activityUnread.markPortSeen(selectedInstance.port);
-    }, [messageActivity.events, managerEvents.events, selectedInstance, view.activeDetailTab, view.selectedPort]);
 
     function canLeaveDirtySettings(): boolean {
         if (view.activeDetailTab !== 'settings' || !settingsDirty) return true;
@@ -276,6 +286,14 @@ export function App() {
         view.setNotesTreeWidth(value); void saveUi({ notesTreeWidth: value });
     }
 
+    function handleDashboardSettingsPatch(ui: NonNullable<Parameters<typeof saveUi>[0]>): void {
+        if (ui.showLatestActivityTitles !== undefined) view.setShowLatestActivityTitles(ui.showLatestActivityTitles);
+        if (ui.showInlineLabelEditor !== undefined) view.setShowInlineLabelEditor(ui.showInlineLabelEditor);
+        if (ui.showSidebarRuntimeLine !== undefined) view.setShowSidebarRuntimeLine(ui.showSidebarRuntimeLine);
+        if (ui.showSelectedRowActions !== undefined) view.setShowSelectedRowActions(ui.showSelectedRowActions);
+        void saveUi(ui);
+    }
+
     async function handleLifecycle(action: DashboardLifecycleAction, instance: DashboardInstance): Promise<void> {
         const lifecycle = instance.lifecycle;
         if (!lifecycle) return;
@@ -327,6 +345,10 @@ export function App() {
             transitionAction={transitionAction}
             activityUnreadByPort={activityUnread.unreadByPort}
             latestTitleByPort={messageActivity.titlesByPort}
+            showLatestActivityTitles={view.showLatestActivityTitles}
+            showInlineLabelEditor={view.showInlineLabelEditor}
+            showSidebarRuntimeLine={view.showSidebarRuntimeLine}
+            showSelectedRowActions={view.showSelectedRowActions}
             profiles={profiles}
             getLabel={instanceLabel}
             formatUptime={formatUptime}
@@ -338,14 +360,9 @@ export function App() {
         />
     );
 
-    const workbenchHeader = (
-        <WorkbenchHeader
-            instance={selectedInstance}
-            previewEnabled={previewEnabled}
-            onPreviewEnabledChange={setPreviewEnabled}
-            onPreviewRefresh={() => setPreviewRefreshKey(key => key + 1)}
-        />
-    );
+    const workbenchHeader = <WorkbenchHeader instance={selectedInstance} previewEnabled={previewEnabled} onPreviewEnabledChange={setPreviewEnabled} onPreviewRefresh={() => setPreviewRefreshKey(key => key + 1)} />;
+    const dashboardSettingsUi = dashboardSettingsUiFromView(view, theme.theme);
+    const titleSupport = summarizeActivityTitleSupport(messageActivity.titleSupportByPort);
 
     const profileChipStrip = (chipProfiles: DashboardProfile[]) => chipProfiles.length > 0 ? (
         <div className="profile-chip-strip drawer-chip-strip" aria-label="Profile filters">
@@ -401,7 +418,9 @@ export function App() {
                             <>
                                 <SidebarRail onlineCount={summary.online || 0} collapsed={view.sidebarCollapsed} mode={view.sidebarMode} onModeChange={handleSidebarModeChange} onToggleSidebar={handleSidebarToggle} />
                                 <div id="manager-sidebar-list" className="manager-sidebar-list">
-                                    {view.sidebarMode === 'notes' ? (
+                                    {view.sidebarMode === 'settings' ? (
+                                        <DashboardSettingsSidebar activeSection={dashboardSettingsSection} onSectionChange={setDashboardSettingsSection} />
+                                    ) : view.sidebarMode === 'notes' ? (
                                         <NotesSidebar selectedPath={view.notesSelectedPath} dirtyPath={notesDirtyPath} treeWidth={view.notesTreeWidth} onSelectedPathChange={handleNotesSelectedPathChange} />
                                     ) : (
                                         <InstanceNavigator active={selectedInstance} hiddenCount={instances.filter(instance => instance.hidden).length} collapsed={view.sidebarCollapsed}>
@@ -412,16 +431,22 @@ export function App() {
                             </>
                         )}
                         workbench={(
-                            <>
+                            <div className="workspace-surface-stack">
                                 {lifecycleMessage && <section className="state lifecycle-state">{lifecycleMessage}</section>}
-                                {view.sidebarMode === 'notes' ? (
-                                    <NotesWorkspace selectedPath={view.notesSelectedPath} viewMode={view.notesViewMode} wordWrap={view.notesWordWrap} treeWidth={view.notesTreeWidth} onSelectedPathChange={handleNotesSelectedPathChange} onDirtyPathChange={setNotesDirtyPath} onViewModeChange={handleNotesViewModeChange} onWordWrapChange={handleNotesWordWrapChange} onTreeWidthChange={handleNotesTreeWidthChange} />
-                                ) : (
-                                    <Workbench mode={view.activeDetailTab} onModeChange={handleTabChange} header={workbenchHeader} overview={detailContent('overview')} preview={(
-                                        <InstancePreview instance={selectedInstance} data={data} enabled={previewEnabled} refreshKey={previewRefreshKey} theme={theme.resolved} />
-                                    )} logs={detailContent('logs')} settings={detailContent('settings')} />
-                                )}
-                            </>
+                                <div className="workspace-surface-layer">
+                                    <WorkspaceSurface active={view.sidebarMode === 'instances'}>
+                                        <Workbench mode={view.activeDetailTab} onModeChange={handleTabChange} header={workbenchHeader} overview={detailContent('overview')} preview={(
+                                            <InstancePreview instance={selectedInstance} data={data} enabled={previewEnabled} refreshKey={previewRefreshKey} theme={theme.resolved} />
+                                        )} logs={detailContent('logs')} settings={detailContent('settings')} />
+                                    </WorkspaceSurface>
+                                    <WorkspaceSurface active={view.sidebarMode === 'notes'}>
+                                        <NotesWorkspace active={view.sidebarMode === 'notes'} selectedPath={view.notesSelectedPath} viewMode={view.notesViewMode} wordWrap={view.notesWordWrap} treeWidth={view.notesTreeWidth} onSelectedPathChange={handleNotesSelectedPathChange} onDirtyPathChange={setNotesDirtyPath} onViewModeChange={handleNotesViewModeChange} onWordWrapChange={handleNotesWordWrapChange} onTreeWidthChange={handleNotesTreeWidthChange} />
+                                    </WorkspaceSurface>
+                                    <WorkspaceSurface active={view.sidebarMode === 'settings'}>
+                                        <DashboardSettingsWorkspace activeSection={dashboardSettingsSection} ui={dashboardSettingsUi} titleSupport={titleSupport} onUiPatch={handleDashboardSettingsPatch} />
+                                    </WorkspaceSurface>
+                                </div>
+                            </div>
                         )}
                         inspector={(
                             <ActivityDock
@@ -437,20 +462,9 @@ export function App() {
                                 onHeightChange={handleActivityHeight}
                             />
                         )}
-                        mobileNav={(
-                            <MobileNav
-                                activeTab={view.activeDetailTab}
-                                onOpenInstances={() => view.setDrawerOpen(true)}
-                                onSelectTab={handleTabChange}
-                                onToggleActivity={activityUnread.openAndMarkSeen}
-                            />
-                        )}
+                        mobileNav={<MobileNav activeTab={view.activeDetailTab} onOpenInstances={() => view.setDrawerOpen(true)} onSelectTab={handleTabChange} onToggleActivity={activityUnread.openAndMarkSeen} />}
                         drawer={(
-                            <InstanceDrawer
-                                open={view.drawerOpen}
-                                profileFilters={profileChipStrip(profiles)}
-                                onClose={() => view.setDrawerOpen(false)}
-                            >
+                            <InstanceDrawer open={view.drawerOpen} profileFilters={profileChipStrip(profiles)} onClose={() => view.setDrawerOpen(false)}>
                                 {instanceListContent}
                             </InstanceDrawer>
                         )}

@@ -1,6 +1,7 @@
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
+import { notesEditorTheme, notesSyntaxHighlighting } from './editor-theme';
 
 type MarkdownEditorProps = {
     content: string;
@@ -13,7 +14,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
         <div className={`notes-editor${props.wordWrap ? ' is-word-wrapped' : ''}`}>
             <CodeMirror
                 value={props.content}
-                extensions={[markdown({ codeLanguages: languages })]}
+                extensions={[notesEditorTheme, notesSyntaxHighlighting, markdown({ codeLanguages: languages })]}
                 onChange={props.onChange}
                 height="100%"
                 basicSetup={{

@@ -13,6 +13,10 @@ export function useDashboardView() {
     const [notesViewMode, setNotesViewMode] = useState<DashboardNotesViewMode>('split');
     const [notesWordWrap, setNotesWordWrap] = useState(true);
     const [notesTreeWidth, setNotesTreeWidth] = useState(280);
+    const [showLatestActivityTitles, setShowLatestActivityTitles] = useState(true);
+    const [showInlineLabelEditor, setShowInlineLabelEditor] = useState(true);
+    const [showSidebarRuntimeLine, setShowSidebarRuntimeLine] = useState(true);
+    const [showSelectedRowActions, setShowSelectedRowActions] = useState(true);
 
     return {
         selectedPort,
@@ -37,5 +41,13 @@ export function useDashboardView() {
         setNotesWordWrap,
         notesTreeWidth,
         setNotesTreeWidth,
+        showLatestActivityTitles,
+        setShowLatestActivityTitles,
+        showInlineLabelEditor,
+        setShowInlineLabelEditor,
+        showSidebarRuntimeLine,
+        setShowSidebarRuntimeLine,
+        showSelectedRowActions,
+        setShowSelectedRowActions,
     };
 }

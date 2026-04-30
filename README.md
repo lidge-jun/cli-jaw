@@ -12,13 +12,15 @@
 
 **English** / [한국어](README.ko.md) / [中文](README.zh-CN.md)
 
-<video src="https://github.com/user-attachments/assets/a7cf17c9-bfb3-44f0-b7fd-d001a39643fd" autoplay loop muted playsinline width="100%"></video>
+![CLI-JAW manager dashboard](docs/screenshots/manager-dashboard-light.png)
 
 </div>
 
 <table>
 <tr><td><b>Your existing subscriptions, unified</b></td><td>Claude Max, ChatGPT Pro, Copilot, Gemini Advanced — route through OAuth. Add any model via OpenCode. No per-token billing.</td></tr>
-<tr><td><b>Lives where you do</b></td><td>Web PWA with virtual scroll and WS streaming, Mac WebView app, terminal TUI, Telegram with voice, Discord — five surfaces, one conversation.</td></tr>
+<tr><td><b>Manager dashboard</b></td><td>Track every local JAW instance, preview live Web UIs, switch light/dark themes, inspect runtime settings, and launch or stop managed sessions from one browser workspace.</td></tr>
+<tr><td><b>Notes workspace</b></td><td>Markdown vault under the dashboard home with folders, rename/move, dirty-state markers, raw/split/preview modes, KaTeX, Mermaid, and highlighted code blocks.</td></tr>
+<tr><td><b>Lives where you do</b></td><td>Manager dashboard, Web PWA, Mac WebView app, terminal TUI, Telegram with voice, Discord — one assistant and one memory across every surface.</td></tr>
 <tr><td><b>3-layer memory</b></td><td>History Block (recent sessions) + Memory Flush (episodes, daily logs) + Soul and Task Snapshot (identity, semantic recall). SQLite FTS5 full-text search.</td></tr>
 <tr><td><b>Multi-agent orchestration</b></td><td>PABCD — a DB-persisted 5-phase FSM. Employee system with worker registry. Parallel subtasks with file-overlap detection. You approve every phase.</td></tr>
 <tr><td><b>Browser and desktop automation</b></td><td>Chrome CDP, vision-click, DOM reference for ChatGPT/Grok/Gemini, Computer Use integration via Codex App, diagram skill for SVG and interactive visualizations.</td></tr>
@@ -34,6 +36,25 @@
 - [Engine routing](#-engine-routing) · [Memory](#-memory) · [PABCD](#-orchestration--pabcd) · [Skills](#-skills)
 - [Browser automation](#-browser--desktop-automation) · [MCP](#-mcp) · [Messaging](#-messaging)
 - [CLI commands](#%EF%B8%8F-cli-commands) · [Docker](#-docker) · [Docs](#-documentation) · [How it compares](#-how-it-compares)
+
+---
+
+## Manager dashboard
+
+The dashboard is now the main control plane for running CLI-JAW locally. It keeps instance discovery, previews, settings, employees, and Notes in one place while each instance keeps its own home, database, memory, lifecycle metadata, and working directory.
+
+| Area | What it does |
+|---|---|
+| **Navigator** | Groups active/running/offline instances, shows CLI/model labels, custom names, ports, and direct Preview/Open/Start/Stop/Restart actions |
+| **Live preview** | Embeds the selected instance's Web UI through the manager preview proxy with refresh/open controls and a Preview-on toggle |
+| **Runtime settings** | Shows active CLI, model, reasoning effort, permission mode, working directory, employees, skills, and settings from the selected instance |
+| **Notes** | Dashboard-local markdown vault with folder tree, manual save, drag-to-folder moves, rename, split preview, KaTeX, Mermaid, and highlighted code blocks |
+
+Screenshot coverage still needed for release polish:
+
+1. Dark theme dashboard with the same three-pane layout.
+2. Notes mode showing the folder tree, split editor/preview, and rendered KaTeX/Mermaid/code block.
+3. Mobile or narrow viewport dashboard showing responsive navigation.
 
 <details>
 <summary>Are you on Windows? — WSL one-click setup</summary>
@@ -428,86 +449,26 @@ CLI-JAW descends from the OpenClaw harness architecture (hybrid search manager, 
 
 ## 🛠️ Development
 
-<details>
-<summary>Build and project structure</summary>
-
 ```bash
 npm run build          # tsc → dist/
 npm run dev            # tsx server.ts (hot-reload)
+npm test               # native Node.js test runner
 ```
 
-```
-src/
-├── agent/          # AI agent lifecycle, spawn, history block
-├── browser/        # Chrome CDP, vision-click, launch policy
-├── cli/            # CLI registry, slash commands, model presets
-├── core/           # DB, config, employees, logging
-├── discord/        # Discord bot, commands, file send
-├── http/           # Express server, middleware
-├── memory/         # 3-layer memory, FTS5 indexing, flush, soul
-├── messaging/      # Channel routing, session keys
-├── orchestrator/   # PABCD state machine, worker registry, dispatch
-├── prompt/         # Prompt assembly pipeline, templates
-├── routes/         # REST API (95 handlers, 94 endpoints)
-├── security/       # Input sanitization, path guards
-└── telegram/       # Telegram bot, voice STT, forwarder
-```
-
-</details>
-
----
-
-## 🧪 Tests
-
-```bash
-npm test             # tsx --test (native Node.js test runner)
-```
-
-See [TESTS.md](TESTS.md) for current inventory and pass counts.
+Architecture and test details live in [ARCHITECTURE.md](docs/ARCHITECTURE.md), [TESTS.md](TESTS.md), and [devlog/structure/](devlog/structure/).
 
 ---
 
 ## ❓ Troubleshooting
 
-<details>
-<summary>Common issues</summary>
-
 | Problem | Solution |
 |---|---|
 | `cli-jaw: command not found` | `npm install -g cli-jaw` again. Check `npm bin -g` is in `$PATH` |
-| Claude computer-use MCP fails | Reinstall Claude natively: `curl -fsSL https://claude.ai/install.sh \| bash` or run `claude install`, then re-run `jaw doctor` |
 | `Error: node version` | Upgrade to Node.js 22+: `nvm install 22` |
 | `NODE_MODULE_VERSION` mismatch | `npm run ensure:native` (auto-rebuild) |
-| Agent timeout | `jaw doctor` to check CLI auth |
 | `EADDRINUSE: port 3457` | Another instance running. Use `--port 3458` |
-| Telegram not responding | Check token with `jaw doctor`. Ensure `jaw serve` is running |
-| Skills not loading | `jaw skill reset` then `jaw mcp sync` |
+| Telegram or agent auth fails | Run `jaw doctor`, then restart `jaw serve` |
 | Browser commands fail | Install Chrome. Run `jaw browser start` first |
-
-</details>
-
-<details>
-<summary>Fresh start — clean reinstall</summary>
-
-```bash
-npm uninstall -g cli-jaw
-[ -d ~/.cli-jaw ] && mv ~/.cli-jaw ~/.cli-jaw.bak.$(date +%s)
-npm install -g cli-jaw
-jaw init
-jaw doctor
-```
-
-</details>
-
-<details>
-<summary>Native module mismatch (better-sqlite3)</summary>
-
-```bash
-npm run ensure:native
-# or: rm -rf node_modules package-lock.json && npm install
-```
-
-</details>
 
 ---
 

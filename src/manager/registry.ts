@@ -32,7 +32,7 @@ const MAX_NOTES_TREE_WIDTH = 420;
 const DEFAULT_NOTES_TREE_WIDTH = 280;
 const DETAIL_TABS: DashboardDetailTab[] = ['overview', 'preview', 'logs', 'settings'];
 const UI_THEMES: DashboardUiTheme[] = ['auto', 'dark', 'light'];
-const SIDEBAR_MODES: DashboardSidebarMode[] = ['instances', 'notes'];
+const SIDEBAR_MODES: DashboardSidebarMode[] = ['instances', 'notes', 'settings'];
 const NOTES_VIEW_MODES: DashboardNotesViewMode[] = ['raw', 'split', 'preview', 'settings'];
 
 export type DashboardRegistryLoadResult = {
@@ -119,6 +119,10 @@ function defaultUi(): DashboardRegistryUi {
         notesViewMode: 'split',
         notesWordWrap: true,
         notesTreeWidth: DEFAULT_NOTES_TREE_WIDTH,
+        showLatestActivityTitles: true,
+        showInlineLabelEditor: true,
+        showSidebarRuntimeLine: true,
+        showSelectedRowActions: true,
     };
 }
 
@@ -165,6 +169,10 @@ function normalizeUi(value: unknown): DashboardRegistryUi {
         notesViewMode,
         notesWordWrap: typeof input.notesWordWrap === 'boolean' ? input.notesWordWrap : fallback.notesWordWrap,
         notesTreeWidth: clampInt(input.notesTreeWidth, fallback.notesTreeWidth, MIN_NOTES_TREE_WIDTH, MAX_NOTES_TREE_WIDTH),
+        showLatestActivityTitles: typeof input.showLatestActivityTitles === 'boolean' ? input.showLatestActivityTitles : fallback.showLatestActivityTitles,
+        showInlineLabelEditor: typeof input.showInlineLabelEditor === 'boolean' ? input.showInlineLabelEditor : fallback.showInlineLabelEditor,
+        showSidebarRuntimeLine: typeof input.showSidebarRuntimeLine === 'boolean' ? input.showSidebarRuntimeLine : fallback.showSidebarRuntimeLine,
+        showSelectedRowActions: typeof input.showSelectedRowActions === 'boolean' ? input.showSelectedRowActions : fallback.showSelectedRowActions,
     };
 }
 

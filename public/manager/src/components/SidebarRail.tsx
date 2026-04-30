@@ -47,6 +47,15 @@ function NoteIcon() {
     );
 }
 
+function SettingsIcon() {
+    return (
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+            <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+            <circle cx="12" cy="12" r="3" />
+        </svg>
+    );
+}
+
 export function SidebarRail(props: SidebarRailProps) {
     const expanded = !props.collapsed;
     const toggleLabel = expanded ? 'Collapse navigation' : 'Expand navigation';
@@ -83,6 +92,16 @@ export function SidebarRail(props: SidebarRailProps) {
                 title="Notes"
             >
                 <NoteIcon />
+            </button>
+            <button
+                className={`rail-button rail-workspace-button${props.mode === 'settings' ? ' is-active' : ''}`}
+                type="button"
+                onClick={() => props.onModeChange('settings')}
+                aria-label="Dashboard settings"
+                aria-pressed={props.mode === 'settings'}
+                title="Dashboard settings"
+            >
+                <SettingsIcon />
             </button>
             <div className="rail-spacer" />
             <span className="rail-status-dot" aria-label={`${props.onlineCount} online instances`} />
