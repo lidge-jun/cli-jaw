@@ -14,6 +14,7 @@
     "dist:mac": "electron-builder --mac",
     "dist:mac:zip": "electron-builder --mac zip",
     "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
     "dist:all": "electron-builder -mwl"
   },
   "devDependencies": {

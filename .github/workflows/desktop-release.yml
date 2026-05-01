@@ -1,0 +1,96 @@
+name: Desktop Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  desktop-release:
+    name: Build ${{ matrix.platform }} desktop app
+    runs-on: ${{ matrix.os }}
+    concurrency:
+      group: desktop-release-${{ github.event.release.tag_name }}-${{ matrix.platform }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos
+            os: macos-latest
+            script: dist:mac
+            artifact_globs: |
+              electron/dist/*.dmg
+              electron/dist/*.zip
+          - platform: windows
+            os: windows-latest
+            script: dist:win
+            artifact_globs: |
+              electron/dist/*.exe
+              electron/dist/*.msi
+              electron/dist/*.zip
+          - platform: linux
+            os: ubuntu-latest
+            script: dist:linux
+            artifact_globs: |
+              electron/dist/*.AppImage
+              electron/dist/*.deb
+              electron/dist/*.rpm
+              electron/dist/*.zip
+
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: electron/package-lock.json
+
+      - name: Install Electron dependencies
+        run: npm ci --prefix electron
+
+      - name: Type check Electron shell
+        run: npm --prefix electron run typecheck
+
+      - name: Build Electron shell
+        run: npm --prefix electron run build
+
+      - name: Package desktop app
+        run: npm --prefix electron run ${{ matrix.script }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload desktop assets to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.event.release.tag_name }}
+          ARTIFACT_GLOBS: ${{ matrix.artifact_globs }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          files=()
+          while IFS= read -r pattern; do
+            [ -n "$pattern" ] || continue
+            for file in $pattern; do
+              [ -f "$file" ] && files+=("$file")
+            done
+          done <<< "$ARTIFACT_GLOBS"
+
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No desktop assets found for ${{ matrix.platform }}."
+            find electron/dist -maxdepth 2 -type f -print || true
+            exit 1
+          fi
+
+          printf 'Uploading %s assets for %s:\n' "${#files[@]}" "${{ matrix.platform }}"
+          printf ' - %s\n' "${files[@]}"
+          gh release upload "$TAG_NAME" "${files[@]}" --clobber

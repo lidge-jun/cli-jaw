@@ -6,19 +6,19 @@
 #   ./release-preview.sh --minor         → minor bump (1.6.9 → 1.7.0-preview.*)
 #   ./release-preview.sh --major         → major bump (1.6.9 → 2.0.0-preview.*)
 #   ./release-preview.sh 1.8.0           → explicit base version
-#   ./release-preview.sh --with-desktop  → also build & attach unsigned macOS app
+# Desktop artifacts are built and attached by GitHub Actions after the
+# GitHub prerelease is published.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 # ─── Flag parsing ──────────────────────────────────────
-WITH_DESKTOP=0
 BUMP_KIND="patch"
 POSITIONAL=()
 for arg in "$@"; do
   case "$arg" in
     --with-desktop)
-      WITH_DESKTOP=1
+      echo "ℹ️  --with-desktop is no longer needed; GitHub Actions builds desktop assets after release publication."
       ;;
     --major|major)
       BUMP_KIND="major"
@@ -50,23 +50,22 @@ run_electron_release_checks() {
 ELECTRON_RELEASE_NOTES_BASE="### Desktop / Electron
 - Electron shell validated with \`npm --prefix electron run typecheck\` and \`npm --prefix electron run build\`.
 - npm package boundary validated with \`npm run check:electron-no-native\`; Electron app artifacts remain outside the npm package.
-- Desktop app distribution remains separate from \`npm install -g cli-jaw\` and should be shipped through the GitHub/download channel."
+- Desktop app distribution remains separate from \`npm install -g cli-jaw\`.
+- macOS, Windows, and Linux desktop assets are built by GitHub Actions after this prerelease is published, then attached to this GitHub Release."
 
 ELECTRON_RELEASE_NOTES_UNSIGNED="
 #### ⚠️ Desktop app downloads are unsigned
-The macOS \`.dmg\` / \`.zip\` and Windows installers attached to this release are **unsigned** (no Apple Developer ID / Windows code-signing cert configured).
+The desktop assets attached by GitHub Actions are **unsigned** (no Apple Developer ID / Windows code-signing cert configured).
 
 - macOS: Gatekeeper will block first launch. Either right-click → Open → Open, or remove the quarantine attribute:
   \`\`\`sh
   xattr -d com.apple.quarantine /Applications/cli-jaw.app
   \`\`\`
 - Windows: SmartScreen will warn on first run. Click \"More info\" → \"Run anyway\".
+- Linux: AppImage downloads may need execute permission before launch.
 - For trusted distribution, install via \`npm install -g cli-jaw\` instead."
 
-ELECTRON_RELEASE_NOTES="$ELECTRON_RELEASE_NOTES_BASE"
-if [ "$WITH_DESKTOP" = "1" ]; then
-  ELECTRON_RELEASE_NOTES="$ELECTRON_RELEASE_NOTES_BASE$ELECTRON_RELEASE_NOTES_UNSIGNED"
-fi
+ELECTRON_RELEASE_NOTES="$ELECTRON_RELEASE_NOTES_BASE$ELECTRON_RELEASE_NOTES_UNSIGNED"
 
 # ─── Version detection ─────────────────────────────────
 NPM_LATEST=$(npm view cli-jaw dist-tags.latest 2>/dev/null || echo "")
@@ -139,23 +138,6 @@ npm run build:frontend
 
 run_electron_release_checks
 
-# ─── Desktop dist (optional, --with-desktop) ───────────
-DESKTOP_ARTIFACTS=()
-if [ "$WITH_DESKTOP" = "1" ]; then
-  if [ "$(uname -s)" = "Darwin" ]; then
-    echo "🖥️  Building desktop app (unsigned)..."
-    rm -rf electron/dist
-    CSC_IDENTITY_AUTO_DISCOVERY=false npm --prefix electron run dist:mac
-    while IFS= read -r f; do
-      [ -n "$f" ] && DESKTOP_ARTIFACTS+=("$f")
-    done < <(ls electron/dist/*.dmg electron/dist/*.zip 2>/dev/null || true)
-    echo "📦 Desktop artifacts collected: ${#DESKTOP_ARTIFACTS[@]}"
-    printf '   - %s\n' "${DESKTOP_ARTIFACTS[@]+"${DESKTOP_ARTIFACTS[@]}"}"
-  else
-    echo "⚠️  --with-desktop requested but host is not Darwin; skipping macOS dist."
-  fi
-fi
-
 echo "🧪 Verifying npm package contents..."
 npm pack --dry-run >/dev/null
 
@@ -193,9 +175,9 @@ if command -v gh &>/dev/null; then
   gh release create "v$VERSION" \
     --title "v$VERSION (preview)" \
     --notes "$RELEASE_BODY" \
-    --prerelease \
-    "${DESKTOP_ARTIFACTS[@]+"${DESKTOP_ARTIFACTS[@]}"}"
+    --prerelease
   echo "✅ GitHub prerelease v$VERSION created!"
+  echo "🖥️  Desktop assets will be built by the Desktop Release GitHub Actions workflow."
 else
   echo "⚠️  Skipped GitHub prerelease (gh CLI not found)"
 fi
