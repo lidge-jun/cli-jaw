@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import * as fsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MAX_NOTE_BYTES } from '../../src/manager/notes/path-guards.js';
-import { NotesStore } from '../../src/manager/notes/store.js';
+import { NotesStore, type NotesStoreFs } from '../../src/manager/notes/store.js';
 
 function tmpRoot(): string {
     return mkdtempSync(join(tmpdir(), 'jaw-notes-store-test-'));
@@ -44,6 +45,50 @@ test('store writes with baseRevision and rejects stale revision', async (t) => {
     );
 });
 
+test('store serializes writes so one same-revision concurrent save conflicts', async (t) => {
+    const root = tmpRoot();
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    let delayFirstWrite = false;
+    let releaseFirstWrite!: () => void;
+    let firstWriteEntered!: () => void;
+    const firstWriteEnteredPromise = new Promise<void>(resolve => {
+        firstWriteEntered = resolve;
+    });
+    const releaseFirstWritePromise = new Promise<void>(resolve => {
+        releaseFirstWrite = resolve;
+    });
+    const fsImpl: NotesStoreFs = {
+        existsSync,
+        lstat: fsPromises.lstat,
+        mkdir: fsPromises.mkdir,
+        readFile: fsPromises.readFile,
+        readdir: fsPromises.readdir,
+        realpath: fsPromises.realpath,
+        rename: fsPromises.rename,
+        stat: fsPromises.stat,
+        writeFile: async (...args) => {
+            if (delayFirstWrite && args[1] === 'two') {
+                firstWriteEntered();
+                await releaseFirstWritePromise;
+            }
+            return await fsPromises.writeFile(...args);
+        },
+    };
+    const store = new NotesStore({ root, fsImpl });
+    const created = await store.createFile('note.md', 'one');
+
+    delayFirstWrite = true;
+    const first = store.writeFile({ path: 'note.md', content: 'two', baseRevision: created.revision });
+    await firstWriteEnteredPromise;
+    const second = store.writeFile({ path: 'note.md', content: 'three', baseRevision: created.revision });
+    releaseFirstWrite();
+
+    const results = await Promise.allSettled([first, second]);
+    assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+    assert.equal(results.filter(result => result.status === 'rejected').length, 1);
+    assert.equal((await store.readFile('note.md')).content, 'two');
+});
+
 test('store renames markdown files and rejects collisions', async (t) => {
     const root = tmpRoot();
     t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -76,6 +121,25 @@ test('store rejects symlink parent escapes on create', async (t) => {
     symlinkSync(outside, join(root, 'links', 'outside'));
     const store = new NotesStore({ root });
     await assert.rejects(() => store.createFile('links/outside/x.md', 'x'), /symlinks/);
+});
+
+test('store rejects baseRevision-free writes to symlink targets', async (t) => {
+    const root = tmpRoot();
+    const outside = tmpRoot();
+    t.after(() => {
+        rmSync(root, { recursive: true, force: true });
+        rmSync(outside, { recursive: true, force: true });
+    });
+    const outsideFile = join(outside, 'outside.md');
+    writeFileSync(outsideFile, 'outside');
+    symlinkSync(outsideFile, join(root, 'note.md'));
+    const store = new NotesStore({ root });
+
+    await assert.rejects(
+        () => store.writeFile({ path: 'note.md', content: 'changed' }),
+        /symlinks/,
+    );
+    assert.equal(await fsPromises.readFile(outsideFile, 'utf8'), 'outside');
 });
 
 test('store renames folders and rejects cycles', async (t) => {

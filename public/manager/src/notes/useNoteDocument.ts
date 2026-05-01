@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { DashboardNoteFileResponse } from '../types';
 import { fetchNoteFile, saveNoteFile } from './notes-api';
 import { isRevisionConflict } from './note-revisions';
@@ -28,6 +28,8 @@ export function useNoteDocument(): UseNoteDocumentResult {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [conflict, setConflict] = useState<NoteConflictState | null>(null);
+    const latestContentRef = useRef('');
+    const savingRef = useRef(false);
 
     const load = useCallback(async (path: string): Promise<void> => {
         setLoading(true);
@@ -36,6 +38,7 @@ export function useNoteDocument(): UseNoteDocumentResult {
         try {
             const next = await fetchNoteFile(path);
             setFile(next);
+            latestContentRef.current = next.content;
             setContentState(next.content);
             setDirty(false);
         } catch (err) {
@@ -46,24 +49,30 @@ export function useNoteDocument(): UseNoteDocumentResult {
     }, []);
 
     function setContent(value: string): void {
+        latestContentRef.current = value;
         setContentState(value);
         setDirty(true);
     }
 
     const save = useCallback(async (): Promise<void> => {
-        if (!file || !dirty) return;
+        if (!file || !dirty || savingRef.current) return;
+        const contentSnapshot = latestContentRef.current;
+        savingRef.current = true;
         setSaving(true);
         setError(null);
         setConflict(null);
         try {
             const saved = await saveNoteFile({
                 path: file.path,
-                content,
+                content: contentSnapshot,
                 baseRevision: file.revision,
             });
             setFile(saved);
-            setContentState(saved.content);
-            setDirty(false);
+            if (latestContentRef.current === contentSnapshot) {
+                latestContentRef.current = saved.content;
+                setContentState(saved.content);
+                setDirty(false);
+            }
         } catch (err) {
             if (isRevisionConflict(err)) {
                 let remoteRevision = file.revision;
@@ -75,7 +84,7 @@ export function useNoteDocument(): UseNoteDocumentResult {
                     remoteRevision = file.revision;
                 }
                 setConflict({
-                    localContent: content,
+                    localContent: contentSnapshot,
                     remoteRevision,
                     message: (err as Error).message,
                 });
@@ -83,9 +92,10 @@ export function useNoteDocument(): UseNoteDocumentResult {
                 setError((err as Error).message);
             }
         } finally {
+            savingRef.current = false;
             setSaving(false);
         }
-    }, [content, dirty, file]);
+    }, [dirty, file]);
 
     const reloadFromDisk = useCallback(async (): Promise<void> => {
         if (!file) return;
@@ -93,21 +103,27 @@ export function useNoteDocument(): UseNoteDocumentResult {
     }, [file, load]);
 
     const overwrite = useCallback(async (): Promise<void> => {
-        if (!file) return;
+        if (!file || savingRef.current) return;
+        const contentSnapshot = latestContentRef.current;
+        savingRef.current = true;
         setSaving(true);
         setError(null);
         try {
-            const saved = await saveNoteFile({ path: file.path, content });
+            const saved = await saveNoteFile({ path: file.path, content: contentSnapshot });
             setFile(saved);
-            setContentState(saved.content);
-            setDirty(false);
+            if (latestContentRef.current === contentSnapshot) {
+                latestContentRef.current = saved.content;
+                setContentState(saved.content);
+                setDirty(false);
+            }
             setConflict(null);
         } catch (err) {
             setError((err as Error).message);
         } finally {
+            savingRef.current = false;
             setSaving(false);
         }
-    }, [content, file]);
+    }, [file]);
 
     return {
         file,

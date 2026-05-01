@@ -69,9 +69,13 @@ export function installHiddenUnloadWatcher(options: {
 
     if (doc.hidden) startTimer();
     doc.addEventListener('visibilitychange', handler as EventListener);
+    // Page Lifecycle: a frozen tab can resume directly without a visibilitychange edge.
+    // Run the same elapsed-time check on `resume` so freeze + late return still fires onUnload.
+    doc.addEventListener('resume', handler as EventListener);
 
     return () => {
         doc.removeEventListener('visibilitychange', handler as EventListener);
+        doc.removeEventListener('resume', handler as EventListener);
         clearPendingTimer();
     };
 }

@@ -63,6 +63,9 @@ test('Markdown editor exposes WYSIWYG toolbar without changing the save path', (
     assert.ok(milkdown.includes('toggleStrikethroughCommand'), 'Milkdown WYSIWYG must expose GFM strikethrough');
     assert.ok(milkdown.includes('insertTableCommand'), 'Milkdown WYSIWYG must expose GFM tables');
     assert.ok(milkdown.includes('handleTaskListClick'), 'Milkdown WYSIWYG must let users toggle task list checkboxes');
+    assert.ok(milkdown.includes('handleTaskListKeyDown'), 'Milkdown WYSIWYG task checkboxes must be keyboard-toggleable');
+    assert.ok(milkdown.includes("item.setAttribute('role', 'checkbox')"), 'Milkdown WYSIWYG task items must expose checkbox semantics');
+    assert.ok(milkdown.includes("item.setAttribute('aria-checked'"), 'Milkdown WYSIWYG task items must expose checked state');
     assert.ok(milkdown.includes('createLanguageCodeBlock'), 'Milkdown WYSIWYG must create language-aware code blocks');
     assert.ok(milkdown.includes('normalizeCodeLanguage'), 'code block language input must be normalized before reaching Markdown');
     assert.ok(mathPlugin.includes('$view'), 'Milkdown math must use node views for rendered/raw editing');

@@ -107,7 +107,7 @@ export function ElectronMetricsPanel(props: ElectronMetricsPanelProps = {}) {
 
     if (!snapshot) {
         return (
-            <div className="electron-metrics-panel electron-metrics-panel--empty" role="status">
+            <div className="electron-metrics-panel electron-metrics-panel--empty" aria-label="Electron process metrics">
                 <div className="electron-metrics-header">
                     <span className="electron-metrics-title">Desktop metrics</span>
                 </div>
@@ -123,7 +123,7 @@ export function ElectronMetricsPanel(props: ElectronMetricsPanelProps = {}) {
     const panelClass = `electron-metrics-panel${overThreshold ? ' electron-metrics-panel--warn' : ''}`;
 
     return (
-        <div className={panelClass} role="status" aria-label="Electron process metrics">
+        <div className={panelClass} aria-label="Electron process metrics">
             <div className="electron-metrics-header">
                 <span className="electron-metrics-title">Desktop metrics</span>
                 <button
@@ -139,8 +139,8 @@ export function ElectronMetricsPanel(props: ElectronMetricsPanelProps = {}) {
             {!collapsed && (
                 <div className="electron-metrics-body">
                     {overThreshold && (
-                        <div className="electron-metrics-warn" role="alert">
-                            <span>Renderer RSS exceeds {formatRss(WARN_THRESHOLD_KB)}.</span>
+                        <div className="electron-metrics-warn">
+                            <span role="alert">Electron RSS total exceeds {formatRss(WARN_THRESHOLD_KB)}.</span>
                             {props.onUnloadPreview && (
                                 <button
                                     type="button"

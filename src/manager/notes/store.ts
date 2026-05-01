@@ -61,6 +61,7 @@ const DEFAULT_FS: NotesStoreFs = {
 export class NotesStore {
     private readonly root: string;
     private readonly fs: NotesStoreFs;
+    private readonly writeLocks = new Map<string, Promise<void>>();
 
     constructor(options: NotesStoreOptions = {}) {
         this.root = options.root || dashboardPath('notes');
@@ -101,17 +102,22 @@ export class NotesStore {
 
     async writeFile(request: DashboardPutNoteRequest): Promise<DashboardNoteFileResponse> {
         const relPath = assertNoteRelPath(request.path);
-        await this.assertWritableTarget(relPath);
-        await this.assertContentSize(request.content);
-        const target = resolveNotePath(this.root, relPath);
-        if (request.baseRevision && this.fs.existsSync(target)) {
-            const current = await this.readFile(relPath);
-            if (current.revision !== request.baseRevision) {
-                throw notePathError(409, 'note_revision_conflict', 'note changed since it was loaded');
+        return await this.withWriteLock(relPath, async () => {
+            await this.assertWritableTarget(relPath);
+            await this.assertContentSize(request.content);
+            const target = resolveNotePath(this.root, relPath);
+            if (this.fs.existsSync(target)) {
+                await this.assertExistingWritableFile(relPath);
+                if (request.baseRevision) {
+                    const current = await this.readFile(relPath);
+                    if (current.revision !== request.baseRevision) {
+                        throw notePathError(409, 'note_revision_conflict', 'note changed since it was loaded');
+                    }
+                }
             }
-        }
-        await this.fs.writeFile(target, request.content, 'utf8');
-        return await this.readFile(relPath);
+            await this.fs.writeFile(target, request.content, 'utf8');
+            return await this.readFile(relPath);
+        });
     }
 
     async createFolder(path: string): Promise<{ path: string }> {
@@ -236,6 +242,29 @@ export class NotesStore {
         }
         await assertNotSymlink(parent);
         await assertRealPathInside(this.root, parent);
+    }
+
+    private async assertExistingWritableFile(relPath: string): Promise<void> {
+        await this.existingFilePath(relPath);
+    }
+
+    private async withWriteLock<T>(relPath: string, fn: () => Promise<T>): Promise<T> {
+        const previous = this.writeLocks.get(relPath) ?? Promise.resolve();
+        let release!: () => void;
+        const current = new Promise<void>(resolve => {
+            release = resolve;
+        });
+        const next = previous.then(() => current, () => current);
+        this.writeLocks.set(relPath, next);
+        await previous;
+        try {
+            return await fn();
+        } finally {
+            release();
+            if (this.writeLocks.get(relPath) === next) {
+                this.writeLocks.delete(relPath);
+            }
+        }
     }
 
     private async assertContentSize(content: string): Promise<void> {

@@ -193,6 +193,38 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         const root = rootRef.current;
         if (!root) return undefined;
 
+        function syncTaskListAccessibility(): void {
+            root!.querySelectorAll<HTMLElement>('li[data-item-type="task"][data-checked]').forEach(item => {
+                const checked = item.dataset.checked === 'true';
+                item.setAttribute('role', 'checkbox');
+                item.setAttribute('aria-checked', checked ? 'true' : 'false');
+                item.setAttribute('tabindex', '0');
+                item.setAttribute('aria-label', item.textContent?.trim() || (checked ? 'Checked task' : 'Unchecked task'));
+            });
+        }
+
+        function toggleTaskItem(item: HTMLElement): void {
+            editorRef.current?.action(ctx => {
+                const view = ctx.get(editorViewCtx);
+                const pos = view.posAtDOM(item, 0);
+                const resolved = view.state.doc.resolve(pos);
+                for (let depth = resolved.depth; depth > 0; depth -= 1) {
+                    const node = resolved.node(depth);
+                    if (node.type.name !== 'list_item' || node.attrs.checked == null) continue;
+                    const listItemPos = resolved.before(depth);
+                    view.dispatch(view.state.tr.setNodeMarkup(listItemPos, undefined, {
+                        ...node.attrs,
+                        checked: !node.attrs.checked,
+                    }).scrollIntoView());
+                    const markdown = getMarkdown()(ctx);
+                    latestMarkdownRef.current = markdown;
+                    if (!syncingFromPropsRef.current) onChangeRef.current(markdown);
+                    queueMicrotask(syncTaskListAccessibility);
+                    return;
+                }
+            });
+        }
+
         function handleTaskListClick(event: MouseEvent): void {
             const target = event.target;
             if (!(target instanceof HTMLElement)) return;
@@ -212,28 +244,29 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
             const rect = item.getBoundingClientRect();
             if (event.clientX > rect.left + 26) return;
             event.preventDefault();
-            editorRef.current?.action(ctx => {
-                const view = ctx.get(editorViewCtx);
-                const pos = view.posAtDOM(item, 0);
-                const resolved = view.state.doc.resolve(pos);
-                for (let depth = resolved.depth; depth > 0; depth -= 1) {
-                    const node = resolved.node(depth);
-                    if (node.type.name !== 'list_item' || node.attrs.checked == null) continue;
-                    const listItemPos = resolved.before(depth);
-                    view.dispatch(view.state.tr.setNodeMarkup(listItemPos, undefined, {
-                        ...node.attrs,
-                        checked: !node.attrs.checked,
-                    }).scrollIntoView());
-                    const markdown = getMarkdown()(ctx);
-                    latestMarkdownRef.current = markdown;
-                    if (!syncingFromPropsRef.current) onChangeRef.current(markdown);
-                    return;
-                }
-            });
+            toggleTaskItem(item);
         }
 
+        function handleTaskListKeyDown(event: KeyboardEvent): void {
+            if (event.key !== ' ' && event.key !== 'Enter') return;
+            const target = event.target;
+            if (!(target instanceof HTMLElement)) return;
+            const item = target.closest<HTMLElement>('li[data-item-type="task"][data-checked]');
+            if (!item || !root!.contains(item)) return;
+            event.preventDefault();
+            toggleTaskItem(item);
+        }
+
+        syncTaskListAccessibility();
+        const observer = new MutationObserver(syncTaskListAccessibility);
+        observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-checked'] });
         root.addEventListener('click', handleTaskListClick);
-        return () => root.removeEventListener('click', handleTaskListClick);
+        root.addEventListener('keydown', handleTaskListKeyDown);
+        return () => {
+            observer.disconnect();
+            root.removeEventListener('click', handleTaskListClick);
+            root.removeEventListener('keydown', handleTaskListKeyDown);
+        };
     }, [ready]);
 
     function handlePasteCapture(event: ClipboardEvent<HTMLDivElement>): void {

@@ -38,4 +38,6 @@ test('round-trip normalizer is not wired into the Notes save path', () => {
     const noteDocument = read('public/manager/src/notes/useNoteDocument.ts');
     assert.equal(noteDocument.includes('normalizeMarkdownForRoundTrip'), false);
     assert.ok(noteDocument.includes('saveNoteFile({'), 'Notes must still save the editor markdown content through the existing save path');
+    assert.ok(noteDocument.includes('latestContentRef.current'), 'Notes save must use the latest editor content even before React commits a render');
+    assert.ok(noteDocument.includes('savingRef.current'), 'Notes save must synchronously reject duplicate save calls');
 });

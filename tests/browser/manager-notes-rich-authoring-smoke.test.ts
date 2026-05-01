@@ -15,12 +15,13 @@ async function pageForManager(): Promise<Page> {
 async function seedRichNote(page: Page, notePath: string): Promise<void> {
     await page.evaluate(async ({ notePath }) => {
         const headers = { 'content-type': 'application/json' };
-        await fetch('/api/dashboard/registry', {
+        const registry = await fetch('/api/dashboard/registry', {
             method: 'PATCH',
             headers,
             body: JSON.stringify({ ui: { sidebarMode: 'notes', notesSelectedPath: notePath, notesViewMode: 'raw', notesAuthoringMode: 'plain' } }),
         });
-        await fetch('/api/dashboard/notes/file', {
+        if (!registry.ok) throw new Error(`registry seed failed: ${registry.status}`);
+        const note = await fetch('/api/dashboard/notes/file', {
             method: 'POST',
             headers,
             body: JSON.stringify({
@@ -40,18 +41,20 @@ async function seedRichNote(page: Page, notePath: string): Promise<void> {
                 ].join('\n'),
             }),
         });
+        if (!note.ok) throw new Error(`note seed failed: ${note.status}`);
     }, { notePath });
 }
 
 async function seedGfmNote(page: Page, notePath: string): Promise<void> {
     await page.evaluate(async ({ notePath }) => {
         const headers = { 'content-type': 'application/json' };
-        await fetch('/api/dashboard/registry', {
+        const registry = await fetch('/api/dashboard/registry', {
             method: 'PATCH',
             headers,
             body: JSON.stringify({ ui: { sidebarMode: 'notes', notesSelectedPath: notePath, notesViewMode: 'raw', notesAuthoringMode: 'plain' } }),
         });
-        await fetch('/api/dashboard/notes/file', {
+        if (!registry.ok) throw new Error(`registry seed failed: ${registry.status}`);
+        const note = await fetch('/api/dashboard/notes/file', {
             method: 'POST',
             headers,
             body: JSON.stringify({
@@ -69,9 +72,14 @@ async function seedGfmNote(page: Page, notePath: string): Promise<void> {
                     '| GFM | works |',
                     '',
                     'Visit www.example.com',
+                    '',
+                    'A note[^1]',
+                    '',
+                    '[^1]: footnote body',
                 ].join('\n'),
             }),
         });
+        if (!note.ok) throw new Error(`note seed failed: ${note.status}`);
     }, { notePath });
 }
 
@@ -199,6 +207,12 @@ test('notes render and edit GitHub Flavored Markdown affordances', async () => {
         'Preview must render GFM tables');
     assert.ok((await page.locator('.notes-preview a').first().getAttribute('href'))?.includes('www.example.com'),
         'Preview must autolink GFM URL literals');
+    assert.equal(await page.locator('.notes-preview a[data-footnote-ref]').count(), 1,
+        'Preview must render GFM footnote references');
+    assert.equal(await page.locator('.notes-preview section.footnotes, .notes-preview [data-footnotes]').count(), 1,
+        'Preview must render GFM footnote definitions');
+    assert.equal(await page.locator('.notes-preview a[data-footnote-backref]').count(), 1,
+        'Preview must render GFM footnote backrefs');
 
     await page.getByRole('tab', { name: 'WYSIWYG' }).click();
     await page.waitForSelector('.notes-milkdown-root .ProseMirror', { timeout: 5000 });
@@ -222,12 +236,16 @@ test('notes render and edit GitHub Flavored Markdown affordances', async () => {
         const body = await response.json();
         return body.content as string;
     }, { noteName });
-    assert.ok(/[-*] \[x\] unchecked task/.test(savedContent),
+    assert.ok(/(^|\n)[-*] \[x\] unchecked task(\n|$)/.test(savedContent),
         'WYSIWYG task checkbox toggles must round-trip back to GFM markdown');
+    assert.ok(/(^|\n)[-*] \[[xX]\] checked task(\n|$)/.test(savedContent),
+        'Existing checked GFM tasks must remain checked after WYSIWYG save');
     assert.ok(savedContent.includes('~~done later~~'),
         'GFM strikethrough must round-trip back to canonical markdown');
-    assert.ok(savedContent.includes('| GFM  | works  |') || savedContent.includes('| GFM | works |'),
+    assert.ok(/\|\s*Item\s*\|\s*Status\s*\|\s*\n\|[-:\s|]+\|\s*\n\|\s*GFM\s*\|\s*works\s*\|/.test(savedContent),
         'GFM tables must round-trip back to canonical markdown');
+    assert.ok(savedContent.includes('A note[^1]') && savedContent.includes('[^1]: footnote body'),
+        'GFM footnotes must round-trip back to markdown');
 });
 
 async function expectInputValue(locator: Locator, expected: string): Promise<void> {

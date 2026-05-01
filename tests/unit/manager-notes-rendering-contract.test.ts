@@ -92,6 +92,8 @@ test('Notes app imports KaTeX CSS and notes CSS owns rich preview styling', () =
         'Preview and WYSIWYG code blocks must share highlight token colors');
     assert.ok(css.includes('.task-list-item'), 'Notes CSS must style rendered GFM task lists');
     assert.ok(css.includes('li[data-item-type="task"]'), 'Notes CSS must style Milkdown GFM task list items');
+    assert.ok(css.includes('.notes-preview table'), 'Notes CSS must style rendered GFM tables');
+    assert.ok(css.includes('[data-footnotes]'), 'Notes CSS must style rendered GFM footnotes');
     assert.ok(css.includes('.notes-mermaid-block'), 'Notes CSS must style Mermaid blocks');
     assert.ok(css.includes('.katex-display'), 'Notes CSS must handle KaTeX display overflow');
 });

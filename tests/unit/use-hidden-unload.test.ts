@@ -5,20 +5,23 @@ import { installHiddenUnloadWatcher } from '../../public/manager/src/lib/use-hid
 type Listener = (e?: unknown) => void;
 
 function makeFakeDoc(initialHidden: boolean) {
-    const listeners = new Set<Listener>();
+    const listeners = new Map<string, Set<Listener>>();
     const doc = {
         hidden: initialHidden,
-        addEventListener(_type: string, cb: Listener) {
-            listeners.add(cb);
+        addEventListener(type: string, cb: Listener) {
+            if (!listeners.has(type)) listeners.set(type, new Set());
+            listeners.get(type)!.add(cb);
         },
-        removeEventListener(_type: string, cb: Listener) {
-            listeners.delete(cb);
+        removeEventListener(type: string, cb: Listener) {
+            listeners.get(type)?.delete(cb);
         },
-        emit() {
-            for (const cb of listeners) cb();
+        emit(type: string = 'visibilitychange') {
+            for (const cb of listeners.get(type) ?? []) cb();
         },
         listenerCount() {
-            return listeners.size;
+            let count = 0;
+            for (const set of listeners.values()) count += set.size;
+            return count;
         },
     };
     return doc;
@@ -133,8 +136,33 @@ describe('installHiddenUnloadWatcher', () => {
             clearTimeout: clock.clearTimeout,
             now: clock.now,
         });
-        assert.equal(doc.listenerCount(), 1);
+        // visibilitychange + resume listeners both registered
+        assert.equal(doc.listenerCount(), 2);
         cleanup();
         assert.equal(doc.listenerCount(), 0);
+    });
+
+    it('fires on resume event when timer was frozen and threshold elapsed', () => {
+        const doc = makeFakeDoc(false);
+        const clock = makeFakeClock();
+        let fired = 0;
+        installHiddenUnloadWatcher({
+            onUnload: () => { fired += 1; },
+            idleMs: 5_000,
+            doc,
+            setTimeout(cb, _ms) {
+                void cb;
+                return 1;
+            },
+            clearTimeout: clock.clearTimeout,
+            now: clock.now,
+        });
+        doc.hidden = true;
+        doc.emit('visibilitychange');
+        clock.advance(7_000);
+        // Page Lifecycle: frozen → resume (no visibilitychange edge required)
+        doc.hidden = false;
+        doc.emit('resume');
+        assert.equal(fired, 1);
     });
 });
