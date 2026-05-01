@@ -75,7 +75,11 @@
     "preview:frontend": "vite preview --config vite.config.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:frontend": "tsc --noEmit -p tsconfig.frontend.json",
-    "prepublishOnly": "npm run build && npm run build:frontend"
+    "prepublishOnly": "npm run build && npm run build:frontend",
+    "electron:dev": "concurrently -k -n jaw,electron \"jaw dashboard serve --port 24576\" \"npm --prefix electron run dev\"",
+    "electron:build": "npm --prefix electron run build && cd electron && npx electron-builder --mac --win",
+    "electron:start": "npm --prefix electron run start",
+    "check:electron-no-native": "node scripts/check-electron-no-native.cjs"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "^6.5.0",
@@ -119,6 +123,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.5.0",
     "@vitejs/plugin-react": "^5.2.0",
+    "concurrently": "^9.2.1",
     "jsdom": "^29.1.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.2",

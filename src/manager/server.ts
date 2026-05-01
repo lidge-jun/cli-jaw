@@ -131,7 +131,10 @@ app.use(express.json({ limit: '64kb' }));
 app.get('/api/dashboard/health', (_req, res) => {
     res.json({
         ok: true,
+        app: 'cli-jaw',
+        service: 'manager-dashboard',
         port,
+        pid: process.pid,
         rangeFrom: scanFrom,
         rangeTo: scanFrom + scanCount - 1,
     });
