@@ -268,6 +268,16 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
         } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
 
+    app.post('/api/browser/web-ai/sessions/prune', requireAuth, async (req: Request, res: Response) => {
+        try {
+            res.json(await browser.webAi.sessionsPrune({
+                ...(req.body?.olderThanMs !== undefined ? { olderThanMs: req.body.olderThanMs } : {}),
+                ...(req.body?.before ? { before: String(req.body.before) } : {}),
+                ...(req.body?.status ? { status: String(req.body.status) } : {}),
+            }));
+        } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
+    });
+
     app.get('/api/browser/web-ai/notifications', requireAuth, async (req: Request, res: Response) => {
         try {
             res.json({

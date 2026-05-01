@@ -4,7 +4,7 @@ import { renderContextDryRunReport } from '../../src/browser/web-ai/context-pack
 type BrowserApi = (method: string, path: string, body?: unknown) => Promise<unknown>;
 type QueryString = (params: Record<string, unknown>) => string;
 
-const WEB_AI_COMMANDS = new Set(['render', 'status', 'send', 'poll', 'query', 'watch', 'watchers', 'sessions', 'notifications', 'capabilities', 'stop', 'diagnose', 'context-dry-run', 'context-render']);
+const WEB_AI_COMMANDS = new Set(['render', 'status', 'send', 'poll', 'query', 'watch', 'watchers', 'sessions', 'sessions-prune', 'notifications', 'capabilities', 'stop', 'diagnose', 'context-dry-run', 'context-render']);
 
 function rejectFutureWebAiFlags(values: Record<string, unknown>): void {
     const vendor = values.vendor ?? 'chatgpt';
@@ -73,6 +73,8 @@ export async function runWebAiCommand(
             'files-report': { type: 'boolean', default: false },
             'context-transport': { type: 'string' },
             'dry-run': { type: 'string' },
+            'older-than-ms': { type: 'string' },
+            before: { type: 'string' },
             full: { type: 'boolean', default: false },
             json: { type: 'boolean', default: false },
         },
@@ -137,6 +139,14 @@ async function callWebAiEndpoint(
 ): Promise<unknown> {
     if (command === 'status') return deps.api('GET', `/web-ai/status${deps.qs({ vendor: values.vendor })}`);
     if (command === 'sessions') return deps.api('GET', `/web-ai/sessions${deps.qs({ vendor: values.vendor, status: values.status })}`);
+    if (command === 'sessions-prune') {
+        const olderThanMs = values['older-than-ms'] ? Number(values['older-than-ms']) : undefined;
+        return deps.api('POST', '/web-ai/sessions/prune', {
+            ...(olderThanMs !== undefined && Number.isFinite(olderThanMs) ? { olderThanMs } : {}),
+            ...(values.before ? { before: values.before } : {}),
+            ...(values.status ? { status: values.status } : {}),
+        });
+    }
     if (command === 'notifications') return deps.api('GET', `/web-ai/notifications${deps.qs({ vendor: values.vendor, status: values.status, session: values.session })}`);
     if (command === 'watchers') return deps.api('GET', '/web-ai/watchers');
     if (command === 'capabilities') return deps.api('GET', `/web-ai/capabilities${deps.qs({ vendor: values.vendor, family: values.family, frontendStatus: values['frontend-status'] })}`);

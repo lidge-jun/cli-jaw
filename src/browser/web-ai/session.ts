@@ -241,6 +241,37 @@ export function clearSession(sessionId: string): void {
     savePersistentStore();
 }
 
+export function pruneSessions(input: {
+    olderThanMs?: number;
+    before?: string;
+    status?: WebAiSessionStatus;
+} = {}): { removed: number; remaining: number } {
+    loadPersistentStore();
+    const cutoff = input.before
+        ? Date.parse(input.before)
+        : (typeof input.olderThanMs === 'number' && Number.isFinite(input.olderThanMs))
+            ? Date.now() - input.olderThanMs
+            : null;
+    const toRemove: string[] = [];
+    for (const [sessionId, record] of sessions) {
+        if (input.status && record.status !== input.status) continue;
+        const created = Date.parse(record.createdAt || '');
+        if (cutoff !== null && Number.isFinite(created) && created < cutoff) {
+            toRemove.push(sessionId);
+        }
+    }
+    for (const sessionId of toRemove) {
+        const record = sessions.get(sessionId);
+        sessions.delete(sessionId);
+        if (record) {
+            const targetKey = makeBaselineKey(record.vendor, record.targetId);
+            if (sessionsByTarget.get(targetKey) === sessionId) sessionsByTarget.delete(targetKey);
+        }
+    }
+    if (toRemove.length > 0) savePersistentStore();
+    return { removed: toRemove.length, remaining: sessions.size };
+}
+
 export function assertSameTarget(record: WebAiSessionRecord, actualTargetId: string): void {
     if (record.targetId !== actualTargetId) {
         throw new WrongTargetError(record.targetId, actualTargetId);

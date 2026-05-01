@@ -16,6 +16,7 @@ import {
     getBaseline,
     getSession,
     listSessions,
+    pruneSessions,
     saveBaseline,
     updateSessionResult,
     updateSessionStatus,
@@ -368,6 +369,22 @@ export async function sessions(input: { vendor?: string; status?: string } = {})
         sessions: listSessions({ vendor, status }),
         warnings: [],
     };
+}
+
+export async function sessionsPrune(input: { olderThanMs?: number | string; before?: string; status?: string } = {}): Promise<WebAiOutput> {
+    const ms = typeof input.olderThanMs === 'string' ? Number(input.olderThanMs) : input.olderThanMs;
+    const result = pruneSessions({
+        ...(typeof ms === 'number' && Number.isFinite(ms) ? { olderThanMs: ms } : {}),
+        ...(input.before ? { before: input.before } : {}),
+        ...(input.status ? { status: input.status as any } : {}),
+    });
+    return {
+        ok: true,
+        vendor: 'chatgpt',
+        status: 'ready',
+        prune: result,
+        warnings: [],
+    } as WebAiOutput;
 }
 
 export async function stop(port: number, input: { vendor?: string } = {}): Promise<WebAiOutput> {
