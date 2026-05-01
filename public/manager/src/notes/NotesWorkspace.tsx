@@ -6,6 +6,8 @@ import { NotesToolbar } from './NotesToolbar';
 import { useNoteDocument } from './useNoteDocument';
 import type { NotesAuthoringMode, NotesViewMode } from './notes-types';
 
+type NotesPrimaryMode = 'raw' | 'preview' | 'wysiwyg';
+
 type NotesWorkspaceProps = {
     active: boolean;
     selectedPath: string | null;
@@ -20,6 +22,14 @@ type NotesWorkspaceProps = {
     onWordWrapChange: (value: boolean) => void;
     onTreeWidthChange: (value: number) => void;
 };
+
+const PRIMARY_MODE_CYCLE: NotesPrimaryMode[] = ['raw', 'preview', 'wysiwyg'];
+
+function primaryModeFor(viewMode: NotesViewMode, authoringMode: NotesAuthoringMode): NotesPrimaryMode {
+    if (viewMode === 'preview') return 'preview';
+    if (authoringMode === 'wysiwyg') return 'wysiwyg';
+    return 'raw';
+}
 
 export function NotesWorkspace(props: NotesWorkspaceProps) {
     const document = useNoteDocument();
@@ -44,6 +54,25 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
         window.addEventListener('keydown', handleSaveShortcut);
         return () => window.removeEventListener('keydown', handleSaveShortcut);
     }, [document.save, props.active]);
+
+    useEffect(() => {
+        if (!props.active) return;
+        function handleModeShortcut(event: KeyboardEvent): void {
+            if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'e') return;
+            event.preventDefault();
+            const current = primaryModeFor(props.viewMode, props.authoringMode);
+            const next = PRIMARY_MODE_CYCLE[(PRIMARY_MODE_CYCLE.indexOf(current) + 1) % PRIMARY_MODE_CYCLE.length];
+            if (next === 'preview') {
+                props.onViewModeChange('preview');
+                return;
+            }
+            props.onViewModeChange('raw');
+            props.onAuthoringModeChange(next === 'wysiwyg' ? 'wysiwyg' : 'plain');
+        }
+
+        window.addEventListener('keydown', handleModeShortcut);
+        return () => window.removeEventListener('keydown', handleModeShortcut);
+    }, [props.active, props.viewMode, props.authoringMode, props.onViewModeChange, props.onAuthoringModeChange]);
 
     const showEditor = props.viewMode === 'raw' || props.viewMode === 'split';
     const showPreview = props.viewMode === 'preview' || props.viewMode === 'split';

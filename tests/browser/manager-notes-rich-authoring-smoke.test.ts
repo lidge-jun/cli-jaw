@@ -43,11 +43,43 @@ async function seedRichNote(page: Page, notePath: string): Promise<void> {
     }, { notePath });
 }
 
+async function seedGfmNote(page: Page, notePath: string): Promise<void> {
+    await page.evaluate(async ({ notePath }) => {
+        const headers = { 'content-type': 'application/json' };
+        await fetch('/api/dashboard/registry', {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ ui: { sidebarMode: 'notes', notesSelectedPath: notePath, notesViewMode: 'raw', notesAuthoringMode: 'plain' } }),
+        });
+        await fetch('/api/dashboard/notes/file', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                path: notePath,
+                content: [
+                    '# GFM smoke',
+                    '',
+                    '- [ ] unchecked task',
+                    '- [x] checked task',
+                    '',
+                    '~~done later~~',
+                    '',
+                    '| Item | Status |',
+                    '| --- | --- |',
+                    '| GFM | works |',
+                    '',
+                    'Visit www.example.com',
+                ].join('\n'),
+            }),
+        });
+    }, { notePath });
+}
+
 after(async () => {
     await Promise.allSettled(browsers.map(browser => browser.close()));
 });
 
-test('notes rich authoring toggles renderer-backed CodeMirror widgets without becoming a view tab', async () => {
+test('notes WYSIWYG authoring keeps the primary toolbar compact', async () => {
     const page = await pageForManager();
     const noteName = `browser-rich-${Date.now()}.md`;
 
@@ -59,16 +91,23 @@ test('notes rich authoring toggles renderer-backed CodeMirror widgets without be
     await page.locator('.notes-tree-file-button').filter({ hasText: noteName }).first().click();
     await page.waitForSelector('.cm-content[contenteditable="true"]');
     assert.equal(await page.getByRole('tab', { name: 'Rich' }).count(), 0, 'Rich must not be a Notes view tab');
+    assert.equal(await page.getByRole('button', { name: 'Rich', exact: true }).count(), 0,
+        'Rich legacy authoring must not be a primary toolbar button');
 
-    await page.getByRole('button', { name: 'Rich', exact: true }).click();
-    await page.waitForSelector('.cm-rich-widget', { timeout: 5000 });
-    assert.ok(await page.locator('.cm-rich-widget').count() >= 1, 'Rich authoring must create renderer-backed widgets');
-
+    await page.getByRole('tab', { name: 'Split' }).click();
+    await page.keyboard.press('Control+E');
+    assert.equal(await page.getByRole('tab', { name: 'Preview' }).getAttribute('aria-selected'), 'true',
+        'Cmd/Ctrl+E from Split must skip Split and continue the Raw/Preview/WYSIWYG cycle');
+    await page.keyboard.press('Control+E');
+    assert.equal(await page.getByRole('tab', { name: 'WYSIWYG' }).getAttribute('aria-selected'), 'true',
+        'Cmd/Ctrl+E must continue from Preview to WYSIWYG without selecting Split');
+    await page.keyboard.press('Control+E');
+    assert.equal(await page.getByRole('tab', { name: 'Raw' }).getAttribute('aria-selected'), 'true',
+        'Cmd/Ctrl+E must continue from WYSIWYG back to Raw without selecting Split');
+    await page.getByRole('tab', { name: 'Split' }).click();
     await page.getByRole('tab', { name: 'Preview' }).click();
     await page.getByRole('tab', { name: 'Raw' }).click();
-    await page.waitForSelector('.cm-rich-widget', { timeout: 5000 });
-
-    await page.getByRole('button', { name: 'WYSIWYG', exact: true }).click();
+    await page.getByRole('tab', { name: 'WYSIWYG' }).click();
     await page.waitForSelector('.notes-wysiwyg-toolbar', { timeout: 5000 });
     assert.ok(await page.locator('.notes-wysiwyg-toolbar button[title="Bold"]').count() === 1,
         'WYSIWYG authoring must expose visual formatting controls');
@@ -121,7 +160,7 @@ test('notes rich authoring toggles renderer-backed CodeMirror widgets without be
     assert.ok(reopenedValue.endsWith('```'),
         'Backspace from the line below a code block must re-open its raw textarea at end of source');
     await page.keyboard.press('Escape');
-    await page.getByRole('button', { name: 'Save' }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
 
     const savedContent = await page.evaluate(async ({ noteName }) => {
         const response = await fetch(`/api/dashboard/notes/file?path=${encodeURIComponent(noteName)}`);
@@ -136,6 +175,59 @@ test('notes rich authoring toggles renderer-backed CodeMirror widgets without be
         'WYSIWYG code blocks must preserve the selected language');
     assert.ok(savedContent.includes('const milkdownCodeBlock = true;'),
         'WYSIWYG code block content must round-trip back to canonical markdown');
+});
+
+test('notes render and edit GitHub Flavored Markdown affordances', async () => {
+    const page = await pageForManager();
+    const noteName = `browser-gfm-${Date.now()}.md`;
+
+    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+    await seedGfmNote(page, noteName);
+    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+    await page.waitForSelector('.notes-tree');
+
+    await page.locator('.notes-tree-file-button').filter({ hasText: noteName }).first().click();
+    await page.getByRole('tab', { name: 'Preview' }).click();
+    await page.waitForSelector('.notes-preview input[type="checkbox"]', { timeout: 5000 });
+    assert.equal(await page.locator('.notes-preview input[type="checkbox"]').count(), 2,
+        'Preview must render GFM task list checkboxes');
+    assert.equal(await page.locator('.notes-preview input[type="checkbox"]:checked').count(), 1,
+        'Preview must preserve checked GFM task list state');
+    assert.equal(await page.locator('.notes-preview del').count(), 1,
+        'Preview must render GFM strikethrough');
+    assert.equal(await page.locator('.notes-preview table').count(), 1,
+        'Preview must render GFM tables');
+    assert.ok((await page.locator('.notes-preview a').first().getAttribute('href'))?.includes('www.example.com'),
+        'Preview must autolink GFM URL literals');
+
+    await page.getByRole('tab', { name: 'WYSIWYG' }).click();
+    await page.waitForSelector('.notes-milkdown-root .ProseMirror', { timeout: 5000 });
+    await page.waitForSelector('.notes-wysiwyg-toolbar button[title="Strikethrough"]', { timeout: 5000 });
+    await page.waitForSelector('.notes-wysiwyg-toolbar button[title="Task list"]', { timeout: 5000 });
+    await page.waitForSelector('.notes-wysiwyg-toolbar button[title="Table"]', { timeout: 5000 });
+    const uncheckedTask = page.locator('.notes-milkdown-root li[data-item-type="task"][data-checked="false"]').filter({ hasText: 'unchecked task' }).first();
+    await uncheckedTask.waitFor({ timeout: 5000 });
+    const taskBox = await uncheckedTask.boundingBox();
+    assert.ok(taskBox, 'WYSIWYG must expose GFM task list items in the editor DOM');
+    await page.mouse.click(taskBox.x + 8, taskBox.y + 10);
+    await page.locator('.notes-milkdown-root li[data-item-type="task"][data-checked="true"]').filter({ hasText: 'unchecked task' }).first().waitFor({ timeout: 5000 });
+    assert.equal(await page.locator('.notes-milkdown-root del').count(), 1,
+        'WYSIWYG must render GFM strikethrough');
+    assert.equal(await page.locator('.notes-milkdown-root table').count(), 1,
+        'WYSIWYG must render GFM tables');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+
+    const savedContent = await page.evaluate(async ({ noteName }) => {
+        const response = await fetch(`/api/dashboard/notes/file?path=${encodeURIComponent(noteName)}`);
+        const body = await response.json();
+        return body.content as string;
+    }, { noteName });
+    assert.ok(savedContent.includes('- [x] unchecked task'),
+        'WYSIWYG task checkbox toggles must round-trip back to GFM markdown');
+    assert.ok(savedContent.includes('~~done later~~'),
+        'GFM strikethrough must round-trip back to canonical markdown');
+    assert.ok(savedContent.includes('| GFM  | works  |') || savedContent.includes('| GFM | works |'),
+        'GFM tables must round-trip back to canonical markdown');
 });
 
 async function expectInputValue(locator: Locator, expected: string): Promise<void> {

@@ -272,23 +272,21 @@
     font-size: 12px;
 }
 
-.notes-view-tabs,
-.notes-authoring-toggle {
+.notes-view-tabs {
     display: inline-flex;
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
     overflow: hidden;
 }
 
-.notes-view-tabs button,
-.notes-authoring-toggle button {
+.notes-view-tabs button {
     border: 0;
     border-radius: 0;
     background: transparent;
 }
 
 .notes-view-tabs button.is-active,
-.notes-authoring-toggle button.is-active,
+.notes-toolbar-actions > button.is-active,
 .notes-save-button {
     background: var(--accent-soft);
 }
@@ -426,6 +424,39 @@
 .notes-milkdown-root .ProseMirror blockquote,
 .notes-milkdown-root .ProseMirror pre {
     margin-bottom: 14px;
+}
+
+.notes-milkdown-root .ProseMirror li[data-item-type="task"] {
+    position: relative;
+    list-style: none;
+    padding-left: 28px;
+}
+
+.notes-milkdown-root .ProseMirror li[data-item-type="task"]::before {
+    content: "";
+    position: absolute;
+    top: 0.45em;
+    left: 2px;
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--border-strong, var(--border-subtle));
+    border-radius: 4px;
+    background: var(--canvas-panel);
+    color: var(--accent);
+    font: 700 12px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    cursor: pointer;
+}
+
+.notes-milkdown-root .ProseMirror li[data-item-type="task"][data-checked="true"]::before {
+    content: "✓";
+    border-color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.notes-milkdown-root .ProseMirror li[data-item-type="task"][data-checked="true"] {
+    color: var(--text-secondary);
 }
 
 .notes-milkdown-root .ProseMirror blockquote {
@@ -731,6 +762,29 @@
 .notes-preview blockquote,
 .notes-preview pre {
     margin: 0 0 12px;
+}
+
+.notes-preview :where(ul.contains-task-list, ol.contains-task-list) {
+    padding-left: 0;
+    list-style: none;
+}
+
+.notes-preview .task-list-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.notes-preview .task-list-item > input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    margin: 0.42em 0 0;
+    accent-color: var(--accent);
+}
+
+.notes-preview del,
+.notes-milkdown-root .ProseMirror del {
+    color: var(--text-secondary);
 }
 
 .notes-preview code {

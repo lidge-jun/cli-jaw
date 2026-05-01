@@ -1,6 +1,8 @@
 import type { NotesAuthoringMode, NotesViewMode } from './notes-types';
 import { canSaveNote, noteDisplayName } from './note-revisions';
 
+type NotesPrimaryMode = 'raw' | 'split' | 'preview' | 'wysiwyg';
+
 type NotesToolbarProps = {
     selectedPath: string | null;
     viewMode: NotesViewMode;
@@ -15,16 +17,40 @@ type NotesToolbarProps = {
     onReload: () => void;
 };
 
-const VIEW_MODES: NotesViewMode[] = ['raw', 'split', 'preview', 'settings'];
-const AUTHORING_MODES: NotesAuthoringMode[] = ['plain', 'rich', 'wysiwyg'];
+const PRIMARY_MODES: NotesPrimaryMode[] = ['raw', 'split', 'preview', 'wysiwyg'];
 
-function authoringModeLabel(mode: NotesAuthoringMode): string {
-    if (mode === 'plain') return 'Plain';
-    if (mode === 'rich') return 'Rich';
+function primaryModeLabel(mode: NotesPrimaryMode): string {
+    if (mode === 'raw') return 'Raw';
+    if (mode === 'split') return 'Split';
+    if (mode === 'preview') return 'Preview';
     return 'WYSIWYG';
 }
 
+function activePrimaryMode(viewMode: NotesViewMode, authoringMode: NotesAuthoringMode): NotesPrimaryMode | null {
+    if (viewMode === 'settings') return null;
+    if (viewMode === 'split') return 'split';
+    if (viewMode === 'preview') return 'preview';
+    if (authoringMode === 'wysiwyg') return 'wysiwyg';
+    return 'raw';
+}
+
 export function NotesToolbar(props: NotesToolbarProps) {
+    function activatePrimaryMode(mode: NotesPrimaryMode): void {
+        if (mode === 'split') {
+            props.onViewModeChange('split');
+            props.onAuthoringModeChange('plain');
+            return;
+        }
+        if (mode === 'preview') {
+            props.onViewModeChange('preview');
+            return;
+        }
+        props.onViewModeChange('raw');
+        props.onAuthoringModeChange(mode === 'wysiwyg' ? 'wysiwyg' : 'plain');
+    }
+
+    const activeMode = activePrimaryMode(props.viewMode, props.authoringMode);
+
     return (
         <div className="notes-toolbar">
             <div className="notes-toolbar-title">
@@ -33,33 +59,27 @@ export function NotesToolbar(props: NotesToolbarProps) {
             </div>
             <div className="notes-toolbar-actions">
                 <div className="notes-view-tabs" role="tablist" aria-label="Notes view">
-                    {VIEW_MODES.map(mode => (
+                    {PRIMARY_MODES.map(mode => (
                         <button
                             key={mode}
                             type="button"
                             role="tab"
-                            aria-selected={props.viewMode === mode}
-                            className={props.viewMode === mode ? 'is-active' : ''}
-                            onClick={() => props.onViewModeChange(mode)}
-                        >
-                            {mode[0].toUpperCase() + mode.slice(1)}
-                        </button>
-                    ))}
-                </div>
-                <div className="notes-authoring-toggle" role="group" aria-label="Notes authoring mode">
-                    {AUTHORING_MODES.map(mode => (
-                        <button
-                            key={mode}
-                            type="button"
-                            aria-pressed={props.authoringMode === mode}
-                            className={props.authoringMode === mode ? 'is-active' : ''}
+                            aria-selected={activeMode === mode}
+                            className={activeMode === mode ? 'is-active' : ''}
                             disabled={!props.selectedPath}
-                            onClick={() => props.onAuthoringModeChange(mode)}
+                            onClick={() => activatePrimaryMode(mode)}
                         >
-                            {authoringModeLabel(mode)}
+                            {primaryModeLabel(mode)}
                         </button>
                     ))}
                 </div>
+                <button
+                    type="button"
+                    className={props.viewMode === 'settings' ? 'is-active' : ''}
+                    onClick={() => props.onViewModeChange('settings')}
+                >
+                    Settings
+                </button>
                 <button type="button" onClick={props.onReload} disabled={!props.selectedPath || props.loading}>
                     Refresh
                 </button>

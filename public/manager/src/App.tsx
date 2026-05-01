@@ -17,6 +17,8 @@ import { WorkbenchHeader } from './components/WorkbenchHeader';
 import { WorkspaceLayout } from './components/WorkspaceLayout';
 import { InstancePreview } from './InstancePreview';
 import { ElectronMetricsPanel } from './electron-metrics';
+import { loadPreviewEnabled, savePreviewEnabled } from './lib/preview-prefs';
+import { useHiddenUnload } from './lib/use-hidden-unload';
 import { DashboardSettingsSidebar, type DashboardSettingsSection } from './dashboard-settings/DashboardSettingsSidebar';
 import { DashboardSettingsWorkspace } from './dashboard-settings/DashboardSettingsWorkspace';
 import { summarizeActivityTitleSupport } from './dashboard-settings/activity-title-support';
@@ -71,8 +73,26 @@ export function App() {
     const [settingsDirty, setSettingsDirty] = useState(false);
     const [notesDirtyPath, setNotesDirtyPath] = useState<string | null>(null);
     const [dashboardSettingsSection, setDashboardSettingsSection] = useState<DashboardSettingsSection>('display');
-    const [previewEnabled, setPreviewEnabled] = useState(true);
+    const [previewEnabled, setPreviewEnabled] = useState<boolean>(() => loadPreviewEnabled());
     const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
+    const [autoUnloadNotice, setAutoUnloadNotice] = useState(false);
+    useEffect(() => {
+        savePreviewEnabled(previewEnabled);
+    }, [previewEnabled]);
+    useHiddenUnload({
+        enabled: previewEnabled,
+        onUnload: () => {
+            setPreviewEnabled(false);
+            setAutoUnloadNotice(true);
+        },
+    });
+    useEffect(() => {
+        if (!autoUnloadNotice) return undefined;
+        if (typeof document === 'undefined') return undefined;
+        if (document.hidden) return undefined;
+        const timer = setTimeout(() => setAutoUnloadNotice(false), 8000);
+        return () => clearTimeout(timer);
+    }, [autoUnloadNotice]);
     const registry = useDashboardRegistry();
     const view = useDashboardView();
     const theme = useTheme((next) => {
@@ -327,7 +347,7 @@ export function App() {
         if (action === 'unperm' && !window.confirm(`Remove persistent service for :${instance.port}? The instance will stop and won't auto-start.`)) {
             return;
         }
-        if (action === 'stop' && lifecycle.owner === 'launchd') {
+        if (action === 'stop' && lifecycle.owner === 'service') {
             if (!window.confirm(`Stop :${instance.port}? This will also remove the persistent launchd service.`)) return;
         } else if ((action === 'stop' || action === 'restart') && !window.confirm(`${action} :${instance.port}?`)) {
             return;
@@ -535,7 +555,20 @@ export function App() {
                 onOpenSelected={openSelectedInBrowser}
                 selectedInstance={selectedInstance}
             />
-            <ElectronMetricsPanel />
+            <ElectronMetricsPanel onUnloadPreview={() => setPreviewEnabled(false)} />
+            {autoUnloadNotice && (
+                <div className="preview-auto-unload-notice" role="status">
+                    Preview was unloaded after 5 minutes of inactivity. Toggle the preview switch to re-enable.
+                    <button
+                        type="button"
+                        className="preview-auto-unload-dismiss"
+                        aria-label="Dismiss preview auto-unload notice"
+                        onClick={() => setAutoUnloadNotice(false)}
+                    >
+                        ×
+                    </button>
+                </div>
+            )}
         </>
     );
 }

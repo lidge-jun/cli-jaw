@@ -9,7 +9,7 @@ function read(path: string): string {
     return readFileSync(join(projectRoot, path), 'utf8');
 }
 
-test('WYSIWYG is exposed only as an authoring mode, not a Notes view mode', () => {
+test('WYSIWYG is exposed as a primary toolbar mode backed by authoring state', () => {
     const notesTypes = read('public/manager/src/notes/notes-types.ts');
     const publicTypes = read('public/manager/src/types.ts');
     const toolbar = read('public/manager/src/notes/NotesToolbar.tsx');
@@ -20,8 +20,8 @@ test('WYSIWYG is exposed only as an authoring mode, not a Notes view mode', () =
     assert.ok(notesTypes.includes("export type NotesAuthoringMode = 'plain' | 'rich' | 'wysiwyg';"));
     assert.ok(notesTypes.includes("export type NotesViewMode = 'raw' | 'split' | 'preview' | 'settings';"));
     assert.ok(publicTypes.includes("export type DashboardNotesAuthoringMode = 'plain' | 'rich' | 'wysiwyg';"));
-    assert.ok(toolbar.includes("const AUTHORING_MODES: NotesAuthoringMode[] = ['plain', 'rich', 'wysiwyg'];"));
-    assert.ok(toolbar.includes('WYSIWYG'));
+    assert.ok(toolbar.includes("const PRIMARY_MODES: NotesPrimaryMode[] = ['raw', 'split', 'preview', 'wysiwyg'];"));
+    assert.ok(toolbar.includes("props.onAuthoringModeChange(mode === 'wysiwyg' ? 'wysiwyg' : 'plain')"));
     assert.ok(app.includes('notesAuthoringMode'), 'App must persist authoring mode through the existing UI registry');
     assert.ok(workspace.includes('authoringMode={props.authoringMode}'), 'Workspace must route authoring mode without adding a view tab');
     assert.ok(editor.includes("props.authoringMode === 'wysiwyg'"), 'Editor must own the WYSIWYG authoring surface');

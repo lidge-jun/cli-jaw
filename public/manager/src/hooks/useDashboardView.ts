@@ -10,7 +10,7 @@ export function useDashboardView() {
     const [activityDockHeight, setActivityDockHeight] = useState(150);
     const [sidebarMode, setSidebarMode] = useState<DashboardSidebarMode>('instances');
     const [notesSelectedPath, setNotesSelectedPath] = useState<string | null>(null);
-    const [notesViewMode, setNotesViewMode] = useState<DashboardNotesViewMode>('split');
+    const [notesViewMode, setNotesViewMode] = useState<DashboardNotesViewMode>('raw');
     const [notesAuthoringMode, setNotesAuthoringMode] = useState<DashboardNotesAuthoringMode>('plain');
     const [notesWordWrap, setNotesWordWrap] = useState(true);
     const [notesTreeWidth, setNotesTreeWidth] = useState(280);

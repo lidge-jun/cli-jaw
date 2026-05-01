@@ -10,11 +10,11 @@ import {
     wrapInBulletListCommand,
     wrapInHeadingCommand,
 } from '@milkdown/kit/preset/commonmark';
-import { gfm } from '@milkdown/kit/preset/gfm';
+import { gfm, insertTableCommand, toggleStrikethroughCommand } from '@milkdown/kit/preset/gfm';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { history } from '@milkdown/kit/plugin/history';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
-import { callCommand, insert, replaceAll } from '@milkdown/kit/utils';
+import { callCommand, getMarkdown, insert, replaceAll } from '@milkdown/kit/utils';
 import { safeMarkdownUrl } from '../markdown-security';
 import { notesMilkdownBlockKeymap } from './milkdown-block-keymap';
 import { notesMilkdownCodeBlockView } from './milkdown-code-block-view';
@@ -180,6 +180,62 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         run(editor => editor.action(callCommand(createCodeBlockCommand.key, language)));
     }
 
+    function insertTaskListItem(): void {
+        run(editor => editor.action(insert('- [ ] ')));
+    }
+
+    function insertTable(): void {
+        run(editor => editor.action(callCommand(insertTableCommand.key, { row: 3, col: 3 })));
+    }
+
+    useEffect(() => {
+        if (!ready) return undefined;
+        const root = rootRef.current;
+        if (!root) return undefined;
+
+        function handleTaskListClick(event: MouseEvent): void {
+            const target = event.target;
+            if (!(target instanceof HTMLElement)) return;
+            const rootEl = root!;
+            const directItem = target.closest<HTMLElement>('li[data-item-type="task"][data-checked]');
+            const item = directItem && rootEl.contains(directItem)
+                ? directItem
+                : Array.from(rootEl.querySelectorAll<HTMLElement>('li[data-item-type="task"][data-checked]'))
+                    .find(candidate => {
+                        const rect = candidate.getBoundingClientRect();
+                        return event.clientY >= rect.top
+                            && event.clientY <= rect.bottom
+                            && event.clientX >= rect.left
+                            && event.clientX <= rect.left + 26;
+                    }) ?? null;
+            if (!item || !rootEl.contains(item)) return;
+            const rect = item.getBoundingClientRect();
+            if (event.clientX > rect.left + 26) return;
+            event.preventDefault();
+            editorRef.current?.action(ctx => {
+                const view = ctx.get(editorViewCtx);
+                const pos = view.posAtDOM(item, 0);
+                const resolved = view.state.doc.resolve(pos);
+                for (let depth = resolved.depth; depth > 0; depth -= 1) {
+                    const node = resolved.node(depth);
+                    if (node.type.name !== 'list_item' || node.attrs.checked == null) continue;
+                    const listItemPos = resolved.before(depth);
+                    view.dispatch(view.state.tr.setNodeMarkup(listItemPos, undefined, {
+                        ...node.attrs,
+                        checked: !node.attrs.checked,
+                    }).scrollIntoView());
+                    const markdown = getMarkdown()(ctx);
+                    latestMarkdownRef.current = markdown;
+                    if (!syncingFromPropsRef.current) onChangeRef.current(markdown);
+                    return;
+                }
+            });
+        }
+
+        root.addEventListener('click', handleTaskListClick);
+        return () => root.removeEventListener('click', handleTaskListClick);
+    }, [ready]);
+
     function handlePasteCapture(event: ClipboardEvent<HTMLDivElement>): void {
         const html = event.clipboardData.getData('text/html');
         if (!html) return;
@@ -195,13 +251,16 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
             <div className="notes-wysiwyg-toolbar" aria-label="WYSIWYG formatting tools">
                 <button type="button" title="Bold" aria-label="Bold" disabled={!ready} onClick={() => run(editor => editor.action(callCommand(toggleStrongCommand.key)))}>B</button>
                 <button type="button" title="Italic" aria-label="Italic" disabled={!ready} onClick={() => run(editor => editor.action(callCommand(toggleEmphasisCommand.key)))}>I</button>
+                <button type="button" title="Strikethrough" aria-label="Strikethrough" disabled={!ready} onClick={() => run(editor => editor.action(callCommand(toggleStrikethroughCommand.key)))}>S</button>
                 <button type="button" title="Inline code" aria-label="Inline code" disabled={!ready} onClick={() => run(editor => editor.action(callCommand(toggleInlineCodeCommand.key)))}>Code</button>
                 <button type="button" title="Link" aria-label="Link" disabled={!ready} onClick={insertSafeLink}>Link</button>
                 <button type="button" title="Inline math" aria-label="Inline math" disabled={!ready} onClick={insertInlineMath}>Math</button>
                 <button type="button" title="Block math" aria-label="Block math" disabled={!ready} onClick={insertBlockMath}>Math Block</button>
                 <button type="button" title="Heading" aria-label="Heading level 2" disabled={!ready} onClick={() => run(editor => editor.action(callCommand(wrapInHeadingCommand.key, 2)))}>H2</button>
                 <button type="button" title="List" aria-label="Bullet list" disabled={!ready} onClick={() => run(editor => editor.action(callCommand(wrapInBulletListCommand.key)))}>List</button>
+                <button type="button" title="Task list" aria-label="Task list" disabled={!ready} onClick={insertTaskListItem}>Task</button>
                 <button type="button" title="Quote" aria-label="Quote" disabled={!ready} onClick={() => run(editor => editor.action(callCommand(wrapInBlockquoteCommand.key)))}>Quote</button>
+                <button type="button" title="Table" aria-label="Table" disabled={!ready} onClick={insertTable}>Table</button>
                 <button type="button" title="Code block" aria-label="Code block" disabled={!ready} onClick={createLanguageCodeBlock}>Block</button>
             </div>
             {error && <div className="notes-wysiwyg-error" role="alert">{error}</div>}

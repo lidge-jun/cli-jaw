@@ -59,6 +59,10 @@ test('Markdown editor exposes WYSIWYG toolbar without changing the save path', (
     assert.ok(milkdown.includes('.use(notesMilkdownCodeBlockView)'), 'Milkdown WYSIWYG must install the code block source view');
     assert.ok(milkdown.includes('insertInlineMath'), 'Milkdown WYSIWYG must expose inline math insertion');
     assert.ok(milkdown.includes('insertBlockMath'), 'Milkdown WYSIWYG must expose block math insertion');
+    assert.ok(milkdown.includes('insertTaskListItem'), 'Milkdown WYSIWYG must expose task list insertion');
+    assert.ok(milkdown.includes('toggleStrikethroughCommand'), 'Milkdown WYSIWYG must expose GFM strikethrough');
+    assert.ok(milkdown.includes('insertTableCommand'), 'Milkdown WYSIWYG must expose GFM tables');
+    assert.ok(milkdown.includes('handleTaskListClick'), 'Milkdown WYSIWYG must let users toggle task list checkboxes');
     assert.ok(milkdown.includes('createLanguageCodeBlock'), 'Milkdown WYSIWYG must create language-aware code blocks');
     assert.ok(milkdown.includes('normalizeCodeLanguage'), 'code block language input must be normalized before reaching Markdown');
     assert.ok(mathPlugin.includes('$view'), 'Milkdown math must use node views for rendered/raw editing');

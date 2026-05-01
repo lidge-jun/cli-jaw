@@ -758,3 +758,67 @@
     color: var(--ink-muted, rgba(255, 255, 255, 0.5));
     font-style: italic;
 }
+
+.electron-metrics-panel--warn {
+    border-color: rgba(255, 110, 110, 0.55);
+    background: rgba(60, 12, 12, 0.92);
+}
+
+.electron-metrics-warn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    background: rgba(255, 110, 110, 0.18);
+    color: rgba(255, 200, 200, 0.95);
+    font-size: 11px;
+}
+
+.electron-metrics-unload-btn {
+    margin-left: auto;
+    padding: 2px 8px;
+    border: 1px solid rgba(255, 200, 200, 0.5);
+    border-radius: 3px;
+    background: transparent;
+    color: rgba(255, 200, 200, 0.95);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.electron-metrics-unload-btn:hover {
+    background: rgba(255, 200, 200, 0.12);
+}
+
+.preview-auto-unload-notice {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 480px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    background: rgba(40, 40, 40, 0.95);
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.preview-auto-unload-dismiss {
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 2px;
+}
+
+.preview-auto-unload-dismiss:hover {
+    color: rgba(255, 255, 255, 1);
+}

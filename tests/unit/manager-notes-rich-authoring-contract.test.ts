@@ -29,19 +29,22 @@ test('Notes authoring mode is separate from Notes view mode', () => {
     assert.ok(registry.includes("notesAuthoringMode: 'plain'"), 'registry default must be plain authoring');
 });
 
-test('Notes toolbar exposes Plain/Rich authoring independently from layout tabs', () => {
+test('Notes toolbar exposes compact view modes without legacy authoring toggles', () => {
     const toolbar = read('public/manager/src/notes/NotesToolbar.tsx');
     const app = read('public/manager/src/App.tsx');
     const workspace = read('public/manager/src/notes/NotesWorkspace.tsx');
 
-    assert.ok(toolbar.includes("const VIEW_MODES: NotesViewMode[] = ['raw', 'split', 'preview', 'settings'];"),
-        'Rich must not be a view tab');
-    assert.ok(toolbar.includes("const AUTHORING_MODES: NotesAuthoringMode[] = ['plain', 'rich', 'wysiwyg'];"),
-        'toolbar must expose authoring modes separately');
-    assert.ok(toolbar.includes('aria-label="Notes authoring mode"'), 'authoring control must be accessible');
-    assert.ok(toolbar.includes('authoringModeLabel'), 'authoring labels must be explicit');
+    assert.ok(toolbar.includes("const PRIMARY_MODES: NotesPrimaryMode[] = ['raw', 'split', 'preview', 'wysiwyg'];"),
+        'primary toolbar must keep Split mouse-selectable while excluding legacy rich/plain toggles');
+    assert.equal(toolbar.includes('notes-authoring-toggle'), false,
+        'Plain/Rich legacy authoring must not clutter the top toolbar');
+    assert.ok(toolbar.includes("props.onViewModeChange('settings')"),
+        'settings must remain a separate action outside the primary mode tabs');
     assert.ok(app.includes('handleNotesAuthoringModeChange'), 'App must persist authoring mode changes');
     assert.ok(workspace.includes('authoringMode={props.authoringMode}'), 'workspace must pass authoring mode to the editor');
+    assert.ok(workspace.includes("event.key.toLowerCase() !== 'e'"), 'workspace must support Cmd/Ctrl+E primary mode cycling');
+    assert.ok(workspace.includes("const PRIMARY_MODE_CYCLE: NotesPrimaryMode[] = ['raw', 'preview', 'wysiwyg'];"),
+        'Cmd/Ctrl+E must skip Split while cycling primary authoring destinations');
 });
 
 test('Rich markdown files reuse the shared renderer and avoid renderer dependency duplication', () => {

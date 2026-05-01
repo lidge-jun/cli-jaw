@@ -8,7 +8,7 @@ export type DashboardInstanceStatus =
 export type DashboardServiceMode = 'unknown' | 'ad-hoc' | 'service' | 'manager';
 export type DashboardPreviewMode = 'direct' | 'proxy';
 export type DashboardLifecycleAction = 'start' | 'stop' | 'restart' | 'perm' | 'unperm';
-export type DashboardLifecycleOwner = 'none' | 'external' | 'manager' | 'launchd';
+export type DashboardLifecycleOwner = 'none' | 'external' | 'manager' | 'service';
 export type DashboardDetailTab = 'overview' | 'preview' | 'logs' | 'settings';
 export type DashboardUiTheme = 'auto' | 'dark' | 'light';
 export type DashboardLocale = 'ko' | 'en' | 'zh' | 'ja';
@@ -92,12 +92,13 @@ export type DashboardLifecycleCapability = {
     pid: number | null;
 };
 
-export type DashboardLaunchdState = {
-    plistExists: boolean;
+export type DashboardServiceState = {
+    registered: boolean;
     loaded: boolean;
     pid: number | null;
     label: string;
-    plistPath: string;
+    unitPath: string;
+    backend: 'launchd' | 'systemd' | 'none';
 };
 
 export type DashboardLifecycleExpectedState = 'online' | 'offline' | 'restart-detected';

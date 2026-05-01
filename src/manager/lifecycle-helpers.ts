@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type {
     DashboardInstance,
-    DashboardLaunchdState,
+    DashboardServiceState,
     DashboardLifecycleAction,
     DashboardLifecycleCapability,
     DashboardLifecycleResult,
@@ -67,20 +67,20 @@ export function waitForStartupGrace<T extends { child: ChildProcessWithoutNullSt
 export function buildCapability(args: {
     instance: DashboardInstance;
     managed: { mode: 'attached' | 'detached'; pid: number } | null;
-    launchdState?: DashboardLaunchdState | null;
+    serviceState?: DashboardServiceState | null;
     defaultHome: string;
     commandPreview: string[];
 }): DashboardLifecycleCapability {
-    const { instance, managed, launchdState, defaultHome, commandPreview } = args;
+    const { instance, managed, serviceState, defaultHome, commandPreview } = args;
     if (managed) {
-        const hasPlist = launchdState?.plistExists ?? false;
+        const hasRegistration = serviceState?.registered ?? false;
         return {
             owner: 'manager',
             canStart: false,
             canStop: true,
             canRestart: true,
-            canPerm: !hasPlist,
-            canUnperm: hasPlist,
+            canPerm: !hasRegistration,
+            canUnperm: hasRegistration,
             reason: managed.mode === 'attached'
                 ? 'dashboard-owned'
                 : 'dashboard-owned (recovered)',
@@ -89,29 +89,29 @@ export function buildCapability(args: {
             pid: managed.pid || null,
         };
     }
-    if (launchdState?.plistExists) {
-        if (launchdState.loaded) {
+    if (serviceState?.registered) {
+        if (serviceState.loaded) {
             return {
-                owner: 'launchd',
+                owner: 'service',
                 canStart: false,
                 canStop: true,
                 canRestart: true,
                 canPerm: false,
                 canUnperm: true,
-                reason: 'launchd service',
+                reason: `${serviceState.backend} service`,
                 defaultHome,
                 commandPreview,
-                pid: launchdState.pid,
+                pid: serviceState.pid,
             };
         }
         return {
-            owner: 'launchd',
+            owner: 'service',
             canStart: true,
             canStop: false,
             canRestart: false,
             canPerm: false,
             canUnperm: true,
-            reason: 'launchd paused',
+            reason: `${serviceState.backend} paused`,
             defaultHome,
             commandPreview,
             pid: null,

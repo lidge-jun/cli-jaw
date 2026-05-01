@@ -38,10 +38,11 @@ test('MarkdownRenderer wires math, sanitize, safe links, and block routing', () 
     const renderer = read('public/manager/src/notes/rendering/MarkdownRenderer.tsx');
 
     assert.ok(renderer.includes("import remarkBreaks from 'remark-breaks';"), 'remark-breaks must be wired so single newlines render as <br>');
+    assert.ok(renderer.includes("import remarkGfm from 'remark-gfm';"), 'remark-gfm must be wired for task lists, tables, strikethrough, autolinks, and footnotes');
     assert.ok(renderer.includes("import remarkMath from 'remark-math';"), 'remark-math must be wired');
     assert.ok(renderer.includes("import rehypeKatex from 'rehype-katex';"), 'rehype-katex must be wired');
     assert.ok(renderer.includes("import rehypeSanitize from 'rehype-sanitize';"), 'rehype-sanitize must be wired');
-    assert.ok(renderer.includes('remarkPlugins={[remarkBreaks, remarkMath]}'), 'remarkBreaks and remarkMath must be passed to ReactMarkdown in that order');
+    assert.ok(renderer.includes('remarkPlugins={[remarkGfm, remarkBreaks, remarkMath]}'), 'GFM must run before breaks/math in ReactMarkdown');
     assert.ok(renderer.includes('[rehypeSanitize, markdownSanitizeSchema]'), 'sanitize schema must be passed before KaTeX');
     assert.ok(renderer.includes('rehypeKatex'), 'KaTeX renderer must be passed to ReactMarkdown');
     assert.ok(renderer.includes('skipHtml'), 'raw HTML must stay disabled');
@@ -89,6 +90,8 @@ test('Notes app imports KaTeX CSS and notes CSS owns rich preview styling', () =
     assert.ok(css.includes('.notes-code-rendered'), 'Notes CSS must style WYSIWYG rendered code blocks');
     assert.ok(css.includes(':where(.notes-code-block, .notes-code-rendered) .hljs-keyword'),
         'Preview and WYSIWYG code blocks must share highlight token colors');
+    assert.ok(css.includes('.task-list-item'), 'Notes CSS must style rendered GFM task lists');
+    assert.ok(css.includes('li[data-item-type="task"]'), 'Notes CSS must style Milkdown GFM task list items');
     assert.ok(css.includes('.notes-mermaid-block'), 'Notes CSS must style Mermaid blocks');
     assert.ok(css.includes('.katex-display'), 'Notes CSS must handle KaTeX display overflow');
 });

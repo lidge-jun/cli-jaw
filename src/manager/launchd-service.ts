@@ -7,7 +7,7 @@ import { mkdir } from 'node:fs/promises';
 import { generateLaunchdPlist } from '../core/launchd-plist.js';
 import { getNodePath, getJawPath, buildServicePath } from '../core/instance.js';
 import { MANAGED_INSTANCE_PORT_FROM, MANAGED_INSTANCE_PORT_TO } from './constants.js';
-import type { DashboardLaunchdState, DashboardLifecycleResult } from './types.js';
+import type { DashboardServiceState, DashboardLifecycleResult } from './types.js';
 
 const LAUNCHCTL = '/bin/launchctl';
 const PRINT_TIMEOUT_MS = 2000;
@@ -51,30 +51,30 @@ function execLaunchctl(args: string[], timeoutMs: number): Promise<{ stdout: str
     });
 }
 
-export async function detectLaunchdState(port: number, home: string): Promise<DashboardLaunchdState> {
+export async function detectLaunchdState(port: number, home: string): Promise<DashboardServiceState> {
     const label = computeLaunchdLabel(port, home);
     const plistPath = computePlistPath(label);
-    const plistExists = existsSync(plistPath);
+    const registered = existsSync(plistPath);
 
-    if (!plistExists) {
-        return { plistExists: false, loaded: false, pid: null, label, plistPath };
+    if (!registered) {
+        return { registered: false, loaded: false, pid: null, label, unitPath: plistPath, backend: 'launchd' };
     }
 
     const { stdout, code } = await execLaunchctl(['print', `${guiDomain()}/${label}`], PRINT_TIMEOUT_MS);
     if (code !== 0) {
-        return { plistExists: true, loaded: false, pid: null, label, plistPath };
+        return { registered: true, loaded: false, pid: null, label, unitPath: plistPath, backend: 'launchd' };
     }
 
     const pidMatch = stdout.match(/pid\s*=\s*(\d+)/);
     const pid = pidMatch ? Number(pidMatch[1]) : null;
-    return { plistExists: true, loaded: true, pid, label, plistPath };
+    return { registered: true, loaded: true, pid, label, unitPath: plistPath, backend: 'launchd' };
 }
 
 export async function detectAllLaunchdStates(
     portRange: { from: number; to: number },
     homeRoot = homedir(),
-): Promise<Map<number, DashboardLaunchdState>> {
-    const results = new Map<number, DashboardLaunchdState>();
+): Promise<Map<number, DashboardServiceState>> {
+    const results = new Map<number, DashboardServiceState>();
     if (!isLaunchdSupported()) return results;
 
     const agentsDir = join(homedir(), 'Library', 'LaunchAgents');

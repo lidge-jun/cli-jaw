@@ -21,6 +21,10 @@ type ElectronMetricsResponse =
     | { available: true; snapshot: MetricsSnapshot | null };
 
 const POLL_INTERVAL_MS = 5000;
+// 1.5 GiB binary; tune if observed renderers settle higher under normal load.
+export const WARN_THRESHOLD_KB = 1_572_864;
+const NAME_CAP = 24;
+const COLLAPSED_STORAGE_KEY = 'jaw.metricsPanelCollapsed';
 
 async function fetchElectronMetrics(): Promise<ElectronMetricsResponse> {
     const response = await fetch('/api/dashboard/electron-metrics');
@@ -28,14 +32,45 @@ async function fetchElectronMetrics(): Promise<ElectronMetricsResponse> {
     return await response.json() as ElectronMetricsResponse;
 }
 
-function formatMb(kb: number): string {
+function formatRss(kb: number): string {
+    if (kb >= 1024 * 1024) return `${(kb / 1024 / 1024).toFixed(2)} GB`;
     return `${(kb / 1024).toFixed(1)} MB`;
 }
 
-export function ElectronMetricsPanel() {
+function capName(value: string): string {
+    return value.length > NAME_CAP ? `${value.slice(0, NAME_CAP - 1)}…` : value;
+}
+
+function loadCollapsed(): boolean {
+    if (typeof localStorage === 'undefined') return false;
+    try {
+        return localStorage.getItem(COLLAPSED_STORAGE_KEY) === 'true';
+    } catch {
+        return false;
+    }
+}
+
+function saveCollapsed(value: boolean): void {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        localStorage.setItem(COLLAPSED_STORAGE_KEY, value ? 'true' : 'false');
+    } catch {
+        // Storage may be disabled in private mode; ignore.
+    }
+}
+
+export type ElectronMetricsPanelProps = {
+    onUnloadPreview?: () => void;
+};
+
+export function ElectronMetricsPanel(props: ElectronMetricsPanelProps = {}) {
     const [available, setAvailable] = useState<boolean | null>(null);
     const [snapshot, setSnapshot] = useState<MetricsSnapshot | null>(null);
-    const [collapsed, setCollapsed] = useState(false);
+    const [collapsed, setCollapsed] = useState<boolean>(() => loadCollapsed());
+
+    useEffect(() => {
+        saveCollapsed(collapsed);
+    }, [collapsed]);
 
     useEffect(() => {
         let cancelled = false;
@@ -84,9 +119,11 @@ export function ElectronMetricsPanel() {
     const topThree = [...snapshot.processes]
         .sort((a, b) => b.rssKb - a.rssKb)
         .slice(0, 3);
+    const overThreshold = snapshot.rssTotalKb >= WARN_THRESHOLD_KB;
+    const panelClass = `electron-metrics-panel${overThreshold ? ' electron-metrics-panel--warn' : ''}`;
 
     return (
-        <div className="electron-metrics-panel" role="status" aria-label="Electron process metrics">
+        <div className={panelClass} role="status" aria-label="Electron process metrics">
             <div className="electron-metrics-header">
                 <span className="electron-metrics-title">Desktop metrics</span>
                 <button
@@ -101,6 +138,20 @@ export function ElectronMetricsPanel() {
             </div>
             {!collapsed && (
                 <div className="electron-metrics-body">
+                    {overThreshold && (
+                        <div className="electron-metrics-warn" role="alert">
+                            <span>Renderer RSS exceeds {formatRss(WARN_THRESHOLD_KB)}.</span>
+                            {props.onUnloadPreview && (
+                                <button
+                                    type="button"
+                                    className="electron-metrics-unload-btn"
+                                    onClick={() => props.onUnloadPreview?.()}
+                                >
+                                    Unload preview
+                                </button>
+                            )}
+                        </div>
+                    )}
                     <div className="electron-metrics-row">
                         <span>renderers</span>
                         <span>{snapshot.rendererCount}</span>
@@ -111,7 +162,7 @@ export function ElectronMetricsPanel() {
                     </div>
                     <div className="electron-metrics-row">
                         <span>RSS total</span>
-                        <span>{formatMb(snapshot.rssTotalKb)}</span>
+                        <span>{formatRss(snapshot.rssTotalKb)}</span>
                     </div>
                     <div className="electron-metrics-divider" aria-hidden="true" />
                     <div className="electron-metrics-subtitle">top by RSS</div>
@@ -119,10 +170,9 @@ export function ElectronMetricsPanel() {
                         {topThree.map((p) => (
                             <li key={p.pid}>
                                 <span className="electron-metrics-proc">
-                                    {p.type}
-                                    {p.name ? ` · ${p.name}` : ''}
+                                    {capName(p.name ? `${p.type} · ${p.name}` : p.type)}
                                 </span>
-                                <span className="electron-metrics-proc-rss">{formatMb(p.rssKb)}</span>
+                                <span className="electron-metrics-proc-rss">{formatRss(p.rssKb)}</span>
                             </li>
                         ))}
                     </ul>
