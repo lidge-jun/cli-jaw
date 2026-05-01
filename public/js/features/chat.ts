@@ -40,22 +40,20 @@ export async function sendMessage(source: SendSource = 'enter'): Promise<void> {
     if (!input || !btn) return;
 
     // Stop-mode click policy (devlog 260501_chat_pause_and_unread_badge):
-    //  - busy + click  → no-op. Do not kill the running agent (Bug 1) and do
-    //    not fall through into the send path which would queue the typed text
-    //    and drain it as a steer (Bug 2).
-    //  - idle + empty  → fire /api/stop as the runaway escape hatch (legacy).
-    //  - any stop-mode click never falls through to the send path; the
-    //    textarea contents and attachments are preserved.
-    // Why an explicit `source` param: a previous version detected the click
-    // path via `document.activeElement === btn`. That is unreliable inside an
-    // iframe whose parent has focus — at click-handler time activeElement can
-    // still be <body>, so the stop branch never fires and clicks look "dead".
+    //  - any stop-mode button click  → fire /api/stop and return.
+    //    /api/stop calls killAllAgents() server-side, which is the user's
+    //    intent ("실제로 정지가 안돼"). The early `return` preserves typed
+    //    text and attachments — typing is never auto-steered into the
+    //    just-killed run.
+    //  - Enter key and slash-command execute do NOT enter this branch
+    //    (source !== 'button'), so they keep their normal behavior even
+    //    while the agent is busy.
+    // Source param (vs old document.activeElement === btn): activeElement is
+    // unreliable inside an iframe whose parent has focus, so the explicit
+    // SendSource keeps detection deterministic across cross-frame clicks.
     const stopByExplicitButton = source === 'button';
     if (btn.classList.contains('stop-mode') && stopByExplicitButton) {
-        if (state.agentBusy) return;
-        if (!input.value.trim() && !state.attachedFiles.length) {
-            apiFire('/api/stop', 'POST');
-        }
+        apiFire('/api/stop', 'POST');
         return;
     }
 
