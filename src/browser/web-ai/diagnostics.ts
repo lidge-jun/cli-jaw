@@ -225,6 +225,12 @@ export interface WebAiErrorEnvelope {
     ok: false;
     error: string;
     stage: WebAiFailureStage;
+    errorCode?: string;
+    retryHint?: string;
+    vendor?: string;
+    mutationAllowed?: boolean;
+    selectorsTried?: string[];
+    evidence?: unknown;
     diagnostics?: WebAiDiagnostics;
 }
 
@@ -233,19 +239,29 @@ export function toWebAiErrorEnvelope(
     fallbackStage: WebAiFailureStage = 'unknown',
     diagnostics?: WebAiDiagnostics,
 ): WebAiErrorEnvelope {
-    // Phase 2 PR2 mirror: if the error is a typed WebAiError, prefer its
-    // serializer so the HTTP and CLI layers agree on errorCode/retryHint
-    // semantics. Legacy fallback shape stays for non-typed throws during the
-    // transition window.
+    // Phase 2 PR2 mirror + GPT Pro admit fix: when the error is a typed
+    // WebAiError, preserve errorCode / retryHint / vendor / mutationAllowed /
+    // selectorsTried / evidence alongside the legacy { error, stage } pair so
+    // HTTP/CLI/agbrowse all see the same failure shape.
     const typed = (error && typeof error === 'object' && (error as { name?: string }).name === 'WebAiError' && typeof (error as { toJSON?: unknown }).toJSON === 'function')
         ? ((error as { toJSON: () => Record<string, unknown> }).toJSON())
         : null;
     if (typed) {
         const message = redactDiagnosticText(String(typed.message ?? ''), { maxChars: 512 });
         const stage = normalizeFailureStage(String(typed.stage ?? diagnostics?.stage ?? fallbackStage));
-        return diagnostics
-            ? { ok: false, error: message, stage, diagnostics }
-            : { ok: false, error: message, stage };
+        const envelope: WebAiErrorEnvelope = {
+            ok: false,
+            error: message,
+            stage,
+            ...(typed.errorCode ? { errorCode: String(typed.errorCode) } : {}),
+            ...(typed.retryHint ? { retryHint: String(typed.retryHint) } : {}),
+            ...(typed.vendor ? { vendor: String(typed.vendor) } : {}),
+            ...(typeof typed.mutationAllowed === 'boolean' ? { mutationAllowed: typed.mutationAllowed } : {}),
+            ...(Array.isArray(typed.selectorsTried) ? { selectorsTried: typed.selectorsTried as string[] } : {}),
+            ...(typed.evidence !== undefined && typed.evidence !== null ? { evidence: typed.evidence } : {}),
+        };
+        if (diagnostics) envelope.diagnostics = diagnostics;
+        return envelope;
     }
     const message = redactDiagnosticText((error as Error)?.message ?? error, { maxChars: 512 });
     const stage = normalizeFailureStage((error as { stage?: string })?.stage ?? diagnostics?.stage ?? fallbackStage);

@@ -2,6 +2,7 @@ import type { Page } from 'playwright-core';
 import { basename } from 'node:path';
 import { statSync } from 'node:fs';
 import { getActivePage, getActiveTab } from '../connection.js';
+import { WebAiError } from './errors.js';
 import { normalizeEnvelope, renderQuestionEnvelope, renderQuestionEnvelopeWithContext } from './question.js';
 import {
     assertSameTarget,
@@ -77,9 +78,13 @@ export async function grokSend(port: number, input: QuestionEnvelopeInput = {}):
 
     const envelope = normalizeEnvelope({ ...input, vendor: 'grok' });
     if (hasContextPackaging(input) && input.allowGrokContextPack !== true) {
-        const err = new Error('grok context-pack disabled by default; pass --allow-grok-context-pack to override');
-        (err as any).stage = 'grok-context-pack-not-allowed';
-        throw err;
+        throw new WebAiError({
+            errorCode: 'grok.context-pack-not-allowed',
+            stage: 'grok-context-pack-not-allowed',
+            vendor: 'grok',
+            retryHint: 'inline-only-or-allow-flag',
+            message: 'grok context-pack disabled by default; pass --allow-grok-context-pack to override',
+        });
     }
     const contextPack = await prepareContextForBrowser({ ...input, vendor: 'grok' });
     if (contextPack?.attachments?.[0] && input.filePath) {
