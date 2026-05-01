@@ -23,30 +23,32 @@ for (const scriptPath of ['scripts/release.sh', 'scripts/release-preview.sh']) {
         assert.ok(script.includes('Desktop / Electron'), 'GitHub release notes must include a Desktop / Electron section');
     });
 
-    test(`${scriptPath} supports unsigned desktop distribution via --with-desktop`, () => {
+    test(`${scriptPath} delegates desktop distribution to release-triggered GitHub Actions`, () => {
         const script = read(scriptPath);
 
-        assert.ok(script.includes('--with-desktop'), 'release script must accept --with-desktop flag');
-        assert.ok(script.includes('WITH_DESKTOP'), 'release script must track --with-desktop state');
         assert.ok(
-            script.includes('CSC_IDENTITY_AUTO_DISCOVERY=false'),
-            'release script must disable Apple code-signing auto-discovery for unsigned builds',
+            script.includes('--with-desktop'),
+            'release script must keep --with-desktop as a backward-compatible no-op',
         );
         assert.ok(
-            script.includes('npm --prefix electron run dist:mac'),
-            'release script must invoke Electron dist:mac when --with-desktop is on',
+            script.includes('GitHub Actions builds desktop assets after release publication'),
+            'release script must route desktop assets to GitHub Actions',
         );
         assert.ok(
             script.includes('unsigned'),
-            'release notes must contain the literal "unsigned" warning when desktop artifacts ship',
+            'release notes must contain the literal "unsigned" warning for desktop artifacts',
         );
         assert.ok(
             script.includes('xattr -d com.apple.quarantine'),
             'release notes must instruct macOS users on the xattr -d com.apple.quarantine workaround',
         );
         assert.ok(
-            script.includes('electron/dist'),
-            'release script must reference electron/dist artifacts for gh release upload',
+            !script.includes('npm --prefix electron run dist:mac'),
+            'release script must not build desktop installers locally',
+        );
+        assert.ok(
+            !script.includes('DESKTOP_ARTIFACTS'),
+            'release script must not collect local desktop artifacts',
         );
         assert.ok(
             script.includes('gh release create'),
@@ -54,3 +56,19 @@ for (const scriptPath of ['scripts/release.sh', 'scripts/release-preview.sh']) {
         );
     });
 }
+
+test('desktop release workflow uploads OS matrix artifacts only after GitHub release publication', () => {
+    const workflow = read('.github/workflows/desktop-release.yml');
+
+    assert.ok(workflow.includes('release:'), 'desktop workflow must be release-triggered');
+    assert.ok(workflow.includes('types: [published]'), 'desktop workflow must run only after release publication');
+    assert.ok(!workflow.includes('push:'), 'desktop workflow must not run on git push');
+    assert.ok(workflow.includes('macos-latest'), 'desktop workflow must build macOS artifacts');
+    assert.ok(workflow.includes('windows-latest'), 'desktop workflow must build Windows artifacts');
+    assert.ok(workflow.includes('ubuntu-latest'), 'desktop workflow must build Linux artifacts');
+    assert.ok(workflow.includes('npm --prefix electron run typecheck'), 'desktop workflow must typecheck Electron shell');
+    assert.ok(workflow.includes('npm --prefix electron run build'), 'desktop workflow must build Electron shell');
+    assert.ok(workflow.includes('CSC_IDENTITY_AUTO_DISCOVERY: false'), 'desktop workflow must keep unsigned mac builds explicit');
+    assert.ok(workflow.includes('gh release upload'), 'desktop workflow must upload artifacts to the existing release');
+    assert.ok(workflow.includes('--clobber'), 'desktop workflow reruns must replace stale release assets');
+});
