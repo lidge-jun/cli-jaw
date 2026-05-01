@@ -86,6 +86,9 @@ test('Notes app imports KaTeX CSS and notes CSS owns rich preview styling', () =
 
     assert.ok(main.includes("import 'katex/dist/katex.min.css';"), 'KaTeX CSS must be imported');
     assert.ok(css.includes('.notes-code-block'), 'Notes CSS must style code blocks');
+    assert.ok(css.includes('.notes-code-rendered'), 'Notes CSS must style WYSIWYG rendered code blocks');
+    assert.ok(css.includes(':where(.notes-code-block, .notes-code-rendered) .hljs-keyword'),
+        'Preview and WYSIWYG code blocks must share highlight token colors');
     assert.ok(css.includes('.notes-mermaid-block'), 'Notes CSS must style Mermaid blocks');
     assert.ok(css.includes('.katex-display'), 'Notes CSS must handle KaTeX display overflow');
 });

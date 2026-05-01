@@ -16,7 +16,14 @@ import {
   showCrashLoopDialog,
   showSpawnFailedDialog,
 } from './lib/dialog.js';
+import {
+  extractJawUrlArg,
+  focusWindow,
+  registerJawProtocol,
+  routeJawDeepLink,
+} from './lib/deep-link.js';
 import { RingBuffer } from './lib/ring-buffer.js';
+import { startAppMetricsCollector, type MetricsCollectorHandle } from './lib/app-metrics.js';
 
 interface CliFlags {
   port: number;
@@ -97,12 +104,14 @@ const DEV_TOOLS_ENABLED =
 const ringBuffer = new RingBuffer(1024 * 1024);
 let managerProcess: ChildProcess | null = null;
 let mainWindow: BrowserWindow | null = null;
+let pendingDeepLinkUrl: string | null = null;
 let restartTimestamps: number[] = [];
 let crashLoopStopped = false;
 let shuttingDown = false;
 let shutdownComplete = false;
 let bootstrapPromise: Promise<void> | null = null;
 let managerReadyPromise: Promise<void> | null = null;
+let metricsCollector: MetricsCollectorHandle | null = null;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -113,16 +122,36 @@ if (!gotLock) {
   app.quit();
 } else {
   app.enableSandbox();
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
+  registerJawProtocol(app);
+
+  app.on('second-instance', (_event, argv) => {
+    const deepLink = extractJawUrlArg(argv);
+    if (deepLink) {
+      void handleDeepLink(deepLink);
+      return;
     }
+    focusWindow(mainWindow);
+  });
+
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    void handleDeepLink(url);
   });
 
   app.whenReady().then(async () => {
     await bootstrapOnce();
+    if (!metricsCollector) {
+      try {
+        metricsCollector = startAppMetricsCollector();
+      } catch (err) {
+        ringBuffer.append(`[metrics start error] ${(err as Error)?.message ?? err}\n`);
+      }
+    }
+    if (pendingDeepLinkUrl) {
+      const pending = pendingDeepLinkUrl;
+      pendingDeepLinkUrl = null;
+      await handleDeepLink(pending);
+    }
 
     app.on('activate', () => {
       if (!mainWindow || mainWindow.isDestroyed()) {
@@ -145,6 +174,14 @@ app.on('before-quit', async (event) => {
   if (shuttingDown) {
     event.preventDefault();
     return;
+  }
+  if (metricsCollector) {
+    try {
+      metricsCollector.stop();
+    } catch {
+      // ignore
+    }
+    metricsCollector = null;
   }
   if (!managerProcess) return;
   event.preventDefault();
@@ -175,6 +212,24 @@ function bootstrapOnce(): Promise<void> {
     });
   }
   return bootstrapPromise;
+}
+
+async function handleDeepLink(raw: string): Promise<void> {
+  if (!app.isReady()) {
+    pendingDeepLinkUrl = raw;
+    return;
+  }
+  try {
+    const routed = await routeJawDeepLink(raw, {
+      managerUrl: MANAGER_URL,
+      getWindow: () => mainWindow,
+      ensureReady: bootstrapOnce,
+    });
+    if (!routed) focusWindow(mainWindow);
+  } catch (err) {
+    ringBuffer.append(`[deep-link error] ${(err as Error)?.message ?? err}\n`);
+    focusWindow(mainWindow);
+  }
 }
 
 function installSecurityHeaders(managerOrigin: string): void {

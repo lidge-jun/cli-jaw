@@ -4,6 +4,7 @@ import type { Node as ProseMirrorNode } from '@milkdown/kit/prose/model';
 import { TextSelection } from '@milkdown/kit/prose/state';
 import type { EditorView, NodeView, NodeViewConstructor } from '@milkdown/kit/prose/view';
 import { $view } from '@milkdown/kit/utils';
+import { highlightCode } from '../rendering/highlight-languages';
 
 function codeText(node: ProseMirrorNode): string {
     return node.textContent;
@@ -147,7 +148,6 @@ function createCodeBlockView(): NodeViewConstructor {
         header.className = 'notes-code-source-header';
         copyBtn.className = 'notes-code-copy-btn';
         copyBtn.type = 'button';
-        copyBtn.textContent = 'Copy';
         copyBtn.setAttribute('aria-label', 'Copy code');
         raw.className = 'notes-code-raw';
         raw.setAttribute('aria-label', 'Edit fenced code source');
@@ -158,19 +158,20 @@ function createCodeBlockView(): NodeViewConstructor {
         rendered.append(header, pre);
         dom.append(rendered, raw);
 
+        function copyButtonLabel(): string {
+            return codeLanguage(currentNode) || 'copy';
+        }
+
         function sync(): void {
             const language = codeLanguage(currentNode);
             const source = codeText(currentNode);
             dom.dataset.language = language;
             pre.dataset.language = language;
-            const label = header.firstChild;
-            const labelText = language || 'code';
-            if (label?.nodeType === Node.TEXT_NODE) {
-                label.textContent = labelText;
-            } else {
-                header.insertBefore(document.createTextNode(labelText), copyBtn);
-            }
-            code.textContent = source;
+            copyBtn.textContent = copyButtonLabel();
+            const highlighted = highlightCode(source, language);
+            code.className = `hljs language-${highlighted.language}`;
+            code.dataset.highlighted = highlighted.highlighted ? 'yes' : 'no';
+            code.innerHTML = highlighted.html;
             if (dom.dataset.editing !== 'true') raw.value = fencedCodeSource(currentNode);
         }
 
@@ -220,6 +221,7 @@ function createCodeBlockView(): NodeViewConstructor {
 
         function openFromRenderedEvent(event: Event): void {
             if (raw.contains(event.target as Node)) return;
+            if (copyBtn.contains(event.target as Node)) return;
             if (dom.dataset.editing === 'true') return;
             event.preventDefault();
             event.stopPropagation();
@@ -315,7 +317,7 @@ function createCodeBlockView(): NodeViewConstructor {
             const text = codeText(currentNode);
             navigator.clipboard.writeText(text).then(() => {
                 copyBtn.textContent = 'Copied!';
-                setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+                setTimeout(() => { copyBtn.textContent = copyButtonLabel(); }, 1500);
             });
         });
         copyBtn.addEventListener('mousedown', event => event.stopPropagation());

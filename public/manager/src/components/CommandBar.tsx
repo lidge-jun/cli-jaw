@@ -1,4 +1,5 @@
 import type { DashboardUiTheme } from '../types';
+import { DesktopLink } from '../desktop-link';
 import { CommandCenter } from './CommandCenter';
 import { ThemeSwitch } from './ThemeSwitch';
 
@@ -40,6 +41,7 @@ export function CommandBar(props: CommandBarProps) {
             )}
             actions={(
                 <div className="command-actions-group">
+                    <DesktopLink />
                     <button
                         type="button"
                         className="command-palette-trigger"

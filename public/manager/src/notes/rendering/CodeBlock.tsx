@@ -24,9 +24,8 @@ export function CodeBlock(props: CodeBlockProps) {
     return (
         <div className="notes-code-block">
             <div className="notes-code-header">
-                <span>{label}</span>
                 <button type="button" onClick={() => void copyCode()}>
-                    {copied ? 'Copied' : 'Copy'}
+                    {copied ? 'Copied' : label}
                 </button>
             </div>
             <pre>

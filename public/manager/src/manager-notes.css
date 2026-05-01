@@ -28,6 +28,17 @@
     height: 100%;
     display: block;
     background: var(--canvas-mid);
+    --notes-code-keyword: #8ab4ff;
+    --notes-code-string: #7dd3a8;
+    --notes-code-comment: #8290a3;
+    --notes-code-literal: #f6b567;
+}
+
+:root[data-theme="light"] .notes-workspace {
+    --notes-code-keyword: #1d4ed8;
+    --notes-code-string: #047857;
+    --notes-code-comment: #64748b;
+    --notes-code-literal: #b45309;
 }
 
 .notes-tree {
@@ -441,21 +452,6 @@
     box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text-primary) 5%, transparent);
 }
 
-.notes-milkdown-root .ProseMirror pre[data-language]:not([data-language=""]) {
-    padding-top: 32px;
-}
-
-.notes-milkdown-root .ProseMirror pre[data-language]:not([data-language=""])::before {
-    content: attr(data-language);
-    position: absolute;
-    top: 7px;
-    right: 10px;
-    font-size: 11px;
-    line-height: 1;
-    color: var(--text-secondary);
-    text-transform: lowercase;
-}
-
 .notes-milkdown-root .ProseMirror pre code {
     padding: 0;
     border: 0;
@@ -573,27 +569,39 @@
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent);
 }
 
+.notes-milkdown-root .ProseMirror .notes-code-rendered {
+    position: relative;
+}
+
 .notes-milkdown-root .ProseMirror .notes-code-source-header {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 1;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    min-height: 24px;
-    padding: 6px 10px 0;
-    color: var(--text-muted, var(--text-secondary));
-    font: 600 11px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
-    text-transform: lowercase;
+    justify-content: flex-end;
+    min-height: 0;
+    padding: 0;
+    pointer-events: auto;
 }
 
 .notes-milkdown-root .ProseMirror .notes-code-copy-btn {
-    padding: 2px 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    min-height: 22px;
+    padding: 3px 8px;
     border: 1px solid var(--border, #555);
     border-radius: 4px;
-    background: transparent;
-    color: var(--text-muted, var(--text-secondary));
+    background: var(--bg-panel);
+    color: var(--text-primary);
     font: 500 10px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
     cursor: pointer;
-    opacity: 0;
-    transition: opacity 140ms ease, background 100ms ease;
+    opacity: 1;
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--text-primary) 10%, transparent);
+    transition: opacity 140ms ease, background 100ms ease, border-color 100ms ease;
 }
 
 .notes-milkdown-root .ProseMirror .notes-code-source-node:hover .notes-code-copy-btn,
@@ -603,6 +611,7 @@
 
 .notes-milkdown-root .ProseMirror .notes-code-copy-btn:hover {
     background: var(--bg-hover, rgba(255,255,255,0.06));
+    border-color: var(--border-strong, var(--border));
 }
 
 .notes-milkdown-root .ProseMirror .notes-code-source-node[data-editing="true"] .notes-code-copy-btn {
@@ -611,6 +620,7 @@
 
 .notes-milkdown-root .ProseMirror .notes-code-rendered pre {
     margin-top: 0;
+    padding-top: 34px;
 }
 
 .notes-milkdown-root .ProseMirror .notes-code-raw {
@@ -740,6 +750,7 @@
 
 .notes-code-block,
 .notes-mermaid-block {
+    position: relative;
     margin: 0 0 14px;
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
@@ -747,13 +758,15 @@
 }
 
 .notes-code-header {
-    min-height: 34px;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 1;
+    min-height: 0;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 6px 8px 6px 12px;
-    border-bottom: 1px solid var(--border-subtle);
+    justify-content: flex-end;
+    padding: 0;
     color: var(--text-secondary);
     font-size: 12px;
 }
@@ -771,7 +784,7 @@
 
 .notes-code-block pre {
     margin: 0;
-    padding: 12px;
+    padding: 38px 12px 12px;
     overflow-x: auto;
 }
 
@@ -780,26 +793,28 @@
     line-height: 1.55;
 }
 
-.notes-code-block .hljs-keyword,
-.notes-code-block .hljs-selector-tag,
-.notes-code-block .hljs-title.function_ {
-    color: var(--accent-strong, var(--accent));
+:where(.notes-code-block, .notes-code-rendered) .hljs-keyword,
+:where(.notes-code-block, .notes-code-rendered) .hljs-selector-tag,
+:where(.notes-code-block, .notes-code-rendered) .hljs-title.function_ {
+    color: var(--notes-code-keyword);
+    font-weight: 650;
 }
 
-.notes-code-block .hljs-string,
-.notes-code-block .hljs-attr,
-.notes-code-block .hljs-symbol {
-    color: var(--success-strong, var(--text-primary));
+:where(.notes-code-block, .notes-code-rendered) .hljs-string,
+:where(.notes-code-block, .notes-code-rendered) .hljs-attr,
+:where(.notes-code-block, .notes-code-rendered) .hljs-symbol {
+    color: var(--notes-code-string);
 }
 
-.notes-code-block .hljs-comment,
-.notes-code-block .hljs-quote {
-    color: var(--text-tertiary, var(--text-secondary));
+:where(.notes-code-block, .notes-code-rendered) .hljs-comment,
+:where(.notes-code-block, .notes-code-rendered) .hljs-quote {
+    color: var(--notes-code-comment);
 }
 
-.notes-code-block .hljs-number,
-.notes-code-block .hljs-literal {
-    color: var(--warning-strong, var(--text-primary));
+:where(.notes-code-block, .notes-code-rendered) .hljs-number,
+:where(.notes-code-block, .notes-code-rendered) .hljs-literal {
+    color: var(--notes-code-literal);
+    font-weight: 600;
 }
 
 .notes-mermaid-block {

@@ -479,6 +479,29 @@
     gap: 8px;
 }
 
+.desktop-open-button,
+.desktop-status-badge {
+    min-height: 30px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 7px;
+    background: var(--canvas-soft);
+    color: var(--text-secondary);
+    padding: 5px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.desktop-open-button:hover {
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+}
+
+.desktop-status-badge {
+    border-color: color-mix(in srgb, var(--accent) 35%, var(--border-subtle));
+    color: var(--accent);
+}
+
 .theme-switch {
     display: inline-flex;
     background: var(--segment-track);
@@ -624,4 +647,112 @@
 
 .command-filter-strip .launch-home-control input.home-input {
     width: 180px;
+}
+
+/* Electron production observability (P6): metrics panel */
+.electron-metrics-panel {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 50;
+    max-width: 320px;
+    min-width: 200px;
+    background: rgba(20, 22, 28, 0.86);
+    color: var(--ink-strong, #f5f7fa);
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-family: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+    font-size: 11px;
+    line-height: 1.4;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.32);
+    pointer-events: auto;
+}
+
+.electron-metrics-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.electron-metrics-title {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 10px;
+    color: var(--ink-muted, rgba(255, 255, 255, 0.6));
+}
+
+.electron-metrics-toggle {
+    background: transparent;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0 4px;
+    line-height: 1;
+}
+
+.electron-metrics-toggle:hover {
+    color: #ffffff;
+}
+
+.electron-metrics-body {
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.electron-metrics-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.electron-metrics-divider {
+    height: 1px;
+    background: var(--border-subtle, rgba(255, 255, 255, 0.12));
+    margin: 4px 0;
+}
+
+.electron-metrics-subtitle {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 9px;
+    color: var(--ink-muted, rgba(255, 255, 255, 0.5));
+    margin-bottom: 2px;
+}
+
+.electron-metrics-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.electron-metrics-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.electron-metrics-proc {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.electron-metrics-proc-rss {
+    color: var(--ink-muted, rgba(255, 255, 255, 0.7));
+    flex-shrink: 0;
+}
+
+.electron-metrics-empty {
+    margin-top: 4px;
+    color: var(--ink-muted, rgba(255, 255, 255, 0.5));
+    font-style: italic;
 }

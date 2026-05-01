@@ -73,6 +73,12 @@ test('Markdown editor exposes WYSIWYG toolbar without changing the save path', (
     assert.ok(codePlugin.includes('fencedCodeSource'), 'code block raw editing must expose fenced markdown source');
     assert.ok(codePlugin.includes('notes-code-raw'), 'code block node views must expose raw editable source');
     assert.ok(codePlugin.includes('updateCodeBlockNode'), 'raw code block edits must write back into the ProseMirror node');
+    assert.ok(codePlugin.includes("import { highlightCode } from '../rendering/highlight-languages';"),
+        'WYSIWYG code block rendering must reuse the preview highlight pipeline');
+    assert.ok(codePlugin.includes('code.innerHTML = highlighted.html'),
+        'WYSIWYG rendered code must preserve highlight.js spans instead of plain text only');
+    assert.ok(codePlugin.includes('code.dataset.highlighted'),
+        'WYSIWYG rendered code must expose highlight state for regression checks');
     assert.ok(codePlugin.includes('commitAndExitCodeBlock'),
         'code block exit must commit and move caret in a single transaction');
     assert.equal(codePlugin.includes('function moveAfterCodeBlock'), false,
