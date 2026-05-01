@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { normalizeEscapedTaskMarkers } from '../../public/manager/src/notes/wysiwyg/milkdown-task-markers';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..');
@@ -50,6 +51,9 @@ test('Markdown editor exposes WYSIWYG toolbar without changing the save path', (
     const codePlugin = read('public/manager/src/notes/wysiwyg/milkdown-code-block-view.ts');
 
     assert.ok(editor.includes('MilkdownWysiwygEditor'), 'WYSIWYG mode must render the Milkdown authoring surface');
+    assert.ok(editor.includes('hasMilkdownUnsafeGfm'), 'WYSIWYG mode must guard Milkdown from known unsafe GFM constructs');
+    assert.ok(editor.includes('WYSIWYG is temporarily disabled for notes with GFM task lists, tables, or footnotes.'),
+        'unsafe GFM fallback must explain why WYSIWYG did not mount');
     assert.ok(milkdown.includes('@milkdown/kit/core'), 'WYSIWYG mode must use Milkdown core directly');
     assert.ok(milkdown.includes('@milkdown/kit/preset/commonmark'), 'Milkdown WYSIWYG must support CommonMark editing');
     assert.ok(milkdown.includes('./milkdown-gfm-safe'), 'Milkdown WYSIWYG must support GFM editing through the local safe wrapper');
@@ -62,7 +66,7 @@ test('Markdown editor exposes WYSIWYG toolbar without changing the save path', (
     assert.ok(milkdown.includes('.use(notesMilkdownCodeBlockView)'), 'Milkdown WYSIWYG must install the code block source view');
     assert.ok(milkdown.includes('insertInlineMath'), 'Milkdown WYSIWYG must expose inline math insertion');
     assert.ok(milkdown.includes('insertBlockMath'), 'Milkdown WYSIWYG must expose block math insertion');
-    assert.ok(milkdown.includes('insertTaskListItem'), 'Milkdown WYSIWYG must expose task list insertion');
+    assert.equal(milkdown.includes('insertTaskListItem'), false, 'Task list toolbar insertion must not keep a dead handler while disabled');
     assert.ok(milkdown.includes('normalizeEscapedTaskMarkers'), 'WYSIWYG must save literal task markers as canonical GFM task list markdown');
     assert.ok(milkdown.includes('toggleStrikethroughCommand'), 'Milkdown WYSIWYG must expose GFM strikethrough');
     assert.ok(milkdown.includes('insertTableCommand'), 'Milkdown WYSIWYG must expose GFM tables');
@@ -77,7 +81,8 @@ test('Markdown editor exposes WYSIWYG toolbar without changing the save path', (
     assert.ok(milkdown.includes('observer.disconnect()'), 'WYSIWYG task accessibility observer must be disconnected on unmount');
     assert.ok(milkdown.includes("root.removeEventListener('click', handleTaskListClick)"), 'WYSIWYG task click listener must be removed on unmount');
     assert.ok(milkdown.includes("root.removeEventListener('keydown', handleTaskListKeyDown, true)"), 'WYSIWYG task key listener must be removed on unmount');
-    assert.ok(milkdown.includes('<button type="button" title="Task list" aria-label="Task list" disabled'), 'Task toolbar insertion must stay disabled until a safe non-freezing command exists');
+    assert.ok(milkdown.includes('Task list toolbar insertion is disabled to prevent dashboard freezes'), 'Disabled task toolbar button must explain why insertion is unavailable');
+    assert.ok(milkdown.includes('aria-disabled="true"'), 'Disabled task toolbar button must expose disabled state for assistive technology');
     assert.ok(mathPlugin.includes('$view'), 'Milkdown math must use node views for rendered/raw editing');
     assert.ok(mathPlugin.includes('notesMathInlineView'), 'inline math must have a rendered/raw node view');
     assert.ok(mathPlugin.includes('notesMathBlockView'), 'block math must have a rendered/raw node view');
@@ -109,12 +114,38 @@ test('Markdown editor exposes WYSIWYG toolbar without changing the save path', (
     assert.ok(milkdown.includes('syncingFromPropsRef'), 'Milkdown WYSIWYG must suppress controlled prop sync writes');
     assert.ok(milkdown.includes('latestPropContentRef'), 'Milkdown WYSIWYG must reconcile async creation with latest props');
     assert.ok(workspace.includes('key={props.selectedPath}'), 'WYSIWYG history must reset on note boundaries');
+    assert.ok(workspace.includes('{showEditor && <div className="notes-editor-pane">'),
+        'Notes preview mode must not mount the hidden editor pane or hidden WYSIWYG editor');
+    assert.equal(workspace.includes('hidden={!showEditor}'), false,
+        'Notes preview mode must unmount the editor instead of hiding a live WYSIWYG instance');
     assert.ok(milkdown.includes('safeMarkdownUrl'), 'WYSIWYG link insertion must reuse safe URL policy');
     assert.ok(milkdown.includes('onPasteCapture'), 'WYSIWYG paste must own an HTML-to-text safety boundary');
     assert.ok(milkdown.includes('notes-wysiwyg-toolbar'), 'WYSIWYG mode must expose visual formatting controls');
     assert.equal(milkdown.includes('@milkdown/react'), false, 'WYSIWYG mode must avoid Crepe-pulling React wrapper');
     assert.equal(milkdown.includes('@milkdown/crepe'), false, 'WYSIWYG mode must not import Crepe');
     assert.equal(milkdown.includes('@milkdown/plugin-math'), false, 'WYSIWYG mode must not import deprecated plugin-math');
+});
+
+test('WYSIWYG task marker normalization is narrow and idempotent', () => {
+    const input = [
+        '  - [X]\tchecked',
+        '\t* \\[ \\]\ttab indented',
+        '+ \\[x\\] done',
+        '- [not-task] keep',
+        'plain \\[ \\] keep',
+    ].join('\n');
+
+    const expected = [
+        '  - [X]\tchecked',
+        '\t* [ ]\ttab indented',
+        '+ [x] done',
+        '- [not-task] keep',
+        'plain \\[ \\] keep',
+    ].join('\n');
+
+    const normalized = normalizeEscapedTaskMarkers(input);
+    assert.equal(normalized, expected);
+    assert.equal(normalizeEscapedTaskMarkers(normalized), expected);
 });
 
 test('Markdown preview strips HTML and blocks unsafe URLs', () => {

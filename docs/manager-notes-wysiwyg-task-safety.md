@@ -23,6 +23,9 @@ The patch therefore keeps task-list support without reinstalling Milkdown's
   and plugins, but filters out `wrapInTaskListInputRule`.
 - Convert escaped literal task markers only at the Markdown boundary, not during
   live typing.
+- Do not mount Milkdown WYSIWYG for existing notes that already contain GFM task
+  lists, tables, or footnotes; those notes open in the raw editor fallback until
+  the upstream conversion path is safe.
 - Keep the toolbar `Task` action disabled until a safe non-freezing command path
   exists. Multiple command-based insertion attempts re-entered Milkdown task/list
   conversion and froze the renderer.
@@ -47,10 +50,10 @@ The implementation is intentionally small and bounded:
 
 - Typing `- [ ]` in WYSIWYG must not freeze the dashboard.
 - Saving typed literal task markers must produce canonical GFM task Markdown.
+- Loading an existing GFM task/table/footnote note in WYSIWYG mode must not mount
+  Milkdown; it must use the raw editor fallback.
 - The toolbar `Task` button must not trigger a renderer freeze. It is disabled
   for now.
-- Reloaded GFM task Markdown must render as task nodes and remain clickable and
-  keyboard-toggleable.
 - Preview mode must continue to render GFM task checkboxes through the shared
   Markdown renderer.
 
@@ -69,5 +72,7 @@ For browser smoke, use a real dashboard instance and verify:
 
 - `/dashboard` loads after restarting `jaw dashboard`.
 - WYSIWYG accepts `- [ ] test` without a renderer freeze.
-- The toolbar `Task` button creates a visible checkbox.
+- Existing GFM task/table/footnote notes show the raw editor fallback in WYSIWYG
+  mode instead of mounting Milkdown.
+- The toolbar `Task` button is disabled and does not insert a task item.
 - Preview renders `- [ ]` and `- [x]` as disabled checkboxes.

@@ -20,6 +20,7 @@ import { notesMilkdownBlockKeymap } from './milkdown-block-keymap';
 import { notesMilkdownCodeBlockView } from './milkdown-code-block-view';
 import { notesMilkdownGfm } from './milkdown-gfm-safe';
 import { notesMilkdownKatexOptionsCtx, notesMilkdownMath } from './milkdown-math';
+import { normalizeEscapedTaskMarkers } from './milkdown-task-markers';
 
 type MilkdownWysiwygEditorProps = {
     active: boolean;
@@ -41,12 +42,6 @@ function htmlToPlainText(html: string): string {
 
 function normalizeCodeLanguage(language: string): string {
     return language.trim().toLowerCase().replace(/[^a-z0-9_+-]/g, '');
-}
-
-function normalizeEscapedTaskMarkers(markdown: string): string {
-    // Milkdown can serialize typed task markers as escaped literal text after
-    // the unsafe input rule is removed; keep canonical GFM at the save boundary.
-    return markdown.replace(/^([ \t]*[-*+][ \t]+)\\?\[([ xX])\\?\]([ \t]*)/gm, '$1[$2]$3');
 }
 
 export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
@@ -188,10 +183,6 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         run(editor => editor.action(callCommand(createCodeBlockCommand.key, language)));
     }
 
-    function insertTaskListItem(): void {
-        run(editor => editor.action(insert('- [ ] ')));
-    }
-
     function insertTable(): void {
         run(editor => editor.action(callCommand(insertTableCommand.key, { row: 3, col: 3 })));
     }
@@ -299,7 +290,13 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
                 <button type="button" title="Block math" aria-label="Block math" disabled={!ready} onClick={insertBlockMath}>Math Block</button>
                 <button type="button" title="Heading" aria-label="Heading level 2" disabled={!ready} onClick={() => run(editor => editor.action(callCommand(wrapInHeadingCommand.key, 2)))}>H2</button>
                 <button type="button" title="List" aria-label="Bullet list" disabled={!ready} onClick={() => run(editor => editor.action(callCommand(wrapInBulletListCommand.key)))}>List</button>
-                <button type="button" title="Task list" aria-label="Task list" disabled onClick={insertTaskListItem}>Task</button>
+                <button
+                    type="button"
+                    title="Task list toolbar insertion is disabled to prevent dashboard freezes; type - [ ] manually"
+                    aria-label="Task list insertion disabled"
+                    aria-disabled="true"
+                    disabled
+                >Task</button>
                 <button type="button" title="Quote" aria-label="Quote" disabled={!ready} onClick={() => run(editor => editor.action(callCommand(wrapInBlockquoteCommand.key)))}>Quote</button>
                 <button type="button" title="Table" aria-label="Table" disabled={!ready} onClick={insertTable}>Table</button>
                 <button type="button" title="Code block" aria-label="Code block" disabled={!ready} onClick={createLanguageCodeBlock}>Block</button>

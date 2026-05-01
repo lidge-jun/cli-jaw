@@ -47,6 +47,7 @@ test('MarkdownRenderer wires math, sanitize, safe links, and block routing', () 
     assert.ok(renderer.includes('rehypeKatex'), 'KaTeX renderer must be passed to ReactMarkdown');
     assert.ok(renderer.includes('skipHtml'), 'raw HTML must stay disabled');
     assert.ok(renderer.includes('urlTransform={safeMarkdownUrl}'), 'safe URL transform must stay active');
+    assert.ok(renderer.includes('...anchorProps'), 'custom anchors must preserve safe GFM footnote data attributes');
     assert.equal(renderer.includes('rehypeRaw'), false, 'rehype-raw must not be introduced');
     assert.ok(renderer.includes("language === 'mermaid'"), 'Mermaid must be selected from language-mermaid fenced code');
     assert.ok(renderer.includes('<CodeBlock code={code} language={language} />'), 'code fences must route to CodeBlock');

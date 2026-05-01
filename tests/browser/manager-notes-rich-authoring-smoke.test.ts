@@ -45,8 +45,8 @@ async function seedRichNote(page: Page, notePath: string): Promise<void> {
     }, { notePath });
 }
 
-async function seedGfmNote(page: Page, notePath: string): Promise<void> {
-    await page.evaluate(async ({ notePath }) => {
+async function seedGfmNote(page: Page, notePath: string, options: { includeFootnotes?: boolean } = {}): Promise<void> {
+    await page.evaluate(async ({ notePath, includeFootnotes }) => {
         const headers = { 'content-type': 'application/json' };
         const registry = await fetch('/api/dashboard/registry', {
             method: 'PATCH',
@@ -54,33 +54,33 @@ async function seedGfmNote(page: Page, notePath: string): Promise<void> {
             body: JSON.stringify({ ui: { sidebarMode: 'notes', notesSelectedPath: notePath, notesViewMode: 'raw', notesAuthoringMode: 'plain' } }),
         });
         if (!registry.ok) throw new Error(`registry seed failed: ${registry.status}`);
+        const content = [
+            '# GFM smoke',
+            '',
+            '- [ ] unchecked task',
+            '- [x] checked task',
+            '',
+            '~~done later~~',
+            '',
+            '| Item | Status |',
+            '| --- | --- |',
+            '| GFM | works |',
+            '',
+            'Visit www.example.com',
+        ];
+        if (includeFootnotes) {
+            content.push('', 'A note[^1]', '', '[^1]: footnote body');
+        }
         const note = await fetch('/api/dashboard/notes/file', {
             method: 'POST',
             headers,
             body: JSON.stringify({
                 path: notePath,
-                content: [
-                    '# GFM smoke',
-                    '',
-                    '- [ ] unchecked task',
-                    '- [x] checked task',
-                    '',
-                    '~~done later~~',
-                    '',
-                    '| Item | Status |',
-                    '| --- | --- |',
-                    '| GFM | works |',
-                    '',
-                    'Visit www.example.com',
-                    '',
-                    'A note[^1]',
-                    '',
-                    '[^1]: footnote body',
-                ].join('\n'),
+                content: content.join('\n'),
             }),
         });
         if (!note.ok) throw new Error(`note seed failed: ${note.status}`);
-    }, { notePath });
+    }, { notePath, includeFootnotes: options.includeFootnotes !== false });
 }
 
 after(async () => {
@@ -188,9 +188,11 @@ test('notes WYSIWYG authoring keeps the primary toolbar compact', async () => {
 test('notes render and edit GitHub Flavored Markdown affordances', async () => {
     const page = await pageForManager();
     const noteName = `browser-gfm-${Date.now()}.md`;
+    const wysiwygNoteName = `browser-gfm-wysiwyg-${Date.now()}.md`;
 
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
     await seedGfmNote(page, noteName);
+    await seedGfmNote(page, wysiwygNoteName, { includeFootnotes: false });
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
     await page.waitForSelector('.notes-tree');
 
@@ -215,36 +217,36 @@ test('notes render and edit GitHub Flavored Markdown affordances', async () => {
         'Preview must render GFM footnote backrefs');
 
     await page.getByRole('tab', { name: 'WYSIWYG' }).click();
-    await page.waitForSelector('.notes-milkdown-root .ProseMirror', { timeout: 5000 });
-    await page.waitForSelector('.notes-wysiwyg-toolbar button[title="Strikethrough"]', { timeout: 5000 });
-    await page.waitForSelector('.notes-wysiwyg-toolbar button[title="Task list"]', { timeout: 5000 });
-    await page.waitForSelector('.notes-wysiwyg-toolbar button[title="Table"]', { timeout: 5000 });
-    const uncheckedTask = page.locator('.notes-milkdown-root li[data-item-type="task"][data-checked="false"]').filter({ hasText: 'unchecked task' }).first();
-    await uncheckedTask.waitFor({ timeout: 5000 });
-    const taskBox = await uncheckedTask.boundingBox();
-    assert.ok(taskBox, 'WYSIWYG must expose GFM task list items in the editor DOM');
-    await page.mouse.click(taskBox.x + 8, taskBox.y + 10);
-    await page.locator('.notes-milkdown-root li[data-item-type="task"][data-checked="true"]').filter({ hasText: 'unchecked task' }).first().waitFor({ timeout: 5000 });
-    assert.equal(await page.locator('.notes-milkdown-root del').count(), 1,
-        'WYSIWYG must render GFM strikethrough');
-    assert.equal(await page.locator('.notes-milkdown-root table').count(), 1,
-        'WYSIWYG must render GFM tables');
-    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.waitForSelector('.notes-wysiwyg-error', { timeout: 5000 });
+    assert.equal(await page.locator('.notes-milkdown-root').count(), 0,
+        'WYSIWYG must not mount Milkdown for notes with GFM footnotes until that path is safe');
+    assert.ok((await page.locator('.notes-wysiwyg-error').textContent())?.includes('GFM task lists'),
+        'unsafe GFM fallback must explain that GFM constructs are blocked');
+
+    await page.locator('.notes-tree-file-button').filter({ hasText: wysiwygNoteName }).first().click();
+    await page.waitForSelector('.notes-wysiwyg-error', { timeout: 5000 });
+    assert.equal(await page.locator('.notes-milkdown-root').count(), 0,
+        'WYSIWYG must not mount Milkdown for existing GFM task/table notes until that path is safe');
 
     const savedContent = await page.evaluate(async ({ noteName }) => {
         const response = await fetch(`/api/dashboard/notes/file?path=${encodeURIComponent(noteName)}`);
         const body = await response.json();
         return body.content as string;
     }, { noteName });
-    assert.ok(/(^|\n)[-*] \[x\] unchecked task(\n|$)/.test(savedContent),
-        'WYSIWYG task checkbox toggles must round-trip back to GFM markdown');
+    assert.ok(/(^|\n)[-*] \[ \] unchecked task(\n|$)/.test(savedContent),
+        'GFM task fallback must preserve unchecked task markdown');
     assert.ok(/(^|\n)[-*] \[[xX]\] checked task(\n|$)/.test(savedContent),
         'Existing checked GFM tasks must remain checked after WYSIWYG save');
     assert.ok(savedContent.includes('~~done later~~'),
         'GFM strikethrough must round-trip back to canonical markdown');
     assert.ok(/\|\s*Item\s*\|\s*Status\s*\|\s*\n\|[-:\s|]+\|\s*\n\|\s*GFM\s*\|\s*works\s*\|/.test(savedContent),
         'GFM tables must round-trip back to canonical markdown');
-    assert.ok(savedContent.includes('A note[^1]') && savedContent.includes('[^1]: footnote body'),
+    const footnoteContent = await page.evaluate(async ({ noteName }) => {
+        const response = await fetch(`/api/dashboard/notes/file?path=${encodeURIComponent(noteName)}`);
+        const body = await response.json();
+        return body.content as string;
+    }, { noteName });
+    assert.ok(footnoteContent.includes('A note[^1]') && footnoteContent.includes('[^1]: footnote body'),
         'GFM footnotes must round-trip back to markdown');
 });
 

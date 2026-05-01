@@ -18,6 +18,10 @@ type MarkdownRendererProps = {
     markdown: string;
 };
 
+type MarkdownAnchorProps = ComponentProps<'a'> & {
+    node?: unknown;
+};
+
 function textFromNode(node: ReactNode): string {
     if (typeof node === 'string' || typeof node === 'number') return String(node);
     if (Array.isArray(node)) return node.map(textFromNode).join('');
@@ -43,11 +47,12 @@ export function MarkdownRenderer(props: MarkdownRendererProps) {
                 rehypeKatex,
             ]}
             components={{
-                a: ({ href, children }) => {
+                a: ({ href, children, node: _node, ...anchorProps }: MarkdownAnchorProps) => {
                     const safeHref = typeof href === 'string' && isSafeExternalHref(href) ? href : undefined;
                     const external = Boolean(safeHref && /^https?:\/\//i.test(safeHref));
                     return (
                         <a
+                            {...anchorProps}
                             href={safeHref}
                             target={external ? '_blank' : undefined}
                             rel={external ? 'noreferrer noopener' : undefined}

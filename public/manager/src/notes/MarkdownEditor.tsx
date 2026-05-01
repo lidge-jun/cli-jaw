@@ -25,8 +25,17 @@ type MarkdownEditorProps = {
     onChange: (value: string) => void;
 };
 
+function hasMilkdownUnsafeGfm(markdown: string): boolean {
+    return /(^|\n)[ \t]*\[\^[^\]\n]+]:/.test(markdown)
+        || /\[\^[^\]\n]+]/.test(markdown)
+        || /(^|\n)[ \t]*[-*+][ \t]+\[[ xX]\]/.test(markdown)
+        || /(^|\n)[ \t]*\|.*\|[ \t]*\n[ \t]*\|?[ \t]*:?-{3,}/.test(markdown);
+}
+
 export function MarkdownEditor(props: MarkdownEditorProps) {
     const [widgets, setWidgets] = useState<Map<string, RichMarkdownWidgetRegistration>>(() => new Map());
+    const hasUnsafeMilkdownGfm = props.authoringMode === 'wysiwyg' && hasMilkdownUnsafeGfm(props.content);
+    const isWysiwyg = props.authoringMode === 'wysiwyg' && !hasUnsafeMilkdownGfm;
     const registerWidget = useCallback((registration: RichMarkdownWidgetRegistration): void => {
         setWidgets(current => {
             const next = new Map(current);
@@ -53,7 +62,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
             markdown({ codeLanguages: languages }),
             richMarkdownPastePolicy(),
             richMarkdownExtension({
-                enabled: props.authoringMode === 'rich' || props.authoringMode === 'wysiwyg',
+                enabled: props.authoringMode === 'rich' || isWysiwyg,
                 active: props.active,
                 registerWidget,
                 unregisterWidget,
@@ -62,9 +71,8 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
         ];
         if (props.wordWrap) base.push(EditorView.lineWrapping);
         return base;
-    }, [props.active, props.authoringMode, props.wordWrap, registerWidget, requestMeasure, unregisterWidget]);
+    }, [props.active, props.authoringMode, props.wordWrap, isWysiwyg, registerWidget, requestMeasure, unregisterWidget]);
 
-    const isWysiwyg = props.authoringMode === 'wysiwyg';
     if (isWysiwyg) {
         return (
             <div className="notes-editor notes-wysiwyg-editor">
@@ -77,6 +85,11 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
 
     return (
         <div className="notes-editor">
+            {hasUnsafeMilkdownGfm && (
+                <div className="notes-wysiwyg-error" role="status">
+                    WYSIWYG is temporarily disabled for notes with GFM task lists, tables, or footnotes.
+                </div>
+            )}
             <RichMarkdownPortalHost widgets={[...widgets.values()]} />
             <CodeMirror
                 value={props.content}

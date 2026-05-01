@@ -127,9 +127,9 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
                 {!props.selectedPath && props.viewMode !== 'settings' && <NotesEmptyState />}
                 {props.selectedPath && props.viewMode !== 'settings' && (
                     <div className="notes-document-grid">
-                        <div className="notes-editor-pane" hidden={!showEditor} aria-hidden={!showEditor}>
+                        {showEditor && <div className="notes-editor-pane">
                             <MarkdownEditor key={props.selectedPath} active={props.active && showEditor} authoringMode={props.authoringMode} content={document.content} wordWrap={props.wordWrap} onChange={document.setContent} />
-                        </div>
+                        </div>}
                         {showPreview && <MarkdownPreview markdown={document.content} />}
                     </div>
                 )}

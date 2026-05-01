@@ -50,6 +50,7 @@ async function pageForManager(): Promise<Page> {
 async function selectFirstOnlineInstance(page: Page): Promise<void> {
     await page.waitForSelector('.dashboard-shell.manager-shell');
     const port = await page.evaluate(async () => {
+        localStorage.setItem('jaw.previewEnabled', 'true');
         const response = await fetch('/api/dashboard/instances?showHidden=1');
         const data = await response.json() as { instances?: Array<{ port: number; ok: boolean }> };
         const selected = data.instances?.find(instance => instance.ok);
@@ -57,7 +58,7 @@ async function selectFirstOnlineInstance(page: Page): Promise<void> {
         await fetch('/api/dashboard/registry', {
             method: 'PATCH',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ ui: { selectedPort: selected.port, selectedTab: 'preview' } }),
+            body: JSON.stringify({ ui: { sidebarMode: 'instances', selectedPort: selected.port, selectedTab: 'preview' } }),
         });
         return selected.port;
     });
