@@ -79,7 +79,7 @@ export function buildCapability(args: {
             canStart: false,
             canStop: true,
             canRestart: true,
-            canPerm: false,
+            canPerm: !hasPlist,
             canUnperm: hasPlist,
             reason: managed.mode === 'attached'
                 ? 'dashboard-owned'
