@@ -60,8 +60,22 @@ test('CM-008: migrateLegacyClaudeValue is idempotent on canonical alias values',
 
 // ─── Legacy map ──────────────────────────────────────
 
-test('CM-009: legacy map is empty by default (passthrough policy)', () => {
-    assert.equal(Object.keys(CLAUDE_LEGACY_VALUE_MAP).length, 0);
+test('CM-009: legacy map contains only dot-form → hyphen-form migrations', () => {
+    for (const [from, to] of Object.entries(CLAUDE_LEGACY_VALUE_MAP)) {
+        assert.ok(from.includes('.'), `legacy key "${from}" should be a dot-form`);
+        assert.ok(!to.includes('.'), `legacy target "${to}" should be hyphen-form`);
+    }
+    assert.equal(CLAUDE_LEGACY_VALUE_MAP['claude-opus-4.7'], 'claude-opus-4-7');
+    assert.equal(CLAUDE_LEGACY_VALUE_MAP['claude-sonnet-4.6'], 'claude-sonnet-4-6');
+    assert.equal(CLAUDE_LEGACY_VALUE_MAP['claude-haiku-4.5'], 'claude-haiku-4-5');
+});
+
+test('CM-009b: migrateLegacyClaudeValue upgrades dot-form to hyphen-form', () => {
+    assert.equal(migrateLegacyClaudeValue('claude-opus-4.7'), 'claude-opus-4-7');
+    assert.equal(migrateLegacyClaudeValue('claude-opus-4.6'), 'claude-opus-4-6');
+    assert.equal(migrateLegacyClaudeValue('claude-sonnet-4.6'), 'claude-sonnet-4-6');
+    assert.equal(migrateLegacyClaudeValue('claude-sonnet-4.5'), 'claude-sonnet-4-5');
+    assert.equal(migrateLegacyClaudeValue('claude-haiku-4.5'), 'claude-haiku-4-5');
 });
 
 // ─── Helpers ─────────────────────────────────────────
@@ -87,7 +101,7 @@ test('CM-012: getDefaultClaudeChoices returns aliases + verified pinned full IDs
     ]);
 });
 
-test('CM-013: getClaudeModelKind classifies correctly with empty legacy map', () => {
+test('CM-013: getClaudeModelKind classifies correctly', () => {
     assert.equal(getClaudeModelKind('sonnet'), 'canonical');
     assert.equal(getClaudeModelKind('opus'), 'canonical');
     assert.equal(getClaudeModelKind('claude-sonnet-4-6'), 'explicit');
@@ -95,4 +109,6 @@ test('CM-013: getClaudeModelKind classifies correctly with empty legacy map', ()
     assert.equal(getClaudeModelKind('claude-opus-4-7'), 'explicit');
     assert.equal(getClaudeModelKind('claude-sonnet-4-7-preview'), 'explicit');
     assert.equal(getClaudeModelKind('default'), 'explicit');
+    assert.equal(getClaudeModelKind('claude-opus-4.7'), 'legacy');
+    assert.equal(getClaudeModelKind('claude-sonnet-4.6'), 'legacy');
 });

@@ -27,16 +27,18 @@ export const CLAUDE_PINNED_FULL_IDS = [
   'claude-haiku-4-5',
 ] as const;
 
-// Empty by design — user-typed Claude model strings pass through to
-// `claude --model <literal>` unchanged. Claude Code resolves short aliases
-// (opus, sonnet, sonnet[1m], haiku) internally via firstPartyNameToCanonical;
-// pinned full IDs (claude-opus-4-7, claude-opus-4-7-20260416, etc.) reach the
-// Anthropic Messages API verbatim so the literal the user pinned is what gets
-// hashed for the prompt-cache prefix.
-//
-// Add a row here ONLY when a literal is fully retired by Anthropic and must
-// be silently upgraded to a still-valid name.
-export const CLAUDE_LEGACY_VALUE_MAP: Record<string, ClaudeCanonicalModel> = {};
+// Dot-form model strings that older UI versions persisted into settings.
+// These are invalid for the Anthropic API (which uses hyphens), so we
+// silently upgrade them to the correct hyphen-form. Full-ID → alias
+// rewrites are intentionally absent: passthrough policy preserves the
+// user's pinned literal for prompt-cache stability.
+export const CLAUDE_LEGACY_VALUE_MAP: Record<string, string> = {
+  'claude-opus-4.7': 'claude-opus-4-7',
+  'claude-opus-4.6': 'claude-opus-4-6',
+  'claude-sonnet-4.6': 'claude-sonnet-4-6',
+  'claude-sonnet-4.5': 'claude-sonnet-4-5',
+  'claude-haiku-4.5': 'claude-haiku-4-5',
+};
 
 export function isClaudeCli(cli: string): boolean {
   return cli === 'claude';

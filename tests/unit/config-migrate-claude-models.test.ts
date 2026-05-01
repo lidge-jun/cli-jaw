@@ -96,6 +96,18 @@ test('CfgM-009: migrateSettings preserves claude-opus-4-7 verbatim across PUT cy
     assert.equal(s.memory.model, 'claude-opus-4-7');
 });
 
+test('CfgM-010: migrateSettings upgrades dot-form Claude model to hyphen-form', () => {
+    const s = migrateSettings({
+        cli: 'claude',
+        perCli: { claude: { model: 'claude-opus-4.7', effort: 'medium' } },
+        activeOverrides: { claude: { model: 'claude-sonnet-4.6' } },
+        memory: { cli: 'claude', model: 'claude-haiku-4.5' },
+    });
+    assert.equal(s.perCli.claude.model, 'claude-opus-4-7');
+    assert.equal(s.activeOverrides.claude.model, 'claude-sonnet-4-6');
+    assert.equal(s.memory.model, 'claude-haiku-4-5');
+});
+
 test('CfgM-008: migrateSettings rewrites deprecated Copilot fast opus model', () => {
     const s = migrateSettings({
         cli: 'copilot',
