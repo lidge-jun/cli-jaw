@@ -4,6 +4,7 @@ import katex from 'katex';
 import remarkMath from 'remark-math';
 import { InputRule } from '@milkdown/kit/prose/inputrules';
 import type { Node as ProseMirrorNode } from '@milkdown/kit/prose/model';
+import { TextSelection } from '@milkdown/kit/prose/state';
 import type { EditorView, NodeView, NodeViewConstructor } from '@milkdown/kit/prose/view';
 import { $ctx, $inputRule, $nodeSchema, $remark, $view } from '@milkdown/kit/utils';
 
@@ -64,6 +65,33 @@ function parseBlockMathSource(source: string): string {
     return source;
 }
 
+function isClosedMathSource(source: string, block: boolean): boolean {
+    const trimmed = source.trim();
+    if (block) return trimmed.startsWith('$$') && trimmed.endsWith('$$') && trimmed.length >= 4;
+    return trimmed.startsWith('$') && trimmed.endsWith('$') && trimmed.length >= 2;
+}
+
+function isCaretAtEnd(raw: HTMLInputElement | HTMLTextAreaElement): boolean {
+    return raw.selectionStart === raw.value.length && raw.selectionEnd === raw.value.length;
+}
+
+function moveAfterMathNode(view: EditorView, getPos: () => number | undefined, block: boolean): void {
+    const pos = getPos();
+    if (pos === undefined) return;
+    const node = view.state.doc.nodeAt(pos);
+    if (!node) return;
+    const after = pos + node.nodeSize;
+    const paragraph = view.state.schema.nodes.paragraph?.create();
+    if (!paragraph) return;
+    if (block) {
+        const tr = view.state.tr.insert(after, paragraph);
+        tr.setSelection(TextSelection.create(tr.doc, after + 1));
+        view.dispatch(tr.scrollIntoView());
+        return;
+    }
+    view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(after), 1)).scrollIntoView());
+}
+
 function createMathView(options: {
     block: boolean;
     render: (target: HTMLElement, code: string) => void;
@@ -114,10 +142,38 @@ function createMathView(options: {
             options.render(rendered, code);
         }
 
-        rendered.addEventListener('click', event => {
+        function revealRawControl(targetDom: Element | null): void {
+            if (!(targetDom instanceof HTMLElement)) return;
+            const targetRaw = targetDom.querySelector('.notes-math-raw');
+            if (!(targetRaw instanceof HTMLInputElement || targetRaw instanceof HTMLTextAreaElement)) return;
+            targetDom.dataset.editing = 'true';
+            targetRaw.focus();
+            targetRaw.select();
+        }
+
+        function openFromRenderedEvent(event: Event): void {
+            if (raw.contains(event.target as Node)) return;
+            if (dom.dataset.editing === 'true') return;
             event.preventDefault();
-            setEditing(true);
-        });
+            event.stopPropagation();
+            const pointer = event instanceof PointerEvent || event instanceof MouseEvent
+                ? { x: event.clientX, y: event.clientY }
+                : null;
+            setTimeout(() => {
+                if (dom.isConnected) {
+                    setEditing(true);
+                    return;
+                }
+                const targetDom = pointer
+                    ? document.elementFromPoint(pointer.x, pointer.y)?.closest('.notes-math-node') ?? null
+                    : null;
+                revealRawControl(targetDom);
+            }, 0);
+        }
+
+        dom.addEventListener('pointerdown', openFromRenderedEvent, { capture: true });
+        dom.addEventListener('mousedown', openFromRenderedEvent, { capture: true });
+        dom.addEventListener('click', openFromRenderedEvent);
         dom.addEventListener('keydown', event => {
             const keyEvent = event as KeyboardEvent;
             if (dom.dataset.editing === 'true') return;
@@ -130,6 +186,13 @@ function createMathView(options: {
             updateMathNode(view, getPos, options.block
                 ? parseBlockMathSource(raw.value)
                 : parseInlineMathSource(raw.value));
+            if (isClosedMathSource(raw.value, options.block) && isCaretAtEnd(raw)) {
+                setTimeout(() => {
+                    setEditing(false);
+                    moveAfterMathNode(view, getPos, options.block);
+                    view.focus();
+                }, 0);
+            }
         });
         raw.addEventListener('blur', () => setEditing(false));
         raw.addEventListener('keydown', event => {
@@ -138,6 +201,13 @@ function createMathView(options: {
                 keyEvent.preventDefault();
                 setEditing(false);
                 view.focus();
+            }
+            if (keyEvent.key === 'Enter' && isClosedMathSource(raw.value, options.block) && isCaretAtEnd(raw)) {
+                keyEvent.preventDefault();
+                setEditing(false);
+                moveAfterMathNode(view, getPos, options.block);
+                view.focus();
+                return;
             }
             if (!options.block && keyEvent.key === 'Enter') {
                 keyEvent.preventDefault();
@@ -169,8 +239,17 @@ function createMathView(options: {
             deselectNode: () => {
                 dom.dataset.selected = 'false';
             },
-            stopEvent: event => event.target === raw || raw.contains(event.target as Node),
-            ignoreMutation: mutation => mutation.target === raw || raw.contains(mutation.target as Node) || rendered.contains(mutation.target),
+            stopEvent: event =>
+                event.target === raw
+                || raw.contains(event.target as Node)
+                || event.type === 'pointerdown'
+                || event.type === 'mousedown'
+                || event.type === 'click',
+            ignoreMutation: mutation =>
+                mutation.target === dom
+                || mutation.target === raw
+                || raw.contains(mutation.target as Node)
+                || rendered.contains(mutation.target),
         };
     };
 }

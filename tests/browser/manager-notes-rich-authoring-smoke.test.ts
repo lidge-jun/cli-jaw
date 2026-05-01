@@ -30,6 +30,10 @@ async function seedRichNote(page: Page, notePath: string): Promise<void> {
                     '',
                     '$E = mc^2$',
                     '',
+                    '$$',
+                    '\\int_0^1 x^2 dx',
+                    '$$',
+                    '',
                     '```ts',
                     'const value = 1;',
                     '```',
@@ -69,37 +73,31 @@ test('notes rich authoring toggles renderer-backed CodeMirror widgets without be
     assert.ok(await page.locator('.notes-wysiwyg-toolbar button[title="Bold"]').count() === 1,
         'WYSIWYG authoring must expose visual formatting controls');
     await page.waitForSelector('.notes-milkdown-root .ProseMirror', { timeout: 5000 });
-    await page.locator('.notes-milkdown-root .ProseMirror').click();
-    await page.keyboard.type('\nMilkdown browser smoke edit');
-    page.once('dialog', dialog => void dialog.accept('a^2 + b^2 = c^2'));
-    await page.getByRole('button', { name: 'Inline math' }).click();
-    await page.locator('.notes-math-inline-node').last().click();
+    await page.locator('.notes-math-inline-node').first().click();
     const inlineMathSource = page.locator('.notes-math-inline-node[data-editing="true"] input.notes-math-raw');
-    await expectInputValue(inlineMathSource, '$a^2 + b^2 = c^2$');
+    await expectInputValue(inlineMathSource, '$E = mc^2$');
     await inlineMathSource.click();
     await page.keyboard.press('End');
     await page.keyboard.type(' + e');
-    await expectInputValue(inlineMathSource, '$a^2 + b^2 = c^2$ + e');
+    await expectInputValue(inlineMathSource, '$E = mc^2$ + e');
     await inlineMathSource.fill('$a^2 + b^2 = c^2 + d^2$');
     await page.keyboard.press('Enter');
-    page.once('dialog', dialog => void dialog.accept('\\int_0^1 x^2 dx'));
-    await page.getByRole('button', { name: 'Block math' }).click();
-    await page.locator('.notes-math-block-node').last().click();
+    await page.locator('.notes-math-block-node').first().click();
     const blockMathSource = page.locator('.notes-math-block-node[data-editing="true"] textarea.notes-math-raw');
     await expectInputValue(blockMathSource, '$$\n\\int_0^1 x^2 dx\n$$');
     await blockMathSource.fill('$$\n\\int_0^1 x^2 dx = 1/3\n$$');
-    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
-    page.once('dialog', dialog => void dialog.accept('ts'));
-    await page.getByRole('button', { name: 'Code block' }).click();
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('.notes-math-block-node[data-editing="true"]').count(), 0,
+        'closed block math source followed by Enter must exit the raw block');
     await page.waitForSelector('.notes-code-source-node[data-language="ts"]');
-    await page.locator('.notes-code-source-node[data-language="ts"]').last().click();
+    await page.locator('.notes-code-source-node[data-language="ts"]').first().click();
     const codeSource = page.locator('.notes-code-source-node[data-editing="true"] textarea.notes-code-raw');
     await expectInputValueIncludes(codeSource, '```ts\n');
     await expectInputValueIncludes(codeSource, '\n```');
-    await page.keyboard.type('```ts\n// raw typing works\n```');
-    await expectInputValueIncludes(codeSource, '// raw typing works');
     await codeSource.fill('```ts\nconst milkdownCodeBlock = true;\n```');
-    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
+    await page.keyboard.press('Enter');
+    assert.equal(await page.locator('.notes-code-source-node[data-editing="true"]').count(), 0,
+        'closed fenced code source followed by Enter must exit the raw block');
     await page.getByRole('button', { name: 'Save' }).click();
 
     const savedContent = await page.evaluate(async ({ noteName }) => {

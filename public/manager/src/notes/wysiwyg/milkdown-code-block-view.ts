@@ -1,6 +1,7 @@
 import type { MilkdownPlugin } from '@milkdown/kit/ctx';
 import { codeBlockSchema } from '@milkdown/kit/preset/commonmark';
 import type { Node as ProseMirrorNode } from '@milkdown/kit/prose/model';
+import { TextSelection } from '@milkdown/kit/prose/state';
 import type { EditorView, NodeView, NodeViewConstructor } from '@milkdown/kit/prose/view';
 import { $view } from '@milkdown/kit/utils';
 
@@ -27,6 +28,14 @@ function parseFencedCodeSource(source: string): { language: string; code: string
     };
 }
 
+function isClosedFencedCodeSource(source: string): boolean {
+    return /^```[^\n`]*\n?[\s\S]*?\n?```\s*$/.test(source.replace(/\r\n?/g, '\n'));
+}
+
+function isCaretAtEnd(input: HTMLTextAreaElement): boolean {
+    return input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
+}
+
 function updateCodeBlockNode(view: EditorView, getPos: () => number | undefined, source: string): void {
     const pos = getPos();
     if (pos === undefined) return;
@@ -39,6 +48,19 @@ function updateCodeBlockNode(view: EditorView, getPos: () => number | undefined,
         .replaceWith(pos + 1, pos + current.nodeSize - 1, nextText)
         .scrollIntoView();
     view.dispatch(tr);
+}
+
+function moveAfterCodeBlock(view: EditorView, getPos: () => number | undefined): void {
+    const pos = getPos();
+    if (pos === undefined) return;
+    const node = view.state.doc.nodeAt(pos);
+    if (!node) return;
+    const after = pos + node.nodeSize;
+    const paragraph = view.state.schema.nodes.paragraph?.create();
+    if (!paragraph) return;
+    const tr = view.state.tr.insert(after, paragraph);
+    tr.setSelection(TextSelection.create(tr.doc, after + 1));
+    view.dispatch(tr.scrollIntoView());
 }
 
 function createCodeBlockView(): NodeViewConstructor {
@@ -83,10 +105,38 @@ function createCodeBlockView(): NodeViewConstructor {
             }
         }
 
-        rendered.addEventListener('click', event => {
+        function revealRawControl(targetDom: Element | null): void {
+            if (!(targetDom instanceof HTMLElement)) return;
+            const targetRaw = targetDom.querySelector('textarea.notes-code-raw');
+            if (!(targetRaw instanceof HTMLTextAreaElement)) return;
+            targetDom.dataset.editing = 'true';
+            targetRaw.focus();
+            targetRaw.select();
+        }
+
+        function openFromRenderedEvent(event: Event): void {
+            if (raw.contains(event.target as Node)) return;
+            if (dom.dataset.editing === 'true') return;
             event.preventDefault();
-            setEditing(true);
-        });
+            event.stopPropagation();
+            const pointer = event instanceof PointerEvent || event instanceof MouseEvent
+                ? { x: event.clientX, y: event.clientY }
+                : null;
+            setTimeout(() => {
+                if (dom.isConnected) {
+                    setEditing(true);
+                    return;
+                }
+                const targetDom = pointer
+                    ? document.elementFromPoint(pointer.x, pointer.y)?.closest('.notes-code-source-node') ?? null
+                    : null;
+                revealRawControl(targetDom);
+            }, 0);
+        }
+
+        dom.addEventListener('pointerdown', openFromRenderedEvent, { capture: true });
+        dom.addEventListener('mousedown', openFromRenderedEvent, { capture: true });
+        dom.addEventListener('click', openFromRenderedEvent);
         dom.addEventListener('keydown', event => {
             if (dom.dataset.editing === 'true') return;
             if (event.key === 'Enter' || event.key === ' ') {
@@ -100,10 +150,27 @@ function createCodeBlockView(): NodeViewConstructor {
                 setEditing(false);
                 view.focus();
             }
+            if (event.key === 'Enter' && isClosedFencedCodeSource(raw.value) && isCaretAtEnd(raw)) {
+                event.preventDefault();
+                setEditing(false);
+                moveAfterCodeBlock(view, getPos);
+                view.focus();
+                return;
+            }
             if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
                 event.preventDefault();
                 setEditing(false);
                 view.focus();
+            }
+        });
+        raw.addEventListener('input', () => {
+            updateCodeBlockNode(view, getPos, raw.value);
+            if (isClosedFencedCodeSource(raw.value) && isCaretAtEnd(raw)) {
+                setTimeout(() => {
+                    setEditing(false);
+                    moveAfterCodeBlock(view, getPos);
+                    view.focus();
+                }, 0);
             }
         });
         raw.addEventListener('mousedown', event => event.stopPropagation());
@@ -125,8 +192,17 @@ function createCodeBlockView(): NodeViewConstructor {
             deselectNode: () => {
                 dom.dataset.selected = 'false';
             },
-            stopEvent: event => event.target === raw || raw.contains(event.target as Node),
-            ignoreMutation: mutation => mutation.target === raw || raw.contains(mutation.target as Node) || rendered.contains(mutation.target),
+            stopEvent: event =>
+                event.target === raw
+                || raw.contains(event.target as Node)
+                || event.type === 'pointerdown'
+                || event.type === 'mousedown'
+                || event.type === 'click',
+            ignoreMutation: mutation =>
+                mutation.target === dom
+                || mutation.target === raw
+                || raw.contains(mutation.target as Node)
+                || rendered.contains(mutation.target),
         };
     };
 }
