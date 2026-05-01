@@ -283,7 +283,7 @@ h2 { font-size: 13px; }
 .quick-btn.action-stop:hover { background: color-mix(in srgb, var(--status-error) 8%, var(--bg-raised)); }
 .quick-btn.action-open { text-decoration: none; color: var(--text-secondary); }
 .quick-btn.action-open:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border-subtle)); }
-.quick-btn:disabled { opacity: 0.35; pointer-events: none; }
+.quick-btn:disabled, .quick-btn.is-disabled { opacity: 0.35; pointer-events: none; }
 .instance-row-title { min-width: 0; display: grid; gap: 3px; }
 .instance-row-title-line {
     min-width: 0;

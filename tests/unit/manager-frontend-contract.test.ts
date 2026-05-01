@@ -42,7 +42,7 @@ test('manager frontend has API entry and Open action', () => {
     assert.ok(api.includes('/api/dashboard/notes/rename'), 'manager API must call dashboard notes rename endpoint');
     assert.ok(api.includes('/api/dashboard/notes/trash'), 'manager API must call dashboard notes trash endpoint');
     assert.ok(row.includes('Open'), 'manager UI must expose Open action');
-    assert.ok(row.includes('href={props.instance.url}'), 'Open must link to instance URL');
+    assert.ok(row.includes('props.instance.url'), 'Open must link to instance URL');
     assert.ok(row.includes('props.instance.ok'), 'Open must gate on instance reachability');
     assert.ok(command.includes('Search port, home, CLI, model'), 'manager UI must include search');
 });

@@ -107,37 +107,36 @@ export function InstanceRow(props: InstanceRowProps) {
                         {transitionLabel && <span><em className="instance-row-transition">{transitionLabel}</em></span>}
                     </div>
                     <div className="instance-row-quick" onClick={stopAction}>
-                        {lifecycle?.canStop && (
-                            <button
-                                type="button"
-                                className="quick-btn action-stop"
-                                onClick={(event) => {
-                                    stopAction(event);
-                                    props.onLifecycle('stop', props.instance);
-                                }}
-                                disabled={props.busy}
-                                title="Stop"
-                                aria-label="Stop"
-                            >
-                                <StopIcon />
-                            </button>
-                        )}
-                        {props.instance.ok && (
-                            <a
-                                className="quick-btn action-open"
-                                href={props.instance.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                title="Open in new tab"
-                                aria-label="Open"
-                                onClick={(event) => {
-                                    stopAction(event);
-                                    props.onMarkActivitySeen(props.instance.port);
-                                }}
-                            >
-                                <OpenIcon />
-                            </a>
-                        )}
+                        <button
+                            type="button"
+                            className="quick-btn action-stop"
+                            onClick={(event) => {
+                                stopAction(event);
+                                props.onLifecycle('stop', props.instance);
+                            }}
+                            disabled={!lifecycle?.canStop || props.busy}
+                            title="Stop"
+                            aria-label="Stop"
+                        >
+                            <StopIcon />
+                        </button>
+                        <a
+                            className={`quick-btn action-open${!props.instance.ok ? ' is-disabled' : ''}`}
+                            href={props.instance.ok ? props.instance.url : undefined}
+                            target={props.instance.ok ? '_blank' : undefined}
+                            rel={props.instance.ok ? 'noreferrer' : undefined}
+                            title="Open in new tab"
+                            aria-label="Open"
+                            aria-disabled={!props.instance.ok || undefined}
+                            tabIndex={props.instance.ok ? undefined : -1}
+                            onClick={(event) => {
+                                if (!props.instance.ok) { event.preventDefault(); return; }
+                                stopAction(event);
+                                props.onMarkActivitySeen(props.instance.port);
+                            }}
+                        >
+                            <OpenIcon />
+                        </a>
                         <span className="port">:{props.instance.port}</span>
                     </div>
                 </div>
@@ -203,45 +202,39 @@ export function InstanceRow(props: InstanceRowProps) {
                 >
                     Preview
                 </button>
-                {lifecycle?.canStart && (
-                    <button
-                        type="button"
-                        className="action-start"
-                        onClick={(event) => {
-                            stopAction(event);
-                            props.onLifecycle('start', props.instance);
-                        }}
-                        disabled={props.busy}
-                        title={lifecycle?.commandPreview.join(' ')}
-                    >
-                        Start
-                    </button>
-                )}
-                {lifecycle?.canPerm && (
-                    <button
-                        type="button"
-                        onClick={(event) => {
-                            stopAction(event);
-                            props.onLifecycle('perm', props.instance);
-                        }}
-                        disabled={props.busy}
-                        title="Register as launchd service"
-                    >
-                        Perm
-                    </button>
-                )}
-                {lifecycle?.canRestart && (
-                    <button
-                        type="button"
-                        onClick={(event) => {
-                            stopAction(event);
-                            props.onLifecycle('restart', props.instance);
-                        }}
-                        disabled={props.busy}
-                    >
-                        Restart
-                    </button>
-                )}
+                <button
+                    type="button"
+                    className="action-start"
+                    onClick={(event) => {
+                        stopAction(event);
+                        props.onLifecycle('start', props.instance);
+                    }}
+                    disabled={!lifecycle?.canStart || props.busy}
+                    title={lifecycle?.commandPreview?.join(' ')}
+                >
+                    Start
+                </button>
+                <button
+                    type="button"
+                    onClick={(event) => {
+                        stopAction(event);
+                        props.onLifecycle('perm', props.instance);
+                    }}
+                    disabled={!lifecycle?.canPerm || props.busy}
+                    title="Register as launchd service"
+                >
+                    Perm
+                </button>
+                <button
+                    type="button"
+                    onClick={(event) => {
+                        stopAction(event);
+                        props.onLifecycle('restart', props.instance);
+                    }}
+                    disabled={!lifecycle?.canRestart || props.busy}
+                >
+                    Restart
+                </button>
             </div>
             )}
         </article>
