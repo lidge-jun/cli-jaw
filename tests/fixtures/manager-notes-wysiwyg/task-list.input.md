@@ -1,0 +1,2 @@
+- [ ] write contract
+- [x] keep markdown canonical
