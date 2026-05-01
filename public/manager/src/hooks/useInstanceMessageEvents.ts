@@ -24,6 +24,7 @@ export type InstanceMessageActivityState = {
     events: ManagerEvent[];
     titlesByPort: Record<number, string>;
     titleSupportByPort: Record<number, DashboardActivityTitleSupportStatus>;
+    busyPorts: Set<number>;
 };
 
 export function latestAssistantFromEnvelope(data: MessageEnvelope['data']): MessageRow | null {
@@ -55,18 +56,36 @@ function titleSupportFromEnvelope(data: MessageEnvelope['data']): DashboardActiv
     return 'activity' in data || 'latestAssistant' in data ? 'ready' : 'legacy';
 }
 
+const BUSY_STALE_MS = 2 * 60 * 60_000;
+
+function parseUtcTimestamp(raw: string): number {
+    const iso = raw.includes('T') ? raw : raw.replace(' ', 'T');
+    return Date.parse(iso.endsWith('Z') ? iso : iso + 'Z');
+}
+
+function isActivityBusy(data: MessageEnvelope['data']): boolean {
+    if (!data || !('activity' in data)) return false;
+    const activity = data.activity;
+    if (!activity || activity.role !== 'user') return false;
+    const updatedAt = parseUtcTimestamp(activity.updatedAt);
+    if (Number.isNaN(updatedAt)) return false;
+    return Date.now() - updatedAt < BUSY_STALE_MS;
+}
+
 async function fetchLatestAssistantMessage(port: number): Promise<{
     latest: MessageRow | null;
     title: string | null;
     support: DashboardActivityTitleSupportStatus;
+    busy: boolean;
 }> {
     const response = await fetch(`/i/${port}/api/messages/latest`);
-    if (!response.ok) return { latest: null, title: null, support: 'offline' };
+    if (!response.ok) return { latest: null, title: null, support: 'offline', busy: false };
     const body = await response.json() as MessageEnvelope;
     return {
         latest: notifiableAssistantFromEnvelope(body.data),
         title: activityTitleFromEnvelope(body.data),
         support: titleSupportFromEnvelope(body.data),
+        busy: isActivityBusy(body.data),
     };
 }
 
@@ -74,6 +93,7 @@ export function useInstanceMessageEvents(instances: DashboardInstance[]): Instan
     const [events, setEvents] = useState<ManagerEvent[]>([]);
     const [titlesByPort, setTitlesByPort] = useState<Record<number, string>>({});
     const [titleSupportByPort, setTitleSupportByPort] = useState<Record<number, DashboardActivityTitleSupportStatus>>({});
+    const [busyPorts, setBusyPorts] = useState<Set<number>>(new Set());
     const baselineByPortRef = useRef<Record<number, number>>({});
     const onlinePorts = useMemo(() => {
         return instances.filter(instance => instance.ok).map(instance => instance.port).sort((a, b) => a - b);
@@ -107,11 +127,13 @@ export function useInstanceMessageEvents(instances: DashboardInstance[]): Instan
             }));
             const nextEvents: ManagerEvent[] = [];
             const nextTitles: Record<number, string> = {};
+            const nextBusy = new Set<number>();
             for (const result of results) {
                 if (result.status !== 'fulfilled') {
                     continue;
                 }
-                const { port, latest, title, support } = result.value;
+                const { port, latest, title, support, busy } = result.value;
+                if (busy) nextBusy.add(port);
                 nextSupport[port] = support;
                 if (title) nextTitles[port] = title;
                 if (!latest) continue;
@@ -133,6 +155,7 @@ export function useInstanceMessageEvents(instances: DashboardInstance[]): Instan
                 if (!nextSupport[port]) nextSupport[port] = 'offline';
             }
             setTitleSupportByPort(nextSupport);
+            setBusyPorts(nextBusy);
             setTitlesByPort(prev => {
                 const merged: Record<number, string> = {};
                 for (const [portKey, title] of Object.entries(prev)) {
@@ -179,5 +202,5 @@ export function useInstanceMessageEvents(instances: DashboardInstance[]): Instan
         };
     }, [onlinePortKey, instanceSupportKey]);
 
-    return { events, titlesByPort, titleSupportByPort };
+    return { events, titlesByPort, titleSupportByPort, busyPorts };
 }

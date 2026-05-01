@@ -31,6 +31,22 @@ test('dashboard command declares approved defaults and placeholder service', () 
     assert.ok(dashboard.includes('planned for a later phase'), 'dashboard service must be placeholder-only');
 });
 
+test('dashboard command pins managed instance starts to the launching CLI binary', () => {
+    const dashboard = read('bin/commands/dashboard.ts');
+    const instance = read('src/core/instance.ts');
+
+    assert.ok(dashboard.includes('CLI_JAW_BIN'), 'dashboard command must pass CLI_JAW_BIN to manager server');
+    assert.ok(
+        dashboard.includes('process.env.CLI_JAW_BIN || process.argv[1]'),
+        'dashboard command must prefer an existing CLI_JAW_BIN and otherwise use the launching CLI path'
+    );
+    assert.ok(instance.includes('process.env.CLI_JAW_BIN'), 'getJawPath must honor CLI_JAW_BIN before PATH lookup');
+    assert.ok(
+        instance.indexOf('process.env.CLI_JAW_BIN') < instance.indexOf("whichWithServicePath('jaw')"),
+        'CLI_JAW_BIN must be checked before PATH-based jaw discovery'
+    );
+});
+
 test('dashboard implementation does not mount into existing serve path', () => {
     const serve = read('bin/commands/serve.ts');
     const server = read('server.ts');

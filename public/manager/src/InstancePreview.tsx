@@ -40,6 +40,7 @@ function postPreviewTheme(frame: HTMLIFrameElement | null, src: string, theme: P
 
 export function InstancePreview(props: InstancePreviewProps) {
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
+    const loadedSrcRef = useRef<string | null>(null);
     const state = buildPreviewState(
         props.instance,
         props.data,
@@ -50,6 +51,7 @@ export function InstancePreview(props: InstancePreviewProps) {
         : state.reason;
     const syncTheme = useCallback((): void => {
         if (!props.enabled || !state.canPreview || !state.src) return;
+        if (loadedSrcRef.current !== state.src) return;
         postPreviewTheme(iframeRef.current, state.src, props.theme);
     }, [props.enabled, props.theme, state.canPreview, state.src]);
 
@@ -69,8 +71,11 @@ export function InstancePreview(props: InstancePreviewProps) {
                     className="preview-frame"
                     src={state.src}
                     sandbox="allow-forms allow-modals allow-popups allow-same-origin allow-scripts allow-downloads"
-                    allow="clipboard-read; clipboard-write; web-share"
-                    onLoad={syncTheme}
+                    allow="clipboard-read; clipboard-write"
+                    onLoad={() => {
+                        loadedSrcRef.current = state.src;
+                        syncTheme();
+                    }}
                 />
             )}
 

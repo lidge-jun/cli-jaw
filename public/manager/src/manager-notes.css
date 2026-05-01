@@ -576,11 +576,37 @@
 .notes-milkdown-root .ProseMirror .notes-code-source-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     min-height: 24px;
     padding: 6px 10px 0;
     color: var(--text-muted, var(--text-secondary));
     font: 600 11px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
     text-transform: lowercase;
+}
+
+.notes-milkdown-root .ProseMirror .notes-code-copy-btn {
+    padding: 2px 8px;
+    border: 1px solid var(--border, #555);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-muted, var(--text-secondary));
+    font: 500 10px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 140ms ease, background 100ms ease;
+}
+
+.notes-milkdown-root .ProseMirror .notes-code-source-node:hover .notes-code-copy-btn,
+.notes-milkdown-root .ProseMirror .notes-code-copy-btn:focus-visible {
+    opacity: 1;
+}
+
+.notes-milkdown-root .ProseMirror .notes-code-copy-btn:hover {
+    background: var(--bg-hover, rgba(255,255,255,0.06));
+}
+
+.notes-milkdown-root .ProseMirror .notes-code-source-node[data-editing="true"] .notes-code-copy-btn {
+    display: none;
 }
 
 .notes-milkdown-root .ProseMirror .notes-code-rendered pre {

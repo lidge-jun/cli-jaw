@@ -7,6 +7,7 @@ type InstanceRowProps = {
     profile?: DashboardProfile;
     selected: boolean;
     busy: boolean;
+    agentBusy?: boolean;
     label: string;
     uptime: string;
     density?: 'compact' | 'comfortable' | 'rail';
@@ -48,7 +49,7 @@ export function InstanceRow(props: InstanceRowProps) {
     }
 
     const transitionLabel = props.transitioning ? TRANSITION_LABELS[props.transitioning] : null;
-    const dotClass = `${statusClass(props.instance.status)}${transitionLabel ? ' is-transitioning' : ''}`;
+    const dotClass = `${statusClass(props.instance.status)}${transitionLabel ? ' is-transitioning' : ''}${props.agentBusy ? ' is-busy' : ''}`;
     const primaryLabel = props.instance.label || props.profile?.label || props.label;
 
     async function submitLabel(event: FormEvent<HTMLFormElement>): Promise<void> {

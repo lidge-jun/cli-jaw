@@ -5,17 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="icon" type="image/png" href="/icons/icon-192.png">
   <title>Jaw Manager</title>
-  <script>
-    (function () {
-      try {
-        var saved = localStorage.getItem('jaw.uiTheme');
-        if (saved !== 'dark' && saved !== 'light' && saved !== 'auto') saved = 'auto';
-        document.documentElement.setAttribute('data-theme', saved);
-      } catch (_) {
-        document.documentElement.setAttribute('data-theme', 'auto');
-      }
-    })();
-  </script>
+  <script src="/manager/theme-boot.js"></script>
 </head>
 <body>
   <div id="manager-root"></div>

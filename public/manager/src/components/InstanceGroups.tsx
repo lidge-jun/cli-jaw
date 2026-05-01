@@ -15,6 +15,7 @@ type InstanceGroupsProps = {
     transitionAction?: DashboardLifecycleAction | null;
     activityUnreadByPort?: Record<number, number>;
     latestTitleByPort?: Record<number, string>;
+    busyPorts?: Set<number>;
     showLatestActivityTitles?: boolean;
     showInlineLabelEditor?: boolean;
     showSidebarRuntimeLine?: boolean;
@@ -84,6 +85,7 @@ function renderInstanceRow(
             transitioning={props.transitioningPort === instance.port ? props.transitionAction || null : null}
             activityUnreadCount={props.activityUnreadByPort?.[instance.port] || 0}
             latestActivityTitle={props.latestTitleByPort?.[instance.port] || null}
+            agentBusy={props.busyPorts?.has(instance.port) || false}
             showLatestActivityTitle={props.showLatestActivityTitles}
             showInlineLabelEditor={props.showInlineLabelEditor}
             showRuntimeLine={props.showSidebarRuntimeLine}

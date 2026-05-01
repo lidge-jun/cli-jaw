@@ -125,10 +125,22 @@ function commitAndExitMathNode(
 
     const after = tr.mapping.map(pos + node.nodeSize);
     if (block) {
-        const paragraph = view.state.schema.nodes.paragraph?.create();
-        if (!paragraph) return;
-        tr.insert(after, paragraph);
-        tr.setSelection(TextSelection.create(tr.doc, after + 1));
+        const $math = tr.doc.resolve(pos);
+        const nextIndex = $math.index() + 1;
+        let landed = false;
+        if (nextIndex < $math.parent.childCount) {
+            const nextNode = $math.parent.child(nextIndex);
+            if (nextNode.isTextblock && nextNode.content.size === 0) {
+                tr.setSelection(TextSelection.create(tr.doc, after + 1));
+                landed = true;
+            }
+        }
+        if (!landed) {
+            const paragraph = view.state.schema.nodes.paragraph?.create();
+            if (!paragraph) return;
+            tr.insert(after, paragraph);
+            tr.setSelection(TextSelection.create(tr.doc, after + 1));
+        }
     } else if (direction === 'above') {
         tr.setSelection(TextSelection.near(tr.doc.resolve(pos), -1));
     } else {

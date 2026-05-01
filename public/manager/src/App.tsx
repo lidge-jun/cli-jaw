@@ -368,6 +368,7 @@ export function App() {
             transitionAction={transitionAction}
             activityUnreadByPort={activityUnread.unreadByPort}
             latestTitleByPort={messageActivity.titlesByPort}
+            busyPorts={messageActivity.busyPorts}
             showLatestActivityTitles={view.showLatestActivityTitles}
             showInlineLabelEditor={view.showInlineLabelEditor}
             showSidebarRuntimeLine={view.showSidebarRuntimeLine}
@@ -455,7 +456,19 @@ export function App() {
                         )}
                         workbench={(
                             <div className="workspace-surface-stack">
-                                {lifecycleMessage && <section className="state lifecycle-state">{lifecycleMessage}</section>}
+                                {lifecycleMessage && (
+                                    <section className="state lifecycle-state" role="status">
+                                        <span>{lifecycleMessage}</span>
+                                        <button
+                                            type="button"
+                                            className="state-dismiss"
+                                            aria-label="Dismiss lifecycle message"
+                                            onClick={() => setLifecycleMessage(null)}
+                                        >
+                                            X
+                                        </button>
+                                    </section>
+                                )}
                                 <div className="workspace-surface-layer">
                                     <WorkspaceSurface active={view.sidebarMode === 'instances'}>
                                         <Workbench mode={view.activeDetailTab} onModeChange={handleTabChange} header={workbenchHeader} overview={detailContent('overview')} preview={(

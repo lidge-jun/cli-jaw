@@ -80,9 +80,19 @@ function commitAndExitCodeBlock(
         .replaceWith(pos + 1, pos + current.nodeSize - 1, nextText);
 
     if (direction === 'below') {
+        const codeAfter = tr.mapping.map(pos + current.nodeSize);
+        const $code = tr.doc.resolve(pos);
+        const nextIndex = $code.index() + 1;
+        if (nextIndex < $code.parent.childCount) {
+            const nextNode = $code.parent.child(nextIndex);
+            if (nextNode.isTextblock && nextNode.content.size === 0) {
+                tr.setSelection(TextSelection.create(tr.doc, codeAfter + 1));
+                view.dispatch(tr.scrollIntoView());
+                return;
+            }
+        }
         const paragraph = view.state.schema.nodes.paragraph?.create();
         if (!paragraph) return;
-        const codeAfter = tr.mapping.map(pos + current.nodeSize);
         tr.insert(codeAfter, paragraph);
         tr.setSelection(TextSelection.create(tr.doc, codeAfter + 1));
         view.dispatch(tr.scrollIntoView());
@@ -131,13 +141,20 @@ function createCodeBlockView(): NodeViewConstructor {
         const raw = document.createElement('textarea');
 
         dom.className = 'notes-code-source-node';
+        const copyBtn = document.createElement('button');
+
         rendered.className = 'notes-code-rendered';
         header.className = 'notes-code-source-header';
+        copyBtn.className = 'notes-code-copy-btn';
+        copyBtn.type = 'button';
+        copyBtn.textContent = 'Copy';
+        copyBtn.setAttribute('aria-label', 'Copy code');
         raw.className = 'notes-code-raw';
         raw.setAttribute('aria-label', 'Edit fenced code source');
         dom.contentEditable = 'false';
         dom.tabIndex = 0;
         pre.append(code);
+        header.append(copyBtn);
         rendered.append(header, pre);
         dom.append(rendered, raw);
 
@@ -146,7 +163,13 @@ function createCodeBlockView(): NodeViewConstructor {
             const source = codeText(currentNode);
             dom.dataset.language = language;
             pre.dataset.language = language;
-            header.textContent = language || 'code';
+            const label = header.firstChild;
+            const labelText = language || 'code';
+            if (label?.nodeType === Node.TEXT_NODE) {
+                label.textContent = labelText;
+            } else {
+                header.insertBefore(document.createTextNode(labelText), copyBtn);
+            }
             code.textContent = source;
             if (dom.dataset.editing !== 'true') raw.value = fencedCodeSource(currentNode);
         }
@@ -155,7 +178,11 @@ function createCodeBlockView(): NodeViewConstructor {
             if (dom.dataset.editing === 'true' && editing) return;
             if (!editing && dom.dataset.editing !== 'true') return;
             if (!editing && options.commit !== false) {
-                updateCodeBlockNode(view, getPos, raw.value);
+                const source = raw.value;
+                dom.dataset.editing = 'false';
+                raw.blur();
+                updateCodeBlockNode(view, getPos, source);
+                return;
             }
             dom.dataset.editing = editing ? 'true' : 'false';
             if (editing) {
@@ -165,6 +192,14 @@ function createCodeBlockView(): NodeViewConstructor {
             } else {
                 raw.blur();
             }
+        }
+
+        function closeAfterOutsidePointer(event: Event): void {
+            if (dom.dataset.editing !== 'true') return;
+            if (dom.contains(event.target as Node)) return;
+            setTimeout(() => {
+                if (dom.dataset.editing === 'true') setEditing(false);
+            }, 0);
         }
 
         function exitToNextParagraph(direction: 'above' | 'below' = 'below'): void {
@@ -258,12 +293,32 @@ function createCodeBlockView(): NodeViewConstructor {
         });
         raw.addEventListener('input', () => {
             updateCodeBlockNode(view, getPos, raw.value);
-            if (isClosedFencedCodeSource(raw.value) && isCaretAtEnd(raw)) {
-                queueMicrotask(exitToNextParagraph);
-            }
+            // No auto-exit on input. Fence-closing keystrokes used to trigger
+            // an immediate microtask exit, but that traps the user out as soon
+            // as the source is in a closed state — e.g. when re-editing a
+            // code block whose closing fence is already in place. Exit is now
+            // explicit via Enter / Arrow keys / Escape only.
+        });
+        raw.addEventListener('blur', () => {
+            setTimeout(() => {
+                if (dom.dataset.editing === 'true' && document.activeElement !== raw) {
+                    setEditing(false);
+                }
+            }, 0);
         });
         raw.addEventListener('mousedown', event => event.stopPropagation());
         raw.addEventListener('click', event => event.stopPropagation());
+        document.addEventListener('pointerdown', closeAfterOutsidePointer, true);
+        copyBtn.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            const text = codeText(currentNode);
+            navigator.clipboard.writeText(text).then(() => {
+                copyBtn.textContent = 'Copied!';
+                setTimeout(() => { copyBtn.textContent = 'Copy'; }, 1500);
+            });
+        });
+        copyBtn.addEventListener('mousedown', event => event.stopPropagation());
         dom.addEventListener('notes-enter-editing', (event: Event) => {
             setEditing(true);
             const detail = (event as CustomEvent<{ caretPosition?: 'start' | 'end' }>).detail;
@@ -286,6 +341,9 @@ function createCodeBlockView(): NodeViewConstructor {
             },
             deselectNode: () => {
                 dom.dataset.selected = 'false';
+                if (dom.dataset.editing === 'true') {
+                    setEditing(false);
+                }
             },
             stopEvent: event =>
                 event.target === raw
@@ -298,6 +356,9 @@ function createCodeBlockView(): NodeViewConstructor {
                 || mutation.target === raw
                 || raw.contains(mutation.target as Node)
                 || rendered.contains(mutation.target),
+            destroy: () => {
+                document.removeEventListener('pointerdown', closeAfterOutsidePointer, true);
+            },
         };
     };
 }

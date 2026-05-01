@@ -211,6 +211,17 @@ test('manager instance activity unread badges are row-scoped and registry-backed
     assert.ok(messageHook.includes('previousId == null'), 'message unread hook must baseline existing messages without backfilling badges');
 });
 
+test('manager lifecycle message can be dismissed', () => {
+    const app = read('public/manager/src/App.tsx');
+    const components = read('public/manager/src/manager-components.css');
+
+    assert.ok(app.includes('className="state lifecycle-state"'), 'lifecycle message must keep its status banner styling');
+    assert.ok(app.includes('aria-label="Dismiss lifecycle message"'), 'lifecycle message must expose a dismiss button');
+    assert.ok(app.includes('onClick={() => setLifecycleMessage(null)}'), 'dismiss button must clear lifecycleMessage');
+    assert.ok(components.includes('.state-dismiss'), 'dismiss button must have dedicated compact styling');
+    assert.ok(components.includes('overflow-wrap: anywhere'), 'long lifecycle errors must wrap inside the banner');
+});
+
 test('manager instance rows support custom labels and latest activity titles', () => {
     const app = read('public/manager/src/App.tsx');
     const list = read('public/manager/src/components/InstanceListContent.tsx');

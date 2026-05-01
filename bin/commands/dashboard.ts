@@ -52,6 +52,7 @@ const child = spawn(command, args, {
     stdio: 'inherit',
     env: {
         ...process.env,
+        CLI_JAW_BIN: process.env.CLI_JAW_BIN || process.argv[1] || '',
         DASHBOARD_PORT: values.port as string,
         DASHBOARD_SCAN_FROM: values.from as string,
         DASHBOARD_SCAN_COUNT: values.count as string,

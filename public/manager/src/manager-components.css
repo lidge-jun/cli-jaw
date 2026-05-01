@@ -15,10 +15,30 @@
     height: 9px;
     border-radius: 999px;
     display: inline-block;
+    position: relative;
+}
+.instance-status.is-busy::after {
+    content: '';
+    position: absolute;
+    inset: -3.5px;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, transparent 0deg, var(--status-running) 90deg, transparent 180deg);
+    mask: radial-gradient(closest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+    -webkit-mask: radial-gradient(closest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+    animation: busy-ring-spin 1.8s linear infinite;
+}
+@keyframes busy-ring-spin {
+    to { rotate: 360deg; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .instance-status.is-busy::after {
+        animation: none;
+        background: none;
+        box-shadow: 0 0 0 2px color-mix(in oklch, var(--status-running) 40%, transparent);
+    }
 }
 .rail-status-dot, .status-online {
     background: var(--status-running);
-    animation: breathe 1.8s ease-in-out infinite;
 }
 .status-timeout { background: var(--status-warn); }
 .status-error { background: var(--status-error); }
@@ -112,7 +132,40 @@ h2 { font-size: 13px; }
     padding: 12px;
 }
 .error-state { border-color: var(--error-border); color: var(--error-text); }
-.lifecycle-state { margin: 10px 12px 0; border-color: var(--lifecycle-border); color: var(--lifecycle-text); }
+.lifecycle-state {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 10px 12px 0;
+    border-color: var(--lifecycle-border);
+    color: var(--lifecycle-text);
+}
+.lifecycle-state span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.state-dismiss {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, var(--lifecycle-border) 70%, transparent);
+    border-radius: 6px;
+    padding: 0;
+    color: inherit;
+    background: color-mix(in srgb, var(--bg-raised) 88%, transparent);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+}
+.state-dismiss:hover,
+.state-dismiss:focus-visible {
+    border-color: var(--lifecycle-border);
+    background: color-mix(in srgb, var(--lifecycle-border) 18%, var(--bg-raised));
+}
 .instance-groups { padding: 8px; }
 .instance-navigator {
     height: 100%;
