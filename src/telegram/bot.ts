@@ -7,7 +7,7 @@ import { broadcast, addBroadcastListener, removeBroadcastListener } from '../cor
 import { settings, detectAllCli, APP_VERSION } from '../core/config.js';
 import { t, normalizeLocale } from '../core/i18n.js';
 import { insertMessage } from '../core/db.js';
-import { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } from '../orchestrator/pipeline.js';
+import { orchestrate, orchestrateReset, isResetIntent } from '../orchestrator/pipeline.js';
 import { submitMessage } from '../orchestrator/gateway.js';
 import { makeCommandCtx } from '../cli/command-context.js';
 import {

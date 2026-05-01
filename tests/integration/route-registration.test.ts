@@ -24,7 +24,7 @@ function createRouteCollector() {
 const BASELINE_ROUTES = [
     'GET /api/session', 'GET /api/messages', 'GET /api/runtime',
     'POST /api/command', 'GET /api/commands', 'POST /api/message',
-    'POST /api/orchestrate/continue', 'POST /api/stop', 'POST /api/clear',
+    'POST /api/stop', 'POST /api/clear',
     'GET /api/settings', 'PUT /api/settings',
     'GET /api/prompt', 'PUT /api/prompt',
     'GET /api/heartbeat-md', 'PUT /api/heartbeat-md',

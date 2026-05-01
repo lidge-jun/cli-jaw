@@ -40,6 +40,7 @@ export function getNodePath(): string {
 
 /** Resolve absolute path to jaw binary. */
 export function getJawPath(): string {
+    if (process.env.CLI_JAW_BIN) return process.env.CLI_JAW_BIN;
     const argvPath = process.argv[1];
     if (argvPath && /(?:^|\/)(?:cli-jaw|jaw)(?:\.js)?$/.test(argvPath)) return argvPath;
     try { return whichWithServicePath('jaw'); }

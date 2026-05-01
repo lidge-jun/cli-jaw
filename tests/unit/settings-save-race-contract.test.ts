@@ -35,10 +35,10 @@ test('SSR-004: chat waits for pending settings save before sending message', () 
     assert.ok(waitIdx > -1, 'chat must wait for pending settings save');
 
     const sendPoints = [
-        ["fetch('/api/command'", 'slash command POST'],
+        ['${API_BASE}/api/command', 'slash command POST'],
         ["apiJson('/api/message', 'POST', { prompt: text })", 'slash not_command fallback message POST'],
         ["apiJson('/api/message', 'POST', { prompt })", 'file attachment message POST'],
-        ["fetch('/api/message'", 'normal message POST'],
+        ['${API_BASE}/api/message', 'normal message POST'],
     ] as const;
 
     for (const [needle, label] of sendPoints) {

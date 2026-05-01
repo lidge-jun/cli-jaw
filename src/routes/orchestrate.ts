@@ -3,7 +3,7 @@ import type { AuthMiddleware } from './types.js';
 import { ok, fail } from '../http/response.js';
 import { isAgentBusy, messageQueue, getQueuedMessageSnapshotForScope, removeQueuedMessage, killActiveAgent, waitForProcessEnd, getCurrentMainMeta } from '../agent/spawn.js';
 import { getLiveRun } from '../agent/live-run-state.js';
-import { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent, drainPendingReplays } from '../orchestrator/pipeline.js';
+import { orchestrate, orchestrateReset, isResetIntent, drainPendingReplays } from '../orchestrator/pipeline.js';
 import { insertMessage } from '../core/db.js';
 import { getState, getCtx, setState, resetState, canTransition, resetAllStaleStates, parseWorkerVerdict } from '../orchestrator/state-machine.js';
 import type { OrcStateName } from '../orchestrator/state-machine.js';
@@ -25,14 +25,6 @@ function getRuntimeSnapshot() {
 }
 
 export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddleware): void {
-    app.post('/api/orchestrate/continue', requireAuth, (req, res) => {
-        if (isAgentBusy()) {
-            return res.status(409).json({ error: 'agent already running' });
-        }
-        orchestrateContinue({ origin: 'web' });
-        res.json({ ok: true });
-    });
-
     app.post('/api/orchestrate/reset', requireAuth, async (req, res) => {
         try {
             const all = req.query.all === 'true' || req.body?.all === true;
@@ -137,9 +129,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         broadcast('new_message', { role: 'user', content: prompt, source: origin, fromQueue: true });
         const task = isResetIntent(prompt)
             ? orchestrateReset({ origin, _skipInsert: true })
-            : isContinueIntent(prompt)
-                ? orchestrateContinue({ origin, _skipInsert: true })
-                : orchestrate(prompt, { origin, _skipInsert: true });
+            : orchestrate(prompt, { origin, _skipInsert: true });
         task.catch((err: Error) => console.error('[steer:orchestrate]', err.message));
         return res.json({ ok: true, pending: result.pending });
     });

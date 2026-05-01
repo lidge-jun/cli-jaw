@@ -75,3 +75,22 @@ test('RH-007: build avoids destructive clean:dist (rsync-based template copy)', 
     assert.ok(build.includes('tsc'), 'build must still invoke tsc');
     assert.ok(build.includes('rsync'), 'build must use rsync for template copy (atomic per-file)');
 });
+
+// ── RH-008: Electron desktop app stays out of the npm CLI package ──
+
+test('RH-008: root npm package stays lean and excludes Electron app/deps', () => {
+    const pkg = JSON.parse(fs.readFileSync(join(root, 'package.json'), 'utf8'));
+    const files = pkg.files || [];
+    const dependencyMaps = [
+        pkg.dependencies || {},
+        pkg.devDependencies || {},
+        pkg.optionalDependencies || {},
+        pkg.peerDependencies || {},
+    ];
+    const hasElectronDep = dependencyMaps.some((deps: Record<string, string>) => Object.hasOwn(deps, 'electron'));
+    const includesElectronApp = files.some((entry: string) => entry === 'electron' || entry.startsWith('electron/'));
+
+    assert.equal(hasElectronDep, false, 'root package.json must not depend on electron');
+    assert.equal(includesElectronApp, false, 'published npm files must not include electron/');
+    assert.deepEqual(files, ['dist/', 'public/', 'scripts/', 'package.json']);
+});
