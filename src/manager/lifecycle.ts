@@ -347,10 +347,10 @@ export class DashboardLifecycleManager {
         const command = entry?.command || this.buildStartCommand(port, home);
         const rejected = this.validatePort(action, port, home, command);
         if (rejected) return rejected;
-        if (!entry && launchdState?.loaded) {
-            const { stopLaunchdInstance } = await import('./launchd-service.js');
-            const result = await stopLaunchdInstance(launchdState.label);
-            return { ...result, port, home, expectedStateAfter: 'offline' };
+        if (!entry && launchdState?.plistExists) {
+            const { unpermInstance } = await import('./launchd-service.js');
+            const result = await unpermInstance(port, home);
+            return { ...result, action: 'stop', status: result.ok ? 'stopped' : result.status, port, home, expectedStateAfter: 'offline' };
         }
         if (!entry) {
             return rejectResult(action, port, home, command, 'Only dashboard-owned instances can be stopped.');

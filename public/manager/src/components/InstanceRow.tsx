@@ -146,78 +146,46 @@ export function InstanceRow(props: InstanceRowProps) {
             ) : null}
             {props.showSelectedActions !== false && (
             <div className="instance-actions">
-                <button
-                    type="button"
-                    onClick={(event) => {
-                        stopAction(event);
-                        props.onPreview(props.instance);
-                    }}
-                    disabled={!props.instance.ok}
-                >
-                    Preview
-                </button>
-                <a
-                    className="open-link"
-                    href={props.instance.ok ? props.instance.url : undefined}
-                    target={props.instance.ok ? '_blank' : undefined}
-                    rel={props.instance.ok ? 'noreferrer' : undefined}
-                    aria-disabled={!props.instance.ok || undefined}
-                    tabIndex={props.instance.ok ? undefined : -1}
-                    onClick={(event) => {
-                        if (!props.instance.ok) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            return;
-                        }
-                        stopAction(event);
-                        props.onMarkActivitySeen(props.instance.port);
-                    }}
-                >
-                    Open
-                </a>
-                <button
-                    type="button"
-                    onClick={(event) => {
-                        stopAction(event);
-                        props.onLifecycle('start', props.instance);
-                    }}
-                    disabled={!lifecycle?.canStart || props.busy}
-                    title={lifecycle?.commandPreview.join(' ')}
-                >
-                    Start
-                </button>
-                <button
-                    type="button"
-                    onClick={(event) => {
-                        stopAction(event);
-                        props.onLifecycle('stop', props.instance);
-                    }}
-                    disabled={!lifecycle?.canStop || props.busy}
-                >
-                    Stop
-                </button>
-                <button
-                    type="button"
-                    onClick={(event) => {
-                        stopAction(event);
-                        props.onLifecycle('restart', props.instance);
-                    }}
-                    disabled={!lifecycle?.canRestart || props.busy}
-                >
-                    Restart
-                </button>
-                {(lifecycle?.canPerm || lifecycle?.canUnperm) && (
+                {lifecycle?.canStart && (
                     <button
                         type="button"
+                        className="action-start"
                         onClick={(event) => {
                             stopAction(event);
-                            props.onLifecycle(lifecycle?.canUnperm ? 'unperm' : 'perm', props.instance);
+                            props.onLifecycle('start', props.instance);
                         }}
-                        disabled={(!lifecycle?.canPerm && !lifecycle?.canUnperm) || props.busy}
-                        title={lifecycle?.canUnperm ? 'Remove launchd service' : 'Register as launchd service'}
+                        disabled={props.busy}
+                        title={lifecycle?.commandPreview.join(' ')}
                     >
-                        {lifecycle?.canUnperm ? 'Unperm' : 'Perm'}
+                        Start
                     </button>
+                )}
+                {lifecycle?.canStop && (
+                    <button
+                        type="button"
+                        className="action-stop"
+                        onClick={(event) => {
+                            stopAction(event);
+                            props.onLifecycle('stop', props.instance);
+                        }}
+                        disabled={props.busy}
+                    >
+                        Stop
+                    </button>
+                )}
+                {props.instance.ok && (
+                    <a
+                        className="open-link action-open"
+                        href={props.instance.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(event) => {
+                            stopAction(event);
+                            props.onMarkActivitySeen(props.instance.port);
+                        }}
+                    >
+                        Open
+                    </a>
                 )}
             </div>
             )}

@@ -327,7 +327,9 @@ export function App() {
         if (action === 'unperm' && !window.confirm(`Remove persistent service for :${instance.port}? The instance will stop and won't auto-start.`)) {
             return;
         }
-        if ((action === 'stop' || action === 'restart') && !window.confirm(`${action} :${instance.port}?`)) {
+        if (action === 'stop' && lifecycle.owner === 'launchd') {
+            if (!window.confirm(`Stop :${instance.port}? This will also remove the persistent launchd service.`)) return;
+        } else if ((action === 'stop' || action === 'restart') && !window.confirm(`${action} :${instance.port}?`)) {
             return;
         }
         if (!canLeaveDirtySettings()) return;

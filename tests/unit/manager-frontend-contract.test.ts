@@ -42,8 +42,8 @@ test('manager frontend has API entry and Open action', () => {
     assert.ok(api.includes('/api/dashboard/notes/rename'), 'manager API must call dashboard notes rename endpoint');
     assert.ok(api.includes('/api/dashboard/notes/trash'), 'manager API must call dashboard notes trash endpoint');
     assert.ok(row.includes('Open'), 'manager UI must expose Open action');
-    assert.ok(row.includes('href={props.instance.ok ? props.instance.url : undefined}'), 'Open must stay active for online instances');
-    assert.ok(row.includes('aria-disabled={!props.instance.ok || undefined}'), 'Open must only disable when the instance is not reachable');
+    assert.ok(row.includes('href={props.instance.url}'), 'Open must link to instance URL');
+    assert.ok(row.includes('props.instance.ok'), 'Open must gate on instance reachability');
     assert.ok(command.includes('Search port, home, CLI, model'), 'manager UI must include search');
 });
 
@@ -135,8 +135,6 @@ test('manager frontend exposes lifecycle controls without hiding discovery actio
     assert.ok(app.includes('handleLifecycle'), 'manager UI must keep lifecycle controller');
     assert.ok(row.includes("onLifecycle('start'"), 'manager UI must expose Start action');
     assert.ok(row.includes("onLifecycle('stop'"), 'manager UI must expose Stop action');
-    assert.ok(row.includes("onLifecycle('restart'"), 'manager UI must expose Restart action');
-    assert.ok(row.includes('Preview'), 'manager UI must keep Preview action');
     assert.ok(row.includes('Open'), 'manager UI must keep Open action');
 });
 

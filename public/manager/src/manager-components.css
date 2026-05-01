@@ -351,11 +351,30 @@ h2 { font-size: 13px; }
     color: var(--status-error);
     font-size: 11px;
 }
-.instance-actions { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.instance-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: flex-end;
+}
 .instance-actions button, .instance-actions .open-link {
     min-width: 0;
-    padding-inline: 6px;
+    padding-inline: 8px;
     font-size: 12px;
+}
+.instance-actions .action-stop {
+    border-color: color-mix(in srgb, var(--status-error) 40%, var(--border-subtle));
+    color: var(--status-error);
+}
+.instance-actions .action-stop:hover {
+    background: color-mix(in srgb, var(--status-error) 8%, var(--bg-raised));
+}
+.instance-actions .action-start {
+    border-color: color-mix(in srgb, var(--status-running) 40%, var(--border-subtle));
+    color: var(--status-running);
+}
+.instance-actions .action-open {
+    text-decoration: none;
 }
 .detail-panel {
     height: 100%;
