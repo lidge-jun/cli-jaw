@@ -88,7 +88,7 @@ import { initAttentionBadge } from './features/attention-badge.js';
 import { initHelpDialog } from './features/help-dialog.js';
 
 // ── Chat Actions ──
-document.getElementById('btnSend')?.addEventListener('click', sendMessage);
+document.getElementById('btnSend')?.addEventListener('click', () => { void sendMessage('button'); });
 const chatInput = document.getElementById('chatInput') as HTMLTextAreaElement | null;
 chatInput?.addEventListener('keydown', (e) => {
     if (handleSlashKeydown(e as KeyboardEvent)) return;
@@ -104,7 +104,7 @@ chatInput?.addEventListener('input', (e) => {
     });
 });
 chatInput?.addEventListener('cmd-execute', () => {
-    void sendMessage();
+    void sendMessage('cmd-execute');
 });
 document.getElementById('cmdDropdown')?.addEventListener('click', handleSlashClick);
 document.addEventListener('click', handleSlashOutsideClick);

@@ -285,11 +285,6 @@
     border-right: 1px solid var(--border-subtle);
 }
 
-.notes-editor.is-word-wrapped .cm-line {
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-
 .notes-preview {
     padding: 22px;
     line-height: 1.65;

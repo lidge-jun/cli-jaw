@@ -3,6 +3,7 @@ import type { ComponentProps, ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import rehypeSanitize from 'rehype-sanitize';
+import remarkBreaks from 'remark-breaks';
 import remarkMath from 'remark-math';
 import { CodeBlock } from './CodeBlock';
 import { MermaidBlock } from './MermaidBlock';
@@ -35,7 +36,7 @@ export function MarkdownRenderer(props: MarkdownRendererProps) {
         <ReactMarkdown
             skipHtml
             urlTransform={safeMarkdownUrl}
-            remarkPlugins={[remarkMath]}
+            remarkPlugins={[remarkBreaks, remarkMath]}
             rehypePlugins={[
                 [rehypeSanitize, markdownSanitizeSchema],
                 rehypeKatex,

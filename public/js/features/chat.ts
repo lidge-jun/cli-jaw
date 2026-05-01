@@ -32,7 +32,9 @@ function isOrchestrateCommand(text: string): boolean {
 // second line of defense. See devlog/_plan/260417_message_duplication/.
 let __chatSending = false;
 
-export async function sendMessage(): Promise<void> {
+export type SendSource = 'button' | 'enter' | 'cmd-execute';
+
+export async function sendMessage(source: SendSource = 'enter'): Promise<void> {
     const input = document.getElementById('chatInput') as HTMLTextAreaElement | null;
     const btn = document.getElementById('btnSend');
     if (!input || !btn) return;
@@ -44,9 +46,11 @@ export async function sendMessage(): Promise<void> {
     //  - idle + empty  → fire /api/stop as the runaway escape hatch (legacy).
     //  - any stop-mode click never falls through to the send path; the
     //    textarea contents and attachments are preserved.
-    // Enter-key send is unaffected because document.activeElement is the
-    // textarea, not the button, so stopByExplicitButton is false.
-    const stopByExplicitButton = document.activeElement === btn;
+    // Why an explicit `source` param: a previous version detected the click
+    // path via `document.activeElement === btn`. That is unreliable inside an
+    // iframe whose parent has focus — at click-handler time activeElement can
+    // still be <body>, so the stop branch never fires and clicks look "dead".
+    const stopByExplicitButton = source === 'button';
     if (btn.classList.contains('stop-mode') && stopByExplicitButton) {
         if (state.agentBusy) return;
         if (!input.value.trim() && !state.attachedFiles.length) {
@@ -192,7 +196,7 @@ export async function sendMessage(): Promise<void> {
 }
 
 export function handleKey(e: KeyboardEvent): void {
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage(); }
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMessage('enter'); }
 }
 
 async function uploadFile(file: File): Promise<string> {

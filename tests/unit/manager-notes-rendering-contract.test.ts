@@ -37,10 +37,11 @@ test('MarkdownPreview delegates to the shared renderer', () => {
 test('MarkdownRenderer wires math, sanitize, safe links, and block routing', () => {
     const renderer = read('public/manager/src/notes/rendering/MarkdownRenderer.tsx');
 
+    assert.ok(renderer.includes("import remarkBreaks from 'remark-breaks';"), 'remark-breaks must be wired so single newlines render as <br>');
     assert.ok(renderer.includes("import remarkMath from 'remark-math';"), 'remark-math must be wired');
     assert.ok(renderer.includes("import rehypeKatex from 'rehype-katex';"), 'rehype-katex must be wired');
     assert.ok(renderer.includes("import rehypeSanitize from 'rehype-sanitize';"), 'rehype-sanitize must be wired');
-    assert.ok(renderer.includes('remarkPlugins={[remarkMath]}'), 'remarkMath must be passed to ReactMarkdown');
+    assert.ok(renderer.includes('remarkPlugins={[remarkBreaks, remarkMath]}'), 'remarkBreaks and remarkMath must be passed to ReactMarkdown in that order');
     assert.ok(renderer.includes('[rehypeSanitize, markdownSanitizeSchema]'), 'sanitize schema must be passed before KaTeX');
     assert.ok(renderer.includes('rehypeKatex'), 'KaTeX renderer must be passed to ReactMarkdown');
     assert.ok(renderer.includes('skipHtml'), 'raw HTML must stay disabled');

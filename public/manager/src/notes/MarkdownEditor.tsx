@@ -1,6 +1,7 @@
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
+import { EditorView } from '@codemirror/view';
 import { useCallback, useMemo, useState } from 'react';
 import { notesEditorTheme, notesSyntaxHighlighting } from './editor-theme';
 import { RichMarkdownPortalHost } from './rich-markdown/RichMarkdownPortalHost';
@@ -37,22 +38,26 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
     const requestMeasure = useCallback((): void => {
         window.dispatchEvent(new Event('resize'));
     }, []);
-    const extensions = useMemo(() => [
-        notesEditorTheme,
-        notesSyntaxHighlighting,
-        markdown({ codeLanguages: languages }),
-        richMarkdownPastePolicy(),
-        richMarkdownExtension({
-            enabled: props.authoringMode === 'rich',
-            active: props.active,
-            registerWidget,
-            unregisterWidget,
-            requestMeasure,
-        }),
-    ], [props.active, props.authoringMode, registerWidget, requestMeasure, unregisterWidget]);
+    const extensions = useMemo(() => {
+        const base = [
+            notesEditorTheme,
+            notesSyntaxHighlighting,
+            markdown({ codeLanguages: languages }),
+            richMarkdownPastePolicy(),
+            richMarkdownExtension({
+                enabled: props.authoringMode === 'rich',
+                active: props.active,
+                registerWidget,
+                unregisterWidget,
+                requestMeasure,
+            }),
+        ];
+        if (props.wordWrap) base.push(EditorView.lineWrapping);
+        return base;
+    }, [props.active, props.authoringMode, props.wordWrap, registerWidget, requestMeasure, unregisterWidget]);
 
     return (
-        <div className={`notes-editor${props.wordWrap ? ' is-word-wrapped' : ''}`}>
+        <div className="notes-editor">
             <RichMarkdownPortalHost widgets={[...widgets.values()]} />
             <CodeMirror
                 value={props.content}

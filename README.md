@@ -10,7 +10,7 @@
 [![License](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-supported-2496ED?logo=docker&logoColor=white)](#-docker)
 
-**English** / [한국어](README.ko.md) / [中文](README.zh-CN.md)
+**English** / [한국어](README.ko.md) / [中文](README.zh-CN.md) / [日本語](README.ja.md)
 
 ![CLI-JAW manager dashboard](docs/screenshots/manager-dashboard-light.png)
 
@@ -25,7 +25,7 @@
 <tr><td><b>Multi-agent orchestration</b></td><td>PABCD — a DB-persisted 5-phase FSM. Employee system with worker registry. Parallel subtasks with file-overlap detection. You approve every phase.</td></tr>
 <tr><td><b>Browser and desktop automation</b></td><td>Chrome CDP, vision-click, DOM reference for ChatGPT/Grok/Gemini, Computer Use integration via Codex App, diagram skill for SVG and interactive visualizations.</td></tr>
 <tr><td><b>MCP install once, 5 engines</b></td><td><code>jaw mcp install</code> syncs to Claude, Codex, Gemini, OpenCode, and Copilot simultaneously. One config file.</td></tr>
-<tr><td><b>Speaks your language</b></td><td>English, Korean, Chinese README. i18n web UI. HWP/HWPX Korean office document support via OfficeCLI.</td></tr>
+<tr><td><b>Speaks your language</b></td><td>English, Korean, Chinese, Japanese README. i18n web UI. HWP/HWPX Korean office document support via OfficeCLI.</td></tr>
 </table>
 
 ---
@@ -175,7 +175,7 @@ CLI-JAW works from five surfaces. Same assistant, same memory, same skills acros
 
 | Surface | What you get |
 |---|---|
-| **Web PWA** | Full UI with markdown/KaTeX/Mermaid rendering, virtual scroll, WS streaming, drag-and-drop file upload, voice recording, PABCD roadmap bar, i18n (English, Korean), dark/light theme, offline message cache via IndexedDB |
+| **Web PWA** | Full UI with markdown/KaTeX/Mermaid rendering, virtual scroll, WS streaming, drag-and-drop file upload, voice recording, PABCD roadmap bar, i18n (English, Korean, Chinese, Japanese), dark/light theme, offline message cache via IndexedDB |
 | **Mac WebView app** | `jaw serve` wrapped in a native macOS app shell. Access from Dock without opening a browser |
 | **Terminal TUI** | Multiline editing, slash-command autocomplete, overlay selectors, session persistence, resume classification |
 | **Telegram** | Voice messages (multi-provider STT), photos, files. Scheduled task results delivered automatically. Slash commands for model/CLI switching |
@@ -441,7 +441,7 @@ docker run -e CHROME_NO_SANDBOX=1 -p 3457:3457 cli-jaw
 | **Orchestration** | PABCD 5-phase FSM | Subagent spawn | Task tool |
 | **Execution** | Local + Docker | Local/Docker/SSH/Daytona/Modal/Singularity | Local |
 | **Skills** | 100+ bundled | Self-creating + agentskills.io | User-configured |
-| **i18n** | English, Korean, Chinese | English | English |
+| **i18n** | English, Korean, Chinese, Japanese | English | English |
 
 CLI-JAW descends from the OpenClaw harness architecture (hybrid search manager, fallback patterns, session indexing). If migrating from OpenClaw, the slash-command surface and memory model will be familiar.
 

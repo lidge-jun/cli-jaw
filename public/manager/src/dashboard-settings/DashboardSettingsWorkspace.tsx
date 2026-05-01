@@ -122,7 +122,7 @@ const COPY = {
             activity: {
                 label: '最近活动预览',
                 scope: '左侧实例列表',
-                description: '当实例支持摘要 endpoint 时,显示最近一条 user 或 assistant 消息整理后的单行内容。',
+                description: '当实例支持摘要 endpoint 时，显示最近一条 user 或 assistant 消息整理后的单行内容。',
             },
             rename: {
                 label: '重命名控件',
@@ -132,7 +132,7 @@ const COPY = {
             runtime: {
                 label: '运行时信息行',
                 scope: '左侧实例列表',
-                description: '在每个实例标签下方显示 CLI 与模型信息,例如 codex / gpt-5.5。',
+                description: '在每个实例标签下方显示 CLI 与模型信息，例如 codex / gpt-5.5。',
             },
             actions: {
                 label: '展开行操作',
