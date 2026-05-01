@@ -4,7 +4,7 @@ import { renderContextDryRunReport } from '../../src/browser/web-ai/context-pack
 type BrowserApi = (method: string, path: string, body?: unknown) => Promise<unknown>;
 type QueryString = (params: Record<string, unknown>) => string;
 
-const WEB_AI_COMMANDS = new Set(['render', 'status', 'send', 'poll', 'query', 'watch', 'watchers', 'sessions', 'sessions-prune', 'notifications', 'capabilities', 'stop', 'diagnose', 'context-dry-run', 'context-render']);
+const WEB_AI_COMMANDS = new Set(['render', 'status', 'send', 'poll', 'query', 'watch', 'watchers', 'sessions', 'sessions-prune', 'resume', 'reattach', 'notifications', 'capabilities', 'stop', 'diagnose', 'doctor', 'context-dry-run', 'context-render']);
 
 function rejectFutureWebAiFlags(values: Record<string, unknown>): void {
     const vendor = values.vendor ?? 'chatgpt';
@@ -76,6 +76,8 @@ export async function runWebAiCommand(
             'older-than-ms': { type: 'string' },
             before: { type: 'string' },
             probe: { type: 'string' },
+            deadline: { type: 'string' },
+            navigate: { type: 'boolean', default: false },
             full: { type: 'boolean', default: false },
             json: { type: 'boolean', default: false },
         },
@@ -153,7 +155,12 @@ async function callWebAiEndpoint(
     if (command === 'capabilities') return deps.api('GET', `/web-ai/capabilities${deps.qs({ vendor: values.vendor, family: values.family, frontendStatus: values['frontend-status'] })}`);
     if (command === 'poll') return deps.api('GET', `/web-ai/poll${deps.qs({ vendor: values.vendor, timeout: values.timeout, session: values.session, allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'] })}`);
     if (command === 'watch') return deps.api('GET', `/web-ai/watch${deps.qs({ vendor: values.vendor, timeout: values.timeout, session: values.session, url: values.url, notify: values.notify, pollIntervalSeconds: values['poll-interval'], allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'] })}`);
-    if (command === 'diagnose') return deps.api('GET', `/web-ai/diagnose${deps.qs({ vendor: values.vendor, stage: values.stage })}`);
+    if (command === 'resume') return deps.api('GET', `/web-ai/poll${deps.qs({ vendor: values.vendor, session: values.session, timeout: values.timeout || values.deadline, allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'] })}`);
+    if (command === 'reattach') {
+        if (!values.session) throw new Error('reattach requires --session <id>');
+        return deps.api('GET', `/web-ai/status${deps.qs({ vendor: values.vendor, session: values.session, navigate: values.navigate })}`);
+    }
+    if (command === 'doctor' || command === 'diagnose') return deps.api('GET', `/web-ai/diagnose${deps.qs({ vendor: values.vendor, stage: values.stage })}`);
     if (command === 'context-dry-run' || command === 'context-render') return deps.api('POST', `/web-ai/${command}`, body);
     return deps.api('POST', `/web-ai/${command}`, body);
 }
