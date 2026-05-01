@@ -4,7 +4,7 @@ import { addMessage, addSystemMsg } from '../ui.js';
 import { getPreferredLocale } from '../locale.js';
 import { t } from './i18n.js';
 import * as slashCmd from './slash-commands.js';
-import { api, apiJson, apiFire, getAuthToken } from '../api.js';
+import { api, apiJson, apiFire, getAuthToken, API_BASE } from '../api.js';
 import { escapeHtml, cancelPostRender } from '../render.js';
 import { getVirtualScroll } from '../virtual-scroll.js';
 import { clearCache, upsertMessage } from './idb-cache.js';
@@ -94,7 +94,7 @@ export async function sendMessage(source: SendSource = 'enter'): Promise<void> {
                 }
                 const locale = getPreferredLocale();
                 const token = await getAuthToken();
-                const res = await fetch('/api/command', {
+                const res = await fetch(`${API_BASE}/api/command`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -157,7 +157,7 @@ export async function sendMessage(source: SendSource = 'enter'): Promise<void> {
             // because we only addMessage when we know for sure what happened.
             input.value = '';
             resetInputHeight();
-            const res = await fetch('/api/message', {
+            const res = await fetch(`${API_BASE}/api/message`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ prompt: text }),
@@ -198,7 +198,7 @@ export function handleKey(e: KeyboardEvent): void {
 }
 
 async function uploadFile(file: File): Promise<string> {
-    const res = await fetch('/api/upload', {
+    const res = await fetch(`${API_BASE}/api/upload`, {
         method: 'POST',
         headers: { 'X-Filename': encodeURIComponent(file.name) },
         body: file,
@@ -372,7 +372,7 @@ export async function sendVoiceToServer(blob: Blob, ext: string, mime: string): 
 
     try {
         // Step 1: STT only (no submitMessage on server)
-        const sttRes = await fetch('/api/voice', {
+        const sttRes = await fetch(`${API_BASE}/api/voice`, {
             method: 'POST',
             headers: {
                 'Content-Type': mime,

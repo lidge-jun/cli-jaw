@@ -1,5 +1,6 @@
 // ── WebSocket Connection ──
 import { state } from './state.js';
+import { API_BASE } from './api.js';
 import { setStatus, updateQueueBadge, addSystemMsg, appendAgentText, finalizeAgent, addMessage, showProcessStep, cleanupToolActivity, applyQueuedOverlay, hydrateActiveRun, reconcileChatBottomAfterRestore, showChatRestoreIndicator } from './ui.js';
 import { renderPendingQueue } from './features/pending-queue.js';
 import { t, getLang } from './features/i18n.js';
@@ -93,7 +94,7 @@ const SNAPSHOT_SYNC_THROTTLE_MS = 750;
 const RESTORE_TRIGGER_DEBOUNCE_MS = 750;
 
 async function refreshRuntimeSnapshot(options: { hydrateRun?: boolean } = {}): Promise<void> {
-    const response = await fetch('/api/orchestrate/snapshot');
+    const response = await fetch(`${API_BASE}/api/orchestrate/snapshot`);
     const snap = await response.json();
     currentOrcScope = String(snap.orc.scope || '');
     applyOrcState(snap.orc.state);
@@ -328,7 +329,7 @@ function applyOrcState(orcState: string, title?: string) {
 export function connect(): void {
     registerOrchestrateRestoreHooks();
     const wsBase = import.meta.env?.DEV ? 'ws://localhost:3458' : `ws://${location.host}`;
-    state.ws = new WebSocket(`${wsBase}?lang=${getLang()}`);
+    state.ws = new WebSocket(`${wsBase}${API_BASE}/?lang=${getLang()}`);
     state.ws.onmessage = (e: MessageEvent) => {
         let msg: WsMessage;
         try {

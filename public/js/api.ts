@@ -1,6 +1,14 @@
 // ── API Fetch Wrapper ──
 // All API calls centralized for error handling + ok/data unwrapping
 
+function detectProxyBase(): string {
+    if (typeof window === 'undefined') return '';
+    const match = window.location.pathname.match(/^\/i\/(\d+)/);
+    return match ? `/i/${match[1]}` : '';
+}
+
+export const API_BASE = detectProxyBase();
+
 interface ApiResponse<T = unknown> {
     ok?: boolean;
     data?: T;
@@ -12,7 +20,7 @@ let _authToken: string | null = null;
 export async function getAuthToken(): Promise<string> {
     if (_authToken) return _authToken;
     try {
-        const res = await fetch('/api/auth/token');
+        const res = await fetch(`${API_BASE}/api/auth/token`);
         if (res.ok) {
             const json = await res.json();
             _authToken = json.token || '';
@@ -47,7 +55,7 @@ export async function api<T = unknown>(path: string, opts: RequestInit = {}): Pr
                         : Object.entries(opts.headers)
             ) : undefined
         );
-        const res = await fetch(path, { ...opts, headers });
+        const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
         if (!res.ok) {
             console.warn(`[api] ${opts.method || 'GET'} ${path} → ${res.status}`);
             return null;
@@ -91,5 +99,5 @@ export async function apiFire(path: string, method: string = 'POST', body?: unkn
         opts.headers = authHeaders({ 'Content-Type': 'application/json' });
         opts.body = JSON.stringify(body);
     }
-    fetch(path, opts).catch(() => { });
+    fetch(`${API_BASE}${path}`, opts).catch(() => { });
 }
