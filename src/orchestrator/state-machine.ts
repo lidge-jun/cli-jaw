@@ -141,6 +141,10 @@ If issues found: fix the plan and re-audit (output employee JSON again).
 If PASS: report results to the user and wait for approval.
 When user approves, run \`cli-jaw orchestrate B\` to advance to Build.
 
+Reporting: distill the verdict and key findings into a concise bullet list (≤5 items).
+Use a diagram when the audit covers 3+ files or integration points.
+Do NOT paste the full employee output verbatim.
+
 ⛔ STOP after reporting. WAIT for user approval.
 
 Employee results:`,
@@ -150,6 +154,10 @@ Below are verification results for your code.
 If NEEDS_FIX: fix and re-verify (output employee JSON again).
 If DONE: report results to the user and wait for approval.
 When user approves, run \`cli-jaw orchestrate C\` to advance to Check.
+
+Reporting: distill the verdict and key findings into a concise bullet list (≤5 items).
+Use a diagram when the verification covers 3+ files.
+Do NOT paste the full employee output verbatim.
 
 ⛔ STOP after reporting. WAIT for user approval.
 
@@ -174,10 +182,12 @@ You are now in Planning mode. Your ONLY job right now is to write a plan.
 Steps:
 1. Read the project's structural documentation and dev skill docs.
 2. Write a plan with TWO parts:
-   - Part 1: Easy explanation of what will be built (non-developer friendly).
-   - Part 2: Diff-level precision — exact file paths (NEW/MODIFY/DELETE),
+   - Part 1 (chat): Easy explanation + a Mermaid/SVG diagram showing the file change map.
+   - Part 2 (file): Diff-level plan — exact file paths (NEW/MODIFY/DELETE),
      before/after diffs for MODIFY, complete content for NEW.
-3. Present the plan to the user.
+     Save Part 2 to a file (ask the user where to save, or use the project's existing plan folder).
+3. In chat, present ONLY: Part 1 summary (≤5 sentences), diagram, and the Part 2 file path.
+   Do NOT paste diffs, full file contents, or line-by-line changes into chat.
 4. Ask: "Any business logic I shouldn't decide alone?" and "Does Part 1 match your intent?"
 
 ⛔ STOP HERE. Do NOT proceed to the next phase.
