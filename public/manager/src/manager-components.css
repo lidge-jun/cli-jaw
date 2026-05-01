@@ -255,7 +255,7 @@ h2 { font-size: 13px; }
     gap: 8px;
 }
 .instance-row-main .instance-status {
-    margin-top: 5px;
+    margin-top: 3px;
 }
 .instance-row-quick {
     display: flex;
@@ -290,6 +290,7 @@ h2 { font-size: 13px; }
     display: flex;
     align-items: baseline;
     gap: 5px;
+    padding-top: 1px;
 }
 .instance-row-title strong {
     min-width: 0;
