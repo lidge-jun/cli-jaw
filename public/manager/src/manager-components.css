@@ -257,6 +257,33 @@ h2 { font-size: 13px; }
 .instance-row-main .instance-status {
     margin-top: 1px;
 }
+.instance-row-quick {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+}
+.quick-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    min-height: 24px;
+    padding: 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.quick-btn:hover { color: var(--text-primary); background: var(--surface-raised); }
+.quick-btn.action-stop { border-color: color-mix(in srgb, var(--status-error) 30%, var(--border-subtle)); color: var(--status-error); }
+.quick-btn.action-stop:hover { background: color-mix(in srgb, var(--status-error) 8%, var(--bg-raised)); }
+.quick-btn.action-open { text-decoration: none; color: var(--text-secondary); }
+.quick-btn.action-open:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--border-subtle)); }
+.quick-btn:disabled { opacity: 0.35; pointer-events: none; }
 .instance-row-title { min-width: 0; display: grid; gap: 3px; }
 .instance-row-title-line {
     min-width: 0;
@@ -355,26 +382,16 @@ h2 { font-size: 13px; }
     display: flex;
     align-items: center;
     gap: 6px;
-    justify-content: flex-end;
+    flex-wrap: wrap;
 }
-.instance-actions button, .instance-actions .open-link {
+.instance-actions button {
     min-width: 0;
     padding-inline: 8px;
     font-size: 12px;
 }
-.instance-actions .action-stop {
-    border-color: color-mix(in srgb, var(--status-error) 40%, var(--border-subtle));
-    color: var(--status-error);
-}
-.instance-actions .action-stop:hover {
-    background: color-mix(in srgb, var(--status-error) 8%, var(--bg-raised));
-}
 .instance-actions .action-start {
     border-color: color-mix(in srgb, var(--status-running) 40%, var(--border-subtle));
     color: var(--status-running);
-}
-.instance-actions .action-open {
-    text-decoration: none;
 }
 .detail-panel {
     height: 100%;

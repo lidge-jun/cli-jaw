@@ -38,6 +38,20 @@ function statusClass(status: DashboardInstance['status']): string {
     return `instance-status status-${status}`;
 }
 
+const StopIcon = () => (
+    <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" aria-hidden="true">
+        <rect x="3" y="3" width="10" height="10" rx="1.5" />
+    </svg>
+);
+
+const OpenIcon = () => (
+    <svg viewBox="0 0 16 16" width="12" height="12" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M6.5 3.5H4a1 1 0 0 0-1 1V12a1 1 0 0 0 1 1h7.5a1 1 0 0 0 1-1V9.5" />
+        <path d="M9.5 2.5h4v4" />
+        <path d="M13.5 2.5 8 8" />
+    </svg>
+);
+
 export function InstanceRow(props: InstanceRowProps) {
     const lifecycle = props.instance.lifecycle;
     const reason = lifecycle?.reason || props.instance.healthReason || 'ok';
@@ -92,7 +106,40 @@ export function InstanceRow(props: InstanceRowProps) {
                         </div>
                         {transitionLabel && <span><em className="instance-row-transition">{transitionLabel}</em></span>}
                     </div>
-                    <span className="port">:{props.instance.port}</span>
+                    <div className="instance-row-quick" onClick={stopAction}>
+                        {lifecycle?.canStop && (
+                            <button
+                                type="button"
+                                className="quick-btn action-stop"
+                                onClick={(event) => {
+                                    stopAction(event);
+                                    props.onLifecycle('stop', props.instance);
+                                }}
+                                disabled={props.busy}
+                                title="Stop"
+                                aria-label="Stop"
+                            >
+                                <StopIcon />
+                            </button>
+                        )}
+                        {props.instance.ok && (
+                            <a
+                                className="quick-btn action-open"
+                                href={props.instance.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                title="Open in new tab"
+                                aria-label="Open"
+                                onClick={(event) => {
+                                    stopAction(event);
+                                    props.onMarkActivitySeen(props.instance.port);
+                                }}
+                            >
+                                <OpenIcon />
+                            </a>
+                        )}
+                        <span className="port">:{props.instance.port}</span>
+                    </div>
                 </div>
                 <div className="instance-row-meta">
                     {props.showLatestActivityTitle !== false && props.latestActivityTitle && <span className="instance-row-activity-title">{props.latestActivityTitle}</span>}
@@ -146,6 +193,16 @@ export function InstanceRow(props: InstanceRowProps) {
             ) : null}
             {props.showSelectedActions !== false && (
             <div className="instance-actions">
+                <button
+                    type="button"
+                    onClick={(event) => {
+                        stopAction(event);
+                        props.onPreview(props.instance);
+                    }}
+                    disabled={!props.instance.ok}
+                >
+                    Preview
+                </button>
                 {lifecycle?.canStart && (
                     <button
                         type="button"
@@ -160,32 +217,30 @@ export function InstanceRow(props: InstanceRowProps) {
                         Start
                     </button>
                 )}
-                {lifecycle?.canStop && (
+                {lifecycle?.canPerm && (
                     <button
                         type="button"
-                        className="action-stop"
                         onClick={(event) => {
                             stopAction(event);
-                            props.onLifecycle('stop', props.instance);
+                            props.onLifecycle('perm', props.instance);
+                        }}
+                        disabled={props.busy}
+                        title="Register as launchd service"
+                    >
+                        Perm
+                    </button>
+                )}
+                {lifecycle?.canRestart && (
+                    <button
+                        type="button"
+                        onClick={(event) => {
+                            stopAction(event);
+                            props.onLifecycle('restart', props.instance);
                         }}
                         disabled={props.busy}
                     >
-                        Stop
+                        Restart
                     </button>
-                )}
-                {props.instance.ok && (
-                    <a
-                        className="open-link action-open"
-                        href={props.instance.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(event) => {
-                            stopAction(event);
-                            props.onMarkActivitySeen(props.instance.port);
-                        }}
-                    >
-                        Open
-                    </a>
                 )}
             </div>
             )}
