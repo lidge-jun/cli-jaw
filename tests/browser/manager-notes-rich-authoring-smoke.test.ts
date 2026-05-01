@@ -76,6 +76,10 @@ test('notes rich authoring toggles renderer-backed CodeMirror widgets without be
     await page.locator('.notes-math-inline-node').last().click();
     const inlineMathSource = page.locator('.notes-math-inline-node[data-editing="true"] input.notes-math-raw');
     await expectInputValue(inlineMathSource, '$a^2 + b^2 = c^2$');
+    await inlineMathSource.click();
+    await page.keyboard.press('End');
+    await page.keyboard.type(' + e');
+    await expectInputValue(inlineMathSource, '$a^2 + b^2 = c^2$ + e');
     await inlineMathSource.fill('$a^2 + b^2 = c^2 + d^2$');
     await page.keyboard.press('Enter');
     page.once('dialog', dialog => void dialog.accept('\\int_0^1 x^2 dx'));
@@ -92,6 +96,8 @@ test('notes rich authoring toggles renderer-backed CodeMirror widgets without be
     const codeSource = page.locator('.notes-code-source-node[data-editing="true"] textarea.notes-code-raw');
     await expectInputValueIncludes(codeSource, '```ts\n');
     await expectInputValueIncludes(codeSource, '\n```');
+    await page.keyboard.type('```ts\n// raw typing works\n```');
+    await expectInputValueIncludes(codeSource, '// raw typing works');
     await codeSource.fill('```ts\nconst milkdownCodeBlock = true;\n```');
     await page.keyboard.press(process.platform === 'darwin' ? 'Meta+Enter' : 'Control+Enter');
     await page.getByRole('button', { name: 'Save' }).click();

@@ -33,9 +33,12 @@ function updateCodeBlockNode(view: EditorView, getPos: () => number | undefined,
     const current = view.state.doc.nodeAt(pos);
     if (!current) return;
     const parsed = parseFencedCodeSource(source);
-    const text = parsed.code ? view.state.schema.text(parsed.code) : undefined;
-    const next = current.type.create({ ...current.attrs, language: parsed.language }, text, current.marks);
-    view.dispatch(view.state.tr.replaceWith(pos, pos + current.nodeSize, next).scrollIntoView());
+    const nextText = parsed.code ? view.state.schema.text(parsed.code) : [];
+    const tr = view.state.tr
+        .setNodeMarkup(pos, undefined, { ...current.attrs, language: parsed.language })
+        .replaceWith(pos + 1, pos + current.nodeSize - 1, nextText)
+        .scrollIntoView();
+    view.dispatch(tr);
 }
 
 function createCodeBlockView(): NodeViewConstructor {
@@ -53,6 +56,8 @@ function createCodeBlockView(): NodeViewConstructor {
         header.className = 'notes-code-source-header';
         raw.className = 'notes-code-raw';
         raw.setAttribute('aria-label', 'Edit fenced code source');
+        dom.contentEditable = 'false';
+        dom.tabIndex = 0;
         pre.append(code);
         rendered.append(header, pre);
         dom.append(rendered, raw);
@@ -68,6 +73,8 @@ function createCodeBlockView(): NodeViewConstructor {
         }
 
         function setEditing(editing: boolean): void {
+            if (dom.dataset.editing === 'true' && editing) return;
+            if (!editing && dom.dataset.editing === 'true') updateCodeBlockNode(view, getPos, raw.value);
             dom.dataset.editing = editing ? 'true' : 'false';
             if (editing) {
                 raw.value = fencedCodeSource(currentNode);
@@ -76,9 +83,17 @@ function createCodeBlockView(): NodeViewConstructor {
             }
         }
 
-        dom.addEventListener('click', () => setEditing(true));
-        raw.addEventListener('input', () => updateCodeBlockNode(view, getPos, raw.value));
-        raw.addEventListener('blur', () => setEditing(false));
+        rendered.addEventListener('click', event => {
+            event.preventDefault();
+            setEditing(true);
+        });
+        dom.addEventListener('keydown', event => {
+            if (dom.dataset.editing === 'true') return;
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                setEditing(true);
+            }
+        });
         raw.addEventListener('keydown', event => {
             if (event.key === 'Escape') {
                 event.preventDefault();
@@ -91,6 +106,8 @@ function createCodeBlockView(): NodeViewConstructor {
                 view.focus();
             }
         });
+        raw.addEventListener('mousedown', event => event.stopPropagation());
+        raw.addEventListener('click', event => event.stopPropagation());
 
         sync();
 
@@ -109,7 +126,7 @@ function createCodeBlockView(): NodeViewConstructor {
                 dom.dataset.selected = 'false';
             },
             stopEvent: event => event.target === raw || raw.contains(event.target as Node),
-            ignoreMutation: mutation => mutation.target === raw || rendered.contains(mutation.target),
+            ignoreMutation: mutation => mutation.target === raw || raw.contains(mutation.target as Node) || rendered.contains(mutation.target),
         };
     };
 }

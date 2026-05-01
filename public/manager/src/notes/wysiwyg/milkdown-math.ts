@@ -78,6 +78,8 @@ function createMathView(options: {
         dom.className = options.block
             ? 'notes-math-node notes-math-block-node'
             : 'notes-math-node notes-math-inline-node';
+        dom.contentEditable = 'false';
+        dom.tabIndex = 0;
         rendered.className = 'notes-math-rendered';
         raw.className = 'notes-math-raw';
         raw.setAttribute('aria-label', options.block ? 'Edit block math source' : 'Edit inline math source');
@@ -94,6 +96,7 @@ function createMathView(options: {
         }
 
         function setEditing(editing: boolean): void {
+            if (dom.dataset.editing === 'true' && editing) return;
             dom.dataset.editing = editing ? 'true' : 'false';
             if (editing) {
                 raw.value = options.block ? blockMathSource(value()) : inlineMathSource(value());
@@ -111,7 +114,18 @@ function createMathView(options: {
             options.render(rendered, code);
         }
 
-        dom.addEventListener('click', () => setEditing(true));
+        rendered.addEventListener('click', event => {
+            event.preventDefault();
+            setEditing(true);
+        });
+        dom.addEventListener('keydown', event => {
+            const keyEvent = event as KeyboardEvent;
+            if (dom.dataset.editing === 'true') return;
+            if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
+                keyEvent.preventDefault();
+                setEditing(true);
+            }
+        });
         raw.addEventListener('input', () => {
             updateMathNode(view, getPos, options.block
                 ? parseBlockMathSource(raw.value)
@@ -136,6 +150,8 @@ function createMathView(options: {
                 view.focus();
             }
         });
+        raw.addEventListener('mousedown', event => event.stopPropagation());
+        raw.addEventListener('click', event => event.stopPropagation());
 
         sync();
 
@@ -153,8 +169,8 @@ function createMathView(options: {
             deselectNode: () => {
                 dom.dataset.selected = 'false';
             },
-            stopEvent: event => event.target === raw || dom.contains(event.target as Node),
-            ignoreMutation: mutation => mutation.target === raw || rendered.contains(mutation.target),
+            stopEvent: event => event.target === raw || raw.contains(event.target as Node),
+            ignoreMutation: mutation => mutation.target === raw || raw.contains(mutation.target as Node) || rendered.contains(mutation.target),
         };
     };
 }
