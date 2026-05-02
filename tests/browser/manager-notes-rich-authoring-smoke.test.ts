@@ -205,6 +205,10 @@ test('notes WYSIWYG authoring keeps the primary toolbar compact', async () => {
     await page.keyboard.press('Enter');
     assert.equal(await page.locator('.notes-code-source-node[data-editing="true"]').count(), 0,
         'closed fenced code source followed by Enter must exit the raw block');
+    await page.locator('.notes-code-source-node[data-language="ts"]').first().click();
+    await page.getByRole('button', { name: 'Done editing code block' }).click();
+    assert.equal(await page.locator('.notes-code-source-node[data-editing="true"]').count(), 0,
+        'code block raw editor must expose a pointer-accessible exit action');
     assert.equal(
         await page.locator('.notes-code-source-node.ProseMirror-selectednode, .notes-code-source-node[data-selected="true"]').count(),
         0,
@@ -310,10 +314,9 @@ test('notes WYSIWYG toolbar commands can be used together without conflicts', as
     await page.keyboard.press('Escape');
 
     await page.getByRole('button', { name: 'Table', exact: true }).click();
-    await Promise.race([
-        page.waitForSelector('.notes-wysiwyg-error', { timeout: 5000 }),
-        page.waitForSelector('.notes-milkdown-root table', { timeout: 5000 }),
-    ]);
+    await page.waitForSelector('.notes-milkdown-root table', { timeout: 5000 });
+    assert.equal(await page.locator('.notes-wysiwyg-error').count(), 0,
+        'Table command must keep the WYSIWYG surface mounted');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
 
     const savedContent = await page.evaluate(async ({ noteName }) => {
@@ -336,7 +339,7 @@ test('notes WYSIWYG toolbar commands can be used together without conflicts', as
     assert.ok(savedContent.includes('|'), 'Table command must insert table markdown');
 });
 
-test('notes WYSIWYG Task toolbar creates a usable checkbox without Milkdown task nodes', async () => {
+test('notes WYSIWYG Task toolbar stays in Milkdown without fallback', async () => {
     const page = await pageForManager();
     const noteName = `browser-task-toolbar-${Date.now()}.md`;
 
@@ -349,9 +352,11 @@ test('notes WYSIWYG Task toolbar creates a usable checkbox without Milkdown task
     await page.getByRole('tab', { name: 'WYSIWYG' }).click();
     await page.waitForSelector('.notes-wysiwyg-toolbar', { timeout: 5000 });
     await page.getByRole('button', { name: 'Task list' }).click();
-    await page.waitForSelector('.notes-wysiwyg-error', { timeout: 5000 });
-    await page.waitForSelector('.cm-rich-task-widget input[type="checkbox"]', { timeout: 5000 });
-    await page.locator('.cm-rich-task-widget input[type="checkbox"]').first().click();
+    await page.waitForSelector('.notes-milkdown-root .ProseMirror', { timeout: 5000 });
+    assert.equal(await page.locator('.notes-wysiwyg-error').count(), 0,
+        'Task toolbar must not push WYSIWYG into a fallback pane');
+    assert.equal(await page.locator('.cm-rich-task-widget input[type="checkbox"]').count(), 0,
+        'WYSIWYG must not mount the CodeMirror task fallback');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
 
     const savedContent = await page.evaluate(async ({ noteName }) => {
@@ -359,8 +364,8 @@ test('notes WYSIWYG Task toolbar creates a usable checkbox without Milkdown task
         const body = await response.json();
         return body.content as string;
     }, { noteName });
-    assert.ok(/(^|\n)- \[x\](\s|$)/.test(savedContent),
-        'WYSIWYG Task toolbar checkbox must toggle and save through the CodeMirror widget');
+    assert.ok(/(^|\n)- \[ \](\s|$)/.test(savedContent),
+        'WYSIWYG Task toolbar must save canonical task markdown without fallback rendering');
 });
 
 test('notes render and edit GitHub Flavored Markdown affordances', async () => {
@@ -397,25 +402,24 @@ test('notes render and edit GitHub Flavored Markdown affordances', async () => {
         'Preview must render GFM footnote backrefs');
 
     await page.getByRole('tab', { name: 'WYSIWYG' }).click();
-    await page.waitForSelector('.notes-wysiwyg-error', { timeout: 5000 });
-    assert.equal(await page.locator('.notes-milkdown-root').count(), 0,
-        'WYSIWYG must not mount Milkdown for notes with GFM footnotes until that path is safe');
-    assert.ok((await page.locator('.notes-wysiwyg-error').textContent())?.includes('GFM task lists'),
-        'unsafe GFM fallback must explain that GFM constructs are blocked');
+    await page.waitForSelector('.notes-milkdown-root .ProseMirror', { timeout: 5000 });
+    assert.equal(await page.locator('.notes-wysiwyg-error').count(), 0,
+        'WYSIWYG must not render a fallback banner for GFM footnotes');
 
     await page.locator('.notes-tree-file-button').filter({ hasText: wysiwygNoteName }).first().click();
-    await page.waitForSelector('.notes-wysiwyg-error', { timeout: 5000 });
-    assert.equal(await page.locator('.notes-milkdown-root').count(), 0,
-        'WYSIWYG must not mount Milkdown for existing GFM task/table notes until that path is safe');
+    await page.waitForSelector('.notes-milkdown-root .ProseMirror', { timeout: 5000 });
+    assert.equal(await page.locator('.notes-wysiwyg-error').count(), 0,
+        'WYSIWYG must stay mounted for existing GFM task/table notes');
 
     await page.locator('.notes-tree-file-button').filter({ hasText: taskOnlyNoteName }).first().click();
     await page.getByRole('tab', { name: 'WYSIWYG' }).click();
-    await page.waitForSelector('.notes-wysiwyg-error', { timeout: 5000 });
-    await page.waitForSelector('.cm-rich-widget[data-rich-widget-kind="math-inline"]', { timeout: 5000 });
-    await page.waitForSelector('.cm-rich-widget[data-rich-widget-kind="code"]', { timeout: 5000 });
-    await page.waitForSelector('.cm-rich-task-widget input[type="checkbox"]', { timeout: 5000 });
-    assert.equal(await page.locator('.notes-milkdown-root').count(), 0,
-        'mixed rich/task notes must use sorted CodeMirror widgets instead of mounting Milkdown task nodes');
+    await page.waitForSelector('.notes-milkdown-root .ProseMirror', { timeout: 5000 });
+    await page.waitForSelector('.notes-math-inline-node', { timeout: 5000 });
+    await page.waitForSelector('.notes-code-source-node[data-language="ts"]', { timeout: 5000 });
+    assert.equal(await page.locator('.notes-wysiwyg-error').count(), 0,
+        'mixed rich/task notes must stay in Milkdown without fallback');
+    assert.equal(await page.locator('.cm-rich-task-widget input[type="checkbox"]').count(), 0,
+        'mixed rich/task WYSIWYG must not mount CodeMirror task widgets');
 
     const savedContent = await page.evaluate(async ({ noteName }) => {
         const response = await fetch(`/api/dashboard/notes/file?path=${encodeURIComponent(noteName)}`);
@@ -423,7 +427,7 @@ test('notes render and edit GitHub Flavored Markdown affordances', async () => {
         return body.content as string;
     }, { noteName });
     assert.ok(/(^|\n)[-*] \[ \] unchecked task(\n|$)/.test(savedContent),
-        'GFM task fallback must preserve unchecked task markdown');
+        'GFM task WYSIWYG protection must preserve unchecked task markdown');
     assert.ok(/(^|\n)[-*] \[[xX]\] checked task(\n|$)/.test(savedContent),
         'Existing checked GFM tasks must remain checked after WYSIWYG save');
     assert.ok(savedContent.includes('~~done later~~'),

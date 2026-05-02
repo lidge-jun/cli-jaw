@@ -21,6 +21,7 @@ import {
     replaceStep,
     updateStepStatus,
     collapseBlock,
+    stopBlockTicker,
     buildProcessBlockHtml,
     bindProcessBlockInteractions,
     type ProcessStep,
@@ -28,7 +29,7 @@ import {
 } from './features/process-block.js';
 interface MessageItem { role: string; content: string; tool_log?: string | null; cli?: string | null; }
 interface QueuedOverlayItem { id: string; prompt: string; source?: string; ts?: number; }
-interface ActiveRunSnapshot { running?: boolean; cli?: string; text?: string; toolLog?: ToolLogEntry[]; }
+interface ActiveRunSnapshot { running?: boolean; cli?: string; text?: string; toolLog?: ToolLogEntry[]; startedAt?: number; }
 
 function processStepType(toolType?: string): ProcessStep['type'] {
     return toolType === 'thinking' || toolType === 'search' || toolType === 'subagent'
@@ -50,7 +51,8 @@ function getAgentIcon(_cli?: string | null): string {
     return getAgentAvatarMarkup();
 }
 
-function toProcessSteps(tools: ToolLogEntry[]): ProcessStep[] {
+function toProcessSteps(tools: ToolLogEntry[], runStartedAt?: number): ProcessStep[] {
+    const baseTime = runStartedAt && runStartedAt > 0 ? runStartedAt : Date.now();
     return tools.map((tool: any) => ({
         id: generateId(),
         icon: tool.icon ? emojiToIcon(tool.icon) : ICONS.tool,
@@ -60,7 +62,7 @@ function toProcessSteps(tools: ToolLogEntry[]): ProcessStep[] {
         detail: tool.detail || '',
         stepRef: tool.stepRef || '',
         status: tool.status || 'done',
-        startTime: Date.now(),
+        startTime: baseTime,
     }));
 }
 
@@ -249,6 +251,7 @@ export function addSystemMsg(text: string, extraClass?: string, type?: string): 
 
 export function cleanupToolActivity(): void {
     cleanupToolElements();
+    stopBlockTicker();
     state.currentAgentDiv = null;
     state.currentProcessBlock = null;
     currentStream = null;
@@ -392,7 +395,7 @@ export function hydrateActiveRun(snapshot?: ActiveRunSnapshot | null): void {
         normalizeAgentToolBlocks(state.currentAgentDiv);
         removeAgentToolBlocks(state.currentAgentDiv);
         const pb = createProcessBlock(body);
-        for (const tool of toProcessSteps(snapshot.toolLog)) addStep(pb, tool);
+        for (const tool of toProcessSteps(snapshot.toolLog, snapshot.startedAt)) addStep(pb, tool);
         state.currentProcessBlock = pb;
     } else {
         normalizeAgentToolBlocks(state.currentAgentDiv);

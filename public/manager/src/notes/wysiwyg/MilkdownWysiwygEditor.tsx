@@ -20,7 +20,7 @@ import { notesMilkdownBlockKeymap } from './milkdown-block-keymap';
 import { notesMilkdownCodeBlockView } from './milkdown-code-block-view';
 import { notesMilkdownGfm } from './milkdown-gfm-safe';
 import { notesMilkdownKatexOptionsCtx, notesMilkdownMath } from './milkdown-math';
-import { normalizeEscapedTaskMarkers } from './milkdown-task-markers';
+import { normalizeEscapedTaskMarkers, protectUnsupportedGfmForMilkdown } from './milkdown-task-markers';
 
 type MilkdownWysiwygEditorProps = {
     active: boolean;
@@ -71,7 +71,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         void Editor.make()
             .config(ctx => {
                 ctx.set(rootCtx, root);
-                ctx.set(defaultValueCtx, latestMarkdownRef.current);
+                ctx.set(defaultValueCtx, protectUnsupportedGfmForMilkdown(latestMarkdownRef.current));
                 ctx.set(notesMilkdownKatexOptionsCtx.key, {
                     throwOnError: false,
                     strict: 'warn',
@@ -101,7 +101,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
                 editorRef.current = instance;
                 if (latestPropContentRef.current !== latestMarkdownRef.current) {
                     latestMarkdownRef.current = latestPropContentRef.current;
-                    instance.action(replaceAll(latestPropContentRef.current, true));
+                    instance.action(replaceAll(protectUnsupportedGfmForMilkdown(latestPropContentRef.current), true));
                 }
                 setReady(true);
                 queueMicrotask(() => {
@@ -129,7 +129,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         if (props.content === latestMarkdownRef.current) return;
         syncingFromPropsRef.current = true;
         latestMarkdownRef.current = props.content;
-        editor.action(replaceAll(props.content, true));
+        editor.action(replaceAll(protectUnsupportedGfmForMilkdown(props.content), true));
         queueMicrotask(() => {
             syncingFromPropsRef.current = false;
         });
@@ -192,6 +192,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         const nextMarkdown = `${currentMarkdown}${currentMarkdown ? '\n\n' : ''}- [ ] `;
         latestMarkdownRef.current = nextMarkdown;
         onChangeRef.current(nextMarkdown);
+        run(editor => editor.action(replaceAll(protectUnsupportedGfmForMilkdown(nextMarkdown), true)));
     }
 
     useEffect(() => {

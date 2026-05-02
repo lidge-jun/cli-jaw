@@ -675,8 +675,35 @@
     resize: vertical;
 }
 
+.notes-milkdown-root .ProseMirror .notes-code-raw-controls {
+    display: none;
+    justify-content: flex-end;
+    padding: 6px 0 0;
+}
+
+.notes-milkdown-root .ProseMirror .notes-code-done-btn {
+    min-height: 26px;
+    padding: 3px 10px;
+    border: 1px solid var(--border, #555);
+    border-radius: 4px;
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    font: 600 11px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+    cursor: pointer;
+}
+
+.notes-milkdown-root .ProseMirror .notes-code-done-btn:hover,
+.notes-milkdown-root .ProseMirror .notes-code-done-btn:focus-visible {
+    border-color: var(--border-strong, var(--border));
+    background: var(--bg-hover, rgba(255,255,255,0.06));
+}
+
 .notes-milkdown-root .ProseMirror .notes-code-source-node[data-editing="true"] .notes-code-rendered {
     display: none;
+}
+
+.notes-milkdown-root .ProseMirror .notes-code-source-node[data-editing="true"] .notes-code-raw-controls {
+    display: flex;
 }
 
 .notes-milkdown-root .ProseMirror .notes-code-source-node[data-editing="true"] .notes-code-raw {

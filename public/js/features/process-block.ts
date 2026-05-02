@@ -20,6 +20,34 @@ export interface ProcessBlockState {
     element: HTMLElement;
     steps: ProcessStep[];
     collapsed: boolean;
+    _durationEl?: HTMLElement | null;
+}
+
+// ── Duration ticker ──
+// Single module-level interval; runs only while a block has running steps.
+// 3s cadence — one textContent write per tick, no DOM queries beyond cached ref.
+let _tickerHandle: ReturnType<typeof setInterval> | null = null;
+let _tickerBlock: ProcessBlockState | null = null;
+
+function tickDuration(): void {
+    const pb = _tickerBlock;
+    if (!pb || pb.collapsed || pb.steps.length === 0) { stopBlockTicker(); return; }
+    const el = pb._durationEl ?? (pb._durationEl = pb.element.querySelector('.process-duration') as HTMLElement | null);
+    if (!el) return;
+    const elapsed = Math.round((Date.now() - pb.steps[0].startTime) / 1000);
+    el.textContent = elapsed > 0 ? `${elapsed}s` : '';
+}
+
+function ensureTicker(pb: ProcessBlockState): void {
+    if (_tickerHandle && _tickerBlock === pb) return;
+    stopBlockTicker();
+    _tickerBlock = pb;
+    _tickerHandle = setInterval(tickDuration, 3000);
+}
+
+export function stopBlockTicker(): void {
+    if (_tickerHandle) { clearInterval(_tickerHandle); _tickerHandle = null; }
+    _tickerBlock = null;
 }
 
 function buildSummaryText(steps: ProcessStep[]): string {
@@ -166,8 +194,11 @@ function updateSummary(pb: ProcessBlockState): void {
     const elapsed = pb.steps.length > 0
         ? Math.round((Date.now() - pb.steps[0].startTime) / 1000)
         : 0;
-    const dur = pb.element.querySelector('.process-duration');
+    const dur = pb._durationEl ?? (pb._durationEl = pb.element.querySelector('.process-duration') as HTMLElement | null);
     if (dur) dur.textContent = elapsed > 0 ? `${elapsed}s` : '';
+
+    if (anyRunning && !pb.collapsed) ensureTicker(pb);
+    else if (_tickerBlock === pb) stopBlockTicker();
 }
 
 export function createProcessBlock(parentEl: HTMLElement): ProcessBlockState {
@@ -220,6 +251,7 @@ export function updateStepStatus(pb: ProcessBlockState, stepId: string, status: 
 }
 
 export function collapseBlock(pb: ProcessBlockState): void {
+    if (_tickerBlock === pb) stopBlockTicker();
     pb.collapsed = true;
     pb.element.classList.add('collapsed');
     const btn = pb.element.querySelector('.process-summary');

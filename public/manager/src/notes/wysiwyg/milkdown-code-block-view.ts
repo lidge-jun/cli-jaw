@@ -140,6 +140,8 @@ function createCodeBlockView(): NodeViewConstructor {
         const pre = document.createElement('pre');
         const code = document.createElement('code');
         const raw = document.createElement('textarea');
+        const rawControls = document.createElement('div');
+        const doneBtn = document.createElement('button');
 
         dom.className = 'notes-code-source-node';
         const copyBtn = document.createElement('button');
@@ -149,6 +151,11 @@ function createCodeBlockView(): NodeViewConstructor {
         copyBtn.className = 'notes-code-copy-btn';
         copyBtn.type = 'button';
         copyBtn.setAttribute('aria-label', 'Copy code');
+        rawControls.className = 'notes-code-raw-controls';
+        doneBtn.className = 'notes-code-done-btn';
+        doneBtn.type = 'button';
+        doneBtn.textContent = 'Done';
+        doneBtn.setAttribute('aria-label', 'Done editing code block');
         raw.className = 'notes-code-raw';
         raw.setAttribute('aria-label', 'Edit fenced code source');
         dom.contentEditable = 'false';
@@ -156,7 +163,8 @@ function createCodeBlockView(): NodeViewConstructor {
         pre.append(code);
         header.append(copyBtn);
         rendered.append(header, pre);
-        dom.append(rendered, raw);
+        rawControls.append(doneBtn);
+        dom.append(rendered, rawControls, raw);
 
         function copyButtonLabel(): string {
             return codeLanguage(currentNode) || 'copy';
@@ -311,6 +319,12 @@ function createCodeBlockView(): NodeViewConstructor {
         raw.addEventListener('mousedown', event => event.stopPropagation());
         raw.addEventListener('click', event => event.stopPropagation());
         document.addEventListener('pointerdown', closeAfterOutsidePointer, true);
+        doneBtn.addEventListener('click', event => {
+            event.preventDefault();
+            event.stopPropagation();
+            exitToNextParagraph('below');
+        });
+        doneBtn.addEventListener('mousedown', event => event.stopPropagation());
         copyBtn.addEventListener('click', event => {
             event.preventDefault();
             event.stopPropagation();
@@ -350,6 +364,8 @@ function createCodeBlockView(): NodeViewConstructor {
             stopEvent: event =>
                 event.target === raw
                 || raw.contains(event.target as Node)
+                || event.target === doneBtn
+                || doneBtn.contains(event.target as Node)
                 || event.type === 'pointerdown'
                 || event.type === 'mousedown'
                 || event.type === 'click',
@@ -357,6 +373,7 @@ function createCodeBlockView(): NodeViewConstructor {
                 mutation.target === dom
                 || mutation.target === raw
                 || raw.contains(mutation.target as Node)
+                || rawControls.contains(mutation.target as Node)
                 || rendered.contains(mutation.target),
             destroy: () => {
                 document.removeEventListener('pointerdown', closeAfterOutsidePointer, true);
