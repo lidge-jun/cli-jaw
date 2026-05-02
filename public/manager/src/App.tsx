@@ -12,6 +12,7 @@ import { ManagerShell } from './components/ManagerShell';
 import { MobileNav } from './components/MobileNav';
 import { ProfileChip } from './components/ProfileChip';
 import { SidebarRail } from './components/SidebarRail';
+import { HelpDrawer } from './help/HelpDrawer';
 import { Workbench } from './components/Workbench';
 import { WorkbenchHeader } from './components/WorkbenchHeader';
 import { WorkspaceLayout } from './components/WorkspaceLayout';
@@ -25,6 +26,10 @@ import { summarizeActivityTitleSupport } from './dashboard-settings/activity-tit
 import { dashboardSettingsUiFromView } from './dashboard-settings/dashboard-settings-ui';
 import { NotesSidebar } from './notes/NotesSidebar';
 import { NotesWorkspace } from './notes/NotesWorkspace';
+import { DashboardBoardSidebar, type BoardLane } from './dashboard-board/DashboardBoardSidebar';
+import { DashboardBoardWorkspace } from './dashboard-board/DashboardBoardWorkspace';
+import { DashboardScheduleSidebar, type ScheduleGroup } from './dashboard-schedule/DashboardScheduleSidebar';
+import { DashboardScheduleWorkspace } from './dashboard-schedule/DashboardScheduleWorkspace';
 import { useDashboardRegistry } from './hooks/useDashboardRegistry';
 import { useDashboardView } from './hooks/useDashboardView';
 import { useActivityUnread } from './hooks/useActivityUnread';
@@ -73,9 +78,12 @@ export function App() {
     const [settingsDirty, setSettingsDirty] = useState(false);
     const [notesDirtyPath, setNotesDirtyPath] = useState<string | null>(null);
     const [dashboardSettingsSection, setDashboardSettingsSection] = useState<DashboardSettingsSection>('display');
+    const [boardLane, setBoardLane] = useState<BoardLane>('inbox');
+    const [scheduleGroup, setScheduleGroup] = useState<ScheduleGroup>('today');
     const [previewEnabled, setPreviewEnabled] = useState<boolean>(() => loadPreviewEnabled());
     const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
     const [autoUnloadNotice, setAutoUnloadNotice] = useState(false);
+    const [helpOpen, setHelpOpen] = useState(false);
     useEffect(() => {
         savePreviewEnabled(previewEnabled);
     }, [previewEnabled]);
@@ -469,12 +477,16 @@ export function App() {
                         inspectorHeight={view.activityDockCollapsed ? 48 : view.activityDockHeight}
                         navigator={(
                             <>
-                                <SidebarRail onlineCount={summary.online || 0} collapsed={view.sidebarCollapsed} mode={view.sidebarMode} onModeChange={handleSidebarModeChange} onToggleSidebar={handleSidebarToggle} />
+                                <SidebarRail onlineCount={summary.online || 0} collapsed={view.sidebarCollapsed} mode={view.sidebarMode} onModeChange={handleSidebarModeChange} onToggleSidebar={handleSidebarToggle} helpOpen={helpOpen} onToggleHelp={() => setHelpOpen(open => !open)} />
                                 <div id="manager-sidebar-list" className="manager-sidebar-list">
                                     {view.sidebarMode === 'settings' ? (
                                         <DashboardSettingsSidebar activeSection={dashboardSettingsSection} locale={view.locale} onSectionChange={setDashboardSettingsSection} />
                                     ) : view.sidebarMode === 'notes' ? (
                                         <NotesSidebar selectedPath={view.notesSelectedPath} dirtyPath={notesDirtyPath} treeWidth={view.notesTreeWidth} onSelectedPathChange={handleNotesSelectedPathChange} />
+                                    ) : view.sidebarMode === 'board' ? (
+                                        <DashboardBoardSidebar activeLane={boardLane} onLaneChange={setBoardLane} instances={instances} selectedPort={selectedInstance?.port ?? null} />
+                                    ) : view.sidebarMode === 'schedule' ? (
+                                        <DashboardScheduleSidebar activeGroup={scheduleGroup} onGroupChange={setScheduleGroup} />
                                     ) : (
                                         <InstanceNavigator active={selectedInstance} hiddenCount={instances.filter(instance => instance.hidden).length} collapsed={view.sidebarCollapsed}>
                                             {instanceListContent}
@@ -509,6 +521,12 @@ export function App() {
                                     </WorkspaceSurface>
                                     <WorkspaceSurface active={view.sidebarMode === 'settings'}>
                                         <DashboardSettingsWorkspace activeSection={dashboardSettingsSection} ui={dashboardSettingsUi} titleSupport={titleSupport} onUiPatch={handleDashboardSettingsPatch} />
+                                    </WorkspaceSurface>
+                                    <WorkspaceSurface active={view.sidebarMode === 'board'}>
+                                        <DashboardBoardWorkspace active={view.sidebarMode === 'board'} activeLane={boardLane} instances={instances} selectedPort={selectedInstance?.port ?? null} titlesByPort={messageActivity.titlesByPort} busyPorts={messageActivity.busyPorts} />
+                                    </WorkspaceSurface>
+                                    <WorkspaceSurface active={view.sidebarMode === 'schedule'}>
+                                        <DashboardScheduleWorkspace active={view.sidebarMode === 'schedule'} activeGroup={scheduleGroup} busyPorts={messageActivity.busyPorts} />
                                     </WorkspaceSurface>
                                 </div>
                             </div>
@@ -556,6 +574,7 @@ export function App() {
                 selectedInstance={selectedInstance}
             />
             <ElectronMetricsPanel onUnloadPreview={() => setPreviewEnabled(false)} />
+            <HelpDrawer open={helpOpen} mode={view.sidebarMode} onClose={() => setHelpOpen(false)} />
             {autoUnloadNotice && (
                 <div className="preview-auto-unload-notice" role="status">
                     Preview was unloaded after 5 minutes of inactivity. Toggle the preview switch to re-enable.

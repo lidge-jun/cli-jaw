@@ -23,6 +23,8 @@ import { registerMemoryRoutes } from './src/routes/memory.js';
 import { registerSettingsRoutes } from './src/routes/settings.js';
 import { registerMessagingRoutes } from './src/routes/messaging.js';
 import { registerAvatarRoutes } from './src/routes/avatar.js';
+import { createDashboardBoardRouter } from './src/manager/board/routes.js';
+import { createDashboardScheduleRouter } from './src/manager/schedule/routes.js';
 import {
     ensureWorkingDirSkillsLinks, initMcpConfig, copyDefaultSkills,
 } from './lib/mcp-sync.js';
@@ -521,6 +523,10 @@ registerMemoryRoutes(app, requireAuth);
 registerSettingsRoutes(app, requireAuth, applySettingsPatch, projectRoot);
 registerMessagingRoutes(app, requireAuth);
 registerAvatarRoutes(app, requireAuth);
+
+// ─── Dashboard Board / Schedule (P3) ─────────────────
+app.use('/api/dashboard/board', requireAuth, createDashboardBoardRouter());
+app.use('/api/dashboard/schedule', requireAuth, createDashboardScheduleRouter());
 
 // ─── Browser API (Phase 7) — see src/routes/browser.js
 registerBrowserRoutes(app, requireAuth);

@@ -31,6 +31,10 @@ import {
 } from './notes/routes.js';
 import { createDesktopStatusRouter } from './routes/desktop-status.js';
 import { createElectronMetricsRouter } from './routes/electron-metrics.js';
+import { createDashboardBoardRouter } from './board/routes.js';
+import { createDashboardScheduleRouter } from './schedule/routes.js';
+import { ScheduleStore } from './schedule/store.js';
+import { startScheduleRunner } from './schedule/runner.js';
 import type {
     DashboardInstance,
     DashboardServiceState,
@@ -144,6 +148,9 @@ app.use(
 app.use(express.json({ limit: '64kb' }));
 app.use('/api/dashboard/desktop-status', createDesktopStatusRouter());
 app.use('/api/dashboard/electron-metrics', createElectronMetricsRouter());
+app.use('/api/dashboard/board', createDashboardBoardRouter());
+const scheduleStore = new ScheduleStore();
+app.use('/api/dashboard/schedule', createDashboardScheduleRouter({ store: scheduleStore }));
 
 app.get('/api/dashboard/health', (_req, res) => {
     res.json({
@@ -429,6 +436,10 @@ async function main(): Promise<void> {
         console.log(`\n  Jaw Manager — ${url}`);
         console.log(`  Scanning: ${scanFrom}-${scanFrom + scanCount - 1}`);
         console.log(`  Preview: ${previewFrom}-${previewFrom + scanCount - 1}\n`);
+
+        startScheduleRunner(scheduleStore, {
+            log: msg => console.log(msg),
+        });
 
         if (process.env.JAW_DASHBOARD_OPEN === '1') {
             const openCmd = process.platform === 'darwin' ? 'open'

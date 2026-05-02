@@ -1,0 +1,360 @@
+/* Dashboard / Schedule — light + dark via global tokens.
+ * Mirrors board.css patterns so both modes feel identical. */
+
+/* ---------- Sidebar ---------- */
+.dashboard-schedule-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 8px;
+    color: var(--ink-primary);
+}
+
+.dashboard-schedule-sidebar-header {
+    padding: 4px 8px 8px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.dashboard-schedule-sidebar-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+}
+
+.dashboard-schedule-sidebar-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.dashboard-schedule-sidebar-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 6px 10px;
+    border: 0;
+    background: transparent;
+    color: var(--ink-primary);
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background-color 0.12s ease;
+}
+
+.dashboard-schedule-sidebar-item:hover {
+    background: color-mix(in srgb, var(--ink-primary) 6%, transparent);
+}
+
+.dashboard-schedule-sidebar-item.is-active {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 600;
+}
+
+/* ---------- Workspace shell ---------- */
+.dashboard-schedule-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 16px 20px;
+    height: 100%;
+    overflow: auto;
+    color: var(--ink-primary);
+    background: var(--surface-base);
+}
+
+.dashboard-schedule-workspace-header h2 {
+    margin: 0 0 4px;
+    font-size: 18px;
+    color: var(--ink-primary);
+}
+
+.dashboard-schedule-workspace-subtitle {
+    margin: 0;
+    color: var(--ink-secondary);
+    font-size: 12px;
+}
+
+/* ---------- Groups ---------- */
+.dashboard-schedule-groups {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+}
+
+.dashboard-schedule-group {
+    background: var(--surface-panel);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 10px;
+    min-height: 220px;
+    display: flex;
+    flex-direction: column;
+}
+
+.dashboard-schedule-group.is-focused {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-soft);
+}
+
+.dashboard-schedule-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.dashboard-schedule-group-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-secondary);
+}
+
+.dashboard-schedule-group-count {
+    font-size: 11px;
+    color: var(--ink-muted);
+    background: var(--surface-raised);
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid var(--border-subtle);
+}
+
+.dashboard-schedule-items {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+}
+
+/* ---------- Item ---------- */
+.dashboard-schedule-item {
+    position: relative;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    color: var(--ink-primary);
+    transition: border-color 0.12s ease;
+}
+
+.dashboard-schedule-item:hover {
+    border-color: var(--border-strong);
+}
+
+.dashboard-schedule-item[data-persisted="true"] {
+    background: var(--surface-overlay);
+}
+
+.dashboard-schedule-item-name {
+    font-weight: 500;
+    color: var(--ink-primary);
+    word-break: break-word;
+}
+
+.dashboard-schedule-item-meta {
+    font-size: 11px;
+    color: var(--ink-muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dashboard-schedule-item[data-dispatch-status="dispatched"] .dashboard-schedule-item-meta {
+    color: var(--accent);
+}
+
+.dashboard-schedule-item[data-dispatch-status="queued"] .dashboard-schedule-item-meta {
+    color: #c79a3a;
+}
+
+.dashboard-schedule-item[data-dispatch-status="no_target"] .dashboard-schedule-item-meta,
+.dashboard-schedule-item[data-dispatch-status="disabled"] .dashboard-schedule-item-meta {
+    color: var(--ink-muted);
+}
+
+.dashboard-schedule-item-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+    align-items: center;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.dashboard-schedule-item:hover .dashboard-schedule-item-actions,
+.dashboard-schedule-item:focus-within .dashboard-schedule-item-actions,
+.dashboard-schedule-item-actions[data-open="true"] {
+    opacity: 1;
+}
+
+.dashboard-schedule-empty {
+    color: var(--ink-muted);
+    font-size: 12px;
+    font-style: italic;
+    padding: 4px 0;
+}
+
+/* ---------- Add affordance (per group) ---------- */
+.dashboard-schedule-group-add {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border-subtle);
+}
+
+.dashboard-schedule-add-trigger {
+    width: 100%;
+    background: transparent;
+    border: 1px dashed var(--border-subtle);
+    color: var(--ink-muted);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 0.12s ease, color 0.12s ease, background-color 0.12s ease;
+}
+
+.dashboard-schedule-add-trigger:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.dashboard-schedule-add-composer {
+    display: flex;
+    gap: 6px;
+    align-items: stretch;
+}
+
+.dashboard-schedule-add-composer input {
+    flex: 1;
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-size: 13px;
+    color: var(--ink-primary);
+    outline: none;
+}
+
+.dashboard-schedule-add-composer input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.dashboard-schedule-add-composer button {
+    background: var(--accent);
+    color: var(--surface-base);
+    border: 0;
+    border-radius: 6px;
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.dashboard-schedule-add-composer button[type="button"] {
+    background: transparent;
+    color: var(--ink-muted);
+    border: 1px solid var(--border-subtle);
+}
+
+.dashboard-schedule-add-composer button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ---------- Item action buttons ---------- */
+.dashboard-schedule-item-action,
+.dashboard-schedule-run-now {
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    color: var(--ink-secondary);
+    border-radius: 5px;
+    padding: 2px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    line-height: 1.4;
+    transition: border-color 0.1s ease, color 0.1s ease, background-color 0.1s ease;
+}
+
+.dashboard-schedule-item-action:hover,
+.dashboard-schedule-run-now:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: var(--accent-soft);
+}
+
+.dashboard-schedule-run-now:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.dashboard-schedule-item-action[data-danger="true"]:hover {
+    border-color: #d04d4d;
+    color: #d04d4d;
+    background: color-mix(in srgb, #d04d4d 10%, transparent);
+}
+
+/* ---------- Move popover ---------- */
+.dashboard-schedule-popover {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    z-index: 20;
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 140px;
+}
+
+.dashboard-schedule-popover-item {
+    background: transparent;
+    border: 0;
+    color: var(--ink-primary);
+    text-align: left;
+    padding: 6px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.dashboard-schedule-popover-item:hover {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.dashboard-schedule-popover-item.is-current {
+    color: var(--ink-muted);
+    cursor: default;
+}
+
+.dashboard-schedule-popover-item.is-current:hover {
+    background: transparent;
+    color: var(--ink-muted);
+}
+
+/* ---------- Hidden disabled-toggle (kept available for future) ---------- */
+.dashboard-schedule-item-toggle {
+    display: none;
+}

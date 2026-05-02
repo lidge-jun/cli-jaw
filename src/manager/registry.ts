@@ -35,7 +35,7 @@ const DEFAULT_NOTES_TREE_WIDTH = 280;
 const DETAIL_TABS: DashboardDetailTab[] = ['overview', 'preview', 'logs', 'settings'];
 const UI_THEMES: DashboardUiTheme[] = ['auto', 'dark', 'light'];
 const LOCALES: DashboardLocale[] = ['ko', 'en', 'zh', 'ja'];
-const SIDEBAR_MODES: DashboardSidebarMode[] = ['instances', 'notes', 'settings'];
+const SIDEBAR_MODES: DashboardSidebarMode[] = ['instances', 'board', 'schedule', 'notes', 'settings'];
 const NOTES_VIEW_MODES: DashboardNotesViewMode[] = ['raw', 'split', 'preview', 'settings'];
 const NOTES_AUTHORING_MODES: DashboardNotesAuthoringMode[] = ['plain', 'rich', 'wysiwyg'];
 
