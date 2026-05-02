@@ -79,7 +79,7 @@ export function App() {
     const [settingsDirty, setSettingsDirty] = useState(false);
     const [notesDirtyPath, setNotesDirtyPath] = useState<string | null>(null);
     const [dashboardSettingsSection, setDashboardSettingsSection] = useState<DashboardSettingsSection>('display');
-    const [boardLane, setBoardLane] = useState<BoardLane>('inbox');
+    const [boardLane, setBoardLane] = useState<BoardLane>('backlog');
     const [scheduleGroup, setScheduleGroup] = useState<ScheduleGroup>('today');
     const [previewEnabled, setPreviewEnabled] = useState<boolean>(() => loadPreviewEnabled());
     const [previewRefreshKey, setPreviewRefreshKey] = useState(0);

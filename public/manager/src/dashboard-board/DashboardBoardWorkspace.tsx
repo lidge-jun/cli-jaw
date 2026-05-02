@@ -260,6 +260,7 @@ export function DashboardBoardWorkspace(props: Props) {
                         >
                             <header className="dashboard-board-lane-header">
                                 <span className="dashboard-board-lane-title">{lane.label}</span>
+                                <span className="dashboard-board-lane-policy">{lane.policy}</span>
                                 <span className="dashboard-board-lane-count">{laneCards.length}</span>
                             </header>
                             <ul className="dashboard-board-lane-cards">

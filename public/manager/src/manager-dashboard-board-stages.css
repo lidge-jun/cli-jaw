@@ -1,26 +1,64 @@
 /* Board stage color system. Kept separate so core board CSS stays under 500 lines. */
 
-.dashboard-board-lane[data-lane="inbox"] {
+.dashboard-board-lane[data-lane="backlog"] {
     --board-lane-color: #64748b;
     --board-lane-soft: color-mix(in srgb, #64748b 12%, transparent);
 }
 
-.dashboard-board-lane[data-lane="planning"] {
+.dashboard-board-lane[data-lane="ready"] {
     --board-lane-color: #2563eb;
     --board-lane-soft: color-mix(in srgb, #2563eb 12%, transparent);
 }
 
-.dashboard-board-lane[data-lane="working"] {
+.dashboard-board-lane[data-lane="active"] {
     --board-lane-color: #0891b2;
     --board-lane-soft: color-mix(in srgb, #0891b2 12%, transparent);
 }
 
-.dashboard-board-lane[data-lane="blocked"] {
-    --board-lane-color: #dc2626;
-    --board-lane-soft: color-mix(in srgb, #dc2626 12%, transparent);
+.dashboard-board-lane[data-lane="review"] {
+    --board-lane-color: #d97706;
+    --board-lane-soft: color-mix(in srgb, #d97706 12%, transparent);
 }
 
 .dashboard-board-lane[data-lane="done"] {
     --board-lane-color: #16a34a;
     --board-lane-soft: color-mix(in srgb, #16a34a 12%, transparent);
+}
+
+.dashboard-board-lane-policy {
+    color: var(--ink-secondary);
+    font-size: 11px;
+    line-height: 1.2;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashboard-board-lane-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 8px;
+}
+
+.dashboard-board-lane-policy {
+    grid-column: 1 / 2;
+}
+
+.dashboard-board-lane-count {
+    grid-column: 2 / 3;
+    grid-row: 1 / 3;
+    align-self: start;
+}
+
+.dashboard-board-sidebar-item small {
+    display: block;
+    margin-top: 2px;
+    color: var(--ink-secondary);
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }

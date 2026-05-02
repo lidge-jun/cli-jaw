@@ -2,14 +2,14 @@ import { useMemo } from 'react';
 import type { DashboardInstance } from '../types';
 import { RUNNING_CHIP_MIME, deriveRunningChips, encodeRunningChip } from './running-chips';
 
-type BoardLane = 'inbox' | 'doing' | 'blocked' | 'review' | 'done';
+type BoardLane = 'backlog' | 'ready' | 'active' | 'review' | 'done';
 
-const LANES: { id: BoardLane; label: string }[] = [
-    { id: 'inbox', label: 'Inbox' },
-    { id: 'doing', label: 'Doing' },
-    { id: 'blocked', label: 'Blocked' },
-    { id: 'review', label: 'Review' },
-    { id: 'done', label: 'Done' },
+const LANES: { id: BoardLane; label: string; policy: string }[] = [
+    { id: 'backlog', label: 'Backlog', policy: 'Options not yet committed' },
+    { id: 'ready', label: 'Ready', policy: 'Pullable, clear enough to start' },
+    { id: 'active', label: 'In Progress', policy: 'Current WIP, keep starts limited' },
+    { id: 'review', label: 'Review', policy: 'Check output before delivery' },
+    { id: 'done', label: 'Done', policy: 'Delivered or no longer active' },
 ];
 
 type Props = {
@@ -73,6 +73,7 @@ export function DashboardBoardSidebar(props: Props) {
                             aria-pressed={props.activeLane === lane.id}
                         >
                             <span>{lane.label}</span>
+                            <small>{lane.policy}</small>
                         </button>
                     </li>
                 ))}

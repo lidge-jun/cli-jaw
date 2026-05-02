@@ -1,4 +1,4 @@
-export type DashboardTaskLane = 'inbox' | 'doing' | 'blocked' | 'review' | 'done';
+export type DashboardTaskLane = 'backlog' | 'ready' | 'active' | 'review' | 'done';
 
 export type DashboardTask = {
     id: string;
