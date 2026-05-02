@@ -200,6 +200,7 @@ function renderEntry(
                                 onEntryClick(entry.path, event);
                                 return;
                             }
+                            onEntryClick(entry.path, event);
                             props.onSelectFolder(entry.path);
                             toggleFolder(entry.path);
                         }}
@@ -284,6 +285,7 @@ function renderEntry(
                             onEntryClick(entry.path, event);
                             return;
                         }
+                        onEntryClick(entry.path, event);
                         props.onSelectPath(entry.path);
                     }}
                     onKeyDown={(event) => handleTreeKey(event, entry, {
@@ -359,8 +361,11 @@ export function NotesFileTree(props: NotesFileTreeProps) {
                 return next;
             });
             setAnchorPath(path);
+        } else {
+            if (multiSelected.size > 0) setMultiSelected(new Set());
+            setAnchorPath(path);
         }
-    }, [anchorPath, flatPaths, props.selectedPath]);
+    }, [anchorPath, flatPaths, multiSelected.size, props.selectedPath]);
 
     useEffect(() => {
         if (props.selectedPath) {

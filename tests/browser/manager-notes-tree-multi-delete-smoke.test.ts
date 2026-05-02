@@ -114,3 +114,62 @@ test('notes tree multi-select Delete trashes every selected entry in one keystro
     assert.equal(flatPaths.includes(noteA), false, 'tree response must omit trashed note A');
     assert.equal(flatPaths.includes(noteB), false, 'tree response must omit trashed note B');
 });
+
+test('notes tree single click clears existing multi-selection', async () => {
+    const page = await pageForManager();
+    const runId = `multiclear-${Date.now()}`;
+    const noteA = `browser-clear-${runId}-a.md`;
+    const noteB = `browser-clear-${runId}-b.md`;
+    const noteC = `browser-clear-${runId}-c.md`;
+    const folderName = `browser-clear-folder-${runId}`;
+
+    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+    await page.evaluate(async ({ folderName }) => {
+        const headers = { 'content-type': 'application/json' };
+        await fetch('/api/dashboard/registry', {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ ui: { sidebarMode: 'notes', notesSelectedPath: null } }),
+        });
+        await fetch('/api/dashboard/notes/folder', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ path: folderName }),
+        });
+    }, { folderName });
+    await seedNote(page, noteA);
+    await seedNote(page, noteB);
+    await seedNote(page, noteC);
+    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+    await page.waitForSelector('.notes-tree');
+
+    const buttonA = page.locator('.notes-tree-file-button').filter({ hasText: noteA }).first();
+    const buttonB = page.locator('.notes-tree-file-button').filter({ hasText: noteB }).first();
+    const buttonC = page.locator('.notes-tree-file-button').filter({ hasText: noteC }).first();
+    await buttonA.waitFor({ timeout: 5000 });
+    await buttonB.waitFor({ timeout: 5000 });
+    await buttonC.waitFor({ timeout: 5000 });
+
+    await buttonA.click();
+    await page.keyboard.down('Meta');
+    await buttonB.click();
+    await page.keyboard.up('Meta');
+    await page.locator('.notes-tree-selection-info').waitFor({ timeout: 2000 });
+    assert.match(await page.locator('.notes-tree-selection-info').innerText(), /2 selected/);
+
+    await buttonC.click();
+    await page.waitForSelector('.notes-tree-selection-info', { state: 'detached', timeout: 2000 });
+    assert.equal(await page.locator('.notes-tree-file-row.is-multi-selected').count(), 0,
+        'plain file click must clear multi-selected file rows');
+
+    await buttonA.click();
+    await page.keyboard.down('Meta');
+    await buttonB.click();
+    await page.keyboard.up('Meta');
+    await page.locator('.notes-tree-selection-info').waitFor({ timeout: 2000 });
+
+    await page.locator('.notes-tree-folder-button').filter({ hasText: folderName }).first().click();
+    await page.waitForSelector('.notes-tree-selection-info', { state: 'detached', timeout: 2000 });
+    assert.equal(await page.locator('.notes-tree-file-row.is-multi-selected, .notes-tree-folder-row.is-multi-selected').count(), 0,
+        'plain folder click must clear multi-selected rows');
+});
