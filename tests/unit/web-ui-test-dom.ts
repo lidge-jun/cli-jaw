@@ -1,4 +1,5 @@
 import { JSDOM } from 'jsdom';
+import { resetDOMPurifyForTests } from '../../public/js/sanitizer.ts';
 
 let observedElements: HTMLElement[] = [];
 let unobservedElements: HTMLElement[] = [];
@@ -85,6 +86,8 @@ export function setupWebUiDom(): void {
 }
 
 export function resetWebUiDom(): void {
+    dom?.window.close();
+    resetDOMPurifyForTests();
     dom = null;
     observedElements = [];
     unobservedElements = [];

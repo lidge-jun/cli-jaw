@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setupWebUiDom, resetWebUiDom } from './web-ui-test-dom.ts';
+import { stopBlockTicker } from '../../public/js/features/process-block.ts';
 
 test.afterEach(() => {
+    stopBlockTicker();
     resetWebUiDom();
 });
 

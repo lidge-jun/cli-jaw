@@ -32,7 +32,9 @@ import {
     extractTopLevelSvg,
 } from './diagram/types.js';
 
-const DOMPurify = getDOMPurify();
+function purifier() {
+    return getDOMPurify();
+}
 
 // Register hljs languages (core-only import: ~25KB vs ~1MB full)
 hljs.registerLanguage('javascript', javascript);
@@ -134,7 +136,7 @@ function applyMermaidTheme() {
 // Mermaid is configured with htmlLabels:false so labels use SVG <text>,
 // not <foreignObject> + HTML. This avoids DOMPurify namespace issues.
 function sanitizeMermaidSvg(svg: string): string {
-    const clean = DOMPurify.sanitize(svg, {
+    const clean = purifier().sanitize(svg, {
         USE_PROFILES: { svg: true, svgFilters: true },
         FORBID_TAGS: [
             'script', 'iframe', 'object', 'embed', 'form', 'input',
@@ -163,7 +165,7 @@ export function escapeHtml(str: string): string {
 
 // ── XSS sanitization (hardened for inline SVG — Phase 1) ──
 export function sanitizeHtml(html: string): string {
-    return DOMPurify.sanitize(html, {
+    return purifier().sanitize(html, {
         USE_PROFILES: { html: true, svg: true, svgFilters: true },
         FORBID_TAGS: [
             'script', 'style', 'iframe', 'object', 'embed', 'form', 'input',

@@ -77,3 +77,7 @@ export function getDOMPurify(): DOMPurifyLike {
     registerAttributeHook(purifySingleton);
     return purifySingleton;
 }
+
+export function resetDOMPurifyForTests(): void {
+    purifySingleton = null;
+}
