@@ -28,10 +28,11 @@ import os from 'os';
 import { execSync, execFileSync } from 'child_process';
 import { fileURLToPath } from 'node:url';
 import { ensureSharedHomeSkillsLinks, initMcpConfig, copyDefaultSkills, propagateSkillsToInstances, loadUnifiedMcp, saveUnifiedMcp } from '../lib/mcp-sync.js';
+import { resolveHomePath } from '../src/core/path-expand.js';
 
 // ─── JAW_HOME inline (config.ts → registry.ts import 체인 제거) ───
 const JAW_HOME = process.env.CLI_JAW_HOME
-    ? path.resolve(process.env.CLI_JAW_HOME.replace(/^~(?=\/|$)/, os.homedir()))
+    ? resolveHomePath(process.env.CLI_JAW_HOME)
     : path.join(os.homedir(), '.cli-jaw');
 
 const home = os.homedir();

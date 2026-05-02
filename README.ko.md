@@ -127,7 +127,7 @@ curl -fsSL https://raw.githubusercontent.com/lidge-jun/cli-jaw/master/scripts/in
 
 ```bash
 source ~/.bashrc
-copilot login    # 또는: claude auth / codex login / gemini
+copilot login    # 또는: claude auth login / codex login / gemini
 jaw serve        # -> http://localhost:3457
 ```
 
@@ -171,7 +171,7 @@ copilot login        # GitHub Copilot (무료 티어 있음)
 opencode             # OpenCode (무료 모델 사용 가능)
 
 # 유료 (월 구독)
-claude auth          # Claude Max 구독
+claude auth login    # Claude Max 구독
 codex login          # ChatGPT Pro 구독
 gemini               # Gemini Advanced 구독
 ```
@@ -179,6 +179,7 @@ gemini               # Gemini Advanced 구독
 제대로 됐는지 확인하려면:
 
 ```bash
+claude auth status
 jaw doctor
 ```
 

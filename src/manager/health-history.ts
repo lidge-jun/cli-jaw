@@ -8,8 +8,9 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
+import { resolveHomePath } from '../core/path-expand.js';
 import type { DashboardInstanceStatus } from './types.js';
 
 const DEFAULT_RETENTION = 50;
@@ -38,7 +39,7 @@ export type HealthHistory = {
 
 function managerHome(): string {
     const home = process.env.CLI_JAW_HOME || join(homedir(), '.cli-jaw');
-    return resolve(home.replace(/^~(?=\/|$)/, homedir()));
+    return resolveHomePath(home, homedir());
 }
 
 function defaultPersistPath(): string | null {

@@ -3,6 +3,7 @@ import os from 'os';
 import { join, relative, basename } from 'path';
 import { execFileSync } from 'child_process';
 import { JAW_HOME, settings } from '../core/config.js';
+import { expandHomePath } from '../core/path-expand.js';
 import { instanceId } from '../core/instance.js';
 import { getMemory } from '../core/db.js';
 import {
@@ -68,8 +69,8 @@ function parseLegacyMemorySections(content: string) {
 }
 
 function getLegacyClaudeMemoryDir() {
-    const wd = (settings.workingDir || os.homedir()).replace(/^~/, os.homedir());
-    const hash = wd.replace(/\//g, '-');
+    const wd = expandHomePath(settings.workingDir || os.homedir(), os.homedir());
+    const hash = wd.replace(/[\\/]/g, '-');
     return join(os.homedir(), '.claude', 'projects', hash, 'memory');
 }
 

@@ -59,6 +59,24 @@ test('CDP-005: connection.ts delegates headless policy to launch policy helper',
     );
 });
 
+test('CDP-005b: connection.ts verifies jaw-owned Chrome on Windows instead of failing closed', () => {
+    assert.match(
+        connectionSrc,
+        /powershell\.exe/,
+        'Windows process command line lookup should use PowerShell when available',
+    );
+    assert.match(
+        connectionSrc,
+        /wmic\.exe/,
+        'Windows process command line lookup should fall back to WMIC',
+    );
+    assert.doesNotMatch(
+        connectionSrc,
+        /if \(process\.platform === 'win32'\) return false/,
+        'Windows ownership proof must not be hardcoded to false',
+    );
+});
+
 // ─── DIFF-B: routes/browser.ts ───────────────────────
 
 test('CDP-006: API /start passes headless option', () => {

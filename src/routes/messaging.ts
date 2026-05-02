@@ -14,6 +14,7 @@ import { assertSendFilePath } from '../security/path-guards.js';
 import { decodeFilenameSafe } from '../security/decode.js';
 import { sendChannelOutput, normalizeChannelSendRequest } from '../messaging/send.js';
 import { settings } from '../core/config.js';
+import { expandHomePath } from '../core/path-expand.js';
 
 function getLatestTelegramChatId() {
     const ids = Array.from(telegramActiveChatIds);
@@ -38,7 +39,7 @@ type OpenTarget = {
 };
 
 function expandOpenPath(rawPath: string): string {
-    return rawPath.startsWith('~/') ? os.homedir() + rawPath.slice(1) : rawPath;
+    return expandHomePath(rawPath, os.homedir());
 }
 
 function getExistingNormalizedPath(candidatePath: string): string | null {

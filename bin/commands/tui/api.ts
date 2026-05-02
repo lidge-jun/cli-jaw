@@ -4,6 +4,7 @@
 import { APP_VERSION } from '../../../src/core/config.js';
 import { getCliAuthToken, authHeaders } from '../../../src/cli/api-auth.js';
 import { cliColor, cliLabel, c, type TuiContext } from './types.js';
+import { homedir } from 'node:os';
 
 export async function apiJson(ctx: TuiContext, path: string, init: Record<string, any> = {}, timeoutMs = 10000) {
     const headers: Record<string, string> = { ...authHeaders(), ...(init.headers || {}) };
@@ -42,7 +43,7 @@ export async function refreshInfo(ctx: TuiContext): Promise<void> {
     } catch { /* keep current info on fetch failure */ }
     ctx.accent = cliColor[ctx.info.cli] || c.red;
     ctx.label = cliLabel[ctx.info.cli] || ctx.info.cli;
-    ctx.dir = ctx.info.workingDir.replace(process.env.HOME || '', '~');
+    ctx.dir = ctx.info.workingDir.replace(homedir(), '~');
 }
 
 export function makeCliCommandCtx(ctx: TuiContext) {

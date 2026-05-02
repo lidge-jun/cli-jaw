@@ -3,6 +3,7 @@ import os from 'os';
 import { createHash } from 'crypto';
 import { join } from 'path';
 import { settings, JAW_HOME, PROMPTS_DIR, SKILLS_DIR, SKILLS_REF_DIR, loadHeartbeatFile, deriveCdpPort } from '../core/config.js';
+import { expandHomePath } from '../core/path-expand.js';
 import { getEmployees } from '../core/db.js';
 import { memoryFlushCounter, flushCycleCount } from '../agent/spawn.js';
 import { describeHeartbeatSchedule, normalizeHeartbeatSchedule } from '../memory/heartbeat-schedule.js';
@@ -249,8 +250,8 @@ export function initPromptFiles() {
 // ─── Memory ──────────────────────────────────────────
 
 export function getMemoryDir() {
-    const wd = (settings.workingDir || os.homedir()).replace(/^~/, os.homedir());
-    const hash = wd.replace(/\//g, '-');
+    const wd = expandHomePath(settings.workingDir || os.homedir(), os.homedir());
+    const hash = wd.replace(/[\\/]/g, '-');
     return join(os.homedir(), '.claude', 'projects', hash, 'memory');
 }
 

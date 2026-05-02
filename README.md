@@ -140,12 +140,12 @@ copilot login        # GitHub Copilot (free tier available)
 opencode             # OpenCode — free models available
 
 # Paid (monthly subscription you already pay for)
-claude auth          # Anthropic Claude Max
+claude auth login    # Anthropic Claude Max
 codex login          # OpenAI ChatGPT Pro
 gemini               # Google Gemini Advanced
 ```
 
-Check everything at once: `jaw doctor`
+Check everything at once: `claude auth status && jaw doctor`
 
 <details>
 <summary>Example jaw doctor output</summary>
@@ -248,7 +248,7 @@ No per-token API billing. Route through subscriptions you already pay for.
 
 | CLI | Default Model | Auth | Cost |
 |---|---|---|---|
-| **Claude** | `opus-4-6` | `claude auth` | Claude Max subscription |
+| **Claude** | `opus-4-6` | `claude auth login` | Claude Max subscription |
 | **Codex** | `gpt-5.5` | `codex login` | ChatGPT Pro subscription |
 | **Gemini** | `gemini-3.1-pro-preview` | `gemini` | Gemini Advanced subscription |
 | **OpenCode** | `minimax-m2.7` | `opencode` | Free models available |

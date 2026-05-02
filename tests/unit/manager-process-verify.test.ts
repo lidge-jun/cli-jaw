@@ -1,9 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync, chmodSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, chmodSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { isPidAlive, resolveListeningPid, waitForPortFree } from '../../src/manager/process-verify.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const projectRoot = join(__dirname, '..', '..');
+const processVerifySrc = readFileSync(join(projectRoot, 'src', 'manager', 'process-verify.ts'), 'utf8');
 
 function withFakeLsof(script: string, fn: () => Promise<void>): () => Promise<void> {
     return async () => {
@@ -67,6 +72,21 @@ test('resolveListeningPid returns null for invalid port', async () => {
     assert.equal(await resolveListeningPid(-1), null);
     assert.equal(await resolveListeningPid(70000), null);
     assert.equal(await resolveListeningPid(1.5), null);
+});
+
+test('resolveListeningPid has a Windows netstat backend instead of lsof-only lookup', () => {
+    assert.ok(
+        processVerifySrc.includes("process.platform === 'win32'"),
+        'Windows must not use the lsof-only PID lookup path',
+    );
+    assert.ok(
+        processVerifySrc.includes("'netstat'"),
+        'Windows should resolve listening PIDs through netstat',
+    );
+    assert.ok(
+        processVerifySrc.includes("['-ano', '-p', 'tcp']"),
+        'Windows netstat lookup should request PID columns for TCP listeners',
+    );
 });
 
 test(

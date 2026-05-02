@@ -5,7 +5,7 @@
  */
 import fs from 'fs';
 import os from 'os';
-import { join } from 'path';
+import { basename, join } from 'path';
 import { execSync } from 'child_process';
 import {
     JAW_HOME,
@@ -313,7 +313,7 @@ export function propagateSkillsToInstances() {
             }
         }
 
-        const tag = `${instDir.split('/').pop()}`;
+        const tag = basename(instDir);
         const parts: string[] = [];
         if (refNew) parts.push(`${refNew} new ref`);
         if (refUpdated) parts.push(`${refUpdated} updated ref`);

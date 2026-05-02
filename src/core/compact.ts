@@ -93,6 +93,7 @@ export function buildManagedCompactSummaryForTest(rows: MessageRow[], instructio
 import { execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { getRecentMessages } from './db.js';
+import { expandHomePath } from './path-expand.js';
 import { searchMemoryWithPolicy } from '../memory/injection.js';
 import { buildTaskSnapshot } from '../memory/runtime.js';
 
@@ -152,8 +153,7 @@ function clipSlot(text: string, max: number): string {
 
 export function normalizeWorkingDir(wd: string | null | undefined): string | null {
     if (!wd || wd === '~') return null;
-    if (wd.startsWith('~/')) return wd.replace(/^~/, homedir());
-    return wd;
+    return expandHomePath(wd, homedir());
 }
 
 function harvestGoal(rows: MessageRow[], instructions: string): string {

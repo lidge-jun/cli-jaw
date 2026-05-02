@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { basename, resolve } from 'node:path';
+import { basename } from 'node:path';
 import { homedir } from 'node:os';
+import { resolveHomePath } from '../core/path-expand.js';
 import type {
     DashboardInstance,
     DashboardProfile,
@@ -9,7 +10,7 @@ import type {
 } from './types.js';
 
 function normalizeHomePath(homePath: string): string {
-    return resolve(homePath.replace(/^~(?=\/|$)/, homedir()));
+    return resolveHomePath(homePath, homedir());
 }
 
 function slugPart(value: string): string {

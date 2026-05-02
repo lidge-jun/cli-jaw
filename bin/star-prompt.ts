@@ -2,8 +2,9 @@ import { spawnSync, type SpawnSyncReturns, type SpawnSyncOptionsWithStringEncodi
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { createInterface } from 'node:readline/promises';
+import { resolveHomePath } from '../src/core/path-expand.js';
 
 const REPO = 'lidge-jun/cli-jaw';
 
@@ -27,7 +28,7 @@ export type StarRepoResult = { ok: true } | { ok: false; error: string };
 
 function resolveJawHome(): string {
     return process.env.CLI_JAW_HOME
-        ? resolve(process.env.CLI_JAW_HOME.replace(/^~(?=\/|$)/, homedir()))
+        ? resolveHomePath(process.env.CLI_JAW_HOME, homedir())
         : join(homedir(), '.cli-jaw');
 }
 

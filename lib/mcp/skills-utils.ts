@@ -5,12 +5,13 @@
  */
 import fs from 'fs';
 import os from 'os';
-import { join, dirname, resolve } from 'path';
+import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { resolveHomePath } from '../../src/core/path-expand.js';
 
 // ─── JAW_HOME inline (config.ts → registry.ts import 체인 제거) ───
 export const JAW_HOME = process.env.CLI_JAW_HOME
-    ? resolve(process.env.CLI_JAW_HOME.replace(/^~(?=\/|$)/, os.homedir()))
+    ? resolveHomePath(process.env.CLI_JAW_HOME)
     : join(os.homedir(), '.cli-jaw');
 
 // ─── Clone cooldown ─────────────────────────────────

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import { chromium, type Browser } from 'playwright-core';
 import { resolveLaunchPolicy, type BrowserStartMode } from './launch-policy.js';
+import os from 'node:os';
 import {
     browserReaperIntervalMs,
     createEmptyBrowserRuntime,
@@ -103,7 +104,7 @@ function findChrome() {
             '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
             '/Applications/Chromium.app/Contents/MacOS/Chromium',
             '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
-            `${process.env.HOME || ''}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`,
+            `${os.homedir()}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`,
         );
     } else if (platform === 'win32') {
         const pf = process.env.PROGRAMFILES || 'C:\\Program Files';
@@ -165,7 +166,35 @@ export async function withBrowserActivity<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 function readProcessCommandLine(pid: number): Promise<string | null> {
-    if (process.platform === 'win32') return Promise.resolve(null);
+    if (process.platform === 'win32') {
+        const pidText = String(Math.trunc(pid));
+        return new Promise((resolve) => {
+            execFile('powershell.exe', [
+                '-NoProfile',
+                '-NonInteractive',
+                '-Command',
+                `(Get-CimInstance Win32_Process -Filter "ProcessId = ${pidText}").CommandLine`,
+            ], (psError, psStdout) => {
+                const psCommand = psStdout.trim();
+                if (!psError && psCommand) {
+                    resolve(psCommand);
+                    return;
+                }
+                execFile('wmic.exe', ['process', 'where', `ProcessId=${pidText}`, 'get', 'CommandLine', '/value'], (wmicError, wmicStdout) => {
+                    if (wmicError) {
+                        resolve(null);
+                        return;
+                    }
+                    const command = wmicStdout
+                        .split(/\r?\n/)
+                        .find((line) => line.startsWith('CommandLine='))
+                        ?.slice('CommandLine='.length)
+                        .trim();
+                    resolve(command || null);
+                });
+            });
+        });
+    }
     if (process.platform === 'linux') {
         try {
             return Promise.resolve(fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ').trim());
@@ -187,7 +216,6 @@ function readProcessCommandLine(pid: number): Promise<string | null> {
 async function isRecordedChromeStillOwned(owner: BrowserRuntimeOwner | null): Promise<boolean> {
     if (!owner || owner.ownership !== 'jaw-owned') return false;
     if (!owner.pid || !owner.port || !owner.userDataDir) return false;
-    if (process.platform === 'win32') return false;
     const command = await readProcessCommandLine(owner.pid);
     if (!command) return false;
     return command.includes(`--remote-debugging-port=${owner.port}`)

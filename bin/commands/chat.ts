@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { resolve as resolvePath, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
 import { loadLocales } from '../../src/core/i18n.js';
 import { consumePasteProtocol, getComposerDisplayText, setBracketedPaste } from '../../src/cli/tui/composer.js';
 import { cleanupScrollRegion, resolveShellLayout, setupScrollRegion } from '../../src/cli/tui/shell.js';
@@ -115,7 +116,7 @@ const ctx: TuiContext = {
     info,
     accent: cliColor[info.cli] || c.red,
     label: cliLabel[info.cli] || info.cli,
-    dir: info.workingDir.replace(process.env.HOME || '', '~'),
+    dir: info.workingDir.replace(homedir(), '~'),
     runtimeLocale,
     tuiConfig,
     values: { port: values.port as string, raw: !!values.raw, simple: !!values.simple },

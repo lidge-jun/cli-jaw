@@ -2,7 +2,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { readClaudeCreds, getClaudeCredentialsPath } from '../../src/routes/quota.ts';
 
 // Read source for structural verification
 const quotaSrc = fs.readFileSync(
@@ -48,15 +50,58 @@ test('QS-002: fetchCodexUsage distinguishes 401/403 from 5xx', () => {
     );
 });
 
-test('QS-003: readClaudeCreds is macOS-only with explicit platform guard', () => {
+test('QS-003: readClaudeCreds supports cross-platform Claude credentials file', () => {
     assert.ok(
-        quotaSrc.includes("process.platform !== 'darwin'"),
-        'should have explicit darwin guard',
+        quotaSrc.includes('getClaudeCredentialsPath'),
+        'should centralize Claude credentials file path resolution',
     );
     assert.ok(
-        quotaSrc.includes('macOS-only'),
-        'should document macOS-only behavior',
+        quotaSrc.includes("CLAUDE_CONFIG_DIR"),
+        'should support Claude Code custom config directory',
     );
+    assert.ok(
+        quotaSrc.includes("'.credentials.json'"),
+        'should read Claude Code credentials JSON on Linux/Windows/WSL',
+    );
+    assert.ok(
+        quotaSrc.includes('macOS stores subscription OAuth in Keychain'),
+        'should document macOS Keychain behavior without making the reader macOS-only',
+    );
+});
+
+test('QS-003b: readClaudeCreds reads CLAUDE_CONFIG_DIR credentials before OS keychain fallback', () => {
+    const prev = {
+        CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR,
+        CLAUDE_CODE_USE_BEDROCK: process.env.CLAUDE_CODE_USE_BEDROCK,
+        CLAUDE_CODE_USE_VERTEX: process.env.CLAUDE_CODE_USE_VERTEX,
+        CLAUDE_CODE_USE_FOUNDRY: process.env.CLAUDE_CODE_USE_FOUNDRY,
+        ANTHROPIC_AUTH_TOKEN: process.env.ANTHROPIC_AUTH_TOKEN,
+        ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+        CLAUDE_CODE_OAUTH_TOKEN: process.env.CLAUDE_CODE_OAUTH_TOKEN,
+    };
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-claude-creds-'));
+    try {
+        for (const key of Object.keys(prev)) delete process.env[key];
+        process.env.CLAUDE_CONFIG_DIR = tmp;
+        fs.writeFileSync(
+            path.join(tmp, '.credentials.json'),
+            JSON.stringify({ claudeAiOauth: { accessToken: 'oauth-test', subscriptionType: 'max', rateLimitTier: 'tier-1' } }),
+            { mode: 0o600 },
+        );
+
+        assert.equal(getClaudeCredentialsPath(tmp), path.join(tmp, '.credentials.json'));
+        const creds = readClaudeCreds();
+        assert.equal(creds?.token, 'oauth-test');
+        assert.equal(creds?.source, 'credentials-json');
+        assert.equal(creds?.quotaCapable, true);
+        assert.deepEqual(creds?.account, { type: 'max', tier: 'tier-1' });
+    } finally {
+        for (const [key, value] of Object.entries(prev)) {
+            if (value == null) delete process.env[key];
+            else process.env[key] = value;
+        }
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
 });
 
 test('QS-004: readGeminiAccount has cross-platform documentation', () => {

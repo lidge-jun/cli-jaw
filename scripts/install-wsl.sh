@@ -251,7 +251,8 @@ main() {
   echo ""
   echo -e "${DIM}  Tip: Authenticate at least one AI engine:${NC}"
   echo -e "${DIM}    gh auth login        # GitHub Copilot (free)${NC}"
-  echo -e "${DIM}    claude auth           # Anthropic Claude${NC}"
+  echo -e "${DIM}    claude auth login     # Anthropic Claude${NC}"
+  echo -e "${DIM}    claude auth status    # Verify Claude login${NC}"
   echo -e "${DIM}    codex login           # OpenAI Codex${NC}"
   echo ""
 }

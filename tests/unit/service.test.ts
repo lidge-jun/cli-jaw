@@ -134,6 +134,19 @@ test('S-013: instance.ts exports all required functions', async () => {
     assert.ok(instanceCode.includes('export function sanitizeUnitName'), 'sanitizeUnitName must be exported');
 });
 
+test('S-013b: instance binary lookup is Windows-aware', async () => {
+    const instanceCode = readFileSync(
+        join(projectRoot, 'src', 'core', 'instance.ts'),
+        'utf8'
+    );
+    assert.ok(instanceCode.includes("process.platform === 'win32' ? 'where' : 'which'"),
+        'binary lookup should use where on Windows and which elsewhere');
+    assert.ok(instanceCode.includes('split(/\\r?\\n/)'),
+        'Windows where may return multiple lines and should select the first result');
+    assert.ok(instanceCode.includes('(?:^|[\\\\/])(?:cli-jaw|jaw)'),
+        'argv path detection should support both POSIX and Windows separators');
+});
+
 // ─── S-014: service.ts uses --no-open in ExecStart ──
 
 test('S-014: ExecStart uses --no-open to prevent browser auto-open', async () => {
@@ -253,6 +266,10 @@ test('S-024: doctor uses npm root -g for playwright-core detection', async () =>
     assert.ok(doctorCode.includes('detectCli'), 'doctor.ts should reuse detectCli for CLI lookup');
     assert.ok(doctorCode.includes('computer-use MCP is safer with native Claude install'),
         'doctor.ts should warn when Claude looks node-managed');
+    assert.ok(doctorCode.includes("check('Claude auth'"),
+        'doctor.ts should report Claude auth separately from Claude install status');
+    assert.ok(doctorCode.includes('readClaudeCreds'),
+        'doctor.ts should reuse the cross-platform Claude auth reader');
 });
 
 test('S-025: install.sh verifies Chromium binary after install', async () => {

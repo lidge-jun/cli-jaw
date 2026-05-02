@@ -3,6 +3,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import { join } from 'path';
+import { resolveHomePath } from '../core/path-expand.js';
 
 export interface GeminiQuotaBucket {
     remainingFraction?: number;
@@ -32,9 +33,25 @@ interface GeminiQuotaAccount {
     account: { email: string | null };
 }
 
+type ClaudeCredsSource =
+    | 'cloud-provider-env'
+    | 'auth-token-env'
+    | 'api-key-env'
+    | 'oauth-env'
+    | 'macos-keychain'
+    | 'credentials-json';
+
+interface ClaudeCreds {
+    token?: string;
+    source: ClaudeCredsSource;
+    quotaCapable: boolean;
+    account: { type: string; tier: string | null };
+}
+
 const GEMINI_CODE_ASSIST_ENDPOINT = 'https://cloudcode-pa.googleapis.com/v1internal';
 const GEMINI_OAUTH_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 const GEMINI_TOKEN_EXPIRY_SKEW_MS = 60_000;
+const CLAUDE_CREDENTIALS_FILE = '.credentials.json';
 
 function clampPercent(value: number): number {
     return Math.max(0, Math.min(100, value));
@@ -78,22 +95,76 @@ export function normalizeGeminiQuotaBuckets(buckets: GeminiQuotaBucket[]): Gemin
     });
 }
 
-// macOS-only: reads Claude Code OAuth token from system keychain.
-// On Linux/WSL: returns null → classified as { authenticated: false } by /api/quota.
-export function readClaudeCreds() {
-    if (process.platform !== 'darwin') return null;
+function expandClaudeConfigDir(configDir = process.env.CLAUDE_CONFIG_DIR, homeDir = os.homedir()): string {
+    if (configDir?.trim()) {
+        return resolveHomePath(configDir, homeDir);
+    }
+    return join(homeDir, '.claude');
+}
+
+export function getClaudeCredentialsPath(configDir = process.env.CLAUDE_CONFIG_DIR, homeDir = os.homedir()): string {
+    return join(expandClaudeConfigDir(configDir, homeDir), CLAUDE_CREDENTIALS_FILE);
+}
+
+function readClaudeOAuthPayload(raw: string, source: ClaudeCredsSource): ClaudeCreds | null {
+    try {
+        const parsed = JSON.parse(raw);
+        const oauth = parsed?.claudeAiOauth ?? parsed?.oauth ?? parsed;
+        const accessToken = oauth?.accessToken ?? oauth?.access_token;
+        if (typeof accessToken !== 'string' || !accessToken.trim()) return null;
+        return {
+            token: accessToken,
+            source,
+            quotaCapable: true,
+            account: {
+                type: oauth?.subscriptionType ?? oauth?.subscription_type ?? source,
+                tier: oauth?.rateLimitTier ?? oauth?.rate_limit_tier ?? null,
+            },
+        };
+    } catch { return null; }
+}
+
+function readClaudeCredsFromKeychain(): ClaudeCreds | null {
     try {
         const raw = execSync(
             'security find-generic-password -s "Claude Code-credentials" -w',
             { timeout: 3000, stdio: ['pipe', 'pipe', 'pipe'] }
         ).toString().trim();
-        const oauth = JSON.parse(raw)?.claudeAiOauth;
-        if (!oauth?.accessToken) return null;
-        return {
-            token: oauth.accessToken,
-            account: { type: oauth.subscriptionType ?? 'unknown', tier: oauth.rateLimitTier ?? null },
-        };
+        return readClaudeOAuthPayload(raw, 'macos-keychain');
     } catch { return null; }
+}
+
+function readClaudeCredsFromFile(): ClaudeCreds | null {
+    try {
+        const raw = fs.readFileSync(getClaudeCredentialsPath(), 'utf8');
+        return readClaudeOAuthPayload(raw, 'credentials-json');
+    } catch { return null; }
+}
+
+// Cross-platform Claude auth detection.
+// macOS stores subscription OAuth in Keychain; Linux/Windows/WSL store it in
+// ~/.claude/.credentials.json, or under $CLAUDE_CONFIG_DIR when configured.
+export function readClaudeCreds(): ClaudeCreds | null {
+    if (process.env.CLAUDE_CODE_USE_BEDROCK || process.env.CLAUDE_CODE_USE_VERTEX || process.env.CLAUDE_CODE_USE_FOUNDRY) {
+        return { source: 'cloud-provider-env', quotaCapable: false, account: { type: 'cloud-provider', tier: null } };
+    }
+    if (process.env.ANTHROPIC_AUTH_TOKEN) {
+        return { token: process.env.ANTHROPIC_AUTH_TOKEN, source: 'auth-token-env', quotaCapable: false, account: { type: 'auth-token', tier: null } };
+    }
+    if (process.env.ANTHROPIC_API_KEY) {
+        return { token: process.env.ANTHROPIC_API_KEY, source: 'api-key-env', quotaCapable: false, account: { type: 'api-key', tier: null } };
+    }
+    if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+        return { token: process.env.CLAUDE_CODE_OAUTH_TOKEN, source: 'oauth-env', quotaCapable: true, account: { type: 'oauth-token', tier: null } };
+    }
+    if (process.env.CLAUDE_CONFIG_DIR) {
+        return readClaudeCredsFromFile();
+    }
+    if (process.platform === 'darwin') {
+        const keychainCreds = readClaudeCredsFromKeychain();
+        if (keychainCreds) return keychainCreds;
+    }
+    return readClaudeCredsFromFile();
 }
 
 export function readCodexTokens() {
@@ -109,7 +180,11 @@ let _claudeUsageCache: { data: Record<string, unknown>; ts: number } | null = nu
 const CLAUDE_CACHE_TTL = 5 * 60 * 1000; // 5 min
 
 export async function fetchClaudeUsage(creds: any) {
-    if (!creds?.token) return null;
+    if (!creds) return null;
+    if (creds.quotaCapable === false) {
+        return { authenticated: true, account: creds.account, windows: [], source: creds.source };
+    }
+    if (!creds.token) return null;
     try {
         const resp = await fetch('https://api.anthropic.com/api/oauth/usage', {
             headers: { 'Authorization': `Bearer ${creds.token}`, 'anthropic-beta': 'oauth-2025-04-20' },

@@ -2,6 +2,7 @@
 // Phase 9.1 — path traversal, id injection, filename abuse 방어
 import path from 'node:path';
 import os from 'node:os';
+import { resolveHomePath } from '../core/path-expand.js';
 
 const SKILL_ID_RE = /^[a-z0-9][a-z0-9._-]*$/;
 const FILE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
@@ -91,7 +92,7 @@ export function assertSendFilePath(filePath: string, workingDir?: string): strin
     const resolved = path.resolve(filePath);
 
     // Allow anything under JAW_HOME
-    const jawHome = path.resolve(process.env.JAW_HOME || path.join(process.env.HOME || '', '.cli-jaw'));
+    const jawHome = resolveHomePath(process.env.CLI_JAW_HOME || process.env.JAW_HOME || path.join(os.homedir(), '.cli-jaw'));
     const homePref = jawHome.endsWith(path.sep) ? jawHome : jawHome + path.sep;
     if (resolved.startsWith(homePref) || resolved === jawHome) return resolved;
 

@@ -2,6 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import os from 'node:os';
 
 // ─── validateTarget behavior ─────────────────────────
 
@@ -48,7 +49,7 @@ test('validateDiscordFileSize accepts 5 MiB', async () => {
 
 test('normalizeChannelSendRequest maps body fields correctly', async () => {
     const { normalizeChannelSendRequest } = await import('../../src/messaging/send.js');
-    const jawHome = process.env.JAW_HOME || path.join(process.env.HOME || '', '.cli-jaw');
+    const jawHome = process.env.CLI_JAW_HOME || process.env.JAW_HOME || path.join(os.homedir(), '.cli-jaw');
     const testPath = path.join(jawHome, 'output', 'test.png');
     const req = normalizeChannelSendRequest({
         channel: 'discord',

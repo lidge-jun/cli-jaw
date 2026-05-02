@@ -10,6 +10,7 @@ import path from 'node:path';
 import { JAW_HOME, SETTINGS_PATH, DB_PATH, HEARTBEAT_JOBS_PATH, detectCli } from '../../src/core/config.js';
 import { detectSharedPathContamination } from '../../lib/mcp-sync.js';
 import { classifyClaudeInstall } from '../../src/core/claude-install.js';
+import { readClaudeCreds } from '../../src/routes/quota.js';
 import { shouldShowHelp, printAndExit } from '../helpers/help.js';
 
 if (shouldShowHelp(process.argv)) printAndExit(`
@@ -159,6 +160,13 @@ for (const cli of ['claude', 'codex', 'gemini', 'opencode', 'copilot']) {
         throw new Error('WARN: not installed');
     });
 }
+
+check('Claude auth', () => {
+    const creds = readClaudeCreds();
+    if (!creds) throw new Error('WARN: not authenticated — run: claude auth login');
+    const quotaNote = creds.quotaCapable ? 'quota available' : 'quota unavailable for this auth source';
+    return `${creds.source} (${quotaNote})`;
+});
 
 // 6a. Active channel
 check('Active channel', () => {

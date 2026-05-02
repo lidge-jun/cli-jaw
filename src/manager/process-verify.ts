@@ -30,6 +30,39 @@ export function killPid(pid: number, signal: NodeJS.Signals): void {
 
 export async function resolveListeningPid(port: number): Promise<number | null> {
     if (!Number.isInteger(port) || port <= 0 || port > 65535) return null;
+    if (process.platform === 'win32') return await resolveListeningPidWin32(port);
+    return await resolveListeningPidLsof(port);
+}
+
+async function resolveListeningPidWin32(port: number): Promise<number | null> {
+    return await new Promise<number | null>((resolve) => {
+        execFile(
+            'netstat',
+            ['-ano', '-p', 'tcp'],
+            { timeout: LSOF_TIMEOUT_MS },
+            (err, stdout) => {
+                if (err) return resolve(null);
+                const pids = String(stdout)
+                    .split(/\r?\n/)
+                    .map(line => line.trim().split(/\s+/))
+                    .filter(parts => parts.length >= 5)
+                    .filter(parts => /^TCP$/i.test(parts[0] || ''))
+                    .filter(parts => /LISTENING/i.test(parts[3] || ''))
+                    .filter(parts => {
+                        const local = parts[1] || '';
+                        return local.endsWith(`:${port}`) || local.endsWith(`.${port}`);
+                    })
+                    .map(parts => Number(parts[4]))
+                    .filter(pid => Number.isInteger(pid) && pid > 0);
+                const unique = Array.from(new Set(pids));
+                if (unique.length !== 1) return resolve(null);
+                resolve(unique[0]!);
+            },
+        );
+    });
+}
+
+async function resolveListeningPidLsof(port: number): Promise<number | null> {
     return await new Promise<number | null>((resolve) => {
         execFile(
             'lsof',

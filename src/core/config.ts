@@ -8,6 +8,7 @@ import { CLI_REGISTRY, CLI_KEYS, DEFAULT_CLI, buildDefaultPerCli } from '../cli/
 import { pickFirstReadyCli } from '../cli/readiness.js';
 import { migrateLegacyClaudeValue } from '../cli/claude-models.js';
 import { buildServicePath } from './runtime-path.js';
+import { resolveHomePath } from './path-expand.js';
 
 // ─── Version (single source of truth: package.json) ──
 import { dirname } from 'path';
@@ -28,7 +29,7 @@ export const APP_VERSION: string = pkg.version;
 // ─── Paths ───────────────────────────────────────────
 
 export const JAW_HOME = process.env.CLI_JAW_HOME
-    ? resolve(process.env.CLI_JAW_HOME.replace(/^~(?=\/|$)/, os.homedir()))
+    ? resolveHomePath(process.env.CLI_JAW_HOME)
     : join(os.homedir(), '.cli-jaw');
 export const PROMPTS_DIR = join(JAW_HOME, 'prompts');
 export const DB_PATH = join(JAW_HOME, 'jaw.db');

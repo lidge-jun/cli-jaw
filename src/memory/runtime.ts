@@ -3,6 +3,7 @@ import os from 'os';
 import { join, relative } from 'path';
 import Database from 'better-sqlite3';
 import { JAW_HOME, settings } from '../core/config.js';
+import { expandHomePath } from '../core/path-expand.js';
 import { instanceId } from '../core/instance.js';
 import { getMemory, getRecentMessages } from '../core/db.js';
 
@@ -268,8 +269,8 @@ export function getAdvancedMemoryStatus() {
 }
 
 function getLegacyClaudeMemoryDir() {
-    const wd = (settings.workingDir || os.homedir()).replace(/^~/, os.homedir());
-    const hash = wd.replace(/\//g, '-');
+    const wd = expandHomePath(settings.workingDir || os.homedir(), os.homedir());
+    const hash = wd.replace(/[\\/]/g, '-');
     return join(os.homedir(), '.claude', 'projects', hash, 'memory');
 }
 

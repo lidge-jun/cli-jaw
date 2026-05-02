@@ -10,6 +10,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { JAW_HOME } from '../../src/core/config.js';
+import { resolveHomePath } from '../../src/core/path-expand.js';
 import { shouldShowHelp, printAndExit } from '../helpers/help.js';
 
 if (shouldShowHelp(process.argv)) printAndExit(`
@@ -39,7 +40,7 @@ const { values, positionals } = parseArgs({
 });
 
 const target = positionals[0]
-    ? path.resolve(positionals[0].replace(/^~(?=\/|$)/, os.homedir()))
+    ? resolveHomePath(positionals[0], os.homedir())
     : null;
 
 if (!target) {
@@ -48,7 +49,7 @@ if (!target) {
 }
 
 const source = values.from
-    ? path.resolve((values.from as string).replace(/^~(?=\/|$)/, os.homedir()))
+    ? resolveHomePath(values.from as string, os.homedir())
     : JAW_HOME;
 const withMemory = values['with-memory'] as boolean;
 const linkRef = values['link-ref'] as boolean;

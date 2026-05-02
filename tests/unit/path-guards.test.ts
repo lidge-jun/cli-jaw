@@ -2,8 +2,11 @@
 // src/security/path-guards.js 가 생성되면 통과
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertSkillId, assertFilename, safeResolveUnder } from '../../src/security/path-guards.ts';
+import { assertSkillId, assertFilename, safeResolveUnder, assertSendFilePath } from '../../src/security/path-guards.ts';
+import { expandHomePath } from '../../src/core/path-expand.ts';
 import path from 'node:path';
+import os from 'node:os';
+import fs from 'node:fs';
 
 // ─── assertSkillId ───────────────────────────────────
 
@@ -86,4 +89,34 @@ test('PG-016: safeResolveUnder blocks encoded traversal (..%2f)', () => {
     // decodeURIComponent happens before this function, so raw % isn't a traversal,
     // but if decoded value escapes base, it should be caught
     assert.throws(() => safeResolveUnder(BASE, '../../etc/passwd'), /path_escape/);
+});
+
+test('PG-017: expandHomePath handles POSIX and Windows tilde separators', () => {
+    assert.equal(expandHomePath('~/jaw', '/home/user'), '/home/user/jaw');
+    assert.equal(expandHomePath('~\\jaw', 'C:\\Users\\jun'), 'C:\\Users\\jun\\jaw');
+    assert.equal(expandHomePath('~', '/Users/jun'), '/Users/jun');
+});
+
+test('PG-018: assertSendFilePath uses CLI_JAW_HOME/os.homedir instead of HOME-only fallback', () => {
+    const previousCliHome = process.env.CLI_JAW_HOME;
+    const previousJawHome = process.env.JAW_HOME;
+    const previousHome = process.env.HOME;
+    const testHome = path.join(os.tmpdir(), 'jaw-send-path-home');
+    const allowedFile = path.join(testHome, 'out.txt');
+    try {
+        fs.mkdirSync(testHome, { recursive: true });
+        fs.writeFileSync(allowedFile, 'ok');
+        process.env.CLI_JAW_HOME = testHome;
+        delete process.env.JAW_HOME;
+        delete process.env.HOME;
+        assert.equal(assertSendFilePath(allowedFile), path.resolve(allowedFile));
+    } finally {
+        if (previousCliHome == null) delete process.env.CLI_JAW_HOME;
+        else process.env.CLI_JAW_HOME = previousCliHome;
+        if (previousJawHome == null) delete process.env.JAW_HOME;
+        else process.env.JAW_HOME = previousJawHome;
+        if (previousHome == null) delete process.env.HOME;
+        else process.env.HOME = previousHome;
+        fs.rmSync(testHome, { recursive: true, force: true });
+    }
 });

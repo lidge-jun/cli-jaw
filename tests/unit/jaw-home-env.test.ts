@@ -5,6 +5,7 @@ import { execSync } from 'node:child_process';
 import { mkdirSync, rmSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { expandHomePath } from '../../src/core/path-expand.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..');
@@ -59,17 +60,8 @@ test('P2-004: --home=/path equals syntax works', () => {
 });
 
 test('P2-005: tilde expansion resolves correctly', () => {
-    const result = execSync(
-        `node -e "
-            import os from 'node:os';
-            const val = '~/test-tilde'.replace(/^~(?=\\\\/|$)/, os.homedir());
-            console.log(val);
-        "`,
-        { encoding: 'utf8' }
-    );
-    assert.ok(result.trim().startsWith('/'));
-    assert.ok(result.trim().endsWith('/test-tilde'));
-    assert.ok(!result.trim().includes('~'));
+    assert.equal(expandHomePath('~/test-tilde', '/home/jaw'), '/home/jaw/test-tilde');
+    assert.equal(expandHomePath('~\\test-tilde', 'C:\\Users\\jaw'), 'C:\\Users\\jaw\\test-tilde');
 });
 
 test('P23-001: postinstall legacy rename guard — custom home must not move ~/.cli-jaw', () => {

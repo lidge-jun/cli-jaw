@@ -11,9 +11,10 @@ import { execFileSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { resolveHomePath } from '../src/core/path-expand.js';
 
 const JAW_HOME = process.env.CLI_JAW_HOME
-    ? path.resolve(process.env.CLI_JAW_HOME.replace(/^~(?=\/|$)/, os.homedir()))
+    ? resolveHomePath(process.env.CLI_JAW_HOME)
     : path.join(os.homedir(), '.cli-jaw');
 const AUTH_DIR = path.join(JAW_HOME, 'auth');
 const TOKEN_CACHE_PATH = path.join(AUTH_DIR, 'copilot-token');

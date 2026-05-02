@@ -23,13 +23,14 @@ export function instanceId(): string {
 export { buildServicePath } from './runtime-path.js';
 
 function whichWithServicePath(binary: string): string {
-    return execFileSync('which', [binary], {
+    const lookup = process.platform === 'win32' ? 'where' : 'which';
+    return execFileSync(lookup, [binary], {
         encoding: 'utf8',
         env: {
             ...process.env,
             PATH: buildServicePath(process.env.PATH || ''),
         },
-    }).trim();
+    }).trim().split(/\r?\n/)[0]!;
 }
 
 /** Resolve absolute path to node binary. */
@@ -42,7 +43,7 @@ export function getNodePath(): string {
 export function getJawPath(): string {
     if (process.env.CLI_JAW_BIN) return process.env.CLI_JAW_BIN;
     const argvPath = process.argv[1];
-    if (argvPath && /(?:^|\/)(?:cli-jaw|jaw)(?:\.js)?$/.test(argvPath)) return argvPath;
+    if (argvPath && /(?:^|[\\/])(?:cli-jaw|jaw)(?:\.js)?$/.test(argvPath)) return argvPath;
     try { return whichWithServicePath('jaw'); }
     catch { return whichWithServicePath('cli-jaw'); }
 }

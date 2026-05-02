@@ -29,7 +29,8 @@ export function getCliReadiness(): CliReadiness[] {
             case 'claude': {
                 const creds = readClaudeCreds();
                 authenticated = !!creds?.token;
-                source = authenticated ? 'keychain' : 'none';
+                if (creds?.source === 'cloud-provider-env') authenticated = true;
+                source = creds?.source ?? 'none';
                 break;
             }
             case 'codex': {
