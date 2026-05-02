@@ -44,6 +44,12 @@ export function replaceLiveRunTools(scope: string, toolLog: any[]): void {
     current.toolLog = [...toolLog];
 }
 
+export function appendLiveRunTool(scope: string, tool: any): void {
+    const current = liveRuns.get(scope);
+    if (!current?.running) return;
+    current.toolLog.push(tool);
+}
+
 export function clearLiveRun(scope: string): void {
     liveRuns.delete(scope);
 }

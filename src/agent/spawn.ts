@@ -31,7 +31,7 @@ import { hasBlockingWorkers, hasPendingWorkerReplays, getActiveWorkers, clearAll
 import { handleAgentExit, setSpawnAgent, setMainMetaHandler } from './lifecycle-handler.js';
 import { buildServicePath } from '../core/runtime-path.js';
 import { resolveOrcScope } from '../orchestrator/scope.js';
-import { beginLiveRun, appendLiveRunText, clearLiveRun, replaceLiveRunTools } from './live-run-state.js';
+import { beginLiveRun, appendLiveRunText, clearLiveRun, replaceLiveRunTools, appendLiveRunTool } from './live-run-state.js';
 import {
     memoryFlushCounter as _memoryFlushCounter,
     flushCycleCount as _flushCycleCount,
@@ -974,6 +974,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             turns: null as number | null, duration: null as number | null, tokens: null as any, stderrBuf: '',
             thinkingBuf: '',
             liveScope: effectiveLiveScope,
+            parentLiveScope: isEmployee ? liveScope : null,
         };
 
         // Flush accumulated 💭 thinking buffer as a single merged event
@@ -987,6 +988,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 const tool = { icon: '💭', label, toolType: 'thinking' as const, detail: merged };
                 ctx.toolLog.push(tool);
                 if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
+                if (ctx.parentLiveScope) appendLiveRunTool(ctx.parentLiveScope, { ...tool, isEmployee: true });
                 broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
             }
             ctx.thinkingBuf = '';
@@ -1017,6 +1019,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                     ctx.seenToolKeys.add(key);
                     ctx.toolLog.push(parsedTool);
                     if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
+                    if (ctx.parentLiveScope) appendLiveRunTool(ctx.parentLiveScope, { ...parsedTool, isEmployee: true });
                     broadcast('agent_tool', { agentId: agentLabel, ...parsedTool, ...empTag });
                     // Reset heartbeat gate on actually visible broadcast (not 💭)
                     lastVisibleBroadcastTs = Date.now();
@@ -1040,6 +1043,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             if (parsed?.tool) {
                 ctx.toolLog.push(parsed.tool);
                 if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
+                if (ctx.parentLiveScope) appendLiveRunTool(ctx.parentLiveScope, { ...parsed.tool, isEmployee: true });
                 broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool, ...empTag });
             }
         });
@@ -1052,6 +1056,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             if (parsed?.tool) {
                 ctx.toolLog.push(parsed.tool);
                 if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
+                if (ctx.parentLiveScope) appendLiveRunTool(ctx.parentLiveScope, { ...parsed.tool, isEmployee: true });
                 broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool, ...empTag });
             }
         });
@@ -1287,6 +1292,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         showReasoning: settings.showReasoning === true,
         outputTextStarted: false,
         liveScope: effectiveLiveScope,
+        parentLiveScope: isEmployee ? liveScope : null,
         geminiResultSeen: false,
         opencodeSpawnAudit: opencodeSpawnAudit as Record<string, unknown> | undefined,
     };

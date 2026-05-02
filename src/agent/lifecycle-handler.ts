@@ -10,7 +10,7 @@ import { resolveSessionBucket } from './args.js';
 import { buildContinuationPrompt } from './smoke-detector.js';
 import { shouldInvalidateResumeSession } from './resume-classifier.js';
 import { classifyExitError } from './error-classifier.js';
-import { clearLiveRun } from './live-run-state.js';
+import { clearLiveRun, getLiveRun } from './live-run-state.js';
 import {
     incrementMemoryFlush,
     resetMemoryFlushCounter,
@@ -268,12 +268,14 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         }
 
         if (mainManaged && !opts.internal) {
-            const toolLogJson = ctx.toolLog.length ? JSON.stringify(ctx.toolLog) : null;
+            const liveRun = getLiveRun(liveScope);
+            const mergedToolLog = liveRun.toolLog.length > ctx.toolLog.length ? liveRun.toolLog : ctx.toolLog;
+            const toolLogJson = mergedToolLog.length ? JSON.stringify(mergedToolLog) : null;
             insertMessageWithTrace.run(
                 'assistant', finalContent, cli, model,
                 traceText || null, toolLogJson, settings.workingDir || null,
             );
-            broadcast('agent_done', { text: finalContent, toolLog: ctx.toolLog, origin, ...empTag });
+            broadcast('agent_done', { text: finalContent, toolLog: mergedToolLog, origin, ...empTag });
 
             incrementMemoryFlush();
             const threshold = settings.memory?.flushEvery ?? 10;

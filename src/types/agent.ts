@@ -30,6 +30,8 @@ export interface SpawnContext {
   outputTextStarted?: boolean;
   thinkingBuf?: string;
   liveScope?: string | null;
+  parentLiveScope?: string | null;
+  _parentSyncedCount?: number;
   // Phase 3: model/metadata storage
   model?: string;
   metadata?: Record<string, any>;

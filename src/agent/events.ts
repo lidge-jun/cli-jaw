@@ -2,7 +2,7 @@
 
 import { broadcast } from '../core/bus.js';
 import type { SpawnContext } from '../types/agent.js';
-import { appendLiveRunText, replaceLiveRunTools } from './live-run-state.js';
+import { appendLiveRunText, replaceLiveRunTools, appendLiveRunTool } from './live-run-state.js';
 
 function liveScopeOf(ctx: SpawnContext): string | null {
     return ctx.liveScope ?? null;
@@ -11,6 +11,14 @@ function liveScopeOf(ctx: SpawnContext): string | null {
 function syncLiveTools(ctx: SpawnContext): void {
     const scope = liveScopeOf(ctx);
     if (scope) replaceLiveRunTools(scope, ctx.toolLog);
+    if (ctx.parentLiveScope) {
+        const synced = ctx._parentSyncedCount || 0;
+        const total = ctx.toolLog.length;
+        for (let i = synced; i < total; i++) {
+            appendLiveRunTool(ctx.parentLiveScope, { ...ctx.toolLog[i], isEmployee: true });
+        }
+        ctx._parentSyncedCount = total;
+    }
 }
 
 /** Flush Claude-specific stream buffers (thinking + input_json).
@@ -533,11 +541,49 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                         }
                     }
                 }
+                if (event.item?.type === 'command_execution') {
+                    const cmd = (event.item.command || '').slice(0, 120);
+                    const exitCode = event.item.exit_code ?? '?';
+                    const itemId = event.item.id || '';
+                    const doneRef = itemId ? `codex:cmd:${itemId}` : `codex:cmd:done:${ctx.toolLog.length}`;
+                    const doneTool = {
+                        icon: '✅',
+                        label: 'done',
+                        toolType: 'tool' as const,
+                        stepRef: doneRef,
+                        status: (exitCode === 0 ? 'done' : 'error') as 'done' | 'error',
+                    };
+                    const doneKey = `${doneTool.icon}:${doneTool.label}:${doneRef}:${doneTool.status}`;
+                    if (!ctx.seenToolKeys?.has(doneKey)) {
+                        ctx.seenToolKeys?.add(doneKey);
+                        ctx.toolLog.push(doneTool);
+                        syncLiveTools(ctx);
+                        broadcast('agent_tool', { agentId: agentLabel, ...doneTool, ...empTag });
+                    }
+                }
                 if (event.item?.type === 'collab_tool_call'
                     && ['spawn_agent', 'wait'].includes(String(event.item.tool || event.item.name || ''))) {
                     ctx.hasActiveSubAgent = false;
                 }
             } else if (event.type === 'item.started') {
+                if (event.item?.type === 'command_execution') {
+                    const cmd = (event.item.command || '').slice(0, 120);
+                    const itemId = event.item.id || '';
+                    const tool = {
+                        icon: '⚡',
+                        label: buildPreview(cmd, 80) || 'command',
+                        toolType: 'tool' as const,
+                        detail: cmd,
+                        stepRef: itemId ? `codex:cmd:${itemId}` : undefined,
+                    };
+                    const key = `${tool.icon}:${tool.label}:${tool.stepRef || ''}:`;
+                    if (!ctx.seenToolKeys?.has(key)) {
+                        ctx.seenToolKeys?.add(key);
+                        ctx.toolLog.push(tool);
+                        syncLiveTools(ctx);
+                        broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
+                    }
+                }
                 if (event.item?.type === 'collab_tool_call'
                     && ['spawn_agent', 'wait'].includes(String(event.item.tool || event.item.name || ''))) {
                     ctx.hasActiveSubAgent = true;

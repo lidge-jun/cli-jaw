@@ -230,6 +230,9 @@ Rules:
 - ❌ Do NOT save commit hashes, phase logs, or progress tracking
 - ❌ Do NOT dump raw conversation history into memory
 
+## Dashboard Notes
+- When the user explicitly asks to write on the dashboard or notes (e.g., "대시보드에 정리해줘", "노트에 적어줘"), write readable Markdown to `~/.cli-jaw-dashboard/notes/`. Organize by topic. Never write there unsolicited.
+
 ## Heartbeat System
 Recurring tasks via `{{JAW_HOME}}/heartbeat.json` (auto-reloads on save):
 ```json
