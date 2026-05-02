@@ -13,6 +13,24 @@ import { consumePasteProtocol, getComposerDisplayText, setBracketedPaste } from 
 import { cleanupScrollRegion, resolveShellLayout, setupScrollRegion } from '../../src/cli/tui/shell.js';
 import { createTuiStore } from '../../src/cli/tui/store.js';
 import { isGitRepo, detectIde } from '../../src/ide/diff.js';
+import { shouldShowHelp, printAndExit } from '../helpers/help.js';
+
+if (shouldShowHelp(process.argv)) printAndExit(`
+  jaw chat — interactive terminal REPL
+
+  Usage: jaw chat [--port <3457>] [--raw] [--simple]
+
+  Connects to the running jaw server for interactive chat.
+  Server must be running first (jaw serve).
+
+  Modes:
+    (default)    Rich TUI with persistent footer
+    --raw        JSON protocol mode (for UI integration)
+    --simple     Plain readline (minimal)
+
+  Options:
+    --port <N>   Server port (default: 3457)
+`);
 import { APP_VERSION, getServerUrl, getWsUrl } from '../../src/core/config.js';
 import { c, cliColor, cliLabel, hrLine, getRows, ESC_WAIT_MS, type TuiContext } from './tui/types.js';
 import { runSimpleMode } from './tui/simple-mode.js';

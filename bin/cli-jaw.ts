@@ -60,46 +60,60 @@ async function maybePromptForStarOnLaunch(): Promise<void> {
 function printHelp() {
     const c = { cyan: '\x1b[36m', dim: '\x1b[2m', bold: '\x1b[1m', reset: '\x1b[0m' };
     console.log(`
-${c.cyan}     _____ _      _____       _                 
-    / ____| |    |_   _|     | |                
-   | |    | |      | |       | | __ ___      __ 
-   | |    | |      | |   _   | |/ _\` \\ \\ /\\ / / 
-   | |____| |____ _| |_ | |__| | (_| |\\ V  V /  
-    \\_____|______|_____| \\____/ \\__,_| \\_/\\_/   ${c.reset}
-${c.dim}   ─────────────────────────────────────${c.reset}
-${c.bold}   🦈 v${pkg.version}${c.reset}  ${c.dim}AI Agent Orchestration Platform${c.reset}
+${c.cyan}  🦈 jaw${c.reset} — AI agent orchestration platform  ${c.dim}v${pkg.version}${c.reset}
 
-  ${c.bold}Usage:${c.reset}  jaw <command> [options]
+  ${c.bold}Usage:${c.reset}  jaw <command> [args] [--flags]
+          jaw --home <path> <command>
 
-  ${c.bold}Commands:${c.reset}
-    serve      서버 시작 (포그라운드)
-    init       초기 설정 마법사
-    doctor     설치/설정 진단
-    chat       터미널 채팅 (REPL)
-    employee   직원 관리 (reset)
-    reset      전체 초기화 (MCP/스킬/직원/세션)
-    mcp        MCP 서버 관리 (install/sync/list)
-    skill      스킬 관리 (install/remove/info)
-    status     서버 상태 확인
-    browser    브라우저 제어
-    memory     영구 메모리 관리
-    launchd    macOS 자동 실행 관리 (install/uninstall/status)
-    service    크로스 플랫폼 자동 실행 (systemd/launchd/docker)
-    clone      인스턴스 복제 (독립 에이전트 생성)
-    dashboard  다중 Jaw 인스턴스 manager 대시보드
-    orchestrate PABCD 상태 전환 (P|A|B|C|D)
-    dispatch   직원 호출 (pipe 모드 호환)
+  ${c.bold}Quick start:${c.reset}
+    jaw init                            Initial setup wizard
+    jaw serve                           Start server (foreground)
+    jaw status --json                   Check server health
+    jaw dashboard serve                 Multi-instance dashboard
+    jaw doctor --json                   Diagnose installation
+
+  ${c.bold}Agent decision guide:${c.reset}
+    1. Check state first: jaw status [--json] or jaw dashboard status --json
+    2. Use --json on any command for machine-readable output.
+    3. Lifecycle actions need dashboard running: jaw dashboard start/stop <port>
+    4. Dispatch employees: jaw dispatch --agent "Name" --task "..."
+    5. Search memory: jaw memory search "<query>"
+
+  ${c.bold}Server:${c.reset}
+    serve [--port] [--no-open]          Start server (foreground)
+    status [--json] [--dashboard]       Server health check
+    dashboard <sub> [--json]            Multi-instance manager (jaw dashboard --help)
+
+  ${c.bold}Setup & diagnostics:${c.reset}
+    init                                Interactive setup wizard
+    doctor [--json]                     Installation diagnostics
+    reset [--all|--mcp|--skills|...]    Reset configuration
+
+  ${c.bold}Orchestration:${c.reset}
+    chat                                Terminal REPL
+    dispatch --agent "N" --task "..."   Dispatch employee (pipe-compatible)
+    employee [list|reset]               Employee management
+    orchestrate [P|A|B|C|D|reset]       PABCD state machine
+
+  ${c.bold}Automation:${c.reset}
+    browser <sub>                       Chrome CDP browser control
+    memory <search|read|save>           Persistent memory store
+    mcp <install|sync|list>             MCP server management
+    skill <install|remove|info|list>    Skill management
+
+  ${c.bold}Service management:${c.reset}
+    service <install|status|unset|logs> Cross-platform auto-start (systemd/launchd)
+    clone <port> [--home]               Clone instance as independent agent
 
   ${c.bold}Options:${c.reset}
-    --home     데이터 디렉토리 지정 (기본: ~/.cli-jaw)
-    --help     도움말 표시
-    --version  버전 표시
+    --home <path>       Data directory (default: ~/.cli-jaw)
+    --help, -h          Show help (works on all subcommands)
+    --version, -v       Show version
 
-  ${c.bold}Examples:${c.reset}
-    jaw serve
-    jaw serve --home ~/.jaw-work --port 3458
-    jaw init
-    jaw doctor --json
+  ${c.bold}Environment:${c.reset}
+    CLI_JAW_HOME        Override data directory
+    PORT                Default server port (3457)
+    DASHBOARD_PORT      Dashboard port (24576)
 `);
 }
 

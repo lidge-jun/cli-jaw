@@ -21,14 +21,14 @@ test('cli routes dashboard command separately from serve', () => {
     assert.ok(cli.includes("import('./commands/serve.js')"), 'existing serve route must remain');
 });
 
-test('dashboard command declares approved defaults and placeholder service', () => {
+test('dashboard command declares approved defaults and implements service', () => {
     const dashboard = read('bin/commands/dashboard.ts');
 
     assert.ok(dashboard.includes('DASHBOARD_DEFAULT_PORT'), 'dashboard command must use manager default port constant');
     assert.ok(dashboard.includes('MANAGED_INSTANCE_PORT_FROM'), 'dashboard command must use scan start constant');
     assert.ok(dashboard.includes('MANAGED_INSTANCE_PORT_COUNT'), 'dashboard command must use scan count constant');
-    assert.ok(dashboard.includes("subcommand === 'service'"), 'dashboard service must be handled explicitly');
-    assert.ok(dashboard.includes('planned for a later phase'), 'dashboard service must be placeholder-only');
+    assert.ok(dashboard.includes("case 'service'"), 'dashboard service must have switch case');
+    assert.ok(dashboard.includes('dashboard-service'), 'dashboard service must delegate to dashboard-service module');
 });
 
 test('dashboard command pins managed instance starts to the launching CLI binary', () => {

@@ -28,7 +28,7 @@
     "url": "https://github.com/lidge-jun/cli-jaw/issues"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.4.0"
   },
   "bin": {
     "cli-jaw": "dist/bin/cli-jaw.js",

@@ -112,6 +112,7 @@ if (backend === 'launchd') {
         ...(subcommand ? [subcommand] : []),
         ...portArgs,
     ];
+    process.env._CLI_JAW_SERVICE_DELEGATE = '1';
     await import('./launchd.js');
     process.exit(0);
 }

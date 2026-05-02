@@ -4,12 +4,30 @@
  */
 import { parseArgs } from 'node:util';
 import { getServerUrl, DEFAULT_PORT } from '../../src/core/config.js';
+import { DASHBOARD_DEFAULT_PORT } from '../../src/manager/constants.js';
+import { shouldShowHelp, printAndExit } from '../helpers/help.js';
+
+if (shouldShowHelp(process.argv)) printAndExit(`
+  jaw status — check server health
+
+  Usage: jaw status [--port <3457>] [--json] [--dashboard]
+
+  Options:
+    --port <N>      Target port (default: 3457)
+    --json          Machine-readable output
+    --dashboard     Also check dashboard server (port 24576)
+
+  Exit codes:
+    0  Server running
+    1  Server not running or error
+`);
 
 const { values } = parseArgs({
     args: process.argv.slice(3),
     options: {
         port: { type: 'string', default: process.env.PORT || DEFAULT_PORT },
         json: { type: 'boolean', default: false },
+        dashboard: { type: 'boolean', default: false },
     },
     strict: false,
 });
@@ -46,4 +64,22 @@ try {
         console.log(`  ❌ Server not running (port ${values.port})`);
     }
     process.exitCode = 1;
+}
+
+if (values.dashboard) {
+    const dashPort = Number(process.env.DASHBOARD_PORT || DASHBOARD_DEFAULT_PORT);
+    const dashUrl = `http://127.0.0.1:${dashPort}/api/dashboard/health`;
+    try {
+        const dashRes = await fetch(dashUrl, { signal: AbortSignal.timeout(3000) });
+        const dashData = await dashRes.json() as Record<string, any>;
+        if (values.json) {
+            console.log(JSON.stringify({ dashboard: { status: 'running', ...dashData } }));
+        } else {
+            console.log(`  🖥️  Dashboard running — port ${dashData.port}, pid ${dashData.pid}`);
+            console.log(`  Scan: ${dashData.rangeFrom}-${dashData.rangeTo}`);
+        }
+    } catch {
+        if (values.json) console.log(JSON.stringify({ dashboard: { status: 'stopped' } }));
+        else console.log(`  ❌ Dashboard not running (port ${dashPort})`);
+    }
 }

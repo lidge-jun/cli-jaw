@@ -10,6 +10,24 @@ import path from 'node:path';
 import { JAW_HOME, SETTINGS_PATH, DB_PATH, HEARTBEAT_JOBS_PATH, detectCli } from '../../src/core/config.js';
 import { detectSharedPathContamination } from '../../lib/mcp-sync.js';
 import { classifyClaudeInstall } from '../../src/core/claude-install.js';
+import { shouldShowHelp, printAndExit } from '../helpers/help.js';
+
+if (shouldShowHelp(process.argv)) printAndExit(`
+  jaw doctor — diagnose installation and configuration
+
+  Usage: jaw doctor [--json]
+
+  Checks:
+    - Node.js version and path
+    - CLI binary resolution
+    - Settings file validity
+    - MCP server connectivity
+    - Employee CLI availability
+    - Port availability
+
+  Options:
+    --json    Machine-readable diagnostic output
+`);
 
 const HEARTBEAT_PATH = HEARTBEAT_JOBS_PATH;
 

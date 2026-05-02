@@ -4,6 +4,24 @@
 
 import { loadSettings, getServerUrl } from '../../src/core/config.js';
 import { cliFetch, getCliAuthToken } from '../../src/cli/api-auth.js';
+import { shouldShowHelp, printAndExit } from '../helpers/help.js';
+
+if (shouldShowHelp(process.argv)) printAndExit(`
+  jaw dispatch — send task to an employee agent
+
+  Usage: jaw dispatch --agent "Name" --task "instruction"
+
+  Options:
+    --agent <name>    Employee name (must match settings.json employees)
+    --task <text>     Task instruction to send
+    --json            JSON output
+
+  Result is returned via stdout. Employee names are case-sensitive.
+
+  Examples:
+    jaw dispatch --agent "Frontend" --task "Fix CSS bug in header"
+    jaw dispatch --agent "Backend" --task "Add rate limiting to /api/chat"
+`);
 
 loadSettings();
 

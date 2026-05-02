@@ -4,8 +4,26 @@
 
 import { settings, loadSettings, getServerUrl } from '../../src/core/config.js';
 import { cliFetch, getCliAuthToken } from '../../src/cli/api-auth.js';
+import { shouldShowHelp, printAndExit } from '../helpers/help.js';
 
-loadSettings();  // ensure settings.port is loaded from this instance's settings.json
+if (shouldShowHelp(process.argv)) printAndExit(`
+  jaw orchestrate — PABCD state machine transitions
+
+  Usage: jaw orchestrate <phase>
+
+  Phases:
+    P       Enter Planning (from IDLE)
+    A       Enter Plan Audit (from P)
+    B       Enter Build (from A)
+    C       Enter Check (from B)
+    D       Enter Done (from C, returns to IDLE)
+    status  Show current phase
+    reset   Return to IDLE from any state
+
+  Transitions: P -> A -> B -> C -> D -> IDLE (one-way only).
+`);
+
+loadSettings();
 
 interface Args {
   target: string;

@@ -13,6 +13,11 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { parseArgs } from 'node:util';
 import { JAW_HOME } from '../../src/core/config.js';
+
+if (process.argv[2] === 'launchd' && !process.env._CLI_JAW_SERVICE_DELEGATE) {
+    console.error('  ⚠️  jaw launchd is deprecated. Use jaw service instead (cross-platform).');
+    console.error('');
+}
 import { instanceId, getNodePath, getJawPath, buildServicePath } from '../../src/core/instance.js';
 import { generateLaunchdPlist } from '../../src/core/launchd-plist.js';
 import { findLegacyCliJawLabels } from '../../src/core/launchd-cleanup.js';

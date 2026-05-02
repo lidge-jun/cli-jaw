@@ -9,6 +9,20 @@ import { fileURLToPath } from 'node:url';
 
 import { getServerUrl } from '../../src/core/config.js';
 import fs from 'node:fs';
+import { shouldShowHelp, printAndExit } from '../helpers/help.js';
+
+if (shouldShowHelp(process.argv)) printAndExit(`
+  jaw serve — start jaw server (foreground)
+
+  Usage: jaw serve [--port <3457>] [--no-open] [--home <path>]
+
+  Options:
+    --port <N>    Server port (default: 3457, or PORT env)
+    --no-open     Don't open browser on start
+
+  The server must be running for chat, dispatch, and browser commands.
+  Use 'jaw service install' to run as a background daemon instead.
+`);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..');

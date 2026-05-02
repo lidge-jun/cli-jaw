@@ -10,6 +10,20 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { JAW_HOME } from '../../src/core/config.js';
+import { shouldShowHelp, printAndExit } from '../helpers/help.js';
+
+if (shouldShowHelp(process.argv)) printAndExit(`
+  jaw clone — clone instance as independent agent
+
+  Usage: jaw clone <port> [--home <path>] [--link-skills]
+
+  Creates a new jaw instance with its own data directory.
+  Copies config + skills, creates fresh DB.
+
+  Options:
+    --home <path>     Target directory (default: ~/.cli-jaw-<port>)
+    --link-skills     Symlink skills from source instead of copying
+`);
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
