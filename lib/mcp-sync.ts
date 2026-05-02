@@ -59,7 +59,7 @@ export function ensureSharedHomeSkillsLinks(...args: Parameters<typeof _ensureSh
 }
 
 // ─── skills-distribution ──────────────────────────
-export { copyDefaultSkills } from './mcp/skills-distribution.js';
+export { copyDefaultSkills, propagateSkillsToInstances } from './mcp/skills-distribution.js';
 
 // ─── skills-reset ─────────────────────────────────
 export {

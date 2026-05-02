@@ -218,3 +218,111 @@ export function copyDefaultSkills() {
 
     return copied;
 }
+
+/**
+ * Propagate skills from JAW_HOME to all ~/.cli-jaw-* instance directories.
+ * Runs after copyDefaultSkills() so the base is already up-to-date.
+ *
+ * - skills_ref/: version-aware merge (new + updated)
+ * - skills/ (active): update existing + auto-activate standard set
+ */
+export function propagateSkillsToInstances() {
+    const home = os.homedir();
+    const baseActive = join(JAW_HOME, 'skills');
+    const baseRef = join(JAW_HOME, 'skills_ref');
+    if (!fs.existsSync(baseRef)) return;
+
+    let instances: string[];
+    try {
+        instances = fs.readdirSync(home, { withFileTypes: true })
+            .filter(d => d.isDirectory() && /^\.cli-jaw-\d+$/.test(d.name))
+            .map(d => join(home, d.name));
+    } catch { return; }
+
+    if (instances.length === 0) return;
+
+    const srcRefReg = loadRegistry(baseRef);
+
+    // Build auto-activate set (same logic as copyDefaultSkills)
+    const autoActivate = new Set([...CODEX_ACTIVE, ...OPENCLAW_ACTIVE]);
+    try {
+        const registryPath = join(baseRef, 'registry.json');
+        if (fs.existsSync(registryPath)) {
+            const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+            for (const [id, meta] of Object.entries(registry.skills || {}) as [string, any][]) {
+                if (meta.category === 'orchestration') autoActivate.add(id);
+            }
+        }
+    } catch { /* skip */ }
+
+    for (const instDir of instances) {
+        const instRef = join(instDir, 'skills_ref');
+        const instActive = join(instDir, 'skills');
+        fs.mkdirSync(instRef, { recursive: true });
+        fs.mkdirSync(instActive, { recursive: true });
+
+        // 1. Sync skills_ref/ (version-aware)
+        const dstRefReg = loadRegistry(instRef);
+        let refNew = 0, refUpdated = 0;
+        for (const entry of fs.readdirSync(baseRef, { withFileTypes: true })) {
+            const src = join(baseRef, entry.name);
+            const dst = join(instRef, entry.name);
+            if (entry.isDirectory()) {
+                if (!fs.existsSync(dst)) {
+                    copyDirRecursive(src, dst);
+                    refNew++;
+                } else {
+                    const sv = getSkillVersion(entry.name, srcRefReg);
+                    const dv = getSkillVersion(entry.name, dstRefReg);
+                    if (sv && (!dv || semverGt(sv, dv))) {
+                        fs.rmSync(dst, { recursive: true, force: true });
+                        copyDirRecursive(src, dst);
+                        refUpdated++;
+                    }
+                }
+            } else if (entry.isFile()) {
+                fs.copyFileSync(src, dst);
+            }
+        }
+
+        // 2. Sync active skills: update existing + auto-activate standard set
+        let activeUpdated = 0, autoActivated = 0;
+        if (fs.existsSync(baseActive)) {
+            for (const entry of fs.readdirSync(baseActive, { withFileTypes: true })) {
+                if (!entry.isDirectory()) continue;
+                const src = join(baseActive, entry.name);
+                const dst = join(instActive, entry.name);
+                const srcSkill = join(src, 'SKILL.md');
+                const dstSkill = join(dst, 'SKILL.md');
+
+                if (fs.existsSync(dst)) {
+                    // Update existing active skill if source is newer
+                    try {
+                        const srcMtime = fs.statSync(srcSkill).mtimeMs;
+                        const dstMtime = fs.statSync(dstSkill).mtimeMs;
+                        if (srcMtime > dstMtime) {
+                            fs.rmSync(dst, { recursive: true, force: true });
+                            copyDirRecursive(src, dst);
+                            activeUpdated++;
+                        }
+                    } catch { /* SKILL.md missing — skip */ }
+                } else if (autoActivate.has(entry.name)) {
+                    copyDirRecursive(src, dst);
+                    autoActivated++;
+                }
+            }
+        }
+
+        const tag = `${instDir.split('/').pop()}`;
+        const parts: string[] = [];
+        if (refNew) parts.push(`${refNew} new ref`);
+        if (refUpdated) parts.push(`${refUpdated} updated ref`);
+        if (activeUpdated) parts.push(`${activeUpdated} active updated`);
+        if (autoActivated) parts.push(`${autoActivated} auto-activated`);
+        if (parts.length > 0) {
+            console.log(`[skills] ${tag}: ${parts.join(', ')}`);
+        }
+    }
+
+    console.log(`[skills] propagated to ${instances.length} instance(s)`);
+}

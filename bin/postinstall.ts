@@ -27,7 +27,7 @@ import path from 'path';
 import os from 'os';
 import { execSync, execFileSync } from 'child_process';
 import { fileURLToPath } from 'node:url';
-import { ensureSharedHomeSkillsLinks, initMcpConfig, copyDefaultSkills, loadUnifiedMcp, saveUnifiedMcp } from '../lib/mcp-sync.js';
+import { ensureSharedHomeSkillsLinks, initMcpConfig, copyDefaultSkills, propagateSkillsToInstances, loadUnifiedMcp, saveUnifiedMcp } from '../lib/mcp-sync.js';
 
 // ─── JAW_HOME inline (config.ts → registry.ts import 체인 제거) ───
 const JAW_HOME = process.env.CLI_JAW_HOME
@@ -503,8 +503,9 @@ export async function runPostinstall() {
     // 5. MCP config
     initMcpConfig(home);
 
-    // 6. Default skills
+    // 6. Default skills (base) + propagate to all instances
     copyDefaultSkills();
+    propagateSkillsToInstances();
 
     // 7-9. Install CLI tools, MCP servers, skill deps, officecli runtime
     await installCliTools();
