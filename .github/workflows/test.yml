@@ -60,7 +60,8 @@ jobs:
         run: npx tsc
 
       - name: Run tests
-        run: npm test
+        run: npx tsx --import ./tests/setup/test-home.ts --test tests/*.test.ts tests/unit/*.test.ts
+        timeout-minutes: 3
 
       - name: Build frontend
         run: npm run build:frontend
