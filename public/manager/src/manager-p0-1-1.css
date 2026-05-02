@@ -5,21 +5,53 @@
 
 .command-primary {
     gap: 8px;
-    grid-template-columns: minmax(108px, 150px) max-content minmax(max-content, 1fr);
+    grid-template-columns: minmax(112px, 148px) max-content minmax(max-content, 1fr);
 }
 
-.command-title .eyebrow {
-    display: none;
+.command-title {
+    --manager-brand-cyan: #21e6f3;
+    position: relative;
+    display: flex;
+    gap: 0;
+    align-content: center;
+    align-items: center;
+    min-width: 0;
+    padding-left: 0;
 }
 
-.command-title h1 {
-    max-width: 150px;
+.command-title h1,
+.command-title .manager-brand-heading {
+    max-width: 136px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: var(--text-primary);
+    color: var(--manager-brand-cyan);
+    font-family: "Satoshi", "Geist Mono", "IBM Plex Mono", monospace;
     font-size: 14px;
-    font-weight: 700;
+    font-weight: 850;
+    letter-spacing: 0;
+    line-height: 0.95;
+    text-shadow: 0 0 16px color-mix(in srgb, var(--manager-brand-cyan) 28%, transparent);
+}
+
+.manager-brand-heading {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    margin: 0;
+    min-width: 0;
+}
+
+.manager-brand-wordmark {
+    flex: 0 0 auto;
+}
+
+.manager-brand-dash {
+    flex: 0 1 auto;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 750;
+    letter-spacing: 0;
 }
 
 .command-filter-strip {

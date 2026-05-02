@@ -23,10 +23,10 @@ export function CommandBar(props: CommandBarProps) {
                 </button>
             )}
             title={(
-                <>
-                    <p className="eyebrow">Manager</p>
-                    <h1>🦈 Jaw dashboard</h1>
-                </>
+                <h1 className="manager-brand-heading" aria-label="CLI-JAW Dashboard">
+                    <span className="manager-brand-wordmark">CLI-JAW</span>
+                    <span className="manager-brand-dash">DASH</span>
+                </h1>
             )}
             search={(
                 <div className="search-input-wrapper">
