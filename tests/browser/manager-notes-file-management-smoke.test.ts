@@ -37,7 +37,7 @@ async function seedNote(page: Page, notePath: string): Promise<void> {
         await fetch('/api/dashboard/registry', {
             method: 'PATCH',
             headers,
-            body: JSON.stringify({ ui: { sidebarMode: 'notes', notesSelectedPath: null } }),
+            body: JSON.stringify({ ui: { sidebarMode: 'notes', notesSelectedPath: null, notesViewMode: 'raw', notesAuthoringMode: 'plain' } }),
         });
         await fetch('/api/dashboard/notes/file', {
             method: 'POST',

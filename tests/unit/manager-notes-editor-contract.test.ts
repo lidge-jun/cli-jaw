@@ -52,8 +52,12 @@ test('Markdown editor exposes WYSIWYG toolbar without changing the save path', (
 
     assert.ok(editor.includes('MilkdownWysiwygEditor'), 'WYSIWYG mode must render the Milkdown authoring surface');
     assert.ok(editor.includes('hasMilkdownUnsafeGfm'), 'WYSIWYG mode must guard Milkdown from known unsafe GFM constructs');
+    assert.ok(editor.includes("enabled: props.authoringMode === 'rich' || props.authoringMode === 'wysiwyg'"),
+        'WYSIWYG fallback must enable CodeMirror rich widgets for task checkboxes');
     assert.ok(editor.includes('WYSIWYG is temporarily disabled for notes with GFM task lists, tables, or footnotes.'),
         'unsafe GFM fallback must explain why WYSIWYG did not mount');
+    assert.ok(editor.includes('<MarkdownPreview markdown={props.content} />'),
+        'unsafe GFM fallback must still show rendered checkboxes through the safe preview renderer');
     assert.ok(milkdown.includes('@milkdown/kit/core'), 'WYSIWYG mode must use Milkdown core directly');
     assert.ok(milkdown.includes('@milkdown/kit/preset/commonmark'), 'Milkdown WYSIWYG must support CommonMark editing');
     assert.ok(milkdown.includes('./milkdown-gfm-safe'), 'Milkdown WYSIWYG must support GFM editing through the local safe wrapper');
@@ -66,7 +70,10 @@ test('Markdown editor exposes WYSIWYG toolbar without changing the save path', (
     assert.ok(milkdown.includes('.use(notesMilkdownCodeBlockView)'), 'Milkdown WYSIWYG must install the code block source view');
     assert.ok(milkdown.includes('insertInlineMath'), 'Milkdown WYSIWYG must expose inline math insertion');
     assert.ok(milkdown.includes('insertBlockMath'), 'Milkdown WYSIWYG must expose block math insertion');
-    assert.equal(milkdown.includes('insertTaskListItem'), false, 'Task list toolbar insertion must not keep a dead handler while disabled');
+    assert.ok(milkdown.includes('insertTaskListItem'), 'Task list toolbar insertion must use a safe handler');
+    assert.ok(milkdown.includes('}- [ ] `'), 'Task toolbar insertion must append canonical task markdown');
+    assert.equal(milkdown.includes("insert('\\n- [ ] '"), false, 'Task toolbar insertion must not enter Milkdown task parsing');
+    assert.ok(milkdown.includes('onMouseDown={event => event.preventDefault()}'), 'Task toolbar button must preserve the current Milkdown selection before click');
     assert.ok(milkdown.includes('normalizeEscapedTaskMarkers'), 'WYSIWYG must save literal task markers as canonical GFM task list markdown');
     assert.ok(milkdown.includes('toggleStrikethroughCommand'), 'Milkdown WYSIWYG must expose GFM strikethrough');
     assert.ok(milkdown.includes('insertTableCommand'), 'Milkdown WYSIWYG must expose GFM tables');
@@ -81,8 +88,10 @@ test('Markdown editor exposes WYSIWYG toolbar without changing the save path', (
     assert.ok(milkdown.includes('observer.disconnect()'), 'WYSIWYG task accessibility observer must be disconnected on unmount');
     assert.ok(milkdown.includes("root.removeEventListener('click', handleTaskListClick)"), 'WYSIWYG task click listener must be removed on unmount');
     assert.ok(milkdown.includes("root.removeEventListener('keydown', handleTaskListKeyDown, true)"), 'WYSIWYG task key listener must be removed on unmount');
-    assert.ok(milkdown.includes('Task list toolbar insertion is disabled to prevent dashboard freezes'), 'Disabled task toolbar button must explain why insertion is unavailable');
-    assert.ok(milkdown.includes('aria-disabled="true"'), 'Disabled task toolbar button must expose disabled state for assistive technology');
+    assert.ok(milkdown.includes('aria-label="Task list"'), 'Task toolbar button must be enabled for ready WYSIWYG editors');
+    assert.ok(milkdown.includes('onClick={insertTaskListItem}'), 'Task toolbar button must insert a task item');
+    assert.equal(milkdown.includes('Task list toolbar insertion is disabled'), false, 'Task toolbar button must not remain disabled as a policy choice');
+    assert.equal(milkdown.includes('aria-disabled="true"'), false, 'Task toolbar button must not expose a fake permanently disabled state');
     assert.ok(mathPlugin.includes('$view'), 'Milkdown math must use node views for rendered/raw editing');
     assert.ok(mathPlugin.includes('notesMathInlineView'), 'inline math must have a rendered/raw node view');
     assert.ok(mathPlugin.includes('notesMathBlockView'), 'block math must have a rendered/raw node view');
@@ -124,6 +133,29 @@ test('Markdown editor exposes WYSIWYG toolbar without changing the save path', (
     assert.equal(milkdown.includes('@milkdown/react'), false, 'WYSIWYG mode must avoid Crepe-pulling React wrapper');
     assert.equal(milkdown.includes('@milkdown/crepe'), false, 'WYSIWYG mode must not import Crepe');
     assert.equal(milkdown.includes('@milkdown/plugin-math'), false, 'WYSIWYG mode must not import deprecated plugin-math');
+});
+
+test('CodeMirror rich widgets render and toggle task markers without Milkdown task nodes', () => {
+    const extension = read('public/manager/src/notes/rich-markdown/rich-markdown-extension.ts');
+    const css = read('public/manager/src/manager-notes.css');
+
+    assert.ok(extension.includes('class TaskLineWidget'), 'task checkboxes must be implemented as CodeMirror widgets');
+    assert.ok(extension.includes('taskLinePattern'), 'task widget scanner must match markdown task lines');
+    assert.ok(extension.includes("insert: checkbox.checked ? '[x]' : '[ ]'"),
+        'task widget toggle must update the source markdown marker');
+    assert.ok(extension.includes("userEvent: 'input.task-toggle'"),
+        'task widget toggle must identify its editor transaction');
+    assert.ok(extension.includes('MAX_TASK_WIDGETS_PER_VIEWPORT'),
+        'task widget rendering must be bounded for large notes');
+    assert.ok(extension.includes('destroy(dom: HTMLElement)'),
+        'task widget must explicitly release DOM event handlers on destroy');
+    assert.ok(extension.includes('updateDOM(dom: HTMLElement, view: EditorView)'),
+        'task widget must update existing DOM instead of recreating every checkbox');
+    assert.ok(extension.includes('EditorView.atomicRanges.of'),
+        'task widget replacement ranges must be exposed as atomic ranges');
+    assert.ok(extension.includes('let inFence = false'),
+        'task widget scanner must avoid rendering checkboxes inside fenced code blocks');
+    assert.ok(css.includes('.cm-rich-task-widget'), 'task widgets must have scoped notes styling');
 });
 
 test('WYSIWYG task marker normalization is narrow and idempotent', () => {

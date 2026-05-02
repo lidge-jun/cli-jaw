@@ -45,6 +45,27 @@ async function seedRichNote(page: Page, notePath: string): Promise<void> {
     }, { notePath });
 }
 
+async function seedSimpleNote(page: Page, notePath: string): Promise<void> {
+    await page.evaluate(async ({ notePath }) => {
+        const headers = { 'content-type': 'application/json' };
+        const registry = await fetch('/api/dashboard/registry', {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ ui: { sidebarMode: 'notes', notesSelectedPath: notePath, notesViewMode: 'raw', notesAuthoringMode: 'plain' } }),
+        });
+        if (!registry.ok) throw new Error(`registry seed failed: ${registry.status}`);
+        const note = await fetch('/api/dashboard/notes/file', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                path: notePath,
+                content: ['# Task toolbar smoke', '', 'Simple note.'].join('\n'),
+            }),
+        });
+        if (!note.ok) throw new Error(`note seed failed: ${note.status}`);
+    }, { notePath });
+}
+
 async function seedGfmNote(page: Page, notePath: string, options: { includeFootnotes?: boolean } = {}): Promise<void> {
     await page.evaluate(async ({ notePath, includeFootnotes }) => {
         const headers = { 'content-type': 'application/json' };
@@ -81,6 +102,27 @@ async function seedGfmNote(page: Page, notePath: string, options: { includeFootn
         });
         if (!note.ok) throw new Error(`note seed failed: ${note.status}`);
     }, { notePath, includeFootnotes: options.includeFootnotes !== false });
+}
+
+async function seedTaskOnlyNote(page: Page, notePath: string): Promise<void> {
+    await page.evaluate(async ({ notePath }) => {
+        const headers = { 'content-type': 'application/json' };
+        const registry = await fetch('/api/dashboard/registry', {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ ui: { sidebarMode: 'notes', notesSelectedPath: notePath, notesViewMode: 'raw', notesAuthoringMode: 'plain' } }),
+        });
+        if (!registry.ok) throw new Error(`registry seed failed: ${registry.status}`);
+        const note = await fetch('/api/dashboard/notes/file', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+                path: notePath,
+                content: ['# Task smoke', '', '- [ ] existing task'].join('\n'),
+            }),
+        });
+        if (!note.ok) throw new Error(`note seed failed: ${note.status}`);
+    }, { notePath });
 }
 
 after(async () => {
@@ -185,14 +227,142 @@ test('notes WYSIWYG authoring keeps the primary toolbar compact', async () => {
         'WYSIWYG code block content must round-trip back to canonical markdown');
 });
 
+test('notes WYSIWYG toolbar commands can be used together without conflicts', async () => {
+    const page = await pageForManager();
+    const noteName = `browser-toolbar-all-${Date.now()}.md`;
+
+    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+    await seedSimpleNote(page, noteName);
+    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+    await page.waitForSelector('.notes-tree');
+
+    await page.locator('.notes-tree-file-button').filter({ hasText: noteName }).first().click();
+    await page.getByRole('tab', { name: 'WYSIWYG' }).click();
+    await page.waitForSelector('.notes-wysiwyg-toolbar', { timeout: 5000 });
+    await page.waitForSelector('.notes-milkdown-root .ProseMirror', { timeout: 5000 });
+
+    const editor = page.locator('.notes-milkdown-root .ProseMirror');
+    await editor.click();
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+End' : 'Control+End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+
+    await page.getByRole('button', { name: 'Bold' }).click();
+    await page.keyboard.type('bold toolbar');
+    await page.getByRole('button', { name: 'Bold' }).click();
+    await page.keyboard.press('Enter');
+
+    await page.getByRole('button', { name: 'Italic' }).click();
+    await page.keyboard.type('italic toolbar');
+    await page.getByRole('button', { name: 'Italic' }).click();
+    await page.keyboard.press('Enter');
+
+    await page.getByRole('button', { name: 'Strikethrough' }).click();
+    await page.keyboard.type('strike toolbar');
+    await page.getByRole('button', { name: 'Strikethrough' }).click();
+    await page.keyboard.press('Enter');
+
+    await page.getByRole('button', { name: 'Inline code' }).click();
+    await page.keyboard.type('code toolbar');
+    await page.getByRole('button', { name: 'Inline code' }).click();
+    await page.keyboard.press('Enter');
+
+    page.once('dialog', dialog => dialog.accept('https://example.com/toolbar'));
+    await page.getByRole('button', { name: 'Link', exact: true }).click();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Enter');
+    page.once('dialog', dialog => dialog.accept('a+b'));
+    await page.getByRole('button', { name: 'Inline math' }).click();
+    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('Enter');
+    page.once('dialog', dialog => dialog.accept('\\int_0^1 x dx'));
+    await page.getByRole('button', { name: 'Block math' }).click();
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+
+    await page.getByRole('button', { name: 'Heading level 2' }).click();
+    await page.keyboard.type('heading toolbar');
+    await page.keyboard.press('Enter');
+
+    await page.getByRole('button', { name: 'Bullet list' }).click();
+    await page.keyboard.type('bullet toolbar');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+
+    await page.getByRole('button', { name: 'Quote' }).click();
+    await page.keyboard.type('quote toolbar');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Enter');
+
+    page.once('dialog', dialog => dialog.accept('ts'));
+    await page.getByRole('button', { name: 'Code block' }).click();
+    await page.keyboard.type('const toolbarCommand = true;');
+    await page.keyboard.press('Escape');
+
+    await page.getByRole('button', { name: 'Table', exact: true }).click();
+    await Promise.race([
+        page.waitForSelector('.notes-wysiwyg-error', { timeout: 5000 }),
+        page.waitForSelector('.notes-milkdown-root table', { timeout: 5000 }),
+    ]);
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+
+    const savedContent = await page.evaluate(async ({ noteName }) => {
+        const response = await fetch(`/api/dashboard/notes/file?path=${encodeURIComponent(noteName)}`);
+        const body = await response.json();
+        return body.content as string;
+    }, { noteName });
+
+    assert.ok(savedContent.includes('bold toolbar'), 'Bold command must leave editable content intact');
+    assert.ok(savedContent.includes('italic toolbar'), 'Italic command must leave editable content intact');
+    assert.ok(savedContent.includes('strike toolbar'), 'Strikethrough command must leave editable content intact');
+    assert.ok(savedContent.includes('code toolbar'), 'Inline code command must leave editable content intact');
+    assert.ok(savedContent.includes('https://example.com/toolbar'), 'Link command must insert a safe URL');
+    assert.ok(savedContent.includes('a+b'), 'Inline math command must insert math content');
+    assert.ok(savedContent.includes('\\int_0^1 x dx'), 'Block math command must insert math content');
+    assert.ok(savedContent.includes('heading toolbar'), 'Heading command must preserve typed content');
+    assert.ok(savedContent.includes('bullet toolbar'), 'Bullet list command must preserve typed content');
+    assert.ok(savedContent.includes('quote toolbar'), 'Quote command must preserve typed content');
+    assert.ok(savedContent.includes('```ts'), 'Code block command must insert a language-aware fenced block');
+    assert.ok(savedContent.includes('|'), 'Table command must insert table markdown');
+});
+
+test('notes WYSIWYG Task toolbar creates a usable checkbox without Milkdown task nodes', async () => {
+    const page = await pageForManager();
+    const noteName = `browser-task-toolbar-${Date.now()}.md`;
+
+    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+    await seedSimpleNote(page, noteName);
+    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+    await page.waitForSelector('.notes-tree');
+
+    await page.locator('.notes-tree-file-button').filter({ hasText: noteName }).first().click();
+    await page.getByRole('tab', { name: 'WYSIWYG' }).click();
+    await page.waitForSelector('.notes-wysiwyg-toolbar', { timeout: 5000 });
+    await page.getByRole('button', { name: 'Task list' }).click();
+    await page.waitForSelector('.notes-wysiwyg-error', { timeout: 5000 });
+    await page.waitForSelector('.cm-rich-task-widget input[type="checkbox"]', { timeout: 5000 });
+    await page.locator('.cm-rich-task-widget input[type="checkbox"]').first().click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+
+    const savedContent = await page.evaluate(async ({ noteName }) => {
+        const response = await fetch(`/api/dashboard/notes/file?path=${encodeURIComponent(noteName)}`);
+        const body = await response.json();
+        return body.content as string;
+    }, { noteName });
+    assert.ok(/(^|\n)- \[x\](\s|$)/.test(savedContent),
+        'WYSIWYG Task toolbar checkbox must toggle and save through the CodeMirror widget');
+});
+
 test('notes render and edit GitHub Flavored Markdown affordances', async () => {
     const page = await pageForManager();
     const noteName = `browser-gfm-${Date.now()}.md`;
     const wysiwygNoteName = `browser-gfm-wysiwyg-${Date.now()}.md`;
+    const taskOnlyNoteName = `browser-gfm-task-only-${Date.now()}.md`;
 
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
     await seedGfmNote(page, noteName);
     await seedGfmNote(page, wysiwygNoteName, { includeFootnotes: false });
+    await seedTaskOnlyNote(page, taskOnlyNoteName);
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
     await page.waitForSelector('.notes-tree');
 
@@ -227,6 +397,13 @@ test('notes render and edit GitHub Flavored Markdown affordances', async () => {
     await page.waitForSelector('.notes-wysiwyg-error', { timeout: 5000 });
     assert.equal(await page.locator('.notes-milkdown-root').count(), 0,
         'WYSIWYG must not mount Milkdown for existing GFM task/table notes until that path is safe');
+
+    await page.locator('.notes-tree-file-button').filter({ hasText: taskOnlyNoteName }).first().click();
+    await page.getByRole('tab', { name: 'WYSIWYG' }).click();
+    await page.waitForSelector('.notes-wysiwyg-error', { timeout: 5000 });
+    await page.waitForSelector('.cm-rich-task-widget input[type="checkbox"]', { timeout: 5000 });
+    assert.equal(await page.locator('.notes-milkdown-root').count(), 0,
+        'task-only notes must use safe CodeMirror task widgets instead of mounting Milkdown task nodes');
 
     const savedContent = await page.evaluate(async ({ noteName }) => {
         const response = await fetch(`/api/dashboard/notes/file?path=${encodeURIComponent(noteName)}`);

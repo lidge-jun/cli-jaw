@@ -6,6 +6,7 @@ import { EditorView, keymap } from '@codemirror/view';
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react';
 import { notesEditorTheme, notesSyntaxHighlighting } from './editor-theme';
 import { markdownShortcutsKeymap } from './markdown-shortcuts';
+import { MarkdownPreview } from './MarkdownPreview';
 import { RichMarkdownPortalHost } from './rich-markdown/RichMarkdownPortalHost';
 import { richMarkdownExtension } from './rich-markdown/rich-markdown-extension';
 import { richMarkdownPastePolicy } from './rich-markdown/paste-policy';
@@ -62,7 +63,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
             markdown({ codeLanguages: languages }),
             richMarkdownPastePolicy(),
             richMarkdownExtension({
-                enabled: props.authoringMode === 'rich' || isWysiwyg,
+                enabled: props.authoringMode === 'rich' || props.authoringMode === 'wysiwyg',
                 active: props.active,
                 registerWidget,
                 unregisterWidget,
@@ -71,7 +72,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
         ];
         if (props.wordWrap) base.push(EditorView.lineWrapping);
         return base;
-    }, [props.active, props.authoringMode, props.wordWrap, isWysiwyg, registerWidget, requestMeasure, unregisterWidget]);
+    }, [props.active, props.authoringMode, props.wordWrap, registerWidget, requestMeasure, unregisterWidget]);
 
     if (isWysiwyg) {
         return (
@@ -90,6 +91,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
                     WYSIWYG is temporarily disabled for notes with GFM task lists, tables, or footnotes.
                 </div>
             )}
+            {hasUnsafeMilkdownGfm && <MarkdownPreview markdown={props.content} />}
             <RichMarkdownPortalHost widgets={[...widgets.values()]} />
             <CodeMirror
                 value={props.content}

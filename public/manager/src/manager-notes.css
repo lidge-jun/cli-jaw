@@ -736,6 +736,21 @@
     background-color: var(--selection-bg) !important;
 }
 
+.cm-rich-task-widget {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 22px;
+    color: var(--text-primary);
+}
+
+.cm-rich-task-widget input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: var(--accent);
+}
+
 .notes-preview {
     padding: 22px;
     line-height: 1.65;

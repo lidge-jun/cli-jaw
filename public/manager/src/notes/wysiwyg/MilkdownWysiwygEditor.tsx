@@ -187,6 +187,13 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         run(editor => editor.action(callCommand(insertTableCommand.key, { row: 3, col: 3 })));
     }
 
+    function insertTaskListItem(): void {
+        const currentMarkdown = latestMarkdownRef.current.trimEnd();
+        const nextMarkdown = `${currentMarkdown}${currentMarkdown ? '\n\n' : ''}- [ ] `;
+        latestMarkdownRef.current = nextMarkdown;
+        onChangeRef.current(nextMarkdown);
+    }
+
     useEffect(() => {
         if (!ready) return undefined;
         const root = rootRef.current;
@@ -290,13 +297,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
                 <button type="button" title="Block math" aria-label="Block math" disabled={!ready} onClick={insertBlockMath}>Math Block</button>
                 <button type="button" title="Heading" aria-label="Heading level 2" disabled={!ready} onClick={() => run(editor => editor.action(callCommand(wrapInHeadingCommand.key, 2)))}>H2</button>
                 <button type="button" title="List" aria-label="Bullet list" disabled={!ready} onClick={() => run(editor => editor.action(callCommand(wrapInBulletListCommand.key)))}>List</button>
-                <button
-                    type="button"
-                    title="Task list toolbar insertion is disabled to prevent dashboard freezes; type - [ ] manually"
-                    aria-label="Task list insertion disabled"
-                    aria-disabled="true"
-                    disabled
-                >Task</button>
+                <button type="button" title="Task list" aria-label="Task list" disabled={!ready} onMouseDown={event => event.preventDefault()} onClick={insertTaskListItem}>Task</button>
                 <button type="button" title="Quote" aria-label="Quote" disabled={!ready} onClick={() => run(editor => editor.action(callCommand(wrapInBlockquoteCommand.key)))}>Quote</button>
                 <button type="button" title="Table" aria-label="Table" disabled={!ready} onClick={insertTable}>Table</button>
                 <button type="button" title="Code block" aria-label="Code block" disabled={!ready} onClick={createLanguageCodeBlock}>Block</button>
