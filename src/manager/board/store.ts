@@ -3,11 +3,19 @@ import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
 import { dashboardPath } from '../dashboard-home.js';
 
-export type DashboardTaskLane = 'inbox' | 'doing' | 'blocked' | 'review' | 'done';
-export const TASK_LANES: readonly DashboardTaskLane[] = ['inbox', 'doing', 'blocked', 'review', 'done'] as const;
+export type DashboardTaskLane = 'backlog' | 'ready' | 'active' | 'review' | 'done';
+export const TASK_LANES: readonly DashboardTaskLane[] = ['backlog', 'ready', 'active', 'review', 'done'] as const;
 
 function isLane(v: unknown): v is DashboardTaskLane {
     return typeof v === 'string' && (TASK_LANES as readonly string[]).includes(v);
+}
+
+function normalizeLane(v: unknown): DashboardTaskLane {
+    if (isLane(v)) return v;
+    if (v === 'inbox') return 'backlog';
+    if (v === 'doing') return 'active';
+    if (v === 'blocked') return 'active';
+    return 'backlog';
 }
 
 export type DashboardTask = {
@@ -52,13 +60,12 @@ type Row = {
 };
 
 function rowToTask(row: Row): DashboardTask {
-    const lane: DashboardTaskLane = isLane(row.lane) ? row.lane : 'inbox';
     return {
         id: row.id,
         title: row.title,
         summary: row.summary,
         detail: row.detail,
-        lane,
+        lane: normalizeLane(row.lane),
         port: row.port,
         threadKey: row.thread_key,
         notePath: row.note_path,
@@ -98,7 +105,7 @@ export class BoardStore {
                 title       TEXT NOT NULL,
                 summary     TEXT,
                 detail      TEXT,
-                lane        TEXT NOT NULL DEFAULT 'inbox',
+                lane        TEXT NOT NULL DEFAULT 'backlog',
                 port        INTEGER,
                 thread_key  TEXT,
                 note_path   TEXT,
@@ -111,12 +118,18 @@ export class BoardStore {
         `);
         this.ensureColumn('summary', 'TEXT');
         this.ensureColumn('detail', 'TEXT');
+        this.migrateLegacyLanes();
     }
 
     private ensureColumn(name: string, ddl: string): void {
         const rows = this.db.prepare('PRAGMA table_info(dashboard_tasks)').all() as Array<{ name: string }>;
         if (rows.some(row => row.name === name)) return;
         this.db.exec(`ALTER TABLE dashboard_tasks ADD COLUMN ${name} ${ddl}`);
+    }
+
+    private migrateLegacyLanes(): void {
+        this.db.prepare("UPDATE dashboard_tasks SET lane = 'backlog' WHERE lane = 'inbox'").run();
+        this.db.prepare("UPDATE dashboard_tasks SET lane = 'active' WHERE lane IN ('doing', 'blocked')").run();
     }
 
     list(): DashboardTask[] {
@@ -132,7 +145,7 @@ export class BoardStore {
     create(input: DashboardTaskInput): DashboardTask {
         const id = `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
         if (input.lane !== undefined && !isLane(input.lane)) throw new Error('invalid lane');
-        const lane: DashboardTaskLane = input.lane ?? 'inbox';
+        const lane: DashboardTaskLane = input.lane ?? 'backlog';
         const title = String(input.title || '').trim();
         if (!title) throw new Error('title required');
         if (title.length > 500) throw new Error('title too long');

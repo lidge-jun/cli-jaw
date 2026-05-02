@@ -82,7 +82,7 @@ export function createDashboardBoardRouter(options: DashboardBoardRouterOptions 
             const threadKey = typeof body.threadKey === 'string' ? body.threadKey : null;
             const titleRaw = typeof body.title === 'string' ? body.title.trim() : '';
             const title = titleRaw || (threadKey ? `Thread @ :${port}` : `Instance :${port}`);
-            const lane = typeof body.lane === 'string' ? body.lane as DashboardTaskInput['lane'] : 'inbox';
+            const lane = typeof body.lane === 'string' ? body.lane as DashboardTaskInput['lane'] : 'backlog';
             const task = store.create({
                 title,
                 lane,

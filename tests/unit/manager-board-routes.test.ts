@@ -42,7 +42,7 @@ test('board routes persist and return title, summary, and detail edits', async (
                 title: 'Initial',
                 summary: 'One line',
                 detail: 'Full detail',
-                lane: 'inbox',
+                lane: 'backlog',
             }),
         });
         assert.equal(created.status, 201);
