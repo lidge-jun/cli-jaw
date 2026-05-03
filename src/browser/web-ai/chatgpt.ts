@@ -1,7 +1,9 @@
 import { getActivePage, getCdpSession, createTab, waitForPageByTargetId, getPageByTargetId } from '../connection.js';
 import { getActiveTab, type ActiveTabResult, type BrowserTabInfo } from '../connection.js';
 import { cleanupIdleTabs } from '../tab-lifecycle.js';
-import { getPooledTab, poolTab } from './tab-pool.js';
+import { cleanupPoolTabs, getPooledTab } from './tab-pool.js';
+import { finalizeProviderTab } from './tab-finalizer.js';
+import { recordActiveLease } from './tab-lease-store.js';
 import { withSessionCommandLock } from './session-store.js';
 import { basename } from 'node:path';
 import { statSync } from 'node:fs';
@@ -123,8 +125,13 @@ async function ensureProviderTab(port: number, input: QuestionEnvelopeInput): Pr
     }
     const vendor = (input.vendor || 'chatgpt') as WebAiVendor;
     const vendorUrl = input.url || 'https://chatgpt.com';
+    await cleanupPoolTabs(port);
     await cleanupIdleTabs(port, { maxTabs: Number.POSITIVE_INFINITY });
-    const pooled = await getPooledTab(port, vendor);
+    const pooled = await getPooledTab(port, vendor, {
+        owner: 'cli-jaw',
+        sessionType: 'jaw',
+        url: vendorUrl,
+    });
     if (pooled) {
         const page = await waitForPageByTargetId(port, pooled.targetId);
         if (page.url?.() !== vendorUrl) {
@@ -226,6 +233,15 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
         timeoutMs: 600_000,
     });
     bindSessionToTab(session.sessionId, targetId);
+    await recordActiveLease({
+        owner: 'cli-jaw',
+        vendor: envelope.vendor,
+        sessionType: 'jaw',
+        port,
+        targetId,
+        sessionId: session.sessionId,
+        url: page.url(),
+    });
 
     const adapter = createChatGptEditorAdapter(page, {
         insertText: async (text: string) => {
@@ -347,8 +363,7 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
     if (session && !result.ok) updateSessionStatus(session.sessionId, 'timeout');
     if (result.canvas) {
         if (session) {
-            updateSessionResult({ sessionId: session.sessionId, status: 'complete', url: currentUrl, conversationUrl: currentUrl, answerText: result.answerText });
-            poolTab(vendor, session.targetId, currentUrl);
+            await finalizeProviderTab({ vendor, session, port, url: currentUrl, answerText: result.answerText || '' });
         }
         return {
             ok: true,
@@ -365,8 +380,7 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
     }
     if (result.ok) {
         if (session) {
-            updateSessionResult({ sessionId: session.sessionId, status: 'complete', url: currentUrl, conversationUrl: currentUrl, answerText: result.answerText });
-            poolTab(vendor, session.targetId, currentUrl);
+            await finalizeProviderTab({ vendor, session, port, url: currentUrl, answerText: result.answerText || '' });
         }
         return {
             ok: true,

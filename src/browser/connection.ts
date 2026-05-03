@@ -531,9 +531,11 @@ export async function getCdpSession(port = getActivePort()) {
     return page.context().newCDPSession(page);
 }
 
-function isReusableBlankTab(tab: RawCdpTab): boolean {
+function isReusableBlankTab(tab: RawCdpTab, allTabs: RawCdpTab[] = []): boolean {
     const url = String(tab.url || '').toLowerCase();
-    return Boolean(tab.id) && (url === 'about:blank' || url === '');
+    if (!tab.id || (url !== 'about:blank' && url !== '')) return false;
+    if (allTabs.length <= 1) return true;
+    return Boolean(getTabActivity(tab.id));
 }
 
 export async function createTab(port = getActivePort(), url = 'about:blank', opts: { activate?: boolean; reuseBlank?: boolean } = {}): Promise<{ targetId: string; url: string; title: string; activated: boolean; lastActiveAt: number | null; reusedBlank?: boolean }> {
@@ -541,7 +543,8 @@ export async function createTab(port = getActivePort(), url = 'about:blank', opt
     if (!cdp) throw new Error('No CDP session available for tab creation');
     try {
         if (url !== 'about:blank' && opts.reuseBlank !== false) {
-            const blank = (await readCdpPageTargets(port)).find(isReusableBlankTab);
+            const tabs = await readCdpPageTargets(port);
+            const blank = tabs.find(tab => isReusableBlankTab(tab, tabs));
             if (blank?.id) {
                 const page = await waitForPageByTargetId(port, blank.id);
                 await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });

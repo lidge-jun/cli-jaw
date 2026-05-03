@@ -84,16 +84,48 @@ test('browser createTab reuses startup about:blank tabs before creating provider
     const source = readFileSync(new URL('../../src/browser/connection.ts', import.meta.url), 'utf8');
     assert.ok(source.includes('function isReusableBlankTab'));
     assert.ok(source.includes('opts.reuseBlank !== false'));
+    assert.ok(source.includes('allTabs.length <= 1'));
+    assert.ok(source.includes('getTabActivity(tab.id)'));
     assert.ok(source.includes('reusedBlank: true'));
 });
 
-test('browser web-ai tab pool persists across CLI processes and checks out pooled tabs once', () => {
+test('browser tab lifecycle counts only owned closeable leases toward managed max-tabs', () => {
+    const now = 10_000;
+    const selected = selectTabsForCleanup({
+        now,
+        idleTimeoutMs: 60_000,
+        maxTabs: 1,
+        tabs: [
+            { tabId: 'user-old', targetId: 'user-old', index: 1, title: '', url: '', type: 'page', active: false, attached: true, lastActiveAt: 100 },
+            { tabId: 'owned-old', targetId: 'owned-old', index: 2, title: '', url: '', type: 'page', active: false, attached: true, lastActiveAt: 200 },
+            { tabId: 'owned-new', targetId: 'owned-new', index: 3, title: '', url: '', type: 'page', active: false, attached: true, lastActiveAt: 300 },
+            { tabId: 'active', targetId: 'active', index: 4, title: '', url: '', type: 'page', active: false, attached: true, lastActiveAt: 50 },
+        ],
+        activeSessionTargetIds: new Set(['active']),
+        leaseByTargetId: new Map([
+            ['owned-old', { owner: 'cli-jaw', state: 'pooled' }],
+            ['owned-new', { owner: 'cli-jaw', state: 'pooled' }],
+            ['active', { owner: 'cli-jaw', state: 'active-session' }],
+        ]),
+    });
+
+    assert.deepEqual(selected.map(tab => tab.targetId), ['owned-old']);
+    assert.equal(selected[0]?.cleanupReason, 'max-tabs');
+});
+
+test('browser web-ai tab pool persists leases, locks checkout, and closes evicted tabs', () => {
     const poolSource = readFileSync(new URL('../../src/browser/web-ai/tab-pool.ts', import.meta.url), 'utf8');
+    const leaseSource = readFileSync(new URL('../../src/browser/web-ai/tab-lease-store.ts', import.meta.url), 'utf8');
+    const finalizerSource = readFileSync(new URL('../../src/browser/web-ai/tab-finalizer.ts', import.meta.url), 'utf8');
     const chatgptSource = readFileSync(new URL('../../src/browser/web-ai/chatgpt.ts', import.meta.url), 'utf8');
-    assert.ok(poolSource.includes('browser-web-ai-tab-pool.json'));
-    assert.ok(poolSource.includes('function loadPool'));
-    assert.ok(poolSource.includes('function savePool'));
-    assert.ok(poolSource.includes('pool.delete(vendor)'));
-    assert.ok(chatgptSource.includes('getPooledTab(port, input.vendor)'));
-    assert.ok(chatgptSource.includes('poolTab(vendor, session.targetId, currentUrl)'));
+    assert.ok(leaseSource.includes('browser-web-ai-tab-leases.json'));
+    assert.ok(leaseSource.includes('export async function withLeaseLock'));
+    assert.ok(leaseSource.includes('buildLeaseKey'));
+    assert.ok(leaseSource.includes('closeTab(port, lease.targetId)'));
+    assert.ok(poolSource.includes('releaseCompletedLease'));
+    assert.ok(finalizerSource.includes('updateSessionResult'));
+    assert.ok(finalizerSource.includes('await poolTab'));
+    assert.ok(chatgptSource.includes('cleanupPoolTabs(port)'));
+    assert.ok(chatgptSource.includes('getPooledTab(port, vendor'));
+    assert.ok(chatgptSource.includes('await finalizeProviderTab'));
 });
