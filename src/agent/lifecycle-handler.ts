@@ -326,7 +326,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                 retryP.then((r: any) => resolve(r)).catch(() => {
                     broadcast('agent_done', { text: `❌ ${errMsg} (재시도 실패)`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
                     resolve({ text: '', code: 1 });
-                    if (mainManaged) processQueue();
+                    if (mainManaged && !opts.internal) processQueue();
                 });
             }, 10_000));
             return;
@@ -355,7 +355,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                         ...empTag,
                     }, isEmployee ? 'internal' : 'public');
                     resolve({ text: '', code: 1 });
-                    if (mainManaged) processQueue();
+                    if (mainManaged && !opts.internal) processQueue();
                 });
                 return;
             }
@@ -383,7 +383,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         tools: ctx.toolLog, smoke: smokeResult,
         diagnostic,
     });
-    if (mainManaged) processQueue();
+    if (mainManaged && !opts.internal) processQueue();
 }
 
 // ─── Post-flush reindex (3-C) ────────────────────────

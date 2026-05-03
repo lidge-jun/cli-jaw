@@ -136,6 +136,12 @@ export async function triggerMemoryFlush(): Promise<void> {
                         console.error('[memory] post-flush auto-reflect failed:', e)
                     );
                     console.log(`[memory] flush complete (code=${code}), watermark=${maxId}`);
+                    setTimeout(async () => {
+                        try {
+                            const { processQueue } = await import('./spawn.js');
+                            processQueue();
+                        } catch { /* spawn module may not be ready */ }
+                    }, 100);
                 },
             },
         });

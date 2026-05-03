@@ -946,8 +946,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             console.warn(`[spawn:dup] activeProcesses already has child for ${agentLabel} — orphaning previous reference`);
         }
         activeProcesses.set(agentLabel, child);
-        broadcast('agent_status', { running: true, agentId: agentLabel, cli, ...empTag });
-        if (mainManaged) beginLiveRun(liveScope, cli);
+        if (!opts.internal) broadcast('agent_status', { running: true, agentId: agentLabel, cli, ...empTag });
+        if (mainManaged && !opts.internal) beginLiveRun(liveScope, cli);
 
         // ─── DIFF-C: ACP error guard — prevent uncaught EventEmitter crash ───
         let acpSettled = false;  // guard: error→exit can fire sequentially
@@ -1121,7 +1121,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 ctx.toolLog = [];
                 ctx.seenToolKeys.clear();
                 ctx.thinkingBuf = '';  // Phase 17.2: clear replay thinking too
-                if (mainManaged) beginLiveRun(liveScope, cli);
+                if (mainManaged && !opts.internal) beginLiveRun(liveScope, cli);
 
                 // If loadSession failed (or not resuming), inject history into prompt
                 const needsHistoryFallback = isResume && !loadSessionOk;
@@ -1233,8 +1233,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         console.warn(`[spawn:dup] activeProcesses already has child for ${agentLabel} — orphaning previous reference`);
     }
     activeProcesses.set(agentLabel, child);
-    broadcast('agent_status', { running: true, agentId: agentLabel, cli, ...empTag });
-    if (mainManaged) beginLiveRun(liveScope, cli);
+    if (!opts.internal) broadcast('agent_status', { running: true, agentId: agentLabel, cli, ...empTag });
+    if (mainManaged && !opts.internal) beginLiveRun(liveScope, cli);
 
     // ─── DIFF-A: error guard — prevent uncaught ENOENT crash ───
     let stdSettled = false;  // guard: error→close can fire sequentially
