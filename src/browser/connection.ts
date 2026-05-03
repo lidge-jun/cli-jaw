@@ -534,8 +534,7 @@ export async function getCdpSession(port = getActivePort()) {
 function isReusableBlankTab(tab: RawCdpTab, allTabs: RawCdpTab[] = []): boolean {
     const url = String(tab.url || '').toLowerCase();
     if (!tab.id || (url !== 'about:blank' && url !== '')) return false;
-    if (allTabs.length <= 1) return true;
-    return Boolean(getTabActivity(tab.id));
+    return allTabs.length <= 1;
 }
 
 export async function createTab(port = getActivePort(), url = 'about:blank', opts: { activate?: boolean; reuseBlank?: boolean } = {}): Promise<{ targetId: string; url: string; title: string; activated: boolean; lastActiveAt: number | null; reusedBlank?: boolean }> {

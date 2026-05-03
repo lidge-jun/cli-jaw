@@ -85,7 +85,6 @@ test('browser createTab reuses startup about:blank tabs before creating provider
     assert.ok(source.includes('function isReusableBlankTab'));
     assert.ok(source.includes('opts.reuseBlank !== false'));
     assert.ok(source.includes('allTabs.length <= 1'));
-    assert.ok(source.includes('getTabActivity(tab.id)'));
     assert.ok(source.includes('reusedBlank: true'));
 });
 

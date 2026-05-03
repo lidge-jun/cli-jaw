@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, openSync, readFileSync, closeSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, openSync, readFileSync, closeSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { JAW_HOME } from '../../core/config.js';
 import { closeTab, listTabs } from '../connection.js';
@@ -170,7 +170,9 @@ function readStoreUnlocked(): LeaseStoreFile {
 
 function writeStoreUnlocked(store: LeaseStoreFile): void {
     mkdirSync(dirname(storePath()), { recursive: true });
-    writeFileSync(storePath(), `${JSON.stringify({ version: 1, leases: store.leases }, null, 2)}\n`);
+    const tmp = `${storePath()}.tmp.${process.pid}.${Date.now()}`;
+    writeFileSync(tmp, `${JSON.stringify({ version: 1, leases: store.leases }, null, 2)}\n`);
+    renameSync(tmp, storePath());
 }
 
 export async function withLeaseLock<T>(fn: () => T | Promise<T>): Promise<T> {
@@ -238,7 +240,7 @@ export async function recordActiveLease(input: ReleaseLeaseInput): Promise<TabLe
             updatedAt: now,
             leaseKey,
         };
-        store.leases = store.leases.filter(existing => existing.targetId !== input.targetId);
+        store.leases = store.leases.filter(existing => !sameTargetScope(existing, lease) && !sameSessionScope(existing, lease));
         store.leases.push(lease);
         writeStoreUnlocked(store);
         return lease;
@@ -273,14 +275,41 @@ function selectPoolClosePlan(leases: TabLease[], timestamp = Date.now()): CloseP
     return closePlan;
 }
 
-async function closePlanned(port: number, plan: ClosePlanItem[]): Promise<void> {
+function scopedTargetKey(lease: Pick<TabLease, 'owner' | 'vendor' | 'sessionType' | 'origin' | 'browserProfileKey' | 'targetId'>): string {
+    return [lease.owner || '', lease.vendor || '', lease.sessionType || '', lease.origin || '', lease.browserProfileKey || '', lease.targetId || ''].join(':');
+}
+
+function sameTargetScope(a: TabLease, b: TabLease): boolean {
+    return Boolean(a?.targetId && b?.targetId && scopedTargetKey(a) === scopedTargetKey(b));
+}
+
+function sameSessionScope(a: TabLease, b: TabLease): boolean {
+    return Boolean(a?.sessionId && b?.sessionId && a.sessionId === b.sessionId && a.owner === b.owner && a.vendor === b.vendor && a.sessionType === b.sessionType && a.browserProfileKey === b.browserProfileKey);
+}
+
+function sameBrowserProfile(a: TabLease, b: TabLease): boolean {
+    return a.owner === b.owner && a.vendor === b.vendor && a.sessionType === b.sessionType && a.browserProfileKey === b.browserProfileKey;
+}
+
+async function closePlanned(port: number, plan: ClosePlanItem[]): Promise<ClosePlanItem[]> {
+    const closed: ClosePlanItem[] = [];
     for (const { lease } of plan) {
         try {
             await closeTab(port, lease.targetId);
+            closed.push({ lease, reason: 'closed' });
         } catch {
             // The tab may already be closed by the user or Chrome.
         }
     }
+    if (closed.length > 0) {
+        const closedKeys = new Set(closed.map(item => scopedTargetKey(item.lease)));
+        await withLeaseLock(() => {
+            const store = readStoreUnlocked();
+            store.leases = store.leases.filter(lease => !closedKeys.has(scopedTargetKey(lease)));
+            writeStoreUnlocked(store);
+        });
+    }
+    return closed;
 }
 
 export async function releaseCompletedLease(input: ReleaseLeaseInput): Promise<TabLease | null> {
@@ -312,26 +341,20 @@ export async function releaseCompletedLease(input: ReleaseLeaseInput): Promise<T
             updatedAt: now,
             leaseKey,
         };
-        store.leases = store.leases.filter(existing => existing.targetId !== input.targetId);
+        const current = store.leases.find(existing => sameTargetScope(existing, lease));
+        if (!current || current.state !== 'active-session' || !lease.sessionId || current.sessionId !== lease.sessionId) return lease;
+        store.leases = store.leases.filter(existing => !sameTargetScope(existing, lease));
         store.leases.push(lease);
-        closePlan = selectPoolClosePlan(store.leases);
-        if (lease.state === 'completed-session') closePlan.push({ lease, reason: 'closed' });
-        const closingIds = new Set(closePlan.map(item => item.lease.targetId));
-        store.leases = store.leases.map(existing => closingIds.has(existing.targetId)
+        closePlan = selectPoolClosePlan(store.leases.filter(existing => sameBrowserProfile(existing, lease)));
+        if (lease.state === 'completed-session') closePlan.push({ lease: { ...lease, state: 'closing', leaseDisposition: 'closing' }, reason: 'closed' });
+        const closingIds = new Set(closePlan.map(item => scopedTargetKey(item.lease)));
+        store.leases = store.leases.map(existing => closingIds.has(scopedTargetKey(existing))
             ? { ...existing, state: 'closing', leaseDisposition: 'closing', updatedAt: now }
             : existing);
         writeStoreUnlocked(store);
         return lease;
     });
     await closePlanned(port, closePlan);
-    if (closePlan.length > 0) {
-        const closedIds = new Set(closePlan.map(item => item.lease.targetId));
-        await withLeaseLock(() => {
-            const store = readStoreUnlocked();
-            store.leases = store.leases.filter(lease => !closedIds.has(lease.targetId));
-            writeStoreUnlocked(store);
-        });
-    }
     return pooledLease;
 }
 
@@ -343,32 +366,24 @@ export async function checkoutPooledLease(input: CheckoutLeaseInput): Promise<{ 
         const store = readStoreUnlocked();
         const now = Date.now();
         closePlan = selectPoolClosePlan(store.leases, now);
-        const closeIds = new Set(closePlan.map(item => item.lease.targetId));
+        const closeIds = new Set(closePlan.map(item => scopedTargetKey(item.lease)));
         const leaseKey = buildLeaseKey(input);
         selected = store.leases
-            .filter(lease => lease.state === 'pooled' && lease.leaseKey === leaseKey && !closeIds.has(lease.targetId))
+            .filter(lease => lease.state === 'pooled' && lease.leaseKey === leaseKey && !closeIds.has(scopedTargetKey(lease)))
             .filter(lease => liveTargetIds.has(lease.targetId))
             .sort((a, b) => Date.parse(b.pooledAt || b.updatedAt) - Date.parse(a.pooledAt || a.updatedAt))[0] || null;
         const selectedId = selected?.targetId || null;
         store.leases = store.leases.filter(lease => {
-            if (selectedId && lease.targetId === selectedId) return false;
-            if (closeIds.has(lease.targetId)) return true;
+            if (selectedId && sameTargetScope(lease, selected as TabLease)) return false;
+            if (closeIds.has(scopedTargetKey(lease))) return true;
             if (lease.state === 'pooled' && !liveTargetIds.has(lease.targetId)) return false;
             return true;
-        }).map(lease => closeIds.has(lease.targetId)
+        }).map(lease => closeIds.has(scopedTargetKey(lease))
             ? { ...lease, state: 'closing', leaseDisposition: 'closing', updatedAt: nowIso() }
             : lease);
         writeStoreUnlocked(store);
     });
     await closePlanned(input.port, closePlan);
-    if (closePlan.length > 0) {
-        const closedIds = new Set(closePlan.map(item => item.lease.targetId));
-        await withLeaseLock(() => {
-            const store = readStoreUnlocked();
-            store.leases = store.leases.filter(lease => !closedIds.has(lease.targetId));
-            writeStoreUnlocked(store);
-        });
-    }
     const checkedOut = selected as TabLease | null;
     return checkedOut ? { targetId: checkedOut.targetId, url: checkedOut.url } : null;
 }
@@ -377,22 +392,15 @@ export async function cleanupLeasedTabs(port: number): Promise<{ closed: number 
     let closePlan: ClosePlanItem[] = [];
     await withLeaseLock(() => {
         const store = readStoreUnlocked();
-        closePlan = selectPoolClosePlan(store.leases);
-        const closeIds = new Set(closePlan.map(item => item.lease.targetId));
-        store.leases = store.leases.map(lease => closeIds.has(lease.targetId)
+        const browserProfileKey = `cdp:${port || 'default'}`;
+        closePlan = selectPoolClosePlan(store.leases.filter(lease => lease.browserProfileKey === browserProfileKey));
+        const closeIds = new Set(closePlan.map(item => scopedTargetKey(item.lease)));
+        store.leases = store.leases.map(lease => closeIds.has(scopedTargetKey(lease))
             ? { ...lease, state: 'closing', leaseDisposition: 'closing', updatedAt: nowIso() }
             : lease);
         writeStoreUnlocked(store);
     });
     await closePlanned(port, closePlan);
-    if (closePlan.length > 0) {
-        const closedIds = new Set(closePlan.map(item => item.lease.targetId));
-        await withLeaseLock(() => {
-            const store = readStoreUnlocked();
-            store.leases = store.leases.filter(lease => !closedIds.has(lease.targetId));
-            writeStoreUnlocked(store);
-        });
-    }
     return { closed: closePlan.length };
 }
 
