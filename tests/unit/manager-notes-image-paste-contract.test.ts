@@ -151,6 +151,7 @@ test('notes image paste is wired through JSON upload and all authoring surfaces'
 
     const insertImage = read('public/manager/src/notes/image-assets/insert-image-markdown.ts');
     assert.ok(insertImage.includes('NOTE_IMAGE_MAX_BYTES'), 'upload must precheck file size before sending');
+    assert.ok(insertImage.includes('compressImageFile'), 'upload must compress oversized images instead of rejecting');
     assert.ok(renderer.includes('img: ({ src, alt'), 'MarkdownRenderer must own image rendering');
     assert.ok(renderer.includes('notesImageSrc(src)'), 'MarkdownRenderer must route image src through the Notes asset resolver');
 });
