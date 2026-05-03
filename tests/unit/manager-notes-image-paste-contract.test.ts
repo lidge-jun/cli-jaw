@@ -109,7 +109,8 @@ test('remote clipboard image URL detection accepts image extensions and rejects 
     assert.equal(firstRemoteClipboardImageUrl(remoteUrlData('just some text')), null);
     assert.equal(firstRemoteClipboardImageUrl(remoteUrlData('')), null);
 
-    assert.ok(firstRemoteClipboardImageUrl(remoteUrlData('', '<img src="https://cdn.example.com/dynamic-image">')));
+    assert.equal(firstRemoteClipboardImageUrl(remoteUrlData('', '<img src="https://cdn.example.com/dynamic-image">')), null);
+    assert.ok(firstRemoteClipboardImageUrl(remoteUrlData('', '<img src="https://cdn.example.com/photo.png">')));
 });
 
 test('notes image URL resolver maps only safe asset paths and blocks dangerous URLs', () => {

@@ -83,7 +83,7 @@ export function firstRemoteClipboardImageUrl(data: DataTransfer | null): string 
     const htmlMatch = HTML_IMAGE_SRC_RE.exec(html);
     if (htmlMatch) {
         const url = cleanRemoteImageUrl(htmlMatch[1]);
-        if (url) return url;
+        if (url && looksLikeImageUrl(url)) return url;
     }
     const uriList = data.getData?.('text/uri-list') ?? '';
     for (const line of uriList.split(/\r?\n/)) {

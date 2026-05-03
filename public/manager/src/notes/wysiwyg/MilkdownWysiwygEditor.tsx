@@ -381,17 +381,28 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
             event.preventDefault();
             event.stopPropagation();
             let dropPos: number | null = null;
+            let dropDocSize: number | null = null;
             try {
                 editorRef.current?.action(ctx => {
                     const view = ctx.get(editorViewCtx);
                     const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
                     dropPos = coords?.pos ?? null;
+                    dropDocSize = view.state.doc.content.size;
                 });
             } catch { /* editor not ready */ }
             function safeInsert(content: string, inline?: boolean): void {
                 run(editor => {
+                    let useDropPos = dropPos != null;
+                    if (useDropPos) {
+                        try {
+                            editor.action(ctx => {
+                                const view = ctx.get(editorViewCtx);
+                                if (view.state.doc.content.size !== dropDocSize) useDropPos = false;
+                            });
+                        } catch { useDropPos = false; }
+                    }
                     try {
-                        editor.action(dropPos != null ? insertPos(content, dropPos, inline) : insert(content, inline));
+                        editor.action(useDropPos ? insertPos(content, dropPos!, inline) : insert(content, inline));
                     } catch {
                         editor.action(insert(content, inline));
                     }
