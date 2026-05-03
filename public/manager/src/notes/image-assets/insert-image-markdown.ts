@@ -1,6 +1,6 @@
 import type { EditorView } from '@codemirror/view';
-import { uploadNoteAsset } from '../../api';
-import { firstClipboardImage } from './clipboard-images';
+import { uploadNoteAsset, uploadRemoteNoteAsset } from '../../api';
+import { firstClipboardImage, firstRemoteClipboardImageUrl, hasImportableClipboardImage } from './clipboard-images';
 
 export type NotesImagePasteOptions = {
     notePath: string;
@@ -13,9 +13,32 @@ function errorFromUnknown(error: unknown): Error {
 
 export async function uploadClipboardImageMarkdown(notePath: string, data: DataTransfer | null): Promise<string | null> {
     const image = firstClipboardImage(data);
-    if (!image) return null;
-    const result = await uploadNoteAsset(notePath, image);
+    const remoteUrl = image ? null : firstRemoteClipboardImageUrl(data);
+    if (!image && !remoteUrl) return null;
+    const result = image
+        ? await uploadNoteAsset(notePath, image)
+        : await uploadRemoteNoteAsset(notePath, remoteUrl!);
     return result.markdown;
+}
+
+export function handleImageDataTransfer(
+    event: ClipboardEvent | DragEvent,
+    view: EditorView,
+    options: NotesImagePasteOptions,
+): boolean {
+    const data = 'clipboardData' in event ? event.clipboardData : event.dataTransfer;
+    if (!hasImportableClipboardImage(data)) return false;
+    const textFallback = data?.getData('text/plain') ?? '';
+    event.preventDefault();
+    void uploadClipboardImageMarkdown(options.notePath, data)
+        .then(result => {
+            if (result) view.dispatch(view.state.replaceSelection(result));
+        })
+        .catch(error => {
+            if (textFallback) view.dispatch(view.state.replaceSelection(textFallback));
+            options.onError?.(errorFromUnknown(error));
+        });
+    return true;
 }
 
 export function handleClipboardImagePaste(
@@ -23,17 +46,5 @@ export function handleClipboardImagePaste(
     view: EditorView,
     options: NotesImagePasteOptions,
 ): boolean {
-    const image = firstClipboardImage(event.clipboardData);
-    if (!image) return false;
-    const textFallback = event.clipboardData?.getData('text/plain') ?? '';
-    event.preventDefault();
-    void uploadNoteAsset(options.notePath, image)
-        .then(result => {
-            view.dispatch(view.state.replaceSelection(result.markdown));
-        })
-        .catch(error => {
-            if (textFallback) view.dispatch(view.state.replaceSelection(textFallback));
-            options.onError?.(errorFromUnknown(error));
-        });
-    return true;
+    return handleImageDataTransfer(event, view, options);
 }

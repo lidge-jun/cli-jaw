@@ -1,4 +1,4 @@
-import { type ClipboardEvent, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Editor, defaultValueCtx, editorViewCtx, rootCtx, schemaCtx } from '@milkdown/kit/core';
 import { commonmark } from '@milkdown/kit/preset/commonmark';
 import {
@@ -16,8 +16,9 @@ import { history } from '@milkdown/kit/plugin/history';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { callCommand, getMarkdown, insert, replaceAll } from '@milkdown/kit/utils';
 import { safeMarkdownUrl } from '../markdown-security';
-import { firstClipboardImage } from '../image-assets/clipboard-images';
+import { hasImportableClipboardImage } from '../image-assets/clipboard-images';
 import { uploadClipboardImageMarkdown } from '../image-assets/insert-image-markdown';
+import { notesImageSrc } from '../rendering/markdown-render-security';
 import { notesMilkdownBlockKeymap } from './milkdown-block-keymap';
 import { notesMilkdownCodeBlockView } from './milkdown-code-block-view';
 import { notesMilkdownGfm } from './milkdown-gfm-safe';
@@ -48,12 +49,26 @@ function normalizeCodeLanguage(language: string): string {
     return language.trim().toLowerCase().replace(/[^a-z0-9_+-]/g, '');
 }
 
+function refreshMilkdownAssetImages(root: HTMLDivElement | null): void {
+    if (!root) return;
+    root.querySelectorAll<HTMLImageElement>('img[src]').forEach(image => {
+        const originalSrc = image.dataset.notesOriginalSrc || image.getAttribute('src') || '';
+        if (!originalSrc) return;
+        const resolvedSrc = notesImageSrc(originalSrc);
+        if (!resolvedSrc) return;
+        image.dataset.notesOriginalSrc = originalSrc;
+        if (image.getAttribute('src') !== resolvedSrc) image.setAttribute('src', resolvedSrc);
+    });
+}
+
 export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
+    const shellRef = useRef<HTMLDivElement | null>(null);
     const rootRef = useRef<HTMLDivElement | null>(null);
     const editorRef = useRef<Editor | null>(null);
     const latestMarkdownRef = useRef(props.content);
     const latestPropContentRef = useRef(props.content);
     const onChangeRef = useRef(props.onChange);
+    const notePathRef = useRef(props.notePath);
     const syncingFromPropsRef = useRef(true);
     const [ready, setReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -65,6 +80,10 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
     useEffect(() => {
         latestPropContentRef.current = props.content;
     }, [props.content]);
+
+    useEffect(() => {
+        notePathRef.current = props.notePath;
+    }, [props.notePath]);
 
     useEffect(() => {
         let disposed = false;
@@ -83,6 +102,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
                 ctx.get(listenerCtx).markdownUpdated((_, markdown) => {
                     const normalizedMarkdown = normalizeEscapedTaskMarkers(markdown);
                     latestMarkdownRef.current = normalizedMarkdown;
+                    queueMicrotask(() => refreshMilkdownAssetImages(rootRef.current));
                     if (syncingFromPropsRef.current) return;
                     onChangeRef.current(normalizedMarkdown);
                 });
@@ -111,6 +131,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
                 setReady(true);
                 queueMicrotask(() => {
                     syncingFromPropsRef.current = false;
+                    refreshMilkdownAssetImages(root);
                 });
                 if (props.active) focusEditable(root);
             })
@@ -137,6 +158,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         editor.action(replaceAll(protectUnsupportedGfmForMilkdown(props.content), true));
         queueMicrotask(() => {
             syncingFromPropsRef.current = false;
+            refreshMilkdownAssetImages(rootRef.current);
         });
     }, [props.content]);
 
@@ -293,18 +315,68 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-checked'] });
         root.addEventListener('click', handleTaskListClick);
         root.addEventListener('keydown', handleTaskListKeyDown, true);
+        const imageObserver = new MutationObserver(() => {
+            refreshMilkdownAssetImages(root);
+        });
+        imageObserver.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
+        refreshMilkdownAssetImages(root);
         return () => {
             observer.disconnect();
+            imageObserver.disconnect();
             root.removeEventListener('click', handleTaskListClick);
             root.removeEventListener('keydown', handleTaskListKeyDown, true);
         };
     }, [ready]);
 
-    function handlePasteCapture(event: ClipboardEvent<HTMLDivElement>): void {
-        const imageFallback = event.clipboardData.getData('text/plain');
-        if (firstClipboardImage(event.clipboardData)) {
+    useEffect(() => {
+        const shell = shellRef.current;
+        if (!shell) return undefined;
+
+        function handlePaste(event: ClipboardEvent): void {
+            const data = event.clipboardData;
+            if (!data) return;
+
+            if (hasImportableClipboardImage(data)) {
+                event.preventDefault();
+                event.stopPropagation();
+                const imageFallback = data.getData('text/plain');
+                void uploadClipboardImageMarkdown(notePathRef.current, data)
+                    .then(markdown => {
+                        if (markdown) {
+                            run(editor => editor.action(insert(markdown, true)));
+                            return;
+                        }
+                        if (imageFallback) run(editor => editor.action(insert(imageFallback)));
+                    })
+                    .catch(error => {
+                        console.warn('[notes-image-paste]', error);
+                        if (imageFallback) run(editor => editor.action(insert(imageFallback)));
+                    });
+                return;
+            }
+
+            const html = data.getData('text/html');
+            if (!html) return;
             event.preventDefault();
-            void uploadClipboardImageMarkdown(props.notePath, event.clipboardData)
+            event.stopPropagation();
+            const text = data.getData('text/plain');
+            const plainText = text || htmlToPlainText(html);
+            if (!plainText) return;
+            run(editor => editor.action(insert(plainText)));
+        }
+
+        function handleDragOver(event: DragEvent): void {
+            if (!hasImportableClipboardImage(event.dataTransfer)) return;
+            event.preventDefault();
+            if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+        }
+
+        function handleDrop(event: DragEvent): void {
+            if (!hasImportableClipboardImage(event.dataTransfer)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const imageFallback = event.dataTransfer?.getData('text/plain') ?? '';
+            void uploadClipboardImageMarkdown(notePathRef.current, event.dataTransfer)
                 .then(markdown => {
                     if (markdown) {
                         run(editor => editor.action(insert(markdown, true)));
@@ -313,22 +385,26 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
                     if (imageFallback) run(editor => editor.action(insert(imageFallback)));
                 })
                 .catch(error => {
-                    console.warn('[notes-image-paste]', error);
+                    console.warn('[notes-image-drop]', error);
                     if (imageFallback) run(editor => editor.action(insert(imageFallback)));
                 });
-            return;
         }
-        const html = event.clipboardData.getData('text/html');
-        if (!html) return;
-        event.preventDefault();
-        const text = event.clipboardData.getData('text/plain');
-        const plainText = text || htmlToPlainText(html);
-        if (!plainText) return;
-        run(editor => editor.action(insert(plainText)));
-    }
+
+        shell.addEventListener('paste', handlePaste, true);
+        shell.addEventListener('dragover', handleDragOver, true);
+        shell.addEventListener('drop', handleDrop, true);
+        return () => {
+            shell.removeEventListener('paste', handlePaste, true);
+            shell.removeEventListener('dragover', handleDragOver, true);
+            shell.removeEventListener('drop', handleDrop, true);
+        };
+    }, []);
 
     return (
-        <div className="notes-milkdown-shell" onPasteCapture={handlePasteCapture}>
+        <div
+            ref={shellRef}
+            className="notes-milkdown-shell"
+        >
             <div className="notes-wysiwyg-toolbar" aria-label="WYSIWYG formatting tools">
                 <button type="button" title="Bold" aria-label="Bold" disabled={!ready} onClick={() => run(editor => editor.action(callCommand(toggleStrongCommand.key)))}>B</button>
                 <button type="button" title="Italic" aria-label="Italic" disabled={!ready} onClick={() => run(editor => editor.action(callCommand(toggleEmphasisCommand.key)))}>I</button>

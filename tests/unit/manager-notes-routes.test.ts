@@ -165,6 +165,37 @@ test('notes asset route keeps its larger JSON parser isolated and origin protect
     });
 });
 
+test('notes remote asset route imports public images and blocks localhost URLs', async (t) => {
+    await withNotesServer(t, async (baseUrl) => {
+        const originalFetch = globalThis.fetch;
+        t.after(() => {
+            globalThis.fetch = originalFetch;
+        });
+        globalThis.fetch = async () => new Response(Buffer.from(PNG_BASE64, 'base64'), {
+            status: 200,
+            headers: { 'content-type': 'image/png' },
+        });
+
+        const imported = await originalFetch(`${baseUrl}/api/dashboard/notes/asset/remote`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ notePath: 'daily/today.md', url: 'https://93.184.216.34/copied.png' }),
+        });
+        assert.equal(imported.status, 201);
+        const importBody = await readJson(imported);
+        assert.equal(importBody.ok, true);
+        assert.match(String(importBody.path), /^\.assets\/daily__today\/.+\.png$/);
+
+        const blocked = await originalFetch(`${baseUrl}/api/dashboard/notes/asset/remote`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ notePath: 'daily/today.md', url: `${baseUrl}/private.png` }),
+        });
+        assert.equal(blocked.status, 400);
+        assert.equal((await readJson(blocked)).code, 'note_asset_remote_host_blocked');
+    });
+});
+
 test('notes routes trash folders with explicit kind', async (t) => {
     await withNotesServer(t, async (baseUrl) => {
         const folder = await fetch(`${baseUrl}/api/dashboard/notes/folder`, {

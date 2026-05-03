@@ -166,7 +166,7 @@ test('Markdown editor exposes WYSIWYG toolbar without changing the save path', (
     assert.equal(workspace.includes('hidden={!showEditor}'), false,
         'Notes preview mode must unmount the editor instead of hiding a live WYSIWYG instance');
     assert.ok(milkdown.includes('safeMarkdownUrl'), 'WYSIWYG link insertion must reuse safe URL policy');
-    assert.ok(milkdown.includes('onPasteCapture'), 'WYSIWYG paste must own an HTML-to-text safety boundary');
+    assert.ok(milkdown.includes("addEventListener('paste'") || milkdown.includes('onPasteCapture'), 'WYSIWYG paste must own an HTML-to-text safety boundary');
     assert.ok(milkdown.includes('notes-wysiwyg-toolbar'), 'WYSIWYG mode must expose visual formatting controls');
     assert.equal(milkdown.includes('@milkdown/react'), false, 'WYSIWYG mode must avoid Crepe-pulling React wrapper');
     assert.equal(milkdown.includes('@milkdown/crepe'), false, 'WYSIWYG mode must not import Crepe');

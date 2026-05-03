@@ -12,6 +12,7 @@ import {
 import type { DashboardPutNoteRequest } from '../types.js';
 import { NOTE_ASSET_JSON_LIMIT, NotesAssetStore } from './assets.js';
 import { type NotePathError, notePathError } from './path-guards.js';
+import { saveRemoteNoteAsset } from './remote-assets.js';
 import { NotesStore } from './store.js';
 import { NotesTrash } from './trash.js';
 import type { DashboardTrashNoteKind } from '../types.js';
@@ -147,6 +148,14 @@ export function createDashboardNotesRouter(options: DashboardNotesRouterOptions)
             notePath: requireString(body.notePath, 'invalid_note_path', 'notePath is required'),
             mime: requireString(body.mime, 'note_asset_unsupported_type', 'mime is required'),
             dataBase64: requireString(body.dataBase64, 'note_asset_invalid_base64', 'dataBase64 is required'),
+        }));
+    }));
+
+    router.post('/asset/remote', express.json({ limit: '32kb' }), asyncRoute(async (req, res) => {
+        const body = bodyObject(req);
+        res.status(201).json(await saveRemoteNoteAsset(assetStore, {
+            notePath: requireString(body.notePath, 'invalid_note_path', 'notePath is required'),
+            url: requireString(body.url, 'note_asset_remote_invalid_url', 'url is required'),
         }));
     }));
 

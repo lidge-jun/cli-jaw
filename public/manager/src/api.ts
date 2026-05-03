@@ -199,6 +199,15 @@ export async function uploadNoteAsset(notePath: string, file: File): Promise<Das
     return await parseNotesResponse<DashboardNoteAssetResponse>(response, `note asset upload failed: ${response.status}`);
 }
 
+export async function uploadRemoteNoteAsset(notePath: string, url: string): Promise<DashboardNoteAssetResponse> {
+    const response = await fetch('/api/dashboard/notes/asset/remote', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ notePath, url }),
+    });
+    return await parseNotesResponse<DashboardNoteAssetResponse>(response, `remote note asset upload failed: ${response.status}`);
+}
+
 export async function createNoteFolder(path: string): Promise<{ path: string }> {
     const response = await fetch('/api/dashboard/notes/folder', {
         method: 'POST',

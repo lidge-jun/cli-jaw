@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { firstClipboardImage } from '../../public/manager/src/notes/image-assets/clipboard-images';
+import { firstClipboardImage, firstRemoteClipboardImageUrl } from '../../public/manager/src/notes/image-assets/clipboard-images';
 import { notesImageSrc } from '../../public/manager/src/notes/rendering/markdown-render-security';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -40,6 +40,40 @@ test('clipboard image helper prefers items, falls back to files, and rejects SVG
     assert.equal(rejected, null);
 });
 
+test('clipboard image helper accepts HTML data image fallback from macOS/browser copy', () => {
+    const pngBase64 = 'iVBORw0KGgo=';
+    const data = {
+        items: [],
+        files: [],
+        getData: (type: string) => type === 'text/html'
+            ? `<img src="data:image/png;base64,${pngBase64}" alt="copied">`
+            : '',
+    } as unknown as DataTransfer;
+
+    const picked = firstClipboardImage(data);
+    assert.equal(picked?.type, 'image/png');
+    assert.equal(picked?.name, 'pasted-image.png');
+});
+
+test('clipboard image helper extracts remote Chrome image copy URLs without accepting unsafe schemes', () => {
+    const data = {
+        items: [],
+        files: [],
+        getData: (type: string) => {
+            if (type === 'text/html') return '<img src="https://example.com/copied.png" alt="copied">';
+            if (type === 'text/plain') return 'https://example.com/fallback.png';
+            return '';
+        },
+    } as unknown as DataTransfer;
+
+    assert.equal(firstRemoteClipboardImageUrl(data), 'https://example.com/copied.png');
+    assert.equal(firstRemoteClipboardImageUrl({
+        items: [],
+        files: [],
+        getData: (type: string) => type === 'text/html' ? '<img src="javascript:alert(1)">' : '',
+    } as unknown as DataTransfer), null);
+});
+
 test('notes image URL resolver maps only safe asset paths and blocks dangerous URLs', () => {
     assert.equal(
         notesImageSrc('./.assets/project__meeting/file.png'),
@@ -61,14 +95,20 @@ test('notes image paste is wired through JSON upload and all authoring surfaces'
     const renderer = read('public/manager/src/notes/rendering/MarkdownRenderer.tsx');
 
     assert.ok(api.includes('export async function uploadNoteAsset'), 'API client must expose note asset upload');
+    assert.ok(api.includes('export async function uploadRemoteNoteAsset'), 'API client must expose remote note asset upload');
     assert.ok(api.includes("fetch('/api/dashboard/notes/asset'"), 'upload must POST to the notes asset route');
+    assert.ok(api.includes("fetch('/api/dashboard/notes/asset/remote'"), 'remote upload must POST to the remote asset route');
     assert.ok(api.includes('JSON.stringify({'), 'upload must send JSON');
     assert.equal(api.includes('FormData'), false, 'upload must not use multipart FormData in v1');
     assert.ok(editor.includes('notePath: string'), 'MarkdownEditor must receive the selected note path');
     assert.ok(workspace.includes('notePath={props.selectedPath}'), 'NotesWorkspace must pass selectedPath to the editor');
     assert.ok(richPaste.includes('handleClipboardImagePaste(event, view, options)'), 'CodeMirror paste policy must handle image blobs before HTML');
-    assert.ok(wysiwyg.includes('firstClipboardImage(event.clipboardData)'), 'WYSIWYG paste must inspect clipboard image blobs');
-    assert.ok(wysiwyg.includes('uploadClipboardImageMarkdown(props.notePath'), 'WYSIWYG paste must upload against the current note path');
+    assert.ok(richPaste.includes('drop(event, view)'), 'CodeMirror policy must handle dropped images');
+    assert.ok(wysiwyg.includes('hasImportableClipboardImage('), 'WYSIWYG paste must inspect local and remote clipboard images');
+    assert.ok(wysiwyg.includes("addEventListener('drop'") || wysiwyg.includes('onDropCapture={handleDropCapture}'), 'WYSIWYG must accept dropped images');
+    assert.ok(wysiwyg.includes('uploadClipboardImageMarkdown(notePathRef.current') || wysiwyg.includes('uploadClipboardImageMarkdown(props.notePath'), 'WYSIWYG paste must upload against the current note path');
+    assert.ok(wysiwyg.includes('notesImageSrc(originalSrc)'), 'WYSIWYG must route local asset image nodes through the notes asset endpoint');
+    assert.ok(wysiwyg.includes('new MutationObserver'), 'WYSIWYG must refresh image src after Milkdown renders image nodes');
     assert.ok(renderer.includes('img: ({ src, alt'), 'MarkdownRenderer must own image rendering');
     assert.ok(renderer.includes('notesImageSrc(src)'), 'MarkdownRenderer must route image src through the Notes asset resolver');
 });
