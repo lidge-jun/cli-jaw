@@ -78,6 +78,8 @@ export async function runWebAiCommand(
             probe: { type: 'string' },
             deadline: { type: 'string' },
             navigate: { type: 'boolean', default: false },
+            'new-tab': { type: 'boolean', default: false },
+            'reuse-tab': { type: 'boolean', default: false },
             full: { type: 'boolean', default: false },
             json: { type: 'boolean', default: false },
         },
@@ -114,6 +116,8 @@ export async function runWebAiCommand(
         ...(values['inline-only'] ? { inlineOnly: true } : {}),
         ...(values['allow-copy-markdown-fallback'] ? { allowCopyMarkdownFallback: true } : {}),
         ...(values['allow-grok-context-pack'] ? { allowGrokContextPack: true } : {}),
+        ...(values['new-tab'] ? { newTab: true } : {}),
+        ...(values['reuse-tab'] ? { reuseTab: true } : {}),
     };
     const result = await callWebAiEndpoint(command, body, values, deps) as Record<string, unknown>;
     const fullContextOutput = values.full === true || command === 'context-render';

@@ -1,8 +1,9 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { MarkdownEditor } from './MarkdownEditor';
 import { MarkdownPreview } from './MarkdownPreview';
 import { NotesEmptyState } from './NotesEmptyState';
 import { NotesToolbar } from './NotesToolbar';
+import { renameNotePath } from './notes-api';
 import { useNoteDocument } from './useNoteDocument';
 import type { NotesAuthoringMode, NotesViewMode } from './notes-types';
 
@@ -24,6 +25,12 @@ type NotesWorkspaceProps = {
 };
 
 const PRIMARY_MODE_CYCLE: NotesPrimaryMode[] = ['raw', 'preview', 'wysiwyg'];
+const INVALID_TITLE_CHARS = /[/\\]/g;
+
+function titleFromPath(path: string): string {
+    const name = path.split('/').pop() ?? path;
+    return name.endsWith('.md') ? name.slice(0, -3) : name;
+}
 
 function primaryModeFor(viewMode: NotesViewMode, authoringMode: NotesAuthoringMode): NotesPrimaryMode {
     if (viewMode === 'preview') return 'preview';
@@ -33,6 +40,7 @@ function primaryModeFor(viewMode: NotesViewMode, authoringMode: NotesAuthoringMo
 
 export function NotesWorkspace(props: NotesWorkspaceProps) {
     const document = useNoteDocument();
+    const renamingRef = useRef(false);
 
     useEffect(() => {
         if (!props.selectedPath) return;
@@ -73,6 +81,29 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
         window.addEventListener('keydown', handleModeShortcut);
         return () => window.removeEventListener('keydown', handleModeShortcut);
     }, [props.active, props.viewMode, props.authoringMode, props.onViewModeChange, props.onAuthoringModeChange]);
+
+    async function handleTitleBlur(event: React.FocusEvent<HTMLInputElement>): Promise<void> {
+        if (renamingRef.current || !props.selectedPath) return;
+        const newTitle = event.currentTarget.value.trim().replace(INVALID_TITLE_CHARS, '');
+        const currentTitle = titleFromPath(props.selectedPath);
+        if (!newTitle || newTitle === currentTitle) {
+            event.currentTarget.value = currentTitle;
+            return;
+        }
+        const parts = props.selectedPath.split('/');
+        parts[parts.length - 1] = newTitle.endsWith('.md') ? newTitle : `${newTitle}.md`;
+        const newPath = parts.join('/');
+        renamingRef.current = true;
+        try {
+            await renameNotePath(props.selectedPath, newPath);
+            props.onSelectedPathChange(newPath);
+        } catch (error) {
+            console.warn('[notes-rename]', error);
+            event.currentTarget.value = currentTitle;
+        } finally {
+            renamingRef.current = false;
+        }
+    }
 
     const showEditor = props.viewMode === 'raw' || props.viewMode === 'split';
     const showPreview = props.viewMode === 'preview' || props.viewMode === 'split';
@@ -128,6 +159,15 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
                     {!props.selectedPath && props.viewMode !== 'settings' && <NotesEmptyState />}
                     {props.selectedPath && props.viewMode !== 'settings' && (
                         <div className="notes-document-grid">
+                            <input
+                                className="notes-inline-title"
+                                key={props.selectedPath}
+                                defaultValue={titleFromPath(props.selectedPath)}
+                                onBlur={handleTitleBlur}
+                                onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                                spellCheck={false}
+                                aria-label="Note title"
+                            />
                             {showEditor && <div className="notes-editor-pane">
                                 <MarkdownEditor key={props.selectedPath} active={props.active && showEditor} authoringMode={props.authoringMode} content={document.content} notePath={props.selectedPath} wordWrap={props.wordWrap} onChange={document.setContent} />
                             </div>}

@@ -169,6 +169,29 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
         catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
+    app.post('/api/browser/tab-new', requireAuth, async (req: Request, res: Response) => {
+        try {
+            res.json(await browser.createTab(cdpPort(req), String(req.body.url || 'about:blank'), {
+                activate: req.body.activate !== false,
+            }));
+        } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
+    });
+
+    app.post('/api/browser/tab-close', requireAuth, async (req: Request, res: Response) => {
+        try { res.json(await browser.closeTab(cdpPort(req), String(req.body.targetId || req.body.target || ''))); }
+        catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
+    });
+
+    app.post('/api/browser/tab-cleanup', requireAuth, async (req: Request, res: Response) => {
+        try {
+            res.json(await browser.cleanupIdleTabs(cdpPort(req), {
+                idleTimeoutMs: req.body.idleAfter ? browser.parseTabDuration(String(req.body.idleAfter)) : undefined,
+                maxTabs: req.body.maxTabs ? Number(req.body.maxTabs) : undefined,
+                includeUntracked: req.body.includeUntracked === true,
+            }));
+        } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
+    });
+
     app.post('/api/browser/evaluate', requireAuth, async (req: Request, res: Response) => {
         try { res.json(await browser.evaluate(cdpPort(req), req.body.expression)); }
         catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }

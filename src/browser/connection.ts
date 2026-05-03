@@ -18,6 +18,7 @@ import {
 } from './runtime-owner.js';
 
 const PROFILE_DIR = join(JAW_HOME, 'browser-profile');
+const TAB_ACTIVITY_FILE = join(JAW_HOME, 'browser-tab-activity.json');
 type BrowserConnectionCache = { browser: Browser; cdpUrl: string };
 
 let cached: BrowserConnectionCache | null = null;
@@ -28,6 +29,8 @@ let activeCommandCount = 0;
 let idleReaper: ReturnType<typeof setInterval> | null = null;
 let verifiedActiveTargetId: string | null = null;
 let browserStateVersion = 0;
+const tabActivity = new Map<string, number>();
+let tabActivityLoaded = false;
 
 export interface BrowserTabInfo {
     tabId: string;
@@ -38,6 +41,7 @@ export interface BrowserTabInfo {
     type: string;
     active: boolean;
     attached: boolean;
+    lastActiveAt?: number | null;
 }
 
 export interface ActiveTabResult {
@@ -59,6 +63,46 @@ export function markBrowserStateChanged() {
 
 export function getBrowserStateVersion() {
     return browserStateVersion;
+}
+
+function loadTabActivity(): void {
+    if (tabActivityLoaded) return;
+    tabActivityLoaded = true;
+    if (!fs.existsSync(TAB_ACTIVITY_FILE)) return;
+    try {
+        const parsed = JSON.parse(fs.readFileSync(TAB_ACTIVITY_FILE, 'utf8')) as { tabs?: Record<string, number> };
+        for (const [targetId, lastActiveAt] of Object.entries(parsed.tabs || {})) {
+            if (targetId && Number.isFinite(lastActiveAt)) tabActivity.set(targetId, lastActiveAt);
+        }
+    } catch {
+        tabActivity.clear();
+    }
+}
+
+function saveTabActivity(): void {
+    fs.mkdirSync(JAW_HOME, { recursive: true });
+    fs.writeFileSync(TAB_ACTIVITY_FILE, `${JSON.stringify({ tabs: Object.fromEntries(tabActivity.entries()) }, null, 2)}\n`);
+}
+
+export function markTabActive(targetId: string | null | undefined, at = Date.now()): number | null {
+    if (!targetId) return null;
+    loadTabActivity();
+    tabActivity.set(targetId, at);
+    saveTabActivity();
+    return at;
+}
+
+export function forgetTabActivity(targetId: string | null | undefined): void {
+    if (!targetId) return;
+    loadTabActivity();
+    tabActivity.delete(targetId);
+    saveTabActivity();
+}
+
+export function getTabActivity(targetId: string | null | undefined): number | null {
+    if (!targetId) return null;
+    loadTabActivity();
+    return tabActivity.get(targetId) || null;
 }
 
 /** Check if a port is already listening via TCP connect */
@@ -415,6 +459,7 @@ function toBrowserTabInfo(tab: RawCdpTab, index: number, activeTargetId: string 
         type: tab.type || 'page',
         active: Boolean(activeTargetId && targetId === activeTargetId),
         attached: true,
+        lastActiveAt: getTabActivity(targetId),
     };
 }
 
@@ -455,6 +500,7 @@ export async function switchTab(port = getActivePort(), target: string): Promise
         await cdp.detach().catch(() => undefined);
     }
     verifiedActiveTargetId = wanted.id;
+    markTabActive(wanted.id);
     markBrowserStateChanged();
     const active = await getActiveTab(port);
     if (!active.ok || active.tab?.targetId !== wanted.id) return { ok: false, reason: 'unverified' };
@@ -485,7 +531,7 @@ export async function getCdpSession(port = getActivePort()) {
     return page.context().newCDPSession(page);
 }
 
-export async function createTab(port = getActivePort(), url = 'about:blank', opts: { activate?: boolean } = {}): Promise<{ targetId: string; url: string; title: string; activated: boolean }> {
+export async function createTab(port = getActivePort(), url = 'about:blank', opts: { activate?: boolean } = {}): Promise<{ targetId: string; url: string; title: string; activated: boolean; lastActiveAt: number | null }> {
     const cdp = await getCdpSession(port);
     if (!cdp) throw new Error('No CDP session available for tab creation');
     try {
@@ -493,7 +539,8 @@ export async function createTab(port = getActivePort(), url = 'about:blank', opt
         await new Promise(r => setTimeout(r, 100));
         const tabs = await readCdpPageTargets(port);
         const tab = tabs.find(t => t.id === targetId);
-        return { targetId, url: tab?.url || url, title: tab?.title || 'New Tab', activated: opts.activate !== false };
+        const lastActiveAt = markTabActive(targetId);
+        return { targetId, url: tab?.url || url, title: tab?.title || 'New Tab', activated: opts.activate !== false, lastActiveAt };
     } finally {
         await cdp.detach().catch(() => undefined);
     }
@@ -504,9 +551,13 @@ export async function closeTab(port = getActivePort(), targetId: string): Promis
     if (!cdp) throw new Error('No CDP session available for tab close');
     try {
         await cdp.send('Target.closeTarget', { targetId });
+        forgetTabActivity(targetId);
         return { closed: true, targetId };
     } catch (error: any) {
-        if (error.message?.includes('No target')) return { closed: true, targetId, alreadyClosed: true };
+        if (error.message?.includes('No target')) {
+            forgetTabActivity(targetId);
+            return { closed: true, targetId, alreadyClosed: true };
+        }
         throw error;
     } finally {
         await cdp.detach().catch(() => undefined);
@@ -521,7 +572,10 @@ export async function getPageByTargetId(port = getActivePort(), targetId: string
             const session = await context.newCDPSession(page);
             try {
                 const { targetInfo } = await session.send('Target.getTargetInfo');
-                if (targetInfo.targetId === targetId) return page;
+                if (targetInfo.targetId === targetId) {
+                    markTabActive(targetId);
+                    return page;
+                }
             } finally {
                 await session.detach().catch(() => undefined);
             }

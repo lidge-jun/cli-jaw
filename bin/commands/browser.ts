@@ -50,6 +50,29 @@ function parseClip(values: Record<string, any>) {
     return { x, y, width, height };
 }
 
+function formatRelativeAge(ms: number | null | undefined): string {
+    if (!Number.isFinite(ms as number) || (ms as number) < 0) return 'untracked';
+    if ((ms as number) < 1000) return 'now';
+    const sec = Math.floor((ms as number) / 1000);
+    if (sec < 60) return `${sec}s`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}m`;
+    const hours = Math.floor(min / 60);
+    if (hours < 24) return `${hours}h`;
+    return `${Math.floor(hours / 24)}d`;
+}
+
+function decorateTab(tab: Record<string, any>, now = Date.now()): Record<string, any> {
+    const lastActiveAt = Number(tab.lastActiveAt);
+    const idleForMs = Number.isFinite(lastActiveAt) && lastActiveAt > 0 ? now - lastActiveAt : null;
+    return {
+        ...tab,
+        idleForMs,
+        idleFor: idleForMs === null ? 'untracked' : formatRelativeAge(idleForMs),
+        lastActiveAtIso: idleForMs === null ? null : new Date(lastActiveAt).toISOString(),
+    };
+}
+
 try {
     switch (sub) {
         case 'web-ai':
@@ -222,11 +245,18 @@ try {
         }
         case 'tabs': {
             const r = await api('GET', '/tabs') as Record<string, any>;
+            const tabs = (r.tabs || r.data?.tabs || []).map((tab: Record<string, any>) => decorateTab(tab));
             if (process.argv.includes('--json')) {
-                console.log(JSON.stringify(r.tabs || r.data?.tabs || [], null, 2));
+                console.log(JSON.stringify(tabs, null, 2));
                 break;
             }
-            (r.tabs || r.data?.tabs || []).forEach((t: any, i: number) => console.log(`${i + 1}. ${t.title}\n   ${t.url}`));
+            tabs.forEach((t: any, i: number) => {
+                const state = `${t.active ? 'active, ' : ''}idle ${t.idleFor}`;
+                console.log(`${i + 1}. ${t.title}${t.title ? '' : '(untitled)'} [${state}]`);
+                console.log(`   ${t.url}`);
+                console.log(`   targetId: ${t.targetId}`);
+            });
+            console.log('\nTip: run "cli-jaw browser tab-cleanup" to close idle/overflow tabs.');
             break;
         }
         case 'active-tab': {
@@ -239,6 +269,45 @@ try {
             if (!target) { console.error('Usage: cli-jaw browser tab-switch <index-or-targetId>'); process.exit(1); }
             const r = await api('POST', '/tab-switch', { target }) as Record<string, any>;
             console.log(JSON.stringify(r, null, 2));
+            break;
+        }
+        case 'new-tab': {
+            const url = process.argv[4] || 'about:blank';
+            const activate = !process.argv.includes('--no-activate');
+            const r = await api('POST', '/tab-new', { url, activate }) as Record<string, any>;
+            console.log(`created tab: ${r.targetId} (${r.url})`);
+            break;
+        }
+        case 'tab-close': {
+            const target = process.argv[4];
+            if (!target) { console.error('Usage: cli-jaw browser tab-close <targetId>'); process.exit(1); }
+            const r = await api('POST', '/tab-close', { targetId: target }) as Record<string, any>;
+            console.log(`closed tab: ${r.targetId}`);
+            break;
+        }
+        case 'tab-cleanup': {
+            const { values } = parseArgs({
+                args: process.argv.slice(4),
+                options: {
+                    json: { type: 'boolean', default: false },
+                    'idle-after': { type: 'string' },
+                    'max-tabs': { type: 'string' },
+                    'include-untracked': { type: 'boolean', default: false },
+                },
+                strict: false,
+            });
+            const r = await api('POST', '/tab-cleanup', {
+                idleAfter: values['idle-after'],
+                maxTabs: values['max-tabs'],
+                includeUntracked: values['include-untracked'],
+            }) as Record<string, any>;
+            if (values.json) console.log(JSON.stringify(r, null, 2));
+            else {
+                console.log(`closed tabs: ${r.closed}`);
+                console.log(`  idle timeout: ${r.idleClosed}`);
+                console.log(`  max-tabs: ${r.limitClosed}`);
+                console.log(`  untracked: ${r.untrackedClosed}`);
+            }
             break;
         }
         case 'text': {
@@ -464,7 +533,13 @@ try {
     resize <w> <h> [--fullscreen]
       Resize viewport/window.
     tabs [--json]
-      List tabs.
+      List tabs with idle metadata.
+    new-tab <url> [--no-activate]
+      Create a browser tab.
+    tab-close <targetId>
+      Close a browser tab by CDP target id.
+    tab-cleanup [--idle-after <30m>] [--max-tabs <n>] [--include-untracked] [--json]
+      Close idle or overflow tabs. Active web-ai session tabs are preserved.
     active-tab --json
       Show active tab target-id contract.
     tab-switch <index-or-targetId>
@@ -521,6 +596,8 @@ try {
       --context-from-files <glob|path>
       --context-transport <upload|inline>
       --allow-copy-markdown-fallback
+      --new-tab
+      --reuse-tab
       --json
 
     Examples:

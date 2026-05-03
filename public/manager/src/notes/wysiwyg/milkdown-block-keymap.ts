@@ -40,11 +40,23 @@ function adjacentBlock(state: import('@milkdown/kit/prose/state').EditorState, s
 }
 
 export const notesBlockBoundaryKeymap = $prose(() => keymap({
-    'Backspace': (state, _dispatch, view) => {
+    'Backspace': (state, dispatch, view) => {
         if (!(state.selection instanceof TextSelection)) return false;
         const { $cursor } = state.selection;
         if (!$cursor) return false;
         if ($cursor.parentOffset !== 0) return false;
+
+        const parent = $cursor.parent;
+        if (parent.type.name === 'heading') {
+            const paragraph = state.schema.nodes.paragraph;
+            if (!paragraph || !dispatch) return true;
+            const depth = $cursor.depth;
+            const pos = $cursor.before(depth);
+            const tr = state.tr.setNodeMarkup(pos, paragraph);
+            tr.setSelection(TextSelection.near(tr.doc.resolve(pos + 1)));
+            dispatch(tr.scrollIntoView());
+            return true;
+        }
 
         const depth = $cursor.depth;
         if (depth < 1) return false;

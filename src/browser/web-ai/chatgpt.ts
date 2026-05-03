@@ -1,5 +1,6 @@
 import { getActivePage, getCdpSession, createTab, waitForPageByTargetId, getPageByTargetId } from '../connection.js';
 import { getActiveTab, type ActiveTabResult, type BrowserTabInfo } from '../connection.js';
+import { cleanupIdleTabs } from '../tab-lifecycle.js';
 import { withSessionCommandLock } from './session-store.js';
 import { basename } from 'node:path';
 import { statSync } from 'node:fs';
@@ -120,6 +121,7 @@ async function ensureProviderTab(port: number, input: QuestionEnvelopeInput): Pr
         return { page, targetId: active.targetId };
     }
     const vendorUrl = input.url || 'https://chatgpt.com';
+    await cleanupIdleTabs(port);
     const tab = await createTab(port, vendorUrl, { activate: false });
     const page = await waitForPageByTargetId(port, tab.targetId);
     return { page, targetId: tab.targetId };
