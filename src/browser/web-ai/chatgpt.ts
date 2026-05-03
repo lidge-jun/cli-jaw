@@ -212,7 +212,7 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
             ? renderQuestionEnvelopeWithContext(envelope, contextPack.composerText)
             : renderQuestionEnvelope(envelope)
         : renderQuestionEnvelope(envelope);
-    const selectedModel = await selectChatGptModel(page, input.model);
+    const selectedModel = await selectChatGptModel(page, input.model, { effort: input.reasoningEffort });
     await waitForStableAssistantCount(page);
     const assistantCount = await countAssistantMessages(page);
     const baseline = saveBaseline({
@@ -292,6 +292,7 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
             ...(contextPack?.warnings || []),
             ...(contextPack?.attachments?.[0] ? [`context package attached: ${contextPack.attachments[0].displayPath}`] : []),
             ...(selectedModel ? [`model selected: ${selectedModel.selected}${selectedModel.alreadySelected ? ' (already selected)' : ''}`] : []),
+            ...(selectedModel?.effort ? [`reasoning effort selected: ${selectedModel.effort}`] : []),
         ],
     };
 }

@@ -10,6 +10,8 @@ function rejectFutureWebAiFlags(values: Record<string, unknown>): void {
     const vendor = values.vendor ?? 'chatgpt';
     if (vendor !== 'chatgpt' && vendor !== 'gemini' && vendor !== 'grok') throw new Error(`unsupported vendor: ${vendor}`);
     if (values.model && !isSupportedWebAiModel(vendor, values.model)) throw new Error(`unsupported ${webAiVendorLabel(vendor)} model selection: ${values.model}`);
+    const effort = values.effort || values['reasoning-effort'];
+    if (effort && !isSupportedWebAiEffort(vendor, values.model, effort)) throw new Error(`unsupported ${webAiVendorLabel(vendor)} reasoning effort: ${effort}`);
 }
 
 function isSupportedWebAiModel(vendor: unknown, model: unknown): boolean {
@@ -20,6 +22,18 @@ function isSupportedWebAiModel(vendor: unknown, model: unknown): boolean {
         grok: new Set(['auto', 'automatic', 'fast', 'quick', 'expert', 'thinking', 'think', 'grok-4.3', 'grok43', 'grok-43', 'beta', 'heavy']),
     };
     return Boolean(byVendor[String(vendor || 'chatgpt')]?.has(key));
+}
+
+function isSupportedWebAiEffort(vendor: unknown, model: unknown, effort: unknown): boolean {
+    if (String(vendor || 'chatgpt') !== 'chatgpt') return false;
+    const effortKey = String(effort || '').trim().toLowerCase();
+    const normalizedEffort = ({ low: 'light', light: 'light', standard: 'standard', normal: 'standard', regular: 'standard', default: 'standard', high: 'extended', extended: 'extended', heavy: 'heavy' } as Record<string, string>)[effortKey];
+    if (!normalizedEffort) return false;
+    const modelKey = String(model || 'pro').trim().toLowerCase();
+    const normalizedModel = ({ think: 'thinking', thinking: 'thinking', 'gpt-5-5-thinking': 'thinking', 'gpt-5.5-thinking': 'thinking', pro: 'pro', 'gpt-5-5-pro': 'pro', 'gpt-5.5-pro': 'pro' } as Record<string, string>)[modelKey];
+    if (normalizedModel === 'thinking') return ['light', 'standard', 'extended', 'heavy'].includes(normalizedEffort);
+    if (normalizedModel === 'pro') return ['standard', 'extended'].includes(normalizedEffort);
+    return false;
 }
 
 function webAiVendorLabel(vendor: unknown): string {
@@ -64,6 +78,8 @@ export async function runWebAiCommand(
             notify: { type: 'boolean', default: true },
             file: { type: 'string' },
             model: { type: 'string' },
+            effort: { type: 'string' },
+            'reasoning-effort': { type: 'string' },
             'thinking-time': { type: 'string' },
             'context-from-files': { type: 'string', multiple: true },
             'context-exclude': { type: 'string', multiple: true },
@@ -106,6 +122,7 @@ export async function runWebAiCommand(
         ...(values.file ? { filePath: values.file } : {}),
         ...(values['thinking-time'] ? { thinkingTime: values['thinking-time'] } : {}),
         ...(values.model ? { model: values.model } : {}),
+        ...(values.effort || values['reasoning-effort'] ? { reasoningEffort: values.effort || values['reasoning-effort'] } : {}),
         contextFromFiles: values['context-from-files'] || [],
         contextExclude: values['context-exclude'] || [],
         ...(values['context-file'] ? { contextFile: values['context-file'] } : {}),

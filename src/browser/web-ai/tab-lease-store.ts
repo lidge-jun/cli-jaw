@@ -409,8 +409,8 @@ export async function cleanupLeasedTabs(port: number): Promise<{ closed: number 
             : lease);
         writeStoreUnlocked(store);
     });
-    await closePlanned(port, closePlan);
-    return { closed: closePlan.length };
+    const closed = await closePlanned(port, closePlan);
+    return { closed: closed.length };
 }
 
 export async function removeLease(targetId: string | null | undefined, scope: Partial<LeaseScopeInput> = {}): Promise<void> {

@@ -526,9 +526,53 @@ export function getBrowserRuntimeStatus(): BrowserRuntimeStatus {
 }
 
 export async function getCdpSession(port = getActivePort()) {
-    const page = await getActivePage(port);
-    if (!page) return null;
-    return page.context().newCDPSession(page);
+    try {
+        const page = await getActivePage(port);
+        if (page) return page.context().newCDPSession(page);
+        const { browser } = await connectCdp(port);
+        if (typeof browser.newBrowserCDPSession === 'function') {
+            return browser.newBrowserCDPSession();
+        }
+    } catch (error: any) {
+        if (!String(error?.message || '').includes('Browser.setDownloadBehavior')) throw error;
+    }
+    return createRawBrowserCdpSession(port);
+}
+
+async function createRawBrowserCdpSession(port: number): Promise<{ send(method: string, params?: Record<string, unknown>): Promise<any>; detach(): Promise<void> } | null> {
+    const response = await fetch(`http://127.0.0.1:${port}/json/version`);
+    const version = await response.json() as { webSocketDebuggerUrl?: string };
+    const endpoint = version.webSocketDebuggerUrl;
+    if (!endpoint || typeof WebSocket !== 'function') return null;
+    const ws = new WebSocket(endpoint);
+    let nextId = 1;
+    const pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
+    ws.addEventListener('message', event => {
+        let payload: any = null;
+        try { payload = JSON.parse(String(event.data)); } catch { return; }
+        if (!payload?.id || !pending.has(payload.id)) return;
+        const callbacks = pending.get(payload.id)!;
+        pending.delete(payload.id);
+        if (payload.error) callbacks.reject(new Error(payload.error.message || JSON.stringify(payload.error)));
+        else callbacks.resolve(payload.result || {});
+    });
+    await new Promise<void>((resolve, reject) => {
+        ws.addEventListener('open', () => resolve(), { once: true });
+        ws.addEventListener('error', () => reject(new Error('CDP websocket connection failed')), { once: true });
+    });
+    return {
+        send(method: string, params: Record<string, unknown> = {}) {
+            const id = nextId++;
+            const promise = new Promise<any>((resolve, reject) => pending.set(id, { resolve, reject }));
+            ws.send(JSON.stringify({ id, method, params }));
+            return promise;
+        },
+        async detach() {
+            for (const { reject } of pending.values()) reject(new Error('CDP session detached'));
+            pending.clear();
+            if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
+        },
+    };
 }
 
 function isReusableBlankTab(tab: RawCdpTab, allTabs: RawCdpTab[] = []): boolean {
@@ -558,7 +602,7 @@ export async function createTab(port = getActivePort(), url = 'about:blank', opt
             }
         }
 
-        const { targetId } = await cdp.send('Target.createTarget', { url, newWindow: false, background: !opts.activate });
+        const { targetId } = await createTargetWithWindowFallback(cdp, url, opts);
         await new Promise(r => setTimeout(r, 100));
         const tabs = await readCdpPageTargets(port);
         const tab = tabs.find(t => t.id === targetId);
@@ -566,6 +610,15 @@ export async function createTab(port = getActivePort(), url = 'about:blank', opt
         return { targetId, url: tab?.url || url, title: tab?.title || 'New Tab', activated: opts.activate !== false, lastActiveAt };
     } finally {
         await cdp.detach().catch(() => undefined);
+    }
+}
+
+async function createTargetWithWindowFallback(cdp: { send(method: string, params?: Record<string, unknown>): Promise<any> }, url: string, opts: { activate?: boolean }): Promise<{ targetId: string }> {
+    try {
+        return await cdp.send('Target.createTarget', { url, newWindow: false, background: !opts.activate }) as { targetId: string };
+    } catch (error: any) {
+        if (!String(error?.message || '').includes('no browser is open')) throw error;
+        return await cdp.send('Target.createTarget', { url, newWindow: true, background: false }) as { targetId: string };
     }
 }
 

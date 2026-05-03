@@ -1,6 +1,7 @@
 // ─── Browser API Routes (Phase 7) ─────────────────────
 import type { Express, Request, Response, NextFunction } from 'express';
 import * as browser from '../browser/index.js';
+import { cleanupPoolTabs } from '../browser/web-ai/tab-pool.js';
 import { ok } from '../http/response.js';
 import { DEBUG_CONSOLE_ONLY_MESSAGE, normalizeBrowserStartMode, type BrowserStartMode } from '../browser/launch-policy.js';
 
@@ -184,11 +185,21 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
 
     app.post('/api/browser/tab-cleanup', requireAuth, async (req: Request, res: Response) => {
         try {
-            res.json(await browser.cleanupIdleTabs(cdpPort(req), {
+            if (req.body.includeUntracked === true && req.body.force !== true) {
+                res.status(400).json({ error: 'tab-cleanup includeUntracked requires force=true' });
+                return;
+            }
+            const leaseResult = await cleanupPoolTabs(cdpPort(req));
+            const idleResult = await browser.cleanupIdleTabs(cdpPort(req), {
                 idleTimeoutMs: req.body.idleAfter ? browser.parseTabDuration(String(req.body.idleAfter)) : undefined,
                 maxTabs: req.body.maxTabs ? Number(req.body.maxTabs) : undefined,
                 includeUntracked: req.body.includeUntracked === true,
-            }));
+            });
+            res.json({
+                ...idleResult,
+                closed: idleResult.closed + (leaseResult.closed || 0),
+                leaseClosed: leaseResult.closed || 0,
+            });
         } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 

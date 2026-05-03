@@ -61,7 +61,19 @@ test('BWCOMP-007: ChatGPT model selector uses observed radio menu fallbacks', ()
     assert.match(modelSrc, /model-switcher-gpt-5-5-thinking/);
     assert.match(modelSrc, /model-switcher-gpt-5-5-pro/);
     assert.match(modelSrc, /model-switcher-gpt-5-5-pro-thinking-effort/);
+    assert.match(modelSrc, /CHATGPT_MODEL_EFFORT_OPTIONS/);
+    assert.match(modelSrc, /Extended Pro/);
     assert.match(modelSrc, /Heavy/);
     assert.match(modelSrc, /aria-checked="true"/);
-    assert.match(chatgptSrc, /selectChatGptModel/);
+    assert.match(chatgptSrc, /selectChatGptModel\(page, input\.model, \{ effort: input\.reasoningEffort \}\)/);
+    assert.match(chatgptSrc, /reasoning effort selected/);
+});
+
+test('BWCOMP-008: ChatGPT reasoning effort is exposed through CLI and typed input', () => {
+    const cliSrc = fs.readFileSync(join(root, 'bin/commands/browser-web-ai.ts'), 'utf8');
+    const typesSrc = fs.readFileSync(join(root, 'src/browser/web-ai/types.ts'), 'utf8');
+    assert.match(cliSrc, /effort: \{ type: 'string' \}/);
+    assert.match(cliSrc, /'reasoning-effort': \{ type: 'string' \}/);
+    assert.match(cliSrc, /reasoningEffort: values\.effort \|\| values\['reasoning-effort'\]/);
+    assert.match(typesSrc, /reasoningEffort\?: string/);
 });

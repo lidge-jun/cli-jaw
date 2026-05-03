@@ -36,6 +36,7 @@ export interface QuestionEnvelopeInput {
     filePath?: string;
     thinkingTime?: string;
     model?: string;
+    reasoningEffort?: string;
     contextFromFiles?: string[];
     contextExclude?: string[];
     contextFile?: string;

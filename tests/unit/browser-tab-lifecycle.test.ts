@@ -1,7 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { parseTabDuration, selectTabsForCleanup } from '../../src/browser/tab-lifecycle.ts';
+import { cleanupLeasedTabs, listLeases } from '../../src/browser/web-ai/tab-lease-store.ts';
+import { JAW_HOME } from '../../src/core/config.ts';
 
 test('browser tab lifecycle parses cleanup duration strings', () => {
     assert.equal(parseTabDuration('500ms'), 500);
@@ -86,6 +89,9 @@ test('browser createTab reuses startup about:blank tabs before creating provider
     assert.ok(source.includes('opts.reuseBlank !== false'));
     assert.ok(source.includes('allTabs.length <= 1'));
     assert.ok(source.includes('reusedBlank: true'));
+    assert.ok(source.includes('newBrowserCDPSession'));
+    assert.ok(source.includes('createRawBrowserCdpSession'));
+    assert.ok(source.includes('createTargetWithWindowFallback'));
 });
 
 test('browser tab lifecycle counts only owned closeable leases toward managed max-tabs', () => {
@@ -127,4 +133,53 @@ test('browser web-ai tab pool persists leases, locks checkout, and closes evicte
     assert.ok(chatgptSource.includes('cleanupPoolTabs(port)'));
     assert.ok(chatgptSource.includes('getPooledTab(port, vendor'));
     assert.ok(chatgptSource.includes('await finalizeProviderTab'));
+});
+
+test('browser tab cleanup API rejects includeUntracked without force', () => {
+    const routeSource = readFileSync(new URL('../../src/routes/browser.ts', import.meta.url), 'utf8');
+    assert.ok(routeSource.includes('req.body.includeUntracked === true && req.body.force !== true'));
+    assert.ok(routeSource.includes('includeUntracked requires force=true'));
+});
+
+test('browser tab cleanup API runs durable lease pool cleanup', () => {
+    const routeSource = readFileSync(new URL('../../src/routes/browser.ts', import.meta.url), 'utf8');
+    assert.ok(routeSource.includes("import { cleanupPoolTabs } from '../browser/web-ai/tab-pool.js'"));
+    assert.ok(routeSource.includes('const leaseResult = await cleanupPoolTabs(cdpPort(req))'));
+    assert.ok(routeSource.includes('leaseClosed'));
+});
+
+test('browser web-ai lease cleanup reports actual closed count after close failure', async () => {
+    const storePath = join(JAW_HOME, 'browser-web-ai-tab-leases.json');
+    mkdirSync(JAW_HOME, { recursive: true });
+    writeFileSync(storePath, JSON.stringify({
+        version: 1,
+        leases: [
+            {
+                owner: 'cli-jaw',
+                vendor: 'chatgpt',
+                sessionType: 'jaw',
+                origin: 'https://chatgpt.com',
+                browserProfileKey: 'cdp:65529',
+                targetId: 'close-fails',
+                sessionId: 'session-close-fails',
+                url: 'https://chatgpt.com/c/close-fails',
+                state: 'pooled',
+                leasedAt: '2026-05-03T00:00:00.000Z',
+                pooledAt: '2026-05-03T00:00:00.000Z',
+                finalizedAt: '2026-05-03T00:00:00.000Z',
+                poolExpiresAt: '2026-05-03T00:01:00.000Z',
+                leaseDisposition: 'pooled',
+                updatedAt: '2026-05-03T00:00:00.000Z',
+                leaseKey: 'cli-jaw:chatgpt:jaw:https://chatgpt.com:cdp:65529',
+            },
+        ],
+    }));
+
+    const result = await cleanupLeasedTabs(65529);
+    const leases = await listLeases();
+
+    assert.equal(result.closed, 0);
+    assert.equal(leases.length, 1);
+    assert.equal(leases[0]?.state, 'pooled');
+    assert.equal(leases[0]?.leaseDisposition, 'close-failed-retryable');
 });
