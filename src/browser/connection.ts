@@ -531,10 +531,31 @@ export async function getCdpSession(port = getActivePort()) {
     return page.context().newCDPSession(page);
 }
 
-export async function createTab(port = getActivePort(), url = 'about:blank', opts: { activate?: boolean } = {}): Promise<{ targetId: string; url: string; title: string; activated: boolean; lastActiveAt: number | null }> {
+function isReusableBlankTab(tab: RawCdpTab): boolean {
+    const url = String(tab.url || '').toLowerCase();
+    return Boolean(tab.id) && (url === 'about:blank' || url === '');
+}
+
+export async function createTab(port = getActivePort(), url = 'about:blank', opts: { activate?: boolean; reuseBlank?: boolean } = {}): Promise<{ targetId: string; url: string; title: string; activated: boolean; lastActiveAt: number | null; reusedBlank?: boolean }> {
     const cdp = await getCdpSession(port);
     if (!cdp) throw new Error('No CDP session available for tab creation');
     try {
+        if (url !== 'about:blank' && opts.reuseBlank !== false) {
+            const blank = (await readCdpPageTargets(port)).find(isReusableBlankTab);
+            if (blank?.id) {
+                const page = await waitForPageByTargetId(port, blank.id);
+                await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+                if (opts.activate !== false) {
+                    await cdp.send('Target.activateTarget', { targetId: blank.id });
+                    verifiedActiveTargetId = blank.id;
+                    markBrowserStateChanged();
+                }
+                const lastActiveAt = markTabActive(blank.id);
+                const title = await page.title().catch(() => 'New Tab');
+                return { targetId: blank.id, url: page.url(), title, activated: opts.activate !== false, lastActiveAt, reusedBlank: true };
+            }
+        }
+
         const { targetId } = await cdp.send('Target.createTarget', { url, newWindow: false, background: !opts.activate });
         await new Promise(r => setTimeout(r, 100));
         const tabs = await readCdpPageTargets(port);

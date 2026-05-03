@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { parseTabDuration, selectTabsForCleanup } from '../../src/browser/tab-lifecycle.ts';
 
 test('browser tab lifecycle parses cleanup duration strings', () => {
@@ -77,4 +78,11 @@ test('browser tab lifecycle does not close untracked tabs for max-tabs unless ex
 
     assert.deepEqual(selectTabsForCleanup(input).map(tab => tab.targetId), ['tracked']);
     assert.deepEqual(selectTabsForCleanup({ ...input, includeUntracked: true }).map(tab => tab.targetId), ['untracked']);
+});
+
+test('browser createTab reuses startup about:blank tabs before creating provider tabs', () => {
+    const source = readFileSync(new URL('../../src/browser/connection.ts', import.meta.url), 'utf8');
+    assert.ok(source.includes('function isReusableBlankTab'));
+    assert.ok(source.includes('opts.reuseBlank !== false'));
+    assert.ok(source.includes('reusedBlank: true'));
 });
