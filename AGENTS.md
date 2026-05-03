@@ -101,3 +101,26 @@ echo '[...]' | officecli batch data.xlsx --json                     # batch ops
 - Binary selection: smoke test prefers `OFFICECLI_BIN`, then global `officecli` on PATH, then `officecli/build-local/officecli` as fallback
 - CJK-enhanced binary: global install defaults to `lidge-jun/OfficeCLI`; repo-local `officecli/build-local/officecli` is fallback/dev-only
 - Full docs: [`docs/officecli-integration.md`](docs/officecli-integration.md)
+
+#### OfficeCLI Rebase Hygiene
+
+When rebasing the `officecli` submodule fork onto `iOfficeAI/OfficeCLI`, preserve the HWP/rhwp commits and keep generated Rust outputs out of history.
+
+```bash
+cd officecli
+git fetch upstream
+git status --short --branch
+git branch backup/feat-hwpx-pre-rebase-$(date +%y%m%d-%H%M) feat/hwpx
+git tag backup/feat-hwpx-pre-rebase-$(date +%y%m%d-%H%M) feat/hwpx
+```
+
+- Rebase onto `upstream/main`, then resolve conflicts by preserving upstream OfficeCLI core changes plus local HWP/rhwp routing, help, capability, fixture, and bridge code.
+- If `src/rhwp-field-bridge/target/` or any Rust `target/` output blocks rebase/cherry-pick, move or delete that generated directory before continuing. It is build output, not source.
+- If an old commit accidentally stages Rust build artifacts, stop before committing and run `git rm -r --cached src/rhwp-field-bridge/target` plus `rm -rf src/rhwp-field-bridge/target`; commit only source, fixtures, tests, and docs.
+- After every rebase, verify `git ls-files 'src/rhwp-field-bridge/target/*' | wc -l` returns `0`.
+- Required checks before force-pushing the rebased feature branch:
+  - `dotnet build officecli.slnx`
+  - `cargo build --manifest-path src/rhwp-field-bridge/Cargo.toml`
+  - `dotnet test tests/OfficeCli.Tests/OfficeCli.Tests.csproj --filter FullyQualifiedName~HwpBridge --no-build`
+  - `dotnet test tests/OfficeCli.Tests/OfficeCli.Tests.csproj --no-build`
+- Push rebased `feat/hwpx` with `git push --force-with-lease origin feat/hwpx`, then commit the updated `officecli` submodule pointer in this repo.
