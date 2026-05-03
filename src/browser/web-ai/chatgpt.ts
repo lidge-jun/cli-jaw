@@ -121,7 +121,7 @@ async function ensureProviderTab(port: number, input: QuestionEnvelopeInput): Pr
         return { page, targetId: active.targetId };
     }
     const vendorUrl = input.url || 'https://chatgpt.com';
-    await cleanupIdleTabs(port);
+    await cleanupIdleTabs(port, { maxTabs: Number.POSITIVE_INFINITY });
     const tab = await createTab(port, vendorUrl, { activate: false });
     const page = await waitForPageByTargetId(port, tab.targetId);
     return { page, targetId: tab.targetId };

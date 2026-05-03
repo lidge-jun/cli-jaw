@@ -63,3 +63,18 @@ test('browser tab lifecycle closes untracked tabs only when explicit', () => {
     assert.deepEqual(selectTabsForCleanup(input), []);
     assert.deepEqual(selectTabsForCleanup({ ...input, includeUntracked: true }).map(tab => tab.cleanupReason), ['untracked']);
 });
+
+test('browser tab lifecycle does not close untracked tabs for max-tabs unless explicit', () => {
+    const input = {
+        now: 10_000,
+        idleTimeoutMs: 1000,
+        maxTabs: 1,
+        tabs: [
+            { tabId: 'untracked', targetId: 'untracked', index: 1, title: '', url: '', type: 'page', active: false, attached: true, lastActiveAt: null },
+            { tabId: 'tracked', targetId: 'tracked', index: 2, title: '', url: '', type: 'page', active: false, attached: true, lastActiveAt: 9000 },
+        ],
+    };
+
+    assert.deepEqual(selectTabsForCleanup(input).map(tab => tab.targetId), ['tracked']);
+    assert.deepEqual(selectTabsForCleanup({ ...input, includeUntracked: true }).map(tab => tab.targetId), ['untracked']);
+});

@@ -84,10 +84,13 @@ export function selectTabsForCleanup({
     }
 
     const remaining = tabs.filter(tab => tab.targetId && !selected.has(tab.targetId));
-    const remainingCloseable = remaining.filter(tab =>
-        !pinnedTargetIds.has(tab.targetId) &&
-        !activeSessionTargetIds.has(tab.targetId)
-    );
+    const remainingCloseable = remaining.filter(tab => {
+        const lastActiveAt = Number(tab.lastActiveAt);
+        const tracked = Number.isFinite(lastActiveAt) && lastActiveAt > 0;
+        return !pinnedTargetIds.has(tab.targetId) &&
+            !activeSessionTargetIds.has(tab.targetId) &&
+            (tracked || includeUntracked);
+    });
 
     if (remaining.length > maxTabs) {
         const limitCloseCount = remaining.length - maxTabs;
@@ -116,7 +119,7 @@ export async function cleanupIdleTabs(port: number, opts: TabCleanupOptions = {}
         pinnedTargetIds: pinnedTabs,
         now: opts.now || Date.now(),
         idleTimeoutMs: opts.idleTimeoutMs || parseTabDuration(process.env.JAW_BROWSER_TAB_IDLE || '30m'),
-        maxTabs: opts.maxTabs || Number(process.env.JAW_BROWSER_MAX_TABS || DEFAULT_MAX_TABS),
+        maxTabs: opts.maxTabs ?? Number(process.env.JAW_BROWSER_MAX_TABS || DEFAULT_MAX_TABS),
         includeUntracked: opts.includeUntracked === true,
     });
 
