@@ -11,10 +11,15 @@ function errorFromUnknown(error: unknown): Error {
     return error instanceof Error ? error : new Error(String(error));
 }
 
+const NOTE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
 export async function uploadClipboardImageMarkdown(notePath: string, data: DataTransfer | null): Promise<string | null> {
     const image = firstClipboardImage(data);
     const remoteUrl = image ? null : firstRemoteClipboardImageUrl(data);
     if (!image && !remoteUrl) return null;
+    if (image && image.size > NOTE_IMAGE_MAX_BYTES) {
+        throw new Error('Image exceeds 5 MB limit');
+    }
     const result = image
         ? await uploadNoteAsset(notePath, image)
         : await uploadRemoteNoteAsset(notePath, remoteUrl!);

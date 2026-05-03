@@ -72,6 +72,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
     const syncingFromPropsRef = useRef(true);
     const [ready, setReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'error'>('idle');
 
     useEffect(() => {
         onChangeRef.current = props.onChange;
@@ -340,8 +341,10 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
                 event.preventDefault();
                 event.stopPropagation();
                 const imageFallback = data.getData('text/plain');
+                setUploadStatus('uploading');
                 void uploadClipboardImageMarkdown(notePathRef.current, data)
                     .then(markdown => {
+                        setUploadStatus('idle');
                         if (markdown) {
                             run(editor => editor.action(insert(markdown, true)));
                             return;
@@ -350,6 +353,8 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
                     })
                     .catch(error => {
                         console.warn('[notes-image-paste]', error);
+                        setUploadStatus('error');
+                        setTimeout(() => setUploadStatus('idle'), 3000);
                         if (imageFallback) run(editor => editor.action(insert(imageFallback)));
                     });
                 return;
@@ -383,20 +388,28 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
                     dropPos = coords?.pos ?? null;
                 });
             } catch { /* editor not ready */ }
+            function safeInsert(content: string, inline?: boolean): void {
+                run(editor => {
+                    try {
+                        editor.action(dropPos != null ? insertPos(content, dropPos, inline) : insert(content, inline));
+                    } catch {
+                        editor.action(insert(content, inline));
+                    }
+                });
+            }
             const imageFallback = event.dataTransfer?.getData('text/plain') ?? '';
+            setUploadStatus('uploading');
             void uploadClipboardImageMarkdown(notePathRef.current, event.dataTransfer)
                 .then(markdown => {
-                    if (markdown) {
-                        run(editor => editor.action(
-                            dropPos != null ? insertPos(markdown, dropPos, true) : insert(markdown, true),
-                        ));
-                        return;
-                    }
-                    if (imageFallback) run(editor => editor.action(insert(imageFallback)));
+                    setUploadStatus('idle');
+                    if (markdown) { safeInsert(markdown, true); return; }
+                    if (imageFallback) safeInsert(imageFallback);
                 })
                 .catch(error => {
                     console.warn('[notes-image-drop]', error);
-                    if (imageFallback) run(editor => editor.action(insert(imageFallback)));
+                    setUploadStatus('error');
+                    setTimeout(() => setUploadStatus('idle'), 3000);
+                    if (imageFallback) safeInsert(imageFallback);
                 });
         }
 
@@ -431,6 +444,11 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
                 <button type="button" title="Code block" aria-label="Code block" disabled={!ready} onClick={createLanguageCodeBlock}>Block</button>
             </div>
             {error && <div className="notes-wysiwyg-error" role="alert">{error}</div>}
+            {uploadStatus !== 'idle' && (
+                <div className="notes-wysiwyg-upload-status" role="status" data-status={uploadStatus}>
+                    {uploadStatus === 'uploading' ? 'Uploading image…' : 'Image upload failed'}
+                </div>
+            )}
             <div
                 ref={rootRef}
                 className="notes-milkdown-root"

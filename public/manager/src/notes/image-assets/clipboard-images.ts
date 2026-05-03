@@ -58,7 +58,7 @@ export function firstClipboardImage(data: DataTransfer | null): File | null {
     return null;
 }
 
-const REMOTE_IMAGE_EXT_RE = /\.(?:png|jpe?g|gif|webp)(?:\?|#|$)/i;
+const REMOTE_IMAGE_EXT_RE = /\.(?:png|jpe?g|gif|webp)$/i;
 
 function cleanRemoteImageUrl(input: string): string | null {
     const trimmed = input.trim();

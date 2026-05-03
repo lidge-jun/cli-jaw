@@ -437,6 +437,18 @@
     background: var(--danger-soft, var(--canvas-panel));
 }
 
+.notes-wysiwyg-upload-status {
+    padding: 4px 12px;
+    font-size: 13px;
+    color: var(--text-secondary, #888);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.notes-wysiwyg-upload-status[data-status="error"] {
+    color: var(--danger-strong, var(--text-primary));
+    background: var(--danger-soft, var(--canvas-panel));
+}
+
 .notes-milkdown-root .ProseMirror {
     min-height: 100%;
     padding: 24px 28px 160px;

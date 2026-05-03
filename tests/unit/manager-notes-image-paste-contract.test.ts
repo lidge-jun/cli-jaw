@@ -74,6 +74,44 @@ test('clipboard image helper extracts remote Chrome image copy URLs without acce
     } as unknown as DataTransfer), null);
 });
 
+test('remote clipboard image URL detection accepts image extensions and rejects non-image URLs', () => {
+    function remoteUrlData(plain: string, html = ''): DataTransfer {
+        return {
+            items: [],
+            files: [],
+            getData: (type: string) => {
+                if (type === 'text/html') return html;
+                if (type === 'text/plain') return plain;
+                return '';
+            },
+        } as unknown as DataTransfer;
+    }
+
+    assert.ok(firstRemoteClipboardImageUrl(remoteUrlData('https://cdn.example.com/photo.png')));
+    assert.ok(firstRemoteClipboardImageUrl(remoteUrlData('https://cdn.example.com/photo.jpg')));
+    assert.ok(firstRemoteClipboardImageUrl(remoteUrlData('https://cdn.example.com/photo.jpeg')));
+    assert.ok(firstRemoteClipboardImageUrl(remoteUrlData('https://cdn.example.com/photo.webp')));
+    assert.ok(firstRemoteClipboardImageUrl(remoteUrlData('https://cdn.example.com/photo.gif')));
+    assert.ok(firstRemoteClipboardImageUrl(remoteUrlData('https://cdn.example.com/photo.JPG')));
+    assert.ok(firstRemoteClipboardImageUrl(remoteUrlData('https://cdn.example.com/photo.PNG')));
+
+    assert.ok(firstRemoteClipboardImageUrl(remoteUrlData('https://cdn.example.com/photo.png?w=100')));
+    assert.ok(firstRemoteClipboardImageUrl(remoteUrlData('https://cdn.example.com/photo.webp#frag')));
+
+    assert.equal(firstRemoteClipboardImageUrl(remoteUrlData('https://example.com/doc.pdf')), null);
+    assert.equal(firstRemoteClipboardImageUrl(remoteUrlData('https://example.com/image.svg')), null);
+    assert.equal(firstRemoteClipboardImageUrl(remoteUrlData('https://example.com/image.avif')), null);
+    assert.equal(firstRemoteClipboardImageUrl(remoteUrlData('https://example.com/image.bmp')), null);
+    assert.equal(firstRemoteClipboardImageUrl(remoteUrlData('https://example.com/image.ico')), null);
+
+    assert.equal(firstRemoteClipboardImageUrl(remoteUrlData('https://example.com/photo')), null);
+    assert.equal(firstRemoteClipboardImageUrl(remoteUrlData('https://example.com/')), null);
+    assert.equal(firstRemoteClipboardImageUrl(remoteUrlData('just some text')), null);
+    assert.equal(firstRemoteClipboardImageUrl(remoteUrlData('')), null);
+
+    assert.ok(firstRemoteClipboardImageUrl(remoteUrlData('', '<img src="https://cdn.example.com/dynamic-image">')));
+});
+
 test('notes image URL resolver maps only safe asset paths and blocks dangerous URLs', () => {
     assert.equal(
         notesImageSrc('./.assets/project__meeting/file.png'),
@@ -109,6 +147,10 @@ test('notes image paste is wired through JSON upload and all authoring surfaces'
     assert.ok(wysiwyg.includes('uploadClipboardImageMarkdown(notePathRef.current') || wysiwyg.includes('uploadClipboardImageMarkdown(props.notePath'), 'WYSIWYG paste must upload against the current note path');
     assert.ok(wysiwyg.includes('notesImageSrc(originalSrc)'), 'WYSIWYG must route local asset image nodes through the notes asset endpoint');
     assert.ok(wysiwyg.includes('new MutationObserver'), 'WYSIWYG must refresh image src after Milkdown renders image nodes');
+    assert.ok(wysiwyg.includes('setUploadStatus'), 'WYSIWYG must show upload progress feedback');
+
+    const insertImage = read('public/manager/src/notes/image-assets/insert-image-markdown.ts');
+    assert.ok(insertImage.includes('NOTE_IMAGE_MAX_BYTES'), 'upload must precheck file size before sending');
     assert.ok(renderer.includes('img: ({ src, alt'), 'MarkdownRenderer must own image rendering');
     assert.ok(renderer.includes('notesImageSrc(src)'), 'MarkdownRenderer must route image src through the Notes asset resolver');
 });
