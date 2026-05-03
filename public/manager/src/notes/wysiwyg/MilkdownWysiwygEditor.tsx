@@ -14,7 +14,7 @@ import { insertTableCommand, toggleStrikethroughCommand } from '@milkdown/kit/pr
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { history } from '@milkdown/kit/plugin/history';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
-import { callCommand, getMarkdown, insert, replaceAll } from '@milkdown/kit/utils';
+import { callCommand, getMarkdown, insert, insertPos, replaceAll } from '@milkdown/kit/utils';
 import { safeMarkdownUrl } from '../markdown-security';
 import { hasImportableClipboardImage } from '../image-assets/clipboard-images';
 import { uploadClipboardImageMarkdown } from '../image-assets/insert-image-markdown';
@@ -375,11 +375,21 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
             if (!hasImportableClipboardImage(event.dataTransfer)) return;
             event.preventDefault();
             event.stopPropagation();
+            let dropPos: number | null = null;
+            try {
+                editorRef.current?.action(ctx => {
+                    const view = ctx.get(editorViewCtx);
+                    const coords = view.posAtCoords({ left: event.clientX, top: event.clientY });
+                    dropPos = coords?.pos ?? null;
+                });
+            } catch { /* editor not ready */ }
             const imageFallback = event.dataTransfer?.getData('text/plain') ?? '';
             void uploadClipboardImageMarkdown(notePathRef.current, event.dataTransfer)
                 .then(markdown => {
                     if (markdown) {
-                        run(editor => editor.action(insert(markdown, true)));
+                        run(editor => editor.action(
+                            dropPos != null ? insertPos(markdown, dropPos, true) : insert(markdown, true),
+                        ));
                         return;
                     }
                     if (imageFallback) run(editor => editor.action(insert(imageFallback)));

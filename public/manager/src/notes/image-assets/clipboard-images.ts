@@ -58,6 +58,8 @@ export function firstClipboardImage(data: DataTransfer | null): File | null {
     return null;
 }
 
+const REMOTE_IMAGE_EXT_RE = /\.(?:png|jpe?g|gif|webp)(?:\?|#|$)/i;
+
 function cleanRemoteImageUrl(input: string): string | null {
     const trimmed = input.trim();
     if (!trimmed) return null;
@@ -69,6 +71,10 @@ function cleanRemoteImageUrl(input: string): string | null {
     } catch {
         return null;
     }
+}
+
+function looksLikeImageUrl(url: string): boolean {
+    try { return REMOTE_IMAGE_EXT_RE.test(new URL(url).pathname); } catch { return false; }
 }
 
 export function firstRemoteClipboardImageUrl(data: DataTransfer | null): string | null {
@@ -83,9 +89,10 @@ export function firstRemoteClipboardImageUrl(data: DataTransfer | null): string 
     for (const line of uriList.split(/\r?\n/)) {
         if (!line || line.startsWith('#')) continue;
         const url = cleanRemoteImageUrl(line);
-        if (url) return url;
+        if (url && looksLikeImageUrl(url)) return url;
     }
-    return cleanRemoteImageUrl(data.getData?.('text/plain') ?? '');
+    const plain = cleanRemoteImageUrl(data.getData?.('text/plain') ?? '');
+    return plain && looksLikeImageUrl(plain) ? plain : null;
 }
 
 export function hasImportableClipboardImage(data: DataTransfer | null): boolean {
