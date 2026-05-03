@@ -86,3 +86,14 @@ test('browser createTab reuses startup about:blank tabs before creating provider
     assert.ok(source.includes('opts.reuseBlank !== false'));
     assert.ok(source.includes('reusedBlank: true'));
 });
+
+test('browser web-ai tab pool persists across CLI processes and checks out pooled tabs once', () => {
+    const poolSource = readFileSync(new URL('../../src/browser/web-ai/tab-pool.ts', import.meta.url), 'utf8');
+    const chatgptSource = readFileSync(new URL('../../src/browser/web-ai/chatgpt.ts', import.meta.url), 'utf8');
+    assert.ok(poolSource.includes('browser-web-ai-tab-pool.json'));
+    assert.ok(poolSource.includes('function loadPool'));
+    assert.ok(poolSource.includes('function savePool'));
+    assert.ok(poolSource.includes('pool.delete(vendor)'));
+    assert.ok(chatgptSource.includes('getPooledTab(port, input.vendor)'));
+    assert.ok(chatgptSource.includes('poolTab(vendor, session.targetId, currentUrl)'));
+});

@@ -1,6 +1,7 @@
 import { getActivePage, getCdpSession, createTab, waitForPageByTargetId, getPageByTargetId } from '../connection.js';
 import { getActiveTab, type ActiveTabResult, type BrowserTabInfo } from '../connection.js';
 import { cleanupIdleTabs } from '../tab-lifecycle.js';
+import { getPooledTab, poolTab } from './tab-pool.js';
 import { withSessionCommandLock } from './session-store.js';
 import { basename } from 'node:path';
 import { statSync } from 'node:fs';
@@ -120,8 +121,17 @@ async function ensureProviderTab(port: number, input: QuestionEnvelopeInput): Pr
         const page = await requireActivePage(port);
         return { page, targetId: active.targetId };
     }
+    const vendor = (input.vendor || 'chatgpt') as WebAiVendor;
     const vendorUrl = input.url || 'https://chatgpt.com';
     await cleanupIdleTabs(port, { maxTabs: Number.POSITIVE_INFINITY });
+    const pooled = await getPooledTab(port, vendor);
+    if (pooled) {
+        const page = await waitForPageByTargetId(port, pooled.targetId);
+        if (page.url?.() !== vendorUrl) {
+            await page.goto(vendorUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+        }
+        return { page, targetId: pooled.targetId };
+    }
     const tab = await createTab(port, vendorUrl, { activate: false });
     const page = await waitForPageByTargetId(port, tab.targetId);
     return { page, targetId: tab.targetId };
@@ -336,7 +346,10 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
     if (session && result.ok) updateSessionStatus(session.sessionId, 'complete');
     if (session && !result.ok) updateSessionStatus(session.sessionId, 'timeout');
     if (result.canvas) {
-        if (session) updateSessionResult({ sessionId: session.sessionId, status: 'complete', url: currentUrl, conversationUrl: currentUrl, answerText: result.answerText });
+        if (session) {
+            updateSessionResult({ sessionId: session.sessionId, status: 'complete', url: currentUrl, conversationUrl: currentUrl, answerText: result.answerText });
+            poolTab(vendor, session.targetId, currentUrl);
+        }
         return {
             ok: true,
             vendor,
@@ -351,7 +364,10 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
         };
     }
     if (result.ok) {
-        if (session) updateSessionResult({ sessionId: session.sessionId, status: 'complete', url: currentUrl, conversationUrl: currentUrl, answerText: result.answerText });
+        if (session) {
+            updateSessionResult({ sessionId: session.sessionId, status: 'complete', url: currentUrl, conversationUrl: currentUrl, answerText: result.answerText });
+            poolTab(vendor, session.targetId, currentUrl);
+        }
         return {
             ok: true,
             vendor,
