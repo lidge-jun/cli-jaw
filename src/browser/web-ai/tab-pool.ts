@@ -47,9 +47,16 @@ export async function getPooledTab(
     });
 }
 
-export async function unpoolTab(vendor: WebAiVendor, targetId: string | null | undefined): Promise<void> {
-    void vendor;
-    await removeLease(targetId);
+export async function unpoolTab(vendor: WebAiVendor, targetId: string | null | undefined, options: Partial<LeaseScopeInput> = {}): Promise<void> {
+    await removeLease(targetId, {
+        owner: options.owner || 'cli-jaw',
+        vendor,
+        sessionType: options.sessionType || 'jaw',
+        browserProfileKey: options.browserProfileKey,
+        origin: options.origin,
+        url: options.url,
+        port: options.port,
+    });
 }
 
 export async function cleanupPoolTabs(port: number): Promise<{ closed: number }> {

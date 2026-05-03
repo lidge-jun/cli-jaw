@@ -21,6 +21,7 @@ export interface TabLease {
     finalizedAt?: string | null;
     poolExpiresAt?: string | null;
     leaseDisposition?: string | null;
+    closePreviousState?: TabLeaseState | null;
     updatedAt: string;
     leaseKey: string;
 }
@@ -148,6 +149,7 @@ function normalizeLease(raw: Partial<TabLease>): TabLease | null {
         finalizedAt: raw.finalizedAt || null,
         poolExpiresAt: raw.poolExpiresAt || null,
         leaseDisposition: raw.leaseDisposition || null,
+        closePreviousState: raw.closePreviousState || null,
         updatedAt: raw.updatedAt || nowIso(),
         leaseKey,
     };
@@ -293,19 +295,25 @@ function sameBrowserProfile(a: TabLease, b: TabLease): boolean {
 
 async function closePlanned(port: number, plan: ClosePlanItem[]): Promise<ClosePlanItem[]> {
     const closed: ClosePlanItem[] = [];
+    const failed: ClosePlanItem[] = [];
     for (const { lease } of plan) {
         try {
             await closeTab(port, lease.targetId);
             closed.push({ lease, reason: 'closed' });
         } catch {
-            // The tab may already be closed by the user or Chrome.
+            failed.push({ lease, reason: 'closed' });
         }
     }
-    if (closed.length > 0) {
+    if (closed.length > 0 || failed.length > 0) {
         const closedKeys = new Set(closed.map(item => scopedTargetKey(item.lease)));
+        const failedKeys = new Set(failed.map(item => scopedTargetKey(item.lease)));
         await withLeaseLock(() => {
             const store = readStoreUnlocked();
-            store.leases = store.leases.filter(lease => !closedKeys.has(scopedTargetKey(lease)));
+            store.leases = store.leases
+                .filter(lease => !closedKeys.has(scopedTargetKey(lease)))
+                .map(lease => failedKeys.has(scopedTargetKey(lease))
+                    ? { ...lease, state: lease.closePreviousState || 'pooled', closePreviousState: null, leaseDisposition: 'close-failed-retryable', updatedAt: nowIso() }
+                    : lease);
             writeStoreUnlocked(store);
         });
     }
@@ -349,7 +357,7 @@ export async function releaseCompletedLease(input: ReleaseLeaseInput): Promise<T
         if (lease.state === 'completed-session') closePlan.push({ lease: { ...lease, state: 'closing', leaseDisposition: 'closing' }, reason: 'closed' });
         const closingIds = new Set(closePlan.map(item => scopedTargetKey(item.lease)));
         store.leases = store.leases.map(existing => closingIds.has(scopedTargetKey(existing))
-            ? { ...existing, state: 'closing', leaseDisposition: 'closing', updatedAt: now }
+            ? { ...existing, state: 'closing', closePreviousState: existing.closePreviousState || existing.state, leaseDisposition: 'closing', updatedAt: now }
             : existing);
         writeStoreUnlocked(store);
         return lease;
@@ -361,25 +369,26 @@ export async function releaseCompletedLease(input: ReleaseLeaseInput): Promise<T
 export async function checkoutPooledLease(input: CheckoutLeaseInput): Promise<{ targetId: string; url?: string | null } | null> {
     let selected: TabLease | null = null;
     let closePlan: ClosePlanItem[] = [];
+    const browserProfileKey = `cdp:${input.port || 'default'}`;
     const liveTargetIds = new Set((await listTabs(input.port)).map(tab => tab.targetId));
     await withLeaseLock(() => {
         const store = readStoreUnlocked();
         const now = Date.now();
-        closePlan = selectPoolClosePlan(store.leases, now);
+        closePlan = selectPoolClosePlan(store.leases.filter(lease => lease.browserProfileKey === browserProfileKey), now);
         const closeIds = new Set(closePlan.map(item => scopedTargetKey(item.lease)));
         const leaseKey = buildLeaseKey(input);
         selected = store.leases
-            .filter(lease => lease.state === 'pooled' && lease.leaseKey === leaseKey && !closeIds.has(scopedTargetKey(lease)))
+            .filter(lease => lease.browserProfileKey === browserProfileKey && lease.state === 'pooled' && lease.leaseKey === leaseKey && !closeIds.has(scopedTargetKey(lease)))
             .filter(lease => liveTargetIds.has(lease.targetId))
             .sort((a, b) => Date.parse(b.pooledAt || b.updatedAt) - Date.parse(a.pooledAt || a.updatedAt))[0] || null;
         const selectedId = selected?.targetId || null;
         store.leases = store.leases.filter(lease => {
             if (selectedId && sameTargetScope(lease, selected as TabLease)) return false;
             if (closeIds.has(scopedTargetKey(lease))) return true;
-            if (lease.state === 'pooled' && !liveTargetIds.has(lease.targetId)) return false;
+            if (lease.browserProfileKey === browserProfileKey && lease.state === 'pooled' && !liveTargetIds.has(lease.targetId)) return false;
             return true;
         }).map(lease => closeIds.has(scopedTargetKey(lease))
-            ? { ...lease, state: 'closing', leaseDisposition: 'closing', updatedAt: nowIso() }
+            ? { ...lease, state: 'closing', closePreviousState: lease.closePreviousState || lease.state, leaseDisposition: 'closing', updatedAt: nowIso() }
             : lease);
         writeStoreUnlocked(store);
     });
@@ -396,7 +405,7 @@ export async function cleanupLeasedTabs(port: number): Promise<{ closed: number 
         closePlan = selectPoolClosePlan(store.leases.filter(lease => lease.browserProfileKey === browserProfileKey));
         const closeIds = new Set(closePlan.map(item => scopedTargetKey(item.lease)));
         store.leases = store.leases.map(lease => closeIds.has(scopedTargetKey(lease))
-            ? { ...lease, state: 'closing', leaseDisposition: 'closing', updatedAt: nowIso() }
+            ? { ...lease, state: 'closing', closePreviousState: lease.closePreviousState || lease.state, leaseDisposition: 'closing', updatedAt: nowIso() }
             : lease);
         writeStoreUnlocked(store);
     });
@@ -404,11 +413,13 @@ export async function cleanupLeasedTabs(port: number): Promise<{ closed: number 
     return { closed: closePlan.length };
 }
 
-export async function removeLease(targetId: string | null | undefined): Promise<void> {
+export async function removeLease(targetId: string | null | undefined, scope: Partial<LeaseScopeInput> = {}): Promise<void> {
     if (!targetId) return;
     await withLeaseLock(() => {
         const store = readStoreUnlocked();
-        store.leases = store.leases.filter(lease => lease.targetId !== targetId);
+        const scoped = normalizeLease({ ...scope, origin: scope.origin || undefined, vendor: scope.vendor || 'chatgpt', targetId });
+        if (!scoped) return;
+        store.leases = store.leases.filter(lease => !sameTargetScope(lease, scoped));
         writeStoreUnlocked(store);
     });
 }
