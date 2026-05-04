@@ -293,17 +293,24 @@ try {
                     'idle-after': { type: 'string' },
                     'max-tabs': { type: 'string' },
                     'include-untracked': { type: 'boolean', default: false },
+                    force: { type: 'boolean', default: false },
                 },
                 strict: false,
             });
+            if (values['include-untracked'] === true && values.force !== true) {
+                console.error('error: tab-cleanup --include-untracked requires --force');
+                process.exit(1);
+            }
             const r = await api('POST', '/tab-cleanup', {
                 idleAfter: values['idle-after'],
                 maxTabs: values['max-tabs'],
                 includeUntracked: values['include-untracked'],
+                force: values.force,
             }) as Record<string, any>;
             if (values.json) console.log(JSON.stringify(r, null, 2));
             else {
                 console.log(`closed tabs: ${r.closed}`);
+                console.log(`  lease pool: ${r.leaseClosed || 0}`);
                 console.log(`  idle timeout: ${r.idleClosed}`);
                 console.log(`  max-tabs: ${r.limitClosed}`);
                 console.log(`  untracked: ${r.untrackedClosed}`);
@@ -538,8 +545,9 @@ try {
       Create a browser tab.
     tab-close <targetId>
       Close a browser tab by CDP target id.
-    tab-cleanup [--idle-after <30m>] [--max-tabs <n>] [--include-untracked] [--json]
+    tab-cleanup [--idle-after <30m>] [--max-tabs <n>] [--include-untracked --force] [--json]
       Close idle or overflow tabs. Active web-ai session tabs are preserved.
+      JSON includes leaseClosed and leaseClosedTabs for pooled-tab close diagnostics.
     active-tab --json
       Show active tab target-id contract.
     tab-switch <index-or-targetId>
@@ -591,6 +599,10 @@ try {
       --vendor <chatgpt|gemini|grok>
       --url <url>
       --model <alias>
+      --effort <alias>                 ChatGPT only; requires --model.
+                                       Pro: standard/extended
+                                       Thinking: light/standard/extended/heavy
+      --reasoning-effort <alias>       Alias for --effort
       --inline-only
       --file <path>
       --context-from-files <glob|path>
@@ -599,6 +611,11 @@ try {
       --new-tab
       --reuse-tab
       --json
+
+    Tab lease policy:
+      Completed provider tabs are runtime leases. The warm pool keeps max 1 owned
+      tab per owner/vendor/sessionType/origin/profile key for 5m, then closes
+      expired or overflow targets. Use tab-cleanup --json to inspect leaseClosedTabs.
 
     Examples:
       cli-jaw browser web-ai render --vendor chatgpt --prompt "hello" --json

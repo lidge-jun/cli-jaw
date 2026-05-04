@@ -21,6 +21,9 @@ test('BWCLI-002: send and query gating + flag rejection (32.7B live)', () => {
     assert.match(cliWebAiSrc, /isSupportedWebAiModel/);
     assert.match(cliWebAiSrc, /gemini: new Set/);
     assert.match(cliWebAiSrc, /grok: new Set/);
+    assert.match(cliWebAiSrc, /WEB_AI_USAGE/);
+    assert.match(cliWebAiSrc, /--effort <alias>/);
+    assert.match(cliWebAiSrc, /Requires --model/);
 });
 
 test('BWCLI-003: web-ai routes are authenticated', () => {

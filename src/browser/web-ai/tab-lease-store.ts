@@ -397,7 +397,7 @@ export async function checkoutPooledLease(input: CheckoutLeaseInput): Promise<{ 
     return checkedOut ? { targetId: checkedOut.targetId, url: checkedOut.url } : null;
 }
 
-export async function cleanupLeasedTabs(port: number): Promise<{ closed: number }> {
+export async function cleanupLeasedTabs(port: number): Promise<{ closed: number; closedTabs: string[] }> {
     let closePlan: ClosePlanItem[] = [];
     await withLeaseLock(() => {
         const store = readStoreUnlocked();
@@ -410,7 +410,7 @@ export async function cleanupLeasedTabs(port: number): Promise<{ closed: number 
         writeStoreUnlocked(store);
     });
     const closed = await closePlanned(port, closePlan);
-    return { closed: closed.length };
+    return { closed: closed.length, closedTabs: closed.map(item => item.lease.targetId) };
 }
 
 export async function removeLease(targetId: string | null | undefined, scope: Partial<LeaseScopeInput> = {}): Promise<void> {

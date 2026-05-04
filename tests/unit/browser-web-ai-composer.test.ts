@@ -75,5 +75,7 @@ test('BWCOMP-008: ChatGPT reasoning effort is exposed through CLI and typed inpu
     assert.match(cliSrc, /effort: \{ type: 'string' \}/);
     assert.match(cliSrc, /'reasoning-effort': \{ type: 'string' \}/);
     assert.match(cliSrc, /reasoningEffort: values\.effort \|\| values\['reasoning-effort'\]/);
+    assert.match(cliSrc, /reasoning effort requires --model/);
+    assert.match(cliSrc, /modelKey = String\(model \|\| ''\)/);
     assert.match(typesSrc, /reasoningEffort\?: string/);
 });

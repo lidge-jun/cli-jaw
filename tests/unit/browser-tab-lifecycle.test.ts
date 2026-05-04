@@ -137,8 +137,12 @@ test('browser web-ai tab pool persists leases, locks checkout, and closes evicte
 
 test('browser tab cleanup API rejects includeUntracked without force', () => {
     const routeSource = readFileSync(new URL('../../src/routes/browser.ts', import.meta.url), 'utf8');
+    const cliSource = readFileSync(new URL('../../bin/commands/browser.ts', import.meta.url), 'utf8');
     assert.ok(routeSource.includes('req.body.includeUntracked === true && req.body.force !== true'));
     assert.ok(routeSource.includes('includeUntracked requires force=true'));
+    assert.ok(cliSource.includes("values['include-untracked'] === true && values.force !== true"));
+    assert.ok(cliSource.includes('tab-cleanup --include-untracked requires --force'));
+    assert.ok(cliSource.includes('force: values.force'));
 });
 
 test('browser tab cleanup API runs durable lease pool cleanup', () => {
@@ -146,6 +150,7 @@ test('browser tab cleanup API runs durable lease pool cleanup', () => {
     assert.ok(routeSource.includes("import { cleanupPoolTabs } from '../browser/web-ai/tab-pool.js'"));
     assert.ok(routeSource.includes('const leaseResult = await cleanupPoolTabs(cdpPort(req))'));
     assert.ok(routeSource.includes('leaseClosed'));
+    assert.ok(routeSource.includes('leaseClosedTabs'));
 });
 
 test('browser web-ai lease cleanup reports actual closed count after close failure', async () => {

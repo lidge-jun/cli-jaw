@@ -199,6 +199,7 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
                 ...idleResult,
                 closed: idleResult.closed + (leaseResult.closed || 0),
                 leaseClosed: leaseResult.closed || 0,
+                leaseClosedTabs: leaseResult.closedTabs || [],
             });
         } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });

@@ -6,11 +6,73 @@ type QueryString = (params: Record<string, unknown>) => string;
 
 const WEB_AI_COMMANDS = new Set(['render', 'status', 'send', 'poll', 'query', 'watch', 'watchers', 'sessions', 'sessions-prune', 'resume', 'reattach', 'notifications', 'capabilities', 'stop', 'diagnose', 'doctor', 'context-dry-run', 'context-render']);
 
+export const WEB_AI_USAGE = `
+Usage:
+  cli-jaw browser web-ai <command> --vendor <chatgpt|gemini|grok> [options]
+
+Commands:
+  render              Render the prompt envelope without opening a browser
+  status              Check verified provider tab state
+  send                Send a prompt and store a durable session
+  poll                Poll a session for completion
+  query               send + poll in one command
+  watch               Watch a saved session until terminal status
+  watchers            List active web-ai watchers
+  sessions            List saved web-ai sessions
+  notifications       List web-ai completion notifications
+  capabilities        List observed/provider capability schemas
+  diagnose | doctor   Capture redacted diagnostics for the active provider page
+  stop                Stop current provider generation with Escape
+  context-dry-run     Build a context package without sending
+  context-render      Render full prompt/context package text
+
+Provider:
+  --vendor <name>     chatgpt | gemini | grok (default: chatgpt)
+  --model <alias>     ChatGPT: instant, thinking, pro
+                      Gemini:  fast, thinking, pro
+                      Grok:    auto, fast, expert, thinking, heavy
+  --effort <alias>    ChatGPT reasoning effort. Requires --model because
+                      Pro and Thinking expose different effort menus.
+                      Pro: standard, extended
+                      Thinking: light, standard, extended, heavy
+  --reasoning-effort <alias>
+                      Alias for --effort
+  --timeout <sec>     Polling timeout
+
+Prompt and context:
+  --prompt <text>     Main prompt/question
+  --inline-only       Required for send/query without files
+  --file <path>       Upload a single file
+  --context-from-files <glob|path>
+  --context-exclude <glob>
+  --context-file <path>
+  --context-transport <upload|inline>
+  --allow-copy-markdown-fallback
+  --allow-grok-context-pack
+
+Sessions:
+  --session <id>      Resume/poll a saved session
+  --deadline <iso>    Override session deadline
+  --navigate          Allow resume to switch tabs if needed
+  --new-tab           Create a new tab
+  --reuse-tab         Reuse active tab
+
+Output:
+  --json              Print JSON
+  --full              Print full context dry-run/render output
+
+Examples:
+  cli-jaw browser web-ai render --vendor chatgpt --prompt "hello" --json
+  cli-jaw browser web-ai query --vendor chatgpt --model pro --effort extended --inline-only --prompt "Reply OK"
+  cli-jaw browser web-ai query --vendor grok --inline-only --prompt "Reply OK"
+`;
+
 function rejectFutureWebAiFlags(values: Record<string, unknown>): void {
     const vendor = values.vendor ?? 'chatgpt';
     if (vendor !== 'chatgpt' && vendor !== 'gemini' && vendor !== 'grok') throw new Error(`unsupported vendor: ${vendor}`);
     if (values.model && !isSupportedWebAiModel(vendor, values.model)) throw new Error(`unsupported ${webAiVendorLabel(vendor)} model selection: ${values.model}`);
     const effort = values.effort || values['reasoning-effort'];
+    if (effort && !values.model) throw new Error(`${webAiVendorLabel(vendor)} reasoning effort requires --model because effort menus differ by model`);
     if (effort && !isSupportedWebAiEffort(vendor, values.model, effort)) throw new Error(`unsupported ${webAiVendorLabel(vendor)} reasoning effort: ${effort}`);
 }
 
@@ -29,7 +91,7 @@ function isSupportedWebAiEffort(vendor: unknown, model: unknown, effort: unknown
     const effortKey = String(effort || '').trim().toLowerCase();
     const normalizedEffort = ({ low: 'light', light: 'light', standard: 'standard', normal: 'standard', regular: 'standard', default: 'standard', high: 'extended', extended: 'extended', heavy: 'heavy' } as Record<string, string>)[effortKey];
     if (!normalizedEffort) return false;
-    const modelKey = String(model || 'pro').trim().toLowerCase();
+    const modelKey = String(model || '').trim().toLowerCase();
     const normalizedModel = ({ think: 'thinking', thinking: 'thinking', 'gpt-5-5-thinking': 'thinking', 'gpt-5.5-thinking': 'thinking', pro: 'pro', 'gpt-5-5-pro': 'pro', 'gpt-5.5-pro': 'pro' } as Record<string, string>)[modelKey];
     if (normalizedModel === 'thinking') return ['light', 'standard', 'extended', 'heavy'].includes(normalizedEffort);
     if (normalizedModel === 'pro') return ['standard', 'extended'].includes(normalizedEffort);
@@ -49,8 +111,12 @@ export async function runWebAiCommand(
     deps: { api: BrowserApi; qs: QueryString },
 ): Promise<void> {
     const command = args[0];
+    if (!command || command === '--help' || command === 'help' || args.includes('--help')) {
+        console.log(WEB_AI_USAGE.trim());
+        return;
+    }
     if (!command || !WEB_AI_COMMANDS.has(command)) {
-        throw new Error(`Usage: cli-jaw browser web-ai <${[...WEB_AI_COMMANDS].join('|')}> --vendor chatgpt`);
+        throw new Error(WEB_AI_USAGE.trim());
     }
     const { values } = parseArgs({
         args: args.slice(1),

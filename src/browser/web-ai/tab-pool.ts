@@ -59,7 +59,7 @@ export async function unpoolTab(vendor: WebAiVendor, targetId: string | null | u
     });
 }
 
-export async function cleanupPoolTabs(port: number): Promise<{ closed: number }> {
+export async function cleanupPoolTabs(port: number): Promise<{ closed: number; closedTabs: string[] }> {
     return cleanupLeasedTabs(port);
 }
 
