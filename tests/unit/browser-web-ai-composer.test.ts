@@ -179,7 +179,42 @@ test('BWCOMP-007e: ChatGPT selector rejects labels-only effort menus with unsupp
     assert.equal(result?.usedFallbacks.includes('pro-effort-generic-trigger'), false);
 });
 
-test('BWCOMP-007f: ChatGPT selector verifies effort from active pill when checked effort rows disappear', async () => {
+test('BWCOMP-007f: ChatGPT selector does not trust overlapping labels-only menus from broad generic effort triggers', async () => {
+    const { selectChatGptModel } = await import('../../src/browser/web-ai/chatgpt-model.js');
+    const page = createFakeModelPage({
+        model: 'pro',
+        exactEffortTrigger: false,
+        genericEffortTrigger: true,
+        effortTexts: labelsOnlyProEffortTexts(),
+        genericEffortTexts: labelsOnlyProEffortTexts(),
+    });
+
+    const result = await selectChatGptModel(page, 'pro', { effort: 'standard' });
+
+    assert.equal(result?.selected, 'pro');
+    assert.equal(result?.effort, 'standard');
+    assert.ok(result?.usedFallbacks.includes('pro-effort-keyboard-open'));
+    assert.equal(result?.usedFallbacks.includes('pro-effort-generic-trigger'), false);
+});
+
+test('BWCOMP-007g: ChatGPT selector opens visible-text-only effort controls without data-testid or aria-label hooks', async () => {
+    const { selectChatGptModel } = await import('../../src/browser/web-ai/chatgpt-model.js');
+    const page = createFakeModelPage({
+        model: 'thinking',
+        exactEffortTrigger: false,
+        genericEffortTrigger: true,
+        genericTriggerMode: 'text',
+        effortTexts: thinkingEffortTexts(),
+    });
+
+    const result = await selectChatGptModel(page, 'thinking', { effort: 'extended' });
+
+    assert.equal(result?.selected, 'thinking');
+    assert.equal(result?.effort, 'extended');
+    assert.ok(result?.usedFallbacks.includes('thinking-effort-text-trigger'));
+});
+
+test('BWCOMP-007h: ChatGPT selector verifies effort from active pill when checked effort rows disappear', async () => {
     const { selectChatGptModel } = await import('../../src/browser/web-ai/chatgpt-model.js');
     const page = createFakeModelPage({
         model: 'thinking',
@@ -191,6 +226,21 @@ test('BWCOMP-007f: ChatGPT selector verifies effort from active pill when checke
 
     assert.equal(result?.selected, 'thinking');
     assert.equal(result?.effort, 'heavy');
+});
+
+test('BWCOMP-007i: ChatGPT selector verifies effort from a role-button composer pill', async () => {
+    const { selectChatGptModel } = await import('../../src/browser/web-ai/chatgpt-model.js');
+    const page = createFakeModelPage({
+        model: 'thinking',
+        effortTexts: thinkingEffortTexts(),
+        checkedEffortRows: false,
+        roleButtonPill: true,
+    });
+
+    const result = await selectChatGptModel(page, 'thinking', { effort: 'standard' });
+
+    assert.equal(result?.selected, 'thinking');
+    assert.equal(result?.effort, 'standard');
 });
 
 test('BWCOMP-008: ChatGPT reasoning effort is exposed through CLI and typed input', () => {
@@ -241,12 +291,16 @@ function createFakeModelPage(input: {
     effortTexts?: Record<string, string>;
     genericEffortTexts?: Record<string, string>;
     checkedEffortRows?: boolean;
+    roleButtonPill?: boolean;
     exactEffortTrigger?: boolean;
     genericEffortTrigger?: boolean;
+    genericTriggerMode?: 'css' | 'text';
 } = {}): any {
     const effortTexts = input.effortTexts || {};
     const genericEffortTexts = input.genericEffortTexts || null;
     const checkedEffortRows = input.checkedEffortRows ?? true;
+    const roleButtonPill = input.roleButtonPill ?? false;
+    const genericTriggerMode = input.genericTriggerMode || 'css';
     const state: any = {
         modelMenuOpen: true,
         effortMenuOpen: false,
@@ -334,7 +388,9 @@ function createFakeModelPage(input: {
     }
 
     function selectElements(selector: string): any[] {
-        if (selector === 'button') return [modelPill];
+        if (selector === 'button, [role="button"], [role="menuitem"]') return state.genericEffortTrigger && genericTriggerMode === 'text' ? [modelPill, genericTrigger] : [modelPill];
+        if (selector.includes('__composer-pill')) return roleButtonPill ? [modelPill] : [];
+        if (selector === 'button') return roleButtonPill ? [] : [modelPill];
         if (selector === '[role="menu"]') {
             return state.effortMenuOpen ? [createElement({ text: Object.values(currentEffortTexts()).join('\n') })] : [];
         }
@@ -352,7 +408,7 @@ function createFakeModelPage(input: {
             if (testId.includes('thinking-effort')) return state.exactEffortTrigger ? [exactTrigger] : [];
             return modelRows.filter(element => element.testId === testId);
         }
-        if (/Effort|Reasoning|effort/i.test(selector)) return state.genericEffortTrigger ? [genericTrigger] : [];
+        if (/Effort|Reasoning|effort/i.test(selector)) return state.genericEffortTrigger && genericTriggerMode === 'css' ? [genericTrigger] : [];
         return [];
     }
 }
