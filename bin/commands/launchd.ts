@@ -8,7 +8,7 @@
  *   jaw launchd cleanup      — legacy plist 정리
  */
 import { execSync } from 'node:child_process';
-import { existsSync, writeFileSync, unlinkSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, unlinkSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { parseArgs } from 'node:util';
@@ -102,6 +102,12 @@ switch (sub) {
             console.log('   등록: jaw launchd');
             break;
         }
+        let displayPort = PORT;
+        try {
+            const plistContent = readFileSync(PLIST_PATH, 'utf8');
+            const portMatch = plistContent.match(/--port<\/string>\s*<string>(\d+)<\/string>/);
+            if (portMatch) displayPort = portMatch[1]!;
+        } catch { /* use CLI port as fallback */ }
         try {
             const out = execSync(`launchctl print ${GUI_DOMAIN}/${LABEL}`, { encoding: 'utf8' });
             const pidMatch = out.match(/pid = (\d+)/);
@@ -110,7 +116,7 @@ switch (sub) {
             const processType = ptMatch ? ptMatch[1] : '(unknown)';
             console.log(`🦈 jaw serve — ${pid}`);
             console.log(`   instance:    ${INSTANCE}`);
-            console.log(`   port:        ${PORT}`);
+            console.log(`   port:        ${displayPort}`);
             console.log(`   plist:       ${PLIST_PATH}`);
             console.log(`   log:         ${LOG_DIR}/jaw-serve.log`);
             console.log(`   domain:      ${GUI_DOMAIN}`);
