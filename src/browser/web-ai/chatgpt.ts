@@ -1,9 +1,9 @@
 import { getActivePage, getCdpSession, createTab, waitForPageByTargetId, getPageByTargetId, listTabs } from '../connection.js';
 import { getActiveTab, type ActiveTabResult, type BrowserTabInfo } from '../connection.js';
-import { cleanupIdleTabs } from '../tab-lifecycle.js';
+import { cleanupIdleTabs, isPinned } from '../tab-lifecycle.js';
 import { cleanupPoolTabs, getPooledTab } from './tab-pool.js';
 import { finalizeProviderTab } from './tab-finalizer.js';
-import { recordActiveLease } from './tab-lease-store.js';
+import { listLeases, recordActiveLease } from './tab-lease-store.js';
 import { withSessionCommandLock } from './session-store.js';
 import { basename } from 'node:path';
 import { statSync } from 'node:fs';
@@ -127,19 +127,19 @@ async function ensureProviderTab(port: number, input: QuestionEnvelopeInput): Pr
     const vendorUrl = input.url || 'https://chatgpt.com';
     await cleanupPoolTabs(port);
     await cleanupIdleTabs(port, { maxTabs: Number.POSITIVE_INFINITY });
-    const pooled = await getPooledTab(port, vendor, {
-        owner: 'cli-jaw',
-        sessionType: 'jaw',
-        url: vendorUrl,
-    });
-    if (pooled) {
-        const page = await waitForPageByTargetId(port, pooled.targetId);
-        if (page.url?.() !== vendorUrl) {
-            await page.goto(vendorUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-        }
-        return { page, targetId: pooled.targetId };
-    }
     if (input.newTab !== true) {
+        const pooled = await getPooledTab(port, vendor, {
+            owner: 'cli-jaw',
+            sessionType: 'jaw',
+            url: vendorUrl,
+        });
+        if (pooled) {
+            const page = await waitForPageByTargetId(port, pooled.targetId);
+            if (page.url?.() !== vendorUrl) {
+                await page.goto(vendorUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+            }
+            return { page, targetId: pooled.targetId };
+        }
         const reusable = await findReusableChatGptTab(port);
         if (reusable?.targetId) {
             const page = await waitForPageByTargetId(port, reusable.targetId);
@@ -159,12 +159,23 @@ async function findReusableChatGptTab(port: number): Promise<BrowserTabInfo | nu
     for (const session of [...listSessions({ status: 'sent' }), ...listSessions({ status: 'streaming' })]) {
         if (session.targetId) activeSessions.add(session.targetId);
     }
+    const leases = await listLeases();
+    const leaseByTargetId = new Map(leases.map(lease => [lease.targetId, lease]));
     const tabs = await listTabs(port);
     return tabs
         .filter(tab => tab.targetId && tab.type === 'page')
         .filter(tab => !activeSessions.has(tab.targetId))
+        .filter(tab => !isPinned(tab.targetId))
+        .filter(tab => isReusableByLease(tab.targetId, leaseByTargetId))
         .filter(tab => isChatGptUrl(tab.url || ''))
         .sort((a, b) => (Number(b.lastActiveAt) || 0) - (Number(a.lastActiveAt) || 0))[0] || null;
+}
+
+function isReusableByLease(targetId: string, leaseByTargetId: Map<string, any>): boolean {
+    const lease = leaseByTargetId.get(targetId);
+    if (!lease) return true;
+    return ['cli-jaw', 'web-ai'].includes(lease.owner) &&
+        ['pooled', 'completed-session'].includes(lease.state);
 }
 
 async function withSessionPage(port: number, sessionId: string, fn: (ctx: { page: any; targetId: string; session: any }) => Promise<any>): Promise<any> {

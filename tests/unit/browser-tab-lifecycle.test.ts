@@ -157,9 +157,14 @@ test('browser web-ai tab pool persists leases, locks checkout, and closes evicte
 test('browser web-ai reuses inactive ChatGPT tabs before creating another tab', () => {
     const chatgptSource = readFileSync(new URL('../../src/browser/web-ai/chatgpt.ts', import.meta.url), 'utf8');
     assert.ok(chatgptSource.includes('listTabs'));
+    assert.ok(chatgptSource.includes('listLeases'));
+    assert.ok(chatgptSource.includes('isPinned'));
     assert.ok(chatgptSource.includes('findReusableChatGptTab'));
     assert.ok(chatgptSource.includes('input.newTab !== true'));
     assert.ok(chatgptSource.includes('const reusable = await findReusableChatGptTab(port)'));
+    assert.ok(chatgptSource.includes('!activeSessions.has(tab.targetId)'));
+    assert.ok(chatgptSource.includes('!isPinned(tab.targetId)'));
+    assert.ok(chatgptSource.includes('isReusableByLease(tab.targetId, leaseByTargetId)'));
     assert.ok(chatgptSource.includes('await page.goto(vendorUrl'));
 });
 
