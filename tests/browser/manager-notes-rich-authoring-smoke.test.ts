@@ -241,6 +241,46 @@ test('notes WYSIWYG authoring keeps the primary toolbar compact', async () => {
         'WYSIWYG code block content must round-trip back to canonical markdown');
 });
 
+test('notes WYSIWYG code block raw editor keeps rich paste inside textarea', async () => {
+    const page = await pageForManager();
+    const noteName = `browser-code-paste-${Date.now()}.md`;
+
+    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+    await seedRichNote(page, noteName);
+    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+    await page.waitForSelector('.notes-tree');
+    await page.locator('.notes-tree-file-button').filter({ hasText: noteName }).first().click();
+    await page.getByRole('tab', { name: 'WYSIWYG' }).click();
+    await page.waitForSelector('.notes-code-source-node[data-language="ts"]');
+
+    await page.locator('.notes-code-source-node[data-language="ts"]').first().click();
+    const raw = page.locator('.notes-code-source-node[data-editing="true"] textarea.notes-code-raw');
+    await raw.waitFor({ timeout: 2000 });
+
+    const pasteResult = await raw.evaluate(element => {
+        const data = new DataTransfer();
+        data.setData('text/plain', 'const pastedFromWeb = true;');
+        data.setData('text/html', '<span style="font-weight: 700">const pastedFromWeb = true;</span>');
+        const event = new ClipboardEvent('paste', {
+            bubbles: true,
+            cancelable: true,
+            clipboardData: data,
+        });
+        return {
+            defaultAllowed: element.dispatchEvent(event),
+            activeClass: document.activeElement?.className ?? '',
+            editingCount: document.querySelectorAll('.notes-code-source-node[data-editing="true"]').length,
+        };
+    });
+
+    assert.equal(pasteResult.defaultAllowed, true,
+        'shell WYSIWYG paste handler must not prevent default paste inside raw code textarea');
+    assert.match(String(pasteResult.activeClass), /notes-code-raw/,
+        'raw code textarea must keep focus after rich paste event');
+    assert.equal(pasteResult.editingCount, 1,
+        'code block must remain in raw editing mode after rich paste event');
+});
+
 test('notes WYSIWYG toolbar commands can be used together without conflicts', async () => {
     const page = await pageForManager();
     const noteName = `browser-toolbar-all-${Date.now()}.md`;

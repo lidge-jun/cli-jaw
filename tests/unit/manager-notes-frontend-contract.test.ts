@@ -97,6 +97,14 @@ test('Notes API and create actions surface backend/fallback failures without unc
     assert.ok(tree.includes('event.defaultPrevented'), 'global trash shortcut must not double-fire after row-level keyboard handling');
     assert.ok(tree.includes("props.selectedFolderPath && pathKindLookup.get(props.selectedFolderPath) === 'folder'"),
         'Cmd/Ctrl+Delete must trash the selected folder even when no file path is selected');
+    assert.ok(tree.includes('activeTreePath'),
+        'notes tree must track the last active file or folder row for copy-path shortcuts');
+    assert.ok(tree.includes('setActiveTreePath(path)'),
+        'tree row clicks must update the active copy-path target');
+    assert.ok(tree.includes('isEditableShortcutTarget(event.target)'),
+        'copy-path shortcut must not steal Cmd/Ctrl+Shift+C from editors or inputs');
+    assert.ok(tree.includes('activeTreePath && pathKindLookup.has(activeTreePath)'),
+        'copy-path shortcut must prefer the active tree target over stale selected file state');
     assert.ok(tree.includes("event.key === 'F2'"), 'tree keyboard rename must be available');
     assert.ok(tree.includes("event.key === 'Enter'"), 'tree keyboard enter must open files or toggle folders');
     assert.ok(tree.includes('options.onSelectFolder?.(entry.path)'), 'folder Enter must select the folder target');

@@ -160,6 +160,14 @@ test('Markdown editor exposes WYSIWYG toolbar without changing the save path', (
     assert.ok(milkdown.includes('onChangeRef.current(normalizedMarkdown)') || milkdown.includes('onChangeRef.current(markdown)'), 'Milkdown WYSIWYG must keep the existing markdown save path');
     assert.ok(milkdown.includes('syncingFromPropsRef'), 'Milkdown WYSIWYG must suppress controlled prop sync writes');
     assert.ok(milkdown.includes('latestPropContentRef'), 'Milkdown WYSIWYG must reconcile async creation with latest props');
+    assert.ok(milkdown.includes('isCodeBlockRawPasteTarget'),
+        'WYSIWYG shell paste handler must detect code block raw textarea targets');
+    assert.ok(milkdown.includes("target.closest('textarea.notes-code-raw')"),
+        'code block raw textarea paste must bypass shell-level HTML/image paste handling');
+    assert.ok(
+        milkdown.indexOf('isCodeBlockRawPasteTarget(event.target)') < milkdown.indexOf('hasImportableClipboardImage(data)'),
+        'code block raw paste bypass must run before image/html paste interception',
+    );
     assert.ok(workspace.includes('key={props.selectedPath}'), 'WYSIWYG history must reset on note boundaries');
     assert.ok(workspace.includes('{showEditor && <div className="notes-editor-pane">'),
         'Notes preview mode must not mount the hidden editor pane or hidden WYSIWYG editor');

@@ -238,3 +238,59 @@ test('notes tree Cmd+Delete trashes the selected folder', async () => {
     }
     assert.equal(await pageApiStatus(page, notePath), 404, 'Cmd+Delete must trash the selected folder and nested note');
 });
+
+test('notes tree Cmd+Shift+C copies the selected folder path instead of stale file path', async () => {
+    const page = await pageForManager();
+    const runId = `folder-copy-${Date.now()}`;
+    const folderName = `browser-folder-copy-${runId}`;
+    const notePath = `${folderName}/nested.md`;
+
+    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+    await page.evaluate(async ({ folderName, notePath }) => {
+        const headers = { 'content-type': 'application/json' };
+        await fetch('/api/dashboard/registry', {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ ui: { sidebarMode: 'notes', notesSelectedPath: notePath } }),
+        });
+        await fetch('/api/dashboard/notes/folder', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ path: folderName }),
+        });
+        await fetch('/api/dashboard/notes/file', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ path: notePath, content: '# Nested' }),
+        });
+    }, { folderName, notePath });
+
+    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+    await page.waitForSelector('.notes-tree');
+    await page.evaluate(`
+        Object.defineProperty(navigator.clipboard, 'writeText', {
+            configurable: true,
+            value: async function writeText(text) {
+                document.documentElement.dataset.lastCopiedNotesPath = text;
+            },
+        });
+    `);
+
+    const folderButton = page.locator('.notes-tree-folder-button').filter({ hasText: folderName }).first();
+    await folderButton.waitFor({ timeout: 5000 });
+    await folderButton.click();
+    await page.locator('.notes-tree-folder-row.is-folder-selected').filter({ hasText: folderName }).waitFor({ timeout: 2000 });
+    await page.locator('body').click({ position: { x: 10, y: 10 } });
+
+    await page.keyboard.down('Meta');
+    await page.keyboard.down('Shift');
+    await page.keyboard.press('C');
+    await page.keyboard.up('Shift');
+    await page.keyboard.up('Meta');
+
+    const copied = await page.evaluate(() => document.documentElement.dataset.lastCopiedNotesPath ?? '');
+    assert.ok(copied.endsWith(`/${folderName}`),
+        'folder copy shortcut must copy the selected folder absolute path');
+    assert.equal(copied.endsWith(`/${notePath}`), false,
+        'folder copy shortcut must not copy a stale nested file path');
+});

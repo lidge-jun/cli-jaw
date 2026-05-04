@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import type { NotesTreeEntry } from './notes-types';
 
 type NotesTrashItem = { path: string; kind: NotesTreeEntry['kind'] };
@@ -330,6 +330,7 @@ export function NotesFileTree(props: NotesFileTreeProps) {
     const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
     const [multiSelected, setMultiSelected] = useState<Set<string>>(() => new Set());
     const [anchorPath, setAnchorPath] = useState<string | null>(null);
+    const [activeTreePath, setActiveTreePath] = useState<string | null>(null);
 
     function toggleFolder(path: string): void {
         setExpandedFolders(current => {
@@ -341,11 +342,11 @@ export function NotesFileTree(props: NotesFileTreeProps) {
     }
 
     const flatPaths = flattenEntries(props.entries, expandedFolders);
-    const pathKindLookup = (() => {
+    const pathKindLookup = useMemo(() => {
         const map = new Map<string, NotesTreeEntry['kind']>();
         collectPathKinds(props.entries, map);
         return map;
-    })();
+    }, [props.entries]);
 
     function trashSelected(): void {
         if (multiSelected.size === 0) return;
@@ -355,6 +356,7 @@ export function NotesFileTree(props: NotesFileTreeProps) {
     }
 
     const onEntryClick = useCallback((path: string, event: MouseEvent) => {
+        setActiveTreePath(path);
         if (event.shiftKey && anchorPath) {
             const range = rangeSelect(flatPaths, anchorPath, path);
             setMultiSelected(range);
@@ -380,6 +382,9 @@ export function NotesFileTree(props: NotesFileTreeProps) {
     }, [props.selectedPath]);
 
     useEffect(() => {
+        if (activeTreePath && !pathKindLookup.has(activeTreePath)) {
+            setActiveTreePath(null);
+        }
         if (multiSelected.size === 0) return;
         setMultiSelected(prev => {
             let changed = false;
@@ -390,17 +395,20 @@ export function NotesFileTree(props: NotesFileTreeProps) {
             }
             return changed ? next : prev;
         });
-    }, [props.entries]);
+    }, [activeTreePath, multiSelected.size, pathKindLookup]);
 
     useEffect(() => {
         function handleCopyPath(event: globalThis.KeyboardEvent): void {
             if (!(event.metaKey || event.ctrlKey) || !event.shiftKey || event.key.toLowerCase() !== 'c') return;
+            if (isEditableShortcutTarget(event.target)) return;
             const root = props.notesRoot;
             if (!root) return;
 
             const paths = multiSelected.size > 0
                 ? Array.from(multiSelected)
-                : props.selectedPath ? [props.selectedPath] : [];
+                : activeTreePath && pathKindLookup.has(activeTreePath)
+                    ? [activeTreePath]
+                    : props.selectedPath ? [props.selectedPath] : [];
             if (paths.length === 0) return;
 
             event.preventDefault();
@@ -410,7 +418,7 @@ export function NotesFileTree(props: NotesFileTreeProps) {
 
         window.addEventListener('keydown', handleCopyPath);
         return () => window.removeEventListener('keydown', handleCopyPath);
-    }, [multiSelected, props.selectedPath, props.notesRoot]);
+    }, [activeTreePath, multiSelected, pathKindLookup, props.selectedPath, props.notesRoot]);
 
     useEffect(() => {
         function handleCommandTrash(event: globalThis.KeyboardEvent): void {

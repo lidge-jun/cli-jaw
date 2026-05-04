@@ -45,6 +45,11 @@ function htmlToPlainText(html: string): string {
     return element.textContent ?? '';
 }
 
+function isCodeBlockRawPasteTarget(target: EventTarget | null): boolean {
+    return target instanceof HTMLElement
+        && Boolean(target.closest('textarea.notes-code-raw'));
+}
+
 function normalizeCodeLanguage(language: string): string {
     return language.trim().toLowerCase().replace(/[^a-z0-9_+-]/g, '');
 }
@@ -334,6 +339,8 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         if (!shell) return undefined;
 
         function handlePaste(event: ClipboardEvent): void {
+            if (isCodeBlockRawPasteTarget(event.target)) return;
+
             const data = event.clipboardData;
             if (!data) return;
 
