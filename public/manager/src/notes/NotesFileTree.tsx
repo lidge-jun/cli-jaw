@@ -122,6 +122,12 @@ function buildTrashItems(
     return items;
 }
 
+function isEditableShortcutTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    const tag = target.tagName.toLowerCase();
+    return target.isContentEditable || tag === 'input' || tag === 'textarea' || tag === 'select';
+}
+
 function rangeSelect(flatPaths: string[], anchor: string, target: string): Set<string> {
     const anchorIndex = flatPaths.indexOf(anchor);
     const targetIndex = flatPaths.indexOf(target);
@@ -405,6 +411,31 @@ export function NotesFileTree(props: NotesFileTreeProps) {
         window.addEventListener('keydown', handleCopyPath);
         return () => window.removeEventListener('keydown', handleCopyPath);
     }, [multiSelected, props.selectedPath, props.notesRoot]);
+
+    useEffect(() => {
+        function handleCommandTrash(event: globalThis.KeyboardEvent): void {
+            if (event.defaultPrevented) return;
+            if (!(event.metaKey || event.ctrlKey)) return;
+            if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+            if (isEditableShortcutTarget(event.target)) return;
+
+            const items = multiSelected.size > 0
+                ? buildTrashItems(multiSelected, pathKindLookup)
+                : props.selectedFolderPath && pathKindLookup.get(props.selectedFolderPath) === 'folder'
+                    ? [{ path: props.selectedFolderPath, kind: 'folder' as const }]
+                    : props.selectedPath && pathKindLookup.get(props.selectedPath) === 'file'
+                        ? [{ path: props.selectedPath, kind: 'file' as const }]
+                        : [];
+            if (items.length === 0) return;
+
+            event.preventDefault();
+            if (items.length > 1) props.onTrashPaths(items);
+            else props.onTrashPath(items[0].path, items[0].kind);
+        }
+
+        window.addEventListener('keydown', handleCommandTrash);
+        return () => window.removeEventListener('keydown', handleCommandTrash);
+    }, [multiSelected, pathKindLookup, props]);
 
     return (
         <aside

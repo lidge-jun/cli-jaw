@@ -8,7 +8,7 @@ export function useInvalidationSubscription(
 ): void {
     const callbackRef = useRef(callback);
     callbackRef.current = callback;
-    const timerRef = useRef<ReturnType<typeof setTimeout>>();
+    const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
     useEffect(() => {
         return subscribeInvalidation(topic, () => {

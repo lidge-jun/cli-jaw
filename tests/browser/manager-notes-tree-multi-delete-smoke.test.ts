@@ -173,3 +173,68 @@ test('notes tree single click clears existing multi-selection', async () => {
     assert.equal(await page.locator('.notes-tree-file-row.is-multi-selected, .notes-tree-folder-row.is-multi-selected').count(), 0,
         'plain folder click must clear multi-selected rows');
 });
+
+test('notes tree Cmd+Delete trashes the selected folder', async () => {
+    const page = await pageForManager();
+    const runId = `folder-cmd-delete-${Date.now()}`;
+    const folderName = `browser-folder-trash-${runId}`;
+    const notePath = `${folderName}/nested.md`;
+
+    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+    await page.evaluate(async ({ folderName, notePath }) => {
+        const headers = { 'content-type': 'application/json' };
+        await fetch('/api/dashboard/registry', {
+            method: 'PATCH',
+            headers,
+            body: JSON.stringify({ ui: { sidebarMode: 'notes', notesSelectedPath: null } }),
+        });
+        await fetch('/api/dashboard/notes/folder', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ path: folderName }),
+        });
+        await fetch('/api/dashboard/notes/file', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ path: notePath, content: '# Nested' }),
+        });
+    }, { folderName, notePath });
+
+    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+    await page.waitForSelector('.notes-tree');
+
+    const folderButton = page.locator('.notes-tree-folder-button').filter({ hasText: folderName }).first();
+    await folderButton.waitFor({ timeout: 5000 });
+    await folderButton.click();
+    await page.locator('.notes-tree-folder-row.is-folder-selected').filter({ hasText: folderName }).waitFor({ timeout: 2000 });
+    await page.locator('body').click({ position: { x: 10, y: 10 } });
+
+    const dialogPromise = new Promise<string>((resolve) => {
+        page.once('dialog', async (dialog) => {
+            const message = dialog.message();
+            await dialog.accept();
+            resolve(message);
+        });
+    });
+
+    await page.keyboard.down('Meta');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.up('Meta');
+
+    const confirmMessage = await Promise.race([
+        dialogPromise,
+        new Promise<string>((_, reject) => {
+            setTimeout(() => reject(new Error('folder trash confirmation dialog did not appear')), 5000);
+        }),
+    ]);
+    assert.match(confirmMessage, /folder/i);
+    assert.match(confirmMessage, /trash/i);
+
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+        const status = await pageApiStatus(page, notePath);
+        if (status === 404) break;
+        await page.waitForTimeout(150);
+    }
+    assert.equal(await pageApiStatus(page, notePath), 404, 'Cmd+Delete must trash the selected folder and nested note');
+});

@@ -91,6 +91,12 @@ test('Notes API and create actions surface backend/fallback failures without unc
     assert.ok(tree.includes('onTrashPath'), 'notes tree must expose trash action prop');
     assert.ok(tree.includes("event.key === 'Delete'"), 'tree keyboard delete must route through trash');
     assert.ok(tree.includes("event.key === 'Backspace'"), 'tree keyboard backspace must route through trash');
+    assert.ok(tree.includes('function isEditableShortcutTarget('), 'notes tree global destructive shortcuts must not run from editable fields');
+    assert.ok(tree.includes('function handleCommandTrash(event: globalThis.KeyboardEvent): void'),
+        'notes tree must register a Cmd/Ctrl+Delete trash shortcut for selected tree entries');
+    assert.ok(tree.includes('event.defaultPrevented'), 'global trash shortcut must not double-fire after row-level keyboard handling');
+    assert.ok(tree.includes("props.selectedFolderPath && pathKindLookup.get(props.selectedFolderPath) === 'folder'"),
+        'Cmd/Ctrl+Delete must trash the selected folder even when no file path is selected');
     assert.ok(tree.includes("event.key === 'F2'"), 'tree keyboard rename must be available');
     assert.ok(tree.includes("event.key === 'Enter'"), 'tree keyboard enter must open files or toggle folders');
     assert.ok(tree.includes('options.onSelectFolder?.(entry.path)'), 'folder Enter must select the folder target');
