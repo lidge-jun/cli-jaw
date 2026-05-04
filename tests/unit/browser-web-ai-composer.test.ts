@@ -310,6 +310,22 @@ test('BWCOMP-007j: ChatGPT selector verifies effort from a role-button composer 
     assert.equal(result?.effort, 'standard');
 });
 
+test('BWCOMP-007k: ChatGPT selector ignores checked labels-only effort rows when verifying the selected model', async () => {
+    const { selectChatGptModel } = await import('../../src/browser/web-ai/chatgpt-model.js');
+    const page = createFakeModelPage({
+        model: 'thinking',
+        effortTexts: labelsOnlyThinkingEffortTexts(),
+        activePillTexts: { heavy: 'GPT-5.5 Thinking Heavy' },
+        checkedModelRows: false,
+        roleButtonPill: true,
+    });
+
+    const result = await selectChatGptModel(page, 'thinking', { effort: 'heavy' });
+
+    assert.equal(result?.selected, 'thinking');
+    assert.equal(result?.effort, 'heavy');
+});
+
 test('BWCOMP-008: ChatGPT reasoning effort is exposed through CLI and typed input', () => {
     const cliSrc = fs.readFileSync(join(root, 'bin/commands/browser-web-ai.ts'), 'utf8');
     const typesSrc = fs.readFileSync(join(root, 'src/browser/web-ai/types.ts'), 'utf8');
@@ -356,8 +372,10 @@ function labelsOnlyProEffortTexts(): Record<string, string> {
 function createFakeModelPage(input: {
     model?: string;
     effortTexts?: Record<string, string>;
+    activePillTexts?: Record<string, string>;
     genericEffortTexts?: Record<string, string>;
     checkedEffortRows?: boolean;
+    checkedModelRows?: boolean;
     roleButtonPill?: boolean;
     keyboardOpensEffort?: boolean;
     initialModelMenuOpen?: boolean;
@@ -367,8 +385,10 @@ function createFakeModelPage(input: {
     genericTriggerMode?: 'css' | 'text';
 } = {}): any {
     const effortTexts = input.effortTexts || {};
+    const activePillTexts = input.activePillTexts || null;
     const genericEffortTexts = input.genericEffortTexts || null;
     const checkedEffortRows = input.checkedEffortRows ?? true;
+    const checkedModelRows = input.checkedModelRows ?? true;
     const roleButtonPill = input.roleButtonPill ?? false;
     const keyboardOpensEffort = input.keyboardOpensEffort ?? true;
     const initialModelMenuOpen = input.initialModelMenuOpen ?? true;
@@ -387,19 +407,19 @@ function createFakeModelPage(input: {
         createElement({
             text: 'GPT-5.3 Instant',
             testId: 'model-switcher-gpt-5-3',
-            checked: () => state.currentModel === 'instant',
+            checked: () => checkedModelRows && state.currentModel === 'instant',
             onClick: () => { state.currentModel = 'instant'; },
         }),
         createElement({
             text: 'GPT-5.5 Thinking',
             testId: 'model-switcher-gpt-5-5-thinking',
-            checked: () => state.currentModel === 'thinking',
+            checked: () => checkedModelRows && state.currentModel === 'thinking',
             onClick: () => { state.currentModel = 'thinking'; },
         }),
         createElement({
             text: 'GPT-5.5 Pro',
             testId: 'model-switcher-gpt-5-5-pro',
-            checked: () => state.currentModel === 'pro',
+            checked: () => checkedModelRows && state.currentModel === 'pro',
             onClick: () => { state.currentModel = 'pro'; },
         }),
     ];
@@ -420,7 +440,7 @@ function createFakeModelPage(input: {
     });
     const modelPill = createElement({
         text: () => state.selectedEffort
-            ? `${effortTexts[state.selectedEffort] || currentEffortTexts()[state.selectedEffort] || state.currentModel}`
+            ? `${activePillTexts?.[state.selectedEffort] || effortTexts[state.selectedEffort] || currentEffortTexts()[state.selectedEffort] || state.currentModel}`
             : state.currentModel,
         onClick: () => { state.modelMenuOpen = true; },
     });
