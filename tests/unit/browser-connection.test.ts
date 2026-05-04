@@ -9,6 +9,9 @@ const __dirname = dirname(__filename);
 const root = join(__dirname, '..', '..');
 
 const connectionSrc = fs.readFileSync(join(root, 'src', 'browser', 'connection.ts'), 'utf8');
+const diagnosticsSrc = fs.readFileSync(join(root, 'src', 'browser', 'runtime-diagnostics.ts'), 'utf8');
+const orphanSrc = fs.readFileSync(join(root, 'src', 'browser', 'runtime-orphans.ts'), 'utf8');
+const ownerStoreSrc = fs.readFileSync(join(root, 'src', 'browser', 'runtime-owner-store.ts'), 'utf8');
 const routesSrc = fs.readFileSync(join(root, 'src', 'routes', 'browser.ts'), 'utf8');
 const cliBrowserSrc = fs.readFileSync(join(root, 'bin', 'commands', 'browser.ts'), 'utf8');
 
@@ -187,4 +190,46 @@ test('CDP-015: route-level activity covers browser work but excludes status/star
 test('CDP-016: CLI status prints runtime owner and idle close policy', () => {
     assert.match(cliBrowserSrc, /owner:\s*\$\{runtime\.ownership \|\| 'none'\}/);
     assert.match(cliBrowserSrc, /idleClose:/);
+});
+
+test('CDP-017: launchChrome clears stale jaw-owned process memory when CDP is gone', () => {
+    assert.match(connectionSrc, /resetStaleChromeProcIfCdpUnavailable/);
+    assert.match(connectionSrc, /waitForCdpReady\(port,\s*1000\)/);
+    assert.match(connectionSrc, /chromeProc\.kill\('SIGTERM'\)/);
+    assert.match(connectionSrc, /runtimeOwner\?\.ownership === 'jaw-owned'/);
+    assert.match(connectionSrc, /runtimeOwner = null/);
+    assert.match(connectionSrc, /activePort = null/);
+    assert.match(connectionSrc, /verifiedActiveTargetId = null/);
+    assert.match(connectionSrc, /const reset = await resetStaleChromeProcIfCdpUnavailable\(port\)/);
+});
+
+test('CDP-018: CLI start failure includes runtime diagnostics', () => {
+    assert.match(cliBrowserSrc, /Failed to start Chrome/);
+    assert.match(cliBrowserSrc, /owner:\s*\$\{runtime\.ownership \|\| 'none'\}/);
+    assert.match(cliBrowserSrc, /tabs:\s*\$\{r\.tabs \?\? 0\}/);
+    assert.match(cliBrowserSrc, /cli-jaw browser status/);
+});
+
+test('CDP-019: browser doctor reports stale runtime and orphan cleanup scope', () => {
+    assert.match(diagnosticsSrc, /stale-jaw-owned-runtime/);
+    assert.match(diagnosticsSrc, /durable-jaw-owned-runtime-records-only/);
+    assert.match(diagnosticsSrc, /idleAutoCloseScope/);
+    assert.match(diagnosticsSrc, /safeExternalKill:\s*false/);
+    assert.match(routesSrc, /\/api\/browser\/doctor/);
+    assert.match(cliBrowserSrc, /case 'doctor'/);
+    assert.match(cliBrowserSrc, /orphanJanitor:/);
+});
+
+test('CDP-020: orphan runtime cleanup requires durable ownership proof and force', () => {
+    assert.match(connectionSrc, /writeDurableBrowserRuntimeOwner\(owner\)/);
+    assert.match(connectionSrc, /clearDurableBrowserRuntimeOwner\(owner\)/);
+    assert.match(ownerStoreSrc, /browser-runtime-owner\.json/);
+    assert.match(orphanSrc, /commandLineMatchesDurableRuntimeOwner/);
+    assert.match(orphanSrc, /command\.includes\('--type='\)/);
+    assert.match(orphanSrc, /--remote-debugging-port=\$\{owner\.port\}/);
+    assert.match(orphanSrc, /--user-data-dir=\$\{owner\.userDataDir\}/);
+    assert.match(routesSrc, /\/api\/browser\/cleanup-runtimes/);
+    assert.match(routesSrc, /cleanup-runtimes close requires force=true/);
+    assert.match(cliBrowserSrc, /case 'cleanup-runtimes'/);
+    assert.match(cliBrowserSrc, /cleanup-runtimes --close requires --force/);
 });

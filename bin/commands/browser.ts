@@ -92,7 +92,13 @@ try {
                 headless: values.headless,
                 mode: values.agent ? 'agent' : 'manual',
             }) as Record<string, any>;
-            console.log(r.running ? `🌐 Chrome started (CDP: ${r.cdpUrl})` : '❌ Failed');
+            if (r.running) {
+                console.log(`🌐 Chrome started (CDP: ${r.cdpUrl})`);
+            } else {
+                const runtime = r.runtime || {};
+                console.log(`❌ Failed to start Chrome (CDP: ${r.cdpUrl || 'n/a'}, owner: ${runtime.ownership || 'none'}, tabs: ${r.tabs ?? 0})`);
+                console.log('Hint: run "cli-jaw browser status"; if owner is jaw-owned but CDP is n/a, retry start once or restart cli-jaw serve.');
+            }
             break;
         }
         case 'stop':
@@ -113,6 +119,89 @@ try {
                 `owner: ${runtime.ownership || 'none'}`,
                 `idleClose: ${idleClose}`,
             ].join('\n'));
+            break;
+        }
+        case 'doctor': {
+            const { values } = parseArgs({
+                args: process.argv.slice(4),
+                options: {
+                    json: { type: 'boolean', default: false },
+                    port: { type: 'string' },
+                },
+                strict: false,
+            });
+            const r = await api('GET', `/doctor${qs({ port: values.port })}`) as Record<string, any>;
+            if (values.json) {
+                console.log(JSON.stringify(r, null, 2));
+                break;
+            }
+            const runtime = r.runtime || {};
+            const status = r.status || {};
+            const cleanup = r.cleanup || {};
+            console.log([
+                `ok: ${r.ok}`,
+                `port: ${r.port}`,
+                `running: ${status.running}`,
+                `tabs: ${status.tabs ?? 0}`,
+                `cdpUrl: ${status.cdpUrl || 'n/a'}`,
+                `owner: ${runtime.ownership || 'none'}`,
+                `idleAutoClose: ${cleanup.idleAutoClose ? cleanup.idleAutoCloseScope : 'disabled'}`,
+                `orphanJanitor: ${cleanup.orphanJanitor ? 'enabled' : 'disabled'}`,
+            ].join('\n'));
+            if (Array.isArray(r.orphanCandidates) && r.orphanCandidates.length > 0) {
+                console.log('\nRuntime candidates:');
+                for (const candidate of r.orphanCandidates) {
+                    console.log(`- pid=${candidate.pid || 'n/a'} port=${candidate.port || 'n/a'} action=${candidate.action} reason=${candidate.reason}`);
+                }
+            }
+            if (Array.isArray(r.issues) && r.issues.length > 0) {
+                console.log('\nIssues:');
+                for (const issue of r.issues) {
+                    console.log(`- [${issue.severity}] ${issue.code}: ${issue.message}`);
+                }
+            }
+            if (Array.isArray(r.recommendations) && r.recommendations.length > 0) {
+                console.log('\nRecommendations:');
+                for (const recommendation of r.recommendations) {
+                    console.log(`- ${recommendation}`);
+                }
+            }
+            break;
+        }
+        case 'cleanup-runtimes': {
+            const { values } = parseArgs({
+                args: process.argv.slice(4),
+                options: {
+                    json: { type: 'boolean', default: false },
+                    close: { type: 'boolean', default: false },
+                    force: { type: 'boolean', default: false },
+                },
+                strict: false,
+            });
+            if (values.close === true && values.force !== true) {
+                console.error('error: cleanup-runtimes --close requires --force');
+                process.exit(1);
+            }
+            const r = await api('POST', '/cleanup-runtimes', {
+                close: values.close,
+                force: values.force,
+            }) as Record<string, any>;
+            if (values.json) {
+                console.log(JSON.stringify(r, null, 2));
+                break;
+            }
+            console.log([
+                `dryRun: ${r.dryRun}`,
+                `closed: ${r.closed || 0}`,
+                `pruned: ${r.pruned || 0}`,
+                `candidates: ${Array.isArray(r.candidates) ? r.candidates.length : 0}`,
+            ].join('\n'));
+            for (const candidate of r.candidates || []) {
+                console.log(`- pid=${candidate.pid || 'n/a'} port=${candidate.port || 'n/a'} action=${candidate.action} reason=${candidate.reason}`);
+            }
+            if (r.dryRun) {
+                console.log('\nDry-run only. Add --close --force to close durable jaw-owned orphan candidates.');
+            }
             break;
         }
         case 'snapshot': {
@@ -500,6 +589,10 @@ try {
       Stop Chrome.
     status
       Print running state, tab count, and CDP URL.
+    doctor [--json]
+      Diagnose CDP/runtime ownership mismatch and cleanup scope.
+    cleanup-runtimes [--json] [--close --force]
+      Dry-run or close durable jaw-owned orphan browser runtime records.
     reset [--force]
       Clear browser profile, screenshots, and CDP cache.
 

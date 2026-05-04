@@ -16,6 +16,7 @@ import {
     type BrowserRuntimeOwner,
     type BrowserRuntimeStatus,
 } from './runtime-owner.js';
+import { clearDurableBrowserRuntimeOwner, writeDurableBrowserRuntimeOwner } from './runtime-owner-store.js';
 
 const PROFILE_DIR = join(JAW_HOME, 'browser-profile');
 const TAB_ACTIVITY_FILE = join(JAW_HOME, 'browser-tab-activity.json');
@@ -128,6 +129,26 @@ async function waitForCdpReady(port: number, timeoutMs = 10000): Promise<boolean
         await new Promise(r => setTimeout(r, 300));
     }
     return false;
+}
+
+async function resetStaleChromeProcIfCdpUnavailable(port: number): Promise<boolean> {
+    if (!chromeProc || chromeProc.killed) return false;
+    if (await waitForCdpReady(port, 1000)) return false;
+    try {
+        chromeProc.kill('SIGTERM');
+    } catch {
+        // The process may have already exited between the killed check and SIGTERM.
+    }
+    chromeProc = null;
+    if (runtimeOwner?.ownership === 'jaw-owned') {
+        clearDurableBrowserRuntimeOwner(runtimeOwner);
+        runtimeOwner = null;
+        activePort = null;
+        verifiedActiveTargetId = null;
+        disconnectLocalBrowserCache();
+        markBrowserStateChanged();
+    }
+    return true;
 }
 
 function isWSL() {
@@ -294,6 +315,7 @@ async function closeOwnedChrome(reason: 'manual' | 'idle'): Promise<boolean> {
         }
     }
     chromeProc = null;
+    clearDurableBrowserRuntimeOwner(owner);
     runtimeOwner = null;
     activePort = null;
     verifiedActiveTargetId = null;
@@ -342,7 +364,10 @@ export async function launchChrome(
         }
     }
 
-    if (chromeProc && !chromeProc.killed) return;
+    if (chromeProc && !chromeProc.killed) {
+        const reset = await resetStaleChromeProcIfCdpUnavailable(port);
+        if (!reset) return;
+    }
 
     const launchPolicy = resolveLaunchPolicy({
         mode: opts.mode,
@@ -378,12 +403,14 @@ export async function launchChrome(
     const ready = await waitForCdpReady(port);
     if (ready) {
         activePort = port;
-        runtimeOwner = createJawOwnedBrowserRuntime({
+        const owner = createJawOwnedBrowserRuntime({
             port,
             pid: chromeProc.pid ?? null,
             userDataDir: PROFILE_DIR,
             headless,
         });
+        runtimeOwner = owner;
+        writeDurableBrowserRuntimeOwner(owner);
         ensureIdleReaperStarted();
     } else {
         if (chromeProc && !chromeProc.killed) {

@@ -80,6 +80,25 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
         catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
+    app.get('/api/browser/doctor', requireAuth, async (req: Request, res: Response) => {
+        try { res.json(await browser.getBrowserDiagnostics(cdpPort(req))); }
+        catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
+    });
+
+    app.post('/api/browser/cleanup-runtimes', requireAuth, async (req: Request, res: Response) => {
+        try {
+            if (req.body.close === true && req.body.force !== true) {
+                res.status(400).json({ error: 'cleanup-runtimes close requires force=true' });
+                return;
+            }
+            res.json(await browser.cleanupBrowserRuntimeOrphans({
+                close: req.body.close === true,
+                force: req.body.force === true,
+                currentRuntime: browser.getBrowserRuntimeStatus(),
+            }));
+        } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
+    });
+
     app.get('/api/browser/snapshot', requireAuth, async (req: Request, res: Response) => {
         try {
             const result = await browser.snapshot(cdpPort(req), {

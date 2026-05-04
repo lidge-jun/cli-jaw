@@ -145,8 +145,14 @@ export default function Browser({ port, client }: SettingsPageProps) {
         [fetchStatus],
     );
 
-    const onStart = useCallback(() => {
-        void runAction('Start', () =>
+    const onStartVisible = useCallback(() => {
+        void runAction('Start visible browser', () =>
+            client.post('/api/browser/start', { mode: 'manual', headless: false }),
+        );
+    }, [client, runAction]);
+
+    const onStartAgent = useCallback(() => {
+        void runAction('Start agent browser', () =>
             client.post('/api/browser/start', { mode: 'agent', headless: true }),
         );
     }, [client, runAction]);
@@ -201,9 +207,17 @@ export default function Browser({ port, client }: SettingsPageProps) {
                         type="button"
                         className="settings-action settings-action-save"
                         disabled={status.running || actionPending}
-                        onClick={onStart}
+                        onClick={onStartVisible}
                     >
-                        Start (agent, headless)
+                        Start visible browser
+                    </button>
+                    <button
+                        type="button"
+                        className="settings-action"
+                        disabled={status.running || actionPending}
+                        onClick={onStartAgent}
+                    >
+                        Start agent browser
                     </button>
                     <button
                         type="button"

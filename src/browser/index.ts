@@ -10,6 +10,10 @@ export {
 } from './connection.js';
 export type { BrowserTabInfo, ActiveTabResult } from './connection.js';
 export type { BrowserRuntimeOwner, BrowserRuntimeStatus } from './runtime-owner.js';
+export { getBrowserDiagnostics } from './runtime-diagnostics.js';
+export type { BrowserRuntimeDiagnostics, BrowserRuntimeIssue } from './runtime-diagnostics.js';
+export { cleanupBrowserRuntimeOrphans, inspectBrowserRuntimeOrphans } from './runtime-orphans.js';
+export type { BrowserRuntimeCleanupResult, BrowserRuntimeOrphanCandidate } from './runtime-orphans.js';
 export {
     cleanupIdleTabs, isPinned, parseTabDuration, pinTab, selectTabsForCleanup, unpinTab,
 } from './tab-lifecycle.js';
