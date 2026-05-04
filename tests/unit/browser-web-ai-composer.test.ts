@@ -101,6 +101,21 @@ test('BWCOMP-007b: ChatGPT model selector can choose all supported reasoning eff
     }
 });
 
+test('BWCOMP-007b2: ChatGPT selector does not treat the closed model dropdown button as an open model menu', async () => {
+    const { selectChatGptModel } = await import('../../src/browser/web-ai/chatgpt-model.js');
+    const page = createFakeModelPage({
+        model: 'thinking',
+        initialModelMenuOpen: false,
+        closedDropdownButton: true,
+        effortTexts: thinkingEffortTexts(),
+    });
+
+    const result = await selectChatGptModel(page, 'thinking', { effort: 'standard' });
+
+    assert.equal(result?.selected, 'thinking');
+    assert.equal(result?.effort, 'standard');
+});
+
 test('BWCOMP-007c: ChatGPT reasoning menu opens through generic effort controls for every supported effort when exact ids are absent', async () => {
     const { selectChatGptModel } = await import('../../src/browser/web-ai/chatgpt-model.js');
     const cases = [
@@ -345,6 +360,8 @@ function createFakeModelPage(input: {
     checkedEffortRows?: boolean;
     roleButtonPill?: boolean;
     keyboardOpensEffort?: boolean;
+    initialModelMenuOpen?: boolean;
+    closedDropdownButton?: boolean;
     exactEffortTrigger?: boolean;
     genericEffortTrigger?: boolean;
     genericTriggerMode?: 'css' | 'text';
@@ -354,9 +371,11 @@ function createFakeModelPage(input: {
     const checkedEffortRows = input.checkedEffortRows ?? true;
     const roleButtonPill = input.roleButtonPill ?? false;
     const keyboardOpensEffort = input.keyboardOpensEffort ?? true;
+    const initialModelMenuOpen = input.initialModelMenuOpen ?? true;
+    const closedDropdownButton = input.closedDropdownButton ?? false;
     const genericTriggerMode = input.genericTriggerMode || 'css';
     const state: any = {
-        modelMenuOpen: true,
+        modelMenuOpen: initialModelMenuOpen,
         effortMenuOpen: false,
         currentModel: input.model || 'thinking',
         selectedEffort: null,
@@ -392,6 +411,12 @@ function createFakeModelPage(input: {
     const genericTrigger = createElement({
         text: 'Reasoning effort',
         onClick: () => openEffortRows('generic'),
+    });
+    const dropdownButton = createElement({
+        text: 'ChatGPT',
+        testId: 'model-switcher-dropdown-button',
+        onClick: () => { state.modelMenuOpen = true; },
+        visible: closedDropdownButton,
     });
     const modelPill = createElement({
         text: () => state.selectedEffort
@@ -448,11 +473,12 @@ function createFakeModelPage(input: {
     function selectElements(selector: string): any[] {
         if (selector === 'button, [role="button"], [role="menuitem"]') return state.genericEffortTrigger && genericTriggerMode === 'text' ? [modelPill, genericTrigger] : [modelPill];
         if (selector.includes('__composer-pill')) return roleButtonPill ? [modelPill] : [];
-        if (selector === 'button') return roleButtonPill ? [] : [modelPill];
+        if (selector === 'button') return roleButtonPill ? [] : [dropdownButton, modelPill].filter(element => element.visible);
         if (selector === '[role="menu"]') {
             return state.effortMenuOpen ? [createElement({ text: Object.values(currentEffortTexts()).join('\n') })] : [];
         }
         if (selector === '[data-testid^="model-switcher-"]') return state.modelMenuOpen ? modelRows : [];
+        if (selector === '[data-testid^="model-switcher-gpt-"]') return state.modelMenuOpen ? modelRows : [];
         if (selector === '[role="menuitemradio"], [role="menuitem"]') return state.effortMenuOpen ? currentEffortRows() : modelRows;
         if (selector === '[role="menuitemradio"]') return state.effortMenuOpen ? currentEffortRows() : [];
         if (selector.includes('aria-checked="true"') || selector.includes('data-state="checked"')) {
@@ -463,8 +489,9 @@ function createFakeModelPage(input: {
         }
         const testId = selector.match(/data-testid="([^"]+)"/)?.[1];
         if (testId) {
+            if (testId === 'model-switcher-dropdown-button') return closedDropdownButton ? [dropdownButton] : [];
             if (testId.includes('thinking-effort')) return state.exactEffortTrigger ? [exactTrigger] : [];
-            return modelRows.filter(element => element.testId === testId);
+            return state.modelMenuOpen ? modelRows.filter(element => element.testId === testId) : [];
         }
         if (/Effort|Reasoning|effort/i.test(selector)) return state.genericEffortTrigger && genericTriggerMode === 'css' ? [genericTrigger] : [];
         return [];
