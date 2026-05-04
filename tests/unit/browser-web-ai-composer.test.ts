@@ -197,7 +197,24 @@ test('BWCOMP-007f: ChatGPT selector does not trust overlapping labels-only menus
     assert.equal(result?.usedFallbacks.includes('pro-effort-generic-trigger'), false);
 });
 
-test('BWCOMP-007g: ChatGPT selector opens visible-text-only effort controls without data-testid or aria-label hooks', async () => {
+test('BWCOMP-007g: ChatGPT selector does not reuse a rejected labels-only generic menu as a later row-bound success', async () => {
+    const { selectChatGptModel } = await import('../../src/browser/web-ai/chatgpt-model.js');
+    const page = createFakeModelPage({
+        model: 'pro',
+        exactEffortTrigger: false,
+        genericEffortTrigger: true,
+        effortTexts: labelsOnlyProEffortTexts(),
+        genericEffortTexts: labelsOnlyProEffortTexts(),
+        keyboardOpensEffort: false,
+    });
+
+    await assert.rejects(
+        () => selectChatGptModel(page, 'pro', { effort: 'standard' }),
+        /reasoning effort selector not found/,
+    );
+});
+
+test('BWCOMP-007h: ChatGPT selector opens visible-text-only effort controls without data-testid or aria-label hooks', async () => {
     const { selectChatGptModel } = await import('../../src/browser/web-ai/chatgpt-model.js');
     const page = createFakeModelPage({
         model: 'thinking',
@@ -214,7 +231,7 @@ test('BWCOMP-007g: ChatGPT selector opens visible-text-only effort controls with
     assert.ok(result?.usedFallbacks.includes('thinking-effort-text-trigger'));
 });
 
-test('BWCOMP-007h: ChatGPT selector verifies effort from active pill when checked effort rows disappear', async () => {
+test('BWCOMP-007i: ChatGPT selector verifies effort from active pill when checked effort rows disappear', async () => {
     const { selectChatGptModel } = await import('../../src/browser/web-ai/chatgpt-model.js');
     const page = createFakeModelPage({
         model: 'thinking',
@@ -228,7 +245,7 @@ test('BWCOMP-007h: ChatGPT selector verifies effort from active pill when checke
     assert.equal(result?.effort, 'heavy');
 });
 
-test('BWCOMP-007i: ChatGPT selector verifies effort from a role-button composer pill', async () => {
+test('BWCOMP-007j: ChatGPT selector verifies effort from a role-button composer pill', async () => {
     const { selectChatGptModel } = await import('../../src/browser/web-ai/chatgpt-model.js');
     const page = createFakeModelPage({
         model: 'thinking',
@@ -292,6 +309,7 @@ function createFakeModelPage(input: {
     genericEffortTexts?: Record<string, string>;
     checkedEffortRows?: boolean;
     roleButtonPill?: boolean;
+    keyboardOpensEffort?: boolean;
     exactEffortTrigger?: boolean;
     genericEffortTrigger?: boolean;
     genericTriggerMode?: 'css' | 'text';
@@ -300,6 +318,7 @@ function createFakeModelPage(input: {
     const genericEffortTexts = input.genericEffortTexts || null;
     const checkedEffortRows = input.checkedEffortRows ?? true;
     const roleButtonPill = input.roleButtonPill ?? false;
+    const keyboardOpensEffort = input.keyboardOpensEffort ?? true;
     const genericTriggerMode = input.genericTriggerMode || 'css';
     const state: any = {
         modelMenuOpen: true,
@@ -343,17 +362,21 @@ function createFakeModelPage(input: {
         text: () => state.selectedEffort
             ? `${effortTexts[state.selectedEffort] || currentEffortTexts()[state.selectedEffort] || state.currentModel}`
             : state.currentModel,
+        onClick: () => { state.modelMenuOpen = true; },
     });
 
     return {
         keyboard: {
             press: async (key: string) => {
                 if (key === 'Escape') {
-                    state.modelMenuOpen = false;
-                    state.effortMenuOpen = false;
-                    state.effortMenuSource = null;
+                    if (state.effortMenuOpen) {
+                        state.effortMenuOpen = false;
+                        state.effortMenuSource = null;
+                    } else {
+                        state.modelMenuOpen = false;
+                    }
                 }
-                if (key === 'ArrowRight') openEffortRows('target');
+                if (key === 'ArrowRight' && keyboardOpensEffort) openEffortRows('target');
             },
         },
         mouse: {

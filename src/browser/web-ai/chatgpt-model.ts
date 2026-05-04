@@ -284,6 +284,7 @@ async function openEffortMenu(page: Page, model: ChatGptModelChoice, usedFallbac
             usedFallbacks.push(`${model}-effort-generic-trigger`);
             return;
         }
+        await dismissEffortMenuAndReopenModel(page, usedFallbacks);
     }
     const textTrigger = page.locator('button, [role="button"], [role="menuitem"]').filter({ hasText: /^(Effort|Reasoning effort)$/i }).last();
     if (await textTrigger.isVisible().catch(() => false)) {
@@ -293,6 +294,7 @@ async function openEffortMenu(page: Page, model: ChatGptModelChoice, usedFallbac
             usedFallbacks.push(`${model}-effort-text-trigger`);
             return;
         }
+        await dismissEffortMenuAndReopenModel(page, usedFallbacks);
     }
     if (row) {
         await row.focus({ timeout: 1_000 }).catch(() => undefined);
@@ -316,6 +318,12 @@ async function openEffortMenu(page: Page, model: ChatGptModelChoice, usedFallbac
     }
     usedFallbacks.push(`${model}-effort-trigger`);
     throw new Error(`ChatGPT reasoning effort selector not found for ${model}`);
+}
+
+async function dismissEffortMenuAndReopenModel(page: Page, usedFallbacks: string[]): Promise<void> {
+    await page.keyboard.press('Escape').catch(() => undefined);
+    await page.waitForTimeout(200).catch(() => undefined);
+    await openModelMenu(page, usedFallbacks);
 }
 
 async function findEffortTriggerBoxNearModelRow(page: Page, model: ChatGptModelChoice): Promise<{ x: number; y: number; width: number; height: number } | null> {
