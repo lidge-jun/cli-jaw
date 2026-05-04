@@ -26,6 +26,10 @@ import { summarizeActivityTitleSupport } from './dashboard-settings/activity-tit
 import { dashboardSettingsUiFromView } from './dashboard-settings/dashboard-settings-ui';
 import { NotesSidebar } from './notes/NotesSidebar';
 import { NotesWorkspace } from './notes/NotesWorkspace';
+import { publishInvalidation } from './sync/invalidation-bus';
+import { useInvalidationSubscription } from './sync/useInvalidationSubscription';
+import { IframeBridge } from './sync/IframeBridge';
+import { VisibilityBridge } from './sync/VisibilityBridge';
 import { DashboardBoardSidebar } from './dashboard-board/DashboardBoardSidebar';
 import { DashboardBoardWorkspace } from './dashboard-board/DashboardBoardWorkspace';
 import type { BoardView } from './dashboard-board/board-view';
@@ -197,6 +201,8 @@ export function App() {
             instances: current.instances.map(row => row.port === port ? instance : row),
         } : current);
     }
+
+    useInvalidationSubscription('instances', () => void load(), 'app');
 
     useEffect(() => {
         async function initialize(): Promise<void> {
@@ -387,6 +393,7 @@ export function App() {
                 setLifecycleMessage(`${result.message} (not yet reachable, refresh manually if needed)`);
             }
             await load();
+            publishInvalidation({ topics: ['instances'], reason: 'instance:lifecycle', source: 'ui', sourceId: 'app' });
             view.setSelectedPort(instance.port);
         } catch (err) {
             setLifecycleMessage((err as Error).message);
@@ -452,15 +459,21 @@ export function App() {
             onSettingsDirtyChange={setSettingsDirty}
             onSettingsSaved={() => {
                 if (selectedInstance) void refreshInstance(selectedInstance.port);
+                publishInvalidation({ topics: ['instances'], reason: 'instance:settings-saved', source: 'ui', sourceId: 'app' });
             }}
             onRegistryPatch={(port, patch) => {
-                void registry.save({ instances: { [String(port)]: patch } }).then(() => load());
+                void registry.save({ instances: { [String(port)]: patch } }).then(() => {
+                    load();
+                    publishInvalidation({ topics: ['instances'], reason: 'instance:registry-patched', source: 'ui', sourceId: 'app' });
+                });
             }}
         />
     );
 
     return (
         <>
+            <IframeBridge />
+            <VisibilityBridge />
             <ManagerShell
                 sidebarCollapsed={view.sidebarCollapsed}
                 commandBar={(

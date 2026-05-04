@@ -5,6 +5,7 @@ import { NotesEmptyState } from './NotesEmptyState';
 import { NotesToolbar } from './NotesToolbar';
 import { renameNotePath } from './notes-api';
 import { useNoteDocument } from './useNoteDocument';
+import { publishInvalidation } from '../sync/invalidation-bus';
 import type { NotesAuthoringMode, NotesViewMode } from './notes-types';
 
 type NotesPrimaryMode = 'raw' | 'preview' | 'wysiwyg';
@@ -101,6 +102,7 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
         try {
             await renameNotePath(props.selectedPath, newPath);
             props.onSelectedPathChange(newPath);
+            publishInvalidation({ topics: ['notes'], reason: 'note:title-renamed', source: 'ui' });
         } catch (error) {
             console.warn('[notes-rename]', error);
             event.currentTarget.value = currentTitle;

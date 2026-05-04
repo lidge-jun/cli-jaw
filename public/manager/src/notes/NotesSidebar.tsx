@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { createNoteFile, createNoteFolder, fetchNotesInfo, fetchNotesTree, renameNotePath, trashNotePath } from './notes-api';
 import { NotesFileTree } from './NotesFileTree';
+import { publishInvalidation } from '../sync/invalidation-bus';
+import { useInvalidationSubscription } from '../sync/useInvalidationSubscription';
 import type { NotesTreeEntry } from './notes-types';
 
 type NotesSidebarProps = {
@@ -113,6 +115,8 @@ export function NotesSidebar(props: NotesSidebarProps) {
         }
     }
 
+    useInvalidationSubscription('notes', () => void refreshTree(), 'notes-sidebar');
+
     useEffect(() => {
         void refreshTree();
     }, []);
@@ -126,6 +130,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
             const created = await createNoteFile(name.endsWith('.md') ? name : `${name}.md`, '');
             props.onSelectedPathChange(created.path);
             await refreshTree(created.path);
+            publishInvalidation({ topics: ['notes'], reason: 'note:created', source: 'ui', sourceId: 'notes-sidebar' });
         } catch (err) {
             setError((err as Error).message);
         }
@@ -151,6 +156,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
             const created = await createNoteFolder(name);
             setSelectedFolderPath(created.path);
             await refreshTree();
+            publishInvalidation({ topics: ['notes'], reason: 'folder:created', source: 'ui', sourceId: 'notes-sidebar' });
         } catch (err) {
             setError((err as Error).message);
         }
@@ -164,6 +170,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
             const moved = await renameNotePath(from, to);
             if (props.selectedPath === from) props.onSelectedPathChange(moved.to);
             await refreshTree(moved.to);
+            publishInvalidation({ topics: ['notes'], reason: 'note:moved', source: 'ui', sourceId: 'notes-sidebar' });
         } catch (err) {
             setError((err as Error).message);
         }
@@ -183,6 +190,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
             if (nextSelectedFolderPath !== selectedFolderPath) setSelectedFolderPath(nextSelectedFolderPath);
             if (nextSelectedPath !== props.selectedPath) props.onSelectedPathChange(nextSelectedPath);
             await refreshTree(nextSelectedPath);
+            publishInvalidation({ topics: ['notes'], reason: 'note:renamed', source: 'ui', sourceId: 'notes-sidebar' });
         } catch (err) {
             setError((err as Error).message);
         }
@@ -233,6 +241,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
         }
 
         await refreshTree(selectedCleared ? null : props.selectedPath);
+        publishInvalidation({ topics: ['notes'], reason: 'notes:batch-trashed', source: 'ui', sourceId: 'notes-sidebar' });
     }
 
     async function trashPath(path: string, kind: NotesTreeEntry['kind']): Promise<void> {
@@ -257,6 +266,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
                 : '';
             setStatus(`Moved ${result.path} to ${destination}.${restoreHint}`);
             await refreshTree(selectedWasInside ? null : props.selectedPath);
+            publishInvalidation({ topics: ['notes'], reason: 'note:trashed', source: 'ui', sourceId: 'notes-sidebar' });
         } catch (err) {
             setError((err as Error).message);
         }
