@@ -9,6 +9,7 @@
  */
 
 import type { WebAiDiagnostics, WebAiFailureStage } from './diagnostics.js';
+import type { TraceStep } from './action-trace.js';
 
 export type WebAiVendorId = 'chatgpt' | 'gemini' | 'grok';
 
@@ -23,6 +24,7 @@ export interface ResponseCaptureResult {
     ok: boolean;
     answerText?: string;
     canvas?: { kind: 'opened'; reason?: string };
+    resolverTrace?: TraceStep[];
     usedFallbacks: string[];
     warnings: string[];
 }

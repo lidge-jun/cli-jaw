@@ -1,5 +1,7 @@
 import { MAX_TRACE_BYTES, MAX_TRACE_STEPS } from './constants.js';
+import { summarizeTraceSteps } from './action-trace.js';
 import { getSession, updateSessionStatus } from './session.js';
+import type { TraceStep, TraceSummary } from './action-trace.js';
 import type { WebAiSessionRecord } from './types.js';
 
 const REDACTION_PATTERNS = [
@@ -18,7 +20,7 @@ export type TracePersistableValue =
     | TracePersistableValue[]
     | { [key: string]: TracePersistableValue | undefined };
 
-export interface TraceSessionRecord extends WebAiSessionRecord {
+export interface TraceSessionRecord extends Omit<WebAiSessionRecord, 'trace'> {
     trace?: TracePersistableValue[];
 }
 
@@ -39,11 +41,11 @@ export function redactSensitive<T>(value: T): T {
     return value;
 }
 
-export function appendTraceToSession(sessionId: string, steps: TracePersistableValue[]): void {
-    if (!steps?.length) return;
+export function appendTraceToSession(sessionId: string, steps: TracePersistableValue[]): TraceSummary | null {
+    if (!steps?.length) return null;
     const redacted = redactSensitive(steps);
     const session = getSession(sessionId) as TraceSessionRecord | null;
-    if (!session) return;
+    if (!session) return null;
 
     const trace = session.trace || [];
     trace.push(...redacted);
@@ -52,4 +54,5 @@ export function appendTraceToSession(sessionId: string, steps: TracePersistableV
 
     session.trace = trace;
     updateSessionStatus(sessionId, session.status);
+    return summarizeTraceSteps(sessionId, trace as TraceStep[]);
 }

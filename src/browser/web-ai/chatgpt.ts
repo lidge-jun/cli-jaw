@@ -43,6 +43,7 @@ import { ProviderRuntimeDisabledError } from './provider-adapter.js';
 import { fromCliJawStructuredError, WebAiError } from './errors.js';
 import { listCapabilitySchemas } from './capability-registry.js';
 import { prepareContextForBrowser, summarizeContextPack } from './context-pack/index.js';
+import { appendTraceToSession, type TracePersistableValue } from './trace-persistence.js';
 import type {
     QuestionEnvelopeInput,
     WebAiOutput,
@@ -396,6 +397,9 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
     });
     if (session && result.ok) updateSessionStatus(session.sessionId, 'complete');
     if (session && !result.ok) updateSessionStatus(session.sessionId, 'timeout');
+    const traceSummary = session
+        ? appendTraceToSession(session.sessionId, (result.resolverTrace || []) as TracePersistableValue[])
+        : null;
     if (result.canvas) {
         if (session) {
             await finalizeProviderTab({ vendor, session, port, url: currentUrl, answerText: result.answerText || '' });
@@ -409,6 +413,7 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
             canvas: result.canvas,
             baseline,
             ...(session ? { sessionId: session.sessionId } : {}),
+            ...(traceSummary ? { traceSummary } : {}),
             usedFallbacks: result.usedFallbacks,
             warnings: result.warnings,
         };
@@ -425,6 +430,7 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
             answerText: result.answerText,
             baseline,
             ...(session ? { sessionId: session.sessionId } : {}),
+            ...(traceSummary ? { traceSummary } : {}),
             usedFallbacks: result.usedFallbacks,
             warnings: result.warnings,
         };
@@ -436,6 +442,7 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
         url: currentUrl,
         baseline,
         ...(session ? { sessionId: session.sessionId, next: 'poll' } : {}),
+        ...(traceSummary ? { traceSummary } : {}),
         usedFallbacks: result.usedFallbacks,
         warnings: result.warnings,
         error: 'timed out waiting for answer',

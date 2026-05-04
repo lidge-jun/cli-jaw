@@ -61,20 +61,25 @@ export function getSessionTrace(ctx: TraceContext | null | undefined): TraceStep
 }
 
 export function summarizeTrace(ctx: TraceContext | null | undefined): TraceSummary | null {
-    if (!ctx || !ctx.steps.length) return null;
+    if (!ctx) return null;
+    return summarizeTraceSteps(ctx.sessionId, ctx.steps);
+}
+
+export function summarizeTraceSteps(sessionId: string, steps: TraceStep[] = []): TraceSummary | null {
+    if (!steps.length) return null;
     const sources = new Set<string>();
     let errors = 0;
-    for (const step of ctx.steps) {
+    for (const step of steps) {
         if (step.target?.resolution) sources.add(step.target.resolution);
         if (step.target?.source) sources.add(step.target.source);
         if (step.status === 'error') errors += 1;
     }
     return {
-        sessionId: ctx.sessionId,
-        totalSteps: ctx.steps.length,
+        sessionId,
+        totalSteps: steps.length,
         resolutionSources: [...sources],
         errorCount: errors,
-        firstTs: ctx.steps[0]?.ts || null,
-        lastTs: ctx.steps.at(-1)?.ts || null,
+        firstTs: steps[0]?.ts || null,
+        lastTs: steps.at(-1)?.ts || null,
     };
 }

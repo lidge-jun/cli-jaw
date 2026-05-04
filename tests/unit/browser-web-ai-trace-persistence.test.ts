@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createTraceContext, getSessionTrace, summarizeTrace } from '../../src/browser/web-ai/action-trace.ts';
+import { createTraceContext, getSessionTrace, summarizeTrace, summarizeTraceSteps } from '../../src/browser/web-ai/action-trace.ts';
 import { appendTraceToSession, redactSensitive } from '../../src/browser/web-ai/trace-persistence.ts';
 import { __resetSessionState, createSession, getSession } from '../../src/browser/web-ai/session.ts';
 
@@ -20,6 +20,21 @@ test('trace context records bounded steps and summarizes resolution sources', ()
     });
 });
 
+test('trace summary can be built from persisted trace arrays', () => {
+    const steps = [
+        { ts: '2026-05-05T00:00:00.000Z', status: 'ok', target: { resolution: 'semantic' } },
+        { ts: '2026-05-05T00:00:01.000Z', status: 'error', target: { source: 'css-fallback' } },
+    ];
+    assert.deepEqual(summarizeTraceSteps('session-b', steps), {
+        sessionId: 'session-b',
+        totalSteps: 2,
+        resolutionSources: ['semantic', 'css-fallback'],
+        errorCount: 1,
+        firstTs: '2026-05-05T00:00:00.000Z',
+        lastTs: '2026-05-05T00:00:01.000Z',
+    });
+});
+
 test('trace persistence redacts sensitive values before attaching to a session', () => {
     __resetSessionState();
     const session = createSession({
@@ -31,9 +46,10 @@ test('trace persistence redacts sensitive values before attaching to a session',
         timeoutMs: 1000,
     });
 
-    appendTraceToSession(session.sessionId, [{ token: 'Bearer abc.def.ghi', email: 'a@example.com' }]);
+    const summary = appendTraceToSession(session.sessionId, [{ token: 'Bearer abc.def.ghi', email: 'a@example.com' }]);
     const reloaded = getSession(session.sessionId) as typeof session & { trace?: Array<Record<string, string>> };
 
+    assert.equal(summary?.totalSteps, 1);
     assert.equal(redactSensitive('sk-proj-abcdefghijklmnopqrstuvwxyz'), '[REDACTED]');
     assert.equal(reloaded.trace?.[0]?.token, '[REDACTED]');
     assert.equal(reloaded.trace?.[0]?.email, '[REDACTED]');

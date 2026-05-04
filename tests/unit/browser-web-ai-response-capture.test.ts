@@ -45,6 +45,9 @@ test('RESP-005: captureAssistantResponse records copy fallback through ActionTra
     assert.equal(result.answerText, 'copied answer');
     assert.deepEqual(result.usedFallbacks, ['copy-markdown']);
     assert.equal(page.copySelectorSet?.copyButtonSelectors[0], 'button[data-testid="copy-turn-action-button"]');
+    assert.equal(result.resolverTrace?.[0]?.intentId, 'copy.lastResponse');
+    assert.equal(result.resolverTrace?.[0]?.status, 'ok');
+    assert.doesNotMatch(JSON.stringify(result.resolverTrace), /copied answer|dom answer/);
 });
 
 function fakeResponsePage(input: { assistantTexts: string[]; copyText: string }): any {

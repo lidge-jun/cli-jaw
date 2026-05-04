@@ -99,6 +99,7 @@ export interface WebAiSessionRecord {
     failedAt?: string;
     staleAt?: string;
     lastError?: string;
+    trace?: Array<Record<string, unknown>>;
     createdAt: string;
     updatedAt: string;
 }
@@ -141,6 +142,7 @@ export interface WebAiOutput {
     }>;
     next?: 'poll' | 'reattach' | 'stop';
     canvas?: { kind: 'opened'; reason?: string };
+    traceSummary?: import('./action-trace.js').TraceSummary;
     contextPack?: import('./context-pack/index.js').ContextPackSummary;
     usedFallbacks?: string[];
     warnings: string[];
