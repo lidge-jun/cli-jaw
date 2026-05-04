@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { CACHE_SCHEMA_VERSION, RESOLUTION_SOURCES, VALIDATION_REASONS, VALIDATION_THRESHOLD } from './constants.js';
+import { CHATGPT_COPY_SELECTORS, GEMINI_COPY_SELECTORS, GROK_COPY_SELECTORS } from './copy-markdown.js';
 import { WebAiError, wrapError } from './errors.js';
 import type { ResolvedActionTarget } from './action-cache.js';
 import type { WebAiVendor } from './types.js';
@@ -126,7 +127,7 @@ const SEMANTIC_TARGETS: Record<string, Record<string, SemanticTarget>> = {
         modelPicker: { roles: ['button', 'combobox'], names: [/model/i, /gpt/i], cssFallbacks: ['button[aria-label*="model" i]', 'button[data-testid*="model" i]'] },
         uploadSurface: { roles: ['button'], names: [/attach/i, /upload/i, /file/i, /add/i], cssFallbacks: ['button[aria-label*="Upload" i]', 'button[aria-label*="Attach" i]', 'button[data-testid*="plus" i]'] },
         responseFeed: { roles: ['article', 'region', 'group'], names: [/assistant/i, /response/i], cssFallbacks: ['[data-message-author-role="assistant"]', '[data-turn="assistant"]'] },
-        copyButton: { roles: ['button'], names: [/copy/i], cssFallbacks: ['button[aria-label*="copy" i]', '[data-testid*="copy" i]'] },
+        copyButton: { roles: ['button'], names: [/copy/i], cssFallbacks: CHATGPT_COPY_SELECTORS.copyButtonSelectors },
         streamingIndicator: { roles: ['button'], names: [/stop/i], cssFallbacks: ['button[data-testid="stop-button"]', 'button[aria-label*="Stop" i]'] },
     },
     gemini: {
@@ -134,7 +135,7 @@ const SEMANTIC_TARGETS: Record<string, Record<string, SemanticTarget>> = {
         modelPicker: { roles: ['button', 'combobox'], names: [/model/i, /mode/i, /picker/i], cssFallbacks: ['button[data-test-id="bard-mode-menu-button"]', 'button[aria-label="Open mode picker"]'] },
         uploadSurface: { roles: ['button'], names: [/upload/i, /file/i, /attach/i], cssFallbacks: ['button[aria-label="Open upload file menu"]', 'button[aria-label*="upload file menu" i]'] },
         responseFeed: { roles: ['article', 'region', 'group'], names: [/response/i, /gemini/i], cssFallbacks: ['model-response', '[data-response-index]'] },
-        copyButton: { roles: ['button'], names: [/copy/i], cssFallbacks: ['button[aria-label*="copy" i]'] },
+        copyButton: { roles: ['button'], names: [/copy/i], cssFallbacks: GEMINI_COPY_SELECTORS.copyButtonSelectors },
         streamingIndicator: { roles: ['button', 'status'], names: [/stop/i, /response/i], cssFallbacks: ['.response-footer.complete', 'message-actions'] },
     },
     grok: {
@@ -142,7 +143,7 @@ const SEMANTIC_TARGETS: Record<string, Record<string, SemanticTarget>> = {
         modelPicker: { roles: ['button', 'combobox'], names: [/model/i], cssFallbacks: ['button[aria-label="Model select"]', 'button[aria-label*="Model select" i]'] },
         uploadSurface: { roles: ['button'], names: [/upload/i, /attach/i, /file/i], cssFallbacks: ['button[aria-label*="Upload" i]', 'button[aria-label*="Attach" i]'] },
         responseFeed: { roles: ['article', 'region', 'group'], names: [/assistant/i, /response/i], cssFallbacks: ['[data-testid="assistant-message"]'] },
-        copyButton: { roles: ['button'], names: [/copy/i], cssFallbacks: ['button[aria-label*="copy" i]'] },
+        copyButton: { roles: ['button'], names: [/copy/i], cssFallbacks: GROK_COPY_SELECTORS.copyButtonSelectors },
         streamingIndicator: { roles: ['button'], names: [/stop/i], cssFallbacks: ['button[aria-label*="Stop" i]'] },
     },
 };

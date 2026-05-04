@@ -44,25 +44,52 @@ test('RESP-005: captureAssistantResponse records copy fallback through ActionTra
     assert.equal(result.ok, true);
     assert.equal(result.answerText, 'copied answer');
     assert.deepEqual(result.usedFallbacks, ['copy-markdown']);
+    assert.equal(page.copySelectorSet?.copyButtonSelectors[0], 'button[data-testid="copy-turn-action-button"]');
 });
 
 function fakeResponsePage(input: { assistantTexts: string[]; copyText: string }): any {
-    return {
+    const page: any = {
+        copySelectorSet: null,
+        url: () => 'https://chatgpt.com/',
         evaluate: async (fn: any, selectors?: readonly string[]) => {
             const source = String(fn);
-            if (source.includes('selectorSet')) return { ok: true, text: input.copyText };
+            if (source.includes('selectorSet')) {
+                page.copySelectorSet = (selectors as any)?.selectorSet || null;
+                return { ok: true, text: input.copyText };
+            }
             if (Array.isArray(selectors)) return input.assistantTexts;
             return [];
         },
         waitForTimeout: async () => undefined,
         locator: (selector: string) => ({
+            count: async () => selector === 'button[data-testid="copy-turn-action-button"]' ? 1 : 0,
             first: () => ({
-                isVisible: async () => selector.includes('copy-turn-action-button'),
+                isVisible: async () => selector === 'button[data-testid="copy-turn-action-button"]',
+                isEnabled: async () => true,
+                evaluate: async (fn: any) => fn({
+                    getAttribute(name: string) {
+                        if (name === 'role') return null;
+                        if (name === 'aria-label') return 'Copy';
+                        return null;
+                    },
+                    tagName: 'BUTTON',
+                    isContentEditable: false,
+                    contentEditable: 'false',
+                    textContent: 'Copy',
+                }),
                 click: async () => undefined,
             }),
             all: async () => selector.includes('copy-turn-action-button')
                 ? [{ isVisible: async () => true, click: async () => undefined }]
                 : [],
         }),
+        getByRole: () => ({
+            count: async () => 0,
+            first: () => page.locator('missing').first(),
+            isVisible: async () => false,
+            isEnabled: async () => false,
+            evaluate: async () => null,
+        }),
     };
+    return page;
 }

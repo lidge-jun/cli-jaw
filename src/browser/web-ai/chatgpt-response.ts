@@ -10,6 +10,7 @@
 import type { ResponseCaptureResult } from './provider-adapter.js';
 import { ActionTranscript, captureTextBaseline } from '../primitives.js';
 import { captureCopiedResponseText, CHATGPT_COPY_SELECTORS, preferCopiedText } from './copy-markdown.js';
+import { resolveActionTarget } from './self-heal.js';
 
 declare const document: any;
 
@@ -139,7 +140,8 @@ export async function captureAssistantResponse(page: any, options: CaptureOption
             if (snap.latestNewText === stableText) {
                 if (stableSince !== null && Date.now() - stableSince >= stableWindowMs) {
                     if (options.allowCopyMarkdownFallback) {
-                        const copied = await captureCopiedResponseText(page, CHATGPT_COPY_SELECTORS);
+                        const copyTarget = await resolveOptionalChatGptCopyTarget(page);
+                        const copied = await captureCopiedResponseText(page, CHATGPT_COPY_SELECTORS, { copyTarget });
                         const copiedText = preferCopiedText(snap.latestNewText, copied);
                         if (copiedText) {
                             transcript.fallback('copy-markdown');
@@ -161,7 +163,8 @@ export async function captureAssistantResponse(page: any, options: CaptureOption
     }
 
     if (options.allowCopyMarkdownFallback && stableText) {
-        const copied = await captureCopiedResponseText(page, CHATGPT_COPY_SELECTORS);
+        const copyTarget = await resolveOptionalChatGptCopyTarget(page);
+        const copied = await captureCopiedResponseText(page, CHATGPT_COPY_SELECTORS, { copyTarget });
         const copiedText = preferCopiedText(stableText, copied);
         if (copiedText) {
             transcript.fallback('copy-markdown');
@@ -170,6 +173,20 @@ export async function captureAssistantResponse(page: any, options: CaptureOption
         transcript.warn(`copy-markdown-fallback-unavailable:${copied.status || 'unknown'}`);
     }
     return { ok: false, answerText: stableText, usedFallbacks: transcript.usedFallbacks, warnings: transcript.warnings };
+}
+
+async function resolveOptionalChatGptCopyTarget(page: any): Promise<{ selector?: string | null } | null> {
+    try {
+        const result = await resolveActionTarget(page, {
+            provider: 'chatgpt',
+            intent: 'copy.lastResponse',
+            actionKind: 'click',
+        });
+        if (result.ok && result.target?.selector) return result.target;
+    } catch {
+        // Copy fallback remains optional; unresolved self-heal targets use the legacy scoped scan.
+    }
+    return null;
 }
 
 function pickLatestRealAnswer(texts: string[], promptText: string): string | undefined {

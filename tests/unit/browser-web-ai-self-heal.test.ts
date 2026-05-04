@@ -53,6 +53,27 @@ test('self-heal resolves composer.fill from css fallback and validates fill targ
     assert.equal(result.target?.resolution, 'css-fallback');
 });
 
+test('self-heal resolves ChatGPT copy.lastResponse through observed copy selectors', async () => {
+    const page = {
+        url: () => 'https://chatgpt.com/',
+        locator: (selector: string) => selector === 'button[data-testid="copy-turn-action-button"]'
+            ? makeLocator({ role: 'button', label: 'Copy', tagName: 'BUTTON', editable: false })
+            : makeLocator({ count: 0 }),
+        getByRole: () => makeLocator({ count: 0 }),
+    };
+
+    const result = await resolveActionTarget(page, {
+        provider: 'chatgpt',
+        intent: 'copy.lastResponse',
+        actionKind: 'click',
+    });
+
+    assert.equal(resolveIntentFeature('copy.lastResponse'), 'copyButton');
+    assert.equal(result.ok, true);
+    assert.equal(result.target?.selector, 'button[data-testid="copy-turn-action-button"]');
+    assert.equal(result.target?.resolution, 'css-fallback');
+});
+
 test('self-heal rejects ambiguous selectors and throws WebAiError for unresolved refs', async () => {
     const page = {
         url: () => 'https://chatgpt.com/',

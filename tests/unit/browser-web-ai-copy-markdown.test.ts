@@ -31,7 +31,41 @@ test('COPY-MD-002: helper intercepts page clipboard writes without OS clipboard 
     assert.doesNotMatch(src, /readText\s*\(/);
 });
 
-test('COPY-MD-003: copied text is rejected when it is likely truncated', () => {
+test('COPY-MD-003: helper prioritizes a resolver-selected copy target inside the latest turn', async () => {
+    let payload: any = null;
+    const page = {
+        evaluate: async (_fn: any, arg: any) => {
+            payload = arg;
+            return { ok: true, text: 'copied **markdown**' };
+        },
+    };
+
+    await captureCopiedResponseText(page, CHATGPT_COPY_SELECTORS, {
+        copyTarget: { selector: 'button[data-testid="resolved-copy-button"]' },
+    });
+
+    assert.equal(payload.selectorSet.copyButtonSelectors[0], 'button[data-testid="resolved-copy-button"]');
+    assert.equal(new Set(payload.selectorSet.copyButtonSelectors).size, payload.selectorSet.copyButtonSelectors.length);
+});
+
+test('COPY-MD-004: helper keeps response-copy selectors ahead of generic resolver matches', async () => {
+    let payload: any = null;
+    const page = {
+        evaluate: async (_fn: any, arg: any) => {
+            payload = arg;
+            return { ok: true, text: 'turn-level markdown' };
+        },
+    };
+
+    await captureCopiedResponseText(page, CHATGPT_COPY_SELECTORS, {
+        copyTarget: { selector: 'button[aria-label*="Copy" i]' },
+    });
+
+    assert.deepEqual(payload.selectorSet.copyButtonSelectors, CHATGPT_COPY_SELECTORS.copyButtonSelectors);
+    assert.equal(payload.selectorSet.copyButtonSelectors[0], 'button[data-testid="copy-turn-action-button"]');
+});
+
+test('COPY-MD-005: copied text is rejected when it is likely truncated', () => {
     assert.equal(preferCopiedText('a'.repeat(200), { ok: true, text: 'short' }), undefined);
     assert.equal(preferCopiedText('dom answer', { ok: true, text: 'copied answer' }), 'copied answer');
 });

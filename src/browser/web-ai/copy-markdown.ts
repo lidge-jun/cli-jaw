@@ -19,6 +19,7 @@ export interface CopyMarkdownResult {
 export interface CopyMarkdownOptions {
     timeoutMs?: number;
     stableTicks?: number;
+    copyTarget?: { selector?: string | null } | null;
 }
 
 export const CHATGPT_COPY_SELECTORS: CopyMarkdownSelectorSet = {
@@ -55,6 +56,7 @@ export async function captureCopiedResponseText(
     selectors: CopyMarkdownSelectorSet,
     options: CopyMarkdownOptions = {},
 ): Promise<CopyMarkdownResult> {
+    const selectorSet = copySelectorsWithTarget(selectors, options.copyTarget);
     try {
         const result = await page.evaluate?.(
             async ({ selectorSet, timeoutMs, stableTicks }: any) => {
@@ -148,7 +150,7 @@ export async function captureCopiedResponseText(
                 }
             },
             {
-                selectorSet: selectors,
+                selectorSet,
                 timeoutMs: Math.max(250, options.timeoutMs ?? 1500),
                 stableTicks: Math.max(1, options.stableTicks ?? 3),
             },
@@ -164,6 +166,27 @@ export async function captureCopiedResponseText(
     } catch (e) {
         return { ok: false, status: 'exception', error: (e as Error).message };
     }
+}
+
+function copySelectorsWithTarget(
+    selectors: CopyMarkdownSelectorSet,
+    copyTarget: { selector?: string | null } | null = null,
+): CopyMarkdownSelectorSet {
+    if (!copyTarget?.selector) return selectors;
+    const existingSelectors = selectors.copyButtonSelectors || [];
+    if (existingSelectors.includes(copyTarget.selector)) {
+        return {
+            ...selectors,
+            copyButtonSelectors: [...new Set(existingSelectors)],
+        };
+    }
+    return {
+        ...selectors,
+        copyButtonSelectors: [
+            copyTarget.selector,
+            ...existingSelectors,
+        ],
+    };
 }
 
 export function preferCopiedText(domText: string, copied: CopyMarkdownResult): string | undefined {
