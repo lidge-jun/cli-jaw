@@ -33,3 +33,19 @@ test('build output guard fails static vendor-utils import', () => {
     assert.equal(result.ok, false);
     assert.match(result.errors.join('\n'), /vendor-utils/);
 });
+
+test('build output guard fails __vite__mapDeps referencing vendor-mermaid', () => {
+    const appJs = 'const deps = __vite__mapDeps(["./vendor-mermaid-abc.js","./chunk-xyz.js"]);';
+    const dist = makeDist('<script type="module" src="/assets/app-test.js"></script>', appJs);
+    const result = checkWebUiBuildOutput({ distDir: dist });
+    assert.equal(result.ok, false);
+    assert.match(result.errors.join('\n'), /vendor-mermaid/);
+});
+
+test('build output guard fails when entry bytes exceed budget', () => {
+    const bigJs = 'x'.repeat(1000);
+    const dist = makeDist('<script type="module" src="/assets/app-test.js"></script>', bigJs);
+    const result = checkWebUiBuildOutput({ distDir: dist, entryBudgetBytes: 500 });
+    assert.equal(result.ok, false);
+    assert.match(result.errors.join('\n'), /exceed budget/);
+});

@@ -15,6 +15,7 @@ import { activateWidgets } from './diagram/iframe-renderer.js';
 import { renderLiveToolActivity, cleanupToolElements, bindToolItemInteractions, type ToolLogEntry } from './features/tool-ui.js';
 import { ICONS, emojiToIcon, emojiToStatus, isCompletionEmoji } from './icons.js';
 import { providerIcon } from './provider-icons.js';
+import { findRunningProcessStepMatch } from './features/process-step-match.js';
 import {
     createProcessBlock,
     addStep,
@@ -153,22 +154,6 @@ function currentProcessBlockFromDom(agentMsg: HTMLElement): ProcessBlockState | 
     };
 }
 
-function findLegacyRunningMatch(steps: ProcessStep[], step: ProcessStep): ProcessStep | null {
-    const matches = steps.filter(s => s.status === 'running'
-        && !s.stepRef
-        && s.label === step.label
-        && s.type === step.type);
-    return matches.length === 1 ? matches[0] : null;
-}
-
-function findRunningProcessStepMatch(steps: ProcessStep[], step: ProcessStep): ProcessStep | null {
-    const running = [...steps].reverse().filter(s => s.status === 'running');
-    if (step.stepRef) {
-        return running.find(s => s.stepRef === step.stepRef)
-            ?? findLegacyRunningMatch(running, step);
-    }
-    return findLegacyRunningMatch(running, step);
-}
 
 function removeAgentToolBlocks(agentMsg: HTMLElement): void {
     for (const block of agentToolBlocks(agentMsg)) block.remove();

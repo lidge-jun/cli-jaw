@@ -8,6 +8,7 @@ import fs from 'fs';
 import https from 'node:https';
 import type { IncomingMessage } from 'node:http';
 import { join, extname, basename } from 'path';
+import { detectMimeFromBuffer, MIME_TO_EXT } from './mime-detect.js';
 
 export const TELEGRAM_DOWNLOAD_TIMEOUT_MS = 30_000;
 export const TELEGRAM_METADATA_MAX_BYTES = 1024 * 1024;
@@ -26,22 +27,37 @@ export interface TelegramDownloadOptions {
     kind?: TelegramDownloadKind;
 }
 
+export type SaveUploadOptions = {
+    allowedMimes?: readonly string[];
+};
+
 /**
  * Save a buffer to ~/.cli-jaw/uploads/ with a timestamped filename.
  * @param {string} uploadsDir - Absolute path to uploads directory
  * @param {Buffer} buffer - File content
  * @param {string} originalName - Original filename (for extension)
+ * @param {SaveUploadOptions} [options] - Optional MIME restrictions
  * @returns {string} Absolute path to saved file
  */
-export function saveUpload(uploadsDir: string, buffer: Buffer, originalName: string) {
+export function saveUpload(uploadsDir: string, buffer: Buffer, originalName: string, options?: SaveUploadOptions) {
     const ts = Date.now();
-    const ext = extname(originalName) || '.bin';
-    const stem = basename(originalName, ext).replace(/[^\p{L}\p{N}_-]/gu, '').slice(0, 100) || 'file';
+    const originalExt = extname(originalName) || '.bin';
+    const detectedMime = Buffer.isBuffer(buffer) ? detectMimeFromBuffer(buffer) : null;
+    if (options?.allowedMimes) {
+        if (!detectedMime || !options.allowedMimes.includes(detectedMime)) {
+            throw Object.assign(
+                new Error(`upload_mime_rejected: ${detectedMime || 'unrecognized'}`),
+                { statusCode: 415 },
+            );
+        }
+    }
+    const ext = (detectedMime && MIME_TO_EXT[detectedMime]) || originalExt;
+    const stem = basename(originalName, originalExt).replace(/[^\p{L}\p{N}_-]/gu, '').slice(0, 100) || 'file';
     const nonce = randomUUID().slice(0, 8);
     const safeName = `${ts}_${nonce}_${stem}${ext}`;
     const filePath = join(uploadsDir, safeName);
     fs.writeFileSync(filePath, buffer);
-    console.log(`[upload] saved ${filePath} (${buffer.length} bytes)`);
+    console.log(`[upload] saved ${filePath} (${buffer.length} bytes, mime=${detectedMime || 'unknown'})`);
     return filePath;
 }
 

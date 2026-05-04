@@ -15,7 +15,7 @@ import {
 import { getSystemPrompt, regenerateB } from '../prompt/builder.js';
 import { extractSessionId, extractFromEvent, extractFromAcpUpdate, extractOutputChunk, logEventSummary, flushClaudeBuffers } from './events.js';
 import { detectSmokeResponse, buildContinuationPrompt } from './smoke-detector.js';
-import { saveUpload as _saveUpload, buildMediaPrompt, buildMediaPromptMany } from '../../lib/upload.js';
+import { saveUpload as _saveUpload, buildMediaPrompt, buildMediaPromptMany, type SaveUploadOptions } from '../../lib/upload.js';
 import { getMemoryFlushFilePath, getMemoryStatus } from '../memory/runtime.js';
 import { resolveMainCli, consumePendingBootstrapPrompt } from '../core/main-session.js';
 import {
@@ -598,7 +598,7 @@ export { buildArgs, buildResumeArgs, resolveSessionBucket };
 
 // ─── Upload wrapper ──────────────────────────────────
 
-export const saveUpload = (buffer: any, originalName: string) => _saveUpload(UPLOADS_DIR, buffer, originalName);
+export const saveUpload = (buffer: any, originalName: string, options?: SaveUploadOptions) => _saveUpload(UPLOADS_DIR, buffer, originalName, options);
 export { buildMediaPrompt, buildMediaPromptMany };
 
 // ─── Spawn Agent ─────────────────────────────────────

@@ -6,6 +6,7 @@ import { basename, extname } from 'path';
 import express from 'express';
 import { ok, fail } from '../http/response.js';
 import { saveUpload } from '../agent/spawn.js';
+import { IMAGE_MIMES } from '../../lib/mime-detect.js';
 import { settings, saveSettings, UPLOADS_DIR } from '../core/config.js';
 import { safeResolveUnder } from '../security/path-guards.js';
 import { decodeFilenameSafe } from '../security/decode.js';
@@ -113,7 +114,7 @@ export function registerAvatarRoutes(app: Express, requireAuth: AuthMiddleware):
             const bodyLen = Buffer.isBuffer(req.body) ? req.body.length : 0;
             console.log(`[avatar:upload] target=${target} ct=${contentType} file=${filename} bodyLen=${bodyLen}`);
             validateUpload(contentType, filename, req.body);
-            const filePath = saveUpload(req.body, filename);
+            const filePath = saveUpload(req.body, filename, { allowedMimes: IMAGE_MIMES });
             saveAvatarImage(target, filePath);
             return ok(res, serializeAvatar(target));
         } catch (error: unknown) {

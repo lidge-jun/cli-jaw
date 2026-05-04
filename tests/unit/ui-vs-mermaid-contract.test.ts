@@ -75,7 +75,7 @@ test('imports: renderMermaidBlocks is imported in ui.ts without touching existin
         'renderMermaidBlocks must be imported on its own line from ./render.js');
     // Existing import must remain intact
     assert.ok(
-        uiSrc.includes("import { renderMarkdown, escapeHtml, stripOrchestration, linkifyFilePaths } from './render.js';"),
+        uiSrc.includes("import { renderMarkdown, escapeHtml, sanitizeHtml, stripOrchestration, linkifyFilePaths } from './render.js';"),
         'original render.js import line must be preserved untouched',
     );
     // activateWidgets must still come from iframe-renderer
