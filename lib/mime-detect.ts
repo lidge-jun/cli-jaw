@@ -47,7 +47,13 @@ export function detectMimeFromBuffer(buffer: Buffer): string | null {
     if (buffer.length >= 3 && buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33) {
         return 'audio/mpeg';
     }
-    if (buffer[0] === 0xff && buffer[1] != null && (buffer[1] & 0xe0) === 0xe0) return 'audio/mpeg';
+    // MP3 frame sync: require valid MPEG version (not reserved) and layer (not reserved)
+    if (buffer[0] === 0xff && buffer[1] != null
+        && (buffer[1] & 0xe0) === 0xe0
+        && (buffer[1] & 0x18) !== 0x08
+        && (buffer[1] & 0x06) !== 0x00) {
+        return 'audio/mpeg';
+    }
     // PDF: %PDF
     if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
         return 'application/pdf';
