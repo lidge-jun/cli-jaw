@@ -79,6 +79,8 @@ graph LR
 surfaces through server-backed API routes, CLI commands, dashboard UI, and
 `skills_ref/`. Do not claim parity unless this table says the surface is ready.
 
+> Phase 22+ source of truth: [CAPABILITY_TRUTH_TABLE.md](CAPABILITY_TRUTH_TABLE.md). The summary below is kept for context; the truth table governs.
+
 | Phase surface | cli-jaw mirror status | Evidence |
 | --- | --- | --- |
 | Phase 15 browser runtime visibility / orphan cleanup | ready | `browser doctor`, `cleanup-runtimes`, dashboard visible/agent split |
