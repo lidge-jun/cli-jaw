@@ -1,8 +1,41 @@
-declare const document: any;
-declare const navigator: any;
-declare const window: any;
-declare const PointerEvent: any;
-declare const MouseEvent: any;
+import type { Page } from 'playwright-core';
+
+type BrowserEventInitLike = { bubbles?: boolean; cancelable?: boolean; view?: unknown };
+type BrowserEventConstructor = new (type: string, eventInitDict?: BrowserEventInitLike) => unknown;
+type BrowserCopyButtonLike = {
+    offsetParent?: unknown;
+    getClientRects(): { length: number };
+    dispatchEvent(event: unknown): boolean;
+    click?: () => void;
+};
+type BrowserTurnLike = {
+    querySelectorAll(selector: string): Iterable<BrowserCopyButtonLike>;
+};
+type BrowserDocumentLike = {
+    querySelectorAll(selector: string): Iterable<BrowserTurnLike>;
+};
+type BrowserClipboardItemLike = {
+    types?: string[];
+    getType(type: string): Promise<{ text(): Promise<string> }>;
+};
+type BrowserClipboardLike = {
+    writeText?: (text: string) => Promise<void>;
+    write?: (items: BrowserClipboardItemLike[]) => Promise<void>;
+};
+type CopyMarkdownEvaluateInput = {
+    selectorSet: CopyMarkdownSelectorSet;
+    timeoutMs: number;
+    stableTicks: number;
+};
+type CopyMarkdownEvaluateResult =
+    | { ok: true; text: string }
+    | { ok: false; status: CopyMarkdownResult['status']; error?: string };
+
+declare const document: BrowserDocumentLike;
+declare const navigator: { clipboard?: BrowserClipboardLike };
+declare const window: unknown;
+declare const PointerEvent: BrowserEventConstructor;
+declare const MouseEvent: BrowserEventConstructor;
 
 export interface CopyMarkdownSelectorSet {
     turnSelectors: string[];
@@ -52,33 +85,30 @@ export const GROK_COPY_SELECTORS: CopyMarkdownSelectorSet = {
 };
 
 export async function captureCopiedResponseText(
-    page: any,
+    page: Page,
     selectors: CopyMarkdownSelectorSet,
     options: CopyMarkdownOptions = {},
 ): Promise<CopyMarkdownResult> {
     const selectorSet = copySelectorsWithTarget(selectors, options.copyTarget);
     try {
-        const result = await page.evaluate?.(
-            async ({ selectorSet, timeoutMs, stableTicks }: any) => {
+        const result = await page.evaluate<CopyMarkdownEvaluateResult, CopyMarkdownEvaluateInput>(
+            async ({ selectorSet, timeoutMs, stableTicks }: CopyMarkdownEvaluateInput): Promise<CopyMarkdownEvaluateResult> => {
                 const doc = document;
                 const turns = selectorSet.turnSelectors
                     .flatMap((selector: string) => Array.from(doc.querySelectorAll(selector)))
-                    .filter((node: any, index: number, arr: any[]) => arr.indexOf(node) === index);
+                    .filter((node: BrowserTurnLike, index: number, arr: BrowserTurnLike[]) => arr.indexOf(node) === index);
                 const turn = turns.at(-1);
                 if (!turn) return { ok: false, status: 'missing-turn' };
 
-                let button: any = null;
+                let button: BrowserCopyButtonLike | null = null;
                 for (const selector of selectorSet.copyButtonSelectors) {
-                    const scoped = Array.from(turn.querySelectorAll(selector)) as any[];
+                    const scoped = Array.from(turn.querySelectorAll(selector));
                     button = scoped.find(candidate => candidate.offsetParent !== null || candidate.getClientRects().length > 0) || scoped.at(-1) || null;
                     if (button) break;
                 }
                 if (!button) return { ok: false, status: 'missing-button' };
 
-                const clipboard = navigator.clipboard as {
-                    writeText?: (text: string) => Promise<void>;
-                    write?: (items: any[]) => Promise<void>;
-                };
+                const clipboard = navigator.clipboard;
                 if (!clipboard) return { ok: false, status: 'missing-clipboard' };
 
                 const originalWriteText = clipboard.writeText?.bind(clipboard);
@@ -104,7 +134,7 @@ export async function captureCopiedResponseText(
                     if (originalWrite) {
                         Object.defineProperty(clipboard, 'write', {
                             configurable: true,
-                            value: async (items: any[]) => {
+                            value: async (items: BrowserClipboardItemLike[]) => {
                                 for (const item of items || []) {
                                     const types = item.types || [];
                                     const type = types.includes('text/plain') ? 'text/plain' : types.find((t: string) => t.startsWith('text/'));
@@ -155,13 +185,14 @@ export async function captureCopiedResponseText(
                 stableTicks: Math.max(1, options.stableTicks ?? 3),
             },
         );
-        if (result?.ok && typeof result.text === 'string' && result.text.trim()) {
+        if (result?.ok === true && typeof result.text === 'string' && result.text.trim()) {
             return { ok: true, text: result.text };
         }
+        const failed = result?.ok === false ? result : null;
         return {
             ok: false,
-            status: result?.status || 'empty',
-            ...(result?.error ? { error: String(result.error) } : {}),
+            status: failed?.status || 'empty',
+            ...(failed?.error ? { error: String(failed.error) } : {}),
         };
     } catch (e) {
         return { ok: false, status: 'exception', error: (e as Error).message };

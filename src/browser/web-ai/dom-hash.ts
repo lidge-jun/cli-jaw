@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 
-declare const document: any;
+type DomHashElementLike = { outerHTML?: string };
+declare const document: { querySelector(selector: string): DomHashElementLike | null };
 
 export interface PageLike {
     evaluate<T, A>(fn: (arg: A) => T | Promise<T>, arg: A): Promise<T>;

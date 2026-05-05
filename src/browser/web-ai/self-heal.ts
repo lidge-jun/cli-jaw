@@ -50,7 +50,15 @@ export interface PageLocator {
     isVisible(): Promise<boolean>;
     isEnabled(): Promise<boolean>;
     isEditable?(): Promise<boolean>;
-    evaluate<T>(fn: (node: any) => T | Promise<T>): Promise<T>;
+    evaluate<T>(fn: (node: ValidationNodeLike) => T | Promise<T>): Promise<T>;
+}
+
+interface ValidationNodeLike {
+    getAttribute(name: string): string | null;
+    tagName: string;
+    isContentEditable?: boolean;
+    contentEditable?: string;
+    textContent?: string | null;
 }
 
 export interface PageLike {

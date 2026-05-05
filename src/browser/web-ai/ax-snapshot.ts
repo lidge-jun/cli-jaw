@@ -104,6 +104,14 @@ export interface AxSnapshotPageLike {
     evaluate: <T, A>(fn: (arg: A) => T | null, arg: A) => Promise<T | null>;
 }
 
+type BrowserOuterHtmlElement = { outerHTML?: string };
+type BrowserDocumentLike = {
+    querySelector(selector: string): BrowserOuterHtmlElement | null;
+};
+type BrowserGlobalWithDocument = typeof globalThis & {
+    document: BrowserDocumentLike;
+};
+
 export async function buildWebAiSnapshot(
     page: AxSnapshotPageLike,
     {
@@ -342,10 +350,11 @@ async function domHashAround(
 ): Promise<string | null> {
     const maxChars = options.maxChars ?? 8192;
     const html = await page.evaluate((sels: string[]) => {
+        const browserGlobal = globalThis as BrowserGlobalWithDocument;
         for (const s of sels) {
             try {
-                const n = (globalThis as any).document.querySelector(s);
-                if (n) return (n as any).outerHTML;
+                const n = browserGlobal.document.querySelector(s);
+                if (n) return n.outerHTML || null;
             } catch {
                 // invalid selector
             }

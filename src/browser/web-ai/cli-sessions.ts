@@ -12,7 +12,12 @@ const DURATION_MS: Record<string, number> = { '': 1000, s: 1000, m: 60_000, h: 3
 
 export interface SessionsDeps {
     port?: number;
-    getPage?: () => Promise<any>;
+    getPage?: () => Promise<SessionsPageLike | null | undefined>;
+}
+
+export interface SessionsPageLike {
+    url?: () => string | null;
+    goto(url: string, options?: { waitUntil?: string; timeout?: number }): Promise<unknown>;
 }
 
 export interface SessionsInput {
@@ -54,7 +59,7 @@ export async function runSessionsCommand(
     values: Record<string, unknown>,
     deps: SessionsDeps,
     input: SessionsInput,
-): Promise<any> {
+): Promise<Record<string, unknown>> {
     const [sub, ...rest] = args;
     if (!sub) {
         return {
@@ -111,6 +116,9 @@ export async function runSessionsCommand(
         const session = getSession(id);
         if (!session) throw new WebAiError({ errorCode: 'internal.unhandled', stage: 'internal', retryHint: 'report', message: `no session record for ${id}`, evidence: { sessionId: id } });
         const page = await deps.getPage?.();
+        if (!page) {
+            return { ok: false, status: 'reattach-failed', sessionId: id, vendor: session.vendor, error: 'no active page', warnings: [] };
+        }
         const currentUrl = page?.url?.() || null;
         const targetUrl = session.conversationUrl || session.url;
         if (!targetUrl) {
@@ -148,17 +156,25 @@ export async function runSessionsCommand(
 
 export function printSessionsHuman(result: unknown): void {
     if (!result) return;
-    const r = result as any;
+    if (!isRecord(result)) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+    }
+    const r = result;
     if (r.status === 'help') {
-        console.log(r.usage);
-        console.log(`subcommands: ${r.commands?.join(', ')}`);
+        console.log(String(r.usage || ''));
+        const commands = Array.isArray(r.commands) ? r.commands.map(String) : [];
+        console.log(`subcommands: ${commands.join(', ')}`);
         return;
     }
     if (r.status === 'list') {
-        const rows = r.sessions || [];
+        const rows = Array.isArray(r.sessions) ? r.sessions : [];
         if (rows.length === 0) { console.log('(no sessions)'); return; }
         for (const s of rows) {
-            console.log(`${s.sessionId}  ${s.vendor.padEnd(8)}  ${s.status.padEnd(10)}  ${s.createdAt}  ${s.conversationUrl || s.url || ''}`);
+            if (!isRecord(s)) continue;
+            const vendor = String(s.vendor || '');
+            const status = String(s.status || '');
+            console.log(`${String(s.sessionId || '')}  ${vendor.padEnd(8)}  ${status.padEnd(10)}  ${String(s.createdAt || '')}  ${String(s.conversationUrl || s.url || '')}`);
         }
         return;
     }
@@ -180,8 +196,12 @@ export function printSessionsHuman(result: unknown): void {
         return;
     }
     if (r.answerText) {
-        console.log(r.answerText);
+        console.log(String(r.answerText));
         return;
     }
     console.log(JSON.stringify(r, null, 2));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }

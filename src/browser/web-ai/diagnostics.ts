@@ -43,7 +43,7 @@ export interface WebAiDiagnostics {
 
 export interface DiagnosticsCaptureOptions {
     stage: WebAiFailureStage;
-    page?: any;
+    page?: DiagnosticsPageLike;
     promptLength?: number;
     usedFallbacks?: string[];
     /** Opt-in only. */
@@ -53,6 +53,21 @@ export interface DiagnosticsCaptureOptions {
 }
 
 const DEFAULT_MAX_CHARS = 1024;
+
+type DiagnosticsLocatorLike = {
+    count(): Promise<number>;
+    all?(): Promise<DiagnosticsLocatorLike[]>;
+    first(): DiagnosticsLocatorLike;
+    isVisible(): Promise<boolean>;
+    isDisabled?(): Promise<boolean>;
+};
+type DiagnosticsPageLike = {
+    locator(selector: string): DiagnosticsLocatorLike;
+    waitForTimeout?(timeoutMs: number): Promise<unknown>;
+    evaluate?(fn: (innerSelectors: readonly string[]) => string[], arg: readonly string[]): Promise<unknown>;
+    url?: string | (() => string | Promise<string>);
+    title?: () => string | Promise<string>;
+};
 
 const KNOWN_STAGES: ReadonlySet<WebAiFailureStage> = new Set([
     'status',
@@ -186,7 +201,7 @@ export async function captureWebAiDiagnostics(
     return out;
 }
 
-async function safeCount(page: any, selector: string): Promise<number> {
+async function safeCount(page: DiagnosticsPageLike, selector: string): Promise<number> {
     try {
         return await page.locator(selector).count();
     } catch {
@@ -194,11 +209,11 @@ async function safeCount(page: any, selector: string): Promise<number> {
     }
 }
 
-async function safeVisibleCount(page: any, selectors: string[]): Promise<number> {
+async function safeVisibleCount(page: DiagnosticsPageLike, selectors: string[]): Promise<number> {
     let total = 0;
     for (const selector of selectors) {
         try {
-            const locators = await page.locator(selector).all();
+            const locators = await (page.locator(selector).all?.() ?? Promise.resolve([]));
             for (const loc of locators) {
                 if (await loc.isVisible().catch(() => false)) total += 1;
             }
@@ -209,12 +224,12 @@ async function safeVisibleCount(page: any, selectors: string[]): Promise<number>
     return total;
 }
 
-async function readButtonState(page: any, selector: string): Promise<'enabled' | 'disabled' | 'absent'> {
+async function readButtonState(page: DiagnosticsPageLike, selector: string): Promise<'enabled' | 'disabled' | 'absent'> {
     try {
         const loc = page.locator(selector).first();
         const visible = await loc.isVisible().catch(() => false);
         if (!visible) return 'absent';
-        const disabled = await loc.isDisabled().catch(() => false);
+        const disabled = loc.isDisabled ? await loc.isDisabled().catch(() => false) : false;
         return disabled ? 'disabled' : 'enabled';
     } catch {
         return 'absent';

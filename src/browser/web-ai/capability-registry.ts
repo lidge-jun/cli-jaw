@@ -479,7 +479,7 @@ export function requireCapabilityOrFailClosed(id: string): CapabilityEntry {
         stage,
         mutationAllowed: entry.browserMutationAllowed,
     });
-    (error as any).ownerPrd = entry.ownerPrd;
+    (error as BrowserCapabilityError & { ownerPrd?: string }).ownerPrd = entry.ownerPrd;
     throw error;
 }
 

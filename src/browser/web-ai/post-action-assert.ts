@@ -22,9 +22,23 @@ export interface LocatorLike {
     click(): Promise<void>;
     fill?(value: string): Promise<void>;
     inputValue?(): Promise<string>;
-    evaluate<T>(fn: (el: any) => T | Promise<T>): Promise<T>;
+    evaluate<T>(fn: (el: LocatorNodeLike) => T | Promise<T>): Promise<T>;
     isVisible?(): Promise<boolean>;
 }
+
+interface LocatorNodeLike {
+    textContent?: string | null;
+    value?: string;
+}
+
+interface FocusDocumentLike {
+    querySelector(value: string): { contains(value: unknown): boolean } | null;
+    activeElement: unknown;
+}
+
+type FocusGlobalLike = typeof globalThis & {
+    document: FocusDocumentLike;
+};
 
 export interface PageLike {
     url(): string;
@@ -144,10 +158,7 @@ export async function fillWithPostAssert(
         try {
             await locator.click();
             const focused = await page.evaluate?.((selector) => {
-                const doc = (globalThis as any).document as {
-                    querySelector(value: string): { contains(value: unknown): boolean } | null;
-                    activeElement: unknown;
-                };
+                const doc = (globalThis as FocusGlobalLike).document;
                 const target = selector ? doc.querySelector(selector) : null;
                 return !!target && (doc.activeElement === target || target.contains(doc.activeElement));
             }, resolvedTarget.selector || null).catch(() => false);

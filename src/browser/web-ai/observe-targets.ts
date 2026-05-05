@@ -8,8 +8,6 @@ export interface SemanticTarget {
 
 export interface FeatureMap {
     semanticTargets?: Record<string, SemanticTarget>;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    [key: string]: any;
 }
 
 export interface SnapshotLike {
@@ -39,8 +37,7 @@ export interface TargetCandidate {
     selector?: string;
     count?: number;
     confidence: number;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 export interface ObserveOptions {
@@ -63,34 +60,39 @@ export async function observeProviderTargets(
     }: ObserveOptions = {},
 ): Promise<Record<string, TargetCandidate[]>> {
     void provider;
-    const semanticTargets = featureMap.semanticTargets || featureMap || {};
+    const semanticTargets = semanticTargetsFromFeatureMap(featureMap);
     const results: Record<string, TargetCandidate[]> = {};
     for (const [feature, target] of Object.entries(semanticTargets)) {
         const candidates: TargetCandidate[] = [];
         if (snapshot?.refs) {
             for (const ref of Object.values(snapshot.refs)) {
-                if (!targetMatchesRef(target as SemanticTarget, ref)) continue;
+                if (!targetMatchesRef(target, ref)) continue;
                 candidates.push({
                     source: 'snapshot-ref',
                     ref: ref.ref,
                     role: ref.role,
                     name: ref.name || '',
-                    confidence: scoreCandidate({ role: ref.role, name: ref.name || '' }, target as SemanticTarget),
+                    confidence: scoreCandidate({ role: ref.role, name: ref.name || '' }, target),
                 });
             }
         }
-        for (const selector of (target as SemanticTarget).cssFallbacks || []) {
+        for (const selector of target.cssFallbacks || []) {
             const count = await page.locator(selector).count().catch(() => 0);
             if (count > 0) {
                 candidates.push({ source: 'css', selector, count, confidence: count === 1 ? 2 : 1 });
             }
         }
         results[feature] = rankTargetCandidates(candidates, {
-            expectedRole: (target as SemanticTarget).roles?.[0] || null,
-            expectedNames: (target as SemanticTarget).names || [],
+            expectedRole: target.roles?.[0] || null,
+            expectedNames: target.names || [],
         });
     }
     return results;
+}
+
+function semanticTargetsFromFeatureMap(featureMap: FeatureMap = {}): Record<string, SemanticTarget> {
+    if ('semanticTargets' in featureMap && featureMap.semanticTargets) return featureMap.semanticTargets;
+    return featureMap as Record<string, SemanticTarget>;
 }
 
 export function rankTargetCandidates(

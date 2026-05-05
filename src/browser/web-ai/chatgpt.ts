@@ -524,7 +524,7 @@ function decorateCompletedOutput(
         provider: result.vendor || input.vendor,
         sessionId: result.sessionId,
         conversationUrl: result.url,
-    }) as WebAiOutput;
+    });
     if (input.requireSourceAudit !== true) return withArtifact;
     const answerText = withArtifact.answerText || withArtifact.answerArtifact?.text || withArtifact.answerArtifact?.markdown || '';
     if (!answerText && withArtifact.ok === false) return withArtifact;
