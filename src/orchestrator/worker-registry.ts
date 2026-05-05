@@ -44,7 +44,9 @@ export class WorkerBusyError extends Error {
     }
 }
 
-export function claimWorker(emp: Record<string, any>, task: string, replayMeta?: WorkerReplayMeta): WorkerSlot {
+export interface WorkerEmployeeRef { id: string; name?: string }
+
+export function claimWorker(emp: WorkerEmployeeRef, task: string, replayMeta?: WorkerReplayMeta): WorkerSlot {
     const existing = workers.get(emp.id);
     if (existing && existing.state === 'running') {
         throw new WorkerBusyError(existing);

@@ -228,7 +228,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         } : undefined;
         let slot;
         try {
-            slot = claimWorker(emp, task, replayMeta);
+            slot = claimWorker(emp as { id: string; name?: string }, task, replayMeta);
         } catch (err) {
             if (err instanceof WorkerBusyError) {
                 return res.status(409).json({
