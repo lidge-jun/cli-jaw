@@ -57,6 +57,10 @@ function lockPath(): string {
     return `${storePath()}.lock`;
 }
 
+function hasErrorCode(error: unknown, code: string): boolean {
+    return Boolean(error && typeof error === 'object' && 'code' in error && error.code === code);
+}
+
 export function generateSessionId(now = Date.now()): string {
     return encodeTime(now) + encodeRandom();
 }
@@ -214,8 +218,8 @@ export async function withSessionCommandLock<T>(sessionId: string, fn: () => Pro
                 writeFileSync(fd, JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString(), sessionId }));
             } catch { /* best-effort metadata write */ }
             break;
-        } catch (err: any) {
-            if (err?.code !== 'EEXIST') throw err;
+        } catch (err: unknown) {
+            if (!hasErrorCode(err, 'EEXIST')) throw err;
             attempts += 1;
             const stale = isStaleLock(path);
             if (stale) {

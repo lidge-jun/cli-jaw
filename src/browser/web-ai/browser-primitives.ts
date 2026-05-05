@@ -1,8 +1,17 @@
 import { clickWithPostAssert, fillWithPostAssert } from './post-action-assert.js';
 import type { TraceContext } from './action-trace.js';
 import type { ResolvedActionTarget } from './action-cache.js';
+import type { LocatorLike as PostActionLocatorLike, PageLike as PostActionPageLike } from './post-action-assert.js';
 
-declare const document: any;
+type BoxLike = { width: number; height: number };
+type StyleLike = { display?: string; visibility?: string; opacity?: string };
+type VisibleNodeLike = { getBoundingClientRect?: () => BoxLike };
+type TextNodeLike = { innerText?: string; textContent?: string };
+type BrowserGlobal = typeof globalThis & {
+    getComputedStyle?: (node: VisibleNodeLike) => StyleLike | null;
+};
+
+declare const document: { querySelectorAll(selector: string): Iterable<TextNodeLike> };
 
 export class BrowserCapabilityError extends Error {
     capabilityId: string;
@@ -47,17 +56,25 @@ export interface FindVisibleCandidateOptions {
 export interface VisibleCandidate {
     selector: string;
     index: number;
-    locator: any;
+    locator: LocatorLike;
     visible: boolean;
 }
 
+export interface LocatorLike {
+    count?(): Promise<number>;
+    nth?(index: number): LocatorLike;
+    first?(): LocatorLike;
+    all?(): Promise<LocatorLike[]>;
+    waitFor?(options: { state: 'visible'; timeout: number }): Promise<unknown>;
+    boundingBox?(): Promise<BoxLike | null>;
+    evaluate?<T>(fn: (node: VisibleNodeLike) => T | Promise<T>): Promise<T>;
+    innerText?(): Promise<string>;
+}
+
 export interface PageLike {
-    locator(selector: string): {
-        count(): Promise<number>;
-        nth(index: number): any;
-        first(): any;
-    };
+    locator(selector: string): LocatorLike;
     waitForTimeout?(ms: number): Promise<void>;
+    evaluate?(fn: (innerSelectors: string[]) => string[], arg: string[]): Promise<unknown>;
 }
 
 export async function findVisibleCandidate(
@@ -73,9 +90,11 @@ export async function findVisibleCandidate(
     do {
         for (const selector of selectors) {
             const baseLocator = page.locator(selector);
-            const count = await baseLocator.count().catch(() => 0);
+            const count = await baseLocator.count?.().catch(() => 0) ?? 0;
             for (let index = 0; index < count; index += 1) {
-                const locator = typeof baseLocator.nth === 'function' ? baseLocator.nth(index) : baseLocator.first();
+                const locator = typeof baseLocator.nth === 'function'
+                    ? baseLocator.nth(index)
+                    : baseLocator.first?.() ?? baseLocator;
                 const visible = await isLocatorVisible(locator);
                 const candidate: VisibleCandidate = { selector, index, locator, visible };
                 firstCandidate ??= candidate;
@@ -159,25 +178,25 @@ export async function waitForStableTextAfterBaseline(
     return { ok: false, baseline, latestText: stableText, warnings };
 }
 
-export async function isLocatorVisible(locator: any): Promise<boolean> {
+export async function isLocatorVisible(locator: LocatorLike): Promise<boolean> {
     const waited = await locator.waitFor?.({ state: 'visible', timeout: 500 }).then(() => true).catch(() => false);
     if (waited) return true;
     const box = await locator.boundingBox?.().catch(() => null);
     if (box && box.width > 0 && box.height > 0) return true;
-    return Boolean(await locator.evaluate?.((node: any) => {
+    return Boolean(await locator.evaluate?.((node: VisibleNodeLike) => {
         if (!node || typeof node.getBoundingClientRect !== 'function') return false;
         const rect = node.getBoundingClientRect();
         if (rect.width <= 0 || rect.height <= 0) return false;
-        const style = (globalThis as any).getComputedStyle?.(node);
+        const style = (globalThis as BrowserGlobal).getComputedStyle?.(node);
         return !style || (style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0');
     }).catch(() => false));
 }
 
 async function readTexts(page: PageLike, selectors: string[]): Promise<string[]> {
-    const evaluated = await (page as any).evaluate?.((innerSelectors: string[]) => {
+    const evaluated = await page.evaluate?.((innerSelectors: string[]) => {
         for (const selector of innerSelectors) {
             const texts = Array.from(document.querySelectorAll(selector))
-                .map((el: any) => String(el.innerText || el.textContent || '').trim())
+                .map((el: TextNodeLike) => String(el.innerText || el.textContent || '').trim())
                 .filter(Boolean);
             if (texts.length) return texts;
         }
@@ -186,7 +205,7 @@ async function readTexts(page: PageLike, selectors: string[]): Promise<string[]>
     if (Array.isArray(evaluated) && evaluated.length > 0) return evaluated.map(String);
 
     for (const selector of selectors) {
-        const locators = await (page.locator(selector) as any).all?.().catch(() => []);
+        const locators = await page.locator(selector).all?.().catch(() => []) ?? [];
         const texts: string[] = [];
         for (const locator of locators) {
             const text = String(await locator.innerText?.().catch(() => '') || '').trim();
@@ -209,8 +228,8 @@ function hashTexts(texts: string[]): string {
 }
 
 export async function clickResolvedTarget(
-    page: any,
-    locator: any,
+    page: PostActionPageLike,
+    locator: PostActionLocatorLike,
     resolvedTarget: ResolvedActionTarget,
     traceCtx: TraceContext | undefined,
 ): Promise<import('./post-action-assert.js').PostActionAssertionResult> {
@@ -218,8 +237,8 @@ export async function clickResolvedTarget(
 }
 
 export async function fillResolvedTarget(
-    page: any,
-    locator: any,
+    page: PostActionPageLike,
+    locator: PostActionLocatorLike,
     resolvedTarget: ResolvedActionTarget,
     value: string,
     traceCtx: TraceContext | undefined,

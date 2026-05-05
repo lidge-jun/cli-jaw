@@ -81,6 +81,10 @@ function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function hasErrorCode(error: unknown, code: string): boolean {
+    return Boolean(error && typeof error === 'object' && 'code' in error && error.code === code);
+}
+
 export function parseDuration(value: string | number | null | undefined, fallbackMs = DEFAULT_POOL_TTL_MS): number {
     if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value;
     const raw = String(value || '').trim();
@@ -184,8 +188,8 @@ export async function withLeaseLock<T>(fn: () => T | Promise<T>): Promise<T> {
     while (fd === null) {
         try {
             fd = openSync(lockPath(), 'wx');
-        } catch (error: any) {
-            if (error?.code !== 'EEXIST') throw error;
+        } catch (error: unknown) {
+            if (!hasErrorCode(error, 'EEXIST')) throw error;
             try {
                 const raw = readFileSync(lockPath(), 'utf8');
                 const lockedAt = Number(JSON.parse(raw).lockedAt || 0);
