@@ -6,13 +6,14 @@ import { NotesToolbar } from './NotesToolbar';
 import { renameNotePath } from './notes-api';
 import { useNoteDocument } from './useNoteDocument';
 import { publishInvalidation } from '../sync/invalidation-bus';
-import type { NotesAuthoringMode, NotesViewMode } from './notes-types';
+import type { NotesAuthoringMode, NotesVaultIndexSnapshot, NotesViewMode } from './notes-types';
 
 type NotesPrimaryMode = 'raw' | 'preview' | 'wysiwyg';
 
 type NotesWorkspaceProps = {
     active: boolean;
     selectedPath: string | null;
+    vaultIndex: NotesVaultIndexSnapshot | null;
     viewMode: NotesViewMode;
     authoringMode: NotesAuthoringMode;
     wordWrap: boolean;

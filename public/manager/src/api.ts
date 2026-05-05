@@ -4,6 +4,7 @@ import type {
     DashboardLifecycleResult,
     DashboardNoteAssetResponse,
     DashboardNoteFileResponse,
+    DashboardNotesCapabilities,
     DashboardNoteTreeEntry,
     DashboardPutNoteRequest,
     DashboardProcessControlState,
@@ -15,6 +16,7 @@ import type {
     HealthEvent,
     InstanceLogSnapshot,
     ManagerEvent,
+    VaultIndexSnapshot,
 } from './types';
 
 export class DashboardApiError extends Error {
@@ -156,6 +158,16 @@ export async function fetchNotesVersion(): Promise<number> {
 export async function fetchNotesTree(): Promise<DashboardNoteTreeEntry[]> {
     const response = await fetch('/api/dashboard/notes/tree');
     return await parseNotesResponse<DashboardNoteTreeEntry[]>(response, `notes tree fetch failed: ${response.status}`);
+}
+
+export async function fetchNotesIndex(): Promise<VaultIndexSnapshot> {
+    const response = await fetch('/api/dashboard/notes/index');
+    return await parseNotesResponse<VaultIndexSnapshot>(response, `notes index fetch failed: ${response.status}`);
+}
+
+export async function fetchNotesCapabilities(): Promise<DashboardNotesCapabilities> {
+    const response = await fetch('/api/dashboard/notes/capabilities');
+    return await parseNotesResponse<DashboardNotesCapabilities>(response, `notes capabilities fetch failed: ${response.status}`);
 }
 
 export async function fetchNoteFile(path: string): Promise<DashboardNoteFileResponse> {

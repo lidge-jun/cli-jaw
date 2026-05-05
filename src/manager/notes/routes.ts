@@ -17,6 +17,8 @@ import { NotesStore } from './store.js';
 import { NotesTrash } from './trash.js';
 import type { DashboardTrashNoteKind } from '../types.js';
 import { createNotesWatcher, type NotesWatcher } from './watcher.js';
+import { NotesVaultIndex } from './vault-index.js';
+import { detectNotesCapabilities } from './capabilities.js';
 
 export type DashboardNotesRouterOptions = {
     managerPort: number;
@@ -142,6 +144,10 @@ export function createDashboardNotesRouter(options: DashboardNotesRouterOptions)
     const assetStore = options.assetStore || new NotesAssetStore({ notesRoot: store.rootPath() });
     const trash = options.trash || new NotesTrash();
     const watcher = options.watcher || createNotesWatcher(store.rootPath());
+    const vaultIndex = new NotesVaultIndex({
+        root: store.rootPath(),
+        watcherVersion: watcher.version,
+    });
 
     router.use(requireManagerOrigin(options.managerPort));
 
@@ -187,6 +193,14 @@ export function createDashboardNotesRouter(options: DashboardNotesRouterOptions)
 
     router.get('/tree', asyncRoute(async (_req, res) => {
         res.json(await store.listTree());
+    }));
+
+    router.get('/index', asyncRoute(async (_req, res) => {
+        res.json(await vaultIndex.snapshot());
+    }));
+
+    router.get('/capabilities', asyncRoute(async (_req, res) => {
+        res.json(await detectNotesCapabilities());
     }));
 
     router.get('/file', asyncRoute(async (req, res) => {

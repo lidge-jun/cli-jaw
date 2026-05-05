@@ -26,6 +26,10 @@ test('BWCLI-002: send and query gating + flag rejection (32.7B live)', () => {
     assert.match(cliWebAiSrc, /Requires --model/);
     assert.match(cliWebAiSrc, /Force a fresh provider tab/);
     assert.match(cliWebAiSrc, /default reuses pooled or inactive tabs first/);
+    assert.match(cliWebAiSrc, /--require-source-audit/);
+    assert.match(cliWebAiSrc, /--source-audit-ratio <0\.\.1>/);
+    assert.match(cliWebAiSrc, /--source-audit-scope <text>/);
+    assert.match(cliWebAiSrc, /--source-audit-date <text>/);
 });
 
 test('BWCLI-003: web-ai routes are authenticated', () => {
@@ -69,6 +73,15 @@ test('BWCLI-007: copy-markdown fallback flag is wired through CLI and routes', (
     assert.match(cliWebAiSrc, /'allow-copy-markdown-fallback': \{ type: 'boolean', default: false \}/);
     assert.match(cliWebAiSrc, /allowCopyMarkdownFallback: true/);
     assert.match(routeSrc, /allowCopyMarkdownFallback === 'true'/);
+});
+
+test('BWCLI-008: source audit flags are wired through CLI and routes', () => {
+    assert.match(cliWebAiSrc, /'require-source-audit': \{ type: 'boolean', default: false \}/);
+    assert.match(cliWebAiSrc, /sourceAuditRatio: values\['source-audit-ratio'\]/);
+    assert.match(cliWebAiSrc, /sourceAuditScope: values\['source-audit-scope'\]/);
+    assert.match(cliWebAiSrc, /sourceAuditDate: values\['source-audit-date'\]/);
+    assert.match(routeSrc, /requireSourceAudit: true/);
+    assert.match(routeSrc, /sourceAuditRatio: String\(req\.query\.sourceAuditRatio\)/);
 });
 
 test('BWCLI-004: browser index exports webAi namespace', () => {

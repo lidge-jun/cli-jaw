@@ -24,12 +24,17 @@ async function withNotesServer(
     const dashboardHome = tmpRoot();
     const app = express();
     const server = http.createServer(app);
-    t.after(() => {
-        server.close();
+    t.after(async () => {
+        await new Promise<void>(resolve => {
+            server.close(() => resolve());
+            server.closeIdleConnections();
+            server.closeAllConnections();
+        });
         rmSync(root, { recursive: true, force: true });
         rmSync(dashboardHome, { recursive: true, force: true });
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    server.unref();
     const address = server.address();
     assert.equal(typeof address, 'object');
     assert.ok(address);
@@ -39,6 +44,7 @@ async function withNotesServer(
         createDashboardNotesRouter({
             managerPort: port,
             store: new NotesStore({ root }),
+            watcher: { version: () => 0, close: () => {} },
             trash: new NotesTrash({
                 dashboardHome,
                 adapter: { moveToOsTrash: async () => { throw new Error('no system trash'); } },
@@ -119,6 +125,36 @@ test('notes routes create, read, update, tree, rename, and trash markdown files'
         const trashBody = await readJson(trashed);
         assert.equal(trashBody.kind, 'file');
         assert.equal(trashBody.deletedTo, 'dashboard-trash');
+    });
+});
+
+test('notes routes expose vault index and capabilities contracts', async (t) => {
+    await withNotesServer(t, async (baseUrl) => {
+        await fetch(`${baseUrl}/api/dashboard/notes/file`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: 'alpha.md', content: 'See [[beta]].' }),
+        });
+        await fetch(`${baseUrl}/api/dashboard/notes/file`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ path: 'beta.md', content: '# Beta' }),
+        });
+
+        const index = await fetch(`${baseUrl}/api/dashboard/notes/index`);
+        assert.equal(index.status, 200);
+        const indexBody = await readJson(index);
+        assert.equal(typeof indexBody.version, 'number');
+        assert.deepEqual((indexBody.notes as Array<{ path: string }>).map(note => note.path), ['alpha.md', 'beta.md']);
+        const links = (indexBody.outgoingLinks as Record<string, Array<{ status: string; resolvedPath?: string }>>)['alpha.md'];
+        assert.equal(links?.[0]?.status, 'resolved');
+        assert.equal(links?.[0]?.resolvedPath, 'beta.md');
+
+        const capabilities = await fetch(`${baseUrl}/api/dashboard/notes/capabilities`);
+        assert.equal(capabilities.status, 200);
+        const capabilitiesBody = await readJson(capabilities);
+        assert.equal(typeof (capabilitiesBody.git as { available: boolean }).available, 'boolean');
+        assert.equal((capabilitiesBody.fileWatching as { provider: string }).provider, 'fs.watch');
     });
 });
 

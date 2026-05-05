@@ -15,6 +15,7 @@ test('Notes workspace frontend files and API wrapper exist', () => {
     [
         'public/manager/src/notes/NotesWorkspace.tsx',
         'public/manager/src/notes/NotesSidebar.tsx',
+        'public/manager/src/notes/useNotesModel.ts',
         'public/manager/src/notes/NotesFileTree.tsx',
         'public/manager/src/notes/NotesToolbar.tsx',
         'public/manager/src/notes/NotesEmptyState.tsx',
@@ -28,6 +29,8 @@ test('Notes workspace frontend files and API wrapper exist', () => {
 
     const api = read('public/manager/src/notes/notes-api.ts');
     assert.ok(api.includes('fetchNotesTree'), 'notes API wrapper must re-export tree fetch');
+    assert.ok(api.includes('fetchNotesIndex'), 'notes API wrapper must re-export index fetch');
+    assert.ok(api.includes('fetchNotesCapabilities'), 'notes API wrapper must re-export capabilities fetch');
     assert.ok(api.includes('fetchNoteFile'), 'notes API wrapper must re-export file fetch');
     assert.ok(api.includes('saveNoteFile'), 'notes API wrapper must re-export file save');
     assert.ok(api.includes('trashNotePath'), 'notes API wrapper must expose trash');
@@ -36,6 +39,7 @@ test('Notes workspace frontend files and API wrapper exist', () => {
 test('Notes API and create actions surface backend/fallback failures without uncaught JSON parse crashes', () => {
     const api = read('public/manager/src/api.ts');
     const sidebar = read('public/manager/src/notes/NotesSidebar.tsx');
+    const model = read('public/manager/src/notes/useNotesModel.ts');
     const tree = read('public/manager/src/notes/NotesFileTree.tsx');
     const workspace = read('public/manager/src/notes/NotesWorkspace.tsx');
     const css = read('public/manager/src/manager-notes.css');
@@ -43,6 +47,14 @@ test('Notes API and create actions surface backend/fallback failures without unc
     assert.ok(api.includes('response.text()'), 'notes response parsing must inspect text before JSON parsing');
     assert.ok(api.includes('invalid_json'), 'notes response parsing must classify non-JSON responses');
     assert.ok(api.includes('DashboardApiError'), 'notes response parsing must surface typed API errors');
+    assert.ok(api.includes('/api/dashboard/notes/index'), 'notes API must expose the vault index endpoint');
+    assert.ok(api.includes('/api/dashboard/notes/capabilities'), 'notes API must expose the capabilities endpoint');
+    assert.ok(model.includes('fetchNotesTree()'), 'notes model must own tree fetching above the sidebar');
+    assert.ok(model.includes('fetchNotesIndex()'), 'notes model must own index fetching above the sidebar');
+    assert.ok(model.includes('Promise.all'), 'notes model must refresh tree and index together');
+    assert.ok(model.includes('requestIdRef'), 'notes model must prevent stale refreshes from overwriting newer state');
+    assert.ok(model.includes("useInvalidationSubscription('notes'"), 'notes model must refresh from notes invalidations');
+    assert.equal(sidebar.includes('fetchNotesTree'), false, 'notes sidebar must not independently fetch the tree');
     assert.ok(sidebar.includes('async function createNote()'), 'notes sidebar must own create note action');
     assert.ok(sidebar.includes('async function createFolder()'), 'notes sidebar must own create folder action');
     assert.ok(sidebar.includes('catch (err)'), 'notes sidebar create actions must catch async API failures');
@@ -59,8 +71,8 @@ test('Notes API and create actions surface backend/fallback failures without unc
         'notes create shortcut must suppress the browser new-window default');
     assert.ok(sidebar.includes('void createNote()'),
         'notes create shortcut must reuse the existing file-path create flow');
-    assert.ok(sidebar.includes('function hasFile('), 'notes sidebar must verify registry-selected note paths against the current tree');
-    assert.ok(sidebar.includes('props.onSelectedPathChange(nextSelected)'), 'notes sidebar must clear stale selected paths when the tree does not contain them');
+    assert.ok(model.includes('function hasFile('), 'notes model must verify registry-selected note paths against the current tree');
+    assert.ok(model.includes('options.onSelectedPathChange(nextSelected)'), 'notes model must clear stale selected paths when the tree does not contain them');
     assert.ok(sidebar.includes('selectedFolderPath'), 'notes sidebar must track the selected folder for nested note/folder creation');
     assert.ok(sidebar.includes('createNoteFolder(name)'), 'notes sidebar must call the folder creation API');
     assert.ok(sidebar.includes('renameNotePath'), 'notes sidebar must use notes rename API for drag-to-folder moves');
@@ -197,6 +209,7 @@ test('App renders NotesWorkspace outside Workbench and imports notes CSS', () =>
 
     assert.ok(app.includes('import { NotesWorkspace }'), 'App must import NotesWorkspace');
     assert.ok(app.includes('import { NotesSidebar }'), 'App must import NotesSidebar for the existing navigator column');
+    assert.ok(app.includes('import { useNotesModel }'), 'App must import the parent-owned Notes model hook');
     assert.ok(app.includes('import { DashboardSettingsWorkspace }'), 'App must import Dashboard settings workspace');
     assert.ok(app.includes('import { DashboardSettingsSidebar'), 'App must import Dashboard settings sidebar');
     assert.ok(app.includes("view.sidebarMode === 'notes'"), 'App must branch by sidebar mode');
@@ -204,6 +217,9 @@ test('App renders NotesWorkspace outside Workbench and imports notes CSS', () =>
     assert.ok(app.includes('workspace-surface-stack'), 'App must keep workspace mode surfaces mounted');
     assert.ok(app.includes("active={view.sidebarMode === 'notes'}"), 'App must pass active state to NotesWorkspace and its persistent surface');
     assert.ok(app.includes('<NotesSidebar'), 'App must render the Notes file tree in the manager sidebar');
+    assert.ok(app.includes('tree={notesModel.tree}'), 'App must pass the parent-owned Notes tree to the sidebar');
+    assert.ok(app.includes('onRefreshTree={notesModel.refresh}'), 'App must pass the parent-owned refresh action to the sidebar');
+    assert.ok(app.includes('vaultIndex={notesModel.index}'), 'App must pass the parent-owned vault index toward the workspace');
     assert.ok(app.includes('<NotesWorkspace'), 'App must render NotesWorkspace');
     assert.ok(app.includes('<DashboardSettingsSidebar'), 'App must render Dashboard settings nav in the manager sidebar');
     assert.ok(app.includes('<DashboardSettingsWorkspace'), 'App must render Dashboard settings workspace');

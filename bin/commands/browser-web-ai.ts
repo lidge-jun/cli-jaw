@@ -49,6 +49,14 @@ Prompt and context:
   --context-transport <upload|inline>
   --allow-copy-markdown-fallback
   --allow-grok-context-pack
+  --require-source-audit
+                      Fail closed when completed answers lack inline sources
+  --source-audit-ratio <0..1>
+                      Required sourced claim ratio (default: 1)
+  --source-audit-scope <text>
+                      Checked scope for absence/no-result claims
+  --source-audit-date <text>
+                      Checked date for absence/no-result claims
 
 Sessions:
   --session <id>      Resume/poll a saved session
@@ -141,6 +149,10 @@ export async function runWebAiCommand(
             'inline-only': { type: 'boolean', default: false },
             'allow-copy-markdown-fallback': { type: 'boolean', default: false },
             'allow-grok-context-pack': { type: 'boolean', default: false },
+            'require-source-audit': { type: 'boolean', default: false },
+            'source-audit-ratio': { type: 'string' },
+            'source-audit-scope': { type: 'string' },
+            'source-audit-date': { type: 'string' },
             notify: { type: 'boolean', default: true },
             file: { type: 'string' },
             model: { type: 'string' },
@@ -199,6 +211,10 @@ export async function runWebAiCommand(
         ...(values['inline-only'] ? { inlineOnly: true } : {}),
         ...(values['allow-copy-markdown-fallback'] ? { allowCopyMarkdownFallback: true } : {}),
         ...(values['allow-grok-context-pack'] ? { allowGrokContextPack: true } : {}),
+        ...(values['require-source-audit'] ? { requireSourceAudit: true } : {}),
+        ...(values['source-audit-ratio'] ? { sourceAuditRatio: values['source-audit-ratio'] } : {}),
+        ...(values['source-audit-scope'] ? { sourceAuditScope: values['source-audit-scope'] } : {}),
+        ...(values['source-audit-date'] ? { sourceAuditDate: values['source-audit-date'] } : {}),
         ...(values['new-tab'] ? { newTab: true } : {}),
         ...(values['reuse-tab'] ? { reuseTab: true } : {}),
     };
@@ -240,9 +256,9 @@ async function callWebAiEndpoint(
     if (command === 'notifications') return deps.api('GET', `/web-ai/notifications${deps.qs({ vendor: values.vendor, status: values.status, session: values.session })}`);
     if (command === 'watchers') return deps.api('GET', '/web-ai/watchers');
     if (command === 'capabilities') return deps.api('GET', `/web-ai/capabilities${deps.qs({ vendor: values.vendor, family: values.family, frontendStatus: values['frontend-status'] })}`);
-    if (command === 'poll') return deps.api('GET', `/web-ai/poll${deps.qs({ vendor: values.vendor, timeout: values.timeout, session: values.session, allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'] })}`);
-    if (command === 'watch') return deps.api('GET', `/web-ai/watch${deps.qs({ vendor: values.vendor, timeout: values.timeout, session: values.session, url: values.url, notify: values.notify, pollIntervalSeconds: values['poll-interval'], allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'] })}`);
-    if (command === 'resume') return deps.api('GET', `/web-ai/poll${deps.qs({ vendor: values.vendor, session: values.session, timeout: values.timeout || values.deadline, allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'] })}`);
+    if (command === 'poll') return deps.api('GET', `/web-ai/poll${deps.qs({ vendor: values.vendor, timeout: values.timeout, session: values.session, allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'], requireSourceAudit: values['require-source-audit'], sourceAuditRatio: values['source-audit-ratio'], sourceAuditScope: values['source-audit-scope'], sourceAuditDate: values['source-audit-date'] })}`);
+    if (command === 'watch') return deps.api('GET', `/web-ai/watch${deps.qs({ vendor: values.vendor, timeout: values.timeout, session: values.session, url: values.url, notify: values.notify, pollIntervalSeconds: values['poll-interval'], allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'], requireSourceAudit: values['require-source-audit'], sourceAuditRatio: values['source-audit-ratio'], sourceAuditScope: values['source-audit-scope'], sourceAuditDate: values['source-audit-date'] })}`);
+    if (command === 'resume') return deps.api('GET', `/web-ai/poll${deps.qs({ vendor: values.vendor, session: values.session, timeout: values.timeout || values.deadline, allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'], requireSourceAudit: values['require-source-audit'], sourceAuditRatio: values['source-audit-ratio'], sourceAuditScope: values['source-audit-scope'], sourceAuditDate: values['source-audit-date'] })}`);
     if (command === 'reattach') {
         if (!values.session) throw new Error('reattach requires --session <id>');
         return deps.api('GET', `/web-ai/status${deps.qs({ vendor: values.vendor, session: values.session, navigate: values.navigate })}`);

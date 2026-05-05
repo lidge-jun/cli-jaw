@@ -50,8 +50,17 @@ export function commandLineMatchesDurableRuntimeOwner(owner: BrowserRuntimeOwner
     if (!command || owner.ownership !== 'jaw-owned') return false;
     if (!owner.port || !owner.userDataDir) return false;
     if (command.includes('--type=')) return false;
-    return command.includes(`--remote-debugging-port=${owner.port}`)
-        && command.includes(`--user-data-dir=${owner.userDataDir}`);
+    return commandLineHasExactFlagValue(command, 'remote-debugging-port', String(owner.port))
+        && commandLineHasExactFlagValue(command, 'user-data-dir', owner.userDataDir);
+}
+
+function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function commandLineHasExactFlagValue(command: string, flag: string, expected: string): boolean {
+    const pattern = new RegExp(`(?:^|\\s)--${escapeRegExp(flag)}=${escapeRegExp(expected)}(?:\\s|$)`);
+    return pattern.test(command);
 }
 
 function isCurrentRuntime(owner: BrowserRuntimeOwner, current: BrowserRuntimeStatus | null | undefined): boolean {
@@ -126,13 +135,13 @@ export async function cleanupBrowserRuntimeOrphans(options: {
                 try {
                     process.kill(candidate.pid, 'SIGTERM');
                     closed++;
-                    clearDurableBrowserRuntimeOwner();
+                    clearDurableBrowserRuntimeOwner(candidate);
                 } catch {
                     // Treat vanished processes as stale records.
-                    if (clearDurableBrowserRuntimeOwner()) pruned++;
+                    if (clearDurableBrowserRuntimeOwner(candidate)) pruned++;
                 }
             } else if (candidate.action === 'prune-record') {
-                if (clearDurableBrowserRuntimeOwner()) pruned++;
+                if (clearDurableBrowserRuntimeOwner(candidate)) pruned++;
             }
         }
     }

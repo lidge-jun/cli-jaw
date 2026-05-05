@@ -5,6 +5,8 @@ import type { BrowserRuntimeOwner } from './runtime-owner.js';
 
 const RUNTIME_OWNER_FILE = join(JAW_HOME, 'browser-runtime-owner.json');
 
+type BrowserRuntimeOwnerMatch = Pick<BrowserRuntimeOwner, 'pid' | 'port' | 'userDataDir'>;
+
 function isRuntimeOwner(value: unknown): value is BrowserRuntimeOwner {
     if (!value || typeof value !== 'object') return false;
     const record = value as Record<string, unknown>;
@@ -30,7 +32,7 @@ export function writeDurableBrowserRuntimeOwner(owner: BrowserRuntimeOwner): voi
     fs.writeFileSync(RUNTIME_OWNER_FILE, `${JSON.stringify(owner, null, 2)}\n`);
 }
 
-export function clearDurableBrowserRuntimeOwner(expected?: BrowserRuntimeOwner | null): boolean {
+export function clearDurableBrowserRuntimeOwner(expected?: BrowserRuntimeOwnerMatch | null): boolean {
     const current = readDurableBrowserRuntimeOwner();
     if (!current) return false;
     if (expected && (

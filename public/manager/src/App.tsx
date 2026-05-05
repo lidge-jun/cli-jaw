@@ -26,6 +26,7 @@ import { summarizeActivityTitleSupport } from './dashboard-settings/activity-tit
 import { dashboardSettingsUiFromView } from './dashboard-settings/dashboard-settings-ui';
 import { NotesSidebar } from './notes/NotesSidebar';
 import { NotesWorkspace } from './notes/NotesWorkspace';
+import { useNotesModel } from './notes/useNotesModel';
 import { publishInvalidation } from './sync/invalidation-bus';
 import { useInvalidationSubscription } from './sync/useInvalidationSubscription';
 import { IframeBridge } from './sync/IframeBridge';
@@ -356,6 +357,12 @@ export function App() {
         view.setNotesTreeWidth(value); void saveUi({ notesTreeWidth: value });
     }
 
+    const notesModel = useNotesModel({
+        active: view.sidebarMode === 'notes',
+        selectedPath: view.notesSelectedPath,
+        onSelectedPathChange: handleNotesSelectedPathChange,
+    });
+
     function handleDashboardSettingsPatch(ui: NonNullable<Parameters<typeof saveUi>[0]>): void {
         if (ui.showLatestActivityTitles !== undefined) view.setShowLatestActivityTitles(ui.showLatestActivityTitles);
         if (ui.showInlineLabelEditor !== undefined) view.setShowInlineLabelEditor(ui.showInlineLabelEditor);
@@ -510,7 +517,7 @@ export function App() {
                                     {view.sidebarMode === 'settings' ? (
                                         <DashboardSettingsSidebar activeSection={dashboardSettingsSection} locale={view.locale} onSectionChange={setDashboardSettingsSection} />
                                     ) : view.sidebarMode === 'notes' ? (
-                                        <NotesSidebar selectedPath={view.notesSelectedPath} dirtyPath={notesDirtyPath} treeWidth={view.notesTreeWidth} onSelectedPathChange={handleNotesSelectedPathChange} />
+                                        <NotesSidebar tree={notesModel.tree} loading={notesModel.loading} error={notesModel.error} notesRoot={notesModel.notesRoot} selectedPath={view.notesSelectedPath} dirtyPath={notesDirtyPath} treeWidth={view.notesTreeWidth} onSelectedPathChange={handleNotesSelectedPathChange} onRefreshTree={notesModel.refresh} />
                                     ) : view.sidebarMode === 'board' ? (
                                         <DashboardBoardSidebar view={boardView} onViewChange={setBoardView} instances={instances} titlesByPort={messageActivity.titlesByPort} busyPorts={messageActivity.busyPorts} />
                                     ) : SCHEDULE_WORKSPACE_ENABLED && view.sidebarMode === 'schedule' ? (
@@ -545,7 +552,7 @@ export function App() {
                                         )} logs={detailContent('logs')} settings={detailContent('settings')} />
                                     </WorkspaceSurface>
                                     <WorkspaceSurface active={view.sidebarMode === 'notes'}>
-                                        <NotesWorkspace active={view.sidebarMode === 'notes'} selectedPath={view.notesSelectedPath} viewMode={view.notesViewMode} authoringMode={view.notesAuthoringMode} wordWrap={view.notesWordWrap} treeWidth={view.notesTreeWidth} onSelectedPathChange={handleNotesSelectedPathChange} onDirtyPathChange={setNotesDirtyPath} onViewModeChange={handleNotesViewModeChange} onAuthoringModeChange={handleNotesAuthoringModeChange} onWordWrapChange={handleNotesWordWrapChange} onTreeWidthChange={handleNotesTreeWidthChange} />
+                                        <NotesWorkspace active={view.sidebarMode === 'notes'} selectedPath={view.notesSelectedPath} vaultIndex={notesModel.index} viewMode={view.notesViewMode} authoringMode={view.notesAuthoringMode} wordWrap={view.notesWordWrap} treeWidth={view.notesTreeWidth} onSelectedPathChange={handleNotesSelectedPathChange} onDirtyPathChange={setNotesDirtyPath} onViewModeChange={handleNotesViewModeChange} onAuthoringModeChange={handleNotesAuthoringModeChange} onWordWrapChange={handleNotesWordWrapChange} onTreeWidthChange={handleNotesTreeWidthChange} />
                                     </WorkspaceSurface>
                                     <WorkspaceSurface active={view.sidebarMode === 'settings'}>
                                         <DashboardSettingsWorkspace activeSection={dashboardSettingsSection} ui={dashboardSettingsUi} titleSupport={titleSupport} onUiPatch={handleDashboardSettingsPatch} />

@@ -21,6 +21,10 @@ export {
 } from './gemini-contract.js';
 export type { GeminiAccountStatus, GeminiStatusReport, GeminiDeepThinkConstraints } from './gemini-contract.js';
 export * from './chatgpt-response.js';
+export * from './action-intent.js';
+export * from './target-resolver.js';
+export * from './answer-artifact.js';
+export * from './source-audit.js';
 export * from './chatgpt-attachments.js';
 export * from './chatgpt-model.js';
 export * from './product-surfaces.js';

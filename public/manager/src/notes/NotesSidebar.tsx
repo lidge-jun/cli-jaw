@@ -1,34 +1,20 @@
 import { useEffect, useState } from 'react';
-import { createNoteFile, createNoteFolder, fetchNotesInfo, fetchNotesTree, renameNotePath, trashNotePath } from './notes-api';
+import { createNoteFile, createNoteFolder, renameNotePath, trashNotePath } from './notes-api';
 import { NotesFileTree } from './NotesFileTree';
 import { publishInvalidation } from '../sync/invalidation-bus';
-import { useInvalidationSubscription } from '../sync/useInvalidationSubscription';
-import { useNotesExternalSync } from './useNotesExternalSync';
 import type { NotesTreeEntry } from './notes-types';
 
 type NotesSidebarProps = {
+    tree: NotesTreeEntry[];
+    loading: boolean;
+    error: string | null;
+    notesRoot: string | null;
     selectedPath: string | null;
     dirtyPath: string | null;
     treeWidth: number;
     onSelectedPathChange: (path: string | null) => void;
+    onRefreshTree: (selectPath?: string | null) => Promise<void>;
 };
-
-function firstFile(entries: NotesTreeEntry[]): string | null {
-    for (const entry of entries) {
-        if (entry.kind === 'file') return entry.path;
-        const child = firstFile(entry.children || []);
-        if (child) return child;
-    }
-    return null;
-}
-
-function hasFile(entries: NotesTreeEntry[], path: string): boolean {
-    for (const entry of entries) {
-        if (entry.kind === 'file' && entry.path === path) return true;
-        if (hasFile(entry.children || [], path)) return true;
-    }
-    return false;
-}
 
 function movePathToFolder(path: string, folderPath: string | null): string {
     const parts = path.split('/').filter(Boolean);
@@ -90,39 +76,9 @@ function batchTrashConfirmMessage(items: { path: string; kind: NotesTreeEntry['k
 }
 
 export function NotesSidebar(props: NotesSidebarProps) {
-    const [tree, setTree] = useState<NotesTreeEntry[]>([]);
-    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [status, setStatus] = useState<string | null>(null);
     const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null);
-    const [notesRoot, setNotesRoot] = useState<string | null>(null);
-
-    useNotesExternalSync(true);
-
-    useEffect(() => {
-        void fetchNotesInfo().then(info => setNotesRoot(info.root)).catch(() => {});
-    }, []);
-
-    async function refreshTree(selectPath = props.selectedPath): Promise<void> {
-        setLoading(true);
-        setError(null);
-        try {
-            const next = await fetchNotesTree();
-            setTree(next);
-            const nextSelected = selectPath && hasFile(next, selectPath) ? selectPath : firstFile(next);
-            if (nextSelected !== props.selectedPath) props.onSelectedPathChange(nextSelected);
-        } catch (err) {
-            setError((err as Error).message);
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    useInvalidationSubscription('notes', () => void refreshTree(), 'notes-sidebar');
-
-    useEffect(() => {
-        void refreshTree();
-    }, []);
 
     async function createNote(): Promise<void> {
         const fallback = selectedFolderPath ? `${selectedFolderPath}/untitled.md` : 'untitled.md';
@@ -132,7 +88,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
             setStatus(null);
             const created = await createNoteFile(name.endsWith('.md') ? name : `${name}.md`, '');
             props.onSelectedPathChange(created.path);
-            await refreshTree(created.path);
+            await props.onRefreshTree(created.path);
             publishInvalidation({ topics: ['notes'], reason: 'note:created', source: 'ui', sourceId: 'notes-sidebar' });
         } catch (err) {
             setError((err as Error).message);
@@ -158,7 +114,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
             setStatus(null);
             const created = await createNoteFolder(name);
             setSelectedFolderPath(created.path);
-            await refreshTree();
+            await props.onRefreshTree();
             publishInvalidation({ topics: ['notes'], reason: 'folder:created', source: 'ui', sourceId: 'notes-sidebar' });
         } catch (err) {
             setError((err as Error).message);
@@ -172,7 +128,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
             setStatus(null);
             const moved = await renameNotePath(from, to);
             if (props.selectedPath === from) props.onSelectedPathChange(moved.to);
-            await refreshTree(moved.to);
+            await props.onRefreshTree(moved.to);
             publishInvalidation({ topics: ['notes'], reason: 'note:moved', source: 'ui', sourceId: 'notes-sidebar' });
         } catch (err) {
             setError((err as Error).message);
@@ -192,7 +148,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
             const nextSelectedFolderPath = rebasePath(selectedFolderPath, renamed.from, renamed.to);
             if (nextSelectedFolderPath !== selectedFolderPath) setSelectedFolderPath(nextSelectedFolderPath);
             if (nextSelectedPath !== props.selectedPath) props.onSelectedPathChange(nextSelectedPath);
-            await refreshTree(nextSelectedPath);
+            await props.onRefreshTree(nextSelectedPath);
             publishInvalidation({ topics: ['notes'], reason: 'note:renamed', source: 'ui', sourceId: 'notes-sidebar' });
         } catch (err) {
             setError((err as Error).message);
@@ -243,7 +199,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
             setStatus(`Moved ${succeeded} item${succeeded === 1 ? '' : 's'} to trash.`);
         }
 
-        await refreshTree(selectedCleared ? null : props.selectedPath);
+        await props.onRefreshTree(selectedCleared ? null : props.selectedPath);
         publishInvalidation({ topics: ['notes'], reason: 'notes:batch-trashed', source: 'ui', sourceId: 'notes-sidebar' });
     }
 
@@ -268,7 +224,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
                 ? ` Restore from: ${result.restoreHint}`
                 : '';
             setStatus(`Moved ${result.path} to ${destination}.${restoreHint}`);
-            await refreshTree(selectedWasInside ? null : props.selectedPath);
+            await props.onRefreshTree(selectedWasInside ? null : props.selectedPath);
             publishInvalidation({ topics: ['notes'], reason: 'note:trashed', source: 'ui', sourceId: 'notes-sidebar' });
         } catch (err) {
             setError((err as Error).message);
@@ -277,16 +233,16 @@ export function NotesSidebar(props: NotesSidebarProps) {
 
     return (
         <>
-            {error && <section className="state error-state">{error}</section>}
+            {(props.error || error) && <section className="state error-state">{props.error || error}</section>}
             {status && <section className="state notes-status-state">{status}</section>}
             <NotesFileTree
-                entries={tree}
+                entries={props.tree}
                 selectedPath={props.selectedPath}
                 selectedFolderPath={selectedFolderPath}
                 dirtyPath={props.dirtyPath}
-                loading={loading}
+                loading={props.loading}
                 width={props.treeWidth}
-                notesRoot={notesRoot}
+                notesRoot={props.notesRoot}
                 onSelectPath={props.onSelectedPathChange}
                 onSelectFolder={setSelectedFolderPath}
                 onMovePath={(from, toFolder) => void moveNote(from, toFolder)}
@@ -295,7 +251,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
                 onTrashPaths={items => void trashPaths(items)}
                 onCreateNote={() => void createNote()}
                 onCreateFolder={() => void createFolder()}
-                onRefresh={() => void refreshTree()}
+                onRefresh={() => void props.onRefreshTree()}
             />
         </>
     );

@@ -25,6 +25,12 @@ test('note file path rejects absolute, traversal, NUL, backslash, and non-md pat
     }
 });
 
+test('note path guards reject shared reserved directories', () => {
+    assert.throws(() => assertNoteRelPath('.assets/pasted.md'), /reserved/);
+    assert.throws(() => assertNoteRelPath('_templates/template.md'), /reserved/);
+    assert.throws(() => assertNoteFolderRelPath('_plugins'), /reserved/);
+});
+
 test('folder path rejects markdown file paths', () => {
     assert.equal(assertNoteFolderRelPath('daily'), 'daily');
     assert.throws(() => assertNoteFolderRelPath('daily.md'), /folder paths/);

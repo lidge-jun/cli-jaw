@@ -11,6 +11,9 @@ const modelSrc = fs.readFileSync(join(root, 'src/browser/web-ai/chatgpt-model.ts
 
 test('BWCOMP-001: ChatGPT composer uses user-input insertion path', () => {
     assert.match(chatgptSrc, /Input\.insertText/);
+    assert.match(chatgptSrc, /resolveTargetForIntent/);
+    assert.match(chatgptSrc, /intentId: 'composer\.fill'/);
+    assert.match(chatgptSrc, /intentId: 'send\.click'/);
     assert.match(composerSrc, /insertTextLikeProvider/);
     assert.doesNotMatch(chatgptSrc, /await fillComposer/);
     assert.doesNotMatch(chatgptSrc, /locator\.fill/);

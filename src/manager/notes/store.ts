@@ -28,6 +28,7 @@ import {
     parentRelPath,
     resolveNotePath,
 } from './path-guards.js';
+import { hasReservedNoteSegment } from './constants.js';
 
 export type NotesStoreFs = {
     existsSync: typeof existsSync;
@@ -173,8 +174,8 @@ export class NotesStore {
         const entries = await this.fs.readdir(folder, { withFileTypes: true });
         const result: DashboardNoteTreeEntry[] = [];
         for (const entry of entries) {
-            if (entry.name.startsWith('.')) continue;
             const relPath = relFolder ? `${relFolder}/${entry.name}` : entry.name;
+            if (hasReservedNoteSegment(relPath)) continue;
             const target = resolveNotePath(this.root, relPath);
             const entryStat = await this.fs.lstat(target);
             if (entryStat.isSymbolicLink()) continue;

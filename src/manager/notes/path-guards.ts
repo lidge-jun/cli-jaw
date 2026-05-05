@@ -1,6 +1,7 @@
 import { lstat, realpath } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { posix } from 'node:path';
+import { hasReservedNoteSegment } from './constants.js';
 
 export const NOTE_FILE_EXT = '.md';
 export const MAX_NOTE_BYTES = 1_048_576;
@@ -34,6 +35,9 @@ function assertStringPath(input: unknown): string {
     }
     if (normalized.split('/').some(segment => !segment || segment === '.' || segment === '..')) {
         throw notePathError(400, 'invalid_note_path', 'note path contains invalid segments');
+    }
+    if (hasReservedNoteSegment(normalized)) {
+        throw notePathError(400, 'note_path_reserved', 'note path uses a reserved notes directory');
     }
     return normalized;
 }

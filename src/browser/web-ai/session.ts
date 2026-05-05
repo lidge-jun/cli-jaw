@@ -176,6 +176,8 @@ export function updateSessionResult(input: {
     url?: string;
     conversationUrl?: string;
     answerText?: string;
+    answerArtifact?: import('./answer-artifact.js').AnswerArtifact;
+    sourceAudit?: import('./source-audit.js').SourceAuditResult;
     error?: string;
     capabilityMode?: string;
     tabId?: string;
@@ -197,6 +199,8 @@ export function updateSessionResult(input: {
         record.answerText = input.answerText;
         record.lastSeenTextHash = createHash('sha256').update(input.answerText).digest('hex');
     }
+    if (input.answerArtifact !== undefined) record.answerArtifact = input.answerArtifact;
+    if (input.sourceAudit !== undefined) record.sourceAudit = input.sourceAudit;
     if (input.status === 'complete') record.completedAt = now;
     if (input.status === 'error') record.failedAt = now;
     if (input.status === 'timeout') record.staleAt = now;

@@ -267,3 +267,90 @@ export type DashboardTrashNoteResponse = {
     deletedTo: 'os-trash' | 'dashboard-trash';
     restoreHint?: string;
 };
+
+export type NoteLinkStatus = 'resolved' | 'missing' | 'ambiguous';
+
+export type NoteIndexWarningCode =
+    | 'frontmatter_parse_error'
+    | 'frontmatter_unsupported_value'
+    | 'invalid_wikilink_target'
+    | 'note_file_too_large'
+    | 'note_symlink_skipped';
+
+export type NoteIndexWarning = {
+    code: NoteIndexWarningCode;
+    path: string;
+    message: string;
+    line?: number;
+    column?: number;
+};
+
+export type NoteLinkReason = 'not_found' | 'invalid_target' | 'ambiguous';
+
+export type NoteLinkRef = {
+    sourcePath: string;
+    raw: string;
+    target: string;
+    displayText?: string;
+    heading?: string;
+    line: number;
+    column: number;
+    startOffset: number;
+    endOffset: number;
+    status: NoteLinkStatus;
+    resolvedPath?: string;
+    candidatePaths?: string[];
+    reason?: NoteLinkReason;
+};
+
+export type NoteMetadata = {
+    path: string;
+    title: string;
+    aliases: string[];
+    tags: string[];
+    created?: string;
+    mtimeMs: number;
+    size: number;
+    revision: string;
+    frontmatterError?: string;
+};
+
+export type NoteGraphNode = {
+    id: string;
+    title: string;
+    kind: 'note' | 'missing' | 'ambiguous';
+    path?: string;
+    candidatePaths?: string[];
+};
+
+export type NoteGraphEdge = {
+    source: string;
+    target: string;
+    raw: string;
+    status: NoteLinkStatus;
+    resolvedPath?: string;
+};
+
+export type VaultIndexSnapshot = {
+    version: number;
+    notes: NoteMetadata[];
+    outgoingLinks: Record<string, NoteLinkRef[]>;
+    backlinks: Record<string, NoteLinkRef[]>;
+    unresolvedLinks: NoteLinkRef[];
+    graph: { nodes: NoteGraphNode[]; edges: NoteGraphEdge[] };
+    errors: NoteIndexWarning[];
+};
+
+export type NotesCapability = {
+    available: boolean;
+    version?: string;
+    command?: string;
+    reason?: string;
+};
+
+export type DashboardNotesCapabilities = {
+    ripgrep: NotesCapability;
+    git: NotesCapability;
+    fileWatching: NotesCapability & { provider?: 'fs.watch' | 'watcher' };
+    pdf: NotesCapability;
+};

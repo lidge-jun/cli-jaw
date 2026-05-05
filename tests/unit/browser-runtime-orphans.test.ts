@@ -40,3 +40,14 @@ test('BRO-003: durable orphan proof rejects wrong port or profile', () => {
         'Google Chrome --remote-debugging-port=9240 --user-data-dir=/tmp/other-profile',
     ), false);
 });
+
+test('BRO-004: durable orphan proof rejects prefix-only port and profile matches', () => {
+    assert.equal(commandLineMatchesDurableRuntimeOwner(
+        owner,
+        'Google Chrome --remote-debugging-port=92401 --user-data-dir=/tmp/jaw/browser-profile',
+    ), false);
+    assert.equal(commandLineMatchesDurableRuntimeOwner(
+        owner,
+        'Google Chrome --remote-debugging-port=9240 --user-data-dir=/tmp/jaw/browser-profile-extra',
+    ), false);
+});

@@ -224,10 +224,13 @@ test('CDP-020: orphan runtime cleanup requires durable ownership proof and force
     assert.match(connectionSrc, /writeDurableBrowserRuntimeOwner\(owner\)/);
     assert.match(connectionSrc, /clearDurableBrowserRuntimeOwner\(owner\)/);
     assert.match(ownerStoreSrc, /browser-runtime-owner\.json/);
+    assert.match(ownerStoreSrc, /Pick<BrowserRuntimeOwner,\s*'pid'\s*\|\s*'port'\s*\|\s*'userDataDir'>/);
     assert.match(orphanSrc, /commandLineMatchesDurableRuntimeOwner/);
+    assert.match(orphanSrc, /commandLineHasExactFlagValue/);
+    assert.match(orphanSrc, /clearDurableBrowserRuntimeOwner\(candidate\)/);
     assert.match(orphanSrc, /command\.includes\('--type='\)/);
-    assert.match(orphanSrc, /--remote-debugging-port=\$\{owner\.port\}/);
-    assert.match(orphanSrc, /--user-data-dir=\$\{owner\.userDataDir\}/);
+    assert.match(orphanSrc, /remote-debugging-port/);
+    assert.match(orphanSrc, /user-data-dir/);
     assert.match(routesSrc, /\/api\/browser\/cleanup-runtimes/);
     assert.match(routesSrc, /cleanup-runtimes close requires force=true/);
     assert.match(cliBrowserSrc, /case 'cleanup-runtimes'/);

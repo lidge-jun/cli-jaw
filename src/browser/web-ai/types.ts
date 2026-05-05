@@ -49,6 +49,10 @@ export interface QuestionEnvelopeInput {
     allowGrokContextPack?: boolean;
     reuseTab?: boolean;
     newTab?: boolean;
+    requireSourceAudit?: boolean;
+    sourceAuditRatio?: string | number;
+    sourceAuditScope?: string;
+    sourceAuditDate?: string;
 }
 
 export interface RenderedQuestionBundle {
@@ -93,6 +97,8 @@ export interface WebAiSessionRecord {
     notifyOnComplete?: boolean;
     capabilityMode?: string;
     answerText?: string;
+    answerArtifact?: import('./answer-artifact.js').AnswerArtifact;
+    sourceAudit?: import('./source-audit.js').SourceAuditResult;
     lastSeenTextHash?: string;
     tabState?: WebAiSessionTabState;
     completedAt?: string;
@@ -128,6 +134,8 @@ export interface WebAiOutput {
     status: WebAiStatus;
     url?: string;
     answerText?: string;
+    answerArtifact?: import('./answer-artifact.js').AnswerArtifact;
+    sourceAudit?: import('./source-audit.js').SourceAuditResult;
     rendered?: RenderedQuestionBundle;
     baseline?: CommittedTurnBaseline;
     sessionId?: string;

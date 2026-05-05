@@ -31,6 +31,9 @@ import {
 } from './session.js';
 import { captureAssistantResponse } from './chatgpt-response.js';
 import { selectChatGptModel } from './chatgpt-model.js';
+import { withAnswerArtifact } from './answer-artifact.js';
+import { auditSources } from './source-audit.js';
+import { resolveTargetForIntent } from './target-resolver.js';
 import { listActiveWebAiWatchers, resumeStoredWebAiWatchers, startWebAiWatcher } from './watcher.js';
 import {
     captureWebAiDiagnostics,
@@ -289,6 +292,13 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
         },
     });
     try {
+        const composerTarget = await resolveTargetForIntent(page, {
+            provider: envelope.vendor,
+            intentId: 'composer.fill',
+        });
+        if (!composerTarget.ok && composerTarget.required) {
+            throw new Error(`composer target unresolved: ${composerTarget.errorCode || 'unknown'}`);
+        }
         await adapter.waitForReady();
         const commitBaseline = { turnsCount: await countConversationTurns(page).catch(() => assistantCount) };
         await adapter.insertPrompt(rendered.composerText);
@@ -298,9 +308,20 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
         }
         const uploadPath = input.filePath || contextAttachmentPath;
         if (uploadPath) {
+            await resolveTargetForIntent(page, {
+                provider: envelope.vendor,
+                intentId: 'upload.attach',
+            }).catch(() => null);
             const info = localFileInfo(uploadPath);
             const uploaded = await attachLocalFileLive(page, info);
             if (!uploaded.ok) throw new Error(uploaded.error);
+        }
+        const sendTarget = await resolveTargetForIntent(page, {
+            provider: envelope.vendor,
+            intentId: 'send.click',
+        });
+        if (!sendTarget.ok && sendTarget.required) {
+            throw new Error(`send target unresolved: ${sendTarget.errorCode || 'unknown'}`);
         }
         await adapter.submitPrompt();
         await adapter.verifyPromptCommitted(rendered.composerText, commitBaseline);
@@ -338,26 +359,35 @@ function localFileInfo(filePath: string): { path: string; basename: string; size
     return { path: filePath, basename: basename(filePath), sizeBytes: stat.size };
 }
 
-export async function poll(port: number, input: { vendor?: string; timeout?: number | string; session?: string; allowCopyMarkdownFallback?: boolean } = {}): Promise<WebAiOutput> {
+export async function poll(port: number, input: {
+    vendor?: string;
+    timeout?: number | string;
+    session?: string;
+    allowCopyMarkdownFallback?: boolean;
+    requireSourceAudit?: boolean;
+    sourceAuditRatio?: string | number;
+    sourceAuditScope?: string;
+    sourceAuditDate?: string;
+} = {}): Promise<WebAiOutput> {
     const vendor = parseVendor(input.vendor);
     if (vendor === 'gemini') {
         try {
-            return await geminiPoll(port, {
+            return decorateCompletedOutput(await geminiPoll(port, {
                 timeout: input.timeout,
                 session: input.session,
                 allowCopyMarkdownFallback: input.allowCopyMarkdownFallback === true,
-            });
+            }), input, 'poll');
         } catch (e) {
             throw stageError(e, 'poll-timeout');
         }
     }
     if (vendor === 'grok') {
         try {
-            return await grokPoll(port, {
+            return decorateCompletedOutput(await grokPoll(port, {
                 timeout: input.timeout,
                 session: input.session,
                 allowCopyMarkdownFallback: input.allowCopyMarkdownFallback === true,
-            });
+            }), input, 'poll');
         } catch (e) {
             throw stageError(e, 'poll-timeout');
         }
@@ -404,7 +434,7 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
         if (session) {
             await finalizeProviderTab({ vendor, session, port, url: currentUrl, answerText: result.answerText || '' });
         }
-        return {
+        const output = decorateCompletedOutput({
             ok: true,
             vendor,
             status: 'complete',
@@ -416,13 +446,21 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
             ...(traceSummary ? { traceSummary } : {}),
             usedFallbacks: result.usedFallbacks,
             warnings: result.warnings,
-        };
+        }, input, 'poll');
+        if (session) updateSessionResult({
+            sessionId: session.sessionId,
+            status: 'complete',
+            answerText: output.answerText,
+            answerArtifact: output.answerArtifact,
+            sourceAudit: output.sourceAudit,
+        });
+        return output;
     }
     if (result.ok) {
         if (session) {
             await finalizeProviderTab({ vendor, session, port, url: currentUrl, answerText: result.answerText || '' });
         }
-        return {
+        const output = decorateCompletedOutput({
             ok: true,
             vendor,
             status: 'complete',
@@ -433,7 +471,15 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
             ...(traceSummary ? { traceSummary } : {}),
             usedFallbacks: result.usedFallbacks,
             warnings: result.warnings,
-        };
+        }, input, 'poll');
+        if (session) updateSessionResult({
+            sessionId: session.sessionId,
+            status: 'complete',
+            answerText: output.answerText,
+            answerArtifact: output.answerArtifact,
+            sourceAudit: output.sourceAudit,
+        });
+        return output;
     }
     return {
         ok: false,
@@ -449,6 +495,78 @@ export async function poll(port: number, input: { vendor?: string; timeout?: num
     };
 }
 
+function decorateCompletedOutput(
+    result: WebAiOutput,
+    input: {
+        vendor?: string;
+        requireSourceAudit?: boolean;
+        sourceAuditRatio?: string | number;
+        sourceAuditScope?: string;
+        sourceAuditDate?: string;
+    },
+    command: 'poll' | 'query' | 'watch',
+): WebAiOutput {
+    const withArtifact = withAnswerArtifact(result, {
+        provider: result.vendor || input.vendor,
+        sessionId: result.sessionId,
+        conversationUrl: result.url,
+    }) as WebAiOutput;
+    if (input.requireSourceAudit !== true) return withArtifact;
+    const answerText = withArtifact.answerText || withArtifact.answerArtifact?.text || withArtifact.answerArtifact?.markdown || '';
+    if (!answerText && withArtifact.ok === false) return withArtifact;
+    if (!answerText) {
+        throw new WebAiError({
+            errorCode: 'source-audit.answer-missing',
+            stage: 'source-audit',
+            vendor: result.vendor || parseVendor(input.vendor),
+            retryHint: 'poll-or-disable-audit',
+            message: `source audit requires completed answer text for web-ai ${command}`,
+            mutationAllowed: false,
+            evidence: { status: result.status || null },
+        });
+    }
+    const sourceAudit = auditSources(answerText, {
+        requiredSourceRatio: parseSourceAuditRatio(input.sourceAuditRatio),
+        checkedScope: input.sourceAuditScope || null,
+        checkedDate: input.sourceAuditDate || null,
+    });
+    withArtifact.sourceAudit = sourceAudit;
+    if (!sourceAudit.ok) {
+        throw new WebAiError({
+            errorCode: 'source-audit.failed',
+            stage: 'source-audit',
+            vendor: result.vendor || parseVendor(input.vendor),
+            retryHint: 'add-inline-sources-or-disable-audit',
+            message: `source audit failed: ${sourceAudit.gaps.map(gap => gap.code).join(', ')}`,
+            mutationAllowed: false,
+            evidence: {
+                gaps: sourceAudit.gaps,
+                claimCount: sourceAudit.claims.length,
+                unsourcedClaimCount: sourceAudit.unsourcedClaims.length,
+                checkedScope: sourceAudit.checkedScope,
+                checkedDate: sourceAudit.checkedDate,
+            },
+        });
+    }
+    return withArtifact;
+}
+
+function parseSourceAuditRatio(value: unknown): number {
+    if (value === undefined || value === null || value === '') return 1;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+        throw new WebAiError({
+            errorCode: 'source-audit.invalid-ratio',
+            stage: 'source-audit',
+            retryHint: 'fix-source-audit-ratio',
+            message: '--source-audit-ratio must be a number between 0 and 1',
+            mutationAllowed: false,
+            evidence: { value },
+        });
+    }
+    return parsed;
+}
+
 export async function query(port: number, input: QuestionEnvelopeInput & { timeout?: number | string; allowCopyMarkdownFallback?: boolean } = {}): Promise<WebAiOutput> {
     const sent = await send(port, input);
     const result = await poll(port, {
@@ -456,6 +574,10 @@ export async function query(port: number, input: QuestionEnvelopeInput & { timeo
         timeout: input.timeout,
         session: sent.sessionId,
         allowCopyMarkdownFallback: input.allowCopyMarkdownFallback,
+        requireSourceAudit: input.requireSourceAudit,
+        sourceAuditRatio: input.sourceAuditRatio,
+        sourceAuditScope: input.sourceAuditScope,
+        sourceAuditDate: input.sourceAuditDate,
     });
     return {
         ...result,
@@ -464,7 +586,7 @@ export async function query(port: number, input: QuestionEnvelopeInput & { timeo
     };
 }
 
-export async function watch(port: number, input: { vendor?: string; timeout?: number | string; session?: string; url?: string; notify?: boolean; pollIntervalSeconds?: number | string; allowCopyMarkdownFallback?: boolean } = {}): Promise<WebAiOutput> {
+export async function watch(port: number, input: { vendor?: string; timeout?: number | string; session?: string; url?: string; notify?: boolean; pollIntervalSeconds?: number | string; allowCopyMarkdownFallback?: boolean; requireSourceAudit?: boolean; sourceAuditRatio?: string | number; sourceAuditScope?: string; sourceAuditDate?: string } = {}): Promise<WebAiOutput> {
     if (input.url) await navigateRequestedConversation(port, input.url, parseVendor(input.vendor));
     if (input.session && input.notify !== false) {
         const vendor = parseVendor(input.vendor);

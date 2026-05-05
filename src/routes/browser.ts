@@ -296,6 +296,10 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
                 timeout: String(req.query.timeout || '600'),
                 ...(req.query.session ? { session: String(req.query.session) } : {}),
                 ...(req.query.allowCopyMarkdownFallback === 'true' ? { allowCopyMarkdownFallback: true } : {}),
+                ...(req.query.requireSourceAudit === 'true' ? { requireSourceAudit: true } : {}),
+                ...(req.query.sourceAuditRatio ? { sourceAuditRatio: String(req.query.sourceAuditRatio) } : {}),
+                ...(req.query.sourceAuditScope ? { sourceAuditScope: String(req.query.sourceAuditScope) } : {}),
+                ...(req.query.sourceAuditDate ? { sourceAuditDate: String(req.query.sourceAuditDate) } : {}),
             }));
         } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
@@ -310,6 +314,10 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
                 ...(req.query.notify !== undefined ? { notify: String(req.query.notify) !== 'false' } : {}),
                 ...(req.query.pollIntervalSeconds ? { pollIntervalSeconds: String(req.query.pollIntervalSeconds) } : {}),
                 ...(req.query.allowCopyMarkdownFallback === 'true' ? { allowCopyMarkdownFallback: true } : {}),
+                ...(req.query.requireSourceAudit === 'true' ? { requireSourceAudit: true } : {}),
+                ...(req.query.sourceAuditRatio ? { sourceAuditRatio: String(req.query.sourceAuditRatio) } : {}),
+                ...(req.query.sourceAuditScope ? { sourceAuditScope: String(req.query.sourceAuditScope) } : {}),
+                ...(req.query.sourceAuditDate ? { sourceAuditDate: String(req.query.sourceAuditDate) } : {}),
             }));
         } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
