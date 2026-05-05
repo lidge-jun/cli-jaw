@@ -29,10 +29,11 @@ import { execSync, execFileSync } from 'child_process';
 import { fileURLToPath } from 'node:url';
 import { ensureSharedHomeSkillsLinks, initMcpConfig, copyDefaultSkills, propagateSkillsToInstances, loadUnifiedMcp, saveUnifiedMcp } from '../lib/mcp-sync.js';
 import { resolveHomePath } from '../src/core/path-expand.js';
+import { asArray, asRecord, errString, fieldString } from './_http-client.js';
 
 // ─── JAW_HOME inline (config.ts → registry.ts import 체인 제거) ───
-const JAW_HOME = process.env.CLI_JAW_HOME
-    ? resolveHomePath(process.env.CLI_JAW_HOME)
+const JAW_HOME = process.env["CLI_JAW_HOME"]
+    ? resolveHomePath(process.env["CLI_JAW_HOME"])
     : path.join(os.homedir(), '.cli-jaw');
 
 const home = os.homedir();
@@ -43,10 +44,10 @@ const PROJECT_ROOT = fs.existsSync(path.join(MODULE_DIR, '..', '..', 'scripts'))
     ? path.resolve(MODULE_DIR, '..', '..')
     : path.resolve(MODULE_DIR, '..');
 const OFFICECLI_DEFAULT_REPO = 'lidge-jun/OfficeCLI';
-const OFFICECLI_SKIP = process.env.CLI_JAW_SKIP_OFFICECLI === '1'
-    || process.env.CLI_JAW_SKIP_OFFICECLI === 'true';
-const OFFICECLI_FORCE = process.env.CLI_JAW_FORCE_OFFICECLI === '1'
-    || process.env.CLI_JAW_FORCE_OFFICECLI === 'true';
+const OFFICECLI_SKIP = process.env["CLI_JAW_SKIP_OFFICECLI"] === '1'
+    || process.env["CLI_JAW_SKIP_OFFICECLI"] === 'true';
+const OFFICECLI_FORCE = process.env["CLI_JAW_FORCE_OFFICECLI"] === '1'
+    || process.env["CLI_JAW_FORCE_OFFICECLI"] === 'true';
 
 // ─── Legacy migration ───
 // Moved into runPostinstall() to prevent side effects on dynamic import.
@@ -66,8 +67,9 @@ function ensureSymlink(target: string, linkPath: string) {
         fs.symlinkSync(target, linkPath);
         console.log(`[jaw:init] symlink: ${linkPath} → ${target}`);
         return true;
-    } catch (e: any) {
-        if (process.platform === 'win32' && (e?.code === 'EPERM' || e?.code === 'UNKNOWN')) {
+    } catch (e: unknown) {
+        const err = asRecord(e);
+        if (process.platform === 'win32' && (err["code"] === 'EPERM' || err["code"] === 'UNKNOWN')) {
             try {
                 const stat = fs.statSync(target);
                 if (stat.isDirectory()) {
@@ -77,12 +79,12 @@ function ensureSymlink(target: string, linkPath: string) {
                 }
                 console.log(`[jaw:init] fallback link: ${linkPath} → ${target}`);
                 return true;
-            } catch (fallbackErr: any) {
-                console.error(`[jaw:init] ⚠️ symlink fallback failed: ${linkPath} (${fallbackErr?.message || 'unknown'})`);
+            } catch (fallbackErr: unknown) {
+                console.error(`[jaw:init] ⚠️ symlink fallback failed: ${linkPath} (${errString(fallbackErr) || 'unknown'})`);
                 return false;
             }
         }
-        console.error(`[jaw:init] ⚠️ symlink failed: ${linkPath} (${e?.message || 'unknown'})`);
+        console.error(`[jaw:init] ⚠️ symlink failed: ${linkPath} (${errString(e) || 'unknown'})`);
         return false;
     }
 }
@@ -97,22 +99,36 @@ function findBinaryPath(name: string): string | null {
     }
 }
 
-function logSkillsSymlinkReport(report: any) {
-    if (!report?.links) return;
+interface SkillsSymlinkLink {
+    action?: unknown;
+    status?: unknown;
+    backupPath?: unknown;
+    linkPath?: unknown;
+    message?: unknown;
+}
 
-    const moved = report.links.filter((x: any) => x.action === 'backup_replace');
+interface SkillsSymlinkReport {
+    links?: SkillsSymlinkLink[];
+}
+
+function logSkillsSymlinkReport(report: SkillsSymlinkReport) {
+    const links = asArray<SkillsSymlinkLink>(report.links);
+    if (!links.length) return;
+
+    const moved = links.filter((x) => x.action === 'backup_replace');
     if (moved.length) {
         console.log(`[jaw:init] skills conflicts moved to backup: ${moved.length}`);
         for (const item of moved) {
-            if (item.backupPath) {
-                console.log(`[jaw:init]   - ${item.linkPath} -> ${item.backupPath}`);
+            const backupPath = fieldString(item.backupPath);
+            if (backupPath) {
+                console.log(`[jaw:init]   - ${fieldString(item.linkPath)} -> ${backupPath}`);
             }
         }
     }
 
-    const errors = report.links.filter((x: any) => x.status === 'error');
+    const errors = links.filter((x) => x.status === 'error');
     for (const item of errors) {
-        console.log(`[jaw:init] ⚠️ symlink error: ${item.linkPath} (${item.message || 'unknown'})`);
+        console.log(`[jaw:init] ⚠️ symlink error: ${fieldString(item.linkPath)} (${fieldString(item.message, 'unknown')})`);
     }
 }
 
@@ -145,9 +161,10 @@ async function maybeReregisterLaunchd() {
     }
     try {
         execFileSync(jawBin, ['launchd'], { stdio: 'inherit', timeout: 30000 });
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.warn(`[jaw:init] ⚠️  launchd 재등록 실패 — 수동: jaw launchd`);
-        if (e?.message) console.warn(`   ${e.message.slice(0, 120)}`);
+        const message = errString(e);
+        if (message) console.warn(`   ${message.slice(0, 120)}`);
     }
 }
 
@@ -165,7 +182,7 @@ export async function installOfficeCli(opts: InstallOpts = {}) {
         return;
     }
 
-    const repo = process.env.OFFICECLI_REPO || OFFICECLI_DEFAULT_REPO;
+    const repo = process.env["OFFICECLI_REPO"] || OFFICECLI_DEFAULT_REPO;
     if (opts.interactive && opts.ask) {
         const answer = await opts.ask(`Install/update OfficeCLI (${repo})? [Y/n]`, 'y');
         if (answer.toLowerCase() === 'n') {
@@ -193,8 +210,9 @@ export async function installOfficeCli(opts: InstallOpts = {}) {
         console.log(`[jaw:init] 📦 ensuring officecli (${repo}) via PowerShell installer...`);
         try {
             execFileSync(ps, args, { stdio: 'inherit', timeout: 180000, env: process.env });
-        } catch (e: any) {
-            console.warn(`[jaw:init] ⚠️  officecli install failed (exit ${e.status ?? '?'}); skipping — run manually: install-officecli.sh`);
+        } catch (e: unknown) {
+            const status = asRecord(e)["status"];
+            console.warn(`[jaw:init] ⚠️  officecli install failed (exit ${fieldString(status, '?')}); skipping — run manually: install-officecli.sh`);
         }
         return;
     }
@@ -217,8 +235,9 @@ export async function installOfficeCli(opts: InstallOpts = {}) {
             timeout: 180000,
             env: { ...process.env, OFFICECLI_REPO: repo },
         });
-    } catch (e: any) {
-        console.warn(`[jaw:init] ⚠️  officecli install failed (exit ${e.status ?? '?'}); skipping — run manually: bash scripts/install-officecli.sh`);
+    } catch (e: unknown) {
+        const status = asRecord(e)["status"];
+        console.warn(`[jaw:init] ⚠️  officecli install failed (exit ${fieldString(status, '?')}); skipping — run manually: bash scripts/install-officecli.sh`);
     }
 }
 
@@ -375,10 +394,12 @@ export async function installMcpServers(opts: InstallOpts = {}) {
             const binPath = findBinaryPath(bin) || bin;
             console.log(`[jaw:init] ✅ ${bin} → ${binPath}`);
 
-            for (const [name, srv] of Object.entries(config.servers || {}) as [string, any][]) {
-                if (srv.command === 'npx' && (srv.args || []).includes(pkg)) {
-                    srv.command = bin;
-                    srv.args = [];
+            const servers = asRecord(config.servers);
+            for (const srv of Object.values(servers).map(asRecord)) {
+                const args = asArray(srv["args"]);
+                if (srv["command"] === 'npx' && args.includes(pkg)) {
+                    srv["command"] = bin;
+                    srv["args"] = [];
                     updated = true;
                 }
             }
@@ -436,10 +457,10 @@ export async function installSkillDeps(opts: InstallOpts = {}) {
 // Dynamic import from init.ts gets clean library exports only.
 export async function runPostinstall() {
     // ── Safe mode guard (before ANY side effects) ──
-    const isSafeMode = process.env.npm_config_jaw_safe === '1'
-        || process.env.npm_config_jaw_safe === 'true'
-        || process.env.JAW_SAFE === '1'
-        || process.env.JAW_SAFE === 'true';
+    const isSafeMode = process.env["npm_config_jaw_safe"] === '1'
+        || process.env["npm_config_jaw_safe"] === 'true'
+        || process.env["JAW_SAFE"] === '1'
+        || process.env["JAW_SAFE"] === 'true';
 
     // 1. Ensure ~/.cli-jaw/ home directory
     ensureDir(jawHome);
@@ -469,10 +490,10 @@ export async function runPostinstall() {
     // No workingDir compat links in postinstall.
     // Postinstall must remain isolated to ~/.cli-jaw/* only.
     const shouldMigrateSharedPaths =
-        process.env.CLI_JAW_MIGRATE_SHARED_PATHS === '1'
-        || process.env.CLI_JAW_MIGRATE_SHARED_PATHS === 'true'
-        || process.env.npm_config_jaw_migrate_shared_paths === '1'
-        || process.env.npm_config_jaw_migrate_shared_paths === 'true';
+        process.env["CLI_JAW_MIGRATE_SHARED_PATHS"] === '1'
+        || process.env["CLI_JAW_MIGRATE_SHARED_PATHS"] === 'true'
+        || process.env["npm_config_jaw_migrate_shared_paths"] === '1'
+        || process.env["npm_config_jaw_migrate_shared_paths"] === 'true';
 
     if (shouldMigrateSharedPaths) {
         const sharedReport = ensureSharedHomeSkillsLinks({

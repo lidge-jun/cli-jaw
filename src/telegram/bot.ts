@@ -1,10 +1,11 @@
 // ─── Telegram Bot ────────────────────────────────────
 
 import https from 'node:https';
-import { Bot } from 'grammy';
+import { Bot, type Context } from 'grammy';
 import { sequentialize } from '@grammyjs/runner';
 import { broadcast, addBroadcastListener, removeBroadcastListener } from '../core/bus.js';
 import { settings, detectAllCli, APP_VERSION } from '../core/config.js';
+import { stripUndefined } from '../core/strip-undefined.js';
 import { t, normalizeLocale } from '../core/i18n.js';
 import { insertMessage } from '../core/db.js';
 import { orchestrate, orchestrateReset, isResetIntent } from '../orchestrator/pipeline.js';
@@ -51,8 +52,8 @@ export { orchestrateAndCollect };
 
 // ─── State ───────────────────────────────────────────
 
-export let telegramBot: any = null;
-export const telegramActiveChatIds = new Set();
+export let telegramBot: Bot | null = null;
+export const telegramActiveChatIds = new Set<number>();
 let tgRetryTimer: ReturnType<typeof setTimeout> | null = null;
 let tgInitLock = false;
 let tg409RetryCount = 0;
@@ -61,14 +62,14 @@ let botUsername: string | null = null;
 const telegramForwarderLifecycle = createForwarderLifecycle({
     addListener: addBroadcastListener,
     removeListener: removeBroadcastListener,
-    buildForwarder: ({ bot }: Record<string, any>) => createTelegramForwarder({
-        bot,
+    buildForwarder: ({ bot }: Record<string, unknown>) => createTelegramForwarder({
+        bot: bot as Bot,
         getLastChatId: () => {
             const chatIds = Array.from(telegramActiveChatIds);
-            return chatIds.length ? chatIds[chatIds.length - 1] : null;
+            return chatIds.length ? (chatIds[chatIds.length - 1] ?? null) : null;
         },
-        shouldSkip: (data: any) => data.origin === 'telegram', // handled by tgOrchestrate already
-        log: ({ chatId, preview }: { chatId: any; preview: any }) => {
+        shouldSkip: (data: Record<string, unknown>) => data["origin"] === 'telegram', // handled by tgOrchestrate already
+        log: ({ chatId, preview }: { chatId: string | number; preview: string }) => {
             console.log(`[tg:forward] → chat ${chatId}: ${String(preview).slice(0, 60)}...`);
         },
     }),
@@ -76,17 +77,17 @@ const telegramForwarderLifecycle = createForwarderLifecycle({
 
 
 function currentLocale() {
-    return normalizeLocale(settings.locale, 'ko');
+    return normalizeLocale(settings["locale"], 'ko');
 }
 
-function markChatActive(chatId: number, ctx?: any) {
+function markChatActive(chatId: number, ctx?: Context) {
     // Refresh insertion order so Array.from(set).at(-1) points to latest active chat.
     telegramActiveChatIds.delete(chatId);
     telegramActiveChatIds.add(chatId);
     // Auto-persist to settings.json so forwarding survives server restart
-    const allowed = settings.telegram?.allowedChatIds || [];
+    const allowed = settings["telegram"]?.allowedChatIds || [];
     if (!allowed.includes(chatId)) {
-        settings.telegram.allowedChatIds = [...allowed, chatId];
+        settings["telegram"].allowedChatIds = [...allowed, chatId];
         import('../core/config.js').then(m => m.saveSettings(settings)).catch(() => { });
     }
     // Update messaging runtime targets
@@ -101,7 +102,7 @@ function detachTelegramForwarder() {
     telegramForwarderLifecycle.detach();
 }
 
-function attachTelegramForwarder(bot: any) {
+function attachTelegramForwarder(bot: Bot) {
     telegramForwarderLifecycle.attach({ bot });
 }
 
@@ -123,8 +124,8 @@ export function getLatestTelegramChatId(): string | number | null {
 }
 
 export function getTelegramTargetIds(): Array<string | number> {
-    return settings.telegram.allowedChatIds?.length
-        ? [...settings.telegram.allowedChatIds]
+    return settings["telegram"].allowedChatIds?.length
+        ? [...settings["telegram"].allowedChatIds]
         : ([...telegramActiveChatIds] as Array<string | number>);
 }
 
@@ -133,19 +134,19 @@ export async function sendTelegramText(chatId: string, text: string) {
     return telegramBot.api.sendMessage(chatId, text);
 }
 
-function buildTelegramTarget(ctx: any): RemoteTarget {
+function buildTelegramTarget(ctx: Context): RemoteTarget {
     const chatType = ctx.chat?.type;
     const isGroup = chatType === 'group' || chatType === 'supergroup';
-    return {
+    return stripUndefined({
         channel: 'telegram',
         targetKind: 'channel',
         peerKind: isGroup ? 'group' : 'direct',
-        targetId: String(ctx.chat.id),
+        targetId: String(ctx.chat?.id ?? ''),
         threadId: ctx.message?.message_thread_id ? String(ctx.message.message_thread_id) : undefined,
-    };
+    });
 }
 
-async function telegramSendHandler(req: ChannelSendRequest): Promise<{ ok: boolean; error?: string; [k: string]: any }> {
+async function telegramSendHandler(req: ChannelSendRequest): Promise<{ ok: boolean; error?: string; [k: string]: unknown }> {
     if (!telegramBot) return { ok: false, error: 'Telegram not connected' };
 
     const chatId = req.chatId || req.target?.targetId || getLatestTelegramChatId();
@@ -172,7 +173,7 @@ async function telegramSendHandler(req: ChannelSendRequest): Promise<{ ok: boole
     if (!filePath) return { ok: false, error: 'file_path required for non-text types' };
     const { validateFileSize, sendTelegramFile } = await import('./telegram-file.js');
     validateFileSize(filePath, req.type);
-    const result = await sendTelegramFile(telegramBot, chatId, filePath, req.type, { caption: req.caption });
+    const result = await sendTelegramFile(telegramBot, chatId, filePath, req.type, stripUndefined({ caption: req.caption }));
     return result;
 }
 
@@ -189,20 +190,20 @@ function escapeRegExp(text: string) {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function syncTelegramCommands(bot: any) {
+function syncTelegramCommands(bot: Bot) {
     const locale = currentLocale();
     const cmds = getTelegramMenuCommands()
-        .map((c: any) => ({
+        .map((c: { name: string; desc?: string; descKey?: string; tgDescKey?: string }) => ({
             command: c.name,
             description: toTelegramCommandDescription(
-                c.tgDescKey ? t(c.tgDescKey, {}, locale) : (c.descKey ? t(c.descKey, {}, locale) : c.desc)
+                (c.tgDescKey ? t(c.tgDescKey, {}, locale) : (c.descKey ? t(c.descKey, {}, locale) : c.desc)) ?? ''
             ),
         }));
     // Set commands with language_code per Telegram Bot API
     // Also set default (no language_code) for users without language preference
     return Promise.all([
         bot.api.setMyCommands(cmds),
-        bot.api.setMyCommands(cmds, { language_code: locale }),
+        bot.api.setMyCommands(cmds, { language_code: locale as 'en' | 'ko' }),
     ]);
 }
 
@@ -252,36 +253,39 @@ async function _initTelegramInner() {
             await new Promise(r => setTimeout(r, 2000));
         }
     }
-    const envToken = process.env.TELEGRAM_TOKEN;
-    if (envToken) settings.telegram.token = envToken;
+    const envToken = process.env["TELEGRAM_TOKEN"];
+    if (envToken) settings["telegram"].token = envToken;
 
-    const envChatIds = process.env.TELEGRAM_ALLOWED_CHAT_IDS;
+    const envChatIds = process.env["TELEGRAM_ALLOWED_CHAT_IDS"];
     if (envChatIds) {
-        settings.telegram.allowedChatIds = envChatIds
+        settings["telegram"].allowedChatIds = envChatIds
             .split(',')
             .map(id => parseInt(id.trim(), 10))
             .filter(id => !isNaN(id));
     }
 
-    if (!settings.telegram?.enabled || !settings.telegram?.token) {
+    if (!settings["telegram"]?.enabled || !settings["telegram"]?.token) {
         console.log('[tg] ⏭️  Telegram pending (disabled or no token)');
         return;
     }
 
     // Pre-seed telegramActiveChatIds from persisted allowedChatIds
-    if (settings.telegram.allowedChatIds?.length) {
-        for (const id of settings.telegram.allowedChatIds) telegramActiveChatIds.add(id);
-        console.log(`[tg] Pre-seeded ${settings.telegram.allowedChatIds.length} chat(s) from allowedChatIds`);
+    if (settings["telegram"].allowedChatIds?.length) {
+        for (const id of settings["telegram"].allowedChatIds) telegramActiveChatIds.add(id);
+        console.log(`[tg] Pre-seeded ${settings["telegram"].allowedChatIds.length} chat(s) from allowedChatIds`);
     }
 
     const ipv4Agent = new https.Agent({ family: 4 });
-    const ipv4Fetch = (url: string, init: Record<string, any> = {}): Promise<any> => {
+    const ipv4Fetch = (url: string, init: Record<string, unknown> = {}): Promise<unknown> => {
         return new Promise((resolve, reject) => {
             const u = new URL(url);
+            const headersInit = init["headers"];
             const opts = {
                 hostname: u.hostname, port: u.port || 443, path: u.pathname + u.search,
-                method: init.method || 'GET', agent: ipv4Agent,
-                headers: init.headers instanceof Headers ? Object.fromEntries(init.headers) : (init.headers || {}),
+                method: (init["method"] as string) || 'GET', agent: ipv4Agent,
+                headers: headersInit instanceof Headers
+                    ? Object.fromEntries(headersInit)
+                    : ((headersInit as Record<string, string>) || {}),
             };
             const req = https.request(opts, (res) => {
                 let data = '';
@@ -294,13 +298,14 @@ async function _initTelegramInner() {
                 }));
             });
             req.on('error', reject);
-            if (init.body) req.write(typeof init.body === 'string' ? init.body : JSON.stringify(init.body));
+            const body = init["body"];
+            if (body) req.write(typeof body === 'string' ? body : JSON.stringify(body));
             req.end();
         });
     };
 
-    const bot = new Bot(settings.telegram.token, {
-        client: { fetch: ipv4Fetch as any },
+    const bot = new Bot(settings["telegram"].token, {
+        client: { fetch: ipv4Fetch as never },
     });
     bot.catch((err) => console.error('[tg:error]', err.message || err));
     bot.use(sequentialize((ctx) => `tg:${ctx.chat?.id || 'unknown'}`));
@@ -311,7 +316,7 @@ async function _initTelegramInner() {
     });
 
     bot.use(async (ctx, next) => {
-        const allowed = settings.telegram.allowedChatIds;
+        const allowed = settings["telegram"].allowedChatIds;
         if (allowed?.length > 0 && !allowed.includes(ctx.chat?.id)) {
             console.log(`[tg:blocked] chatId=${ctx.chat?.id}`);
             return;
@@ -321,7 +326,7 @@ async function _initTelegramInner() {
 
     // Group chat @mention gating (configurable)
     bot.use(async (ctx, next) => {
-        if (settings.telegram.mentionOnly === false) {
+        if (settings["telegram"].mentionOnly === false) {
             await next();
             return;
         }
@@ -336,11 +341,13 @@ async function _initTelegramInner() {
     });
 
     bot.command('start', (ctx) => ctx.reply(t('tg.connected', {}, currentLocale())));
-    bot.command('id', (ctx) => ctx.reply(`Chat ID: <code>${ctx.chat.id}</code>`, { parse_mode: 'HTML' }));
+    bot.command('id', (ctx) => ctx.reply(`Chat ID: <code>${ctx.chat?.id ?? ''}</code>`, { parse_mode: 'HTML' }));
 
-    async function tgOrchestrate(ctx: any, prompt: string, displayMsg: string) {
+    async function tgOrchestrate(ctx: Context, prompt: string, displayMsg: string) {
         const chatId = ctx.chat?.id;
-        const result = submitMessage(prompt, { origin: 'telegram', displayText: displayMsg, skipOrchestrate: true, chatId });
+        if (!ctx.chat) return;
+        const chat = ctx.chat;
+        const result = submitMessage(prompt, stripUndefined({ origin: 'telegram' as const, displayText: displayMsg, skipOrchestrate: true, chatId }));
 
         if (result.action === 'queued') {
             console.log(`[tg:queue] agent busy, queued (${result.pending} pending)`);
@@ -348,10 +355,10 @@ async function _initTelegramInner() {
 
             // 큐 처리 후 응답을 이 채팅으로 전달 — requestId로 request-level 격리
             const requestId = result.requestId;
-            const queueHandler = (type: string, data: Record<string, any>) => {
-                if (type === 'orchestrate_done' && data.text && data.origin === 'telegram' && data.requestId === requestId) {
+            const queueHandler = (type: string, data: Record<string, unknown>) => {
+                if (type === 'orchestrate_done' && data["text"] && data["origin"] === 'telegram' && data["requestId"] === requestId) {
                     removeBroadcastListener(queueHandler);
-                    const html = markdownToTelegramHtml(data.text);
+                    const html = markdownToTelegramHtml(String(data["text"]));
                     const chunks = chunkTelegramMessage(html);
                     for (const chunk of chunks) {
                         ctx.reply(chunk, { parse_mode: 'HTML' })
@@ -371,20 +378,20 @@ async function _initTelegramInner() {
 
         // result.action === 'started' — TG 출력 로직 진입
         const submitRequestId = result.requestId;
-        markChatActive(ctx.chat.id, ctx);
+        markChatActive(chat.id, ctx);
 
         await ctx.replyWithChatAction('typing')
             .then(() => console.log('[tg:typing] ✅ sent'))
-            .catch((e: any) => console.log('[tg:typing] ❌', e.message));
+            .catch((e: unknown) => console.log('[tg:typing] ❌', (e as Error).message));
         const typingInterval = setInterval(() => {
             ctx.replyWithChatAction('typing')
                 .then(() => console.log('[tg:typing] ✅ refresh'))
-                .catch((e: any) => console.log('[tg:typing] ❌ refresh', e.message));
+                .catch((e: unknown) => console.log('[tg:typing] ❌ refresh', (e as Error).message));
         }, 4000);
 
-        const showTools = settings.telegram?.showToolUse !== false;
+        const showTools = settings["telegram"]?.showToolUse !== false;
         let statusMsgId: number | null = null;
-        let statusMsgCreatePromise: Promise<any> | null = null;
+        let statusMsgCreatePromise: Promise<number | null> | null = null;
         let statusUpdateTimer: ReturnType<typeof setTimeout> | null = null;
         let statusUpdateRunning = false;
         let pendingStatusText = '';
@@ -397,7 +404,7 @@ async function _initTelegramInner() {
             if (!statusMsgId) {
                 if (!statusMsgCreatePromise) {
                     statusMsgCreatePromise = ctx.reply(`🔄 ${display}`)
-                        .then((m: any) => {
+                        .then((m: { message_id: number }) => {
                             statusMsgId = m.message_id;
                             return statusMsgId;
                         })
@@ -410,7 +417,7 @@ async function _initTelegramInner() {
                 return;
             }
 
-            await ctx.api.editMessageText(ctx.chat.id, statusMsgId, `🔄 ${display}`)
+            await ctx.api.editMessageText(chat.id, statusMsgId, `🔄 ${display}`)
                 .catch(() => { });
         };
 
@@ -441,15 +448,15 @@ async function _initTelegramInner() {
 
         const toolHandler = showTools ? (type: string, data: Record<string, any>) => {
             if (type === 'agent_retry') {
-                pushToolLine(`⏳ ${data.cli} 429 — ${data.delay}s 후 재시도`);
+                pushToolLine(`⏳ ${data["cli"]} 429 — ${data["delay"]}s 후 재시도`);
             } else if (type === 'agent_fallback') {
-                pushToolLine(`⚡ ${data.from} → ${data.to}`);
+                pushToolLine(`⚡ ${data["from"]} → ${data["to"]}`);
             } else if (type === 'agent_smoke') {
-                console.log(`[tg:smoke] ${data.cli} smoke detected — auto-continuing`);
-            } else if (type === 'agent_tool' && data.icon && data.label) {
+                console.log(`[tg:smoke] ${data["cli"]} smoke detected — auto-continuing`);
+            } else if (type === 'agent_tool' && data["icon"] && data["label"]) {
                 // Copilot ACP emits many thought chunks; hide them on Telegram to avoid message storms.
-                if (data.icon === '💭') return;
-                pushToolLine(`${data.icon} ${data.label}`);
+                if (data["icon"] === '💭') return;
+                pushToolLine(`${data["icon"]} ${data["label"]}`);
             } else {
                 return;
             }
@@ -458,7 +465,7 @@ async function _initTelegramInner() {
         if (toolHandler) addBroadcastListener(toolHandler);
 
         try {
-            const result = await orchestrateAndCollect(prompt, { origin: 'telegram', chatId: ctx.chat.id, requestId: submitRequestId, _skipInsert: true }) as string;
+            const result = await orchestrateAndCollect(prompt, { origin: 'telegram', chatId: chat.id, requestId: submitRequestId, _skipInsert: true }) as string;
             clearInterval(typingInterval);
             if (statusUpdateTimer) {
                 clearTimeout(statusUpdateTimer);
@@ -466,7 +473,7 @@ async function _initTelegramInner() {
             }
             if (toolHandler) removeBroadcastListener(toolHandler);
             if (statusMsgId) {
-                ctx.api.deleteMessage(ctx.chat.id, statusMsgId).catch(() => { });
+                ctx.api.deleteMessage(chat.id, statusMsgId).catch(() => { });
             }
             const html = markdownToTelegramHtml(result);
             const chunks = chunkTelegramMessage(html);
@@ -477,7 +484,7 @@ async function _initTelegramInner() {
                     await ctx.reply(chunk.replace(/<[^>]+>/g, ''));
                 }
             }
-            console.log(`[tg:out] ${ctx.chat.id}: ${result.slice(0, 80)}`);
+            console.log(`[tg:out] ${chat.id}: ${result.slice(0, 80)}`);
         } catch (err: unknown) {
             clearInterval(typingInterval);
             if (statusUpdateTimer) {
@@ -486,7 +493,7 @@ async function _initTelegramInner() {
             }
             if (toolHandler) removeBroadcastListener(toolHandler);
             if (statusMsgId) {
-                ctx.api.deleteMessage(ctx.chat.id, statusMsgId).catch(() => { });
+                ctx.api.deleteMessage(chat.id, statusMsgId).catch(() => { });
             }
             console.error('[tg:error]', err);
             await ctx.reply(`❌ Error: ${(err as Error).message}`);
@@ -494,6 +501,7 @@ async function _initTelegramInner() {
     }
 
     bot.on('message:text', async (ctx) => {
+        if (!ctx.chat) return;
         markChatActive(ctx.chat.id, ctx);
         let text = ctx.message.text;
         if (botUsername) {
@@ -529,7 +537,7 @@ async function _initTelegramInner() {
             }
             return;
         }
-        console.log(`[tg:in] ${ctx.chat.id}: ${text.slice(0, 80)}`);
+        console.log(`[tg:in] ${ctx.chat?.id}: ${text.slice(0, 80)}`);
 
         // Reset intent: use submitMessage gateway for consistency
         if (isResetIntent(text)) {
@@ -548,14 +556,14 @@ async function _initTelegramInner() {
         const photos = ctx.message.photo;
         const largest = photos[photos.length - 1]!;
         const caption = ctx.message.caption || '';
-        console.log(`[tg:photo] ${ctx.chat.id}: fileId=${largest.file_id.slice(0, 20)}... caption=${caption.slice(0, 40)}`);
+        console.log(`[tg:photo] ${ctx.chat?.id}: fileId=${largest.file_id.slice(0, 20)}... caption=${caption.slice(0, 40)}`);
         try {
-            const dlResult = await downloadTelegramFile(largest.file_id, settings.telegram.token, {
+            const dlResult = await downloadTelegramFile(largest.file_id, settings["telegram"].token, stripUndefined({
                 kind: 'photo',
                 maxBytes: TELEGRAM_DOWNLOAD_LIMITS.photo,
                 fileSize: largest.file_size,
-            }) as Record<string, any>;
-            const filePath = saveUpload(dlResult.buffer, `photo${dlResult.ext}`);
+            })) as Record<string, unknown>;
+            const filePath = saveUpload(dlResult["buffer"] as Buffer, `photo${dlResult["ext"]}`);
             const prompt = buildMediaPrompt(filePath, caption);
             tgOrchestrate(ctx, prompt, `${t('tg.imageCaption', { caption }, currentLocale())}`);
         } catch (err: unknown) {
@@ -567,14 +575,14 @@ async function _initTelegramInner() {
     bot.on('message:document', async (ctx) => {
         const doc = ctx.message.document;
         const caption = ctx.message.caption || '';
-        console.log(`[tg:doc] ${ctx.chat.id}: ${doc.file_name} (${doc.file_size} bytes)`);
+        console.log(`[tg:doc] ${ctx.chat?.id}: ${doc.file_name} (${doc.file_size} bytes)`);
         try {
-            const dlResult = await downloadTelegramFile(doc.file_id, settings.telegram.token, {
+            const dlResult = await downloadTelegramFile(doc.file_id, settings["telegram"].token, stripUndefined({
                 kind: 'document',
                 maxBytes: TELEGRAM_DOWNLOAD_LIMITS.document,
                 fileSize: doc.file_size,
-            }) as Record<string, any>;
-            const filePath = saveUpload(dlResult.buffer, doc.file_name || 'document');
+            })) as Record<string, any>;
+            const filePath = saveUpload(dlResult["buffer"], doc.file_name || 'document');
             const prompt = buildMediaPrompt(filePath, caption);
             tgOrchestrate(ctx, prompt, `[📎 ${doc.file_name || 'file'}] ${caption}`);
         } catch (err: unknown) {
@@ -586,7 +594,7 @@ async function _initTelegramInner() {
     bot.on('message:voice', (ctx) => handleVoice(ctx, currentLocale, tgOrchestrate));
 
     // ─── Global Forwarding: non-Telegram responses → Telegram ───
-    if (settings.telegram?.forwardAll !== false) {
+    if (settings["telegram"]?.forwardAll !== false) {
         attachTelegramForwarder(bot);
     }
 
@@ -627,6 +635,6 @@ async function _initTelegramInner() {
             console.error('[tg:fatal]', err);
         }
     });
-    telegramBot = bot as any;
+    telegramBot = bot;
     console.log('[tg] Bot starting...');
 }

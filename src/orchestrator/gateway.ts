@@ -7,6 +7,7 @@ import { isAgentBusy, enqueueMessage, messageQueue } from '../agent/spawn.js';
 import { hasBlockingWorkers } from './worker-registry.js';
 import { insertMessage } from '../core/db.js';
 import { settings } from '../core/config.js';
+import { stripUndefined } from '../core/strip-undefined.js';
 import { broadcast } from '../core/bus.js';
 import {
     orchestrate, orchestrateContinue, orchestrateReset,
@@ -97,10 +98,10 @@ export function submitMessage(
     recentSubmissions.set(key, { ts: now, requestId });
 
     // ── continue intent (only when IDLE) ──
-    const scope = resolveOrcScope({ origin: meta.origin, chatId: meta.chatId, workingDir: settings.workingDir || null });
+    const scope = resolveOrcScope(stripUndefined({ origin: meta.origin, chatId: meta.chatId, workingDir: settings["workingDir"] || null }));
     if (getState(scope) === 'IDLE' && isContinueIntent(trimmed)) {
         if (isAgentBusy()) return { action: 'rejected', reason: 'busy' };
-        insertMessage.run('user', display, meta.origin, '', settings.workingDir || null);
+        insertMessage.run('user', display, meta.origin, '', settings["workingDir"] || null);
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
         if (!meta.skipOrchestrate) {
             runDetached(
@@ -114,7 +115,7 @@ export function submitMessage(
 
     // ── reset intent ──
     if (isResetIntent(trimmed)) {
-        insertMessage.run('user', display, meta.origin, '', settings.workingDir || null);
+        insertMessage.run('user', display, meta.origin, '', settings["workingDir"] || null);
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
         if (!meta.skipOrchestrate) {
             runDetached(
@@ -134,13 +135,13 @@ export function submitMessage(
     // starting immediately is safe and avoids the processQueue deadlock
     // documented in devlog/_plan/260417_message_duplication/02_*.
     if (isAgentBusy() || hasBlockingWorkers()) {
-        const queuedId = enqueueMessage(trimmed, meta.origin, { target: meta.target, chatId: meta.chatId, requestId, scope });
+        const queuedId = enqueueMessage(trimmed, meta.origin, stripUndefined({ target: meta.target, chatId: meta.chatId, requestId, scope }));
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
         return { action: 'queued', pending: messageQueue.length, queued: true, requestId, queuedId };
     }
 
     // ── idle → start immediately ──
-    insertMessage.run('user', display, meta.origin, '', settings.workingDir || null);
+    insertMessage.run('user', display, meta.origin, '', settings["workingDir"] || null);
     broadcast('new_message', { role: 'user', content: display, source: meta.origin });
     if (!meta.skipOrchestrate) {
         runDetached(

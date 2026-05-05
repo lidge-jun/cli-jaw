@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { stripUndefined } from '../../core/strip-undefined.js';
 import { CACHE_SCHEMA_VERSION, RESOLUTION_SOURCES, VALIDATION_REASONS, VALIDATION_THRESHOLD } from './constants.js';
 import { CHATGPT_COPY_SELECTORS, GEMINI_COPY_SELECTORS, GROK_COPY_SELECTORS } from './copy-markdown.js';
 import { WebAiError, wrapError } from './errors.js';
@@ -50,7 +51,15 @@ export interface PageLocator {
     isVisible(): Promise<boolean>;
     isEnabled(): Promise<boolean>;
     isEditable?(): Promise<boolean>;
-    evaluate<T>(fn: (node: any) => T | Promise<T>): Promise<T>;
+    evaluate<T>(fn: (node: ValidationNodeLike) => T | Promise<T>): Promise<T>;
+}
+
+interface ValidationNodeLike {
+    getAttribute(name: string): string | null;
+    tagName: string;
+    isContentEditable?: boolean;
+    contentEditable?: string;
+    textContent?: string | null;
 }
 
 export interface PageLike {
@@ -158,7 +167,7 @@ export function resolveIntentFeature(intent: string, featureOverride: string | n
 }
 
 export function semanticTargetsForVendor(vendor = 'chatgpt'): Record<string, SemanticTarget> {
-    return SEMANTIC_TARGETS[vendor] || SEMANTIC_TARGETS.chatgpt || {};
+    return SEMANTIC_TARGETS[vendor] || SEMANTIC_TARGETS["chatgpt"] || {};
 }
 
 export async function resolveActionTarget(page: PageLike, ctx: ResolveActionTargetContext): Promise<ResolveActionTargetResult> {
@@ -190,14 +199,14 @@ export async function resolveActionTarget(page: PageLike, ctx: ResolveActionTarg
 
         const cached = cache?.get({ provider, intent, actionKind, urlHost, fingerprint });
         if (cached) {
-            const validation = await validateResolvedTarget(page, cached.target, {
+            const validation = await validateResolvedTarget(page, cached.target, stripUndefined({
                 semanticTarget,
                 actionKind,
                 registry,
                 contractVersion: ctx.contractVersion,
                 framePath: ctx.framePath,
                 browserConfigHash: ctx.browserConfigHash,
-            });
+            }));
             attempts.push({ source: RESOLUTION_SOURCES.CACHE, validation });
             if (validation.ok) return { ok: true, target: { ...cached.target, resolution: RESOLUTION_SOURCES.CACHE }, attempts };
         }
@@ -209,7 +218,7 @@ export async function resolveActionTarget(page: PageLike, ctx: ResolveActionTarg
         });
         for (const candidate of ranked) {
             const validation = await validateResolvedTarget(page, candidate, { semanticTarget, actionKind, registry });
-            attempts.push({ source: candidate.source, ref: candidate.ref || null, selector: candidate.selector || null, validation });
+            attempts.push(stripUndefined({ source: candidate.source, ref: candidate.ref || null, selector: candidate.selector || null, validation }));
             if (validation.ok) return { ok: true, target: { ...candidate, resolution: candidate.source }, attempts };
         }
         return {
@@ -281,10 +290,10 @@ export async function validateResolvedTarget(
         if (!await el.isVisible().catch(() => false)) return { ok: false, reason: VALIDATION_REASONS.NOT_VISIBLE };
         if (!await el.isEnabled().catch(() => false)) return { ok: false, reason: VALIDATION_REASONS.NOT_ENABLED };
         if (actionKind === 'fill' && !await el.isEditable?.().catch(() => false)) return { ok: false, reason: VALIDATION_REASONS.NOT_EDITABLE };
-        if (semanticTarget?.roles?.length || semanticTarget?.names?.length || target?.role || target?.name || target?.nameHash) {
+        if (semanticTarget?.roles?.length || semanticTarget?.names?.length || target?.role || target?.name || target?.["nameHash"]) {
             const validation = await runValidationContract(el, { target: target || {}, semanticTarget, actionKind });
-            if (!validation.ok) return { ok: false, reason: validation.reason, confidence: validation.confidence };
-            return { ok: true, confidence: validation.confidence };
+            if (!validation.ok) return stripUndefined({ ok: false, reason: validation.reason, confidence: validation.confidence });
+            return stripUndefined({ ok: true, confidence: validation.confidence });
         }
         return { ok: true, confidence: 1.0 };
     } catch (err) {
@@ -332,11 +341,11 @@ function observeProviderTargets(snapshot: TargetSnapshot, featureMap: Record<str
             .filter((ref) => targetMatchesRef(target, ref))
             .map((ref) => ({
                 source: RESOLUTION_SOURCES.SNAPSHOT_SEMANTIC,
-                ref: ref.ref,
+                ref: ref.ref || null,
                 selector: ref.selector || null,
                 role: ref.role || null,
                 name: ref.name || '',
-                confidence: scoreCandidate({ role: ref.role, name: ref.name || '' }, target),
+                confidence: scoreCandidate(stripUndefined({ role: ref.role, name: ref.name || '' }), target),
             }));
         results[feature] = rankTargetCandidates(candidates, { expectedRole: target.roles?.[0] || null, expectedNames: target.names || [] });
     }
@@ -369,8 +378,8 @@ async function runValidationContract(locator: PageLocator, input: { target: Targ
     if (input.target.role) score += input.target.role === info.role ? 3 : (input.semanticTarget?.roles?.includes(info.role) ? 2 : 0);
     else if (input.semanticTarget?.roles?.includes(info.role)) score += 3;
     maxScore += 3;
-    if (input.target.nameHash) {
-        if ((info.label ? hashField(info.label) : null) === input.target.nameHash) score += 3;
+    if (input.target["nameHash"]) {
+        if ((info.label ? hashField(info.label) : null) === input.target["nameHash"]) score += 3;
     } else if (input.target.name) {
         if (new RegExp(escapeForRegExp(input.target.name), 'i').test(info.label)) score += 3;
     } else if (input.semanticTarget?.names?.some((pattern) => patternMatches(pattern, info.label))) score += 3;

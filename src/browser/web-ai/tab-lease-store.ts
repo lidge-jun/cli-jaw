@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, openSync, readFileSync, closeSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { JAW_HOME } from '../../core/config.js';
+import { stripUndefined } from '../../core/strip-undefined.js';
 import { closeTab, listTabs } from '../connection.js';
 import type { WebAiVendor } from './types.js';
 
@@ -81,6 +82,10 @@ function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function hasErrorCode(error: unknown, code: string): boolean {
+    return Boolean(error && typeof error === 'object' && 'code' in error && error.code === code);
+}
+
 export function parseDuration(value: string | number | null | undefined, fallbackMs = DEFAULT_POOL_TTL_MS): number {
     if (typeof value === 'number' && Number.isFinite(value) && value >= 0) return value;
     const raw = String(value || '').trim();
@@ -96,16 +101,16 @@ export function parseDuration(value: string | number | null | undefined, fallbac
 }
 
 function poolTtlMs(): number {
-    return parseDuration(process.env.JAW_BROWSER_PROVIDER_POOL_TTL || process.env.AGBROWSE_PROVIDER_POOL_TTL || '5m');
+    return parseDuration(process.env["JAW_BROWSER_PROVIDER_POOL_TTL"] || process.env["AGBROWSE_PROVIDER_POOL_TTL"] || '5m');
 }
 
 function poolMaxPerKey(): number {
-    const parsed = Number(process.env.JAW_BROWSER_PROVIDER_POOL_MAX_PER_KEY || process.env.AGBROWSE_PROVIDER_POOL_MAX_PER_KEY || DEFAULT_POOL_MAX_PER_KEY);
+    const parsed = Number(process.env["JAW_BROWSER_PROVIDER_POOL_MAX_PER_KEY"] || process.env["AGBROWSE_PROVIDER_POOL_MAX_PER_KEY"] || DEFAULT_POOL_MAX_PER_KEY);
     return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : DEFAULT_POOL_MAX_PER_KEY;
 }
 
 function poolGlobalMax(): number {
-    const parsed = Number(process.env.JAW_BROWSER_PROVIDER_POOL_GLOBAL_MAX || process.env.AGBROWSE_PROVIDER_POOL_GLOBAL_MAX || DEFAULT_POOL_GLOBAL_MAX);
+    const parsed = Number(process.env["JAW_BROWSER_PROVIDER_POOL_GLOBAL_MAX"] || process.env["AGBROWSE_PROVIDER_POOL_GLOBAL_MAX"] || DEFAULT_POOL_GLOBAL_MAX);
     return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : DEFAULT_POOL_GLOBAL_MAX;
 }
 
@@ -184,8 +189,8 @@ export async function withLeaseLock<T>(fn: () => T | Promise<T>): Promise<T> {
     while (fd === null) {
         try {
             fd = openSync(lockPath(), 'wx');
-        } catch (error: any) {
-            if (error?.code !== 'EEXIST') throw error;
+        } catch (error: unknown) {
+            if (!hasErrorCode(error, 'EEXIST')) throw error;
             try {
                 const raw = readFileSync(lockPath(), 'utf8');
                 const lockedAt = Number(JSON.parse(raw).lockedAt || 0);
@@ -394,7 +399,7 @@ export async function checkoutPooledLease(input: CheckoutLeaseInput): Promise<{ 
     });
     await closePlanned(input.port, closePlan);
     const checkedOut = selected as TabLease | null;
-    return checkedOut ? { targetId: checkedOut.targetId, url: checkedOut.url } : null;
+    return checkedOut ? stripUndefined({ targetId: checkedOut.targetId, url: checkedOut.url }) : null;
 }
 
 export async function cleanupLeasedTabs(port: number): Promise<{ closed: number; closedTabs: string[] }> {
@@ -417,7 +422,7 @@ export async function removeLease(targetId: string | null | undefined, scope: Pa
     if (!targetId) return;
     await withLeaseLock(() => {
         const store = readStoreUnlocked();
-        const scoped = normalizeLease({ ...scope, origin: scope.origin || undefined, vendor: scope.vendor || 'chatgpt', targetId });
+        const scoped = normalizeLease(stripUndefined({ ...scope, origin: scope.origin || undefined, vendor: scope.vendor || 'chatgpt', targetId }));
         if (!scoped) return;
         store.leases = store.leases.filter(lease => !sameTargetScope(lease, scoped));
         writeStoreUnlocked(store);

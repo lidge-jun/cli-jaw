@@ -1,3 +1,5 @@
+import { stripUndefined } from '../../core/strip-undefined.js';
+
 const CAPTURE_METHODS = new Set(['copy-button', 'dom-fallback', 'clipboard', 'manual', 'unknown']);
 
 export interface AnswerArtifact {
@@ -47,27 +49,31 @@ export function createAnswerArtifact(input: AnswerArtifactInput = {}): AnswerArt
     };
 }
 
-export function artifactFromPollResult(result: Record<string, any> = {}, context: Record<string, any> = {}): AnswerArtifact {
-    const capturedBy = result.capturedBy
-        || result.captureMethod
-        || (Array.isArray(result.usedFallbacks) && result.usedFallbacks.includes('copy-markdown') ? 'copy-button' : null)
-        || (result.answerText ? 'dom-fallback' : 'unknown');
+export function artifactFromPollResult(result: object = {}, context: object = {}): AnswerArtifact {
+    const resultUsedFallbacks = readProp(result, 'usedFallbacks');
+    const capturedBy = stringValue(readProp(result, 'capturedBy'))
+        || stringValue(readProp(result, 'captureMethod'))
+        || (Array.isArray(resultUsedFallbacks) && resultUsedFallbacks.includes('copy-markdown') ? 'copy-button' : null)
+        || (readProp(result, 'answerText') ? 'dom-fallback' : 'unknown');
+    const contextWarnings = readProp(context, 'warnings');
+    const resultWarnings = readProp(result, 'warnings');
 
-    return createAnswerArtifact({
-        provider: result.vendor || context.provider,
-        sessionId: result.sessionId || context.sessionId,
-        conversationUrl: result.conversationUrl || result.url || context.conversationUrl,
+    return createAnswerArtifact(stripUndefined({
+        provider: stringValue(readProp(result, 'vendor')) || stringValue(readProp(context, 'provider')),
+        sessionId: stringValue(readProp(result, 'sessionId')) || stringValue(readProp(context, 'sessionId')),
+        conversationUrl: stringValue(readProp(result, 'conversationUrl')) || stringValue(readProp(result, 'url')) || stringValue(readProp(context, 'conversationUrl')),
         capturedBy,
-        markdown: result.markdown || result.answerMarkdown || result.answerText || '',
-        text: result.text || result.answerText || result.markdown || result.answerMarkdown || '',
-        responseStableMs: result.responseStableMs,
-        warnings: [...(context.warnings || []), ...(result.warnings || [])],
-    });
+        markdown: stringValue(readProp(result, 'markdown')) || stringValue(readProp(result, 'answerMarkdown')) || stringValue(readProp(result, 'answerText')),
+        text: stringValue(readProp(result, 'text')) || stringValue(readProp(result, 'answerText')) || stringValue(readProp(result, 'markdown')) || stringValue(readProp(result, 'answerMarkdown')),
+        responseStableMs: readProp(result, 'responseStableMs') as number | string | null | undefined,
+        warnings: [...arrayValue(contextWarnings), ...arrayValue(resultWarnings)],
+    }));
 }
 
-export function withAnswerArtifact<T extends Record<string, any>>(result: T, context: Record<string, any> = {}): T & { answerArtifact?: AnswerArtifact } {
-    if (result.answerArtifact) return result;
-    if (!result.answerText && !result.markdown && !result.answerMarkdown && !result.text) return result;
+export function withAnswerArtifact<T extends object>(result: T, context: object = {}): T & { answerArtifact?: AnswerArtifact } {
+    const output = result as T & { answerArtifact?: AnswerArtifact; answerText?: unknown; markdown?: unknown; answerMarkdown?: unknown; text?: unknown };
+    if (output.answerArtifact) return output;
+    if (!output.answerText && !output.markdown && !output.answerMarkdown && !output.text) return output;
     return {
         ...result,
         answerArtifact: artifactFromPollResult(result, context),
@@ -94,6 +100,18 @@ function normalizeCaptureMethod(value: unknown): string {
 
 function normalizeText(value: unknown): string {
     return typeof value === 'string' ? value : '';
+}
+
+function stringValue(value: unknown): string {
+    return typeof value === 'string' ? value : '';
+}
+
+function arrayValue(value: unknown): unknown[] {
+    return Array.isArray(value) ? value : [];
+}
+
+function readProp(source: object, key: string): unknown {
+    return (source as Record<string, unknown>)[key];
 }
 
 function estimateExactnessScore(input: { capturedBy: string; markdown: string; text: string }): number {

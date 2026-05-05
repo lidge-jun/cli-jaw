@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { resolveHomePath } from '../core/path-expand.js';
+import { stripUndefined } from '../core/strip-undefined.js';
 import {
     MANAGED_INSTANCE_PORT_COUNT,
     MANAGED_INSTANCE_PORT_FROM,
@@ -61,7 +62,7 @@ type StatusOptions = {
 };
 
 function legacyManagerHome(): string {
-    const home = process.env.CLI_JAW_HOME || join(homedir(), '.cli-jaw');
+    const home = process.env["CLI_JAW_HOME"] || join(homedir(), '.cli-jaw');
     return resolveHomePath(home, homedir());
 }
 
@@ -143,62 +144,62 @@ export function defaultDashboardRegistry(options: RegistryOptions = {}): Dashboa
 function normalizeUi(value: unknown): DashboardRegistryUi {
     const input = isRecord(value) ? value : {};
     const fallback = defaultUi();
-    const selectedPort = input.selectedPort == null
+    const selectedPort = input["selectedPort"] == null
         ? null
-        : clampInt(input.selectedPort, 0, 1, 65535);
-    const selectedTab = DETAIL_TABS.includes(input.selectedTab as DashboardDetailTab)
-        ? input.selectedTab as DashboardDetailTab
+        : clampInt(input["selectedPort"], 0, 1, 65535);
+    const selectedTab = DETAIL_TABS.includes(input["selectedTab"] as DashboardDetailTab)
+        ? input["selectedTab"] as DashboardDetailTab
         : fallback.selectedTab;
-    const uiTheme = UI_THEMES.includes(input.uiTheme as DashboardUiTheme)
-        ? input.uiTheme as DashboardUiTheme
+    const uiTheme = UI_THEMES.includes(input["uiTheme"] as DashboardUiTheme)
+        ? input["uiTheme"] as DashboardUiTheme
         : fallback.uiTheme;
-    const locale = LOCALES.includes(input.locale as DashboardLocale)
-        ? input.locale as DashboardLocale
+    const locale = LOCALES.includes(input["locale"] as DashboardLocale)
+        ? input["locale"] as DashboardLocale
         : fallback.locale;
-    const sidebarMode = SIDEBAR_MODES.includes(input.sidebarMode as DashboardSidebarMode)
-        ? input.sidebarMode as DashboardSidebarMode
+    const sidebarMode = SIDEBAR_MODES.includes(input["sidebarMode"] as DashboardSidebarMode)
+        ? input["sidebarMode"] as DashboardSidebarMode
         : fallback.sidebarMode;
-    const notesViewMode = NOTES_VIEW_MODES.includes(input.notesViewMode as DashboardNotesViewMode)
-        ? input.notesViewMode as DashboardNotesViewMode
+    const notesViewMode = NOTES_VIEW_MODES.includes(input["notesViewMode"] as DashboardNotesViewMode)
+        ? input["notesViewMode"] as DashboardNotesViewMode
         : fallback.notesViewMode;
-    const notesAuthoringMode = NOTES_AUTHORING_MODES.includes(input.notesAuthoringMode as DashboardNotesAuthoringMode)
-        ? input.notesAuthoringMode as DashboardNotesAuthoringMode
+    const notesAuthoringMode = NOTES_AUTHORING_MODES.includes(input["notesAuthoringMode"] as DashboardNotesAuthoringMode)
+        ? input["notesAuthoringMode"] as DashboardNotesAuthoringMode
         : fallback.notesAuthoringMode;
     return {
         selectedPort,
         selectedTab,
-        sidebarCollapsed: typeof input.sidebarCollapsed === 'boolean' ? input.sidebarCollapsed : fallback.sidebarCollapsed,
-        activityDockCollapsed: typeof input.activityDockCollapsed === 'boolean' ? input.activityDockCollapsed : fallback.activityDockCollapsed,
-        activityDockHeight: clampInt(input.activityDockHeight, fallback.activityDockHeight, MIN_ACTIVITY_HEIGHT, MAX_ACTIVITY_HEIGHT),
-        activitySeenAt: typeof input.activitySeenAt === 'string' && !Number.isNaN(Date.parse(input.activitySeenAt))
-            ? input.activitySeenAt
+        sidebarCollapsed: typeof input["sidebarCollapsed"] === 'boolean' ? input["sidebarCollapsed"] : fallback.sidebarCollapsed,
+        activityDockCollapsed: typeof input["activityDockCollapsed"] === 'boolean' ? input["activityDockCollapsed"] : fallback.activityDockCollapsed,
+        activityDockHeight: clampInt(input["activityDockHeight"], fallback.activityDockHeight, MIN_ACTIVITY_HEIGHT, MAX_ACTIVITY_HEIGHT),
+        activitySeenAt: typeof input["activitySeenAt"] === 'string' && !Number.isNaN(Date.parse(input["activitySeenAt"]))
+            ? input["activitySeenAt"]
             : null,
-        activitySeenByPort: normalizeActivitySeenByPort(input.activitySeenByPort),
+        activitySeenByPort: normalizeActivitySeenByPort(input["activitySeenByPort"]),
         uiTheme,
         locale,
         sidebarMode,
-        notesSelectedPath: typeof input.notesSelectedPath === 'string' && input.notesSelectedPath.trim()
-            ? input.notesSelectedPath.trim()
+        notesSelectedPath: typeof input["notesSelectedPath"] === 'string' && input["notesSelectedPath"].trim()
+            ? input["notesSelectedPath"].trim()
             : null,
         notesViewMode,
         notesAuthoringMode,
-        notesWordWrap: typeof input.notesWordWrap === 'boolean' ? input.notesWordWrap : fallback.notesWordWrap,
-        notesTreeWidth: clampInt(input.notesTreeWidth, fallback.notesTreeWidth, MIN_NOTES_TREE_WIDTH, MAX_NOTES_TREE_WIDTH),
-        showLatestActivityTitles: typeof input.showLatestActivityTitles === 'boolean' ? input.showLatestActivityTitles : fallback.showLatestActivityTitles,
-        showInlineLabelEditor: typeof input.showInlineLabelEditor === 'boolean' ? input.showInlineLabelEditor : fallback.showInlineLabelEditor,
-        showSidebarRuntimeLine: typeof input.showSidebarRuntimeLine === 'boolean' ? input.showSidebarRuntimeLine : fallback.showSidebarRuntimeLine,
-        showSelectedRowActions: typeof input.showSelectedRowActions === 'boolean' ? input.showSelectedRowActions : fallback.showSelectedRowActions,
+        notesWordWrap: typeof input["notesWordWrap"] === 'boolean' ? input["notesWordWrap"] : fallback.notesWordWrap,
+        notesTreeWidth: clampInt(input["notesTreeWidth"], fallback.notesTreeWidth, MIN_NOTES_TREE_WIDTH, MAX_NOTES_TREE_WIDTH),
+        showLatestActivityTitles: typeof input["showLatestActivityTitles"] === 'boolean' ? input["showLatestActivityTitles"] : fallback.showLatestActivityTitles,
+        showInlineLabelEditor: typeof input["showInlineLabelEditor"] === 'boolean' ? input["showInlineLabelEditor"] : fallback.showInlineLabelEditor,
+        showSidebarRuntimeLine: typeof input["showSidebarRuntimeLine"] === 'boolean' ? input["showSidebarRuntimeLine"] : fallback.showSidebarRuntimeLine,
+        showSelectedRowActions: typeof input["showSelectedRowActions"] === 'boolean' ? input["showSelectedRowActions"] : fallback.showSelectedRowActions,
     };
 }
 
 function normalizeInstance(value: unknown): DashboardRegistryInstance {
     const input = isRecord(value) ? value : {};
     return {
-        label: readString(input.label),
-        favorite: input.favorite === true,
-        group: readString(input.group),
-        hidden: input.hidden === true,
-        notes: readString(input.notes),
+        label: readString(input["label"]),
+        favorite: input["favorite"] === true,
+        group: readString(input["group"]),
+        hidden: input["hidden"] === true,
+        notes: readString(input["notes"]),
     };
 }
 
@@ -206,34 +207,34 @@ function normalizeProfile(key: string, value: unknown): Partial<DashboardProfile
     const profileId = readProfileId(key);
     const input = isRecord(value) ? value : {};
     if (!profileId) return null;
-    const homePath = readString(input.homePath);
+    const homePath = readString(input["homePath"]);
     if (!homePath && Object.keys(input).length > 0) return null;
-    return {
+    return stripUndefined({
         profileId,
-        label: readString(input.label) || undefined,
+        label: readString(input["label"]) || undefined,
         homePath: homePath || undefined,
-        preferredPort: input.preferredPort == null ? undefined : clampInt(input.preferredPort, 0, 1, 65535),
-        serviceMode: ['unknown', 'ad-hoc', 'service', 'manager'].includes(String(input.serviceMode))
-            ? input.serviceMode as DashboardProfile['serviceMode']
+        preferredPort: input["preferredPort"] == null ? undefined : clampInt(input["preferredPort"], 0, 1, 65535),
+        serviceMode: ['unknown', 'ad-hoc', 'service', 'manager'].includes(String(input["serviceMode"]))
+            ? input["serviceMode"] as DashboardProfile['serviceMode']
             : undefined,
-        defaultCli: readString(input.defaultCli) || undefined,
-        notes: readString(input.notes) || undefined,
-        lastSeenAt: typeof input.lastSeenAt === 'string' && !Number.isNaN(Date.parse(input.lastSeenAt)) ? input.lastSeenAt : undefined,
-        pinned: typeof input.pinned === 'boolean' ? input.pinned : undefined,
-        color: readString(input.color) || undefined,
-    };
+        defaultCli: readString(input["defaultCli"]) || undefined,
+        notes: readString(input["notes"]) || undefined,
+        lastSeenAt: typeof input["lastSeenAt"] === 'string' && !Number.isNaN(Date.parse(input["lastSeenAt"])) ? input["lastSeenAt"] : undefined,
+        pinned: typeof input["pinned"] === 'boolean' ? input["pinned"] : undefined,
+        color: readString(input["color"]) || undefined,
+    });
 }
 
 export function normalizeDashboardRegistry(value: unknown, options: RegistryOptions = {}): DashboardRegistry {
     const input = isRecord(value) ? value : {};
     const defaults = defaultDashboardRegistry(options);
-    const scan = isRecord(input.scan) ? input.scan : {};
-    const from = validInt(scan.from, defaults.scan.from, 1, 65535);
-    const count = clampInt(scan.count, defaults.scan.count, 1, Math.min(MANAGED_INSTANCE_PORT_COUNT, 65535 - from + 1));
+    const scan = isRecord(input["scan"]) ? input["scan"] : {};
+    const from = validInt(scan["from"], defaults.scan.from, 1, 65535);
+    const count = clampInt(scan["count"], defaults.scan.count, 1, Math.min(MANAGED_INSTANCE_PORT_COUNT, 65535 - from + 1));
     const instances: Record<string, DashboardRegistryInstance> = {};
-    const rawInstances = isRecord(input.instances) ? input.instances : {};
+    const rawInstances = isRecord(input["instances"]) ? input["instances"] : {};
     const profiles: Record<string, Partial<DashboardProfile>> = {};
-    const rawProfiles = isRecord(input.profiles) ? input.profiles : {};
+    const rawProfiles = isRecord(input["profiles"]) ? input["profiles"] : {};
 
     for (const [key, raw] of Object.entries(rawInstances)) {
         const port = Number(key);
@@ -247,22 +248,22 @@ export function normalizeDashboardRegistry(value: unknown, options: RegistryOpti
         if (normalized) profiles[key] = normalized;
     }
 
-    const activeProfileFilter = Array.isArray(input.activeProfileFilter)
-        ? input.activeProfileFilter.map(readProfileId).filter((value): value is DashboardProfileId => Boolean(value))
+    const activeProfileFilter = Array.isArray(input["activeProfileFilter"])
+        ? input["activeProfileFilter"].map(readProfileId).filter((value): value is DashboardProfileId => Boolean(value))
         : [];
 
-    return { scan: { from, count }, ui: normalizeUi(input.ui), instances, profiles, activeProfileFilter };
+    return { scan: { from, count }, ui: normalizeUi(input["ui"]), instances, profiles, activeProfileFilter };
 }
 
 function statusFor(path: string, loaded: boolean, error: string | null, registry: DashboardRegistry, options: StatusOptions = {}): DashboardRegistryStatus {
-    return {
+    return stripUndefined({
         path,
         loaded,
         error,
         ui: registry.ui,
         dashboardHome: options.dashboardHome,
         migratedFrom: options.migratedFrom ?? null,
-    };
+    });
 }
 
 function readRegistryFile(path: string, options: RegistryOptions, statusOptions: StatusOptions = {}): DashboardRegistryLoadResult {

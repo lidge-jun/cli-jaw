@@ -176,8 +176,8 @@ export async function cleanupIdleTabs(port: number, opts: TabCleanupOptions = {}
         activeSessionTargetIds,
         pinnedTargetIds: pinnedTabs,
         now: opts.now || Date.now(),
-        idleTimeoutMs: opts.idleTimeoutMs || parseTabDuration(process.env.JAW_BROWSER_TAB_IDLE || '30m'),
-        maxTabs: opts.maxTabs ?? Number(process.env.JAW_BROWSER_MAX_TABS || DEFAULT_MAX_TABS),
+        idleTimeoutMs: opts.idleTimeoutMs || parseTabDuration(process.env["JAW_BROWSER_TAB_IDLE"] || '30m'),
+        maxTabs: opts.maxTabs ?? Number(process.env["JAW_BROWSER_MAX_TABS"] || DEFAULT_MAX_TABS),
         includeUntracked: opts.includeUntracked === true,
         leaseByTargetId,
     });

@@ -38,12 +38,12 @@ export type HealthHistory = {
 };
 
 function managerHome(): string {
-    const home = process.env.CLI_JAW_HOME || join(homedir(), '.cli-jaw');
+    const home = process.env["CLI_JAW_HOME"] || join(homedir(), '.cli-jaw');
     return resolveHomePath(home, homedir());
 }
 
 function defaultPersistPath(): string | null {
-    if (process.env.JAW_DASHBOARD_HEALTH_PERSIST === '1') {
+    if (process.env["JAW_DASHBOARD_HEALTH_PERSIST"] === '1') {
         return join(managerHome(), DEFAULT_FILENAME);
     }
     return null;
@@ -53,11 +53,11 @@ function isHealthEvent(value: unknown): value is HealthEvent {
     if (!value || typeof value !== 'object') return false;
     const event = value as Record<string, unknown>;
     return (
-        typeof event.port === 'number'
-        && typeof event.at === 'string'
-        && typeof event.status === 'string'
-        && (event.reason === null || typeof event.reason === 'string')
-        && (event.versionSeen === null || typeof event.versionSeen === 'string')
+        typeof event["port"] === 'number'
+        && typeof event["at"] === 'string'
+        && typeof event["status"] === 'string'
+        && (event["reason"] === null || typeof event["reason"] === 'string')
+        && (event["versionSeen"] === null || typeof event["versionSeen"] === 'string')
     );
 }
 

@@ -7,6 +7,7 @@
  */
 
 import { captureBrowserDiagnostics } from '../primitives.js';
+import { stripUndefined } from '../../core/strip-undefined.js';
 
 export type WebAiFailureStage =
     | 'status'
@@ -43,7 +44,7 @@ export interface WebAiDiagnostics {
 
 export interface DiagnosticsCaptureOptions {
     stage: WebAiFailureStage;
-    page?: any;
+    page?: DiagnosticsPageLike;
     promptLength?: number;
     usedFallbacks?: string[];
     /** Opt-in only. */
@@ -53,6 +54,21 @@ export interface DiagnosticsCaptureOptions {
 }
 
 const DEFAULT_MAX_CHARS = 1024;
+
+type DiagnosticsLocatorLike = {
+    count(): Promise<number>;
+    all?(): Promise<DiagnosticsLocatorLike[]>;
+    first(): DiagnosticsLocatorLike;
+    isVisible(): Promise<boolean>;
+    isDisabled?(): Promise<boolean>;
+};
+type DiagnosticsPageLike = {
+    locator(selector: string): DiagnosticsLocatorLike;
+    waitForTimeout?(timeoutMs: number): Promise<unknown>;
+    evaluate?(fn: (innerSelectors: readonly string[]) => string[], arg: readonly string[]): Promise<unknown>;
+    url?: string | (() => string | Promise<string>);
+    title?: () => string | Promise<string>;
+};
 
 const KNOWN_STAGES: ReadonlySet<WebAiFailureStage> = new Set([
     'status',
@@ -156,15 +172,15 @@ export async function captureWebAiDiagnostics(
         out.promptLengthOnly = Math.max(0, Math.floor(options.promptLength));
     }
     const page = options.page;
-    const browserDiagnostics = await captureBrowserDiagnostics({
+    const browserDiagnostics = await captureBrowserDiagnostics(stripUndefined({
         page,
         selectors: [...COMPOSER_SELECTORS, ...SEND_BUTTON_SELECTORS, ...STOP_BUTTON_SELECTORS, ASSISTANT_SELECTORS.join(','), 'article[data-testid^="conversation-turn"]'],
         visibleSelectors: [...COMPOSER_SELECTORS, ...STOP_BUTTON_SELECTORS],
         redactText: redactDiagnosticText,
-    });
+    }));
     out.warnings.push(...browserDiagnostics.warnings);
-    out.url = browserDiagnostics.url;
-    out.title = browserDiagnostics.title;
+    if (browserDiagnostics.url !== undefined) out.url = browserDiagnostics.url;
+    if (browserDiagnostics.title !== undefined) out.title = browserDiagnostics.title;
     if (!page) return out;
     for (const selector of COMPOSER_SELECTORS) {
         out.selectorCounts[selector] = browserDiagnostics.selectorCounts[selector] ?? 0;
@@ -186,7 +202,7 @@ export async function captureWebAiDiagnostics(
     return out;
 }
 
-async function safeCount(page: any, selector: string): Promise<number> {
+async function safeCount(page: DiagnosticsPageLike, selector: string): Promise<number> {
     try {
         return await page.locator(selector).count();
     } catch {
@@ -194,11 +210,11 @@ async function safeCount(page: any, selector: string): Promise<number> {
     }
 }
 
-async function safeVisibleCount(page: any, selectors: string[]): Promise<number> {
+async function safeVisibleCount(page: DiagnosticsPageLike, selectors: string[]): Promise<number> {
     let total = 0;
     for (const selector of selectors) {
         try {
-            const locators = await page.locator(selector).all();
+            const locators = await (page.locator(selector).all?.() ?? Promise.resolve([]));
             for (const loc of locators) {
                 if (await loc.isVisible().catch(() => false)) total += 1;
             }
@@ -209,12 +225,12 @@ async function safeVisibleCount(page: any, selectors: string[]): Promise<number>
     return total;
 }
 
-async function readButtonState(page: any, selector: string): Promise<'enabled' | 'disabled' | 'absent'> {
+async function readButtonState(page: DiagnosticsPageLike, selector: string): Promise<'enabled' | 'disabled' | 'absent'> {
     try {
         const loc = page.locator(selector).first();
         const visible = await loc.isVisible().catch(() => false);
         if (!visible) return 'absent';
-        const disabled = await loc.isDisabled().catch(() => false);
+        const disabled = loc.isDisabled ? await loc.isDisabled().catch(() => false) : false;
         return disabled ? 'disabled' : 'enabled';
     } catch {
         return 'absent';
@@ -247,18 +263,18 @@ export function toWebAiErrorEnvelope(
         ? ((error as { toJSON: () => Record<string, unknown> }).toJSON())
         : null;
     if (typed) {
-        const message = redactDiagnosticText(String(typed.message ?? ''), { maxChars: 512 });
-        const stage = normalizeFailureStage(String(typed.stage ?? diagnostics?.stage ?? fallbackStage));
+        const message = redactDiagnosticText(String(typed["message"] ?? ''), { maxChars: 512 });
+        const stage = normalizeFailureStage(String(typed["stage"] ?? diagnostics?.stage ?? fallbackStage));
         const envelope: WebAiErrorEnvelope = {
             ok: false,
             error: message,
             stage,
-            ...(typed.errorCode ? { errorCode: String(typed.errorCode) } : {}),
-            ...(typed.retryHint ? { retryHint: String(typed.retryHint) } : {}),
-            ...(typed.vendor ? { vendor: String(typed.vendor) } : {}),
-            ...(typeof typed.mutationAllowed === 'boolean' ? { mutationAllowed: typed.mutationAllowed } : {}),
-            ...(Array.isArray(typed.selectorsTried) ? { selectorsTried: typed.selectorsTried as string[] } : {}),
-            ...(typed.evidence !== undefined && typed.evidence !== null ? { evidence: typed.evidence } : {}),
+            ...(typed["errorCode"] ? { errorCode: String(typed["errorCode"]) } : {}),
+            ...(typed["retryHint"] ? { retryHint: String(typed["retryHint"]) } : {}),
+            ...(typed["vendor"] ? { vendor: String(typed["vendor"]) } : {}),
+            ...(typeof typed["mutationAllowed"] === 'boolean' ? { mutationAllowed: typed["mutationAllowed"] } : {}),
+            ...(Array.isArray(typed["selectorsTried"]) ? { selectorsTried: typed["selectorsTried"] as string[] } : {}),
+            ...(typed["evidence"] !== undefined && typed["evidence"] !== null ? { evidence: typed["evidence"] } : {}),
         };
         if (diagnostics) envelope.diagnostics = diagnostics;
         return envelope;

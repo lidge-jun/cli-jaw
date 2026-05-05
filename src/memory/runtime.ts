@@ -108,8 +108,8 @@ export function listAdvancedMemoryFiles() {
 }
 
 export function searchAdvancedMemory(query: string | string[]) {
-    const terms = Array.isArray(query as any)
-        ? (query as any[]).map(v => String(v || '').trim()).filter(Boolean)
+    const terms = Array.isArray(query)
+        ? query.map(v => String(v || '').trim()).filter(Boolean)
         : [String(query || '').trim()].filter(Boolean);
     const baseQuery = terms[0] || '';
     const expanded = terms.length > 1 ? terms.slice(1) : undefined;
@@ -148,7 +148,7 @@ export function hasSoulFile(): boolean {
 }
 
 function diversifyHits(
-    hits: Array<{ kind: string; relpath: string; [k: string]: any }>,
+    hits: Array<{ kind: string; relpath: string; [k: string]: unknown }>,
     opts: { maxPerKind?: Record<string, number>; maxPerRelpath?: number } = {},
 ) {
     const maxPerKind = opts.maxPerKind || { episode: 2, profile: 1, semantic: 1, shared: 1, procedure: 1 };
@@ -178,7 +178,7 @@ export function buildTaskSnapshot(query: string | string[], budget = 2800, expan
     // returns meaningful context instead of empty.
     if (cleaned.length < 20) {
         try {
-            const wd = settings.workingDir || null;
+            const wd = settings["workingDir"] || null;
             const rows = (getRecentMessages.all(wd, 5) as Array<{ role?: string; content?: string }>) || [];
             const recentText = rows
                 .filter(r => r.role === 'user' || r.role === 'assistant')
@@ -200,10 +200,10 @@ export function buildTaskSnapshot(query: string | string[], budget = 2800, expan
 
     for (const hit of diversified.slice(0, 4)) {
         if (remaining <= 0) break;
-        const header = `### ${hit.relpath}:${hit.source_start_line}-${hit.source_end_line}`;
+        const header = `### ${hit.relpath}:${hit["source_start_line"]}-${hit["source_end_line"]}`;
         const snippetBudget = Math.min(700, Math.max(0, remaining - header.length - 4));
         if (snippetBudget <= 0) break;
-        const snippet = hit.snippet.slice(0, snippetBudget).trim();
+        const snippet = String(hit["snippet"] ?? '').slice(0, snippetBudget).trim();
         const block = `${header}\n${snippet}`;
         out.push(block);
         remaining -= block.length + 2;
@@ -269,7 +269,7 @@ export function getAdvancedMemoryStatus() {
 }
 
 function getLegacyClaudeMemoryDir() {
-    const wd = expandHomePath(settings.workingDir || os.homedir(), os.homedir());
+    const wd = expandHomePath(settings["workingDir"] || os.homedir(), os.homedir());
     const hash = wd.replace(/[\\/]/g, '-');
     return join(os.homedir(), '.claude', 'projects', hash, 'memory');
 }
@@ -284,7 +284,7 @@ export function ensureIntegratedMemoryReady() {
     const hasLegacy = fs.existsSync(join(JAW_HOME, 'memory', 'MEMORY.md'))
         || fs.existsSync(join(JAW_HOME, 'memory', 'daily'))
         || fs.existsSync(getLegacyClaudeMemoryDir())
-        || (getMemory.all() as any[]).length > 0
+        || (getMemory.all() as unknown[]).length > 0
         || fs.existsSync(getLegacyAdvancedMemoryDir());
     if (!hasLegacy) {
         // No legacy data — seed profile from hardware/project scan

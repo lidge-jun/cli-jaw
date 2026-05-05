@@ -1,13 +1,16 @@
 // ─── Browser API Routes (Phase 7) ─────────────────────
+import type { WebAiVendor, WebAiNotificationStatus } from '../browser/web-ai/types.js';
+import type { WebAiVendorScope, CapabilityFamily, FrontendObservationStatus } from '../browser/web-ai/capability-registry.js';
 import type { Express, Request, Response, NextFunction } from 'express';
 import * as browser from '../browser/index.js';
 import { cleanupPoolTabs } from '../browser/web-ai/tab-pool.js';
+import { stripUndefined } from '../core/strip-undefined.js';
 import { ok } from '../http/response.js';
 import { DEBUG_CONSOLE_ONLY_MESSAGE, normalizeBrowserStartMode, type BrowserStartMode } from '../browser/launch-policy.js';
 
 /** Port priority: req param > activePort > settings.browser.cdpPort > deriveCdpPort() */
 const cdpPort = (req: Request) => {
-    const p = Number(req.query?.port || req.body?.port);
+    const p = Number(req.query?.["port"] || req.body?.port);
     if (Number.isInteger(p) && p > 0 && p <= 65535) return p;
     return browser.getActivePort();
 };
@@ -63,7 +66,8 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
         try {
             const start = resolveBrowserStartOptions(req);
             if (start.mode === 'debug') {
-                return res.status(400).json({ error: DEBUG_CONSOLE_ONLY_MESSAGE });
+                res.status(400).json({ error: DEBUG_CONSOLE_ONLY_MESSAGE });
+                return;
             }
             await browser.launchChrome(start.port, { mode: start.mode, headless: start.headless });
             res.json(await browser.getBrowserStatus(start.port));
@@ -102,9 +106,9 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     app.get('/api/browser/snapshot', requireAuth, async (req: Request, res: Response) => {
         try {
             const result = await browser.snapshot(cdpPort(req), {
-                interactive: req.query.interactive === 'true',
-                maxNodes: req.query.maxNodes || req.query['max-nodes'],
-                json: req.query.json === 'true',
+                interactive: req.query["interactive"] === 'true',
+                maxNodes: req.query["maxNodes"] || req.query['max-nodes'],
+                json: req.query["json"] === 'true',
             });
             if (Array.isArray(result)) res.json({ nodes: result });
             else res.json(result);
@@ -132,7 +136,9 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
                 case 'scroll': result = await browser.scroll(cdpPort(req), { x, y, ref }); break;
                 case 'select': result = await browser.select(cdpPort(req), ref, values || []); break;
                 case 'drag': result = await browser.drag(cdpPort(req), fromRef, toRef); break;
-                default: return res.status(400).json({ error: `unknown action: ${kind}` });
+                default:
+                    res.status(400).json({ error: `unknown action: ${kind}` });
+                    return;
             }
             res.json(result);
         } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
@@ -141,7 +147,10 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     app.post('/api/browser/vision-click', requireAuth, async (req: Request, res: Response) => {
         try {
             const { target, provider, doubleClick, prepareStable, region, clip, verifyBeforeClick } = req.body;
-            if (!target) return res.status(400).json({ error: 'target required' });
+            if (!target) {
+                res.status(400).json({ error: 'target required' });
+                return;
+            }
             const result = await browser.visionClick(cdpPort(req), target, {
                 provider,
                 doubleClick,
@@ -209,13 +218,13 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
                 return;
             }
             const leaseResult = await cleanupPoolTabs(cdpPort(req));
-            const idleResult = await browser.cleanupIdleTabs(cdpPort(req), {
+            const idleResult = await browser.cleanupIdleTabs(cdpPort(req), stripUndefined({
                 idleTimeoutMs: req.body.idleAfter ? browser.parseTabDuration(String(req.body.idleAfter)) : undefined,
                 maxTabs: req.body.maxTabs ? Number(req.body.maxTabs) : undefined,
                 includeUntracked: req.body.includeUntracked === true,
                 provider: req.body.provider ? String(req.body.provider) : undefined,
                 keepProviderTabs: req.body.keepProviderTabs ? Number(req.body.keepProviderTabs) : undefined,
-            });
+            }));
             res.json({
                 ...idleResult,
                 closed: idleResult.closed + (leaseResult.closed || 0),
@@ -231,7 +240,7 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     });
 
     app.get('/api/browser/text', requireAuth, async (req: Request, res: Response) => {
-        try { res.json(await browser.getPageText(cdpPort(req), req.query.format as string | undefined)); }
+        try { res.json(await browser.getPageText(cdpPort(req), req.query["format"] as string | undefined)); }
         catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
@@ -278,8 +287,8 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     app.get('/api/browser/web-ai/status', requireAuth, async (req: Request, res: Response) => {
         try {
             res.json(await browser.webAi.status(cdpPort(req), {
-                vendor: String(req.query.vendor || 'chatgpt'),
-                ...(req.query.probe ? { probe: String(req.query.probe) } : {}),
+                vendor: String(req.query["vendor"] || 'chatgpt'),
+                ...(req.query["probe"] ? { probe: String(req.query["probe"]) } : {}),
             }));
         } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
@@ -292,14 +301,14 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     app.get('/api/browser/web-ai/poll', requireAuth, async (req: Request, res: Response) => {
         try {
             res.json(await browser.webAi.poll(cdpPort(req), {
-                vendor: String(req.query.vendor || 'chatgpt'),
-                timeout: String(req.query.timeout || '600'),
-                ...(req.query.session ? { session: String(req.query.session) } : {}),
-                ...(req.query.allowCopyMarkdownFallback === 'true' ? { allowCopyMarkdownFallback: true } : {}),
-                ...(req.query.requireSourceAudit === 'true' ? { requireSourceAudit: true } : {}),
-                ...(req.query.sourceAuditRatio ? { sourceAuditRatio: String(req.query.sourceAuditRatio) } : {}),
-                ...(req.query.sourceAuditScope ? { sourceAuditScope: String(req.query.sourceAuditScope) } : {}),
-                ...(req.query.sourceAuditDate ? { sourceAuditDate: String(req.query.sourceAuditDate) } : {}),
+                vendor: String(req.query["vendor"] || 'chatgpt'),
+                timeout: String(req.query["timeout"] || '600'),
+                ...(req.query["session"] ? { session: String(req.query["session"]) } : {}),
+                ...(req.query["allowCopyMarkdownFallback"] === 'true' ? { allowCopyMarkdownFallback: true } : {}),
+                ...(req.query["requireSourceAudit"] === 'true' ? { requireSourceAudit: true } : {}),
+                ...(req.query["sourceAuditRatio"] ? { sourceAuditRatio: String(req.query["sourceAuditRatio"]) } : {}),
+                ...(req.query["sourceAuditScope"] ? { sourceAuditScope: String(req.query["sourceAuditScope"]) } : {}),
+                ...(req.query["sourceAuditDate"] ? { sourceAuditDate: String(req.query["sourceAuditDate"]) } : {}),
             }));
         } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
@@ -307,17 +316,17 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     app.get('/api/browser/web-ai/watch', requireAuth, async (req: Request, res: Response) => {
         try {
             res.json(await browser.webAi.watch(cdpPort(req), {
-                vendor: String(req.query.vendor || 'chatgpt'),
-                timeout: String(req.query.timeout || '600'),
-                ...(req.query.session ? { session: String(req.query.session) } : {}),
-                ...(req.query.url ? { url: String(req.query.url) } : {}),
-                ...(req.query.notify !== undefined ? { notify: String(req.query.notify) !== 'false' } : {}),
-                ...(req.query.pollIntervalSeconds ? { pollIntervalSeconds: String(req.query.pollIntervalSeconds) } : {}),
-                ...(req.query.allowCopyMarkdownFallback === 'true' ? { allowCopyMarkdownFallback: true } : {}),
-                ...(req.query.requireSourceAudit === 'true' ? { requireSourceAudit: true } : {}),
-                ...(req.query.sourceAuditRatio ? { sourceAuditRatio: String(req.query.sourceAuditRatio) } : {}),
-                ...(req.query.sourceAuditScope ? { sourceAuditScope: String(req.query.sourceAuditScope) } : {}),
-                ...(req.query.sourceAuditDate ? { sourceAuditDate: String(req.query.sourceAuditDate) } : {}),
+                vendor: String(req.query["vendor"] || 'chatgpt'),
+                timeout: String(req.query["timeout"] || '600'),
+                ...(req.query["session"] ? { session: String(req.query["session"]) } : {}),
+                ...(req.query["url"] ? { url: String(req.query["url"]) } : {}),
+                ...(req.query["notify"] !== undefined ? { notify: String(req.query["notify"]) !== 'false' } : {}),
+                ...(req.query["pollIntervalSeconds"] ? { pollIntervalSeconds: String(req.query["pollIntervalSeconds"]) } : {}),
+                ...(req.query["allowCopyMarkdownFallback"] === 'true' ? { allowCopyMarkdownFallback: true } : {}),
+                ...(req.query["requireSourceAudit"] === 'true' ? { requireSourceAudit: true } : {}),
+                ...(req.query["sourceAuditRatio"] ? { sourceAuditRatio: String(req.query["sourceAuditRatio"]) } : {}),
+                ...(req.query["sourceAuditScope"] ? { sourceAuditScope: String(req.query["sourceAuditScope"]) } : {}),
+                ...(req.query["sourceAuditDate"] ? { sourceAuditDate: String(req.query["sourceAuditDate"]) } : {}),
             }));
         } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
@@ -330,8 +339,8 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     app.get('/api/browser/web-ai/sessions', requireAuth, async (req: Request, res: Response) => {
         try {
             res.json(await browser.webAi.sessions({
-                ...(req.query.vendor ? { vendor: String(req.query.vendor) } : {}),
-                ...(req.query.status ? { status: String(req.query.status) } : {}),
+                ...(req.query["vendor"] ? { vendor: String(req.query["vendor"]) } : {}),
+                ...(req.query["status"] ? { status: String(req.query["status"]) } : {}),
             }));
         } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
@@ -350,12 +359,12 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
         try {
             res.json({
                 ok: true,
-                vendor: String(req.query.vendor || 'chatgpt'),
+                vendor: String(req.query["vendor"] || 'chatgpt'),
                 status: 'ready',
                 notifications: browser.webAi.listNotifications({
-                    ...(req.query.vendor ? { vendor: String(req.query.vendor) as any } : {}),
-                    ...(req.query.status ? { status: String(req.query.status) as any } : {}),
-                    ...(req.query.session ? { sessionId: String(req.query.session) } : {}),
+                    ...(req.query["vendor"] ? { vendor: String(req.query["vendor"]) as WebAiVendor } : {}),
+                    ...(req.query["status"] ? { status: String(req.query["status"]) as WebAiNotificationStatus } : {}),
+                    ...(req.query["session"] ? { sessionId: String(req.query["session"]) } : {}),
                 }),
                 warnings: [],
             });
@@ -366,12 +375,12 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
         try {
             res.json({
                 ok: true,
-                vendor: String(req.query.vendor || 'chatgpt'),
+                vendor: String(req.query["vendor"] || 'chatgpt'),
                 status: 'ready',
                 capabilities: browser.webAi.listCapabilitySchemas({
-                    ...(req.query.vendor ? { vendor: String(req.query.vendor) as any } : {}),
-                    ...(req.query.family ? { family: String(req.query.family) as any } : {}),
-                    ...(req.query.frontendStatus ? { frontendStatus: String(req.query.frontendStatus) as any } : {}),
+                    ...(req.query["vendor"] ? { vendor: String(req.query["vendor"]) as WebAiVendorScope } : {}),
+                    ...(req.query["family"] ? { family: String(req.query["family"]) as CapabilityFamily } : {}),
+                    ...(req.query["frontendStatus"] ? { frontendStatus: String(req.query["frontendStatus"]) as FrontendObservationStatus } : {}),
                 }),
                 warnings: [],
             });
@@ -391,8 +400,8 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     app.get('/api/browser/web-ai/diagnose', requireAuth, async (req: Request, res: Response) => {
         try {
             res.json(await browser.webAi.diagnose(cdpPort(req), {
-                vendor: String(req.query.vendor || 'chatgpt'),
-                stage: String(req.query.stage || 'unknown'),
+                vendor: String(req.query["vendor"] || 'chatgpt'),
+                stage: String(req.query["stage"] || 'unknown'),
             }));
         } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
@@ -402,17 +411,17 @@ function toWebAiHttpError(e: unknown): { ok: false; error: string; stage: string
     if (isWebAiErrorLike(e)) {
         const json = (e as { toJSON?: () => unknown }).toJSON?.() as Record<string, unknown> | undefined;
         if (json && typeof json === 'object') {
-            return {
+            return stripUndefined({
                 ok: false,
-                error: String(json.message ?? ''),
-                stage: String(json.stage ?? 'unknown'),
-                errorCode: json.errorCode as string | undefined,
-                retryHint: json.retryHint as string | undefined,
-                vendor: json.vendor as string | undefined,
-                mutationAllowed: json.mutationAllowed as boolean | undefined,
-                selectorsTried: json.selectorsTried as string[] | undefined,
-                evidence: json.evidence,
-            };
+                error: String(json["message"] ?? ''),
+                stage: String(json["stage"] ?? 'unknown'),
+                errorCode: json["errorCode"] as string | undefined,
+                retryHint: json["retryHint"] as string | undefined,
+                vendor: json["vendor"] as string | undefined,
+                mutationAllowed: json["mutationAllowed"] as boolean | undefined,
+                selectorsTried: json["selectorsTried"] as string[] | undefined,
+                evidence: json["evidence"],
+            });
         }
     }
     const err = e as { message?: string; stage?: string };

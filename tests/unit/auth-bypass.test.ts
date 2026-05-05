@@ -1,3 +1,4 @@
+import { readSource } from './source-normalize.js';
 // Auth bypass contract — issue #108
 // Verifies that requireAuth in server.ts allows loopback + (lanBypass && isPrivateIP).
 import test from 'node:test';
@@ -6,7 +7,7 @@ import fs from 'node:fs';
 import { join } from 'node:path';
 
 const projectRoot = join(import.meta.dirname, '../..');
-const serverSrc = fs.readFileSync(join(projectRoot, 'server.ts'), 'utf8');
+const serverSrc = readSource(join(projectRoot, 'server.ts'), 'utf8');
 
 test('AB-001: requireAuth uses isLoopback || isLanBypass branch', () => {
     const fnStart = serverSrc.indexOf('function requireAuth(');
@@ -76,7 +77,7 @@ test('AB-006: 403 responses include LAN hint', () => {
 });
 
 test('AB-007: settings.network defaults include bindHost + lanBypass', () => {
-    const configSrc = fs.readFileSync(join(projectRoot, 'src/core/config.ts'), 'utf8');
+    const configSrc = readSource(join(projectRoot, 'src/core/config.ts'), 'utf8');
     assert.ok(configSrc.includes("bindHost: '127.0.0.1'"),
         'createDefaultSettings must set network.bindHost default');
     assert.ok(/lanBypass:\s*false/.test(configSrc),
@@ -86,7 +87,7 @@ test('AB-007: settings.network defaults include bindHost + lanBypass', () => {
 });
 
 test('AB-008: settings-merge includes network in nested merge list', () => {
-    const mergeSrc = fs.readFileSync(join(projectRoot, 'src/core/settings-merge.ts'), 'utf8');
+    const mergeSrc = readSource(join(projectRoot, 'src/core/settings-merge.ts'), 'utf8');
     const arrayIdx = mergeSrc.indexOf("['heartbeat', 'telegram'");
     assert.ok(arrayIdx >= 0, 'nested merge array should exist');
     const arrayLine = mergeSrc.slice(arrayIdx, mergeSrc.indexOf(']', arrayIdx) + 1);
@@ -112,7 +113,7 @@ test('SC-002: trust proxy only enabled with both trustProxies + trustForwardedFo
 });
 
 test('SC-003: config defaults remoteAccess.requireAuth=true', () => {
-    const configSrc = fs.readFileSync(join(projectRoot, 'src/core/config.ts'), 'utf8');
+    const configSrc = readSource(join(projectRoot, 'src/core/config.ts'), 'utf8');
     assert.ok(configSrc.includes('requireAuth: true'),
         'default remoteAccess.requireAuth must be true');
 });

@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { readSource } from './source-normalize.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const gatewaySrc = fs.readFileSync(join(__dirname, '../../src/orchestrator/gateway.ts'), 'utf8');
-const spawnSrc = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
-const botSrc = fs.readFileSync(join(__dirname, '../../src/telegram/bot.ts'), 'utf8');
+const gatewaySrc = readSource(join(__dirname, '../../src/orchestrator/gateway.ts'), 'utf8');
+const spawnSrc = readSource(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
+const botSrc = readSource(join(__dirname, '../../src/telegram/bot.ts'), 'utf8');
 
 test('TQ-001: submitMessage metadata supports optional chatId', () => {
     assert.ok(
@@ -105,14 +106,15 @@ test('TQ-007: tgOrchestrate passes chatId to submitMessage', () => {
         fnBlock.includes('const chatId = ctx.chat?.id'),
         'tgOrchestrate should capture current chatId',
     );
-    assert.ok(
-        fnBlock.includes('submitMessage(prompt, { origin: \'telegram\', displayText: displayMsg, skipOrchestrate: true, chatId })'),
+    assert.match(
+        fnBlock,
+        /submitMessage\(prompt,\s*\{\s*origin:\s*'telegram'(?:\s+as\s+const)?,\s*displayText:\s*displayMsg,\s*skipOrchestrate:\s*true,\s*chatId\s*\}\)/,
         'tgOrchestrate should pass chatId into submitMessage',
     );
 });
 
 test('TQ-008: queued telegram response filter uses requestId for isolation', () => {
-    const fnStart = botSrc.indexOf('const queueHandler = (type: string, data: Record<string, any>) =>');
+    const fnStart = botSrc.indexOf('const queueHandler = (type: string, data: Record<string, unknown>) =>');
     const fnBlock = botSrc.slice(fnStart, fnStart + 600);
     assert.ok(
         fnBlock.includes('data.requestId === requestId'),

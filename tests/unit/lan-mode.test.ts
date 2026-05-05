@@ -1,3 +1,4 @@
+import { readSource } from './source-normalize.js';
 // LAN mode UX tests — Phase 1.1 (#108)
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -5,9 +6,9 @@ import fs from 'node:fs';
 import { join } from 'node:path';
 
 const projectRoot = join(import.meta.dirname, '../..');
-const serveSrc = fs.readFileSync(join(projectRoot, 'bin/commands/serve.ts'), 'utf8');
-const serverSrc = fs.readFileSync(join(projectRoot, 'server.ts'), 'utf8');
-const doctorSrc = fs.readFileSync(join(projectRoot, 'bin/commands/doctor.ts'), 'utf8');
+const serveSrc = readSource(join(projectRoot, 'bin/commands/serve.ts'), 'utf8');
+const serverSrc = readSource(join(projectRoot, 'server.ts'), 'utf8');
+const doctorSrc = readSource(join(projectRoot, 'bin/commands/doctor.ts'), 'utf8');
 
 test('LM-001: serve.ts parseArgs includes --lan option', () => {
     assert.ok(serveSrc.includes("lan: { type: 'boolean'"),

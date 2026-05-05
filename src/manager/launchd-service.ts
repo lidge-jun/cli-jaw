@@ -14,7 +14,7 @@ const PRINT_TIMEOUT_MS = 2000;
 const OP_TIMEOUT_MS = 5000;
 
 function uid(): number {
-    return typeof process.getuid === 'function' ? process.getuid() : Number(process.env.UID || 501);
+    return typeof process.getuid === 'function' ? process.getuid() : Number(process.env["UID"] || 501);
 }
 
 function guiDomain(): string {
@@ -44,7 +44,7 @@ export function computePlistPath(label: string): string {
 function execLaunchctl(args: string[], timeoutMs: number): Promise<{ stdout: string; stderr: string; code: number }> {
     return new Promise((resolve) => {
         const child = execFile(LAUNCHCTL, args, { timeout: timeoutMs, encoding: 'utf8' }, (err, stdout, stderr) => {
-            const code = err && 'code' in err ? (err as any).code ?? 1 : err ? 1 : 0;
+            const code = err && 'code' in err ? (err as NodeJS.ErrnoException).code ?? 1 : err ? 1 : 0;
             resolve({ stdout: stdout || '', stderr: stderr || '', code: typeof code === 'number' ? code : 1 });
         });
         child.unref?.();
@@ -124,7 +124,7 @@ export async function permInstance(port: number, home: string): Promise<Dashboar
 
     const nodePath = getNodePath();
     const jawPath = getJawPath();
-    const servicePath = buildServicePath(process.env.PATH || '', [join(homedir(), '.local', 'bin')]);
+    const servicePath = buildServicePath(process.env["PATH"] || '', [join(homedir(), '.local', 'bin')]);
 
     const plist = generateLaunchdPlist({
         label,

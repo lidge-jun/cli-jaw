@@ -15,6 +15,10 @@ import {
     employeeArgumentCompletions, browserArgumentCompletions, fallbackArgumentCompletions,
     flushArgumentCompletions,
 } from './handlers.js';
+import type { CliCommandContext } from './command-context.js';
+import type {
+    SlashCommand, SlashChoice, SlashResult, ParsedSlashCommand, CompletionCtx,
+} from './types.js';
 
 const CATEGORY_ORDER = ['session', 'model', 'tools', 'cli'];
 const CATEGORY_LABEL = {
@@ -24,7 +28,7 @@ const CATEGORY_LABEL = {
     cli: 'CLI',
 };
 
-function sortCommands(list: any[]) {
+function sortCommands(list: SlashCommand[]): SlashCommand[] {
     return [...list].sort((a, b) => {
         const ai = CATEGORY_ORDER.indexOf(a.category || 'tools');
         const bi = CATEGORY_ORDER.indexOf(b.category || 'tools');
@@ -33,32 +37,34 @@ function sortCommands(list: any[]) {
     });
 }
 
-function displayUsage(cmd: any) {
+function displayUsage(cmd: SlashCommand): string {
     return `/${cmd.name}${cmd.args ? ` ${cmd.args}` : ''}`;
 }
 
-function toChoiceKey(value: any) {
+function toChoiceKey(value: unknown): string {
     return String(value || '').trim().toLowerCase();
 }
 
-function normalizeArgumentCandidate(entry: any) {
+function normalizeArgumentCandidate(entry: SlashChoice | string | null | undefined): SlashChoice | null {
     if (typeof entry === 'string') {
         const value = entry.trim();
         if (!value) return null;
         return { value, label: '' };
     }
     if (!entry || typeof entry !== 'object') return null;
-    const value = String(entry.value ?? entry.name ?? '').trim();
+    const e = entry as unknown as Record<string, unknown>;
+    const value = String(e["value"] ?? e["name"] ?? '').trim();
     if (!value) return null;
-    const label = String(entry.label ?? entry.desc ?? '').trim();
+    const label = String(e["label"] ?? e["desc"] ?? '').trim();
     return { value, label };
 }
 
-function dedupeChoices(list: any[]) {
-    const out = [];
-    const seen = new Set();
+function dedupeChoices(list: Array<SlashChoice | null>): SlashChoice[] {
+    const out: SlashChoice[] = [];
+    const seen = new Set<string>();
     for (const entry of list || []) {
-        const key = toChoiceKey(entry?.value ?? entry);
+        if (!entry) continue;
+        const key = toChoiceKey(entry.value ?? entry);
         if (!key || seen.has(key)) continue;
         seen.add(key);
         out.push(entry);
@@ -66,7 +72,7 @@ function dedupeChoices(list: any[]) {
     return out;
 }
 
-function scoreToken(value: any, query: any) {
+function scoreToken(value: string, query: string): number {
     const target = toChoiceKey(value);
     const q = toChoiceKey(query);
     if (!q) return 0;
@@ -77,12 +83,12 @@ function scoreToken(value: any, query: any) {
     return -1;
 }
 
-function categoryIndex(category: any) {
+function categoryIndex(category: string | undefined): number {
     const idx = CATEGORY_ORDER.indexOf(category || 'tools');
     return idx >= 0 ? idx : CATEGORY_ORDER.length;
 }
 
-function scoreCommandCandidate(cmd: any, query: any) {
+function scoreCommandCandidate(cmd: SlashCommand, query: string): number {
     const q = toChoiceKey(query);
     if (!q) return 0;
     let score = scoreToken(cmd.name, q);
@@ -93,27 +99,27 @@ function scoreCommandCandidate(cmd: any, query: any) {
     return score;
 }
 
-function scoreArgumentCandidate(item: any, query: any) {
+function scoreArgumentCandidate(item: SlashChoice, query: string): number {
     const base = scoreToken(item.value, query);
     if (base >= 0) return base;
-    const labelScore = scoreToken(item.label, query);
+    const labelScore = scoreToken(item.label || '', query);
     if (labelScore >= 0) return Math.max(10, labelScore - 10);
     return -1;
 }
 
-function findCommand(name: any): any {
+function findCommand(name: string): SlashCommand | undefined {
     const key = (name || '').toLowerCase();
     return COMMANDS.find(c => c.name === key || (c.aliases || []).includes(key));
 }
 
 // ─── helpHandler (kept here — needs COMMANDS/findCommand/sortCommands) ──
 
-async function helpHandler(args: any[], ctx: any): Promise<any> {
+async function helpHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const iface = ctx.interface || 'cli';
     const L = ctx.locale || 'ko';
     if (args[0]) {
         const targetName = String(args[0]).replace(/^\//, '');
-        const target: any = findCommand(targetName);
+        const target: SlashCommand | undefined = findCommand(targetName);
         if (!target) return unknownCommand(targetName, L);
         const desc = target.descKey ? t(target.descKey, {}, L) : target.desc;
         const lines: string[] = [
@@ -126,11 +132,11 @@ async function helpHandler(args: any[], ctx: any): Promise<any> {
     const available = sortCommands(COMMANDS.filter(c =>
         c.interfaces.includes(iface) && !c.hidden
     ));
-    const byCategory = new Map();
+    const byCategory = new Map<string, SlashCommand[]>();
     for (const cmd of available) {
         const cat = cmd.category || 'tools';
         if (!byCategory.has(cat)) byCategory.set(cat, []);
-        byCategory.get(cat).push(cmd);
+        byCategory.get(cat)!.push(cmd);
     }
 
     const lines = [t('cmd.helpTitle', {}, L)];
@@ -149,7 +155,7 @@ async function helpHandler(args: any[], ctx: any): Promise<any> {
 
 // ─── COMMANDS Registry ───────────────────────────────
 
-export const COMMANDS = [
+export const COMMANDS: SlashCommand[] = [
     { name: 'help', aliases: ['h'], descKey: 'cmd.help.desc', tgDescKey: 'cmd.help.tg_desc', desc: 'Command list', args: '[command]', category: 'session', interfaces: ['cli', 'web', 'telegram', 'discord'], handler: helpHandler },
     { name: 'commands', aliases: ['cmd'], descKey: '', desc: 'Open command palette', category: 'session', interfaces: ['cli'], handler: async () => ({ code: 'open_palette' }) },
     { name: 'status', descKey: 'cmd.status.desc', tgDescKey: 'cmd.status.tg_desc', desc: 'Current status', category: 'session', interfaces: ['cli', 'web', 'telegram', 'discord'], handler: statusHandler },
@@ -178,11 +184,12 @@ export const COMMANDS = [
 
 // ─── Dispatch ────────────────────────────────────────
 
-export function parseCommand(text: any) {
+export function parseCommand(text: string): ParsedSlashCommand {
     if (typeof text !== 'string' || !text.startsWith('/')) return null;
     const body = text.slice(1).trim();
     if (!body) {
         const help = findCommand('help');
+        if (!help) return null;
         return { type: 'known', cmd: help, args: [], name: 'help' };
     }
     // File paths like /users/junny/... or /tmp/foo — not commands
@@ -195,27 +202,30 @@ export function parseCommand(text: any) {
     return { type: 'known', cmd, args: parts, name };
 }
 
-export async function executeCommand(parsed: any, ctx: any) {
+export async function executeCommand(parsed: ParsedSlashCommand, ctx: { interface?: string; locale?: string; [k: string]: unknown }): Promise<SlashResult | null> {
     const L = ctx?.locale || 'ko';
     if (!parsed) return null;
     if (parsed.type === 'unknown') return unknownCommand(parsed.name, L);
-    if (!parsed.cmd.interfaces.includes(ctx.interface || 'cli')) {
-        return unsupportedCommand(parsed.cmd, ctx.interface || 'cli', L);
+    const iface = ctx.interface || 'cli';
+    if (!parsed.cmd.interfaces.includes(iface)) {
+        return unsupportedCommand(parsed.cmd, iface, L);
     }
     // Readonly enforcement: if command is readonly on this interface and args are supplied (write attempt), block
-    if (ctx.interface && parsed.args?.length > 0) {
+    if (iface && parsed.args?.length > 0) {
         const { getCommandCatalog, CAPABILITY } = await import('../command-contract/catalog.js');
-        const catalogCmd = getCommandCatalog().find((c: any) => c.name === parsed.cmd.name);
-        if (catalogCmd?.capability?.[ctx.interface] === CAPABILITY.readonly) {
+        const catalogCmd = getCommandCatalog().find((c: SlashCommand) => c.name === parsed.cmd.name);
+        const cap = (catalogCmd as { capability?: Record<string, string> } | undefined)?.capability;
+        if (cap?.[iface] === CAPABILITY.readonly) {
             return {
                 ok: false,
                 code: 'readonly',
-                text: t('cmd.unsupported', { name: parsed.cmd.name, iface: ctx.interface }, L),
+                text: t('cmd.unsupported', { name: parsed.cmd.name, iface }, L),
             };
         }
     }
     try {
-        return normalizeResult(await parsed.cmd.handler(parsed.args || [], ctx));
+        const handler = parsed.cmd.handler as (args: string[], ctx: CliCommandContext) => unknown;
+        return normalizeResult(await handler(parsed.args || [], ctx as unknown as CliCommandContext));
     } catch (err: unknown) {
         const msg = (err as Error)?.message || String(err);
         return {
@@ -228,7 +238,7 @@ export async function executeCommand(parsed: any, ctx: any) {
 
 // ─── Completions ─────────────────────────────────────
 
-export function getCompletions(partial: any, iface = 'cli') {
+export function getCompletions(partial: string, iface: string = 'cli'): string[] {
     const prefix = (partial || '').startsWith('/')
         ? (partial || '').toLowerCase()
         : '/' + String(partial || '').toLowerCase();
@@ -236,7 +246,16 @@ export function getCompletions(partial: any, iface = 'cli') {
         .map(c => `/${c.name}`);
 }
 
-export function getCompletionItems(partial: any, iface = 'cli', locale = 'ko') {
+export interface CommandCompletionItem {
+    kind: 'command';
+    name: string;
+    desc: string;
+    args: string;
+    category: string;
+    insertText: string;
+}
+
+export function getCompletionItems(partial: string, iface: string = 'cli', locale: string = 'ko'): CommandCompletionItem[] {
     const query = String(partial || '').replace(/^\//, '').trim().toLowerCase();
     return COMMANDS
         .filter(c => c.interfaces.includes(iface) && !c.hidden)
@@ -249,29 +268,47 @@ export function getCompletionItems(partial: any, iface = 'cli', locale = 'ko') {
             return a.cmd.name.localeCompare(b.cmd.name);
         })
         .map(({ cmd }) => ({
-            kind: 'command',
+            kind: 'command' as const,
             name: cmd.name,
-            desc: cmd.descKey ? t(cmd.descKey, {}, locale) : cmd.desc,
+            desc: (cmd.descKey ? t(cmd.descKey, {}, locale) : cmd.desc) || '',
             args: cmd.args || '',
             category: cmd.category || 'tools',
             insertText: `/${cmd.name}${cmd.args ? ' ' : ''}`,
         }));
 }
 
-export function getArgumentCompletionItems(commandName: any, partial = '', iface = 'cli', argv: any[] = [], ctx: any = {}) {
+export interface ArgumentCompletionItem {
+    kind: 'argument';
+    name: string;
+    desc: string;
+    args: string;
+    category: string;
+    command: string;
+    commandDesc: string;
+    insertText: string;
+}
+
+export function getArgumentCompletionItems(
+    commandName: string,
+    partial: string = '',
+    iface: string = 'cli',
+    argv: string[] = [],
+    ctx: { settings?: { perCli?: Record<string, unknown>; cli?: string }; locale?: string } = {},
+): ArgumentCompletionItem[] {
     const cmd = findCommand(commandName);
     if (!cmd || cmd.hidden) return [];
     if (!cmd.interfaces.includes(iface)) return [];
     if (typeof cmd.getArgumentCompletions !== 'function') return [];
 
-    let candidates;
+    let candidates: SlashChoice[];
     try {
-        candidates = cmd.getArgumentCompletions(ctx, argv, partial) || [];
+        const result = cmd.getArgumentCompletions(ctx as CompletionCtx, argv, partial);
+        candidates = (Array.isArray(result) ? result : []) as SlashChoice[];
     } catch (err: unknown) {
-        if (process.env.DEBUG) console.warn('[commands:argComplete]', (err as Error).message);
+        if (process.env["DEBUG"]) console.warn('[commands:argComplete]', (err as Error).message);
         return [];
     }
-    const normalized = dedupeChoices(candidates.map(normalizeArgumentCandidate).filter(Boolean));
+    const normalized = dedupeChoices(candidates.map(normalizeArgumentCandidate));
     const query = String(partial || '').trim().toLowerCase();
 
     return normalized
@@ -283,13 +320,13 @@ export function getArgumentCompletionItems(commandName: any, partial = '', iface
             return a.entry.value.localeCompare(b.entry.value);
         })
         .map(({ entry }) => ({
-            kind: 'argument',
+            kind: 'argument' as const,
             name: entry.value,
-            desc: entry.label,
+            desc: entry.label || '',
             args: '',
             category: cmd.category || 'tools',
             command: cmd.name,
-            commandDesc: cmd.desc,
+            commandDesc: cmd.desc || '',
             insertText: `/${cmd.name} ${entry.value}`,
         }));
 }

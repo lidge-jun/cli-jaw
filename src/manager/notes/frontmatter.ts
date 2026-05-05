@@ -1,4 +1,5 @@
 import { parseDocument } from 'yaml';
+import { stripUndefined } from '../../core/strip-undefined.js';
 import type { NoteIndexWarning } from '../types.js';
 
 export type ParsedNoteFrontmatter = {
@@ -132,27 +133,27 @@ export function normalizeFrontmatter(
     data: Record<string, unknown>,
 ): NormalizedFrontmatter {
     const warnings: NoteIndexWarning[] = [];
-    const title = typeof data.title === 'string' && data.title.trim() ? data.title.trim() : undefined;
+    const title = typeof data["title"] === 'string' && data["title"].trim() ? data["title"].trim() : undefined;
     const aliases = dedupeStable([
-        ...normalizeStringList(data.aliases, { path, key: 'aliases', warnings }),
-        ...normalizeStringList(data.alias, { path, key: 'alias', warnings }),
+        ...normalizeStringList(data["aliases"], { path, key: 'aliases', warnings }),
+        ...normalizeStringList(data["alias"], { path, key: 'alias', warnings }),
     ]);
-    const tags = normalizeStringList(data.tags, {
+    const tags = normalizeStringList(data["tags"], {
         path,
         key: 'tags',
         warnings,
         splitString: true,
         stripHash: true,
     });
-    const created = typeof data.created === 'string' && data.created.trim()
-        ? data.created.trim()
-        : data.created instanceof Date
-            ? data.created.toISOString()
+    const created = typeof data["created"] === 'string' && data["created"].trim()
+        ? data["created"].trim()
+        : data["created"] instanceof Date
+            ? data["created"].toISOString()
             : undefined;
 
-    if (data.created !== undefined && created === undefined) {
+    if (data["created"] !== undefined && created === undefined) {
         pushWarning(warnings, path, 'created', 'value must be a string or timestamp');
     }
 
-    return { title, aliases, tags, created, warnings };
+    return stripUndefined({ title, aliases, tags, created, warnings });
 }

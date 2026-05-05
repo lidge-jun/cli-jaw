@@ -34,7 +34,7 @@ export function formatResolverResult(
 } {
     const actionIntent = serializeActionIntent(actionIntentInput);
     const selectedAttempt = resolution.attempts?.find(attempt => attempt.validation?.ok) || null;
-    const resolutionSource = resolution.target?.resolution || selectedAttempt?.source || null;
+    const resolutionSource = resolution.target?.["resolution"] || selectedAttempt?.source || null;
     return {
         ok: resolution.ok === true,
         intent: actionIntent,

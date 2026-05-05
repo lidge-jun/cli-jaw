@@ -1,6 +1,7 @@
 import { getActivePage, getCdpSession, createTab, waitForPageByTargetId, getPageByTargetId, listTabs } from '../connection.js';
 import { getActiveTab, type ActiveTabResult, type BrowserTabInfo } from '../connection.js';
 import { cleanupIdleTabs, isPinned } from '../tab-lifecycle.js';
+import { stripUndefined } from '../../core/strip-undefined.js';
 import { cleanupPoolTabs, getPooledTab } from './tab-pool.js';
 import { finalizeProviderTab } from './tab-finalizer.js';
 import { listLeases, recordActiveLease } from './tab-lease-store.js';
@@ -50,10 +51,22 @@ import { appendTraceToSession, type TracePersistableValue } from './trace-persis
 import type {
     QuestionEnvelopeInput,
     WebAiOutput,
+    WebAiSessionRecord,
+    WebAiSessionStatus,
     WebAiVendor,
 } from './types.js';
+import type { Page } from 'playwright-core';
 
-declare const document: any;
+type TextNodeLike = { innerText?: string; textContent?: string | null };
+declare const document: { querySelectorAll(selector: string): Iterable<TextNodeLike> };
+
+type SessionPageContext = {
+    page: Page;
+    targetId: string;
+    session: WebAiSessionRecord;
+};
+type BoundCommandInput = { vendor?: string; session?: string; [key: string]: unknown };
+type BoundCommandHandler = (port: number, input: BoundCommandInput) => Promise<WebAiOutput>;
 
 const CHATGPT_HOSTS = new Set(['chatgpt.com', 'chat.openai.com']);
 const ASSISTANT_SELECTORS = [
@@ -110,7 +123,7 @@ export async function status(port: number, input: { vendor?: string; probe?: str
         const active = await requireVerifiedChatGptTab(port, vendor);
         inner = { ok: true, vendor: 'chatgpt', status: 'ready', url: active.url, warnings: [] };
     }
-    const allRows = listCapabilitySchemas({ vendor: vendor as any });
+    const allRows = listCapabilitySchemas({ vendor });
     const rows = input.probe
         ? allRows.filter((row: { capabilityId: string }) => row.capabilityId === input.probe)
         : allRows;
@@ -120,8 +133,8 @@ export async function status(port: number, input: { vendor?: string; probe?: str
     } as WebAiOutput;
 }
 
-async function ensureProviderTab(port: number, input: QuestionEnvelopeInput): Promise<{ page: any; targetId: string }> {
-    const reuseTab = input.reuseTab === true || process.env.JAW_REUSE_TAB === '1';
+async function ensureProviderTab(port: number, input: QuestionEnvelopeInput): Promise<{ page: Page; targetId: string }> {
+    const reuseTab = input.reuseTab === true || process.env["JAW_REUSE_TAB"] === '1';
     if (reuseTab) {
         const active = await requireVerifiedChatGptTab(port, input.vendor);
         const page = await requireActivePage(port);
@@ -175,14 +188,14 @@ async function findReusableChatGptTab(port: number): Promise<BrowserTabInfo | nu
         .sort((a, b) => (Number(b.lastActiveAt) || 0) - (Number(a.lastActiveAt) || 0))[0] || null;
 }
 
-function isReusableByLease(targetId: string, leaseByTargetId: Map<string, any>): boolean {
+function isReusableByLease(targetId: string, leaseByTargetId: Map<string, Awaited<ReturnType<typeof listLeases>>[number]>): boolean {
     const lease = leaseByTargetId.get(targetId);
     if (!lease) return true;
     return ['cli-jaw', 'web-ai'].includes(lease.owner) &&
         ['pooled', 'completed-session'].includes(lease.state);
 }
 
-async function withSessionPage(port: number, sessionId: string, fn: (ctx: { page: any; targetId: string; session: any }) => Promise<any>): Promise<any> {
+async function withSessionPage<T>(port: number, sessionId: string, fn: (ctx: SessionPageContext) => Promise<T>): Promise<T> {
     const session = getSession(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
     async function resolvePage(forceRecover = false) {
@@ -203,8 +216,8 @@ async function withSessionPage(port: number, sessionId: string, fn: (ctx: { page
     const first = await resolvePage();
     try {
         return await fn(first);
-    } catch (err: any) {
-        const msg = String(err?.message || err || '').toLowerCase();
+    } catch (err: unknown) {
+        const msg = errorMessage(err).toLowerCase();
         const isPageDeath = msg.includes('target closed') || msg.includes('page closed') || msg.includes('browser has been closed') || msg.includes('crash');
         if (!isPageDeath) throw err;
         const recovered = await resolvePage(true);
@@ -212,12 +225,13 @@ async function withSessionPage(port: number, sessionId: string, fn: (ctx: { page
     }
 }
 
-async function runBoundCommand(port: number, command: string, input: any, pollFn: any, stopFn: any): Promise<any> {
+async function runBoundCommand(port: number, command: string, input: BoundCommandInput, pollFn: BoundCommandHandler, stopFn: BoundCommandHandler): Promise<WebAiOutput> {
     if (['poll', 'stop'].includes(command) && input.session) {
-        return withSessionCommandLock(input.session, async () => {
-            return withSessionPage(port, input.session, async ({ page, targetId, session }) => {
-                if (command === 'poll') return pollFn(port, { ...input, vendor: session.vendor, session: session.sessionId });
-                if (command === 'stop') return stopFn(port, { ...input, vendor: session.vendor, session: session.sessionId });
+        const sessionId = input.session;
+        return withSessionCommandLock(sessionId, async () => {
+            return withSessionPage(port, sessionId, async ({ session }) => {
+                const boundInput = { ...input, vendor: session.vendor, session: session.sessionId };
+                return command === 'poll' ? pollFn(port, boundInput) : stopFn(port, boundInput);
             });
         });
     }
@@ -250,7 +264,7 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
             ? renderQuestionEnvelopeWithContext(envelope, contextPack.composerText)
             : renderQuestionEnvelope(envelope)
         : renderQuestionEnvelope(envelope);
-    const selectedModel = await selectChatGptModel(page, input.model, { effort: input.reasoningEffort });
+    const selectedModel = await selectChatGptModel(page, input.model, stripUndefined({ effort: input.reasoningEffort }));
     await waitForStableAssistantCount(page);
     const assistantCount = await countAssistantMessages(page);
     const baseline = saveBaseline({
@@ -284,6 +298,7 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
     const adapter = createChatGptEditorAdapter(page, {
         insertText: async (text: string) => {
             const cdp = await getCdpSession(port);
+            if (!cdp) throw new Error('No CDP session available for text insertion');
             try {
                 await cdp.send('Input.insertText', { text });
             } finally {
@@ -334,7 +349,7 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
         updateSessionStatus(session.sessionId, 'error');
         throw stageError(e, 'send-click');
     }
-    return {
+    return stripUndefined({
         ok: true,
         vendor: envelope.vendor,
         status: 'sent',
@@ -350,7 +365,7 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
             ...(selectedModel ? [`model selected: ${selectedModel.selected}${selectedModel.alreadySelected ? ' (already selected)' : ''}`] : []),
             ...(selectedModel?.effort ? [`reasoning effort selected: ${selectedModel.effort}`] : []),
         ],
-    };
+    });
 }
 
 function localFileInfo(filePath: string): { path: string; basename: string; sizeBytes: number } {
@@ -372,28 +387,28 @@ export async function poll(port: number, input: {
     const vendor = parseVendor(input.vendor);
     if (vendor === 'gemini') {
         try {
-            return decorateCompletedOutput(await geminiPoll(port, {
+            return decorateCompletedOutput(await geminiPoll(port, stripUndefined({
                 timeout: input.timeout,
                 session: input.session,
                 allowCopyMarkdownFallback: input.allowCopyMarkdownFallback === true,
-            }), input, 'poll');
+            })), input, 'poll');
         } catch (e) {
             throw stageError(e, 'poll-timeout');
         }
     }
     if (vendor === 'grok') {
         try {
-            return decorateCompletedOutput(await grokPoll(port, {
+            return decorateCompletedOutput(await grokPoll(port, stripUndefined({
                 timeout: input.timeout,
                 session: input.session,
                 allowCopyMarkdownFallback: input.allowCopyMarkdownFallback === true,
-            }), input, 'poll');
+            })), input, 'poll');
         } catch (e) {
             throw stageError(e, 'poll-timeout');
         }
     }
 
-    let page: any;
+    let page: Page;
     let targetId: string;
     let session = input.session ? getSession(input.session) : null;
 
@@ -434,7 +449,7 @@ export async function poll(port: number, input: {
         if (session) {
             await finalizeProviderTab({ vendor, session, port, url: currentUrl, answerText: result.answerText || '' });
         }
-        const output = decorateCompletedOutput({
+        const output = decorateCompletedOutput(stripUndefined({
             ok: true,
             vendor,
             status: 'complete',
@@ -446,21 +461,21 @@ export async function poll(port: number, input: {
             ...(traceSummary ? { traceSummary } : {}),
             usedFallbacks: result.usedFallbacks,
             warnings: result.warnings,
-        }, input, 'poll');
-        if (session) updateSessionResult({
+        }), input, 'poll');
+        if (session) updateSessionResult(stripUndefined({
             sessionId: session.sessionId,
             status: 'complete',
             answerText: output.answerText,
             answerArtifact: output.answerArtifact,
             sourceAudit: output.sourceAudit,
-        });
+        }));
         return output;
     }
     if (result.ok) {
         if (session) {
             await finalizeProviderTab({ vendor, session, port, url: currentUrl, answerText: result.answerText || '' });
         }
-        const output = decorateCompletedOutput({
+        const output = decorateCompletedOutput(stripUndefined({
             ok: true,
             vendor,
             status: 'complete',
@@ -471,14 +486,14 @@ export async function poll(port: number, input: {
             ...(traceSummary ? { traceSummary } : {}),
             usedFallbacks: result.usedFallbacks,
             warnings: result.warnings,
-        }, input, 'poll');
-        if (session) updateSessionResult({
+        }), input, 'poll');
+        if (session) updateSessionResult(stripUndefined({
             sessionId: session.sessionId,
             status: 'complete',
             answerText: output.answerText,
             answerArtifact: output.answerArtifact,
             sourceAudit: output.sourceAudit,
-        });
+        }));
         return output;
     }
     return {
@@ -510,7 +525,7 @@ function decorateCompletedOutput(
         provider: result.vendor || input.vendor,
         sessionId: result.sessionId,
         conversationUrl: result.url,
-    }) as WebAiOutput;
+    });
     if (input.requireSourceAudit !== true) return withArtifact;
     const answerText = withArtifact.answerText || withArtifact.answerArtifact?.text || withArtifact.answerArtifact?.markdown || '';
     if (!answerText && withArtifact.ok === false) return withArtifact;
@@ -569,7 +584,7 @@ function parseSourceAuditRatio(value: unknown): number {
 
 export async function query(port: number, input: QuestionEnvelopeInput & { timeout?: number | string; allowCopyMarkdownFallback?: boolean } = {}): Promise<WebAiOutput> {
     const sent = await send(port, input);
-    const result = await poll(port, {
+    const result = await poll(port, stripUndefined({
         vendor: sent.vendor,
         timeout: input.timeout,
         session: sent.sessionId,
@@ -578,7 +593,7 @@ export async function query(port: number, input: QuestionEnvelopeInput & { timeo
         sourceAuditRatio: input.sourceAuditRatio,
         sourceAuditScope: input.sourceAuditScope,
         sourceAuditDate: input.sourceAuditDate,
-    });
+    }));
     return {
         ...result,
         usedFallbacks: [...(sent.usedFallbacks || []), ...(result.usedFallbacks || [])],
@@ -596,7 +611,7 @@ export async function watch(port: number, input: { vendor?: string; timeout?: nu
             sessionId: input.session,
             timeoutMs: Math.max(1, Number(input.timeout || 1200)) * 1000,
             pollIntervalSeconds: Number(input.pollIntervalSeconds || 30),
-            allowCopyMarkdownFallback: input.allowCopyMarkdownFallback,
+            ...(input.allowCopyMarkdownFallback !== undefined ? { allowCopyMarkdownFallback: input.allowCopyMarkdownFallback } : {}),
             pollOnce: (pollInput) => poll(port, pollInput),
         });
         return {
@@ -616,7 +631,7 @@ export function watchers(): WebAiOutput {
         ok: true,
         vendor: 'chatgpt',
         status: 'ready',
-        watchers: listActiveWebAiWatchers() as any,
+        watchers: listActiveWebAiWatchers(),
         warnings: [],
     } as WebAiOutput;
 }
@@ -625,7 +640,7 @@ export function resumeStoredWatchers(port: number, input: { vendor?: string; pol
     const vendor = input.vendor ? parseVendor(input.vendor) : undefined;
     const resumed = resumeStoredWebAiWatchers({
         port,
-        vendor,
+        ...(vendor ? { vendor } : {}),
         pollIntervalSeconds: Number(input.pollIntervalSeconds || 30),
         pollOnce: (pollInput) => poll(port, pollInput),
     });
@@ -633,30 +648,30 @@ export function resumeStoredWatchers(port: number, input: { vendor?: string; pol
         ok: true,
         vendor: vendor || 'chatgpt',
         status: 'ready',
-        watchers: resumed as any,
+        watchers: resumed,
         warnings: resumed.length ? [`resumed ${resumed.length} web-ai watcher(s)`] : [],
     } as WebAiOutput;
 }
 
 export async function sessions(input: { vendor?: string; status?: string } = {}): Promise<WebAiOutput> {
     const vendor = input.vendor ? parseVendor(input.vendor) : undefined;
-    const status = input.status as any;
+    const status = parseSessionStatus(input.status);
     return {
         ok: true,
         vendor: vendor || 'chatgpt',
         status: 'ready',
-        sessions: listSessions({ vendor, status }),
+        sessions: listSessions(stripUndefined({ vendor, status })),
         warnings: [],
     };
 }
 
 export async function sessionsPrune(input: { olderThanMs?: number | string; before?: string; status?: string } = {}): Promise<WebAiOutput> {
     const ms = typeof input.olderThanMs === 'string' ? Number(input.olderThanMs) : input.olderThanMs;
-    const result = pruneSessions({
+    const result = pruneSessions(stripUndefined({
         ...(typeof ms === 'number' && Number.isFinite(ms) ? { olderThanMs: ms } : {}),
         ...(input.before ? { before: input.before } : {}),
-        ...(input.status ? { status: input.status as any } : {}),
-    });
+        ...(parseSessionStatus(input.status) ? { status: parseSessionStatus(input.status) } : {}),
+    }));
     return {
         ok: true,
         vendor: 'chatgpt',
@@ -675,7 +690,7 @@ export async function stop(port: number, input: { vendor?: string; session?: str
         try { return await grokStop(port); } catch (e) { throw stageError(e, 'send-click'); }
     }
 
-    let page: any;
+    let page: Page;
     let targetId: string;
     let session = input.session ? getSession(input.session) : null;
 
@@ -736,6 +751,17 @@ function parseVendor(vendor?: string): WebAiVendor {
     });
 }
 
+function parseSessionStatus(status?: string): WebAiSessionStatus | undefined {
+    if (status === 'sent' || status === 'streaming' || status === 'complete' || status === 'timeout' || status === 'error') {
+        return status;
+    }
+    return undefined;
+}
+
+function errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error ?? '');
+}
+
 async function requireVerifiedChatGptTab(port: number, vendor?: string): Promise<BrowserTabInfo> {
     const parsed = parseVendor(vendor);
     if (parsed === 'gemini') {
@@ -770,17 +796,17 @@ async function navigateRequestedConversation(port: number, url: string | undefin
     }
 }
 
-async function requireActivePage(port: number): Promise<any> {
+async function requireActivePage(port: number): Promise<Page> {
     const page = await getActivePage(port);
     if (!page) throw new Error('No active page');
     return page;
 }
 
-async function countAssistantMessages(page: any): Promise<number> {
+async function countAssistantMessages(page: Page): Promise<number> {
     return (await readAssistantMessages(page)).length;
 }
 
-async function waitForStableAssistantCount(page: any, timeoutMs = 8_000): Promise<void> {
+async function waitForStableAssistantCount(page: Page, timeoutMs = 8_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     let previous = -1;
     let stableReads = 0;
@@ -794,11 +820,11 @@ async function waitForStableAssistantCount(page: any, timeoutMs = 8_000): Promis
     }
 }
 
-async function readAssistantMessages(page: any): Promise<string[]> {
+async function readAssistantMessages(page: Page): Promise<string[]> {
     const evaluated = await page.evaluate?.((selectors: readonly string[]) => {
         for (const selector of selectors) {
             const texts = Array.from(document.querySelectorAll(selector))
-                .map((el: any) => String(el.innerText || el.textContent || '').trim())
+                .map((el: TextNodeLike) => String(el.innerText || el.textContent || '').trim())
                 .filter(Boolean);
             if (texts.length) return texts;
         }

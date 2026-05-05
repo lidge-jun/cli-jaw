@@ -2,22 +2,46 @@
 // Communicates with `copilot --acp` process via NDJSON.
 // Official ACP spec: https://agentclientprotocol.com
 
-import { spawn } from 'child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
 import { EventEmitter } from 'events';
 import { createInterface } from 'readline';
 
+type AcpId = string | number;
+interface AcpRequest<P = unknown> { jsonrpc: '2.0'; id: AcpId; method: string; params?: P }
+interface AcpNotification<P = unknown> { jsonrpc: '2.0'; method: string; params?: P }
+interface AcpResponse<R = unknown> {
+    jsonrpc: '2.0';
+    id: AcpId;
+    result?: R;
+    error?: { code: number; message: string; data?: unknown };
+}
+type AcpMessage = AcpRequest | AcpNotification | AcpResponse;
+
+interface PendingEntry {
+    resolve: (val: unknown) => void;
+    reject: (err: Error) => void;
+    timer: ReturnType<typeof setTimeout> | undefined;
+}
+
+interface PermissionOption {
+    name?: string;
+    value?: string;
+    id?: string;
+    optionId?: string;
+}
+
 export class AcpClient extends EventEmitter {
-    model: any;
-    workDir: any;
+    model: string | undefined;
+    workDir: string | undefined;
     permissions: string;
     env: Record<string, string | undefined>;
-    sessionId: any;
-    proc: any;
+    sessionId: string | null;
+    proc: ChildProcessWithoutNullStreams | null;
     _reqId: number;
-    _pending: Map<number, any>;
+    _pending: Map<number, PendingEntry>;
     _buffer: string;
     _activityPing: (() => void) | null;
-    _agentCapabilities: any;
+    _agentCapabilities: unknown;
 
     constructor({
         model,
@@ -25,8 +49,8 @@ export class AcpClient extends EventEmitter {
         permissions = 'auto',
         env = {},
     }: {
-        model?: any;
-        workDir?: any;
+        model?: string;
+        workDir?: string;
         permissions?: string;
         env?: Record<string, string | undefined>;
     } = {}) {
@@ -38,7 +62,7 @@ export class AcpClient extends EventEmitter {
         this.sessionId = null;
         this.proc = null;
         this._reqId = 0;
-        this._pending = new Map(); // id → { resolve, reject, timer }
+        this._pending = new Map();
         this._buffer = '';
         this._activityPing = null;
         this._agentCapabilities = null;
@@ -70,29 +94,29 @@ export class AcpClient extends EventEmitter {
 
         // NDJSON line parser on stdout
         const rl = createInterface({ input: this.proc.stdout });
-        rl.on('line', (line) => this._handleLine(line));
+        rl.on('line', (line: string) => this._handleLine(line));
 
         // Capture stderr for debugging + heartbeat + visibility
-        this.proc.stderr.on('data', (chunk: any) => {
+        this.proc.stderr.on('data', (chunk: Buffer) => {
             this._activityPing?.();  // stderr activity = agent is alive
             const text = chunk.toString().trim();
             if (text) {
-                if (process.env.DEBUG) console.error(`[acp:stderr] ${text}`);
+                if (process.env["DEBUG"]) console.error(`[acp:stderr] ${text}`);
                 this.emit('stderr_activity', text);
             }
         });
 
-        this.proc.on('exit', (code: any, signal: any) => {
+        this.proc.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
             // Reject all pending requests
-            for (const [id, p] of this._pending) {
-                clearTimeout(p.timer);
+            for (const [, p] of this._pending) {
+                if (p.timer) clearTimeout(p.timer);
                 p.reject(new Error(`ACP process exited (code=${code}, signal=${signal})`));
             }
             this._pending.clear();
             this.emit('exit', { code, signal });
         });
 
-        this.proc.on('error', (err: any) => {
+        this.proc.on('error', (err: Error) => {
             this.emit('error', err);
         });
 
@@ -109,21 +133,25 @@ export class AcpClient extends EventEmitter {
     // ─── JSON-RPC transport ──────────────────────
 
     /** Send a JSON-RPC request and return a promise for the result */
-    request(method: any, params = {}, timeoutMs = 30000) {
-        return new Promise((resolve, reject) => {
+    request<R = unknown, P = Record<string, unknown>>(method: string, params: P = {} as P, timeoutMs = 30000): Promise<R> {
+        return new Promise<R>((resolve, reject) => {
             if (!this.proc?.stdin?.writable) {
                 reject(new Error(`ACP stdin is not writable: ${method}`));
                 return;
             }
             const id = ++this._reqId;
-            const msg = { jsonrpc: '2.0', method, id, params };
+            const msg: AcpRequest<P> = { jsonrpc: '2.0', method, id, params };
 
             const timer = setTimeout(() => {
                 this._pending.delete(id);
                 reject(new Error(`ACP request timeout: ${method} (id=${id})`));
             }, timeoutMs);
 
-            this._pending.set(id, { resolve, reject, timer });
+            this._pending.set(id, {
+                resolve: (val: unknown) => resolve(val as R),
+                reject,
+                timer,
+            });
             this._write(msg);
         });
     }
@@ -135,24 +163,24 @@ export class AcpClient extends EventEmitter {
      *   - idle timer (idleMs): resets on each activityPing() call
      *   - absolute timer (maxMs): hard cap, never resets
      */
-    requestWithActivityTimeout(method: any, params = {}, idleMs = 120000, maxMs = 1200000) {
+    requestWithActivityTimeout<R = unknown, P = Record<string, unknown>>(method: string, params: P = {} as P, idleMs = 120000, maxMs = 1200000): { promise: Promise<R>; activityPing: () => void } {
         let idleTimer: ReturnType<typeof setTimeout> | undefined, absTimer: ReturnType<typeof setTimeout> | undefined, settled = false;
 
-        const promise = new Promise((resolve, reject) => {
+        const promise = new Promise<R>((resolve, reject) => {
             if (!this.proc?.stdin?.writable) {
                 reject(new Error(`ACP stdin is not writable: ${method}`));
                 return;
             }
             const id = ++this._reqId;
-            const msg = { jsonrpc: '2.0', method, id, params };
+            const msg: AcpRequest<P> = { jsonrpc: '2.0', method, id, params };
 
             const cleanup = () => {
                 settled = true;
-                clearTimeout(idleTimer);
-                clearTimeout(absTimer);
+                if (idleTimer) clearTimeout(idleTimer);
+                if (absTimer) clearTimeout(absTimer);
             };
 
-            const onTimeout = (reason: any) => {
+            const onTimeout = (reason: string) => {
                 cleanup();
                 this._pending.delete(id);
                 reject(new Error(`ACP request timeout (${reason}): ${method} (id=${id})`));
@@ -161,7 +189,7 @@ export class AcpClient extends EventEmitter {
             // Idle timer — resets on activity
             const resetIdle = () => {
                 if (settled) return;
-                clearTimeout(idleTimer);
+                if (idleTimer) clearTimeout(idleTimer);
                 idleTimer = setTimeout(() => onTimeout(`idle ${idleMs / 1000}s`), idleMs);
             };
 
@@ -170,9 +198,9 @@ export class AcpClient extends EventEmitter {
 
             // Wrap resolve/reject to cleanup timers
             this._pending.set(id, {
-                resolve: (val: any) => { cleanup(); resolve(val); },
-                reject: (err: any) => { cleanup(); reject(err); },
-                timer: idleTimer, // for process exit cleanup
+                resolve: (val: unknown) => { cleanup(); resolve(val as R); },
+                reject: (err: Error) => { cleanup(); reject(err); },
+                timer: idleTimer,
             });
 
             resetIdle();
@@ -187,66 +215,71 @@ export class AcpClient extends EventEmitter {
     }
 
     /** Send a JSON-RPC notification (no response expected) */
-    notify(method: any, params = {}) {
+    notify<P = Record<string, unknown>>(method: string, params: P = {} as P): void {
         this._write({ jsonrpc: '2.0', method, params });
     }
 
-    _write(msg: any) {
+    _write(msg: AcpMessage): void {
         if (!this.proc?.stdin?.writable) return;
         this.proc.stdin.write(JSON.stringify(msg) + '\n');
     }
 
-    _handleLine(line: any) {
+    _handleLine(line: string): void {
         const trimmed = line.trim();
         if (!trimmed) return;
 
-        let msg;
-        try { msg = JSON.parse(trimmed); } catch {
-            if (process.env.DEBUG) console.log(`[acp] non-JSON line: ${trimmed.slice(0, 100)}`);
+        let msg: Record<string, unknown>;
+        try { msg = JSON.parse(trimmed) as Record<string, unknown>; } catch {
+            if (process.env["DEBUG"]) console.log(`[acp] non-JSON line: ${trimmed.slice(0, 100)}`);
             return;
         }
 
         // Any valid JSON-RPC message = agent is alive → reset idle timer
         this._activityPing?.();
 
-        // Response to a request (has id)
-        if (msg.id != null && this._pending.has(msg.id)) {
-            const p = this._pending.get(msg.id);
-            this._pending.delete(msg.id);
-            clearTimeout(p.timer);
+        const id = msg["id"] as number | string | undefined;
+        const method = msg["method"] as string | undefined;
 
-            if (msg.error) {
-                const details = msg.error.data ? ` ${JSON.stringify(msg.error.data)}` : '';
-                p.reject(new Error(`ACP error [${msg.error.code}]: ${msg.error.message}${details}`));
+        // Response to a request (has id)
+        if (id != null && this._pending.has(id as number)) {
+            const p = this._pending.get(id as number)!;
+            this._pending.delete(id as number);
+            if (p.timer) clearTimeout(p.timer);
+
+            const error = msg["error"] as { code: number; message: string; data?: unknown } | undefined;
+            if (error) {
+                const details = error.data ? ` ${JSON.stringify(error.data)}` : '';
+                p.reject(new Error(`ACP error [${error.code}]: ${error.message}${details}`));
             } else {
-                p.resolve(msg.result);
+                p.resolve(msg["result"]);
             }
             return;
         }
 
         // Agent request to client (has id + method) — auto-respond
-        if (msg.id != null && msg.method) {
-            this._handleAgentRequest(msg);
+        if (id != null && method) {
+            this._handleAgentRequest(msg as unknown as AcpRequest);
             return;
         }
 
         // Notification from agent (no id, has method)
-        if (msg.method) {
-            if (msg.method === 'session/cancelled') {
-                console.warn(`[acp:cancelled] ${JSON.stringify(msg.params || {}).slice(0, 200)}`);
+        if (method) {
+            if (method === 'session/cancelled') {
+                console.warn(`[acp:cancelled] ${JSON.stringify(msg["params"] || {}).slice(0, 200)}`);
             }
-            this.emit(msg.method, msg.params);
+            this.emit(method, msg["params"]);
             return;
         }
     }
 
     /** Handle requests FROM the agent (permission requests, file ops, etc.) */
-    _handleAgentRequest(msg: any) {
+    _handleAgentRequest(msg: AcpRequest): void {
         switch (msg.method) {
             case 'session/request_permission': {
                 // Auto-approve all permissions (yolo/auto mode)
-                const options = msg.params?.options || [];
-                const allowOption = options.find((o: any) =>
+                const params = (msg.params || {}) as { options?: PermissionOption[] };
+                const options: PermissionOption[] = params.options || [];
+                const allowOption = options.find((o: PermissionOption) =>
                     o.name?.toLowerCase().includes('allow') ||
                     o.name?.toLowerCase().includes('approve') ||
                     o.name?.toLowerCase().includes('yes')
@@ -266,7 +299,7 @@ export class AcpClient extends EventEmitter {
                                 optionId: options[0]?.value || options[0]?.id || options[0]?.optionId || 'allow',
                             },
                     },
-                });
+                } as AcpResponse);
                 // [P2-3.15] Emit notification so spawn.ts can record audit entry
                 this.emit('session/request_permission', msg.params);
                 break;
@@ -278,7 +311,7 @@ export class AcpClient extends EventEmitter {
                     jsonrpc: '2.0',
                     id: msg.id,
                     error: { code: -32601, message: `Method not supported: ${msg.method}` },
-                });
+                } as AcpResponse);
         }
     }
 
@@ -299,17 +332,17 @@ export class AcpClient extends EventEmitter {
     }
 
     /** Create a new session */
-    async createSession(workDir = this.workDir, mcpServers: any[] = []) {
-        const result = await this.request('session/new', {
+    async createSession(workDir: string | undefined = this.workDir, mcpServers: unknown[] = []) {
+        const result = await this.request<Record<string, unknown>>('session/new', {
             cwd: workDir,
             mcpServers,
-        }) as Record<string, any>;
-        this.sessionId = result?.sessionId;
+        });
+        this.sessionId = (result?.["sessionId"] as string | undefined) ?? null;
         return result;
     }
 
     /** Send a prompt to the agent (activity-based timeout) */
-    prompt(text: any, sessionId: any = null) {
+    prompt(text: string, sessionId: string | null = null) {
         const sid = sessionId || this.sessionId;
         if (!sid) throw new Error('No session. Call createSession first.');
         return this.requestWithActivityTimeout('session/prompt', {
@@ -319,7 +352,7 @@ export class AcpClient extends EventEmitter {
     }
 
     /** Resume a previous session (if agent supports loadSession capability) */
-    async loadSession(sessionId: any, workDir = this.workDir, mcpServers: any[] = []) {
+    async loadSession(sessionId: string, workDir: string | undefined = this.workDir, mcpServers: unknown[] = []) {
         const result = await this.request('session/load', {
             sessionId,
             cwd: workDir,
@@ -330,7 +363,7 @@ export class AcpClient extends EventEmitter {
     }
 
     /** Cancel current operation */
-    cancel(sessionId: any = null) {
+    cancel(sessionId: string | null = null) {
         const sid = sessionId || this.sessionId;
         if (sid) this.notify('session/cancel', { sessionId: sid });
     }
@@ -342,7 +375,8 @@ export class AcpClient extends EventEmitter {
     }
 
     /** Check if agent supports a capability */
-    hasCapability(name: any) {
-        return !!this._agentCapabilities?.[name];
+    hasCapability(name: string): boolean {
+        const caps = this._agentCapabilities as Record<string, unknown> | null | undefined;
+        return !!caps?.[name];
     }
 }

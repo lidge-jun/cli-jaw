@@ -5,6 +5,7 @@
 import { loadSettings, getServerUrl } from '../../src/core/config.js';
 import { cliFetch, getCliAuthToken } from '../../src/cli/api-auth.js';
 import { shouldShowHelp, printAndExit } from '../helpers/help.js';
+import { errString, isConnRefused } from '../_http-client.js';
 
 if (shouldShowHelp(process.argv)) printAndExit(`
   jaw dispatch — send task to an employee agent
@@ -25,13 +26,13 @@ if (shouldShowHelp(process.argv)) printAndExit(`
 
 loadSettings();
 
-if (process.env.JAW_EMPLOYEE_MODE === '1') {
+if (process.env["JAW_EMPLOYEE_MODE"] === '1') {
     console.error('❌ jaw employee sessions cannot dispatch other employees. Complete the assigned task directly.');
     process.exit(2);
 }
 
 // Phase 8: boss-only dispatch. Token must be inherited from the server process.
-const bossToken = process.env.JAW_BOSS_TOKEN || '';
+const bossToken = process.env["JAW_BOSS_TOKEN"] || '';
 if (!bossToken) {
     console.error('❌ JAW_BOSS_TOKEN missing. This session is not authorized to dispatch employees.');
     console.error('   Employees cannot dispatch. If you are the boss, ensure cli-jaw serve is running and this process inherited its env.');
@@ -60,8 +61,24 @@ if (!agent || !task) {
 
 const STARTUP_RETRY_DELAYS_MS = [500, 1000, 1500, 2000, 3000];
 
-function isConnRefused(error: any): boolean {
-    return error?.cause?.code === 'ECONNREFUSED' || error?.code === 'ECONNREFUSED';
+interface EmployeeSummary {
+    id?: string;
+    name?: string;
+}
+
+interface DispatchResultBody {
+    state?: string;
+    result?: { status?: string; text?: string } | string;
+    error?: string;
+    worker?: { agentId?: string };
+    existing?: { agentId?: string };
+    orchestration?: {
+        verdict?: string;
+        statusPersisted?: boolean;
+        persistedField?: string;
+        currentState?: string;
+        ctxPresent?: boolean;
+    };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -71,16 +88,16 @@ function sleep(ms: number): Promise<void> {
 async function resolveAgentId(name: string): Promise<string | null> {
     const res = await cliFetch(`${BASE}/api/employees`);
     if (!res.ok) return null;
-    const employees = await res.json() as Array<Record<string, any>>;
+    const employees = await res.json() as EmployeeSummary[];
     const found = employees.find(e => e.name === name || e.id === name);
     return found?.id || null;
 }
 
-async function pollWorkerResult(agentId: string): Promise<any> {
+async function pollWorkerResult(agentId: string): Promise<DispatchResultBody> {
     const deadline = Date.now() + 600_000;
     while (Date.now() < deadline) {
         const res = await cliFetch(`${BASE}/api/orchestrate/worker/${encodeURIComponent(agentId)}/result`);
-        const body = await res.json() as any;
+        const body = await res.json() as DispatchResultBody;
         if (!res.ok) throw new Error(body.error || `poll failed: ${res.status}`);
         if (body.state !== 'running') return body;
         await sleep(2_000);
@@ -88,24 +105,24 @@ async function pollWorkerResult(agentId: string): Promise<any> {
     throw new Error(`Timed out waiting for worker result: ${agentId}`);
 }
 
-function resultStatus(body: any): string {
-    if (typeof body?.result?.status === 'string') return body.result.status;
-    if (typeof body?.state === 'string') return body.state;
+function resultStatus(body: DispatchResultBody): string {
+    if (typeof body.result === 'object' && typeof body.result?.status === 'string') return body.result.status;
+    if (typeof body.state === 'string') return body.state;
     return 'done';
 }
 
-function resultText(body: any): string | undefined {
-    if (typeof body?.result?.text === 'string') return body.result.text;
-    if (typeof body?.result === 'string') return body.result;
+function resultText(body: DispatchResultBody): string | undefined {
+    if (typeof body.result === 'object' && typeof body.result?.text === 'string') return body.result.text;
+    if (typeof body.result === 'string') return body.result;
     return undefined;
 }
 
-function dispatchExitCode(body: any): number {
+function dispatchExitCode(body: DispatchResultBody): number {
     const status = resultStatus(body);
     return status === 'error' || status === 'failed' || status === 'cancelled' ? 1 : 0;
 }
 
-function printDispatchResult(agentName: string, body: any): void {
+function printDispatchResult(agentName: string, body: DispatchResultBody): void {
     console.log(`✅ ${agentName} completed (${resultStatus(body)})`);
     const text = resultText(body);
     if (text !== undefined) {
@@ -155,12 +172,12 @@ try {
                 + 'For foreground mode: jaw serve',
             );
         } else {
-            console.error(`❌ Error: ${(lastError as Error)?.message || lastError}`);
+        console.error(`❌ Error: ${errString(lastError)}`);
         }
         process.exit(1);
     }
 
-    const body = await res.json() as any;
+    const body = await res.json() as DispatchResultBody;
     if (!res.ok) {
         const pollAgentId = body?.worker?.agentId || body?.existing?.agentId || await resolveAgentId(agent);
         if (res.status === 409 && pollAgentId) {
@@ -174,7 +191,7 @@ try {
     }
     printDispatchResult(agent, body);
     process.exit(dispatchExitCode(body));
-} catch (e: any) {
-    console.error(`❌ Error: ${e.message}`);
+} catch (e: unknown) {
+    console.error(`❌ Error: ${errString(e)}`);
     process.exit(1);
 }

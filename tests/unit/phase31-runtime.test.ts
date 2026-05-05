@@ -1,3 +1,4 @@
+import { readSource } from './source-normalize.js';
 // Phase 3.1 runtime safeguards: startup migration + workingDir artifact regeneration
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,9 +8,9 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..');
-const serverSrc = readFileSync(join(projectRoot, 'server.ts'), 'utf8');
-const runtimeSettingsSrc = readFileSync(join(projectRoot, 'src/core/runtime-settings.ts'), 'utf8');
-const builderSrc = readFileSync(join(projectRoot, 'src/prompt/builder.ts'), 'utf8');
+const serverSrc = readSource(join(projectRoot, 'server.ts'), 'utf8');
+const runtimeSettingsSrc = readSource(join(projectRoot, 'src/core/runtime-settings.ts'), 'utf8');
+const builderSrc = readSource(join(projectRoot, 'src/prompt/builder.ts'), 'utf8');
 
 function section(src: string, startMarker: string, endMarker: string) {
     const start = src.indexOf(startMarker);

@@ -23,7 +23,7 @@ export function normalizeBrowserStartMode(mode: BrowserLaunchPolicyInput['mode']
 
 export function resolveLaunchPolicy(input: BrowserLaunchPolicyInput = {}): BrowserLaunchPolicy {
     const mode = normalizeBrowserStartMode(input.mode);
-    const envHeadless = input.envHeadless ?? process.env.CHROME_HEADLESS === '1';
+    const envHeadless = input.envHeadless ?? process.env["CHROME_HEADLESS"] === '1';
     const requestedHeadless = input.headless === true || envHeadless;
 
     if (mode === 'debug') {

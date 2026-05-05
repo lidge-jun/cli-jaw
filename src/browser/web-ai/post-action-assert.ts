@@ -1,6 +1,7 @@
 import { wrapError } from './errors.js';
 import type { TraceContext } from './action-trace.js';
 import type { ResolvedActionTarget } from './action-cache.js';
+import { stripUndefined } from '../../core/strip-undefined.js';
 
 export interface PostActionAssertionOptions {
     expectedValue?: string;
@@ -22,9 +23,23 @@ export interface LocatorLike {
     click(): Promise<void>;
     fill?(value: string): Promise<void>;
     inputValue?(): Promise<string>;
-    evaluate<T>(fn: (el: any) => T | Promise<T>): Promise<T>;
+    evaluate<T>(fn: (el: LocatorNodeLike) => T | Promise<T>): Promise<T>;
     isVisible?(): Promise<boolean>;
 }
+
+interface LocatorNodeLike {
+    textContent?: string | null;
+    value?: string;
+}
+
+interface FocusDocumentLike {
+    querySelector(value: string): { contains(value: unknown): boolean } | null;
+    activeElement: unknown;
+}
+
+type FocusGlobalLike = typeof globalThis & {
+    document: FocusDocumentLike;
+};
 
 export interface PageLike {
     url(): string;
@@ -40,9 +55,9 @@ export interface PageLike {
 export function scrubTargetForTrace(target: ResolvedActionTarget | null | undefined): Record<string, unknown> | null {
     if (!target) return null;
     return {
-        resolution: target.resolution || null,
-        source: target.source || null,
-        ref: target.ref || null,
+        resolution: target["resolution"] || null,
+        source: target["source"] || null,
+        ref: target["ref"] || null,
         selector: target.selector || null,
         role: target.role || null,
     };
@@ -97,7 +112,7 @@ export async function clickWithPostAssert(
     try {
         await locator.click();
     } catch (err) {
-        traceCtx?.record({ action: 'click', target: scrubTargetForTrace(resolvedTarget), status: 'error', errorCode: (err as { name?: string }).name });
+        traceCtx?.record(stripUndefined({ action: 'click', target: scrubTargetForTrace(resolvedTarget), status: 'error', errorCode: (err as { name?: string }).name }));
         throw wrapError(err, { stage: 'post-action-click', retryHint: 're-snapshot' });
     }
 
@@ -136,18 +151,15 @@ export async function fillWithPostAssert(
         await locator.fill(value);
     } catch (fillErr) {
         const role = resolvedTarget.role || '';
-        const isContentEditable = role === 'textbox' || resolvedTarget.contentEditable === true;
+        const isContentEditable = role === 'textbox' || resolvedTarget["contentEditable"] === true;
         if (!isContentEditable) {
-            traceCtx?.record({ action: 'fill', target: scrubTargetForTrace(resolvedTarget), status: 'error', errorCode: (fillErr as { name?: string }).name });
+            traceCtx?.record(stripUndefined({ action: 'fill', target: scrubTargetForTrace(resolvedTarget), status: 'error', errorCode: (fillErr as { name?: string }).name }));
             throw wrapError(fillErr, { stage: 'post-action-fill', retryHint: 're-snapshot' });
         }
         try {
             await locator.click();
             const focused = await page.evaluate?.((selector) => {
-                const doc = (globalThis as any).document as {
-                    querySelector(value: string): { contains(value: unknown): boolean } | null;
-                    activeElement: unknown;
-                };
+                const doc = (globalThis as FocusGlobalLike).document;
                 const target = selector ? doc.querySelector(selector) : null;
                 return !!target && (doc.activeElement === target || target.contains(doc.activeElement));
             }, resolvedTarget.selector || null).catch(() => false);
@@ -159,7 +171,7 @@ export async function fillWithPostAssert(
             await page.keyboard.press(`${mod}+a`);
             await page.keyboard.insertText(value);
         } catch (kbErr) {
-            traceCtx?.record({ action: 'fill', target: scrubTargetForTrace(resolvedTarget), status: 'error', errorCode: (kbErr as { name?: string }).name });
+                traceCtx?.record(stripUndefined({ action: 'fill', target: scrubTargetForTrace(resolvedTarget), status: 'error', errorCode: (kbErr as { name?: string }).name }));
             throw wrapError(kbErr, { stage: 'post-action-fill-keyboard', retryHint: 're-snapshot' });
         }
     }

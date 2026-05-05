@@ -9,30 +9,34 @@ export function registerHeartbeatRoutes(app: Express, requireAuth: AuthMiddlewar
 
     app.put('/api/heartbeat', requireAuth, (req, res) => {
         const data = req.body;
-        if (!data || !Array.isArray(data.jobs)) return res.status(400).json({ error: 'jobs array required' });
+        if (!data || !Array.isArray(data.jobs)) {
+            res.status(400).json({ error: 'jobs array required' });
+            return;
+        }
         const normalizedJobs = [];
         const idPrefix = `hb_${Date.now()}`;
         for (const [index, rawJob] of data.jobs.entries()) {
             const job = (rawJob && typeof rawJob === 'object') ? rawJob as Record<string, unknown> : {};
-            const scheduleResult = validateHeartbeatScheduleInput(job.schedule);
-            const jobId = typeof job.id === 'string' && job.id.trim()
-                ? job.id.trim()
+            const scheduleResult = validateHeartbeatScheduleInput(job["schedule"]);
+            const jobId = typeof job["id"] === 'string' && job["id"].trim()
+                ? job["id"].trim()
                 : `${idPrefix}_${index}`;
             if (!scheduleResult.ok) {
-                return res.status(400).json({
+                res.status(400).json({
                     error: 'invalid heartbeat schedule',
                     code: scheduleResult.code,
                     detail: scheduleResult.error,
                     index,
                     jobId,
                 });
+                return;
             }
             normalizedJobs.push({
                 id: jobId,
-                name: typeof job.name === 'string' ? job.name : '',
-                enabled: job.enabled !== false,
+                name: typeof job["name"] === 'string' ? job["name"] : '',
+                enabled: job["enabled"] !== false,
                 schedule: scheduleResult.schedule,
-                prompt: typeof job.prompt === 'string' ? job.prompt : '',
+                prompt: typeof job["prompt"] === 'string' ? job["prompt"] : '',
             });
         }
         const payload = { jobs: normalizedJobs };

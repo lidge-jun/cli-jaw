@@ -6,7 +6,7 @@ import { buildContextPack } from './file-selector.js';
 import { buildContextRenderResult } from './renderer.js';
 import type { ContextPackInput, ContextPackResult, ContextPackSummary } from './types.js';
 
-const PACKAGE_DIR = join(process.env.BROWSER_AGENT_HOME || process.env.JAW_HOME || join(homedir(), '.cli-jaw-3460'), 'web-ai-context-packages');
+const PACKAGE_DIR = join(process.env["BROWSER_AGENT_HOME"] || process.env["JAW_HOME"] || join(homedir(), '.cli-jaw-3460'), 'web-ai-context-packages');
 
 export async function buildContextPackageResult(input: ContextPackInput = {}): Promise<ContextPackResult> {
     const selected = await buildContextPack(input);

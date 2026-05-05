@@ -1,3 +1,4 @@
+import { readSource } from './source-normalize.js';
 // PABCD 검증: state machine + worker dispatch + orchestrate structure
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,9 +9,9 @@ import { dirname, join } from 'node:path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const pipelineSrc = fs.readFileSync(join(__dirname, '../../src/orchestrator/pipeline.ts'), 'utf8');
-const spawnSrc = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
-const stateMachineSrc = fs.readFileSync(join(__dirname, '../../src/orchestrator/state-machine.ts'), 'utf8');
+const pipelineSrc = readSource(join(__dirname, '../../src/orchestrator/pipeline.ts'), 'utf8');
+const spawnSrc = readSource(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
+const stateMachineSrc = readSource(join(__dirname, '../../src/orchestrator/state-machine.ts'), 'utf8');
 
 // ─── VR: PABCD State Machine 구조 검증 ───────────────
 

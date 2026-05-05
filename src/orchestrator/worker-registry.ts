@@ -1,6 +1,8 @@
 // ─── Worker Registry ────────────────────────────────
 // In-memory registry tracking worker ownership and result handoff.
 
+import { stripUndefined } from '../core/strip-undefined.js';
+
 const workers = new Map<string, WorkerSlot>();
 
 // Replay metadata captured when Boss dispatches the worker. Used by
@@ -44,12 +46,14 @@ export class WorkerBusyError extends Error {
     }
 }
 
-export function claimWorker(emp: Record<string, any>, task: string, replayMeta?: WorkerReplayMeta): WorkerSlot {
+export interface WorkerEmployeeRef { id: string; name?: string }
+
+export function claimWorker(emp: WorkerEmployeeRef, task: string, replayMeta?: WorkerReplayMeta): WorkerSlot {
     const existing = workers.get(emp.id);
     if (existing && existing.state === 'running') {
         throw new WorkerBusyError(existing);
     }
-    const slot: WorkerSlot = {
+    const slot: WorkerSlot = stripUndefined({
         agentId: emp.id,
         employeeId: emp.id,
         employeeName: emp.name || emp.id,
@@ -64,7 +68,7 @@ export function claimWorker(emp: Record<string, any>, task: string, replayMeta?:
         replayAttempts: 0,
         result: null,
         replayMeta: replayMeta && Object.keys(replayMeta).length ? { ...replayMeta } : undefined,
-    };
+    });
     workers.set(emp.id, slot);
     return slot;
 }
@@ -129,7 +133,7 @@ export function listPendingWorkerResults(): Array<{ agentId: string; text: strin
     const results: Array<{ agentId: string; text: string; meta?: WorkerReplayMeta }> = [];
     for (const slot of workers.values()) {
         if (slot.state === 'done' && slot.pendingReplay && !slot.replayClaimed && slot.result !== null) {
-            results.push({ agentId: slot.agentId, text: slot.result, meta: slot.replayMeta });
+            results.push(stripUndefined({ agentId: slot.agentId, text: slot.result, meta: slot.replayMeta }));
         }
     }
     return results;

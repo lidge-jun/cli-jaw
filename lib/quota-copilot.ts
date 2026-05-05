@@ -12,9 +12,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { resolveHomePath } from '../src/core/path-expand.js';
+import { stripUndefined } from '../src/core/strip-undefined.js';
 
-const JAW_HOME = process.env.CLI_JAW_HOME
-    ? resolveHomePath(process.env.CLI_JAW_HOME)
+const JAW_HOME = process.env["CLI_JAW_HOME"]
+    ? resolveHomePath(process.env["CLI_JAW_HOME"])
     : path.join(os.homedir(), '.cli-jaw');
 const AUTH_DIR = path.join(JAW_HOME, 'auth');
 const TOKEN_CACHE_PATH = path.join(AUTH_DIR, 'copilot-token');
@@ -84,9 +85,9 @@ function getCopilotToken() {
 
     // ─── 1. Env vars (cross-platform, explicit override) ───
     const envToken =
-        process.env.COPILOT_GITHUB_TOKEN ||
-        process.env.GH_TOKEN ||
-        process.env.GITHUB_TOKEN;
+        process.env["COPILOT_GITHUB_TOKEN"] ||
+        process.env["GH_TOKEN"] ||
+        process.env["GITHUB_TOKEN"];
     if (envToken) {
         _cachedToken = envToken;
         return _cachedToken;
@@ -143,7 +144,7 @@ function getCopilotToken() {
     }
 
     // win32/linux: no keychain CLI — rely on env/gh/cache above
-    if (process.env.DEBUG && process.platform !== 'darwin') {
+    if (process.env["DEBUG"] && process.platform !== 'darwin') {
         console.info(`[quota-copilot] token lookup skipped on ${process.platform} (set COPILOT_GITHUB_TOKEN or GH_TOKEN)`);
     }
     return null;
@@ -185,14 +186,27 @@ export async function fetchCopilotQuota() {
             }
             return null;
         }
-        const data = await res.json() as Record<string, any>;
+        const data = await res.json() as {
+            quota_snapshots?: {
+                premium_interactions?: {
+                    unlimited?: boolean;
+                    entitlement?: number;
+                    remaining?: number;
+                    percent_remaining?: number;
+                };
+            };
+            quota_reset_date?: string;
+            login?: string;
+            access_type_sku?: string;
+            copilot_plan?: string;
+        };
 
         const snap = data.quota_snapshots || {};
         const pi = snap.premium_interactions || {};
         const windows = [];
 
         if (!pi.unlimited && pi.entitlement) {
-            const resetsAt = data.quota_reset_date || nextMonthFirstResetDate();
+            const resetsAt = data["quota_reset_date"] || nextMonthFirstResetDate();
             windows.push({
                 label: 'Premium',
                 used: pi.entitlement - (pi.remaining ?? pi.entitlement),
@@ -225,11 +239,17 @@ export function clearCopilotTokenCache() {
     } catch { /* ignore */ }
 }
 
+/** Shape of the `account` field returned by Copilot quota-style endpoints. */
+export interface CopilotAccount {
+    email: string | null;
+    plan: string | null;
+}
+
 /** Force token re-read: reset keychain suppression + clear all caches + retry full chain.
  *  Returns step-by-step results for each source in priority order. */
 export async function refreshCopilotFromKeychain(): Promise<{
     ok: boolean;
-    account?: any;
+    account?: CopilotAccount;
     steps: Array<{ source: string; status: 'hit' | 'miss' | 'error'; detail?: string }>;
 }> {
     _keychainFailed = false;
@@ -244,7 +264,7 @@ export async function refreshCopilotFromKeychain(): Promise<{
     let foundToken: string | null = null;
 
     // 1. ENV
-    const envToken = process.env.COPILOT_GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+    const envToken = process.env["COPILOT_GITHUB_TOKEN"] || process.env["GH_TOKEN"] || process.env["GITHUB_TOKEN"];
     if (envToken) {
         steps.push({ source: 'ENV', status: 'hit', detail: envToken.slice(0, 8) + '…' });
         foundToken = envToken;
@@ -292,7 +312,7 @@ export async function refreshCopilotFromKeychain(): Promise<{
                 steps.push({ source: 'Keychain', status: 'miss' });
             }
         } catch (e: unknown) {
-            steps.push({ source: 'Keychain', status: 'error', detail: (e as Error).message?.split('\n')[0] });
+            steps.push(stripUndefined({ source: 'Keychain', status: 'error' as const, detail: (e as Error).message?.split('\n')[0] }));
         }
     } else {
         steps.push({ source: 'Keychain', status: 'miss', detail: 'non-macOS' });
@@ -304,5 +324,5 @@ export async function refreshCopilotFromKeychain(): Promise<{
     writeTokenCache(expectedLogin || 'refresh', foundToken);
 
     const result = await fetchCopilotQuota();
-    return { ok: true, account: result?.account ?? null, steps };
+    return stripUndefined({ ok: true, account: result?.account, steps });
 }

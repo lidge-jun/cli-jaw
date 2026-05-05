@@ -4,9 +4,11 @@
 import crypto from 'node:crypto';
 import { getEmployees, deleteEmployee, insertEmployee, db } from './db.js';
 import { settings } from './config.js';
+import { stripUndefined } from './strip-undefined.js';
 import { broadcast } from './bus.js';
 import { getDefaultClaudeModel } from '../cli/claude-models.js';
 import { regenerateB } from '../prompt/builder.js';
+import type { CliEngine } from '../types/cli-engine.js';
 
 export const DEFAULT_EMPLOYEES = [
     { name: 'Frontend', role: 'UI/UX, CSS, components' },
@@ -19,7 +21,12 @@ export const DEFAULT_EMPLOYEES = [
 // employees that have fixed CLIs or baked system prompts (e.g. Control
 // needs Codex + darwin).
 
-export type EmployeeCli = 'codex' | 'gemini' | 'claude' | 'opencode' | 'copilot';
+/**
+ * @deprecated Prefer `CliEngine` from `src/types/cli-engine.ts`. This alias
+ * is retained to avoid a renaming churn across employees.ts call sites; it
+ * will be removed in P19/P20 cleanup once consumers have migrated.
+ */
+export type EmployeeCli = CliEngine;
 
 export interface StaticEmployeeRuntimeHints {
     requiresDarwin?: boolean;
@@ -42,6 +49,32 @@ export interface StaticEmployee {
         when: 'not-gui-automation';
         back_to: 'Boss';
     };
+}
+
+/**
+ * Shape of a row returned by `getEmployees.all()` (see ./db.ts).
+ * Derived from the schema in db.ts; keep in sync if the schema changes.
+ */
+export interface EmployeeRow {
+    id: string;
+    name: string;
+    cli: string;          // not narrowed to CliEngine yet — DB may carry legacy values
+    model: string | null;
+    role: string | null;
+    [k: string]: unknown; // allow forward-compatible columns
+}
+
+/**
+ * Synthetic row produced when a request resolves to a STATIC_EMPLOYEES entry
+ * (no real DB id). Shape mirrors the columns the dispatch path actually reads.
+ */
+export interface SyntheticEmployeeRow {
+    id: string;
+    name: string;
+    cli: string;
+    model: string;
+    role: string;
+    status: 'idle';
 }
 
 export const STATIC_EMPLOYEES: StaticEmployee[] = [
@@ -136,17 +169,17 @@ export function checkModelSupport(
  */
 export function resolveDispatchableEmployee(
     name: string,
-    dbRows: Array<Record<string, any>> = getEmployees.all() as any[],
-): { row: Record<string, any>; source: 'db' | 'static'; spec: StaticEmployee | null } | null {
+    dbRows: readonly EmployeeRow[] = getEmployees.all() as EmployeeRow[],
+): { row: EmployeeRow | SyntheticEmployeeRow; source: 'db' | 'static'; spec: StaticEmployee | null } | null {
     const needle = name.trim().toLowerCase();
     for (const r of dbRows) {
-        if ((r.name || '').toLowerCase() === needle) {
+        if ((r.name ?? '').toLowerCase() === needle) {
             return { row: r, source: 'db', spec: findStaticEmployee(r.name) };
         }
     }
     const spec = findStaticEmployee(name);
     if (!spec) return null;
-    const override = (settings.staticEmployees as Record<string, { model?: string }> | undefined)?.[spec.name];
+    const override = (settings["staticEmployees"] as Record<string, { model?: string }> | undefined)?.[spec.name];
     return {
         row: {
             id: `static:${spec.name.toLowerCase()}`,
@@ -171,12 +204,12 @@ export function listEmployees(): EmployeeListing[] {
     const seen = new Set<string>();
     const staticOut: EmployeeListing[] = [];
     const dbOut: EmployeeListing[] = [];
-    const overrides = (settings.staticEmployees as Record<string, { model?: string }> | undefined) || {};
+    const overrides = (settings["staticEmployees"] as Record<string, { model?: string }> | undefined) || {};
 
     // Static employees first (rendered at top of UI list, CLI-locked, model editable).
     for (const s of STATIC_EMPLOYEES) {
         const override = overrides[s.name];
-        staticOut.push({
+        staticOut.push(stripUndefined({
             // Use synthetic id matching resolveDispatchableEmployee so the frontend
             // can round-trip PUT /api/employees/:id to the override storage.
             id: `static:${s.name.toLowerCase()}`,
@@ -190,7 +223,7 @@ export function listEmployees(): EmployeeListing[] {
             systemPromptPatchFile: s.systemPromptPatchFile,
             delegation: s.delegation,
             defer: s.defer,
-        });
+        }));
         seen.add(s.name.toLowerCase());
     }
 
@@ -213,15 +246,15 @@ export function listEmployees(): EmployeeListing[] {
 }
 
 export function seedDefaultEmployees({ reset = false, notify = false } = {}) {
-    if (!db.open) return { seeded: 0, cli: settings.cli, skipped: true };
-    const existing = getEmployees.all();
+    if (!db.open) return { seeded: 0, cli: settings["cli"], skipped: true };
+    const existing = getEmployees.all() as EmployeeRow[];
     if (reset) {
-        for (const emp of existing) deleteEmployee.run((emp as any).id);
+        for (const emp of existing) deleteEmployee.run(emp.id);
     } else if (existing.length > 0) {
-        return { seeded: 0, cli: settings.cli, skipped: true };
+        return { seeded: 0, cli: settings["cli"], skipped: true };
     }
 
-    const cli = settings.cli;
+    const cli = settings["cli"];
     const defaultModel = cli === 'claude' ? getDefaultClaudeModel() : 'default';
     for (const emp of DEFAULT_EMPLOYEES) {
         insertEmployee.run(crypto.randomUUID(), emp.name, cli, defaultModel, emp.role);

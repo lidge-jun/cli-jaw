@@ -3,6 +3,7 @@
 
 import type { Client } from 'discord.js';
 import type { RemoteTarget } from '../messaging/types.js';
+import type { DiscordSendableChannel } from './channel-types.js';
 
 export function chunkDiscordMessage(text: string, limit = 2000): string[] {
     if (text.length <= limit) return [text];
@@ -26,18 +27,18 @@ export function createDiscordForwarder(opts: {
     prefix?: string;
 }) {
     return async (type: string, data: Record<string, any>) => {
-        if (type !== 'agent_done' || !data?.text || data.error) return;
+        if (type !== 'agent_done' || !data?.["text"] || data["error"]) return;
         if (opts.shouldSkip?.(data)) return;
         const target = opts.getLastTarget();
         if (!target?.targetId || !opts.client) return;
         try {
             const channel = await opts.client.channels.fetch(target.targetId);
             if (!channel || !('send' in channel)) return;
-            const chunks = chunkDiscordMessage(`${opts.prefix || ''}${data.text}`);
+            const chunks = chunkDiscordMessage(`${opts.prefix || ''}${data["text"]}`);
             for (const chunk of chunks) {
-                await (channel as any).send(chunk);
+                await (channel as unknown as DiscordSendableChannel).send(chunk);
             }
-            opts.log?.({ channelId: target.targetId, preview: data.text.slice(0, 60) });
+            opts.log?.({ channelId: target.targetId, preview: data["text"].slice(0, 60) });
         } catch (e) {
             console.error('[discord:forward]', (e as Error).message);
         }

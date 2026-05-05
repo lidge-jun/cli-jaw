@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import { join } from 'path';
 import { settings, JAW_HOME, PROMPTS_DIR, SKILLS_DIR, SKILLS_REF_DIR, loadHeartbeatFile, deriveCdpPort } from '../core/config.js';
 import { expandHomePath } from '../core/path-expand.js';
+import { stripUndefined } from '../core/strip-undefined.js';
 import { getEmployees } from '../core/db.js';
 import { memoryFlushCounter, flushCycleCount } from '../agent/spawn.js';
 import { describeHeartbeatSchedule, normalizeHeartbeatSchedule } from '../memory/heartbeat-schedule.js';
@@ -250,7 +251,7 @@ export function initPromptFiles() {
 // ─── Memory ──────────────────────────────────────────
 
 export function getMemoryDir() {
-    const wd = expandHomePath(settings.workingDir || os.homedir(), os.homedir());
+    const wd = expandHomePath(settings["workingDir"] || os.homedir(), os.homedir());
     const hash = wd.replace(/[\\/]/g, '-');
     return join(os.homedir(), '.claude', 'projects', hash, 'memory');
 }
@@ -287,7 +288,7 @@ export function loadRecentMemories() {
 function appendLegacyMemoryContext(prompt: string) {
     let next = prompt;
     try {
-        const threshold = settings.memory?.flushEvery ?? 10;
+        const threshold = settings["memory"]?.flushEvery ?? 10;
         const injectInterval = Math.ceil(threshold / 2);
         // Phase 53-A: Always inject memory in the first 3 turns of a session
         // so short conversations never miss context.
@@ -356,11 +357,11 @@ export function getSystemPrompt(opts: { currentPrompt?: string; forDisk?: boolea
     // No dynamic injection needed — Bot-First policy with curl examples included
 
     if (!forDisk) {
-        const injected = buildMemoryInjection({
+        const injected = buildMemoryInjection(stripUndefined({
             role: 'boss',
             currentPrompt,
             providedSnapshot: opts.memorySnapshot,
-        });
+        }));
         if (injected.mode === 'advanced') {
             prompt += '\n\n' + injected.text;
         } else {
@@ -387,13 +388,14 @@ export function getSystemPrompt(opts: { currentPrompt?: string; forDisk?: boolea
     try {
         const emps = getEmployees.all();
         if (emps.length > 0) {
-            const list = emps.map(e =>
-                `- "${(e as any).name}" (CLI: ${(e as any).cli}) — ${(e as any).role || 'general developer'}`
-            ).join('\n');
-            const example = (emps[0] as any).name;
+            const list = emps.map(e => {
+                const r = e as { name: string; cli: string; role?: string };
+                return `- "${r.name}" (CLI: ${r.cli}) — ${r.role || 'general developer'}`;
+            }).join('\n');
+            const example = (emps[0] as { name: string }).name;
             const vars = getTemplateVars();
-            vars.EMPLOYEE_LIST = list;
-            vars.EXAMPLE_AGENT = example;
+            vars["EMPLOYEE_LIST"] = list;
+            vars["EXAMPLE_AGENT"] = example;
             prompt += '\n\n---\n';
             prompt += renderTemplate(loadTemplate('orchestration.md'), vars);
 
@@ -408,16 +410,16 @@ export function getSystemPrompt(opts: { currentPrompt?: string; forDisk?: boolea
     try {
         const hbData = loadHeartbeatFile();
         if (hbData.jobs.length > 0) {
-            const activeJobs = hbData.jobs.filter((j: any) => j.enabled);
-            const jobList = hbData.jobs.map((job: any) => {
+            const activeJobs = hbData.jobs.filter((j) => j.enabled);
+            const jobList = hbData.jobs.map((job) => {
                 const status = job.enabled ? '✅' : '⏸️';
                 const schedule = normalizeHeartbeatSchedule(job.schedule);
                 return `- ${status} "${job.name}" — ${describeHeartbeatSchedule(schedule)}: ${(job.prompt || '').slice(0, 50)}`;
             }).join('\n');
             const vars = getTemplateVars();
-            vars.JOB_LIST = jobList;
-            vars.ACTIVE_COUNT = String(activeJobs.length);
-            vars.TOTAL_COUNT = String(hbData.jobs.length);
+            vars["JOB_LIST"] = jobList;
+            vars["ACTIVE_COUNT"] = String(activeJobs.length);
+            vars["TOTAL_COUNT"] = String(hbData.jobs.length);
             prompt += '\n\n---\n' + renderTemplate(loadTemplate('heartbeat-jobs.md'), vars);
         }
     } catch { /* heartbeat.json not ready */ }
@@ -432,10 +434,10 @@ export function getSystemPrompt(opts: { currentPrompt?: string; forDisk?: boolea
             prompt += '\n\n---\n## Skills System\n';
 
             const vars = getTemplateVars();
-            vars.ACTIVE_SKILLS_COUNT = String(activeSkills.length);
-            vars.ACTIVE_SKILLS_LIST = activeSkills.map(s => `- ${s!.name} (${s!.id})`).join('\n');
-            vars.REF_SKILLS_COUNT = String(availableRef.length);
-            vars.REF_SKILLS_LIST = availableRef.map(s => s.id).join(', ');
+            vars["ACTIVE_SKILLS_COUNT"] = String(activeSkills.length);
+            vars["ACTIVE_SKILLS_LIST"] = activeSkills.map(s => `- ${s!.name} (${s!.id})`).join('\n');
+            vars["REF_SKILLS_COUNT"] = String(availableRef.length);
+            vars["REF_SKILLS_LIST"] = availableRef.map(s => s.id).join(', ');
 
             // Only render sections that have content
             if (activeSkills.length > 0 && availableRef.length > 0) {
@@ -457,7 +459,7 @@ export function getSystemPrompt(opts: { currentPrompt?: string; forDisk?: boolea
 
     // ─── Vision-Click Hint (Codex only) ──────────────
     try {
-        const activeCli = opts.activeCli || settings.cli;
+        const activeCli = opts.activeCli || settings["cli"];
         if (shouldIncludeVisionClickHint(activeCli)) {
             const visionSkillPath = join(SKILLS_DIR, 'vision-click', 'SKILL.md');
             if (fs.existsSync(visionSkillPath)) {
@@ -486,7 +488,7 @@ export function getSystemPrompt(opts: { currentPrompt?: string; forDisk?: boolea
 
 // ─── Employee Prompt (orchestration-free) ────────────
 
-export function getEmployeePrompt(emp: any) {
+export function getEmployeePrompt(emp: { name: string; role?: string; id?: string | number }) {
     const vars: Record<string, string> = {
         EMP_NAME: emp.name,
         EMP_ROLE: emp.role || 'general developer',
@@ -502,7 +504,7 @@ export function getEmployeePrompt(emp: any) {
             for (const s of activeSkills) {
                 section += `- ${s!.name} (${s!.id})\n`;
             }
-            vars.ACTIVE_SKILLS_SECTION = section;
+            vars["ACTIVE_SKILLS_SECTION"] = section;
         }
     } catch { /* skills not ready */ }
 
@@ -511,9 +513,9 @@ export function getEmployeePrompt(emp: any) {
 
 // ─── Employee Prompt v2 (orchestration phase-aware) ──
 
-export function getEmployeePromptV2(emp: any, role: any, currentPhase: number | string) {
+export function getEmployeePromptV2(emp: { name: string; role?: string; id?: string | number; cli?: string }, role: string, currentPhase: number | string) {
     const phase = Number(currentPhase);
-    const cacheKey = `${emp.id || emp.name}:${role}:${phase}:${settings.workingDir || '~'}`;
+    const cacheKey = `${emp.id || emp.name}:${role}:${phase}:${settings["workingDir"] || '~'}`;
     if (promptCache.has(cacheKey)) return promptCache.get(cacheKey);
 
     let prompt = getEmployeePrompt(emp);
@@ -666,7 +668,7 @@ export function regenerateB() {
 
     // Generate {workDir}/AGENTS.md — read by Codex, Copilot, and OpenCode
     try {
-        const wd = settings.workingDir || os.homedir();
+        const wd = settings["workingDir"] || os.homedir();
         fs.writeFileSync(join(wd, 'AGENTS.md'), fullPrompt);
         console.log(`[prompt] AGENTS.md generated at ${wd}`);
     } catch (e: unknown) {

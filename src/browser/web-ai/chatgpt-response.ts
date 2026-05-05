@@ -9,13 +9,13 @@
 
 import type { ResponseCaptureResult } from './provider-adapter.js';
 import { ActionTranscript, captureTextBaseline } from '../primitives.js';
+import { stripUndefined } from '../../core/strip-undefined.js';
 import { captureCopiedResponseText, CHATGPT_COPY_SELECTORS, preferCopiedText } from './copy-markdown.js';
 import { resolveActionTarget } from './self-heal.js';
 import { createTraceContext, getSessionTrace, recordTraceStep } from './action-trace.js';
 import type { ResolveActionTargetResult, TargetCandidate } from './self-heal.js';
 import type { TraceContext, TraceStep } from './action-trace.js';
-
-declare const document: any;
+import type { Locator, Page } from 'playwright-core';
 
 export const ASSISTANT_TURN_SELECTORS = [
     '[data-message-author-role="assistant"]',
@@ -89,21 +89,21 @@ export interface CaptureOptions {
     pollIntervalMs?: number;
 }
 
-export async function readAssistantSnapshot(page: any, minTurnIndex: number, promptText = ''): Promise<AssistantSnapshot> {
+export async function readAssistantSnapshot(page: Page, minTurnIndex: number, promptText = ''): Promise<AssistantSnapshot> {
     const allTexts = await readAssistantTexts(page);
     const streaming = await isStreaming(page);
     const canvasOpened = await isCanvasOpened(page);
     const newTexts = allTexts.slice(minTurnIndex);
     const latestNewText = pickLatestRealAnswer(newTexts, promptText);
-    return {
+    return stripUndefined({
         assistantCount: allTexts.length,
         latestNewText,
         streaming,
         canvasOpened,
-    };
+    });
 }
 
-async function readAssistantTexts(page: any): Promise<string[]> {
+async function readAssistantTexts(page: Page): Promise<string[]> {
     const baseline = await captureTextBaseline(page, ASSISTANT_TURN_SELECTORS);
     if (baseline.texts.length) return baseline.texts.map(normalizeAssistantText).filter(Boolean);
 
@@ -120,7 +120,7 @@ async function readAssistantTexts(page: any): Promise<string[]> {
     return allTexts;
 }
 
-export async function captureAssistantResponse(page: any, options: CaptureOptions): Promise<ResponseCaptureResult> {
+export async function captureAssistantResponse(page: Page, options: CaptureOptions): Promise<ResponseCaptureResult> {
     const transcript = new ActionTranscript();
     const resolverTrace = createTraceContext('chatgpt-response');
     const stableWindowMs = Math.max(250, options.stableWindowMs ?? 1500);
@@ -132,13 +132,13 @@ export async function captureAssistantResponse(page: any, options: CaptureOption
     while (Date.now() < deadline) {
         const snap = await readAssistantSnapshot(page, options.minTurnIndex, options.promptText);
         if (snap.canvasOpened) {
-            return withResolverTrace({
+            return withResolverTrace(stripUndefined({
                 ok: true,
                 canvas: { kind: 'opened', reason: 'ChatGPT routed answer into Canvas' },
                 answerText: snap.latestNewText,
                 usedFallbacks: transcript.usedFallbacks,
                 warnings: transcript.warnings,
-            }, resolverTrace);
+            }), resolverTrace);
         }
         if (!snap.streaming && snap.latestNewText) {
             if (snap.latestNewText === stableText) {
@@ -176,10 +176,10 @@ export async function captureAssistantResponse(page: any, options: CaptureOption
         }
         transcript.warn(`copy-markdown-fallback-unavailable:${copied.status || 'unknown'}`);
     }
-    return withResolverTrace({ ok: false, answerText: stableText, usedFallbacks: transcript.usedFallbacks, warnings: transcript.warnings }, resolverTrace);
+    return withResolverTrace(stripUndefined({ ok: false, answerText: stableText, usedFallbacks: transcript.usedFallbacks, warnings: transcript.warnings }), resolverTrace);
 }
 
-async function resolveOptionalChatGptCopyTarget(page: any, traceCtx: TraceContext): Promise<{ selector?: string | null } | null> {
+async function resolveOptionalChatGptCopyTarget(page: Page, traceCtx: TraceContext): Promise<{ selector?: string | null } | null> {
     try {
         const result = await resolveActionTarget(page, {
             provider: 'chatgpt',
@@ -208,7 +208,7 @@ function withResolverTrace<T extends ResponseCaptureResult>(result: T, traceCtx:
 }
 
 function recordResolverTrace(traceCtx: TraceContext, result: ResolveActionTargetResult, fallbackIntentId: string): void {
-    recordTraceStep(traceCtx, {
+    recordTraceStep(traceCtx, stripUndefined({
         action: 'target-resolve',
         provider: result.provider || 'chatgpt',
         intentId: result.intent || fallbackIntentId,
@@ -216,10 +216,10 @@ function recordResolverTrace(traceCtx: TraceContext, result: ResolveActionTarget
         status: result.ok ? 'ok' : 'unresolved',
         target: scrubResolverTarget(result.target),
         confidence: result.target?.confidence ?? null,
-        resolutionSource: result.target?.resolution || null,
+        resolutionSource: result.target?.["resolution"] || null,
         errorCode: result.errorCode || undefined,
         attempts: summarizeResolverAttempts(result.attempts),
-    });
+    }));
 }
 
 function summarizeResolverAttempts(attempts: ResolveActionTargetResult['attempts'] = []): TraceStep[] {
@@ -239,7 +239,7 @@ function summarizeResolverAttempts(attempts: ResolveActionTargetResult['attempts
 function scrubResolverTarget(target: TargetCandidate | null | undefined): Record<string, unknown> | null {
     if (!target) return null;
     return {
-        resolution: target.resolution || null,
+        resolution: target["resolution"] || null,
         source: target.source || null,
         ref: target.ref || null,
         selector: target.selector || null,
@@ -259,7 +259,7 @@ function pickLatestRealAnswer(texts: string[], promptText: string): string | und
     return undefined;
 }
 
-async function isStreaming(page: any): Promise<boolean> {
+async function isStreaming(page: Page): Promise<boolean> {
     for (const selector of STOP_BUTTON_SELECTORS) {
         try {
             if (await page.locator(selector).first().isVisible().catch(() => false)) return true;
@@ -270,7 +270,7 @@ async function isStreaming(page: any): Promise<boolean> {
     return false;
 }
 
-async function isCanvasOpened(page: any): Promise<boolean> {
+async function isCanvasOpened(page: Page): Promise<boolean> {
     for (const selector of CANVAS_SELECTORS) {
         try {
             if (await page.locator(selector).first().isVisible().catch(() => false)) return true;
@@ -281,7 +281,7 @@ async function isCanvasOpened(page: any): Promise<boolean> {
     return false;
 }
 
-async function safeAll(page: any, selector: string): Promise<any[]> {
+async function safeAll(page: Page, selector: string): Promise<Locator[]> {
     try { return await page.locator(selector).all(); }
     catch { return []; }
 }

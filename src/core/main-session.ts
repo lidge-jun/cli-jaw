@@ -24,8 +24,8 @@ export function getCliModelAndEffort(
     cli: string,
     currentSettings: Record<string, any> = settings,
 ): { model: string; effort: string } {
-    const ao = currentSettings.activeOverrides?.[cli] || {};
-    const pc = currentSettings.perCli?.[cli] || {};
+    const ao = currentSettings["activeOverrides"]?.[cli] || {};
+    const pc = currentSettings["perCli"]?.[cli] || {};
     return {
         model: ao.model || pc.model || 'default',
         effort: ao.effort || pc.effort || 'medium',
@@ -38,7 +38,7 @@ export function resolveMainCli(
     session: MainSessionRecord | null = null,
 ): string {
     return requestedCli
-        || currentSettings.cli
+        || currentSettings["cli"]
         || session?.active_cli
         || 'claude';
 }
@@ -55,8 +55,8 @@ export function buildSelectedSessionRow(
         cli,
         sessionId,
         model,
-        permissions: currentSettings.permissions || 'auto',
-        workingDir: currentSettings.workingDir || '~',
+        permissions: currentSettings["permissions"] || 'auto',
+        workingDir: currentSettings["workingDir"] || '~',
         effort,
     };
 }
@@ -71,8 +71,8 @@ export function buildClearedSessionRow(
         cli,
         sessionId: null,
         model,
-        permissions: currentSettings.permissions || 'auto',
-        workingDir: currentSettings.workingDir || '~',
+        permissions: currentSettings["permissions"] || 'auto',
+        workingDir: currentSettings["workingDir"] || '~',
         effort,
     };
 }

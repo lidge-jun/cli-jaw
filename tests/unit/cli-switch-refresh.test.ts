@@ -1,3 +1,4 @@
+import { readSource } from './source-normalize.js';
 // CLI Switch Session Refresh — Issue #126
 // Mostly source-pattern assertions following existing test style (phase31-runtime, employee-session-reuse).
 // One real-DB behavioral test exercises setPendingBootstrapPromptStrict end-to-end.
@@ -12,9 +13,9 @@ const COMPACT = path.join(ROOT, 'src/core/compact.ts');
 const RUNTIME = path.join(ROOT, 'src/core/runtime-settings.ts');
 const MAIN_SESSION = path.join(ROOT, 'src/core/main-session.ts');
 
-const compactSrc = fs.readFileSync(COMPACT, 'utf8');
-const runtimeSrc = fs.readFileSync(RUNTIME, 'utf8');
-const mainSessionSrc = fs.readFileSync(MAIN_SESSION, 'utf8');
+const compactSrc = readSource(COMPACT, 'utf8');
+const runtimeSrc = readSource(RUNTIME, 'utf8');
+const mainSessionSrc = readSource(MAIN_SESSION, 'utf8');
 
 test('CSR-001: cliSwitchRefresh always resets target session even when slots are empty', () => {
     assert.match(compactSrc, /const\s+hasAnyContent\s*=\s*Boolean\([\s\S]*?slots\.recent_turns[\s\S]*?slots\.memory_hits[\s\S]*?slots\.grep_hits[\s\S]*?slots\.task_snapshot[\s\S]*?\)/);

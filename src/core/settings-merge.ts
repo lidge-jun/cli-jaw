@@ -13,21 +13,21 @@ export function mergeSettingsPatch(current: Record<string, any>, patch: Record<s
     const remaining = { ...patch };
 
     // Deep merge perCli at per-CLI level
-    if (remaining.perCli && typeof remaining.perCli === 'object') {
-        result.perCli = result.perCli || {};
-        for (const [cli, cfg] of Object.entries(remaining.perCli) as [string, Record<string, any>][]) {
-            result.perCli[cli] = { ...result.perCli[cli], ...cfg };
+    if (remaining["perCli"] && typeof remaining["perCli"] === 'object') {
+        result["perCli"] = result["perCli"] || {};
+        for (const [cli, cfg] of Object.entries(remaining["perCli"]) as [string, Record<string, any>][]) {
+            result["perCli"][cli] = { ...result["perCli"][cli], ...cfg };
         }
-        delete remaining.perCli;
+        delete remaining["perCli"];
     }
 
     // Deep merge activeOverrides at per-CLI level
-    if (remaining.activeOverrides && typeof remaining.activeOverrides === 'object') {
-        result.activeOverrides = result.activeOverrides || {};
-        for (const [cli, cfg] of Object.entries(remaining.activeOverrides) as [string, Record<string, any>][]) {
-            result.activeOverrides[cli] = { ...result.activeOverrides[cli], ...cfg };
+    if (remaining["activeOverrides"] && typeof remaining["activeOverrides"] === 'object') {
+        result["activeOverrides"] = result["activeOverrides"] || {};
+        for (const [cli, cfg] of Object.entries(remaining["activeOverrides"]) as [string, Record<string, any>][]) {
+            result["activeOverrides"][cli] = { ...result["activeOverrides"][cli], ...cfg };
         }
-        delete remaining.activeOverrides;
+        delete remaining["activeOverrides"];
     }
 
     // Deep merge nested objects (heartbeat, telegram, memory, stt, tui, network)
@@ -39,10 +39,10 @@ export function mergeSettingsPatch(current: Record<string, any>, patch: Record<s
     }
 
     // Deep merge nested network.remoteAccess
-    if (remaining.network?.remoteAccess && typeof remaining.network.remoteAccess === 'object') {
-        result.network = result.network || {};
-        result.network.remoteAccess = { ...result.network.remoteAccess, ...remaining.network.remoteAccess };
-        delete remaining.network.remoteAccess;
+    if (remaining["network"]?.remoteAccess && typeof remaining["network"].remoteAccess === 'object') {
+        result["network"] = result["network"] || {};
+        result["network"].remoteAccess = { ...result["network"].remoteAccess, ...remaining["network"].remoteAccess };
+        delete remaining["network"].remoteAccess;
     }
 
     // Top-level scalar fields

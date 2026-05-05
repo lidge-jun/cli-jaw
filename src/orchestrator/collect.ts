@@ -36,17 +36,17 @@ export function orchestrateAndCollect(
                 resetTimeout();
             }
             // NOTE: agent_output removed — no broadcast emits this event (dead branch)
-            if (type === 'agent_done' && data.error && data.text) {
-                collected = collected || data.text;
+            if (type === 'agent_done' && data["error"] && data["text"]) {
+                collected = collected || data["text"];
             }
             if (type === 'orchestrate_done') {
                 // Filter by requestId (strongest), then origin, then chatId
-                if (meta?.requestId && data?.requestId && data.requestId !== meta.requestId) return;
-                if (meta?.origin && data?.origin && data.origin !== meta.origin) return;
-                if (!meta?.requestId && meta?.chatId && data?.chatId && data.chatId !== meta.chatId) return;
+                if (meta?.["requestId"] && data?.["requestId"] && data["requestId"] !== meta["requestId"]) return;
+                if (meta?.["origin"] && data?.["origin"] && data["origin"] !== meta["origin"]) return;
+                if (!meta?.["requestId"] && meta?.["chatId"] && data?.["chatId"] && data["chatId"] !== meta["chatId"]) return;
                 clearTimeout(timeout);
                 removeBroadcastListener(handler);
-                resolve(data.text || collected || t('tg.noResponse', {}, locale));
+                resolve(data["text"] || collected || t('tg.noResponse', {}, locale));
             }
         };
         addBroadcastListener(handler);

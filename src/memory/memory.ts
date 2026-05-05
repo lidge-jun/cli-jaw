@@ -72,8 +72,8 @@ export function read(filename: string, opts: Record<string, any> = {}) {
     const filepath = resolveMemoryPath(filename);
     if (!fs.existsSync(filepath)) return null;
     const content = fs.readFileSync(filepath, 'utf8');
-    if (opts.lines) {
-        const [from, to] = opts.lines.split('-').map(Number);
+    if (opts["lines"]) {
+        const [from, to] = opts["lines"].split('-').map(Number);
         return content.split('\n').slice(from - 1, to).join('\n');
     }
     return content;

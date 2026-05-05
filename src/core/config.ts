@@ -28,8 +28,8 @@ export const APP_VERSION: string = pkg.version;
 
 // ─── Paths ───────────────────────────────────────────
 
-export const JAW_HOME = process.env.CLI_JAW_HOME
-    ? resolveHomePath(process.env.CLI_JAW_HOME)
+export const JAW_HOME = process.env["CLI_JAW_HOME"]
+    ? resolveHomePath(process.env["CLI_JAW_HOME"])
     : join(os.homedir(), '.cli-jaw');
 export const PROMPTS_DIR = join(JAW_HOME, 'prompts');
 export const DB_PATH = join(JAW_HOME, 'jaw.db');
@@ -45,17 +45,17 @@ export const DEFAULT_PORT = '3457';
 export const CDP_PORT_OFFSET = 5783;  // 9240 - 3457
 
 export function deriveCdpPort(serverPort?: number | string): number {
-    const port = Number(serverPort || process.env.PORT || DEFAULT_PORT);
+    const port = Number(serverPort || process.env["PORT"] || DEFAULT_PORT);
     if (!Number.isInteger(port) || port < 1 || port > 65535) return 9240;
     const cdp = port + CDP_PORT_OFFSET;
     return cdp > 65535 ? 9240 : cdp;
 }
 
 export function getServerUrl(port?: string | number) {
-    return `http://localhost:${port || process.env.PORT || settings.port || DEFAULT_PORT}`;
+    return `http://localhost:${port || process.env["PORT"] || settings["port"] || DEFAULT_PORT}`;
 }
 export function getWsUrl(port?: string | number) {
-    return `ws://localhost:${port || process.env.PORT || settings.port || DEFAULT_PORT}`;
+    return `ws://localhost:${port || process.env["PORT"] || settings["port"] || DEFAULT_PORT}`;
 }
 
 /** Locate the cli-jaw package root (for bundled skills_ref/) */
@@ -200,7 +200,7 @@ function createDefaultSettings() {
 
 export const DEFAULT_SETTINGS = createDefaultSettings();
 
-export function normalizeModelForCli(cli: string, model: any) {
+export function normalizeModelForCli(cli: string, model: unknown): unknown {
     if (typeof model !== 'string') return model;
     if (cli === 'claude') return migrateLegacyClaudeValue(model);
     if (cli === 'copilot' && model === 'claude-opus-4.6-fast') return 'claude-opus-4.6';
@@ -231,30 +231,30 @@ function normalizeActiveOverrides(activeOverrides: Record<string, any> = {}) {
 
 /** @internal — exported for unit testing */
 export function migrateSettings(s: Record<string, any>) {
-    if (s.planning) {
-        if (s.planning.cli && s.planning.cli !== s.cli) s.cli = s.planning.cli;
-        if (s.planning.model && s.planning.model !== 'default') {
-            const target = s.perCli?.[s.cli];
-            if (target) target.model = s.planning.model;
+    if (s["planning"]) {
+        if (s["planning"].cli && s["planning"].cli !== s["cli"]) s["cli"] = s["planning"].cli;
+        if (s["planning"].model && s["planning"].model !== 'default') {
+            const target = s["perCli"]?.[s["cli"]];
+            if (target) target.model = s["planning"].model;
         }
-        if (s.planning.effort) {
-            const target = s.perCli?.[s.cli];
-            if (target) target.effort = s.planning.effort;
+        if (s["planning"].effort) {
+            const target = s["perCli"]?.[s["cli"]];
+            if (target) target.effort = s["planning"].effort;
         }
-        delete s.planning;
+        delete s["planning"];
     }
 
     // Claude model alias migration
-    s.perCli = normalizePerCliModels(s.perCli || {});
-    s.activeOverrides = normalizeActiveOverrides(s.activeOverrides || {});
-    if (typeof s.memory?.cli === 'string' && typeof s.memory?.model === 'string') {
-        s.memory.model = normalizeModelForCli(s.memory.cli, s.memory.model);
+    s["perCli"] = normalizePerCliModels(s["perCli"] || {});
+    s["activeOverrides"] = normalizeActiveOverrides(s["activeOverrides"] || {});
+    if (typeof s["memory"]?.cli === 'string' && typeof s["memory"]?.model === 'string') {
+        s["memory"].model = normalizeModelForCli(s["memory"].cli, s["memory"].model);
     }
 
     // Discord/channel migration
-    if (!s.channel) s.channel = 'telegram';
-    if (!s.discord) {
-        s.discord = {
+    if (!s["channel"]) s["channel"] = 'telegram';
+    if (!s["discord"]) {
+        s["discord"] = {
             enabled: false,
             token: '',
             guildId: '',
@@ -265,11 +265,11 @@ export function migrateSettings(s: Record<string, any>) {
         };
     }
     // Telegram mentionOnly migration — existing users had hardcoded always-on behavior
-    if (s.telegram && s.telegram.mentionOnly === undefined) {
-        s.telegram.mentionOnly = true;
+    if (s["telegram"] && s["telegram"].mentionOnly === undefined) {
+        s["telegram"].mentionOnly = true;
     }
-    if (!s.messaging) {
-        s.messaging = {
+    if (!s["messaging"]) {
+        s["messaging"] = {
             latestSeen: { telegram: null, discord: null },
             lastActive: { telegram: null, discord: null },
         };
@@ -279,31 +279,31 @@ export function migrateSettings(s: Record<string, any>) {
 
 /** Apply environment variable overrides to a settings object */
 function applyEnvOverrides(s: Record<string, any>) {
-    if (process.env.TELEGRAM_TOKEN) {
-        s.telegram = s.telegram || {};
-        s.telegram.token = process.env.TELEGRAM_TOKEN;
-        s.telegram.enabled = true;
+    if (process.env["TELEGRAM_TOKEN"]) {
+        s["telegram"] = s["telegram"] || {};
+        s["telegram"].token = process.env["TELEGRAM_TOKEN"];
+        s["telegram"].enabled = true;
     }
-    if (process.env.TELEGRAM_ALLOWED_CHAT_IDS) {
-        s.telegram = s.telegram || {};
-        s.telegram.allowedChatIds = process.env.TELEGRAM_ALLOWED_CHAT_IDS.split(',').map((x: string) => x.trim()).filter(Boolean);
+    if (process.env["TELEGRAM_ALLOWED_CHAT_IDS"]) {
+        s["telegram"] = s["telegram"] || {};
+        s["telegram"].allowedChatIds = process.env["TELEGRAM_ALLOWED_CHAT_IDS"].split(',').map((x: string) => x.trim()).filter(Boolean);
     }
-    if (process.env.DISCORD_TOKEN) {
-        s.discord = s.discord || {};
-        s.discord.token = process.env.DISCORD_TOKEN;
-        s.discord.enabled = true;
+    if (process.env["DISCORD_TOKEN"]) {
+        s["discord"] = s["discord"] || {};
+        s["discord"].token = process.env["DISCORD_TOKEN"];
+        s["discord"].enabled = true;
         // Auto-switch active channel if Discord has token but Telegram doesn't
-        if (!s.telegram?.token && !s.telegram?.enabled) {
-            s.channel = 'discord';
+        if (!s["telegram"]?.token && !s["telegram"]?.enabled) {
+            s["channel"] = 'discord';
         }
     }
-    if (process.env.DISCORD_GUILD_ID) {
-        s.discord = s.discord || {};
-        s.discord.guildId = process.env.DISCORD_GUILD_ID;
+    if (process.env["DISCORD_GUILD_ID"]) {
+        s["discord"] = s["discord"] || {};
+        s["discord"].guildId = process.env["DISCORD_GUILD_ID"];
     }
-    if (process.env.DISCORD_CHANNEL_IDS) {
-        s.discord = s.discord || {};
-        s.discord.channelIds = process.env.DISCORD_CHANNEL_IDS.split(',').map((x: string) => x.trim()).filter(Boolean);
+    if (process.env["DISCORD_CHANNEL_IDS"]) {
+        s["discord"] = s["discord"] || {};
+        s["discord"].channelIds = process.env["DISCORD_CHANNEL_IDS"].split(',').map((x: string) => x.trim()).filter(Boolean);
     }
 }
 
@@ -340,8 +340,8 @@ export function loadSettings() {
             network: { ...defaults.network, ...(raw.network || {}) },
         });
         // --home (JAW_HOME) always wins over persisted workingDir (#64 hotfix)
-        if (merged.workingDir !== JAW_HOME) {
-            merged.workingDir = JAW_HOME;
+        if (merged["workingDir"] !== JAW_HOME) {
+            merged["workingDir"] = JAW_HOME;
             saveSettings(merged);
         }
         if (raw.planning) saveSettings(merged);
@@ -390,15 +390,24 @@ export function replaceSettings(s: Record<string, any>) {
 // ─── Heartbeat File I/O ──────────────────────────────
 // Separated from heartbeat timers so prompt.js can import without circular dep
 
-export function loadHeartbeatFile() {
+export interface HeartbeatJob {
+    id?: string;
+    name?: string;
+    enabled?: boolean;
+    prompt?: string;
+    schedule?: unknown;
+}
+export interface HeartbeatFile { jobs: HeartbeatJob[] }
+
+export function loadHeartbeatFile(): HeartbeatFile {
     try {
-        return JSON.parse(fs.readFileSync(HEARTBEAT_JOBS_PATH, 'utf8'));
+        return JSON.parse(fs.readFileSync(HEARTBEAT_JOBS_PATH, 'utf8')) as HeartbeatFile;
     } catch { /* expected: heartbeat.json may not exist yet */
         return { jobs: [] };
     }
 }
 
-export function saveHeartbeatFile(data: Record<string, any>) {
+export function saveHeartbeatFile(data: HeartbeatFile | Record<string, unknown>) {
     fs.writeFileSync(HEARTBEAT_JOBS_PATH, JSON.stringify(data, null, 2));
 }
 
@@ -413,7 +422,7 @@ export function detectCli(name: string) {
             timeout: 3000,
             env: {
                 ...process.env,
-                PATH: buildServicePath(process.env.PATH || ''),
+                PATH: buildServicePath(process.env["PATH"] || ''),
             },
         }).trim();
         const firstLine = raw.split(/\r?\n/).map(x => x.trim()).find(Boolean) || '';

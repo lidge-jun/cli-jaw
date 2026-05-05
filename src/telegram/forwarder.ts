@@ -40,14 +40,32 @@ export function chunkTelegramMessage(text: string, limit = 4096) {
  * Listener lifecycle helper used by telegram bridge and unit tests.
  * Ensures attach/detach idempotency so re-init does not leak listeners.
  */
+import type { Bot } from 'grammy';
+
+type BroadcastForwarder = (type: string, data: Record<string, unknown>) => void | Promise<void>;
+
+interface ForwarderLifecycleOptions {
+    addListener?: (listener: BroadcastForwarder) => void;
+    removeListener?: (listener: BroadcastForwarder) => void;
+    buildForwarder?: (args: Record<string, unknown>) => BroadcastForwarder | null;
+}
+
+interface TelegramForwarderOptions {
+    bot: Bot;
+    getLastChatId: () => string | number | null | undefined;
+    shouldSkip?: (data: Record<string, unknown>) => boolean;
+    log?: (info: { chatId: string | number; preview: string }) => void;
+    prefix?: string;
+}
+
 export function createForwarderLifecycle({
     addListener,
     removeListener,
     buildForwarder,
-}: Record<string, any> = {}) {
-    let forwarder: ((...args: any[]) => any) | null = null;
+}: ForwarderLifecycleOptions = {}) {
+    let forwarder: BroadcastForwarder | null = null;
     return {
-        attach(args = {}) {
+        attach(args: Record<string, unknown> = {}) {
             if (forwarder) return forwarder;
             const next = typeof buildForwarder === 'function' ? buildForwarder(args) : null;
             if (typeof next !== 'function') {
@@ -75,26 +93,26 @@ export function createForwarderLifecycle({
 export function createTelegramForwarder({
     bot,
     getLastChatId,
-    shouldSkip = (_data: any) => false,
-    log = (_info: any) => { },
+    shouldSkip = (_data: Record<string, unknown>) => false,
+    log = (_info: { chatId: string | number; preview: string }) => { },
     prefix = '📡 ',
-}: Record<string, any> = {}) {
-    return (type: string, data: Record<string, any>) => {
-        if (type !== 'agent_done' || !data?.text) return;
-        if (data.error) return;
+}: TelegramForwarderOptions) {
+    return (type: string, data: Record<string, unknown>) => {
+        if (type !== 'agent_done' || !data?.["text"]) return;
+        if (data["error"]) return;
         if (shouldSkip(data)) return;
 
         const chatId = typeof getLastChatId === 'function' ? getLastChatId() : null;
         if (!chatId) return;
 
-        const preview = String(data.text).slice(0, 200).replace(/\n/g, ' ');
+        const preview = String(data["text"]).slice(0, 200).replace(/\n/g, ' ');
         log({ chatId, preview });
 
-        const html = markdownToTelegramHtml(data.text);
+        const html = markdownToTelegramHtml(String(data["text"]));
         const chunks = chunkTelegramMessage(html);
         for (const chunk of chunks) {
             Promise.resolve(
-                bot.api.sendMessage(chatId, `${prefix}${chunk}`, { parse_mode: 'HTML' })
+                bot.api.sendMessage(chatId, `${prefix}${chunk}`, { parse_mode: 'HTML' as const })
             ).catch(() =>
                 Promise.resolve(
                     bot.api.sendMessage(chatId, `${prefix}${chunk.replace(/<[^>]+>/g, '')}`)

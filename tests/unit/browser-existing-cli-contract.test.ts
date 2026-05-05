@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readSource } from './source-normalize.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const cliSrc = fs.readFileSync(join(root, 'bin/commands/browser.ts'), 'utf8');
-const routesSrc = fs.readFileSync(join(root, 'src/routes/browser.ts'), 'utf8');
-const tuiApiSrc = fs.readFileSync(join(root, 'bin/commands/tui/api.ts'), 'utf8');
-const contextSrc = fs.readFileSync(join(root, 'src/cli/command-context.ts'), 'utf8');
+const cliSrc = readSource(join(root, 'bin/commands/browser.ts'), 'utf8');
+const routesSrc = readSource(join(root, 'src/routes/browser.ts'), 'utf8');
+const tuiApiSrc = readSource(join(root, 'bin/commands/tui/api.ts'), 'utf8');
+const contextSrc = readSource(join(root, 'src/cli/command-context.ts'), 'utf8');
 
 test('BEC-001: existing human output remains default for snapshot and screenshot', () => {
     assert.match(cliSrc, /console\.log\(`\$\{n\.ref\.padEnd/);

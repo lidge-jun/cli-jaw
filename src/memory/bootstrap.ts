@@ -69,7 +69,7 @@ function parseLegacyMemorySections(content: string) {
 }
 
 function getLegacyClaudeMemoryDir() {
-    const wd = expandHomePath(settings.workingDir || os.homedir(), os.homedir());
+    const wd = expandHomePath(settings["workingDir"] || os.homedir(), os.homedir());
     const hash = wd.replace(/[\\/]/g, '-');
     return join(os.homedir(), '.claude', 'projects', hash, 'memory');
 }
@@ -327,7 +327,7 @@ export function scanSystemProfile(): string {
     lines.push(`- release: ${os.release()}`);
     lines.push(`- cpus: ${os.cpus().length} cores (${os.cpus()[0]?.model || 'unknown'})`);
     lines.push(`- memory: ${(os.totalmem() / 1073741824).toFixed(1)} GB`);
-    lines.push(`- shell: ${process.env.SHELL || 'unknown'}`);
+    lines.push(`- shell: ${process.env["SHELL"] || 'unknown'}`);
     lines.push(`- user: ${os.userInfo().username}`);
     lines.push(`- home: ${os.homedir()}`);
 
@@ -341,7 +341,7 @@ export function scanSystemProfile(): string {
     if (bunVer) lines.push(`- bun: ${bunVer}`);
 
     // Working directory / project root
-    const wd = settings.workingDir || process.cwd();
+    const wd = settings["workingDir"] || process.cwd();
     lines.push('');
     lines.push('## Project Root');
     lines.push(`- path: ${wd}`);

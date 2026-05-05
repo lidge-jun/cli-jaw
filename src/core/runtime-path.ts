@@ -35,7 +35,7 @@ function listManagedNodeBins(homeDir: string): string[] {
 }
 
 export function buildServicePath(
-    seedPath = process.env.PATH || '',
+    seedPath = process.env["PATH"] || '',
     extraDirs: string[] = [],
     homeDir = os.homedir(),
 ): string {

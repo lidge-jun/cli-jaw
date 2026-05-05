@@ -177,7 +177,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         try {
             const { autoCompactRefresh } = await import('../core/compact.js');
             await autoCompactRefresh({
-                workDir: settings.workingDir || '',
+                workDir: settings["workingDir"] || '',
                 instructions: prompt || '',
                 cli,
                 model,
@@ -207,7 +207,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
             try {
                 const { autoCompactRefresh } = await import('../core/compact.js');
                 await autoCompactRefresh({
-                    workDir: settings.workingDir || '',
+                    workDir: settings["workingDir"] || '',
                     instructions: prompt || '',
                     cli,
                     model,
@@ -273,7 +273,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
             const toolLogJson = mergedToolLog.length ? JSON.stringify(mergedToolLog) : null;
             insertMessageWithTrace.run(
                 'assistant', finalContent, cli, model,
-                traceText || null, toolLogJson, settings.workingDir || null,
+                traceText || null, toolLogJson, settings["workingDir"] || null,
             );
             broadcast('agent_done', { text: finalContent, toolLog: mergedToolLog, origin, ...empTag });
 
@@ -286,8 +286,8 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
             }
 
             incrementMemoryFlush();
-            const threshold = settings.memory?.flushEvery ?? 10;
-            if (settings.memory?.enabled !== false && memoryFlushCounter >= threshold) {
+            const threshold = settings["memory"]?.flushEvery ?? 10;
+            if (settings["memory"]?.enabled !== false && memoryFlushCounter >= threshold) {
                 resetMemoryFlushCounter();
                 triggerMemoryFlush();
             }
@@ -301,7 +301,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                 clearEmployeeSession.run(opts.agentId);
                 console.log(`[jaw:session] invalidated stale employee resume — ${cli} agent=${opts.agentId}`);
             } else {
-                updateSession.run(cli, null, model, settings.permissions, settings.workingDir, effortVal);
+                updateSession.run(cli, null, model, settings["permissions"], settings["workingDir"], effortVal);
                 // Also clear the per-bucket entry so the next turn doesn't pick the dead session_id again.
                 const bucket = resolveSessionBucket(cli, model);
                 if (bucket) clearSessionBucket.run(bucket);
@@ -334,7 +334,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
 
         // ─── Fallback with retry tracking ───
         if (!opts.internal && !opts._isFallback) {
-            const fallbackCli = (settings.fallbackOrder || [])
+            const fallbackCli = (settings["fallbackOrder"] || [])
                 .find((fc: string) => fc !== cli && detectCli(fc).available);
             if (fallbackCli) {
                 const st = fallbackState.get(cli);

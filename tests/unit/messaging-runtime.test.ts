@@ -1,3 +1,4 @@
+import { readSource } from './source-normalize.js';
 // Messaging runtime tests — Phase 6 Bundle B
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,10 +8,10 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..');
-const runtimeSrc = readFileSync(join(projectRoot, 'src/messaging/runtime.ts'), 'utf8');
-const configSrc = readFileSync(join(projectRoot, 'src/core/config.ts'), 'utf8');
-const runtimeSettingsSrc = readFileSync(join(projectRoot, 'src/core/runtime-settings.ts'), 'utf8');
-const serverSrc = readFileSync(join(projectRoot, 'server.ts'), 'utf8');
+const runtimeSrc = readSource(join(projectRoot, 'src/messaging/runtime.ts'), 'utf8');
+const configSrc = readSource(join(projectRoot, 'src/core/config.ts'), 'utf8');
+const runtimeSettingsSrc = readSource(join(projectRoot, 'src/core/runtime-settings.ts'), 'utf8');
+const serverSrc = readSource(join(projectRoot, 'server.ts'), 'utf8');
 
 // ─── Target state management ──────────────────────
 

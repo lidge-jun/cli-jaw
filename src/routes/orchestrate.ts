@@ -12,8 +12,10 @@ import { getActiveWorkers, claimWorker, finishWorker, failWorker, markWorkerRepl
 import { findEmployee, runSingleAgent } from '../orchestrator/distribute.js';
 import { getEmployees } from '../core/db.js';
 import { settings } from '../core/config.js';
+import { stripUndefined } from '../core/strip-undefined.js';
 import { verifyBossToken } from '../core/boss-auth.js';
 import { resolveDispatchableEmployee, checkRuntimeHints, checkModelSupport } from '../core/employees.js';
+import type { EmployeeRow, SyntheticEmployeeRow } from '../core/employees.js';
 import { getHeartbeatRuntimeState } from '../memory/heartbeat.js';
 
 function getRuntimeSnapshot() {
@@ -27,10 +29,11 @@ function getRuntimeSnapshot() {
 export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddleware): void {
     app.post('/api/orchestrate/reset', requireAuth, async (req, res) => {
         try {
-            const all = req.query.all === 'true' || req.body?.all === true;
+            const all = req.query["all"] === 'true' || req.body?.all === true;
             if (all) {
                 const cleared = resetAllStaleStates();
-                return res.json({ ok: true, cleared, message: `Cleared ${cleared} stale state(s)` });
+                res.json({ ok: true, cleared, message: `Cleared ${cleared} stale state(s)` });
+                return;
             }
             await orchestrateReset({ origin: 'web' });
             res.json({ ok: true });
@@ -41,7 +44,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
     });
 
     app.get('/api/orchestrate/state', (_req, res) => {
-        const scope = resolveOrcScope({ origin: 'web', workingDir: settings.workingDir || null });
+        const scope = resolveOrcScope({ origin: 'web', workingDir: settings["workingDir"] || null });
         res.json({ scope, state: getState(scope), ctx: getCtx(scope) });
     });
 
@@ -51,7 +54,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
 
     app.get('/api/orchestrate/snapshot', (_req, res) => {
         const runtime = getRuntimeSnapshot();
-        const scope = resolveOrcScope({ origin: 'web', workingDir: settings.workingDir || null });
+        const scope = resolveOrcScope({ origin: 'web', workingDir: settings["workingDir"] || null });
         const ctx = getCtx(scope);
         // Phase 56.1: whitelist-sanitize ctx so legacy fields (e.g. sharedPlanPath)
         // from pre-56.1 DB rows don't leak through the snapshot API.
@@ -94,15 +97,15 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
 
     // Pipe-mode employee dispatch
     app.delete('/api/orchestrate/queue/:id', requireAuth, (req, res) => {
-        const id = String(req.params.id || '');
+        const id = String(req.params["id"] || '');
         if (!id) return fail(res, 400, 'missing id');
         const result = removeQueuedMessage(id);
         if (!result.removed) return fail(res, 404, 'queued item not found');
-        return res.json({ ok: true, pending: result.pending });
+        res.json({ ok: true, pending: result.pending });
     });
 
     app.post('/api/orchestrate/queue/:id/steer', requireAuth, async (req, res) => {
-        const id = String(req.params.id || '');
+        const id = String(req.params["id"] || '');
         if (!id) return fail(res, 400, 'missing id');
         // Fix B (W-1+W-2): peek 먼저 → kill+wait → remove → DB insert (processQueue 미러)
         // → orchestrate(_skipInsert). submitMessage idle 분기를 거치지 않아 두 번째
@@ -118,7 +121,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         const result = removeQueuedMessage(id);
         if (!result.removed) return fail(res, 404, 'queued item disappeared during steer');
         try {
-            insertMessage.run('user', prompt, origin, '', settings.workingDir || null);
+            insertMessage.run('user', prompt, origin, '', settings["workingDir"] || null);
         } catch (err) {
             console.warn('[steer:insert]', (err as Error).message);
         }
@@ -131,7 +134,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
             ? orchestrateReset({ origin, _skipInsert: true })
             : orchestrate(prompt, { origin, _skipInsert: true });
         task.catch((err: Error) => console.error('[steer:orchestrate]', err.message));
-        return res.json({ ok: true, pending: result.pending });
+        res.json({ ok: true, pending: result.pending });
     });
 
     app.post('/api/orchestrate/dispatch', requireAuth, async (req, res) => {
@@ -148,7 +151,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         // Phase 57: B-phase workers are READ-ONLY verifiers (Phase 4=Check), not implementers (Phase 3=Dev).
         // PABCD A=Plan Audit (Phase 2), B=Build but workers verify only (Phase 4), C=Check (Phase 4).
         const PABCD_PHASE_MAP: Record<string, number> = { A: 2, B: 4, C: 4 };
-        const dispatchScope = resolveOrcScope({ origin: 'web', workingDir: settings.workingDir || null });
+        const dispatchScope = resolveOrcScope({ origin: 'web', workingDir: settings["workingDir"] || null });
         const currentOrcState = getState(dispatchScope);
         const resolvedPhase = phase ?? PABCD_PHASE_MAP[currentOrcState] ?? 3;
         const dispatchCtx = getCtx(dispatchScope);
@@ -158,11 +161,12 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         if (currentOrcState === 'B') {
             const implPattern = /\b(implement|write\s+(?:the\s+)?code|create\s+(?:the\s+)?file|build\s+(?:the\s+)?feature|add\s+(?:the\s+)?(?:method|function|class))\b/i;
             if (implPattern.test(String(task))) {
-                return res.status(400).json({
+                res.status(400).json({
                     ok: false,
                     error: 'delegation_guard',
                     message: 'B phase: Boss must implement directly. Workers are read-only verifiers. Reword the task as "verify X compiles" / "check integration of Y" / "report DONE or NEEDS_FIX".',
                 });
+                return;
             }
         }
 
@@ -179,10 +183,10 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
             ].join('\n\n');
         }
 
-        const emps = getEmployees.all() as Record<string, any>[];
+        const emps = getEmployees.all() as EmployeeRow[];
         // Try DB first (preserves existing id-based matching), then fall
         // through to static employees for entries like Control.
-        let emp = findEmployee(emps, { agent: agentName });
+        let emp = findEmployee(emps, { agent: agentName }) as EmployeeRow | SyntheticEmployeeRow | null;
         let staticSpec: ReturnType<typeof resolveDispatchableEmployee> = null;
         if (!emp) {
             staticSpec = resolveDispatchableEmployee(agentName, emps);
@@ -218,19 +222,19 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         // worker results later drain back to the correct origin/chatId,
         // not a generic 'system' scope.
         const bossMeta = getCurrentMainMeta();
-        const replayMeta = bossMeta ? {
+        const replayMeta = bossMeta ? stripUndefined({
             origin: bossMeta.origin,
             target: bossMeta.target,
             chatId: bossMeta.chatId,
             requestId: bossMeta.requestId,
             scopeId: bossMeta.scopeId,
-        } : undefined;
+        }) : undefined;
         let slot;
         try {
             slot = claimWorker(emp, task, replayMeta);
         } catch (err) {
             if (err instanceof WorkerBusyError) {
-                return res.status(409).json({
+                res.status(409).json({
                     ok: false,
                     error: 'worker_busy',
                     existing: {
@@ -241,6 +245,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
                     },
                     hint: 'Poll GET /api/orchestrate/worker/:agentId/result for the in-flight run.',
                 });
+                return;
             }
             throw err;
         }
@@ -267,11 +272,11 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
             // Phase 57: Pass worklog path so the worker can append progress entries.
             const worklog = dispatchCtx?.worklogPath ? { path: dispatchCtx.worklogPath } : {};
             const result = await runSingleAgent(ap, emp, worklog, 1, { origin: 'api' }, []);
-            finishWorker(slot.agentId, result.text || '');
+            finishWorker(slot.agentId, String(result["text"] || ''));
 
             // Phase 58: Auto-update audit/verification status from worker verdict.
             // 'A' phase verdicts → auditStatus; 'B' phase verdicts → verificationStatus.
-            const verdict = parseWorkerVerdict(result.text || '');
+            const verdict = parseWorkerVerdict(String(result["text"] || ''));
             let statusPersisted = false;
             let statusPersistReason: 'persisted' | 'state_changed' | 'not_applicable' | null = null;
             let persistedField: 'auditStatus' | 'verificationStatus' | null = null;
@@ -324,26 +329,28 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
             // Only clear replay flag after response is actually flushed to client.
             res.on('finish', () => markWorkerReplayed(slot.agentId));
             res.json({ ok: true, result, orchestration });
-        } catch (err: any) {
-            failWorker(slot.agentId, err.message);
-            if (!res.writableEnded) res.status(500).json({ ok: false, error: err.message });
+        } catch (err: unknown) {
+            const msg = (err as Error)?.message || String(err);
+            failWorker(slot.agentId, msg);
+            if (!res.writableEnded) res.status(500).json({ ok: false, error: msg });
         }
     });
 
     // Phase 7-4: explicit result polling for 409 retries and reconnects.
     app.get('/api/orchestrate/worker/:agentId/result', requireAuth, (req, res) => {
-        const agentId = String(req.params.agentId || '');
+        const agentId = String(req.params["agentId"] || '');
         if (!agentId) return fail(res, 400, 'missing agentId');
         const slot = getWorkerSlot(agentId);
         if (!slot) return fail(res, 404, 'worker not found');
         if (slot.state === 'running') {
-            return res.json({ ok: true, state: 'running', startedAt: slot.startedAt, task: slot.task });
+            res.json({ ok: true, state: 'running', startedAt: slot.startedAt, task: slot.task });
+            return;
         }
         // Consume pending replay — subsequent polls will return 404.
         if (slot.state === 'done' && slot.pendingReplay) {
             markWorkerReplayed(slot.agentId);
         }
-        return res.json({ ok: true, state: slot.state, result: slot.result });
+        res.json({ ok: true, state: slot.state, result: slot.result });
     });
 
     app.put('/api/orchestrate/state', requireAuth, (req, res) => {
@@ -352,7 +359,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         if (!valid.includes(target as OrcStateName)) {
             return fail(res, 400, `Invalid state: ${target}. Must be one of: ${valid.join(', ')}`);
         }
-        const scope = resolveOrcScope({ origin: 'web', workingDir: settings.workingDir || null });
+        const scope = resolveOrcScope({ origin: 'web', workingDir: settings["workingDir"] || null });
         const current = getState(scope);
         const t = target as OrcStateName;
         // Phase 58/59: HTTP override via { force: true } or explicit user command.
@@ -384,7 +391,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         } else {
             setState(
                 t,
-                t === 'P' ? { originalPrompt: '', workingDir: settings.workingDir || null, plan: null, workerResults: [], origin: 'api' } : undefined,
+                t === 'P' ? { originalPrompt: '', workingDir: settings["workingDir"] || null, plan: null, workerResults: [], origin: 'api' } : undefined,
                 scope,
                 t === 'P' ? 'P' : t,
             );

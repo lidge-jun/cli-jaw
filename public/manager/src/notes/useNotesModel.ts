@@ -43,6 +43,11 @@ export function useNotesModel(options: UseNotesModelOptions): NotesModelState {
     const [error, setError] = useState<string | null>(null);
     const [notesRoot, setNotesRoot] = useState<string | null>(null);
     const requestIdRef = useRef(0);
+    const selectedPathRef = useRef(options.selectedPath);
+    const onSelectedPathChangeRef = useRef(options.onSelectedPathChange);
+
+    selectedPathRef.current = options.selectedPath;
+    onSelectedPathChangeRef.current = options.onSelectedPathChange;
 
     useNotesExternalSync(options.active);
 
@@ -51,7 +56,7 @@ export function useNotesModel(options: UseNotesModelOptions): NotesModelState {
         void fetchNotesInfo().then(info => setNotesRoot(info.root)).catch(() => {});
     }, [options.active, notesRoot]);
 
-    const refresh = useCallback(async (selectPath = options.selectedPath): Promise<void> => {
+    const refresh = useCallback(async (selectPath = selectedPathRef.current): Promise<void> => {
         const requestId = requestIdRef.current + 1;
         requestIdRef.current = requestId;
         setLoading(true);
@@ -65,13 +70,13 @@ export function useNotesModel(options: UseNotesModelOptions): NotesModelState {
             setTree(nextTree);
             setIndex(nextIndex);
             const nextSelected = selectPath && hasFile(nextTree, selectPath) ? selectPath : firstFile(nextTree);
-            if (nextSelected !== options.selectedPath) options.onSelectedPathChange(nextSelected);
+            if (nextSelected !== selectedPathRef.current) onSelectedPathChangeRef.current(nextSelected);
         } catch (err) {
             if (requestId === requestIdRef.current) setError((err as Error).message);
         } finally {
             if (requestId === requestIdRef.current) setLoading(false);
         }
-    }, [options.selectedPath, options.onSelectedPathChange]);
+    }, []);
 
     useInvalidationSubscription('notes', () => {
         if (options.active) void refresh();

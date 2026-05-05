@@ -3,15 +3,15 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { readSource } from './source-normalize.js';
 import {
     buildResolvedPathHints,
     buildWorkspaceContextBlock,
     resolveWorkspaceRoot,
 } from '../../src/orchestrator/workspace-context.ts';
 
-const distributeSrc = readFileSync(
+const distributeSrc = readSource(
     join(import.meta.dirname, '../../src/orchestrator/distribute.ts'),
-    'utf8',
 );
 
 test('workspace context block includes authoritative project paths and cwd warning', () => {
@@ -55,7 +55,7 @@ test('runSingleAgent injects workspace context before task instruction and env',
     assert.ok(distributeSrc.includes("import { buildWorkspaceContextBlock } from './workspace-context.js';"));
     assert.ok(distributeSrc.includes('const workspaceBlock = buildWorkspaceContextBlock({'));
     assert.ok(distributeSrc.includes('workingDir: settings.workingDir || null'));
-    assert.ok(distributeSrc.includes('task: ap.task'));
+    assert.ok(distributeSrc.includes('task: text(ap.task)'));
     assert.ok(distributeSrc.includes('const taskPrompt = `${workspaceBlock}'));
     assert.ok(distributeSrc.includes('## Task Instruction [${phaseLabel}]'));
     assert.ok(distributeSrc.indexOf('const taskPrompt = `${workspaceBlock}') <

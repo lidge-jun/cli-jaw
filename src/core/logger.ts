@@ -1,7 +1,7 @@
 // ─── Logger (level-aware console wrapper) ────────────
 
 const LEVELS: Record<string, number> = { debug: 0, info: 1, warn: 2, error: 3 };
-const current = LEVELS[process.env.LOG_LEVEL || 'info'] ?? 1;
+const current = LEVELS[process.env["LOG_LEVEL"] || 'info'] ?? 1;
 
 export const log = {
     debug: (...args: unknown[]) => { if (current <= 0) console.debug('[debug]', ...args); },

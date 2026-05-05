@@ -24,7 +24,7 @@ const CMDLINE_HIDDEN = new Set(['help', 'clear', 'model', 'cli', 'fallback',
 export function getCommandCatalog() {
     return COMMANDS.map(cmd => ({
         ...cmd,
-        capability: (cmd as Record<string, any>).capability || {
+        capability: (cmd as Record<string, any>)["capability"] || {
             cli: cmd.interfaces.includes('cli')
                 ? CAPABILITY.full
                 : CAPABILITY.hidden,

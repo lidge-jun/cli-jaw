@@ -5,11 +5,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readSource } from './source-normalize.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function readSrc(rel: string): string {
-    return fs.readFileSync(join(__dirname, rel), 'utf8');
+    return readSource(join(__dirname, rel));
 }
 
 // ─── Source-level structural checks ─────────────────────

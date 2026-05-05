@@ -12,6 +12,7 @@ import { detectSharedPathContamination } from '../../lib/mcp-sync.js';
 import { classifyClaudeInstall } from '../../src/core/claude-install.js';
 import { readClaudeCreds } from '../../src/routes/quota.js';
 import { shouldShowHelp, printAndExit } from '../helpers/help.js';
+import { asArray, asRecord } from '../_http-client.js';
 
 if (shouldShowHelp(process.argv)) printAndExit(`
   jaw doctor — diagnose installation and configuration
@@ -31,6 +32,36 @@ if (shouldShowHelp(process.argv)) printAndExit(`
 `);
 
 const HEARTBEAT_PATH = HEARTBEAT_JOBS_PATH;
+
+interface MessagingSettings {
+    enabled?: boolean;
+    token?: string;
+}
+
+interface DiscordSettings extends MessagingSettings {
+    guildId?: string;
+    channelIds?: unknown[];
+}
+
+interface NetworkSettings {
+    bindHost?: string;
+    lanBypass?: boolean;
+    remoteAccess?: {
+        mode?: string;
+        trustProxies?: boolean;
+        trustForwardedFor?: boolean;
+        requireAuth?: boolean;
+    };
+}
+
+interface DoctorSettings {
+    cli?: string;
+    channel?: string;
+    skillsDir?: string;
+    telegram?: MessagingSettings;
+    discord?: DiscordSettings;
+    network?: NetworkSettings;
+}
 
 const { values } = parseArgs({
     args: process.argv.slice(3),
@@ -88,7 +119,7 @@ function getNpmPrefix() {
 /** Detect headless server (no display, no desktop environment). */
 function isHeadless(): boolean {
     if (process.platform !== 'linux') return false;
-    return !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY && !isWSL();
+    return !process.env["DISPLAY"] && !process.env["WAYLAND_DISPLAY"] && !isWSL();
 }
 
 function check(name: string, fn: () => string) {
@@ -119,10 +150,13 @@ check('Home directory', () => {
 });
 
 // 2. settings.json
-let settings: Record<string, any> | null = null;
+let settings: DoctorSettings | null = null;
+function loadedSettings(): DoctorSettings {
+    return (settings as DoctorSettings | null) || {};
+}
 check('settings.json', () => {
     if (!fs.existsSync(SETTINGS_PATH)) throw new Error('WARN: not found — run cli-jaw init');
-    settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
+    settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8')) as DoctorSettings;
     return `cli=${settings?.cli || 'not set'}`;
 });
 
@@ -136,8 +170,8 @@ check('jaw.db', () => {
 // 4. heartbeat.json
 check('heartbeat.json', () => {
     if (!fs.existsSync(HEARTBEAT_PATH)) throw new Error('WARN: not found');
-    const hb = JSON.parse(fs.readFileSync(HEARTBEAT_PATH, 'utf8'));
-    const active = (hb.jobs || []).filter((j: any) => j.enabled).length;
+    const hb = asRecord(JSON.parse(fs.readFileSync(HEARTBEAT_PATH, 'utf8')));
+    const active = asArray<{ enabled?: boolean }>(hb["jobs"]).filter((j) => j.enabled).length;
     return `${active} active job${active !== 1 ? 's' : ''}`;
 });
 
@@ -196,7 +230,7 @@ check('Discord', () => {
 
 // 6d. Channel consistency
 check('Channel consistency', () => {
-    const ch = (settings as Record<string, any> | null)?.channel || 'telegram';
+    const ch = settings?.channel || 'telegram';
     if (ch === 'discord' && !settings?.discord?.enabled) {
         throw new Error('WARN: active channel is discord but Discord is not enabled');
     }
@@ -313,8 +347,8 @@ if (headless) {
 } else {
     if (process.platform === 'linux') {
         check('Display Server', () => {
-            if (process.env.WAYLAND_DISPLAY) return `Wayland (${process.env.WAYLAND_DISPLAY})`;
-            if (process.env.DISPLAY) return `X11 (${process.env.DISPLAY})`;
+            if (process.env["WAYLAND_DISPLAY"]) return `Wayland (${process.env["WAYLAND_DISPLAY"]})`;
+            if (process.env["DISPLAY"]) return `X11 (${process.env["DISPLAY"]})`;
             if (isWSL()) {
                 if (hasWslWindowsChrome()) {
                     return 'WSL (no DISPLAY; Windows Chrome path detected via /mnt/c)';
@@ -345,9 +379,9 @@ if (headless) {
             if (fs.existsSync('/Applications/Google Chrome.app')) return 'installed';
             if (fs.existsSync(path.join(os.homedir(), 'Applications/Google Chrome.app'))) return 'installed (user)';
         } else if (process.platform === 'win32') {
-            const pf = process.env.PROGRAMFILES || 'C:\\Program Files';
+            const pf = process.env["PROGRAMFILES"] || 'C:\\Program Files';
             const pf86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
-            const local = process.env.LOCALAPPDATA || '';
+            const local = process.env["LOCALAPPDATA"] || '';
             const winPaths = [
                 `${pf}\\Google\\Chrome\\Application\\chrome.exe`,
                 `${pf86}\\Google\\Chrome\\Application\\chrome.exe`,
@@ -416,7 +450,7 @@ async function runTccDiagnostics(_opts: { fix: boolean; prime: boolean }) {
 
 // Build Discord status for JSON output
 function buildDiscordStatus() {
-    const s = settings as Record<string, any> | null;
+    const s = settings;
     const dc = s?.discord || {};
     const tokenPresent = !!dc.token;
     const guildConfigured = !!dc.guildId;
@@ -455,10 +489,10 @@ if (process.platform === 'darwin' && (values.tcc || values.fix || values.prime))
 // Output
 // Network
 if (!values.json) {
-    const netCfg = (settings as Record<string, any> | null)?.network || {};
+    const netCfg = loadedSettings().network || {};
     const bh = netCfg.bindHost || '127.0.0.1';
     const lb = netCfg.lanBypass === true;
-    const tokenEnv = !!process.env.JAW_AUTH_TOKEN;
+    const tokenEnv = !!process.env["JAW_AUTH_TOKEN"];
     const isLoopback = bh === '127.0.0.1' || bh === '::1' || bh === 'localhost';
     const bindLabel = isLoopback ? '  (loopback only — LAN blocked)'
         : bh === '0.0.0.0' ? '  (all interfaces — LAN accessible)'
@@ -491,7 +525,7 @@ if (!values.json) {
 }
 
 if (values.json) {
-    const netCfg = (settings as Record<string, any> | null)?.network || {};
+    const netCfg = loadedSettings().network || {};
     const bh = netCfg.bindHost || '127.0.0.1';
     const lb = netCfg.lanBypass === true;
     const networkIssues: string[] = [];
@@ -500,10 +534,10 @@ if (values.json) {
     if (!isLoopbackJson && bh !== '0.0.0.0') {
         networkIssues.push(`bindHost=${bh} — specific interface, LAN accessibility depends on routing`);
     }
-    const output: Record<string, any> = {
+    const output: Record<string, unknown> = {
         checks: results,
-        network: { bindHost: bh, lanBypass: lb, authTokenPersisted: !!process.env.JAW_AUTH_TOKEN, issues: networkIssues },
-        activeChannel: (settings as Record<string, any> | null)?.channel || 'telegram',
+        network: { bindHost: bh, lanBypass: lb, authTokenPersisted: !!process.env["JAW_AUTH_TOKEN"], issues: networkIssues },
+        activeChannel: loadedSettings().channel || 'telegram',
         discord: buildDiscordStatus(),
         wsl: isWSL() ? {
             sudoNonInteractive: canSudoNonInteractive(),

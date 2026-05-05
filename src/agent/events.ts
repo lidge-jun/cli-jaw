@@ -1,7 +1,19 @@
 // ─── Event Extraction (NDJSON parser) ────────────────
 
 import { broadcast } from '../core/bus.js';
-import type { SpawnContext } from '../types/agent.js';
+import { stripUndefined } from '../core/strip-undefined.js';
+import type { SpawnContext, ToolEntry } from '../types/agent.js';
+import {
+    asCliEventArray,
+    asCliEventRecord,
+    fieldNumber,
+    fieldString,
+    isCliEventRecord,
+    type AcpSubagentEvent,
+    type AcpUpdateParams,
+    type CliEventRecord,
+    type ExtractedEventResult,
+} from '../types/cli-events.js';
 import { appendLiveRunText, replaceLiveRunTools, appendLiveRunTool } from './live-run-state.js';
 
 function liveScopeOf(ctx: SpawnContext): string | null {
@@ -23,7 +35,7 @@ function syncLiveTools(ctx: SpawnContext): void {
 
 /** Flush Claude-specific stream buffers (thinking + input_json).
  *  Call on stream close to avoid data loss if content_block_stop never arrives. */
-export function flushClaudeBuffers(ctx: SpawnContext, agentLabel?: string, empTag: Record<string, any> = {}) {
+export function flushClaudeBuffers(ctx: SpawnContext, agentLabel?: string, empTag: Record<string, unknown> = {}) {
     if (ctx.claudeThinkingBuf) {
         const merged = ctx.claudeThinkingBuf.trim();
         if (merged) {
@@ -47,7 +59,7 @@ export function flushClaudeBuffers(ctx: SpawnContext, agentLabel?: string, empTa
             const detail = summarizeToolInput(toolName, input);
             if (detail) {
                 const existing = [...ctx.toolLog].reverse().find(
-                    (t: any) => t.icon === '🔧' && t.label === toolName && !t.detail
+                    (t: ToolEntry) => t.icon === '🔧' && t.label === toolName && !t.detail
                 );
                 if (existing) {
                     existing.detail = detail;
@@ -61,17 +73,17 @@ export function flushClaudeBuffers(ctx: SpawnContext, agentLabel?: string, empTa
     }
 }
 
-function pushTrace(ctx: SpawnContext, line: string) {
+function pushTrace(ctx: SpawnContext | null | undefined, line: string) {
     if (!ctx?.traceLog || !line) return;
     ctx.traceLog.push(line);
 }
 
-function logLine(line: string, ctx: SpawnContext) {
+function logLine(line: string, ctx: SpawnContext | null | undefined) {
     console.log(line);
     pushTrace(ctx, line);
 }
 
-function toSingleLine(text: any) {
+function toSingleLine(text: unknown) {
     return String(text || '').replace(/\s+/g, ' ').trim();
 }
 
@@ -80,7 +92,7 @@ function clipText(text: string, max: number) {
     return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
 
-function buildPreview(text: any, max = 80) {
+function buildPreview(text: unknown, max = 80) {
     return clipText(toSingleLine(text), max);
 }
 
@@ -88,7 +100,7 @@ function appendDetail(...parts: Array<string | null | undefined>): string {
     return parts.map(p => String(p || '').trim()).filter(Boolean).join('\n');
 }
 
-function formatJsonDetail(label: string, value: any): string {
+function formatJsonDetail(label: string, value: unknown): string {
     if (value == null) return '';
     try {
         return `${label}: ${typeof value === 'string' ? value : JSON.stringify(value, null, 2)}`;
@@ -97,7 +109,7 @@ function formatJsonDetail(label: string, value: any): string {
     }
 }
 
-function formatAssistantTextSegment(ctx: SpawnContext, text: any): string {
+function formatAssistantTextSegment(ctx: SpawnContext, text: unknown): string {
     const raw = String(text || '');
     if (!raw) return '';
     if (!ctx.outputTextStarted) {
@@ -110,14 +122,14 @@ function formatAssistantTextSegment(ctx: SpawnContext, text: any): string {
         : `\n- ${raw}`;
 }
 
-function appendAssistantTextSegment(ctx: SpawnContext, text: any): string {
+function appendAssistantTextSegment(ctx: SpawnContext, text: unknown): string {
     const segment = formatAssistantTextSegment(ctx, text);
     if (!segment) return '';
     ctx.fullText += segment;
     return segment;
 }
 
-function appendGeminiAssistantTextSegment(ctx: SpawnContext, text: any, isDelta: boolean): string {
+function appendGeminiAssistantTextSegment(ctx: SpawnContext, text: unknown, isDelta: boolean): string {
     const raw = String(text || '');
     if (!raw) return '';
     if (isDelta && ctx.geminiDeltaActive) {
@@ -132,8 +144,8 @@ function appendGeminiAssistantTextSegment(ctx: SpawnContext, text: any, isDelta:
 function emitGeminiThought(
     ctx: SpawnContext,
     agentLabel: string,
-    empTag: Record<string, any>,
-    text: any,
+    empTag: Record<string, unknown>,
+    text: unknown,
 ): void {
     const detail = String(text || '').trim();
     if (!detail) return;
@@ -148,29 +160,30 @@ function emitGeminiThought(
     broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
 }
 
-function extractGeminiThoughtText(content: any): string {
+function extractGeminiThoughtText(content: unknown): string {
     if (typeof content === 'string') return content;
     if (Array.isArray(content)) {
         return content
-            .filter((p: any) => p?.type === 'thought' || p?.type === 'thinking')
-            .map((p: any) => String(p.thought || p.text || p.content || ''))
+            .filter(isCliEventRecord)
+            .filter((p) => p.type === 'thought' || p.type === 'thinking')
+            .map((p) => String(p.thought || p.text || p.content || ''))
             .join('');
     }
-    if (content && typeof content === 'object') {
+    if (isCliEventRecord(content)) {
         return String(content.thought || content.text || content.content || '');
     }
     return '';
 }
 
-function toIndentedPreview(text: any, max = 200) {
+function toIndentedPreview(text: unknown, max = 200) {
     const raw = String(text || '').trim();
     if (!raw) return '';
     const clipped = raw.length > max ? `${raw.slice(0, max)}…` : raw;
     return clipped.replace(/\n/g, '\n  ');
 }
 
-function isOpencodeToolFailure(part: any): boolean {
-    const exitCode = part?.state?.metadata?.exit;
+function isOpencodeToolFailure(part: CliEventRecord): boolean {
+    const exitCode = part?.state?.metadata?.["exit"];
     if (exitCode != null && exitCode !== 0) return true;
     const status = String(part?.state?.status || '').toLowerCase();
     return status === 'error'
@@ -179,24 +192,25 @@ function isOpencodeToolFailure(part: any): boolean {
         || status === 'cancelled';
 }
 
-function cleanOpencodeTaskResult(output: any): string {
+function cleanOpencodeTaskResult(output: unknown): string {
     const raw = String(output || '').trim();
     if (!raw) return '';
     const match = raw.match(/<task_result>([\s\S]*?)<\/task_result>/);
     return (match?.[1] || raw).trim();
 }
 
-function formatOpenCodeTaskDetail(part: any): string {
+function formatOpenCodeTaskDetail(part: CliEventRecord): string {
     const state = part?.state || {};
     const input = state.input || {};
     const meta = state.metadata || {};
+    const modelInfo = asCliEventRecord(meta.model);
     const model = meta.model
-        ? [meta.model.providerID, meta.model.modelID].filter(Boolean).join('/')
+        ? [modelInfo["providerID"], modelInfo["modelID"]].filter(Boolean).join('/')
         : '';
     return appendDetail(
         input.prompt ? `prompt: ${clipText(String(input.prompt), 300)}` : '',
         model ? `model: ${model}` : '',
-        meta.sessionId ? `child_session: ${meta.sessionId}` : '',
+        meta["sessionId"] ? `child_session: ${meta["sessionId"]}` : '',
         cleanOpencodeTaskResult(state.output) ? `result: ${cleanOpencodeTaskResult(state.output)}` : '',
     );
 }
@@ -204,14 +218,14 @@ function formatOpenCodeTaskDetail(part: any): string {
 function finalizeOpencodePendingTools(
     ctx: SpawnContext,
     agentLabel: string,
-    empTag: Record<string, any>,
+    empTag: Record<string, unknown>,
 ): void {
     const pendingRefs = ctx.opencodePendingToolRefs || [];
     if (!pendingRefs.length) return;
     const failed = !!ctx.opencodeHadToolErrorInStep;
     for (const ref of pendingRefs) {
         const existing = [...ctx.toolLog].reverse().find(
-            (t: any) => t.stepRef === ref && (!t.status || t.status === 'running')
+            (t: ToolEntry) => t.stepRef === ref && (!t.status || t.status === 'running')
         );
         if (!existing) continue;
         existing.status = failed ? 'error' : 'done';
@@ -221,17 +235,17 @@ function finalizeOpencodePendingTools(
     }
 }
 
-export function extractSessionId(cli: string, event: any) {
+export function extractSessionId(cli: string, event: CliEventRecord): string | null {
     switch (cli) {
-        case 'claude': return event.type === 'system' ? event.session_id : null;
-        case 'codex': return event.type === 'thread.started' ? event.thread_id : null;
-        case 'gemini': return event.type === 'init' ? event.session_id : null;
-        case 'opencode': return event.sessionID || null;
+        case 'claude': return event.type === 'system' ? event.session_id ?? null : null;
+        case 'codex': return event.type === 'thread.started' ? event.thread_id ?? null : null;
+        case 'gemini': return event.type === 'init' ? event.session_id ?? null : null;
+        case 'opencode': return event.sessionID ?? null;
         default: return null;
     }
 }
 
-export function extractOutputChunk(cli: string, event: any, ctx?: SpawnContext): string {
+export function extractOutputChunk(cli: string, event: CliEventRecord, ctx?: SpawnContext): string {
     if (cli === 'gemini') {
         if (ctx?.pendingOutputChunk) {
             const chunk = ctx.pendingOutputChunk;
@@ -243,8 +257,8 @@ export function extractOutputChunk(cli: string, event: any, ctx?: SpawnContext):
         if (event.type === 'message' && event.role === 'assistant' && event.content) {
             // Skip message events with thought content parts (ACP path)
             if (Array.isArray(event.content)) {
-                const textParts = event.content.filter((p: any) => p?.type === 'text');
-                return textParts.map((p: any) => String(p?.text || '')).join('');
+                const textParts = asCliEventArray(event.content).filter((p) => p.type === 'text');
+                return textParts.map((p) => String(p.text || '')).join('');
             }
             return String(event.content);
         }
@@ -273,14 +287,14 @@ export function extractOutputChunk(cli: string, event: any, ctx?: SpawnContext):
     return '';
 }
 
-export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, agentLabel: string, empTag: Record<string, any> = {}) {
+export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnContext, agentLabel: string, empTag: Record<string, unknown> = {}) {
     // [P2-3.1] Claude system/init metadata: store model, tools, version
     if (cli === 'claude' && event.type === 'system') {
         if (event.model) ctx.model = event.model;
         if (!ctx.metadata) ctx.metadata = {};
-        if (event.tools) ctx.metadata.tools = event.tools;
-        if (event.mcp_servers) ctx.metadata.mcp_servers = event.mcp_servers;
-        if (event.version) ctx.metadata.version = event.version;
+        if (event.tools) ctx.metadata["tools"] = event.tools;
+        if (event.mcp_servers) ctx.metadata["mcp_servers"] = event.mcp_servers;
+        if (event.version) ctx.metadata["version"] = event.version;
     }
 
     // ── Claude stream buffer: thinking_delta + input_json_delta ──
@@ -300,7 +314,7 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
         // [P2-3.2] message_start: capture per-message input_tokens
         if (inner?.type === 'message_start' && inner.message?.usage) {
             if (!ctx.tokens) ctx.tokens = { input_tokens: 0, output_tokens: 0 };
-            ctx.tokens.input_tokens = inner.message.usage.input_tokens ?? ctx.tokens.input_tokens;
+            ctx.tokens["input_tokens"] = inner.message.usage.input_tokens ?? ctx.tokens["input_tokens"] ?? 0;
         }
 
         // Buffer thinking deltas
@@ -334,7 +348,7 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
         if (inner?.type === 'message_delta' && inner.usage) {
             if (inner.usage.output_tokens != null) {
                 if (!ctx.tokens) ctx.tokens = { input_tokens: 0, output_tokens: 0 };
-                ctx.tokens.output_tokens = inner.usage.output_tokens;
+                ctx.tokens["output_tokens"] = inner.usage.output_tokens;
             }
         }
 
@@ -387,7 +401,7 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                     if (detail) {
                         // Find the last tool label for this tool and update its detail
                         const existing = [...ctx.toolLog].reverse().find(
-                            (t: any) => t.icon === '🔧' && t.label === toolName && !t.detail
+                            (t: ToolEntry) => t.icon === '🔧' && t.label === toolName && !t.detail
                         );
                         if (existing) {
                             existing.detail = detail;
@@ -435,7 +449,7 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
         // Resolve running → done/error: replace existing running entry in toolLog
         if (toolLabel.stepRef && (toolLabel.status === 'done' || toolLabel.status === 'error')) {
             const runIdx = ctx.toolLog.findIndex(
-                (t: any) => t.stepRef === toolLabel.stepRef && t.status === 'running'
+                (t: ToolEntry) => t.stepRef === toolLabel.stepRef && t.status === 'running'
             );
             if (runIdx !== -1) {
                 ctx.toolLog[runIdx] = toolLabel;
@@ -468,15 +482,15 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                     }
                 }
             } else if (event.type === 'result') {
-                ctx.cost = event.total_cost_usd;
-                ctx.turns = event.num_turns;
-                ctx.duration = event.duration_ms;
+                ctx.cost = event.total_cost_usd ?? null;
+                ctx.turns = event.num_turns ?? null;
+                ctx.duration = event.duration_ms ?? null;
                 if (event.session_id) ctx.sessionId = event.session_id;
                 // [P1-2.3] Store modelUsage for per-model token/cache breakdown
                 if (event.usage) {
                     ctx.tokens = {
                         input_tokens: event.usage.input_tokens ?? 0,
-                        output_tokens: event.usage.output_tokens ?? ctx.tokens?.output_tokens ?? 0,
+                        output_tokens: event.usage.output_tokens ?? ctx.tokens?.["output_tokens"] ?? 0,
                         cache_read: event.usage.cache_read_input_tokens ?? 0,
                         cache_creation: event.usage.cache_creation_input_tokens ?? 0,
                     };
@@ -493,11 +507,11 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                 for (const block of event.message.content) {
                     if (block.type === 'tool_result' && block.tool_use_id) {
                         const existing = [...ctx.toolLog].reverse().find(
-                            (t: any) => t.stepRef === `claude:tooluse:${block.tool_use_id}`
+                            (t: ToolEntry) => t.stepRef === `claude:tooluse:${block.tool_use_id}`
                         );
                         if (existing) {
-                            existing.status = block.is_error ? 'error' : 'done';
-                            existing.icon = block.is_error ? '❌' : '✅';
+                            existing.status = block["is_error"] ? 'error' : 'done';
+                            existing.icon = block["is_error"] ? '❌' : '✅';
                             const resultText = extractText(block.content);
                             if (resultText) existing.detail = (existing.detail || '') + '\n' + resultText;
                             syncLiveTools(ctx);
@@ -524,14 +538,14 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                     // least one toolLog step. Dedup is handled by seenToolKeys via stepRef.
                     if (segment.trim()) {
                         const itemId = event.item.id || '';
-                        const tool = {
+                        const tool = stripUndefined({
                             icon: '💬',
                             label: buildPreview(segment, 80) || 'message',
                             toolType: 'tool' as const,
                             detail: segment,
                             stepRef: itemId ? `codex:item:${itemId}` : undefined,
                             status: 'done' as const,
-                        };
+                        });
                         const key = tool.stepRef || `codex:msg:${ctx.toolLog.length}:${segment.slice(0, 30)}`;
                         if (!ctx.seenToolKeys || !ctx.seenToolKeys.has(key)) {
                             if (ctx.seenToolKeys) ctx.seenToolKeys.add(key);
@@ -569,13 +583,13 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                 if (event.item?.type === 'command_execution') {
                     const cmd = (event.item.command || '').slice(0, 120);
                     const itemId = event.item.id || '';
-                    const tool = {
+                    const tool = stripUndefined({
                         icon: '⚡',
                         label: buildPreview(cmd, 80) || 'command',
                         toolType: 'tool' as const,
                         detail: cmd,
                         stepRef: itemId ? `codex:cmd:${itemId}` : undefined,
-                    };
+                    });
                     const key = `${tool.icon}:${tool.label}:${tool.stepRef || ''}:`;
                     if (!ctx.seenToolKeys?.has(key)) {
                         ctx.seenToolKeys?.add(key);
@@ -642,8 +656,9 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                         emitGeminiThought(ctx, agentLabel, empTag, extractGeminiThoughtText(event.content));
                     }
                     const textOnly = event.content
-                        .filter((p: any) => p?.type === 'text')
-                        .map((p: any) => String(p?.text || ''))
+                        .filter(isCliEventRecord)
+                        .filter((p) => p.type === 'text')
+                        .map((p) => String(p.text || ''))
                         .join('');
                     if (textOnly) {
                         const segment = appendGeminiAssistantTextSegment(ctx, textOnly, !!event.delta);
@@ -661,8 +676,8 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
             } else if (event.type === 'result') {
                 ctx.geminiDeltaActive = false;
                 ctx.geminiResultSeen = true;
-                ctx.duration = event.stats?.duration_ms;
-                ctx.turns = event.stats?.tool_calls;
+                ctx.duration = event.stats?.duration_ms ?? null;
+                ctx.turns = event.stats?.tool_calls ?? null;
                 // [P0-1.6] Store Gemini token stats
                 if (event.stats) {
                     ctx.tokens = {
@@ -721,25 +736,25 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                 }
             } else if (event.type === 'tool_use') {
                 ctx.opencodeSawToolInStep = true;
-                if (isOpencodeToolFailure(event.part)) ctx.opencodeHadToolErrorInStep = true;
+                if (isOpencodeToolFailure(asCliEventRecord(event.part))) ctx.opencodeHadToolErrorInStep = true;
             } else if (event.type === 'step_finish' && event.part) {
-                ctx.sessionId = event.sessionID;
+                ctx.sessionId = event.sessionID ?? null;
                 // [P0-1.7] Accumulate tokens across steps (not overwrite)
                 if (event.part.tokens) {
                     if (!ctx.tokens) ctx.tokens = { input_tokens: 0, output_tokens: 0, cached_read: 0, cached_write: 0 };
-                    ctx.tokens.input_tokens += event.part.tokens.input ?? 0;
-                    ctx.tokens.output_tokens += event.part.tokens.output ?? 0;
+                    ctx.tokens["input_tokens"] = (ctx.tokens["input_tokens"] ?? 0) + (event.part.tokens.input ?? 0);
+                    ctx.tokens["output_tokens"] = (ctx.tokens["output_tokens"] ?? 0) + (event.part.tokens.output ?? 0);
                     // [P0-1.8] Cache token accumulation
                     if (event.part.tokens.cache) {
-                        ctx.tokens.cached_read += event.part.tokens.cache.read ?? 0;
-                        ctx.tokens.cached_write += event.part.tokens.cache.write ?? 0;
+                        ctx.tokens["cached_read"] = (ctx.tokens["cached_read"] ?? 0) + (event.part.tokens.cache.read ?? 0);
+                        ctx.tokens["cached_write"] = (ctx.tokens["cached_write"] ?? 0) + (event.part.tokens.cache.write ?? 0);
                     }
                     // [P2-3.13] Accumulate total tokens across steps
                     if (event.part.tokens.total != null) {
-                        ctx.tokens.total_tokens = (ctx.tokens.total_tokens ?? 0) + event.part.tokens.total;
+                        ctx.tokens["total_tokens"] = (ctx.tokens["total_tokens"] ?? 0) + event.part.tokens.total;
                     }
                     if (event.part.tokens.reasoning != null) {
-                        ctx.tokens.reasoning_tokens = (ctx.tokens.reasoning_tokens ?? 0) + event.part.tokens.reasoning;
+                        ctx.tokens["reasoning_tokens"] = (ctx.tokens["reasoning_tokens"] ?? 0) + event.part.tokens.reasoning;
                     }
                 }
                 // Accumulate cost across steps
@@ -800,16 +815,16 @@ export function extractFromEvent(cli: string, event: any, ctx: SpawnContext, age
                 ctx.opencodePendingToolRefs = [];
                 ctx.opencodeStepThinkingToolEmitted = false;
                 // [P2-3.12] Store step timing
-                if (event.part.time) {
+                if (event.part["time"]) {
                     if (!ctx.metadata) ctx.metadata = {};
-                    ctx.metadata.lastStepTime = event.part.time;
+                    ctx.metadata["lastStepTime"] = event.part["time"];
                 }
             }
             break;
     }
 }
 
-export function logEventSummary(agentLabel: string, cli: string, event: any, ctx: any = null) {
+export function logEventSummary(agentLabel: string, cli: string, event: CliEventRecord, ctx: SpawnContext | null = null) {
     const item = event.item || event.part || {};
 
     if (cli === 'codex') {
@@ -913,19 +928,19 @@ export function logEventSummary(agentLabel: string, cli: string, event: any, ctx
     }
 }
 
-function makeClaudeToolKey(event: any, label: any) {
+function makeClaudeToolKey(event: CliEventRecord, label: ToolEntry) {
     // Prefer the unique tool_use id (carried in stepRef) so multi-turn streams with
     // matching tool names across distinct messages don't collide on the per-message index.
     if (label.stepRef) return `claude:ref:${label.stepRef}:${label.icon}:${label.label}`;
     const msgId = event.message?.id || '';
-    const idx = event.event?.index;
+    const idx = event.event?.["index"];
     if (msgId && idx !== undefined && idx !== null) return `claude:msg:${msgId}:${idx}:${label.icon}:${label.label}`;
     if (idx !== undefined && idx !== null) return `claude:idx:${idx}:${label.icon}:${label.label}`;
     if (msgId) return `claude:msg:${msgId}:${label.icon}:${label.label}`;
     return `claude:type:${event.type}:${label.icon}:${label.label}`;
 }
 
-function pushToolLabel(labels: any[], label: any, cli: string, event: any, ctx: any) {
+function pushToolLabel(labels: ToolEntry[], label: ToolEntry, cli: string, event: CliEventRecord, ctx: SpawnContext | null) {
     if (cli !== 'claude' || !ctx?.seenToolKeys) {
         labels.push(label);
         return;
@@ -937,9 +952,9 @@ function pushToolLabel(labels: any[], label: any, cli: string, event: any, ctx: 
 }
 
 // Returns array of tool labels (supports multiple blocks per event)
-function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = null) {
+function extractToolLabels(cli: string, event: CliEventRecord, ctx: SpawnContext | null = null): ToolEntry[] {
     const item = event.item || event.part || event;
-    const labels = [];
+    const labels: ToolEntry[] = [];
 
     if (cli === 'codex' && (event.type === 'item.started' || event.type === 'item.completed') && item) {
         if (event.type === 'item.completed' && item.type === 'web_search') {
@@ -988,7 +1003,7 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
             const isStarted = event.type === 'item.started' || item.status === 'in_progress';
             const receiverIds = Array.isArray(item.receiver_thread_ids) ? item.receiver_thread_ids.join(', ') : '';
             const detail = appendDetail(
-                item.sender_thread_id ? `sender: ${item.sender_thread_id}` : '',
+                item["sender_thread_id"] ? `sender: ${item["sender_thread_id"]}` : '',
                 receiverIds ? `receivers: ${receiverIds}` : '',
                 formatJsonDetail('agents', item.agents_states),
                 item.prompt ? `prompt: ${clipText(String(item.prompt), 300)}` : '',
@@ -1042,7 +1057,7 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
                 const usage = event.usage || {};
                 const usageDetail = [
                     usage.total_tokens != null ? `${usage.total_tokens} tok` : '',
-                    usage.tool_uses != null ? `${usage.tool_uses} tools` : '',
+                    usage["tool_uses"] != null ? `${usage["tool_uses"]} tools` : '',
                     usage.duration_ms != null ? `${(Number(usage.duration_ms) / 1000).toFixed(1)}s` : '',
                 ].filter(Boolean).join(' · ');
                 const detail = appendDetail(
@@ -1072,12 +1087,12 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
             const cb = event.event.content_block;
             if (cb?.type === 'tool_use') {
                 const isAgent = cb.name === 'Agent';
-                pushToolLabel(labels, {
+                pushToolLabel(labels, stripUndefined({
                     icon: isAgent ? '🤖' : '🔧',
                     label: isAgent ? 'subagent' : (cb.name || 'tool'),
                     toolType: isAgent ? 'subagent' : 'tool',
                     stepRef: cb.id ? `claude:tooluse:${cb.id}` : undefined,
-                }, cli, event, ctx);
+                }), cli, event, ctx);
             }
             // thinking: don't emit placeholder — buffer in extractFromEvent will emit with real content
         }
@@ -1085,14 +1100,14 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
             for (const block of event.message.content) {
                 if (block.type === 'tool_use') {
                     const isAgent = block.name === 'Agent';
-                    const description = block.input?.description || block.input?.subagent_type || 'subagent';
-                    pushToolLabel(labels, {
+                    const description = block.input?.description || block.input?.["subagent_type"] || 'subagent';
+                    pushToolLabel(labels, stripUndefined({
                         icon: isAgent ? '🤖' : '🔧',
                         label: isAgent ? `subagent: ${buildPreview(description, 60)}` : (block.name || 'tool'),
                         toolType: isAgent ? 'subagent' : 'tool',
                         stepRef: block.id ? `claude:tooluse:${block.id}` : undefined,
                         ...(isAgent && block.input?.prompt ? { detail: `prompt: ${clipText(String(block.input.prompt), 300)}` } : {}),
-                    }, cli, event, ctx);
+                    }), cli, event, ctx);
                 }
                 if (block.type === 'thinking') {
                     const text = (block.thinking || '').trim();
@@ -1135,7 +1150,7 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
             && ctx?.opencodeTaskCallIds?.has(event.part.callID);
 
         if (isTaskToolUse || isTaskToolResult) {
-            const part = event.part;
+            const part = asCliEventRecord(event.part);
             const callID = part.callID || part.id || 'task';
             if (isTaskToolResult && !part.state) return labels;
             if (isTaskToolUse && ctx) {
@@ -1146,7 +1161,7 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
             const input = state.input || {};
             const status = String(state.status || (event.type === 'tool_result' ? 'completed' : 'completed'));
             const failed = isOpencodeToolFailure(part) || ['error', 'failed', 'cancelled', 'canceled'].includes(status);
-            const subagentType = input.subagent_type || 'general';
+            const subagentType = input["subagent_type"] || 'general';
             const description = input.description || state.title || part.tool || 'task';
             const resultText = event.type === 'tool_result'
                 ? extractText(part.content || part.output || state.output)
@@ -1173,10 +1188,10 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
             const detail = summarizeToolInput(event.part.tool || '', event.part.state?.input || {}, 0)
                 || String(event.part.state?.output || '').trim();
             const isDone = event.part.state?.status === 'completed';
-            const exitCode = event.part.state?.metadata?.exit;
+            const exitCode = fieldNumber(event.part.state?.metadata?.["exit"]);
             const isFailed = isOpencodeToolFailure(event.part);
-            const displayLabel = event.part.state?.title || event.part.tool || 'tool';
-            labels.push({
+            const displayLabel = fieldString(event.part.state?.title || event.part.tool, 'tool');
+            labels.push(stripUndefined({
                 icon: isFailed ? '❌' : (isDone ? '✅' : '🔧'),
                 label: displayLabel,
                 toolType: 'tool',
@@ -1184,13 +1199,13 @@ function extractToolLabels(cli: string, event: any, ctx: SpawnContext | null = n
                 detail,
                 status: isFailed ? 'error' : (isDone ? 'done' : undefined),
                 ...(exitCode != null ? { exitCode } : {}),
-            });
+            }));
         }
         if (event.type === 'tool_result' && event.part) {
             const ref = event.part.callID
                 ? `opencode:call:${event.part.callID}`
                 : `opencode:tool:${event.part.tool || 'tool'}`;
-            labels.push({ icon: '✅', label: event.part.tool || 'done', toolType: 'tool', stepRef: ref, status: 'done' });
+            labels.push({ icon: '✅', label: fieldString(event.part.tool, 'done'), toolType: 'tool', stepRef: ref, status: 'done' });
         }
     }
 
@@ -1211,24 +1226,25 @@ function toolKindIcon(kind: string | undefined): string {
 }
 
 /** Summarise a tool's input into a short one-liner for the ProcessBlock UI. */
-export function summarizeToolInput(toolName: string, input: any, max = 0): string {
+export function summarizeToolInput(toolName: string, input: unknown, max = 0): string {
     if (!input) return '';
     if (typeof input !== 'object') return max ? clipText(String(input), max) : String(input);
-    const s = (v: any) => (typeof v === 'string' ? v : v != null ? String(v) : '');
+    const data = asCliEventRecord(input);
+    const s = (v: unknown) => (typeof v === 'string' ? v : v != null ? String(v) : '');
     const name = (toolName || '').toLowerCase();
     let result = '';
     if (name.includes('bash') || name.includes('terminal') || name === 'execute_command')
-        result = s(input.command || input.cmd);
+        result = s(data.command || data.cmd);
     else if (name.includes('read') || name === 'read_file' || name === 'view') {
-        const fullPath = s(input.path || input.file_path || input.filename);
+        const fullPath = s(data["path"] || data["file_path"] || data["filename"]);
         result = max ? (fullPath.split('/').pop() || fullPath) : fullPath;
     } else if (name.includes('write') || name.includes('edit') || name === 'create_file') {
-        const fullPath = s(input.path || input.file_path);
+        const fullPath = s(data["path"] || data["file_path"]);
         result = max ? (fullPath.split('/').pop() || fullPath) : fullPath;
     } else if (name.includes('search') || name.includes('grep') || name === 'codebase_search')
-        result = s(input.query || input.pattern || input.search_query);
+        result = s(data.query || data["pattern"] || data["search_query"]);
     else if (name.includes('web') || name === 'web_search')
-        result = s(input.query);
+        result = s(data.query);
     // Fallback: show first meaningful key-value if specific extraction yielded nothing
     if (!result) {
         try { result = JSON.stringify(input); } catch { /* ignore */ }
@@ -1237,17 +1253,29 @@ export function summarizeToolInput(toolName: string, input: any, max = 0): strin
 }
 
 // Backward-compat: return first label or null
-export function extractToolLabel(cli: string, event: any) {
+export function extractToolLabel(cli: string, event: CliEventRecord): ToolEntry | null {
     const labels = extractToolLabels(cli, event);
-    return labels.length ? labels[0] : null;
+    return labels[0] ?? null;
 }
 
 // Test-only helpers (keep parser logic private for runtime flow)
-export function extractToolLabelsForTest(cli: string, event: any, ctx: any = {}) {
+export function extractToolLabelsForTest(cli: string, event: CliEventRecord, ctx: SpawnContext = {
+    fullText: '',
+    traceLog: [],
+    toolLog: [],
+    seenToolKeys: new Set<string>(),
+    hasClaudeStreamEvents: false,
+    sessionId: null,
+    cost: null,
+    turns: null,
+    duration: null,
+    tokens: null,
+    stderrBuf: '',
+}) {
     return extractToolLabels(cli, event, ctx);
 }
 
-export function makeClaudeToolKeyForTest(event: any, label: any) {
+export function makeClaudeToolKeyForTest(event: CliEventRecord, label: ToolEntry) {
     return makeClaudeToolKey(event, label);
 }
 
@@ -1255,24 +1283,26 @@ export function makeClaudeToolKeyForTest(event: any, label: any) {
 // Official ACP schema: update.sessionUpdate is the discriminator field.
 // Types: agent_message_chunk, agent_thought_chunk, tool_call, tool_call_update, plan
 
-function extractText(content: any) {
+function extractText(content: unknown) {
     if (typeof content === 'string') return content;
     if (Array.isArray(content)) {
         return content
+            .filter(isCliEventRecord)
             .filter(c => c.type === 'text')
             .map(c => c.text || '')
             .join('');
     }
     // Single content object: {type: 'text', text: '...'}
-    if (content && typeof content === 'object' && content.type === 'text') {
+    if (isCliEventRecord(content) && content.type === 'text') {
         return content.text || '';
     }
     return '';
 }
 
-export function extractFromAcpUpdate(params: any, ctx: SpawnContext | null = null) {
-    const update = params?.update;
-    if (!update) return null;
+export function extractFromAcpUpdate(params: AcpUpdateParams | unknown, ctx: SpawnContext | null = null): ExtractedEventResult {
+    const envelope = asCliEventRecord(params);
+    const update = asCliEventRecord(envelope["update"]);
+    if (!isCliEventRecord(envelope["update"])) return null;
 
     const type = update.sessionUpdate;
 
@@ -1290,9 +1320,9 @@ export function extractFromAcpUpdate(params: any, ctx: SpawnContext | null = nul
         }
 
         case 'tool_call': {
-            const toolName = update.name || 'tool';
-            const rawInput = update.rawInput || update.input || {};
-            const isSubagentTask = rawInput?.agent_type === 'task' || rawInput?.agentType === 'task';
+            const toolName = fieldString(update.name, 'tool');
+            const rawInput = asCliEventRecord(update.rawInput || update.input);
+            const isSubagentTask = rawInput?.["agent_type"] === 'task' || rawInput?.["agentType"] === 'task';
             const displayLabel = isSubagentTask
                 ? `subagent: ${update.title || rawInput.description || rawInput.name || toolName}`
                 : update.title || toolName;
@@ -1300,7 +1330,7 @@ export function extractFromAcpUpdate(params: any, ctx: SpawnContext | null = nul
                 if (!ctx.acpSubagentToolCallIds) ctx.acpSubagentToolCallIds = new Set();
                 if (!ctx.acpSubagentLabels) ctx.acpSubagentLabels = new Map();
                 ctx.acpSubagentToolCallIds.add(update.toolCallId);
-                ctx.acpSubagentLabels.set(update.toolCallId, displayLabel);
+                ctx.acpSubagentLabels.set(update.toolCallId, fieldString(displayLabel));
             }
             const fullInput = update.input != null
                 ? (typeof update.input === 'object' ? JSON.stringify(update.input, null, 2) : String(update.input))
@@ -1308,12 +1338,12 @@ export function extractFromAcpUpdate(params: any, ctx: SpawnContext | null = nul
                     ? (typeof update.rawInput === 'object' ? JSON.stringify(update.rawInput, null, 2) : String(update.rawInput))
                 : '';
             // [P1-2.10] Semantic icon from tool kind/title
-            const kindIcon = toolKindIcon(update.kind);
+            const kindIcon = toolKindIcon(fieldString(update["kind"]) || undefined);
             // [P0-1.11] Use toolCallId for unique stepRef
             return {
                 tool: {
                     icon: isSubagentTask ? '🤖' : (kindIcon || '🔧'),
-                    label: displayLabel,
+                    label: fieldString(displayLabel),
                     toolType: isSubagentTask ? 'subagent' : 'tool',
                     detail: fullInput,
                     stepRef: `acp:callid:${update.toolCallId || update.id || toolName}`,
@@ -1331,8 +1361,9 @@ export function extractFromAcpUpdate(params: any, ctx: SpawnContext | null = nul
                 completed: { icon: '✅', status: 'done' },
                 failed: { icon: '❌', status: 'error' },
             };
-            const mapped = statusMap[update.status] || { icon: '❔', status: update.status || 'unknown' };
-            const toolCallId = update.toolCallId || update.id || update.name || 'done';
+            const statusKey = fieldString(update.status);
+            const mapped = statusMap[statusKey] || { icon: '❔', status: statusKey || 'unknown' };
+            const toolCallId = fieldString(update.toolCallId || update.id || update.name, 'done');
             const isSubagentTask = !!(toolCallId && ctx?.acpSubagentToolCallIds?.has(toolCallId));
             const subagentLabel = toolCallId ? ctx?.acpSubagentLabels?.get(toolCallId) : '';
             // [P1-2.9] Extract content from tool result
@@ -1340,7 +1371,7 @@ export function extractFromAcpUpdate(params: any, ctx: SpawnContext | null = nul
             return {
                 tool: {
                     icon: mapped.icon,
-                    label: isSubagentTask ? (subagentLabel || `subagent: ${update.name || update.title || 'task'}`) : update.name || update.id || 'done',
+                    label: isSubagentTask ? (subagentLabel || `subagent: ${update.name || update.title || 'task'}`) : fieldString(update.name || update.id, 'done'),
                     toolType: isSubagentTask ? 'subagent' : 'tool',
                     stepRef: `acp:callid:${toolCallId}`,
                     status: mapped.status,
@@ -1391,20 +1422,21 @@ export function extractFromAcpUpdate(params: any, ctx: SpawnContext | null = nul
         }
 
         default:
-            if (process.env.DEBUG) {
+            if (process.env["DEBUG"]) {
                 console.log(`[acp] unknown sessionUpdate: ${type}`, JSON.stringify(update).slice(0, 100));
             }
             return null;
     }
 }
 
-export function extractFromAcpSubagent(event: any) {
-    if (!event?.type || !String(event.type).startsWith('subagent.')) return null;
-    const data = event.data || {};
-    const display = data.agentDisplayName || data.agentName || 'subagent';
-    const agentName = data.agentName || display;
+export function extractFromAcpSubagent(event: AcpSubagentEvent | unknown): ExtractedEventResult {
+    const record = asCliEventRecord(event);
+    if (!record.type || !String(record.type).startsWith('subagent.')) return null;
+    const data = asCliEventRecord(record["data"]);
+    const display = fieldString(data.agentDisplayName || data.agentName, 'subagent');
+    const agentName = fieldString(data.agentName, display);
 
-    switch (event.type) {
+    switch (record.type) {
         case 'subagent.selected':
             return {
                 tool: {
@@ -1426,7 +1458,8 @@ export function extractFromAcpSubagent(event: any) {
                     status: 'done',
                 },
             };
-        case 'subagent.started':
+        case 'subagent.started': {
+            const agentDescription = fieldString(data["agentDescription"]);
             return {
                 tool: {
                     icon: '🤖',
@@ -1434,9 +1467,10 @@ export function extractFromAcpSubagent(event: any) {
                     toolType: 'subagent',
                     stepRef: `acp:subagent:${data.toolCallId || agentName}`,
                     status: 'running',
-                    ...(data.agentDescription ? { detail: data.agentDescription } : {}),
+                    ...(agentDescription ? { detail: agentDescription } : {}),
                 },
             };
+        }
         case 'subagent.completed':
             return {
                 tool: {

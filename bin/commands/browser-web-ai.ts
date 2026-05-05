@@ -1,10 +1,15 @@
 import { parseArgs } from 'node:util';
 import { renderContextDryRunReport } from '../../src/browser/web-ai/context-pack/index.js';
+import type { ContextDryRunMode, ContextPackResult } from '../../src/browser/web-ai/context-pack/index.js';
 
 type BrowserApi = (method: string, path: string, body?: unknown) => Promise<unknown>;
 type QueryString = (params: Record<string, unknown>) => string;
 
 const WEB_AI_COMMANDS = new Set(['render', 'status', 'send', 'poll', 'query', 'watch', 'watchers', 'sessions', 'sessions-prune', 'resume', 'reattach', 'notifications', 'capabilities', 'stop', 'diagnose', 'doctor', 'context-dry-run', 'context-render']);
+
+function parseContextDryRunMode(value: unknown): ContextDryRunMode {
+    return value === 'json' || value === 'full' || value === 'summary' ? value : 'summary';
+}
 
 export const WEB_AI_USAGE = `
 Usage:
@@ -76,12 +81,12 @@ Examples:
 `;
 
 function rejectFutureWebAiFlags(values: Record<string, unknown>): void {
-    const vendor = values.vendor ?? 'chatgpt';
+    const vendor = values["vendor"] ?? 'chatgpt';
     if (vendor !== 'chatgpt' && vendor !== 'gemini' && vendor !== 'grok') throw new Error(`unsupported vendor: ${vendor}`);
-    if (values.model && !isSupportedWebAiModel(vendor, values.model)) throw new Error(`unsupported ${webAiVendorLabel(vendor)} model selection: ${values.model}`);
-    const effort = values.effort || values['reasoning-effort'];
-    if (effort && !values.model) throw new Error(`${webAiVendorLabel(vendor)} reasoning effort requires --model because effort menus differ by model`);
-    if (effort && !isSupportedWebAiEffort(vendor, values.model, effort)) throw new Error(`unsupported ${webAiVendorLabel(vendor)} reasoning effort: ${effort}`);
+    if (values["model"] && !isSupportedWebAiModel(vendor, values["model"])) throw new Error(`unsupported ${webAiVendorLabel(vendor)} model selection: ${values["model"]}`);
+    const effort = values["effort"] || values['reasoning-effort'];
+    if (effort && !values["model"]) throw new Error(`${webAiVendorLabel(vendor)} reasoning effort requires --model because effort menus differ by model`);
+    if (effort && !isSupportedWebAiEffort(vendor, values["model"], effort)) throw new Error(`unsupported ${webAiVendorLabel(vendor)} reasoning effort: ${effort}`);
 }
 
 function isSupportedWebAiModel(vendor: unknown, model: unknown): boolean {
@@ -218,23 +223,27 @@ export async function runWebAiCommand(
         ...(values['new-tab'] ? { newTab: true } : {}),
         ...(values['reuse-tab'] ? { reuseTab: true } : {}),
     };
-    const result = await callWebAiEndpoint(command, body, values, deps) as Record<string, unknown>;
+    const rawResult = await callWebAiEndpoint(command, body, values, deps);
     const fullContextOutput = values.full === true || command === 'context-render';
-    if (isContextCommand(command) && values.json) {
-        console.log(renderContextDryRunReport(result as any, {
+    if (isContextCommand(command)) {
+        const result = rawResult as ContextPackResult;
+        if (values.json) {
+            console.log(renderContextDryRunReport(result, {
             mode: 'json',
             full: fullContextOutput,
             json: true,
             includeComposerText: fullContextOutput,
-        }));
-    } else if (values.json) console.log(JSON.stringify(result, null, 2));
-    else if (isContextCommand(command)) {
-        console.log(renderContextDryRunReport(result as any, {
-            mode: fullContextOutput ? 'full' : String(values['dry-run'] || 'summary') as any,
+            }));
+        } else {
+            console.log(renderContextDryRunReport(result, {
+            mode: fullContextOutput ? 'full' : parseContextDryRunMode(values['dry-run']),
             full: fullContextOutput,
-        }));
+            }));
+        }
+    } else if (values.json) console.log(JSON.stringify(rawResult, null, 2));
+    else {
+        printWebAiHuman(command, rawResult as Record<string, unknown>);
     }
-    else printWebAiHuman(command, result);
 }
 
 async function callWebAiEndpoint(
@@ -243,27 +252,27 @@ async function callWebAiEndpoint(
     values: Record<string, unknown>,
     deps: { api: BrowserApi; qs: QueryString },
 ): Promise<unknown> {
-    if (command === 'status') return deps.api('GET', `/web-ai/status${deps.qs({ vendor: values.vendor, probe: values.probe })}`);
-    if (command === 'sessions') return deps.api('GET', `/web-ai/sessions${deps.qs({ vendor: values.vendor, status: values.status })}`);
+    if (command === 'status') return deps.api('GET', `/web-ai/status${deps.qs({ vendor: values["vendor"], probe: values["probe"] })}`);
+    if (command === 'sessions') return deps.api('GET', `/web-ai/sessions${deps.qs({ vendor: values["vendor"], status: values["status"] })}`);
     if (command === 'sessions-prune') {
         const olderThanMs = values['older-than-ms'] ? Number(values['older-than-ms']) : undefined;
         return deps.api('POST', '/web-ai/sessions/prune', {
             ...(olderThanMs !== undefined && Number.isFinite(olderThanMs) ? { olderThanMs } : {}),
-            ...(values.before ? { before: values.before } : {}),
-            ...(values.status ? { status: values.status } : {}),
+            ...(values["before"] ? { before: values["before"] } : {}),
+            ...(values["status"] ? { status: values["status"] } : {}),
         });
     }
-    if (command === 'notifications') return deps.api('GET', `/web-ai/notifications${deps.qs({ vendor: values.vendor, status: values.status, session: values.session })}`);
+    if (command === 'notifications') return deps.api('GET', `/web-ai/notifications${deps.qs({ vendor: values["vendor"], status: values["status"], session: values["session"] })}`);
     if (command === 'watchers') return deps.api('GET', '/web-ai/watchers');
-    if (command === 'capabilities') return deps.api('GET', `/web-ai/capabilities${deps.qs({ vendor: values.vendor, family: values.family, frontendStatus: values['frontend-status'] })}`);
-    if (command === 'poll') return deps.api('GET', `/web-ai/poll${deps.qs({ vendor: values.vendor, timeout: values.timeout, session: values.session, allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'], requireSourceAudit: values['require-source-audit'], sourceAuditRatio: values['source-audit-ratio'], sourceAuditScope: values['source-audit-scope'], sourceAuditDate: values['source-audit-date'] })}`);
-    if (command === 'watch') return deps.api('GET', `/web-ai/watch${deps.qs({ vendor: values.vendor, timeout: values.timeout, session: values.session, url: values.url, notify: values.notify, pollIntervalSeconds: values['poll-interval'], allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'], requireSourceAudit: values['require-source-audit'], sourceAuditRatio: values['source-audit-ratio'], sourceAuditScope: values['source-audit-scope'], sourceAuditDate: values['source-audit-date'] })}`);
-    if (command === 'resume') return deps.api('GET', `/web-ai/poll${deps.qs({ vendor: values.vendor, session: values.session, timeout: values.timeout || values.deadline, allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'], requireSourceAudit: values['require-source-audit'], sourceAuditRatio: values['source-audit-ratio'], sourceAuditScope: values['source-audit-scope'], sourceAuditDate: values['source-audit-date'] })}`);
+    if (command === 'capabilities') return deps.api('GET', `/web-ai/capabilities${deps.qs({ vendor: values["vendor"], family: values["family"], frontendStatus: values['frontend-status'] })}`);
+    if (command === 'poll') return deps.api('GET', `/web-ai/poll${deps.qs({ vendor: values["vendor"], timeout: values["timeout"], session: values["session"], allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'], requireSourceAudit: values['require-source-audit'], sourceAuditRatio: values['source-audit-ratio'], sourceAuditScope: values['source-audit-scope'], sourceAuditDate: values['source-audit-date'] })}`);
+    if (command === 'watch') return deps.api('GET', `/web-ai/watch${deps.qs({ vendor: values["vendor"], timeout: values["timeout"], session: values["session"], url: values["url"], notify: values["notify"], pollIntervalSeconds: values['poll-interval'], allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'], requireSourceAudit: values['require-source-audit'], sourceAuditRatio: values['source-audit-ratio'], sourceAuditScope: values['source-audit-scope'], sourceAuditDate: values['source-audit-date'] })}`);
+    if (command === 'resume') return deps.api('GET', `/web-ai/poll${deps.qs({ vendor: values["vendor"], session: values["session"], timeout: values["timeout"] || values["deadline"], allowCopyMarkdownFallback: values['allow-copy-markdown-fallback'], requireSourceAudit: values['require-source-audit'], sourceAuditRatio: values['source-audit-ratio'], sourceAuditScope: values['source-audit-scope'], sourceAuditDate: values['source-audit-date'] })}`);
     if (command === 'reattach') {
-        if (!values.session) throw new Error('reattach requires --session <id>');
-        return deps.api('GET', `/web-ai/status${deps.qs({ vendor: values.vendor, session: values.session, navigate: values.navigate })}`);
+        if (!values["session"]) throw new Error('reattach requires --session <id>');
+        return deps.api('GET', `/web-ai/status${deps.qs({ vendor: values["vendor"], session: values["session"], navigate: values["navigate"] })}`);
     }
-    if (command === 'doctor' || command === 'diagnose') return deps.api('GET', `/web-ai/diagnose${deps.qs({ vendor: values.vendor, stage: values.stage })}`);
+    if (command === 'doctor' || command === 'diagnose') return deps.api('GET', `/web-ai/diagnose${deps.qs({ vendor: values["vendor"], stage: values["stage"] })}`);
     if (command === 'context-dry-run' || command === 'context-render') return deps.api('POST', `/web-ai/${command}`, body);
     return deps.api('POST', `/web-ai/${command}`, body);
 }
@@ -274,13 +283,13 @@ function isContextCommand(command: string): boolean {
 
 function printWebAiHuman(command: string, result: Record<string, unknown>): void {
     if (command === 'render') {
-        const rendered = result.rendered as { composerText?: string; markdown?: string } | undefined;
+        const rendered = result["rendered"] as { composerText?: string; markdown?: string } | undefined;
         console.log(rendered?.composerText || rendered?.markdown || '');
-        if (Array.isArray(result.warnings) && result.warnings.length) console.error(`[warnings] ${result.warnings.join(', ')}`);
+        if (Array.isArray(result["warnings"]) && result["warnings"].length) console.error(`[warnings] ${result["warnings"].join(', ')}`);
         return;
     }
-    if (result.answerText) {
-        console.log(result.answerText);
+    if (result["answerText"]) {
+        console.log(result["answerText"]);
         return;
     }
     for (const key of ['sessions', 'notifications', 'watchers', 'capabilities']) {
@@ -289,5 +298,5 @@ function printWebAiHuman(command: string, result: Record<string, unknown>): void
             return;
         }
     }
-    console.log(`${result.status}: ${result.url || result.vendor || 'web-ai'}`);
+    console.log(`${result["status"]}: ${result["url"] || result["vendor"] || 'web-ai'}`);
 }

@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readSource } from './source-normalize.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..');
 
 function read(path: string): string {
-    return readFileSync(join(projectRoot, path), 'utf8');
+    return readSource(join(projectRoot, path), 'utf8');
 }
 
 test('/api/runtime exposes cli and model for manager scan rows', () => {

@@ -19,25 +19,25 @@ import { migrateLegacyClaudeValue } from '../cli/claude-models.js';
 export function registerSettingsRoutes(
     app: Express,
     requireAuth: AuthMiddleware,
-    applySettings: (patch: Record<string, any>) => Promise<any>,
+    applySettings: (patch: Record<string, unknown>) => Promise<unknown>,
     projectRoot: string,
 ): void {
     app.get('/api/settings', (_, res) => {
         const safe = { ...settings };
-        if (safe.stt) {
-            const gKey = safe.stt.geminiApiKey || process.env.GEMINI_API_KEY || '';
-            const oKey = safe.stt.openaiApiKey || '';
-            safe.stt = { ...safe.stt, geminiApiKey: undefined, geminiKeySet: !!gKey, geminiKeyLast4: gKey.slice(-4) || '', openaiApiKey: undefined, openaiKeySet: !!oKey, openaiKeyLast4: oKey.slice(-4) || '' };
+        if (safe["stt"]) {
+            const gKey = safe["stt"].geminiApiKey || process.env["GEMINI_API_KEY"] || '';
+            const oKey = safe["stt"].openaiApiKey || '';
+            safe["stt"] = { ...safe["stt"], geminiApiKey: undefined, geminiKeySet: !!gKey, geminiKeyLast4: gKey.slice(-4) || '', openaiApiKey: undefined, openaiKeySet: !!oKey, openaiKeyLast4: oKey.slice(-4) || '' };
         }
         ok(res, safe, safe);
     });
 
     app.put('/api/settings', requireAuth, asyncHandler(async (req, res) => {
-        const result = await applySettings(req.body);
-        const safe = { ...result };
+        const result = await applySettings(req.body) as { stt?: Record<string, unknown> };
+        const safe: { stt?: Record<string, unknown> } = { ...result };
         if (safe.stt) {
-            const gKey2 = safe.stt.geminiApiKey || process.env.GEMINI_API_KEY || '';
-            const oKey2 = safe.stt.openaiApiKey || '';
+            const gKey2 = String(safe.stt["geminiApiKey"] || process.env["GEMINI_API_KEY"] || '');
+            const oKey2 = String(safe.stt["openaiApiKey"] || '');
             safe.stt = { ...safe.stt, geminiApiKey: undefined, geminiKeySet: !!gKey2, geminiKeyLast4: gKey2.slice(-4) || '', openaiApiKey: undefined, openaiKeySet: !!oKey2, openaiKeyLast4: oKey2.slice(-4) || '' };
         }
         ok(res, safe);
@@ -54,7 +54,10 @@ export function registerSettingsRoutes(
 
     app.put('/api/prompt', requireAuth, (req, res) => {
         const { content } = req.body;
-        if (content == null) return res.status(400).json({ error: 'content required' });
+        if (content == null) {
+            res.status(400).json({ error: 'content required' });
+            return;
+        }
         fs.writeFileSync(A2_PATH, content);
         regenerateB();
         res.json({ ok: true });
@@ -83,9 +86,15 @@ export function registerSettingsRoutes(
 
     app.put('/api/prompt-templates/:id', requireAuth, (req, res) => {
         const { content } = req.body;
-        if (content == null || typeof content !== 'string') return res.status(400).json({ error: 'content required' });
-        const filename = req.params.id + '.md';
-        if (!/^[a-z0-9-]+\.md$/.test(filename)) return res.status(400).json({ error: 'invalid id' });
+        if (content == null || typeof content !== 'string') {
+            res.status(400).json({ error: 'content required' });
+            return;
+        }
+        const filename = req.params["id"] + '.md';
+        if (!/^[a-z0-9-]+\.md$/.test(filename)) {
+            res.status(400).json({ error: 'invalid id' });
+            return;
+        }
         const dir = getTemplateDir();
         fs.writeFileSync(join(dir, filename), content);
         const srcDir = join(projectRoot, 'src/prompt/templates');
@@ -102,7 +111,10 @@ export function registerSettingsRoutes(
 
     app.put('/api/heartbeat-md', requireAuth, (req, res) => {
         const { content } = req.body;
-        if (content == null) return res.status(400).json({ error: 'content required' });
+        if (content == null) {
+            res.status(400).json({ error: 'content required' });
+            return;
+        }
         fs.writeFileSync(HEARTBEAT_PATH, content);
         res.json({ ok: true });
     });
@@ -111,7 +123,10 @@ export function registerSettingsRoutes(
 
     app.put('/api/mcp', requireAuth, (req, res) => {
         const config = req.body;
-        if (!config || !config.servers) return res.status(400).json({ error: 'servers object required' });
+        if (!config || !config.servers) {
+            res.status(400).json({ error: 'servers object required' });
+            return;
+        }
         saveUnifiedMcp(config);
         res.json({ ok: true, servers: Object.keys(config.servers) });
     });
@@ -140,7 +155,7 @@ export function registerSettingsRoutes(
         try {
             const mcpPath = join(JAW_HOME, 'mcp.json');
             if (fs.existsSync(mcpPath)) fs.unlinkSync(mcpPath);
-            const config = initMcpConfig(settings.workingDir);
+            const config = initMcpConfig(settings["workingDir"]);
             const results = syncToAll(config);
             res.json({
                 ok: true,
@@ -168,7 +183,7 @@ export function registerSettingsRoutes(
             fetchCopilotQuota(),
         ]);
 
-        const classify = (result: any, hasCreds: boolean) =>
+        const classify = (result: unknown, hasCreds: boolean) =>
             result ?? (hasCreds ? { error: true } : { authenticated: false });
 
         res.json({

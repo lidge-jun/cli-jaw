@@ -3,6 +3,7 @@ import { geminiPoll } from './gemini-live.js';
 import { grokPoll } from './grok-live.js';
 import { WebAiError } from './errors.js';
 import { getSession, listSessions, pruneSessions } from './session.js';
+import { stripUndefined } from '../../core/strip-undefined.js';
 import type { WebAiVendor, WebAiSessionStatus } from './types.js';
 
 const SESSIONS_SUBCOMMANDS = new Set(['list', 'show', 'resume', 'reattach', 'prune']);
@@ -12,7 +13,12 @@ const DURATION_MS: Record<string, number> = { '': 1000, s: 1000, m: 60_000, h: 3
 
 export interface SessionsDeps {
     port?: number;
-    getPage?: () => Promise<any>;
+    getPage?: () => Promise<SessionsPageLike | null | undefined>;
+}
+
+export interface SessionsPageLike {
+    url?: () => string | null;
+    goto(url: string, options?: { waitUntil?: string; timeout?: number }): Promise<unknown>;
 }
 
 export interface SessionsInput {
@@ -54,7 +60,7 @@ export async function runSessionsCommand(
     values: Record<string, unknown>,
     deps: SessionsDeps,
     input: SessionsInput,
-): Promise<any> {
+): Promise<Record<string, unknown>> {
     const [sub, ...rest] = args;
     if (!sub) {
         return {
@@ -77,9 +83,9 @@ export async function runSessionsCommand(
     if (sub === 'list') {
         const filter: { vendor?: WebAiVendor; status?: WebAiSessionStatus; limit?: number } = {};
         const vendorExplicit = args.includes('--vendor') || args.some(a => a.startsWith('--vendor='));
-        if (vendorExplicit && values.vendor) filter.vendor = String(values.vendor) as WebAiVendor;
-        if (values.status) filter.status = String(values.status) as WebAiSessionStatus;
-        if (values.limit) filter.limit = Number(values.limit);
+        if (vendorExplicit && values["vendor"]) filter.vendor = String(values["vendor"]) as WebAiVendor;
+        if (values["status"]) filter.status = String(values["status"]) as WebAiSessionStatus;
+        if (values["limit"]) filter.limit = Number(values["limit"]);
         const rows = listSessions(filter);
         return { ok: true, status: 'list', sessions: rows, vendor: 'chatgpt', warnings: [] };
     }
@@ -111,6 +117,9 @@ export async function runSessionsCommand(
         const session = getSession(id);
         if (!session) throw new WebAiError({ errorCode: 'internal.unhandled', stage: 'internal', retryHint: 'report', message: `no session record for ${id}`, evidence: { sessionId: id } });
         const page = await deps.getPage?.();
+        if (!page) {
+            return { ok: false, status: 'reattach-failed', sessionId: id, vendor: session.vendor, error: 'no active page', warnings: [] };
+        }
         const currentUrl = page?.url?.() || null;
         const targetUrl = session.conversationUrl || session.url;
         if (!targetUrl) {
@@ -137,51 +146,63 @@ export async function runSessionsCommand(
         const olderThanMs = values['older-than']
             ? parseDurationToMs(values['older-than'])
             : 30 * 86_400_000;
-        const result = pruneSessions({
+        const result = pruneSessions(stripUndefined({
             olderThanMs: olderThanMs ?? undefined,
-            ...(values.status ? { status: String(values.status) as WebAiSessionStatus } : {}),
-        });
-        return { ok: true, status: 'pruned', ...result, vendor: 'chatgpt', warnings: [], olderThanMs: olderThanMs ?? undefined };
+            ...(values["status"] ? { status: String(values["status"]) as WebAiSessionStatus } : {}),
+        }));
+        return stripUndefined({ ok: true, status: 'pruned', ...result, vendor: 'chatgpt', warnings: [], olderThanMs: olderThanMs ?? undefined });
     }
     return { ok: false, status: 'error', vendor: 'chatgpt', warnings: [], error: 'unreachable' };
 }
 
 export function printSessionsHuman(result: unknown): void {
     if (!result) return;
-    const r = result as any;
-    if (r.status === 'help') {
-        console.log(r.usage);
-        console.log(`subcommands: ${r.commands?.join(', ')}`);
+    if (!isRecord(result)) {
+        console.log(JSON.stringify(result, null, 2));
         return;
     }
-    if (r.status === 'list') {
-        const rows = r.sessions || [];
+    const r = result;
+    if (r["status"] === 'help') {
+        console.log(String(r["usage"] || ''));
+        const commands = Array.isArray(r["commands"]) ? r["commands"].map(String) : [];
+        console.log(`subcommands: ${commands.join(', ')}`);
+        return;
+    }
+    if (r["status"] === 'list') {
+        const rows = Array.isArray(r["sessions"]) ? r["sessions"] : [];
         if (rows.length === 0) { console.log('(no sessions)'); return; }
         for (const s of rows) {
-            console.log(`${s.sessionId}  ${s.vendor.padEnd(8)}  ${s.status.padEnd(10)}  ${s.createdAt}  ${s.conversationUrl || s.url || ''}`);
+            if (!isRecord(s)) continue;
+            const vendor = String(s["vendor"] || '');
+            const status = String(s["status"] || '');
+            console.log(`${String(s["sessionId"] || '')}  ${vendor.padEnd(8)}  ${status.padEnd(10)}  ${String(s["createdAt"] || '')}  ${String(s["conversationUrl"] || s["url"] || '')}`);
         }
         return;
     }
-    if (r.status === 'show') {
-        console.log(JSON.stringify(r.session, null, 2));
+    if (r["status"] === 'show') {
+        console.log(JSON.stringify(r["session"], null, 2));
         return;
     }
-    if (r.status === 'pruned') {
-        console.log(`pruned ${r.removed} (remaining ${r.remaining})`);
+    if (r["status"] === 'pruned') {
+        console.log(`pruned ${r["removed"]} (remaining ${r["remaining"]})`);
         return;
     }
-    if (r.status === 'reattached') {
-        console.log(`reattached to ${r.sessionId} at ${r.url}`);
+    if (r["status"] === 'reattached') {
+        console.log(`reattached to ${r["sessionId"]} at ${r["url"]}`);
         return;
     }
-    if (r.status === 'reattach-mismatch') {
-        console.log(`reattach mismatch: tab=${r.url} session=${r.conversationUrl}`);
+    if (r["status"] === 'reattach-mismatch') {
+        console.log(`reattach mismatch: tab=${r["url"]} session=${r["conversationUrl"]}`);
         console.log('pass --navigate to switch tabs');
         return;
     }
-    if (r.answerText) {
-        console.log(r.answerText);
+    if (r["answerText"]) {
+        console.log(String(r["answerText"]));
         return;
     }
     console.log(JSON.stringify(r, null, 2));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }

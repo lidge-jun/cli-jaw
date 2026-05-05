@@ -34,7 +34,7 @@ export function renderHelp({ iface, commandName, format = 'text' }: { iface?: st
         text: [
             `/${cmd.name}${cmd.args ? ' ' + cmd.args : ''} — ${cmd.desc || ''}`,
             cmd.aliases?.length ? `별칭: ${cmd.aliases.join(', ')}` : '',
-            (cmd as Record<string, any>).examples?.length ? `예시:\n${(cmd as Record<string, any>).examples.map((e: string) => '  ' + e).join('\n')}` : '',
+            (cmd as Record<string, any>)["examples"]?.length ? `예시:\n${(cmd as Record<string, any>)["examples"].map((e: string) => '  ' + e).join('\n')}` : '',
             `지원: ${Object.entries(cmd.capability || {})
                 .filter(([, v]) => v !== 'hidden')
                 .map(([k, v]) => `${k}(${v})`)

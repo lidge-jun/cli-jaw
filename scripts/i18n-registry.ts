@@ -199,11 +199,11 @@ function main(): void {
         for (const [k, v] of Object.entries(skill)) {
             ordered[k] = v;
             if (k === 'name') {
-                ordered.name_ko = skill.name_ko;
-                ordered.name_en = skill.name_en;
+                ordered["name_ko"] = skill.name_ko;
+                ordered["name_en"] = skill.name_en;
             } else if (k === 'description') {
-                ordered.desc_ko = skill.desc_ko;
-                ordered.desc_en = skill.desc_en;
+                ordered["desc_ko"] = skill.desc_ko;
+                ordered["desc_en"] = skill.desc_en;
             }
         }
         newSkills[skillId] = ordered as Skill;

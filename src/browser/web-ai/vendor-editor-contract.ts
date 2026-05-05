@@ -4,6 +4,7 @@ import {
     submitPromptFromComposer,
     verifyPromptCommitted,
 } from './chatgpt-composer.js';
+import type { Page } from 'playwright-core';
 
 export type PromptInsertStage =
     | 'composer-focus'
@@ -37,7 +38,7 @@ export interface VendorEditorAdapter {
     verifyPromptCommitted(prompt: string, baseline?: PromptCommitBaseline): Promise<PromptCommitResult>;
 }
 
-export function createChatGptEditorAdapter(page: any, options: VendorEditorAdapterOptions = {}): VendorEditorAdapter {
+export function createChatGptEditorAdapter(page: Page, options: VendorEditorAdapterOptions = {}): VendorEditorAdapter {
     return {
         vendor: 'chatgpt',
         async waitForReady(): Promise<void> {

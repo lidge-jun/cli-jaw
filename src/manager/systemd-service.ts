@@ -45,7 +45,7 @@ export function computeUnitPath(unitName: string): string {
 function execSystemctl(args: string[], timeoutMs: number): Promise<{ stdout: string; stderr: string; code: number }> {
     return new Promise((resolve) => {
         const child = execFile(SYSTEMCTL, ['--user', ...args], { timeout: timeoutMs, encoding: 'utf8' }, (err, stdout, stderr) => {
-            const code = err && 'code' in err ? (err as any).code ?? 1 : err ? 1 : 0;
+            const code = err && 'code' in err ? (err as NodeJS.ErrnoException).code ?? 1 : err ? 1 : 0;
             resolve({ stdout: stdout || '', stderr: stderr || '', code: typeof code === 'number' ? code : 1 });
         });
         child.unref?.();
@@ -55,7 +55,7 @@ function execSystemctl(args: string[], timeoutMs: number): Promise<{ stdout: str
 function generateUnit(port: number, home: string): string {
     const nodePath = getNodePath();
     const jawPath = getJawPath();
-    const servicePath = buildServicePath(process.env.PATH || '', [dirname(nodePath), dirname(jawPath)]);
+    const servicePath = buildServicePath(process.env["PATH"] || '', [dirname(nodePath), dirname(jawPath)]);
     const logDir = join(home, 'logs');
     mkdirSync(logDir, { recursive: true });
 

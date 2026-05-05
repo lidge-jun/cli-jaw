@@ -24,13 +24,13 @@ export type CommandContextInterface = 'web' | 'cli' | RemoteInterface;
 
 export type CommandContextDeps = {
     /** Apply settings patch (server.ts provides full logic, TG provides restricted subset) */
-    applySettings: (patch: Record<string, any>) => any;
+    applySettings: (patch: Record<string, unknown>) => unknown;
     /** Clear session state callback (deletes messages + clears UI) */
     clearSession: () => void;
     /** Reset session without clearing messages (preserves chat history) */
     resetSession?: () => void;
     /** Seed default employees callback */
-    resetEmployees?: () => any;
+    resetEmployees?: () => unknown;
 };
 
 // Remote interface에서 허용하는 settings patch 키
@@ -44,6 +44,8 @@ const REMOTE_ALLOWED_SETTINGS_KEYS = new Set([
     'discord',        // /forward (discord)
 ]);
 
+export type CliCommandContext = ReturnType<typeof makeCommandCtx>;
+
 export function makeCommandCtx(
     iface: CommandContextInterface,
     locale: string,
@@ -55,7 +57,7 @@ export function makeCommandCtx(
         version: APP_VERSION,
         getSession,
         getSettings: () => settings,
-        updateSettings: async (patch: Record<string, any>) => {
+        updateSettings: async (patch: Record<string, unknown>) => {
             // Remote interfaces: allow curated subset of runtime-setting keys
             if (iface === 'telegram' || iface === 'discord') {
                 const keys = Object.keys(patch);
@@ -95,23 +97,23 @@ export function makeCommandCtx(
 
         // Memory
         listMemory: () => memory.list(),
-        searchMemory: (q: any) => searchMemoryWithPolicy({
+        searchMemory: (q: string) => searchMemoryWithPolicy({
             query: String(q || ''),
             role: 'read_only_tool',
         }),
         getMemoryStatus: () => getMemoryStatus(),
         initMemoryRuntime: () => ensureMemoryStructure(),
-        bootstrapMemory: (options?: Record<string, any>) => bootstrapMemory(options || {}),
+        bootstrapMemory: (options?: Record<string, unknown>) => bootstrapMemory(options || {}),
         reindexMemory: () => reindexMemory(),
         getAdvancedMemoryStatus: () => getMemoryStatus(),
         initAdvancedMemory: () => ensureMemoryStructure(),
-        bootstrapAdvancedMemory: (options?: Record<string, any>) => bootstrapMemory(options || {}),
+        bootstrapAdvancedMemory: (options?: Record<string, unknown>) => bootstrapMemory(options || {}),
         reindexAdvancedMemory: () => reindexMemory(),
         validateAdvancedMemoryConfig: async () => ({ ok: true, provider: 'integrated', error: '' }),
 
         // Browser
-        getBrowserStatus: async () => browser.getBrowserStatus(settings.browser?.cdpPort || deriveCdpPort()),
-        getBrowserTabs: async () => ({ tabs: await browser.listTabs(settings.browser?.cdpPort || deriveCdpPort()) }),
+        getBrowserStatus: async () => browser.getBrowserStatus(settings["browser"]?.cdpPort || deriveCdpPort()),
+        getBrowserTabs: async () => ({ tabs: await browser.listTabs(settings["browser"]?.cdpPort || deriveCdpPort()) }),
 
         // Employees
         resetEmployees: deps.resetEmployees
@@ -122,7 +124,7 @@ export function makeCommandCtx(
         resetSkills: async (mode: 'soft' | 'hard' = 'soft') => {
             const result = runSkillReset({
                 mode,
-                repairTargetDir: settings.workingDir,
+                repairTargetDir: settings["workingDir"],
                 includeClaude: true,
             });
             regenerateB();

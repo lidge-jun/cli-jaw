@@ -94,14 +94,14 @@ export function createExternalBrowserRuntime(port: number): BrowserRuntimeOwner 
 
 export function browserIdleTimeoutMs(): number {
     return parseBrowserRuntimeTimeout(
-        process.env.JAW_BROWSER_IDLE_TIMEOUT_MS,
+        process.env["JAW_BROWSER_IDLE_TIMEOUT_MS"],
         DEFAULT_IDLE_TIMEOUT_MS,
     );
 }
 
 export function browserReaperIntervalMs(): number {
     return parseBrowserRuntimeTimeout(
-        process.env.JAW_BROWSER_REAPER_INTERVAL_MS,
+        process.env["JAW_BROWSER_REAPER_INTERVAL_MS"],
         DEFAULT_REAPER_INTERVAL_MS,
     );
 }

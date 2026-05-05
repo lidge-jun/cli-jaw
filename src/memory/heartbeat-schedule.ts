@@ -100,14 +100,14 @@ export function normalizeHeartbeatTimeZone(value: unknown): string | undefined {
 
 export function normalizeHeartbeatSchedule(schedule: unknown): HeartbeatSchedule {
     const raw = (schedule && typeof schedule === 'object') ? schedule as Record<string, unknown> : {};
-    const timeZone = normalizeHeartbeatTimeZone(raw.timeZone);
-    if (raw.kind === 'cron') {
-        const cron = typeof raw.cron === 'string' && raw.cron.trim()
-            ? raw.cron.trim().replace(/\s+/g, ' ')
+    const timeZone = normalizeHeartbeatTimeZone(raw["timeZone"]);
+    if (raw["kind"] === 'cron') {
+        const cron = typeof raw["cron"] === 'string' && raw["cron"].trim()
+            ? raw["cron"].trim().replace(/\s+/g, ' ')
             : DEFAULT_HEARTBEAT_CRON;
         return timeZone ? { kind: 'cron', cron, timeZone } : { kind: 'cron', cron };
     }
-    const minutesValue = typeof raw.minutes === 'number' ? raw.minutes : Number(raw.minutes);
+    const minutesValue = typeof raw["minutes"] === 'number' ? raw["minutes"] : Number(raw["minutes"]);
     const minutes = Number.isFinite(minutesValue) && minutesValue > 0
         ? Math.max(1, Math.floor(minutesValue))
         : DEFAULT_HEARTBEAT_MINUTES;
@@ -116,9 +116,9 @@ export function normalizeHeartbeatSchedule(schedule: unknown): HeartbeatSchedule
 
 export function validateHeartbeatScheduleInput(schedule: unknown): HeartbeatScheduleValidationResult {
     const raw = (schedule && typeof schedule === 'object') ? schedule as Record<string, unknown> : {};
-    const rawKind = raw.kind;
-    const rawTimeZone = typeof raw.timeZone === 'string' ? raw.timeZone.trim() : '';
-    const timeZone = normalizeHeartbeatTimeZone(raw.timeZone);
+    const rawKind = raw["kind"];
+    const rawTimeZone = typeof raw["timeZone"] === 'string' ? raw["timeZone"].trim() : '';
+    const timeZone = normalizeHeartbeatTimeZone(raw["timeZone"]);
     if (rawTimeZone && !timeZone) {
         return {
             ok: false,
@@ -128,7 +128,7 @@ export function validateHeartbeatScheduleInput(schedule: unknown): HeartbeatSche
     }
 
     if (rawKind === 'cron') {
-        const cron = typeof raw.cron === 'string' ? raw.cron.trim().replace(/\s+/g, ' ') : '';
+        const cron = typeof raw["cron"] === 'string' ? raw["cron"].trim().replace(/\s+/g, ' ') : '';
         if (!cron) {
             return {
                 ok: false,
@@ -151,7 +151,7 @@ export function validateHeartbeatScheduleInput(schedule: unknown): HeartbeatSche
     }
 
     if (rawKind == null || rawKind === 'every') {
-        const minutesValue = typeof raw.minutes === 'number' ? raw.minutes : Number(raw.minutes);
+        const minutesValue = typeof raw["minutes"] === 'number' ? raw["minutes"] : Number(raw["minutes"]);
         if (!Number.isInteger(minutesValue) || minutesValue < 1) {
             return {
                 ok: false,

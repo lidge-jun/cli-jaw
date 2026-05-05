@@ -32,7 +32,7 @@ export function toJsonResult(
         excluded: result.excluded,
         warnings: result.warnings,
     };
-    if (options.full || options.includeComposerText) base.composerText = result.composerText;
+    if (options.full || options.includeComposerText) base["composerText"] = result.composerText;
     return base;
 }
 

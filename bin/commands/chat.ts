@@ -39,6 +39,7 @@ import { openPromptBlock } from './tui/renderer.js';
 import { redrawInputWithAutocomplete, handleResize } from './tui/overlays.js';
 import { handleKeyInput, flushPendingEscape } from './tui/input-handler.js';
 import { handleWsMessage } from './tui/ws-handler.js';
+import { asRecord, fieldString } from '../_http-client.js';
 
 // ─── Init ────────────────────────────────────
 const __filename = fileURLToPath(import.meta.url);
@@ -60,7 +61,7 @@ loadLocales(join(findPackageRoot(__dirname), 'public', 'locales'));
 const { values } = parseArgs({
     args: process.argv.slice(3),
     options: {
-        port: { type: 'string', default: process.env.PORT || '3457' },
+        port: { type: 'string', default: process.env["PORT"] || '3457' },
         raw: { type: 'boolean', default: false },
         simple: { type: 'boolean', default: false },
     },
@@ -71,9 +72,9 @@ const { values } = parseArgs({
 const wsUrl = getWsUrl(values.port as string);
 const apiUrl = getServerUrl(values.port as string);
 
-let ws: any;
+let ws: WebSocket;
 try {
-    ws = await new Promise((resolve, reject) => {
+    ws = await new Promise<WebSocket>((resolve, reject) => {
         const s = new WebSocket(wsUrl);
         s.on('open', () => resolve(s));
         s.on('error', reject);
@@ -91,18 +92,20 @@ let tuiConfig = { pasteCollapseLines: 2, pasteCollapseChars: 160, keymapPreset: 
 try {
     const r = await fetch(`${apiUrl}/api/settings`, { signal: AbortSignal.timeout(2000) });
     if (r.ok) {
-        const res = await r.json() as Record<string, any>;
-        const s = res.data || res;
-        const cli = s.cli || 'codex';
-        info = { cli, workingDir: s.workingDir || '~', model: s.perCli?.[cli]?.model || '' };
-        if (s.locale) runtimeLocale = s.locale;
-        if (s.tui && typeof s.tui === 'object') tuiConfig = { ...tuiConfig, ...s.tui };
+        const res = asRecord(await r.json());
+        const s = asRecord(res["data"] || res);
+        const cli = fieldString(s["cli"], 'codex');
+        const perCli = asRecord(s["perCli"]);
+        const cliSettings = asRecord(perCli[cli]);
+        info = { cli, workingDir: fieldString(s["workingDir"], '~'), model: fieldString(cliSettings["model"]) };
+        if (typeof s["locale"] === 'string') runtimeLocale = s["locale"];
+        if (s["tui"] && typeof s["tui"] === 'object') tuiConfig = { ...tuiConfig, ...asRecord(s["tui"]) };
     }
     const sr = await fetch(`${apiUrl}/api/session`, { signal: AbortSignal.timeout(2000) });
     if (sr.ok) {
-        const ses = await sr.json() as Record<string, any>;
-        const sd = ses.data || ses;
-        if (sd.model) info.model = sd.model;
+        const ses = asRecord(await sr.json());
+        const sd = asRecord(ses["data"] || ses);
+        if (typeof sd["model"] === 'string') info.model = sd["model"];
     }
 } catch { /* keep defaults */ }
 
@@ -219,7 +222,7 @@ if (values.simple) {
     });
 
     // ─── WS messages ─────────────────────────
-    ws.on('message', (data: WebSocket.Data) => handleWsMessage(ctx, data));
+    ws.on('message', (data: WebSocket.RawData) => handleWsMessage(ctx, data));
 
     ws.on('close', () => {
         cleanupScrollRegion(resolveShellLayout(process.stdout.columns || 80, getRows(), ctx.store.panes));

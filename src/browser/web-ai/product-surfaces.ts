@@ -21,7 +21,18 @@ export interface ProductSurfaceStatus {
     mutationAllowed: false;
 }
 
-export async function detectChatGptProductSurfaces(page: any): Promise<ProductSurfaceStatus[]> {
+interface SurfaceLocatorLike {
+    first(): {
+        isVisible(): Promise<boolean>;
+    };
+}
+
+interface ProductSurfacePageLike {
+    getByText?: (text: string, options: { exact: boolean }) => SurfaceLocatorLike;
+    locator(selector: string): SurfaceLocatorLike;
+}
+
+export async function detectChatGptProductSurfaces(page: ProductSurfacePageLike): Promise<ProductSurfaceStatus[]> {
     return [
         await detectByText(page, 'chatgpt-projects', ['Projects', 'New project']),
         await detectByText(page, 'chatgpt-library', ['Library', 'Add from library']),
@@ -35,7 +46,7 @@ export async function detectChatGptProductSurfaces(page: any): Promise<ProductSu
     ];
 }
 
-export async function detectGeminiProductSurfaces(page: any): Promise<ProductSurfaceStatus[]> {
+export async function detectGeminiProductSurfaces(page: ProductSurfacePageLike): Promise<ProductSurfaceStatus[]> {
     return [
         await detectByText(page, 'gemini-deep-research', ['Deep Research', 'Start research']),
         await detectBySelector(page, 'canvas', [
@@ -47,20 +58,21 @@ export async function detectGeminiProductSurfaces(page: any): Promise<ProductSur
 }
 
 async function detectByText(
-    page: any,
+    page: ProductSurfacePageLike,
     id: ProductSurfaceId,
     texts: string[],
 ): Promise<ProductSurfaceStatus> {
     const evidence: string[] = [];
     for (const text of texts) {
-        const found = await page.getByText?.(text, { exact: false }).first().isVisible().catch(() => false);
+        const locator = page.getByText?.(text, { exact: false });
+        const found = locator ? await locator.first().isVisible().catch(() => false) : false;
         if (found) evidence.push(text);
     }
     return { id, available: evidence.length > 0, evidence, mutationAllowed: false };
 }
 
 async function detectBySelector(
-    page: any,
+    page: ProductSurfacePageLike,
     id: ProductSurfaceId,
     selectors: string[],
 ): Promise<ProductSurfaceStatus> {

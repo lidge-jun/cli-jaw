@@ -1,10 +1,11 @@
 import { getArgumentCompletionItems, getCompletionItems } from '../commands.js';
+import type { OverlayItem } from '../types.js';
 
 export interface AutocompleteState {
     open: boolean;
     stage: string;
     contextHeader: string;
-    items: any[];
+    items: OverlayItem[];
     selected: number;
     windowStart: number;
     visibleRows: number;
@@ -17,7 +18,7 @@ export interface ResolvedAutocompleteState {
     open: boolean;
     stage?: string;
     contextHeader?: string;
-    items: any[];
+    items: OverlayItem[];
     selected: number;
     visibleRows: number;
 }
@@ -55,7 +56,7 @@ export function createAutocompleteState(): AutocompleteState {
     };
 }
 
-export function makeSelectionKey(item: any, stage: string): string {
+export function makeSelectionKey(item: OverlayItem | null | undefined, stage: string): string {
     if (!item) return '';
     const base = item.command ? `${item.command}:${item.name}` : item.name;
     return `${stage}:${base}`;
@@ -99,7 +100,7 @@ export function resolveAutocompleteState(options: ResolveAutocompleteOptions): R
     const firstSpace = body.indexOf(' ');
     let stage = 'command';
     let contextHeader = '';
-    let items: any[] = [];
+    let items: OverlayItem[] = [];
 
     if (firstSpace === -1) {
         items = getCommandItems(draft);
@@ -182,7 +183,7 @@ export function closeAutocomplete(state: AutocompleteState, write: (chunk: strin
 }
 
 export function formatAutocompleteLine(
-    item: any,
+    item: OverlayItem,
     selected: boolean,
     stage: string,
     options: Pick<RenderAutocompleteOptions, 'columns' | 'dimCode' | 'resetCode' | 'clipTextToCols'>,
@@ -215,8 +216,10 @@ export function renderAutocomplete(state: AutocompleteState, options: RenderAuto
 
     for (let i = start; i < end; i++) {
         const row = (i - start) + 1 + headerRows;
+        const item = state.items[i];
+        if (!item) continue;
         options.write(`\x1b[${row}B\r\x1b[2K`);
-        options.write(formatAutocompleteLine(state.items[i], i === state.selected, state.stage, options));
+        options.write(formatAutocompleteLine(item, i === state.selected, state.stage, options));
         options.write(`\x1b[${row}A`);
     }
 

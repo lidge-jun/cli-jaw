@@ -3,6 +3,7 @@
  */
 import type { TuiStore } from '../../../src/cli/tui/store.js';
 import type { IdeType } from '../../../src/ide/diff.js';
+import type WebSocket from 'ws';
 
 // ─── ANSI color codes ────────────────────────
 export const c = {
@@ -33,7 +34,7 @@ export function renderCommandText(text: string) {
 
 // ─── Shared state interface ──────────────────
 export interface TuiContext {
-    ws: any;
+    ws: WebSocket;
     apiUrl: string;
 
     info: { cli: string; workingDir: string; model: string };
@@ -41,7 +42,7 @@ export interface TuiContext {
     label: string;
     dir: string;
     runtimeLocale: string;
-    tuiConfig: { pasteCollapseLines: number; pasteCollapseChars: number; [k: string]: any };
+    tuiConfig: { pasteCollapseLines: number; pasteCollapseChars: number; [k: string]: unknown };
     values: { port: string; raw: boolean; simple: boolean };
     isRaw: boolean;
 

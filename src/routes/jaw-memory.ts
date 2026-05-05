@@ -1,5 +1,6 @@
 import type { Express } from 'express';
 import type { AuthMiddleware } from './types.js';
+import { httpStatus, httpCode } from './_http-error.js';
 import { assertMemoryRelPath } from '../security/path-guards.js';
 import * as memory from '../memory/memory.js';
 import { getMemoryStatus, searchIndexedMemory, readIndexedMemorySnippet, reflectMemory, hasSoulFile, loadSoulSummary, getAdvancedMemoryDir, safeReadFile, readMeta, writeMeta, listMemoryFiles, writeText } from '../memory/runtime.js';
@@ -7,6 +8,7 @@ import { ensureAdvancedMemoryStructure, scanSystemProfile } from '../memory/boot
 import { reindexSingleFile } from '../memory/indexing.js';
 import { getMemory } from '../core/db.js';
 import { settings, getServerUrl, JAW_HOME } from '../core/config.js';
+import { stripUndefined } from '../core/strip-undefined.js';
 import { broadcast } from '../core/bus.js';
 import { submitMessage } from '../orchestrator/gateway.js';
 import { buildSoulBootstrapPrompt } from '../prompt/soul-bootstrap-prompt.js';
@@ -64,7 +66,7 @@ function saveCanonicalSoul(content: string): string {
 export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddleware): void {
     app.get('/api/jaw-memory/search', (req, res) => {
         try {
-            const q = String(req.query.q || '');
+            const q = String(req.query["q"] || '');
             const mem = getMemoryStatus();
             res.json({ result: mem.routing.searchRead === 'advanced' ? searchIndexedMemory(q) : memory.search(q) });
         }
@@ -73,13 +75,13 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
 
     app.get('/api/jaw-memory/read', (req, res) => {
         try {
-            const file = assertMemoryRelPath(String(req.query.file || ''), { allowExt: ['.md', '.txt', '.json'] });
+            const file = assertMemoryRelPath(String(req.query["file"] || ''), { allowExt: ['.md', '.txt', '.json'] });
             const mem = getMemoryStatus();
             const content = mem.routing.searchRead === 'advanced'
-                ? readIndexedMemorySnippet(normalizeAdvancedReadPath(file), { lines: req.query.lines as any })
-                : memory.read(file, { lines: req.query.lines as any });
+                ? readIndexedMemorySnippet(normalizeAdvancedReadPath(file), stripUndefined({ lines: req.query["lines"] as string | undefined }))
+                : memory.read(file, stripUndefined({ lines: req.query["lines"] as string | undefined }));
             res.json({ content });
-        } catch (e: unknown) { res.status((e as any).statusCode || 500).json({ error: (e as Error).message }); }
+        } catch (e: unknown) { res.status(httpStatus(e, 500)).json({ error: (e as Error).message }); }
     });
 
     app.post('/api/jaw-memory/save', requireAuth, (req, res) => {
@@ -92,7 +94,7 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
             const payload = buildMemorySyncPayload('save');
             broadcastMemorySync('save');
             res.json({ ok: true, path: p, ...payload });
-        } catch (e: unknown) { res.status((e as any).statusCode || 500).json({ error: (e as Error).message }); }
+        } catch (e: unknown) { res.status(httpStatus(e, 500)).json({ error: (e as Error).message }); }
     });
 
     app.get('/api/jaw-memory/list', (_, res) => {
@@ -180,14 +182,14 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
                 writeMeta({
                     soulSynthesized: true,
                     soulSynthesizedAt: new Date().toISOString(),
-                    soulSynthesizedCli: settings.cli || 'unknown',
+                    soulSynthesizedCli: settings["cli"] || 'unknown',
                 });
             }
             if (!result.applied && req.body?.reason === 'soul-bootstrap' && hasSoulFile()) {
                 writeMeta({
                     soulSynthesized: true,
                     soulSynthesizedAt: new Date().toISOString(),
-                    soulSynthesizedCli: settings.cli || 'unknown',
+                    soulSynthesizedCli: settings["cli"] || 'unknown',
                 });
             }
             const payload = buildMemorySyncPayload(req.body?.reason === 'soul-bootstrap' ? 'soul_bootstrap' : 'soul_update');
@@ -202,7 +204,8 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
         try {
             const meta = readMeta();
             if (meta?.soulSynthesized) {
-                return res.json({ ok: false, reason: 'already_synthesized' });
+                res.json({ ok: false, reason: 'already_synthesized' });
+                return;
             }
 
             const root = getAdvancedMemoryDir();
@@ -210,7 +213,7 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
             const currentSoul = safeReadFile(join(root, 'shared', 'soul.md'));
             const profileContent = safeReadFile(join(root, 'profile.md'));
             const kvEntries = (getMemory.all() as { key: string; value: string }[]) || [];
-            const lang = settings.locale || req.body?.lang || 'en';
+            const lang = settings["locale"] || req.body?.lang || 'en';
 
             const prompt = buildSoulBootstrapPrompt({
                 systemProfile,
@@ -228,7 +231,8 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
             });
 
             if (result.action === 'rejected') {
-                return res.json({ ok: false, reason: result.reason || 'no_active_agent' });
+                res.json({ ok: false, reason: result.reason || 'no_active_agent' });
+                return;
             }
 
             res.json({ ok: true, action: result.action, requestId: result.requestId });

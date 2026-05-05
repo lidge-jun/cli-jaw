@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { readSource } from './source-normalize.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const pipelineSrc = fs.readFileSync(join(__dirname, '../../src/orchestrator/pipeline.ts'), 'utf8');
-const registrySrc = fs.readFileSync(join(__dirname, '../../src/orchestrator/worker-registry.ts'), 'utf8');
+const pipelineSrc = readSource(join(__dirname, '../../src/orchestrator/pipeline.ts'), 'utf8');
+const registrySrc = readSource(join(__dirname, '../../src/orchestrator/worker-registry.ts'), 'utf8');
 
 test('worker classification: pipeline marks non-done worker results as failures', () => {
     assert.ok(

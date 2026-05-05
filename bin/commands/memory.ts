@@ -4,21 +4,28 @@
 import { parseArgs } from 'node:util';
 import { getServerUrl, JAW_HOME, loadSettings } from '../../src/core/config.js';
 import { getCliAuthToken, authHeaders } from '../../src/cli/api-auth.js';
+import { asArray, asRecord, fieldString, type JsonRecord } from '../_http-client.js';
 
 loadSettings();
 const SERVER = getServerUrl();
 await getCliAuthToken();
 const sub = process.argv[3];
 
-async function api(method: string, path: string, body?: any) {
-    const opts: Record<string, any> = { method, headers: { ...authHeaders(), 'Content-Type': 'application/json' } };
+interface MemoryFileEntry {
+    path: string;
+    size: number;
+    modified: string;
+}
+
+async function api<T = JsonRecord>(method: string, path: string, body?: unknown): Promise<T> {
+    const opts: RequestInit = { method, headers: { ...authHeaders(), 'Content-Type': 'application/json' } };
     if (body) opts.body = JSON.stringify(body);
     const resp = await fetch(`${SERVER}/api/jaw-memory${path}`, opts);
     if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: resp.statusText })) as Record<string, any>;
-        throw new Error(err.error || `HTTP ${resp.status}`);
+        const err = asRecord(await resp.json().catch(() => ({ error: resp.statusText })));
+        throw new Error(fieldString(err["error"]) || `HTTP ${resp.status}`);
     }
-    return resp.json();
+    return await resp.json() as T;
 }
 
 try {
@@ -26,7 +33,7 @@ try {
         case 'search': {
             const query = process.argv.slice(4).join(' ');
             if (!query) { console.error('Usage: cli-jaw memory search <query>'); process.exit(1); }
-            const r = await api('GET', `/search?q=${encodeURIComponent(query)}`) as Record<string, any>;
+            const r = await api<{ result?: string }>('GET', `/search?q=${encodeURIComponent(query)}`);
             console.log(r.result);
             break;
         }
@@ -39,7 +46,7 @@ try {
             });
             const params = new URLSearchParams({ file });
             if (values.lines) params.set('lines', values.lines as string);
-            const r = await api('GET', `/read?${params}`) as Record<string, any>;
+            const r = await api<{ content?: string | null }>('GET', `/read?${params}`);
             if (r.content === null) console.error(`❌ File not found: ${file}`);
             else console.log(r.content);
             break;
@@ -57,16 +64,17 @@ try {
                 ].join('\n'));
                 process.exit(1);
             }
-            const r = await api('POST', '/save', { file, content }) as Record<string, any>;
+            const r = await api<{ path?: string }>('POST', '/save', { file, content });
             console.log(`✅ Saved to ${r.path}`);
             break;
         }
         case 'list': {
-            const r = await api('GET', '/list') as Record<string, any>;
-            if (r.files.length === 0) {
+            const r = await api<{ files?: MemoryFileEntry[] }>('GET', '/list');
+            const files = asArray<MemoryFileEntry>(r.files);
+            if (files.length === 0) {
                 console.log('(no memory files — run: cli-jaw memory init)');
             } else {
-                for (const f of r.files) {
+                for (const f of files) {
                     const kb = (f.size / 1024).toFixed(1);
                     console.log(`  ${f.path.padEnd(30)} ${kb} KB  ${f.modified.slice(0, 10)}`);
                 }
@@ -90,12 +98,12 @@ try {
             const r = await api('POST', '/reflect', {
                 sinceDays: Number(reflectValues.sinceDays) || 7,
                 dryRun: reflectValues.dryRun === true,
-            }) as Record<string, any>;
+            });
             console.log(JSON.stringify(r, null, 2));
             break;
         }
         case 'flush': {
-            const r = await api('POST', '/flush', {}) as Record<string, any>;
+            const r = await api<{ message?: string }>('POST', '/flush', {});
             console.log(`🧠 ${r.message || 'Memory flush triggered'}`);
             break;
         }
@@ -105,8 +113,8 @@ try {
                 options: { days: { type: 'string', default: '90' } },
                 strict: false,
             });
-            const r = await api('POST', '/cleanup', { retentionDays: parseInt(cleanupValues.days as string || '90') }) as Record<string, any>;
-            console.log(`🧠 Archived ${(r as any).moved ?? 0} episodes`);
+            const r = await api<{ moved?: number }>('POST', '/cleanup', { retentionDays: parseInt(cleanupValues.days as string || '90') });
+            console.log(`🧠 Archived ${r.moved ?? 0} episodes`);
             break;
         }
         default:

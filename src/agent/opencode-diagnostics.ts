@@ -2,6 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import { spawnSync } from 'child_process';
 import { join } from 'path';
+import { stripUndefined } from '../core/strip-undefined.js';
 
 const DEFAULT_RAW_EVENT_LIMIT = 100;
 const PERMISSION_KEYS = [
@@ -62,11 +63,11 @@ export function readOpencodePermissionSummary(
         const raw = fs.readFileSync(configPath, 'utf8').trim();
         if (!raw) return {};
         const parsed: unknown = JSON.parse(raw);
-        if (!isPlainObject(parsed) || !isPlainObject(parsed.permission)) return {};
+        if (!isPlainObject(parsed) || !isPlainObject(parsed["permission"])) return {};
         const summary: Partial<OpencodePermissionSummary> = {};
         for (const key of PERMISSION_KEYS) {
-            if (Object.prototype.hasOwnProperty.call(parsed.permission, key)) {
-                summary[key] = parsed.permission[key];
+            if (Object.prototype.hasOwnProperty.call(parsed["permission"], key)) {
+                summary[key] = parsed["permission"][key];
             }
         }
         return summary;
@@ -120,7 +121,7 @@ export function buildOpencodeSpawnAudit(input: {
         version: readOpencodeVersion(binary, input.env),
         cwd: input.cwd,
         argsPreview: redactOpencodeArgs(input.args),
-        pathHead: splitPathHead(input.env.PATH),
+        pathHead: splitPathHead(input.env["PATH"]),
         permission: readOpencodePermissionSummary(input.configPath),
     };
 }
@@ -143,7 +144,7 @@ export function buildOpencodeRuntimeSnapshot(ctx: {
     opencodeLastEventType?: string;
     opencodeLastEventAt?: number;
 }): OpencodeRuntimeSnapshot {
-    return {
+    return stripUndefined({
         lastEventType: ctx.opencodeLastEventType,
         lastEventAt: ctx.opencodeLastEventAt,
         finishReason: ctx.finishReason,
@@ -151,5 +152,5 @@ export function buildOpencodeRuntimeSnapshot(ctx: {
         pendingPostToolTextChars: (ctx.opencodePostToolText || '').length,
         pendingToolRefs: ctx.opencodePendingToolRefs?.length || 0,
         rawEventCount: ctx.opencodeRawEvents?.length || 0,
-    };
+    });
 }

@@ -25,7 +25,7 @@ function isAvatarTarget(value: string): value is AvatarTarget {
 }
 
 function ensureAvatarSettings(): Record<AvatarTarget, AvatarEntry> {
-    const current = settings.avatar || {};
+    const current = settings["avatar"] || {};
     const next = {
         agent: {
             imagePath: String(current.agent?.imagePath || ''),
@@ -36,7 +36,7 @@ function ensureAvatarSettings(): Record<AvatarTarget, AvatarEntry> {
             updatedAt: current.user?.updatedAt == null ? null : Number(current.user.updatedAt),
         },
     };
-    settings.avatar = next;
+    settings["avatar"] = next;
     return next;
 }
 
@@ -105,7 +105,7 @@ export function registerAvatarRoutes(app: Express, requireAuth: AuthMiddleware):
     });
 
     app.post('/api/avatar/:target/upload', requireAuth, express.raw({ type: ['image/*', 'application/octet-stream'], limit: '5mb' }), (req, res) => {
-        const target = parseTarget(String(req.params.target || ''));
+        const target = parseTarget(String(req.params["target"] || ''));
         if (!target) return fail(res, 400, 'invalid_avatar_target');
 
         try {
@@ -125,7 +125,7 @@ export function registerAvatarRoutes(app: Express, requireAuth: AuthMiddleware):
     });
 
     app.delete('/api/avatar/:target/image', requireAuth, (req, res) => {
-        const target = parseTarget(String(req.params.target || ''));
+        const target = parseTarget(String(req.params["target"] || ''));
         if (!target) return fail(res, 400, 'invalid_avatar_target');
         resetAvatarImage(target);
         return ok(res, serializeAvatar(target));

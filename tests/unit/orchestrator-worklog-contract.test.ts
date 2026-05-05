@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readSource } from './source-normalize.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..');
-const pipelineSrc = readFileSync(join(projectRoot, 'src/orchestrator/pipeline.ts'), 'utf8');
-const distributeSrc = readFileSync(join(projectRoot, 'src/orchestrator/distribute.ts'), 'utf8');
+const pipelineSrc = readSource(join(projectRoot, 'src/orchestrator/pipeline.ts'), 'utf8');
+const distributeSrc = readSource(join(projectRoot, 'src/orchestrator/distribute.ts'), 'utf8');
 
 test('OWC-001: pipeline imports createWorklog and resolves worklog seed', () => {
     assert.ok(pipelineSrc.includes('createWorklog'));

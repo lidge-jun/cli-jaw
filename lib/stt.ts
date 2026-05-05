@@ -17,11 +17,11 @@ export interface SttResult {
 const DEFAULT_STT_PROMPT_PATH = 'prompts/stt-system.md';
 
 function getSttSettings() {
-    const stt = settings.stt || {};
+    const stt = settings["stt"] || {};
     return {
         engine: stt.engine || 'auto',
-        geminiApiKey: stt.geminiApiKey || process.env.GEMINI_API_KEY || '',
-        geminiModel: stt.geminiModel || process.env.GEMINI_STT_MODEL || 'gemini-2.5-flash-lite',
+        geminiApiKey: stt.geminiApiKey || process.env["GEMINI_API_KEY"] || '',
+        geminiModel: stt.geminiModel || process.env["GEMINI_STT_MODEL"] || 'gemini-2.5-flash-lite',
         promptPath: stt.promptPath || DEFAULT_STT_PROMPT_PATH,
         whisperModel: stt.whisperModel || 'mlx-community/whisper-large-v3-turbo',
         openaiBaseUrl: stt.openaiBaseUrl || '',
@@ -221,11 +221,11 @@ export async function transcribeVoice(audioPath: string, mimeType = 'audio/ogg')
     }
     if (engine === 'gemini' || (engine === 'auto' && geminiApiKey)) {
         try { return await sttGemini(audioPath, mimeType); }
-        catch (e: any) {
+        catch (e: unknown) {
             if (engine === 'gemini') throw e;
-            console.warn('[stt] Gemini failed, trying whisper:', e.message);
+            console.warn('[stt] Gemini failed, trying whisper:', (e as Error).message);
         }
     }
     try { return await sttWhisper(audioPath); }
-    catch (e: any) { throw new Error(`STT failed: ${e.message}`); }
+    catch (e: unknown) { throw new Error(`STT failed: ${(e as Error).message}`); }
 }

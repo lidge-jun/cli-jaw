@@ -54,8 +54,25 @@ Options:
 // Ensure home dir
 fs.mkdirSync(JAW_HOME, { recursive: true });
 
+interface InitSettings {
+    workingDir?: string;
+    cli?: string;
+    telegram?: { enabled?: boolean; token?: string; allowedChatIds?: unknown[] };
+    discord?: {
+        enabled?: boolean;
+        token?: string;
+        guildId?: string;
+        channelIds?: unknown[];
+        forwardAll?: boolean;
+        allowBots?: boolean;
+    };
+    skillsDir?: string;
+    channel?: string;
+    [k: string]: unknown;
+}
+
 // Load existing settings — fail if exists and no --force
-let settings: Record<string, any> = {};
+let settings: InitSettings = {};
 const settingsExist = fs.existsSync(SETTINGS_PATH);
 if (settingsExist && !values.force) {
     console.error('  ❌ settings.json already exists. Use --force to overwrite.');
@@ -74,10 +91,10 @@ const ask = (q: string, def: string): Promise<string> => new Promise(r => {
 console.log('\n  🦈 cli-jaw 초기 설정\n');
 
 // Collect
-const workingDir = values['working-dir'] ||
-    await ask('Working directory', settings.workingDir || JAW_HOME);
-const cli = values.cli ||
-    await ask('CLI (claude/codex/gemini)', settings.cli || 'claude');
+const workingDir = String(values['working-dir'] ||
+    await ask('Working directory', settings.workingDir || JAW_HOME));
+const cli = String(values.cli ||
+    await ask('CLI (claude/codex/gemini)', settings.cli || 'claude'));
 
 // Channel selection
 const channelFlag = values.channel as string | undefined;
@@ -110,7 +127,7 @@ let dcEnabled = false, dcToken = '', dcGuildId = '', dcChannelIds: string[] = []
 if (values['non-interactive']) {
     if (values['discord-token']) {
         dcToken = values['discord-token'] as string;
-        dcGuildId = values['discord-guild-id'] || '';
+        dcGuildId = String(values['discord-guild-id'] || '');
         dcChannelIds = ((values['discord-channel-ids'] || '') as string).split(',').map(s => s.trim()).filter(Boolean);
         dcEnabled = true;
     }
@@ -149,8 +166,8 @@ if (dcEnabled) {
 }
 
 // Skills dir
-const skillsDir = values['skills-dir'] ||
-    await ask('Skills directory', settings.skillsDir || path.join(JAW_HOME, 'skills'));
+const skillsDir = String(values['skills-dir'] ||
+    await ask('Skills directory', settings.skillsDir || path.join(JAW_HOME, 'skills')));
 
 rl.close();
 
@@ -162,10 +179,10 @@ if (!channelFlag) {
 }
 
 // Merge (preserve existing values unless --force)
-const merged: Record<string, any> = values.force ? {} : { ...settings };
+const merged: InitSettings = values.force ? {} : { ...settings };
 merged.workingDir = workingDir;
 merged.cli = cli;
-merged.permissions = 'auto';
+merged["permissions"] = 'auto';
 merged.skillsDir = skillsDir;
 merged.channel = activeChannel;
 if (tgEnabled || values.force) {

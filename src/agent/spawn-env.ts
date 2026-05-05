@@ -30,7 +30,7 @@ function prependPathDir(
     inheritedEnv: NodeJS.ProcessEnv,
     dir: string,
 ): Record<string, string> {
-    const currentPath = extraEnv.PATH ?? inheritedEnv.PATH ?? '';
+    const currentPath = extraEnv["PATH"] ?? inheritedEnv["PATH"] ?? '';
     const parts = currentPath.split(':').filter(Boolean).filter(part => part !== dir);
     return {
         ...extraEnv,
@@ -58,8 +58,8 @@ export function applyCliEnvDefaults(
 
     if (cli !== 'opencode') return extraEnv;
     const withPath = prependPathDir(extraEnv, inheritedEnv, getOpencodePreferredBinDir());
-    if (withPath.OPENCODE_ENABLE_EXA !== undefined) return withPath;
-    if (inheritedEnv.OPENCODE_ENABLE_EXA !== undefined) return withPath;
+    if (withPath["OPENCODE_ENABLE_EXA"] !== undefined) return withPath;
+    if (inheritedEnv["OPENCODE_ENABLE_EXA"] !== undefined) return withPath;
     return {
         ...withPath,
         OPENCODE_ENABLE_EXA: 'true',
@@ -76,7 +76,7 @@ export function buildSessionResumeKey(
     env: Record<string, string | undefined>,
 ): string | null {
     if (cli !== 'opencode') return null;
-    return `exa=${isTruthyEnv(env.OPENCODE_ENABLE_EXA) ? '1' : '0'}`;
+    return `exa=${isTruthyEnv(env["OPENCODE_ENABLE_EXA"]) ? '1' : '0'}`;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -85,13 +85,13 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 export function withOpencodeAlwaysAllowPermissions(config: unknown): Record<string, unknown> {
     const next = isPlainObject(config) ? { ...config } : {};
-    if (typeof next.$schema !== 'string') next.$schema = OPENCODE_CONFIG_SCHEMA;
+    if (typeof next["$schema"] !== 'string') next["$schema"] = OPENCODE_CONFIG_SCHEMA;
 
-    const permission = isPlainObject(next.permission) ? { ...next.permission } : {};
+    const permission = isPlainObject(next["permission"]) ? { ...next["permission"] } : {};
     for (const key of OPENCODE_ALLOW_PERMISSIONS) {
         permission[key] = 'allow';
     }
-    next.permission = permission;
+    next["permission"] = permission;
     return next;
 }
 

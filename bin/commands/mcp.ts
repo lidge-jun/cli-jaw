@@ -17,6 +17,7 @@ import { execSync, execFileSync } from 'node:child_process';
 import { readFileSync, existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { JAW_HOME } from '../../src/core/config.js';
+import { asArray, asRecord, fieldString } from '../_http-client.js';
 
 // ─── lib imports (Single Source of Truth) ────
 import {
@@ -207,10 +208,12 @@ switch (sub) {
             console.log(`  ${c.dim}(none)${c.reset}`);
         } else {
             for (const [name, srv] of entries) {
-                const s = srv as Record<string, any>;
-                const cmd = s.args?.length
-                    ? `${s.command} ${s.args.join(' ')}`
-                    : s.command;
+                const s = asRecord(srv);
+                const args = asArray<string>(s["args"]);
+                const command = fieldString(s["command"]);
+                const cmd = args.length
+                    ? `${command} ${args.join(' ')}`
+                    : command;
                 console.log(`  ${c.cyan}•${c.reset} ${c.bold}${name}${c.reset}  ${c.dim}${cmd}${c.reset}`);
             }
         }

@@ -11,12 +11,17 @@ import {
     CODEX_ACTIVE, OPENCLAW_ACTIVE,
     copyDirRecursive, findPackageRoot,
 } from './skills-utils.js';
+
+type SkillRegistry = {
+    skills?: Record<string, { category?: string }>;
+};
 import {
     ensureWorkingDirSkillsLinks,
     createBackupContext,
     movePathToBackup,
 } from './skills-symlinks.js';
 import { copyDefaultSkills } from './skills-distribution.js';
+import { stripUndefined } from '../../src/core/strip-undefined.js';
 
 // ─── Types ─────────────────────────────────────────
 
@@ -119,8 +124,8 @@ export function softResetSkills() {
     try {
         const regPath = join(refDir, 'registry.json');
         if (fs.existsSync(regPath)) {
-            const reg = JSON.parse(fs.readFileSync(regPath, 'utf8'));
-            for (const [id, meta] of Object.entries(reg.skills || {}) as [string, any][]) {
+            const reg = JSON.parse(fs.readFileSync(regPath, 'utf8')) as SkillRegistry;
+            for (const [id, meta] of Object.entries(reg.skills || {})) {
                 if (meta.category === 'orchestration') autoActivate.add(id);
             }
         }
@@ -213,13 +218,13 @@ export function repairManagedSkillLinksAfterReset(
         _jawHome: jawHome,
     });
 
-    const symlinks = ensureWorkingDirSkillsLinks(repairTargetDir, {
+    const symlinks = ensureWorkingDirSkillsLinks(repairTargetDir, stripUndefined({
         onConflict: 'skip',
         includeClaude: opts.includeClaude ?? true,
         allowReplaceManaged: true,
         _homedir: opts._homedir,
         _jawHome: jawHome,
-    });
+    }));
 
     return { symlinks, repairedPaths };
 }
@@ -242,13 +247,11 @@ export function runSkillReset(options: {
         return { mode, ...resetResult };
     }
 
-    const repair = repairManagedSkillLinksAfterReset(options.repairTargetDir, {
+    const repair = repairManagedSkillLinksAfterReset(options.repairTargetDir, stripUndefined({
         includeClaude: options.includeClaude ?? true,
         _homedir: options._homedir,
         _jawHome: options._jawHome,
-    });
+    }));
 
     return { mode, ...resetResult, ...repair };
 }
-
-

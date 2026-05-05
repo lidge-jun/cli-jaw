@@ -54,6 +54,20 @@ test('Notes API and create actions surface backend/fallback failures without unc
     assert.ok(model.includes('Promise.all'), 'notes model must refresh tree and index together');
     assert.ok(model.includes('requestIdRef'), 'notes model must prevent stale refreshes from overwriting newer state');
     assert.ok(model.includes("useInvalidationSubscription('notes'"), 'notes model must refresh from notes invalidations');
+    assert.ok(model.includes('const selectedPathRef = useRef(options.selectedPath)'),
+        'notes model must keep selectedPath in a ref so refresh identity is not tied to render-local props');
+    assert.ok(model.includes('selectedPathRef.current = options.selectedPath'),
+        'notes model must update selectedPathRef each render');
+    assert.ok(model.includes('const onSelectedPathChangeRef = useRef(options.onSelectedPathChange)'),
+        'notes model must keep onSelectedPathChange in a ref so App inline callbacks do not trigger refresh loops');
+    assert.ok(model.includes('onSelectedPathChangeRef.current = options.onSelectedPathChange'),
+        'notes model must update onSelectedPathChangeRef each render');
+    assert.ok(model.includes('onSelectedPathChangeRef.current(nextSelected)'),
+        'notes model must clear stale selected paths through the latest selection callback');
+    const refreshDeps = model.match(/const refresh = useCallback\([\s\S]*?\}, \[(.*?)\]\);/);
+    assert.ok(refreshDeps, 'notes model must expose refresh through useCallback');
+    assert.equal(refreshDeps[1].trim(), '',
+        'notes refresh callback must be stable; selectedPath and inline App callbacks must not retrigger the initial refresh effect every render');
     assert.equal(sidebar.includes('fetchNotesTree'), false, 'notes sidebar must not independently fetch the tree');
     assert.ok(sidebar.includes('async function createNote()'), 'notes sidebar must own create note action');
     assert.ok(sidebar.includes('async function createFolder()'), 'notes sidebar must own create folder action');
@@ -72,7 +86,7 @@ test('Notes API and create actions surface backend/fallback failures without unc
     assert.ok(sidebar.includes('void createNote()'),
         'notes create shortcut must reuse the existing file-path create flow');
     assert.ok(model.includes('function hasFile('), 'notes model must verify registry-selected note paths against the current tree');
-    assert.ok(model.includes('options.onSelectedPathChange(nextSelected)'), 'notes model must clear stale selected paths when the tree does not contain them');
+    assert.ok(model.includes('onSelectedPathChangeRef.current(nextSelected)'), 'notes model must clear stale selected paths when the tree does not contain them');
     assert.ok(sidebar.includes('selectedFolderPath'), 'notes sidebar must track the selected folder for nested note/folder creation');
     assert.ok(sidebar.includes('createNoteFolder(name)'), 'notes sidebar must call the folder creation API');
     assert.ok(sidebar.includes('renameNotePath'), 'notes sidebar must use notes rename API for drag-to-folder moves');

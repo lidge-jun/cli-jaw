@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { JAW_HOME } from '../../core/config.js';
-import { domHashAround, selectorMatchSummary } from './dom-hash.js';
+import { domHashAround, selectorMatchSummary, type PageWithLocator } from './dom-hash.js';
 import { listSessions } from './session.js';
 import { CHATGPT_COPY_SELECTORS, GEMINI_COPY_SELECTORS, GROK_COPY_SELECTORS } from './copy-markdown.js';
 import { CHATGPT_MODEL_SELECTOR_BUTTONS } from './chatgpt-model.js';
@@ -9,7 +9,9 @@ import { buildWebAiSnapshot, summarizeSnapshotForDoctor } from './ax-snapshot.js
 import { observeProviderTargets } from './observe-targets.js';
 import { editorContractForVendor } from './vendor-editor-contract.js';
 import { reportCacheMetricsFromEvents } from './cache-metrics.js';
-import type { WebAiSessionRecord } from './types.js';
+import type { WebAiSessionRecord, WebAiVendor } from './types.js';
+import type { AxSnapshotPageLike } from './ax-snapshot.js';
+import type { ObserveTargetsPageLike } from './observe-targets.js';
 
 const CHATGPT_FEATURES = [
     { feature: 'composer', selectors: ['#prompt-textarea', '[data-testid="composer-textarea"]', 'div[contenteditable="true"]'] },
@@ -85,8 +87,18 @@ export interface DoctorReport {
 }
 
 export interface DoctorDeps {
-    getPage: () => Promise<any>;
+    getPage: () => Promise<DoctorPageLike>;
 }
+
+type DoctorPageLike = PageWithLocator & AxSnapshotPageLike & ObserveTargetsPageLike & {
+    url: () => string | Promise<string>;
+};
+
+type DoctorSessionView = WebAiSessionRecord & {
+    deadlineAt?: string | null;
+    composerBefore?: string | null;
+    composerAfter?: string | null;
+};
 
 export function featureDefinitionsForVendor(vendor: string): FeatureDefinition[] {
     const deepCopy = (f: FeatureDefinition) => ({ ...f, selectors: [...f.selectors] });
@@ -98,7 +110,7 @@ export function featureDefinitionsForVendor(vendor: string): FeatureDefinition[]
     }
 }
 
-export async function diagnoseFeature(page: any, feature: FeatureDefinition, options: { maxChars?: number } = {}): Promise<FeatureDiagnosis> {
+export async function diagnoseFeature(page: PageWithLocator, feature: FeatureDefinition, options: { maxChars?: number } = {}): Promise<FeatureDiagnosis> {
     const matches = await selectorMatchSummary(page, feature.selectors);
     const anyVisible = matches.some(m => m.visible);
     const anyMatched = matches.some(m => m.matched > 0);
@@ -116,7 +128,7 @@ export async function diagnoseFeature(page: any, feature: FeatureDefinition, opt
 export async function runDoctor(deps: DoctorDeps, options: DoctorOptions = {}): Promise<DoctorReport> {
     const page = await deps.getPage();
     const vendor = options.vendor || 'chatgpt';
-    const url = await page.url();
+    const url = String(await page.url() || '');
     const warnings: string[] = [];
 
     const allowedHosts = PROVIDER_HOSTS[vendor];
@@ -199,7 +211,8 @@ function redactUrl(url: string): string | null {
 }
 
 function findActiveSession(input: { vendor: string; conversationUrl: string }): WebAiSessionRecord | null {
-    const sessions = listSessions({ vendor: input.vendor as any });
+    const vendor = parseDoctorVendor(input.vendor);
+    const sessions = vendor ? listSessions({ vendor }) : listSessions();
     const activeStatuses = new Set(['sent', 'streaming']);
     for (let i = sessions.length - 1; i >= 0; i--) {
         const s = sessions[i]!;
@@ -211,14 +224,18 @@ function findActiveSession(input: { vendor: string; conversationUrl: string }): 
 }
 
 function summarizeSessionForDoctor(session: WebAiSessionRecord): Record<string, unknown> {
-    const anySession = session as any;
+    const sessionView = session as DoctorSessionView;
     return {
         sessionId: session.sessionId,
         status: session.status,
-        deadlineAt: anySession.deadlineAt || null,
-        composerBeforeChars: anySession.composerBefore?.length ?? null,
-        composerAfterChars: anySession.composerAfter?.length ?? null,
+        deadlineAt: sessionView.deadlineAt || null,
+        composerBeforeChars: sessionView.composerBefore?.length ?? null,
+        composerAfterChars: sessionView.composerAfter?.length ?? null,
     };
+}
+
+function parseDoctorVendor(vendor: string): WebAiVendor | null {
+    return vendor === 'chatgpt' || vendor === 'gemini' || vendor === 'grok' ? vendor : null;
 }
 
 function sanitizeObservedTargetsForDoctor(observed: Record<string, Array<Record<string, unknown>>> = {}): Record<string, Array<Record<string, unknown>>> {

@@ -31,6 +31,15 @@ export interface AnnotatedScreenshotPageLike {
     };
 }
 
+type BrowserRectLike = { x: number; y: number; width: number; height: number };
+type BrowserElementWithRect = { getBoundingClientRect(): BrowserRectLike };
+type BrowserDocumentWithRefs = {
+    querySelector(selector: string): BrowserElementWithRect | null;
+};
+type BrowserGlobalWithDocument = typeof globalThis & {
+    document: BrowserDocumentWithRefs;
+};
+
 export async function buildAnnotatedScreenshot(
     page: AnnotatedScreenshotPageLike,
     {
@@ -90,11 +99,12 @@ export async function buildAnnotatedScreenshot(
 async function resolveHighlightBoxes(page: AnnotatedScreenshotPageLike, refs: string[]): Promise<Array<{ x: number; y: number; width: number; height: number }>> {
     if (!refs.length) return [];
     return page.evaluate((refList: string[]) => {
+        const browserGlobal = globalThis as BrowserGlobalWithDocument;
         const boxes: Array<{ x: number; y: number; width: number; height: number }> = [];
         for (const ref of refList) {
-            const el = (globalThis as any).document.querySelector(`[data-web-ai-ref="${ref}"]`);
+            const el = browserGlobal.document.querySelector(`[data-web-ai-ref="${ref}"]`);
             if (!el) continue;
-            const rect = (el as any).getBoundingClientRect();
+            const rect = el.getBoundingClientRect();
             boxes.push({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
         }
         return boxes;
