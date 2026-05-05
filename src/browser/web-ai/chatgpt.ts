@@ -50,10 +50,22 @@ import { appendTraceToSession, type TracePersistableValue } from './trace-persis
 import type {
     QuestionEnvelopeInput,
     WebAiOutput,
+    WebAiSessionRecord,
+    WebAiSessionStatus,
     WebAiVendor,
 } from './types.js';
+import type { Page } from 'playwright-core';
 
-declare const document: any;
+type TextNodeLike = { innerText?: string; textContent?: string | null };
+declare const document: { querySelectorAll(selector: string): Iterable<TextNodeLike> };
+
+type SessionPageContext = {
+    page: Page;
+    targetId: string;
+    session: WebAiSessionRecord;
+};
+type BoundCommandInput = { vendor?: string; session?: string; [key: string]: unknown };
+type BoundCommandHandler = (port: number, input: BoundCommandInput) => Promise<WebAiOutput>;
 
 const CHATGPT_HOSTS = new Set(['chatgpt.com', 'chat.openai.com']);
 const ASSISTANT_SELECTORS = [
@@ -110,7 +122,7 @@ export async function status(port: number, input: { vendor?: string; probe?: str
         const active = await requireVerifiedChatGptTab(port, vendor);
         inner = { ok: true, vendor: 'chatgpt', status: 'ready', url: active.url, warnings: [] };
     }
-    const allRows = listCapabilitySchemas({ vendor: vendor as any });
+    const allRows = listCapabilitySchemas({ vendor });
     const rows = input.probe
         ? allRows.filter((row: { capabilityId: string }) => row.capabilityId === input.probe)
         : allRows;
@@ -120,7 +132,7 @@ export async function status(port: number, input: { vendor?: string; probe?: str
     } as WebAiOutput;
 }
 
-async function ensureProviderTab(port: number, input: QuestionEnvelopeInput): Promise<{ page: any; targetId: string }> {
+async function ensureProviderTab(port: number, input: QuestionEnvelopeInput): Promise<{ page: Page; targetId: string }> {
     const reuseTab = input.reuseTab === true || process.env.JAW_REUSE_TAB === '1';
     if (reuseTab) {
         const active = await requireVerifiedChatGptTab(port, input.vendor);
@@ -175,14 +187,14 @@ async function findReusableChatGptTab(port: number): Promise<BrowserTabInfo | nu
         .sort((a, b) => (Number(b.lastActiveAt) || 0) - (Number(a.lastActiveAt) || 0))[0] || null;
 }
 
-function isReusableByLease(targetId: string, leaseByTargetId: Map<string, any>): boolean {
+function isReusableByLease(targetId: string, leaseByTargetId: Map<string, Awaited<ReturnType<typeof listLeases>>[number]>): boolean {
     const lease = leaseByTargetId.get(targetId);
     if (!lease) return true;
     return ['cli-jaw', 'web-ai'].includes(lease.owner) &&
         ['pooled', 'completed-session'].includes(lease.state);
 }
 
-async function withSessionPage(port: number, sessionId: string, fn: (ctx: { page: any; targetId: string; session: any }) => Promise<any>): Promise<any> {
+async function withSessionPage<T>(port: number, sessionId: string, fn: (ctx: SessionPageContext) => Promise<T>): Promise<T> {
     const session = getSession(sessionId);
     if (!session) throw new Error(`Session not found: ${sessionId}`);
     async function resolvePage(forceRecover = false) {
@@ -203,8 +215,8 @@ async function withSessionPage(port: number, sessionId: string, fn: (ctx: { page
     const first = await resolvePage();
     try {
         return await fn(first);
-    } catch (err: any) {
-        const msg = String(err?.message || err || '').toLowerCase();
+    } catch (err: unknown) {
+        const msg = errorMessage(err).toLowerCase();
         const isPageDeath = msg.includes('target closed') || msg.includes('page closed') || msg.includes('browser has been closed') || msg.includes('crash');
         if (!isPageDeath) throw err;
         const recovered = await resolvePage(true);
@@ -212,12 +224,13 @@ async function withSessionPage(port: number, sessionId: string, fn: (ctx: { page
     }
 }
 
-async function runBoundCommand(port: number, command: string, input: any, pollFn: any, stopFn: any): Promise<any> {
+async function runBoundCommand(port: number, command: string, input: BoundCommandInput, pollFn: BoundCommandHandler, stopFn: BoundCommandHandler): Promise<WebAiOutput> {
     if (['poll', 'stop'].includes(command) && input.session) {
-        return withSessionCommandLock(input.session, async () => {
-            return withSessionPage(port, input.session, async ({ page, targetId, session }) => {
-                if (command === 'poll') return pollFn(port, { ...input, vendor: session.vendor, session: session.sessionId });
-                if (command === 'stop') return stopFn(port, { ...input, vendor: session.vendor, session: session.sessionId });
+        const sessionId = input.session;
+        return withSessionCommandLock(sessionId, async () => {
+            return withSessionPage(port, sessionId, async ({ session }) => {
+                const boundInput = { ...input, vendor: session.vendor, session: session.sessionId };
+                return command === 'poll' ? pollFn(port, boundInput) : stopFn(port, boundInput);
             });
         });
     }
@@ -394,7 +407,7 @@ export async function poll(port: number, input: {
         }
     }
 
-    let page: any;
+    let page: Page;
     let targetId: string;
     let session = input.session ? getSession(input.session) : null;
 
@@ -617,7 +630,7 @@ export function watchers(): WebAiOutput {
         ok: true,
         vendor: 'chatgpt',
         status: 'ready',
-        watchers: listActiveWebAiWatchers() as any,
+        watchers: listActiveWebAiWatchers(),
         warnings: [],
     } as WebAiOutput;
 }
@@ -634,14 +647,14 @@ export function resumeStoredWatchers(port: number, input: { vendor?: string; pol
         ok: true,
         vendor: vendor || 'chatgpt',
         status: 'ready',
-        watchers: resumed as any,
+        watchers: resumed,
         warnings: resumed.length ? [`resumed ${resumed.length} web-ai watcher(s)`] : [],
     } as WebAiOutput;
 }
 
 export async function sessions(input: { vendor?: string; status?: string } = {}): Promise<WebAiOutput> {
     const vendor = input.vendor ? parseVendor(input.vendor) : undefined;
-    const status = input.status as any;
+    const status = parseSessionStatus(input.status);
     return {
         ok: true,
         vendor: vendor || 'chatgpt',
@@ -656,7 +669,7 @@ export async function sessionsPrune(input: { olderThanMs?: number | string; befo
     const result = pruneSessions({
         ...(typeof ms === 'number' && Number.isFinite(ms) ? { olderThanMs: ms } : {}),
         ...(input.before ? { before: input.before } : {}),
-        ...(input.status ? { status: input.status as any } : {}),
+        ...(parseSessionStatus(input.status) ? { status: parseSessionStatus(input.status) } : {}),
     });
     return {
         ok: true,
@@ -676,7 +689,7 @@ export async function stop(port: number, input: { vendor?: string; session?: str
         try { return await grokStop(port); } catch (e) { throw stageError(e, 'send-click'); }
     }
 
-    let page: any;
+    let page: Page;
     let targetId: string;
     let session = input.session ? getSession(input.session) : null;
 
@@ -737,6 +750,17 @@ function parseVendor(vendor?: string): WebAiVendor {
     });
 }
 
+function parseSessionStatus(status?: string): WebAiSessionStatus | undefined {
+    if (status === 'sent' || status === 'streaming' || status === 'complete' || status === 'timeout' || status === 'error') {
+        return status;
+    }
+    return undefined;
+}
+
+function errorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error ?? '');
+}
+
 async function requireVerifiedChatGptTab(port: number, vendor?: string): Promise<BrowserTabInfo> {
     const parsed = parseVendor(vendor);
     if (parsed === 'gemini') {
@@ -771,17 +795,17 @@ async function navigateRequestedConversation(port: number, url: string | undefin
     }
 }
 
-async function requireActivePage(port: number): Promise<any> {
+async function requireActivePage(port: number): Promise<Page> {
     const page = await getActivePage(port);
     if (!page) throw new Error('No active page');
     return page;
 }
 
-async function countAssistantMessages(page: any): Promise<number> {
+async function countAssistantMessages(page: Page): Promise<number> {
     return (await readAssistantMessages(page)).length;
 }
 
-async function waitForStableAssistantCount(page: any, timeoutMs = 8_000): Promise<void> {
+async function waitForStableAssistantCount(page: Page, timeoutMs = 8_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
     let previous = -1;
     let stableReads = 0;
@@ -795,11 +819,11 @@ async function waitForStableAssistantCount(page: any, timeoutMs = 8_000): Promis
     }
 }
 
-async function readAssistantMessages(page: any): Promise<string[]> {
+async function readAssistantMessages(page: Page): Promise<string[]> {
     const evaluated = await page.evaluate?.((selectors: readonly string[]) => {
         for (const selector of selectors) {
             const texts = Array.from(document.querySelectorAll(selector))
-                .map((el: any) => String(el.innerText || el.textContent || '').trim())
+                .map((el: TextNodeLike) => String(el.innerText || el.textContent || '').trim())
                 .filter(Boolean);
             if (texts.length) return texts;
         }

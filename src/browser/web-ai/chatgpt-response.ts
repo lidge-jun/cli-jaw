@@ -14,8 +14,7 @@ import { resolveActionTarget } from './self-heal.js';
 import { createTraceContext, getSessionTrace, recordTraceStep } from './action-trace.js';
 import type { ResolveActionTargetResult, TargetCandidate } from './self-heal.js';
 import type { TraceContext, TraceStep } from './action-trace.js';
-
-declare const document: any;
+import type { Locator, Page } from 'playwright-core';
 
 export const ASSISTANT_TURN_SELECTORS = [
     '[data-message-author-role="assistant"]',
@@ -89,7 +88,7 @@ export interface CaptureOptions {
     pollIntervalMs?: number;
 }
 
-export async function readAssistantSnapshot(page: any, minTurnIndex: number, promptText = ''): Promise<AssistantSnapshot> {
+export async function readAssistantSnapshot(page: Page, minTurnIndex: number, promptText = ''): Promise<AssistantSnapshot> {
     const allTexts = await readAssistantTexts(page);
     const streaming = await isStreaming(page);
     const canvasOpened = await isCanvasOpened(page);
@@ -103,7 +102,7 @@ export async function readAssistantSnapshot(page: any, minTurnIndex: number, pro
     };
 }
 
-async function readAssistantTexts(page: any): Promise<string[]> {
+async function readAssistantTexts(page: Page): Promise<string[]> {
     const baseline = await captureTextBaseline(page, ASSISTANT_TURN_SELECTORS);
     if (baseline.texts.length) return baseline.texts.map(normalizeAssistantText).filter(Boolean);
 
@@ -120,7 +119,7 @@ async function readAssistantTexts(page: any): Promise<string[]> {
     return allTexts;
 }
 
-export async function captureAssistantResponse(page: any, options: CaptureOptions): Promise<ResponseCaptureResult> {
+export async function captureAssistantResponse(page: Page, options: CaptureOptions): Promise<ResponseCaptureResult> {
     const transcript = new ActionTranscript();
     const resolverTrace = createTraceContext('chatgpt-response');
     const stableWindowMs = Math.max(250, options.stableWindowMs ?? 1500);
@@ -179,7 +178,7 @@ export async function captureAssistantResponse(page: any, options: CaptureOption
     return withResolverTrace({ ok: false, answerText: stableText, usedFallbacks: transcript.usedFallbacks, warnings: transcript.warnings }, resolverTrace);
 }
 
-async function resolveOptionalChatGptCopyTarget(page: any, traceCtx: TraceContext): Promise<{ selector?: string | null } | null> {
+async function resolveOptionalChatGptCopyTarget(page: Page, traceCtx: TraceContext): Promise<{ selector?: string | null } | null> {
     try {
         const result = await resolveActionTarget(page, {
             provider: 'chatgpt',
@@ -259,7 +258,7 @@ function pickLatestRealAnswer(texts: string[], promptText: string): string | und
     return undefined;
 }
 
-async function isStreaming(page: any): Promise<boolean> {
+async function isStreaming(page: Page): Promise<boolean> {
     for (const selector of STOP_BUTTON_SELECTORS) {
         try {
             if (await page.locator(selector).first().isVisible().catch(() => false)) return true;
@@ -270,7 +269,7 @@ async function isStreaming(page: any): Promise<boolean> {
     return false;
 }
 
-async function isCanvasOpened(page: any): Promise<boolean> {
+async function isCanvasOpened(page: Page): Promise<boolean> {
     for (const selector of CANVAS_SELECTORS) {
         try {
             if (await page.locator(selector).first().isVisible().catch(() => false)) return true;
@@ -281,7 +280,7 @@ async function isCanvasOpened(page: any): Promise<boolean> {
     return false;
 }
 
-async function safeAll(page: any, selector: string): Promise<any[]> {
+async function safeAll(page: Page, selector: string): Promise<Locator[]> {
     try { return await page.locator(selector).all(); }
     catch { return []; }
 }

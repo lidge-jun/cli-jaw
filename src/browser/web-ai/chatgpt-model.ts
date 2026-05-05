@@ -1,6 +1,14 @@
 import type { Page } from 'playwright-core';
 
-declare const document: any;
+type BoxLike = { x: number; y: number; width: number; height: number };
+type BrowserNodeLike = {
+    innerText?: string;
+    textContent?: string | null;
+    getBoundingClientRect(): BoxLike;
+    getAttribute?(name: string): string | null;
+};
+
+declare const document: { querySelectorAll(selector: string): Iterable<BrowserNodeLike> };
 
 export type ChatGptModelChoice = 'instant' | 'thinking' | 'pro';
 export type ChatGptEffortChoice = 'light' | 'standard' | 'extended' | 'heavy';
@@ -104,9 +112,10 @@ export function normalizeChatGptEffortChoice(effort: string | undefined): ChatGp
 }
 
 export function isChatGptEffortSupported(model: string | undefined, effort: string | undefined): boolean {
-    const requestedModel = normalizeChatGptModelChoice(model) || model;
-    const requestedEffort = normalizeChatGptEffortChoice(effort) || effort;
-    return Boolean((CHATGPT_MODEL_EFFORT_OPTIONS as Record<string, any>)[String(requestedModel)]?.efforts?.[String(requestedEffort)]);
+    const requestedModel = normalizeChatGptModelChoice(model);
+    const requestedEffort = normalizeChatGptEffortChoice(effort);
+    if ((requestedModel !== 'thinking' && requestedModel !== 'pro') || !requestedEffort) return false;
+    return Boolean(CHATGPT_MODEL_EFFORT_OPTIONS[requestedModel].efforts[requestedEffort]);
 }
 
 export async function selectChatGptModel(page: Page, model: string | undefined, options: { effort?: string; reasoningEffort?: string } = {}): Promise<ChatGptModelSelectionResult | null> {
@@ -363,16 +372,16 @@ async function dismissEffortMenuAndReopenModel(page: Page, usedFallbacks: string
 async function findEffortTriggerBoxNearModelRow(page: Page, model: ChatGptModelChoice): Promise<{ x: number; y: number; width: number; height: number } | null> {
     const labels = CHATGPT_MODEL_OPTIONS[model]?.labels || [];
     return page.evaluate(({ expectedLabels, modelChoice, triggerSelectors }: { expectedLabels: string[]; modelChoice: ChatGptModelChoice; triggerSelectors: readonly string[] }) => {
-        const rows = Array.from(document.querySelectorAll('[role="menuitemradio"][data-testid^="model-switcher-"], [role="menuitemradio"]')) as any[];
+        const rows = Array.from(document.querySelectorAll('[role="menuitemradio"][data-testid^="model-switcher-"], [role="menuitemradio"]'));
         const row = rows.find((candidate) => {
             const text = (candidate.innerText || candidate.textContent || '').trim();
             return matchesModelText(text, modelChoice, expectedLabels);
         });
         if (!row) return null;
         const rowRect = row.getBoundingClientRect();
-        const selectorButtons = Array.from(document.querySelectorAll(triggerSelectors.join(','))) as any[];
-        const textButtons = Array.from(document.querySelectorAll('button, [role="button"], [role="menuitem"]') as any)
-            .filter((candidate: any) => /^(Effort|Reasoning effort)$/i.test((candidate.innerText || candidate.textContent || '').trim()));
+        const selectorButtons = Array.from(document.querySelectorAll(triggerSelectors.join(',')));
+        const textButtons = Array.from(document.querySelectorAll('button, [role="button"], [role="menuitem"]'))
+            .filter((candidate: BrowserNodeLike) => /^(Effort|Reasoning effort)$/i.test((candidate.innerText || candidate.textContent || '').trim()));
         const effortButtons = [...selectorButtons, ...textButtons];
         const button = effortButtons.find((candidate) => {
             const rect = candidate.getBoundingClientRect();
@@ -421,7 +430,7 @@ async function isEffortMenuOpen(page: Page, model: ChatGptModelChoice, options: 
         .filter((label): label is string => Boolean(label) && !labels.includes(label));
     return page.locator('[role="menu"]').evaluateAll((menus, { expectedLabels, requiredLabels, unexpectedLabels, modelChoice, allowUnlabeled }: { expectedLabels: string[]; requiredLabels: string[]; unexpectedLabels: string[]; modelChoice: ChatGptModelChoice; allowUnlabeled: boolean }) => {
         return menus.some(menu => {
-            const text = (menu as any).innerText || menu.textContent || '';
+            const text = (menu as BrowserNodeLike).innerText || menu.textContent || '';
             if (!menuTextMatchesModel(text, modelChoice, allowUnlabeled)) return false;
             const unexpectedMatches = unexpectedLabels.filter(label => new RegExp(`(^|\\s)${label}(\\s|$)`, 'i').test(text));
             if (unexpectedMatches.length > 0) return false;
@@ -530,7 +539,7 @@ async function readActiveEffortPill(page: Page): Promise<string> {
 async function isModelMenuOpen(page: Page): Promise<boolean> {
     return page.locator(CHATGPT_MODEL_MENU_ITEM_SELECTOR)
         .filter({ hasText: CHATGPT_MODEL_TEXT_BUTTON_PATTERN })
-        .evaluateAll((items: any[]) => items.some((item: any) => {
+        .evaluateAll((items: BrowserNodeLike[]) => items.some((item: BrowserNodeLike) => {
             const text = (item.innerText || item.textContent || '').trim();
             const testId = item.getAttribute?.('data-testid') || '';
             if (!text) return false;

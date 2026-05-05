@@ -6,7 +6,7 @@ import { join } from 'node:path';
 test('STATUS-CAP-001: src/browser/web-ai/chatgpt.ts status() embeds capabilities[] from listCapabilitySchemas', () => {
     const src = readFileSync(join(process.cwd(), 'src/browser/web-ai/chatgpt.ts'), 'utf8');
     assert.match(src, /import \{ listCapabilitySchemas \} from '\.\/capability-registry\.js'/);
-    assert.match(src, /allRows = listCapabilitySchemas\(\{ vendor: vendor as any \}\)/);
+    assert.match(src, /allRows = listCapabilitySchemas\(\{ vendor \}\)/);
     assert.match(src, /input\.probe\s*\?\s*allRows\.filter/);
     assert.match(src, /capabilities: rows/);
 });

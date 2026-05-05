@@ -1,14 +1,62 @@
 import type { PromptCommitBaseline, PromptCommitResult, PromptSubmitResult, VendorEditorAdapterOptions } from './vendor-editor-contract.js';
-import { findVisibleCandidate } from '../primitives.js';
+import { findVisibleCandidate, type BrowserLocatorLike } from '../primitives.js';
+import type { Page } from 'playwright-core';
 
-declare const document: any;
-declare const window: any;
-declare const PointerEvent: any;
-declare const MouseEvent: any;
-declare const InputEvent: any;
-declare const Event: any;
-declare const HTMLTextAreaElement: any;
-declare const HTMLInputElement: any;
+type BoxLike = { width: number; height: number };
+type StyleLike = { display?: string; visibility?: string; opacity?: string; pointerEvents?: string };
+type EventLike = unknown;
+type EventInitLike = {
+    bubbles?: boolean;
+    cancelable?: boolean;
+    view?: WindowLike;
+    pointerId?: number;
+    pointerType?: string;
+    inputType?: string;
+    data?: string;
+};
+type BrowserNodeLike = {
+    value?: string;
+    textContent?: string | null;
+    innerText?: string;
+    dispatchEvent?(event: EventLike): boolean;
+    focus?(): void;
+    getBoundingClientRect?(): BoxLike;
+    closest?(selector: string): BrowserNodeLike | null;
+    parentElement?: BrowserNodeLike | null;
+    querySelectorAll?(selector: string): Iterable<BrowserNodeLike>;
+    hasAttribute?(name: string): boolean;
+    getAttribute?(name: string): string | null;
+    ownerDocument?: {
+        getSelection?(): {
+            removeAllRanges(): void;
+            addRange(range: unknown): void;
+        } | null;
+        createRange?(): {
+            selectNodeContents(node: BrowserNodeLike): void;
+            collapse(toStart?: boolean): void;
+        };
+    };
+};
+type DocumentLike = BrowserNodeLike & {
+    querySelector(selector: string): BrowserNodeLike | null;
+    querySelectorAll(selector: string): Iterable<BrowserNodeLike>;
+};
+type WindowLike = {
+    getComputedStyle?(node: BrowserNodeLike): StyleLike | null;
+};
+type ComposerLocator = BrowserLocatorLike & {
+    click(): Promise<void>;
+    evaluate<T, A = unknown>(fn: (node: BrowserNodeLike, arg: A) => T | Promise<T>, arg?: A): Promise<T>;
+    inputValue?(): Promise<string>;
+    innerText?(): Promise<string>;
+};
+
+declare const document: DocumentLike;
+declare const window: WindowLike;
+declare const PointerEvent: new (type: string, init?: EventInitLike) => EventLike;
+declare const MouseEvent: new (type: string, init?: EventInitLike) => EventLike;
+declare const InputEvent: new (type: string, init?: EventInitLike) => EventLike;
+declare const Event: new (type: string, init?: EventInitLike) => EventLike;
 
 export const INPUT_SELECTORS = [
     'textarea[data-id="prompt-textarea"]',
@@ -56,16 +104,16 @@ type ComposerState = {
 
 type ComposerCandidate = {
     selector: string;
-    locator: any; // Playwright Locator shape from playwright-core; kept local to avoid public API exposure.
+    locator: ComposerLocator;
 };
 
-export async function findComposerCandidate(page: any): Promise<ComposerCandidate> {
+export async function findComposerCandidate(page: Page): Promise<ComposerCandidate> {
     const candidate = await findVisibleCandidate(page, INPUT_SELECTORS, { allowFirstCandidateFallback: true });
-    if (candidate) return { selector: candidate.selector, locator: candidate.locator };
+    if (candidate) return { selector: candidate.selector, locator: candidate.locator as ComposerLocator };
     throw new Error(`ChatGPT composer not found. Tried: ${INPUT_SELECTORS.join(', ')}`);
 }
 
-export async function insertPromptIntoComposer(page: any, text: string, options: VendorEditorAdapterOptions = {}): Promise<void> {
+export async function insertPromptIntoComposer(page: Page, text: string, options: VendorEditorAdapterOptions = {}): Promise<void> {
     const candidate = await findComposerCandidate(page);
     await focusComposerLikeUser(candidate.locator);
     try {
@@ -88,7 +136,7 @@ export async function insertPromptIntoComposer(page: any, text: string, options:
     }
 }
 
-export async function submitPromptFromComposer(page: any): Promise<PromptSubmitResult> {
+export async function submitPromptFromComposer(page: Page): Promise<PromptSubmitResult> {
     const clicked = await clickEnabledSendButton(page);
     if (clicked) return { method: 'button' };
     await page.keyboard.press('Enter');
@@ -96,7 +144,7 @@ export async function submitPromptFromComposer(page: any): Promise<PromptSubmitR
 }
 
 export async function verifyPromptCommitted(
-    page: any,
+    page: Page,
     prompt: string,
     options: PromptCommitBaseline & { timeoutMs?: number } = {},
 ): Promise<PromptCommitResult> {
@@ -124,20 +172,20 @@ export async function verifyPromptCommitted(
     throw new Error('Prompt did not appear in conversation before timeout (send may have failed)');
 }
 
-export async function countConversationTurns(page: any): Promise<number> {
+export async function countConversationTurns(page: Page): Promise<number> {
     return (await readConversationTurns(page)).length;
 }
 
-async function focusComposerLikeUser(locator: any): Promise<void> {
+async function focusComposerLikeUser(locator: ComposerLocator): Promise<void> {
     await locator.click().catch(() => undefined);
-    await locator.evaluate?.((node: any) => {
+    await locator.evaluate?.((node: BrowserNodeLike) => {
         const types = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
         for (const type of types) {
             const common = { bubbles: true, cancelable: true, view: window };
             const event = type.startsWith('pointer') && 'PointerEvent' in window
                 ? new PointerEvent(type, { ...common, pointerId: 1, pointerType: 'mouse' })
                 : new MouseEvent(type, common);
-            node.dispatchEvent(event);
+            node.dispatchEvent?.(event);
         }
         if (typeof node.focus === 'function') node.focus();
         const selection = node.ownerDocument?.getSelection?.();
@@ -151,7 +199,7 @@ async function focusComposerLikeUser(locator: any): Promise<void> {
     }).catch(() => undefined);
 }
 
-async function insertTextLikeProvider(page: any, text: string, options: VendorEditorAdapterOptions = {}): Promise<void> {
+async function insertTextLikeProvider(page: Page, text: string, options: VendorEditorAdapterOptions = {}): Promise<void> {
     if (typeof options.insertText === 'function') {
         await options.insertText(text);
         return;
@@ -159,19 +207,19 @@ async function insertTextLikeProvider(page: any, text: string, options: VendorEd
     await page.keyboard.insertText(text);
 }
 
-async function writeComposerFallback(page: any, locator: any, text: string): Promise<void> {
+async function writeComposerFallback(page: Page, locator: ComposerLocator, text: string): Promise<void> {
     if (typeof page.evaluate === 'function') {
         const wrote = await page.evaluate(({ selectors, value }: { selectors: readonly string[]; value: string }) => {
-            const write = (node: any): boolean => {
+            const write = (node: BrowserNodeLike | null): boolean => {
                 if (!node) return false;
-                if ('value' in node) {
+                if ('value' in node && typeof node.value !== 'undefined') {
                     node.value = value;
-                    node.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: value }));
-                    node.dispatchEvent(new Event('change', { bubbles: true }));
+                    node.dispatchEvent?.(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: value }));
+                    node.dispatchEvent?.(new Event('change', { bubbles: true }));
                     return true;
                 }
                 node.textContent = value;
-                node.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: value }));
+                node.dispatchEvent?.(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: value }));
                 return true;
             };
             let wroteAny = false;
@@ -185,27 +233,27 @@ async function writeComposerFallback(page: any, locator: any, text: string): Pro
         }, { selectors: INPUT_SELECTORS, value: text }).catch(() => false);
         if (wrote) return;
     }
-    await locator.evaluate((node: any, value: string) => {
-        if ('value' in node) {
+    await locator.evaluate((node: BrowserNodeLike, value: string) => {
+        if ('value' in node && typeof node.value !== 'undefined') {
             node.value = value;
-            node.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: value }));
-            node.dispatchEvent(new Event('change', { bubbles: true }));
+            node.dispatchEvent?.(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: value }));
+            node.dispatchEvent?.(new Event('change', { bubbles: true }));
             return;
         }
         node.textContent = value;
-        node.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: value }));
+        node.dispatchEvent?.(new InputEvent('input', { bubbles: true, inputType: 'insertFromPaste', data: value }));
     }, text);
 }
 
-async function readComposerState(page: any, fallbackLocator?: any): Promise<ComposerState> {
+async function readComposerState(page: Page, fallbackLocator?: ComposerLocator): Promise<ComposerState> {
     if (typeof page.evaluate === 'function') {
         const value = await page.evaluate((selectors: readonly string[]) => {
-            const read = (node: any): string => {
+            const read = (node: BrowserNodeLike | null): string => {
                 if (!node) return '';
-                if (node instanceof HTMLTextAreaElement || node instanceof HTMLInputElement) return node.value || '';
+                if (typeof node.value === 'string') return node.value || '';
                 return node.innerText || node.textContent || '';
             };
-            const isVisible = (node: any): boolean => {
+            const isVisible = (node: BrowserNodeLike | null): boolean => {
                 if (!node || typeof node.getBoundingClientRect !== 'function') return false;
                 const rect = node.getBoundingClientRect();
                 return rect.width > 0 && rect.height > 0;
@@ -228,12 +276,12 @@ async function readComposerState(page: any, fallbackLocator?: any): Promise<Comp
     return { editorText: String(actual || ''), fallbackValue: '', activeValue: String(actual || '') };
 }
 
-async function clickEnabledSendButton(page: any): Promise<boolean> {
+async function clickEnabledSendButton(page: Page): Promise<boolean> {
     const deadline = Date.now() + 8_000;
     while (Date.now() < deadline) {
         const result = await page.evaluate(({ inputSelectors, sendSelectors }: { inputSelectors: readonly string[]; sendSelectors: readonly string[] }) => {
-            const dispatchClickSequence = (target: any): boolean => {
-                if (!target || !(target instanceof EventTarget)) return false;
+            const dispatchClickSequence = (target: BrowserNodeLike | null): boolean => {
+                if (!target || typeof target.dispatchEvent !== 'function') return false;
                 for (const type of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) {
                     const common = { bubbles: true, cancelable: true, view: window };
                     const event = type.startsWith('pointer') && 'PointerEvent' in window
@@ -243,7 +291,7 @@ async function clickEnabledSendButton(page: any): Promise<boolean> {
                 }
                 return true;
             };
-            const isVisible = (node: any): boolean => {
+            const isVisible = (node: BrowserNodeLike | null): boolean => {
                 if (!node || typeof node.getBoundingClientRect !== 'function') return false;
                 const rect = node.getBoundingClientRect();
                 if (rect.width <= 0 || rect.height <= 0) return false;
@@ -258,12 +306,12 @@ async function clickEnabledSendButton(page: any): Promise<boolean> {
                 promptNode?.parentElement ??
                 document;
             const candidates = [
-                ...sendSelectors.flatMap(selector => Array.from(root.querySelectorAll(selector))),
+                ...sendSelectors.flatMap(selector => Array.from(root.querySelectorAll?.(selector) ?? [])),
                 ...sendSelectors.flatMap(selector => Array.from(document.querySelectorAll(selector))),
             ];
-            const seen = new Set();
+            const seen = new Set<BrowserNodeLike>();
             for (const rawButton of candidates) {
-                const button: any = rawButton;
+                const button = rawButton;
                 if (!button || seen.has(button)) continue;
                 seen.add(button);
                 const style = window.getComputedStyle?.(button);
@@ -286,7 +334,7 @@ async function clickEnabledSendButton(page: any): Promise<boolean> {
     return false;
 }
 
-async function readConversationTurns(page: any): Promise<string[]> {
+async function readConversationTurns(page: Page): Promise<string[]> {
     const locators = await page.locator(CONVERSATION_TURN_SELECTOR).all().catch(() => []);
     const turns: string[] = [];
     for (const locator of locators) {
@@ -296,7 +344,7 @@ async function readConversationTurns(page: any): Promise<string[]> {
     return turns;
 }
 
-async function locatorExists(page: any, selector: string): Promise<boolean> {
+async function locatorExists(page: Page, selector: string): Promise<boolean> {
     return (await page.locator(selector).first().count().catch(() => 0)) > 0;
 }
 
