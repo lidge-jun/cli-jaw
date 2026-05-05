@@ -179,11 +179,11 @@ cli-jaw/
 │   │   ├── forwarder.ts      ← Discord 포워딩 헬퍼 (escape, chunk) (45L)
 │   │   └── discord-file.ts   ← Discord 파일 전송 (56L)
 │   ├── browser/              ← Chrome CDP 제어 + web-ai 자동화
-│   │   ├── connection.ts     ← Chrome 탐지/launch/CDP 연결 + readiness polling + retry + headless + **activePort/active-tab 상태 관리** (697L)
+│   │   ├── connection.ts     ← Chrome 탐지/launch/CDP 연결 + readiness polling + retry + headless + **activePort/active-tab 상태 관리** (724L)
 │   │   ├── launch-policy.ts  ← browser start mode 정규화 + agent/debug/manual launch policy (51L)
 │   │   ├── actions.ts        ← snapshot/click/type/navigate/screenshot + browser primitive actions (394L)
 │   │   ├── vision.ts         ← vision-click 파이프라인 + Codex provider + guardrail options (171L)
-│   │   ├── index.ts          ← re-export hub (29L)
+│   │   ├── index.ts          ← re-export hub (33L)
 │   │   └── web-ai/           ← Web AI 브라우저 자동화 (57 files, 10238L; ChatGPT/Gemini/Grok 멀티벤더 + context-pack + tab lifecycle/pool)
 │   │       ├── index.ts      ← web-ai barrel hub (32L)
 │   │       ├── types.ts      ← WebAiVendor, WebAiStatus, QuestionEnvelope, WebAiSessionRecord, WebAiOutput 등 핵심 타입 (136L)
@@ -258,7 +258,7 @@ cli-jaw/
 │   │   ├── messaging.ts      ← upload/file-open/voice/telegram/channel/discord send 라우트 (222L)
 │   │   ├── avatar.ts         ← Agent/User 아바타 이미지 업로드/서빙/삭제 + settings.json 메타 저장 + safeResolveUnder 경로 보호 (146L)
 │   │   ├── quota.ts          ← Copilot/Claude/Codex/Gemini/OpenCode quota helper readers + Claude 429 cache (`settings.ts`/`server.ts`에서 사용) (344L)
-│   │   └── browser.ts        ← 브라우저 API 라우트 + `cdpPort(req)` 포트 우선순위 + primitive/tab/debug/web-ai routes (399L)
+│   │   └── browser.ts        ← 브라우저 API 라우트 + `cdpPort(req)` 포트 우선순위 + primitive/tab/debug/web-ai routes (428L)
 │   ├── security/             ← 보안 입력 검증 (3 files)
 │   │   ├── path-guards.ts    ← assertSkillId, assertFilename, assertMemoryRelPath, assertSendFilePath, safeResolveUnder (112L)
 │   │   ├── decode.ts         ← decodeFilenameSafe (21L)
@@ -273,7 +273,7 @@ cli-jaw/
 │       ├── catalog.ts        ← COMMANDS → capability map 확장 (43L)
 │       ├── policy.ts         ← getVisibleCommands, getTelegramMenuCommands (39L)
 │       └── help-renderer.ts  ← renderHelp list/detail mode (44L)
-├── public/                   ← Web UI (Vite 8 + ES Modules, 404 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 455 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~56554L)
+├── public/                   ← Web UI (Vite 8 + ES Modules, 405 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 455 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~56772L)
 │   ├── index.html            ← 뼈대 (875L, CLI-JAW 대문자 로고, pill theme switch, data-i18n, 로컬 avatar 입력)
 │   ├── manifest.json         ← PWA 매니페스트 (20L) ✨
 │   ├── sw.js                 ← Service Worker 오프라인 캐시 (104L) ✨

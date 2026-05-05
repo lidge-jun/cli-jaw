@@ -1,0 +1,200 @@
+#!/usr/bin/env node
+// @file scripts/check-strict-baseline.mjs
+// Strict-migration regression gate (AST-aware).
+//
+// Per R2.2 (devlog/_plan/strict-migration/07-pro-review-r2.md), this scanner
+// uses the TypeScript Compiler API to walk source files and count AST nodes
+// of kind `AnyKeyword` plus any-typed `TypeReference` (Array<any>, Promise<any>,
+// Record<string, any>, etc.). Comments and string literals are automatically
+// ignored because they are not type-position AST nodes.
+//
+// Two markers per R2.2.1:
+//   @strict-debt(P##)        — temporary, must be cleared by phase P##
+//   @strict-allow-any(<reason>) — permanently allowed, counted separately
+//
+// Reads docs/migration/strict-baseline.md for frozen counts and exits 1 if
+// any tracked directory's live count exceeds the baseline.
+
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
+
+const REPO_ROOT = process.env.STRICT_BASELINE_ROOT || fileURLToPath(new URL('..', import.meta.url));
+const BASELINE_PATH = join(REPO_ROOT, 'docs/migration/strict-baseline.md');
+
+const TRACKED_DIRS = ['src', 'bin', 'lib', 'public/manager/src', 'types'];
+const EXCLUDE_DIR_NAMES = new Set([
+    'node_modules', 'dist', 'build', '.git', 'coverage', '__snapshots__',
+]);
+
+function* walk(dir) {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); }
+    catch { return; }
+    for (const e of entries) {
+        if (EXCLUDE_DIR_NAMES.has(e.name)) continue;
+        const full = join(dir, e.name);
+        if (e.isDirectory()) yield* walk(full);
+        else if (e.isFile() && (full.endsWith('.ts') || full.endsWith('.tsx'))) yield full;
+    }
+}
+
+const ANY_TYPE_REF_NAMES = new Set([
+    'Array', 'Promise', 'Record', 'ReadonlyArray', 'Map', 'Set', 'Partial',
+    'Required', 'Readonly', 'Pick', 'Omit', 'ReadonlyMap', 'ReadonlySet',
+]);
+
+function isAnyKeyword(node) {
+    return ts.isToken(node) && node.kind === ts.SyntaxKind.AnyKeyword;
+}
+
+// Detect type reference whose own type-arguments include `any`, e.g. Record<string, any>.
+function typeArgsContainAny(node) {
+    if (!ts.isTypeReferenceNode(node)) return false;
+    const args = node.typeArguments;
+    if (!args || args.length === 0) return false;
+    return args.some((a) => a.kind === ts.SyntaxKind.AnyKeyword);
+}
+
+function leadingMarkerOnLine(src, pos) {
+    // Look back to the start of the line that contains `pos`, then look at
+    // the lines immediately before for `// @strict-debt(...)` or
+    // `// @strict-allow-any(...)`. Allow up to 3 lines of preceding context.
+    const before = src.slice(0, pos);
+    const idx = before.lastIndexOf('\n');
+    const lineStart = idx + 1;
+    const lineText = src.slice(lineStart, src.indexOf('\n', pos) >= 0 ? src.indexOf('\n', pos) : src.length);
+
+    if (/@strict-(debt|allow-any)\b/.test(lineText)) {
+        return /@strict-debt\b/.test(lineText) ? 'debt' : 'allow';
+    }
+
+    // check up to 3 lines above (whitespace-only between also fine)
+    let cursor = lineStart;
+    for (let i = 0; i < 3; i++) {
+        if (cursor <= 0) break;
+        const prevEnd = cursor - 1;
+        const prevStart = src.lastIndexOf('\n', prevEnd - 1) + 1;
+        const prev = src.slice(prevStart, prevEnd);
+        if (/@strict-debt\b/.test(prev)) return 'debt';
+        if (/@strict-allow-any\b/.test(prev)) return 'allow';
+        if (prev.trim() !== '' && !/^\s*\/\//.test(prev)) break;
+        cursor = prevStart;
+    }
+    return null;
+}
+
+function scanFile(file) {
+    const src = readFileSync(file, 'utf8');
+    const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, /*setParentNodes*/ true, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+    let any = 0;
+    let debt = 0;
+    let allow = 0;
+
+    function visit(node) {
+        let isAny = false;
+        if (isAnyKeyword(node)) isAny = true;
+        else if (typeArgsContainAny(node)) {
+            // type argument scan handled by visiting the children; here we
+            // do nothing extra — each `any` token will be hit by isAnyKeyword
+            // through the child visit. But we still want to make sure we
+            // count the keyword once even within a TypeReference.
+            isAny = false;
+        }
+        if (isAny) {
+            const marker = leadingMarkerOnLine(src, node.getStart(sf));
+            if (marker === 'debt') debt++;
+            else if (marker === 'allow') allow++;
+            else any++;
+        }
+        ts.forEachChild(node, visit);
+    }
+    visit(sf);
+    return { any, debt, allow };
+}
+
+function countDir(absDir) {
+    const result = { any: 0, debt: 0, allow: 0 };
+    let exists = true;
+    try { statSync(absDir); } catch { exists = false; }
+    if (!exists) return result;
+    for (const file of walk(absDir)) {
+        const r = scanFile(file);
+        result.any += r.any;
+        result.debt += r.debt;
+        result.allow += r.allow;
+    }
+    return result;
+}
+
+function parseBaseline(text) {
+    const lines = text.split(/\r?\n/);
+    const start = lines.findIndex((l) => /^##\s+any-shapes baseline\b/i.test(l));
+    if (start < 0) throw new Error('baseline section "## any-shapes baseline" not found');
+    const out = {};
+    for (let i = start + 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (line.startsWith('## ')) break;
+        if (!line.startsWith('|')) continue;
+        if (/^\|[\s\-:|]+\|$/.test(line)) continue;
+        const cells = line.split('|').slice(1, -1).map((c) => c.trim());
+        if (cells.length !== 4) continue;
+        if (cells[0].toLowerCase() === 'dir') continue;
+        const [dir, any, debt, allow] = cells;
+        out[dir] = { any: Number(any), debt: Number(debt), allow: Number(allow) };
+    }
+    if (Object.keys(out).length === 0) {
+        throw new Error('baseline table parsed empty — check column count and separator');
+    }
+    return out;
+}
+
+function fmt(dir, c) { return `| ${dir} | ${c.any} | ${c.debt} | ${c.allow} |`; }
+
+function main() {
+    const baselineText = readFileSync(BASELINE_PATH, 'utf8');
+    const baseline = parseBaseline(baselineText);
+
+    const live = {};
+    for (const dir of TRACKED_DIRS) live[dir] = countDir(join(REPO_ROOT, dir));
+
+    const regressions = [];
+    for (const dir of TRACKED_DIRS) {
+        const b = baseline[dir];
+        const l = live[dir];
+        if (!b) { regressions.push(`baseline missing for tracked dir "${dir}"`); continue; }
+        if (l.any > b.any) regressions.push(`${dir}.any: live=${l.any} > baseline=${b.any} (+${l.any - b.any})`);
+        if (l.debt > b.debt) regressions.push(`${dir}.debt: live=${l.debt} > baseline=${b.debt} (+${l.debt - b.debt})`);
+        // allow can grow — permanent contracts; only flag if doc forbids
+    }
+
+    const header = '| dir | any | debt | allow |';
+    const sep    = '|-----|----:|-----:|------:|';
+    console.log('## strict-baseline live snapshot');
+    console.log(header); console.log(sep);
+    for (const dir of TRACKED_DIRS) console.log(fmt(dir, live[dir]));
+    console.log('');
+    console.log('## strict-baseline baseline (frozen)');
+    console.log(header); console.log(sep);
+    for (const dir of TRACKED_DIRS) {
+        const b = baseline[dir] ?? { any: '—', debt: '—', allow: '—' };
+        console.log(fmt(dir, b));
+    }
+    console.log('');
+
+    if (regressions.length > 0) {
+        console.error('❌ strict-baseline regression detected:');
+        for (const r of regressions) console.error('  - ' + r);
+        console.error('');
+        console.error('If this regression is intentional (a phase plan accepted it),');
+        console.error('lower the baseline in docs/migration/strict-baseline.md in the SAME PR.');
+        console.error('To temporarily exempt a single occurrence, annotate it with one of:');
+        console.error('  // @strict-debt(P##)        — must be cleared by phase P##');
+        console.error('  // @strict-allow-any(<reason>) — permanent contract');
+        process.exit(1);
+    }
+    console.log('✅ strict-baseline OK (no regressions in tracked directories).');
+}
+
+main();

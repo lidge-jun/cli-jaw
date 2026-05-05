@@ -48,6 +48,7 @@
     "clean:dist": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});\"",
     "check:copilot-gap": "tsx scripts/check-copilot-gap.ts",
     "check:deps": "tsx scripts/check-deps-offline.ts",
+    "check:strict-baseline": "node scripts/check-strict-baseline.mjs",
     "check:frontend-build-output": "tsx scripts/check-web-ui-build-output.ts",
     "i18n:registry": "tsx scripts/i18n-registry.ts",
     "check:deps:online": "bash scripts/check-deps-online.sh",

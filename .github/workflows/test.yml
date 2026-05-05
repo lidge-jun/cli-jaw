@@ -75,6 +75,9 @@ jobs:
       - name: Deps security check
         run: npm run check:deps
 
+      - name: Strict-baseline regression gate
+        run: npm run check:strict-baseline
+
       - name: Verify devlog submodule
         id: devlog-check
         run: |
