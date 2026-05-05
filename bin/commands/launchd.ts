@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { parseArgs } from 'node:util';
 import { JAW_HOME } from '../../src/core/config.js';
+import { asRecord, errString } from '../_http-client.js';
 
 if (process.argv[2] === 'launchd' && !process.env._CLI_JAW_SERVICE_DELEGATE) {
     console.error('  ⚠️  jaw launchd is deprecated. Use jaw service instead (cross-platform).');
@@ -144,8 +145,8 @@ switch (sub) {
             try {
                 unlinkSync(legacyPlist);
                 console.log(`  ✓ removed: ${label}`);
-            } catch (e: any) {
-                console.log(`  ✗ failed: ${label} (${e?.message || 'unknown'})`);
+            } catch (e: unknown) {
+                console.log(`  ✗ failed: ${label} (${errString(e) || 'unknown'})`);
             }
         }
         break;
@@ -192,8 +193,9 @@ switch (sub) {
         try {
             execSync(`launchctl bootstrap ${GUI_DOMAIN} "${PLIST_PATH}"`, { stdio: 'pipe' });
             console.log('✅ launchd 등록 + 시작 완료\n');
-        } catch (e: any) {
-            const stderr = (e?.stderr?.toString?.() || e?.message || '');
+        } catch (e: unknown) {
+            const err = asRecord(e);
+            const stderr = (asRecord(err.stderr).toString?.() || errString(e) || '');
             const isBusy = /Bootstrap failed:\s*5/i.test(stderr)
                 || /already (bootstrapped|loaded)/i.test(stderr);
             if (isBusy) {
@@ -206,7 +208,7 @@ switch (sub) {
                 try {
                     execSync(`launchctl bootstrap ${GUI_DOMAIN} "${PLIST_PATH}"`, { stdio: 'pipe' });
                     console.log('✅ 재시도 성공\n');
-                } catch (e2: any) {
+                } catch (e2: unknown) {
                     console.error('');
                     console.error('❌ Bootstrap error 5 지속 — launchd 도메인 오염 가능성');
                     console.error('   수동 복구:');

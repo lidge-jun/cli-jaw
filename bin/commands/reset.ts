@@ -7,6 +7,7 @@ import { parseArgs } from 'node:util';
 import { createInterface } from 'node:readline';
 import { getServerUrl } from '../../src/core/config.js';
 import { cliFetch, getCliAuthToken } from '../../src/cli/api-auth.js';
+import { asRecord, fieldString, type JsonRecord } from '../_http-client.js';
 
 const { values } = parseArgs({
     args: process.argv.slice(3),
@@ -29,13 +30,13 @@ function printHelp() {
 `);
 }
 
-async function apiJson(baseUrl: string, path: string, init: Record<string, any> = {}) {
+async function apiJson<T = JsonRecord>(baseUrl: string, path: string, init: RequestInit = {}): Promise<T> {
     const res = await cliFetch(baseUrl + path, { ...init, signal: AbortSignal.timeout(15000) });
     const text = await res.text();
-    let data: Record<string, any> = {};
-    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    return data;
+    let data: JsonRecord = {};
+    try { data = text ? asRecord(JSON.parse(text)) : {}; } catch { data = { raw: text }; }
+    if (!res.ok) throw new Error(fieldString(data.error) || `HTTP ${res.status}`);
+    return data as T;
 }
 
 async function confirm(question: string) {

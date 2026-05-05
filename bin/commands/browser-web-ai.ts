@@ -1,10 +1,15 @@
 import { parseArgs } from 'node:util';
 import { renderContextDryRunReport } from '../../src/browser/web-ai/context-pack/index.js';
+import type { ContextDryRunMode, ContextPackResult } from '../../src/browser/web-ai/context-pack/index.js';
 
 type BrowserApi = (method: string, path: string, body?: unknown) => Promise<unknown>;
 type QueryString = (params: Record<string, unknown>) => string;
 
 const WEB_AI_COMMANDS = new Set(['render', 'status', 'send', 'poll', 'query', 'watch', 'watchers', 'sessions', 'sessions-prune', 'resume', 'reattach', 'notifications', 'capabilities', 'stop', 'diagnose', 'doctor', 'context-dry-run', 'context-render']);
+
+function parseContextDryRunMode(value: unknown): ContextDryRunMode {
+    return value === 'json' || value === 'full' || value === 'summary' ? value : 'summary';
+}
 
 export const WEB_AI_USAGE = `
 Usage:
@@ -218,23 +223,27 @@ export async function runWebAiCommand(
         ...(values['new-tab'] ? { newTab: true } : {}),
         ...(values['reuse-tab'] ? { reuseTab: true } : {}),
     };
-    const result = await callWebAiEndpoint(command, body, values, deps) as Record<string, unknown>;
+    const rawResult = await callWebAiEndpoint(command, body, values, deps);
     const fullContextOutput = values.full === true || command === 'context-render';
-    if (isContextCommand(command) && values.json) {
-        console.log(renderContextDryRunReport(result as any, {
+    if (isContextCommand(command)) {
+        const result = rawResult as ContextPackResult;
+        if (values.json) {
+            console.log(renderContextDryRunReport(result, {
             mode: 'json',
             full: fullContextOutput,
             json: true,
             includeComposerText: fullContextOutput,
-        }));
-    } else if (values.json) console.log(JSON.stringify(result, null, 2));
-    else if (isContextCommand(command)) {
-        console.log(renderContextDryRunReport(result as any, {
-            mode: fullContextOutput ? 'full' : String(values['dry-run'] || 'summary') as any,
+            }));
+        } else {
+            console.log(renderContextDryRunReport(result, {
+            mode: fullContextOutput ? 'full' : parseContextDryRunMode(values['dry-run']),
             full: fullContextOutput,
-        }));
+            }));
+        }
+    } else if (values.json) console.log(JSON.stringify(rawResult, null, 2));
+    else {
+        printWebAiHuman(command, rawResult as Record<string, unknown>);
     }
-    else printWebAiHuman(command, result);
 }
 
 async function callWebAiEndpoint(

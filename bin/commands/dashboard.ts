@@ -6,6 +6,7 @@ import { parseArgs } from 'node:util';
 import { constants as osConstants } from 'node:os';
 import { DASHBOARD_DEFAULT_PORT, MANAGED_INSTANCE_PORT_COUNT, MANAGED_INSTANCE_PORT_FROM } from '../../src/manager/constants.js';
 import { shouldShowHelp, printAndExit } from '../helpers/help.js';
+import { asArray, asRecord, fieldString, type JsonRecord } from '../_http-client.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const commandRoot = join(__dirname, '..', '..');
@@ -149,7 +150,7 @@ async function handleStatus(): Promise<void> {
     const url = `http://127.0.0.1:${dashboardPort}/api/dashboard/health`;
     try {
         const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
-        const data = await res.json() as Record<string, any>;
+        const data = await res.json() as JsonRecord;
         if (json) {
             console.log(JSON.stringify(data));
         } else {
@@ -168,8 +169,8 @@ async function handleList(): Promise<void> {
     const url = `http://127.0.0.1:${dashboardPort}/api/dashboard/instances?showHidden=true`;
     try {
         const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-        const data = await res.json() as Record<string, any>;
-        const instances = data.instances || [];
+        const data = await res.json() as JsonRecord;
+        const instances = asArray<JsonRecord>(data.instances);
         if (json) {
             console.log(JSON.stringify(instances));
         } else {
@@ -182,12 +183,14 @@ async function handleList(): Promise<void> {
             console.log(`  ${pad('PORT', 6)} ${pad('STATUS', 10)} ${pad('OWNER', 10)} ${pad('CLI', 12)} ${pad('MODEL', 16)} LABEL`);
             console.log(`  ${'-'.repeat(70)}`);
             for (const inst of instances) {
+                const lifecycle = asRecord(inst.lifecycle);
+                const profile = asRecord(inst.profile);
                 const port = String(inst.port);
-                const status = inst.status || 'unknown';
-                const owner = inst.lifecycle?.owner || 'n/a';
-                const cli = inst.currentCli || 'n/a';
-                const model = inst.currentModel || 'n/a';
-                const label = inst.label || inst.profile?.label || `:${inst.port}`;
+                const status = fieldString(inst.status, 'unknown');
+                const owner = fieldString(lifecycle.owner, 'n/a');
+                const cli = fieldString(inst.currentCli, 'n/a');
+                const model = fieldString(inst.currentModel, 'n/a');
+                const label = fieldString(inst.label) || fieldString(profile.label) || `:${inst.port}`;
                 console.log(`  ${pad(port, 6)} ${pad(status, 10)} ${pad(owner, 10)} ${pad(cli, 12)} ${pad(model, 16)} ${label}`);
             }
             console.log('');
@@ -214,7 +217,7 @@ async function handleLifecycle(action: string): Promise<void> {
             body: JSON.stringify({ port: targetPort, home: globalOpts.home }),
             signal: AbortSignal.timeout(15000),
         });
-        const result = await res.json() as Record<string, any>;
+        const result = await res.json() as JsonRecord;
         if (json) {
             console.log(JSON.stringify(result));
             if (!result.ok) process.exitCode = 1;

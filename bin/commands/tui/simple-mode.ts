@@ -6,9 +6,11 @@ import fs from 'node:fs';
 import { resolve as resolvePath } from 'node:path';
 import { APP_VERSION } from '../../../src/core/config.js';
 import { parseCommand, executeCommand } from '../../../src/cli/commands.js';
+import type { ParsedSlashCommand } from '../../../src/cli/types.js';
 import { captureFileSet, diffFileSets, openDiffInIde, getIdeCli } from '../../../src/ide/diff.js';
 import { c, renderCommandText, type TuiContext } from './types.js';
 import { makeCliCommandCtx } from './api.js';
+import type WebSocket from 'ws';
 
 export async function runSimpleMode(ctx: TuiContext): Promise<void> {
     const { ws } = ctx;
@@ -16,7 +18,7 @@ export async function runSimpleMode(ctx: TuiContext): Promise<void> {
     const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: `${ctx.label} > ` });
     let streaming = false;
 
-    async function handleSlashCommand(parsed: any) {
+    async function handleSlashCommand(parsed: ParsedSlashCommand) {
         try {
             const result = await executeCommand(parsed, makeCliCommandCtx(ctx));
             if (result?.code === 'clear_screen') console.clear();
@@ -44,7 +46,7 @@ export async function runSimpleMode(ctx: TuiContext): Promise<void> {
         rl.prompt();
     }
 
-    ws.on('message', (data: any) => {
+    ws.on('message', (data: WebSocket.RawData) => {
         try {
             const msg = JSON.parse(data.toString());
             if (msg.type === 'agent_chunk') { if (!streaming) streaming = true; process.stdout.write(msg.text || ''); }

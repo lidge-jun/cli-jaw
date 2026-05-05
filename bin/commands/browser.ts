@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { getServerUrl, JAW_HOME, deriveCdpPort, loadSettings } from '../../src/core/config.js';
 import { getCliAuthToken, authHeaders } from '../../src/cli/api-auth.js';
 import { runWebAiCommand } from './browser-web-ai.js';
+import { asArray, asRecord, fieldString, type JsonRecord } from '../_http-client.js';
 
 loadSettings();
 const SERVER = getServerUrl();
@@ -21,18 +22,43 @@ const c = {
     cyan: '\x1b[36m',
 };
 
-async function api(method: string, path: string, body?: any) {
-    const opts: Record<string, any> = { method, headers: { ...authHeaders(), 'Content-Type': 'application/json' } };
+interface BrowserTabSummary extends JsonRecord {
+    title?: string;
+    url?: string;
+    targetId?: string;
+    active?: boolean;
+    idleFor?: string;
+    lastActiveAt?: unknown;
+}
+
+interface BrowserTraceEntry {
+    type?: string;
+    text?: string;
+    method?: string;
+    origin?: string;
+    path?: string;
+}
+
+interface BrowserSnapshotNode {
+    ref: string;
+    depth: number;
+    value?: string;
+    role: string;
+    name: string;
+}
+
+async function api<T = JsonRecord>(method: string, path: string, body?: unknown): Promise<T> {
+    const opts: RequestInit = { method, headers: { ...authHeaders(), 'Content-Type': 'application/json' } };
     if (body) opts.body = JSON.stringify(body);
     const resp = await fetch(`${SERVER}/api/browser${path}`, opts);
     if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ error: resp.statusText })) as Record<string, any>;
-        throw new Error(err.error || `HTTP ${resp.status}`);
+        const err = asRecord(await resp.json().catch(() => ({ error: resp.statusText })));
+        throw new Error(fieldString(err.error) || `HTTP ${resp.status}`);
     }
-    return resp.json();
+    return await resp.json() as T;
 }
 
-function qs(params: Record<string, any>) {
+function qs(params: Record<string, unknown>): string {
     const search = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {
         if (value !== undefined && value !== false) search.set(key, String(value));
@@ -41,11 +67,11 @@ function qs(params: Record<string, any>) {
     return out ? `?${out}` : '';
 }
 
-function parseClip(values: Record<string, any>) {
-    const clip = values.clip as string[] | undefined;
+function parseClip(values: Record<string, unknown>): { x: number; y: number; width: number; height: number } | undefined {
+    const clip = Array.isArray(values.clip) ? values.clip.map(String) : undefined;
     if (!clip) return undefined;
     if (clip.length !== 4) throw new Error('--clip requires four values: x y width height');
-    const [x, y, width, height] = clip.map(Number);
+    const [x = NaN, y = NaN, width = NaN, height = NaN] = clip.map(Number);
     if (![x, y, width, height].every(Number.isFinite)) throw new Error('--clip values must be numbers');
     return { x, y, width, height };
 }
@@ -62,7 +88,7 @@ function formatRelativeAge(ms: number | null | undefined): string {
     return `${Math.floor(hours / 24)}d`;
 }
 
-function decorateTab(tab: Record<string, any>, now = Date.now()): Record<string, any> {
+function decorateTab(tab: BrowserTabSummary, now = Date.now()): BrowserTabSummary {
     const lastActiveAt = Number(tab.lastActiveAt);
     const idleForMs = Number.isFinite(lastActiveAt) && lastActiveAt > 0 ? now - lastActiveAt : null;
     return {
@@ -87,15 +113,15 @@ try {
                     agent: { type: 'boolean', default: false },
                 }, strict: false
             });
-            const r = await api('POST', '/start', {
+            const r = await api<JsonRecord>('POST', '/start', {
                 port: Number(values.port),
                 headless: values.headless,
                 mode: values.agent ? 'agent' : 'manual',
-            }) as Record<string, any>;
+            });
             if (r.running) {
                 console.log(`🌐 Chrome started (CDP: ${r.cdpUrl})`);
             } else {
-                const runtime = r.runtime || {};
+                const runtime = asRecord(r.runtime);
                 console.log(`❌ Failed to start Chrome (CDP: ${r.cdpUrl || 'n/a'}, owner: ${runtime.ownership || 'none'}, tabs: ${r.tabs ?? 0})`);
                 console.log('Hint: run "cli-jaw browser status"; if owner is jaw-owned but CDP is n/a, retry start once or restart cli-jaw serve.');
             }
@@ -106,8 +132,8 @@ try {
             console.log('🌐 Chrome stopped');
             break;
         case 'status': {
-            const r = await api('GET', '/status') as Record<string, any>;
-            const runtime = r.runtime || {};
+            const r = await api<JsonRecord>('GET', '/status');
+            const runtime = asRecord(r.runtime);
             const idleMs = Number(runtime.idleTimeoutMs);
             const idleClose = runtime.autoCloseEnabled
                 ? `enabled after ${Number.isFinite(idleMs) ? `${Math.round(idleMs / 60000)}m` : 'configured timeout'}`
@@ -130,14 +156,14 @@ try {
                 },
                 strict: false,
             });
-            const r = await api('GET', `/doctor${qs({ port: values.port })}`) as Record<string, any>;
+            const r = await api<JsonRecord>('GET', `/doctor${qs({ port: values.port })}`);
             if (values.json) {
                 console.log(JSON.stringify(r, null, 2));
                 break;
             }
-            const runtime = r.runtime || {};
-            const status = r.status || {};
-            const cleanup = r.cleanup || {};
+            const runtime = asRecord(r.runtime);
+            const status = asRecord(r.status);
+            const cleanup = asRecord(r.cleanup);
             console.log([
                 `ok: ${r.ok}`,
                 `port: ${r.port}`,
@@ -150,19 +176,19 @@ try {
             ].join('\n'));
             if (Array.isArray(r.orphanCandidates) && r.orphanCandidates.length > 0) {
                 console.log('\nRuntime candidates:');
-                for (const candidate of r.orphanCandidates) {
+                for (const candidate of asArray<JsonRecord>(r.orphanCandidates)) {
                     console.log(`- pid=${candidate.pid || 'n/a'} port=${candidate.port || 'n/a'} action=${candidate.action} reason=${candidate.reason}`);
                 }
             }
             if (Array.isArray(r.issues) && r.issues.length > 0) {
                 console.log('\nIssues:');
-                for (const issue of r.issues) {
+                for (const issue of asArray<JsonRecord>(r.issues)) {
                     console.log(`- [${issue.severity}] ${issue.code}: ${issue.message}`);
                 }
             }
             if (Array.isArray(r.recommendations) && r.recommendations.length > 0) {
                 console.log('\nRecommendations:');
-                for (const recommendation of r.recommendations) {
+                for (const recommendation of asArray<unknown>(r.recommendations)) {
                     console.log(`- ${recommendation}`);
                 }
             }
@@ -182,10 +208,10 @@ try {
                 console.error('error: cleanup-runtimes --close requires --force');
                 process.exit(1);
             }
-            const r = await api('POST', '/cleanup-runtimes', {
+            const r = await api<JsonRecord>('POST', '/cleanup-runtimes', {
                 close: values.close,
                 force: values.force,
-            }) as Record<string, any>;
+            });
             if (values.json) {
                 console.log(JSON.stringify(r, null, 2));
                 break;
@@ -196,7 +222,7 @@ try {
                 `pruned: ${r.pruned || 0}`,
                 `candidates: ${Array.isArray(r.candidates) ? r.candidates.length : 0}`,
             ].join('\n'));
-            for (const candidate of r.candidates || []) {
+            for (const candidate of asArray<JsonRecord>(r.candidates)) {
                 console.log(`- pid=${candidate.pid || 'n/a'} port=${candidate.port || 'n/a'} action=${candidate.action} reason=${candidate.reason}`);
             }
             if (r.dryRun) {
@@ -213,16 +239,16 @@ try {
                     json: { type: 'boolean', default: false },
                 }, strict: false
             });
-            const r = await api('GET', `/snapshot${qs({
+            const r = await api<JsonRecord>('GET', `/snapshot${qs({
                 interactive: values.interactive,
                 'max-nodes': values['max-nodes'],
                 json: values.json,
-            })}`) as Record<string, any>;
+            })}`);
             if (values.json) {
                 console.log(JSON.stringify(r, null, 2));
                 break;
             }
-            for (const n of r.nodes || []) {
+            for (const n of asArray<BrowserSnapshotNode>(r.nodes)) {
                 const indent = '  '.repeat(n.depth);
                 const val = n.value ? ` = "${n.value}"` : '';
                 console.log(`${n.ref.padEnd(4)} ${indent}${n.role.padEnd(10)} "${n.name}"${val}`);
@@ -239,14 +265,14 @@ try {
                     json: { type: 'boolean', default: false },
                 }, strict: false
             });
-            const r = await api('POST', '/screenshot', { fullPage: values['full-page'], ref: values.ref, clip: parseClip(values) }) as Record<string, any>;
+            const r = await api('POST', '/screenshot', { fullPage: values['full-page'], ref: values.ref, clip: parseClip(values) }) as Record<string, unknown>;
             console.log(values.json ? JSON.stringify(r, null, 2) : r.path);
             break;
         }
         case 'click': {
             const ref = process.argv[4];
             if (!ref) { console.error('Usage: cli-jaw browser click <ref>'); process.exit(1); }
-            const opts: Record<string, any> = {};
+            const opts: Record<string, unknown> = {};
             if (process.argv.includes('--double')) opts.doubleClick = true;
             if (process.argv.includes('--right')) opts.button = 'right';
             await api('POST', '/act', { kind: 'click', ref, ...opts });
@@ -278,9 +304,9 @@ try {
                 console.error('Usage: cli-jaw browser mouse-click <x> <y> [--double]');
                 process.exit(1);
             }
-            const opts: Record<string, any> = {};
+            const opts: Record<string, unknown> = {};
             if (process.argv.includes('--double')) opts.doubleClick = true;
-            const r = await api('POST', '/act', { kind: 'mouse-click', x, y, ...opts }) as Record<string, any>;
+            const r = await api('POST', '/act', { kind: 'mouse-click', x, y, ...opts }) as Record<string, unknown>;
             console.log(`🖱️ clicked at (${x}, ${y})`);
             break;
         }
@@ -302,7 +328,7 @@ try {
                 console.error('Usage: cli-jaw browser vision-click "<target>" [--provider codex] [--double]');
                 process.exit(1);
             }
-            const opts: Record<string, any> = {
+            const opts: Record<string, unknown> = {
                 provider: values.provider,
                 doubleClick: values.double,
                 prepareStable: values['prepare-stable'],
@@ -312,34 +338,38 @@ try {
             };
 
             console.log(`${c.dim}👁️ vision-click: "${target}"...${c.reset}`);
-            const r = await api('POST', '/vision-click', { target, ...opts }) as Record<string, any>;
+            const r = await api<JsonRecord>('POST', '/vision-click', { target, ...opts });
+            const clicked = asRecord(r.clicked);
+            const raw = asRecord(r.raw);
 
             if (r.success) {
-                console.log(`${c.green}🖱️ vision-clicked "${target}" at (${r.clicked.x}, ${r.clicked.y}) via ${r.provider}${c.reset}`);
-                if (r.dpr !== 1) console.log(`${c.dim}   DPR=${r.dpr}, raw=(${r.raw.x}, ${r.raw.y})${c.reset}`);
+                console.log(`${c.green}🖱️ vision-clicked "${target}" at (${clicked.x}, ${clicked.y}) via ${r.provider}${c.reset}`);
+                if (r.dpr !== 1) console.log(`${c.dim}   DPR=${r.dpr}, raw=(${raw.x}, ${raw.y})${c.reset}`);
             } else {
                 console.log(`${c.red}❌ "${target}" not found: ${r.reason}${c.reset}`);
             }
             break;
         }
         case 'navigate': {
-            const r = await api('POST', '/navigate', { url: process.argv[4] }) as Record<string, any>;
+            const r = await api('POST', '/navigate', { url: process.argv[4] }) as Record<string, unknown>;
             console.log(`navigated → ${r.url}`);
             break;
         }
         case 'open': {
-            const r = await api('POST', '/navigate', { url: process.argv[4] }) as Record<string, any>;
+            const r = await api('POST', '/navigate', { url: process.argv[4] }) as Record<string, unknown>;
             console.log(`opened → ${r.url}`);
             break;
         }
         case 'tabs': {
-            const r = await api('GET', '/tabs') as Record<string, any>;
-            const tabs = (r.tabs || r.data?.tabs || []).map((tab: Record<string, any>) => decorateTab(tab));
+            const r = await api<JsonRecord>('GET', '/tabs');
+            const data = asRecord(r.data);
+            const rawTabs = Array.isArray(r.tabs) ? r.tabs : data.tabs;
+            const tabs = asArray<BrowserTabSummary>(rawTabs).map((tab) => decorateTab(tab));
             if (process.argv.includes('--json')) {
                 console.log(JSON.stringify(tabs, null, 2));
                 break;
             }
-            tabs.forEach((t: any, i: number) => {
+            tabs.forEach((t: BrowserTabSummary, i: number) => {
                 const state = `${t.active ? 'active, ' : ''}idle ${t.idleFor}`;
                 console.log(`${i + 1}. ${t.title}${t.title ? '' : '(untitled)'} [${state}]`);
                 console.log(`   ${t.url}`);
@@ -349,28 +379,28 @@ try {
             break;
         }
         case 'active-tab': {
-            const r = await api('GET', '/active-tab') as Record<string, any>;
+            const r = await api('GET', '/active-tab') as Record<string, unknown>;
             console.log(JSON.stringify(r, null, 2));
             break;
         }
         case 'tab-switch': {
             const target = process.argv[4];
             if (!target) { console.error('Usage: cli-jaw browser tab-switch <index-or-targetId>'); process.exit(1); }
-            const r = await api('POST', '/tab-switch', { target }) as Record<string, any>;
+            const r = await api('POST', '/tab-switch', { target }) as Record<string, unknown>;
             console.log(JSON.stringify(r, null, 2));
             break;
         }
         case 'new-tab': {
             const url = process.argv[4] || 'about:blank';
             const activate = !process.argv.includes('--no-activate');
-            const r = await api('POST', '/tab-new', { url, activate }) as Record<string, any>;
+            const r = await api('POST', '/tab-new', { url, activate }) as Record<string, unknown>;
             console.log(`created tab: ${r.targetId} (${r.url})`);
             break;
         }
         case 'tab-close': {
             const target = process.argv[4];
             if (!target) { console.error('Usage: cli-jaw browser tab-close <targetId>'); process.exit(1); }
-            const r = await api('POST', '/tab-close', { targetId: target }) as Record<string, any>;
+            const r = await api('POST', '/tab-close', { targetId: target }) as Record<string, unknown>;
             console.log(`closed tab: ${r.targetId}`);
             break;
         }
@@ -399,7 +429,7 @@ try {
                 provider: values.provider,
                 keepProviderTabs: values['keep-provider-tabs'],
                 force: values.force,
-            }) as Record<string, any>;
+            }) as Record<string, unknown>;
             if (values.json) console.log(JSON.stringify(r, null, 2));
             else {
                 console.log(`closed tabs: ${r.closed}`);
@@ -416,7 +446,7 @@ try {
                 args: process.argv.slice(4),
                 options: { format: { type: 'string', default: 'text' } }, strict: false
             });
-            const r = await api('GET', `/text?format=${values.format}`) as Record<string, any>;
+            const r = await api('GET', `/text?format=${values.format}`) as Record<string, unknown>;
             console.log(r.text);
             break;
         }
@@ -426,7 +456,7 @@ try {
                 options: { selector: { type: 'string' }, 'max-chars': { type: 'string' }, json: { type: 'boolean' } },
                 strict: false,
             });
-            const r = await api('GET', `/dom${qs({ selector: values.selector, 'max-chars': values['max-chars'] })}`) as Record<string, any>;
+            const r = await api('GET', `/dom${qs({ selector: values.selector, 'max-chars': values['max-chars'] })}`) as Record<string, unknown>;
             console.log(values.json ? JSON.stringify(r, null, 2) : r.html);
             break;
         }
@@ -447,14 +477,14 @@ try {
                 allowPositionals: true,
                 options: { timeout: { type: 'string' } },
                 strict: false,
-            }) as { values: Record<string, any>; positionals: string[] };
+            }) as { values: Record<string, unknown>; positionals: string[] };
             const text = positionals.join(' ');
             await api('POST', '/wait-for-text', { text, timeout: values.timeout });
             console.log(`waited for text ${text}`);
             break;
         }
         case 'reload': {
-            const r = await api('POST', '/reload', {}) as Record<string, any>;
+            const r = await api('POST', '/reload', {}) as Record<string, unknown>;
             console.log(`reloaded → ${r.url}`);
             break;
         }
@@ -502,8 +532,9 @@ try {
                 options: { json: { type: 'boolean' }, limit: { type: 'string' }, clear: { type: 'boolean' } },
                 strict: false,
             });
-            const r = await api('GET', `/console${qs({ limit: values.limit, clear: values.clear })}`) as Record<string, any>;
-            console.log(values.json ? JSON.stringify(r, null, 2) : (r.entries || []).map((e: any) => `[${e.type}] ${e.text}`).join('\n'));
+            const r = await api<JsonRecord>('GET', `/console${qs({ limit: values.limit, clear: values.clear })}`);
+            const entries = asArray<BrowserTraceEntry>(r.entries);
+            console.log(values.json ? JSON.stringify(r, null, 2) : entries.map((e) => `[${e.type}] ${e.text}`).join('\n'));
             break;
         }
         case 'network': {
@@ -512,12 +543,13 @@ try {
                 options: { json: { type: 'boolean' }, limit: { type: 'string' }, filter: { type: 'string' } },
                 strict: false,
             });
-            const r = await api('GET', `/network${qs({ limit: values.limit, filter: values.filter })}`) as Record<string, any>;
-            console.log(values.json ? JSON.stringify(r, null, 2) : (r.entries || []).map((e: any) => `${e.method} ${e.origin}${e.path || ''}`).join('\n'));
+            const r = await api<JsonRecord>('GET', `/network${qs({ limit: values.limit, filter: values.filter })}`);
+            const entries = asArray<BrowserTraceEntry>(r.entries);
+            console.log(values.json ? JSON.stringify(r, null, 2) : entries.map((e) => `${e.method} ${e.origin}${e.path || ''}`).join('\n'));
             break;
         }
         case 'evaluate': {
-            const r = await api('POST', '/evaluate', { expression: process.argv.slice(4).join(' ') }) as Record<string, any>;
+            const r = await api('POST', '/evaluate', { expression: process.argv.slice(4).join(' ') }) as Record<string, unknown>;
             console.log(JSON.stringify(r.result, null, 2));
             break;
         }

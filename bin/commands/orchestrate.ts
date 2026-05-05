@@ -5,6 +5,8 @@
 import { settings, loadSettings, getServerUrl } from '../../src/core/config.js';
 import { cliFetch, getCliAuthToken } from '../../src/cli/api-auth.js';
 import { shouldShowHelp, printAndExit } from '../helpers/help.js';
+import { errString, isConnRefused } from '../_http-client.js';
+import type { OrcContext } from '../../src/orchestrator/state-machine.js';
 
 if (shouldShowHelp(process.argv)) printAndExit(`
   jaw orchestrate — PABCD state machine transitions
@@ -56,7 +58,15 @@ function parseArgs(argv: string[]): Args {
   return parsed;
 }
 
-function formatStatus(body: any): string {
+interface OrchestrateStatusBody {
+  ok?: boolean;
+  error?: string;
+  scope?: string;
+  state?: string;
+  ctx?: Partial<OrcContext> | null;
+}
+
+function formatStatus(body: OrchestrateStatusBody): string {
   const ctx = body.ctx || {};
   return [
     `State: ${body.state || 'UNKNOWN'}`,
@@ -86,7 +96,7 @@ await getCliAuthToken(PORT);
 try {
   if (target === 'STATUS') {
     const res = await cliFetch(`${BASE}/api/orchestrate/state`);
-    const body = await res.json() as any;
+    const body = await res.json() as OrchestrateStatusBody;
     if (!res.ok) {
       console.error(body.error || `Failed: ${res.status}`);
       process.exit(1);
@@ -98,7 +108,7 @@ try {
   // Reset: return to IDLE from any state
   if (target === 'RESET') {
     const res = await cliFetch(`${BASE}/api/orchestrate/reset`, { method: 'POST' });
-    const body = await res.json() as any;
+    const body = await res.json() as OrchestrateStatusBody;
     if (!res.ok) {
       console.error(body.error || `Failed: ${res.status}`);
       process.exit(1);
@@ -114,13 +124,13 @@ try {
     body: JSON.stringify({ state: target, userInitiated: true, ...(parsed.force ? { force: true } : {}) }),
   });
 
-  const body = await res.json() as any;
+  const body = await res.json() as OrchestrateStatusBody;
 
   if (!res.ok) {
     console.error(body.error || `Failed: ${res.status}`);
     try {
       const stateRes = await cliFetch(`${BASE}/api/orchestrate/state`);
-      const stateBody = await stateRes.json() as any;
+      const stateBody = await stateRes.json() as OrchestrateStatusBody;
       if (stateRes.ok) console.error(`Current server state: ${stateBody.state || 'UNKNOWN'}`);
     } catch {
       // Keep the original transition error as the primary failure.
@@ -132,12 +142,12 @@ try {
 
   // Also print the state prompt for context
   const { getStatePrompt } = await import('../../src/orchestrator/state-machine.js');
-  console.log(getStatePrompt(target as any));
-} catch (e: any) {
-  if (e.cause?.code === 'ECONNREFUSED') {
+  console.log(getStatePrompt(target));
+} catch (e: unknown) {
+  if (isConnRefused(e)) {
     console.error(`Server not running on port ${PORT}. Start with: jaw serve --port ${PORT}`);
   } else {
-    console.error(`Error: ${e.message}`);
+    console.error(`Error: ${errString(e)}`);
   }
   process.exit(1);
 }

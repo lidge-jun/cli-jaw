@@ -15,6 +15,8 @@ import {
     resolveShellLayout, setupScrollRegion, cleanupScrollRegion, ensureSpaceBelow,
 } from '../../../src/cli/tui/shell.js';
 import { executeCommand, getCompletionItems, getArgumentCompletionItems } from '../../../src/cli/commands.js';
+import type { ArgumentCompletionItem } from '../../../src/cli/commands.js';
+import type { ParsedSlashCommand } from '../../../src/cli/types.js';
 import { getIdeCli } from '../../../src/ide/diff.js';
 import { c, hrLine, getRows, renderCommandText, type TuiContext } from './types.js';
 import { showPrompt, redrawPromptLine, openPromptBlock, rebuildFooter } from './renderer.js';
@@ -91,7 +93,8 @@ export function handleResize(ctx: TuiContext): void {
 }
 
 // ─── Slash command execution ─────────────────
-export async function runSlashCommand(ctx: TuiContext, parsed: any): Promise<void> {
+export async function runSlashCommand(ctx: TuiContext, parsed: ParsedSlashCommand): Promise<void> {
+    if (!parsed || parsed.type !== 'known') return;
     const ov = ctx.store.overlay;
     const ac = ctx.store.autocomplete;
     const composer = ctx.store.composer;
@@ -122,7 +125,7 @@ export async function runSlashCommand(ctx: TuiContext, parsed: any): Promise<voi
         sel.subtitle = `${ctx.info.cli}: ${ctx.info.model || 'default'}`;
         sel.filter = '';
         sel.selected = 0;
-        sel.allItems = argItems.map((a: any) => ({
+        sel.allItems = argItems.map((a: ArgumentCompletionItem) => ({
             value: a.name, label: a.desc || '', current: a.name === ctx.info.model,
         }));
         sel.filteredItems = sel.allItems;
@@ -150,7 +153,7 @@ export async function runSlashCommand(ctx: TuiContext, parsed: any): Promise<voi
         sel.subtitle = `current: ${ctx.info.cli}`;
         sel.filter = '';
         sel.selected = 0;
-        sel.allItems = argItems.map((a: any) => ({
+        sel.allItems = argItems.map((a: ArgumentCompletionItem) => ({
             value: a.name, label: a.desc || '', current: a.name === ctx.info.cli,
         }));
         sel.filteredItems = sel.allItems;

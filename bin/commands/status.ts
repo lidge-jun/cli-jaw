@@ -6,6 +6,7 @@ import { parseArgs } from 'node:util';
 import { getServerUrl, DEFAULT_PORT } from '../../src/core/config.js';
 import { DASHBOARD_DEFAULT_PORT } from '../../src/manager/constants.js';
 import { shouldShowHelp, printAndExit } from '../helpers/help.js';
+import { asArray, asRecord } from '../_http-client.js';
 
 if (shouldShowHelp(process.argv)) printAndExit(`
   jaw status — check server health
@@ -37,7 +38,7 @@ const url = `${getServerUrl(values.port as string)}/api/settings`;
 try {
     const res = await fetch(url, { signal: AbortSignal.timeout(3000) });
     if (res.ok) {
-        const data = await res.json() as Record<string, any>;
+        const data = await res.json() as Record<string, unknown>;
         if (values.json) {
             console.log(JSON.stringify({ status: 'running', port: values.port, cli: data.cli }));
         } else {
@@ -48,8 +49,8 @@ try {
             // Heartbeat status
             try {
                 const hbRes = await fetch(`${getServerUrl(values.port as string)}/api/heartbeat`, { signal: AbortSignal.timeout(2000) });
-                const hb = await hbRes.json() as Record<string, any>;
-                const active = (hb.jobs || []).filter((j: any) => j.enabled).length;
+                const hb = asRecord(await hbRes.json());
+                const active = asArray<{ enabled?: boolean }>(hb.jobs).filter((j) => j.enabled).length;
                 console.log(`  Heartbeat: ${active} job${active !== 1 ? 's' : ''} active`);
             } catch { }
         }
@@ -71,7 +72,7 @@ if (values.dashboard) {
     const dashUrl = `http://127.0.0.1:${dashPort}/api/dashboard/health`;
     try {
         const dashRes = await fetch(dashUrl, { signal: AbortSignal.timeout(3000) });
-        const dashData = await dashRes.json() as Record<string, any>;
+        const dashData = await dashRes.json() as Record<string, unknown>;
         if (values.json) {
             console.log(JSON.stringify({ dashboard: { status: 'running', ...dashData } }));
         } else {

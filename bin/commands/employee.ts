@@ -6,6 +6,7 @@
 import { parseArgs } from 'node:util';
 import { getServerUrl } from '../../src/core/config.js';
 import { getCliAuthToken } from '../../src/cli/api-auth.js';
+import { asRecord, fieldString, type JsonRecord } from '../_http-client.js';
 
 const sub = String(process.argv[3] || '').toLowerCase();
 const isHelpSubcommand = sub === '--help' || sub === '-h' || sub === 'help';
@@ -28,21 +29,29 @@ function printHelp() {
 `);
 }
 
-async function apiJson(baseUrl: string, path: string, init: Record<string, any> = {}) {
+type EmployeeApiInit = Omit<RequestInit, 'body' | 'headers'> & {
+    body?: unknown;
+    headers?: Record<string, string>;
+};
+
+async function apiJson<T = JsonRecord>(baseUrl: string, path: string, init: EmployeeApiInit = {}): Promise<T> {
     const headers: Record<string, string> = { ...(init.headers || {}) };
-    let body: any = init.body;
-    if (body && typeof body !== 'string') {
-        headers['Content-Type'] = 'application/json';
-        body = JSON.stringify(body);
+    let body: string | undefined;
+    if (init.body !== undefined) {
+        body = typeof init.body === 'string' ? init.body : JSON.stringify(init.body);
     }
+    if (init.body !== undefined && typeof init.body !== 'string') {
+        headers['Content-Type'] = 'application/json';
+    }
+    const { body: _body, headers: _headers, ...rest } = init;
     const { authHeaders } = await import('../../src/cli/api-auth.js');
     const mergedHeaders = { ...authHeaders(), ...headers };
-    const res = await fetch(baseUrl + path, { ...init, headers: mergedHeaders, body, signal: AbortSignal.timeout(10000) });
+    const res = await fetch(baseUrl + path, { ...rest, headers: mergedHeaders, body, signal: AbortSignal.timeout(10000) });
     const text = await res.text();
-    let data: Record<string, any> = {};
-    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-    return data;
+    let data: JsonRecord = {};
+    try { data = text ? asRecord(JSON.parse(text)) : {}; } catch { data = { raw: text }; }
+    if (!res.ok) throw new Error(fieldString(data.error) || `HTTP ${res.status}`);
+    return data as T;
 }
 
 if (values.help || !sub || isHelpSubcommand) {
@@ -56,7 +65,7 @@ await getCliAuthToken(values.port as string);
 switch (sub) {
     case 'reset': {
         try {
-            const result = await apiJson(baseUrl, '/api/employees/reset', { method: 'POST' }) as Record<string, any>;
+            const result = await apiJson<{ seeded?: number }>(baseUrl, '/api/employees/reset', { method: 'POST' });
             console.log(`✅ employees reset complete (${result.seeded ?? 0} seeded)`);
         } catch (err) {
             console.error(`❌ employee reset failed: ${(err as Error).message}`);
