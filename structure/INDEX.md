@@ -73,6 +73,32 @@ graph LR
 
 ---
 
+## agbrowse Parity
+
+`agbrowse` is the standalone browser/web-ai runtime. `cli-jaw` mirrors selected
+surfaces through server-backed API routes, CLI commands, dashboard UI, and
+`skills_ref/`. Do not claim parity unless this table says the surface is ready.
+
+| Phase surface | cli-jaw mirror status | Evidence |
+| --- | --- | --- |
+| Phase 15 browser runtime visibility / orphan cleanup | ready | `browser doctor`, `cleanup-runtimes`, dashboard visible/agent split |
+| Phase 16 semantic resolver | ready for ChatGPT web-ai path | `action-intent.ts`, `target-resolver.ts`, self-heal tests |
+| Phase 17 answer artifact / source audit | ready for CLI/API output | `answer-artifact.ts`, `source-audit.ts`, `--require-source-audit` flags |
+| Phase 18 broader MCP/AI SDK | partial | only existing cli-jaw browser/web-ai routes and schemas are claimable |
+| Phase 19 external-CDP / hosted browser | deferred | no hosted/cloud support claim |
+| Phase 20 benchmark comparison | deferred | no leaderboard or competitor score claim |
+| Phase 21 release labels | docs mirrored | `skills_ref/browser`, `skills_ref/web-ai`, this parity table |
+
+Support labels must stay aligned with agbrowse:
+
+- `ready`: deterministic local browser primitives, resolver/source-audit
+  contracts, runtime doctor/cleanup.
+- `beta`: live ChatGPT/Gemini/Grok web UI flows.
+- `deferred`: hosted/cloud external-CDP, benchmark score, broad production MCP
+  claims.
+
+---
+
 ## 상호 참조 매트릭스
 
 행 = 참조하는 쪽, 열 = 참조되는 쪽.

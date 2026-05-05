@@ -21,7 +21,7 @@ test('source audit reports unsourced claims and absence-scope gaps', () => {
 });
 
 test('source audit passes sourced absence claims with checked scope/date', () => {
-    const result = auditSources('No official response was found after checking Google Blog on 2026-05-05. https://blog.google/', {
+    const result = auditSources('No official response was found after checking Google Blog on 2026-05-05 https://blog.google/.', {
         requiredSourceRatio: 1,
         checkedScope: 'Google Blog',
         checkedDate: '2026-05-05',
