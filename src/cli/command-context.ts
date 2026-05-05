@@ -44,6 +44,8 @@ const REMOTE_ALLOWED_SETTINGS_KEYS = new Set([
     'discord',        // /forward (discord)
 ]);
 
+export type CliCommandContext = ReturnType<typeof makeCommandCtx>;
+
 export function makeCommandCtx(
     iface: CommandContextInterface,
     locale: string,
@@ -95,7 +97,7 @@ export function makeCommandCtx(
 
         // Memory
         listMemory: () => memory.list(),
-        searchMemory: (q: any) => searchMemoryWithPolicy({
+        searchMemory: (q: string) => searchMemoryWithPolicy({
             query: String(q || ''),
             role: 'read_only_tool',
         }),

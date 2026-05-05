@@ -197,7 +197,7 @@ export async function runSlashCommand(ctx: TuiContext, parsed: any): Promise<voi
         if (result?.code === 'ide_toggle') { ctx.ideEnabled = !ctx.ideEnabled; }
         if (result?.code === 'ide_on') { ctx.ideEnabled = true; }
         if (result?.code === 'ide_off') { ctx.ideEnabled = false; }
-        if (['ide_toggle', 'ide_on', 'ide_off'].includes(result?.code)) {
+        if (result?.code && ['ide_toggle', 'ide_on', 'ide_off'].includes(result.code)) {
             console.log(`  ${ctx.ideEnabled ? c.green + '\u2713' : c.yellow + '\u2717'}${c.reset} IDE diff: ${ctx.ideEnabled ? 'ON' : 'OFF'}${ctx.isGit ? '' : ` ${c.dim}(non-git)${c.reset}`}`);
         }
         if (result?.code === 'ide_pop_toggle') {

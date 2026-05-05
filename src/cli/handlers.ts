@@ -4,20 +4,25 @@
 import { CLI_KEYS, buildModelChoicesByCli } from './registry.js';
 import { t } from '../core/i18n.js';
 import { detectCli, settings } from '../core/config.js';
+import type { CliCommandContext } from './command-context.js';
+import type { SlashCommand, SlashResult } from './types.js';
 export { compactHandler } from './compact.js';
 
 const DEFAULT_CLI_CHOICES = [...CLI_KEYS];
 const MODEL_CHOICES_BY_CLI = buildModelChoicesByCli();
 
-function toChoiceKey(value: any) {
+function toChoiceKey(value: unknown) {
     return String(value || '').trim().toLowerCase();
 }
 
-function dedupeChoices(list: any[]) {
-    const out = [];
-    const seen = new Set();
+function dedupeChoices<T>(list: T[]): T[] {
+    const out: T[] = [];
+    const seen = new Set<string>();
     for (const entry of list || []) {
-        const key = toChoiceKey(entry?.value ?? entry);
+        const candidate: unknown = entry && typeof entry === 'object'
+            ? (entry as { value?: unknown }).value ?? entry
+            : entry;
+        const key = toChoiceKey(candidate);
         if (!key || seen.has(key)) continue;
         seen.add(key);
         out.push(entry);
@@ -25,22 +30,29 @@ function dedupeChoices(list: any[]) {
     return out;
 }
 
-function getCliChoicesFromContext(ctx: any) {
-    const keys = Object.keys(ctx?.settings?.perCli || {});
+function getCliChoicesFromContext(ctx: CliCommandContext): string[] {
+    const s = (ctx as unknown as { settings?: { perCli?: Record<string, unknown> } }).settings;
+    const keys = Object.keys(s?.perCli || {});
     return keys.length ? keys : DEFAULT_CLI_CHOICES;
 }
 
-function getModelChoicesFromContext(ctx: any) {
-    const fromCatalog = Object.values(MODEL_CHOICES_BY_CLI).flat();
-    const fromSettings = Object.values(ctx?.settings?.perCli || {} as Record<string, any>)
-        .map((v: any) => v?.model)
-        .filter(Boolean);
-    const activeCli = ctx?.settings?.cli || '';
-    const currentModel = ctx?.settings?.perCli?.[activeCli]?.model;
+function getModelChoicesFromContext(ctx: CliCommandContext): string[] {
+    const s = (ctx as unknown as {
+        settings?: { cli?: string; perCli?: Record<string, { model?: string } | undefined> };
+    }).settings;
+    const fromCatalog = (Object.values(MODEL_CHOICES_BY_CLI) as string[][]).flat();
+    const fromSettings = Object.values(s?.perCli || {})
+        .map((v) => v?.model)
+        .filter((m): m is string => Boolean(m));
+    const activeCli = s?.cli || '';
+    const currentModel = s?.perCli?.[activeCli]?.model;
     return dedupeChoices([...fromCatalog, ...fromSettings, ...(currentModel ? [currentModel] : [])]);
 }
 
-async function safeCall(fn: any, fallback: any = null) {
+async function safeCall<T>(
+    fn: (() => Promise<T> | T) | undefined | null,
+    fallback: T | null = null,
+): Promise<T | null> {
     if (typeof fn !== 'function') return fallback;
     try {
         return await fn();
@@ -50,7 +62,7 @@ async function safeCall(fn: any, fallback: any = null) {
     }
 }
 
-export function formatDuration(seconds: any) {
+export function formatDuration(seconds: unknown) {
     if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds < 0) return '-';
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -60,7 +72,7 @@ export function formatDuration(seconds: any) {
     return `${s}s`;
 }
 
-export function unknownCommand(name: any, locale = 'ko') {
+export function unknownCommand(name: string, locale = 'ko'): SlashResult {
     return {
         ok: false,
         type: 'error',
@@ -69,7 +81,7 @@ export function unknownCommand(name: any, locale = 'ko') {
     };
 }
 
-export function unsupportedCommand(cmd: any, iface: any, locale = 'ko') {
+export function unsupportedCommand(cmd: SlashCommand, iface: string, locale = 'ko'): SlashResult {
     return {
         ok: false,
         type: 'error',
@@ -78,13 +90,14 @@ export function unsupportedCommand(cmd: any, iface: any, locale = 'ko') {
     };
 }
 
-export function normalizeResult(result: any) {
+export function normalizeResult(result: unknown): SlashResult {
     if (!result) return { ok: true, type: 'success', text: '' };
     if (typeof result === 'string') return { ok: true, type: 'info', text: result };
     if (typeof result === 'object') {
-        const ok = result.ok !== false;
-        const type = result.type || (ok ? 'success' : 'error');
-        return { ok, type, ...result };
+        const r = result as Record<string, unknown>;
+        const ok = r.ok !== false;
+        const type = (typeof r.type === 'string' && r.type) || (ok ? 'success' : 'error');
+        return { ...r, ok, type };
     }
     return { ok: true, type: 'info', text: String(result) };
 }
@@ -92,47 +105,54 @@ export function normalizeResult(result: any) {
 // ─── Individual Handlers ─────────────────────────────
 // helpHandler is kept in commands.js (needs COMMANDS/findCommand access)
 
-export async function statusHandler(_args: any[], ctx: any) {
+export async function statusHandler(_args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const [settings, session, runtime, skills] = await Promise.all([
         safeCall(ctx.getSettings, null),
         safeCall(ctx.getSession, null),
         safeCall(ctx.getRuntime, null),
         safeCall(ctx.getSkills, null),
-    ]);
+    ]) as [
+        // @strict-debt(P10a): settings/session shapes still loose; tightened by P02 follow-up
+        Record<string, unknown> | null,
+        Record<string, unknown> | null,
+        Record<string, unknown> | null,
+        Array<{ enabled?: boolean }> | null,
+    ];
 
-    const cli = settings?.cli || session?.active_cli || 'unknown';
-    const overrideModel = settings?.activeOverrides?.[cli]?.model;
-    const sessionCli = session?.active_cli || session?.activeCli;
+    const cli = (settings?.cli as string | undefined) || (session?.active_cli as string | undefined) || 'unknown';
+    const overrideModel = (settings?.activeOverrides as Record<string, { model?: string }> | undefined)?.[cli]?.model;
+    const sessionCli = (session?.active_cli || session?.activeCli) as string | undefined;
     const sessionModel = session?.model && (!sessionCli || sessionCli === cli)
-        ? session.model
+        ? (session.model as string)
         : undefined;
     const model = overrideModel
         || sessionModel
-        || settings?.perCli?.[cli]?.model
+        || (settings?.perCli as Record<string, { model?: string }> | undefined)?.[cli]?.model
         || 'default';
-    const overrideEffort = settings?.activeOverrides?.[cli]?.effort;
+    const overrideEffort = (settings?.activeOverrides as Record<string, { effort?: string }> | undefined)?.[cli]?.effort;
     const sessionEffort = session?.effort && (!sessionCli || sessionCli === cli)
-        ? session.effort
+        ? (session.effort as string)
         : undefined;
     const effort = overrideEffort
         || sessionEffort
-        || settings?.perCli?.[cli]?.effort
+        || (settings?.perCli as Record<string, { effort?: string }> | undefined)?.[cli]?.effort
         || '-';
-    const agent = runtime?.activeAgent === true
+    const activeAgent = runtime?.activeAgent;
+    const agent = activeAgent === true
         ? '● running'
-        : runtime?.activeAgent === false ? '○ idle' : '-';
+        : activeAgent === false ? '○ idle' : '-';
     const queuePending = runtime?.queuePending ?? '-';
     const uptime = formatDuration(runtime?.uptimeSec);
     const activeSkills = Array.isArray(skills) ? skills.filter(s => s.enabled).length : '-';
     const refSkills = Array.isArray(skills) ? skills.filter(s => !s.enabled).length : '-';
 
-    const fb = settings?.fallbackOrder || [];
+    const fb = (settings?.fallbackOrder as string[] | undefined) || [];
 
     return {
         ok: true,
         type: 'info',
         text: [
-            `🦈 cli-jaw v${ctx.version || 'unknown'}`,
+            `🦈 cli-jaw v${(ctx as { version?: string }).version || 'unknown'}`,
             `CLI:      ${cli}`,
             `Model:    ${model}`,
             `Effort:   ${effort || '-'}`,
@@ -145,21 +165,21 @@ export async function statusHandler(_args: any[], ctx: any) {
     };
 }
 
-export async function modelHandler(args: any[], ctx: any) {
+export async function modelHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const L = ctx.locale || 'ko';
-    const settings = await safeCall(ctx.getSettings, null);
+    const settings = await safeCall(ctx.getSettings, null) as Record<string, unknown> | null;
     if (!settings) return { ok: false, text: t('cmd.settingsLoadFail', {}, L) };
 
-    const activeCli = settings.cli || 'claude';
-    const session = await safeCall(ctx.getSession, null);
-    const sessionCli = session?.active_cli || session?.activeCli;
-    const overrideModel = settings.activeOverrides?.[activeCli]?.model;
+    const activeCli = (settings.cli as string | undefined) || 'claude';
+    const session = await safeCall(ctx.getSession, null) as Record<string, unknown> | null;
+    const sessionCli = (session?.active_cli || session?.activeCli) as string | undefined;
+    const overrideModel = (settings.activeOverrides as Record<string, { model?: string }> | undefined)?.[activeCli]?.model;
     const sessionModel = session?.model && (!sessionCli || sessionCli === activeCli)
-        ? session.model
+        ? (session.model as string)
         : undefined;
     const current = overrideModel
         || sessionModel
-        || settings.perCli?.[activeCli]?.model
+        || (settings.perCli as Record<string, { model?: string }> | undefined)?.[activeCli]?.model
         || 'default';
 
     if (!args.length) {
@@ -171,14 +191,15 @@ export async function modelHandler(args: any[], ctx: any) {
         return { ok: false, text: t('cmd.model.invalid', {}, L) };
     }
 
+    const perCli = (settings.perCli as Record<string, Record<string, unknown>> | undefined) || {};
     const nextPerCli = {
-        ...(settings.perCli || {}),
+        ...perCli,
         [activeCli]: {
-            ...(settings.perCli?.[activeCli] || {}),
+            ...(perCli[activeCli] || {}),
             model: nextModel,
         },
     };
-    const updateResult = await ctx.updateSettings({ perCli: nextPerCli });
+    const updateResult = await ctx.updateSettings({ perCli: nextPerCli }) as SlashResult;
     if (updateResult?.ok === false) return updateResult;
     return {
         ok: true,
@@ -186,14 +207,14 @@ export async function modelHandler(args: any[], ctx: any) {
     };
 }
 
-export async function cliHandler(args: any[], ctx: any) {
+export async function cliHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const L = ctx.locale || 'ko';
-    const settings = await safeCall(ctx.getSettings, null);
+    const settings = await safeCall(ctx.getSettings, null) as Record<string, unknown> | null;
     if (!settings) return { ok: false, text: t('cmd.settingsLoadFail', {}, L) };
 
-    const allowed = Object.keys(settings.perCli || {});
+    const allowed = Object.keys((settings.perCli as Record<string, unknown> | undefined) || {});
     const fallbackAllowed = allowed.length ? allowed : DEFAULT_CLI_CHOICES;
-    const current = settings.cli || 'claude';
+    const current = (settings.cli as string | undefined) || 'claude';
 
     if (!args.length) {
         return {
@@ -202,7 +223,7 @@ export async function cliHandler(args: any[], ctx: any) {
         };
     }
 
-    const nextCli = args[0].toLowerCase();
+    const nextCli = args[0]!.toLowerCase();
     if (!fallbackAllowed.includes(nextCli)) {
         return {
             ok: false,
@@ -214,13 +235,13 @@ export async function cliHandler(args: any[], ctx: any) {
         return { ok: true, text: t('cmd.cli.already', { cli: nextCli }, L) };
     }
 
-    const updateResult = await ctx.updateSettings({ cli: nextCli });
+    const updateResult = await ctx.updateSettings({ cli: nextCli }) as SlashResult;
     if (updateResult?.ok === false) return updateResult;
     return { ok: true, text: t('cmd.cli.changed', { from: current, to: nextCli }, L) };
 }
 
-export async function thoughtHandler(args: any[], ctx: any) {
-    const settings = await safeCall(ctx.getSettings, null);
+export async function thoughtHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
+    const settings = await safeCall(ctx.getSettings, null) as Record<string, unknown> | null;
     if (!settings) return { ok: false, text: t('cmd.settingsLoadFail', {}, ctx.locale || 'ko') };
 
     const sub = String(args[0] || '').toLowerCase();
@@ -235,16 +256,16 @@ export async function thoughtHandler(args: any[], ctx: any) {
     }
 
     const next = sub === 'on';
-    const updateResult = await ctx.updateSettings({ showReasoning: next });
+    const updateResult = await ctx.updateSettings({ showReasoning: next }) as SlashResult;
     if (updateResult?.ok === false) return updateResult;
     return { ok: true, text: `Gemini thought visibility: ${next ? 'ON' : 'OFF'}` };
 }
 
-export async function skillHandler(args: any[], ctx: any) {
+export async function skillHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const L = ctx.locale || 'ko';
     const sub = (args[0] || 'list').toLowerCase();
     if (sub === 'list') {
-        const skills = await safeCall(ctx.getSkills, null);
+        const skills = await safeCall(ctx.getSkills, null) as Array<{ enabled?: boolean }> | null;
         if (!Array.isArray(skills)) return { ok: false, text: t('cmd.skill.loadFail', {}, L) };
         const active = skills.filter(s => s.enabled).length;
         const ref = skills.filter(s => !s.enabled).length;
@@ -260,7 +281,7 @@ export async function skillHandler(args: any[], ctx: any) {
     return { ok: false, text: 'Usage: /skill [list|reset]' };
 }
 
-export async function employeeHandler(args: any[], ctx: any) {
+export async function employeeHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const L = ctx.locale || 'ko';
     const sub = (args[0] || '').toLowerCase();
     if (sub !== 'reset') {
@@ -269,12 +290,12 @@ export async function employeeHandler(args: any[], ctx: any) {
     if (typeof ctx.resetEmployees !== 'function') {
         return { ok: false, text: t('cmd.employee.resetUnavailable', {}, L) };
     }
-    const result = await ctx.resetEmployees();
-    const seeded = Number.isFinite(result?.seeded) ? result.seeded : '?';
+    const result = await ctx.resetEmployees() as { seeded?: number } | undefined;
+    const seeded = Number.isFinite(result?.seeded) ? result!.seeded : '?';
     return { ok: true, text: t('cmd.employee.resetDone', { count: seeded }, L) };
 }
 
-export async function clearHandler(_args: any[], ctx: any) {
+export async function clearHandler(_args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const L = ctx.locale || 'ko';
     const iface = ctx.interface || 'cli';
 
@@ -292,7 +313,7 @@ export async function clearHandler(_args: any[], ctx: any) {
     };
 }
 
-export async function resetHandler(args: any[], ctx: any) {
+export async function resetHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const L = ctx.locale || 'ko';
     if ((args[0] || '').toLowerCase() !== 'confirm') {
         return {
@@ -323,13 +344,13 @@ export async function resetHandler(args: any[], ctx: any) {
     return { ok: true, text: t('cmd.reset.done', { items: results.join(', ') }, L) };
 }
 
-export async function versionHandler(_args: any[], ctx: any) {
-    const status = await safeCall(ctx.getCliStatus, null);
-    const lines = [`cli-jaw v${ctx.version || 'unknown'}`];
+export async function versionHandler(_args: string[], ctx: CliCommandContext): Promise<SlashResult> {
+    const status = await safeCall(ctx.getCliStatus, null) as Record<string, { available?: boolean; path?: string }> | null;
+    const lines = [`cli-jaw v${(ctx as { version?: string }).version || 'unknown'}`];
     if (status && typeof status === 'object') {
         for (const key of DEFAULT_CLI_CHOICES) {
             if (!status[key]) continue;
-            const entry = status[key];
+            const entry = status[key]!;
             const icon = entry.available ? '✅' : '❌';
             lines.push(`${key}: ${icon}${entry.path ? ` ${entry.path}` : ''}`);
         }
@@ -337,20 +358,20 @@ export async function versionHandler(_args: any[], ctx: any) {
     return { ok: true, text: lines.join('\n') };
 }
 
-export async function mcpHandler(args: any[], ctx: any) {
+export async function mcpHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const L = ctx.locale || 'ko';
     const sub = (args[0] || '').toLowerCase();
     if (sub === 'sync') {
-        const d = await ctx.syncMcp();
+        const d = await ctx.syncMcp() as { results?: Record<string, unknown> };
         const keys = Object.keys(d?.results || {});
         return { ok: true, text: t('cmd.mcp.syncDone', { count: keys.length }, L) };
     }
     if (sub === 'install') {
-        const d = await ctx.installMcp();
+        const d = await ctx.installMcp() as { results?: Record<string, unknown> };
         const keys = Object.keys(d?.results || {});
         return { ok: true, text: t('cmd.mcp.installDone', { count: keys.length }, L) };
     }
-    const d = await ctx.getMcp();
+    const d = await ctx.getMcp() as { servers?: Record<string, unknown> };
     const names = Object.keys(d?.servers || {});
     return {
         ok: true,

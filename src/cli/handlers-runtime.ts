@@ -4,10 +4,15 @@
 import { CLI_KEYS, buildModelChoicesByCli } from './registry.js';
 import { t } from '../core/i18n.js';
 import { detectCli, settings } from '../core/config.js';
+import type { CliCommandContext } from './command-context.js';
+import type { SlashResult } from './types.js';
 
 const MODEL_CHOICES_BY_CLI = buildModelChoicesByCli();
 
-async function safeCall(fn: any, fallback: any = null) {
+async function safeCall<T>(
+    fn: (() => Promise<T> | T) | undefined | null,
+    fallback: T | null = null,
+): Promise<T | null> {
     if (typeof fn !== 'function') return fallback;
     try {
         return await fn();
@@ -17,17 +22,18 @@ async function safeCall(fn: any, fallback: any = null) {
     }
 }
 
-export async function memoryHandler(args: any[], ctx: any) {
+export async function memoryHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const L = ctx.locale || 'ko';
     const sub = String(args[0] || '').toLowerCase();
     if (sub === 'status') {
-        const status = await ctx.getMemoryStatus?.();
+        const status = await ctx.getMemoryStatus?.() as Record<string, unknown> | undefined;
+        const routing = status?.routing as { searchRead?: string; save?: string } | undefined;
         const lines = [
             `🧠 Memory`,
             `State: ${status?.state || '-'}`,
             `Storage: ${status?.storageRoot || '-'}`,
-            `Search/Read: ${status?.routing?.searchRead || 'basic'}`,
-            `Save: ${status?.routing?.save || 'basic'}`,
+            `Search/Read: ${routing?.searchRead || 'basic'}`,
+            `Save: ${routing?.save || 'basic'}`,
             `Indexed files: ${status?.indexedFiles || 0}`,
             `Indexed chunks: ${status?.indexedChunks || 0}`,
         ];
@@ -39,7 +45,7 @@ export async function memoryHandler(args: any[], ctx: any) {
             importMarkdown: true,
             importKv: true,
             importClaudeSession: true,
-        });
+        }) as { root?: string; counts?: Record<string, number> } | undefined;
         return {
             ok: true,
             text: [
@@ -50,7 +56,7 @@ export async function memoryHandler(args: any[], ctx: any) {
         };
     }
     if (sub === 'reindex') {
-        const result = await ctx.reindexMemory?.();
+        const result = await ctx.reindexMemory?.() as { totalFiles?: number; totalChunks?: number } | undefined;
         return {
             ok: true,
             text: [
@@ -72,7 +78,7 @@ export async function memoryHandler(args: any[], ctx: any) {
     if (sub === 'adv') {
         const action = String(args[1] || 'status').toLowerCase();
         if (action === 'on') {
-            const status = await ctx.getMemoryStatus?.();
+            const status = await ctx.getMemoryStatus?.() as Record<string, unknown> | undefined;
             return {
                 ok: true,
                 text: `🧠 Memory is integrated by default.\nState: ${status?.state || 'not_initialized'}`,
@@ -82,8 +88,8 @@ export async function memoryHandler(args: any[], ctx: any) {
             return { ok: true, text: '🧠 Memory can no longer be turned off as a separate mode.' };
         }
         if (action === 'init') {
-            const created = await ctx.initMemoryRuntime?.();
-            const status = await ctx.getMemoryStatus?.();
+            const created = await ctx.initMemoryRuntime?.() as { root?: string } | undefined;
+            const status = await ctx.getMemoryStatus?.() as Record<string, unknown> | undefined;
             return {
                 ok: true,
                 text: `🧠 Memory initialized\nRoot: ${created?.root || status?.storageRoot || '-'}\nState: ${status?.state || 'configured'}`,
@@ -95,8 +101,8 @@ export async function memoryHandler(args: any[], ctx: any) {
                 importMarkdown: true,
                 importKv: true,
                 importClaudeSession: true,
-            });
-            const status = await ctx.getMemoryStatus?.();
+            }) as { root?: string; counts?: Record<string, number> } | undefined;
+            const status = await ctx.getMemoryStatus?.() as Record<string, unknown> | undefined;
             return {
                 ok: true,
                 text: [
@@ -108,8 +114,8 @@ export async function memoryHandler(args: any[], ctx: any) {
             };
         }
         if (action === 'reindex') {
-            const result = await ctx.reindexMemory?.();
-            const status = await ctx.getMemoryStatus?.();
+            const result = await ctx.reindexMemory?.() as { totalFiles?: number; totalChunks?: number } | undefined;
+            const status = await ctx.getMemoryStatus?.() as Record<string, unknown> | undefined;
             return {
                 ok: true,
                 text: [
@@ -120,23 +126,25 @@ export async function memoryHandler(args: any[], ctx: any) {
                 ].join('\n'),
             };
         }
-        const status = await ctx.getMemoryStatus?.();
+        const status = await ctx.getMemoryStatus?.() as Record<string, unknown> | undefined;
+        const routing = status?.routing as { searchRead?: string; save?: string } | undefined;
+        const importedCounts = status?.importedCounts as Record<string, number> | undefined;
         const lines = [
             `🧠 Memory: ${status?.enabled ? 'ON' : 'OFF'}`,
             `State: ${status?.state || '-'}`,
             `Storage: ${status?.storageRoot || '-'}`,
-            `Routing(search/read): ${status?.routing?.searchRead || 'basic'}`,
-            `Routing(save): ${status?.routing?.save || 'basic'}`,
+            `Routing(search/read): ${routing?.searchRead || 'basic'}`,
+            `Routing(save): ${routing?.save || 'basic'}`,
             `Indexed files: ${status?.indexedFiles || 0}`,
             `Indexed chunks: ${status?.indexedChunks || 0}`,
-            `Imported core/markdown/kv/claude: ${status?.importedCounts?.core || 0}/${status?.importedCounts?.markdown || 0}/${status?.importedCounts?.kv || 0}/${status?.importedCounts?.claude || 0}`,
+            `Imported core/markdown/kv/claude: ${importedCounts?.core || 0}/${importedCounts?.markdown || 0}/${importedCounts?.kv || 0}/${importedCounts?.claude || 0}`,
         ];
         return { ok: true, text: lines.join('\n') };
     }
-    if (!args.length || (args.length === 1 && args[0].toLowerCase() === 'list')) {
-        const files = await ctx.listMemory();
+    if (!args.length || (args.length === 1 && args[0]!.toLowerCase() === 'list')) {
+        const files = await ctx.listMemory() as Array<{ path: string; size: number }> | undefined;
         if (!files?.length) return { ok: true, text: t('cmd.memory.empty', {}, L) };
-        const lines = files.slice(0, 20).map((f: any) => `- ${f.path} (${f.size}b)`);
+        const lines = files.slice(0, 20).map((f) => `- ${f.path} (${f.size}b)`);
         return { ok: true, text: `🧠 memory files (${files.length})\n${lines.join('\n')}` };
     }
     const query = args.join(' ').trim();
@@ -146,25 +154,25 @@ export async function memoryHandler(args: any[], ctx: any) {
     return { ok: true, text: text.length > MAX ? text.slice(0, MAX) + '\n...(truncated)' : text };
 }
 
-export async function browserHandler(args: any[], ctx: any) {
+export async function browserHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const L = ctx.locale || 'ko';
     const sub = (args[0] || 'status').toLowerCase();
     if (sub === 'tabs') {
-        const d = await ctx.getBrowserTabs();
+        const d = await ctx.getBrowserTabs() as { tabs?: Array<{ title?: string; url?: string }> };
         const tabs = d?.tabs || [];
         if (!tabs.length) return { ok: true, text: t('cmd.browser.noTabs', {}, L) };
-        const lines = tabs.slice(0, 10).map((tab: any, i: number) => `${i + 1}. ${tab.title || '(untitled)'}\n   ${tab.url || ''}`);
+        const lines = tabs.slice(0, 10).map((tab, i: number) => `${i + 1}. ${tab.title || '(untitled)'}\n   ${tab.url || ''}`);
         return { ok: true, text: lines.join('\n') };
     }
     if (sub !== 'status') return { ok: false, text: 'Usage: /browser [status|tabs]' };
-    const d = await ctx.getBrowserStatus();
+    const d = await ctx.getBrowserStatus() as unknown as { running?: boolean; tabs?: unknown[]; tabCount?: number; cdpUrl?: string };
     const running = d?.running ? 'running' : 'stopped';
     const tabCount = d?.tabs?.length ?? d?.tabCount ?? '-';
     return { ok: true, text: `🌐 Browser: ${running}\nTabs: ${tabCount}\nCDP: ${d?.cdpUrl || '-'}` };
 }
 
-export async function promptHandler(_args: any[], ctx: any) {
-    const d = await ctx.getPrompt();
+export async function promptHandler(_args: string[], ctx: CliCommandContext): Promise<SlashResult> {
+    const d = await ctx.getPrompt() as { content?: string };
     const content = d?.content || '';
     if (!content.trim()) return { ok: true, text: '(empty prompt)' };
     const lines = content.trim().split('\n');
@@ -173,15 +181,15 @@ export async function promptHandler(_args: any[], ctx: any) {
     return { ok: true, text: `${preview}${suffix}` };
 }
 
-export async function quitHandler() {
+export async function quitHandler(): Promise<SlashResult> {
     return { ok: true, code: 'exit', text: 'Bye!' };
 }
 
-export async function fileHandler() {
+export async function fileHandler(): Promise<SlashResult> {
     return { ok: false, text: 'Usage: /file <path> [caption]' };
 }
 
-export async function steerHandler(args: any[], ctx: any) {
+export async function steerHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const L = ctx.locale || 'ko';
     const prompt = args.join(' ').trim();
     if (!prompt) {
@@ -207,42 +215,45 @@ export async function steerHandler(args: any[], ctx: any) {
 
     // Web/CLI: fire orchestration directly via submitMessage
     const { submitMessage } = await import('../orchestrator/gateway.js');
-    submitMessage(prompt, { origin: iface as any });
+    // @strict-debt(P10a): SubmitOrigin not exported by message bus
+    submitMessage(prompt, { origin: iface as 'cli' | 'web' | 'telegram' | 'discord' });
     return { ok: true, type: 'success', text: t('cmd.steer.started', {}, L) };
 }
 
-export async function forwardHandler(args: any[], ctx: any) {
+export async function forwardHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const iface = ctx.interface || 'cli';
     const remote = iface === 'discord' ? 'discord'
         : iface === 'telegram' ? 'telegram'
         : null;
     // Determine which channel's forwardAll to modify
-    const settings = await safeCall(ctx.getSettings, null);
-    const channelKey = remote || (settings?.channel || 'telegram');
+    const settings = await safeCall(ctx.getSettings, null) as Record<string, unknown> | null;
+    const channelKey = remote || ((settings?.channel as string | undefined) || 'telegram');
     const arg = args[0]?.toLowerCase();
     if (arg === 'on' || arg === 'off') {
         const val = arg === 'on';
         const patch = { [channelKey]: { forwardAll: val } };
-        const r = await ctx.updateSettings(patch);
+        const r = await ctx.updateSettings(patch) as SlashResult;
         if (!r?.ok) return { ok: false, text: r?.text || 'Failed' };
         const label = channelKey === 'discord' ? 'Discord' : 'Telegram';
         return { text: `📡 ${label} forwarding: ${val ? 'ON (all)' : 'OFF (channel only)'}` };
     }
+    const dc = settings?.discord as { forwardAll?: boolean } | undefined;
+    const tg = settings?.telegram as { forwardAll?: boolean } | undefined;
     const current = channelKey === 'discord'
-        ? settings?.discord?.forwardAll !== false
-        : settings?.telegram?.forwardAll !== false;
+        ? dc?.forwardAll !== false
+        : tg?.forwardAll !== false;
     const label = channelKey === 'discord' ? 'Discord' : 'Telegram';
     return { text: `📡 ${label} forwarding: ${current ? 'ON (all)' : 'OFF (channel only)'}\nUsage: /forward on|off` };
 }
 
-export async function fallbackHandler(args: any[], ctx: any) {
+export async function fallbackHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const L = ctx.locale || 'ko';
-    const settings = await safeCall(ctx.getSettings, null);
+    const settings = await safeCall(ctx.getSettings, null) as Record<string, unknown> | null;
     if (!settings) return { ok: false, text: t('cmd.settingsLoadFail', {}, L) };
-    const available = Object.keys(settings.perCli || {});
+    const available = Object.keys((settings.perCli as Record<string, unknown> | undefined) || {});
 
     if (!args.length) {
-        const fb = settings.fallbackOrder || [];
+        const fb = (settings.fallbackOrder as string[] | undefined) || [];
         return {
             ok: true, type: 'info',
             text: fb.length
@@ -252,48 +263,50 @@ export async function fallbackHandler(args: any[], ctx: any) {
     }
 
     if (args[0] === 'off' || args[0] === 'none') {
-        const r = await ctx.updateSettings({ fallbackOrder: [] });
+        const r = await ctx.updateSettings({ fallbackOrder: [] }) as SlashResult;
         if (r?.ok === false) return r;
         return { ok: true, text: t('cmd.fallback.off', {}, L) };
     }
 
-    const order = args.filter((a: any) => available.includes(a.toLowerCase())).map((a: any) => a.toLowerCase());
+    const order = args.filter((a) => available.includes(a.toLowerCase())).map((a) => a.toLowerCase());
     if (!order.length) {
         return { ok: false, text: t('cmd.fallback.invalidCli', { available: available.join(', ') }, L) };
     }
 
-    const r = await ctx.updateSettings({ fallbackOrder: order });
+    const r = await ctx.updateSettings({ fallbackOrder: order }) as SlashResult;
     if (r?.ok === false) return r;
     return { ok: true, text: t('cmd.fallback.set', { order: order.join(' → ') }, L) };
 }
 
-export async function flushHandler(args: any[], ctx: any) {
+export async function flushHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const L = ctx.locale || 'ko';
-    const settings = await safeCall(ctx.getSettings, null);
+    const settings = await safeCall(ctx.getSettings, null) as Record<string, unknown> | null;
     if (!settings) return { ok: false, text: t('cmd.settingsLoadFail', {}, L) };
 
-    const activeCli = settings.cli || 'claude';
-    const currentFlushCli = settings.memory?.cli || activeCli;
-    const currentFlushModel = settings.memory?.model
-        || settings.perCli?.[currentFlushCli]?.model || 'default';
+    const activeCli = (settings.cli as string | undefined) || 'claude';
+    const memSettings = settings.memory as { cli?: string; model?: string } | undefined;
+    const perCli = settings.perCli as Record<string, { model?: string }> | undefined;
+    const currentFlushCli = memSettings?.cli || activeCli;
+    const currentFlushModel = memSettings?.model
+        || perCli?.[currentFlushCli]?.model || 'default';
 
     if (!args.length) {
-        const isDefault = !settings.memory?.cli && !settings.memory?.model;
+        const isDefault = !memSettings?.cli && !memSettings?.model;
         const suffix = isDefault ? ` (active ${activeCli} 사용)` : '';
         return { ok: true, text: t('cmd.flush.current', { cli: currentFlushCli, model: currentFlushModel }, L) + suffix };
     }
 
-    const first = args[0].toLowerCase();
+    const first = args[0]!.toLowerCase();
 
     // /flush off|reset
     if (first === 'off' || first === 'reset') {
-        const mem = { ...(settings.memory || {}), cli: '', model: '' };
-        const r = await ctx.updateSettings({ memory: mem });
+        const mem = { ...(memSettings || {}), cli: '', model: '' };
+        const r = await ctx.updateSettings({ memory: mem }) as SlashResult;
         if (r?.ok === false) return r;
         return { ok: true, text: t('cmd.flush.reset', {}, L) };
     }
 
-    const cliKeys = [...CLI_KEYS];
+    const cliKeys = [...CLI_KEYS] as readonly string[];
     let newCli: string;
     let newModel: string;
 
@@ -359,15 +372,15 @@ export async function flushHandler(args: any[], ctx: any) {
         };
     }
 
-    const mem = { ...(settings.memory || {}), cli: newCli, model: newModel };
-    const r = await ctx.updateSettings({ memory: mem });
+    const mem = { ...(memSettings || {}), cli: newCli, model: newModel };
+    const r = await ctx.updateSettings({ memory: mem }) as SlashResult;
     if (r?.ok === false) return r;
     return { ok: true, text: t('cmd.flush.changed', { cli: newCli, model: newModel }, L) };
 }
 
 // ─── IDE Handler ─────────────────────────────────────
 
-export async function ideHandler(args: string[], ctx: any) {
+export async function ideHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const L = ctx.locale || 'ko';
     const sub = (args[0] || '').toLowerCase();
     if (sub === 'pop') return { ok: true, code: 'ide_pop_toggle', text: t('cmd.ide.popToggled', {}, L) };
@@ -377,7 +390,7 @@ export async function ideHandler(args: string[], ctx: any) {
     return { ok: false, text: t('cmd.ide.usage', {}, L) };
 }
 
-export async function orchestrateHandler(args: string[], ctx: any) {
+export async function orchestrateHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const { getState, setState, resetState, canTransition, getStatePrompt, getCtx } = await import('../orchestrator/state-machine.js');
     const { resolveOrcScope } = await import('../orchestrator/scope.js');
     type OrcStateName = 'IDLE' | 'P' | 'A' | 'B' | 'C' | 'D';

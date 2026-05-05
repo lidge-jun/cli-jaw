@@ -24,7 +24,7 @@ export async function runSimpleMode(ctx: TuiContext): Promise<void> {
             if (result?.code === 'ide_toggle') { ctx.ideEnabled = !ctx.ideEnabled; }
             if (result?.code === 'ide_on') { ctx.ideEnabled = true; }
             if (result?.code === 'ide_off') { ctx.ideEnabled = false; }
-            if (['ide_toggle', 'ide_on', 'ide_off'].includes(result?.code)) {
+            if (result?.code && ['ide_toggle', 'ide_on', 'ide_off'].includes(result.code)) {
                 console.log(`  ${ctx.ideEnabled ? '\u2713' : '\u2717'} IDE diff: ${ctx.ideEnabled ? 'ON' : 'OFF'}${ctx.isGit ? '' : ' (non-git)'}`);
             }
             if (result?.code === 'ide_pop_toggle') {

@@ -9,8 +9,23 @@ import {
     renderBootstrapPrompt,
     normalizeWorkingDir,
 } from '../core/compact.js';
+import type { CliCommandContext } from './command-context.js';
+import type { SlashResult } from './types.js';
 
-function getActiveModel(settings: any, session: any, activeCli: string): string {
+// @strict-debt(P10a): settings/session shapes still loose; tighten when AppSettings/SessionSnapshot land
+interface CompactSettings {
+    cli?: string;
+    workingDir?: string | null;
+    activeOverrides?: Record<string, { model?: string }>;
+    perCli?: Record<string, { model?: string }>;
+}
+interface CompactSession {
+    active_cli?: string;
+    activeCli?: string;
+    model?: string;
+}
+
+function getActiveModel(settings: CompactSettings | null, session: CompactSession | null, activeCli: string): string {
     const sessionCli = session?.active_cli || session?.activeCli;
     const sessionModel = session?.model && (!sessionCli || sessionCli === activeCli)
         ? session.model
@@ -21,7 +36,10 @@ function getActiveModel(settings: any, session: any, activeCli: string): string 
         || 'default';
 }
 
-async function safeCall(fn: any, fallback: any = null) {
+async function safeCall<T>(
+    fn: (() => Promise<T> | T) | undefined | null,
+    fallback: T | null = null,
+): Promise<T | null> {
     if (typeof fn !== 'function') return fallback;
     try {
         return await fn();
@@ -30,13 +48,13 @@ async function safeCall(fn: any, fallback: any = null) {
     }
 }
 
-export async function compactHandler(args: string[], ctx: any) {
+export async function compactHandler(args: string[], ctx: CliCommandContext): Promise<SlashResult> {
     const instructions = (args || []).join(' ').trim();
     const [settings, session, runtime] = await Promise.all([
         safeCall(ctx?.getSettings, null),
         safeCall(ctx?.getSession, null),
         safeCall(ctx?.getRuntime, null),
-    ]);
+    ]) as [CompactSettings | null, CompactSession | null, { activeAgent?: boolean } | null];
 
     if (runtime?.activeAgent) {
         return {
