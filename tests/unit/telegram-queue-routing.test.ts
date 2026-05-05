@@ -112,7 +112,7 @@ test('TQ-007: tgOrchestrate passes chatId to submitMessage', () => {
 });
 
 test('TQ-008: queued telegram response filter uses requestId for isolation', () => {
-    const fnStart = botSrc.indexOf('const queueHandler = (type: string, data: Record<string, any>) =>');
+    const fnStart = botSrc.indexOf('const queueHandler = (type: string, data: Record<string, unknown>) =>');
     const fnBlock = botSrc.slice(fnStart, fnStart + 600);
     assert.ok(
         fnBlock.includes('data.requestId === requestId'),

@@ -1,5 +1,18 @@
-import { InputFile } from 'grammy';
+import { InputFile, type Bot } from 'grammy';
 import fs from 'node:fs';
+
+interface TelegramApiErrorLike {
+    error_code?: number;
+    statusCode?: number;
+    code?: string;
+    message?: string;
+    parameters?: { retry_after?: number };
+    constructor?: { name?: string };
+}
+
+function asTgErr(err: unknown): TelegramApiErrorLike {
+    return (err && typeof err === 'object') ? (err as TelegramApiErrorLike) : {};
+}
 
 // Telegram Bot API file size limits (bytes)
 // https://core.telegram.org/bots/api#sendphoto / #senddocument / #sendvoice
@@ -33,28 +46,27 @@ export function validateFileSize(filePath: string, type: string): void {
 }
 
 /** Classify error as transient (retryable) using grammY error types. */
-function isTransient(err: any): boolean {
-    // GrammyError with error_code
-    if (typeof err?.error_code === 'number') {
-        if (err.error_code === 429) return true;
-        if (err.error_code >= 500) return true;
-        return false; // other 4xx → permanent
+function isTransient(err: unknown): boolean {
+    const e = asTgErr(err);
+    if (typeof e.error_code === 'number') {
+        if (e.error_code === 429) return true;
+        if (e.error_code >= 500) return true;
+        return false;
     }
-    // HttpError (network-level) — grammY sets constructor.name = 'HttpError'
-    if (err?.constructor?.name === 'HttpError') return true;
-    // Fallback: known network error codes
-    const code = err?.code || '';
+    if (e.constructor?.name === 'HttpError') return true;
+    const code = e.code || '';
     if (/ETIMEDOUT|ECONNRESET|ECONNREFUSED|EPIPE/.test(code)) return true;
     return false;
 }
 
-function getRetryAfterMs(err: any): number {
-    return (err?.parameters?.retry_after ?? 0) * 1000;
+function getRetryAfterMs(err: unknown): number {
+    return (asTgErr(err).parameters?.retry_after ?? 0) * 1000;
 }
 
 /** Determine upstream error category for HTTP response code. */
-export function classifyUpstreamError(err: any): number {
-    if (err?.error_code === 429) return 429;
+export function classifyUpstreamError(err: unknown): number {
+    const e = asTgErr(err);
+    if (e.error_code === 429) return 429;
     return 502; // 5xx or network
 }
 
@@ -63,7 +75,7 @@ export function classifyUpstreamError(err: any): number {
  * Creates a fresh InputFile per attempt (stream safety).
  */
 export async function sendTelegramFile(
-    bot: any,
+    bot: Bot,
     chatId: number | string,
     filePath: string,
     type: string,
@@ -89,15 +101,16 @@ export async function sendTelegramFile(
                     return { ok: false, attempts: attempt, error: `unsupported type: ${type}`, statusCode: 400 };
             }
             return { ok: true, attempts: attempt };
-        } catch (err: any) {
+        } catch (err: unknown) {
+            const e = asTgErr(err);
             const transient = isTransient(err);
             if (!transient || attempt === MAX_RETRIES) {
-                const sc = transient ? classifyUpstreamError(err) : (err?.error_code || err?.statusCode || 500);
-                console.error(`[telegram:file] failed after ${attempt} attempt(s):`, err?.message);
+                const sc = transient ? classifyUpstreamError(err) : (e.error_code || e.statusCode || 500);
+                console.error(`[telegram:file] failed after ${attempt} attempt(s):`, e.message);
                 return {
                     ok: false, attempts: attempt,
-                    error: err?.message || 'unknown error',
-                    retryAfter: err?.error_code === 429 ? err?.parameters?.retry_after : undefined,
+                    error: e.message || 'unknown error',
+                    retryAfter: e.error_code === 429 ? e.parameters?.retry_after : undefined,
                     statusCode: sc,
                 };
             }
@@ -109,7 +122,7 @@ export async function sendTelegramFile(
                 return {
                     ok: false, attempts: attempt,
                     error: `retry_after too large: ${retryAfterMs}ms`,
-                    retryAfter: err?.parameters?.retry_after,
+                    retryAfter: e.parameters?.retry_after,
                     statusCode: 429,
                 };
             }
@@ -125,7 +138,7 @@ export async function sendTelegramFile(
                 };
             }
 
-            console.warn(`[telegram:retry] attempt ${attempt}/${MAX_RETRIES} failed (${err?.error_code || 'network'}), retrying in ${delay}ms...`);
+            console.warn(`[telegram:retry] attempt ${attempt}/${MAX_RETRIES} failed (${e.error_code || 'network'}), retrying in ${delay}ms...`);
             await new Promise(r => setTimeout(r, delay));
         }
     }
