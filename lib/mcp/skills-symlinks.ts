@@ -131,7 +131,7 @@ export function ensureSymlinkSafe(target: string, linkPath: string, opts: Record
             backupPath,
         };
     } catch (e: unknown) {
-        if ((e as any)?.code !== 'ENOENT') {
+        if ((e as NodeJS.ErrnoException)?.code !== 'ENOENT') {
             return {
                 ...baseResult,
                 status: 'error',

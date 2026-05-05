@@ -8,8 +8,8 @@ const NPX_TO_GLOBAL = {
     '@upstash/context7-mcp': { pkg: '@upstash/context7-mcp', bin: 'context7-mcp' },
 };
 
-function resolveNpxPackage(args: any) {
-    const pkg = (args || []).find((a: string) => !a.startsWith('-'));
+function resolveNpxPackage(args: readonly string[] | undefined) {
+    const pkg = (args ?? []).find((a) => !a.startsWith('-'));
     return pkg ? (NPX_TO_GLOBAL as Record<string, any>)[pkg] : null;
 }
 

@@ -221,11 +221,11 @@ export async function transcribeVoice(audioPath: string, mimeType = 'audio/ogg')
     }
     if (engine === 'gemini' || (engine === 'auto' && geminiApiKey)) {
         try { return await sttGemini(audioPath, mimeType); }
-        catch (e: any) {
+        catch (e: unknown) {
             if (engine === 'gemini') throw e;
-            console.warn('[stt] Gemini failed, trying whisper:', e.message);
+            console.warn('[stt] Gemini failed, trying whisper:', (e as Error).message);
         }
     }
     try { return await sttWhisper(audioPath); }
-    catch (e: any) { throw new Error(`STT failed: ${e.message}`); }
+    catch (e: unknown) { throw new Error(`STT failed: ${(e as Error).message}`); }
 }

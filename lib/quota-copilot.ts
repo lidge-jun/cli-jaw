@@ -225,11 +225,17 @@ export function clearCopilotTokenCache() {
     } catch { /* ignore */ }
 }
 
+/** Shape of the `account` field returned by Copilot quota-style endpoints. */
+export interface CopilotAccount {
+    email: string | null;
+    plan: string | null;
+}
+
 /** Force token re-read: reset keychain suppression + clear all caches + retry full chain.
  *  Returns step-by-step results for each source in priority order. */
 export async function refreshCopilotFromKeychain(): Promise<{
     ok: boolean;
-    account?: any;
+    account?: CopilotAccount;
     steps: Array<{ source: string; status: 'hit' | 'miss' | 'error'; detail?: string }>;
 }> {
     _keychainFailed = false;
@@ -304,5 +310,5 @@ export async function refreshCopilotFromKeychain(): Promise<{
     writeTokenCache(expectedLogin || 'refresh', foundToken);
 
     const result = await fetchCopilotQuota();
-    return { ok: true, account: result?.account ?? null, steps };
+    return { ok: true, account: result?.account ?? undefined, steps };
 }

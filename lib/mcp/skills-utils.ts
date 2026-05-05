@@ -89,13 +89,19 @@ export function semverGt(a: string, b: string): boolean {
     return false;
 }
 
-export function loadRegistry(dir: string): Record<string, any> {
+/** Shape of `registry.json` files written by skills-distribution. */
+export interface SkillRegistry {
+    skills?: Record<string, { version?: string; [k: string]: unknown }>;
+    [k: string]: unknown;
+}
+
+export function loadRegistry(dir: string): SkillRegistry {
     try {
-        return JSON.parse(fs.readFileSync(join(dir, 'registry.json'), 'utf8'));
+        return JSON.parse(fs.readFileSync(join(dir, 'registry.json'), 'utf8')) as SkillRegistry;
     } catch { return { skills: {} }; }
 }
 
-export function getSkillVersion(id: string, registry: any): string | null {
+export function getSkillVersion(id: string, registry: SkillRegistry): string | null {
     return registry?.skills?.[id]?.version ?? null;
 }
 
