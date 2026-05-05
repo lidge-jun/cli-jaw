@@ -178,7 +178,7 @@ export function resolveDispatchableEmployee(
     }
     const spec = findStaticEmployee(name);
     if (!spec) return null;
-    const override = (settings.staticEmployees as Record<string, { model?: string }> | undefined)?.[spec.name];
+    const override = (settings["staticEmployees"] as Record<string, { model?: string }> | undefined)?.[spec.name];
     return {
         row: {
             id: `static:${spec.name.toLowerCase()}`,
@@ -203,7 +203,7 @@ export function listEmployees(): EmployeeListing[] {
     const seen = new Set<string>();
     const staticOut: EmployeeListing[] = [];
     const dbOut: EmployeeListing[] = [];
-    const overrides = (settings.staticEmployees as Record<string, { model?: string }> | undefined) || {};
+    const overrides = (settings["staticEmployees"] as Record<string, { model?: string }> | undefined) || {};
 
     // Static employees first (rendered at top of UI list, CLI-locked, model editable).
     for (const s of STATIC_EMPLOYEES) {
@@ -245,15 +245,15 @@ export function listEmployees(): EmployeeListing[] {
 }
 
 export function seedDefaultEmployees({ reset = false, notify = false } = {}) {
-    if (!db.open) return { seeded: 0, cli: settings.cli, skipped: true };
+    if (!db.open) return { seeded: 0, cli: settings["cli"], skipped: true };
     const existing = getEmployees.all() as EmployeeRow[];
     if (reset) {
         for (const emp of existing) deleteEmployee.run(emp.id);
     } else if (existing.length > 0) {
-        return { seeded: 0, cli: settings.cli, skipped: true };
+        return { seeded: 0, cli: settings["cli"], skipped: true };
     }
 
-    const cli = settings.cli;
+    const cli = settings["cli"];
     const defaultModel = cli === 'claude' ? getDefaultClaudeModel() : 'default';
     for (const emp of DEFAULT_EMPLOYEES) {
         insertEmployee.run(crypto.randomUUID(), emp.name, cli, defaultModel, emp.role);

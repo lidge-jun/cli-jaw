@@ -158,22 +158,22 @@ export function createDashboardNotesRouter(options: DashboardNotesRouterOptions)
     router.post('/asset', express.json({ limit: NOTE_ASSET_JSON_LIMIT }), asyncRoute(async (req, res) => {
         const body = bodyObject(req);
         res.status(201).json(await assetStore.saveAsset({
-            notePath: requireString(body.notePath, 'invalid_note_path', 'notePath is required'),
-            mime: requireString(body.mime, 'note_asset_unsupported_type', 'mime is required'),
-            dataBase64: requireString(body.dataBase64, 'note_asset_invalid_base64', 'dataBase64 is required'),
+            notePath: requireString(body["notePath"], 'invalid_note_path', 'notePath is required'),
+            mime: requireString(body["mime"], 'note_asset_unsupported_type', 'mime is required'),
+            dataBase64: requireString(body["dataBase64"], 'note_asset_invalid_base64', 'dataBase64 is required'),
         }));
     }));
 
     router.post('/asset/remote', express.json({ limit: '32kb' }), asyncRoute(async (req, res) => {
         const body = bodyObject(req);
         res.status(201).json(await saveRemoteNoteAsset(assetStore, {
-            notePath: requireString(body.notePath, 'invalid_note_path', 'notePath is required'),
-            url: requireString(body.url, 'note_asset_remote_invalid_url', 'url is required'),
+            notePath: requireString(body["notePath"], 'invalid_note_path', 'notePath is required'),
+            url: requireString(body["url"], 'note_asset_remote_invalid_url', 'url is required'),
         }));
     }));
 
     router.get('/asset', asyncRoute(async (req, res) => {
-        const path = requireString(req.query.path, 'invalid_note_asset_path', 'path query is required');
+        const path = requireString(req.query["path"], 'invalid_note_asset_path', 'path query is required');
         const asset = await assetStore.resolveAsset(path);
         res.setHeader('Content-Type', asset.mime);
         res.setHeader('Cache-Control', 'private, max-age=3600');
@@ -204,43 +204,43 @@ export function createDashboardNotesRouter(options: DashboardNotesRouterOptions)
     }));
 
     router.get('/file', asyncRoute(async (req, res) => {
-        const path = requireString(req.query.path, 'invalid_note_path', 'path query is required');
+        const path = requireString(req.query["path"], 'invalid_note_path', 'path query is required');
         res.json(await store.readFile(path));
     }));
 
     router.post('/file', asyncRoute(async (req, res) => {
         const body = bodyObject(req);
-        const path = requireString(body.path, 'invalid_note_path', 'path is required');
-        res.status(201).json(await store.createFile(path, optionalString(body.content) || ''));
+        const path = requireString(body["path"], 'invalid_note_path', 'path is required');
+        res.status(201).json(await store.createFile(path, optionalString(body["content"]) || ''));
     }));
 
     router.put('/file', asyncRoute(async (req, res) => {
         const body = bodyObject(req);
         const request: DashboardPutNoteRequest = {
-            path: requireString(body.path, 'invalid_note_path', 'path is required'),
-            content: requireString(body.content, 'invalid_note_content', 'content is required'),
-            baseRevision: optionalString(body.baseRevision),
+            path: requireString(body["path"], 'invalid_note_path', 'path is required'),
+            content: requireString(body["content"], 'invalid_note_content', 'content is required'),
+            baseRevision: optionalString(body["baseRevision"]),
         };
         res.json(await store.writeFile(request));
     }));
 
     router.post('/folder', asyncRoute(async (req, res) => {
         const body = bodyObject(req);
-        const path = requireString(body.path, 'invalid_note_folder_path', 'path is required');
+        const path = requireString(body["path"], 'invalid_note_folder_path', 'path is required');
         res.status(201).json(await store.createFolder(path));
     }));
 
     router.post('/rename', asyncRoute(async (req, res) => {
         const body = bodyObject(req);
-        const from = requireString(body.from, 'invalid_note_path', 'from is required');
-        const to = requireString(body.to, 'invalid_note_path', 'to is required');
+        const from = requireString(body["from"], 'invalid_note_path', 'from is required');
+        const to = requireString(body["to"], 'invalid_note_path', 'to is required');
         res.json(await store.rename(from, to));
     }));
 
     router.post('/trash', asyncRoute(async (req, res) => {
         const body = bodyObject(req);
-        const path = requireString(body.path, 'invalid_note_path', 'path is required');
-        const kind = optionalTrashKind(body.kind);
+        const path = requireString(body["path"], 'invalid_note_path', 'path is required');
+        const kind = optionalTrashKind(body["kind"]);
         res.json(await trash.trashPath(store.rootPath(), path, kind));
     }));
 

@@ -1,3 +1,4 @@
+import { readSource } from './source-normalize.js';
 // #44: /api/quota 3-state classification matrix tests
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,10 +8,10 @@ import path from 'node:path';
 import { readClaudeCreds, getClaudeCredentialsPath } from '../../src/routes/quota.ts';
 
 // Read source for structural verification
-const quotaSrc = fs.readFileSync(
+const quotaSrc = readSource(
     path.join(import.meta.dirname, '../../src/routes/quota.ts'), 'utf8'
 );
-const serverSrc = fs.readFileSync(
+const serverSrc = readSource(
     path.join(import.meta.dirname, '../../server.ts'), 'utf8'
 );
 // After Phase 4 decomposition, read all settings modules for structural checks
@@ -19,8 +20,8 @@ const settingsSrc = [
     'settings.ts', 'settings-types.ts', 'settings-core.ts', 'settings-cli-status.ts',
     'settings-telegram.ts', 'settings-discord.ts', 'settings-channel.ts',
     'settings-stt.ts', 'settings-mcp.ts', 'settings-templates.ts',
-].map(f => fs.readFileSync(path.join(settingsDir, f), 'utf8')).join('\n');
-const sidebarCss = fs.readFileSync(
+].map(f => readSource(path.join(settingsDir, f), 'utf8')).join('\n');
+const sidebarCss = readSource(
     path.join(import.meta.dirname, '../../public/css/sidebar.css'), 'utf8'
 );
 
@@ -114,7 +115,7 @@ test('QS-004: readGeminiAccount has cross-platform documentation', () => {
 // ── Server.ts: classify logic ──
 
 test('QS-005: /api/quota classify separates no-creds from API failure', () => {
-    const settingsRouteSrc = fs.readFileSync(
+    const settingsRouteSrc = readSource(
         path.join(import.meta.dirname, '../../src/routes/settings.ts'), 'utf8'
     );
     assert.ok(
@@ -197,7 +198,7 @@ test('QS-010c: Gemini quota normalization exposes compact F/P policy', () => {
 });
 
 test('QS-010d: Copilot monthly quota writes reset to window resetsAt', () => {
-    const copilotSrc = fs.readFileSync(
+    const copilotSrc = readSource(
         path.join(import.meta.dirname, '../../lib/quota-copilot.ts'), 'utf8',
     );
     assert.ok(

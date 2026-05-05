@@ -28,7 +28,7 @@ function getRuntimeSnapshot() {
 export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddleware): void {
     app.post('/api/orchestrate/reset', requireAuth, async (req, res) => {
         try {
-            const all = req.query.all === 'true' || req.body?.all === true;
+            const all = req.query["all"] === 'true' || req.body?.all === true;
             if (all) {
                 const cleared = resetAllStaleStates();
                 return res.json({ ok: true, cleared, message: `Cleared ${cleared} stale state(s)` });
@@ -42,7 +42,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
     });
 
     app.get('/api/orchestrate/state', (_req, res) => {
-        const scope = resolveOrcScope({ origin: 'web', workingDir: settings.workingDir || null });
+        const scope = resolveOrcScope({ origin: 'web', workingDir: settings["workingDir"] || null });
         res.json({ scope, state: getState(scope), ctx: getCtx(scope) });
     });
 
@@ -52,7 +52,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
 
     app.get('/api/orchestrate/snapshot', (_req, res) => {
         const runtime = getRuntimeSnapshot();
-        const scope = resolveOrcScope({ origin: 'web', workingDir: settings.workingDir || null });
+        const scope = resolveOrcScope({ origin: 'web', workingDir: settings["workingDir"] || null });
         const ctx = getCtx(scope);
         // Phase 56.1: whitelist-sanitize ctx so legacy fields (e.g. sharedPlanPath)
         // from pre-56.1 DB rows don't leak through the snapshot API.
@@ -95,7 +95,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
 
     // Pipe-mode employee dispatch
     app.delete('/api/orchestrate/queue/:id', requireAuth, (req, res) => {
-        const id = String(req.params.id || '');
+        const id = String(req.params["id"] || '');
         if (!id) return fail(res, 400, 'missing id');
         const result = removeQueuedMessage(id);
         if (!result.removed) return fail(res, 404, 'queued item not found');
@@ -103,7 +103,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
     });
 
     app.post('/api/orchestrate/queue/:id/steer', requireAuth, async (req, res) => {
-        const id = String(req.params.id || '');
+        const id = String(req.params["id"] || '');
         if (!id) return fail(res, 400, 'missing id');
         // Fix B (W-1+W-2): peek 먼저 → kill+wait → remove → DB insert (processQueue 미러)
         // → orchestrate(_skipInsert). submitMessage idle 분기를 거치지 않아 두 번째
@@ -119,7 +119,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         const result = removeQueuedMessage(id);
         if (!result.removed) return fail(res, 404, 'queued item disappeared during steer');
         try {
-            insertMessage.run('user', prompt, origin, '', settings.workingDir || null);
+            insertMessage.run('user', prompt, origin, '', settings["workingDir"] || null);
         } catch (err) {
             console.warn('[steer:insert]', (err as Error).message);
         }
@@ -149,7 +149,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         // Phase 57: B-phase workers are READ-ONLY verifiers (Phase 4=Check), not implementers (Phase 3=Dev).
         // PABCD A=Plan Audit (Phase 2), B=Build but workers verify only (Phase 4), C=Check (Phase 4).
         const PABCD_PHASE_MAP: Record<string, number> = { A: 2, B: 4, C: 4 };
-        const dispatchScope = resolveOrcScope({ origin: 'web', workingDir: settings.workingDir || null });
+        const dispatchScope = resolveOrcScope({ origin: 'web', workingDir: settings["workingDir"] || null });
         const currentOrcState = getState(dispatchScope);
         const resolvedPhase = phase ?? PABCD_PHASE_MAP[currentOrcState] ?? 3;
         const dispatchCtx = getCtx(dispatchScope);
@@ -268,11 +268,11 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
             // Phase 57: Pass worklog path so the worker can append progress entries.
             const worklog = dispatchCtx?.worklogPath ? { path: dispatchCtx.worklogPath } : {};
             const result = await runSingleAgent(ap, emp, worklog, 1, { origin: 'api' }, []);
-            finishWorker(slot.agentId, result.text || '');
+            finishWorker(slot.agentId, result["text"] || '');
 
             // Phase 58: Auto-update audit/verification status from worker verdict.
             // 'A' phase verdicts → auditStatus; 'B' phase verdicts → verificationStatus.
-            const verdict = parseWorkerVerdict(result.text || '');
+            const verdict = parseWorkerVerdict(result["text"] || '');
             let statusPersisted = false;
             let statusPersistReason: 'persisted' | 'state_changed' | 'not_applicable' | null = null;
             let persistedField: 'auditStatus' | 'verificationStatus' | null = null;
@@ -334,7 +334,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
 
     // Phase 7-4: explicit result polling for 409 retries and reconnects.
     app.get('/api/orchestrate/worker/:agentId/result', requireAuth, (req, res) => {
-        const agentId = String(req.params.agentId || '');
+        const agentId = String(req.params["agentId"] || '');
         if (!agentId) return fail(res, 400, 'missing agentId');
         const slot = getWorkerSlot(agentId);
         if (!slot) return fail(res, 404, 'worker not found');
@@ -354,7 +354,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         if (!valid.includes(target as OrcStateName)) {
             return fail(res, 400, `Invalid state: ${target}. Must be one of: ${valid.join(', ')}`);
         }
-        const scope = resolveOrcScope({ origin: 'web', workingDir: settings.workingDir || null });
+        const scope = resolveOrcScope({ origin: 'web', workingDir: settings["workingDir"] || null });
         const current = getState(scope);
         const t = target as OrcStateName;
         // Phase 58/59: HTTP override via { force: true } or explicit user command.
@@ -386,7 +386,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         } else {
             setState(
                 t,
-                t === 'P' ? { originalPrompt: '', workingDir: settings.workingDir || null, plan: null, workerResults: [], origin: 'api' } : undefined,
+                t === 'P' ? { originalPrompt: '', workingDir: settings["workingDir"] || null, plan: null, workerResults: [], origin: 'api' } : undefined,
                 scope,
                 t === 'P' ? 'P' : t,
             );

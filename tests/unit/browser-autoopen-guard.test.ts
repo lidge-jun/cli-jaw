@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { readSource } from './source-normalize.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const root = join(__dirname, '..', '..');
 
 test('BAO-001: serve --open default is true (jaw serve opens browser)', () => {
-    const src = fs.readFileSync(join(root, 'bin', 'commands', 'serve.ts'), 'utf8');
+    const src = readSource(join(root, 'bin', 'commands', 'serve.ts'), 'utf8');
     assert.match(
         src,
         /open:\s*\{\s*type:\s*'boolean',\s*default:\s*true\s*\}/,
@@ -18,7 +19,7 @@ test('BAO-001: serve --open default is true (jaw serve opens browser)', () => {
 });
 
 test('BAO-002: serve enables JAW_OPEN_BROWSER only when --open is set', () => {
-    const src = fs.readFileSync(join(root, 'bin', 'commands', 'serve.ts'), 'utf8');
+    const src = readSource(join(root, 'bin', 'commands', 'serve.ts'), 'utf8');
     assert.match(
         src,
         /values\.open\s*\?\s*\{\s*JAW_OPEN_BROWSER:\s*'1'\s*\}\s*:\s*\{\s*\}/,
@@ -27,7 +28,7 @@ test('BAO-002: serve enables JAW_OPEN_BROWSER only when --open is set', () => {
 });
 
 test('BAO-003: server auto-open is guarded by JAW_OPEN_BROWSER env', () => {
-    const src = fs.readFileSync(join(root, 'server.ts'), 'utf8');
+    const src = readSource(join(root, 'server.ts'), 'utf8');
     assert.match(
         src,
         /process\.env\.JAW_OPEN_BROWSER\s*===\s*'1'/,
@@ -36,7 +37,7 @@ test('BAO-003: server auto-open is guarded by JAW_OPEN_BROWSER env', () => {
 });
 
 test('BAO-004: server auto-open skips in test environments', () => {
-    const src = fs.readFileSync(join(root, 'server.ts'), 'utf8');
+    const src = readSource(join(root, 'server.ts'), 'utf8');
     assert.match(
         src,
         /isTestEnv/,

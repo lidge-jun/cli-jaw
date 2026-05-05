@@ -112,7 +112,7 @@ if (backend === 'launchd') {
         ...(subcommand ? [subcommand] : []),
         ...portArgs,
     ];
-    process.env._CLI_JAW_SERVICE_DELEGATE = '1';
+    process.env["_CLI_JAW_SERVICE_DELEGATE"] = '1';
     await import('./launchd.js');
     process.exit(0);
 }
@@ -154,7 +154,7 @@ function sudo(args: string[]): void {
 function generateUnit(): string {
     const nodePath = getNodePath();
     const jawPath = getJawPath();
-    const servicePath = buildServicePath(process.env.PATH || '', [dirname(nodePath), dirname(jawPath)]);
+    const servicePath = buildServicePath(process.env["PATH"] || '', [dirname(nodePath), dirname(jawPath)]);
     let user: string;
     try { user = execFileSync('whoami', { encoding: 'utf8' }).trim(); }
     catch { user = 'nobody'; }

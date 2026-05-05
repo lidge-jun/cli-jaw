@@ -31,7 +31,7 @@ export async function installMcpServers(config: Record<string, any>) {
         }
     };
 
-    for (const [name, srv] of Object.entries(config.servers || {}) as [string, any][]) {
+    for (const [name, srv] of Object.entries(config["servers"] || {}) as [string, any][]) {
         // Skip already-global servers
         if (srv.command !== 'npx' && srv.command !== 'uv' && srv.command !== 'uvx') {
             (results as Record<string, any>)[name] = { status: 'skip', reason: 'already global' };

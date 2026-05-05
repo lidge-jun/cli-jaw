@@ -10,10 +10,10 @@ type BrowserRuntimeOwnerMatch = Pick<BrowserRuntimeOwner, 'pid' | 'port' | 'user
 function isRuntimeOwner(value: unknown): value is BrowserRuntimeOwner {
     if (!value || typeof value !== 'object') return false;
     const record = value as Record<string, unknown>;
-    return (record.ownership === 'jaw-owned' || record.ownership === 'external')
-        && (typeof record.pid === 'number' || record.pid === null)
-        && (typeof record.port === 'number' || record.port === null)
-        && (typeof record.userDataDir === 'string' || record.userDataDir === null);
+    return (record["ownership"] === 'jaw-owned' || record["ownership"] === 'external')
+        && (typeof record["pid"] === 'number' || record["pid"] === null)
+        && (typeof record["port"] === 'number' || record["port"] === null)
+        && (typeof record["userDataDir"] === 'string' || record["userDataDir"] === null);
 }
 
 export function readDurableBrowserRuntimeOwner(): BrowserRuntimeOwner | null {

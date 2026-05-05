@@ -28,7 +28,7 @@ function whichWithServicePath(binary: string): string {
         encoding: 'utf8',
         env: {
             ...process.env,
-            PATH: buildServicePath(process.env.PATH || ''),
+            PATH: buildServicePath(process.env["PATH"] || ''),
         },
     }).trim().split(/\r?\n/)[0]!;
 }
@@ -41,7 +41,7 @@ export function getNodePath(): string {
 
 /** Resolve absolute path to jaw binary. */
 export function getJawPath(): string {
-    if (process.env.CLI_JAW_BIN) return process.env.CLI_JAW_BIN;
+    if (process.env["CLI_JAW_BIN"]) return process.env["CLI_JAW_BIN"];
     const argvPath = process.argv[1];
     if (argvPath && /(?:^|[\\/])(?:cli-jaw|jaw)(?:\.js)?$/.test(argvPath)) return argvPath;
     try { return whichWithServicePath('jaw'); }

@@ -14,9 +14,9 @@ export function registerHeartbeatRoutes(app: Express, requireAuth: AuthMiddlewar
         const idPrefix = `hb_${Date.now()}`;
         for (const [index, rawJob] of data.jobs.entries()) {
             const job = (rawJob && typeof rawJob === 'object') ? rawJob as Record<string, unknown> : {};
-            const scheduleResult = validateHeartbeatScheduleInput(job.schedule);
-            const jobId = typeof job.id === 'string' && job.id.trim()
-                ? job.id.trim()
+            const scheduleResult = validateHeartbeatScheduleInput(job["schedule"]);
+            const jobId = typeof job["id"] === 'string' && job["id"].trim()
+                ? job["id"].trim()
                 : `${idPrefix}_${index}`;
             if (!scheduleResult.ok) {
                 return res.status(400).json({
@@ -29,10 +29,10 @@ export function registerHeartbeatRoutes(app: Express, requireAuth: AuthMiddlewar
             }
             normalizedJobs.push({
                 id: jobId,
-                name: typeof job.name === 'string' ? job.name : '',
-                enabled: job.enabled !== false,
+                name: typeof job["name"] === 'string' ? job["name"] : '',
+                enabled: job["enabled"] !== false,
                 schedule: scheduleResult.schedule,
-                prompt: typeof job.prompt === 'string' ? job.prompt : '',
+                prompt: typeof job["prompt"] === 'string' ? job["prompt"] : '',
             });
         }
         const payload = { jobs: normalizedJobs };

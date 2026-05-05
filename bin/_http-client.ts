@@ -30,6 +30,6 @@ export function fieldString(value: unknown, fallback = ''): string {
 
 export function isConnRefused(error: unknown): boolean {
     const err = asRecord(error);
-    const cause = asRecord(err.cause);
-    return cause.code === 'ECONNREFUSED' || err.code === 'ECONNREFUSED';
+    const cause = asRecord(err["cause"]);
+    return cause["code"] === 'ECONNREFUSED' || err["code"] === 'ECONNREFUSED';
 }

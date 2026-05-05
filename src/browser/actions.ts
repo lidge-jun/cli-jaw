@@ -83,18 +83,18 @@ function optionNumber(opts: BrowserActionOptions, key: string, fallback: number)
 }
 
 function optionMouseButton(opts: BrowserActionOptions): MouseButton {
-    const value = opts.button;
+    const value = opts["button"];
     return value === 'right' || value === 'middle' ? value : 'left';
 }
 
 function optionWaitState(opts: BrowserActionOptions): WaitForSelectorState {
-    const value = opts.state;
+    const value = opts["state"];
     if (value === 'attached' || value === 'detached' || value === 'hidden' || value === 'visible') return value;
     return 'visible';
 }
 
 function optionScreenshotType(opts: BrowserActionOptions): ScreenshotImageType {
-    return opts.type === 'jpeg' ? 'jpeg' : 'png';
+    return opts["type"] === 'jpeg' ? 'jpeg' : 'png';
 }
 
 async function requireActivePage(port: number): Promise<Page> {
@@ -104,7 +104,7 @@ async function requireActivePage(port: number): Promise<Page> {
 }
 
 function extractCdpAxNodes(value: unknown): unknown[] {
-    return isRecord(value) && Array.isArray(value.nodes) ? value.nodes : [];
+    return isRecord(value) && Array.isArray(value["nodes"]) ? value["nodes"] : [];
 }
 
 function normalizeActiveTargetId(activeTab: Awaited<ReturnType<typeof getActiveTab>>): string | null {
@@ -116,7 +116,7 @@ function asCdpAxNode(value: unknown): CdpAxNode | null {
 }
 
 function cdpValueText(value: unknown): string {
-    return isRecord(value) && typeof value.value === 'string' ? value.value : '';
+    return isRecord(value) && typeof value["value"] === 'string' ? value["value"] : '';
 }
 
 /**
@@ -195,7 +195,7 @@ export async function snapshot(port: number, opts: BrowserActionOptions = {}) {
         }
     }
 
-    if (opts.interactive) {
+    if (opts["interactive"]) {
         nodes = nodes.filter(n => INTERACTIVE_ROLES.includes(n.role));
     }
 
@@ -210,7 +210,7 @@ export async function snapshot(port: number, opts: BrowserActionOptions = {}) {
         url: page.url(),
         nodes,
     };
-    if (opts.json) return { nodes, meta: { total, shown: nodes.length, snapshotId: latestSnapshot.snapshotId } };
+    if (opts["json"]) return { nodes, meta: { total, shown: nodes.length, snapshotId: latestSnapshot.snapshotId } };
     return nodes;
 }
 
@@ -257,10 +257,10 @@ export async function screenshot(port: number, opts: BrowserActionOptions = {}) 
     const filename = `screenshot_${Date.now()}.${type}`;
     const filepath = join(SCREENSHOTS_DIR, filename);
 
-    const clip = normalizeClip(opts.clip);
-    if (opts.ref && clip) throw new Error('screenshot cannot combine ref and clip');
-    if (opts.ref) {
-        const locator = await refToLocator(page, port, String(opts.ref));
+    const clip = normalizeClip(opts["clip"]);
+    if (opts["ref"] && clip) throw new Error('screenshot cannot combine ref and clip');
+    if (opts["ref"]) {
+        const locator = await refToLocator(page, port, String(opts["ref"]));
         await locator.screenshot({ path: filepath, type });
     } else {
         await page.screenshot({ path: filepath, fullPage: optionBoolean(opts, 'fullPage'), type, ...(clip ? { clip } : {}) });
@@ -275,7 +275,7 @@ function normalizeClip(value: unknown): ClipRect | undefined {
     const clip = Array.isArray(value)
         ? { x: Number(value[0]), y: Number(value[1]), width: Number(value[2]), height: Number(value[3]) }
         : isRecord(value)
-            ? { x: Number(value.x), y: Number(value.y), width: Number(value.width), height: Number(value.height) }
+            ? { x: Number(value["x"]), y: Number(value["y"]), width: Number(value["width"]), height: Number(value["height"]) }
             : { x: Number.NaN, y: Number.NaN, width: Number.NaN, height: Number.NaN };
     if (![clip.x, clip.y, clip.width, clip.height].every(Number.isFinite)) throw new Error('invalid clip');
     if (clip.x < 0 || clip.y < 0 || clip.width <= 0 || clip.height <= 0) throw new Error('invalid clip');
@@ -334,7 +334,7 @@ export async function getPageText(port: number, format = 'text') {
 
 export async function getDom(port: number, opts: BrowserActionOptions = {}) {
     const page = await requireActivePage(port);
-    const selector = String(opts.selector || 'body');
+    const selector = String(opts["selector"] || 'body');
     if (!selector.trim() || selector.includes('\0')) throw new Error('invalid selector');
     const maxChars = Math.max(1, optionNumber(opts, 'maxChars', optionNumber(opts, 'max-chars', DEFAULT_DOM_MAX_CHARS)));
     const locator = page.locator(selector).first();
@@ -376,8 +376,8 @@ export async function scroll(port: number, opts: BrowserActionOptions = {}) {
     const page = await requireActivePage(port);
     const x = optionNumber(opts, 'x', 0);
     const y = optionNumber(opts, 'y', 0);
-    if (opts.ref) {
-        const locator = await refToLocator(page, port, String(opts.ref));
+    if (opts["ref"]) {
+        const locator = await refToLocator(page, port, String(opts["ref"]));
         await locator.evaluate((el: { scrollBy(x: number, y: number): void }, delta: { x: number; y: number }) => el.scrollBy(delta.x, delta.y), { x, y });
     } else {
         await page.mouse.wheel(x, y);
@@ -447,7 +447,7 @@ async function ensureCaptureInstalled(port: number) {
 
 export async function getConsole(port: number, opts: BrowserActionOptions = {}) {
     await ensureCaptureInstalled(port);
-    if (opts.clear) consoleEntries.length = 0;
+    if (opts["clear"]) consoleEntries.length = 0;
     const limit = Math.max(1, optionNumber(opts, 'limit', 50));
     const maxTextLength = Math.max(1, optionNumber(opts, 'maxTextLength', 2000));
     return { entries: consoleEntries.slice(-limit).map(e => ({ ...e, text: redactText(e.text, maxTextLength) })) };
@@ -456,7 +456,7 @@ export async function getConsole(port: number, opts: BrowserActionOptions = {}) 
 export async function getNetwork(port: number, opts: BrowserActionOptions = {}) {
     await ensureCaptureInstalled(port);
     const limit = Math.max(1, optionNumber(opts, 'limit', 50));
-    const filter = opts.filter ? String(opts.filter) : '';
+    const filter = opts["filter"] ? String(opts["filter"]) : '';
     const entries = networkEntries
         .filter(e => !filter || e.url.includes(filter))
         .slice(-limit)

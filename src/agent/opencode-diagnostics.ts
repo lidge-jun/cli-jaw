@@ -62,11 +62,11 @@ export function readOpencodePermissionSummary(
         const raw = fs.readFileSync(configPath, 'utf8').trim();
         if (!raw) return {};
         const parsed: unknown = JSON.parse(raw);
-        if (!isPlainObject(parsed) || !isPlainObject(parsed.permission)) return {};
+        if (!isPlainObject(parsed) || !isPlainObject(parsed["permission"])) return {};
         const summary: Partial<OpencodePermissionSummary> = {};
         for (const key of PERMISSION_KEYS) {
-            if (Object.prototype.hasOwnProperty.call(parsed.permission, key)) {
-                summary[key] = parsed.permission[key];
+            if (Object.prototype.hasOwnProperty.call(parsed["permission"], key)) {
+                summary[key] = parsed["permission"][key];
             }
         }
         return summary;
@@ -120,7 +120,7 @@ export function buildOpencodeSpawnAudit(input: {
         version: readOpencodeVersion(binary, input.env),
         cwd: input.cwd,
         argsPreview: redactOpencodeArgs(input.args),
-        pathHead: splitPathHead(input.env.PATH),
+        pathHead: splitPathHead(input.env["PATH"]),
         permission: readOpencodePermissionSummary(input.configPath),
     };
 }

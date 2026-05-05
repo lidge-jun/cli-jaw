@@ -98,17 +98,17 @@ export function createTelegramForwarder({
     prefix = '📡 ',
 }: TelegramForwarderOptions) {
     return (type: string, data: Record<string, unknown>) => {
-        if (type !== 'agent_done' || !data?.text) return;
-        if (data.error) return;
+        if (type !== 'agent_done' || !data?.["text"]) return;
+        if (data["error"]) return;
         if (shouldSkip(data)) return;
 
         const chatId = typeof getLastChatId === 'function' ? getLastChatId() : null;
         if (!chatId) return;
 
-        const preview = String(data.text).slice(0, 200).replace(/\n/g, ' ');
+        const preview = String(data["text"]).slice(0, 200).replace(/\n/g, ' ');
         log({ chatId, preview });
 
-        const html = markdownToTelegramHtml(String(data.text));
+        const html = markdownToTelegramHtml(String(data["text"]));
         const chunks = chunkTelegramMessage(html);
         for (const chunk of chunks) {
             Promise.resolve(

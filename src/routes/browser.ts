@@ -9,7 +9,7 @@ import { DEBUG_CONSOLE_ONLY_MESSAGE, normalizeBrowserStartMode, type BrowserStar
 
 /** Port priority: req param > activePort > settings.browser.cdpPort > deriveCdpPort() */
 const cdpPort = (req: Request) => {
-    const p = Number(req.query?.port || req.body?.port);
+    const p = Number(req.query?.["port"] || req.body?.port);
     if (Number.isInteger(p) && p > 0 && p <= 65535) return p;
     return browser.getActivePort();
 };
@@ -104,9 +104,9 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     app.get('/api/browser/snapshot', requireAuth, async (req: Request, res: Response) => {
         try {
             const result = await browser.snapshot(cdpPort(req), {
-                interactive: req.query.interactive === 'true',
-                maxNodes: req.query.maxNodes || req.query['max-nodes'],
-                json: req.query.json === 'true',
+                interactive: req.query["interactive"] === 'true',
+                maxNodes: req.query["maxNodes"] || req.query['max-nodes'],
+                json: req.query["json"] === 'true',
             });
             if (Array.isArray(result)) res.json({ nodes: result });
             else res.json(result);
@@ -233,7 +233,7 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     });
 
     app.get('/api/browser/text', requireAuth, async (req: Request, res: Response) => {
-        try { res.json(await browser.getPageText(cdpPort(req), req.query.format as string | undefined)); }
+        try { res.json(await browser.getPageText(cdpPort(req), req.query["format"] as string | undefined)); }
         catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
@@ -280,8 +280,8 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     app.get('/api/browser/web-ai/status', requireAuth, async (req: Request, res: Response) => {
         try {
             res.json(await browser.webAi.status(cdpPort(req), {
-                vendor: String(req.query.vendor || 'chatgpt'),
-                ...(req.query.probe ? { probe: String(req.query.probe) } : {}),
+                vendor: String(req.query["vendor"] || 'chatgpt'),
+                ...(req.query["probe"] ? { probe: String(req.query["probe"]) } : {}),
             }));
         } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
@@ -294,14 +294,14 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     app.get('/api/browser/web-ai/poll', requireAuth, async (req: Request, res: Response) => {
         try {
             res.json(await browser.webAi.poll(cdpPort(req), {
-                vendor: String(req.query.vendor || 'chatgpt'),
-                timeout: String(req.query.timeout || '600'),
-                ...(req.query.session ? { session: String(req.query.session) } : {}),
-                ...(req.query.allowCopyMarkdownFallback === 'true' ? { allowCopyMarkdownFallback: true } : {}),
-                ...(req.query.requireSourceAudit === 'true' ? { requireSourceAudit: true } : {}),
-                ...(req.query.sourceAuditRatio ? { sourceAuditRatio: String(req.query.sourceAuditRatio) } : {}),
-                ...(req.query.sourceAuditScope ? { sourceAuditScope: String(req.query.sourceAuditScope) } : {}),
-                ...(req.query.sourceAuditDate ? { sourceAuditDate: String(req.query.sourceAuditDate) } : {}),
+                vendor: String(req.query["vendor"] || 'chatgpt'),
+                timeout: String(req.query["timeout"] || '600'),
+                ...(req.query["session"] ? { session: String(req.query["session"]) } : {}),
+                ...(req.query["allowCopyMarkdownFallback"] === 'true' ? { allowCopyMarkdownFallback: true } : {}),
+                ...(req.query["requireSourceAudit"] === 'true' ? { requireSourceAudit: true } : {}),
+                ...(req.query["sourceAuditRatio"] ? { sourceAuditRatio: String(req.query["sourceAuditRatio"]) } : {}),
+                ...(req.query["sourceAuditScope"] ? { sourceAuditScope: String(req.query["sourceAuditScope"]) } : {}),
+                ...(req.query["sourceAuditDate"] ? { sourceAuditDate: String(req.query["sourceAuditDate"]) } : {}),
             }));
         } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
@@ -309,17 +309,17 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     app.get('/api/browser/web-ai/watch', requireAuth, async (req: Request, res: Response) => {
         try {
             res.json(await browser.webAi.watch(cdpPort(req), {
-                vendor: String(req.query.vendor || 'chatgpt'),
-                timeout: String(req.query.timeout || '600'),
-                ...(req.query.session ? { session: String(req.query.session) } : {}),
-                ...(req.query.url ? { url: String(req.query.url) } : {}),
-                ...(req.query.notify !== undefined ? { notify: String(req.query.notify) !== 'false' } : {}),
-                ...(req.query.pollIntervalSeconds ? { pollIntervalSeconds: String(req.query.pollIntervalSeconds) } : {}),
-                ...(req.query.allowCopyMarkdownFallback === 'true' ? { allowCopyMarkdownFallback: true } : {}),
-                ...(req.query.requireSourceAudit === 'true' ? { requireSourceAudit: true } : {}),
-                ...(req.query.sourceAuditRatio ? { sourceAuditRatio: String(req.query.sourceAuditRatio) } : {}),
-                ...(req.query.sourceAuditScope ? { sourceAuditScope: String(req.query.sourceAuditScope) } : {}),
-                ...(req.query.sourceAuditDate ? { sourceAuditDate: String(req.query.sourceAuditDate) } : {}),
+                vendor: String(req.query["vendor"] || 'chatgpt'),
+                timeout: String(req.query["timeout"] || '600'),
+                ...(req.query["session"] ? { session: String(req.query["session"]) } : {}),
+                ...(req.query["url"] ? { url: String(req.query["url"]) } : {}),
+                ...(req.query["notify"] !== undefined ? { notify: String(req.query["notify"]) !== 'false' } : {}),
+                ...(req.query["pollIntervalSeconds"] ? { pollIntervalSeconds: String(req.query["pollIntervalSeconds"]) } : {}),
+                ...(req.query["allowCopyMarkdownFallback"] === 'true' ? { allowCopyMarkdownFallback: true } : {}),
+                ...(req.query["requireSourceAudit"] === 'true' ? { requireSourceAudit: true } : {}),
+                ...(req.query["sourceAuditRatio"] ? { sourceAuditRatio: String(req.query["sourceAuditRatio"]) } : {}),
+                ...(req.query["sourceAuditScope"] ? { sourceAuditScope: String(req.query["sourceAuditScope"]) } : {}),
+                ...(req.query["sourceAuditDate"] ? { sourceAuditDate: String(req.query["sourceAuditDate"]) } : {}),
             }));
         } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
@@ -332,8 +332,8 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     app.get('/api/browser/web-ai/sessions', requireAuth, async (req: Request, res: Response) => {
         try {
             res.json(await browser.webAi.sessions({
-                ...(req.query.vendor ? { vendor: String(req.query.vendor) } : {}),
-                ...(req.query.status ? { status: String(req.query.status) } : {}),
+                ...(req.query["vendor"] ? { vendor: String(req.query["vendor"]) } : {}),
+                ...(req.query["status"] ? { status: String(req.query["status"]) } : {}),
             }));
         } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
@@ -352,12 +352,12 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
         try {
             res.json({
                 ok: true,
-                vendor: String(req.query.vendor || 'chatgpt'),
+                vendor: String(req.query["vendor"] || 'chatgpt'),
                 status: 'ready',
                 notifications: browser.webAi.listNotifications({
-                    ...(req.query.vendor ? { vendor: String(req.query.vendor) as WebAiVendor } : {}),
-                    ...(req.query.status ? { status: String(req.query.status) as WebAiNotificationStatus } : {}),
-                    ...(req.query.session ? { sessionId: String(req.query.session) } : {}),
+                    ...(req.query["vendor"] ? { vendor: String(req.query["vendor"]) as WebAiVendor } : {}),
+                    ...(req.query["status"] ? { status: String(req.query["status"]) as WebAiNotificationStatus } : {}),
+                    ...(req.query["session"] ? { sessionId: String(req.query["session"]) } : {}),
                 }),
                 warnings: [],
             });
@@ -368,12 +368,12 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
         try {
             res.json({
                 ok: true,
-                vendor: String(req.query.vendor || 'chatgpt'),
+                vendor: String(req.query["vendor"] || 'chatgpt'),
                 status: 'ready',
                 capabilities: browser.webAi.listCapabilitySchemas({
-                    ...(req.query.vendor ? { vendor: String(req.query.vendor) as WebAiVendorScope } : {}),
-                    ...(req.query.family ? { family: String(req.query.family) as CapabilityFamily } : {}),
-                    ...(req.query.frontendStatus ? { frontendStatus: String(req.query.frontendStatus) as FrontendObservationStatus } : {}),
+                    ...(req.query["vendor"] ? { vendor: String(req.query["vendor"]) as WebAiVendorScope } : {}),
+                    ...(req.query["family"] ? { family: String(req.query["family"]) as CapabilityFamily } : {}),
+                    ...(req.query["frontendStatus"] ? { frontendStatus: String(req.query["frontendStatus"]) as FrontendObservationStatus } : {}),
                 }),
                 warnings: [],
             });
@@ -393,8 +393,8 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     app.get('/api/browser/web-ai/diagnose', requireAuth, async (req: Request, res: Response) => {
         try {
             res.json(await browser.webAi.diagnose(cdpPort(req), {
-                vendor: String(req.query.vendor || 'chatgpt'),
-                stage: String(req.query.stage || 'unknown'),
+                vendor: String(req.query["vendor"] || 'chatgpt'),
+                stage: String(req.query["stage"] || 'unknown'),
             }));
         } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
@@ -406,14 +406,14 @@ function toWebAiHttpError(e: unknown): { ok: false; error: string; stage: string
         if (json && typeof json === 'object') {
             return {
                 ok: false,
-                error: String(json.message ?? ''),
-                stage: String(json.stage ?? 'unknown'),
-                errorCode: json.errorCode as string | undefined,
-                retryHint: json.retryHint as string | undefined,
-                vendor: json.vendor as string | undefined,
-                mutationAllowed: json.mutationAllowed as boolean | undefined,
-                selectorsTried: json.selectorsTried as string[] | undefined,
-                evidence: json.evidence,
+                error: String(json["message"] ?? ''),
+                stage: String(json["stage"] ?? 'unknown'),
+                errorCode: json["errorCode"] as string | undefined,
+                retryHint: json["retryHint"] as string | undefined,
+                vendor: json["vendor"] as string | undefined,
+                mutationAllowed: json["mutationAllowed"] as boolean | undefined,
+                selectorsTried: json["selectorsTried"] as string[] | undefined,
+                evidence: json["evidence"],
             };
         }
     }

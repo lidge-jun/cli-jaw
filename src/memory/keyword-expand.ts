@@ -101,7 +101,7 @@ function extractJsonArray(text: string) {
 
 async function expandViaGemini(query: string, override: Partial<AdvancedConfig> = {}) {
     const cfg = getAdvancedConfig(override);
-    const apiKey = cfg.apiKey || process.env.GEMINI_API_KEY || '';
+    const apiKey = cfg.apiKey || process.env["GEMINI_API_KEY"] || '';
     const model = cfg.model || 'gemini-3.1-flash-lite-preview';
     if (!apiKey) return [];
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;

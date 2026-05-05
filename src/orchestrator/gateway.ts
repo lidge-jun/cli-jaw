@@ -97,10 +97,10 @@ export function submitMessage(
     recentSubmissions.set(key, { ts: now, requestId });
 
     // ── continue intent (only when IDLE) ──
-    const scope = resolveOrcScope({ origin: meta.origin, chatId: meta.chatId, workingDir: settings.workingDir || null });
+    const scope = resolveOrcScope({ origin: meta.origin, chatId: meta.chatId, workingDir: settings["workingDir"] || null });
     if (getState(scope) === 'IDLE' && isContinueIntent(trimmed)) {
         if (isAgentBusy()) return { action: 'rejected', reason: 'busy' };
-        insertMessage.run('user', display, meta.origin, '', settings.workingDir || null);
+        insertMessage.run('user', display, meta.origin, '', settings["workingDir"] || null);
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
         if (!meta.skipOrchestrate) {
             runDetached(
@@ -114,7 +114,7 @@ export function submitMessage(
 
     // ── reset intent ──
     if (isResetIntent(trimmed)) {
-        insertMessage.run('user', display, meta.origin, '', settings.workingDir || null);
+        insertMessage.run('user', display, meta.origin, '', settings["workingDir"] || null);
         broadcast('new_message', { role: 'user', content: display, source: meta.origin });
         if (!meta.skipOrchestrate) {
             runDetached(
@@ -140,7 +140,7 @@ export function submitMessage(
     }
 
     // ── idle → start immediately ──
-    insertMessage.run('user', display, meta.origin, '', settings.workingDir || null);
+    insertMessage.run('user', display, meta.origin, '', settings["workingDir"] || null);
     broadcast('new_message', { role: 'user', content: display, source: meta.origin });
     if (!meta.skipOrchestrate) {
         runDetached(

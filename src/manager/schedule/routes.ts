@@ -14,25 +14,25 @@ function sendErr(res: Response, status: number, code: string, error: unknown) {
 
 function pickInput(body: Record<string, unknown>): DashboardScheduledWorkInput {
     return {
-        title: typeof body.title === 'string' ? body.title : '',
-        group: typeof body.group === 'string' ? body.group as DashboardScheduledWorkInput['group'] : undefined,
-        cron: typeof body.cron === 'string' ? body.cron : null,
-        runAt: typeof body.runAt === 'string' ? body.runAt : null,
-        targetPort: typeof body.targetPort === 'number' ? body.targetPort : null,
-        payload: typeof body.payload === 'string' ? body.payload : null,
-        enabled: typeof body.enabled === 'boolean' ? body.enabled : true,
+        title: typeof body["title"] === 'string' ? body["title"] : '',
+        group: typeof body["group"] === 'string' ? body["group"] as DashboardScheduledWorkInput['group'] : undefined,
+        cron: typeof body["cron"] === 'string' ? body["cron"] : null,
+        runAt: typeof body["runAt"] === 'string' ? body["runAt"] : null,
+        targetPort: typeof body["targetPort"] === 'number' ? body["targetPort"] : null,
+        payload: typeof body["payload"] === 'string' ? body["payload"] : null,
+        enabled: typeof body["enabled"] === 'boolean' ? body["enabled"] : true,
     };
 }
 
 function pickPatch(body: Record<string, unknown>): DashboardScheduledWorkPatch {
     const p: DashboardScheduledWorkPatch = {};
-    if (typeof body.title === 'string') p.title = body.title;
-    if (typeof body.group === 'string') p.group = body.group as DashboardScheduledWorkPatch['group'];
-    if ('cron' in body) p.cron = typeof body.cron === 'string' ? body.cron : null;
-    if ('runAt' in body) p.runAt = typeof body.runAt === 'string' ? body.runAt : null;
-    if ('targetPort' in body) p.targetPort = typeof body.targetPort === 'number' ? body.targetPort : null;
-    if ('payload' in body) p.payload = typeof body.payload === 'string' ? body.payload : null;
-    if (typeof body.enabled === 'boolean') p.enabled = body.enabled;
+    if (typeof body["title"] === 'string') p.title = body["title"];
+    if (typeof body["group"] === 'string') p.group = body["group"] as DashboardScheduledWorkPatch['group'];
+    if ('cron' in body) p.cron = typeof body["cron"] === 'string' ? body["cron"] : null;
+    if ('runAt' in body) p.runAt = typeof body["runAt"] === 'string' ? body["runAt"] : null;
+    if ('targetPort' in body) p.targetPort = typeof body["targetPort"] === 'number' ? body["targetPort"] : null;
+    if ('payload' in body) p.payload = typeof body["payload"] === 'string' ? body["payload"] : null;
+    if (typeof body["enabled"] === 'boolean') p.enabled = body["enabled"];
     return p;
 }
 
@@ -55,7 +55,7 @@ export function createDashboardScheduleRouter(options: DashboardScheduleRouterOp
 
     router.patch('/work/:id', (req: Request, res: Response) => {
         try {
-            const id = String(req.params.id || '');
+            const id = String(req.params["id"] || '');
             const patch = pickPatch((req.body || {}) as Record<string, unknown>);
             const item = store.update(id, patch);
             if (!item) { sendErr(res, 404, 'schedule_item_not_found', 'not found'); return; }
@@ -65,7 +65,7 @@ export function createDashboardScheduleRouter(options: DashboardScheduleRouterOp
 
     router.delete('/work/:id', (req: Request, res: Response) => {
         try {
-            const id = String(req.params.id || '');
+            const id = String(req.params["id"] || '');
             const removed = store.remove(id);
             if (!removed) { sendErr(res, 404, 'schedule_item_not_found', 'not found'); return; }
             res.json({ ok: true });
@@ -74,11 +74,11 @@ export function createDashboardScheduleRouter(options: DashboardScheduleRouterOp
 
     router.post('/work/:id/dispatch', (req: Request, res: Response) => {
         try {
-            const id = String(req.params.id || '');
+            const id = String(req.params["id"] || '');
             const item = store.get(id);
             if (!item) { sendErr(res, 404, 'schedule_item_not_found', 'not found'); return; }
             const body = (req.body || {}) as Record<string, unknown>;
-            const rawBusy = Array.isArray(body.busyPorts) ? body.busyPorts : [];
+            const rawBusy = Array.isArray(body["busyPorts"]) ? body["busyPorts"] : [];
             const busyPorts = rawBusy
                 .map(v => (typeof v === 'number' ? v : Number(v)))
                 .filter(n => Number.isFinite(n) && n > 0);

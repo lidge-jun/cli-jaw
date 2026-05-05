@@ -166,7 +166,7 @@ export function resolveIntentFeature(intent: string, featureOverride: string | n
 }
 
 export function semanticTargetsForVendor(vendor = 'chatgpt'): Record<string, SemanticTarget> {
-    return SEMANTIC_TARGETS[vendor] || SEMANTIC_TARGETS.chatgpt || {};
+    return SEMANTIC_TARGETS[vendor] || SEMANTIC_TARGETS["chatgpt"] || {};
 }
 
 export async function resolveActionTarget(page: PageLike, ctx: ResolveActionTargetContext): Promise<ResolveActionTargetResult> {
@@ -289,7 +289,7 @@ export async function validateResolvedTarget(
         if (!await el.isVisible().catch(() => false)) return { ok: false, reason: VALIDATION_REASONS.NOT_VISIBLE };
         if (!await el.isEnabled().catch(() => false)) return { ok: false, reason: VALIDATION_REASONS.NOT_ENABLED };
         if (actionKind === 'fill' && !await el.isEditable?.().catch(() => false)) return { ok: false, reason: VALIDATION_REASONS.NOT_EDITABLE };
-        if (semanticTarget?.roles?.length || semanticTarget?.names?.length || target?.role || target?.name || target?.nameHash) {
+        if (semanticTarget?.roles?.length || semanticTarget?.names?.length || target?.role || target?.name || target?.["nameHash"]) {
             const validation = await runValidationContract(el, { target: target || {}, semanticTarget, actionKind });
             if (!validation.ok) return { ok: false, reason: validation.reason, confidence: validation.confidence };
             return { ok: true, confidence: validation.confidence };
@@ -377,8 +377,8 @@ async function runValidationContract(locator: PageLocator, input: { target: Targ
     if (input.target.role) score += input.target.role === info.role ? 3 : (input.semanticTarget?.roles?.includes(info.role) ? 2 : 0);
     else if (input.semanticTarget?.roles?.includes(info.role)) score += 3;
     maxScore += 3;
-    if (input.target.nameHash) {
-        if ((info.label ? hashField(info.label) : null) === input.target.nameHash) score += 3;
+    if (input.target["nameHash"]) {
+        if ((info.label ? hashField(info.label) : null) === input.target["nameHash"]) score += 3;
     } else if (input.target.name) {
         if (new RegExp(escapeForRegExp(input.target.name), 'i').test(info.label)) score += 3;
     } else if (input.semanticTarget?.names?.some((pattern) => patternMatches(pattern, info.label))) score += 3;

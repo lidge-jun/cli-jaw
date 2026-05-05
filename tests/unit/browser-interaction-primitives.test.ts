@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readSource } from './source-normalize.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const actionsSrc = fs.readFileSync(join(root, 'src/browser/actions.ts'), 'utf8');
-const routesSrc = fs.readFileSync(join(root, 'src/routes/browser.ts'), 'utf8');
-const cliSrc = fs.readFileSync(join(root, 'bin/commands/browser.ts'), 'utf8');
+const actionsSrc = readSource(join(root, 'src/browser/actions.ts'), 'utf8');
+const routesSrc = readSource(join(root, 'src/routes/browser.ts'), 'utf8');
+const cliSrc = readSource(join(root, 'bin/commands/browser.ts'), 'utf8');
 
 test('BIP-001: mutation primitives are implemented in action layer', () => {
     for (const fn of ['reload', 'resize', 'scroll', 'select', 'drag', 'mouseMove', 'mouseDown', 'mouseUp']) {

@@ -182,7 +182,7 @@ if (!channelFlag) {
 const merged: InitSettings = values.force ? {} : { ...settings };
 merged.workingDir = workingDir;
 merged.cli = cli;
-merged.permissions = 'auto';
+merged["permissions"] = 'auto';
 merged.skillsDir = skillsDir;
 merged.channel = activeChannel;
 if (tgEnabled || values.force) {

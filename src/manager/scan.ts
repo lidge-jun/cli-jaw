@@ -92,8 +92,8 @@ export async function scanPort(port: number, fetchImpl: FetchLike, timeoutMs: nu
 
         try {
             const runtime = await readJson(fetchImpl, `${baseUrl}/api/runtime`, timeoutMs);
-            const data = runtime.data && typeof runtime.data === 'object'
-                ? runtime.data as JsonRecord
+            const data = runtime["data"] && typeof runtime["data"] === 'object'
+                ? runtime["data"] as JsonRecord
                 : runtime;
             row.currentCli ||= readString(data, 'cli');
             row.currentModel ||= readString(data, 'model');

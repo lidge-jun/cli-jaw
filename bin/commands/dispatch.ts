@@ -26,13 +26,13 @@ if (shouldShowHelp(process.argv)) printAndExit(`
 
 loadSettings();
 
-if (process.env.JAW_EMPLOYEE_MODE === '1') {
+if (process.env["JAW_EMPLOYEE_MODE"] === '1') {
     console.error('❌ jaw employee sessions cannot dispatch other employees. Complete the assigned task directly.');
     process.exit(2);
 }
 
 // Phase 8: boss-only dispatch. Token must be inherited from the server process.
-const bossToken = process.env.JAW_BOSS_TOKEN || '';
+const bossToken = process.env["JAW_BOSS_TOKEN"] || '';
 if (!bossToken) {
     console.error('❌ JAW_BOSS_TOKEN missing. This session is not authorized to dispatch employees.');
     console.error('   Employees cannot dispatch. If you are the boss, ensure cli-jaw serve is running and this process inherited its env.');

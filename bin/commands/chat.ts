@@ -61,7 +61,7 @@ loadLocales(join(findPackageRoot(__dirname), 'public', 'locales'));
 const { values } = parseArgs({
     args: process.argv.slice(3),
     options: {
-        port: { type: 'string', default: process.env.PORT || '3457' },
+        port: { type: 'string', default: process.env["PORT"] || '3457' },
         raw: { type: 'boolean', default: false },
         simple: { type: 'boolean', default: false },
     },
@@ -93,19 +93,19 @@ try {
     const r = await fetch(`${apiUrl}/api/settings`, { signal: AbortSignal.timeout(2000) });
     if (r.ok) {
         const res = asRecord(await r.json());
-        const s = asRecord(res.data || res);
-        const cli = fieldString(s.cli, 'codex');
-        const perCli = asRecord(s.perCli);
+        const s = asRecord(res["data"] || res);
+        const cli = fieldString(s["cli"], 'codex');
+        const perCli = asRecord(s["perCli"]);
         const cliSettings = asRecord(perCli[cli]);
-        info = { cli, workingDir: fieldString(s.workingDir, '~'), model: fieldString(cliSettings.model) };
-        if (typeof s.locale === 'string') runtimeLocale = s.locale;
-        if (s.tui && typeof s.tui === 'object') tuiConfig = { ...tuiConfig, ...asRecord(s.tui) };
+        info = { cli, workingDir: fieldString(s["workingDir"], '~'), model: fieldString(cliSettings["model"]) };
+        if (typeof s["locale"] === 'string') runtimeLocale = s["locale"];
+        if (s["tui"] && typeof s["tui"] === 'object') tuiConfig = { ...tuiConfig, ...asRecord(s["tui"]) };
     }
     const sr = await fetch(`${apiUrl}/api/session`, { signal: AbortSignal.timeout(2000) });
     if (sr.ok) {
         const ses = asRecord(await sr.json());
-        const sd = asRecord(ses.data || ses);
-        if (typeof sd.model === 'string') info.model = sd.model;
+        const sd = asRecord(ses["data"] || ses);
+        if (typeof sd["model"] === 'string') info.model = sd["model"];
     }
 } catch { /* keep defaults */ }
 

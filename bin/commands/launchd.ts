@@ -15,7 +15,7 @@ import { parseArgs } from 'node:util';
 import { JAW_HOME } from '../../src/core/config.js';
 import { asRecord, errString } from '../_http-client.js';
 
-if (process.argv[2] === 'launchd' && !process.env._CLI_JAW_SERVICE_DELEGATE) {
+if (process.argv[2] === 'launchd' && !process.env["_CLI_JAW_SERVICE_DELEGATE"]) {
     console.error('  ⚠️  jaw launchd is deprecated. Use jaw service instead (cross-platform).');
     console.error('');
 }
@@ -46,14 +46,14 @@ const INSTANCE = instanceId();
 const LABEL = `com.cli-jaw.${INSTANCE}`;
 const PLIST_PATH = join(homedir(), 'Library', 'LaunchAgents', `${LABEL}.plist`);
 const LOG_DIR = join(JAW_HOME, 'logs');
-const USER_ID = typeof process.getuid === 'function' ? process.getuid() : Number(process.env.UID || 0);
+const USER_ID = typeof process.getuid === 'function' ? process.getuid() : Number(process.env["UID"] || 0);
 const GUI_DOMAIN = `gui/${USER_ID}`;
 
 
 function generatePlist(): string {
     const nodePath = getNodePath();
     const jawPath = getJawPath();
-    const servicePath = buildServicePath(process.env.PATH || '', [join(homedir(), '.local', 'bin')]);
+    const servicePath = buildServicePath(process.env["PATH"] || '', [join(homedir(), '.local', 'bin')]);
     execSync(`mkdir -p "${LOG_DIR}"`);
 
     return generateLaunchdPlist({
@@ -195,7 +195,7 @@ switch (sub) {
             console.log('✅ launchd 등록 + 시작 완료\n');
         } catch (e: unknown) {
             const err = asRecord(e);
-            const stderr = (asRecord(err.stderr).toString?.() || errString(e) || '');
+            const stderr = (asRecord(err["stderr"]).toString?.() || errString(e) || '');
             const isBusy = /Bootstrap failed:\s*5/i.test(stderr)
                 || /already (bootstrapped|loaded)/i.test(stderr);
             if (isBusy) {

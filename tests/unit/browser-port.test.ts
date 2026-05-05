@@ -1,3 +1,4 @@
+import { readSource } from './source-normalize.js';
 /**
  * Browser Port Routing Tests (BP-001 ~ BP-009)
  * Verifies activePort lifecycle, getActivePort() fallback chain,
@@ -9,13 +10,13 @@ import fs from 'node:fs';
 import { join } from 'node:path';
 
 // ─── Source-level verification ───────────────────────
-const connectionSrc = fs.readFileSync(
+const connectionSrc = readSource(
     join(import.meta.dirname!, '..', '..', 'src', 'browser', 'connection.ts'), 'utf8'
 );
-const routesSrc = fs.readFileSync(
+const routesSrc = readSource(
     join(import.meta.dirname!, '..', '..', 'src', 'routes', 'browser.ts'), 'utf8'
 );
-const indexSrc = fs.readFileSync(
+const indexSrc = readSource(
     join(import.meta.dirname!, '..', '..', 'src', 'browser', 'index.ts'), 'utf8'
 );
 

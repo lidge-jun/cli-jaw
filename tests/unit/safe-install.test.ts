@@ -3,14 +3,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { readSource } from './source-normalize.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const postinstallSrc = fs.readFileSync(join(__dirname, '../../bin/postinstall.ts'), 'utf8');
-const initSrc = fs.readFileSync(join(__dirname, '../../bin/commands/init.ts'), 'utf8');
-const officeCliShellSrc = fs.readFileSync(join(__dirname, '../../scripts/install-officecli.sh'), 'utf8');
-const officeCliPowerShellSrc = fs.readFileSync(join(__dirname, '../../scripts/install-officecli.ps1'), 'utf8');
+const postinstallSrc = readSource(join(__dirname, '../../bin/postinstall.ts'), 'utf8');
+const initSrc = readSource(join(__dirname, '../../bin/commands/init.ts'), 'utf8');
+const officeCliShellSrc = readSource(join(__dirname, '../../scripts/install-officecli.sh'), 'utf8');
+const officeCliPowerShellSrc = readSource(join(__dirname, '../../scripts/install-officecli.ps1'), 'utf8');
 
 // ── SAF-001: safe guard with JAW_SAFE ──
 

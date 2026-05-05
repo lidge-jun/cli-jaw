@@ -249,9 +249,9 @@ export async function fillResolvedTarget(
 export function scrubTargetForTrace(target: ResolvedActionTarget | null | undefined): Record<string, unknown> | null {
     if (!target) return null;
     return {
-        resolution: target.resolution || null,
-        source: target.source || null,
-        ref: target.ref || null,
+        resolution: target["resolution"] || null,
+        source: target["source"] || null,
+        ref: target["ref"] || null,
         selector: target.selector || null,
         role: target.role || null,
     };

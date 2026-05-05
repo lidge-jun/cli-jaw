@@ -209,8 +209,8 @@ switch (sub) {
         } else {
             for (const [name, srv] of entries) {
                 const s = asRecord(srv);
-                const args = asArray<string>(s.args);
-                const command = fieldString(s.command);
+                const args = asArray<string>(s["args"]);
+                const command = fieldString(s["command"]);
                 const cmd = args.length
                     ? `${command} ${args.join(' ')}`
                     : command;

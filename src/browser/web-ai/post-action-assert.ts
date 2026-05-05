@@ -54,9 +54,9 @@ export interface PageLike {
 export function scrubTargetForTrace(target: ResolvedActionTarget | null | undefined): Record<string, unknown> | null {
     if (!target) return null;
     return {
-        resolution: target.resolution || null,
-        source: target.source || null,
-        ref: target.ref || null,
+        resolution: target["resolution"] || null,
+        source: target["source"] || null,
+        ref: target["ref"] || null,
         selector: target.selector || null,
         role: target.role || null,
     };
@@ -150,7 +150,7 @@ export async function fillWithPostAssert(
         await locator.fill(value);
     } catch (fillErr) {
         const role = resolvedTarget.role || '';
-        const isContentEditable = role === 'textbox' || resolvedTarget.contentEditable === true;
+        const isContentEditable = role === 'textbox' || resolvedTarget["contentEditable"] === true;
         if (!isContentEditable) {
             traceCtx?.record({ action: 'fill', target: scrubTargetForTrace(resolvedTarget), status: 'error', errorCode: (fillErr as { name?: string }).name });
             throw wrapError(fillErr, { stage: 'post-action-fill', retryHint: 're-snapshot' });

@@ -12,7 +12,7 @@ import { join, dirname } from 'path';
 /** → Claude Code / Gemini CLI format (.mcp.json / settings.json mcpServers block) */
 export function toClaudeMcp(config: Record<string, any>) {
     const mcpServers: Record<string, any> = {};
-    for (const [name, srv] of Object.entries(config.servers || {}) as [string, any][]) {
+    for (const [name, srv] of Object.entries(config["servers"] || {}) as [string, any][]) {
         (mcpServers as Record<string, any>)[name] = { command: srv.command, args: srv.args || [] };
         if (srv.env && Object.keys(srv.env).length) (mcpServers as Record<string, any>)[name].env = srv.env;
     }
@@ -22,7 +22,7 @@ export function toClaudeMcp(config: Record<string, any>) {
 /** → Codex config.toml MCP section string */
 export function toCodexToml(config: Record<string, any>) {
     let toml = '';
-    for (const [name, srv] of Object.entries(config.servers || {}) as [string, any][]) {
+    for (const [name, srv] of Object.entries(config["servers"] || {}) as [string, any][]) {
         toml += `[mcp_servers.${name}]\n`;
         toml += `command = "${srv.command}"\n`;
         toml += `args = ${JSON.stringify(srv.args || [])}\n`;
@@ -40,7 +40,7 @@ export function toCodexToml(config: Record<string, any>) {
 /** → OpenCode opencode.json mcp block */
 export function toOpenCodeMcp(config: Record<string, any>) {
     const mcp: Record<string, any> = {};
-    for (const [name, srv] of Object.entries(config.servers || {}) as [string, any][]) {
+    for (const [name, srv] of Object.entries(config["servers"] || {}) as [string, any][]) {
         (mcp as Record<string, any>)[name] = {
             type: 'local',
             command: [srv.command, ...(srv.args || [])],
@@ -99,7 +99,7 @@ export function syncToAll(config: Record<string, any>) {
         // Merge with existing (keep other keys if any)
         let existing: Record<string, any> = {};
         try { existing = JSON.parse(fs.readFileSync(claudePath, 'utf8')) as Record<string, any>; } catch { }
-        existing.mcpServers = claudeData.mcpServers;
+        existing["mcpServers"] = claudeData.mcpServers;
         fs.writeFileSync(claudePath, JSON.stringify(existing, null, 4) + '\n');
         results.claude = true;
         console.log(`[mcp-sync] ✅ Claude: ${claudePath}`);
@@ -153,7 +153,7 @@ export function syncToAll(config: Record<string, any>) {
         fs.mkdirSync(copilotDir, { recursive: true });
         let existing: Record<string, any> = {};
         try { existing = JSON.parse(fs.readFileSync(copilotPath, 'utf8')) as Record<string, any>; } catch { }
-        existing.mcpServers = copilotData.mcpServers;
+        existing["mcpServers"] = copilotData.mcpServers;
         fs.writeFileSync(copilotPath, JSON.stringify(existing, null, 4) + '\n');
         results.copilot = true;
         console.log(`[mcp-sync] ✅ Copilot: ${copilotPath}`);
@@ -166,7 +166,7 @@ export function syncToAll(config: Record<string, any>) {
         fs.mkdirSync(dirname(antigravityPath), { recursive: true });
         let existing: Record<string, any> = {};
         try { existing = JSON.parse(fs.readFileSync(antigravityPath, 'utf8')) as Record<string, any>; } catch { }
-        existing.mcpServers = antigravityData.mcpServers;
+        existing["mcpServers"] = antigravityData.mcpServers;
         fs.writeFileSync(antigravityPath, JSON.stringify(existing, null, 4) + '\n');
         results.antigravity = true;
         console.log(`[mcp-sync] ✅ Antigravity: ${antigravityPath}`);

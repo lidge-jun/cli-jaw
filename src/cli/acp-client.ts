@@ -102,7 +102,7 @@ export class AcpClient extends EventEmitter {
             this._activityPing?.();  // stderr activity = agent is alive
             const text = chunk.toString().trim();
             if (text) {
-                if (process.env.DEBUG) console.error(`[acp:stderr] ${text}`);
+                if (process.env["DEBUG"]) console.error(`[acp:stderr] ${text}`);
                 this.emit('stderr_activity', text);
             }
         });
@@ -231,15 +231,15 @@ export class AcpClient extends EventEmitter {
 
         let msg: Record<string, unknown>;
         try { msg = JSON.parse(trimmed) as Record<string, unknown>; } catch {
-            if (process.env.DEBUG) console.log(`[acp] non-JSON line: ${trimmed.slice(0, 100)}`);
+            if (process.env["DEBUG"]) console.log(`[acp] non-JSON line: ${trimmed.slice(0, 100)}`);
             return;
         }
 
         // Any valid JSON-RPC message = agent is alive → reset idle timer
         this._activityPing?.();
 
-        const id = msg.id as number | string | undefined;
-        const method = msg.method as string | undefined;
+        const id = msg["id"] as number | string | undefined;
+        const method = msg["method"] as string | undefined;
 
         // Response to a request (has id)
         if (id != null && this._pending.has(id as number)) {
@@ -247,12 +247,12 @@ export class AcpClient extends EventEmitter {
             this._pending.delete(id as number);
             if (p.timer) clearTimeout(p.timer);
 
-            const error = msg.error as { code: number; message: string; data?: unknown } | undefined;
+            const error = msg["error"] as { code: number; message: string; data?: unknown } | undefined;
             if (error) {
                 const details = error.data ? ` ${JSON.stringify(error.data)}` : '';
                 p.reject(new Error(`ACP error [${error.code}]: ${error.message}${details}`));
             } else {
-                p.resolve(msg.result);
+                p.resolve(msg["result"]);
             }
             return;
         }
@@ -266,9 +266,9 @@ export class AcpClient extends EventEmitter {
         // Notification from agent (no id, has method)
         if (method) {
             if (method === 'session/cancelled') {
-                console.warn(`[acp:cancelled] ${JSON.stringify(msg.params || {}).slice(0, 200)}`);
+                console.warn(`[acp:cancelled] ${JSON.stringify(msg["params"] || {}).slice(0, 200)}`);
             }
-            this.emit(method, msg.params);
+            this.emit(method, msg["params"]);
             return;
         }
     }
@@ -339,7 +339,7 @@ export class AcpClient extends EventEmitter {
             cwd: workDir,
             mcpServers,
         });
-        this.sessionId = (result?.sessionId as string | undefined) ?? null;
+        this.sessionId = (result?.["sessionId"] as string | undefined) ?? null;
         return result;
     }
 

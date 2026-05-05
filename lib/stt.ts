@@ -17,11 +17,11 @@ export interface SttResult {
 const DEFAULT_STT_PROMPT_PATH = 'prompts/stt-system.md';
 
 function getSttSettings() {
-    const stt = settings.stt || {};
+    const stt = settings["stt"] || {};
     return {
         engine: stt.engine || 'auto',
-        geminiApiKey: stt.geminiApiKey || process.env.GEMINI_API_KEY || '',
-        geminiModel: stt.geminiModel || process.env.GEMINI_STT_MODEL || 'gemini-2.5-flash-lite',
+        geminiApiKey: stt.geminiApiKey || process.env["GEMINI_API_KEY"] || '',
+        geminiModel: stt.geminiModel || process.env["GEMINI_STT_MODEL"] || 'gemini-2.5-flash-lite',
         promptPath: stt.promptPath || DEFAULT_STT_PROMPT_PATH,
         whisperModel: stt.whisperModel || 'mlx-community/whisper-large-v3-turbo',
         openaiBaseUrl: stt.openaiBaseUrl || '',

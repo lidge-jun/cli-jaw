@@ -19,8 +19,8 @@ export async function applyRuntimeSettingsPatch(
     opts: ApplyRuntimeSettingsOptions = {},
 ): Promise<Record<string, any>> {
     const finishSettingsMutation = beginRuntimeSettingsMutation();
-    const prevCli = settings.cli;
-    const prevWorkingDir = settings.workingDir;
+    const prevCli = settings["cli"];
+    const prevWorkingDir = settings["workingDir"];
     const prevSnapshot = { ...settings };
 
     try {
@@ -29,8 +29,8 @@ export async function applyRuntimeSettingsPatch(
         replaceSettings(migrated);
         saveSettings(settings);
 
-        if (rawPatch.perCli?.codex && 'contextWindow' in rawPatch.perCli.codex) {
-            const codexCfg = settings.perCli?.codex || {};
+        if (rawPatch["perCli"]?.codex && 'contextWindow' in rawPatch["perCli"].codex) {
+            const codexCfg = settings["perCli"]?.codex || {};
             syncCodexContextWindow({
                 enabled: !!codexCfg.contextWindow,
                 contextWindow: codexCfg.contextWindowSize || 1000000,
@@ -44,17 +44,17 @@ export async function applyRuntimeSettingsPatch(
         // (which writes a cleared row inside its DB transaction). On refresh failure
         // we revert settings; the original session row is preserved because nothing
         // touched it on this branch (no syncMainSessionToSettings call).
-        const cliChanged = !!(prevCli && settings.cli && prevCli !== settings.cli);
+        const cliChanged = !!(prevCli && settings["cli"] && prevCli !== settings["cli"]);
         if (cliChanged) {
-            const toCli = settings.cli;
-            const toModel = settings.activeOverrides?.[toCli]?.model
-                || settings.perCli?.[toCli]?.model
+            const toCli = settings["cli"];
+            const toModel = settings["activeOverrides"]?.[toCli]?.model
+                || settings["perCli"]?.[toCli]?.model
                 || 'default';
             try {
                 const { cliSwitchRefresh } = await import('./compact.js');
                 await cliSwitchRefresh({
                     sourceWorkDir: prevWorkingDir || '',
-                    targetWorkDir: settings.workingDir || '',
+                    targetWorkDir: settings["workingDir"] || '',
                     fromCli: prevCli,
                     toCli,
                     toModel,
@@ -69,13 +69,13 @@ export async function applyRuntimeSettingsPatch(
             syncMainSessionToSettings(prevCli);
         }
 
-        if (settings.workingDir !== prevWorkingDir) {
+        if (settings["workingDir"] !== prevWorkingDir) {
             try {
-                initMcpConfig(settings.workingDir);
-                ensureWorkingDirSkillsLinks(settings.workingDir, { onConflict: 'skip', includeClaude: true, allowReplaceManaged: true });
+                initMcpConfig(settings["workingDir"]);
+                ensureWorkingDirSkillsLinks(settings["workingDir"], { onConflict: 'skip', includeClaude: true, allowReplaceManaged: true });
                 syncToAll(loadUnifiedMcp());
                 regenerateB();
-                console.log(`[jaw:workingDir] artifacts regenerated for ${settings.workingDir}`);
+                console.log(`[jaw:workingDir] artifacts regenerated for ${settings["workingDir"]}`);
             } catch (e: unknown) {
                 console.error('[jaw:workingDir]', (e as Error).message);
             }

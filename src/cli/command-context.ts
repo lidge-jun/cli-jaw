@@ -112,8 +112,8 @@ export function makeCommandCtx(
         validateAdvancedMemoryConfig: async () => ({ ok: true, provider: 'integrated', error: '' }),
 
         // Browser
-        getBrowserStatus: async () => browser.getBrowserStatus(settings.browser?.cdpPort || deriveCdpPort()),
-        getBrowserTabs: async () => ({ tabs: await browser.listTabs(settings.browser?.cdpPort || deriveCdpPort()) }),
+        getBrowserStatus: async () => browser.getBrowserStatus(settings["browser"]?.cdpPort || deriveCdpPort()),
+        getBrowserTabs: async () => ({ tabs: await browser.listTabs(settings["browser"]?.cdpPort || deriveCdpPort()) }),
 
         // Employees
         resetEmployees: deps.resetEmployees
@@ -124,7 +124,7 @@ export function makeCommandCtx(
         resetSkills: async (mode: 'soft' | 'hard' = 'soft') => {
             const result = runSkillReset({
                 mode,
-                repairTargetDir: settings.workingDir,
+                repairTargetDir: settings["workingDir"],
                 includeClaude: true,
             });
             regenerateB();

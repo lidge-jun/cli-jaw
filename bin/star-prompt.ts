@@ -27,8 +27,8 @@ interface MaybePromptGithubStarDeps {
 export type StarRepoResult = { ok: true } | { ok: false; error: string };
 
 function resolveJawHome(): string {
-    return process.env.CLI_JAW_HOME
-        ? resolveHomePath(process.env.CLI_JAW_HOME, homedir())
+    return process.env["CLI_JAW_HOME"]
+        ? resolveHomePath(process.env["CLI_JAW_HOME"], homedir())
         : join(homedir(), '.cli-jaw');
 }
 

@@ -136,8 +136,8 @@ function parseContextFile(content: string): ContextPatternSet {
     if (!trimmed) return { include, exclude };
     if (trimmed.startsWith('{')) {
         const parsed = JSON.parse(trimmed) as Record<string, unknown>;
-        include.push(...normalizeList(parsed.include || parsed.files || parsed.contextFromFiles));
-        exclude.push(...normalizeList(parsed.exclude || parsed.contextExclude));
+        include.push(...normalizeList(parsed["include"] || parsed["files"] || parsed["contextFromFiles"]));
+        exclude.push(...normalizeList(parsed["exclude"] || parsed["contextExclude"]));
         return { include, exclude };
     }
     for (const line of trimmed.split(/\r?\n/)) {

@@ -55,7 +55,7 @@ export function compactChurnLog(homeDir = JAW_HOME, limit = DEFAULT_COMPACT_LIMI
 }
 
 export function maybeRecordChurn(report: FeatureReport, homeDir = JAW_HOME): ChurnRecord[] {
-    if (process.env.AGBROWSE_CHURN_LOG !== '1') return [];
+    if (process.env["AGBROWSE_CHURN_LOG"] !== '1') return [];
     const prior = readChurnLog(homeDir);
     const records = changedFeatureRecords(report, prior);
     for (const record of records) appendChurnRecord(record, homeDir);

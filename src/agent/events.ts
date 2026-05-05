@@ -182,7 +182,7 @@ function toIndentedPreview(text: unknown, max = 200) {
 }
 
 function isOpencodeToolFailure(part: CliEventRecord): boolean {
-    const exitCode = part?.state?.metadata?.exit;
+    const exitCode = part?.state?.metadata?.["exit"];
     if (exitCode != null && exitCode !== 0) return true;
     const status = String(part?.state?.status || '').toLowerCase();
     return status === 'error'
@@ -204,12 +204,12 @@ function formatOpenCodeTaskDetail(part: CliEventRecord): string {
     const meta = state.metadata || {};
     const modelInfo = asCliEventRecord(meta.model);
     const model = meta.model
-        ? [modelInfo.providerID, modelInfo.modelID].filter(Boolean).join('/')
+        ? [modelInfo["providerID"], modelInfo["modelID"]].filter(Boolean).join('/')
         : '';
     return appendDetail(
         input.prompt ? `prompt: ${clipText(String(input.prompt), 300)}` : '',
         model ? `model: ${model}` : '',
-        meta.sessionId ? `child_session: ${meta.sessionId}` : '',
+        meta["sessionId"] ? `child_session: ${meta["sessionId"]}` : '',
         cleanOpencodeTaskResult(state.output) ? `result: ${cleanOpencodeTaskResult(state.output)}` : '',
     );
 }
@@ -291,9 +291,9 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
     if (cli === 'claude' && event.type === 'system') {
         if (event.model) ctx.model = event.model;
         if (!ctx.metadata) ctx.metadata = {};
-        if (event.tools) ctx.metadata.tools = event.tools;
-        if (event.mcp_servers) ctx.metadata.mcp_servers = event.mcp_servers;
-        if (event.version) ctx.metadata.version = event.version;
+        if (event.tools) ctx.metadata["tools"] = event.tools;
+        if (event.mcp_servers) ctx.metadata["mcp_servers"] = event.mcp_servers;
+        if (event.version) ctx.metadata["version"] = event.version;
     }
 
     // ── Claude stream buffer: thinking_delta + input_json_delta ──
@@ -313,7 +313,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
         // [P2-3.2] message_start: capture per-message input_tokens
         if (inner?.type === 'message_start' && inner.message?.usage) {
             if (!ctx.tokens) ctx.tokens = { input_tokens: 0, output_tokens: 0 };
-            ctx.tokens.input_tokens = inner.message.usage.input_tokens ?? ctx.tokens.input_tokens ?? 0;
+            ctx.tokens["input_tokens"] = inner.message.usage.input_tokens ?? ctx.tokens["input_tokens"] ?? 0;
         }
 
         // Buffer thinking deltas
@@ -347,7 +347,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
         if (inner?.type === 'message_delta' && inner.usage) {
             if (inner.usage.output_tokens != null) {
                 if (!ctx.tokens) ctx.tokens = { input_tokens: 0, output_tokens: 0 };
-                ctx.tokens.output_tokens = inner.usage.output_tokens;
+                ctx.tokens["output_tokens"] = inner.usage.output_tokens;
             }
         }
 
@@ -489,7 +489,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                 if (event.usage) {
                     ctx.tokens = {
                         input_tokens: event.usage.input_tokens ?? 0,
-                        output_tokens: event.usage.output_tokens ?? ctx.tokens?.output_tokens ?? 0,
+                        output_tokens: event.usage.output_tokens ?? ctx.tokens?.["output_tokens"] ?? 0,
                         cache_read: event.usage.cache_read_input_tokens ?? 0,
                         cache_creation: event.usage.cache_creation_input_tokens ?? 0,
                     };
@@ -509,8 +509,8 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                             (t: ToolEntry) => t.stepRef === `claude:tooluse:${block.tool_use_id}`
                         );
                         if (existing) {
-                            existing.status = block.is_error ? 'error' : 'done';
-                            existing.icon = block.is_error ? '❌' : '✅';
+                            existing.status = block["is_error"] ? 'error' : 'done';
+                            existing.icon = block["is_error"] ? '❌' : '✅';
                             const resultText = extractText(block.content);
                             if (resultText) existing.detail = (existing.detail || '') + '\n' + resultText;
                             syncLiveTools(ctx);
@@ -741,19 +741,19 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                 // [P0-1.7] Accumulate tokens across steps (not overwrite)
                 if (event.part.tokens) {
                     if (!ctx.tokens) ctx.tokens = { input_tokens: 0, output_tokens: 0, cached_read: 0, cached_write: 0 };
-                    ctx.tokens.input_tokens = (ctx.tokens.input_tokens ?? 0) + (event.part.tokens.input ?? 0);
-                    ctx.tokens.output_tokens = (ctx.tokens.output_tokens ?? 0) + (event.part.tokens.output ?? 0);
+                    ctx.tokens["input_tokens"] = (ctx.tokens["input_tokens"] ?? 0) + (event.part.tokens.input ?? 0);
+                    ctx.tokens["output_tokens"] = (ctx.tokens["output_tokens"] ?? 0) + (event.part.tokens.output ?? 0);
                     // [P0-1.8] Cache token accumulation
                     if (event.part.tokens.cache) {
-                        ctx.tokens.cached_read = (ctx.tokens.cached_read ?? 0) + (event.part.tokens.cache.read ?? 0);
-                        ctx.tokens.cached_write = (ctx.tokens.cached_write ?? 0) + (event.part.tokens.cache.write ?? 0);
+                        ctx.tokens["cached_read"] = (ctx.tokens["cached_read"] ?? 0) + (event.part.tokens.cache.read ?? 0);
+                        ctx.tokens["cached_write"] = (ctx.tokens["cached_write"] ?? 0) + (event.part.tokens.cache.write ?? 0);
                     }
                     // [P2-3.13] Accumulate total tokens across steps
                     if (event.part.tokens.total != null) {
-                        ctx.tokens.total_tokens = (ctx.tokens.total_tokens ?? 0) + event.part.tokens.total;
+                        ctx.tokens["total_tokens"] = (ctx.tokens["total_tokens"] ?? 0) + event.part.tokens.total;
                     }
                     if (event.part.tokens.reasoning != null) {
-                        ctx.tokens.reasoning_tokens = (ctx.tokens.reasoning_tokens ?? 0) + event.part.tokens.reasoning;
+                        ctx.tokens["reasoning_tokens"] = (ctx.tokens["reasoning_tokens"] ?? 0) + event.part.tokens.reasoning;
                     }
                 }
                 // Accumulate cost across steps
@@ -814,9 +814,9 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                 ctx.opencodePendingToolRefs = [];
                 ctx.opencodeStepThinkingToolEmitted = false;
                 // [P2-3.12] Store step timing
-                if (event.part.time) {
+                if (event.part["time"]) {
                     if (!ctx.metadata) ctx.metadata = {};
-                    ctx.metadata.lastStepTime = event.part.time;
+                    ctx.metadata["lastStepTime"] = event.part["time"];
                 }
             }
             break;
@@ -932,7 +932,7 @@ function makeClaudeToolKey(event: CliEventRecord, label: ToolEntry) {
     // matching tool names across distinct messages don't collide on the per-message index.
     if (label.stepRef) return `claude:ref:${label.stepRef}:${label.icon}:${label.label}`;
     const msgId = event.message?.id || '';
-    const idx = event.event?.index;
+    const idx = event.event?.["index"];
     if (msgId && idx !== undefined && idx !== null) return `claude:msg:${msgId}:${idx}:${label.icon}:${label.label}`;
     if (idx !== undefined && idx !== null) return `claude:idx:${idx}:${label.icon}:${label.label}`;
     if (msgId) return `claude:msg:${msgId}:${label.icon}:${label.label}`;
@@ -1002,7 +1002,7 @@ function extractToolLabels(cli: string, event: CliEventRecord, ctx: SpawnContext
             const isStarted = event.type === 'item.started' || item.status === 'in_progress';
             const receiverIds = Array.isArray(item.receiver_thread_ids) ? item.receiver_thread_ids.join(', ') : '';
             const detail = appendDetail(
-                item.sender_thread_id ? `sender: ${item.sender_thread_id}` : '',
+                item["sender_thread_id"] ? `sender: ${item["sender_thread_id"]}` : '',
                 receiverIds ? `receivers: ${receiverIds}` : '',
                 formatJsonDetail('agents', item.agents_states),
                 item.prompt ? `prompt: ${clipText(String(item.prompt), 300)}` : '',
@@ -1056,7 +1056,7 @@ function extractToolLabels(cli: string, event: CliEventRecord, ctx: SpawnContext
                 const usage = event.usage || {};
                 const usageDetail = [
                     usage.total_tokens != null ? `${usage.total_tokens} tok` : '',
-                    usage.tool_uses != null ? `${usage.tool_uses} tools` : '',
+                    usage["tool_uses"] != null ? `${usage["tool_uses"]} tools` : '',
                     usage.duration_ms != null ? `${(Number(usage.duration_ms) / 1000).toFixed(1)}s` : '',
                 ].filter(Boolean).join(' · ');
                 const detail = appendDetail(
@@ -1099,7 +1099,7 @@ function extractToolLabels(cli: string, event: CliEventRecord, ctx: SpawnContext
             for (const block of event.message.content) {
                 if (block.type === 'tool_use') {
                     const isAgent = block.name === 'Agent';
-                    const description = block.input?.description || block.input?.subagent_type || 'subagent';
+                    const description = block.input?.description || block.input?.["subagent_type"] || 'subagent';
                     pushToolLabel(labels, {
                         icon: isAgent ? '🤖' : '🔧',
                         label: isAgent ? `subagent: ${buildPreview(description, 60)}` : (block.name || 'tool'),
@@ -1160,7 +1160,7 @@ function extractToolLabels(cli: string, event: CliEventRecord, ctx: SpawnContext
             const input = state.input || {};
             const status = String(state.status || (event.type === 'tool_result' ? 'completed' : 'completed'));
             const failed = isOpencodeToolFailure(part) || ['error', 'failed', 'cancelled', 'canceled'].includes(status);
-            const subagentType = input.subagent_type || 'general';
+            const subagentType = input["subagent_type"] || 'general';
             const description = input.description || state.title || part.tool || 'task';
             const resultText = event.type === 'tool_result'
                 ? extractText(part.content || part.output || state.output)
@@ -1187,7 +1187,7 @@ function extractToolLabels(cli: string, event: CliEventRecord, ctx: SpawnContext
             const detail = summarizeToolInput(event.part.tool || '', event.part.state?.input || {}, 0)
                 || String(event.part.state?.output || '').trim();
             const isDone = event.part.state?.status === 'completed';
-            const exitCode = fieldNumber(event.part.state?.metadata?.exit);
+            const exitCode = fieldNumber(event.part.state?.metadata?.["exit"]);
             const isFailed = isOpencodeToolFailure(event.part);
             const displayLabel = fieldString(event.part.state?.title || event.part.tool, 'tool');
             labels.push({
@@ -1235,13 +1235,13 @@ export function summarizeToolInput(toolName: string, input: unknown, max = 0): s
     if (name.includes('bash') || name.includes('terminal') || name === 'execute_command')
         result = s(data.command || data.cmd);
     else if (name.includes('read') || name === 'read_file' || name === 'view') {
-        const fullPath = s(data.path || data.file_path || data.filename);
+        const fullPath = s(data["path"] || data["file_path"] || data["filename"]);
         result = max ? (fullPath.split('/').pop() || fullPath) : fullPath;
     } else if (name.includes('write') || name.includes('edit') || name === 'create_file') {
-        const fullPath = s(data.path || data.file_path);
+        const fullPath = s(data["path"] || data["file_path"]);
         result = max ? (fullPath.split('/').pop() || fullPath) : fullPath;
     } else if (name.includes('search') || name.includes('grep') || name === 'codebase_search')
-        result = s(data.query || data.pattern || data.search_query);
+        result = s(data.query || data["pattern"] || data["search_query"]);
     else if (name.includes('web') || name === 'web_search')
         result = s(data.query);
     // Fallback: show first meaningful key-value if specific extraction yielded nothing
@@ -1300,8 +1300,8 @@ function extractText(content: unknown) {
 
 export function extractFromAcpUpdate(params: AcpUpdateParams | unknown, ctx: SpawnContext | null = null): ExtractedEventResult {
     const envelope = asCliEventRecord(params);
-    const update = asCliEventRecord(envelope.update);
-    if (!isCliEventRecord(envelope.update)) return null;
+    const update = asCliEventRecord(envelope["update"]);
+    if (!isCliEventRecord(envelope["update"])) return null;
 
     const type = update.sessionUpdate;
 
@@ -1321,7 +1321,7 @@ export function extractFromAcpUpdate(params: AcpUpdateParams | unknown, ctx: Spa
         case 'tool_call': {
             const toolName = fieldString(update.name, 'tool');
             const rawInput = asCliEventRecord(update.rawInput || update.input);
-            const isSubagentTask = rawInput?.agent_type === 'task' || rawInput?.agentType === 'task';
+            const isSubagentTask = rawInput?.["agent_type"] === 'task' || rawInput?.["agentType"] === 'task';
             const displayLabel = isSubagentTask
                 ? `subagent: ${update.title || rawInput.description || rawInput.name || toolName}`
                 : update.title || toolName;
@@ -1337,7 +1337,7 @@ export function extractFromAcpUpdate(params: AcpUpdateParams | unknown, ctx: Spa
                     ? (typeof update.rawInput === 'object' ? JSON.stringify(update.rawInput, null, 2) : String(update.rawInput))
                 : '';
             // [P1-2.10] Semantic icon from tool kind/title
-            const kindIcon = toolKindIcon(fieldString(update.kind) || undefined);
+            const kindIcon = toolKindIcon(fieldString(update["kind"]) || undefined);
             // [P0-1.11] Use toolCallId for unique stepRef
             return {
                 tool: {
@@ -1421,7 +1421,7 @@ export function extractFromAcpUpdate(params: AcpUpdateParams | unknown, ctx: Spa
         }
 
         default:
-            if (process.env.DEBUG) {
+            if (process.env["DEBUG"]) {
                 console.log(`[acp] unknown sessionUpdate: ${type}`, JSON.stringify(update).slice(0, 100));
             }
             return null;
@@ -1431,7 +1431,7 @@ export function extractFromAcpUpdate(params: AcpUpdateParams | unknown, ctx: Spa
 export function extractFromAcpSubagent(event: AcpSubagentEvent | unknown): ExtractedEventResult {
     const record = asCliEventRecord(event);
     if (!record.type || !String(record.type).startsWith('subagent.')) return null;
-    const data = asCliEventRecord(record.data);
+    const data = asCliEventRecord(record["data"]);
     const display = fieldString(data.agentDisplayName || data.agentName, 'subagent');
     const agentName = fieldString(data.agentName, display);
 
@@ -1458,7 +1458,7 @@ export function extractFromAcpSubagent(event: AcpSubagentEvent | unknown): Extra
                 },
             };
         case 'subagent.started': {
-            const agentDescription = fieldString(data.agentDescription);
+            const agentDescription = fieldString(data["agentDescription"]);
             return {
                 tool: {
                     icon: '🤖',

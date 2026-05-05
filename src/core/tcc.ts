@@ -41,7 +41,7 @@ export function readTccAppleEventsGrants(): TccEntry[] {
 
 export function getLaunchdProcessType(label: string): string | null {
     if (process.platform !== 'darwin') return null;
-    const uid = typeof process.getuid === 'function' ? process.getuid() : Number(process.env.UID || 0);
+    const uid = typeof process.getuid === 'function' ? process.getuid() : Number(process.env["UID"] || 0);
     try {
         const out = execFileSync('launchctl', ['print', `gui/${uid}/${label}`], {
             encoding: 'utf8', stdio: 'pipe', timeout: 5000,

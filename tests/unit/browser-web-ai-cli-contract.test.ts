@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readSource } from './source-normalize.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const cliSrc = fs.readFileSync(join(root, 'bin/commands/browser.ts'), 'utf8');
-const cliWebAiSrc = fs.readFileSync(join(root, 'bin/commands/browser-web-ai.ts'), 'utf8');
-const routeSrc = fs.readFileSync(join(root, 'src/routes/browser.ts'), 'utf8');
-const indexSrc = fs.readFileSync(join(root, 'src/browser/index.ts'), 'utf8');
+const cliSrc = readSource(join(root, 'bin/commands/browser.ts'), 'utf8');
+const cliWebAiSrc = readSource(join(root, 'bin/commands/browser-web-ai.ts'), 'utf8');
+const routeSrc = readSource(join(root, 'src/routes/browser.ts'), 'utf8');
+const indexSrc = readSource(join(root, 'src/browser/index.ts'), 'utf8');
 
 test('BWCLI-001: CLI exposes closed web-ai command surface', () => {
     assert.match(cliWebAiSrc, /const WEB_AI_COMMANDS = new Set\(\['render', 'status', 'send', 'poll', 'query', 'watch', 'watchers', 'sessions', 'sessions-prune', 'resume', 'reattach', 'notifications', 'capabilities', 'stop', 'diagnose', 'doctor', 'context-dry-run', 'context-render'\]\)/);

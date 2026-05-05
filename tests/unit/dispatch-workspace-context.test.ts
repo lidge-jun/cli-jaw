@@ -3,15 +3,15 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { readSource } from './source-normalize.js';
 import {
     buildResolvedPathHints,
     buildWorkspaceContextBlock,
     resolveWorkspaceRoot,
 } from '../../src/orchestrator/workspace-context.ts';
 
-const distributeSrc = readFileSync(
+const distributeSrc = readSource(
     join(import.meta.dirname, '../../src/orchestrator/distribute.ts'),
-    'utf8',
 );
 
 test('workspace context block includes authoritative project paths and cwd warning', () => {

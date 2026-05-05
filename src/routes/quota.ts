@@ -95,14 +95,14 @@ export function normalizeGeminiQuotaBuckets(buckets: GeminiQuotaBucket[]): Gemin
     });
 }
 
-function expandClaudeConfigDir(configDir = process.env.CLAUDE_CONFIG_DIR, homeDir = os.homedir()): string {
+function expandClaudeConfigDir(configDir = process.env["CLAUDE_CONFIG_DIR"], homeDir = os.homedir()): string {
     if (configDir?.trim()) {
         return resolveHomePath(configDir, homeDir);
     }
     return join(homeDir, '.claude');
 }
 
-export function getClaudeCredentialsPath(configDir = process.env.CLAUDE_CONFIG_DIR, homeDir = os.homedir()): string {
+export function getClaudeCredentialsPath(configDir = process.env["CLAUDE_CONFIG_DIR"], homeDir = os.homedir()): string {
     return join(expandClaudeConfigDir(configDir, homeDir), CLAUDE_CREDENTIALS_FILE);
 }
 
@@ -145,19 +145,19 @@ function readClaudeCredsFromFile(): ClaudeCreds | null {
 // macOS stores subscription OAuth in Keychain; Linux/Windows/WSL store it in
 // ~/.claude/.credentials.json, or under $CLAUDE_CONFIG_DIR when configured.
 export function readClaudeCreds(): ClaudeCreds | null {
-    if (process.env.CLAUDE_CODE_USE_BEDROCK || process.env.CLAUDE_CODE_USE_VERTEX || process.env.CLAUDE_CODE_USE_FOUNDRY) {
+    if (process.env["CLAUDE_CODE_USE_BEDROCK"] || process.env["CLAUDE_CODE_USE_VERTEX"] || process.env["CLAUDE_CODE_USE_FOUNDRY"]) {
         return { source: 'cloud-provider-env', quotaCapable: false, account: { type: 'cloud-provider', tier: null } };
     }
-    if (process.env.ANTHROPIC_AUTH_TOKEN) {
-        return { token: process.env.ANTHROPIC_AUTH_TOKEN, source: 'auth-token-env', quotaCapable: false, account: { type: 'auth-token', tier: null } };
+    if (process.env["ANTHROPIC_AUTH_TOKEN"]) {
+        return { token: process.env["ANTHROPIC_AUTH_TOKEN"], source: 'auth-token-env', quotaCapable: false, account: { type: 'auth-token', tier: null } };
     }
-    if (process.env.ANTHROPIC_API_KEY) {
-        return { token: process.env.ANTHROPIC_API_KEY, source: 'api-key-env', quotaCapable: false, account: { type: 'api-key', tier: null } };
+    if (process.env["ANTHROPIC_API_KEY"]) {
+        return { token: process.env["ANTHROPIC_API_KEY"], source: 'api-key-env', quotaCapable: false, account: { type: 'api-key', tier: null } };
     }
-    if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
-        return { token: process.env.CLAUDE_CODE_OAUTH_TOKEN, source: 'oauth-env', quotaCapable: true, account: { type: 'oauth-token', tier: null } };
+    if (process.env["CLAUDE_CODE_OAUTH_TOKEN"]) {
+        return { token: process.env["CLAUDE_CODE_OAUTH_TOKEN"], source: 'oauth-env', quotaCapable: true, account: { type: 'oauth-token', tier: null } };
     }
-    if (process.env.CLAUDE_CONFIG_DIR) {
+    if (process.env["CLAUDE_CONFIG_DIR"]) {
         return readClaudeCredsFromFile();
     }
     if (process.platform === 'darwin') {
@@ -234,13 +234,13 @@ export async function fetchCodexUsage(tokens: CodexTokensLike | null | undefined
             return { error: true };
         }
         const data = await resp.json() as Record<string, any>;
-        const account = { email: data.email ?? null, plan: data.plan_type ?? null };
+        const account = { email: data["email"] ?? null, plan: data["plan_type"] ?? null };
         const windows = [];
-        if (data.rate_limit?.primary_window) {
-            windows.push({ label: '5-hour', percent: data.rate_limit.primary_window.used_percent ?? 0, resetsAt: data.rate_limit.primary_window.reset_at ? new Date(data.rate_limit.primary_window.reset_at * 1000).toISOString() : null });
+        if (data["rate_limit"]?.primary_window) {
+            windows.push({ label: '5-hour', percent: data["rate_limit"].primary_window.used_percent ?? 0, resetsAt: data["rate_limit"].primary_window.reset_at ? new Date(data["rate_limit"].primary_window.reset_at * 1000).toISOString() : null });
         }
-        if (data.rate_limit?.secondary_window) {
-            windows.push({ label: '7-day', percent: data.rate_limit.secondary_window.used_percent ?? 0, resetsAt: data.rate_limit.secondary_window.reset_at ? new Date(data.rate_limit.secondary_window.reset_at * 1000).toISOString() : null });
+        if (data["rate_limit"]?.secondary_window) {
+            windows.push({ label: '7-day', percent: data["rate_limit"].secondary_window.used_percent ?? 0, resetsAt: data["rate_limit"].secondary_window.reset_at ? new Date(data["rate_limit"].secondary_window.reset_at * 1000).toISOString() : null });
         }
         return { account, windows, raw: data };
     } catch { return { error: true }; }
@@ -269,8 +269,8 @@ export function readGeminiAccount() {
 
 async function refreshGeminiAccessToken(account: GeminiQuotaAccount): Promise<string | null> {
     if (!account.refreshToken) return null;
-    const clientId = process.env.GEMINI_OAUTH_CLIENT_ID;
-    const clientSecret = process.env.GEMINI_OAUTH_CLIENT_SECRET;
+    const clientId = process.env["GEMINI_OAUTH_CLIENT_ID"];
+    const clientSecret = process.env["GEMINI_OAUTH_CLIENT_SECRET"];
     if (!clientId || !clientSecret) return null;
     const params = new URLSearchParams({
         client_id: clientId,

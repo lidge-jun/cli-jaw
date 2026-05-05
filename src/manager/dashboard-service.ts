@@ -20,7 +20,7 @@ function generateDashboardPlist(port: number, from: number, count: number): stri
     const jawPath = getJawPath();
     const jawHome = join(homedir(), '.cli-jaw');
     const logDir = join(jawHome, 'logs');
-    const servicePath = buildServicePath(process.env.PATH || '', [join(homedir(), '.local', 'bin')]);
+    const servicePath = buildServicePath(process.env["PATH"] || '', [join(homedir(), '.local', 'bin')]);
     mkdirSync(logDir, { recursive: true });
 
     const x = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -75,7 +75,7 @@ function generateDashboardUnit(port: number, from: number, count: number): strin
     const nodePath = getNodePath();
     const jawPath = getJawPath();
     const jawHome = join(homedir(), '.cli-jaw');
-    const servicePath = buildServicePath(process.env.PATH || '', [join(homedir(), '.local', 'bin')]);
+    const servicePath = buildServicePath(process.env["PATH"] || '', [join(homedir(), '.local', 'bin')]);
     const logDir = join(jawHome, 'logs');
     mkdirSync(logDir, { recursive: true });
 

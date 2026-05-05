@@ -56,15 +56,15 @@ export const BOSS_PHASE_AGENDA: Record<number, string> = {
 // ─── Prompt Context Helpers ──────────────────────────
 
 export function buildParallelContext(ap: Record<string, any>, peers: Record<string, any>[]): string {
-    const myFiles = (ap.verification?.affected_files || []).map((f: string) => `- ${f}`).join('\n') || '(no files specified)';
+    const myFiles = (ap["verification"]?.affected_files || []).map((f: string) => `- ${f}`).join('\n') || '(no files specified)';
     const peerList = peers
-        .filter(p => p.agent !== ap.agent)
-        .map(p => `- ${p.agent} (${p.role}): ${(p.verification?.affected_files || []).join(', ') || 'unspecified'}`)
+        .filter(p => p["agent"] !== ap["agent"])
+        .map(p => `- ${p["agent"]} (${p["role"]}): ${(p["verification"]?.affected_files || []).join(', ') || 'unspecified'}`)
         .join('\n') || '(none)';
 
     return `## Parallel Execution Mode ⚡
 - Other agents are working **simultaneously**.
-- Focus only on your area (${ap.role}) and the files listed below.
+- Focus only on your area (${ap["role"]}) and the files listed below.
 - **Never** modify files owned by other agents.
 - Do not modify shared config files (package.json, tsconfig.json, etc.).
 
@@ -77,12 +77,12 @@ ${peerList}`;
 
 export function buildSequentialContext(ap: Record<string, any>, priorResults: Record<string, any>[]): string {
     const priorSummary = priorResults.length > 0
-        ? priorResults.map(r => `- ${r.agent} (${r.role}): ${r.status} — ${r.text.slice(0, 150)}`).join('\n')
+        ? priorResults.map(r => `- ${r["agent"]} (${r["role"]}): ${r["status"]} — ${r["text"].slice(0, 150)}`).join('\n')
         : '(You are the first agent)';
 
     return `## Sequential Execution Rules
 - **Do not touch files already modified by previous agents**
-- Focus only on your area (${ap.role})
+- Focus only on your area (${ap["role"]})
 
 ### Previous Agent Results
 ${priorSummary}`;
@@ -92,43 +92,43 @@ ${priorSummary}`;
 
 export function findEmployee(emps: Record<string, any>[], ap: Record<string, any>) {
     // Guard: immediately return null if agent name is missing/invalid
-    if (!ap.agent || typeof ap.agent !== 'string') {
-        console.warn(`[jaw:match] ⚠️ invalid agent name: ${JSON.stringify(ap.agent)}`);
+    if (!ap["agent"] || typeof ap["agent"] !== 'string') {
+        console.warn(`[jaw:match] ⚠️ invalid agent name: ${JSON.stringify(ap["agent"])}`);
         return null;
     }
     // 1st: exact match (safest)
-    const exact = emps.find(e => e.name === ap.agent);
+    const exact = emps.find(e => e["name"] === ap["agent"]);
     if (exact) return exact;
     // 2nd: case-insensitive exact match
-    const ci = emps.find(e => e.name?.toLowerCase() === ap.agent.toLowerCase());
+    const ci = emps.find(e => e["name"]?.toLowerCase() === ap["agent"].toLowerCase());
     if (ci) return ci;
     // 3rd: fallback substring match (with warning)
-    const fuzzy = emps.find(e => typeof e.name === 'string' && (e.name.includes(ap.agent) || ap.agent.includes(e.name)));
-    if (fuzzy) console.warn(`[jaw:match] ⚠️ Fuzzy match: "${ap.agent}" → "${fuzzy.name}"`);
+    const fuzzy = emps.find(e => typeof e["name"] === 'string' && (e["name"].includes(ap["agent"]) || ap["agent"].includes(e["name"])));
+    if (fuzzy) console.warn(`[jaw:match] ⚠️ Fuzzy match: "${ap["agent"]}" → "${fuzzy["name"]}"`);
     return fuzzy ?? null;
 }
 
 // ─── Parallel Safety Guard ───────────────────────────
 
 export function validateParallelSafety(agentPhases: Record<string, any>[]): void {
-    const parallelAgents = agentPhases.filter(ap => ap.parallel);
+    const parallelAgents = agentPhases.filter(ap => ap["parallel"]);
     if (parallelAgents.length < 2) return;
 
     const fileMap = new Map<string, string>();
     for (const ap of parallelAgents) {
-        const files: string[] = ap.verification?.affected_files || [];
+        const files: string[] = ap["verification"]?.affected_files || [];
         for (const file of files) {
             const existing = fileMap.get(file);
-            if (existing && existing !== ap.agent) {
+            if (existing && existing !== ap["agent"]) {
                 console.warn(
                     `[orchestrator:parallel-guard] File conflict: "${file}" — ` +
-                    `"${existing}" and "${ap.agent}" both marked parallel. ` +
-                    `Downgrading "${ap.agent}" to sequential.`
+                    `"${existing}" and "${ap["agent"]}" both marked parallel. ` +
+                    `Downgrading "${ap["agent"]}" to sequential.`
                 );
-                ap.parallel = false;
+                ap["parallel"] = false;
                 break;
             }
-            fileMap.set(file, ap.agent);
+            fileMap.set(file, ap["agent"]);
         }
     }
 }
@@ -136,12 +136,12 @@ export function validateParallelSafety(agentPhases: Record<string, any>[]): void
 function formatEmployeeFailure(emp: Record<string, any>, r: Record<string, any>): string {
     const parts = [
         'Employee failed without assistant text.',
-        `agent=${emp.name || emp.id}`,
-        `cli=${emp.cli || 'unknown'}`,
-        `model=${emp.model || 'unknown'}`,
-        `exitCode=${r.code ?? 'unknown'}`,
-        r.sessionId ? `sessionId=${String(r.sessionId).slice(0, 24)}` : '',
-        r.diagnostic ? `diagnostic=${String(r.diagnostic).slice(0, 500)}` : '',
+        `agent=${emp["name"] || emp["id"]}`,
+        `cli=${emp["cli"] || 'unknown'}`,
+        `model=${emp["model"] || 'unknown'}`,
+        `exitCode=${r["code"] ?? 'unknown'}`,
+        r["sessionId"] ? `sessionId=${String(r["sessionId"]).slice(0, 24)}` : '',
+        r["diagnostic"] ? `diagnostic=${String(r["diagnostic"]).slice(0, 500)}` : '',
     ].filter(Boolean);
     return parts.join('\n');
 }
@@ -149,7 +149,7 @@ function formatEmployeeFailure(emp: Record<string, any>, r: Record<string, any>)
 // ─── Per-Agent Execution ─────────────────────────────
 
 export function buildPlanPrompt(prompt: string, worklogPath: string, emps: Record<string, any>[]): string {
-    const empList = emps.map(e => `- "${e.name}" (CLI: ${e.cli}, role: ${e.role || 'general developer'})`).join('\n');
+    const empList = emps.map(e => `- "${e["name"]}" (CLI: ${e["cli"]}, role: ${e["role"] || 'general developer'})`).join('\n');
 
     return `## Task Request
 ${prompt}
@@ -299,25 +299,25 @@ export async function runSingleAgent(
     priorResults: Record<string, any>[],
     parallelPeers: Record<string, any>[] = []
 ): Promise<Record<string, any>> {
-    const instruction = PHASE_INSTRUCTIONS[ap.currentPhase];
-    const phaseLabel = PHASES[ap.currentPhase];
-    const sysPrompt = getEmployeePromptV2(emp as { name: string; role?: string; id?: string | number; cli?: string }, ap.role, ap.currentPhase);
+    const instruction = PHASE_INSTRUCTIONS[ap["currentPhase"]];
+    const phaseLabel = PHASES[ap["currentPhase"]];
+    const sysPrompt = getEmployeePromptV2(emp as { name: string; role?: string; id?: string | number; cli?: string }, ap["role"], ap["currentPhase"]);
 
-    const executionContext = ap.parallel
+    const executionContext = ap["parallel"]
         ? buildParallelContext(ap, parallelPeers)
         : buildSequentialContext(ap, priorResults);
 
-    const remainingPhases = ap.phaseProfile
-        .slice(ap.currentPhaseIdx)
+    const remainingPhases = ap["phaseProfile"]
+        .slice(ap["currentPhaseIdx"])
         .map((p: number) => `${p}(${PHASES[p]})`)
         .join('→');
 
-    const worklogPath = String(worklog?.path || '').trim();
+    const worklogPath = String(worklog?.["path"] || '').trim();
     const workspaceBlock = buildWorkspaceContextBlock({
-        workingDir: settings.workingDir || null,
+        workingDir: settings["workingDir"] || null,
         worklogPath,
-        employeeName: emp.name,
-        task: ap.task,
+        employeeName: emp["name"],
+        task: ap["task"],
     });
     // Phase 56.1: plan is auto-injected at the top of the task body via ## Approved Plan.
     // The worklog is now an optional reference for prior execution context; the worker
@@ -331,7 +331,7 @@ If you want to review prior execution context or record your progress, the workl
     const taskPrompt = `${workspaceBlock}
 
 ## Task Instruction [${phaseLabel}]
-${ap.task}
+${ap["task"]}
 
 ## ⛔ Isolation Requirements (hard blocks)
 You are an isolated employee session. The server will reject (HTTP 403) any of the following:
@@ -342,7 +342,7 @@ Additionally you MUST NOT:
 - Output subtask JSON or reference the \`dev-code-reviewer\` skill as a delegation target. You are the single reviewer for this task.
 If the task seems to require parallel work, stop, write \`needs boss follow-up: <reason>\` in your output, and return. The boss will re-dispatch at the next phase.
 
-## Current Phase: ${ap.currentPhase} (${phaseLabel})
+## Current Phase: ${ap["currentPhase"]} (${phaseLabel})
 ${instruction}
 
 ## Remaining Phases: ${remainingPhases}
@@ -356,7 +356,7 @@ ${instruction}
 Example: planning + development together → complete analysis + code in one pass.
 In that case, state which phases you completed at the end of your response:
 
-Phases completed: ${ap.phaseProfile.slice(ap.currentPhaseIdx).join(', ')}
+Phases completed: ${ap["phaseProfile"].slice(ap["currentPhaseIdx"]).join(', ')}
 
 Use this exact plain-text format (NOT JSON). If you completed only one phase, you do not need to add this line.
 
@@ -365,50 +365,50 @@ ${executionContext}
 ${worklogBlock}`.trim();
 
     broadcast('agent_status', {
-        agentId: emp.id, agentName: emp.name,
-        status: 'running', phase: ap.currentPhase, phaseLabel,
+        agentId: emp["id"], agentName: emp["name"],
+        status: 'running', phase: ap["currentPhase"], phaseLabel,
         isEmployee: true,
     });
-    updateWorkerPhase(emp.id, String(ap.currentPhase), phaseLabel ?? '');
+    updateWorkerPhase(emp["id"], String(ap["currentPhase"]), phaseLabel ?? '');
 
-    const employeeModel = String(emp.model || '');
-    const empSession = getEmployeeSession.get(emp.id) as Record<string, any> | undefined;
+    const employeeModel = String(emp["model"] || '');
+    const empSession = getEmployeeSession.get(emp["id"]) as Record<string, any> | undefined;
     const canResume = !!(
-        emp.cli !== 'claude'
-        && empSession?.session_id
-        && empSession?.cli === emp.cli
-        && String(empSession?.model || '') === employeeModel
+        emp["cli"] !== 'claude'
+        && empSession?.["session_id"]
+        && empSession?.["cli"] === emp["cli"]
+        && String(empSession?.["model"] || '') === employeeModel
     );
-    if (emp.cli === 'claude' && empSession?.session_id) {
-        clearEmployeeSession.run(emp.id);
+    if (emp["cli"] === 'claude' && empSession?.["session_id"]) {
+        clearEmployeeSession.run(emp["id"]);
     }
 
     const monitor = startWorkerMonitor({
-        agentId: emp.id,
+        agentId: emp["id"],
         stallThresholdMs: 120_000,
         maxDurationMs: 600_000,
-        onStall: (id) => broadcast('worker_stalled', { agentId: id, employeeName: emp.name, isEmployee: true }),
+        onStall: (id) => broadcast('worker_stalled', { agentId: id, employeeName: emp["name"], isEmployee: true }),
         onDisconnect: (id, code) => broadcast('worker_disconnected', { agentId: id, exitCode: code, isEmployee: true }),
         onTimeout: (id) => {
-            broadcast('worker_timeout', { agentId: id, employeeName: emp.name, isEmployee: true });
+            broadcast('worker_timeout', { agentId: id, employeeName: emp["name"], isEmployee: true });
             killAgentById(id);
         },
     });
 
     const { promise } = spawnAgent(taskPrompt, {
-        agentId: emp.id, cli: emp.cli, model: emp.model,
+        agentId: emp["id"], cli: emp["cli"], model: emp["model"],
         forceNew: !canResume,
-        employeeSessionId: canResume ? empSession!.session_id : undefined,
+        employeeSessionId: canResume ? empSession!["session_id"] : undefined,
         sysPrompt: sysPrompt,
         workspaceContext: workspaceBlock,
-        origin: meta.origin || 'web',
+        origin: meta["origin"] || 'web',
         env: {
             JAW_EMPLOYEE_MODE: '1',
-            JAW_EMPLOYEE_NAME: String(emp.name || ''),
-            JAW_EMPLOYEE_ROLE: String(ap.role || emp.role || ''),
-            JAW_WORKSPACE_ROOT: settings.workingDir || '',
+            JAW_EMPLOYEE_NAME: String(emp["name"] || ''),
+            JAW_EMPLOYEE_ROLE: String(ap["role"] || emp["role"] || ''),
+            JAW_WORKSPACE_ROOT: settings["workingDir"] || '',
             JAW_WORKLOG_PATH: worklogPath || '',
-            PORT: String(process.env.PORT || ''),
+            PORT: String(process.env["PORT"] || ''),
         },
         lifecycle: {
             onActivity: (source) => monitor.touch(source as 'stdout' | 'stderr' | 'acp' | 'heartbeat'),
@@ -423,17 +423,17 @@ ${worklogBlock}`.trim();
         monitor.stop();
         throw err;
     }
-    const isSuccess = r.code === 0 || (r.code == null && (r.text || '').trim().length > 0);
-    if (isSuccess && r.sessionId && emp.cli !== 'claude') {
-        upsertEmployeeSession.run(emp.id, r.sessionId, emp.cli, employeeModel);
-    } else if (emp.cli === 'claude') {
-        clearEmployeeSession.run(emp.id);
+    const isSuccess = r["code"] === 0 || (r["code"] == null && (r["text"] || '').trim().length > 0);
+    if (isSuccess && r["sessionId"] && emp["cli"] !== 'claude') {
+        upsertEmployeeSession.run(emp["id"], r["sessionId"], emp["cli"], employeeModel);
+    } else if (emp["cli"] === 'claude') {
+        clearEmployeeSession.run(emp["id"]);
     }
-    const text = String(r.text || '');
+    const text = String(r["text"] || '');
     const diagnosticText = text || (isSuccess ? '' : formatEmployeeFailure(emp, r));
     const result = {
-        agent: ap.agent, role: ap.role, id: emp.id,
-        phase: ap.currentPhase, phaseLabel,
+        agent: ap["agent"], role: ap["role"], id: emp["id"],
+        phase: ap["currentPhase"], phaseLabel,
         status: isSuccess ? 'done' : 'error',
         text: diagnosticText,
     };
@@ -462,18 +462,18 @@ ${worklogBlock}`.trim();
 
     if (completedPhases) {
         const maxCompleted = Math.max(...completedPhases);
-        const newIdx = ap.phaseProfile.findIndex((p: number) => p > maxCompleted);
+        const newIdx = ap["phaseProfile"].findIndex((p: number) => p > maxCompleted);
         if (newIdx === -1) {
-            ap.completed = true;
-            console.log(`[claw:phase-skip] ${ap.agent} completed ALL phases in one pass`);
-        } else if (newIdx > ap.currentPhaseIdx + 1) {
-            ap.currentPhaseIdx = newIdx;
-            ap.currentPhase = ap.phaseProfile[newIdx];
-            console.log(`[claw:phase-skip] ${ap.agent} jumped to phase ${ap.currentPhase} (completed: ${completedPhases})`);
+            ap["completed"] = true;
+            console.log(`[claw:phase-skip] ${ap["agent"]} completed ALL phases in one pass`);
+        } else if (newIdx > ap["currentPhaseIdx"] + 1) {
+            ap["currentPhaseIdx"] = newIdx;
+            ap["currentPhase"] = ap["phaseProfile"][newIdx];
+            console.log(`[claw:phase-skip] ${ap["agent"]} jumped to phase ${ap["currentPhase"]} (completed: ${completedPhases})`);
         }
     }
 
-    broadcast('agent_status', { agentId: emp.id, agentName: emp.name, status: result.status, phase: ap.currentPhase, isEmployee: true });
+    broadcast('agent_status', { agentId: emp["id"], agentName: emp["name"], status: result.status, phase: ap["currentPhase"], isEmployee: true });
 
     if (worklogPath) {
         appendToWorklog(worklogPath, 'Execution Log',

@@ -40,41 +40,41 @@ function isOptionalString(v: unknown): v is string | undefined {
 function validateProcess(p: unknown): MetricsProcessSample | null {
     if (!p || typeof p !== 'object') return null;
     const o = p as Record<string, unknown>;
-    if (typeof o.type !== 'string') return null;
-    if (!isOptionalString(o.name)) return null;
-    if (!isFiniteNumber(o.pid)) return null;
-    if (!isFiniteNumber(o.rssKb)) return null;
-    if (!isFiniteNumber(o.cpu)) return null;
+    if (typeof o["type"] !== 'string') return null;
+    if (!isOptionalString(o["name"])) return null;
+    if (!isFiniteNumber(o["pid"])) return null;
+    if (!isFiniteNumber(o["rssKb"])) return null;
+    if (!isFiniteNumber(o["cpu"])) return null;
     const sample: MetricsProcessSample = {
-        type: o.type,
-        pid: o.pid,
-        rssKb: o.rssKb,
-        cpu: o.cpu,
+        type: o["type"],
+        pid: o["pid"],
+        rssKb: o["rssKb"],
+        cpu: o["cpu"],
     };
-    if (typeof o.name === 'string') sample.name = o.name;
+    if (typeof o["name"] === 'string') sample.name = o["name"];
     return sample;
 }
 
 export function validateMetricsSnapshot(body: unknown): MetricsSnapshot | null {
     if (!body || typeof body !== 'object') return null;
     const o = body as Record<string, unknown>;
-    if (!isFiniteNumber(o.ts)) return null;
-    if (!isFiniteNumber(o.rendererCount)) return null;
-    if (!isFiniteNumber(o.mainCount)) return null;
-    if (!isFiniteNumber(o.rssTotalKb)) return null;
-    if (!Array.isArray(o.processes)) return null;
-    if (o.processes.length > 256) return null;
+    if (!isFiniteNumber(o["ts"])) return null;
+    if (!isFiniteNumber(o["rendererCount"])) return null;
+    if (!isFiniteNumber(o["mainCount"])) return null;
+    if (!isFiniteNumber(o["rssTotalKb"])) return null;
+    if (!Array.isArray(o["processes"])) return null;
+    if (o["processes"].length > 256) return null;
     const processes: MetricsProcessSample[] = [];
-    for (const raw of o.processes) {
+    for (const raw of o["processes"]) {
         const sample = validateProcess(raw);
         if (!sample) return null;
         processes.push(sample);
     }
     return {
-        ts: o.ts,
-        rendererCount: o.rendererCount,
-        mainCount: o.mainCount,
-        rssTotalKb: o.rssTotalKb,
+        ts: o["ts"],
+        rendererCount: o["rendererCount"],
+        mainCount: o["mainCount"],
+        rssTotalKb: o["rssTotalKb"],
         processes,
     };
 }

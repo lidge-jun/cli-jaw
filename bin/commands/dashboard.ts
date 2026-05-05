@@ -51,7 +51,7 @@ const { values: globalOpts, positionals } = parseArgs({
     args: process.argv.slice(4),
     options: {
         json: { type: 'boolean', default: false },
-        port: { type: 'string', default: process.env.DASHBOARD_PORT || DASHBOARD_DEFAULT_PORT },
+        port: { type: 'string', default: process.env["DASHBOARD_PORT"] || DASHBOARD_DEFAULT_PORT },
         from: { type: 'string', default: String(MANAGED_INSTANCE_PORT_FROM) },
         count: { type: 'string', default: String(MANAGED_INSTANCE_PORT_COUNT) },
         open: { type: 'boolean', default: true },
@@ -110,7 +110,7 @@ async function handleServe(): Promise<void> {
         stdio: 'inherit',
         env: {
             ...process.env,
-            CLI_JAW_BIN: process.env.CLI_JAW_BIN || process.argv[1] || '',
+            CLI_JAW_BIN: process.env["CLI_JAW_BIN"] || process.argv[1] || '',
             DASHBOARD_PORT: String(dashboardPort),
             DASHBOARD_SCAN_FROM: String(scanFrom),
             DASHBOARD_SCAN_COUNT: String(scanCount),
@@ -154,8 +154,8 @@ async function handleStatus(): Promise<void> {
         if (json) {
             console.log(JSON.stringify(data));
         } else {
-            console.log(`  🦈 Dashboard running — port ${data.port}, pid ${data.pid}`);
-            console.log(`  Scan range: ${data.rangeFrom}-${data.rangeTo}`);
+            console.log(`  🦈 Dashboard running — port ${data["port"]}, pid ${data["pid"]}`);
+            console.log(`  Scan range: ${data["rangeFrom"]}-${data["rangeTo"]}`);
         }
     } catch {
         const msg = { ok: false, error: `dashboard not running on port ${dashboardPort}` };
@@ -170,7 +170,7 @@ async function handleList(): Promise<void> {
     try {
         const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
         const data = await res.json() as JsonRecord;
-        const instances = asArray<JsonRecord>(data.instances);
+        const instances = asArray<JsonRecord>(data["instances"]);
         if (json) {
             console.log(JSON.stringify(instances));
         } else {
@@ -183,14 +183,14 @@ async function handleList(): Promise<void> {
             console.log(`  ${pad('PORT', 6)} ${pad('STATUS', 10)} ${pad('OWNER', 10)} ${pad('CLI', 12)} ${pad('MODEL', 16)} LABEL`);
             console.log(`  ${'-'.repeat(70)}`);
             for (const inst of instances) {
-                const lifecycle = asRecord(inst.lifecycle);
-                const profile = asRecord(inst.profile);
-                const port = String(inst.port);
-                const status = fieldString(inst.status, 'unknown');
-                const owner = fieldString(lifecycle.owner, 'n/a');
-                const cli = fieldString(inst.currentCli, 'n/a');
-                const model = fieldString(inst.currentModel, 'n/a');
-                const label = fieldString(inst.label) || fieldString(profile.label) || `:${inst.port}`;
+                const lifecycle = asRecord(inst["lifecycle"]);
+                const profile = asRecord(inst["profile"]);
+                const port = String(inst["port"]);
+                const status = fieldString(inst["status"], 'unknown');
+                const owner = fieldString(lifecycle["owner"], 'n/a');
+                const cli = fieldString(inst["currentCli"], 'n/a');
+                const model = fieldString(inst["currentModel"], 'n/a');
+                const label = fieldString(inst["label"]) || fieldString(profile["label"]) || `:${inst["port"]}`;
                 console.log(`  ${pad(port, 6)} ${pad(status, 10)} ${pad(owner, 10)} ${pad(cli, 12)} ${pad(model, 16)} ${label}`);
             }
             console.log('');
@@ -220,13 +220,13 @@ async function handleLifecycle(action: string): Promise<void> {
         const result = await res.json() as JsonRecord;
         if (json) {
             console.log(JSON.stringify(result));
-            if (!result.ok) process.exitCode = 1;
+            if (!result["ok"]) process.exitCode = 1;
             return;
         }
-        const icon = result.ok ? '✅' : '❌';
-        console.log(`${icon} ${result.action} :${result.port} — ${result.message}`);
-        if (result.pid) console.log(`   PID: ${result.pid}`);
-        if (!result.ok) process.exitCode = 1;
+        const icon = result["ok"] ? '✅' : '❌';
+        console.log(`${icon} ${result["action"]} :${result["port"]} — ${result["message"]}`);
+        if (result["pid"]) console.log(`   PID: ${result["pid"]}`);
+        if (!result["ok"]) process.exitCode = 1;
     } catch {
         const msg = { ok: false, error: `dashboard not running on port ${dashboardPort}` };
         if (json) console.log(JSON.stringify(msg));

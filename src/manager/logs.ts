@@ -44,18 +44,18 @@ function parseLevel(value: unknown): InstanceLogLevel {
 function normalizeLine(raw: unknown, fallbackTs: string): InstanceLogLine | null {
     if (!raw || typeof raw !== 'object') return null;
     const entry = raw as Record<string, unknown>;
-    const text = typeof entry.text === 'string'
-        ? entry.text
-        : typeof entry.message === 'string'
-            ? entry.message
+    const text = typeof entry["text"] === 'string'
+        ? entry["text"]
+        : typeof entry["message"] === 'string'
+            ? entry["message"]
             : null;
     if (!text) return null;
-    const ts = typeof entry.ts === 'string'
-        ? entry.ts
-        : typeof entry.timestamp === 'string'
-            ? entry.timestamp
+    const ts = typeof entry["ts"] === 'string'
+        ? entry["ts"]
+        : typeof entry["timestamp"] === 'string'
+            ? entry["timestamp"]
             : fallbackTs;
-    return { ts, level: parseLevel(entry.level), text };
+    return { ts, level: parseLevel(entry["level"]), text };
 }
 
 async function readJson(fetchImpl: FetchLike, url: string, timeoutMs: number): Promise<unknown> {
@@ -67,13 +67,13 @@ async function readJson(fetchImpl: FetchLike, url: string, timeoutMs: number): P
 function pickLinesArray(payload: unknown): unknown[] | null {
     if (!payload || typeof payload !== 'object') return null;
     const root = payload as Record<string, unknown>;
-    if (Array.isArray(root.lines)) return root.lines;
-    if (Array.isArray(root.logs)) return root.logs;
-    const data = root.data;
+    if (Array.isArray(root["lines"])) return root["lines"];
+    if (Array.isArray(root["logs"])) return root["logs"];
+    const data = root["data"];
     if (data && typeof data === 'object') {
         const inner = data as Record<string, unknown>;
-        if (Array.isArray(inner.lines)) return inner.lines;
-        if (Array.isArray(inner.logs)) return inner.logs;
+        if (Array.isArray(inner["lines"])) return inner["lines"];
+        if (Array.isArray(inner["logs"])) return inner["logs"];
     }
     return null;
 }

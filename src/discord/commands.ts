@@ -15,7 +15,7 @@ import type { DiscordSendableChannel } from './channel-types.js';
 import { seedDefaultEmployees } from '../core/employees.js';
 
 export async function registerDiscordSlashCommands(client: Client) {
-    if (!settings.discord?.guildId) {
+    if (!settings["discord"]?.guildId) {
         console.warn('[discord] guildId not set — skipping slash command registration');
         return;
     }
@@ -36,9 +36,9 @@ export async function registerDiscordSlashCommands(client: Client) {
     );
 
     try {
-        const rest = new REST({ version: '10' }).setToken(settings.discord.token);
+        const rest = new REST({ version: '10' }).setToken(settings["discord"].token);
         await rest.put(
-            Routes.applicationGuildCommands(client.application.id, settings.discord.guildId),
+            Routes.applicationGuildCommands(client.application.id, settings["discord"].guildId),
             { body: commands },
         );
         console.log(`[discord] registered ${commands.length} guild-scoped slash commands`);
@@ -48,7 +48,7 @@ export async function registerDiscordSlashCommands(client: Client) {
 }
 
 function makeDiscordCommandCtx() {
-    const locale = normalizeLocale(settings.locale, 'ko');
+    const locale = normalizeLocale(settings["locale"], 'ko');
     return makeCommandCtx('discord', locale, {
         applySettings: async (patch) => {
             bumpSessionOwnershipGeneration();

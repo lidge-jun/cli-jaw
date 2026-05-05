@@ -1,3 +1,4 @@
+import { readSource } from './source-normalize.js';
 // Discord forwarder tests — Phase 6 Bundle A
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,8 +8,8 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..');
-const forwarderSrc = readFileSync(join(projectRoot, 'src/discord/forwarder.ts'), 'utf8');
-const botSrc = readFileSync(join(projectRoot, 'src/discord/bot.ts'), 'utf8');
+const forwarderSrc = readSource(join(projectRoot, 'src/discord/forwarder.ts'), 'utf8');
+const botSrc = readSource(join(projectRoot, 'src/discord/bot.ts'), 'utf8');
 
 // ─── chunkDiscordMessage ────────────────────────────
 

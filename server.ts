@@ -118,11 +118,11 @@ try {
     }
 } catch { /* no .env, that's fine */ }
 
-process.env.PATH = buildServicePath(process.env.PATH || '');
+process.env["PATH"] = buildServicePath(process.env["PATH"] || '');
 
 // ─── Init ────────────────────────────────────────────
 
-const PORT = process.env.PORT || settings.port || 3457;
+const PORT = process.env["PORT"] || settings["port"] || 3457;
 // DEFAULT_EMPLOYEES + seedDefaultEmployees → src/core/employees.ts
 
 ensureDirs();
@@ -168,8 +168,8 @@ try {
 }
 
 // Phase 3.1: safe → auto 강제 마이그레이션 (기존 사용자 대응)
-if (settings.permissions === 'safe') {
-    settings.permissions = 'auto';
+if (settings["permissions"] === 'safe') {
+    settings["permissions"] = 'auto';
     saveSettings(settings);
     console.log('[jaw:migrate] permissions: safe → auto');
 }
@@ -182,7 +182,7 @@ resetAllStaleStates();
 
 // ─── Express + WebSocket ─────────────────────────────
 
-const remoteAccess = settings.network?.remoteAccess || {} as Record<string, any>;
+const remoteAccess = settings["network"]?.remoteAccess || {} as Record<string, any>;
 const app = express();
 if ((remoteAccess as any).mode === 'reverse-proxy' && (remoteAccess as any).trustProxies && (remoteAccess as any).trustForwardedFor) {
     app.set('trust proxy', 'loopback');
@@ -212,8 +212,8 @@ app.use(helmet({
 }));
 
 // ─── CORS (loopback always, LAN opt-in) ─────────────
-const lanMode = process.env.JAW_LAN_MODE === '1';
-const lanAllowed = () => lanMode || settings.network?.lanBypass === true;
+const lanMode = process.env["JAW_LAN_MODE"] === '1';
+const lanAllowed = () => lanMode || settings["network"]?.lanBypass === true;
 const LAN_HINT = 'Set settings.network.bindHost="0.0.0.0" and lanBypass=true to allow LAN access.';
 
 // Host header validation (DNS rebinding defense)
@@ -241,7 +241,7 @@ app.use((req, res, next) => {
 });
 
 // ─── Bearer Token Auth (CRITICAL endpoints) ─────────
-const JAW_AUTH_TOKEN = process.env.JAW_AUTH_TOKEN || crypto.randomBytes(32).toString('hex');
+const JAW_AUTH_TOKEN = process.env["JAW_AUTH_TOKEN"] || crypto.randomBytes(32).toString('hex');
 
 // Boss-only dispatch token (phase 8). Server generates and stores in process.env;
 // main-agent spawns inherit it, employee spawns strip it in makeCleanEnv.
@@ -304,7 +304,7 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ type: 'queue_update', pending: messageQueue.length }));
     }
     // Send current PABCD state so page refresh preserves glow
-    const webScope = resolveOrcScope({ origin: 'web', workingDir: settings.workingDir || null });
+    const webScope = resolveOrcScope({ origin: 'web', workingDir: settings["workingDir"] || null });
     const orcState = getState(webScope);
     if (orcState && orcState !== 'IDLE') {
         ws.send(JSON.stringify({ type: 'orc_state', state: orcState, scope: webScope, ts: Date.now() }));
@@ -328,7 +328,7 @@ wss.on('connection', (ws) => {
                 const result = submitMessage(text, { origin: 'web' });
                 if (result.action === 'rejected' && result.reason === 'busy') {
                     broadcast('agent_done', {
-                        text: t('ws.agentBusy', {}, resolveRequestLocale(null, settings.locale)),
+                        text: t('ws.agentBusy', {}, resolveRequestLocale(null, settings["locale"])),
                         error: true,
                     });
                 }
@@ -341,7 +341,7 @@ wss.on('connection', (ws) => {
 // ─── API Routes ──────────────────────────────────────
 
 function getRuntimeSnapshot() {
-    const cli = settings.cli || null;
+    const cli = settings["cli"] || null;
     const model = cli ? getCliModelAndEffort(cli, settings).model : 'default';
 
     return {
@@ -364,7 +364,7 @@ function resetSessionOnly() {
 }
 
 function resolveRequestLocale(req: any, preferred: string | null = null) {
-    const fallback = settings.locale || 'ko';
+    const fallback = settings["locale"] || 'ko';
     const direct = typeof preferred === 'string' ? preferred.trim() : '';
     if (direct) return normalizeLocale(direct, fallback);
 
@@ -404,7 +404,7 @@ function makeWebCommandCtx(req: any, localeOverride: string | null = null) {
 app.get('/api/health', (_req, res) => res.json({ ok: true, version: APP_VERSION, uptime: process.uptime() }));
 app.get('/api/session', (_, res) => ok(res, getSession(), getSession() as Record<string, unknown> | undefined));
 app.get('/api/messages', (req, res) => {
-    const includeTrace = ['1', 'true', 'yes'].includes(String(req.query.includeTrace || '').toLowerCase());
+    const includeTrace = ['1', 'true', 'yes'].includes(String(req.query["includeTrace"] || '').toLowerCase());
     const rows = includeTrace ? getMessagesWithTrace.all() : getMessages.all();
     ok(res, rows);
 });
@@ -467,8 +467,8 @@ app.post('/api/command', requireAuth, async (req, res) => {
 });
 
 app.get('/api/commands', (req, res) => {
-    const iface = String(req.query.interface || 'web');
-    const locale = resolveRequestLocale(req, req.query.locale as string);
+    const iface = String(req.query["interface"] || 'web');
+    const locale = resolveRequestLocale(req, req.query["locale"] as string);
     res.vary('Accept-Language');
     res.set('Content-Language', locale);
     res.json(COMMANDS
@@ -582,7 +582,7 @@ const shutdown = async (sig: string) => {
 process.once('SIGTERM', () => shutdown('SIGTERM'));
 process.once('SIGINT', () => shutdown('SIGINT'));
 
-const cfgBind = settings.network?.bindHost || '127.0.0.1';
+const cfgBind = settings["network"]?.bindHost || '127.0.0.1';
 const isLoopbackBind = cfgBind === '127.0.0.1' || cfgBind === '::1' || cfgBind === 'localhost';
 const remoteMode = (remoteAccess as any).mode && (remoteAccess as any).mode !== 'off';
 const bindHost: string = lanMode ? '0.0.0.0'
@@ -600,23 +600,23 @@ server.on('error', (err: NodeJS.ErrnoException) => {
 server.listen(PORT, bindHost, async () => {
     // Persist port so CLI commands auto-discover the running server
     const portStr = String(PORT);
-    if (settings.port !== portStr) {
-        settings.port = portStr;
+    if (settings["port"] !== portStr) {
+        settings["port"] = portStr;
         saveSettings(settings);
     }
 
     // Bootstrap i18n locale dictionaries
     loadLocales(join(projectRoot, 'public', 'locales'));
     log.info(`\n  🦈 Jaw Agent — http://localhost:${PORT}\n`);
-    log.info(`  CLI:    ${settings.cli}`);
-    log.info(`  Perms:  ${settings.permissions}`);
-    log.info(`  CWD:    ${settings.workingDir}`);
+    log.info(`  CLI:    ${settings["cli"]}`);
+    log.info(`  Perms:  ${settings["permissions"]}`);
+    log.info(`  CWD:    ${settings["workingDir"]}`);
 
     // Clear stale PABCD states from previous sessions
     resetAllStaleStates();
 
     // Warn: lanBypass=true but bindHost=127.0.0.1 → LAN unreachable
-    if (settings.network?.lanBypass === true && bindHost === '127.0.0.1' && !lanMode) {
+    if (settings["network"]?.lanBypass === true && bindHost === '127.0.0.1' && !lanMode) {
         log.warn('  ⚠ lanBypass is enabled but bindHost is 127.0.0.1 — LAN devices cannot connect.');
         log.warn('    → Set network.bindHost to "0.0.0.0" in settings.json, or use: cli-jaw serve --lan');
     }
@@ -632,7 +632,7 @@ server.listen(PORT, bindHost, async () => {
             }
         }
         if (urls.length) log.info(`  LAN:    ${urls.join(', ')}`);
-        if (settings.network?.lanBypass === true) {
+        if (settings["network"]?.lanBypass === true) {
             log.warn('  ⚠ LAN auth bypass enabled — only enable on trusted networks.');
         }
     }
@@ -646,9 +646,9 @@ server.listen(PORT, bindHost, async () => {
 
     // Auto-open browser (opt-in via JAW_OPEN_BROWSER=1, set by `jaw serve --open`)
     // Skip in test environments to prevent browser tabs during npm test
-    const isTestEnv = process.env.NODE_ENV === 'test'
-        || (process.env.npm_lifecycle_event || '').includes('test');
-    if (process.env.JAW_OPEN_BROWSER === '1' && !isTestEnv) {
+    const isTestEnv = process.env["NODE_ENV"] === 'test'
+        || (process.env["npm_lifecycle_event"] || '').includes('test');
+    if (process.env["JAW_OPEN_BROWSER"] === '1' && !isTestEnv) {
         const url = `http://localhost:${PORT}`;
         try {
             const openCmd = process.platform === 'darwin' ? 'open'
@@ -668,8 +668,8 @@ server.listen(PORT, bindHost, async () => {
     }
 
     try {
-        initMcpConfig(settings.workingDir);
-        const symlinks = ensureWorkingDirSkillsLinks(settings.workingDir, { onConflict: 'skip', includeClaude: true, allowReplaceManaged: true });
+        initMcpConfig(settings["workingDir"]);
+        const symlinks = ensureWorkingDirSkillsLinks(settings["workingDir"], { onConflict: 'skip', includeClaude: true, allowReplaceManaged: true });
         copyDefaultSkills();
         const moved = (symlinks?.links || []).filter(x => x.action === 'backup_replace');
         if (moved.length) {

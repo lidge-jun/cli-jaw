@@ -10,8 +10,8 @@ import { fileURLToPath } from 'url';
 import { resolveHomePath } from '../../src/core/path-expand.js';
 
 // ─── JAW_HOME inline (config.ts → registry.ts import 체인 제거) ───
-export const JAW_HOME = process.env.CLI_JAW_HOME
-    ? resolveHomePath(process.env.CLI_JAW_HOME)
+export const JAW_HOME = process.env["CLI_JAW_HOME"]
+    ? resolveHomePath(process.env["CLI_JAW_HOME"])
     : join(os.homedir(), '.cli-jaw');
 
 // ─── Clone cooldown ─────────────────────────────────
@@ -45,7 +45,7 @@ export function writeCloneMeta(success: boolean): void {
 }
 
 export function shouldSkipClone(): boolean {
-    if (process.env.JAW_FORCE_CLONE === '1') return false;
+    if (process.env["JAW_FORCE_CLONE"] === '1') return false;
     const meta = readCloneMeta();
     if (!meta) return false;
     if (meta.success) return false;

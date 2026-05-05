@@ -26,7 +26,7 @@ if (shouldShowHelp(process.argv)) printAndExit(`
 const { values } = parseArgs({
     args: process.argv.slice(3),
     options: {
-        port: { type: 'string', default: process.env.PORT || DEFAULT_PORT },
+        port: { type: 'string', default: process.env["PORT"] || DEFAULT_PORT },
         json: { type: 'boolean', default: false },
         dashboard: { type: 'boolean', default: false },
     },
@@ -40,17 +40,17 @@ try {
     if (res.ok) {
         const data = await res.json() as Record<string, unknown>;
         if (values.json) {
-            console.log(JSON.stringify({ status: 'running', port: values.port, cli: data.cli }));
+            console.log(JSON.stringify({ status: 'running', port: values.port, cli: data["cli"] }));
         } else {
             console.log(`  🦈 Server is running on port ${values.port}`);
-            console.log(`  CLI: ${data.cli}`);
-            console.log(`  Working dir: ${data.workingDir || '~'}`);
+            console.log(`  CLI: ${data["cli"]}`);
+            console.log(`  Working dir: ${data["workingDir"] || '~'}`);
 
             // Heartbeat status
             try {
                 const hbRes = await fetch(`${getServerUrl(values.port as string)}/api/heartbeat`, { signal: AbortSignal.timeout(2000) });
                 const hb = asRecord(await hbRes.json());
-                const active = asArray<{ enabled?: boolean }>(hb.jobs).filter((j) => j.enabled).length;
+                const active = asArray<{ enabled?: boolean }>(hb["jobs"]).filter((j) => j.enabled).length;
                 console.log(`  Heartbeat: ${active} job${active !== 1 ? 's' : ''} active`);
             } catch { }
         }
@@ -68,7 +68,7 @@ try {
 }
 
 if (values.dashboard) {
-    const dashPort = Number(process.env.DASHBOARD_PORT || DASHBOARD_DEFAULT_PORT);
+    const dashPort = Number(process.env["DASHBOARD_PORT"] || DASHBOARD_DEFAULT_PORT);
     const dashUrl = `http://127.0.0.1:${dashPort}/api/dashboard/health`;
     try {
         const dashRes = await fetch(dashUrl, { signal: AbortSignal.timeout(3000) });
@@ -76,8 +76,8 @@ if (values.dashboard) {
         if (values.json) {
             console.log(JSON.stringify({ dashboard: { status: 'running', ...dashData } }));
         } else {
-            console.log(`  🖥️  Dashboard running — port ${dashData.port}, pid ${dashData.pid}`);
-            console.log(`  Scan: ${dashData.rangeFrom}-${dashData.rangeTo}`);
+            console.log(`  🖥️  Dashboard running — port ${dashData["port"]}, pid ${dashData["pid"]}`);
+            console.log(`  Scan: ${dashData["rangeFrom"]}-${dashData["rangeTo"]}`);
         }
     } catch {
         if (values.json) console.log(JSON.stringify({ dashboard: { status: 'stopped' } }));

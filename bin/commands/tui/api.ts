@@ -25,7 +25,7 @@ export async function apiJson<T = JsonRecord>(ctx: TuiContext, path: string, ini
     const resp = await fetch(`${ctx.apiUrl}${path}`, req);
     const data = asRecord(await resp.json().catch(() => ({})));
     if (!resp.ok) {
-        const msg = fieldString(data.error) || fieldString(data.message) || `${resp.status} ${resp.statusText}`;
+        const msg = fieldString(data["error"]) || fieldString(data["message"]) || `${resp.status} ${resp.statusText}`;
         throw new Error(msg);
     }
     return data as T;
@@ -37,19 +37,19 @@ export async function refreshInfo(ctx: TuiContext): Promise<void> {
         const r = await fetch(`${ctx.apiUrl}/api/settings`, { headers: authHeaders(), signal: AbortSignal.timeout(2000) });
         if (r.ok) {
             const res = asRecord(await r.json());
-            const s = asRecord(res.data || res);
-            const cli = fieldString(s.cli, 'codex');
-            const perCli = asRecord(s.perCli);
+            const s = asRecord(res["data"] || res);
+            const cli = fieldString(s["cli"], 'codex');
+            const perCli = asRecord(s["perCli"]);
             const cliSettings = asRecord(perCli[cli]);
-            ctx.info = { cli, workingDir: fieldString(s.workingDir, '~'), model: fieldString(cliSettings.model) };
-            if (typeof s.locale === 'string') ctx.runtimeLocale = s.locale;
-            if (s.tui && typeof s.tui === 'object') ctx.tuiConfig = { ...ctx.tuiConfig, ...asRecord(s.tui) };
+            ctx.info = { cli, workingDir: fieldString(s["workingDir"], '~'), model: fieldString(cliSettings["model"]) };
+            if (typeof s["locale"] === 'string') ctx.runtimeLocale = s["locale"];
+            if (s["tui"] && typeof s["tui"] === 'object') ctx.tuiConfig = { ...ctx.tuiConfig, ...asRecord(s["tui"]) };
         }
         const sr = await fetch(`${ctx.apiUrl}/api/session`, { headers: authHeaders(), signal: AbortSignal.timeout(2000) });
         if (sr.ok) {
             const ses = asRecord(await sr.json());
-            const sd = asRecord(ses.data || ses);
-            if (typeof sd.model === 'string') ctx.info.model = sd.model;
+            const sd = asRecord(ses["data"] || ses);
+            if (typeof sd["model"] === 'string') ctx.info.model = sd["model"];
         }
     } catch { /* keep current info on fetch failure */ }
     ctx.accent = cliColor[ctx.info.cli] || c.red;

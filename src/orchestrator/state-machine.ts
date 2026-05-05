@@ -165,10 +165,10 @@ Employee results:`,
 };
 
 export function getPrefix(state: OrcStateName, source: 'user' | 'worker' = 'user'): string | null {
-  if (state === 'P') return PREFIXES.Pb2!;
+  if (state === 'P') return PREFIXES["Pb2"]!;
   // Phase 59: distinguish first-entry user message (Ap) from worker verdict (Ab2).
-  if (state === 'A') return source === 'worker' ? PREFIXES.Ab2! : PREFIXES.Ap!;
-  if (state === 'B' && source === 'worker') return PREFIXES.Bb2!;
+  if (state === 'A') return source === 'worker' ? PREFIXES["Ab2"]! : PREFIXES["Ap"]!;
+  if (state === 'B' && source === 'worker') return PREFIXES["Bb2"]!;
   return null;
 }
 

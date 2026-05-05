@@ -31,19 +31,19 @@ export function registerSendTransport(channel: MessengerChannel, fn: TransportSe
 // ─── Normalize ──────────────────────────────────────
 
 export function normalizeChannelSendRequest(body: Record<string, any>): ChannelSendRequest {
-    const rawPath = body.file_path || body.filePath;
+    const rawPath = body["file_path"] || body["filePath"];
     let filePath: string | undefined;
     if (rawPath) {
-        filePath = assertSendFilePath(String(rawPath), settings.workingDir || undefined);
+        filePath = assertSendFilePath(String(rawPath), settings["workingDir"] || undefined);
     }
     return {
-        channel: body.channel || 'active',
-        type: (body.type || 'text') as OutboundType,
-        text: body.text,
+        channel: body["channel"] || 'active',
+        type: (body["type"] || 'text') as OutboundType,
+        text: body["text"],
         filePath,
-        caption: body.caption,
-        target: body.target,
-        chatId: body.chat_id || body.chatId,
+        caption: body["caption"],
+        target: body["target"],
+        chatId: body["chat_id"] || body["chatId"],
     };
 }
 
@@ -51,7 +51,7 @@ export function normalizeChannelSendRequest(body: Record<string, any>): ChannelS
 
 function resolveChannel(req: ChannelSendRequest): MessengerChannel {
     if (req.channel && req.channel !== 'active') return req.channel;
-    return (settings.channel as MessengerChannel) || 'telegram';
+    return (settings["channel"] as MessengerChannel) || 'telegram';
 }
 
 // ─── Send ───────────────────────────────────────────
@@ -62,7 +62,7 @@ function resolveChannel(req: ChannelSendRequest): MessengerChannel {
  */
 function getConfiguredFallbackTarget(channel: MessengerChannel): RemoteTarget | null {
     if (channel === 'telegram') {
-        const chatIds = settings.telegram?.allowedChatIds;
+        const chatIds = settings["telegram"]?.allowedChatIds;
         if (chatIds?.length) {
             return {
                 channel: 'telegram',
@@ -72,7 +72,7 @@ function getConfiguredFallbackTarget(channel: MessengerChannel): RemoteTarget | 
             };
         }
     } else if (channel === 'discord') {
-        const channelIds = settings.discord?.channelIds;
+        const channelIds = settings["discord"]?.channelIds;
         if (channelIds?.length) {
             return {
                 channel: 'discord',
@@ -93,7 +93,7 @@ export function validateTarget(target: RemoteTarget, channel: MessengerChannel):
     if (!target || !target.targetId) return false;
     if (target.channel !== channel) return false;
     if (channel === 'discord') {
-        const allowed = settings.discord?.channelIds;
+        const allowed = settings["discord"]?.channelIds;
         if (allowed?.length) {
             // Allow if targetId or parentTargetId (for threads) is in channelIds
             const inAllowlist = allowed.includes(target.targetId)
@@ -101,7 +101,7 @@ export function validateTarget(target: RemoteTarget, channel: MessengerChannel):
             if (!inAllowlist) return false;
         }
     } else if (channel === 'telegram') {
-        const allowed = settings.telegram?.allowedChatIds;
+        const allowed = settings["telegram"]?.allowedChatIds;
         if (allowed?.length && !allowed.map(String).includes(String(target.targetId))) return false;
     }
     return true;

@@ -12,7 +12,7 @@ export function registerI18nRoutes(app: Express, requireAuth: AuthMiddleware, pr
         const langs = fs.readdirSync(localeDir)
             .filter(f => f.endsWith('.json') && !f.startsWith('skills-'))
             .map(f => f.replace('.json', ''));
-        res.json({ languages: langs, default: normalizeLocale(settings.locale, 'ko') });
+        res.json({ languages: langs, default: normalizeLocale(settings["locale"], 'ko') });
     });
 
     app.get('/api/i18n/:lang', (req, res) => {

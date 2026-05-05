@@ -67,13 +67,13 @@ function buildLinkReport(links: any[], extra?: Record<string, any>) {
 }
 
 export function ensureSymlinkSafe(target: string, linkPath: string, opts: Record<string, any> = {}) {
-    const onConflict = opts.onConflict === 'skip' ? 'skip' : 'backup';
-    const allowReplaceManaged = opts.allowReplaceManaged === true;
-    const jawHome = opts.jawHome as string | undefined;
-    const backupContext = opts.backupContext || createBackupContext();
+    const onConflict = opts["onConflict"] === 'skip' ? 'skip' : 'backup';
+    const allowReplaceManaged = opts["allowReplaceManaged"] === true;
+    const jawHome = opts["jawHome"] as string | undefined;
+    const backupContext = opts["backupContext"] || createBackupContext();
     const absTarget = resolve(target);
     const baseResult = {
-        name: opts.name || '',
+        name: opts["name"] || '',
         linkPath,
         target,
     };
@@ -157,17 +157,17 @@ export function ensureSymlinkSafe(target: string, linkPath: string, opts: Record
 }
 
 export function movePathToBackup(pathToMove: string, context: Record<string, any>) {
-    fs.mkdirSync(context.root, { recursive: true });
+    fs.mkdirSync(context["root"], { recursive: true });
     const normalized = pathToMove
         .replace(/^[a-zA-Z]:/, '')
         .replace(/^\/+/, '')
         .replace(/[\\/]/g, '__');
 
     const baseName = normalized || 'root';
-    let backupPath = join(context.root, baseName);
+    let backupPath = join(context["root"], baseName);
     let n = 1;
     while (fs.existsSync(backupPath)) {
-        backupPath = join(context.root, `${baseName}__${n}`);
+        backupPath = join(context["root"], `${baseName}__${n}`);
         n += 1;
     }
 
@@ -335,7 +335,7 @@ export function detectSharedPathContamination(opts?: {
 export function ensureSkillsSymlinks(workingDir: string, opts: Record<string, any> = {}) {
     // Delegate to working-dir-only helper (isolated-by-default)
     return ensureWorkingDirSkillsLinks(workingDir, {
-        onConflict: opts.onConflict === 'skip' ? 'skip' : 'backup',
+        onConflict: opts["onConflict"] === 'skip' ? 'skip' : 'backup',
         includeClaude: true,
     });
 }

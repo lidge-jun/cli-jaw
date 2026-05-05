@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { join } from 'node:path';
+import { readSource } from './source-normalize.js';
 
 const projectRoot = join(import.meta.dirname, '../..');
-const serverSrc = fs.readFileSync(join(projectRoot, 'server.ts'), 'utf8');
-const orchestrateSrc = fs.readFileSync(join(projectRoot, 'src/routes/orchestrate.ts'), 'utf8');
+const serverSrc = readSource(join(projectRoot, 'server.ts'), 'utf8');
+const orchestrateSrc = readSource(join(projectRoot, 'src/routes/orchestrate.ts'), 'utf8');
 
 test('dispatch route clears pending replay only after response is flushed (phase 7)', () => {
     const routeStart = orchestrateSrc.indexOf("app.post('/api/orchestrate/dispatch'");
@@ -90,7 +91,7 @@ test('dispatch route accepts optional phase override in request body', () => {
 });
 
 test('pipeline.ts no longer contains parseSubtasks worker dispatch', () => {
-    const pipelineSrc = fs.readFileSync(join(projectRoot, 'src/orchestrator/pipeline.ts'), 'utf8');
+    const pipelineSrc = readSource(join(projectRoot, 'src/orchestrator/pipeline.ts'), 'utf8');
 
     // Worker JSON dispatch block must be removed
     assert.ok(

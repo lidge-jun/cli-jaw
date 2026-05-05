@@ -175,7 +175,7 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
 
             const filePath = String(req.body?.file_path || '').trim();
             if (!filePath) return res.status(400).json({ error: 'file_path required for non-text types' });
-            const safePath = assertSendFilePath(filePath, settings.workingDir || undefined);
+            const safePath = assertSendFilePath(filePath, settings["workingDir"] || undefined);
             if (!fs.existsSync(safePath)) return res.status(400).json({ error: `file not found: ${safePath}` });
 
             validateFileSize(safePath, type);

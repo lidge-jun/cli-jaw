@@ -55,8 +55,8 @@ export function persistMainSession(input: SessionPersistenceInput): boolean {
         input.cli,
         input.sessionId,
         input.model,
-        input.permissions || settings.permissions || 'auto',
-        input.workingDir || settings.workingDir || '~',
+        input.permissions || settings["permissions"] || 'auto',
+        input.workingDir || settings["workingDir"] || '~',
         input.effort,
     );
     // Mirror into per-bucket table so codex-spark keeps a session independent from

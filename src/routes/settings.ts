@@ -24,10 +24,10 @@ export function registerSettingsRoutes(
 ): void {
     app.get('/api/settings', (_, res) => {
         const safe = { ...settings };
-        if (safe.stt) {
-            const gKey = safe.stt.geminiApiKey || process.env.GEMINI_API_KEY || '';
-            const oKey = safe.stt.openaiApiKey || '';
-            safe.stt = { ...safe.stt, geminiApiKey: undefined, geminiKeySet: !!gKey, geminiKeyLast4: gKey.slice(-4) || '', openaiApiKey: undefined, openaiKeySet: !!oKey, openaiKeyLast4: oKey.slice(-4) || '' };
+        if (safe["stt"]) {
+            const gKey = safe["stt"].geminiApiKey || process.env["GEMINI_API_KEY"] || '';
+            const oKey = safe["stt"].openaiApiKey || '';
+            safe["stt"] = { ...safe["stt"], geminiApiKey: undefined, geminiKeySet: !!gKey, geminiKeyLast4: gKey.slice(-4) || '', openaiApiKey: undefined, openaiKeySet: !!oKey, openaiKeyLast4: oKey.slice(-4) || '' };
         }
         ok(res, safe, safe);
     });
@@ -36,8 +36,8 @@ export function registerSettingsRoutes(
         const result = await applySettings(req.body) as { stt?: Record<string, unknown> };
         const safe: { stt?: Record<string, unknown> } = { ...result };
         if (safe.stt) {
-            const gKey2 = String(safe.stt.geminiApiKey || process.env.GEMINI_API_KEY || '');
-            const oKey2 = String(safe.stt.openaiApiKey || '');
+            const gKey2 = String(safe.stt["geminiApiKey"] || process.env["GEMINI_API_KEY"] || '');
+            const oKey2 = String(safe.stt["openaiApiKey"] || '');
             safe.stt = { ...safe.stt, geminiApiKey: undefined, geminiKeySet: !!gKey2, geminiKeyLast4: gKey2.slice(-4) || '', openaiApiKey: undefined, openaiKeySet: !!oKey2, openaiKeyLast4: oKey2.slice(-4) || '' };
         }
         ok(res, safe);
@@ -84,7 +84,7 @@ export function registerSettingsRoutes(
     app.put('/api/prompt-templates/:id', requireAuth, (req, res) => {
         const { content } = req.body;
         if (content == null || typeof content !== 'string') return res.status(400).json({ error: 'content required' });
-        const filename = req.params.id + '.md';
+        const filename = req.params["id"] + '.md';
         if (!/^[a-z0-9-]+\.md$/.test(filename)) return res.status(400).json({ error: 'invalid id' });
         const dir = getTemplateDir();
         fs.writeFileSync(join(dir, filename), content);
@@ -140,7 +140,7 @@ export function registerSettingsRoutes(
         try {
             const mcpPath = join(JAW_HOME, 'mcp.json');
             if (fs.existsSync(mcpPath)) fs.unlinkSync(mcpPath);
-            const config = initMcpConfig(settings.workingDir);
+            const config = initMcpConfig(settings["workingDir"]);
             const results = syncToAll(config);
             res.json({
                 ok: true,

@@ -23,7 +23,7 @@ async function api<T = JsonRecord>(method: string, path: string, body?: unknown)
     const resp = await fetch(`${SERVER}/api/jaw-memory${path}`, opts);
     if (!resp.ok) {
         const err = asRecord(await resp.json().catch(() => ({ error: resp.statusText })));
-        throw new Error(fieldString(err.error) || `HTTP ${resp.status}`);
+        throw new Error(fieldString(err["error"]) || `HTTP ${resp.status}`);
     }
     return await resp.json() as T;
 }

@@ -53,9 +53,9 @@ function normalizeArgumentCandidate(entry: SlashChoice | string | null | undefin
     }
     if (!entry || typeof entry !== 'object') return null;
     const e = entry as unknown as Record<string, unknown>;
-    const value = String(e.value ?? e.name ?? '').trim();
+    const value = String(e["value"] ?? e["name"] ?? '').trim();
     if (!value) return null;
-    const label = String(e.label ?? e.desc ?? '').trim();
+    const label = String(e["label"] ?? e["desc"] ?? '').trim();
     return { value, label };
 }
 
@@ -305,7 +305,7 @@ export function getArgumentCompletionItems(
         const result = cmd.getArgumentCompletions(ctx as CompletionCtx, argv, partial);
         candidates = (Array.isArray(result) ? result : []) as SlashChoice[];
     } catch (err: unknown) {
-        if (process.env.DEBUG) console.warn('[commands:argComplete]', (err as Error).message);
+        if (process.env["DEBUG"]) console.warn('[commands:argComplete]', (err as Error).message);
         return [];
     }
     const normalized = dedupeChoices(candidates.map(normalizeArgumentCandidate));

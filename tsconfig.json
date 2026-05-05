@@ -16,6 +16,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
     "noUncheckedIndexedAccess": true
   },
   "include": [

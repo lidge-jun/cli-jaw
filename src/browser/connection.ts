@@ -73,13 +73,13 @@ function errorMessage(error: unknown): string {
 }
 
 function requireTargetId(value: unknown): { targetId: string } {
-    if (isRecord(value) && typeof value.targetId === 'string') return { targetId: value.targetId };
+    if (isRecord(value) && typeof value["targetId"] === 'string') return { targetId: value["targetId"] };
     throw new Error('CDP response missing targetId');
 }
 
 function targetInfoMatches(value: unknown, targetId: string): boolean {
-    if (!isRecord(value) || !isRecord(value.targetInfo)) return false;
-    return value.targetInfo.targetId === targetId;
+    if (!isRecord(value) || !isRecord(value["targetInfo"])) return false;
+    return value["targetInfo"]["targetId"] === targetId;
 }
 
 export function markBrowserStateChanged() {
@@ -196,9 +196,9 @@ function findChrome() {
             `${os.homedir()}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`,
         );
     } else if (platform === 'win32') {
-        const pf = process.env.PROGRAMFILES || 'C:\\Program Files';
+        const pf = process.env["PROGRAMFILES"] || 'C:\\Program Files';
         const pf86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
-        const local = process.env.LOCALAPPDATA || '';
+        const local = process.env["LOCALAPPDATA"] || '';
         paths.push(
             `${pf}\\Google\\Chrome\\Application\\chrome.exe`,
             `${pf86}\\Google\\Chrome\\Application\\chrome.exe`,
@@ -402,7 +402,7 @@ export async function launchChrome(
     }
 
     const chrome = findChrome();
-    const noSandbox = process.env.CHROME_NO_SANDBOX === '1';
+    const noSandbox = process.env["CHROME_NO_SANDBOX"] === '1';
     const headless = launchPolicy.headless;
 
     // Minimum window size to prevent responsive layout shifts
@@ -453,7 +453,7 @@ export async function launchChrome(
 
 /** Resolve effective CDP port: activePort > settings.browser.cdpPort > deriveCdpPort() */
 export function getActivePort(): number {
-    return activePort || settings.browser?.cdpPort || deriveCdpPort();
+    return activePort || settings["browser"]?.cdpPort || deriveCdpPort();
 }
 
 export async function connectCdp(port = getActivePort(), retries = 3) {
@@ -601,12 +601,12 @@ async function createRawBrowserCdpSession(port: number): Promise<RawBrowserCdpSe
     ws.addEventListener('message', event => {
         let payload: unknown = null;
         try { payload = JSON.parse(String(event.data)); } catch { return; }
-        if (!isRecord(payload) || typeof payload.id !== 'number' || !pending.has(payload.id)) return;
-        const callbacks = pending.get(payload.id)!;
-        pending.delete(payload.id);
-        const error = payload.error;
-        if (isRecord(error)) callbacks.reject(new Error(typeof error.message === 'string' ? error.message : JSON.stringify(error)));
-        else callbacks.resolve(payload.result || {});
+        if (!isRecord(payload) || typeof payload["id"] !== 'number' || !pending.has(payload["id"])) return;
+        const callbacks = pending.get(payload["id"])!;
+        pending.delete(payload["id"]);
+        const error = payload["error"];
+        if (isRecord(error)) callbacks.reject(new Error(typeof error["message"] === 'string' ? error["message"] : JSON.stringify(error)));
+        else callbacks.resolve(payload["result"] || {});
     });
     await new Promise<void>((resolve, reject) => {
         ws.addEventListener('open', () => resolve(), { once: true });

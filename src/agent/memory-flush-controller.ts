@@ -87,8 +87,8 @@ export async function triggerMemoryFlush(): Promise<void> {
         return;
     }
 
-    const threshold = settings.memory?.flushEvery ?? 10;
-    const recent = (getRecentMessages.all(settings.workingDir || null, threshold) as any[])
+    const threshold = settings["memory"]?.flushEvery ?? 10;
+    const recent = (getRecentMessages.all(settings["workingDir"] || null, threshold) as any[])
         .filter((m: any) => !_lastFlushedMessageId || m.id > _lastFlushedMessageId)
         .reverse();
     if (recent.length < 4) return;
@@ -116,8 +116,8 @@ export async function triggerMemoryFlush(): Promise<void> {
 
     fs.mkdirSync(join(memFile, '..'), { recursive: true });
 
-    const flushCli = settings.memory?.cli || settings.cli;
-    const flushModel = settings.memory?.model || (settings.perCli?.[flushCli]?.model) || 'default';
+    const flushCli = settings["memory"]?.cli || settings["cli"];
+    const flushModel = settings["memory"]?.model || (settings["perCli"]?.[flushCli]?.model) || 'default';
 
     try {
         _spawnAgent(flushPrompt, {

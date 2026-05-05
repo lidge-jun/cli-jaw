@@ -125,26 +125,26 @@ db.exec(`
 
 // Lightweight migration for existing DBs created before `trace` column existed.
 const messageCols = db.prepare('PRAGMA table_info(messages)').all();
-if (!(messageCols as Record<string, unknown>[]).some(c => c.name === 'trace')) {
+if (!(messageCols as Record<string, unknown>[]).some(c => c["name"] === 'trace')) {
     db.exec('ALTER TABLE messages ADD COLUMN trace TEXT DEFAULT NULL');
 }
 // Migration: add tool_log column for structured ProcessBlock data
-if (!(messageCols as Record<string, unknown>[]).some(c => c.name === 'tool_log')) {
+if (!(messageCols as Record<string, unknown>[]).some(c => c["name"] === 'tool_log')) {
     db.exec('ALTER TABLE messages ADD COLUMN tool_log TEXT DEFAULT NULL');
 }
 // Migration: add working_dir column for project-scoped message isolation
-if (!(messageCols as Record<string, unknown>[]).some(c => c.name === 'working_dir')) {
+if (!(messageCols as Record<string, unknown>[]).some(c => c["name"] === 'working_dir')) {
     db.exec('ALTER TABLE messages ADD COLUMN working_dir TEXT DEFAULT NULL');
 }
 db.exec('CREATE INDEX IF NOT EXISTS idx_messages_wd ON messages(working_dir)');
 
 const employeeSessionCols = db.prepare('PRAGMA table_info(employee_sessions)').all();
-if (!(employeeSessionCols as Record<string, unknown>[]).some(c => c.name === 'model')) {
+if (!(employeeSessionCols as Record<string, unknown>[]).some(c => c["name"] === 'model')) {
     db.exec("ALTER TABLE employee_sessions ADD COLUMN model TEXT DEFAULT ''");
 }
 
 const sessionBucketCols = db.prepare('PRAGMA table_info(session_buckets)').all();
-if (!(sessionBucketCols as Record<string, unknown>[]).some(c => c.name === 'resume_key')) {
+if (!(sessionBucketCols as Record<string, unknown>[]).some(c => c["name"] === 'resume_key')) {
     db.exec('ALTER TABLE session_buckets ADD COLUMN resume_key TEXT DEFAULT NULL');
 }
 

@@ -100,16 +100,16 @@ export function parseDuration(value: string | number | null | undefined, fallbac
 }
 
 function poolTtlMs(): number {
-    return parseDuration(process.env.JAW_BROWSER_PROVIDER_POOL_TTL || process.env.AGBROWSE_PROVIDER_POOL_TTL || '5m');
+    return parseDuration(process.env["JAW_BROWSER_PROVIDER_POOL_TTL"] || process.env["AGBROWSE_PROVIDER_POOL_TTL"] || '5m');
 }
 
 function poolMaxPerKey(): number {
-    const parsed = Number(process.env.JAW_BROWSER_PROVIDER_POOL_MAX_PER_KEY || process.env.AGBROWSE_PROVIDER_POOL_MAX_PER_KEY || DEFAULT_POOL_MAX_PER_KEY);
+    const parsed = Number(process.env["JAW_BROWSER_PROVIDER_POOL_MAX_PER_KEY"] || process.env["AGBROWSE_PROVIDER_POOL_MAX_PER_KEY"] || DEFAULT_POOL_MAX_PER_KEY);
     return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : DEFAULT_POOL_MAX_PER_KEY;
 }
 
 function poolGlobalMax(): number {
-    const parsed = Number(process.env.JAW_BROWSER_PROVIDER_POOL_GLOBAL_MAX || process.env.AGBROWSE_PROVIDER_POOL_GLOBAL_MAX || DEFAULT_POOL_GLOBAL_MAX);
+    const parsed = Number(process.env["JAW_BROWSER_PROVIDER_POOL_GLOBAL_MAX"] || process.env["AGBROWSE_PROVIDER_POOL_GLOBAL_MAX"] || DEFAULT_POOL_GLOBAL_MAX);
     return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : DEFAULT_POOL_GLOBAL_MAX;
 }
 

@@ -1,3 +1,4 @@
+import { readSource } from './source-normalize.js';
 // ACP diagnostic logging — regression tests
 // Validates that unhandled request logging and cancel detection are properly configured
 
@@ -7,8 +8,8 @@ import fs from 'node:fs';
 
 const ACP_PATH = new URL('../../src/cli/acp-client.ts', import.meta.url).pathname;
 const SPAWN_PATH = new URL('../../src/agent/spawn.ts', import.meta.url).pathname;
-const acpSrc = fs.readFileSync(ACP_PATH, 'utf8');
-const spawnSrc = fs.readFileSync(SPAWN_PATH, 'utf8');
+const acpSrc = readSource(ACP_PATH, 'utf8');
+const spawnSrc = readSource(SPAWN_PATH, 'utf8');
 
 // ─── acp-client.ts ───────────────────────────────────
 

@@ -140,7 +140,7 @@ export function updateMatrix(wlPath: string, agentPhases: Array<Record<string, a
 
     withWriteLock(wlPath, () => {
         const table = agentPhases.map((ap: Record<string, any>) =>
-            `| ${ap.agent} | ${ap.role} | Phase ${ap.currentPhase}: ${(PHASES as Record<string, string>)[ap.currentPhase] || '?'} | ${ap.completed ? '✅ 완료' : ap.checkpointed ? '⏸ checkpoint' : '⏳ 진행 중'} |`
+            `| ${ap["agent"]} | ${ap["role"]} | Phase ${ap["currentPhase"]}: ${(PHASES as Record<string, string>)[ap["currentPhase"]] || '?'} | ${ap["completed"] ? '✅ 완료' : ap["checkpointed"] ? '⏸ checkpoint' : '⏳ 진행 중'} |`
         ).join('\n');
 
         const file = fs.readFileSync(wlPath, 'utf8');

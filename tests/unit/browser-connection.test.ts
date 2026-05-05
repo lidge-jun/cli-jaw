@@ -3,17 +3,18 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { readSource } from './source-normalize.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const root = join(__dirname, '..', '..');
 
-const connectionSrc = fs.readFileSync(join(root, 'src', 'browser', 'connection.ts'), 'utf8');
-const diagnosticsSrc = fs.readFileSync(join(root, 'src', 'browser', 'runtime-diagnostics.ts'), 'utf8');
-const orphanSrc = fs.readFileSync(join(root, 'src', 'browser', 'runtime-orphans.ts'), 'utf8');
-const ownerStoreSrc = fs.readFileSync(join(root, 'src', 'browser', 'runtime-owner-store.ts'), 'utf8');
-const routesSrc = fs.readFileSync(join(root, 'src', 'routes', 'browser.ts'), 'utf8');
-const cliBrowserSrc = fs.readFileSync(join(root, 'bin', 'commands', 'browser.ts'), 'utf8');
+const connectionSrc = readSource(join(root, 'src', 'browser', 'connection.ts'), 'utf8');
+const diagnosticsSrc = readSource(join(root, 'src', 'browser', 'runtime-diagnostics.ts'), 'utf8');
+const orphanSrc = readSource(join(root, 'src', 'browser', 'runtime-orphans.ts'), 'utf8');
+const ownerStoreSrc = readSource(join(root, 'src', 'browser', 'runtime-owner-store.ts'), 'utf8');
+const routesSrc = readSource(join(root, 'src', 'routes', 'browser.ts'), 'utf8');
+const cliBrowserSrc = readSource(join(root, 'bin', 'commands', 'browser.ts'), 'utf8');
 
 // ─── DIFF-A: connection.ts ───────────────────────────
 
@@ -104,7 +105,7 @@ test('CDP-007: CLI --headless option exists', () => {
 
 test('CDP-008: skills_ref SKILL.md uses cli-jaw not cli-claw', { skip: !fs.existsSync(join(root, 'skills_ref', 'browser', 'SKILL.md')) && 'skills_ref submodule not checked out' }, () => {
     const skillPath = join(root, 'skills_ref', 'browser', 'SKILL.md');
-    const skillSrc = fs.readFileSync(skillPath, 'utf8');
+    const skillSrc = readSource(skillPath, 'utf8');
     assert.doesNotMatch(
         skillSrc,
         /cli-claw/,

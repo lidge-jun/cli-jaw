@@ -32,8 +32,8 @@ import { resolveHomePath } from '../src/core/path-expand.js';
 import { asArray, asRecord, errString, fieldString } from './_http-client.js';
 
 // ─── JAW_HOME inline (config.ts → registry.ts import 체인 제거) ───
-const JAW_HOME = process.env.CLI_JAW_HOME
-    ? resolveHomePath(process.env.CLI_JAW_HOME)
+const JAW_HOME = process.env["CLI_JAW_HOME"]
+    ? resolveHomePath(process.env["CLI_JAW_HOME"])
     : path.join(os.homedir(), '.cli-jaw');
 
 const home = os.homedir();
@@ -44,10 +44,10 @@ const PROJECT_ROOT = fs.existsSync(path.join(MODULE_DIR, '..', '..', 'scripts'))
     ? path.resolve(MODULE_DIR, '..', '..')
     : path.resolve(MODULE_DIR, '..');
 const OFFICECLI_DEFAULT_REPO = 'lidge-jun/OfficeCLI';
-const OFFICECLI_SKIP = process.env.CLI_JAW_SKIP_OFFICECLI === '1'
-    || process.env.CLI_JAW_SKIP_OFFICECLI === 'true';
-const OFFICECLI_FORCE = process.env.CLI_JAW_FORCE_OFFICECLI === '1'
-    || process.env.CLI_JAW_FORCE_OFFICECLI === 'true';
+const OFFICECLI_SKIP = process.env["CLI_JAW_SKIP_OFFICECLI"] === '1'
+    || process.env["CLI_JAW_SKIP_OFFICECLI"] === 'true';
+const OFFICECLI_FORCE = process.env["CLI_JAW_FORCE_OFFICECLI"] === '1'
+    || process.env["CLI_JAW_FORCE_OFFICECLI"] === 'true';
 
 // ─── Legacy migration ───
 // Moved into runPostinstall() to prevent side effects on dynamic import.
@@ -69,7 +69,7 @@ function ensureSymlink(target: string, linkPath: string) {
         return true;
     } catch (e: unknown) {
         const err = asRecord(e);
-        if (process.platform === 'win32' && (err.code === 'EPERM' || err.code === 'UNKNOWN')) {
+        if (process.platform === 'win32' && (err["code"] === 'EPERM' || err["code"] === 'UNKNOWN')) {
             try {
                 const stat = fs.statSync(target);
                 if (stat.isDirectory()) {
@@ -182,7 +182,7 @@ export async function installOfficeCli(opts: InstallOpts = {}) {
         return;
     }
 
-    const repo = process.env.OFFICECLI_REPO || OFFICECLI_DEFAULT_REPO;
+    const repo = process.env["OFFICECLI_REPO"] || OFFICECLI_DEFAULT_REPO;
     if (opts.interactive && opts.ask) {
         const answer = await opts.ask(`Install/update OfficeCLI (${repo})? [Y/n]`, 'y');
         if (answer.toLowerCase() === 'n') {
@@ -211,7 +211,7 @@ export async function installOfficeCli(opts: InstallOpts = {}) {
         try {
             execFileSync(ps, args, { stdio: 'inherit', timeout: 180000, env: process.env });
         } catch (e: unknown) {
-            const status = asRecord(e).status;
+            const status = asRecord(e)["status"];
             console.warn(`[jaw:init] ⚠️  officecli install failed (exit ${fieldString(status, '?')}); skipping — run manually: install-officecli.sh`);
         }
         return;
@@ -236,7 +236,7 @@ export async function installOfficeCli(opts: InstallOpts = {}) {
             env: { ...process.env, OFFICECLI_REPO: repo },
         });
     } catch (e: unknown) {
-        const status = asRecord(e).status;
+        const status = asRecord(e)["status"];
         console.warn(`[jaw:init] ⚠️  officecli install failed (exit ${fieldString(status, '?')}); skipping — run manually: bash scripts/install-officecli.sh`);
     }
 }
@@ -396,10 +396,10 @@ export async function installMcpServers(opts: InstallOpts = {}) {
 
             const servers = asRecord(config.servers);
             for (const srv of Object.values(servers).map(asRecord)) {
-                const args = asArray(srv.args);
-                if (srv.command === 'npx' && args.includes(pkg)) {
-                    srv.command = bin;
-                    srv.args = [];
+                const args = asArray(srv["args"]);
+                if (srv["command"] === 'npx' && args.includes(pkg)) {
+                    srv["command"] = bin;
+                    srv["args"] = [];
                     updated = true;
                 }
             }
@@ -457,10 +457,10 @@ export async function installSkillDeps(opts: InstallOpts = {}) {
 // Dynamic import from init.ts gets clean library exports only.
 export async function runPostinstall() {
     // ── Safe mode guard (before ANY side effects) ──
-    const isSafeMode = process.env.npm_config_jaw_safe === '1'
-        || process.env.npm_config_jaw_safe === 'true'
-        || process.env.JAW_SAFE === '1'
-        || process.env.JAW_SAFE === 'true';
+    const isSafeMode = process.env["npm_config_jaw_safe"] === '1'
+        || process.env["npm_config_jaw_safe"] === 'true'
+        || process.env["JAW_SAFE"] === '1'
+        || process.env["JAW_SAFE"] === 'true';
 
     // 1. Ensure ~/.cli-jaw/ home directory
     ensureDir(jawHome);
@@ -490,10 +490,10 @@ export async function runPostinstall() {
     // No workingDir compat links in postinstall.
     // Postinstall must remain isolated to ~/.cli-jaw/* only.
     const shouldMigrateSharedPaths =
-        process.env.CLI_JAW_MIGRATE_SHARED_PATHS === '1'
-        || process.env.CLI_JAW_MIGRATE_SHARED_PATHS === 'true'
-        || process.env.npm_config_jaw_migrate_shared_paths === '1'
-        || process.env.npm_config_jaw_migrate_shared_paths === 'true';
+        process.env["CLI_JAW_MIGRATE_SHARED_PATHS"] === '1'
+        || process.env["CLI_JAW_MIGRATE_SHARED_PATHS"] === 'true'
+        || process.env["npm_config_jaw_migrate_shared_paths"] === '1'
+        || process.env["npm_config_jaw_migrate_shared_paths"] === 'true';
 
     if (shouldMigrateSharedPaths) {
         const sharedReport = ensureSharedHomeSkillsLinks({

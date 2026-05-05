@@ -99,7 +99,7 @@ export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware):
         ok(res, null);
     });
     app.delete('/api/memory/:key', requireAuth, (req, res) => {
-        deleteMemory.run(req.params.key);
+        deleteMemory.run(req.params["key"]);
         try { syncKvShadowImport(); } catch { /* best-effort */ }
         ok(res, null);
     });
@@ -116,12 +116,12 @@ export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware):
                 return { name: f.path, entries, size: f.size };
             });
         res.json({
-            enabled: settings.memory?.enabled !== false,
-            flushEvery: settings.memory?.flushEvery ?? 10,
-            cli: settings.memory?.cli || '',
-            model: settings.memory?.model || '',
-            retentionDays: settings.memory?.retentionDays ?? 30,
-            flushLanguage: settings.memory?.flushLanguage || 'en',
+            enabled: settings["memory"]?.enabled !== false,
+            flushEvery: settings["memory"]?.flushEvery ?? 10,
+            cli: settings["memory"]?.cli || '',
+            model: settings["memory"]?.model || '',
+            retentionDays: settings["memory"]?.retentionDays ?? 30,
+            flushLanguage: settings["memory"]?.flushLanguage || 'en',
             path: memDir, files,
             counter: memoryFlushCounter,
         });
@@ -129,7 +129,7 @@ export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware):
 
     app.get('/api/memory-file', (req, res) => {
         try {
-            const name = assertMemoryRelPath(String(req.query.path || ''), { allowExt: ['.md', '.txt', '.json'] });
+            const name = assertMemoryRelPath(String(req.query["path"] || ''), { allowExt: ['.md', '.txt', '.json'] });
             const fp = safeResolveUnder(memoryModule.MEMORY_DIR, name);
             if (!fs.existsSync(fp)) return res.status(404).json({ error: 'not found' });
             res.json({ name, content: fs.readFileSync(fp, 'utf8') });
@@ -151,7 +151,7 @@ export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware):
 
     app.delete('/api/memory-file', requireAuth, (req, res) => {
         try {
-            const name = assertMemoryRelPath(String(req.query.path || ''), { allowExt: ['.md', '.txt', '.json'] });
+            const name = assertMemoryRelPath(String(req.query["path"] || ''), { allowExt: ['.md', '.txt', '.json'] });
             const fp = safeResolveUnder(memoryModule.MEMORY_DIR, name);
             if (fs.existsSync(fp)) fs.unlinkSync(fp);
             res.json({ ok: true });
@@ -162,7 +162,7 @@ export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware):
 
     app.delete('/api/memory-files/:filename', requireAuth, (req, res) => {
         try {
-            const name = assertFilename(String(req.params.filename));
+            const name = assertFilename(String(req.params["filename"]));
             const fp = safeResolveUnder(memoryModule.MEMORY_DIR, name);
             if (fs.existsSync(fp)) fs.unlinkSync(fp);
             res.json({ ok: true });
@@ -175,11 +175,11 @@ export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware):
         const patch = { ...(req.body || {}) };
         const targetCli = typeof patch.cli === 'string' && patch.cli
             ? patch.cli
-            : settings.memory?.cli || settings.cli || '';
+            : settings["memory"]?.cli || settings["cli"] || '';
         if (targetCli === 'claude' && typeof patch.model === 'string') {
             patch.model = migrateLegacyClaudeValue(patch.model);
         }
-        settings.memory = { ...settings.memory, ...patch };
+        settings["memory"] = { ...settings["memory"], ...patch };
         saveSettings(settings);
         res.json({ ok: true });
     });

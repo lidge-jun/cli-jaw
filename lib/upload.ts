@@ -181,9 +181,9 @@ export async function downloadTelegramFile(fileId: string, token: string, option
         throw new Error('Telegram getFile failed: invalid JSON');
     }
 
-    const filePath = info.result?.file_path;
-    if (info.ok === false || !filePath) throw new Error('Telegram getFile failed: missing file_path');
-    assertTelegramDownloadSize(Number(info.result?.file_size), maxBytes, options.kind || 'file');
+    const filePath = info["result"]?.file_path;
+    if (info["ok"] === false || !filePath) throw new Error('Telegram getFile failed: missing file_path');
+    assertTelegramDownloadSize(Number(info["result"]?.file_size), maxBytes, options.kind || 'file');
 
     const fileUrl = `https://api.telegram.org/file/bot${token}/${filePath}`;
     const buffer = await telegramGet(fileUrl, 'file download', timeoutMs, maxBytes);

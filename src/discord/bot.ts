@@ -101,7 +101,7 @@ function buildAttachmentFailureWarning(failed: FailedDiscordAttachment[]): strin
 }
 
 function currentLocale() {
-    return normalizeLocale(settings.locale, 'ko');
+    return normalizeLocale(settings["locale"], 'ko');
 }
 
 // ─── Discord Orchestrate (full reply path) ──────────
@@ -121,11 +121,11 @@ async function dcOrchestrate(msg: Message, prompt: string, displayMsg: string) {
         const requestId = result.requestId;
         let queueTimeout: ReturnType<typeof setTimeout>;
         const queueHandler = async (type: string, data: Record<string, any>) => {
-            if (type === 'orchestrate_done' && data.text && data.origin === 'discord'
-                && data.requestId === requestId) {
+            if (type === 'orchestrate_done' && data["text"] && data["origin"] === 'discord'
+                && data["requestId"] === requestId) {
                 clearTimeout(queueTimeout);
                 removeBroadcastListener(queueHandler);
-                const chunks = chunkDiscordMessage(data.text);
+                const chunks = chunkDiscordMessage(data["text"]);
                 for (const chunk of chunks) {
                     await (msg.channel as unknown as DiscordSendableChannel).send(chunk).catch((e: Error) => {
                         console.error('[discord:queue-send]', e.message);
@@ -184,7 +184,7 @@ export async function initDiscord() {
     dcInitLock = true;
     try {
     await shutdownDiscord();
-    if (!settings.discord?.enabled || !settings.discord?.token) {
+    if (!settings["discord"]?.enabled || !settings["discord"]?.token) {
         console.log('[discord] ⏭️  Discord pending (disabled or no token)');
         return;
     }
@@ -209,15 +209,15 @@ export async function initDiscord() {
     // ── Message handler ──
     client.on(Events.MessageCreate, async (msg) => {
         if (msg.author.id === client.user?.id) return; // never process own messages
-        if (msg.author.bot && !settings.discord.allowBots) return;
-        if (settings.discord.channelIds?.length) {
+        if (msg.author.bot && !settings["discord"].allowBots) return;
+        if (settings["discord"].channelIds?.length) {
             const parentId = (msg.channel as unknown as DiscordThreadLikeChannel)?.parentId;
-            if (!settings.discord.channelIds.includes(msg.channelId)
-                && !(parentId && settings.discord.channelIds.includes(parentId))) return;
+            if (!settings["discord"].channelIds.includes(msg.channelId)
+                && !(parentId && settings["discord"].channelIds.includes(parentId))) return;
         }
 
         // @mention gating: skip non-mentioned messages in guild channels
-        if (settings.discord.mentionOnly && msg.guild) {
+        if (settings["discord"].mentionOnly && msg.guild) {
             if (!client.user || !msg.mentions.has(client.user, { ignoreRepliedUser: true })) return;
         }
 
@@ -227,7 +227,7 @@ export async function initDiscord() {
         setLatestSeenTarget('discord', target);
 
         let normalizedText = msg.content?.trim() || '';
-        if (settings.discord.mentionOnly && client.user) {
+        if (settings["discord"].mentionOnly && client.user) {
             normalizedText = stripBotMention(normalizedText, client.user.id);
         }
 
@@ -286,11 +286,11 @@ export async function initDiscord() {
     });
 
     // ── Forwarder: non-Discord responses → Discord ──
-    if (settings.discord?.forwardAll !== false) {
+    if (settings["discord"]?.forwardAll !== false) {
         const fwd = createDiscordForwarder({
             client,
             getLastTarget: () => getLastActiveTarget('discord'),
-            shouldSkip: (data) => data.origin === 'discord',
+            shouldSkip: (data) => data["origin"] === 'discord',
             log: ({ channelId, preview }) => {
                 console.log(`[discord:forward] → ${channelId}: ${preview}...`);
             },
@@ -301,7 +301,7 @@ export async function initDiscord() {
 
     // ── Login ──
     try {
-        await client.login(settings.discord.token);
+        await client.login(settings["discord"].token);
     } catch (err) {
         console.error(`[discord] ❌ Login failed (network?): ${(err as Error).message}`);
         console.error('[discord] Disabling Discord for this session — restart to retry');
@@ -346,7 +346,7 @@ async function discordSendHandler(req: ChannelSendRequest): Promise<{ ok: boolea
     // Thread-aware: prefer threadId over targetId when present
     const channelId = req.chatId || req.target?.threadId || req.target?.targetId
         || (Array.from(discordActiveChannelIds).at(-1))
-        || settings.discord?.channelIds?.[0];
+        || settings["discord"]?.channelIds?.[0];
     if (!channelId) return { ok: false, error: 'No discord channelId available — send a message first or set channelIds' };
 
     if (req.type === 'text') {

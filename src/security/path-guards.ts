@@ -92,7 +92,7 @@ export function assertSendFilePath(filePath: string, workingDir?: string): strin
     const resolved = path.resolve(filePath);
 
     // Allow anything under JAW_HOME
-    const jawHome = resolveHomePath(process.env.CLI_JAW_HOME || process.env.JAW_HOME || path.join(os.homedir(), '.cli-jaw'));
+    const jawHome = resolveHomePath(process.env["CLI_JAW_HOME"] || process.env["JAW_HOME"] || path.join(os.homedir(), '.cli-jaw'));
     const homePref = jawHome.endsWith(path.sep) ? jawHome : jawHome + path.sep;
     if (resolved.startsWith(homePref) || resolved === jawHome) return resolved;
 

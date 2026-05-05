@@ -119,7 +119,7 @@ function getNpmPrefix() {
 /** Detect headless server (no display, no desktop environment). */
 function isHeadless(): boolean {
     if (process.platform !== 'linux') return false;
-    return !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY && !isWSL();
+    return !process.env["DISPLAY"] && !process.env["WAYLAND_DISPLAY"] && !isWSL();
 }
 
 function check(name: string, fn: () => string) {
@@ -171,7 +171,7 @@ check('jaw.db', () => {
 check('heartbeat.json', () => {
     if (!fs.existsSync(HEARTBEAT_PATH)) throw new Error('WARN: not found');
     const hb = asRecord(JSON.parse(fs.readFileSync(HEARTBEAT_PATH, 'utf8')));
-    const active = asArray<{ enabled?: boolean }>(hb.jobs).filter((j) => j.enabled).length;
+    const active = asArray<{ enabled?: boolean }>(hb["jobs"]).filter((j) => j.enabled).length;
     return `${active} active job${active !== 1 ? 's' : ''}`;
 });
 
@@ -347,8 +347,8 @@ if (headless) {
 } else {
     if (process.platform === 'linux') {
         check('Display Server', () => {
-            if (process.env.WAYLAND_DISPLAY) return `Wayland (${process.env.WAYLAND_DISPLAY})`;
-            if (process.env.DISPLAY) return `X11 (${process.env.DISPLAY})`;
+            if (process.env["WAYLAND_DISPLAY"]) return `Wayland (${process.env["WAYLAND_DISPLAY"]})`;
+            if (process.env["DISPLAY"]) return `X11 (${process.env["DISPLAY"]})`;
             if (isWSL()) {
                 if (hasWslWindowsChrome()) {
                     return 'WSL (no DISPLAY; Windows Chrome path detected via /mnt/c)';
@@ -379,9 +379,9 @@ if (headless) {
             if (fs.existsSync('/Applications/Google Chrome.app')) return 'installed';
             if (fs.existsSync(path.join(os.homedir(), 'Applications/Google Chrome.app'))) return 'installed (user)';
         } else if (process.platform === 'win32') {
-            const pf = process.env.PROGRAMFILES || 'C:\\Program Files';
+            const pf = process.env["PROGRAMFILES"] || 'C:\\Program Files';
             const pf86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
-            const local = process.env.LOCALAPPDATA || '';
+            const local = process.env["LOCALAPPDATA"] || '';
             const winPaths = [
                 `${pf}\\Google\\Chrome\\Application\\chrome.exe`,
                 `${pf86}\\Google\\Chrome\\Application\\chrome.exe`,
@@ -492,7 +492,7 @@ if (!values.json) {
     const netCfg = loadedSettings().network || {};
     const bh = netCfg.bindHost || '127.0.0.1';
     const lb = netCfg.lanBypass === true;
-    const tokenEnv = !!process.env.JAW_AUTH_TOKEN;
+    const tokenEnv = !!process.env["JAW_AUTH_TOKEN"];
     const isLoopback = bh === '127.0.0.1' || bh === '::1' || bh === 'localhost';
     const bindLabel = isLoopback ? '  (loopback only — LAN blocked)'
         : bh === '0.0.0.0' ? '  (all interfaces — LAN accessible)'
@@ -536,7 +536,7 @@ if (values.json) {
     }
     const output: Record<string, unknown> = {
         checks: results,
-        network: { bindHost: bh, lanBypass: lb, authTokenPersisted: !!process.env.JAW_AUTH_TOKEN, issues: networkIssues },
+        network: { bindHost: bh, lanBypass: lb, authTokenPersisted: !!process.env["JAW_AUTH_TOKEN"], issues: networkIssues },
         activeChannel: loadedSettings().channel || 'telegram',
         discord: buildDiscordStatus(),
         wsl: isWSL() ? {

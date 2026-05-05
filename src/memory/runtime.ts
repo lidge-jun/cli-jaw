@@ -178,7 +178,7 @@ export function buildTaskSnapshot(query: string | string[], budget = 2800, expan
     // returns meaningful context instead of empty.
     if (cleaned.length < 20) {
         try {
-            const wd = settings.workingDir || null;
+            const wd = settings["workingDir"] || null;
             const rows = (getRecentMessages.all(wd, 5) as Array<{ role?: string; content?: string }>) || [];
             const recentText = rows
                 .filter(r => r.role === 'user' || r.role === 'assistant')
@@ -200,10 +200,10 @@ export function buildTaskSnapshot(query: string | string[], budget = 2800, expan
 
     for (const hit of diversified.slice(0, 4)) {
         if (remaining <= 0) break;
-        const header = `### ${hit.relpath}:${hit.source_start_line}-${hit.source_end_line}`;
+        const header = `### ${hit.relpath}:${hit["source_start_line"]}-${hit["source_end_line"]}`;
         const snippetBudget = Math.min(700, Math.max(0, remaining - header.length - 4));
         if (snippetBudget <= 0) break;
-        const snippet = String(hit.snippet ?? '').slice(0, snippetBudget).trim();
+        const snippet = String(hit["snippet"] ?? '').slice(0, snippetBudget).trim();
         const block = `${header}\n${snippet}`;
         out.push(block);
         remaining -= block.length + 2;
@@ -269,7 +269,7 @@ export function getAdvancedMemoryStatus() {
 }
 
 function getLegacyClaudeMemoryDir() {
-    const wd = expandHomePath(settings.workingDir || os.homedir(), os.homedir());
+    const wd = expandHomePath(settings["workingDir"] || os.homedir(), os.homedir());
     const hash = wd.replace(/[\\/]/g, '-');
     return join(os.homedir(), '.claude', 'projects', hash, 'memory');
 }

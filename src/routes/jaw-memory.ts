@@ -65,7 +65,7 @@ function saveCanonicalSoul(content: string): string {
 export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddleware): void {
     app.get('/api/jaw-memory/search', (req, res) => {
         try {
-            const q = String(req.query.q || '');
+            const q = String(req.query["q"] || '');
             const mem = getMemoryStatus();
             res.json({ result: mem.routing.searchRead === 'advanced' ? searchIndexedMemory(q) : memory.search(q) });
         }
@@ -74,11 +74,11 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
 
     app.get('/api/jaw-memory/read', (req, res) => {
         try {
-            const file = assertMemoryRelPath(String(req.query.file || ''), { allowExt: ['.md', '.txt', '.json'] });
+            const file = assertMemoryRelPath(String(req.query["file"] || ''), { allowExt: ['.md', '.txt', '.json'] });
             const mem = getMemoryStatus();
             const content = mem.routing.searchRead === 'advanced'
-                ? readIndexedMemorySnippet(normalizeAdvancedReadPath(file), { lines: req.query.lines as string | undefined })
-                : memory.read(file, { lines: req.query.lines as string | undefined });
+                ? readIndexedMemorySnippet(normalizeAdvancedReadPath(file), { lines: req.query["lines"] as string | undefined })
+                : memory.read(file, { lines: req.query["lines"] as string | undefined });
             res.json({ content });
         } catch (e: unknown) { res.status(httpStatus(e, 500)).json({ error: (e as Error).message }); }
     });
@@ -181,14 +181,14 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
                 writeMeta({
                     soulSynthesized: true,
                     soulSynthesizedAt: new Date().toISOString(),
-                    soulSynthesizedCli: settings.cli || 'unknown',
+                    soulSynthesizedCli: settings["cli"] || 'unknown',
                 });
             }
             if (!result.applied && req.body?.reason === 'soul-bootstrap' && hasSoulFile()) {
                 writeMeta({
                     soulSynthesized: true,
                     soulSynthesizedAt: new Date().toISOString(),
-                    soulSynthesizedCli: settings.cli || 'unknown',
+                    soulSynthesizedCli: settings["cli"] || 'unknown',
                 });
             }
             const payload = buildMemorySyncPayload(req.body?.reason === 'soul-bootstrap' ? 'soul_bootstrap' : 'soul_update');
@@ -211,7 +211,7 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
             const currentSoul = safeReadFile(join(root, 'shared', 'soul.md'));
             const profileContent = safeReadFile(join(root, 'profile.md'));
             const kvEntries = (getMemory.all() as { key: string; value: string }[]) || [];
-            const lang = settings.locale || req.body?.lang || 'en';
+            const lang = settings["locale"] || req.body?.lang || 'en';
 
             const prompt = buildSoulBootstrapPrompt({
                 systemProfile,

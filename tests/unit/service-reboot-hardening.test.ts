@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { buildServicePath } from '../../src/core/runtime-path.ts';
+import { readSource } from './source-normalize.js';
 
 const ROOT = process.cwd();
 const SERVER = path.join(ROOT, 'server.ts');
@@ -37,7 +38,7 @@ test('SRH-002: buildServicePath discovers managed node bins from a custom home',
 });
 
 test('SRH-003: server clears stale employee sessions before heartbeat and seeds employees first', () => {
-    const src = fs.readFileSync(SERVER, 'utf8');
+    const src = readSource(SERVER, 'utf8');
     const clearIdx = src.indexOf('clearAllEmployeeSessions.run()');
     const seedIdx = src.indexOf('const seeded = seedDefaultEmployees()');
     const heartbeatIdx = src.indexOf('startHeartbeat();');
@@ -49,8 +50,8 @@ test('SRH-003: server clears stale employee sessions before heartbeat and seeds 
 });
 
 test('SRH-004: service installers use shared service PATH builder instead of raw process.env.PATH', () => {
-    const launchdSrc = fs.readFileSync(LAUNCHD, 'utf8');
-    const serviceSrc = fs.readFileSync(SERVICE, 'utf8');
+    const launchdSrc = readSource(LAUNCHD, 'utf8');
+    const serviceSrc = readSource(SERVICE, 'utf8');
 
     assert.match(launchdSrc, /buildServicePath\(process\.env\.PATH \|\| ''/);
     assert.match(serviceSrc, /buildServicePath\(process\.env\.PATH \|\| ''/);
@@ -59,10 +60,10 @@ test('SRH-004: service installers use shared service PATH builder instead of raw
 });
 
 test('SRH-005: spawn path and detectCli logic use service-safe PATH handling', () => {
-    const spawnSrc = fs.readFileSync(SPAWN, 'utf8');
-    const configSrc = fs.readFileSync(CONFIG, 'utf8');
-    const lifecycleSrc = fs.readFileSync(LIFECYCLE, 'utf8');
-    const dbSrc = fs.readFileSync(DB, 'utf8');
+    const spawnSrc = readSource(SPAWN, 'utf8');
+    const configSrc = readSource(CONFIG, 'utf8');
+    const lifecycleSrc = readSource(LIFECYCLE, 'utf8');
+    const dbSrc = readSource(DB, 'utf8');
 
     assert.match(spawnSrc, /env\.PATH = buildServicePath\(env\.PATH \|\| ''\)/);
     assert.match(spawnSrc, /const spawnCommand = cli === 'opencode' && process\.platform !== 'win32'/);
@@ -75,7 +76,7 @@ test('SRH-005: spawn path and detectCli logic use service-safe PATH handling', (
 });
 
 test('SRH-006: loadSettings warns and backs up unreadable settings instead of silently overwriting them', () => {
-    const src = fs.readFileSync(CONFIG, 'utf8');
+    const src = readSource(CONFIG, 'utf8');
     assert.match(src, /if \(err\?\.code === 'ENOENT'\)/);
     assert.match(src, /console\.warn\(`\[jaw:settings\] failed to load/);
     assert.match(src, /copyFileSync\(SETTINGS_PATH, backupPath\)/);
@@ -91,7 +92,7 @@ const DISPATCH = path.join(ROOT, 'bin/commands/dispatch.ts');
 const SHARED = path.join(ROOT, 'src/memory/shared.ts');
 
 test('SRH-007: messaging init is awaited before heartbeat starts', () => {
-    const src = fs.readFileSync(SERVER, 'utf8');
+    const src = readSource(SERVER, 'utf8');
     assert.match(src, /await initActiveMessagingRuntime\(\)/,
         'messaging init must be awaited, not fire-and-forget');
     const awaitIdx = src.indexOf('await initActiveMessagingRuntime()');
@@ -101,7 +102,7 @@ test('SRH-007: messaging init is awaited before heartbeat starts', () => {
 });
 
 test('SRH-008: dispatch CLI has retry logic for ECONNREFUSED', () => {
-    const src = fs.readFileSync(DISPATCH, 'utf8');
+    const src = readSource(DISPATCH, 'utf8');
     assert.match(src, /STARTUP_RETRY_DELAYS_MS/,
         'dispatch must define retry delays for cold-start scenario');
     assert.match(src, /isConnRefused/,
@@ -111,8 +112,8 @@ test('SRH-008: dispatch CLI has retry logic for ECONNREFUSED', () => {
 });
 
 test('SRH-009: message queue is persisted to DB', () => {
-    const spawnSrc = fs.readFileSync(SPAWN, 'utf8');
-    const dbSrc = fs.readFileSync(DB, 'utf8');
+    const spawnSrc = readSource(SPAWN, 'utf8');
+    const dbSrc = readSource(DB, 'utf8');
 
     assert.match(dbSrc, /queued_messages/,
         'queued_messages table must exist in schema');
@@ -129,7 +130,7 @@ test('SRH-009: message queue is persisted to DB', () => {
 });
 
 test('SRH-010: orphaned employee tmp dirs are cleaned on startup', () => {
-    const src = fs.readFileSync(SERVER, 'utf8');
+    const src = readSource(SERVER, 'utf8');
     assert.match(src, /jaw-emp-/,
         'startup must reference jaw-emp- prefix for cleanup');
     assert.match(src, /orphaned employee tmp dir/,
@@ -137,7 +138,7 @@ test('SRH-010: orphaned employee tmp dirs are cleaned on startup', () => {
 });
 
 test('SRH-011: migration lock has PID staleness check', () => {
-    const src = fs.readFileSync(SHARED, 'utf8');
+    const src = readSource(SHARED, 'utf8');
     assert.match(src, /isProcessAlive/,
         'migration lock must check if holding process is alive');
     assert.match(src, /process\.kill\(.*0\)/,
@@ -153,7 +154,7 @@ const DOCTOR = path.join(ROOT, 'bin/commands/doctor.ts');
 const INSTALL_SH = path.join(ROOT, 'scripts/install.sh');
 
 test('SRH-012: classifyClaudeInstall extracted to shared module', () => {
-    const src = fs.readFileSync(CLAUDE_INSTALL, 'utf8');
+    const src = readSource(CLAUDE_INSTALL, 'utf8');
     assert.match(src, /export function classifyClaudeInstall/,
         'classifyClaudeInstall must be exported from shared module');
     assert.match(src, /export type ClaudeInstallKind/,
@@ -161,7 +162,7 @@ test('SRH-012: classifyClaudeInstall extracted to shared module', () => {
 });
 
 test('SRH-013: doctor.ts imports classifyClaudeInstall from shared module', () => {
-    const src = fs.readFileSync(DOCTOR, 'utf8');
+    const src = readSource(DOCTOR, 'utf8');
     assert.match(src, /import \{ classifyClaudeInstall \} from '\.\.\/\.\.\/src\/core\/claude-install\.js'/,
         'doctor must import from shared claude-install module');
     assert.ok(!src.includes('function classifyClaudeInstall'),
@@ -169,7 +170,7 @@ test('SRH-013: doctor.ts imports classifyClaudeInstall from shared module', () =
 });
 
 test('SRH-014: install.sh handles network failure gracefully', () => {
-    const src = fs.readFileSync(INSTALL_SH, 'utf8');
+    const src = readSource(INSTALL_SH, 'utf8');
     assert.ok(src.includes('Could not fetch latest version'),
         'install.sh must warn on npm view failure');
     assert.ok(src.includes('keeping existing'),
@@ -177,7 +178,7 @@ test('SRH-014: install.sh handles network failure gracefully', () => {
 });
 
 test('SRH-015: install.sh detects package manager from install path', () => {
-    const src = fs.readFileSync(INSTALL_SH, 'utf8');
+    const src = readSource(INSTALL_SH, 'utf8');
     assert.ok(src.includes('bun add -g cli-jaw'),
         'install.sh must use bun for bun-managed installs');
     assert.ok(src.includes('Detected bun-managed install'),
@@ -185,7 +186,7 @@ test('SRH-015: install.sh detects package manager from install path', () => {
 });
 
 test('SRH-016: install.sh verifies binary after install', () => {
-    const src = fs.readFileSync(INSTALL_SH, 'utf8');
+    const src = readSource(INSTALL_SH, 'utf8');
     assert.ok(src.includes('binary not responding'),
         'install.sh must warn if post-install verification fails');
     assert.ok(src.includes('get_installed_jaw_binary') && src.includes('get_binary_version'),
@@ -193,7 +194,7 @@ test('SRH-016: install.sh verifies binary after install', () => {
 });
 
 test('SRH-017: install.sh has shell-level classify_claude_install_sh', () => {
-    const src = fs.readFileSync(INSTALL_SH, 'utf8');
+    const src = readSource(INSTALL_SH, 'utf8');
     assert.ok(src.includes('classify_claude_install_sh()'),
         'install.sh must define classify_claude_install_sh helper');
     assert.ok(src.includes('mirrors src/core/claude-install.ts'),
@@ -201,7 +202,7 @@ test('SRH-017: install.sh has shell-level classify_claude_install_sh', () => {
 });
 
 test('SRH-018: runtime-path includes deno and keg-only node paths', () => {
-    const src = fs.readFileSync(path.join(ROOT, 'src/core/runtime-path.ts'), 'utf8');
+    const src = readSource(path.join(ROOT, 'src/core/runtime-path.ts'), 'utf8');
     assert.ok(src.includes("'.deno', 'bin'"),
         'runtime-path must include deno bin');
     assert.ok(src.includes("'/opt/homebrew/opt/node@22/bin'"),

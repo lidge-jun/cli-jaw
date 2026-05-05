@@ -46,12 +46,12 @@ function queueHeartbeatJob(
     reason: HeartbeatPendingReason,
     policy?: HeartbeatPendingPolicy,
 ): boolean {
-    if (pendingJobs.some(item => item.job.id === job.id)) return false;
+    if (pendingJobs.some(item => item.job["id"] === job["id"])) return false;
     pendingJobs.push({ job, reason, policy });
     broadcast('heartbeat_pending', {
         ...pendingSnapshot(reason, policy),
-        jobId: job.id,
-        jobName: job.name,
+        jobId: job["id"],
+        jobName: job["name"],
     });
     return true;
 }
@@ -93,33 +93,33 @@ export function stopHeartbeat() {
 async function runHeartbeatJob(job: Record<string, any>) {
     if (getState('default') !== 'IDLE') {
         const queued = queueHeartbeatJob(job, 'pabcd_active', 'defer');
-        console.log(`[heartbeat:${job.name}] ${queued ? 'deferred' : 'already deferred'} during active PABCD (${pendingJobs.length} pending)`);
+        console.log(`[heartbeat:${job["name"]}] ${queued ? 'deferred' : 'already deferred'} during active PABCD (${pendingJobs.length} pending)`);
         return;
     }
     if (heartbeatBusy) {
         if (queueHeartbeatJob(job, 'busy')) {
-            console.log(`[heartbeat:${job.name}] queued (${pendingJobs.length} pending)`);
+            console.log(`[heartbeat:${job["name"]}] queued (${pendingJobs.length} pending)`);
         } else {
-            console.log(`[heartbeat:${job.name}] already queued, skip`);
+            console.log(`[heartbeat:${job["name"]}] already queued, skip`);
         }
         return;
     }
     heartbeatBusy = true;
     try {
-        const schedule = normalizeHeartbeatSchedule(job.schedule);
+        const schedule = normalizeHeartbeatSchedule(job["schedule"]);
         const timeZone = getHeartbeatScheduleTimeZone(schedule);
         const now = formatHeartbeatNow(schedule);
-        const prompt = `[heartbeat:${job.name}] 현재 시간: ${now} (${timeZone})\n\nBefore responding, you MUST search memory (cli-jaw memory search) for recent conversation context, user preferences, and ongoing tasks. Use this context to ground your response.\n\n${job.prompt || '정기 점검입니다. 할 일 없으면 [SILENT]로 응답.'}`;
-        console.log(`[heartbeat:${job.name}] tick (${describeHeartbeatSchedule(schedule)})`);
+        const prompt = `[heartbeat:${job["name"]}] 현재 시간: ${now} (${timeZone})\n\nBefore responding, you MUST search memory (cli-jaw memory search) for recent conversation context, user preferences, and ongoing tasks. Use this context to ground your response.\n\n${job["prompt"] || '정기 점검입니다. 할 일 없으면 [SILENT]로 응답.'}`;
+        console.log(`[heartbeat:${job["name"]}] tick (${describeHeartbeatSchedule(schedule)})`);
         const requestId = crypto.randomUUID();
         const result: string = String(await orchestrateAndCollect(prompt, { origin: 'heartbeat', requestId }));
 
         if (result.includes('[SILENT]')) {
-            console.log(`[heartbeat:${job.name}] silent`);
+            console.log(`[heartbeat:${job["name"]}] silent`);
             return;
         }
 
-        console.log(`[heartbeat:${job.name}] response: ${result.slice(0, 80)}`);
+        console.log(`[heartbeat:${job["name"]}] response: ${result.slice(0, 80)}`);
 
         // Send heartbeat result via active messaging channel
         const sendResult = await sendChannelOutput({
@@ -128,7 +128,7 @@ async function runHeartbeatJob(job: Record<string, any>) {
             text: result,
         });
         if (!sendResult.ok) {
-            console.error(`[heartbeat:${job.name}] send failed: ${sendResult.error}`);
+            console.error(`[heartbeat:${job["name"]}] send failed: ${sendResult.error}`);
         }
 
         // Record heartbeat anchor for context injection on next user turn
@@ -136,15 +136,15 @@ async function runHeartbeatJob(job: Record<string, any>) {
             const now = Date.now();
             try {
                 insertHeartbeatAnchor.run(
-                    job.id, job.name, settings.workingDir, 'active', null,
-                    job.prompt, result, now, now,
+                    job["id"], job["name"], settings["workingDir"], 'active', null,
+                    job["prompt"], result, now, now,
                 );
             } catch (e) {
-                console.error(`[heartbeat:${job.name}] anchor save failed:`, (e as Error).message);
+                console.error(`[heartbeat:${job["name"]}] anchor save failed:`, (e as Error).message);
             }
         }
     } catch (err) {
-        console.error(`[heartbeat:${job.name}] error:`, (err as Error).message);
+        console.error(`[heartbeat:${job["name"]}] error:`, (err as Error).message);
     } finally {
         heartbeatBusy = false;
         drainPending();
@@ -156,7 +156,7 @@ export async function drainPending() {
     const next = pendingJobs.shift()?.job;
     if (!next) return;
     broadcast('heartbeat_pending', pendingSnapshot());
-    console.log(`[heartbeat:${next.name}] dequeued (${pendingJobs.length} remaining)`);
+    console.log(`[heartbeat:${next["name"]}] dequeued (${pendingJobs.length} remaining)`);
     await runHeartbeatJob(next);
 }
 
@@ -164,19 +164,19 @@ function scheduleCronJob(job: Record<string, any>) {
     const armNextTick = (tick: () => void) => {
         const timer = setTimeout(tick, msUntilNextMinute());
         timer.unref?.();
-        heartbeatTimers.set(job.id, timer);
+        heartbeatTimers.set(job["id"], timer);
     };
     startHeartbeatCronLoop(() => maybeRunCronJob(job), armNextTick);
 }
 
 function maybeRunCronJob(job: Record<string, any>) {
-    const schedule = normalizeHeartbeatSchedule(job.schedule);
+    const schedule = normalizeHeartbeatSchedule(job["schedule"]);
     if (schedule.kind !== 'cron') return;
     const timeZone = getHeartbeatScheduleTimeZone(schedule);
     if (!matchesHeartbeatCron(schedule.cron, new Date(), timeZone)) return;
     const slotKey = getHeartbeatMinuteSlotKey(schedule);
-    if (heartbeatCronSlots.get(job.id) === slotKey) return;
-    heartbeatCronSlots.set(job.id, slotKey);
+    if (heartbeatCronSlots.get(job["id"]) === slotKey) return;
+    heartbeatCronSlots.set(job["id"], slotKey);
     void runHeartbeatJob(job);
 }
 

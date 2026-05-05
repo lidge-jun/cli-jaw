@@ -36,7 +36,7 @@ export function registerEmployeeRoutes(app: Express, requireAuth: AuthMiddleware
 
     app.put('/api/employees/:id', requireAuth, (req, res) => {
         const updates = req.body || {};
-        const staticSlug = parseStaticId(String(req.params.id));
+        const staticSlug = parseStaticId(String(req.params["id"]));
 
         // Static employees: only `model` is mutable; CLI and name are locked to the
         // registry definition. Overrides persist in settings.staticEmployees[Name].
@@ -47,30 +47,30 @@ export function registerEmployeeRoutes(app: Express, requireAuth: AuthMiddleware
             if (!newModel) {
                 return res.status(400).json({ error: 'static employees only allow model updates' });
             }
-            const overrides = (settings.staticEmployees as Record<string, { model?: string }>) || {};
+            const overrides = (settings["staticEmployees"] as Record<string, { model?: string }>) || {};
             overrides[spec.name] = { ...overrides[spec.name], model: newModel };
-            settings.staticEmployees = overrides;
+            settings["staticEmployees"] = overrides;
             saveSettings(settings);
-            clearEmployeeSession.run(req.params.id);
-            const merged = listEmployees().find(e => e.id === req.params.id);
+            clearEmployeeSession.run(req.params["id"]);
+            const merged = listEmployees().find(e => e.id === req.params["id"]);
             if (merged) broadcast('agent_updated', merged as Record<string, any>);
             regenerateB();
             return res.json(merged);
         }
 
-        const before = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id) as Record<string, any> | undefined;
+        const before = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params["id"]) as Record<string, any> | undefined;
         const allowed = ['name', 'cli', 'model', 'role', 'status'];
         const keys = Object.keys(updates).filter(k => allowed.includes(k));
         const sets = keys.map(k => `${k} = ?`);
         if (sets.length === 0) return res.status(400).json({ error: 'no valid fields' });
         const vals = keys.map(k => (updates as Record<string, any>)[k]);
-        db.prepare(`UPDATE employees SET ${sets.join(', ')} WHERE id = ?`).run(...vals, req.params.id);
+        db.prepare(`UPDATE employees SET ${sets.join(', ')} WHERE id = ?`).run(...vals, req.params["id"]);
         const changedResumeKey = before && (
-            (keys.includes('cli') && String(before.cli || '') !== String(updates.cli || ''))
-            || (keys.includes('model') && String(before.model || '') !== String(updates.model || ''))
+            (keys.includes('cli') && String(before["cli"] || '') !== String(updates.cli || ''))
+            || (keys.includes('model') && String(before["model"] || '') !== String(updates.model || ''))
         );
-        if (changedResumeKey) clearEmployeeSession.run(req.params.id);
-        const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id) as Record<string, any>;
+        if (changedResumeKey) clearEmployeeSession.run(req.params["id"]);
+        const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params["id"]) as Record<string, any>;
         broadcast('agent_updated', emp);
         regenerateB();
         res.json(emp);
@@ -79,11 +79,11 @@ export function registerEmployeeRoutes(app: Express, requireAuth: AuthMiddleware
     app.delete('/api/employees/:id', requireAuth, (req, res) => {
         // Static employees cannot be deleted (they're baked into the binary) —
         // reject explicitly so the frontend can show the correct UX.
-        if (parseStaticId(String(req.params.id))) {
+        if (parseStaticId(String(req.params["id"]))) {
             return res.status(400).json({ error: 'static employees cannot be deleted' });
         }
-        deleteEmployee.run(req.params.id);
-        broadcast('agent_deleted', { id: req.params.id });
+        deleteEmployee.run(req.params["id"]);
+        broadcast('agent_deleted', { id: req.params["id"] });
         regenerateB();
         res.json({ ok: true });
     });

@@ -13,7 +13,7 @@ export type WebCommandCtxFactory = (req: Request) => { resetSkills: (mode: 'hard
 
 export function registerSkillRoutes(app: Express, requireAuth: AuthMiddleware, makeWebCommandCtx: WebCommandCtxFactory): void {
     app.get('/api/skills', (req, res) => {
-        const lang = (String(req.query.locale || 'ko')).toLowerCase();
+        const lang = (String(req.query["locale"] || 'ko')).toLowerCase();
         const skills = getMergedSkills().map(s => ({
             ...s,
             name: (s as Record<string, unknown>)[`name_${lang}`] as string || s.name,
@@ -66,7 +66,7 @@ export function registerSkillRoutes(app: Express, requireAuth: AuthMiddleware, m
 
     app.post('/api/skills/reset', requireAuth, async (req, res) => {
         try {
-            const mode = (req.query.mode === 'hard') ? 'hard' as const : 'soft' as const;
+            const mode = (req.query["mode"] === 'hard') ? 'hard' as const : 'soft' as const;
             const ctx = makeWebCommandCtx(req);
             const result = await ctx.resetSkills(mode);
             res.json({ ok: true, ...(result as Record<string, unknown>) });

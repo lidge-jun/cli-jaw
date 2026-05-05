@@ -215,7 +215,7 @@ function recordResolverTrace(traceCtx: TraceContext, result: ResolveActionTarget
         status: result.ok ? 'ok' : 'unresolved',
         target: scrubResolverTarget(result.target),
         confidence: result.target?.confidence ?? null,
-        resolutionSource: result.target?.resolution || null,
+        resolutionSource: result.target?.["resolution"] || null,
         errorCode: result.errorCode || undefined,
         attempts: summarizeResolverAttempts(result.attempts),
     });
@@ -238,7 +238,7 @@ function summarizeResolverAttempts(attempts: ResolveActionTargetResult['attempts
 function scrubResolverTarget(target: TargetCandidate | null | undefined): Record<string, unknown> | null {
     if (!target) return null;
     return {
-        resolution: target.resolution || null,
+        resolution: target["resolution"] || null,
         source: target.source || null,
         ref: target.ref || null,
         selector: target.selector || null,

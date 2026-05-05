@@ -17,7 +17,7 @@ async function safeCall<T>(
     try {
         return await fn();
     } catch (err: unknown) {
-        if (process.env.DEBUG) console.warn('[commands:safeCall]', (err as Error).message);
+        if (process.env["DEBUG"]) console.warn('[commands:safeCall]', (err as Error).message);
         return fallback;
     }
 }
@@ -27,15 +27,15 @@ export async function memoryHandler(args: string[], ctx: CliCommandContext): Pro
     const sub = String(args[0] || '').toLowerCase();
     if (sub === 'status') {
         const status = await ctx.getMemoryStatus?.() as Record<string, unknown> | undefined;
-        const routing = status?.routing as { searchRead?: string; save?: string } | undefined;
+        const routing = status?.["routing"] as { searchRead?: string; save?: string } | undefined;
         const lines = [
             `🧠 Memory`,
-            `State: ${status?.state || '-'}`,
-            `Storage: ${status?.storageRoot || '-'}`,
+            `State: ${status?.["state"] || '-'}`,
+            `Storage: ${status?.["storageRoot"] || '-'}`,
             `Search/Read: ${routing?.searchRead || 'basic'}`,
             `Save: ${routing?.save || 'basic'}`,
-            `Indexed files: ${status?.indexedFiles || 0}`,
-            `Indexed chunks: ${status?.indexedChunks || 0}`,
+            `Indexed files: ${status?.["indexedFiles"] || 0}`,
+            `Indexed chunks: ${status?.["indexedChunks"] || 0}`,
         ];
         return { ok: true, text: lines.join('\n') };
     }
@@ -51,7 +51,7 @@ export async function memoryHandler(args: string[], ctx: CliCommandContext): Pro
             text: [
                 '🧠 Memory bootstrap completed',
                 `Root: ${result?.root || '-'}`,
-                `Imported core=${result?.counts?.core || 0}, markdown=${result?.counts?.markdown || 0}, kv=${result?.counts?.kv || 0}, claude=${result?.counts?.claude || 0}`,
+                `Imported core=${result?.counts?.["core"] || 0}, markdown=${result?.counts?.["markdown"] || 0}, kv=${result?.counts?.["kv"] || 0}, claude=${result?.counts?.["claude"] || 0}`,
             ].join('\n'),
         };
     }
@@ -81,7 +81,7 @@ export async function memoryHandler(args: string[], ctx: CliCommandContext): Pro
             const status = await ctx.getMemoryStatus?.() as Record<string, unknown> | undefined;
             return {
                 ok: true,
-                text: `🧠 Memory is integrated by default.\nState: ${status?.state || 'not_initialized'}`,
+                text: `🧠 Memory is integrated by default.\nState: ${status?.["state"] || 'not_initialized'}`,
             };
         }
         if (action === 'off') {
@@ -92,7 +92,7 @@ export async function memoryHandler(args: string[], ctx: CliCommandContext): Pro
             const status = await ctx.getMemoryStatus?.() as Record<string, unknown> | undefined;
             return {
                 ok: true,
-                text: `🧠 Memory initialized\nRoot: ${created?.root || status?.storageRoot || '-'}\nState: ${status?.state || 'configured'}`,
+                text: `🧠 Memory initialized\nRoot: ${created?.root || status?.["storageRoot"] || '-'}\nState: ${status?.["state"] || 'configured'}`,
             };
         }
         if (action === 'bootstrap') {
@@ -107,9 +107,9 @@ export async function memoryHandler(args: string[], ctx: CliCommandContext): Pro
                 ok: true,
                 text: [
                     '🧠 Memory bootstrap completed',
-                    `Root: ${result?.root || status?.storageRoot || '-'}`,
-                    `Imported core=${result?.counts?.core || 0}, markdown=${result?.counts?.markdown || 0}, kv=${result?.counts?.kv || 0}, claude=${result?.counts?.claude || 0}`,
-                    `Import status: ${status?.importStatus || '-'}`,
+                    `Root: ${result?.root || status?.["storageRoot"] || '-'}`,
+                    `Imported core=${result?.counts?.["core"] || 0}, markdown=${result?.counts?.["markdown"] || 0}, kv=${result?.counts?.["kv"] || 0}, claude=${result?.counts?.["claude"] || 0}`,
+                    `Import status: ${status?.["importStatus"] || '-'}`,
                 ].join('\n'),
             };
         }
@@ -120,24 +120,24 @@ export async function memoryHandler(args: string[], ctx: CliCommandContext): Pro
                 ok: true,
                 text: [
                     '🧠 Memory reindex completed',
-                    `Files: ${result?.totalFiles || status?.indexedFiles || 0}`,
-                    `Chunks: ${result?.totalChunks || status?.indexedChunks || 0}`,
-                    `State: ${status?.indexState || '-'}`,
+                    `Files: ${result?.totalFiles || status?.["indexedFiles"] || 0}`,
+                    `Chunks: ${result?.totalChunks || status?.["indexedChunks"] || 0}`,
+                    `State: ${status?.["indexState"] || '-'}`,
                 ].join('\n'),
             };
         }
         const status = await ctx.getMemoryStatus?.() as Record<string, unknown> | undefined;
-        const routing = status?.routing as { searchRead?: string; save?: string } | undefined;
-        const importedCounts = status?.importedCounts as Record<string, number> | undefined;
+        const routing = status?.["routing"] as { searchRead?: string; save?: string } | undefined;
+        const importedCounts = status?.["importedCounts"] as Record<string, number> | undefined;
         const lines = [
-            `🧠 Memory: ${status?.enabled ? 'ON' : 'OFF'}`,
-            `State: ${status?.state || '-'}`,
-            `Storage: ${status?.storageRoot || '-'}`,
+            `🧠 Memory: ${status?.["enabled"] ? 'ON' : 'OFF'}`,
+            `State: ${status?.["state"] || '-'}`,
+            `Storage: ${status?.["storageRoot"] || '-'}`,
             `Routing(search/read): ${routing?.searchRead || 'basic'}`,
             `Routing(save): ${routing?.save || 'basic'}`,
-            `Indexed files: ${status?.indexedFiles || 0}`,
-            `Indexed chunks: ${status?.indexedChunks || 0}`,
-            `Imported core/markdown/kv/claude: ${importedCounts?.core || 0}/${importedCounts?.markdown || 0}/${importedCounts?.kv || 0}/${importedCounts?.claude || 0}`,
+            `Indexed files: ${status?.["indexedFiles"] || 0}`,
+            `Indexed chunks: ${status?.["indexedChunks"] || 0}`,
+            `Imported core/markdown/kv/claude: ${importedCounts?.["core"] || 0}/${importedCounts?.["markdown"] || 0}/${importedCounts?.["kv"] || 0}/${importedCounts?.["claude"] || 0}`,
         ];
         return { ok: true, text: lines.join('\n') };
     }
@@ -227,7 +227,7 @@ export async function forwardHandler(args: string[], ctx: CliCommandContext): Pr
         : null;
     // Determine which channel's forwardAll to modify
     const settings = await safeCall(ctx.getSettings, null) as Record<string, unknown> | null;
-    const channelKey = remote || ((settings?.channel as string | undefined) || 'telegram');
+    const channelKey = remote || ((settings?.["channel"] as string | undefined) || 'telegram');
     const arg = args[0]?.toLowerCase();
     if (arg === 'on' || arg === 'off') {
         const val = arg === 'on';
@@ -237,8 +237,8 @@ export async function forwardHandler(args: string[], ctx: CliCommandContext): Pr
         const label = channelKey === 'discord' ? 'Discord' : 'Telegram';
         return { text: `📡 ${label} forwarding: ${val ? 'ON (all)' : 'OFF (channel only)'}` };
     }
-    const dc = settings?.discord as { forwardAll?: boolean } | undefined;
-    const tg = settings?.telegram as { forwardAll?: boolean } | undefined;
+    const dc = settings?.["discord"] as { forwardAll?: boolean } | undefined;
+    const tg = settings?.["telegram"] as { forwardAll?: boolean } | undefined;
     const current = channelKey === 'discord'
         ? dc?.forwardAll !== false
         : tg?.forwardAll !== false;
@@ -250,10 +250,10 @@ export async function fallbackHandler(args: string[], ctx: CliCommandContext): P
     const L = ctx.locale || 'ko';
     const settings = await safeCall(ctx.getSettings, null) as Record<string, unknown> | null;
     if (!settings) return { ok: false, text: t('cmd.settingsLoadFail', {}, L) };
-    const available = Object.keys((settings.perCli as Record<string, unknown> | undefined) || {});
+    const available = Object.keys((settings["perCli"] as Record<string, unknown> | undefined) || {});
 
     if (!args.length) {
-        const fb = (settings.fallbackOrder as string[] | undefined) || [];
+        const fb = (settings["fallbackOrder"] as string[] | undefined) || [];
         return {
             ok: true, type: 'info',
             text: fb.length
@@ -283,9 +283,9 @@ export async function flushHandler(args: string[], ctx: CliCommandContext): Prom
     const settings = await safeCall(ctx.getSettings, null) as Record<string, unknown> | null;
     if (!settings) return { ok: false, text: t('cmd.settingsLoadFail', {}, L) };
 
-    const activeCli = (settings.cli as string | undefined) || 'claude';
-    const memSettings = settings.memory as { cli?: string; model?: string } | undefined;
-    const perCli = settings.perCli as Record<string, { model?: string }> | undefined;
+    const activeCli = (settings["cli"] as string | undefined) || 'claude';
+    const memSettings = settings["memory"] as { cli?: string; model?: string } | undefined;
+    const perCli = settings["perCli"] as Record<string, { model?: string }> | undefined;
     const currentFlushCli = memSettings?.cli || activeCli;
     const currentFlushModel = memSettings?.model
         || perCli?.[currentFlushCli]?.model || 'default';
@@ -401,7 +401,7 @@ export async function orchestrateHandler(args: string[], ctx: CliCommandContext)
     const target = (positional[0] || 'P').toUpperCase();
 
     const origin = ctx?.interface || 'web';
-    const scope = resolveOrcScope({ origin, workingDir: settings.workingDir || null });
+    const scope = resolveOrcScope({ origin, workingDir: settings["workingDir"] || null });
 
     if (target === 'STATUS') {
         const current = getState(scope);
@@ -452,7 +452,7 @@ export async function orchestrateHandler(args: string[], ctx: CliCommandContext)
     }
 
     if (t === 'P') {
-        setState(t, { originalPrompt: '', workingDir: settings.workingDir || null, plan: null, workerResults: [], origin }, scope, 'P');
+        setState(t, { originalPrompt: '', workingDir: settings["workingDir"] || null, plan: null, workerResults: [], origin }, scope, 'P');
     } else {
         setState(t, undefined, scope, t);
     }

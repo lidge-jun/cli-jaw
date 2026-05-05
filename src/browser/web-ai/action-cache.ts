@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { CACHE_SCHEMA_VERSION } from './constants.js';
 import { WebAiError, wrapError } from './errors.js';
 
-const DEFAULT_HOME = process.env.BROWSER_AGENT_HOME || join(homedir(), '.browser-agent');
+const DEFAULT_HOME = process.env["BROWSER_AGENT_HOME"] || join(homedir(), '.browser-agent');
 const CACHE_FILE = 'action-cache.json';
 const STALE_MS = 30 * 86_400_000;
 

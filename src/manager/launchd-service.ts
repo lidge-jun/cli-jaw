@@ -14,7 +14,7 @@ const PRINT_TIMEOUT_MS = 2000;
 const OP_TIMEOUT_MS = 5000;
 
 function uid(): number {
-    return typeof process.getuid === 'function' ? process.getuid() : Number(process.env.UID || 501);
+    return typeof process.getuid === 'function' ? process.getuid() : Number(process.env["UID"] || 501);
 }
 
 function guiDomain(): string {
@@ -124,7 +124,7 @@ export async function permInstance(port: number, home: string): Promise<Dashboar
 
     const nodePath = getNodePath();
     const jawPath = getJawPath();
-    const servicePath = buildServicePath(process.env.PATH || '', [join(homedir(), '.local', 'bin')]);
+    const servicePath = buildServicePath(process.env["PATH"] || '', [join(homedir(), '.local', 'bin')]);
 
     const plist = generateLaunchdPlist({
         label,

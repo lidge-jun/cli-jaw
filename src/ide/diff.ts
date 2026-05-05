@@ -104,11 +104,11 @@ export type IdeType = 'antigravity' | 'code' | null;
 /** 현재 터미널이 실행 중인 IDE 감지 */
 export function detectIde(): IdeType {
     // Antigravity: 여러 env 시그널 확인 (VS Code 포크라서 VSCODE_* 도 공존)
-    if (process.env.ANTIGRAVITY_AGENT === '1') return 'antigravity';
-    if (process.env.__CFBundleIdentifier?.includes('antigravity')) return 'antigravity';
-    if (process.env.GIT_ASKPASS?.includes('Antigravity')) return 'antigravity';
+    if (process.env["ANTIGRAVITY_AGENT"] === '1') return 'antigravity';
+    if (process.env["__CFBundleIdentifier"]?.includes('antigravity')) return 'antigravity';
+    if (process.env["GIT_ASKPASS"]?.includes('Antigravity')) return 'antigravity';
     // VS Code
-    if (process.env.TERM_PROGRAM === 'vscode' || process.env.VSCODE_PID) return 'code';
+    if (process.env["TERM_PROGRAM"] === 'vscode' || process.env["VSCODE_PID"]) return 'code';
     return null;
 }
 
@@ -116,7 +116,7 @@ export function detectIde(): IdeType {
 export function getIdeCli(ide: IdeType): string | null {
     if (!ide) return null;
     if (ide === 'antigravity') {
-        return process.env.ANTIGRAVITY_CLI_ALIAS || 'antigravity';
+        return process.env["ANTIGRAVITY_CLI_ALIAS"] || 'antigravity';
     }
     return ide;  // 'code'
 }
@@ -161,12 +161,12 @@ export function openDiffInIde(
                 writeFileSync(tmpFile, original);
 
                 execFile(cli, ['-r', '--diff', tmpFile, absFile], (err) => {
-                    if (err && process.env.DEBUG) console.warn(`[ide-diff] ${cli} --diff failed:`, err.message);
+                    if (err && process.env["DEBUG"]) console.warn(`[ide-diff] ${cli} --diff failed:`, err.message);
                 });
             } catch {
                 // 새 파일 (HEAD에 없음) → 그냥 열기
                 execFile(cli, ['-r', '--goto', `${absFile}:1`], (err) => {
-                    if (err && process.env.DEBUG) console.warn(`[ide-diff] ${cli} --goto failed:`, err.message);
+                    if (err && process.env["DEBUG"]) console.warn(`[ide-diff] ${cli} --goto failed:`, err.message);
                 });
             }
         }

@@ -31,7 +31,7 @@ export function deriveDashboardInstanceId(homePath: string | null): string | nul
 
 export function normalizeSettingsMetadata(settingsBody: unknown): DashboardSettingsMetadata {
     const root = asRecord(settingsBody);
-    const data = asRecord(root?.data);
+    const data = asRecord(root?.["data"]);
     const source = data || root;
 
     const workingDir = readString(source, ['workingDir', 'cwd']);
@@ -40,9 +40,9 @@ export function normalizeSettingsMetadata(settingsBody: unknown): DashboardSetti
     let currentModel = readString(source, ['model', 'currentModel']);
 
     if (!currentModel && currentCli && source) {
-        const overrides = asRecord(source.activeOverrides);
+        const overrides = asRecord(source["activeOverrides"]);
         const cliOverride = overrides ? asRecord(overrides[currentCli]) : null;
-        const perCli = asRecord(source.perCli);
+        const perCli = asRecord(source["perCli"]);
         const cliSettings = perCli ? asRecord(perCli[currentCli]) : null;
         currentModel = readString(cliOverride, ['model'])
             || readString(cliSettings, ['model']);

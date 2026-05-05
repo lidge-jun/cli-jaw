@@ -50,7 +50,7 @@ export {
 type SpawnAgentLike = typeof spawnAgent;
 
 function pickPlanningTask(userText: string, _prompt: string, ctx: Record<string, any> | null) {
-    const ctxPrompt = String(ctx?.originalPrompt || '').trim();
+    const ctxPrompt = String(ctx?.["originalPrompt"] || '').trim();
     if (ctxPrompt) return ctxPrompt;
     const userPrompt = String(userText || '').trim();
     if (userPrompt) return userPrompt;
@@ -104,8 +104,8 @@ async function executePreparedWorkerTask(
     },
 ) {
     const { task, emp, workerPhase } = prepared;
-    upsertEmployeeSession.run(emp.id, null, emp.cli, String(emp.model || ''));
-    claimWorker(emp as { id: string; name?: string }, task.task);
+    upsertEmployeeSession.run(emp["id"], null, emp["cli"], String(emp["model"] || ''));
+    claimWorker(emp as { id: string; name?: string }, task["task"]);
 
     try {
         const result = await args.runSingle(
@@ -125,16 +125,16 @@ async function executePreparedWorkerTask(
             args.parallelPeers || [],
         );
 
-        if (result.status === 'done') {
-            finishWorker(emp.id, result.text || '');
+        if (result["status"] === 'done') {
+            finishWorker(emp["id"], result["text"] || '');
         } else {
-            failWorker(emp.id, result.text || `[worker error] ${emp.id}`);
+            failWorker(emp["id"], result["text"] || `[worker error] ${emp["id"]}`);
         }
 
         return { emp, result, dispatched: true, ran: true };
     } catch (err) {
-        failWorker(emp.id, (err as Error).message || String(err));
-        console.error(`[jaw:pabcd] worker ${emp.id} failed:`, (err as Error).message);
+        failWorker(emp["id"], (err as Error).message || String(err));
+        console.error(`[jaw:pabcd] worker ${emp["id"]} failed:`, (err as Error).message);
         return { emp, result: null, dispatched: true, ran: false };
     }
 }
@@ -179,28 +179,28 @@ export async function orchestrate(
     prompt: string,
     meta: Record<string, any> = {},
 ) {
-    const origin = meta.origin || 'web';
-    const chatId = meta.chatId;
-    const target = meta.target;
-    const requestId = meta.requestId;
+    const origin = meta["origin"] || 'web';
+    const chatId = meta["chatId"];
+    const target = meta["target"];
+    const requestId = meta["requestId"];
     const userText = String(prompt || '').trim();
 
     // --- drain pending worker results before normal processing ---
-    if (!meta._skipReplayDrain) {
+    if (!meta["_skipReplayDrain"]) {
         await drainPendingReplays(meta);
     }
-    const runSpawnAgent: SpawnAgentLike = typeof meta._spawnAgent === 'function'
-        ? meta._spawnAgent
+    const runSpawnAgent: SpawnAgentLike = typeof meta["_spawnAgent"] === 'function'
+        ? meta["_spawnAgent"]
         : spawnAgent;
     const scope = 'default';
     let ctx = getCtx(scope);
 
     let state = getState(scope);
-    let skipPrefix = !!meta._skipPrefix;
+    let skipPrefix = !!meta["_skipPrefix"];
 
     // Skip session clear during active PABCD (preserve resume)
     // Employee sessions are preserved across normal prompts to maintain resume state
-    if (!meta._skipClear && state === 'IDLE') {
+    if (!meta["_skipClear"] && state === 'IDLE') {
         // Removed: clearAllEmployeeSessions.run()
         // Employee sessions should only be cleared on explicit /reset, not every message
     }
@@ -214,7 +214,7 @@ export async function orchestrate(
     const numericResolution = state === 'P' && !ctx?.plan
         ? resolveNumericReference(
             userText,
-            getRecentMessages.all(settings.workingDir || null, 20) as Array<{ role?: string; content?: string }>,
+            getRecentMessages.all(settings["workingDir"] || null, 20) as Array<{ role?: string; content?: string }>,
         )
         : null;
     if (numericResolution?.needsConfirmation) {
@@ -229,8 +229,8 @@ export async function orchestrate(
     }
     const planningTask = numericResolution?.resolved || pickPlanningTask(userText, prompt, ctx);
     const isInitialPlanningTurn = state === 'P'
-        && !meta._workerResult
-        && !meta._skipPrefix
+        && !meta["_workerResult"]
+        && !meta["_skipPrefix"]
         && !ctx?.plan
         && !!planningTask;
 
@@ -241,7 +241,7 @@ export async function orchestrate(
         const nextCtx: OrcContext = {
             ...(ctx || {
                 originalPrompt: '',
-                workingDir: settings.workingDir || null,
+                workingDir: settings["workingDir"] || null,
                 scopeId: scope,
                 plan: null,
                 workerResults: [],
@@ -249,7 +249,7 @@ export async function orchestrate(
                 chatId,
             }),
             originalPrompt: planningTask,
-            workingDir: settings.workingDir || null,
+            workingDir: settings["workingDir"] || null,
             scopeId: scope,
             origin,
             chatId,
@@ -271,10 +271,10 @@ export async function orchestrate(
     }
 
     // Inject heartbeat anchor for non-heartbeat user turns
-    if (origin !== 'heartbeat' && !meta._workerResult && !meta._isSmokeContinuation) {
+    if (origin !== 'heartbeat' && !meta["_workerResult"] && !meta["_isSmokeContinuation"]) {
         type HeartbeatAnchorRow = { id?: number; created_at: number; delivered_at?: number | string | null; job_name: string; output: string };
         // @strict-debt(P06): getLatestUnconsumedAnchor row is typed locally until core DB statements expose row generics
-        const anchor = getLatestUnconsumedAnchor.get(settings.workingDir || null) as HeartbeatAnchorRow | undefined;
+        const anchor = getLatestUnconsumedAnchor.get(settings["workingDir"] || null) as HeartbeatAnchorRow | undefined;
         if (anchor) {
             const ageMs = Date.now() - anchor.created_at;
             if (ageMs < 30 * 60 * 1000) {
@@ -290,12 +290,12 @@ export async function orchestrate(
                     `## Current User Message`,
                 ].join('\n');
                 prompt = anchorBlock + '\n' + prompt;
-                meta._heartbeatAnchorId = anchor.id;
+                meta["_heartbeatAnchorId"] = anchor.id;
             }
         }
     }
 
-    const source = meta._workerResult ? 'worker' : 'user';
+    const source = meta["_workerResult"] ? 'worker' : 'user';
     const prefix = getPrefix(state, source as 'user' | 'worker');
     if (prefix && !skipPrefix) {
         prompt = prefix + '\n' + prompt;
@@ -310,10 +310,10 @@ export async function orchestrate(
     let memorySnapshot = '';
     try {
         const injection = buildMemoryInjection({
-            role: meta._workerResult ? 'employee' : 'boss',
+            role: meta["_workerResult"] ? 'employee' : 'boss',
             currentPrompt: userText || prompt,
-            allowProfile: !meta._workerResult,
-            allowSnapshot: !meta._workerResult,
+            allowProfile: !meta["_workerResult"],
+            allowSnapshot: !meta["_workerResult"],
         });
         memorySnapshot = injection.snapshot || '';
     } catch (err) {
@@ -322,9 +322,9 @@ export async function orchestrate(
 
     const { promise } = runSpawnAgent(prompt, {
         origin,
-        _skipInsert: !!meta._skipInsert,
+        _skipInsert: !!meta["_skipInsert"],
         memorySnapshot,
-        _heartbeatAnchorId: meta._heartbeatAnchorId,
+        _heartbeatAnchorId: meta["_heartbeatAnchorId"],
     });
     const result = await promise as Record<string, any>;
 
@@ -332,10 +332,10 @@ export async function orchestrate(
     // (phase transitions via CLI commands, user reset, etc.)
     state = getState(scope);
 
-    if (state === 'P' && !meta._workerResult) {
+    if (state === 'P' && !meta["_workerResult"]) {
         const savedCtx = getCtx(scope);
         if (savedCtx) {
-            const newPlan = stripSubtaskJSON(result.text) || result.text || savedCtx.plan;
+            const newPlan = stripSubtaskJSON(result["text"]) || result["text"] || savedCtx.plan;
             if (newPlan) {
                 // Re-derive title from this scope's original prompt to avoid cross-scope worklog bleed
                 const title = pickWorklogSeed(savedCtx.originalPrompt);
@@ -365,7 +365,7 @@ export async function orchestrate(
     // Normal response → broadcast
     // (Worker JSON dispatch removed in patch3 — Boss calls `cli-jaw dispatch` directly)
     broadcast('orchestrate_done', {
-        text: result.text || '',
+        text: result["text"] || '',
         origin,
         chatId,
         target,
@@ -378,10 +378,10 @@ export async function orchestrate(
 export async function orchestrateContinue(
     meta: Record<string, any> = {},
 ) {
-    const origin = meta.origin || 'web';
-    const chatId = meta.chatId;
-    const target = meta.target;
-    const requestId = meta.requestId;
+    const origin = meta["origin"] || 'web';
+    const chatId = meta["chatId"];
+    const target = meta["target"];
+    const requestId = meta["requestId"];
     const scope = 'default';
     const state = getState(scope);
 
@@ -422,10 +422,10 @@ export async function orchestrateContinue(
 export async function orchestrateReset(
     meta: Record<string, any> = {},
 ) {
-    const origin = meta.origin || 'web';
-    const chatId = meta.chatId;
-    const target = meta.target;
-    const requestId = meta.requestId;
+    const origin = meta["origin"] || 'web';
+    const chatId = meta["chatId"];
+    const target = meta["target"];
+    const requestId = meta["requestId"];
     // --- cancel PABCD workers only — preserve main agent + message queue ---
     for (const w of getActiveWorkers()) {
         killAgentById(w.agentId);

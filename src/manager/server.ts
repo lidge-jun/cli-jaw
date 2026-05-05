@@ -52,14 +52,14 @@ const projectRoot = existsSync(join(serverRoot, 'package.json'))
     : join(serverRoot, '..');
 const app = express();
 
-const port = parsePositivePort(process.env.DASHBOARD_PORT, Number(DASHBOARD_DEFAULT_PORT));
-const scanFrom = parsePositivePort(process.env.DASHBOARD_SCAN_FROM, MANAGED_INSTANCE_PORT_FROM);
+const port = parsePositivePort(process.env["DASHBOARD_PORT"], Number(DASHBOARD_DEFAULT_PORT));
+const scanFrom = parsePositivePort(process.env["DASHBOARD_SCAN_FROM"], MANAGED_INSTANCE_PORT_FROM);
 const scanCount = parsePositiveCount(
-    process.env.DASHBOARD_SCAN_COUNT,
+    process.env["DASHBOARD_SCAN_COUNT"],
     MANAGED_INSTANCE_PORT_COUNT,
     MANAGED_INSTANCE_PORT_COUNT,
 );
-const previewFrom = parsePositivePort(process.env.DASHBOARD_PREVIEW_FROM, DASHBOARD_PREVIEW_PORT_FROM);
+const previewFrom = parsePositivePort(process.env["DASHBOARD_PREVIEW_FROM"], DASHBOARD_PREVIEW_PORT_FROM);
 const lifecycle = new DashboardLifecycleManager({
     managerPort: port,
     from: scanFrom,
@@ -164,9 +164,9 @@ app.get('/api/dashboard/health', (_req, res) => {
 app.get('/api/dashboard/instances', async (req, res) => {
     try {
         const loaded = loadDashboardRegistry({ from: scanFrom, count: scanCount });
-        const from = Number(req.query.from || loaded.registry.scan.from);
-        const count = Number(req.query.count || loaded.registry.scan.count);
-        const showHidden = req.query.showHidden === '1' || req.query.showHidden === 'true';
+        const from = Number(req.query["from"] || loaded.registry.scan.from);
+        const count = Number(req.query["count"] || loaded.registry.scan.count);
+        const showHidden = req.query["showHidden"] === '1' || req.query["showHidden"] === 'true';
         const result = await scanDashboardInstances({ from, count, managerPort: port });
         recordScanEvents(result);
         await previewProxy.reconcileOnlineTargets(
@@ -210,7 +210,7 @@ app.get('/api/dashboard/instances/:port', async (req, res) => {
 });
 
 app.get('/api/manager/events', (req, res) => {
-    const since = typeof req.query.since === 'string' && req.query.since ? req.query.since : null;
+    const since = typeof req.query["since"] === 'string' && req.query["since"] ? req.query["since"] : null;
     if (since && Number.isNaN(Date.parse(since))) {
         return res.status(400).json({ ok: false, error: 'since must be a valid ISO 8601 timestamp' });
     }
@@ -222,7 +222,7 @@ app.get('/api/manager/health-history/:port', (req, res) => {
     if (!Number.isInteger(portValue) || portValue < scanFrom || portValue >= scanFrom + scanCount) {
         return res.status(400).json({ ok: false, error: 'port out of configured scan range' });
     }
-    const limit = req.query.limit ? Math.max(1, Math.min(200, Number(req.query.limit))) : undefined;
+    const limit = req.query["limit"] ? Math.max(1, Math.min(200, Number(req.query["limit"]))) : undefined;
     res.json({ ok: true, port: portValue, events: healthHistory.list(portValue, limit) });
 });
 
@@ -438,7 +438,7 @@ async function main(): Promise<void> {
             log: msg => console.log(msg),
         });
 
-        if (process.env.JAW_DASHBOARD_OPEN === '1') {
+        if (process.env["JAW_DASHBOARD_OPEN"] === '1') {
             const openCmd = process.platform === 'darwin' ? 'open'
                 : process.platform === 'win32' ? 'cmd'
                     : 'xdg-open';

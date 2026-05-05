@@ -13,8 +13,8 @@ import os from 'os';
 import path from 'path';
 import { resolveHomePath } from '../src/core/path-expand.js';
 
-const JAW_HOME = process.env.CLI_JAW_HOME
-    ? resolveHomePath(process.env.CLI_JAW_HOME)
+const JAW_HOME = process.env["CLI_JAW_HOME"]
+    ? resolveHomePath(process.env["CLI_JAW_HOME"])
     : path.join(os.homedir(), '.cli-jaw');
 const AUTH_DIR = path.join(JAW_HOME, 'auth');
 const TOKEN_CACHE_PATH = path.join(AUTH_DIR, 'copilot-token');
@@ -84,9 +84,9 @@ function getCopilotToken() {
 
     // ─── 1. Env vars (cross-platform, explicit override) ───
     const envToken =
-        process.env.COPILOT_GITHUB_TOKEN ||
-        process.env.GH_TOKEN ||
-        process.env.GITHUB_TOKEN;
+        process.env["COPILOT_GITHUB_TOKEN"] ||
+        process.env["GH_TOKEN"] ||
+        process.env["GITHUB_TOKEN"];
     if (envToken) {
         _cachedToken = envToken;
         return _cachedToken;
@@ -143,7 +143,7 @@ function getCopilotToken() {
     }
 
     // win32/linux: no keychain CLI — rely on env/gh/cache above
-    if (process.env.DEBUG && process.platform !== 'darwin') {
+    if (process.env["DEBUG"] && process.platform !== 'darwin') {
         console.info(`[quota-copilot] token lookup skipped on ${process.platform} (set COPILOT_GITHUB_TOKEN or GH_TOKEN)`);
     }
     return null;
@@ -187,12 +187,12 @@ export async function fetchCopilotQuota() {
         }
         const data = await res.json() as Record<string, any>;
 
-        const snap = data.quota_snapshots || {};
+        const snap = data["quota_snapshots"] || {};
         const pi = snap.premium_interactions || {};
         const windows = [];
 
         if (!pi.unlimited && pi.entitlement) {
-            const resetsAt = data.quota_reset_date || nextMonthFirstResetDate();
+            const resetsAt = data["quota_reset_date"] || nextMonthFirstResetDate();
             windows.push({
                 label: 'Premium',
                 used: pi.entitlement - (pi.remaining ?? pi.entitlement),
@@ -204,11 +204,11 @@ export async function fetchCopilotQuota() {
 
         return {
             account: {
-                email: data.login || null,
-                plan: data.access_type_sku?.replace(/_/g, ' ') || data.copilot_plan || null,
+                email: data["login"] || null,
+                plan: data["access_type_sku"]?.replace(/_/g, ' ') || data["copilot_plan"] || null,
             },
             windows,
-            resetDate: data.quota_reset_date || null,
+            resetDate: data["quota_reset_date"] || null,
         };
     } catch (e: unknown) {
         console.error('[quota-copilot]', (e as Error).message);
@@ -250,7 +250,7 @@ export async function refreshCopilotFromKeychain(): Promise<{
     let foundToken: string | null = null;
 
     // 1. ENV
-    const envToken = process.env.COPILOT_GITHUB_TOKEN || process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+    const envToken = process.env["COPILOT_GITHUB_TOKEN"] || process.env["GH_TOKEN"] || process.env["GITHUB_TOKEN"];
     if (envToken) {
         steps.push({ source: 'ENV', status: 'hit', detail: envToken.slice(0, 8) + '…' });
         foundToken = envToken;

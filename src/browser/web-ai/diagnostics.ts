@@ -262,18 +262,18 @@ export function toWebAiErrorEnvelope(
         ? ((error as { toJSON: () => Record<string, unknown> }).toJSON())
         : null;
     if (typed) {
-        const message = redactDiagnosticText(String(typed.message ?? ''), { maxChars: 512 });
-        const stage = normalizeFailureStage(String(typed.stage ?? diagnostics?.stage ?? fallbackStage));
+        const message = redactDiagnosticText(String(typed["message"] ?? ''), { maxChars: 512 });
+        const stage = normalizeFailureStage(String(typed["stage"] ?? diagnostics?.stage ?? fallbackStage));
         const envelope: WebAiErrorEnvelope = {
             ok: false,
             error: message,
             stage,
-            ...(typed.errorCode ? { errorCode: String(typed.errorCode) } : {}),
-            ...(typed.retryHint ? { retryHint: String(typed.retryHint) } : {}),
-            ...(typed.vendor ? { vendor: String(typed.vendor) } : {}),
-            ...(typeof typed.mutationAllowed === 'boolean' ? { mutationAllowed: typed.mutationAllowed } : {}),
-            ...(Array.isArray(typed.selectorsTried) ? { selectorsTried: typed.selectorsTried as string[] } : {}),
-            ...(typed.evidence !== undefined && typed.evidence !== null ? { evidence: typed.evidence } : {}),
+            ...(typed["errorCode"] ? { errorCode: String(typed["errorCode"]) } : {}),
+            ...(typed["retryHint"] ? { retryHint: String(typed["retryHint"]) } : {}),
+            ...(typed["vendor"] ? { vendor: String(typed["vendor"]) } : {}),
+            ...(typeof typed["mutationAllowed"] === 'boolean' ? { mutationAllowed: typed["mutationAllowed"] } : {}),
+            ...(Array.isArray(typed["selectorsTried"]) ? { selectorsTried: typed["selectorsTried"] as string[] } : {}),
+            ...(typed["evidence"] !== undefined && typed["evidence"] !== null ? { evidence: typed["evidence"] } : {}),
         };
         if (diagnostics) envelope.diagnostics = diagnostics;
         return envelope;

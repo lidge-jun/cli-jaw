@@ -12,7 +12,7 @@ import { asRecord, fieldString, type JsonRecord } from '../_http-client.js';
 const { values } = parseArgs({
     args: process.argv.slice(3),
     options: {
-        port: { type: 'string', default: process.env.PORT || '3457' },
+        port: { type: 'string', default: process.env["PORT"] || '3457' },
         yes: { type: 'boolean', short: 'y', default: false },
         help: { type: 'boolean', default: false },
     },
@@ -35,7 +35,7 @@ async function apiJson<T = JsonRecord>(baseUrl: string, path: string, init: Requ
     const text = await res.text();
     let data: JsonRecord = {};
     try { data = text ? asRecord(JSON.parse(text)) : {}; } catch { data = { raw: text }; }
-    if (!res.ok) throw new Error(fieldString(data.error) || `HTTP ${res.status}`);
+    if (!res.ok) throw new Error(fieldString(data["error"]) || `HTTP ${res.status}`);
     return data as T;
 }
 

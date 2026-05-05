@@ -57,7 +57,7 @@ async function safeCall<T>(
     try {
         return await fn();
     } catch (err: unknown) {
-        if (process.env.DEBUG) console.warn('[commands:safeCall]', (err as Error).message);
+        if (process.env["DEBUG"]) console.warn('[commands:safeCall]', (err as Error).message);
         return fallback;
     }
 }
@@ -95,8 +95,8 @@ export function normalizeResult(result: unknown): SlashResult {
     if (typeof result === 'string') return { ok: true, type: 'info', text: result };
     if (typeof result === 'object') {
         const r = result as Record<string, unknown>;
-        const ok = r.ok !== false;
-        const type = (typeof r.type === 'string' && r.type) || (ok ? 'success' : 'error');
+        const ok = r["ok"] !== false;
+        const type = (typeof r["type"] === 'string' && r["type"]) || (ok ? 'success' : 'error');
         return { ...r, ok, type };
     }
     return { ok: true, type: 'info', text: String(result) };
@@ -119,34 +119,34 @@ export async function statusHandler(_args: string[], ctx: CliCommandContext): Pr
         Array<{ enabled?: boolean }> | null,
     ];
 
-    const cli = (settings?.cli as string | undefined) || (session?.active_cli as string | undefined) || 'unknown';
-    const overrideModel = (settings?.activeOverrides as Record<string, { model?: string }> | undefined)?.[cli]?.model;
-    const sessionCli = (session?.active_cli || session?.activeCli) as string | undefined;
-    const sessionModel = session?.model && (!sessionCli || sessionCli === cli)
-        ? (session.model as string)
+    const cli = (settings?.["cli"] as string | undefined) || (session?.["active_cli"] as string | undefined) || 'unknown';
+    const overrideModel = (settings?.["activeOverrides"] as Record<string, { model?: string }> | undefined)?.[cli]?.model;
+    const sessionCli = (session?.["active_cli"] || session?.["activeCli"]) as string | undefined;
+    const sessionModel = session?.["model"] && (!sessionCli || sessionCli === cli)
+        ? (session["model"] as string)
         : undefined;
     const model = overrideModel
         || sessionModel
-        || (settings?.perCli as Record<string, { model?: string }> | undefined)?.[cli]?.model
+        || (settings?.["perCli"] as Record<string, { model?: string }> | undefined)?.[cli]?.model
         || 'default';
-    const overrideEffort = (settings?.activeOverrides as Record<string, { effort?: string }> | undefined)?.[cli]?.effort;
-    const sessionEffort = session?.effort && (!sessionCli || sessionCli === cli)
-        ? (session.effort as string)
+    const overrideEffort = (settings?.["activeOverrides"] as Record<string, { effort?: string }> | undefined)?.[cli]?.effort;
+    const sessionEffort = session?.["effort"] && (!sessionCli || sessionCli === cli)
+        ? (session["effort"] as string)
         : undefined;
     const effort = overrideEffort
         || sessionEffort
-        || (settings?.perCli as Record<string, { effort?: string }> | undefined)?.[cli]?.effort
+        || (settings?.["perCli"] as Record<string, { effort?: string }> | undefined)?.[cli]?.effort
         || '-';
-    const activeAgent = runtime?.activeAgent;
+    const activeAgent = runtime?.["activeAgent"];
     const agent = activeAgent === true
         ? '● running'
         : activeAgent === false ? '○ idle' : '-';
-    const queuePending = runtime?.queuePending ?? '-';
-    const uptime = formatDuration(runtime?.uptimeSec);
+    const queuePending = runtime?.["queuePending"] ?? '-';
+    const uptime = formatDuration(runtime?.["uptimeSec"]);
     const activeSkills = Array.isArray(skills) ? skills.filter(s => s.enabled).length : '-';
     const refSkills = Array.isArray(skills) ? skills.filter(s => !s.enabled).length : '-';
 
-    const fb = (settings?.fallbackOrder as string[] | undefined) || [];
+    const fb = (settings?.["fallbackOrder"] as string[] | undefined) || [];
 
     return {
         ok: true,
@@ -170,16 +170,16 @@ export async function modelHandler(args: string[], ctx: CliCommandContext): Prom
     const settings = await safeCall(ctx.getSettings, null) as Record<string, unknown> | null;
     if (!settings) return { ok: false, text: t('cmd.settingsLoadFail', {}, L) };
 
-    const activeCli = (settings.cli as string | undefined) || 'claude';
+    const activeCli = (settings["cli"] as string | undefined) || 'claude';
     const session = await safeCall(ctx.getSession, null) as Record<string, unknown> | null;
-    const sessionCli = (session?.active_cli || session?.activeCli) as string | undefined;
-    const overrideModel = (settings.activeOverrides as Record<string, { model?: string }> | undefined)?.[activeCli]?.model;
-    const sessionModel = session?.model && (!sessionCli || sessionCli === activeCli)
-        ? (session.model as string)
+    const sessionCli = (session?.["active_cli"] || session?.["activeCli"]) as string | undefined;
+    const overrideModel = (settings["activeOverrides"] as Record<string, { model?: string }> | undefined)?.[activeCli]?.model;
+    const sessionModel = session?.["model"] && (!sessionCli || sessionCli === activeCli)
+        ? (session["model"] as string)
         : undefined;
     const current = overrideModel
         || sessionModel
-        || (settings.perCli as Record<string, { model?: string }> | undefined)?.[activeCli]?.model
+        || (settings["perCli"] as Record<string, { model?: string }> | undefined)?.[activeCli]?.model
         || 'default';
 
     if (!args.length) {
@@ -191,7 +191,7 @@ export async function modelHandler(args: string[], ctx: CliCommandContext): Prom
         return { ok: false, text: t('cmd.model.invalid', {}, L) };
     }
 
-    const perCli = (settings.perCli as Record<string, Record<string, unknown>> | undefined) || {};
+    const perCli = (settings["perCli"] as Record<string, Record<string, unknown>> | undefined) || {};
     const nextPerCli = {
         ...perCli,
         [activeCli]: {
@@ -212,9 +212,9 @@ export async function cliHandler(args: string[], ctx: CliCommandContext): Promis
     const settings = await safeCall(ctx.getSettings, null) as Record<string, unknown> | null;
     if (!settings) return { ok: false, text: t('cmd.settingsLoadFail', {}, L) };
 
-    const allowed = Object.keys((settings.perCli as Record<string, unknown> | undefined) || {});
+    const allowed = Object.keys((settings["perCli"] as Record<string, unknown> | undefined) || {});
     const fallbackAllowed = allowed.length ? allowed : DEFAULT_CLI_CHOICES;
-    const current = (settings.cli as string | undefined) || 'claude';
+    const current = (settings["cli"] as string | undefined) || 'claude';
 
     if (!args.length) {
         return {
@@ -248,7 +248,7 @@ export async function thoughtHandler(args: string[], ctx: CliCommandContext): Pr
     if (!sub || sub === 'status') {
         return {
             ok: true,
-            text: `Gemini thought visibility: ${settings.showReasoning === true ? 'ON' : 'OFF'}\nUsage: /thought on|off`,
+            text: `Gemini thought visibility: ${settings["showReasoning"] === true ? 'ON' : 'OFF'}\nUsage: /thought on|off`,
         };
     }
     if (sub !== 'on' && sub !== 'off') {

@@ -43,7 +43,7 @@ if (_homeIdx !== -1 && process.argv[_homeIdx + 1]) {
         console.error(`  Usage: jaw --home <path> ${_homeVal}`);
         process.exit(1);
     }
-    process.env.CLI_JAW_HOME = resolveHomePath(_homeVal, homedir());
+    process.env["CLI_JAW_HOME"] = resolveHomePath(_homeVal, homedir());
     process.argv.splice(_homeIdx, 2);
 } else if (_homeIdx !== -1 && !process.argv[_homeIdx + 1]) {
     console.error('  ❌ --home requires a path argument');
@@ -51,7 +51,7 @@ if (_homeIdx !== -1 && process.argv[_homeIdx + 1]) {
     process.exit(1);
 } else if (_homeEqArg) {
     const val = _homeEqArg.slice('--home='.length);
-    process.env.CLI_JAW_HOME = resolveHomePath(val, homedir());
+    process.env["CLI_JAW_HOME"] = resolveHomePath(val, homedir());
     process.argv.splice(process.argv.indexOf(_homeEqArg), 1);
 }
 

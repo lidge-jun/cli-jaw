@@ -31,7 +31,7 @@ const { values } = parseArgs({
     args: process.argv.slice(3),
     allowNegative: true,
     options: {
-        port: { type: 'string', default: process.env.PORT || '3457' },
+        port: { type: 'string', default: process.env["PORT"] || '3457' },
         host: { type: 'string', default: '0.0.0.0' },
         open: { type: 'boolean', default: true },
         lan: { type: 'boolean', default: false },

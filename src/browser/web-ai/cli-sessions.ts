@@ -82,9 +82,9 @@ export async function runSessionsCommand(
     if (sub === 'list') {
         const filter: { vendor?: WebAiVendor; status?: WebAiSessionStatus; limit?: number } = {};
         const vendorExplicit = args.includes('--vendor') || args.some(a => a.startsWith('--vendor='));
-        if (vendorExplicit && values.vendor) filter.vendor = String(values.vendor) as WebAiVendor;
-        if (values.status) filter.status = String(values.status) as WebAiSessionStatus;
-        if (values.limit) filter.limit = Number(values.limit);
+        if (vendorExplicit && values["vendor"]) filter.vendor = String(values["vendor"]) as WebAiVendor;
+        if (values["status"]) filter.status = String(values["status"]) as WebAiSessionStatus;
+        if (values["limit"]) filter.limit = Number(values["limit"]);
         const rows = listSessions(filter);
         return { ok: true, status: 'list', sessions: rows, vendor: 'chatgpt', warnings: [] };
     }
@@ -147,7 +147,7 @@ export async function runSessionsCommand(
             : 30 * 86_400_000;
         const result = pruneSessions({
             olderThanMs: olderThanMs ?? undefined,
-            ...(values.status ? { status: String(values.status) as WebAiSessionStatus } : {}),
+            ...(values["status"] ? { status: String(values["status"]) as WebAiSessionStatus } : {}),
         });
         return { ok: true, status: 'pruned', ...result, vendor: 'chatgpt', warnings: [], olderThanMs: olderThanMs ?? undefined };
     }
@@ -161,42 +161,42 @@ export function printSessionsHuman(result: unknown): void {
         return;
     }
     const r = result;
-    if (r.status === 'help') {
-        console.log(String(r.usage || ''));
-        const commands = Array.isArray(r.commands) ? r.commands.map(String) : [];
+    if (r["status"] === 'help') {
+        console.log(String(r["usage"] || ''));
+        const commands = Array.isArray(r["commands"]) ? r["commands"].map(String) : [];
         console.log(`subcommands: ${commands.join(', ')}`);
         return;
     }
-    if (r.status === 'list') {
-        const rows = Array.isArray(r.sessions) ? r.sessions : [];
+    if (r["status"] === 'list') {
+        const rows = Array.isArray(r["sessions"]) ? r["sessions"] : [];
         if (rows.length === 0) { console.log('(no sessions)'); return; }
         for (const s of rows) {
             if (!isRecord(s)) continue;
-            const vendor = String(s.vendor || '');
-            const status = String(s.status || '');
-            console.log(`${String(s.sessionId || '')}  ${vendor.padEnd(8)}  ${status.padEnd(10)}  ${String(s.createdAt || '')}  ${String(s.conversationUrl || s.url || '')}`);
+            const vendor = String(s["vendor"] || '');
+            const status = String(s["status"] || '');
+            console.log(`${String(s["sessionId"] || '')}  ${vendor.padEnd(8)}  ${status.padEnd(10)}  ${String(s["createdAt"] || '')}  ${String(s["conversationUrl"] || s["url"] || '')}`);
         }
         return;
     }
-    if (r.status === 'show') {
-        console.log(JSON.stringify(r.session, null, 2));
+    if (r["status"] === 'show') {
+        console.log(JSON.stringify(r["session"], null, 2));
         return;
     }
-    if (r.status === 'pruned') {
-        console.log(`pruned ${r.removed} (remaining ${r.remaining})`);
+    if (r["status"] === 'pruned') {
+        console.log(`pruned ${r["removed"]} (remaining ${r["remaining"]})`);
         return;
     }
-    if (r.status === 'reattached') {
-        console.log(`reattached to ${r.sessionId} at ${r.url}`);
+    if (r["status"] === 'reattached') {
+        console.log(`reattached to ${r["sessionId"]} at ${r["url"]}`);
         return;
     }
-    if (r.status === 'reattach-mismatch') {
-        console.log(`reattach mismatch: tab=${r.url} session=${r.conversationUrl}`);
+    if (r["status"] === 'reattach-mismatch') {
+        console.log(`reattach mismatch: tab=${r["url"]} session=${r["conversationUrl"]}`);
         console.log('pass --navigate to switch tabs');
         return;
     }
-    if (r.answerText) {
-        console.log(String(r.answerText));
+    if (r["answerText"]) {
+        console.log(String(r["answerText"]));
         return;
     }
     console.log(JSON.stringify(r, null, 2));

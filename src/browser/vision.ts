@@ -34,22 +34,22 @@ function recordText(record: JsonRecord, key: string): string | null {
 
 function parseVisionCoordinates(value: unknown): VisionCoordinates | null {
     if (!isRecord(value)) return null;
-    if (typeof value.found !== 'boolean') return null;
-    if (typeof value.x !== 'number' || typeof value.y !== 'number') return null;
+    if (typeof value["found"] !== 'boolean') return null;
+    if (typeof value["x"] !== 'number' || typeof value["y"] !== 'number') return null;
     return {
-        found: value.found,
-        x: value.x,
-        y: value.y,
+        found: value["found"],
+        x: value["x"],
+        y: value["y"],
         provider: 'codex',
-        ...(typeof value.description === 'string' ? { description: value.description } : {}),
+        ...(typeof value["description"] === 'string' ? { description: value["description"] } : {}),
     };
 }
 
 function collectEventTexts(value: unknown): string[] {
-    if (!isRecord(value) || !isRecord(value.item)) return [];
+    if (!isRecord(value) || !isRecord(value["item"])) return [];
     return [
-        recordText(value.item, 'text'),
-        recordText(value.item, 'aggregated_output'),
+        recordText(value["item"], 'text'),
+        recordText(value["item"], 'aggregated_output'),
     ].filter((text): text is string => Boolean(text));
 }
 

@@ -55,7 +55,7 @@ function execSystemctl(args: string[], timeoutMs: number): Promise<{ stdout: str
 function generateUnit(port: number, home: string): string {
     const nodePath = getNodePath();
     const jawPath = getJawPath();
-    const servicePath = buildServicePath(process.env.PATH || '', [dirname(nodePath), dirname(jawPath)]);
+    const servicePath = buildServicePath(process.env["PATH"] || '', [dirname(nodePath), dirname(jawPath)]);
     const logDir = join(home, 'logs');
     mkdirSync(logDir, { recursive: true });
 

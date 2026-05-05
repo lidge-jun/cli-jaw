@@ -380,7 +380,7 @@ export function waitForProcessEnd(timeoutMs = 3000) {
 export async function steerAgent(newPrompt: string, source: string) {
     const wasRunning = killActiveAgent('steer');
     if (wasRunning) await waitForProcessEnd(3000);
-    insertMessage.run('user', newPrompt, source, '', settings.workingDir || null);
+    insertMessage.run('user', newPrompt, source, '', settings["workingDir"] || null);
     broadcast('new_message', { role: 'user', content: newPrompt, source });
     const { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
@@ -509,7 +509,7 @@ export async function processQueue() {
 
     let inserted = false;
     try {
-        insertMessage.run('user', combined, source, '', settings.workingDir || null);
+        insertMessage.run('user', combined, source, '', settings["workingDir"] || null);
         deleteQueuedMessage.run(item.id);
         inserted = true;
         // Broadcast WITH fromQueue=true so the web client renders the user bubble
@@ -551,20 +551,20 @@ export async function processQueue() {
 
 function makeCleanEnv(extraEnv: Record<string, string> = {}) {
     const env: NodeJS.ProcessEnv = { ...process.env };
-    delete env.CLAUDE_CODE_SSE_PORT;
-    delete env.GEMINI_SYSTEM_MD;
+    delete env["CLAUDE_CODE_SSE_PORT"];
+    delete env["GEMINI_SYSTEM_MD"];
     // Phase 8: strip boss-only dispatch token from employee spawns so employees
     // cannot authenticate against /api/orchestrate/dispatch even via localhost.
     // Detect employee spawn by the explicit JAW_EMPLOYEE_MODE flag; main spawns
     // pass an empty extraEnv and keep the token inherited from process.env.
-    if (extraEnv.JAW_EMPLOYEE_MODE === '1') {
-        delete env.JAW_BOSS_TOKEN;
+    if (extraEnv["JAW_EMPLOYEE_MODE"] === '1') {
+        delete env["JAW_BOSS_TOKEN"];
     }
-    env.PATH = buildServicePath(env.PATH || '');
+    env["PATH"] = buildServicePath(env["PATH"] || '');
     return {
         ...env,
         ...extraEnv,
-        PATH: buildServicePath(extraEnv.PATH || env.PATH || ''),
+        PATH: buildServicePath(extraEnv["PATH"] || env["PATH"] || ''),
     } as NodeJS.ProcessEnv;
 }
 
@@ -753,7 +753,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     // Skip for employee spawns — distribute.ts manages AGENTS.md isolation
     if (!opts.internal && !opts._isFallback && !opts.agentId) regenerateB();
 
-    const liveScope = resolveOrcScope({ origin, chatId: opts.chatId, workingDir: settings.workingDir || null });
+    const liveScope = resolveOrcScope({ origin, chatId: opts.chatId, workingDir: settings["workingDir"] || null });
     // Employee must not pollute boss's liveRun (see devlog 260423_employee_liverun_contamination)
     const effectiveLiveScope = mainManaged ? liveScope : null;
 
@@ -802,12 +802,12 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         }
     }
 
-    const permissions = opts.permissions || settings.permissions || session.permissions || 'auto';
+    const permissions = opts.permissions || settings["permissions"] || session.permissions || 'auto';
     if (cli === 'opencode') {
         ensureOpencodeAlwaysAllowPermissions();
     }
-    const cfg = settings.perCli?.[cli] || {};
-    const ao = settings.activeOverrides?.[cli] || {};
+    const cfg = settings["perCli"]?.[cli] || {};
+    const ao = settings["activeOverrides"]?.[cli] || {};
     const model = opts.model || ao.model || cfg.model || 'default';
     const effort = opts.effort || ao.effort || cfg.effort || '';
 
@@ -869,7 +869,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     }
 
     const resumeSessionId = empSid || (isResume ? bucketSessionId : null);
-    const historyBlock = !isResume ? buildHistoryBlock(prompt, settings.workingDir) : '';
+    const historyBlock = !isResume ? buildHistoryBlock(prompt, settings["workingDir"]) : '';
     const promptForArgs = (cli === 'gemini' || cli === 'opencode')
         ? withHistoryPrompt(prompt, historyBlock)
         : prompt;
@@ -887,7 +887,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     // ─── Universal employee isolation ────────────────────
     // All CLIs auto-read AGENTS.md/CLAUDE.md/GEMINI.md from cwd.
     // Employees must NOT see the Boss's instruction files.
-    let spawnCwd = settings.workingDir;
+    let spawnCwd = settings["workingDir"];
 
     if (opts.agentId && (customSysPrompt || sysPrompt)) {
         const empPrompt = customSysPrompt || sysPrompt;
@@ -904,7 +904,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         fs.mkdirSync(dotClaudeDir, { recursive: true });
         fs.writeFileSync(join(dotClaudeDir, 'CLAUDE.md'), empPromptWithWorkspace);
         try {
-            fs.symlinkSync(settings.workingDir, join(tmpDir, 'workspace'), 'dir');
+            fs.symlinkSync(settings["workingDir"], join(tmpDir, 'workspace'), 'dir');
         } catch {
             // Non-fatal: the absolute Project root in Workspace Context remains authoritative.
         }
@@ -928,7 +928,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         broadcast('agent_done', { text: `❌ ${msg}`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
         resolve!({ text: '', code: 127 });
         if (mainManaged) processQueue();
-        cleanupEmployeeTmpDir(spawnCwd, settings.workingDir, agentLabel);
+        cleanupEmployeeTmpDir(spawnCwd, settings["workingDir"], agentLabel);
         return { child: null, promise: resultPromise };
     }
 
@@ -941,7 +941,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     if (cli === 'gemini' && sysPrompt) {
         const tmpSysFile = join(os.tmpdir(), `jaw-gemini-sys-${agentLabel}.md`);
         fs.writeFileSync(tmpSysFile, sysPrompt);
-        spawnEnv.GEMINI_SYSTEM_MD = tmpSysFile;
+        spawnEnv["GEMINI_SYSTEM_MD"] = tmpSysFile;
     }
 
     // ─── Copilot ACP branch ──────────────────────
@@ -988,7 +988,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         acp.on('error', (err: Error) => {
             if (acpSettled) return;
             acpSettled = true;
-            cleanupEmployeeTmpDir(spawnCwd, settings.workingDir, agentLabel);
+            cleanupEmployeeTmpDir(spawnCwd, settings["workingDir"], agentLabel);
             opts.lifecycle?.onExit?.(null);
             const msg = `Copilot ACP spawn failed: ${err.message}`;
             console.error(`[acp:error] ${msg}`);
@@ -1004,7 +1004,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         });
 
         if (mainManaged && !opts.internal && !opts._skipInsert) {
-            insertMessage.run('user', prompt, cli, model, settings.workingDir || null);
+            insertMessage.run('user', prompt, cli, model, settings["workingDir"] || null);
         }
         broadcast('agent_status', { status: 'running', cli, agentId: agentLabel, ...empTag });
 
@@ -1127,7 +1127,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         (async () => {
             try {
                 const initResult = await acp.initialize();
-                if (process.env.DEBUG) console.log('[acp:init]', JSON.stringify(initResult).slice(0, 200));
+                if (process.env["DEBUG"]) console.log('[acp:init]', JSON.stringify(initResult).slice(0, 200));
 
                 replayMode = true;  // Phase 17.2: mute during session load
                 let loadSessionOk = false;
@@ -1159,14 +1159,14 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
 
                 // If loadSession failed (or not resuming), inject history into prompt
                 const needsHistoryFallback = isResume && !loadSessionOk;
-                const fallbackHistory = needsHistoryFallback ? buildHistoryBlock(prompt, settings.workingDir) : '';
+                const fallbackHistory = needsHistoryFallback ? buildHistoryBlock(prompt, settings["workingDir"]) : '';
                 const acpPrompt = needsHistoryFallback
                     ? withHistoryPrompt(prompt, fallbackHistory)
                     : (isResume ? prompt : withHistoryPrompt(prompt, historyBlock));
                 const { promise: promptPromise } = acp.prompt(acpPrompt);
                 const promptResult = await promptPromise;
                 promptCompleted = true;
-                if (process.env.DEBUG) console.log('[acp:prompt:result]', JSON.stringify(promptResult).slice(0, 200));
+                if (process.env["DEBUG"]) console.log('[acp:prompt:result]', JSON.stringify(promptResult).slice(0, 200));
 
                 // Save session BEFORE shutdown — acp.shutdown() causes SIGTERM (code=null),
                 // which skips the exit handler's code===0 gate, losing session continuity.
@@ -1196,7 +1196,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         acp.on('exit', ({ code, signal }) => {
             if (acpSettled) return;  // error handler already resolved
             acpSettled = true;
-            cleanupEmployeeTmpDir(spawnCwd, settings.workingDir, agentLabel);
+            cleanupEmployeeTmpDir(spawnCwd, settings["workingDir"], agentLabel);
             opts.lifecycle?.onExit?.(code ?? null);
             // [I2] Consume per-process kill reason
             const acpKillReason = consumeKillReason(acp.proc?.pid);
@@ -1283,7 +1283,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         clearOpencodeIdleTimer();
         if (stdSettled) return;
         stdSettled = true;
-        cleanupEmployeeTmpDir(spawnCwd, settings.workingDir, agentLabel);
+        cleanupEmployeeTmpDir(spawnCwd, settings["workingDir"], agentLabel);
         opts.lifecycle?.onExit?.(null);
         const msg = err.code === 'ENOENT'
             ? `CLI '${cli}' 실행 실패 (ENOENT). 설치/경로를 확인하세요.`
@@ -1301,7 +1301,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     });
 
     if (mainManaged && !opts.internal && !opts._skipInsert) {
-        insertMessage.run('user', prompt, cli, model, settings.workingDir || null);
+        insertMessage.run('user', prompt, cli, model, settings["workingDir"] || null);
     }
 
     if (cli === 'claude') {
@@ -1329,7 +1329,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         tokens: null,
         stderrBuf: '',
         hasActiveSubAgent: false,
-        showReasoning: settings.showReasoning === true,
+        showReasoning: settings["showReasoning"] === true,
         outputTextStarted: false,
         liveScope: effectiveLiveScope,
         parentLiveScope: isEmployee ? liveScope : null,
@@ -1358,7 +1358,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             return;
         }
         recordOpencodeEvent(line, event);
-        if (process.env.DEBUG) {
+        if (process.env["DEBUG"]) {
             console.log(`[jaw:event:${agentLabel}] ${cli} type=${event.type}`);
             console.log(`[jaw:raw:${agentLabel}] ${line.slice(0, 300)}`);
         }
@@ -1428,7 +1428,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             buffer = '';
         }
         flushClaudeBuffers(ctx, agentLabel, empTag);  // flush any pending thinking/input buffers
-        cleanupEmployeeTmpDir(spawnCwd, settings.workingDir, agentLabel);
+        cleanupEmployeeTmpDir(spawnCwd, settings["workingDir"], agentLabel);
         opts.lifecycle?.onExit?.(code ?? null);
 
         // [I2] Consume per-process kill reason

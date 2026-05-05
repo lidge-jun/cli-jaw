@@ -3,15 +3,16 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { readSource } from './source-normalize.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const srcRoot = join(__dirname, '../../src');
 
-const gatewaySrc = fs.readFileSync(join(srcRoot, 'orchestrator/gateway.ts'), 'utf8');
-const pipelineSrc = fs.readFileSync(join(srcRoot, 'orchestrator/pipeline.ts'), 'utf8');
-const spawnSrc = fs.readFileSync(join(srcRoot, 'agent/spawn.ts'), 'utf8');
-const botSrc = fs.readFileSync(join(srcRoot, 'telegram/bot.ts'), 'utf8');
+const gatewaySrc = readSource(join(srcRoot, 'orchestrator/gateway.ts'), 'utf8');
+const pipelineSrc = readSource(join(srcRoot, 'orchestrator/pipeline.ts'), 'utf8');
+const spawnSrc = readSource(join(srcRoot, 'agent/spawn.ts'), 'utf8');
+const botSrc = readSource(join(srcRoot, 'telegram/bot.ts'), 'utf8');
 
 // ─── DI-001: gateway idle → orchestrate with _skipInsert ───
 
