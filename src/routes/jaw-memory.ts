@@ -203,7 +203,8 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
         try {
             const meta = readMeta();
             if (meta?.soulSynthesized) {
-                return res.json({ ok: false, reason: 'already_synthesized' });
+                res.json({ ok: false, reason: 'already_synthesized' });
+                return;
             }
 
             const root = getAdvancedMemoryDir();
@@ -229,7 +230,8 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
             });
 
             if (result.action === 'rejected') {
-                return res.json({ ok: false, reason: result.reason || 'no_active_agent' });
+                res.json({ ok: false, reason: result.reason || 'no_active_agent' });
+                return;
             }
 
             res.json({ ok: true, action: result.action, requestId: result.requestId });

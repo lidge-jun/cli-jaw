@@ -185,7 +185,8 @@ app.get('/api/dashboard/instances', async (req, res) => {
 app.get('/api/dashboard/instances/:port', async (req, res) => {
     const portValue = Number(req.params.port);
     if (!Number.isInteger(portValue) || portValue < scanFrom || portValue >= scanFrom + scanCount) {
-        return res.status(400).json({ ok: false, error: 'port out of configured scan range' });
+        res.status(400).json({ ok: false, error: 'port out of configured scan range' });
+        return;
     }
     try {
         const loaded = loadDashboardRegistry({ from: scanFrom, count: scanCount });
@@ -212,7 +213,8 @@ app.get('/api/dashboard/instances/:port', async (req, res) => {
 app.get('/api/manager/events', (req, res) => {
     const since = typeof req.query["since"] === 'string' && req.query["since"] ? req.query["since"] : null;
     if (since && Number.isNaN(Date.parse(since))) {
-        return res.status(400).json({ ok: false, error: 'since must be a valid ISO 8601 timestamp' });
+        res.status(400).json({ ok: false, error: 'since must be a valid ISO 8601 timestamp' });
+        return;
     }
     res.json({ ok: true, events: observability.drain(since) });
 });
@@ -220,7 +222,8 @@ app.get('/api/manager/events', (req, res) => {
 app.get('/api/manager/health-history/:port', (req, res) => {
     const portValue = Number(req.params.port);
     if (!Number.isInteger(portValue) || portValue < scanFrom || portValue >= scanFrom + scanCount) {
-        return res.status(400).json({ ok: false, error: 'port out of configured scan range' });
+        res.status(400).json({ ok: false, error: 'port out of configured scan range' });
+        return;
     }
     const limit = req.query["limit"] ? Math.max(1, Math.min(200, Number(req.query["limit"]))) : undefined;
     res.json({ ok: true, port: portValue, events: healthHistory.list(portValue, limit) });
@@ -229,7 +232,8 @@ app.get('/api/manager/health-history/:port', (req, res) => {
 app.get('/api/manager/instance-logs/:port', async (req, res) => {
     const portValue = Number(req.params.port);
     if (!Number.isInteger(portValue) || portValue < scanFrom || portValue >= scanFrom + scanCount) {
-        return res.status(400).json({ ok: false, error: 'port out of configured scan range' });
+        res.status(400).json({ ok: false, error: 'port out of configured scan range' });
+        return;
     }
     try {
         const snapshot = await fetchInstanceLogs(portValue);
@@ -263,7 +267,7 @@ app.post('/api/dashboard/lifecycle/:action', async (req, res) => {
     const portValue = Number(req.body?.port);
     const home = typeof req.body?.home === 'string' ? req.body.home : undefined;
     if (!['start', 'stop', 'restart', 'perm', 'unperm'].includes(action)) {
-        return res.status(400).json({
+        res.status(400).json({
             ok: false,
             action,
             port: portValue,
@@ -273,9 +277,10 @@ app.post('/api/dashboard/lifecycle/:action', async (req, res) => {
             pid: null,
             command: [],
         });
+        return;
     }
     if (!Number.isInteger(portValue)) {
-        return res.status(400).json({
+        res.status(400).json({
             ok: false,
             action,
             port: portValue,
@@ -285,6 +290,7 @@ app.post('/api/dashboard/lifecycle/:action', async (req, res) => {
             pid: null,
             command: [],
         });
+        return;
     }
 
     try {
@@ -393,7 +399,8 @@ installDashboardProxy(app, server, { from: scanFrom, count: scanCount });
 app.get('/{*splat}', (_req, res) => {
     const htmlPath = managerHtmlCandidates.find(candidate => existsSync(candidate));
     if (!htmlPath) {
-        return res.status(500).send('manager dashboard has not been built');
+        res.status(500).send('manager dashboard has not been built');
+        return;
     }
     sendManagerHtml(res, htmlPath);
 });

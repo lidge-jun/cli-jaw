@@ -131,7 +131,10 @@ export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware):
         try {
             const name = assertMemoryRelPath(String(req.query["path"] || ''), { allowExt: ['.md', '.txt', '.json'] });
             const fp = safeResolveUnder(memoryModule.MEMORY_DIR, name);
-            if (!fs.existsSync(fp)) return res.status(404).json({ error: 'not found' });
+            if (!fs.existsSync(fp)) {
+                res.status(404).json({ error: 'not found' });
+                return;
+            }
             res.json({ name, content: fs.readFileSync(fp, 'utf8') });
         } catch (e: unknown) {
             res.status(httpStatus(e, 400)).json({ error: (e as Error).message });
@@ -142,7 +145,10 @@ export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware):
         try {
             const name = assertFilename(req.params.filename);
             const fp = safeResolveUnder(memoryModule.MEMORY_DIR, name);
-            if (!fs.existsSync(fp)) return res.status(404).json({ error: 'not found' });
+            if (!fs.existsSync(fp)) {
+                res.status(404).json({ error: 'not found' });
+                return;
+            }
             res.json({ name, content: fs.readFileSync(fp, 'utf8') });
         } catch (e: unknown) {
             res.status(httpStatus(e, 400)).json({ error: (e as Error).message });

@@ -65,7 +65,8 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
         try {
             const start = resolveBrowserStartOptions(req);
             if (start.mode === 'debug') {
-                return res.status(400).json({ error: DEBUG_CONSOLE_ONLY_MESSAGE });
+                res.status(400).json({ error: DEBUG_CONSOLE_ONLY_MESSAGE });
+                return;
             }
             await browser.launchChrome(start.port, { mode: start.mode, headless: start.headless });
             res.json(await browser.getBrowserStatus(start.port));
@@ -134,7 +135,9 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
                 case 'scroll': result = await browser.scroll(cdpPort(req), { x, y, ref }); break;
                 case 'select': result = await browser.select(cdpPort(req), ref, values || []); break;
                 case 'drag': result = await browser.drag(cdpPort(req), fromRef, toRef); break;
-                default: return res.status(400).json({ error: `unknown action: ${kind}` });
+                default:
+                    res.status(400).json({ error: `unknown action: ${kind}` });
+                    return;
             }
             res.json(result);
         } catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
@@ -143,7 +146,10 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     app.post('/api/browser/vision-click', requireAuth, async (req: Request, res: Response) => {
         try {
             const { target, provider, doubleClick, prepareStable, region, clip, verifyBeforeClick } = req.body;
-            if (!target) return res.status(400).json({ error: 'target required' });
+            if (!target) {
+                res.status(400).json({ error: 'target required' });
+                return;
+            }
             const result = await browser.visionClick(cdpPort(req), target, {
                 provider,
                 doubleClick,

@@ -54,7 +54,10 @@ export function registerSettingsRoutes(
 
     app.put('/api/prompt', requireAuth, (req, res) => {
         const { content } = req.body;
-        if (content == null) return res.status(400).json({ error: 'content required' });
+        if (content == null) {
+            res.status(400).json({ error: 'content required' });
+            return;
+        }
         fs.writeFileSync(A2_PATH, content);
         regenerateB();
         res.json({ ok: true });
@@ -83,9 +86,15 @@ export function registerSettingsRoutes(
 
     app.put('/api/prompt-templates/:id', requireAuth, (req, res) => {
         const { content } = req.body;
-        if (content == null || typeof content !== 'string') return res.status(400).json({ error: 'content required' });
+        if (content == null || typeof content !== 'string') {
+            res.status(400).json({ error: 'content required' });
+            return;
+        }
         const filename = req.params["id"] + '.md';
-        if (!/^[a-z0-9-]+\.md$/.test(filename)) return res.status(400).json({ error: 'invalid id' });
+        if (!/^[a-z0-9-]+\.md$/.test(filename)) {
+            res.status(400).json({ error: 'invalid id' });
+            return;
+        }
         const dir = getTemplateDir();
         fs.writeFileSync(join(dir, filename), content);
         const srcDir = join(projectRoot, 'src/prompt/templates');
@@ -102,7 +111,10 @@ export function registerSettingsRoutes(
 
     app.put('/api/heartbeat-md', requireAuth, (req, res) => {
         const { content } = req.body;
-        if (content == null) return res.status(400).json({ error: 'content required' });
+        if (content == null) {
+            res.status(400).json({ error: 'content required' });
+            return;
+        }
         fs.writeFileSync(HEARTBEAT_PATH, content);
         res.json({ ok: true });
     });
@@ -111,7 +123,10 @@ export function registerSettingsRoutes(
 
     app.put('/api/mcp', requireAuth, (req, res) => {
         const config = req.body;
-        if (!config || !config.servers) return res.status(400).json({ error: 'servers object required' });
+        if (!config || !config.servers) {
+            res.status(400).json({ error: 'servers object required' });
+            return;
+        }
         saveUnifiedMcp(config);
         res.json({ ok: true, servers: Object.keys(config.servers) });
     });

@@ -31,7 +31,8 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
             const all = req.query["all"] === 'true' || req.body?.all === true;
             if (all) {
                 const cleared = resetAllStaleStates();
-                return res.json({ ok: true, cleared, message: `Cleared ${cleared} stale state(s)` });
+                res.json({ ok: true, cleared, message: `Cleared ${cleared} stale state(s)` });
+                return;
             }
             await orchestrateReset({ origin: 'web' });
             res.json({ ok: true });
@@ -99,7 +100,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         if (!id) return fail(res, 400, 'missing id');
         const result = removeQueuedMessage(id);
         if (!result.removed) return fail(res, 404, 'queued item not found');
-        return res.json({ ok: true, pending: result.pending });
+        res.json({ ok: true, pending: result.pending });
     });
 
     app.post('/api/orchestrate/queue/:id/steer', requireAuth, async (req, res) => {
@@ -132,7 +133,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
             ? orchestrateReset({ origin, _skipInsert: true })
             : orchestrate(prompt, { origin, _skipInsert: true });
         task.catch((err: Error) => console.error('[steer:orchestrate]', err.message));
-        return res.json({ ok: true, pending: result.pending });
+        res.json({ ok: true, pending: result.pending });
     });
 
     app.post('/api/orchestrate/dispatch', requireAuth, async (req, res) => {
@@ -159,11 +160,12 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         if (currentOrcState === 'B') {
             const implPattern = /\b(implement|write\s+(?:the\s+)?code|create\s+(?:the\s+)?file|build\s+(?:the\s+)?feature|add\s+(?:the\s+)?(?:method|function|class))\b/i;
             if (implPattern.test(String(task))) {
-                return res.status(400).json({
+                res.status(400).json({
                     ok: false,
                     error: 'delegation_guard',
                     message: 'B phase: Boss must implement directly. Workers are read-only verifiers. Reword the task as "verify X compiles" / "check integration of Y" / "report DONE or NEEDS_FIX".',
                 });
+                return;
             }
         }
 
@@ -231,7 +233,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
             slot = claimWorker(emp, task, replayMeta);
         } catch (err) {
             if (err instanceof WorkerBusyError) {
-                return res.status(409).json({
+                res.status(409).json({
                     ok: false,
                     error: 'worker_busy',
                     existing: {
@@ -242,6 +244,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
                     },
                     hint: 'Poll GET /api/orchestrate/worker/:agentId/result for the in-flight run.',
                 });
+                return;
             }
             throw err;
         }
@@ -339,13 +342,14 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         const slot = getWorkerSlot(agentId);
         if (!slot) return fail(res, 404, 'worker not found');
         if (slot.state === 'running') {
-            return res.json({ ok: true, state: 'running', startedAt: slot.startedAt, task: slot.task });
+            res.json({ ok: true, state: 'running', startedAt: slot.startedAt, task: slot.task });
+            return;
         }
         // Consume pending replay — subsequent polls will return 404.
         if (slot.state === 'done' && slot.pendingReplay) {
             markWorkerReplayed(slot.agentId);
         }
-        return res.json({ ok: true, state: slot.state, result: slot.result });
+        res.json({ ok: true, state: slot.state, result: slot.result });
     });
 
     app.put('/api/orchestrate/state', requireAuth, (req, res) => {

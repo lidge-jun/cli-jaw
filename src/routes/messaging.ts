@@ -134,7 +134,8 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
             const result = await transcribeVoice(filePath, mime);
 
             if (!result.text.trim()) {
-                return res.status(422).json({ error: 'Empty transcription' });
+                res.status(422).json({ error: 'Empty transcription' });
+                return;
             }
 
             console.log(`[web:voice] STT (${result.engine}, ${result.elapsed.toFixed(1)}s): ${result.text.slice(0, 80)}`);
@@ -155,28 +156,45 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
     // Telegram direct send
     app.post('/api/telegram/send', requireAuth, async (req, res) => {
         try {
-            if (!telegramBot) return res.status(503).json({ error: 'Telegram not connected' });
+            if (!telegramBot) {
+                res.status(503).json({ error: 'Telegram not connected' });
+                return;
+            }
 
             const type = String(req.body?.type || '').trim().toLowerCase();
             const supportedTypes = new Set(['text', 'voice', 'photo', 'document']);
             if (!supportedTypes.has(type)) {
-                return res.status(400).json({ error: 'type must be one of: text, voice, photo, document' });
+                res.status(400).json({ error: 'type must be one of: text, voice, photo, document' });
+                return;
             }
 
             const chatId = req.body?.chat_id || getLatestTelegramChatId();
-            if (!chatId) return res.status(400).json({ error: 'chat_id required (or send a Telegram message first)' });
+            if (!chatId) {
+                res.status(400).json({ error: 'chat_id required (or send a Telegram message first)' });
+                return;
+            }
 
             if (type === 'text') {
                 const text = String(req.body?.text || '').trim();
-                if (!text) return res.status(400).json({ error: 'text required for type=text' });
+                if (!text) {
+                    res.status(400).json({ error: 'text required for type=text' });
+                    return;
+                }
                 await telegramBot.api.sendMessage(chatId, text);
-                return res.json({ ok: true, chat_id: chatId, type });
+                res.json({ ok: true, chat_id: chatId, type });
+                return;
             }
 
             const filePath = String(req.body?.file_path || '').trim();
-            if (!filePath) return res.status(400).json({ error: 'file_path required for non-text types' });
+            if (!filePath) {
+                res.status(400).json({ error: 'file_path required for non-text types' });
+                return;
+            }
             const safePath = assertSendFilePath(filePath, settings["workingDir"] || undefined);
-            if (!fs.existsSync(safePath)) return res.status(400).json({ error: `file not found: ${safePath}` });
+            if (!fs.existsSync(safePath)) {
+                res.status(400).json({ error: `file not found: ${safePath}` });
+                return;
+            }
 
             validateFileSize(safePath, type);
 
@@ -185,16 +203,17 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
 
             if (!result.ok) {
                 const sc = result.statusCode || 502;
-                return res.status(sc).json({
+                res.status(sc).json({
                     error: result.error, attempts: result.attempts,
                     ...(result.retryAfter != null && { retry_after: result.retryAfter }),
                 });
+                return;
             }
-            return res.json({ ok: true, chat_id: chatId, type, attempts: result.attempts });
+            res.json({ ok: true, chat_id: chatId, type, attempts: result.attempts });
         } catch (e: unknown) {
             console.error('[telegram:send]', e);
             const statusCode = httpStatus(e, 500);
-            return res.status(statusCode).json({ error: (e as Error).message, code: httpCode(e) });
+            res.status(statusCode).json({ error: (e as Error).message, code: httpCode(e) });
         }
     });
 
@@ -202,22 +221,28 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
     app.post('/api/channel/send', requireAuth, async (req, res) => {
         try {
             const result = await sendChannelOutput(normalizeChannelSendRequest(req.body));
-            if (!result.ok) return res.status(502).json(result);
-            return res.json(result);
+            if (!result.ok) {
+                res.status(502).json(result);
+                return;
+            }
+            res.json(result);
         } catch (e: unknown) {
             console.error('[channel:send]', e);
-            return res.status(500).json({ error: (e as Error).message });
+            res.status(500).json({ error: (e as Error).message });
         }
     });
 
     app.post('/api/discord/send', requireAuth, async (req, res) => {
         try {
             const result = await sendChannelOutput({ ...normalizeChannelSendRequest(req.body), channel: 'discord' });
-            if (!result.ok) return res.status(502).json(result);
-            return res.json(result);
+            if (!result.ok) {
+                res.status(502).json(result);
+                return;
+            }
+            res.json(result);
         } catch (e: unknown) {
             console.error('[discord:send]', e);
-            return res.status(500).json({ error: (e as Error).message });
+            res.status(500).json({ error: (e as Error).message });
         }
     });
 }

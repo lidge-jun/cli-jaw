@@ -17,6 +17,8 @@
     "isolatedModules": true,
     "noImplicitOverride": true,
     "noPropertyAccessFromIndexSignature": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
     "noUncheckedIndexedAccess": true
   },
   "include": [

@@ -42,10 +42,14 @@ export function registerEmployeeRoutes(app: Express, requireAuth: AuthMiddleware
         // registry definition. Overrides persist in settings.staticEmployees[Name].
         if (staticSlug) {
             const spec = findStaticEmployee(staticSlug);
-            if (!spec) return res.status(404).json({ error: 'unknown static employee' });
+            if (!spec) {
+                res.status(404).json({ error: 'unknown static employee' });
+                return;
+            }
             const newModel = typeof updates.model === 'string' ? updates.model : null;
             if (!newModel) {
-                return res.status(400).json({ error: 'static employees only allow model updates' });
+                res.status(400).json({ error: 'static employees only allow model updates' });
+                return;
             }
             const overrides = (settings["staticEmployees"] as Record<string, { model?: string }>) || {};
             overrides[spec.name] = { ...overrides[spec.name], model: newModel };
@@ -55,14 +59,18 @@ export function registerEmployeeRoutes(app: Express, requireAuth: AuthMiddleware
             const merged = listEmployees().find(e => e.id === req.params["id"]);
             if (merged) broadcast('agent_updated', merged as Record<string, any>);
             regenerateB();
-            return res.json(merged);
+            res.json(merged);
+            return;
         }
 
         const before = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params["id"]) as Record<string, any> | undefined;
         const allowed = ['name', 'cli', 'model', 'role', 'status'];
         const keys = Object.keys(updates).filter(k => allowed.includes(k));
         const sets = keys.map(k => `${k} = ?`);
-        if (sets.length === 0) return res.status(400).json({ error: 'no valid fields' });
+        if (sets.length === 0) {
+            res.status(400).json({ error: 'no valid fields' });
+            return;
+        }
         const vals = keys.map(k => (updates as Record<string, any>)[k]);
         db.prepare(`UPDATE employees SET ${sets.join(', ')} WHERE id = ?`).run(...vals, req.params["id"]);
         const changedResumeKey = before && (
@@ -80,7 +88,8 @@ export function registerEmployeeRoutes(app: Express, requireAuth: AuthMiddleware
         // Static employees cannot be deleted (they're baked into the binary) —
         // reject explicitly so the frontend can show the correct UX.
         if (parseStaticId(String(req.params["id"]))) {
-            return res.status(400).json({ error: 'static employees cannot be deleted' });
+            res.status(400).json({ error: 'static employees cannot be deleted' });
+            return;
         }
         deleteEmployee.run(req.params["id"]);
         broadcast('agent_deleted', { id: req.params["id"] });

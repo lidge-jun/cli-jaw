@@ -28,8 +28,14 @@ export function registerSkillRoutes(app: Express, requireAuth: AuthMiddleware, m
             const refPath = join(SKILLS_REF_DIR, id, 'SKILL.md');
             const dstDir = join(SKILLS_DIR, id);
             const dstPath = join(dstDir, 'SKILL.md');
-            if (fs.existsSync(dstPath)) return res.json({ ok: true, msg: 'already enabled' });
-            if (!fs.existsSync(refPath)) return res.status(404).json({ error: 'skill not found in ref' });
+            if (fs.existsSync(dstPath)) {
+                res.json({ ok: true, msg: 'already enabled' });
+                return;
+            }
+            if (!fs.existsSync(refPath)) {
+                res.status(404).json({ error: 'skill not found in ref' });
+                return;
+            }
             fs.cpSync(join(SKILLS_REF_DIR, id), dstDir, { recursive: true });
             regenerateB();
             res.json({ ok: true });
@@ -42,7 +48,10 @@ export function registerSkillRoutes(app: Express, requireAuth: AuthMiddleware, m
         try {
             const id = assertSkillId(req.body?.id);
             const dstDir = join(SKILLS_DIR, id);
-            if (!fs.existsSync(dstDir)) return res.json({ ok: true, msg: 'already disabled' });
+            if (!fs.existsSync(dstDir)) {
+                res.json({ ok: true, msg: 'already disabled' });
+                return;
+            }
             fs.rmSync(dstDir, { recursive: true });
             regenerateB();
             res.json({ ok: true });
@@ -57,7 +66,10 @@ export function registerSkillRoutes(app: Express, requireAuth: AuthMiddleware, m
             const activePath = join(SKILLS_DIR, id, 'SKILL.md');
             const refPath = join(SKILLS_REF_DIR, id, 'SKILL.md');
             const p = fs.existsSync(activePath) ? activePath : refPath;
-            if (!fs.existsSync(p)) return res.status(404).json({ error: 'not found' });
+            if (!fs.existsSync(p)) {
+                res.status(404).json({ error: 'not found' });
+                return;
+            }
             res.type('text/markdown').send(fs.readFileSync(p, 'utf8'));
         } catch (e: unknown) {
             res.status(httpStatus(e, 400)).json({ error: (e as Error).message });

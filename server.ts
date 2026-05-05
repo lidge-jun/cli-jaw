@@ -220,7 +220,8 @@ const LAN_HINT = 'Set settings.network.bindHost="0.0.0.0" and lanBypass=true to 
 app.use((req, res, next) => {
     const host = req.headers.host;
     if (host && !isAllowedHost(host, lanAllowed())) {
-        return res.status(403).json({ error: 'Host not allowed', hint: LAN_HINT });
+        res.status(403).json({ error: 'Host not allowed', hint: LAN_HINT });
+        return;
     }
     next();
 });
@@ -228,7 +229,8 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (origin && !isAllowedOrigin(origin, req.headers.host, lanAllowed())) {
-        return res.status(403).json({ error: 'Origin not allowed', hint: LAN_HINT });
+        res.status(403).json({ error: 'Origin not allowed', hint: LAN_HINT });
+        return;
     }
     if (origin) {
         res.setHeader('Access-Control-Allow-Origin', origin);
@@ -236,7 +238,10 @@ app.use((req, res, next) => {
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type,X-Filename,Authorization');
         res.setHeader('Access-Control-Allow-Credentials', 'true');
     }
-    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    if (req.method === 'OPTIONS') {
+        res.sendStatus(204);
+        return;
+    }
     next();
 });
 
@@ -434,7 +439,8 @@ app.get('/api/runtime', (_, res) => ok(res, getRuntimeSnapshot(), getRuntimeSnap
 app.get('/api/auth/token', (req, res) => {
     const site = req.headers['sec-fetch-site'];
     if (site && site !== 'same-origin' && site !== 'none') {
-        return res.status(403).json({ error: 'cross-origin token request blocked' });
+        res.status(403).json({ error: 'cross-origin token request blocked' });
+        return;
     }
     res.json({ token: JAW_AUTH_TOKEN });
 });
@@ -447,11 +453,12 @@ app.post('/api/command', requireAuth, async (req, res) => {
         res.vary('Accept-Language');
         res.set('Content-Language', locale);
         if (!parsed) {
-            return res.status(400).json({
+            res.status(400).json({
                 ok: false,
                 code: 'not_command',
                 text: t('api.notCommand', {}, locale),
             });
+            return;
         }
         const result = await executeCommand(parsed, makeWebCommandCtx(req, locale as string));
         res.json(result);
@@ -485,13 +492,17 @@ app.get('/api/commands', (req, res) => {
 
 app.post('/api/message', requireAuth, (req, res) => {
     const { prompt } = req.body;
-    if (!prompt?.trim()) return res.status(400).json({ error: 'prompt required' });
+    if (!prompt?.trim()) {
+        res.status(400).json({ error: 'prompt required' });
+        return;
+    }
 
     const result = submitMessage(prompt.trim(), { origin: 'web' });
     if (result.action === 'rejected') {
         // 'busy' / 'duplicate' both return 409 so the client absorbs them silently.
         const status = (result.reason === 'busy' || result.reason === 'duplicate') ? 409 : 400;
-        return res.status(status).json({ ok: false, error: result.reason, ...result });
+        res.status(status).json({ ok: false, error: result.reason, ...result });
+        return;
     }
     res.json({ ok: true, ...result });
 });

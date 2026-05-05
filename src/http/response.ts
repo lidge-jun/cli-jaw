@@ -9,8 +9,8 @@
  */
 import type { Response } from 'express';
 
-export function ok(res: Response, data: unknown, extra: Record<string, unknown> = {}) {
-    return res.json({ ok: true, data, ...extra });
+export function ok(res: Response, data: unknown, extra: Record<string, unknown> = {}): void {
+    res.json({ ok: true, data, ...extra });
 }
 
 /**
@@ -20,6 +20,6 @@ export function ok(res: Response, data: unknown, extra: Record<string, unknown> 
  * @param {string} error - 에러 코드/메시지
  * @param {object} extra - 추가 정보
  */
-export function fail(res: Response, status: number, error: string, extra: Record<string, unknown> = {}) {
-    return res.status(status).json({ ok: false, error, ...extra });
+export function fail(res: Response, status: number, error: string, extra: Record<string, unknown> = {}): void {
+    res.status(status).json({ ok: false, error, ...extra });
 }

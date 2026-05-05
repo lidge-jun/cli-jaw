@@ -9,7 +9,10 @@ export function registerHeartbeatRoutes(app: Express, requireAuth: AuthMiddlewar
 
     app.put('/api/heartbeat', requireAuth, (req, res) => {
         const data = req.body;
-        if (!data || !Array.isArray(data.jobs)) return res.status(400).json({ error: 'jobs array required' });
+        if (!data || !Array.isArray(data.jobs)) {
+            res.status(400).json({ error: 'jobs array required' });
+            return;
+        }
         const normalizedJobs = [];
         const idPrefix = `hb_${Date.now()}`;
         for (const [index, rawJob] of data.jobs.entries()) {
@@ -19,13 +22,14 @@ export function registerHeartbeatRoutes(app: Express, requireAuth: AuthMiddlewar
                 ? job["id"].trim()
                 : `${idPrefix}_${index}`;
             if (!scheduleResult.ok) {
-                return res.status(400).json({
+                res.status(400).json({
                     error: 'invalid heartbeat schedule',
                     code: scheduleResult.code,
                     detail: scheduleResult.error,
                     index,
                     jobId,
                 });
+                return;
             }
             normalizedJobs.push({
                 id: jobId,
