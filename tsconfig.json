@@ -15,6 +15,7 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
+    "noImplicitOverride": true,
     "noUncheckedIndexedAccess": true
   },
   "include": [
