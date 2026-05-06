@@ -167,6 +167,24 @@ const GATES = {
             return { ok: report.ok, detail: formatClaimAuditReport(report) };
         },
     },
+    'observe-actions-fixtures': {
+        description: 'observe-actions module loads and produces ranked candidates from a fixture snapshot (G02 mirror)',
+        async check() {
+            try {
+                const { spawnSync } = await import('node:child_process');
+                const path = await import('node:path');
+                const tsxBin = path.resolve(repoRoot, 'node_modules/.bin/tsx');
+                const fixtureScript = `import { buildObserveActions, formatObserveActions } from '${path.resolve(repoRoot, 'src/browser/web-ai/observe-actions.ts').replace(/\\\\/g, '/')}';\nconst r = buildObserveActions({ snapshotId: 'gate-fixture', url: null, refs: { '@e1': { role: 'button', name: 'Sign in' }, '@e2': { role: 'textbox', name: 'Email' }, '@e3': { role: 'link', name: 'Forgot password?' } } }, 'click sign in');\nif (!r || !Array.isArray(r.candidates) || r.candidates.length < 3) { console.error('candidates<3'); process.exit(2); }\nif (r.candidates[0].ref !== '@e1' || r.candidates[0].action !== 'click') { console.error('rank-fail'); process.exit(3); }\nif (!r.candidates.every(c => c.args.snapshotId === 'gate-fixture')) { console.error('snapId-missing'); process.exit(4); }\nconst t = formatObserveActions(r); if (!t || typeof t !== 'string') { console.error('format-fail'); process.exit(5); }\nconsole.log('OK ' + r.candidates.length);`;
+                const res = spawnSync(tsxBin, ['--eval', fixtureScript], { encoding: 'utf8' });
+                if (res.status !== 0) {
+                    return { ok: false, detail: `observe-actions fixture failed: status=${res.status} stderr=${(res.stderr || '').trim()} stdout=${(res.stdout || '').trim()}` };
+                }
+                return { ok: true, detail: `observe-actions fixture: ${(res.stdout || '').trim()}` };
+            } catch (err) {
+                return { ok: false, detail: `observe-actions fixture threw: ${(err && err.message) || err}` };
+            }
+        },
+    },
 };
 
 function printResult(name, result) {
@@ -175,7 +193,7 @@ function printResult(name, result) {
     if (result.detail) process.stdout.write(`        ${result.detail.replace(/\n/g, '\n        ')}\n`);
 }
 
-function main() {
+async function main() {
     const target = process.argv[2];
     const names = target ? [target] : Object.keys(GATES);
     let failed = 0;
@@ -187,7 +205,7 @@ function main() {
         }
         let result;
         try {
-            result = GATES[name].check();
+            result = await GATES[name].check();
         } catch (err) {
             result = { ok: false, detail: `threw: ${err.message}` };
         }
@@ -198,4 +216,7 @@ function main() {
     process.exit(failed === 0 ? 0 : 1);
 }
 
-main();
+main().catch((err) => {
+    process.stderr.write(`release-gates threw: ${err.stack || err}\n`);
+    process.exit(1);
+});

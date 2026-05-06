@@ -37,6 +37,7 @@ capability.
 | Benchmark trajectory writer | planned | n/a in cli-jaw | n/a | cli-jaw consumes agbrowse trajectory bundles only; no native writer |
 | Release gates (named) | ready | `scripts/release-gates.mjs`, package scripts `gate:*` | `tests/unit/release-gates.test.ts` (Phase 22) | mirror of agbrowse named gates with cli-jaw-specific checks; `gate:all` includes docs/parity freshness gates |
 | Claim audit (`gate:no-cloud-claims`) | ready | `scripts/claim-audit.mjs`, `scripts/release-gates.mjs` (G10 mirror) | `tests/unit/scripts-claim-audit.test.ts`, `npm run gate:no-cloud-claims` | mirrors `agbrowse/web-ai/claim-audit.mjs`; scans cli-jaw READMEs + truth table |
+| Observe actions API (`buildObserveActions`) | ready | `src/browser/web-ai/observe-actions.ts`, `scripts/release-gates.mjs` (G02 mirror) | `tests/unit/observe-actions.test.ts`, `npm run gate:observe-actions-fixtures` | mirrors `agbrowse/web-ai/observe-actions.mjs`; same ActionCandidate schema |
 | Strict TypeScript migration (P00–P20) | ready | repo-wide `tsconfig.json` | `npm run typecheck`, `tests/unit/strict-baseline.test.ts` | independent of agbrowse |
 
 ## Mirror Rules
