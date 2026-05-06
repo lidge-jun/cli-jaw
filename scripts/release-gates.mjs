@@ -223,6 +223,25 @@ const GATES = {
             }
         },
     },
+    'action-memory-safe-replay': {
+        description: 'action-memory cache returns hit only when DOM signature matches (G07 mirror)',
+        async check() {
+            try {
+                const { spawnSync } = await import('node:child_process');
+                const path = await import('node:path');
+                const tsxBin = path.resolve(repoRoot, 'node_modules/.bin/tsx');
+                const modPath = path.resolve(repoRoot, 'src/browser/web-ai/action-memory.ts').replace(/\\\\/g, '/');
+                const fixtureScript = `import { createActionMemory, validateMemoryHit, ACTION_MEMORY_SCHEMA_VERSION } from '${modPath}';\nif (ACTION_MEMORY_SCHEMA_VERSION !== 'action-memory-v1') { console.error('schema-mismatch'); process.exit(2); }\nconst m = createActionMemory();\nm.put({ origin: 'https://x.test', intentId: 'i', signature: 'sig-A', ref: '@e1', hits: 0, validations: { ok: 0, fail: 0 }, lastGoodAt: '' });\nconst hit = m.get('https://x.test', 'i', 'sig-A');\nif (!hit || hit.ref !== '@e1') { console.error('miss-on-match'); process.exit(3); }\nif (m.get('https://x.test', 'i', 'sig-B') !== null) { console.error('hit-on-drift'); process.exit(4); }\nif (validateMemoryHit(hit, 'sig-B') !== null) { console.error('validate-allowed-drift'); process.exit(5); }\nm.clear();\nif (m.size() !== 0) { console.error('clear-failed'); process.exit(6); }\nconsole.log('OK hit-on-match miss-on-drift clear');`;
+                const res = spawnSync(tsxBin, ['--eval', fixtureScript], { encoding: 'utf8' });
+                if (res.status !== 0) {
+                    return { ok: false, detail: `action-memory fixture failed: status=${res.status} stderr=${(res.stderr || '').trim()} stdout=${(res.stdout || '').trim()}` };
+                }
+                return { ok: true, detail: `action-memory: ${(res.stdout || '').trim()}` };
+            } catch (err) {
+                return { ok: false, detail: `action-memory gate threw: ${(err && err.message) || err}` };
+            }
+        },
+    },
 };
 
 function printResult(name, result) {
