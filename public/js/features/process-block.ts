@@ -1,9 +1,5 @@
-// ── Process Block ──
-// Collapsible panel showing tool/thinking activity during agent responses.
-
 import { escapeHtml } from '../render.js';
 import { ICONS } from '../icons.js';
-
 export interface ProcessStep {
     id: string;
     type: 'tool' | 'thinking' | 'search' | 'subagent';
@@ -15,20 +11,16 @@ export interface ProcessStep {
     detailLength?: number | undefined;
     detailTruncated?: boolean | undefined;
     stepRef?: string | undefined;
+    traceRunId?: string | undefined; traceSeq?: number | undefined; detailAvailable?: boolean | undefined; detailBytes?: number | undefined; rawRetentionStatus?: string | undefined;
     status: 'running' | 'done' | 'error';
     startTime: number;
 }
-
 export interface ProcessBlockState {
     element: HTMLElement;
     steps: ProcessStep[];
     collapsed: boolean;
     _durationEl?: HTMLElement | null;
 }
-
-// ── Duration ticker ──
-// Single module-level interval; runs only while a block has running steps.
-// 3s cadence — one textContent write per tick, no DOM queries beyond cached ref.
 let _tickerHandle: ReturnType<typeof setInterval> | null = null;
 let _tickerBlock: ProcessBlockState | null = null;
 const PROCESS_DETAIL_PREVIEW_CHARS = 160;
@@ -45,13 +37,13 @@ export interface StoredProcessStepMeta {
     rawIcon?: string | undefined;
     label: string;
     stepRef?: string | undefined;
+    traceRunId?: string | undefined; traceSeq?: number | undefined; detailAvailable?: boolean | undefined; detailBytes?: number | undefined; rawRetentionStatus?: string | undefined;
     status: ProcessStep['status'];
     startTime: number;
     preview: string;
     detailLength: number;
     detailTruncated: boolean;
 }
-
 const processDetailStore = new Map<string, { detail: string; originalLength: number; truncated: boolean }>();
 const processStepMetaStore = new Map<string, StoredProcessStepMeta>();
 
@@ -63,7 +55,6 @@ function tickDuration(): void {
     const elapsed = Math.round((Date.now() - pb.steps[0].startTime) / 1000);
     el.textContent = elapsed > 0 ? `${elapsed}s` : '';
 }
-
 function ensureTicker(pb: ProcessBlockState): void {
     if (_tickerHandle && _tickerBlock === pb) return;
     stopBlockTicker();
@@ -75,7 +66,6 @@ export function stopBlockTicker(): void {
     if (_tickerHandle) { clearInterval(_tickerHandle); _tickerHandle = null; }
     _tickerBlock = null;
 }
-
 function buildSummaryText(steps: ProcessStep[]): string {
     const counts: Record<string, number> = {};
     for (const s of steps) {
@@ -128,6 +118,8 @@ export function compactProcessStepForStorage(step: ProcessStep): ProcessStep {
         rawIcon: step.rawIcon,
         label: step.label,
         stepRef: step.stepRef,
+        traceRunId: step.traceRunId, traceSeq: step.traceSeq, detailAvailable: step.detailAvailable,
+        detailBytes: step.detailBytes, rawRetentionStatus: step.rawRetentionStatus,
         status: step.status,
         startTime: step.startTime,
         preview,
@@ -173,6 +165,8 @@ function updateStoredStepMeta(step: ProcessStep): void {
         rawIcon: compact.rawIcon,
         label: compact.label,
         stepRef: compact.stepRef,
+        traceRunId: compact.traceRunId, traceSeq: compact.traceSeq, detailAvailable: compact.detailAvailable,
+        detailBytes: compact.detailBytes, rawRetentionStatus: compact.rawRetentionStatus,
         status: compact.status,
         startTime: compact.startTime,
         preview: compact.detailPreview || compact.detail || '',
@@ -213,9 +207,8 @@ function renderStep(step: ProcessStep): string {
     const icon = renderTrustedIcon(step.icon);
     const detail = step.detailPreview || step.detail || '';
     const detailId = `process-detail-${step.id}`;
+    const traceButton = step.detailAvailable && step.traceRunId && step.traceSeq ? `<span class="process-step-trace" role="button" tabindex="0" title="Open full trace" aria-label="Open full trace" data-trace-run-id="${escapeHtml(step.traceRunId)}" data-trace-seq="${String(step.traceSeq)}">Trace</span>` : '';
 
-    // Always render expandable — VS (THRESHOLD=1) keeps DOM count low
-    // so the extra elements per step are negligible
     const snippetPreview = previewText(detail, step.type === 'thinking' ? 120 : 80);
     const snippetHtml = snippetPreview
         ? `<span class="process-step-snippet">${escapeHtml(snippetPreview)}</span>`
@@ -225,6 +218,8 @@ function renderStep(step: ProcessStep): string {
         data-type="${escapeHtml(step.type)}"
         data-status="${escapeHtml(step.status)}"
         data-step-ref="${escapeHtml(step.stepRef || '')}"
+        data-trace-run-id="${escapeHtml(step.traceRunId || '')}"
+        data-trace-seq="${String(step.traceSeq || '')}"
         data-start-time="${String(step.startTime || Date.now())}">
         <button class="process-step-toggle" aria-expanded="false" aria-controls="${detailId}">
             <span class="${dotClass}"></span>
@@ -234,6 +229,7 @@ function renderStep(step: ProcessStep): string {
                 <span class="process-step-label">${label}</span>
                 ${snippetHtml}
             </span>
+            ${traceButton}
             <span class="process-step-chevron">${ICONS.chevronRight}</span>
         </button>
         <div class="process-step-details collapsed" id="${detailId}">
@@ -309,6 +305,16 @@ export function bindProcessBlockInteractions(root: HTMLElement): void {
     root.addEventListener('click', (event) => {
         const target = event.target as HTMLElement | null;
         if (!target) return;
+        const traceTrigger = target.closest('.process-step-trace') as HTMLElement | null;
+        if (traceTrigger) {
+            event.preventDefault();
+            event.stopPropagation();
+            const runId = traceTrigger.dataset['traceRunId'] || '';
+            const seq = Number(traceTrigger.dataset['traceSeq'] || 0);
+            import('./trace-drawer.js').then(m => m.openTraceDrawer(runId, seq))
+                .catch(error => console.warn('[trace-drawer] open failed:', error));
+            return;
+        }
 
         const stepToggle = target.closest('.process-step-toggle') as HTMLElement | null;
         if (stepToggle) {

@@ -84,3 +84,32 @@ test('broadcast and live-run state bound live tool payloads before JSON serializ
     assert.ok(String(live.toolLog[0]!.label || '').length <= MAX_TOOL_LOG_STRING_CHARS);
     assert.ok(String(rawLog[0]!.detail || '').length < huge.length);
 });
+
+test('tool log sanitizer preserves trace pointers without preserving raw detail', () => {
+    const rawDetail = 'raw-line\n'.repeat(10_000);
+    const runId = 'tr_1234567890abcdef1234567890abcdef';
+    const serialized = serializeSanitizedToolLog([{
+        icon: '🔧',
+        label: 'exec',
+        detail: rawDetail,
+        toolType: 'tool',
+        stepRef: 'step-1',
+        traceRunId: runId,
+        traceSeq: 42,
+        detailAvailable: true,
+        detailBytes: 123456,
+        rawRetentionStatus: 'spilled',
+        isEmployee: true,
+    }]);
+
+    assert.ok(serialized);
+    assert.ok(serialized!.length <= MAX_TOOL_LOG_JSON_CHARS);
+    const parsed = parseToolLogBounded(serialized);
+    assert.equal(parsed[0]!.traceRunId, runId);
+    assert.equal(parsed[0]!.traceSeq, 42);
+    assert.equal(parsed[0]!.detailAvailable, true);
+    assert.equal(parsed[0]!.detailBytes, 123456);
+    assert.equal(parsed[0]!.rawRetentionStatus, 'spilled');
+    assert.equal(parsed[0]!.isEmployee, true);
+    assert.ok(!serialized!.includes(rawDetail.slice(0, 5000)));
+});

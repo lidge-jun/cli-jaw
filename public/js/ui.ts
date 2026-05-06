@@ -38,7 +38,7 @@ import {
     type ProcessStep,
     type ProcessBlockState,
 } from './features/process-block.js';
-interface MessageItem { role: string; content: string; tool_log?: string | null; cli?: string | null; }
+interface MessageItem { role: string; content: string; tool_log?: string | null; trace_run_id?: string | null; cli?: string | null; }
 interface QueuedOverlayItem { id: string; prompt: string; source?: string; ts?: number; }
 interface ActiveRunSnapshot { running?: boolean; cli?: string; text?: string; toolLog?: ToolLogEntry[]; startedAt?: number; }
 
@@ -85,6 +85,11 @@ function toProcessSteps(tools: ToolLogEntry[], runStartedAt?: number): ProcessSt
         type: processStepType(tool.toolType),
         detail: tool.detail || '',
         stepRef: tool.stepRef || '',
+        traceRunId: tool.traceRunId || '',
+        traceSeq: tool.traceSeq,
+        detailAvailable: tool.detailAvailable,
+        detailBytes: tool.detailBytes,
+        rawRetentionStatus: tool.rawRetentionStatus,
         status: processStepStatus(tool.status),
         startTime: baseTime,
     }));
@@ -170,6 +175,11 @@ function processStepFromDom(row: HTMLElement): ProcessStep | null {
         detailLength: storedMeta?.detailLength,
         detailTruncated: storedMeta?.detailTruncated,
         stepRef: storedMeta?.stepRef || row.dataset['stepRef'] || '',
+        traceRunId: storedMeta?.traceRunId || row.dataset['traceRunId'] || '',
+        traceSeq: storedMeta?.traceSeq || Number(row.dataset['traceSeq'] || 0) || undefined,
+        detailAvailable: storedMeta?.detailAvailable,
+        detailBytes: storedMeta?.detailBytes,
+        rawRetentionStatus: storedMeta?.rawRetentionStatus,
         status: storedMeta?.status || processStepStatusFromDom(row.dataset['status']),
         startTime: Number.isFinite(startTime) && startTime > 0 ? startTime : Date.now(),
     };
@@ -199,6 +209,11 @@ function processStepToToolLog(step: ProcessStep, finalize = false): ToolLogEntry
         toolType: step.type,
         stepRef: step.stepRef || '',
         status,
+        traceRunId: step.traceRunId || '',
+        traceSeq: step.traceSeq,
+        detailAvailable: step.detailAvailable,
+        detailBytes: step.detailBytes,
+        rawRetentionStatus: step.rawRetentionStatus,
     };
 }
 
@@ -214,6 +229,11 @@ function processStepFromMeta(stepId: string, finalize = false): ToolLogEntry | n
         toolType: meta.type,
         stepRef: meta.stepRef || '',
         status,
+        traceRunId: meta.traceRunId || '',
+        traceSeq: meta.traceSeq,
+        detailAvailable: meta.detailAvailable,
+        detailBytes: meta.detailBytes,
+        rawRetentionStatus: meta.rawRetentionStatus,
     };
 }
 

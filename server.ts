@@ -23,6 +23,7 @@ import { registerMemoryRoutes } from './src/routes/memory.js';
 import { registerSettingsRoutes } from './src/routes/settings.js';
 import { registerMessagingRoutes } from './src/routes/messaging.js';
 import { registerAvatarRoutes } from './src/routes/avatar.js';
+import { registerTraceRoutes } from './src/routes/traces.js';
 import { createDashboardBoardRouter } from './src/manager/board/routes.js';
 import { createDashboardScheduleRouter } from './src/manager/schedule/routes.js';
 import {
@@ -89,6 +90,7 @@ import { applyRuntimeSettingsPatch } from './src/core/runtime-settings.js';
 
 import { seedDefaultEmployees } from './src/core/employees.js';
 import { buildServicePath } from './src/core/instance.js';
+import { markStaleTraceRunsInterrupted } from './src/trace/store.js';
 
 // ─── Resolve paths ───────────────────────────────────
 
@@ -180,6 +182,7 @@ regenerateB();
 
 // Reset stale orchestration state left by unclean shutdown (single-scope: default only)
 resetAllStaleStates();
+markStaleTraceRunsInterrupted();
 
 // ─── Express + WebSocket ─────────────────────────────
 
@@ -545,6 +548,7 @@ registerMemoryRoutes(app, requireAuth);
 registerSettingsRoutes(app, requireAuth, applySettingsPatch, projectRoot);
 registerMessagingRoutes(app, requireAuth);
 registerAvatarRoutes(app, requireAuth);
+registerTraceRoutes(app, requireAuth);
 
 // ─── Dashboard Board / Schedule (P3) ─────────────────
 app.use('/api/dashboard/board', requireAuth, createDashboardBoardRouter());

@@ -121,6 +121,43 @@ db.exec(`
         consumed_at   INTEGER,
         visible       INTEGER NOT NULL DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS trace_runs (
+        id TEXT PRIMARY KEY,
+        message_id INTEGER,
+        parent_run_id TEXT,
+        cli TEXT NOT NULL,
+        model TEXT,
+        working_dir TEXT,
+        agent_label TEXT,
+        audience TEXT NOT NULL DEFAULT 'public',
+        status TEXT NOT NULL DEFAULT 'running',
+        raw_retention_status TEXT NOT NULL DEFAULT 'available',
+        event_count INTEGER NOT NULL DEFAULT 0,
+        byte_count INTEGER NOT NULL DEFAULT 0,
+        started_at INTEGER NOT NULL,
+        finished_at INTEGER,
+        last_event_at INTEGER,
+        error TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_trace_runs_message ON trace_runs(message_id);
+    CREATE INDEX IF NOT EXISTS idx_trace_runs_started ON trace_runs(started_at);
+
+    CREATE TABLE IF NOT EXISTS trace_events (
+        run_id TEXT NOT NULL,
+        seq INTEGER NOT NULL,
+        source TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        preview TEXT,
+        raw_json TEXT,
+        raw_path TEXT,
+        bytes INTEGER NOT NULL DEFAULT 0,
+        retention_status TEXT NOT NULL DEFAULT 'available',
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (run_id, seq),
+        FOREIGN KEY (run_id) REFERENCES trace_runs(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_trace_events_run_seq ON trace_events(run_id, seq);
 `);
 
 // Lightweight migration for existing DBs created before `trace` column existed.
@@ -136,7 +173,11 @@ if (!(messageCols as Record<string, unknown>[]).some(c => c["name"] === 'tool_lo
 if (!(messageCols as Record<string, unknown>[]).some(c => c["name"] === 'working_dir')) {
     db.exec('ALTER TABLE messages ADD COLUMN working_dir TEXT DEFAULT NULL');
 }
+if (!(messageCols as Record<string, unknown>[]).some(c => c["name"] === 'trace_run_id')) {
+    db.exec('ALTER TABLE messages ADD COLUMN trace_run_id TEXT DEFAULT NULL');
+}
 db.exec('CREATE INDEX IF NOT EXISTS idx_messages_wd ON messages(working_dir)');
+db.exec('CREATE INDEX IF NOT EXISTS idx_messages_trace_run ON messages(trace_run_id)');
 
 const employeeSessionCols = db.prepare('PRAGMA table_info(employee_sessions)').all();
 if (!(employeeSessionCols as Record<string, unknown>[]).some(c => c["name"] === 'model')) {
@@ -157,7 +198,8 @@ export const updateSession = db.prepare(`
 `);
 export const insertMessage = db.prepare('INSERT INTO messages (role, content, cli, model, trace, working_dir) VALUES (?, ?, ?, ?, NULL, ?)');
 export const insertMessageWithTrace = db.prepare('INSERT INTO messages (role, content, cli, model, trace, tool_log, working_dir) VALUES (?, ?, ?, ?, ?, ?, ?)');
-export const getMessages = db.prepare('SELECT id, role, content, cli, model, tool_log, cost_usd, duration_ms, working_dir, created_at FROM messages ORDER BY id ASC');
+export const insertMessageWithTraceRun = db.prepare('INSERT INTO messages (role, content, cli, model, trace, tool_log, working_dir, trace_run_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+export const getMessages = db.prepare('SELECT id, role, content, cli, model, tool_log, trace_run_id, cost_usd, duration_ms, working_dir, created_at FROM messages ORDER BY id ASC');
 export const getMessagesWithTrace = db.prepare('SELECT * FROM messages ORDER BY id ASC');
 export const getLatestAssistantMessage = db.prepare("SELECT id, role, created_at FROM messages WHERE role = 'assistant' ORDER BY id DESC LIMIT 1");
 export const getLatestDashboardActivityMessage = db.prepare("SELECT id, role, substr(content, 1, 240) AS excerpt, created_at FROM messages WHERE role IN ('user', 'assistant') ORDER BY id DESC LIMIT 1");

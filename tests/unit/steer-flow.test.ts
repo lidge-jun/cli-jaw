@@ -47,15 +47,15 @@ test('SF-001: steerAgent flow: kill → wait → insert → orchestrate', () => 
 
 // ─── SF-002: steerAgent saves interrupted output via exit handler ───
 
-test('SF-002: exit handler saves interrupted content to DB via insertMessageWithTrace', () => {
-    // After Phase 2 decomposition, interrupted tagging + insertMessageWithTrace
+test('SF-002: exit handler saves interrupted content to DB via insertMessageWithTraceRun', () => {
+    // After Phase 2 decomposition, interrupted tagging + insertMessageWithTraceRun
     // moved to lifecycle-handler.ts (handleAgentExit). Verify it there.
     const lifecycleSrc = fs.readFileSync(join(__dirname, '../../src/agent/lifecycle-handler.ts'), 'utf8');
 
     const interruptedIdx = lifecycleSrc.indexOf('⏹️ [interrupted]');
-    const insertTraceIdx = lifecycleSrc.indexOf('insertMessageWithTrace.run');
+    const insertTraceIdx = lifecycleSrc.indexOf('insertMessageWithTraceRun.run');
     assert.ok(interruptedIdx > 0, 'lifecycle-handler should have interrupted tagging');
-    assert.ok(insertTraceIdx > interruptedIdx, 'insertMessageWithTrace should come after interrupted tagging');
+    assert.ok(insertTraceIdx > interruptedIdx, 'insertMessageWithTraceRun should come after interrupted tagging');
 
     // Also verify spawn.ts exit handlers delegate to handleAgentExit
     const spawnSrc = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');

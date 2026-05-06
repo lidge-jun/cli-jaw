@@ -23,6 +23,11 @@ test('ProcessBlock keeps huge details out of collapsed state and hydrates lazily
         icon: 'tool',
         label: 'Huge tool',
         detail: huge,
+        traceRunId: 'tr_1234567890abcdef1234567890abcdef',
+        traceSeq: 3,
+        detailAvailable: true,
+        detailBytes: huge.length,
+        rawRetentionStatus: 'spilled',
         status: 'done',
         startTime: Date.now(),
     }], true);
@@ -33,6 +38,8 @@ test('ProcessBlock keeps huge details out of collapsed state and hydrates lazily
     assert.ok(block.dataset.processStepIds?.includes('step-huge'));
     assert.equal(pre.textContent, '');
     assert.equal(pre.dataset.detailLazy, 'true');
+    assert.equal(block.querySelector('.process-step-trace')?.textContent, 'Trace');
+    assert.equal((block.querySelector('.process-step') as HTMLElement).dataset.traceSeq, '3');
     assert.ok(!block.outerHTML.includes(huge.slice(0, 2000)));
     assert.ok(getStoredProcessStepDetail('step-huge').length < huge.length);
 

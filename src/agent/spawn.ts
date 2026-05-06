@@ -9,7 +9,7 @@ import { broadcast } from '../core/bus.js';
 import { settings, UPLOADS_DIR, detectCli, normalizeModelForCli } from '../core/config.js';
 import { stripUndefined } from '../core/strip-undefined.js';
 import {
-    clearEmployeeSession, getSession, updateSession, insertMessage, insertMessageWithTrace, getRecentMessages, getEmployees,
+    clearEmployeeSession, getSession, updateSession, insertMessage, getRecentMessages, getEmployees,
     listQueuedMessages, insertQueuedMessage, deleteQueuedMessage,
     getSessionBucket, upsertSessionBucket, clearSessionBucket,
 } from '../core/db.js';
@@ -48,6 +48,7 @@ import {
 } from './opencode-diagnostics.js';
 import type { SpawnContext, ToolEntry } from '../types/agent.js';
 import { asCliEventRecord, discriminate, fieldString, type CliEventRecord } from '../types/cli-events.js';
+import { appendTraceEvent, stampTraceTool, startTraceRun } from '../trace/store.js';
 
 // ─── State ───────────────────────────────────────────
 
@@ -1009,6 +1010,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         }
         broadcast('agent_status', { status: 'running', cli, agentId: agentLabel, ...empTag });
 
+        const traceAudience = (opts.internal || isEmployee) ? 'internal' : 'public';
+        const traceRunId = startTraceRun({ cli, model, workingDir: settings["workingDir"] || null, agentLabel, audience: traceAudience });
         const ctx: CopilotSpawnContext = {
             fullText: '', traceLog: [], toolLog: [], seenToolKeys: new Set<string>(),
             hasClaudeStreamEvents: false, sessionId: null as string | null, cost: null as number | null,
@@ -1016,6 +1019,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             thinkingBuf: '',
             liveScope: effectiveLiveScope,
             parentLiveScope: isEmployee ? liveScope : null,
+            traceRunId,
+            traceAudience,
         };
 
         // Flush accumulated 💭 thinking buffer as a single merged event
@@ -1027,6 +1032,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 const label = singleLine.length > 120 ? `${singleLine.slice(0, 119)}…` : singleLine;
                 console.log(`  💭 ${label}`);
                 const tool = { icon: '💭', label, toolType: 'thinking' as const, detail: merged };
+                stampTraceTool(tool, ctx, 'thinking');
                 ctx.toolLog.push(tool);
                 if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
                 if (ctx.parentLiveScope) appendLiveRunTool(ctx.parentLiveScope, { ...tool, isEmployee: true });
@@ -1042,6 +1048,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
 
         acp.on('session/update', (params) => {
             if (replayMode) return;  // 리플레이 중 모든 이벤트 무시
+            const update = asCliEventRecord(asCliEventRecord(params)["update"]);
+            appendTraceEvent({ runId: ctx.traceRunId, source: 'acp_raw', eventType: fieldString(update.sessionUpdate, 'session/update'), raw: params });
             const parsed = extractFromAcpUpdate(params, ctx);
             if (!parsed) return;
 
@@ -1058,6 +1066,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 const key = `${parsedTool.icon}:${parsedTool.label}:${parsedTool.stepRef || ''}:${parsedTool.status || ''}`;
                 if (!ctx.seenToolKeys.has(key)) {
                     ctx.seenToolKeys.add(key);
+                    stampTraceTool(parsedTool, ctx, parsedTool.toolType || 'tool');
                     ctx.toolLog.push(parsedTool);
                     if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
                     if (ctx.parentLiveScope) appendLiveRunTool(ctx.parentLiveScope, { ...parsedTool, isEmployee: true });
@@ -1078,10 +1087,12 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
 
         // [P2-3.14] session/cancelled → route through extractFromAcpUpdate for UI notification
         acp.on('session/cancelled', (params: Record<string, unknown>) => {
+            appendTraceEvent({ runId: ctx.traceRunId, source: 'acp_raw', eventType: 'session/cancelled', raw: params });
             const parsed = extractFromAcpUpdate({
                 update: { sessionUpdate: 'session_cancelled', ...(params || {}) },
             });
             if (parsed?.tool) {
+                stampTraceTool(parsed.tool, ctx, parsed.tool.toolType || 'tool');
                 ctx.toolLog.push(parsed.tool);
                 if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
                 if (ctx.parentLiveScope) appendLiveRunTool(ctx.parentLiveScope, { ...parsed.tool, isEmployee: true });
@@ -1091,10 +1102,12 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
 
         // [P2-3.15] session/request_permission → audit record in toolLog
         acp.on('session/request_permission', (params: Record<string, unknown>) => {
+            appendTraceEvent({ runId: ctx.traceRunId, source: 'acp_raw', eventType: 'session/request_permission', raw: params });
             const parsed = extractFromAcpUpdate({
                 update: { sessionUpdate: 'request_permission', ...(params || {}) },
             });
             if (parsed?.tool) {
+                stampTraceTool(parsed.tool, ctx, parsed.tool.toolType || 'tool');
                 ctx.toolLog.push(parsed.tool);
                 if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
                 if (ctx.parentLiveScope) appendLiveRunTool(ctx.parentLiveScope, { ...parsed.tool, isEmployee: true });
@@ -1104,6 +1117,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
 
         // stderr_activity → stderrBuf accumulation + conditional heartbeat
         acp.on('stderr_activity', (text: string) => {
+            appendTraceEvent({ runId: ctx.traceRunId, source: 'stderr', eventType: 'stderr_activity', raw: text });
             // Accumulate stderr for diagnostics (capped)
             if (ctx.stderrBuf.length < 4000) {
                 ctx.stderrBuf += text + '\n';
@@ -1317,6 +1331,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
 
     broadcast('agent_status', { status: 'running', cli, agentId: agentLabel, ...empTag });
 
+    const traceAudience = (opts.internal || isEmployee) ? 'internal' : 'public';
+    const traceRunId = startTraceRun({ cli, model, workingDir: settings["workingDir"] || null, agentLabel, audience: traceAudience });
     const ctx: SpawnContext = {
         fullText: '',
         traceLog: [],
@@ -1334,6 +1350,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         outputTextStarted: false,
         liveScope: effectiveLiveScope,
         parentLiveScope: isEmployee ? liveScope : null,
+        traceRunId,
+        traceAudience,
         geminiResultSeen: false,
         ...(opencodeSpawnAudit ? { opencodeSpawnAudit: opencodeSpawnAudit as Record<string, unknown> } : {}),
     };
@@ -1350,8 +1368,15 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         try {
             raw = JSON.parse(line);
         } catch {
+            appendTraceEvent({ runId: ctx.traceRunId, source: 'cli_raw', eventType: 'malformed_json', raw: line });
             return;
         }
+        appendTraceEvent({
+            runId: ctx.traceRunId,
+            source: 'cli_raw',
+            eventType: fieldString(asCliEventRecord(raw).type, '<no-type>'),
+            raw,
+        });
         const event = discriminate(cli, raw);
         if (!event) {
             const type = fieldString(asCliEventRecord(raw).type, '<no-type>');
@@ -1385,7 +1410,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 cli,
                 text: outputChunk,
                 ...empTag,
-            }, isEmployee ? 'internal' : 'public');
+            }, (opts.internal || isEmployee) ? 'internal' : 'public');
         }
     };
     if (cli === 'opencode') {
@@ -1415,6 +1440,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         opts.lifecycle?.onActivity?.('stderr');
         lastOpencodeIoAt = Date.now();
         const text = chunk.toString().trim();
+        appendTraceEvent({ runId: ctx.traceRunId, source: 'stderr', eventType: 'stderr', raw: text });
         console.error(`[jaw:stderr:${agentLabel}] ${text}`);
         ctx.stderrBuf += text + '\n';
     });

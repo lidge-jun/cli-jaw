@@ -10,6 +10,12 @@ export interface ToolEntry {
   stepRef?: string;
   status?: string;
   exitCode?: number;
+  isEmployee?: boolean;
+  traceRunId?: string;
+  traceSeq?: number;
+  detailAvailable?: boolean;
+  detailBytes?: number;
+  rawRetentionStatus?: string;
 }
 
 /** Context object created per spawnAgent() invocation. */
@@ -32,6 +38,8 @@ export interface SpawnContext {
   liveScope?: string | null;
   parentLiveScope?: string | null;
   _parentSyncedCount?: number;
+  traceRunId?: string;
+  traceAudience?: 'public' | 'internal';
   // Phase 3: model/metadata storage
   model?: string;
   metadata?: Record<string, unknown>;

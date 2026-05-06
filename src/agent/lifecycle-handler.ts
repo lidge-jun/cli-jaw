@@ -4,7 +4,7 @@
 import fs from 'fs';
 import { broadcast } from '../core/bus.js';
 import { settings, detectCli } from '../core/config.js';
-import { clearEmployeeSession, insertMessageWithTrace, updateSession, clearSessionBucket, markAnchorConsumed } from '../core/db.js';
+import { clearEmployeeSession, insertMessageWithTraceRun, updateSession, clearSessionBucket, markAnchorConsumed } from '../core/db.js';
 import { persistMainSession } from './session-persistence.js';
 import { resolveSessionBucket } from './args.js';
 import { buildContinuationPrompt } from './smoke-detector.js';
@@ -12,6 +12,7 @@ import { shouldInvalidateResumeSession } from './resume-classifier.js';
 import { classifyExitError } from './error-classifier.js';
 import { clearLiveRun, getLiveRun } from './live-run-state.js';
 import { sanitizeToolLogForDurableStorage, serializeSanitizedToolLog } from '../shared/tool-log-sanitize.js';
+import { finalizeTraceRun, linkTraceRunToMessage } from '../trace/store.js';
 import {
     incrementMemoryFlush,
     resetMemoryFlushCounter,
@@ -38,6 +39,7 @@ export interface ExitContext {
     traceLog: any[];
     stderrBuf: string;
     liveScope?: string | null;
+    traceRunId?: string | null;
     cost?: { input?: number; output?: number } | number | null;
     turns?: number | null;
     duration?: number | null;
@@ -104,6 +106,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
     const isEmployee = !mainManaged;
     const empTag = isEmployee ? { isEmployee: true } : {};
     const liveScope = ctx.liveScope || 'default';
+    const traceStatus = code === 0 ? 'done' : wasKilled ? 'interrupted' : 'error';
 
     // ─── Smoke response auto-continuation ───
     if (
@@ -136,6 +139,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         activeProcesses.delete(agentLabel);
         setActiveProcess(null);
         broadcast('agent_status', { running: false, agentId: agentLabel, ...empTag });
+        finalizeTraceRun(ctx.traceRunId, 'done');
 
         const contPrompt = buildContinuationPrompt(prompt, ctx.fullText);
         const { promise: contPromise } = _spawnAgent(contPrompt, {
@@ -273,10 +277,13 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
             const mergedToolLog = liveRun.toolLog.length > ctx.toolLog.length ? liveRun.toolLog : ctx.toolLog;
             const sanitizedToolLog = sanitizeToolLogForDurableStorage(mergedToolLog);
             const toolLogJson = serializeSanitizedToolLog(sanitizedToolLog);
-            insertMessageWithTrace.run(
+            const info = insertMessageWithTraceRun.run(
                 'assistant', finalContent, cli, model,
                 traceText || null, toolLogJson, settings["workingDir"] || null,
+                ctx.traceRunId || null,
             );
+            const messageId = Number(info.lastInsertRowid || 0);
+            if (ctx.traceRunId && Number.isInteger(messageId) && messageId > 0) linkTraceRunToMessage(ctx.traceRunId, messageId);
             broadcast('agent_done', { text: finalContent, toolLog: sanitizedToolLog, origin, ...empTag });
 
             if (opts._heartbeatAnchorId) {
@@ -315,6 +322,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         if (!opts.internal && !opts._isFallback && is429 && !opts._isRetry) {
             console.log(`[jaw:retry] ${cli} 429 detected — waiting 10s before retry`);
             broadcast('agent_retry', { cli, delay: 10, reason: errMsg, ...empTag }, isEmployee ? 'internal' : 'public');
+            finalizeTraceRun(ctx.traceRunId, 'error', errMsg);
             retryState.setIsEmployee(isEmployee);
             retryState.setResolve(resolve);
             retryState.setOrigin(origin);
@@ -348,6 +356,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                     console.log(`[jaw:fallback] ${cli} → ${fallbackCli}, ${fallbackMaxRetries} retries queued`);
                 }
                 broadcast('agent_fallback', { from: cli, to: fallbackCli, reason: errMsg, ...empTag }, isEmployee ? 'internal' : 'public');
+                finalizeTraceRun(ctx.traceRunId, 'error', errMsg);
                 const { promise: retryP } = _spawnAgent(prompt, {
                     ...opts, cli: fallbackCli, _isFallback: true, _skipInsert: true,
                 });
@@ -367,6 +376,11 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
 
     // ─── Final resolve ───
     const resolvedCode = code;
+    finalizeTraceRun(
+        ctx.traceRunId,
+        traceStatus,
+        traceStatus === 'error' ? classifyExitError(cli, resolvedCode ?? 1, ctx.stderrBuf).message : null,
+    );
     if (mainManaged) clearLiveRun(liveScope);
     broadcast('agent_status', {
         status: (resolvedCode === 0 || resolvedCode === null) ? 'done' : 'error',

@@ -60,8 +60,13 @@ interface WsMessage {
     toolType?: string;
     detail?: string;
     stepRef?: string;
+    traceRunId?: string;
+    traceSeq?: number;
+    detailAvailable?: boolean;
+    detailBytes?: number;
+    rawRetentionStatus?: string;
     text?: string;
-    toolLog?: { icon: string; label: string; detail?: string; toolType?: string; stepRef?: string }[];
+    toolLog?: { icon: string; label: string; detail?: string; toolType?: string; stepRef?: string; traceRunId?: string; traceSeq?: number; detailAvailable?: boolean; detailBytes?: number; rawRetentionStatus?: string }[];
     from?: string;
     to?: string;
     source?: string;
@@ -384,6 +389,11 @@ export function connect(): void {
                 label: empPrefix + (msg.label || ''),
                 detail: msg.detail || '',
                 stepRef: msg.stepRef || '',
+                traceRunId: msg.traceRunId || '',
+                traceSeq: msg.traceSeq,
+                detailAvailable: msg.detailAvailable,
+                detailBytes: msg.detailBytes,
+                rawRetentionStatus: msg.rawRetentionStatus,
                 status: (msg.status as 'running' | 'done' | 'error') || 'running',
                 startTime: Date.now(),
             });

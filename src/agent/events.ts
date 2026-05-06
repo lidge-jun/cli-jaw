@@ -15,12 +15,14 @@ import {
     type ExtractedEventResult,
 } from '../types/cli-events.js';
 import { appendLiveRunText, replaceLiveRunTools, appendLiveRunTool } from './live-run-state.js';
+import { stampTraceToolEntries } from '../trace/store.js';
 
 function liveScopeOf(ctx: SpawnContext): string | null {
     return ctx.liveScope ?? null;
 }
 
 function syncLiveTools(ctx: SpawnContext): void {
+    stampTraceToolEntries(ctx);
     const scope = liveScopeOf(ctx);
     if (scope) replaceLiveRunTools(scope, ctx.toolLog);
     if (ctx.parentLiveScope) {

@@ -209,9 +209,9 @@ export function buildObserveActions(
         return a.ref.localeCompare(b.ref, undefined, { numeric: true });
     });
     const top = candidates.slice(0, topN);
-    const snapId = snapshot && snapshot.snapshotId ? snapshot.snapshotId : null;
+    const snapId = snapshot && snapshot['snapshotId'] ? snapshot['snapshotId'] : null;
     if (snapId) {
-        for (const c of top) c.args.snapshotId = snapId;
+        for (const c of top) c.args['snapshotId'] = snapId;
     }
     return { snapshotId: snapId, instruction: String(instruction || ''), candidates: top };
 }

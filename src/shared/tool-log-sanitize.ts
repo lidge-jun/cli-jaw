@@ -6,6 +6,12 @@ export interface SanitizableToolLogEntry {
     toolType?: unknown;
     stepRef?: unknown;
     status?: unknown;
+    isEmployee?: unknown;
+    traceRunId?: unknown;
+    traceSeq?: unknown;
+    detailAvailable?: unknown;
+    detailBytes?: unknown;
+    rawRetentionStatus?: unknown;
     [key: string]: unknown;
 }
 
@@ -17,6 +23,12 @@ export interface SanitizedToolLogEntry {
     toolType?: string;
     stepRef?: string;
     status?: string;
+    isEmployee?: boolean;
+    traceRunId?: string;
+    traceSeq?: number;
+    detailAvailable?: boolean;
+    detailBytes?: number;
+    rawRetentionStatus?: string;
 }
 
 export const MAX_TOOL_LOG_RAW_INPUT_CHARS = 180_000;
@@ -28,7 +40,8 @@ export const MAX_TOOL_LOG_JSON_CHARS = 64_000;
 
 const TRUNCATION_ICON = '⚠️';
 const TRUNCATION_LABEL = 'Tool log truncated';
-const TRUNCATION_DETAIL = 'Tool log was truncated for dashboard memory safety.';
+const TRUNCATION_DETAIL = 'Inline preview capped.';
+const TRACE_RUN_ID_RE = /^tr_[A-Za-z0-9_-]{16,80}$/;
 
 function asBoundedString(value: unknown, max: number): string | undefined {
     if (value == null) return undefined;
@@ -53,6 +66,12 @@ function makeOverflowEntry(omitted: number): SanitizedToolLogEntry {
     };
 }
 
+function boundedNumber(value: unknown, max: number): number | undefined {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) return undefined;
+    return Math.min(Math.floor(n), max);
+}
+
 export function sanitizeToolLogEntry(
     entry: SanitizableToolLogEntry,
     detailBudget = MAX_TOOL_LOG_DETAIL_CHARS,
@@ -73,11 +92,21 @@ export function sanitizeToolLogEntry(
     const toolType = asBoundedString(entry.toolType, MAX_TOOL_LOG_STRING_CHARS);
     const stepRef = asBoundedString(entry.stepRef, MAX_TOOL_LOG_STRING_CHARS);
     const status = asBoundedString(entry.status, MAX_TOOL_LOG_STRING_CHARS);
+    const traceRunId = asBoundedString(entry.traceRunId, 96);
+    const traceSeq = boundedNumber(entry.traceSeq, Number.MAX_SAFE_INTEGER);
+    const detailBytes = boundedNumber(entry.detailBytes, Number.MAX_SAFE_INTEGER);
+    const rawRetentionStatus = asBoundedString(entry.rawRetentionStatus, 32);
     if (rawIcon) sanitized.rawIcon = rawIcon;
     if (detail) sanitized.detail = detail;
     if (toolType) sanitized.toolType = toolType;
     if (stepRef) sanitized.stepRef = stepRef;
     if (status) sanitized.status = status;
+    if (entry['isEmployee'] === true) sanitized.isEmployee = true;
+    if (traceRunId && TRACE_RUN_ID_RE.test(traceRunId)) sanitized.traceRunId = traceRunId;
+    if (traceSeq != null && traceSeq > 0) sanitized.traceSeq = traceSeq;
+    if (entry.detailAvailable === true) sanitized.detailAvailable = true;
+    if (detailBytes != null) sanitized.detailBytes = detailBytes;
+    if (rawRetentionStatus) sanitized.rawRetentionStatus = rawRetentionStatus;
     return sanitized;
 }
 
@@ -114,10 +143,20 @@ function shrinkEntryForJson(entry: SanitizedToolLogEntry): SanitizedToolLogEntry
     const stepRef = asBoundedString(entry.stepRef, 80);
     const status = asBoundedString(entry.status, 24);
     const detail = asBoundedString(entry.detail, 180);
+    const traceRunId = asBoundedString(entry.traceRunId, 96);
+    const traceSeq = boundedNumber(entry.traceSeq, Number.MAX_SAFE_INTEGER);
+    const detailBytes = boundedNumber(entry.detailBytes, Number.MAX_SAFE_INTEGER);
+    const rawRetentionStatus = asBoundedString(entry.rawRetentionStatus, 32);
     if (toolType) shrunk.toolType = toolType;
     if (stepRef) shrunk.stepRef = stepRef;
     if (status) shrunk.status = status;
     if (detail) shrunk.detail = detail;
+    if (entry.isEmployee === true) shrunk.isEmployee = true;
+    if (traceRunId && TRACE_RUN_ID_RE.test(traceRunId)) shrunk.traceRunId = traceRunId;
+    if (traceSeq != null && traceSeq > 0) shrunk.traceSeq = traceSeq;
+    if (entry.detailAvailable === true) shrunk.detailAvailable = true;
+    if (detailBytes != null) shrunk.detailBytes = detailBytes;
+    if (rawRetentionStatus) shrunk.rawRetentionStatus = rawRetentionStatus;
     return shrunk;
 }
 

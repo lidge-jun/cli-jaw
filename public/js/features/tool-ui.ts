@@ -7,12 +7,18 @@ import { ICONS } from '../icons.js';
 
 export interface ToolLogEntry {
     icon: string;
-    rawIcon?: string;
+    rawIcon?: string | undefined;
     label: string;
-    detail?: string;
-    toolType?: string;
-    stepRef?: string;
-    status?: string;
+    detail?: string | undefined;
+    toolType?: string | undefined;
+    stepRef?: string | undefined;
+    status?: string | undefined;
+    isEmployee?: boolean | undefined;
+    traceRunId?: string | undefined;
+    traceSeq?: number | undefined;
+    detailAvailable?: boolean | undefined;
+    detailBytes?: number | undefined;
+    rawRetentionStatus?: string | undefined;
 }
 
 function hasExpandableDetail(tl: ToolLogEntry): boolean {
