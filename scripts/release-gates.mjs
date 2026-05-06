@@ -185,6 +185,25 @@ const GATES = {
             }
         },
     },
+    'observation-bundle-fixtures': {
+        description: 'observation-bundle module emits ObservationBundleV1 from a fixture (G06 mirror)',
+        async check() {
+            try {
+                const { spawnSync } = await import('node:child_process');
+                const path = await import('node:path');
+                const tsxBin = path.resolve(repoRoot, 'node_modules/.bin/tsx');
+                const modPath = path.resolve(repoRoot, 'src/browser/web-ai/observation-bundle.ts').replace(/\\\\/g, '/');
+                const fixtureScript = `import { buildObservationBundle, OBSERVATION_BUNDLE_SCHEMA_VERSION } from '${modPath}';\nconst b = buildObservationBundle({ url: 'https://x.test/', viewport: { width: 800, height: 600 }, snapshotNodes: [{ ref: '@e1', role: 'button', name: 'Go' }, { ref: '...', role: 'note', name: 't' }], boxes: { '@e1': { x: 1, y: 2, width: 10, height: 20 } }, textSummary: 'hello' });\nif (b.schemaVersion !== OBSERVATION_BUNDLE_SCHEMA_VERSION) { console.error('schema-mismatch'); process.exit(2); }\nif (b.refs.length !== 1) { console.error('ref-filter-fail'); process.exit(3); }\nif (!b.refs[0].box || b.refs[0].box.width !== 10) { console.error('box-attach-fail'); process.exit(4); }\nif (b.stats.refCount !== 1 || b.stats.boxCount !== 1 || b.stats.textChars !== 5) { console.error('stats-fail'); process.exit(5); }\nconsole.log('OK refs=' + b.stats.refCount + ' boxes=' + b.stats.boxCount + ' text=' + b.stats.textChars + 'ch');`;
+                const res = spawnSync(tsxBin, ['--eval', fixtureScript], { encoding: 'utf8' });
+                if (res.status !== 0) {
+                    return { ok: false, detail: `observation-bundle fixture failed: status=${res.status} stderr=${(res.stderr || '').trim()} stdout=${(res.stdout || '').trim()}` };
+                }
+                return { ok: true, detail: `observation-bundle fixture: ${(res.stdout || '').trim()}` };
+            } catch (err) {
+                return { ok: false, detail: `observation-bundle fixture threw: ${(err && err.message) || err}` };
+            }
+        },
+    },
 };
 
 function printResult(name, result) {
