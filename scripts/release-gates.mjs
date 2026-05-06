@@ -13,6 +13,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { auditClaims, formatClaimAuditReport } from './claim-audit.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -157,6 +158,13 @@ const GATES = {
                 return { ok: false, detail: `forbidden terms in ready sections:\n${offending.join('\n')}` };
             }
             return { ok: true, detail: `${files.length} README/truth-table file(s) clean of experimental terms in ready sections` };
+        },
+    },
+    'no-cloud-claims': {
+        description: 'no hosted/cloud/stealth/external-CDP/leaderboard claims outside experimental sections (G10 mirror)',
+        check() {
+            const report = auditClaims({ repoRoot });
+            return { ok: report.ok, detail: formatClaimAuditReport(report) };
         },
     },
 };
