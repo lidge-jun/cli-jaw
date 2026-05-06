@@ -101,6 +101,7 @@ public/
 | ProcessBlock ownership | assistant message의 tool UI는 `.agent-body > .process-block` 또는 legacy `.agent-body > .tool-group` 하나만 허용되며 `.msg-content` 내부 tool block은 normalize 단계에서 제거/승격된다 |
 | Mermaid lifecycle | virtual-scroll unmount/deactivate 전 `releaseMermaidNodes()`가 pending/queued/in-flight Mermaid nodes를 observer에서 해제하고 transient markers를 제거한다 |
 | Build output guard | `npm run check:frontend-build-output`가 built app entry에서 eager Mermaid/vendor-utils reference를 차단하고 lazy `mermaid-loader` dynamic import는 허용한다 |
+| Tool-log memory cap | Server-side `sanitizeToolLog*()` caps `agent_tool`, `agent_done.toolLog`, and snapshot `activeRun.toolLog` before ProcessBlock/Manager hydration. |
 
 ### Diagram Pipeline
 
@@ -204,7 +205,12 @@ settings.ts
 | `manager/src/App.tsx` | instance scan/filter/select/lifecycle + dashboard section 상태 orchestration |
 | `manager/src/api.ts` | `/api/dashboard/instances`, `/api/dashboard/registry`, `/api/dashboard/lifecycle/:action` fetch wrapper |
 | `manager/src/components/` | `ManagerShell`, `WorkspaceLayout`, `Instance*`, `Command*`, `ActivityDock`, `MobileNav` 등 dashboard UI |
+| `manager/src/dashboard-board/` | standard workflow lanes (`backlog`, `ready`, `active`, `review`, `done`) 기반 board UI |
+| `manager/src/dashboard-schedule/` | schedule/heartbeat dashboard UI |
 | `manager/src/hooks/` | dashboard registry/view persistence hooks |
+| `manager/src/notes/` | markdown notes, image-assets, rich-markdown, WYSIWYG editing |
+| `manager/src/settings/` | settings pages/components/field renderers |
+| `manager/src/sync/` | dashboard sync helpers |
 | `manager/src/*.css` | manager 전용 layout/components/persistence/polish/styles |
 
 Manager 서버는 `jaw dashboard serve`가 실행하는 `src/manager/server.ts`이며 기본 port는 `24576`, 기본 scan 범위는 `3457`부터 50개다.

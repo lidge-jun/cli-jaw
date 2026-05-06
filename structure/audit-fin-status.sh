@@ -3,7 +3,7 @@
 # Exit: 0 = clean, 1 = runtime error, 2 = planning/active/blocked leakage, 3 = strict-mode failure
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 FIN_DIR="devlog/_fin"

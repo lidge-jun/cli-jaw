@@ -17,7 +17,7 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 
 | File | Line count | Role |
 | --- | ---: | --- |
-| `src/agent/args.ts` | 104L | CLI별 신규/재개 인자 생성 |
+| `src/agent/args.ts` | 119L | CLI별 신규/재개 인자 생성; Gemini full-access flags 포함 |
 | `src/agent/error-classifier.ts` | 23L | stderr/result 기반 에러 분류 helper |
 | `src/agent/events.ts` | 1418L | NDJSON 파서 + ACP `session/update` / subagent lifecycle 매핑 |
 | `src/agent/lifecycle-handler.ts` | 395L | child lifecycle, fallback, retry, queue resume orchestration |
@@ -27,7 +27,7 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 | `src/agent/resume-classifier.ts` | 51L | stale resume 판별 |
 | `src/agent/session-persistence.ts` | 70L | main session persistence gate |
 | `src/agent/smoke-detector.ts` | 141L | smoke response 감지 + auto-continue 판단 |
-| `src/agent/spawn-env.ts` | 120L | OpenCode/Gemini 전용 env/permission 보정 |
+| `src/agent/spawn-env.ts` | 119L | OpenCode/Gemini 전용 env/permission 보정 |
 | `src/agent/spawn.ts` | 1439L | spawn/ACP/stream/DB/broadcast + queue drain 핵심 |
 
 ### `spawn.ts` 핵심 흐름
@@ -66,6 +66,7 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 - `claude`는 stdin에 `withHistoryPrompt(prompt, historyBlock)`를 직접 쓴다.
 - `codex`는 resume가 아닐 때만 stdin에 `[User Message]` 블록을 쓴다.
 - `gemini`와 `opencode`는 `promptForArgs = withHistoryPrompt(prompt, historyBlock)`를 받아 인자 레벨에서 prompt/history를 합친다.
+- `gemini`는 fresh/resume 모두 `--skip-trust --approval-mode yolo`를 붙인다. 과거 `-y` short flag 또는 `GEMINI_CLI_TRUST_WORKSPACE` 의존 설명은 stale이다.
 - stdout NDJSON은 `logEventSummary()` → `extractSessionId()` → `extractFromEvent()` → `extractOutputChunk()` 순으로 처리된다.
 - `shouldInvalidateResumeSession()`가 true면 `updateSession.run(cli, null, model, settings.permissions, settings.workingDir, ...)`로 stale resume을 지운다.
 - smoke response가 감지되면 세션을 먼저 저장하고, `buildContinuationPrompt()`로 같은 엔진에 재스폰한다.
@@ -81,6 +82,20 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 - 저장할 때는 `cli`, `sessionId`, `model`, `permissions`, `workingDir`, `effort`를 같이 기록한다.
 - `shouldInvalidateResumeSession()`는 `code === 0`이면 무조건 false이고, 실패한 stderr/resultText에서 generic matcher + CLI별 matcher를 함께 검사한다.
 - resume 무효화 조건은 `claude`, `codex`, `gemini`, `opencode`, `copilot` 각각 따로 분기된다. copilot은 `session not found`와 `loadSession failed`를 본다.
+
+---
+
+### Tool-log safety boundary
+
+`src/shared/tool-log-sanitize.ts` is the shared cap/truncate boundary for live and persisted tool UI:
+
+| Surface | Sanitization path |
+| --- | --- |
+| WS `agent_tool` | `core/bus.ts` → `sanitizeToolLogEntry()` |
+| WS `agent_done.toolLog` | `core/bus.ts` → `sanitizeToolLogForDurableStorage()` |
+| `/api/orchestrate/snapshot.activeRun.toolLog` | `routes/orchestrate.ts` → `getSafeLiveRun()` |
+
+Limits are intentionally bounded (`MAX_TOOL_LOG_ENTRIES`, per-detail cap, total-detail cap, JSON cap) so Manager/ProcessBlock hydration cannot retain unbounded raw tool output.
 
 ---
 
@@ -146,7 +161,7 @@ orchestrate(prompt, meta)
 - `state === 'P'`이고 `ctx.plan`이 비어 있으면 `resolveNumericReference()`로 "1번", "2번" 같은 사용자 지시를 직전 assistant numbered list에서 본문으로 치환하고, 매칭이 모호하면 `orchestrate_done`으로 확인 요청을 보내고 종료한다.
 - `buildApprovedPlanPromptBlock()`이 `A/B/C` 상태에서 `ctx.plan`을 prompt 최상단에 붙여 worker가 plan을 재구성하지 못하도록 잠근다.
 - `memorySnapshot`은 `buildMemoryInjection()`의 advanced snapshot 경로를 재사용해 boss turn에서만 붙인다.
-- `orchestrateContinue()`는 active PABCD면 `"Please continue from where you left off."`로 이어가고, IDLE이면 최신 worklog가 `done/reset`이 아닐 때만 worklog-based resume를 한다.
+- `orchestrateContinue()`는 active PABCD면 `"Please continue from where you left off."`로 이어가고, IDLE이면 최신 worklog가 `done/reset`이 아닐 때만 worklog-based resume를 한다. 이 경로는 parser 기준 explicit `/continue`에서만 들어와야 하며, 일반 “continue/계속/이어서” 발화는 평범한 사용자 프롬프트로 처리한다.
 - `orchestrateReset()`는 active agent / worker / queue / worker registry / employee session / state / worklog status를 모두 reset한다.
 
 ### Worker registry / monitor
@@ -166,7 +181,7 @@ orchestrate(prompt, meta)
 
 ### Parser (`orchestrator/parser.ts`)
 
-- `isContinueIntent` / `isResetIntent` / `isApproveIntent`로 한국어·영어 짧은 명령을 매칭한다.
+- `isContinueIntent`는 explicit `/continue`만 매칭한다. `isResetIntent` / `isApproveIntent`는 한국어·영어 짧은 명령을 매칭한다.
 - `parseSubtasks()` / `parseDirectAnswer()` / `stripSubtaskJSON()`은 patch3 이후 deprecated이지만 하위 호환용으로 남아 있다. `pipeline.ts`는 P 상태 plan 추출 시 `stripSubtaskJSON()`만 사용한다.
 - `resolveNumericReference()`는 직전 assistant 메시지의 numbered list에서 항목을 찾는다.
 - `parseVerdicts()`는 fenced/raw JSON 양쪽으로 verdict 객체를 추출한다.
