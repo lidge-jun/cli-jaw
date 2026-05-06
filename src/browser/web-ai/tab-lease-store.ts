@@ -52,9 +52,9 @@ const STORE_FILE = join(JAW_HOME, 'browser-web-ai-tab-leases.json');
 const LOCK_STALE_MS = 30_000;
 const LOCK_RETRY_MS = 25;
 const LOCK_TIMEOUT_MS = 5_000;
-const DEFAULT_POOL_TTL_MS = 5 * 60 * 1000;
-const DEFAULT_POOL_MAX_PER_KEY = 1;
-const DEFAULT_POOL_GLOBAL_MAX = 4;
+const DEFAULT_POOL_TTL_MS = 15 * 60 * 1000;
+const DEFAULT_POOL_MAX_PER_KEY = 3;
+const DEFAULT_POOL_GLOBAL_MAX = 8;
 
 interface LeaseStoreFile {
     version: 1;
@@ -101,7 +101,7 @@ export function parseDuration(value: string | number | null | undefined, fallbac
 }
 
 function poolTtlMs(): number {
-    return parseDuration(process.env["JAW_BROWSER_PROVIDER_POOL_TTL"] || process.env["AGBROWSE_PROVIDER_POOL_TTL"] || '5m');
+    return parseDuration(process.env["JAW_BROWSER_PROVIDER_POOL_TTL"] || process.env["AGBROWSE_PROVIDER_POOL_TTL"] || '15m');
 }
 
 function poolMaxPerKey(): number {

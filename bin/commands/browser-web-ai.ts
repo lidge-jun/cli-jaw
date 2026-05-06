@@ -68,6 +68,8 @@ Sessions:
   --deadline <iso>    Override session deadline
   --navigate          Allow resume to switch tabs if needed
   --new-tab           Force a fresh provider tab; default reuses pooled or inactive tabs first
+  --parallel          Alias for --new-tab. Use to run a query without
+                      contending with another in-flight one (lease per-key cap)
   --reuse-tab         Reuse active tab
 
 Output:
@@ -178,6 +180,7 @@ export async function runWebAiCommand(
             deadline: { type: 'string' },
             navigate: { type: 'boolean', default: false },
             'new-tab': { type: 'boolean', default: false },
+            parallel: { type: 'boolean', default: false },
             'reuse-tab': { type: 'boolean', default: false },
             full: { type: 'boolean', default: false },
             json: { type: 'boolean', default: false },
@@ -220,7 +223,7 @@ export async function runWebAiCommand(
         ...(values['source-audit-ratio'] ? { sourceAuditRatio: values['source-audit-ratio'] } : {}),
         ...(values['source-audit-scope'] ? { sourceAuditScope: values['source-audit-scope'] } : {}),
         ...(values['source-audit-date'] ? { sourceAuditDate: values['source-audit-date'] } : {}),
-        ...(values['new-tab'] ? { newTab: true } : {}),
+        ...(values['new-tab'] || values.parallel ? { newTab: true } : {}),
         ...(values['reuse-tab'] ? { reuseTab: true } : {}),
     };
     const rawResult = await callWebAiEndpoint(command, body, values, deps);
