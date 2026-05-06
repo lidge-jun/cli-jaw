@@ -313,11 +313,62 @@ export async function hover(port: number, ref: string) {
     return { ok: true };
 }
 
-export async function navigate(port: number, url: string) {
+export interface NavigateOptions {
+    waitUntil?: 'commit' | 'load' | 'domcontentloaded' | 'networkidle';
+    timeout?: number;
+}
+
+export async function navigate(port: number, url: string, opts: NavigateOptions = {}) {
     const page = await requireActivePage(port);
-    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    const waitUntil = opts.waitUntil ?? 'domcontentloaded';
+    const timeout = Number.isFinite(opts.timeout) ? opts.timeout! : 30000;
+    let degraded: string | null = null;
+    const isCoopBlock = (e: unknown) =>
+        /ERR_BLOCKED_BY_RESPONSE|Cross-Origin-Opener-Policy/i.test(((e as { message?: string })?.message) || String(e));
+    const isTimeout = (e: unknown) =>
+        /Timeout|timeout/.test(((e as { message?: string })?.message) || String(e));
+    const checkHealthy = async () => {
+        try {
+            const dims = await page.evaluate(() => {
+                const w = (globalThis as unknown as { innerWidth?: number }).innerWidth || 0;
+                const h = (globalThis as unknown as { innerHeight?: number }).innerHeight || 0;
+                return { w, h };
+            });
+            return dims && dims.w > 0 && dims.h > 0;
+        } catch { return false; }
+    };
+    try {
+        await page.goto(url, { waitUntil, timeout });
+    } catch (err) {
+        if (isCoopBlock(err)) {
+            try {
+                await page.goto('about:blank', { waitUntil: 'commit', timeout: 5000 });
+                await page.goto(url, { waitUntil, timeout });
+                degraded = 'fallback:about:blank (COOP block on direct navigate)';
+            } catch (err2) {
+                if (isTimeout(err2)) {
+                    await page.goto(url, { waitUntil: 'commit', timeout });
+                    degraded = 'fallback:about:blank+commit (COOP + timeout)';
+                } else {
+                    throw err2;
+                }
+            }
+        } else if (isTimeout(err) && waitUntil !== 'commit') {
+            await page.goto(url, { waitUntil: 'commit', timeout });
+            degraded = `fallback:commit (initial waitUntil=${waitUntil} timed out)`;
+        } else {
+            throw err;
+        }
+    }
+    if (!(await checkHealthy())) {
+        try {
+            await page.goto('about:blank', { waitUntil: 'commit', timeout: 5000 });
+            await page.goto(url, { waitUntil, timeout });
+            degraded = `${degraded ? degraded + '; ' : ''}fallback:about:blank (post-nav 0-width recovery)`;
+        } catch { /* keep landed state */ }
+    }
     markBrowserStateChanged();
-    return { ok: true, url: page.url() };
+    return { ok: true, url: page.url(), degraded };
 }
 
 export async function evaluate(port: number, expression: string) {

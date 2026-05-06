@@ -351,13 +351,29 @@ try {
             break;
         }
         case 'navigate': {
-            const r = await api('POST', '/navigate', { url: process.argv[4] }) as Record<string, unknown>;
-            console.log(`navigated → ${r["url"]}`);
+            const args = process.argv.slice(4);
+            const url = args.find((a) => !a.startsWith('--')) || '';
+            const wuIdx = args.indexOf('--wait-until');
+            const toIdx = args.indexOf('--timeout');
+            const body: Record<string, unknown> = { url };
+            if (wuIdx >= 0 && args[wuIdx + 1]) body['waitUntil'] = args[wuIdx + 1];
+            if (toIdx >= 0 && args[toIdx + 1]) body['timeout'] = Number(args[toIdx + 1]);
+            const r = await api('POST', '/navigate', body) as Record<string, unknown>;
+            const tail = r["degraded"] ? ` [${r["degraded"]}]` : '';
+            console.log(`navigated → ${r["url"]}${tail}`);
             break;
         }
         case 'open': {
-            const r = await api('POST', '/navigate', { url: process.argv[4] }) as Record<string, unknown>;
-            console.log(`opened → ${r["url"]}`);
+            const args = process.argv.slice(4);
+            const url = args.find((a) => !a.startsWith('--')) || '';
+            const wuIdx = args.indexOf('--wait-until');
+            const toIdx = args.indexOf('--timeout');
+            const body: Record<string, unknown> = { url };
+            if (wuIdx >= 0 && args[wuIdx + 1]) body['waitUntil'] = args[wuIdx + 1];
+            if (toIdx >= 0 && args[toIdx + 1]) body['timeout'] = Number(args[toIdx + 1]);
+            const r = await api('POST', '/navigate', body) as Record<string, unknown>;
+            const tail = r["degraded"] ? ` [${r["degraded"]}]` : '';
+            console.log(`opened → ${r["url"]}${tail}`);
             break;
         }
         case 'tabs': {

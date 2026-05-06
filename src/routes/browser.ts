@@ -166,7 +166,12 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
     });
 
     app.post('/api/browser/navigate', requireAuth, async (req: Request, res: Response) => {
-        try { res.json(await browser.navigate(cdpPort(req), req.body.url)); }
+        try {
+            const opts: { waitUntil?: 'commit' | 'load' | 'domcontentloaded' | 'networkidle'; timeout?: number } = {};
+            if (req.body?.waitUntil) opts.waitUntil = req.body.waitUntil;
+            if (Number.isFinite(req.body?.timeout)) opts.timeout = Number(req.body.timeout);
+            res.json(await browser.navigate(cdpPort(req), req.body.url, opts));
+        }
         catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
