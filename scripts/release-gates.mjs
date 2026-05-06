@@ -242,6 +242,74 @@ const GATES = {
             }
         },
     },
+    'model-adapter-frozen': {
+        description: 'G09 mirror: cli-jaw must not implement an API model adapter or claim parity (negative-parity)',
+        async check() {
+            try {
+                // Truth-table must declare the deferred (frozen) row.
+                const truth = readFile('structure/CAPABILITY_TRUTH_TABLE.md');
+                const g09Line = truth.match(/^[^\n]*G09[^\n]+model[- ]adapter[^\n]+/im)?.[0] || '';
+                if (!g09Line) {
+                    return { ok: false, detail: 'CAPABILITY_TRUTH_TABLE.md missing G09 model-adapter row' };
+                }
+                if (!/(deferred|frozen)/i.test(g09Line)) {
+                    return { ok: false, detail: `G09 row must be marked deferred/frozen, got: ${g09Line.slice(0, 200)}` };
+                }
+
+                // package.json must NOT depend on provider SDKs.
+                const pkg = JSON.parse(readFile('package.json'));
+                const allDeps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}), ...(pkg.peerDependencies || {}) };
+                const sdkDenylist = ['openai', '@anthropic-ai/sdk', '@google/generative-ai', '@google/genai', 'ai'];
+                for (const name of Object.keys(allDeps)) {
+                    if (sdkDenylist.includes(name) || name.startsWith('@ai-sdk/')) {
+                        return { ok: false, detail: `forbidden provider SDK dep: ${name}` };
+                    }
+                }
+
+                // Source scan limited to browser/web-ai surface (cli-jaw's
+                // broader memory/quota system has unrelated OpenAI integration
+                // that pre-dates and is independent of the agbrowse G09 freeze).
+                const scanRoots = ['src/browser'];
+                /** @type {Array<{file:string, hit:string}>} */
+                const violations = [];
+                const cmdAliasRe = /\b(api-query|model-query|--api\b|--transport\s+api|--mode\s+api)\b/;
+                const envRe = /\b(OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|GOOGLE_API_KEY|MODEL_ADAPTER_[A-Z_]+|AI_SDK_[A-Z_]+)\b/;
+                const importRe = /from\s+['"](openai|@anthropic-ai\/sdk|@google\/generative-ai|@google\/genai|@ai-sdk\/[^'"]+|ai)['"]/;
+                const dirDenylist = ['src/browser/web-ai/model-adapter', 'src/model-adapter', 'src/api-client'];
+                for (const dirRel of dirDenylist) {
+                    if (fs.existsSync(path.join(repoRoot, dirRel))) {
+                        return { ok: false, detail: `forbidden path exists: ${dirRel}/` };
+                    }
+                }
+                /** @param {string} dirAbs */
+                function walk(dirAbs) {
+                    if (!fs.existsSync(dirAbs)) return;
+                    for (const entry of fs.readdirSync(dirAbs, { withFileTypes: true })) {
+                        if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+                        const abs = path.join(dirAbs, entry.name);
+                        if (entry.isDirectory()) { walk(abs); continue; }
+                        if (!/\.(mjs|cjs|js|ts|tsx|json|md)$/.test(entry.name)) continue;
+                        const rel = path.relative(repoRoot, abs);
+                        if (rel.endsWith('release-gates.mjs')) continue;
+                        if (rel.endsWith('CAPABILITY_TRUTH_TABLE.md')) continue;
+                        const text = fs.readFileSync(abs, 'utf8');
+                        if (cmdAliasRe.test(text)) violations.push({ file: rel, hit: 'forbidden api-query/--api/--transport api alias' });
+                        if (envRe.test(text)) violations.push({ file: rel, hit: 'forbidden API key/MODEL_ADAPTER_/AI_SDK_ env var' });
+                        if (importRe.test(text)) violations.push({ file: rel, hit: 'forbidden provider SDK import' });
+                    }
+                }
+                for (const root of scanRoots) walk(path.join(repoRoot, root));
+                if (violations.length) {
+                    const sample = violations.slice(0, 5).map(v => `${v.file}: ${v.hit}`).join('; ');
+                    return { ok: false, detail: `${violations.length} negative-parity violation(s): ${sample}` };
+                }
+
+                return { ok: true, detail: 'cli-jaw mirror clean: deferred row present, no SDK deps, no api-* drift' };
+            } catch (err) {
+                return { ok: false, detail: `model-adapter-frozen mirror gate threw: ${(err && err.message) || err}` };
+            }
+        },
+    },
 };
 
 function printResult(name, result) {
