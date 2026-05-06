@@ -33,7 +33,7 @@ graph LR
     ORC --> AGT
 ```
 
-4개 인터페이스(CLI, Web, Telegram, Discord)는 `server.ts`를 경유하고, `server.ts`는 인증/보안/WS/bootstrap을 맡은 뒤 `src/routes/`의 11개 route registrar와 2개 shared helper(`types.ts`, `quota.ts`)로 API를 위임합니다. Browser route registrar는 일반 CDP primitive와 `web-ai` ChatGPT/Gemini/Grok 자동화 API를 함께 제공하므로 route 수가 가장 큽니다.
+4개 인터페이스(CLI, Web, Telegram, Discord)는 `server.ts`를 경유하고, `server.ts`는 인증/보안/WS/bootstrap을 맡은 뒤 `src/routes/`의 11개 route registrar와 2개 shared helper(`types.ts`, `quota.ts`)로 API를 위임합니다. Browser route registrar는 일반 CDP primitive와 `web-ai` ChatGPT/Gemini/Grok 자동화 API를 함께 제공하므로 route 수가 가장 큽니다. Process/tool logs는 `src/shared/tool-log-sanitize.ts`에서 WS와 snapshot 저장 전에 cap/truncate되어 Manager 대시보드 메모리 폭주를 막습니다.
 
 ---
 
@@ -54,16 +54,16 @@ graph LR
 
 | 문서 | 범위 | 핵심 키워드 |
 |------|------|-------------|
-| [AGENTS.md](AGENTS.md) | Command/API 변경 시 동기화 체크리스트 | 동기화, 체크리스트, 변경관리 |
+| [AGENTS.md](AGENTS.md) | Command/API/README/CLAUDE 변경 시 동기화 체크리스트 | 동기화, 체크리스트, 변경관리 |
 | [str_func.md](str_func.md) | 전체 파일 트리 + 함수 시그니처 레퍼런스 | 파일트리, 함수, 마스터맵 |
 | [prompt_flow.md](prompt_flow.md) | 프롬프트가 조립되는 9단계 파이프라인 | 프롬프트, 파이프라인, 주입 |
-| [agent_spawn.md](agent_spawn.md) | CLI spawn + ACP 분기 + 오케스트레이션 | spawn, ACP, 멀티에이전트 |
+| [agent_spawn.md](agent_spawn.md) | CLI spawn + ACP 분기 + Gemini full-access flags + 오케스트레이션 | spawn, ACP, Gemini, 멀티에이전트 |
 | [memory_architecture.md](memory_architecture.md) | History Block + Flush + Advanced Runtime + Task Snapshot | 메모리, flush, runtime, snapshot |
 | [infra.md](infra.md) | config, db, bus, security 등 코어 모듈 | 인프라, SQLite, EventBus |
-| [commands.md](commands.md) | 24개 슬래시 커맨드 + root CLI 18개 서브커맨드 + `browser web-ai` | 커맨드, 디스패처, 레지스트리 |
+| [commands.md](commands.md) | 24개 슬래시 커맨드 + root CLI 18개 서브커맨드 + `browser web-ai` + explicit `/continue` note | 커맨드, 디스패처, 레지스트리 |
 | [server_api.md](server_api.md) | `server.ts` 글루 + `src/routes/` API 126 handlers / 125 endpoints | REST, WebSocket, 라우트 |
 | [stream-events.md](stream-events.md) | CLI NDJSON 이벤트 트레이스 + ProcessBlock 매핑 | NDJSON, stepRef, ProcessBlock |
-| [🎨 frontend.md](frontend.md) | `public/` 소스/자산 277개 + `public/dist/` 생성물 455개, Manager notes/settings/WYSIWYG, ProcessBlock 렌더링 | 프론트엔드, Vite 8, PWA, ProcessBlock |
+| [🎨 frontend.md](frontend.md) | `public/` 소스/자산 277개 + `public/dist/` 생성물 455개, Manager notes/settings/WYSIWYG, ProcessBlock 렌더링, bounded tool-log hydration | 프론트엔드, Vite 8, PWA, ProcessBlock |
 | [frontend_modernization_analysis.md](frontend_modernization_analysis.md) | 8개 현대화 제안의 비용-편익 분석 | 리팩터링, 비용분석, 마이그레이션 |
 | [telegram.md](telegram.md) | Telegram 봇 + heartbeat + 음성 STT | 텔레그램, 하트비트, STT |
 | [prompt_basic_A1.md](prompt_basic_A1.md) | 시스템 프롬프트 기본값 (A-1.md) | 시스템규칙, 기본값 |
@@ -101,6 +101,21 @@ Support labels must stay aligned with agbrowse:
 
 ---
 
+## Recent Non-Strict Architecture Deltas (2026-05)
+
+최근 100개 커밋 중 strict migration 자체가 아닌 구조 변화는 아래 문서에 반영되어야 합니다.
+
+| Area | Current source of truth | Doc impact |
+| --- | --- | --- |
+| PABCD continue routing | `src/orchestrator/parser.ts`, `src/orchestrator/pipeline.ts` | natural-language “continue/계속/이어서”은 일반 프롬프트로 두고, worklog resume은 explicit `/continue`만 허용한다. |
+| Gemini CLI full access | `src/agent/args.ts`, `src/agent/spawn-env.ts` | fresh/resume Gemini runs use `--skip-trust --approval-mode yolo`; the older `-y`/env trust wording is stale. |
+| Bounded tool logs | `src/shared/tool-log-sanitize.ts`, `src/core/bus.ts`, `src/routes/orchestrate.ts` | WS `agent_tool`, `agent_done.toolLog`, `/api/orchestrate/snapshot.activeRun.toolLog` are sanitized before public/UI delivery. |
+| Unified channel send | `src/messaging/*`, `src/routes/messaging.ts`, `src/telegram/*`, `src/discord/*` | `/api/channel/send` is canonical; `/api/telegram/send` and `/api/discord/send` remain compatibility/direct paths. |
+| Browser runtime lifecycle | `src/browser/runtime-diagnostics.ts`, `src/browser/runtime-orphans.ts`, `src/browser/tab-lifecycle.ts`, `src/browser/web-ai/session*.ts` | browser docs should mention runtime doctor/orphan cleanup, persistent tab lifecycle, and web-ai session reattach. |
+| Release gates | `scripts/release-gates.mjs`, `package.json` | `gate:all` now owns named docs/parity gates in addition to typecheck/tests. |
+
+---
+
 ## 상호 참조 매트릭스
 
 행 = 참조하는 쪽, 열 = 참조되는 쪽.
@@ -132,4 +147,4 @@ Support labels must stay aligned with agbrowse:
 
 ---
 
-*마지막 갱신: 2026-05-05 (`server.ts` 726L, `src/routes/` 126 route handlers / 125 API endpoints, `src/manager/` 39 TS/TSX files / 6503L, `src/browser/web-ai/` 57 TS files / 10238L, `bin/commands/` 18 top-level ts subcommands + `tui/` 7 helper, `public/js/` 52 .ts (root 17 + features 32 + diagram 3), `public/manager/` 191 files, tests 311 .test.ts 기준)*
+*마지막 갱신: 2026-05-06 (`server.ts` 726L, `src/routes/` 126 route handlers / 125 API endpoints, `src/manager/` 39 TS/TSX files / 6503L, `src/browser/web-ai/` 57 TS files / 10238L, `bin/commands/` 18 top-level ts subcommands + `tui/` 7 helper, `public/js/` 52 .ts (root 17 + features 32 + diagram 3), `public/manager/` 191 files, tests 311 .test.ts 기준)*

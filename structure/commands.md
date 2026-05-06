@@ -198,6 +198,21 @@ prompt, quit, file, steer, ide, orchestrate
 
 - PABCD explicit entry.
 - auto-activation 제거 후 명시적 진입점으로만 유지된다.
+- `jaw orchestrate P|A|B|C|D|status|reset`는 root CLI transition/control surface다.
+- `/continue`는 worklog/PABCD resume 전용 intent다. Natural-language “continue/계속/이어서”은 더 이상 resume trigger가 아니다.
+
+---
+
+### Root CLI release gates
+
+`package.json` exposes named release gates through `scripts/release-gates.mjs`:
+
+```text
+gate:typecheck, gate:tests, gate:truth-table-fresh,
+gate:mcp-scope-frozen, gate:no-experimental-in-readme-ready-section, gate:all
+```
+
+Use `npm run gate:all` as the broad docs/release sanity command when available.
 
 ---
 

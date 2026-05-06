@@ -41,7 +41,20 @@ This is the general availability release. Here's what landed:
 | **Employee System** | Your main CLI dispatches other CLIs as workers. "Fix the frontend" goes to OpenCode. "Update the API" goes to Codex. You approve the results |
 | **Responsive Mobile Layout** | Sidebar overlay, touch-friendly controls. Manage your fleet from your phone |
 
-Plus: improved PABCD orchestration, 230+ skills (32 active, 194 reference), SQLite FTS5 memory search, and Computer Use desktop automation.
+Plus: explicit PABCD orchestration (`/orchestrate`, `/pabcd`, `/continue`), 230+ reference skills, SQLite FTS5 memory search, cron/every heartbeat jobs, and Computer Use desktop automation.
+
+---
+
+## Recent Architecture Updates
+
+| Area | Update |
+|---|---|
+| **PABCD** | Worklog resume is explicit: use `/continue`. Natural language “continue” stays a normal prompt |
+| **Gemini CLI** | Full-access Gemini runs use `--skip-trust --approval-mode yolo` for both fresh and resume sessions |
+| **Messaging** | `/api/channel/send` is the canonical Telegram/Discord outbound path; legacy channel-specific endpoints remain |
+| **Heartbeat** | Jobs support `every` and `cron` schedules with optional IANA time zones |
+| **Browser web-AI** | Runtime diagnostics/orphan cleanup, persistent tab lifecycle, session reattach, and ChatGPT/Gemini/Grok vendor paths are documented in `structure/` |
+| **Release gates** | `npm run gate:all` runs named release/doc parity checks when developing locally |
 
 ---
 
@@ -198,7 +211,7 @@ A markdown vault lives inside the dashboard. Think mini-Obsidian:
 
 ### Kanban Board
 
-Drag instance cards into lanes (Backlog / In Progress / Review / Done). Each card links to the live instance and has an editor for notes. Good for tracking what each AI session is working on when you're running multiple instances.
+Drag instance cards into lanes (Backlog / Ready / Active / Review / Done). Each card links to the live instance and has an editor for notes. Good for tracking what each AI session is working on when you're running multiple instances.
 
 ### Settings Inspector
 
@@ -279,7 +292,7 @@ P (Plan) → A (Audit) → B (Build) → C (Check) → D (Done) → IDLE
 | **C — Check** | Type-check (`tsc --noEmit`), docs update, consistency check |
 | **D — Done** | Summary of all changes. Returns to idle |
 
-State is DB-persisted and survives restarts. Workers cannot modify files — only verify. Activate with `jaw orchestrate` or `/pabcd` from any interface.
+State is DB-persisted and survives restarts. Workers cannot modify files — only verify. Activate with `jaw orchestrate`, `/orchestrate`, or `/pabcd`; resume an active worklog explicitly with `/continue`.
 
 ---
 
@@ -314,7 +327,7 @@ jaw memory search "how did we set up the API auth?"
 | **Visualization** | `diagram` | SVG diagrams, charts, interactive visualizations rendered in chat |
 | **Dev Guides** | `dev`, `dev-frontend`, `dev-backend`, `dev-data`, `dev-testing`, `dev-pabcd` | Engineering guidelines injected into agent prompts |
 
-32 skills are always active. 194+ reference skills load on demand.
+Reference skills live in `skills_ref/` and install into the active runtime on demand; active skills are loaded from the user runtime home.
 
 ```bash
 jaw skill install <name>    # activate a reference skill
@@ -330,7 +343,7 @@ jaw skill list              # see what's available
 | **Chrome CDP** | Navigate, click, type, screenshot, evaluate JS, scroll, press keys — full DevTools Protocol control |
 | **Vision-click** | Screenshot the screen → AI extracts target coordinates → clicks. `jaw browser vision-click "Login button"` |
 | **Computer Use** | Desktop app automation via Codex Computer Use MCP. Use Safari for localhost and it feels like the Codex app |
-| **DOM Reference** | Documented selector maps for ChatGPT, Grok, Gemini web UIs |
+| **Web-AI vendors** | `jaw browser web-ai --vendor chatgpt\|gemini\|grok` with session lifecycle, diagnostics, and source-audit/answer-artifact support where implemented |
 | **Diagram Skill** | Generate SVG diagrams and interactive visualizations, rendered inline in chat |
 
 Computer Use lets you control any macOS app — Finder, Safari, System Settings, Xcode — through natural language. Point it at your localhost dev server in Safari and you get a full visual testing loop.
@@ -345,7 +358,7 @@ Computer Use lets you control any macOS app — Finder, Safari, System Settings,
 📱 Telegram ←→ 🦈 CLI-JAW ←→ 🤖 AI Engines
 ```
 
-Text chat, voice messages (auto-transcribed via multi-provider STT), file/photo upload, slash commands (`/cli`, `/model`, `/status`), scheduled task delivery.
+Text chat, voice messages (auto-transcribed via multi-provider STT), file/photo upload, slash commands (`/cli`, `/model`, `/status`), scheduled task delivery via `every`/`cron` heartbeat jobs.
 
 <details>
 <summary>Setup (3 steps)</summary>
@@ -358,7 +371,7 @@ Text chat, voice messages (auto-transcribed via multi-provider STT), file/photo 
 
 ### Discord
 
-Same capabilities as Telegram — text, files, commands. Channel and thread routing with forwarder for agent result broadcast. Setup via Web UI settings.
+Same capabilities as Telegram — text, files, commands. Channel/thread routing, canonical `/api/channel/send`, and forwarder support for agent result broadcast. Setup via Web UI settings.
 
 ### Voice & STT
 
@@ -399,7 +412,8 @@ jaw service install               # auto-start on boot
 
 # AI & Orchestration
 jaw dispatch --agent "Backend" --task "..."  # dispatch employee
-jaw orchestrate                   # enter PABCD workflow
+jaw orchestrate                   # enter/control PABCD workflow
+# in chat: /continue               # explicit worklog/PABCD resume
 
 # Skills & MCP
 jaw skill install <name>          # activate a skill
@@ -468,9 +482,10 @@ docker run -e CHROME_NO_SANDBOX=1 -p 3457:3457 cli-jaw
 npm run build          # tsc → dist/
 npm run dev            # tsx server.ts (hot-reload)
 npm test               # native Node.js test runner
+npm run gate:all       # named release/docs parity gates
 ```
 
-Architecture details: [ARCHITECTURE.md](docs/ARCHITECTURE.md) · Test coverage: [TESTS.md](TESTS.md) · Internal docs: [devlog/structure/](devlog/structure/)
+Architecture details: [ARCHITECTURE.md](docs/ARCHITECTURE.md) · Test coverage: [TESTS.md](TESTS.md) · Internal structure docs: [structure/](structure/)
 
 ---
 
