@@ -46,8 +46,9 @@ export function listPrimitiveCommands(): string[] {
 export function primitivesByCategory(): Record<string, BrowserPrimitive[]> {
     const out: Record<string, BrowserPrimitive[]> = {};
     for (const p of BROWSER_PRIMITIVES) {
-        if (!out[p.category]) out[p.category] = [];
-        out[p.category].push(p);
+        const group = out[p.category] ?? [];
+        group.push(p);
+        out[p.category] = group;
     }
     return out;
 }
