@@ -204,6 +204,25 @@ const GATES = {
             }
         },
     },
+    'browser-primitives-catalog': {
+        description: 'action-breadth catalog exposes the agreed primitive set (G03 mirror)',
+        async check() {
+            try {
+                const { spawnSync } = await import('node:child_process');
+                const path = await import('node:path');
+                const tsxBin = path.resolve(repoRoot, 'node_modules/.bin/tsx');
+                const modPath = path.resolve(repoRoot, 'src/browser/web-ai/action-breadth.ts').replace(/\\\\/g, '/');
+                const fixtureScript = `import { BROWSER_PRIMITIVES, listPrimitiveCommands, BROWSER_PRIMITIVE_SCHEMA_VERSION, auditPrimitiveCoverage } from '${modPath}';\nif (BROWSER_PRIMITIVE_SCHEMA_VERSION !== 'browser-primitives-v1') { console.error('schema-mismatch'); process.exit(2); }\nif (BROWSER_PRIMITIVES.length < 18) { console.error('too-few'); process.exit(3); }\nconst cmds = new Set(listPrimitiveCommands());\nfor (const c of ['select','check','uncheck','upload','drag','scroll','wait-for']) { if (!cmds.has(c)) { console.error('missing:'+c); process.exit(4); } }\nconst fake = [...BROWSER_PRIMITIVES].map(p => 'case ' + JSON.stringify(p.command) + ':').join('\\n');\nconst r = auditPrimitiveCoverage(fake);\nif (!r.ok || r.missing.length !== 0) { console.error('audit-fail'); process.exit(5); }\nconsole.log('OK ' + BROWSER_PRIMITIVES.length + ' primitives');`;
+                const res = spawnSync(tsxBin, ['--eval', fixtureScript], { encoding: 'utf8' });
+                if (res.status !== 0) {
+                    return { ok: false, detail: `action-breadth fixture failed: status=${res.status} stderr=${(res.stderr || '').trim()} stdout=${(res.stdout || '').trim()}` };
+                }
+                return { ok: true, detail: `action-breadth fixture: ${(res.stdout || '').trim()}` };
+            } catch (err) {
+                return { ok: false, detail: `action-breadth gate threw: ${(err && err.message) || err}` };
+            }
+        },
+    },
 };
 
 function printResult(name, result) {

@@ -84,6 +84,7 @@
     "gate:no-cloud-claims": "node scripts/release-gates.mjs no-cloud-claims",
     "gate:observe-actions-fixtures": "node scripts/release-gates.mjs observe-actions-fixtures",
     "gate:observation-bundle-fixtures": "node scripts/release-gates.mjs observation-bundle-fixtures",
+    "gate:browser-primitives-catalog": "node scripts/release-gates.mjs browser-primitives-catalog",
     "gate:all": "node scripts/release-gates.mjs",
     "prepublishOnly": "npm run build && npm run build:frontend",
     "electron:dev": "concurrently -k -n jaw,electron \"node scripts/electron-dev-manager.mjs\" \"npm --prefix electron run dev\"",

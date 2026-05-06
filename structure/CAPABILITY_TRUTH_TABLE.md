@@ -39,6 +39,7 @@ capability.
 | Claim audit (`gate:no-cloud-claims`) | ready | `scripts/claim-audit.mjs`, `scripts/release-gates.mjs` (G10 mirror) | `tests/unit/scripts-claim-audit.test.ts`, `npm run gate:no-cloud-claims` | mirrors `agbrowse/web-ai/claim-audit.mjs`; scans cli-jaw READMEs + truth table |
 | Observe actions API (`buildObserveActions`) | ready | `src/browser/web-ai/observe-actions.ts`, `scripts/release-gates.mjs` (G02 mirror) | `tests/unit/observe-actions.test.ts`, `npm run gate:observe-actions-fixtures` | mirrors `agbrowse/web-ai/observe-actions.mjs`; same ActionCandidate schema |
 | Observation bundle (`buildObservationBundle`, ObservationBundleV1) | ready | `src/browser/web-ai/observation-bundle.ts`, `scripts/release-gates.mjs` (G06 mirror) | `tests/unit/observation-bundle.test.ts`, `npm run gate:observation-bundle-fixtures` | mirrors `agbrowse/web-ai/observation-bundle.mjs`; pure assembler, schema `observation-bundle-v1` |
+| Action breadth catalog (`BROWSER_PRIMITIVES`, 22 primitives) | ready | `src/browser/web-ai/action-breadth.ts`, `scripts/release-gates.mjs` (G03 mirror) | `tests/unit/action-breadth.test.ts`, `npm run gate:browser-primitives-catalog` | mirrors `agbrowse/web-ai/action-breadth.mjs`; schema `browser-primitives-v1`; supports parity audits against agbrowse CLI |
 | Strict TypeScript migration (P00–P20) | ready | repo-wide `tsconfig.json` | `npm run typecheck`, `tests/unit/strict-baseline.test.ts` | independent of agbrowse |
 
 ## Mirror Rules
