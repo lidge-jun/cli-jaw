@@ -201,7 +201,7 @@ export function createDashboardNotesRouter(options: DashboardNotesRouterOptions)
         const q = requireString(req.query["q"], 'invalid_note_search_query', 'q query param is required');
         const limit = typeof req.query["limit"] === 'string' ? Number(req.query["limit"]) : undefined;
         const regex = req.query["regex"] === 'true';
-        res.json(await searchNotes(store.rootPath(), q, { limit, regex }));
+        res.json(await searchNotes(store.rootPath(), q, stripUndefined({ limit, regex })));
     }));
 
     router.get('/index', asyncRoute(async (_req, res) => {
