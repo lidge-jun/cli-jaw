@@ -6,10 +6,10 @@ aliases: [CLI-JAW Server API, server.ts reference, server_api]
 
 > 📚 [INDEX](INDEX.md) · [체크리스트 ↗](AGENTS.md) · [커맨드 ↗](commands.md) · **서버 API**
 
-# server.ts — Glue + Route Registration (726L)
+# server.ts — Glue + Route Registration (741L)
 
-> Express/WS bootstrap + localhost/LAN opt-in 보안 가드 + base route 13개 + `src/routes/*` 11개 registrar 등록.
-> 현재 라이브 surface는 총 126개 route handler이며, 이 중 `/`를 제외한 API 엔드포인트는 125개다.
+> Express/WS bootstrap + localhost/LAN opt-in 보안 가드 + base route 13개 + `src/routes/*` 12개 registrar 등록.
+> 현재 라이브 surface는 총 131개 route handler이며, 이 중 `/`를 제외한 API 엔드포인트는 130개다.
 > mutation route(`POST`/`PUT`/`DELETE`)는 총 71개고 모두 `requireAuth`를 거친다. 단, `requireAuth()`는 loopback 요청을 토큰 없이 통과시키고, `lanAllowed()`가 true일 때 private IP도 LAN bypass로 통과시킨다.
 > `GET /api/auth/token`은 Bearer bootstrap 전용이며 `Sec-Fetch-Site`가 `same-origin` 또는 `none`이 아닐 때 `403`을 반환한다.
 
@@ -19,16 +19,17 @@ aliases: [CLI-JAW Server API, server.ts reference, server_api]
 
 | Module | Lines | Routes | 역할 |
 | --- | ---: | ---: | --- |
-| `server.ts` | 726L | 13 | Helmet/CORS/Host/rate-limit/WS/bootstrap + base routes + module registration |
+| `server.ts` | 741L | 13 | Helmet/CORS/Host/rate-limit/WS/bootstrap + base routes + module registration |
 | `src/routes/settings.ts` | 191L | 18 | settings/prompt/heartbeat-md/MCP/CLI registry/quota/copilot |
 | `src/routes/memory.ts` | 185L | 13 | memory runtime + KV memory + memory files |
-| `src/routes/browser.ts` | 399L | 38 | browser primitive/tab/debug routes + web-ai render/send/poll/watch/sessions/capabilities/context routes |
+| `src/routes/browser.ts` | 442L | 40 | browser primitive/tab/debug/doctor/cleanup routes + web-ai render/send/poll/watch/sessions/capabilities/context routes |
 | `src/routes/jaw-memory.ts` | 239L | 11 | jaw memory search/read/save/list/init/reflect/flush/soul/soul-activate/bootstrap |
 | `src/routes/orchestrate.ts` | 394L | 9 | reset/state/workers/snapshot/queue cancel/queue steer/dispatch/worker result/state PUT |
 | `src/routes/messaging.ts` | 222L | 6 | upload/file-open/voice/telegram/channel/discord send |
 | `src/routes/employees.ts` | 96L | 5 | employee CRUD + reset |
 | `src/routes/skills.ts` | 74L | 5 | skills list/read/enable/disable/reset |
 | `src/routes/avatar.ts` | 146L | 4 | avatar summary + agent/user image upload/delete/read |
+| `src/routes/traces.ts` | 80L | 3 | public trace summary/event read routes |
 | `src/routes/heartbeat.ts` | 43L | 2 | heartbeat GET + validated PUT |
 | `src/routes/i18n.ts` | 26L | 2 | language list + locale bundle |
 | `src/routes/quota.ts` | 344L | — | `settings.ts`가 호출하는 quota reader helper |
@@ -38,10 +39,11 @@ aliases: [CLI-JAW Server API, server.ts reference, server_api]
 
 ```text
 employees → heartbeat → skills → jaw-memory → orchestrate
-→ memory → settings → messaging → avatar → browser → i18n
+→ memory → settings → messaging → avatar → traces
+→ dashboard board/schedule → browser → i18n
 ```
 
-라우트 모듈은 `server.ts:485-496` 부근에서 등록된다.
+라우트 모듈은 `server.ts:543-561` 부근에서 등록된다.
 
 ---
 
@@ -164,7 +166,7 @@ ensureDirs()
 | Settings/Prompt | `GET/PUT /api/settings` `GET /api/codex-context` `GET/PUT /api/prompt` `GET /api/prompt-templates` `PUT /api/prompt-templates/:id` `GET/PUT /api/heartbeat-md` |
 | MCP/CLI/Quota | `GET/PUT /api/mcp` `POST /api/mcp/sync` `POST /api/mcp/install` `POST /api/mcp/reset` `GET /api/cli-registry` `GET /api/cli-status` `GET /api/quota` `POST /api/copilot/refresh` |
 | Heartbeat | `GET/PUT /api/heartbeat` |
-| Browser | `POST /api/browser/start` `POST /api/browser/stop` `GET /api/browser/status` `GET /api/browser/snapshot` `POST /api/browser/screenshot` `POST /api/browser/act` `POST /api/browser/vision-click` `POST /api/browser/navigate` `POST /api/browser/reload` `POST /api/browser/resize` `GET /api/browser/tabs` `GET /api/browser/active-tab` `POST /api/browser/tab-switch` `POST /api/browser/tab-new` `POST /api/browser/tab-close` `POST /api/browser/tab-cleanup` `POST /api/browser/evaluate` `GET /api/browser/text` `GET /api/browser/dom` `GET /api/browser/console` `GET /api/browser/network` `POST /api/browser/wait-for-selector` `POST /api/browser/wait-for-text` `POST /api/browser/web-ai/render` `POST /api/browser/web-ai/context-dry-run` `POST /api/browser/web-ai/context-render` `GET /api/browser/web-ai/status` `POST /api/browser/web-ai/send` `GET /api/browser/web-ai/poll` `GET /api/browser/web-ai/watch` `GET /api/browser/web-ai/watchers` `GET /api/browser/web-ai/sessions` `POST /api/browser/web-ai/sessions/prune` `GET /api/browser/web-ai/notifications` `GET /api/browser/web-ai/capabilities` `POST /api/browser/web-ai/query` `POST /api/browser/web-ai/stop` `GET /api/browser/web-ai/diagnose` |
+| Browser | `POST /api/browser/start` `POST /api/browser/stop` `GET /api/browser/status` `GET /api/browser/doctor` `POST /api/browser/cleanup-runtimes` `GET /api/browser/snapshot` `POST /api/browser/screenshot` `POST /api/browser/act` `POST /api/browser/vision-click` `POST /api/browser/navigate` `POST /api/browser/reload` `POST /api/browser/resize` `GET /api/browser/tabs` `GET /api/browser/active-tab` `POST /api/browser/tab-switch` `POST /api/browser/tab-new` `POST /api/browser/tab-close` `POST /api/browser/tab-cleanup` `POST /api/browser/evaluate` `GET /api/browser/text` `GET /api/browser/dom` `GET /api/browser/console` `GET /api/browser/network` `POST /api/browser/wait-for-selector` `POST /api/browser/wait-for-text` `POST /api/browser/web-ai/render` `POST /api/browser/web-ai/context-dry-run` `POST /api/browser/web-ai/context-render` `GET /api/browser/web-ai/status` `POST /api/browser/web-ai/send` `GET /api/browser/web-ai/poll` `GET /api/browser/web-ai/watch` `GET /api/browser/web-ai/watchers` `GET /api/browser/web-ai/sessions` `POST /api/browser/web-ai/sessions/prune` `GET /api/browser/web-ai/notifications` `GET /api/browser/web-ai/capabilities` `POST /api/browser/web-ai/query` `POST /api/browser/web-ai/stop` `GET /api/browser/web-ai/diagnose` |
 | Orchestrate | `POST /api/orchestrate/reset` `GET /api/orchestrate/state` `GET /api/orchestrate/workers` `GET /api/orchestrate/snapshot` `DELETE /api/orchestrate/queue/:id` `POST /api/orchestrate/queue/:id/steer` `POST /api/orchestrate/dispatch` `GET /api/orchestrate/worker/:agentId/result` `PUT /api/orchestrate/state` |
 | Employees | `GET /api/employees` `POST /api/employees` `PUT /api/employees/:id` `DELETE /api/employees/:id` `POST /api/employees/reset` |
 | Skills | `GET /api/skills` `GET /api/skills/:id` `POST /api/skills/enable` `POST /api/skills/disable` `POST /api/skills/reset` |
@@ -172,9 +174,10 @@ ensureDirs()
 | Jaw Memory | `GET /api/jaw-memory/search` `GET /api/jaw-memory/read` `POST /api/jaw-memory/save` `GET /api/jaw-memory/list` `POST /api/jaw-memory/init` `POST /api/jaw-memory/reflect` `POST /api/jaw-memory/flush` `GET /api/jaw-memory/soul` `POST /api/jaw-memory/soul/activate` `POST /api/jaw-memory/soul` `POST /api/soul/bootstrap` |
 | Messaging | `POST /api/upload` `POST /api/file/open` `POST /api/voice` `POST /api/telegram/send` `POST /api/channel/send` `POST /api/discord/send` |
 | Avatar | `GET /api/avatar` `POST /api/avatar/:target/upload` `DELETE /api/avatar/:target/image` `GET /api/avatar/:target/image` |
+| Traces | `GET /api/traces/:runId` `GET /api/traces/:runId/events` `GET /api/traces/:runId/events/:seq` |
 | i18n | `GET /api/i18n/languages` `GET /api/i18n/:lang` |
 
-> 실제 코드(`server.ts` + `src/routes/*.ts`)에서 추출한 총 126개 route handler 기준이다. 이 중 API 엔드포인트는 125개이고, 나머지 1개는 `/` 엔트리이다. Browser API 38개는 `src/routes/browser.ts`에서 등록된다. 이 중 POST/PUT/DELETE mutation endpoint 71개는 모두 `requireAuth` 보호를 받고, `GET /api/auth/token`은 `Sec-Fetch-Site`가 `same-origin|none`이 아닐 때 `403`을 반환한다.
+> 실제 코드(`server.ts` + `src/routes/*.ts`)에서 추출한 총 131개 route handler 기준이다. 이 중 API 엔드포인트는 130개이고, 나머지 1개는 `/` 엔트리이다. Browser API 40개는 `src/routes/browser.ts`에서 등록된다. 이 중 POST/PUT/DELETE mutation endpoint 71개는 모두 `requireAuth` 보호를 받고, `GET /api/auth/token`은 `Sec-Fetch-Site`가 `same-origin|none`이 아닐 때 `403`을 반환한다.
 
 ### 최근 surface drift
 
@@ -182,7 +185,8 @@ ensureDirs()
 - avatar API가 `registerAvatarRoutes()`로 연결되어 agent/user custom image를 관리한다.
 - `/api/session/reset`이 base route로 추가되어 `/clear`와 의미가 분리됐다.
 - orchestrate API는 queue cancel / queue steer / worker result 조회까지 포함한 9개 route이며, 이전 `continue` route는 현재 코드 표면에 없다.
-- browser API는 primitive/tab/debug 라우트와 web-ai provider automation 라우트를 합쳐 38개 route로 확장됐다.
+- browser API는 primitive/tab/debug/doctor/runtime-cleanup 라우트와 web-ai provider automation 라우트를 합쳐 40개 route로 확장됐다.
+- trace API는 public trace summary와 bounded event page/read를 `GET /api/traces/:runId*` 3개 route로 노출한다.
 
 ---
 
@@ -242,7 +246,7 @@ ensureDirs()
 
 ## WebSocket Events
 
-연결 시 서버는 현재 상태 스냅샷을 먼저 보낸다: `agent_status`, `queue_update`, 비-IDLE `orc_state`. 현재 브로드캐스트되는 WebSocket 이벤트는 22종이다.
+연결 시 서버는 현재 상태 스냅샷을 먼저 보낸다: `agent_status`, `queue_update`, 비-IDLE `orc_state`. 현재 브로드캐스트되는 WebSocket 이벤트는 23종이다.
 
 | Type | 설명 |
 | --- | --- |
@@ -251,6 +255,7 @@ ensureDirs()
 | `agent_output` | 라이브 text chunk preview |
 | `agent_done` | 최종 응답 + toolLog + origin |
 | `agent_retry` / `agent_fallback` | retry/fallback 안내 |
+| `alert_escalation` | repeated failure / capacity fallback escalation alert |
 | `agent_smoke` | smoke auto-continue 안내 |
 | `queue_update` | 대기열 길이 갱신 |
 | `clear` / `session_reset` | UI clear / session reset broadcast |

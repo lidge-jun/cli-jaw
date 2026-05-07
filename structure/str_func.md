@@ -8,8 +8,8 @@ aliases: [CLI-JAW Source Structure, str_func, source structure reference]
 
 # CLI-JAW — Source Structure & Function Reference
 
-> 마지막 검증: 2026-05-05 (실제 코드베이스 재측정)
-> `server.ts` 726L / `src/routes/` 13 files (11 registrar + `quota.ts` helper + `types.ts`, 126 route handlers) / `src/cli/handlers*.ts` 363L + 449L + 92L / `src/cli/api-auth.ts` 45L / `src/agent/spawn.ts` 1451L / `src/manager/` 39 TS/TSX files (6503L, dashboard manager + board/notes/schedule/routes + notes assets/watcher 서브모듈) / `src/browser/web-ai/` 57 files (10238L, ChatGPT/Gemini/Grok 멀티벤더 자동화 + context-pack/tab-pool) / `src/types/` 1 file (75L) / `bin/commands/` 18 top-level ts files + `tui/` 7 helper files
+> 마지막 검증: 2026-05-08 (실제 코드베이스 재측정)
+> `server.ts` 741L / `src/routes/` 15 files (12 registrar + `quota.ts` helper + `types.ts` + trace routes, 131 route handlers) / `src/cli/handlers*.ts` 363L + 449L + 92L / `src/cli/api-auth.ts` 45L / `src/agent/spawn.ts` 1556L / `src/manager/` 46 TS/TSX files (7559L, dashboard manager + board/notes/search/schedule/routes + notes assets/watcher 서브모듈) / `src/browser/web-ai/` 57 files (10238L, ChatGPT/Gemini/Grok 멀티벤더 자동화 + context-pack/tab-pool) / `src/types/` 1 file (75L) / `bin/commands/` 18 top-level ts files + `tui/` 7 helper files
 > issue #91: OfficeCLI 10-phase integration (dual-audited, 94/94 tests) — closed
 > issue #92: Phase 20 overlay consolidation + GitHub Release v1.0.28-lidge.1 (3 audits passed: A-/A/A) — closed
 > issue #95: Avatar image upload — emoji+image dual support, 4 API endpoints, secure path serving — closed
@@ -89,7 +89,7 @@ cli-jaw/
 │   │   ├── builder.ts        ← A-1/A-2 + 스킬 + 직원 프롬프트 v2 + promptCache (4-segment key: emp:role:phase:workingDir) + dev skill rules + **advanced memory mode branch + task snapshot injection** (677L)
 │   │   ├── soul-bootstrap-prompt.ts ← LLM 기반 soul.md 개인화 부트스트랩 프롬프트 빌더 (52L)
 │   │   └── template-loader.ts ← 프롬프트 템플릿 로더 (50L)
-│   ├── manager/              ← Multi-instance 대시보드 매니저 (39 TS/TSX files, 6503L; `jaw dashboard serve` + board/notes/schedule/routes/notes assets/watcher 서브모듈)
+│   ├── manager/              ← Multi-instance 대시보드 매니저 (46 TS/TSX files, 7559L; `jaw dashboard serve` + board/notes/search/schedule/routes/notes assets/watcher 서브모듈)
 │   │   ├── server.ts         ← Express 대시보드 서버 + helmet + 헬스/스캔/액션 라우트 + board/notes/schedule/routes 라우터 마운트 (461L)
 │   │   ├── scan.ts           ← 포트 범위 스캔 + 인스턴스 감지 (148L)
 │   │   ├── proxy.ts          ← 인스턴스 reverse proxy 미들웨어 (231L)
@@ -99,7 +99,7 @@ cli-jaw/
 │   │   ├── registry.ts       ← `manager-instances.json` 영속화 + UI status 패치 (405L)
 │   │   ├── metadata.ts       ← 인스턴스 메타데이터 헬퍼 (43L)
 │   │   ├── constants.ts      ← DASHBOARD_DEFAULT_PORT / MANAGED_INSTANCE_PORT_FROM/COUNT (13L)
-│   │   ├── types.ts          ← Dashboard 타입 (DashboardInstance/Registry/ScanResult 등, 255L)
+│   │   ├── types.ts          ← Dashboard 타입 (DashboardInstance/Registry/ScanResult/NoteSearchResult 등, 363L)
 │   │   ├── dashboard-home.ts ← DASHBOARD_HOME_ENV + resolveDashboardHome + dashboardPath 헬퍼 (22L)
 │   │   ├── dashboard-service.ts ← permDashboard/unpermDashboard/dashboardServiceStatus 서비스 관리 (214L)
 │   │   ├── health-history.ts ← HealthEvent/HealthHistory 건강 이력 추적 + createHealthHistory (138L)
@@ -116,15 +116,22 @@ cli-jaw/
 │   │   ├── board/            ← 칸반 보드 서브모듈 (2 files, 307L)
 │   │   │   ├── store.ts      ← BoardStore 클래스 + DashboardTask/TaskLane CRUD (SQLite) (209L)
 │   │   │   └── routes.ts     ← 칸반 보드 Express 라우터 (createDashboardBoardRouter) (98L)
-│   │   ├── notes/            ← 대시보드 노트 서브모듈 (8 files, 957L)
+│   │   ├── notes/            ← 대시보드 노트 서브모듈 (15 files, 1963L)
 │   │   │   ├── assets.ts     ← note asset path/metadata helpers (65L)
-│   │   │   ├── remote-assets.ts ← remote image fetch/cache helpers (149L)
-│   │   │   ├── store.ts      ← NotesStore 클래스 — 마크다운 노트 CRUD (파일시스템 기반) (296L)
-│   │   │   ├── routes.ts     ← 노트 Express 라우터 (createDashboardNotesRouter) + JSON 에러 핸들러 (191L)
+│   │   │   ├── capabilities.ts ← notes feature capability summary (58L)
+│   │   │   ├── constants.ts  ← notes reserved path constants (11L)
+│   │   │   ├── frontmatter.ts ← frontmatter parse/stringify helpers (159L)
+│   │   │   ├── link-resolver.ts ← note link/wiki-link resolver (107L)
+│   │   │   ├── remote-assets.ts ← remote image fetch/cache helpers (139L)
+│   │   │   ├── search.ts     ← ripgrep-backed markdown search + typed errors + reserved-folder filter (197L)
+│   │   │   ├── store.ts      ← NotesStore 클래스 — 마크다운 노트 CRUD (파일시스템 기반) (297L)
+│   │   │   ├── routes.ts     ← 노트 Express 라우터 (createDashboardNotesRouter) + `/search` + JSON 에러 핸들러 (257L)
 │   │   │   ├── trash.ts      ← NotesTrash 클래스 — os-trash/dashboard-trash 이중 경로 (129L)
-│   │   │   ├── path-guards.ts ← 노트 경로 보안 (assertNoteRelPath, isPathInside, resolveNotePath, encodeTrashPath 등) (87L)
+│   │   │   ├── vault-index.ts ← notes vault index builder (276L)
+│   │   │   ├── path-guards.ts ← 노트 경로 보안 (assertNoteRelPath, isPathInside, resolveNotePath, encodeTrashPath 등) (91L)
 │   │   │   ├── system-trash.ts ← macOS system trash 이동 헬퍼 (moveToSystemTrash) (20L)
-│   │   │   └── watcher.ts    ← notes external file watcher (20L)
+│   │   │   ├── watcher.ts    ← notes external file watcher (33L)
+│   │   │   └── wiki-links.ts ← wiki-link extraction/update helpers (121L)
 │   │   ├── schedule/         ← 스케줄 관리 서브모듈 (4 files, 458L)
 │   │   │   ├── store.ts      ← ScheduleStore 클래스 + DashboardScheduledWork CRUD (SQLite) (230L)
 │   │   │   ├── routes.ts     ← 스케줄 Express 라우터 (createDashboardScheduleRouter) (111L)
@@ -179,7 +186,7 @@ cli-jaw/
 │   │   ├── forwarder.ts      ← Discord 포워딩 헬퍼 (escape, chunk) (45L)
 │   │   └── discord-file.ts   ← Discord 파일 전송 (56L)
 │   ├── browser/              ← Chrome CDP 제어 + web-ai 자동화
-│   │   ├── connection.ts     ← Chrome 탐지/launch/CDP 연결 + readiness polling + retry + headless + **activePort/active-tab 상태 관리** (752L)
+│   │   ├── connection.ts     ← Chrome 탐지/launch/CDP 연결 + readiness polling + retry + headless + runtime diagnostics/orphan cleanup + **activePort/active-tab 상태 관리** (817L)
 │   │   ├── launch-policy.ts  ← browser start mode 정규화 + agent/debug/manual launch policy (51L)
 │   │   ├── actions.ts        ← snapshot/click/type/navigate/screenshot + browser primitive actions (527L)
 │   │   ├── vision.ts         ← vision-click 파이프라인 + Codex provider + guardrail options (204L)
@@ -245,7 +252,7 @@ cli-jaw/
 │   │           └── token-estimator.ts ← estimateTokens, resolveMaxInputTokens, buildBudgetReport (40L)
 │   ├── ide/                   ← IDE 연동 (jaw chat TUI 전용)
 │   │   └── diff.ts            ← git diff 감지 + IDE diff 뷰 + 서브모듈 재귀 + fingerprint 비교 (203L)
-│   ├── routes/               ← Express 라우트 추출 (13 files: 11 registrar + quota helper + types, 126 route handlers)
+│   ├── routes/               ← Express 라우트 추출 (15 files: 12 registrar + quota helper + types + traces, 131 route handlers)
 │   │   ├── types.ts          ← `AuthMiddleware` shared type (3L)
 │   │   ├── employees.ts      ← employee CRUD 라우트 (96L)
 │   │   ├── heartbeat.ts      ← heartbeat read/write 라우트 (43L)
@@ -258,7 +265,8 @@ cli-jaw/
 │   │   ├── messaging.ts      ← upload/file-open/voice/telegram/channel/discord send 라우트 (222L)
 │   │   ├── avatar.ts         ← Agent/User 아바타 이미지 업로드/서빙/삭제 + settings.json 메타 저장 + safeResolveUnder 경로 보호 (146L)
 │   │   ├── quota.ts          ← Copilot/Claude/Codex/Gemini/OpenCode quota helper readers + Claude 429 cache (`settings.ts`/`server.ts`에서 사용) (344L)
-│   │   └── browser.ts        ← 브라우저 API 라우트 + `cdpPort(req)` 포트 우선순위 + primitive/tab/debug/web-ai routes (442L)
+│   │   ├── traces.ts         ← public trace summary/events read routes (80L)
+│   │   └── browser.ts        ← 브라우저 API 라우트 + `cdpPort(req)` 포트 우선순위 + primitive/tab/debug/doctor/cleanup/web-ai routes (442L)
 │   ├── security/             ← 보안 입력 검증 (3 files)
 │   │   ├── path-guards.ts    ← assertSkillId, assertFilename, assertMemoryRelPath, assertSendFilePath, safeResolveUnder (112L)
 │   │   ├── decode.ts         ← decodeFilenameSafe (21L)
@@ -273,7 +281,7 @@ cli-jaw/
 │       ├── catalog.ts        ← COMMANDS → capability map 확장 (43L)
 │       ├── policy.ts         ← getVisibleCommands, getTelegramMenuCommands (39L)
 │       └── help-renderer.ts  ← renderHelp list/detail mode (44L)
-├── public/                   ← Web UI (Vite 8 + ES Modules, 407 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 456 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~57409L)
+├── public/                   ← Web UI (Vite 8 + ES Modules, 409 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 456 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~57694L)
 │   ├── index.html            ← 뼈대 (876L, CLI-JAW 대문자 로고, pill theme switch, data-i18n, 로컬 avatar 입력)
 │   ├── manifest.json         ← PWA 매니페스트 (20L) ✨
 │   ├── sw.js                 ← Service Worker 오프라인 캐시 (104L) ✨
@@ -371,7 +379,7 @@ cli-jaw/
 │       ├── browser-web-ai.ts ← `jaw browser web-ai` ChatGPT/Gemini/Grok 자동화 helper (277L)
 │       ├── dashboard.ts      ← `jaw dashboard serve` — `dist/src/manager/server.js` 서브프로세스 기동 (255L)
 │       └── tui/              ← chat 터미널 TUI 분리 (api/input-handler/overlays/renderer/simple-mode/types/ws-handler, 7 files)
-├── tests/                    ← 회귀 방지 테스트 (311 .test.ts files: root 5 / unit 291 / integration 9 / browser 4 / fixtures + smoke)
+├── tests/                    ← 회귀 방지 테스트 (342 .test.ts files: root 5 / unit 323 / integration 9 / browser 4 / fixtures + smoke)
 │   ├── acp-client.test.ts     ← ACP client contract
 │   ├── employee-session.test.ts ← main-session ownership
 │   ├── events.test.ts        ← 이벤트 파서 단위 테스트 + stepRef + compact event parsing

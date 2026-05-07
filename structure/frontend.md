@@ -10,7 +10,7 @@ aliases: [CLI-JAW Frontend, public architecture, frontend.md]
 
 > Web UI 본체는 Vanilla HTML + CSS + TypeScript ES Modules로 구성된다. Manager 대시보드는 `public/manager/`의 React 19 + TSX 앱이다.
 > 빌드는 Vite 8 기준이며, `vite.config.ts`는 `public/index.html`과 `public/manager/index.html`을 multi-entry로 빌드한다.
-> 현재 `public/`에서 `public/dist/*`를 제외한 소스/자산/legacy duplicate는 404개다. `public/public/dist/*`까지 generated로 보면 실제 편집 대상 소스/자산은 277개다. 생성 산출물은 `public/dist/` 455개와 별도 중복 트리 `public/public/dist/` 127개가 남아 있고, `public/dist/dist/`는 전자에 재귀 포함된 nested 복제본이다.
+> 현재 `public/`에서 `public/dist/*`를 제외한 소스/자산/legacy duplicate는 409개다. `public/public/dist/*`까지 generated로 보면 실제 편집 대상 소스/자산은 282개다. 생성 산출물은 `public/dist/` 456개와 별도 중복 트리 `public/public/dist/` 127개가 남아 있고, `public/dist/dist/`는 전자에 재귀 포함된 nested 복제본이다.
 > 메인 UI는 `index.html`에서 Google Fonts `Chakra Petch` + `Outfit`을 불러오고, 로컬 `public/assets/fonts/GeistVF.woff2`와 `JetBrainsMono-Variable.woff2`는 자산으로 보관 중이다.
 > PWA는 `manifest.json` + `sw.js` + `icons/`로 구성된다. 오프라인 메시지 캐시, virtual scroll, markdown/KaTeX/Mermaid 렌더링, sandboxed diagram widget, avatar emoji/image 커스터마이즈, voice recording, PABCD roadmap, subagent-aware ProcessBlock 렌더링, 반응형 사이드바, theme toggle이 현재 런타임의 핵심이다.
 
@@ -35,7 +35,7 @@ public/
 │   ├── diagram/          ← 3 diagram pipeline modules
 │   └── features/         ← 32 feature modules
 ├── locales/              ← ko/en/ja/zh JSON bundles
-├── manager/              ← React manager dashboard + notes/settings workspaces (191 files)
+├── manager/              ← React manager dashboard + notes/search/settings workspaces (194 files)
 │   ├── index.html        ← Manager HTML entry
 │   └── src/              ← React components/hooks/styles
 └── dist/                 ← Vite build output (generated, nested dist copies remain)
@@ -45,22 +45,22 @@ public/
 
 | 영역 | 파일 수 | 비고 |
 | --- | ---: | --- |
-| `public/` source/assets | 404 | 문서 관례상 `public/dist/*`만 제외, `public/public/dist/*`는 포함 |
-| `public/` source/assets (generated 제외) | 277 | `public/dist/*`, `public/public/dist/*` 모두 제외 |
+| `public/` source/assets | 409 | 문서 관례상 `public/dist/*`만 제외, `public/public/dist/*`는 포함 |
+| `public/` source/assets (generated 제외) | 282 | `public/dist/*`, `public/public/dist/*` 모두 제외 |
 | `public/js/` root | 17 | 전부 TypeScript ES modules, `mermaid-loader.ts`, `uuid.ts`, `virtual-scroll-bootstrap.ts` 포함 |
 | `public/js/diagram/` | 3 | SVG/iframe diagram pipeline |
 | `public/js/features/` | 32 | settings 분해 + help/attention/orchestrate scope + process-step-match 포함 |
-| `public/manager/` | 191 | React 19 manager dashboard, notes, schedule, settings, sync, WYSIWYG source |
+| `public/manager/` | 194 | React 19 manager dashboard, notes/search, schedule, settings, sync, WYSIWYG source |
 | `public/css/` | 9 | theme/layout/chat/markdown/tool UI/diagram |
 | `public/locales/` | 4 | `ko.json`, `en.json`, `ja.json`, `zh.json` |
 | `public/assets/providers/` | 10 | provider SVG 세트 |
 | `public/assets/fonts/` | 2 | 로컬 폰트 자산 |
 | `public/icons/` | 3 | PWA icons |
-| `public/dist/` | 455 | generated build output, nested `dist/dist` 포함 |
+| `public/dist/` | 456 | generated build output, nested `dist/dist` 포함 |
 | `public/public/dist/` | 127 | old build duplicate |
 | `public/dist/dist/` | 127 | old build duplicate |
 
-> 참고: `public/dist/` 455개에는 `public/dist/dist/` 127개가 이미 재귀 포함된다. 그래서 별도 루트 기준으로 보면 현재 남아 있는 build tree는 `public/dist/`와 `public/public/dist/` 두 갈래다.
+> 참고: `public/dist/` 456개에는 `public/dist/dist/` 127개가 이미 재귀 포함된다. 그래서 별도 루트 기준으로 보면 현재 남아 있는 build tree는 `public/dist/`와 `public/public/dist/` 두 갈래다.
 
 ---
 
@@ -203,17 +203,28 @@ settings.ts
 | `manager/index.html` | `#manager-root`와 `/manager/src/main.tsx`를 가진 Manager HTML entry |
 | `manager/src/main.tsx` | `react-dom/client` `createRoot()`로 `App` 렌더 |
 | `manager/src/App.tsx` | instance scan/filter/select/lifecycle + dashboard section 상태 orchestration |
-| `manager/src/api.ts` | `/api/dashboard/instances`, `/api/dashboard/registry`, `/api/dashboard/lifecycle/:action` fetch wrapper |
+| `manager/src/api.ts` | `/api/dashboard/instances`, `/api/dashboard/registry`, `/api/dashboard/lifecycle/:action`, `/api/dashboard/notes/search` fetch wrapper |
 | `manager/src/components/` | `ManagerShell`, `WorkspaceLayout`, `Instance*`, `Command*`, `ActivityDock`, `MobileNav` 등 dashboard UI |
 | `manager/src/dashboard-board/` | standard workflow lanes (`backlog`, `ready`, `active`, `review`, `done`) 기반 board UI |
 | `manager/src/dashboard-schedule/` | schedule/heartbeat dashboard UI |
 | `manager/src/hooks/` | dashboard registry/view persistence hooks |
-| `manager/src/notes/` | markdown notes, image-assets, rich-markdown, WYSIWYG editing |
+| `manager/src/notes/` | markdown notes, search panel, image-assets, rich-markdown, WYSIWYG editing |
 | `manager/src/settings/` | settings pages/components/field renderers |
 | `manager/src/sync/` | dashboard sync helpers |
 | `manager/src/*.css` | manager 전용 layout/components/persistence/polish/styles |
 
 Manager 서버는 `jaw dashboard serve`가 실행하는 `src/manager/server.ts`이며 기본 port는 `24576`, 기본 scan 범위는 `3457`부터 50개다.
+
+### Manager Notes Search
+
+Notes 검색은 backend `src/manager/notes/search.ts`의 ripgrep 기반 검색과 frontend `NotesSearchPanel.tsx`가 한 세트다.
+
+| 관심사 | 현재 구현 |
+| --- | --- |
+| API wrapper | `public/manager/src/api.ts`의 `searchNotes()`가 `/api/dashboard/notes/search?q=`를 호출하고 typed `DashboardNoteSearchResult[]`를 반환한다. `AbortController.signal`은 값이 있을 때만 `RequestInit`에 넣어 `exactOptionalPropertyTypes`와 맞춘다. |
+| UI entry | `NotesWorkspace.tsx`가 `NotesSearchPanel`을 렌더하고 검색 shortcut을 토글한다. |
+| Panel behavior | `NotesSearchPanel.tsx`는 debounced query, stale request abort, typed error rendering, result click-to-open을 담당한다. |
+| Styling | `notes-search.css`는 `.notes-workspace`를 overlay positioning context로 만들고 `.notes-search-panel`을 workspace 안에 띄운다. |
 
 ---
 
@@ -256,7 +267,11 @@ subagent 렌더링 변경 이후 tool history의 canonical UI는 `features/proce
 | `public/js/icons.ts` | 278L | Lucide registry + emoji compatibility + `robot`/`tool` ProcessBlock icon source |
 | `public/css/tool-ui.css` | 548L | legacy tool group뿐 아니라 ProcessBlock layout/style 대부분 포함 |
 | `public/js/state.ts` | 89L | `currentProcessBlock` + `currentAgentDiv` shared runtime state |
-| `public/manager/src/App.tsx` | 625L | Manager dashboard state orchestration |
+| `public/manager/src/App.tsx` | 632L | Manager dashboard state orchestration |
+| `public/manager/src/api.ts` | 276L | Dashboard API wrapper, including typed notes search fetch |
+| `public/manager/src/notes/NotesWorkspace.tsx` | 210L | Notes workspace + search panel toggle/shortcut |
+| `public/manager/src/notes/NotesSearchPanel.tsx` | 121L | Abortable debounced notes search overlay |
+| `public/manager/src/notes/notes-search.css` | 108L | Notes search overlay positioning/styling |
 
 ---
 
@@ -297,7 +312,7 @@ subagent 렌더링 변경 이후 tool history의 canonical UI는 `features/proce
 | WS | `agent_tool`은 typed ProcessBlock step으로, `agent_output`은 streaming renderer로, `agent_done`은 finalization으로 흘러가며, reconnect 직후 10초 이내에는 중복 `loadMessages()`를 건너뛴다 |
 | 상태 | `agent_status`, `queue_update`, `orc_state`, `session_reset`, `clear`, Telegram/Discord `new_message`를 처리한다 |
 | 반응형 | sidebar collapse/expand, mobile edge swipe, mobile nav, theme switch, PABCD roadmap, voice shortcut(`Ctrl/Cmd+Shift+Space`) 지원 |
-| Manager | 별도 React 앱이 dashboard API로 Jaw 인스턴스 scan/preview/lifecycle 관리 |
+| Manager | 별도 React 앱이 dashboard API로 Jaw 인스턴스 scan/preview/lifecycle과 notes search를 관리 |
 
 ### 주의할 점
 
@@ -311,3 +326,4 @@ subagent 렌더링 변경 이후 tool history의 canonical UI는 `features/proce
 - `7ade8e5` 이후 virtual scroll은 viewport child를 재사용하고 `onPostRender` hook에서 widget activation/linkification을 처리한다.
 - `a42de89` 이후 virtual scroll live append id 안정성과 runtime path hardening이 같이 들어가, 서비스 재기동 직후에도 avatar/image path와 UI append 흐름이 덜 깨지도록 보강됐다.
 - 2026-04-24 subagent rendering 반영: `toolType: 'subagent'` 보존, summary Tool/Subagent split, stepRef 기반 running->done merge, done-only fallback 제한, repeated done-only dedup, ProcessBlock row icon column, rawIcon/trusted SVG 정책을 문서화했다.
+- 2026-05-08 notes search 반영: `NotesSearchPanel.tsx` + `notes-search.css` + `searchNotes()` wrapper가 추가되어 Manager Notes에서 markdown 본문 검색을 UI/API 양쪽으로 지원한다.

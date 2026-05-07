@@ -33,7 +33,7 @@ graph LR
     ORC --> AGT
 ```
 
-4개 인터페이스(CLI, Web, Telegram, Discord)는 `server.ts`를 경유하고, `server.ts`는 인증/보안/WS/bootstrap을 맡은 뒤 `src/routes/`의 11개 route registrar와 2개 shared helper(`types.ts`, `quota.ts`)로 API를 위임합니다. Browser route registrar는 일반 CDP primitive와 `web-ai` ChatGPT/Gemini/Grok 자동화 API를 함께 제공하므로 route 수가 가장 큽니다. Process/tool logs는 `src/shared/tool-log-sanitize.ts`에서 WS와 snapshot 저장 전에 cap/truncate되어 Manager 대시보드 메모리 폭주를 막습니다.
+4개 인터페이스(CLI, Web, Telegram, Discord)는 `server.ts`를 경유하고, `server.ts`는 인증/보안/WS/bootstrap을 맡은 뒤 `src/routes/`의 12개 route registrar와 2개 shared helper(`types.ts`, `quota.ts`)로 API를 위임합니다. Browser route registrar는 일반 CDP primitive, runtime doctor/cleanup, `web-ai` ChatGPT/Gemini/Grok 자동화 API를 함께 제공하므로 route 수가 가장 큽니다. Process/tool logs는 `src/shared/tool-log-sanitize.ts`에서 WS와 snapshot 저장 전에 cap/truncate되어 Manager 대시보드 메모리 폭주를 막습니다.
 
 ---
 
@@ -61,9 +61,9 @@ graph LR
 | [memory_architecture.md](memory_architecture.md) | History Block + Flush + Advanced Runtime + Task Snapshot | 메모리, flush, runtime, snapshot |
 | [infra.md](infra.md) | config, db, bus, security 등 코어 모듈 | 인프라, SQLite, EventBus |
 | [commands.md](commands.md) | 24개 슬래시 커맨드 + root CLI 18개 서브커맨드 + `browser web-ai` + explicit `/continue` note | 커맨드, 디스패처, 레지스트리 |
-| [server_api.md](server_api.md) | `server.ts` 글루 + `src/routes/` API 126 handlers / 125 endpoints | REST, WebSocket, 라우트 |
+| [server_api.md](server_api.md) | `server.ts` 글루 + `src/routes/` API 131 handlers / 130 endpoints | REST, WebSocket, 라우트 |
 | [stream-events.md](stream-events.md) | CLI NDJSON 이벤트 트레이스 + ProcessBlock 매핑 | NDJSON, stepRef, ProcessBlock |
-| [🎨 frontend.md](frontend.md) | `public/` 소스/자산 277개 + `public/dist/` 생성물 455개, Manager notes/settings/WYSIWYG, ProcessBlock 렌더링, bounded tool-log hydration | 프론트엔드, Vite 8, PWA, ProcessBlock |
+| [🎨 frontend.md](frontend.md) | `public/` 소스/자산 282개 + `public/dist/` 생성물 456개, Manager notes/search/settings/WYSIWYG, ProcessBlock 렌더링, bounded tool-log hydration | 프론트엔드, Vite 8, PWA, ProcessBlock |
 | [frontend_modernization_analysis.md](frontend_modernization_analysis.md) | 8개 현대화 제안의 비용-편익 분석 | 리팩터링, 비용분석, 마이그레이션 |
 | [telegram.md](telegram.md) | Telegram 봇 + heartbeat + 음성 STT | 텔레그램, 하트비트, STT |
 | [prompt_basic_A1.md](prompt_basic_A1.md) | 시스템 프롬프트 기본값 (A-1.md) | 시스템규칙, 기본값 |
@@ -113,6 +113,9 @@ Support labels must stay aligned with agbrowse:
 | Unified channel send | `src/messaging/*`, `src/routes/messaging.ts`, `src/telegram/*`, `src/discord/*` | `/api/channel/send` is canonical; `/api/telegram/send` and `/api/discord/send` remain compatibility/direct paths. |
 | Browser runtime lifecycle | `src/browser/runtime-diagnostics.ts`, `src/browser/runtime-orphans.ts`, `src/browser/tab-lifecycle.ts`, `src/browser/web-ai/session*.ts` | browser docs should mention runtime doctor/orphan cleanup, persistent tab lifecycle, and web-ai session reattach. |
 | Release gates | `scripts/release-gates.mjs`, `package.json` | `gate:all` now owns named docs/parity gates in addition to typecheck/tests. |
+| Manager notes search | `src/manager/notes/search.ts`, `src/manager/notes/routes.ts`, `public/manager/src/notes/NotesSearchPanel.tsx` | Manager notes docs should describe ripgrep-backed markdown search, `/api/dashboard/notes/search`, abortable frontend search, and typed search errors. |
+| Trace read API | `src/routes/traces.ts`, `src/trace/store.ts` | Server API docs should list public trace summary/event routes and the `alert_escalation` WS event. |
+| PABCD Project root guard + Jawdev skill guidance | `src/orchestrator/pipeline.ts`, `src/orchestrator/state-machine.ts`, `skills_ref/dev*/SKILL.md`, `structure/prompt_basic_B.md` | PABCD docs should require `Project root: <absolute path>` in injected/dispatch examples and skill docs should prefer strict TypeScript plus existing `structure/`/`devlog`/SOT discovery. |
 
 ---
 
@@ -147,4 +150,4 @@ Support labels must stay aligned with agbrowse:
 
 ---
 
-*마지막 갱신: 2026-05-06 (`server.ts` 726L, `src/routes/` 126 route handlers / 125 API endpoints, `src/manager/` 39 TS/TSX files / 6503L, `src/browser/web-ai/` 57 TS files / 10238L, `bin/commands/` 18 top-level ts subcommands + `tui/` 7 helper, `public/js/` 52 .ts (root 17 + features 32 + diagram 3), `public/manager/` 191 files, tests 311 .test.ts 기준)*
+*마지막 갱신: 2026-05-08 (`server.ts` 741L, `src/routes/` 131 route handlers / 130 API endpoints, `src/manager/` 46 TS/TSX files / 7559L, `src/browser/web-ai/` 57 TS files / 10238L, `bin/commands/` 18 top-level ts subcommands + `tui/` 7 helper, `public/js/` 52 .ts (root 17 + features 32 + diagram 3), `public/manager/` 194 files, tests 342 .test.ts 기준)*
