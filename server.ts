@@ -5,7 +5,6 @@ import express, { type Request } from 'express';
 import helmet from 'helmet';
 import { log } from './src/core/logger.js';
 import { createServer } from 'http';
-import { spawn } from 'node:child_process';
 import { WebSocketServer } from 'ws';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -56,6 +55,7 @@ import {
     clearAllEmployeeSessions,
 } from './src/core/db.js';
 import { dashboardActivityTitleFromExcerpt } from './src/core/message-summary.js';
+import { openUrlInBrowser } from './src/core/browser-open.js';
 import { sanitizeSerializedToolLog } from './src/shared/tool-log-sanitize.js';
 import {
     initPromptFiles, regenerateB,
@@ -677,21 +677,7 @@ server.listen(PORT, bindHost, async () => {
         || (process.env["npm_lifecycle_event"] || '').includes('test');
     if (process.env["JAW_OPEN_BROWSER"] === '1' && !isTestEnv) {
         const url = `http://localhost:${PORT}`;
-        try {
-            const openCmd = process.platform === 'darwin' ? 'open'
-                : process.platform === 'win32' ? 'cmd'
-                    : 'xdg-open';
-            const openArgs = process.platform === 'win32'
-                ? ['/c', 'start', '', url]
-                : [url];
-            const opener = spawn(openCmd, openArgs, { detached: true, stdio: 'ignore' });
-            opener.on('error', (err) => {
-                log.info(`  Browser: could not auto-open (${err.message})`);
-            });
-            opener.unref();
-        } catch (e: unknown) {
-            log.info(`  Browser: could not auto-open (${(e as Error).message})`);
-        }
+        openUrlInBrowser(url, { logPrefix: 'serve' });
     }
 
     try {

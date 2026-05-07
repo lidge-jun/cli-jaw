@@ -8,6 +8,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { getServerUrl } from '../../src/core/config.js';
+import { shouldOpenBrowserByDefault } from '../../src/core/browser-open-default.js';
 import fs from 'node:fs';
 import { shouldShowHelp, printAndExit } from '../helpers/help.js';
 
@@ -33,7 +34,7 @@ const { values } = parseArgs({
     options: {
         port: { type: 'string', default: process.env["PORT"] || '3457' },
         host: { type: 'string', default: '0.0.0.0' },
-        open: { type: 'boolean', default: true },
+        open: { type: 'boolean', default: shouldOpenBrowserByDefault() },
         lan: { type: 'boolean', default: false },
         remote: { type: 'boolean', default: false },
         'trust-proxy': { type: 'boolean', default: false },

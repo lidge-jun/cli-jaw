@@ -33,7 +33,7 @@ import { createDashboardBoardRouter } from './board/routes.js';
 import { createDashboardScheduleRouter } from './schedule/routes.js';
 import { ScheduleStore } from './schedule/store.js';
 import { startScheduleRunner } from './schedule/runner.js';
-import { openDashboardUrl } from './browser-open.js';
+import { openUrlInBrowser } from '../core/browser-open.js';
 import type {
     DashboardInstance,
     DashboardServiceState,
@@ -446,7 +446,7 @@ async function main(): Promise<void> {
         });
 
         if (process.env["JAW_DASHBOARD_OPEN"] === '1') {
-            openDashboardUrl(url);
+            openUrlInBrowser(url, { logPrefix: 'dashboard' });
         }
     });
 }

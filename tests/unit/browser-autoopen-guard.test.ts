@@ -9,12 +9,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const root = join(__dirname, '..', '..');
 
-test('BAO-001: serve --open default is true (jaw serve opens browser)', () => {
+test('BAO-001: serve --open defaults through headless-aware browser policy', () => {
     const src = readSource(join(root, 'bin', 'commands', 'serve.ts'), 'utf8');
     assert.match(
         src,
-        /open:\s*\{\s*type:\s*'boolean',\s*default:\s*true\s*\}/,
-        'serve.ts should keep --open default true so jaw serve opens browser',
+        /open:\s*\{\s*type:\s*'boolean',\s*default:\s*shouldOpenBrowserByDefault\(\)\s*\}/,
+        'serve.ts should use the shared headless-aware browser open default',
     );
 });
 
@@ -42,5 +42,14 @@ test('BAO-004: server auto-open skips in test environments', () => {
         src,
         /isTestEnv/,
         'server.ts should have isTestEnv guard to prevent browser opening during npm test',
+    );
+});
+
+test('BAO-005: server auto-open uses shared WSL-safe browser opener', () => {
+    const src = readSource(join(root, 'server.ts'), 'utf8');
+    assert.match(
+        src,
+        /openUrlInBrowser\(url,\s*\{\s*logPrefix:\s*'serve'\s*\}\)/,
+        'server.ts should share the WSL-safe opener used by dashboard',
     );
 });

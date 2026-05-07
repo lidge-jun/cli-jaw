@@ -6,6 +6,10 @@ type BrowserOpenCommand = {
     args: string[];
 };
 
+type BrowserOpenOptions = {
+    logPrefix?: string;
+};
+
 export function isWslEnvironment(env: NodeJS.ProcessEnv = process.env): boolean {
     if (env["WSL_DISTRO_NAME"] || env["WSL_INTEROP"]) return true;
     if (!existsSync('/proc/version')) return false;
@@ -26,12 +30,18 @@ export function browserOpenCommand(url: string, platform = process.platform, env
     return { command: 'xdg-open', args: [url] };
 }
 
-export function openDashboardUrl(url: string): void {
-    const { command, args } = browserOpenCommand(url);
-    const opener = spawn(command, args, { detached: true, stdio: 'ignore' });
-    opener.on('error', error => {
-        console.warn(`[dashboard] failed to open browser automatically: ${error.message}`);
-        console.warn(`[dashboard] open manually: ${url}`);
-    });
-    opener.unref();
+export function openUrlInBrowser(url: string, options: BrowserOpenOptions = {}): void {
+    const logPrefix = options.logPrefix || 'browser';
+    try {
+        const { command, args } = browserOpenCommand(url);
+        const opener = spawn(command, args, { detached: true, stdio: 'ignore' });
+        opener.on('error', error => {
+            console.warn(`[${logPrefix}] failed to open browser automatically: ${error.message}`);
+            console.warn(`[${logPrefix}] open manually: ${url}`);
+        });
+        opener.unref();
+    } catch (error) {
+        console.warn(`[${logPrefix}] failed to open browser automatically: ${(error as Error).message}`);
+        console.warn(`[${logPrefix}] open manually: ${url}`);
+    }
 }
