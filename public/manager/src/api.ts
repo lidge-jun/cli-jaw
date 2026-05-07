@@ -180,7 +180,9 @@ export async function searchNotes(
     const params = new URLSearchParams({ q: query });
     if (options.limit !== undefined) params.set('limit', String(options.limit));
     if (options.regex) params.set('regex', 'true');
-    const response = await fetch(`/api/dashboard/notes/search?${params}`, { signal: options.signal });
+    const init: RequestInit = {};
+    if (options.signal) init.signal = options.signal;
+    const response = await fetch(`/api/dashboard/notes/search?${params}`, init);
     return await parseNotesResponse<DashboardNoteSearchResult[]>(
         response,
         `notes search failed: ${response.status}`,
