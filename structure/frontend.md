@@ -84,11 +84,11 @@ public/
 | 파일 | 역할 |
 | --- | --- |
 | `js/render.ts` | marked + highlight.js + KaTeX + Mermaid + diagram-html widget rendering, SVG/HTML sanitization, orchestration stripping, local file-path linkification + open interception, lazy Mermaid refresh, 100ms batched post-render debounce |
-| `js/ui.ts` | 메시지 렌더링, skeleton/empty state, virtual scroll 연동, ProcessBlock 오케스트레이션, subagent/tool step merge + dedup, copy button, markdown/file-path post-render linkification, avatar markup 주입, message finalization, bottom-follow intent helper |
+| `js/ui.ts` | 메시지 렌더링, skeleton/empty state, virtual scroll 연동, ProcessBlock 오케스트레이션, subagent/tool step merge + dedup, copy button, markdown/file-path post-render linkification, avatar markup 주입, message finalization, `scrollIntent` 기반 bottom-follow/restore policy |
 | `js/ws.ts` | WebSocket 메시지 라우팅. agent status, queue update, `agent_tool`→typed ProcessStep, agent output/done, orchestration state, Telegram/Discord new message, reconnect snapshot, 10초 reload dedup, reconnect 후 bottom anchor reconciliation |
 | `js/streaming-render.ts` | 스트리밍 텍스트 렌더러 |
-| `js/virtual-scroll-bootstrap.ts` | virtual scroll 초기 hydrate/measure/bootstrap 오케스트레이터 |
-| `js/virtual-scroll.ts` | TanStack virtualizer 기반 DOM 풀링, mounted node 재사용, post-render hook 실행, pageshow/visibility/focus 복귀 시 bottom-follow intent reconciliation |
+| `js/virtual-scroll-bootstrap.ts` | virtual scroll 초기 hydrate/measure/bootstrap 오케스트레이터. bootstrap 전 scroll tracking bind와 bootstrap 후 following intent 확정 hook을 제공 |
+| `js/virtual-scroll.ts` | TanStack virtualizer 기반 DOM 풀링, mounted node 재사용, post-render hook 실행, pageshow/visibility/focus 복귀 시 guarded bottom-follow reconciliation, ProcessBlock mutation anchor 보존 |
 | `js/sanitizer.ts` | DOMPurify singleton + SVG/HTML attribute hook boundary. `render.ts`는 이 adapter를 통해서만 sanitizer 인스턴스를 사용한다 |
 | `js/cjk-fix.ts` | CJK 줄바꿈/구두점 보정 |
 
@@ -99,6 +99,8 @@ public/
 | Web UI runtime tests | `tests/unit/web-ui-test-dom.ts`가 jsdom window/document/observer globals를 먼저 설치하고, frontend modules는 dynamic import한다 |
 | ProcessBlock DOM recovery | `.process-step` row는 `data-step-id`, `data-type`, `data-status`, `data-step-ref`, `data-start-time`을 보존한다. DOM에서 복구한 `ProcessBlockState`는 `element`, `steps`, `collapsed`를 유지한다 |
 | ProcessBlock ownership | assistant message의 tool UI는 `.agent-body > .process-block` 또는 legacy `.agent-body > .tool-group` 하나만 허용되며 `.msg-content` 내부 tool block은 normalize 단계에서 제거/승격된다 |
+| ProcessBlock layout mutation | detail/summary toggle은 `window.__jawProcessBlockLayoutMutation(anchor, mutate)` bridge를 거쳐 virtual-scroll mounted row remeasure와 row-top anchor 보존을 요청한다 |
+| Restore bottom-follow intent | restore/reconnect는 `scrollIntent = unknown/following/pinnedAway`를 기준으로 guarded reconciliation을 수행한다. 사용자가 위에서 읽는 `pinnedAway` 상태에서는 delayed restore pass와 final DOM scroll이 bottom으로 끌어내리지 않는다 |
 | Mermaid lifecycle | virtual-scroll unmount/deactivate 전 `releaseMermaidNodes()`가 pending/queued/in-flight Mermaid nodes를 observer에서 해제하고 transient markers를 제거한다 |
 | Build output guard | `npm run check:frontend-build-output`가 built app entry에서 eager Mermaid/vendor-utils reference를 차단하고 lazy `mermaid-loader` dynamic import는 허용한다 |
 | Tool-log memory cap | Server-side `sanitizeToolLog*()` caps `agent_tool`, `agent_done.toolLog`, and snapshot `activeRun.toolLog` before ProcessBlock/Manager hydration. |
@@ -244,6 +246,7 @@ subagent 렌더링 변경 이후 tool history의 canonical UI는 `features/proce
 | ghost replacement | detail 있는 재broadcast가 같은 label+type의 detail 없는 running ghost를 만나면 해당 row를 교체한다. |
 | finalization | `finalizeAgent()`는 live ProcessBlock 또는 canonical DOM block이 이미 있던 응답에서는 static tool HTML을 다시 붙이지 않는다. static tool HTML은 `.msg-content` 안이 아니라 `.agent-body > .process-block` 위치에만 둔다. |
 | single-owner invariant | assistant message의 tool history는 `.agent-body > .process-block` 또는 legacy `.agent-body > .tool-group` 하나만 허용한다. `normalizeAgentToolBlocks()`가 finalize/hydrate/live-step/virtual-scroll serialization 전에 중첩 `.msg-content > .process-block`과 duplicate block을 정리한다. |
+| layout mutation anchor | ProcessBlock detail expand/collapse와 summary collapse는 clicked `.process-step`/`.process-block` anchor를 전달한다. virtual scroll은 mutation 전 row top을 캡처하고 remeasure 후 delta를 보정해 사용자가 읽던 위치를 유지한다. |
 | lazy history render | virtual-scroll history item은 raw markdown `data-raw`와 escaped raw `data-tool-log`만 저장한다. markdown과 tool-log ProcessBlock detail HTML은 mounted lazy render 시점에 만들고 `body.dataset.toolLog`를 삭제한다. |
 | mermaid cleanup | `virtual-scroll.ts`는 unmount/deactivate 전에 `releaseMermaidNodes()`를 호출해 `.mermaid-pending` observer target과 transient queue flags를 해제한다. |
 | vendor chunk split | Mermaid는 `public/js/mermaid-loader.ts` lazy path 뒤에 둔다. `vite.config.ts`는 강제 `vendor-mermaid` manual chunk를 만들지 않고, lodash-es/d3/chevrotain만 `vendor-utils`로 분리해 app entry의 Mermaid/static utility hoist를 줄인다. |

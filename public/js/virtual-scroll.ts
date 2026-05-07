@@ -34,7 +34,12 @@ export interface VirtualItem {
 }
 
 export type LazyRenderCallback = (targets: HTMLElement[]) => void;
+export type RestoreFollowPredicate = () => boolean;
 type MeasurableVirtualElement = Pick<HTMLElement, 'getBoundingClientRect'>;
+interface ScrollAnchor {
+    el: HTMLElement;
+    top: number;
+}
 
 function readMeasuredHeight(el: MeasurableVirtualElement): number {
     const height = Math.ceil(el.getBoundingClientRect().height);
@@ -73,6 +78,7 @@ export class VirtualScroll {
     private mounted = new Map<number, HTMLElement>();
     private itemGap = 0;
     private restorePassTimers = new Set<number>();
+    private shouldFollowAfterRestore: RestoreFollowPredicate = () => true;
 
     onLazyRender: LazyRenderCallback | null = null;
     onPostRender: ((viewport: HTMLElement) => void) | null = null;
@@ -193,6 +199,10 @@ export class VirtualScroll {
         return dist < threshold;
     }
 
+    setRestoreFollowPredicate(predicate: RestoreFollowPredicate | null): void {
+        this.shouldFollowAfterRestore = predicate ?? (() => true);
+    }
+
     reconcileBottomAfterLayout(reason: RestoreReason, shouldFollow = this.isNearBottom()): void {
         if (!shouldFollow) return;
         void reason;
@@ -204,35 +214,96 @@ export class VirtualScroll {
         });
     }
 
+    reconcileAfterRestore(reason: RestoreReason, shouldFollow: RestoreFollowPredicate = this.shouldFollowAfterRestore): void {
+        if (!shouldFollow()) {
+            this.invalidateLayout();
+            return;
+        }
+        this.scheduleRestoreReconcile(reason, shouldFollow);
+    }
+
     forceBottomAfterRestore(reason: RestoreReason): void {
         this.scheduleRestoreReconcile(reason);
     }
 
-    private scheduleRestoreReconcile(reason: RestoreReason): void {
-        this.runRestoreReconcilePass(reason);
-        requestAnimationFrame(() => this.runRestoreReconcilePass(reason));
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => this.runRestoreReconcilePass(reason));
-        });
-        this.scheduleRestoreTimer(reason, 250);
-        this.scheduleRestoreTimer(reason, 1000);
-        void document.fonts?.ready.then(() => this.runRestoreReconcilePass(reason));
+    cancelRestoreReconcile(_reason?: RestoreReason): void {
+        this.clearRestoreTimers();
     }
 
-    private scheduleRestoreTimer(reason: RestoreReason, delayMs: number): void {
+    preserveScrollDuringMutation<T>(anchorEl: Element | null, mutate: () => T): T {
+        const wasNearBottom = this.isNearBottom();
+        const anchor = this.captureScrollAnchor(anchorEl);
+        const result = mutate();
+        this.invalidateLayout();
+        if (wasNearBottom) {
+            this.reconcileBottomAfterLayout('manual', true);
+            return result;
+        }
+        this.restoreScrollAnchor(anchor);
+        return result;
+    }
+
+    private scheduleRestoreReconcile(reason: RestoreReason, shouldFollow?: RestoreFollowPredicate): void {
+        this.runRestoreReconcilePass(reason, shouldFollow);
+        requestAnimationFrame(() => this.runRestoreReconcilePass(reason, shouldFollow));
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => this.runRestoreReconcilePass(reason, shouldFollow));
+        });
+        this.scheduleRestoreTimer(reason, 250, shouldFollow);
+        this.scheduleRestoreTimer(reason, 1000, shouldFollow);
+        void document.fonts?.ready.then(() => this.runRestoreReconcilePass(reason, shouldFollow));
+    }
+
+    private scheduleRestoreTimer(reason: RestoreReason, delayMs: number, shouldFollow?: RestoreFollowPredicate): void {
         const timer = window.setTimeout(() => {
             this.restorePassTimers.delete(timer);
-            this.runRestoreReconcilePass(reason);
+            this.runRestoreReconcilePass(reason, shouldFollow);
         }, delayMs);
         this.restorePassTimers.add(timer);
     }
 
-    private runRestoreReconcilePass(reason: RestoreReason): void {
+    private runRestoreReconcilePass(reason: RestoreReason, shouldFollow?: RestoreFollowPredicate): void {
         if (!this.virtualizer) return;
         void reason;
+        if (shouldFollow && !shouldFollow()) {
+            this.cancelRestoreReconcile(reason);
+            this.invalidateLayout();
+            return;
+        }
         this.invalidateLayout();
         remeasureMountedVirtualItems(this.items, this.mounted, this.virtualizer);
         this.scrollToBottom();
+    }
+
+    private captureScrollAnchor(preferred: Element | null): ScrollAnchor | null {
+        const preferredEl = preferred instanceof HTMLElement ? preferred : null;
+        const chosen = preferredEl && this.isVisibleInContainer(preferredEl)
+            ? preferredEl
+            : this.firstVisibleMountedItem();
+        return chosen ? { el: chosen, top: chosen.getBoundingClientRect().top } : null;
+    }
+
+    private restoreScrollAnchor(anchor: ScrollAnchor | null): void {
+        if (!anchor || !anchor.el.isConnected) return;
+        const afterTop = anchor.el.getBoundingClientRect().top;
+        const delta = afterTop - anchor.top;
+        if (Number.isFinite(delta) && delta !== 0) {
+            this.container.scrollTop += delta;
+        }
+    }
+
+    private firstVisibleMountedItem(): HTMLElement | null {
+        const mounted = Array.from(this.mounted.entries()).sort(([a], [b]) => a - b);
+        for (const [, el] of mounted) {
+            if (this.isVisibleInContainer(el)) return el;
+        }
+        return null;
+    }
+
+    private isVisibleInContainer(el: HTMLElement): boolean {
+        const rect = el.getBoundingClientRect();
+        const containerRect = this.container.getBoundingClientRect();
+        return rect.bottom > containerRect.top && rect.top < containerRect.bottom;
     }
 
     private clearRestoreTimers(): void {
@@ -337,10 +408,9 @@ export class VirtualScroll {
 
         // ── Browser restore reconciliation ──
         // Resume/discard paths can restore stale virtualizer measurements.
-        // Product policy: browser restore/reconnect forces the newest message.
         const restoreBottomAfterLayout = (reason: RestoreReason) => {
             if (!this.virtualizer) return;
-            this.forceBottomAfterRestore(reason);
+            this.reconcileAfterRestore(reason, this.shouldFollowAfterRestore);
         };
         const onPageShow = (e: PageTransitionEvent) => {
             if (!e.persisted) return;
@@ -394,7 +464,7 @@ export class VirtualScroll {
         const wasDiscarded = 'wasDiscarded' in document
             && Boolean((document as Document & { wasDiscarded?: boolean }).wasDiscarded);
         if (wasDiscarded) {
-            this.forceBottomAfterRestore('discard');
+            restoreBottomAfterLayout('discard');
         }
     }
 

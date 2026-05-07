@@ -38,6 +38,8 @@ function makeDeps(log: string[]): VirtualHistoryBootstrapDeps {
             log.push(`activateIfNeeded(toBottom=${toBottom})`);
         }),
         scrollToBottom: mock.fn(() => { log.push('scrollToBottom'); }),
+        onBeforeVirtualHistoryBootstrap: mock.fn(() => { log.push('onBeforeVirtualHistoryBootstrap'); }),
+        onAfterVirtualHistoryBottomed: mock.fn(() => { log.push('onAfterVirtualHistoryBottomed'); }),
     };
 }
 
@@ -49,10 +51,12 @@ describe('bootstrapVirtualHistory', () => {
         bootstrapVirtualHistory(items, deps);
 
         assert.deepStrictEqual(log, [
+            'onBeforeVirtualHistoryBootstrap',
             'registerCallbacks',
             'setItems(count=82, autoActivate=false)',
             'activateIfNeeded(toBottom=true)',
             'scrollToBottom',
+            'onAfterVirtualHistoryBottomed',
         ]);
     });
 
@@ -64,7 +68,9 @@ describe('bootstrapVirtualHistory', () => {
 
         const cbIdx = log.findIndex(s => s === 'registerCallbacks');
         const setIdx = log.findIndex(s => s.startsWith('setItems'));
+        const beforeIdx = log.findIndex(s => s === 'onBeforeVirtualHistoryBootstrap');
         assert.ok(cbIdx < setIdx, 'registerCallbacks must precede setItems');
+        assert.ok(beforeIdx < cbIdx, 'scroll tracking bind must precede virtual history bootstrap');
     });
 
     it('handles zero messages', () => {
@@ -74,10 +80,12 @@ describe('bootstrapVirtualHistory', () => {
         bootstrapVirtualHistory(items, deps);
 
         assert.deepStrictEqual(log, [
+            'onBeforeVirtualHistoryBootstrap',
             'registerCallbacks',
             'setItems(count=0, autoActivate=false)',
             'activateIfNeeded(toBottom=true)',
             'scrollToBottom',
+            'onAfterVirtualHistoryBottomed',
         ]);
     });
 
@@ -116,14 +124,24 @@ describe('bootstrapVirtualHistory', () => {
         assert.deepEqual(calls, measured);
     });
 
-    it('forced restore bottom path schedules delayed remeasure passes', () => {
+    it('guarded restore bottom path schedules delayed remeasure passes', () => {
         assert.ok(virtualScrollSource.includes('forceBottomAfterRestore('), 'VirtualScroll should expose forced restore API');
+        assert.ok(virtualScrollSource.includes('reconcileAfterRestore('), 'VirtualScroll should expose guarded restore API');
+        assert.ok(virtualScrollSource.includes('setRestoreFollowPredicate('), 'VirtualScroll should accept live restore intent predicate');
         assert.ok(virtualScrollSource.includes('scheduleRestoreReconcile('), 'forced restore should use a dedicated scheduler');
         assert.ok(virtualScrollSource.includes('runRestoreReconcilePass('), 'restore scheduler should run a remeasure pass');
+        assert.ok(virtualScrollSource.includes('if (shouldFollow && !shouldFollow())'), 'delayed restore passes should re-check live intent');
+        assert.ok(virtualScrollSource.includes('cancelRestoreReconcile(reason)'), 'restore pass should cancel pending timers when user scrolls away');
         assert.ok(virtualScrollSource.includes('remeasureMountedVirtualItems(this.items, this.mounted, this.virtualizer)'), 'restore pass should remeasure mounted items');
         assert.ok(virtualScrollSource.includes('document.fonts?.ready'), 'restore pass should wait for font layout when available');
-        assert.ok(virtualScrollSource.includes('this.scheduleRestoreTimer(reason, 250)'), 'restore should run a delayed 250ms pass');
-        assert.ok(virtualScrollSource.includes('this.scheduleRestoreTimer(reason, 1000)'), 'restore should run a delayed 1000ms pass');
+        assert.ok(virtualScrollSource.includes('this.scheduleRestoreTimer(reason, 250, shouldFollow)'), 'restore should run a guarded delayed 250ms pass');
+        assert.ok(virtualScrollSource.includes('this.scheduleRestoreTimer(reason, 1000, shouldFollow)'), 'restore should run a guarded delayed 1000ms pass');
         assert.ok(virtualScrollSource.includes('clearRestoreTimers()'), 'restore timers should be cleaned up');
+    });
+
+    it('ProcessBlock mutation helper preserves a passed anchor element', () => {
+        assert.ok(virtualScrollSource.includes('preserveScrollDuringMutation<T>(anchorEl: Element | null'), 'mutation helper should accept preferred anchor element');
+        assert.ok(virtualScrollSource.includes('captureScrollAnchor(anchorEl)'), 'mutation helper should capture the preferred anchor before mutation');
+        assert.ok(virtualScrollSource.includes('restoreScrollAnchor(anchor)'), 'mutation helper should restore row-top anchor after mutation');
     });
 });

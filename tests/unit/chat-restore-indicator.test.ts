@@ -45,9 +45,11 @@ test('bottom restore owns indicator lifecycle', () => {
     const restoreBlock = exportedFunctionBlock(uiSrc, 'reconcileChatBottomAfterRestore');
     assert.ok(restoreBlock.includes('showChatRestoreIndicator(reason)'), 'bottom restore should show the indicator');
     assert.ok(restoreBlock.includes('hideChatRestoreIndicatorAfterSettle()'), 'bottom restore should schedule settle hide');
-    assert.ok(restoreBlock.includes('vs.forceBottomAfterRestore'), 'virtual-scroll restore path should remain intact');
-    assert.ok(restoreBlock.includes('window.setTimeout(scroll, 250)'), 'non-VS 250ms pass should remain intact');
-    assert.ok(restoreBlock.includes('window.setTimeout(scroll, 1000)'), 'non-VS 1000ms pass should remain intact');
+    assert.ok(restoreBlock.includes('vs.reconcileAfterRestore'), 'virtual-scroll restore path should use guarded reconciliation');
+    assert.ok(restoreBlock.includes('canFollowAfterRestore'), 'restore passes should re-check live scroll intent');
+    assert.ok(restoreBlock.includes('scrollIfFollowing'), 'non-VS restore should guard the final DOM scroll');
+    assert.ok(restoreBlock.includes('scheduleChatRestoreTimer(runRestorePass, 250)'), 'non-VS 250ms pass should remain intact');
+    assert.ok(restoreBlock.includes('scheduleChatRestoreTimer(runRestorePass, 1000)'), 'non-VS 1000ms pass should remain intact');
 });
 
 test('ws restore hooks route through one wrapper and reconcile in finally', () => {

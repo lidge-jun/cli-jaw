@@ -42,6 +42,12 @@ interface MessageItem { role: string; content: string; tool_log?: string | null;
 interface QueuedOverlayItem { id: string; prompt: string; source?: string; ts?: number; }
 interface ActiveRunSnapshot { running?: boolean; cli?: string; text?: string; toolLog?: ToolLogEntry[]; startedAt?: number; }
 
+declare global {
+    interface Window {
+        __jawProcessBlockLayoutMutation?: (anchor: Element | null, mutate: () => void) => void;
+    }
+}
+
 function processStepType(toolType?: string): ProcessStep['type'] {
     return toolType === 'thinking' || toolType === 'search' || toolType === 'subagent'
         ? toolType
@@ -767,19 +773,74 @@ export function addMessage(role: string, text: string, cli?: string | null): HTM
 
 let scrollRAF: number | null = null;
 let userNearBottom = true;
+type ScrollIntent = 'unknown' | 'following' | 'pinnedAway';
+let scrollIntent: ScrollIntent = 'unknown';
 let scrollTrackingBound = false;
 const SCROLL_BOTTOM_THRESHOLD = 80; // px
 const RESTORE_INDICATOR_SETTLE_MS = 1100;
 let chatRestoreIndicatorHideTimer: number | null = null;
+const chatRestorePassTimers = new Set<number>();
+const chatRestorePassRafs = new Set<number>();
+
+function canFollowAfterRestore(): boolean {
+    return scrollIntent !== 'pinnedAway';
+}
+
+function markFollowingBottom(): void {
+    userNearBottom = true;
+    scrollIntent = 'following';
+}
+
+function updateScrollIntentFromDistance(dist: number): void {
+    userNearBottom = dist < SCROLL_BOTTOM_THRESHOLD;
+    scrollIntent = userNearBottom ? 'following' : 'pinnedAway';
+    if (scrollIntent === 'pinnedAway') cancelPendingChatRestorePasses();
+}
+
+function cancelPendingChatRestorePasses(): void {
+    for (const timer of chatRestorePassTimers) window.clearTimeout(timer);
+    chatRestorePassTimers.clear();
+    for (const raf of chatRestorePassRafs) cancelAnimationFrame(raf);
+    chatRestorePassRafs.clear();
+}
+
+function requestChatRestoreFrame(callback: () => void): void {
+    const raf = requestAnimationFrame(() => {
+        chatRestorePassRafs.delete(raf);
+        callback();
+    });
+    chatRestorePassRafs.add(raf);
+}
+
+function trackChatRestoreTimer(timer: number): void {
+    chatRestorePassTimers.add(timer);
+}
+
+function scheduleChatRestoreTimer(callback: () => void, delayMs: number): void {
+    const timer = window.setTimeout(() => {
+        chatRestorePassTimers.delete(timer);
+        callback();
+    }, delayMs);
+    trackChatRestoreTimer(timer);
+}
 
 function ensureScrollTracking(): void {
+    getVirtualScroll().setRestoreFollowPredicate(canFollowAfterRestore);
+    window.__jawProcessBlockLayoutMutation = (anchor, mutate) => {
+        const vs = getVirtualScroll();
+        if (vs.active) {
+            vs.preserveScrollDuringMutation(anchor, mutate);
+            return;
+        }
+        mutate();
+    };
     if (scrollTrackingBound) return;
     const c = document.getElementById('chatMessages');
     if (!c) return;
     scrollTrackingBound = true;
     c.addEventListener('scroll', () => {
         const dist = c.scrollHeight - c.scrollTop - c.clientHeight;
-        userNearBottom = dist < SCROLL_BOTTOM_THRESHOLD;
+        updateScrollIntentFromDistance(dist);
     }, { passive: true });
 }
 
@@ -796,7 +857,7 @@ export function isChatNearBottom(): boolean {
 export function reconcileChatBottomAfterLayout(shouldFollow = isChatNearBottom()): void {
     ensureScrollTracking();
     if (!shouldFollow) return;
-    userNearBottom = true;
+    markFollowingBottom();
     const vs = getVirtualScroll();
     if (vs.active) {
         vs.reconcileBottomAfterLayout('reconnect', true);
@@ -852,22 +913,36 @@ export function reconcileChatBottomAfterRestore(reason: string): void {
     showChatRestoreIndicator(reason);
     hideChatRestoreIndicatorAfterSettle();
     ensureScrollTracking();
-    userNearBottom = true;
     const vs = getVirtualScroll();
     if (vs.active) {
-        vs.forceBottomAfterRestore(reason as RestoreReason);
+        vs.reconcileAfterRestore(reason as RestoreReason, canFollowAfterRestore);
         return;
     }
-    const scroll = () => {
+    if (!canFollowAfterRestore()) return;
+    const scrollIfFollowing = () => {
+        if (!canFollowAfterRestore()) {
+            cancelPendingChatRestorePasses();
+            return;
+        }
         const c = document.getElementById('chatMessages');
-        if (c) c.scrollTop = c.scrollHeight;
+        if (c) {
+            c.scrollTop = c.scrollHeight;
+            markFollowingBottom();
+        }
     };
-    scroll();
-    requestAnimationFrame(scroll);
-    requestAnimationFrame(() => requestAnimationFrame(scroll));
-    window.setTimeout(scroll, 250);
-    window.setTimeout(scroll, 1000);
-    void document.fonts?.ready.then(scroll);
+    const runRestorePass = () => {
+        if (!canFollowAfterRestore()) {
+            cancelPendingChatRestorePasses();
+            return;
+        }
+        requestChatRestoreFrame(scrollIfFollowing);
+    };
+    runRestorePass();
+    requestChatRestoreFrame(runRestorePass);
+    requestChatRestoreFrame(() => requestChatRestoreFrame(runRestorePass));
+    scheduleChatRestoreTimer(runRestorePass, 250);
+    scheduleChatRestoreTimer(runRestorePass, 1000);
+    void document.fonts?.ready.then(runRestorePass);
 }
 
 /** Scroll chat to bottom.
@@ -877,7 +952,7 @@ export function scrollToBottom(force = false): void {
     if (!force && !userNearBottom) return;
     // After force scroll, mark as near-bottom so subsequent
     // streaming chunks keep auto-scrolling until user scrolls up
-    if (force) userNearBottom = true;
+    if (force) markFollowingBottom();
 
     const vs = getVirtualScroll();
     if (vs.active) {
@@ -998,6 +1073,12 @@ function makeBootstrapDeps(
         setItems: (items, opts) => vs.setItems(items, opts),
         activateIfNeeded: (toBottom) => vs.activateIfNeeded(toBottom),
         scrollToBottom: () => vs.scrollToBottom(),
+        onBeforeVirtualHistoryBootstrap: () => {
+            ensureScrollTracking();
+        },
+        onAfterVirtualHistoryBottomed: () => {
+            markFollowingBottom();
+        },
     };
 }
 

@@ -1,5 +1,11 @@
 import { escapeHtml } from '../render.js';
 import { ICONS } from '../icons.js';
+
+declare global {
+    interface Window {
+        __jawProcessBlockLayoutMutation?: (anchor: Element | null, mutate: () => void) => void;
+    }
+}
 export interface ProcessStep {
     id: string;
     type: 'tool' | 'thinking' | 'search' | 'subagent';
@@ -309,6 +315,15 @@ function toggleStepDetails(toggle: HTMLElement): void {
     if (chevron) chevron.innerHTML = expanding ? ICONS.chevronDown : ICONS.chevronRight;
 }
 
+function withProcessBlockLayoutMutation(anchor: Element | null, mutate: () => void): void {
+    const hook = window.__jawProcessBlockLayoutMutation;
+    if (typeof hook === 'function') {
+        hook(anchor, mutate);
+        return;
+    }
+    mutate();
+}
+
 export function bindProcessBlockInteractions(root: HTMLElement): void {
     if (root.dataset['processBlockBound'] === '1') return;
     root.addEventListener('click', (event) => {
@@ -327,7 +342,9 @@ export function bindProcessBlockInteractions(root: HTMLElement): void {
 
         const stepToggle = target.closest('.process-step-toggle') as HTMLElement | null;
         if (stepToggle) {
-            toggleStepDetails(stepToggle);
+            withProcessBlockLayoutMutation(stepToggle.closest('.process-step, .process-block'), () => {
+                toggleStepDetails(stepToggle);
+            });
             return;
         }
 
@@ -335,11 +352,13 @@ export function bindProcessBlockInteractions(root: HTMLElement): void {
         if (summary) {
             const block = summary.closest('.process-block');
             if (!block) return;
-            const expanding = block.classList.contains('collapsed');
-            block.classList.toggle('collapsed', !expanding);
-            summary.setAttribute('aria-expanded', expanding ? 'true' : 'false');
-            const chevron = summary.querySelector('.process-chevron');
-            if (chevron) chevron.innerHTML = expanding ? ICONS.chevronDown : ICONS.chevronRight;
+            withProcessBlockLayoutMutation(block, () => {
+                const expanding = block.classList.contains('collapsed');
+                block.classList.toggle('collapsed', !expanding);
+                summary.setAttribute('aria-expanded', expanding ? 'true' : 'false');
+                const chevron = summary.querySelector('.process-chevron');
+                if (chevron) chevron.innerHTML = expanding ? ICONS.chevronDown : ICONS.chevronRight;
+            });
         }
     });
     root.dataset['processBlockBound'] = '1';

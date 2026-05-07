@@ -116,11 +116,14 @@ test('WRS-004: applyQueuedOverlay no longer renders chat bubbles for queued item
     assert.ok(fnBlock.includes('data-queued-overlay="true"'), 'must still clean up legacy overlay nodes from older builds');
 });
 
-test('WRS-005: virtual scroll restore hooks force bottom after browser restore', { skip: !hasVirtualScroll && 'public/js/virtual-scroll source not found' }, () => {
+test('WRS-005: virtual scroll restore hooks use guarded bottom reconciliation after browser restore', { skip: !hasVirtualScroll && 'public/js/virtual-scroll source not found' }, () => {
     const src = readFileSync(virtualScrollPath, 'utf8');
     assert.ok(src.includes('isNearBottom('), 'VirtualScroll should expose near-bottom intent detection');
     assert.ok(src.includes('reconcileBottomAfterLayout('), 'VirtualScroll should expose post-layout bottom reconciliation');
     assert.ok(src.includes('forceBottomAfterRestore('), 'VirtualScroll should expose forced restore bottom reconciliation');
+    assert.ok(src.includes('reconcileAfterRestore('), 'VirtualScroll should expose guarded restore reconciliation');
+    assert.ok(src.includes('setRestoreFollowPredicate('), 'VirtualScroll should accept a live follow predicate');
+    assert.ok(src.includes('this.reconcileAfterRestore(reason, this.shouldFollowAfterRestore)'), 'restore hooks should use guarded reconciliation');
     assert.ok(src.includes("window.addEventListener('pageshow'"), 'bfcache restore should be handled');
     assert.ok(src.includes("document.addEventListener('visibilitychange'"), 'sleep/wake visible restore should be handled');
     assert.ok(src.includes("window.addEventListener('focus'"), 'Chrome reopen/focus restore should be handled');
@@ -135,18 +138,22 @@ test('WRS-006: reconnect snapshot reapplies bottom anchor without stale near-bot
     const openBlock = wsSrc.slice(openIdx, wsSrc.indexOf('state.ws.onclose', openIdx));
     assert.ok(!openBlock.includes('const shouldFollowBottom = isChatNearBottom()'), 'reconnect should not capture stale near-bottom geometry before hydration');
     assert.ok(!openBlock.includes('reconcileChatBottomAfterLayout(shouldFollowBottom)'), 'reconnect should not gate restore on stale geometry');
-    assert.ok(openBlock.includes("reconcileChatBottomAfterRestore('reconnect')"), 'reconnect should force restore bottom after hydration');
+    assert.ok(openBlock.includes("reconcileChatBottomAfterRestore('reconnect')"), 'reconnect should run guarded restore bottom reconciliation after hydration');
 });
 
-test('WRS-007: ui exposes forced restore helper used by restore and reconnect paths', { skip: !hasUi && 'public/js/ui source not found' }, () => {
+test('WRS-007: ui exposes guarded restore helper used by restore and reconnect paths', { skip: !hasUi && 'public/js/ui source not found' }, () => {
     const uiSrc = readFileSync(uiPath, 'utf8');
     assert.ok(uiSrc.includes('export function isChatNearBottom'), 'ui should export bottom intent reader');
     assert.ok(uiSrc.includes('export function reconcileChatBottomAfterLayout'), 'ui should export reconnect reconciliation helper');
-    assert.ok(uiSrc.includes('export function reconcileChatBottomAfterRestore'), 'ui should export forced restore reconciliation helper');
+    assert.ok(uiSrc.includes('export function reconcileChatBottomAfterRestore'), 'ui should export guarded restore reconciliation helper');
     assert.ok(uiSrc.includes('export function showChatRestoreIndicator'), 'ui should export restore indicator show helper');
     assert.ok(uiSrc.includes('export function hideChatRestoreIndicatorAfterSettle'), 'ui should export settle-aware hide helper');
     assert.ok(uiSrc.includes('showChatRestoreIndicator(reason)'), 'restore reconciliation should own indicator lifecycle');
     assert.ok(uiSrc.includes('hideChatRestoreIndicatorAfterSettle()'), 'restore reconciliation should hide indicator after settle');
     assert.ok(uiSrc.includes("vs.reconcileBottomAfterLayout('reconnect', true)"), 'virtual-scroll reconnect should use the same reconciliation path');
-    assert.ok(uiSrc.includes('vs.forceBottomAfterRestore'), 'restore helper should delegate to virtual scroll forced restore');
+    assert.ok(uiSrc.includes('vs.reconcileAfterRestore'), 'restore helper should delegate to virtual scroll guarded restore');
+    assert.ok(uiSrc.includes("type ScrollIntent = 'unknown' | 'following' | 'pinnedAway'"), 'ui should track explicit bottom-follow intent');
+    assert.ok(uiSrc.includes('const scrollIfFollowing = () =>'), 'non-VS restore should use a guarded final DOM scroll closure');
+    assert.ok(uiSrc.includes('requestChatRestoreFrame(scrollIfFollowing)'), 'non-VS restore final RAF should re-check live intent');
+    assert.ok(!uiSrc.includes('userNearBottom = true;\\n    const vs = getVirtualScroll();\\n    if (vs.active)'), 'restore helper should not reset near-bottom intent before guarded restore');
 });

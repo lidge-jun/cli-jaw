@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setupWebUiDom, resetWebUiDom } from './web-ui-test-dom.ts';
-import { stopBlockTicker } from '../../public/js/features/process-block.ts';
+import { bindProcessBlockInteractions, stopBlockTicker } from '../../public/js/features/process-block.ts';
 
 test.afterEach(() => {
     stopBlockTicker();
+    window.__jawProcessBlockLayoutMutation = undefined;
     resetWebUiDom();
 });
 
@@ -182,6 +183,44 @@ test('employee detail rebroadcast does not replace non-employee ghost row', asyn
     assert.equal(document.querySelectorAll('.process-step-origin').length, 1);
     assert.equal(document.querySelectorAll('.process-step-label')[0]?.textContent, 'read_file');
     assert.equal(document.querySelectorAll('.process-step-label')[1]?.textContent, 'read_file');
+});
+
+test('ProcessBlock toggles pass row anchor through layout mutation hook', () => {
+    setupWebUiDom();
+    const host = document.createElement('div');
+    host.innerHTML = `
+        <div class="process-block">
+            <button class="process-summary" aria-expanded="true">
+                <span class="process-chevron"></span>
+            </button>
+            <div class="process-details">
+                <div class="process-steps-inner">
+                    <div class="process-step process-step-expandable" data-step-id="row-anchor">
+                        <button class="process-step-toggle" aria-expanded="false">
+                            <span class="process-step-chevron"></span>
+                        </button>
+                        <div class="process-step-details collapsed">
+                            <pre class="process-step-full">detail</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    document.body.appendChild(host);
+    const block = host.querySelector('.process-block') as HTMLElement;
+    const anchors: Array<Element | null> = [];
+    window.__jawProcessBlockLayoutMutation = (anchor, mutate) => {
+        anchors.push(anchor);
+        mutate();
+    };
+
+    bindProcessBlockInteractions(block);
+    (block.querySelector('.process-step-toggle') as HTMLButtonElement).click();
+    (block.querySelector('.process-summary') as HTMLButtonElement).click();
+
+    assert.equal(anchors.length, 2);
+    assert.equal(anchors[0]?.classList.contains('process-step'), true);
+    assert.equal(anchors[1]?.classList.contains('process-block'), true);
 });
 
 test('normalization keeps top-level process-block over top-level tool-group', async () => {

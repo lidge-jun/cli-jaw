@@ -9,6 +9,8 @@ export interface VirtualHistoryBootstrapDeps {
     setItems: (items: VirtualItem[], options?: { autoActivate?: boolean; toBottom?: boolean }) => void;
     activateIfNeeded: (toBottom: boolean) => void;
     scrollToBottom: () => void;
+    onBeforeVirtualHistoryBootstrap?: () => void;
+    onAfterVirtualHistoryBottomed?: () => void;
 }
 
 /**
@@ -22,8 +24,10 @@ export function bootstrapVirtualHistory(
     items: VirtualItem[],
     deps: VirtualHistoryBootstrapDeps,
 ): void {
+    deps.onBeforeVirtualHistoryBootstrap?.();
     deps.registerCallbacks();
     deps.setItems(items, { autoActivate: false });
     deps.activateIfNeeded(true);
     deps.scrollToBottom();
+    deps.onAfterVirtualHistoryBottomed?.();
 }
