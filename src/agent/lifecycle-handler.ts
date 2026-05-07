@@ -373,8 +373,8 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                 _isCapacityFallback: true,
                 _skipInsert: true,
                 _skipSessionPersist: true,
-            });
-            retryP.then((r: any) => resolve(r)).catch(() => {
+            }) as { promise: Promise<{ text: string; code: number }> };
+            retryP.then(resolve).catch(() => {
                 broadcast('agent_done', { text: `❌ ${errMsg} (Auto fallback failed)`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
                 resolve({ text: '', code: 1 });
                 if (mainManaged && !opts.internal) processQueue();
