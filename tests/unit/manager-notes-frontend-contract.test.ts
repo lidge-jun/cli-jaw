@@ -17,10 +17,12 @@ test('Notes workspace frontend files and API wrapper exist', () => {
         'public/manager/src/notes/NotesSidebar.tsx',
         'public/manager/src/notes/useNotesModel.ts',
         'public/manager/src/notes/NotesFileTree.tsx',
+        'public/manager/src/notes/NotesSearchPanel.tsx',
         'public/manager/src/notes/NotesToolbar.tsx',
         'public/manager/src/notes/NotesEmptyState.tsx',
         'public/manager/src/notes/useNoteDocument.ts',
         'public/manager/src/notes/notes-api.ts',
+        'public/manager/src/notes/notes-search.css',
         'public/manager/src/notes/editor-theme.ts',
         'public/manager/src/manager-notes.css',
     ].forEach(path => {
@@ -42,6 +44,8 @@ test('Notes API and create actions surface backend/fallback failures without unc
     const model = read('public/manager/src/notes/useNotesModel.ts');
     const tree = read('public/manager/src/notes/NotesFileTree.tsx');
     const workspace = read('public/manager/src/notes/NotesWorkspace.tsx');
+    const searchPanel = read('public/manager/src/notes/NotesSearchPanel.tsx');
+    const searchCss = read('public/manager/src/notes/notes-search.css');
     const css = read('public/manager/src/manager-notes.css');
 
     assert.ok(api.includes('response.text()'), 'notes response parsing must inspect text before JSON parsing');
@@ -49,6 +53,10 @@ test('Notes API and create actions surface backend/fallback failures without unc
     assert.ok(api.includes('DashboardApiError'), 'notes response parsing must surface typed API errors');
     assert.ok(api.includes('/api/dashboard/notes/index'), 'notes API must expose the vault index endpoint');
     assert.ok(api.includes('/api/dashboard/notes/capabilities'), 'notes API must expose the capabilities endpoint');
+    assert.ok(api.includes('/api/dashboard/notes/search'), 'notes API must expose the search endpoint');
+    assert.ok(api.includes('parseNotesResponse<DashboardNoteSearchResult[]>'), 'notes search must surface typed backend errors');
+    assert.ok(read('public/manager/src/notes/notes-api.ts').includes('searchNotes'), 'notes feature API barrel must re-export search');
+    assert.ok(read('public/manager/src/notes/notes-types.ts').includes('NoteSearchResult'), 'notes feature types must expose search result type');
     assert.ok(model.includes('fetchNotesTree()'), 'notes model must own tree fetching above the sidebar');
     assert.ok(model.includes('fetchNotesIndex()'), 'notes model must own index fetching above the sidebar');
     assert.ok(model.includes('Promise.all'), 'notes model must refresh tree and index together');
@@ -163,6 +171,18 @@ test('Notes API and create actions surface backend/fallback failures without unc
     assert.ok(workspace.includes("event.key.toLowerCase() !== 's'"), 'notes save shortcut must be limited to the S key');
     assert.ok(workspace.includes('event.preventDefault()'), 'notes save shortcut must suppress browser Save Page');
     assert.ok(workspace.includes('void document.save()'), 'notes save shortcut must call the existing manual save path');
+    assert.ok(workspace.includes('NotesSearchPanel'), 'notes workspace must render the search panel');
+    assert.ok(workspace.includes('setSearchOpen(open => !open)'), 'notes workspace must toggle search with a shortcut');
+    assert.ok(workspace.includes("event.key.toLowerCase() !== 'f'"), 'notes search shortcut must be bound to F');
+    assert.ok(workspace.includes('!event.shiftKey'), 'notes search shortcut must require Shift');
+    assert.ok(searchPanel.includes('AbortController'), 'notes search panel must cancel stale searches');
+    assert.ok(searchPanel.includes('isAbortError'), 'notes search panel must distinguish aborts from real failures');
+    assert.ok(searchPanel.includes('notes-search-error'), 'notes search panel must render actionable errors');
+    assert.ok(searchPanel.includes('searchNotes(trimmed'), 'notes search panel must call the notes search API');
+    assert.ok(searchCss.includes('.notes-workspace'), 'search CSS must anchor the overlay to the Notes workspace');
+    assert.ok(searchCss.includes('position: relative'), 'search CSS must make Notes workspace the positioning context');
+    assert.ok(searchCss.includes('.notes-search-panel'), 'search CSS must style the search panel');
+    assert.ok(read('public/manager/src/main.tsx').includes("./notes/notes-search.css"), 'main entry must import the split notes search CSS');
     assert.ok(workspace.includes('className="notes-content"'), 'notes toolbar body must be wrapped so document panes land in a constrained scroll row');
     assert.ok(css.includes('grid-template-rows: max-content minmax(0, 1fr);'), 'notes main grid must reserve a fixed toolbar row and a constrained scroll content row');
     assert.ok(css.includes('.notes-content'), 'notes content wrapper must own the error/conflict/document rows');
