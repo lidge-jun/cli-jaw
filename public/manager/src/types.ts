@@ -290,6 +290,7 @@ export type DashboardNoteSearchResult = {
     line: number;
     content: string;
     context: string;
+    kind: 'path' | 'content';
 };
 
 export type DashboardPutNoteRequest = {

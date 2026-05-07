@@ -1,28 +1,21 @@
-.notes-workspace {
-    position: relative;
+.notes-tree-actions button.is-active {
+    border-color: var(--accent-soft);
+    background: var(--accent-soft);
+    color: var(--text-primary);
 }
 
-.notes-search-panel {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    z-index: 20;
-    width: min(420px, calc(100% - 24px));
-    max-height: min(520px, calc(100% - 24px));
+.notes-search-sidebar {
+    min-height: 0;
     display: grid;
     grid-template-rows: max-content minmax(0, 1fr);
     overflow: hidden;
-    border: 1px solid var(--border-subtle);
-    border-radius: 8px;
-    background: var(--canvas-deep);
-    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34);
 }
 
-.notes-search-header {
+.notes-search-sidebar-header {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px;
+    padding: 8px;
     border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -38,18 +31,7 @@
     font: inherit;
 }
 
-.notes-search-close {
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
-    border: 1px solid var(--border-subtle);
-    border-radius: 7px;
-    background: var(--bg-panel);
-    color: var(--text-secondary);
-    cursor: pointer;
-}
-
-.notes-search-results {
+.notes-search-sidebar-results {
     min-height: 0;
     overflow: auto;
     padding: 6px;

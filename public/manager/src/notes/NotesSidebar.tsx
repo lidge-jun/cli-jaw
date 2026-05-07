@@ -1,8 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { createNoteFile, createNoteFolder, renameNotePath, trashNotePath } from './notes-api';
-import { NotesFileTree } from './NotesFileTree';
+import { NewFolderIcon, NewNoteIcon, NotesFileTree, RefreshIcon } from './NotesFileTree';
+import { NotesSearchSidebar } from './NotesSearchSidebar';
 import { publishInvalidation } from '../sync/invalidation-bus';
 import type { NotesTreeEntry } from './notes-types';
+
+export type NotesSidebarMode = 'files' | 'search';
 
 type NotesSidebarProps = {
     tree: NotesTreeEntry[];
@@ -12,6 +15,10 @@ type NotesSidebarProps = {
     selectedPath: string | null;
     dirtyPath: string | null;
     treeWidth: number;
+    mode: NotesSidebarMode;
+    searchFocusToken: number;
+    onModeChange: (mode: NotesSidebarMode) => void;
+    onOpenSearch: () => void;
     onSelectedPathChange: (path: string | null) => void;
     onRefreshTree: (selectPath?: string | null) => Promise<void>;
 };
@@ -75,7 +82,17 @@ function batchTrashConfirmMessage(items: { path: string; kind: NotesTreeEntry['k
     return dirty ? `${label}\n\nThere are unsaved changes inside this selection.` : label;
 }
 
+function SearchIcon() {
+    return (
+        <svg viewBox="0 0 18 18" aria-hidden="true" className="notes-tree-action-icon">
+            <path d="M7.8 3.2a4.6 4.6 0 1 1 0 9.2 4.6 4.6 0 0 1 0-9.2Z" fill="none" stroke="currentColor" strokeWidth="1.5" />
+            <path d="m11.3 11.3 3.2 3.2" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
+    );
+}
+
 export function NotesSidebar(props: NotesSidebarProps) {
+    const style = { '--notes-tree-width': `${props.treeWidth}px` } as CSSProperties;
     const [error, setError] = useState<string | null>(null);
     const [status, setStatus] = useState<string | null>(null);
     const [selectedFolderPath, setSelectedFolderPath] = useState<string | null>(null);
@@ -232,27 +249,52 @@ export function NotesSidebar(props: NotesSidebarProps) {
     }
 
     return (
-        <>
+        <aside className="notes-tree" style={style}>
             {(props.error || error) && <section className="state error-state">{props.error || error}</section>}
             {status && <section className="state notes-status-state">{status}</section>}
-            <NotesFileTree
-                entries={props.tree}
-                selectedPath={props.selectedPath}
-                selectedFolderPath={selectedFolderPath}
-                dirtyPath={props.dirtyPath}
-                loading={props.loading}
-                width={props.treeWidth}
-                notesRoot={props.notesRoot}
-                onSelectPath={props.onSelectedPathChange}
-                onSelectFolder={setSelectedFolderPath}
-                onMovePath={(from, toFolder) => void movePath(from, toFolder)}
-                onRenamePath={(path, kind) => void renamePath(path, kind)}
-                onTrashPath={(path, kind) => void trashPath(path, kind)}
-                onTrashPaths={items => void trashPaths(items)}
-                onCreateNote={() => void createNote()}
-                onCreateFolder={() => void createFolder()}
-                onRefresh={() => void props.onRefreshTree()}
-            />
-        </>
+            <div className="notes-tree-header">
+                <strong>Notes</strong>
+                <div className="notes-tree-actions">
+                    <button
+                        type="button"
+                        className={props.mode === 'search' ? 'is-active' : ''}
+                        onClick={() => {
+                            if (props.mode === 'search') props.onModeChange('files');
+                            else props.onOpenSearch();
+                        }}
+                        title="Search notes"
+                        aria-label="Search notes"
+                        aria-pressed={props.mode === 'search'}
+                    >
+                        <SearchIcon />
+                    </button>
+                    <button type="button" onClick={() => void createNote()} title="New note" aria-label="New note"><NewNoteIcon /></button>
+                    <button type="button" onClick={() => void createFolder()} title="New folder" aria-label="New folder"><NewFolderIcon /></button>
+                    <button type="button" onClick={() => void props.onRefreshTree()} disabled={props.loading} title="Refresh notes" aria-label="Refresh notes"><RefreshIcon /></button>
+                </div>
+            </div>
+            {props.mode === 'files' ? (
+                <NotesFileTree
+                    entries={props.tree}
+                    selectedPath={props.selectedPath}
+                    selectedFolderPath={selectedFolderPath}
+                    dirtyPath={props.dirtyPath}
+                    loading={props.loading}
+                    notesRoot={props.notesRoot}
+                    onSelectPath={props.onSelectedPathChange}
+                    onSelectFolder={setSelectedFolderPath}
+                    onMovePath={(from, toFolder) => void movePath(from, toFolder)}
+                    onRenamePath={(path, kind) => void renamePath(path, kind)}
+                    onTrashPath={(path, kind) => void trashPath(path, kind)}
+                    onTrashPaths={items => void trashPaths(items)}
+                />
+            ) : (
+                <NotesSearchSidebar
+                    focusToken={props.searchFocusToken}
+                    onSelect={props.onSelectedPathChange}
+                    onModeChange={props.onModeChange}
+                />
+            )}
+        </aside>
     );
 }

@@ -167,17 +167,21 @@ test('notes search route returns markdown hits when ripgrep is available', async
     await withNotesServer(t, async (baseUrl, root) => {
         mkdirSync(join(root, 'daily'), { recursive: true });
         writeFileSync(join(root, 'daily', 'today.md'), 'hello jawsidian\n');
+        writeFileSync(join(root, 'daily', 'hello-name.md'), 'body only\n');
         writeFileSync(join(root, 'daily', 'other.txt'), 'hello hidden\n');
         mkdirSync(join(root, 'daily', '.assets'), { recursive: true });
         writeFileSync(join(root, 'daily', '.assets', 'ignored.md'), 'hello ignored\n');
 
         const response = await fetch(`${baseUrl}/api/dashboard/notes/search?q=hello`);
         assert.equal(response.status, 200);
-        const body = await response.json() as Array<{ path: string; line: number; context: string }>;
+        const body = await response.json() as Array<{ path: string; line: number; context: string; kind: string }>;
 
-        assert.deepEqual(body.map(hit => hit.path), ['daily/today.md']);
-        assert.equal(body[0]?.line, 1);
-        assert.equal(body[0]?.context, 'hello jawsidian');
+        assert.deepEqual(body.map(hit => [hit.kind, hit.path]), [
+            ['path', 'daily/hello-name.md'],
+            ['content', 'daily/today.md'],
+        ]);
+        assert.equal(body[1]?.line, 1);
+        assert.equal(body[1]?.context, 'hello jawsidian');
     });
 });
 

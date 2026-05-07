@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { MarkdownEditor } from './MarkdownEditor';
 import { MarkdownPreview } from './MarkdownPreview';
 import { NotesEmptyState } from './NotesEmptyState';
-import { NotesSearchPanel } from './NotesSearchPanel';
 import { NotesToolbar } from './NotesToolbar';
 import { renameNotePath } from './notes-api';
 import { useNoteDocument } from './useNoteDocument';
@@ -19,6 +18,7 @@ type NotesWorkspaceProps = {
     authoringMode: NotesAuthoringMode;
     wordWrap: boolean;
     treeWidth: number;
+    onOpenSidebarSearch: () => void;
     onSelectedPathChange: (path: string | null) => void;
     onDirtyPathChange: (path: string | null) => void;
     onViewModeChange: (mode: NotesViewMode) => void;
@@ -44,7 +44,6 @@ function primaryModeFor(viewMode: NotesViewMode, authoringMode: NotesAuthoringMo
 export function NotesWorkspace(props: NotesWorkspaceProps) {
     const document = useNoteDocument();
     const renamingRef = useRef(false);
-    const [searchOpen, setSearchOpen] = useState(false);
 
     useEffect(() => {
         if (!props.selectedPath) return;
@@ -91,12 +90,12 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
         function handleSearchShortcut(event: KeyboardEvent): void {
             if (!(event.metaKey || event.ctrlKey) || !event.shiftKey || event.key.toLowerCase() !== 'f') return;
             event.preventDefault();
-            setSearchOpen(open => !open);
+            props.onOpenSidebarSearch();
         }
 
         window.addEventListener('keydown', handleSearchShortcut);
         return () => window.removeEventListener('keydown', handleSearchShortcut);
-    }, [props.active]);
+    }, [props.active, props.onOpenSidebarSearch]);
 
     async function handleTitleBlur(event: React.FocusEvent<HTMLInputElement>): Promise<void> {
         if (renamingRef.current || !props.selectedPath) return;
@@ -131,14 +130,6 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
 
     return (
         <section className="notes-workspace" aria-label="Notes workspace">
-            <NotesSearchPanel
-                open={searchOpen}
-                onSelect={path => {
-                    props.onSelectedPathChange(path);
-                    setSearchOpen(false);
-                }}
-                onClose={() => setSearchOpen(false)}
-            />
             <main className={`notes-main notes-mode-${props.viewMode}`}>
                 <NotesToolbar
                     selectedPath={props.selectedPath}

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { searchNotes } from './notes-api';
 import type { NoteSearchResult } from './notes-types';
+import type { NotesSidebarMode } from './NotesSidebar';
 
-type NotesSearchPanelProps = {
-    open: boolean;
+type NotesSearchSidebarProps = {
+    focusToken: number;
     onSelect: (path: string) => void;
-    onClose: () => void;
+    onModeChange: (mode: NotesSidebarMode) => void;
 };
 
 const MIN_QUERY_LENGTH = 2;
@@ -16,7 +17,7 @@ function isAbortError(error: unknown): boolean {
     return error instanceof DOMException && error.name === 'AbortError';
 }
 
-export function NotesSearchPanel(props: NotesSearchPanelProps) {
+export function NotesSearchSidebar(props: NotesSearchSidebarProps) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<NoteSearchResult[]>([]);
     const [loading, setLoading] = useState(false);
@@ -33,13 +34,8 @@ export function NotesSearchPanel(props: NotesSearchPanelProps) {
     }, []);
 
     useEffect(() => {
-        if (!props.open) {
-            cancelSearch();
-            setLoading(false);
-            return;
-        }
         inputRef.current?.focus();
-    }, [props.open, cancelSearch]);
+    }, [props.focusToken]);
 
     useEffect(() => {
         return () => cancelSearch();
@@ -78,14 +74,14 @@ export function NotesSearchPanel(props: NotesSearchPanelProps) {
     }
 
     function handleKeyDown(event: React.KeyboardEvent): void {
-        if (event.key === 'Escape') props.onClose();
+        if (event.key !== 'Escape') return;
+        event.preventDefault();
+        props.onModeChange('files');
     }
 
-    if (!props.open) return null;
-
     return (
-        <aside className="notes-search-panel" aria-label="Search notes" onKeyDown={handleKeyDown}>
-            <div className="notes-search-header">
+        <section className="notes-search-sidebar" aria-label="Search notes" onKeyDown={handleKeyDown}>
+            <div className="notes-search-sidebar-header">
                 <input
                     ref={inputRef}
                     className="notes-search-input"
@@ -95,20 +91,21 @@ export function NotesSearchPanel(props: NotesSearchPanelProps) {
                     onChange={event => handleQueryChange(event.currentTarget.value)}
                     aria-label="Search notes"
                 />
-                <button type="button" className="notes-search-close" aria-label="Close search" onClick={props.onClose}>X</button>
             </div>
-            <div className="notes-search-results" aria-live="polite">
+            <div className="notes-search-sidebar-results" aria-live="polite">
                 {loading && <div className="notes-search-loading">Searching...</div>}
                 {error && <div className="notes-search-error">{error}</div>}
                 {!error && results.map(result => (
                     <button
-                        key={`${result.path}:${result.line}:${result.context}`}
+                        key={`${result.kind}:${result.path}:${result.line}:${result.context}`}
                         type="button"
                         className="notes-search-result"
                         onClick={() => props.onSelect(result.path)}
                     >
                         <span className="notes-search-result-path">{result.path}</span>
-                        <span className="notes-search-result-line">Line {result.line}</span>
+                        <span className="notes-search-result-line">
+                            {result.kind === 'path' ? 'Path match' : `Line ${result.line}`}
+                        </span>
                         <span className="notes-search-result-context">{result.context}</span>
                     </button>
                 ))}
@@ -116,6 +113,6 @@ export function NotesSearchPanel(props: NotesSearchPanelProps) {
                     <div className="notes-search-empty">No results</div>
                 )}
             </div>
-        </aside>
+        </section>
     );
 }

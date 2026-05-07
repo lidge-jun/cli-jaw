@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { existsSync, readdirSync } from 'node:fs';
+import { readdir as readDir } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import { hasReservedNoteSegment, NOTES_RESERVED_DIRS } from './constants.js';
 import { isPathInside, NOTE_FILE_EXT, notePathError } from './path-guards.js';
 
@@ -8,11 +11,13 @@ export type NoteSearchResult = {
     line: number;
     content: string;
     context: string;
+    kind: 'path' | 'content';
 };
 
 export type SearchNotesOptions = {
     limit?: number;
     regex?: boolean;
+    ripgrepPath?: string;
     timeoutMs?: number;
     spawnImpl?: typeof spawn;
 };
@@ -24,6 +29,7 @@ const MAX_LIMIT = 100;
 const MAX_COUNT_PER_FILE = 3;
 const DEFAULT_TIMEOUT_MS = 5000;
 const MAX_OUTPUT_BYTES = 2 * 1024 * 1024;
+const RIPGREP_ENV_PATH = 'CLI_JAW_RIPGREP_PATH';
 
 function parseLimit(input: number | undefined): number {
     if (input === undefined) return DEFAULT_LIMIT;
@@ -47,6 +53,47 @@ function normalizeResultPath(root: string, rawPath: string): string | null {
     return rel;
 }
 
+function pathMatchesQuery(path: string, query: string): boolean {
+    const normalizedQuery = query.toLocaleLowerCase();
+    const normalizedPath = path.toLocaleLowerCase();
+    const filename = posix.basename(normalizedPath, NOTE_FILE_EXT);
+    return normalizedPath.includes(normalizedQuery) || filename.includes(normalizedQuery);
+}
+
+async function collectPathMatches(root: string, query: string, limit: number): Promise<NoteSearchResult[]> {
+    const results: NoteSearchResult[] = [];
+    async function walk(relativeDir: string): Promise<void> {
+        if (results.length >= limit) return;
+        const absoluteDir = resolve(root, relativeDir);
+        let entries;
+        try {
+            entries = await readDir(absoluteDir, { withFileTypes: true });
+        } catch {
+            return;
+        }
+        for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+            if (results.length >= limit) return;
+            const childPath = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+            if (hasReservedNoteSegment(childPath)) continue;
+            if (entry.isDirectory()) {
+                await walk(childPath);
+                continue;
+            }
+            if (!entry.isFile() || !childPath.endsWith(NOTE_FILE_EXT)) continue;
+            if (!pathMatchesQuery(childPath, query)) continue;
+            results.push({
+                path: childPath,
+                line: 0,
+                content: childPath,
+                context: childPath,
+                kind: 'path',
+            });
+        }
+    }
+    await walk('');
+    return results;
+}
+
 function rgArgs(query: string, regex: boolean): string[] {
     const args = [
         '--no-config',
@@ -66,7 +113,47 @@ function rgArgs(query: string, regex: boolean): string[] {
     return args;
 }
 
-function pushMatch(root: string, rawLine: string, results: NoteSearchResult[], limit: number): void {
+function ripgrepBinaryName(): string {
+    return process.platform === 'win32' ? 'rg.exe' : 'rg';
+}
+
+function bundledRipgrepRoots(): string[] {
+    return [
+        join(homedir(), '.bun', 'install', 'global', 'node_modules', '@openai'),
+        join(homedir(), '.npm-global', 'lib', 'node_modules', '@openai'),
+    ];
+}
+
+function findBundledRipgrep(): string | null {
+    const binary = ripgrepBinaryName();
+    for (const root of bundledRipgrepRoots()) {
+        if (!existsSync(root)) continue;
+        try {
+            const packages = readdirSync(root, { withFileTypes: true })
+                .filter(entry => entry.isDirectory() && entry.name.startsWith('codex-'));
+            for (const pkg of packages) {
+                const vendorRoot = join(root, pkg.name, 'vendor');
+                if (!existsSync(vendorRoot)) continue;
+                for (const target of readdirSync(vendorRoot, { withFileTypes: true })) {
+                    if (!target.isDirectory()) continue;
+                    const candidate = join(vendorRoot, target.name, 'path', binary);
+                    if (existsSync(candidate)) return candidate;
+                }
+            }
+        } catch {
+            continue;
+        }
+    }
+    return null;
+}
+
+export function resolveRipgrepCommand(): string {
+    const configured = process.env[RIPGREP_ENV_PATH]?.trim();
+    if (configured) return configured;
+    return findBundledRipgrep() || 'rg';
+}
+
+function pushMatch(root: string, rawLine: string, results: NoteSearchResult[], limit: number, skipPaths: Set<string>): void {
     if (results.length >= limit || !rawLine.trim()) return;
     let parsed: unknown;
     try {
@@ -80,6 +167,7 @@ function pushMatch(root: string, rawLine: string, results: NoteSearchResult[], l
     if (typeof pathText !== 'string') return;
     const relPath = normalizeResultPath(root, pathText);
     if (!relPath) return;
+    if (skipPaths.has(relPath)) return;
     const lineNumber = typeof data?.["line_number"] === 'number' ? data["line_number"] : 0;
     const lineText = (data?.["lines"] as { text?: unknown } | undefined)?.text;
     const content = typeof lineText === 'string' ? lineText.trim() : '';
@@ -88,6 +176,7 @@ function pushMatch(root: string, rawLine: string, results: NoteSearchResult[], l
         line: lineNumber,
         content,
         context: content.slice(0, 200),
+        kind: 'content',
     });
 }
 
@@ -111,11 +200,15 @@ export async function searchNotes(
     const limit = parseLimit(options.limit);
     const run = options.spawnImpl || spawn;
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    const results: NoteSearchResult[] = [];
+    const pathResults = await collectPathMatches(root, query, limit);
+    const results: NoteSearchResult[] = [...pathResults];
+    const pathMatched = new Set(pathResults.map(result => result.path));
+    if (results.length >= limit) return results;
     const args = buildRipgrepArgs(query, root, Boolean(options.regex));
+    const command = options.ripgrepPath || resolveRipgrepCommand();
 
     return await new Promise<NoteSearchResult[]>((resolvePromise, rejectPromise) => {
-        const child = run('rg', args, {
+        const child = run(command, args, {
             shell: false,
             env: { ...process.env, RIPGREP_CONFIG_PATH: '' },
         });
@@ -150,7 +243,7 @@ export async function searchNotes(
             lineBuffer += text;
             let newline = lineBuffer.indexOf('\n');
             while (newline >= 0) {
-                pushMatch(root, lineBuffer.slice(0, newline), results, limit);
+                pushMatch(root, lineBuffer.slice(0, newline), results, limit, pathMatched);
                 lineBuffer = lineBuffer.slice(newline + 1);
                 if (results.length >= limit) {
                     killedForLimit = true;
@@ -178,7 +271,7 @@ export async function searchNotes(
         });
         child.on('close', code => {
             if (settled) return;
-            if (lineBuffer) pushMatch(root, lineBuffer, results, limit);
+            if (lineBuffer) pushMatch(root, lineBuffer, results, limit, pathMatched);
             if (killedForLimit || code === 0) {
                 finish(undefined, results);
                 return;

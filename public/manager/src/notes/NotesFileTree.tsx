@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import type { NotesTreeEntry } from './notes-types';
 
 type NotesTrashItem = { path: string; kind: NotesTreeEntry['kind'] };
@@ -9,7 +9,6 @@ type NotesFileTreeProps = {
     selectedFolderPath: string | null;
     dirtyPath: string | null;
     loading: boolean;
-    width: number;
     notesRoot: string | null;
     onSelectPath: (path: string) => void;
     onSelectFolder: (path: string | null) => void;
@@ -17,9 +16,6 @@ type NotesFileTreeProps = {
     onRenamePath: (path: string, kind: NotesTreeEntry['kind']) => void;
     onTrashPath: (path: string, kind: NotesTreeEntry['kind']) => void;
     onTrashPaths: (items: NotesTrashItem[]) => void;
-    onCreateNote: () => void;
-    onCreateFolder: () => void;
-    onRefresh: () => void;
 };
 
 function TreeChevron({ expanded }: { expanded: boolean }) {
@@ -48,7 +44,7 @@ function FileIcon() {
     );
 }
 
-function NewNoteIcon() {
+export function NewNoteIcon() {
     return (
         <svg viewBox="0 0 18 18" aria-hidden="true" className="notes-tree-action-icon">
             <path d="M5 2.8h5.2L13.5 6v9.2H5V2.8Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
@@ -57,7 +53,7 @@ function NewNoteIcon() {
     );
 }
 
-function NewFolderIcon() {
+export function NewFolderIcon() {
     return (
         <svg viewBox="0 0 18 18" aria-hidden="true" className="notes-tree-action-icon">
             <path d="M2.5 5.2h5.1l1.2 1.5h6.7v6.7a1.4 1.4 0 0 1-1.4 1.4H3.9a1.4 1.4 0 0 1-1.4-1.4V5.2Z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
@@ -66,7 +62,7 @@ function NewFolderIcon() {
     );
 }
 
-function RefreshIcon() {
+export function RefreshIcon() {
     return (
         <svg viewBox="0 0 18 18" aria-hidden="true" className="notes-tree-action-icon">
             <path d="M14.2 6.3A5.5 5.5 0 0 0 4 5.2L3 6.6M3.8 11.7A5.5 5.5 0 0 0 14 12.8l1-1.4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -331,7 +327,6 @@ function renderEntry(
 }
 
 export function NotesFileTree(props: NotesFileTreeProps) {
-    const style = { '--notes-tree-width': `${props.width}px` } as CSSProperties;
     const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => new Set());
     const [dropTargetPath, setDropTargetPath] = useState<string | null>(null);
     const [multiSelected, setMultiSelected] = useState<Set<string>>(() => new Set());
@@ -452,9 +447,8 @@ export function NotesFileTree(props: NotesFileTreeProps) {
     }, [multiSelected, pathKindLookup, props]);
 
     return (
-        <aside
-            className={`notes-tree ${dropTargetPath === null ? 'is-root-drop-target' : ''}`}
-            style={style}
+        <div
+            className={`notes-tree-body ${dropTargetPath === null ? 'is-root-drop-target' : ''}`}
             onDragOver={(event) => {
                 if (!hasNotePathDrag(event)) return;
                 event.preventDefault();
@@ -467,14 +461,6 @@ export function NotesFileTree(props: NotesFileTreeProps) {
                 props.onMovePath(draggedPath, null);
             }}
         >
-            <div className="notes-tree-header">
-                <strong>Notes</strong>
-                <div className="notes-tree-actions">
-                    <button type="button" onClick={props.onCreateNote} title="New note" aria-label="New note"><NewNoteIcon /></button>
-                    <button type="button" onClick={props.onCreateFolder} title="New folder" aria-label="New folder"><NewFolderIcon /></button>
-                    <button type="button" onClick={props.onRefresh} disabled={props.loading} title="Refresh notes" aria-label="Refresh notes"><RefreshIcon /></button>
-                </div>
-            </div>
             {multiSelected.size > 0 && (
                 <div className="notes-tree-selection-info">
                     {multiSelected.size} selected
@@ -492,6 +478,6 @@ export function NotesFileTree(props: NotesFileTreeProps) {
             {!props.loading && props.entries.length > 0 && (
                 <ul className="notes-tree-list">{props.entries.map(entry => renderEntry(entry, props, expandedFolders, toggleFolder, dropTargetPath, setDropTargetPath, multiSelected, pathKindLookup, onEntryClick))}</ul>
             )}
-        </aside>
+        </div>
     );
 }

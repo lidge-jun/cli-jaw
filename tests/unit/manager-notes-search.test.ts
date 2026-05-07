@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PassThrough } from 'node:stream';
 import type { spawn } from 'node:child_process';
-import { buildRipgrepArgs, searchNotes } from '../../src/manager/notes/search.js';
+import { buildRipgrepArgs, resolveRipgrepCommand, searchNotes } from '../../src/manager/notes/search.js';
 
 type FakeSpawnOptions = {
     stdout?: string[];
@@ -59,6 +59,33 @@ function fakeSpawn(options: FakeSpawnOptions): typeof spawn {
     }) as typeof spawn;
 }
 
+test('notes search can use a resolved ripgrep binary outside the server PATH', async () => {
+    let command = '';
+    const spawnImpl = ((cmd, _args, _options) => {
+        command = String(cmd);
+        return fakeSpawn({ code: 1 })(cmd, _args, _options);
+    }) as typeof spawn;
+
+    const results = await searchNotes(tmpRoot(), 'alpha', {
+        ripgrepPath: '/opt/codex/vendor/path/rg',
+        spawnImpl,
+    });
+
+    assert.deepEqual(results, []);
+    assert.equal(command, '/opt/codex/vendor/path/rg');
+});
+
+test('notes search honors CLI_JAW_RIPGREP_PATH for manager service environments', () => {
+    const previous = process.env.CLI_JAW_RIPGREP_PATH;
+    try {
+        process.env.CLI_JAW_RIPGREP_PATH = '/custom/bin/rg';
+        assert.equal(resolveRipgrepCommand(), '/custom/bin/rg');
+    } finally {
+        if (previous === undefined) delete process.env.CLI_JAW_RIPGREP_PATH;
+        else process.env.CLI_JAW_RIPGREP_PATH = previous;
+    }
+});
+
 test('notes search builds rg args for literal dash-leading queries', () => {
     const args = buildRipgrepArgs('--help', '/notes', false);
 
@@ -87,7 +114,31 @@ test('notes search parses matches and filters reserved folders', async () => {
             line: 1,
             content: 'alpha beta',
             context: 'alpha beta',
+            kind: 'content',
         }]);
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('notes search returns filename and path matches before content matches', async () => {
+    const root = tmpRoot();
+    try {
+        mkdirSync(join(root, 'projects'), { recursive: true });
+        writeFileSync(join(root, 'projects', 'alpha-plan.md'), 'body without the token\n');
+        writeFileSync(join(root, 'projects', 'body.md'), 'alpha in body\n');
+
+        const results = await searchNotes(root, 'alpha', {
+            spawnImpl: fakeSpawn({
+                stdout: [match(join(root, 'projects', 'body.md'), 'alpha in body')],
+            }),
+        });
+
+        assert.deepEqual(results.map(result => [result.kind, result.path]), [
+            ['path', 'projects/alpha-plan.md'],
+            ['content', 'projects/body.md'],
+        ]);
+        assert.equal(results[0]?.context, 'projects/alpha-plan.md');
     } finally {
         rmSync(root, { recursive: true, force: true });
     }

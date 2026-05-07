@@ -24,7 +24,7 @@ import { DashboardSettingsSidebar, type DashboardSettingsSection } from './dashb
 import { DashboardSettingsWorkspace } from './dashboard-settings/DashboardSettingsWorkspace';
 import { summarizeActivityTitleSupport } from './dashboard-settings/activity-title-support';
 import { dashboardSettingsUiFromView } from './dashboard-settings/dashboard-settings-ui';
-import { NotesSidebar } from './notes/NotesSidebar';
+import { NotesSidebar, type NotesSidebarMode } from './notes/NotesSidebar';
 import { NotesWorkspace } from './notes/NotesWorkspace';
 import { useNotesModel } from './notes/useNotesModel';
 import { publishInvalidation } from './sync/invalidation-bus';
@@ -84,6 +84,8 @@ export function App() {
     const [activeProfileIds, setActiveProfileIds] = useState<string[]>([]);
     const [settingsDirty, setSettingsDirty] = useState(false);
     const [notesDirtyPath, setNotesDirtyPath] = useState<string | null>(null);
+    const [notesSidebarMode, setNotesSidebarMode] = useState<NotesSidebarMode>('files');
+    const [notesSearchFocusToken, setNotesSearchFocusToken] = useState(0);
     const [dashboardSettingsSection, setDashboardSettingsSection] = useState<DashboardSettingsSection>('display');
     const [boardView, setBoardView] = useState<BoardView>({ kind: 'overall' });
     const [scheduleGroup, setScheduleGroup] = useState<ScheduleGroup>('today');
@@ -341,6 +343,11 @@ export function App() {
         view.setNotesSelectedPath(path); void saveUi({ notesSelectedPath: path });
     }
 
+    function openNotesSidebarSearch(): void {
+        setNotesSidebarMode('search');
+        setNotesSearchFocusToken(token => token + 1);
+    }
+
     function handleNotesViewModeChange(mode: DashboardNotesViewMode): void {
         view.setNotesViewMode(mode); void saveUi({ notesViewMode: mode });
     }
@@ -517,7 +524,7 @@ export function App() {
                                     {view.sidebarMode === 'settings' ? (
                                         <DashboardSettingsSidebar activeSection={dashboardSettingsSection} locale={view.locale} onSectionChange={setDashboardSettingsSection} />
                                     ) : view.sidebarMode === 'notes' ? (
-                                        <NotesSidebar tree={notesModel.tree} loading={notesModel.loading} error={notesModel.error} notesRoot={notesModel.notesRoot} selectedPath={view.notesSelectedPath} dirtyPath={notesDirtyPath} treeWidth={view.notesTreeWidth} onSelectedPathChange={handleNotesSelectedPathChange} onRefreshTree={notesModel.refresh} />
+                                        <NotesSidebar tree={notesModel.tree} loading={notesModel.loading} error={notesModel.error} notesRoot={notesModel.notesRoot} selectedPath={view.notesSelectedPath} dirtyPath={notesDirtyPath} treeWidth={view.notesTreeWidth} mode={notesSidebarMode} searchFocusToken={notesSearchFocusToken} onModeChange={setNotesSidebarMode} onOpenSearch={openNotesSidebarSearch} onSelectedPathChange={handleNotesSelectedPathChange} onRefreshTree={notesModel.refresh} />
                                     ) : view.sidebarMode === 'board' ? (
                                         <DashboardBoardSidebar view={boardView} onViewChange={setBoardView} instances={instances} titlesByPort={messageActivity.titlesByPort} busyPorts={messageActivity.busyPorts} />
                                     ) : SCHEDULE_WORKSPACE_ENABLED && view.sidebarMode === 'schedule' ? (
@@ -552,7 +559,7 @@ export function App() {
                                         )} logs={detailContent('logs')} settings={detailContent('settings')} />
                                     </WorkspaceSurface>
                                     <WorkspaceSurface active={view.sidebarMode === 'notes'}>
-                                        <NotesWorkspace active={view.sidebarMode === 'notes'} selectedPath={view.notesSelectedPath} vaultIndex={notesModel.index} viewMode={view.notesViewMode} authoringMode={view.notesAuthoringMode} wordWrap={view.notesWordWrap} treeWidth={view.notesTreeWidth} onSelectedPathChange={handleNotesSelectedPathChange} onDirtyPathChange={setNotesDirtyPath} onViewModeChange={handleNotesViewModeChange} onAuthoringModeChange={handleNotesAuthoringModeChange} onWordWrapChange={handleNotesWordWrapChange} onTreeWidthChange={handleNotesTreeWidthChange} />
+                                        <NotesWorkspace active={view.sidebarMode === 'notes'} selectedPath={view.notesSelectedPath} vaultIndex={notesModel.index} viewMode={view.notesViewMode} authoringMode={view.notesAuthoringMode} wordWrap={view.notesWordWrap} treeWidth={view.notesTreeWidth} onOpenSidebarSearch={openNotesSidebarSearch} onSelectedPathChange={handleNotesSelectedPathChange} onDirtyPathChange={setNotesDirtyPath} onViewModeChange={handleNotesViewModeChange} onAuthoringModeChange={handleNotesAuthoringModeChange} onWordWrapChange={handleNotesWordWrapChange} onTreeWidthChange={handleNotesTreeWidthChange} />
                                     </WorkspaceSurface>
                                     <WorkspaceSurface active={view.sidebarMode === 'settings'}>
                                         <DashboardSettingsWorkspace activeSection={dashboardSettingsSection} ui={dashboardSettingsUi} titleSupport={titleSupport} onUiPatch={handleDashboardSettingsPatch} />

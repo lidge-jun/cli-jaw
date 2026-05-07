@@ -17,7 +17,7 @@ test('Notes workspace frontend files and API wrapper exist', () => {
         'public/manager/src/notes/NotesSidebar.tsx',
         'public/manager/src/notes/useNotesModel.ts',
         'public/manager/src/notes/NotesFileTree.tsx',
-        'public/manager/src/notes/NotesSearchPanel.tsx',
+        'public/manager/src/notes/NotesSearchSidebar.tsx',
         'public/manager/src/notes/NotesToolbar.tsx',
         'public/manager/src/notes/NotesEmptyState.tsx',
         'public/manager/src/notes/useNoteDocument.ts',
@@ -44,9 +44,11 @@ test('Notes API and create actions surface backend/fallback failures without unc
     const model = read('public/manager/src/notes/useNotesModel.ts');
     const tree = read('public/manager/src/notes/NotesFileTree.tsx');
     const workspace = read('public/manager/src/notes/NotesWorkspace.tsx');
-    const searchPanel = read('public/manager/src/notes/NotesSearchPanel.tsx');
+    const toolbar = read('public/manager/src/notes/NotesToolbar.tsx');
+    const searchSidebar = read('public/manager/src/notes/NotesSearchSidebar.tsx');
     const searchCss = read('public/manager/src/notes/notes-search.css');
     const css = read('public/manager/src/manager-notes.css');
+    const app = read('public/manager/src/App.tsx');
 
     assert.ok(api.includes('response.text()'), 'notes response parsing must inspect text before JSON parsing');
     assert.ok(api.includes('invalid_json'), 'notes response parsing must classify non-JSON responses');
@@ -78,6 +80,17 @@ test('Notes API and create actions surface backend/fallback failures without unc
         'notes refresh callback must be stable; selectedPath and inline App callbacks must not retrigger the initial refresh effect every render');
     assert.equal(sidebar.includes('fetchNotesTree'), false, 'notes sidebar must not independently fetch the tree');
     assert.ok(sidebar.includes('async function createNote()'), 'notes sidebar must own create note action');
+    assert.ok(sidebar.includes("export type NotesSidebarMode = 'files' | 'search'"), 'notes sidebar must define local Files/Search modes');
+    assert.equal(sidebar.includes('notes-sidebar-mode-tabs'), false, 'notes sidebar must not render Files/Search mode tabs');
+    assert.ok(sidebar.includes('function SearchIcon()'), 'notes sidebar must expose search as a compact header icon');
+    assert.ok(sidebar.includes("className={props.mode === 'search' ? 'is-active' : ''}"), 'notes sidebar search icon must expose active state');
+    assert.ok(sidebar.includes("aria-pressed={props.mode === 'search'}"), 'notes sidebar search icon must expose pressed state');
+    assert.ok(sidebar.includes("if (props.mode === 'search') props.onModeChange('files')"), 'notes sidebar search icon must toggle back to Files mode');
+    assert.ok(sidebar.includes('else props.onOpenSearch()'), 'notes sidebar search icon must use the App focus-aware opener');
+    assert.ok(sidebar.includes("props.mode === 'files'"), 'notes sidebar must conditionally render Files mode');
+    assert.ok(sidebar.includes('<NotesSearchSidebar'), 'notes sidebar must render Search mode inside the sidebar');
+    assert.ok(sidebar.includes('focusToken={props.searchFocusToken}'), 'notes sidebar must pass search focus tokens to the search sidebar');
+    assert.ok(sidebar.includes('onModeChange={props.onModeChange}'), 'notes sidebar must pass mode transitions to the search sidebar');
     assert.ok(sidebar.includes('async function createFolder()'), 'notes sidebar must own create folder action');
     assert.ok(sidebar.includes('catch (err)'), 'notes sidebar create actions must catch async API failures');
     assert.ok(sidebar.includes('setError((err as Error).message)'), 'notes sidebar create failures must render as tree errors');
@@ -118,7 +131,7 @@ test('Notes API and create actions surface backend/fallback failures without unc
     assert.ok(sidebar.includes("parent ? `${parent}/${nextName}` : nextName"), 'basename-only rename must keep the file or folder in its current parent');
     assert.ok(sidebar.includes('setSelectedFolderPath(nextSelectedFolderPath)'), 'notes sidebar must update selected folder after folder rename');
     assert.ok(tree.includes('function FolderIcon('), 'notes tree must render a folder icon for folder entries');
-    assert.ok(tree.includes('function NewFolderIcon()'), 'notes tree must use an icon button for folder creation');
+    assert.ok(tree.includes('export function NewFolderIcon()'), 'notes tree must export an icon button for folder creation');
     assert.ok(tree.includes('function PencilIcon()'), 'notes tree must expose a pencil rename icon');
     assert.ok(tree.includes('aria-expanded={expanded}'), 'folder rows must expose expandable tree state');
     assert.ok(tree.includes('onSelectFolder'), 'folder rows must be selectable as creation targets');
@@ -171,17 +184,44 @@ test('Notes API and create actions surface backend/fallback failures without unc
     assert.ok(workspace.includes("event.key.toLowerCase() !== 's'"), 'notes save shortcut must be limited to the S key');
     assert.ok(workspace.includes('event.preventDefault()'), 'notes save shortcut must suppress browser Save Page');
     assert.ok(workspace.includes('void document.save()'), 'notes save shortcut must call the existing manual save path');
-    assert.ok(workspace.includes('NotesSearchPanel'), 'notes workspace must render the search panel');
-    assert.ok(workspace.includes('setSearchOpen(open => !open)'), 'notes workspace must toggle search with a shortcut');
+    assert.equal(workspace.includes('NotesSearchPanel'), false, 'notes workspace must not render a floating search panel');
+    assert.equal(workspace.includes('setSearchOpen'), false, 'notes workspace must not own local overlay search state');
+    assert.ok(workspace.includes('onOpenSidebarSearch: () => void'), 'notes workspace must receive the App-owned sidebar search opener');
+    assert.ok(workspace.includes('props.onOpenSidebarSearch()'), 'notes workspace shortcut must open sidebar Search mode');
     assert.ok(workspace.includes("event.key.toLowerCase() !== 'f'"), 'notes search shortcut must be bound to F');
     assert.ok(workspace.includes('!event.shiftKey'), 'notes search shortcut must require Shift');
-    assert.ok(searchPanel.includes('AbortController'), 'notes search panel must cancel stale searches');
-    assert.ok(searchPanel.includes('isAbortError'), 'notes search panel must distinguish aborts from real failures');
-    assert.ok(searchPanel.includes('notes-search-error'), 'notes search panel must render actionable errors');
-    assert.ok(searchPanel.includes('searchNotes(trimmed'), 'notes search panel must call the notes search API');
-    assert.ok(searchCss.includes('.notes-workspace'), 'search CSS must anchor the overlay to the Notes workspace');
-    assert.ok(searchCss.includes('position: relative'), 'search CSS must make Notes workspace the positioning context');
-    assert.ok(searchCss.includes('.notes-search-panel'), 'search CSS must style the search panel');
+    assert.equal(toolbar.includes('searchOpen: boolean'), false, 'notes toolbar must not accept search state after sidebar icon owns Search');
+    assert.equal(toolbar.includes('onSearchToggle: () => void'), false, 'notes toolbar must not accept a search toggle after sidebar icon owns Search');
+    assert.equal(toolbar.includes('aria-pressed={props.searchOpen}'), false, 'notes toolbar must not expose a Search pressed state');
+    assert.equal(toolbar.includes('onClick={props.onSearchToggle}'), false, 'notes toolbar must not render a Search action');
+    assert.doesNotMatch(toolbar, />\s*Search\s*<\/button>/, 'notes toolbar must not render a visible Search button');
+    assert.equal(workspace.includes('searchOpen={props.sidebarSearchActive}'), false, 'notes workspace must not pass search state to the toolbar');
+    assert.equal(workspace.includes('onSearchToggle={props.onOpenSidebarSearch}'), false, 'notes workspace must not pass a search toggle to the toolbar');
+    assert.ok(app.includes("const [notesSidebarMode, setNotesSidebarMode] = useState<NotesSidebarMode>('files')"), 'App must own the Notes Files/Search sidebar mode');
+    assert.ok(app.includes('const [notesSearchFocusToken, setNotesSearchFocusToken] = useState(0)'), 'App must own a Notes search focus token');
+    assert.ok(app.includes('function openNotesSidebarSearch(): void'), 'App must expose a sidebar search opener');
+    assert.ok(app.includes("setNotesSidebarMode('search')"), 'App search opener must switch the sidebar to Search mode');
+    assert.ok(app.includes('setNotesSearchFocusToken(token => token + 1)'), 'App search opener must request input focus');
+    assert.ok(app.includes('mode={notesSidebarMode}'), 'App must pass Notes sidebar mode to NotesSidebar');
+    assert.ok(app.includes('searchFocusToken={notesSearchFocusToken}'), 'App must pass search focus token to NotesSidebar');
+    assert.ok(app.includes('onModeChange={setNotesSidebarMode}'), 'App must pass NotesSidebar mode changes back to App');
+    assert.ok(app.includes('onOpenSearch={openNotesSidebarSearch}'), 'App must pass the focus-aware search opener to NotesSidebar');
+    assert.equal(app.includes("sidebarSearchActive={notesSidebarMode === 'search'}"), false, 'App must not pass removed toolbar search active state to NotesWorkspace');
+    assert.ok(app.includes('onOpenSidebarSearch={openNotesSidebarSearch}'), 'App must pass search opener to NotesWorkspace');
+    assert.ok(searchSidebar.includes('AbortController'), 'notes search sidebar must cancel stale searches');
+    assert.ok(searchSidebar.includes('isAbortError'), 'notes search sidebar must distinguish aborts from real failures');
+    assert.ok(searchSidebar.includes('notes-search-error'), 'notes search sidebar must render actionable errors');
+    assert.ok(searchSidebar.includes('searchNotes(trimmed'), 'notes search sidebar must call the notes search API');
+    assert.ok(searchSidebar.includes('focusToken'), 'notes search sidebar must focus the search input from App tokens');
+    assert.ok(searchSidebar.includes("props.onModeChange('files')"), 'Escape in notes search sidebar must return to Files mode');
+    assert.ok(searchSidebar.includes("result.kind === 'path' ? 'Path match'"), 'notes search sidebar must label file/path matches');
+    assert.equal(searchCss.includes('.notes-sidebar-mode-tabs'), false, 'search CSS must not style removed Files/Search tabs');
+    assert.ok(searchCss.includes('.notes-tree-actions button.is-active'), 'search CSS must style the active header search icon');
+    assert.ok(searchCss.includes('.notes-search-sidebar'), 'search CSS must style the sidebar search surface');
+    assert.ok(searchCss.includes('.notes-search-sidebar-results'), 'search CSS must keep sidebar search results scrollable');
+    assert.equal(searchCss.includes('.notes-search-panel'), false, 'search CSS must not keep the floating overlay panel');
+    assert.equal(searchCss.includes('position: absolute'), false, 'search CSS must not absolutely position search results over the editor');
+    assert.equal(searchCss.includes('top: 12px'), false, 'search CSS must not cover the toolbar search button');
     assert.ok(read('public/manager/src/main.tsx').includes("./notes/notes-search.css"), 'main entry must import the split notes search CSS');
     assert.ok(workspace.includes('className="notes-content"'), 'notes toolbar body must be wrapped so document panes land in a constrained scroll row');
     assert.ok(css.includes('grid-template-rows: max-content minmax(0, 1fr);'), 'notes main grid must reserve a fixed toolbar row and a constrained scroll content row');
@@ -244,7 +284,7 @@ test('App renders NotesWorkspace outside Workbench and imports notes CSS', () =>
     const workbench = read('public/manager/src/components/Workbench.tsx');
 
     assert.ok(app.includes('import { NotesWorkspace }'), 'App must import NotesWorkspace');
-    assert.ok(app.includes('import { NotesSidebar }'), 'App must import NotesSidebar for the existing navigator column');
+    assert.ok(app.includes('import { NotesSidebar, type NotesSidebarMode }'), 'App must import NotesSidebar for the existing navigator column and local search mode type');
     assert.ok(app.includes('import { useNotesModel }'), 'App must import the parent-owned Notes model hook');
     assert.ok(app.includes('import { DashboardSettingsWorkspace }'), 'App must import Dashboard settings workspace');
     assert.ok(app.includes('import { DashboardSettingsSidebar'), 'App must import Dashboard settings sidebar');
