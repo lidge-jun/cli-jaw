@@ -1363,7 +1363,14 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     let geminiWatchdog: ReturnType<typeof setTimeout> | null = null;
 
     // ─── Subprocess stall watchdog (Phase 1: #178 OAuth2 stall recovery) ───
-    const agentTimeoutCfg = (settings as Record<string, any>)["agentTimeout"] || {};
+    const rawAgentTimeoutCfg = (settings as Record<string, unknown>)["agentTimeout"];
+    const agentTimeoutCfg = rawAgentTimeoutCfg && typeof rawAgentTimeoutCfg === 'object'
+        ? rawAgentTimeoutCfg as Record<string, unknown>
+        : {};
+    const watchdogConfig: { firstProgressMs?: number; idleMs?: number; absoluteMs?: number } = {};
+    if (typeof agentTimeoutCfg['firstProgressMs'] === 'number') watchdogConfig.firstProgressMs = agentTimeoutCfg['firstProgressMs'];
+    if (typeof agentTimeoutCfg['idleMs'] === 'number') watchdogConfig.idleMs = agentTimeoutCfg['idleMs'];
+    if (typeof agentTimeoutCfg['absoluteMs'] === 'number') watchdogConfig.absoluteMs = agentTimeoutCfg['absoluteMs'];
     const stallWatchdog = attachWatchdog(child, agentLabel, (reason) => {
         console.log(`[jaw:watchdog] killing ${agentLabel} — ${reason}`);
         ctx.stallReason = reason;
@@ -1373,11 +1380,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 try { killProcessTree(child.pid!, 'SIGKILL'); } catch { /* already dead */ }
             }, 5_000);
         }
-    }, {
-        firstProgressMs: agentTimeoutCfg.firstProgressMs,
-        idleMs: agentTimeoutCfg.idleMs,
-        absoluteMs: agentTimeoutCfg.absoluteMs,
-    });
+    }, watchdogConfig);
 
     let buffer = '';
     const recordOpencodeEvent = (line: string, event: CliEventRecord) => {
