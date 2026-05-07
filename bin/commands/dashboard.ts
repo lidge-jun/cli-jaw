@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { constants as osConstants } from 'node:os';
 import { DASHBOARD_DEFAULT_PORT, MANAGED_INSTANCE_PORT_COUNT, MANAGED_INSTANCE_PORT_FROM } from '../../src/manager/constants.js';
+import { shouldOpenDashboardByDefault } from '../../src/manager/dashboard-open-default.js';
 import { shouldShowHelp, printAndExit } from '../helpers/help.js';
 import { asArray, asRecord, fieldString, type JsonRecord } from '../_http-client.js';
 
@@ -54,7 +55,7 @@ const { values: globalOpts, positionals } = parseArgs({
         port: { type: 'string', default: process.env["DASHBOARD_PORT"] || DASHBOARD_DEFAULT_PORT },
         from: { type: 'string', default: String(MANAGED_INSTANCE_PORT_FROM) },
         count: { type: 'string', default: String(MANAGED_INSTANCE_PORT_COUNT) },
-        open: { type: 'boolean', default: true },
+        open: { type: 'boolean', default: shouldOpenDashboardByDefault() },
         home: { type: 'string' },
     },
     strict: false,

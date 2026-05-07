@@ -4,7 +4,6 @@ import { existsSync } from 'node:fs';
 import http from 'node:http';
 import { basename, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
 import {
     DASHBOARD_DEFAULT_PORT,
     DASHBOARD_PREVIEW_PORT_FROM,
@@ -34,6 +33,7 @@ import { createDashboardBoardRouter } from './board/routes.js';
 import { createDashboardScheduleRouter } from './schedule/routes.js';
 import { ScheduleStore } from './schedule/store.js';
 import { startScheduleRunner } from './schedule/runner.js';
+import { openDashboardUrl } from './browser-open.js';
 import type {
     DashboardInstance,
     DashboardServiceState,
@@ -446,14 +446,7 @@ async function main(): Promise<void> {
         });
 
         if (process.env["JAW_DASHBOARD_OPEN"] === '1') {
-            const openCmd = process.platform === 'darwin' ? 'open'
-                : process.platform === 'win32' ? 'cmd'
-                    : 'xdg-open';
-            const openArgs = process.platform === 'win32'
-                ? ['/c', 'start', '', url]
-                : [url];
-            const opener = spawn(openCmd, openArgs, { detached: true, stdio: 'ignore' });
-            opener.unref();
+            openDashboardUrl(url);
         }
     });
 }
