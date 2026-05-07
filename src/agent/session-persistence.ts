@@ -10,6 +10,7 @@ export type SessionPersistenceInput = {
     isFallback?: boolean;
     code?: number | null;
     wasKilled?: boolean;
+    skipSessionPersist?: boolean;
     cli: string;
     model: string;
     resumeKey?: string | null;
@@ -38,6 +39,7 @@ export function isCurrentSessionOwner(ownerGeneration: number): boolean {
 }
 
 export function shouldPersistMainSession(input: SessionPersistenceInput): boolean {
+    if (input.skipSessionPersist) return false;
     if (input.forceNew || input.employeeSessionId || !input.sessionId || input.isFallback) return false;
     // User-initiated kill (SIGTERM/SIGKILL) yields exit codes like 143/137/1 depending on
     // the CLI's signal handler. Allow persistence when wasKilled=true so resume works for

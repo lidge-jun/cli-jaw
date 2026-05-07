@@ -11,6 +11,14 @@ interface ErrorRecord {
 const errorHistory = new Map<string, ErrorRecord[]>();
 let lastAlertAt = 0;
 
+function actionForErrorType(type: string): string {
+    if (type === 'auth') return 'CLI 로그인 상태 확인 필요';
+    if (type === 'model_capacity') return 'Gemini Pro Preview capacity 부족 — Auto/Flash 전환 또는 잠시 후 재시도';
+    if (type === '429') return '쿼터/모델 capacity 상태 확인 필요';
+    if (type === 'stall') return 'CLI 응답 정지 — 프로세스/네트워크 상태 확인 필요';
+    return 'CLI 상태 및 최근 로그 확인 필요';
+}
+
 function getConfig() {
     const cfg = (settings as Record<string, unknown>)["alertEscalation"] as Record<string, unknown> | undefined || {};
     return {
@@ -41,7 +49,7 @@ export function recordError(cli: string, type: string): void {
             `━━━━━━━━━━━━━━━━━\n` +
             `상태: ${lastType} ${recent.length}회 (${Math.round(cfg.windowMs / 60_000)}분)\n` +
             `━━━━━━━━━━━━━━━━━\n` +
-            `조치: CLI 로그인 상태 확인 필요`;
+            `조치: ${actionForErrorType(lastType)}`;
         broadcast('alert_escalation', { cli, message: msg, channels: cfg.channels });
     }
 }

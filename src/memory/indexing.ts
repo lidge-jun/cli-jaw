@@ -10,9 +10,9 @@ import {
     ensureDir,
     safeReadFile,
     hashText,
-    sanitizeKeywords,
     listMarkdownFiles,
 } from './shared.js';
+import { expandSynonyms, initSynonymsTable } from './synonyms.js';
 
 function parseMarkdownFile(raw: string): ParsedMarkdown {
     const lines = raw.replace(/\r\n/g, '\n').split('\n');
@@ -122,32 +122,50 @@ function chunkMarkdown(absPath: string, relpath: string, kind: string) {
 export function getIndexDb() {
     ensureDir(getAdvancedMemoryDir());
     const db = new Database(getAdvancedIndexDbPath());
-    db.pragma('journal_mode = WAL');
-    db.pragma('busy_timeout = 3000');
+    try {
+        db.pragma('journal_mode = WAL');
+        db.pragma('busy_timeout = 3000');
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS chunks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                path TEXT NOT NULL,
+                relpath TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                home_id TEXT NOT NULL DEFAULT '',
+                source_start_line INTEGER NOT NULL,
+                source_end_line INTEGER NOT NULL,
+                source_hash TEXT NOT NULL,
+                content TEXT NOT NULL,
+                content_hash TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT ''
+            );
+            CREATE INDEX IF NOT EXISTS idx_chunks_relpath ON chunks(relpath);
+            CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path);
+            CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+                content,
+                relpath UNINDEXED,
+                kind UNINDEXED,
+                tokenize = 'unicode61'
+            );
+        `);
+        ensureTrigramIndex(db);
+        initSynonymsTable(db);
+        return db;
+    } catch (err) {
+        db.close();
+        throw err;
+    }
+}
+
+export function ensureTrigramIndex(db: Database.Database): void {
     db.exec(`
-        CREATE TABLE IF NOT EXISTS chunks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            path TEXT NOT NULL,
-            relpath TEXT NOT NULL,
-            kind TEXT NOT NULL,
-            home_id TEXT NOT NULL DEFAULT '',
-            source_start_line INTEGER NOT NULL,
-            source_end_line INTEGER NOT NULL,
-            source_hash TEXT NOT NULL,
-            content TEXT NOT NULL,
-            content_hash TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT ''
-        );
-        CREATE INDEX IF NOT EXISTS idx_chunks_relpath ON chunks(relpath);
-        CREATE INDEX IF NOT EXISTS idx_chunks_path ON chunks(path);
-        CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
-            content,
+        CREATE VIRTUAL TABLE IF NOT EXISTS chunks_trigram USING fts5(
+            chunk_id UNINDEXED,
             relpath UNINDEXED,
-            kind UNINDEXED,
-            tokenize = 'unicode61'
+            body,
+            tokenize = 'trigram'
         );
     `);
-    return db;
 }
 
 interface ChunkRow {
@@ -163,6 +181,7 @@ interface ChunkRow {
 function clearIndex(db: Database.Database) {
     db.exec('DELETE FROM chunks;');
     db.exec(`DELETE FROM chunks_fts;`);
+    db.exec('DELETE FROM chunks_trigram;');
 }
 
 export function indexedFiles(root: string) {
@@ -180,6 +199,7 @@ function kindForFile(root: string, file: string) {
     const rel = relative(root, file).replace(/\\/g, '/');
     if (rel === 'profile.md') return 'profile';
     if (rel.startsWith('shared/')) return 'shared';
+    if (rel.startsWith('episodes/digests/')) return 'episode-cold';
     if (rel.startsWith('episodes/')) return 'episode';
     if (rel.startsWith('semantic/')) return 'semantic';
     if (rel.startsWith('procedures/')) return 'procedure';
@@ -188,84 +208,66 @@ function kindForFile(root: string, file: string) {
 
 export function reindexAll(root: string) {
     const db = getIndexDb();
-    clearIndex(db);
-
-    const now = new Date().toISOString();
-    const homeId = instanceId();
-    const insertChunk = db.prepare(`
-        INSERT INTO chunks (path, relpath, kind, home_id, source_start_line, source_end_line, source_hash, content, content_hash, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const insertFts = db.prepare(`
-        INSERT INTO chunks_fts (rowid, content, relpath, kind)
-        VALUES (?, ?, ?, ?)
-    `);
-
-    let totalFiles = 0;
-    let totalChunks = 0;
-    const tx = db.transaction(() => {
-        for (const file of indexedFiles(root)) {
-            totalFiles += 1;
-            const rel = relative(root, file).replace(/\\/g, '/');
-            const kind = kindForFile(root, file);
-            for (const chunk of chunkMarkdown(file, rel, kind)) {
-                const contentHash = hashText(chunk.content);
-                const info = insertChunk.run(
-                    chunk.path,
-                    chunk.relpath,
-                    chunk.kind,
-                    homeId,
-                    chunk.source_start_line,
-                    chunk.source_end_line,
-                    chunk.source_hash,
-                    chunk.content,
-                    contentHash,
-                    now,
-                );
-                insertFts.run(
-                    Number(info.lastInsertRowid),
-                    chunk.content,
-                    chunk.relpath,
-                    chunk.kind,
-                );
-                totalChunks += 1;
+    try {
+        clearIndex(db);
+        const now = new Date().toISOString();
+        const homeId = instanceId();
+        const insertChunk = db.prepare(`
+            INSERT INTO chunks (path, relpath, kind, home_id, source_start_line, source_end_line, source_hash, content, content_hash, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        const insertFts = db.prepare('INSERT INTO chunks_fts (rowid, content, relpath, kind) VALUES (?, ?, ?, ?)');
+        const insertTrigram = db.prepare('INSERT INTO chunks_trigram (chunk_id, relpath, body) VALUES (?, ?, ?)');
+        let totalFiles = 0;
+        let totalChunks = 0;
+        const tx = db.transaction(() => {
+            for (const file of indexedFiles(root)) {
+                totalFiles += 1;
+                const rel = relative(root, file).replace(/\\/g, '/');
+                const kind = kindForFile(root, file);
+                for (const chunk of chunkMarkdown(file, rel, kind)) {
+                    const contentHash = hashText(chunk.content);
+                    const info = insertChunk.run(chunk.path, chunk.relpath, chunk.kind, homeId, chunk.source_start_line, chunk.source_end_line, chunk.source_hash, chunk.content, contentHash, now);
+                    const chunkId = Number(info.lastInsertRowid);
+                    insertFts.run(chunkId, chunk.content, chunk.relpath, chunk.kind);
+                    insertTrigram.run(chunkId, chunk.relpath, chunk.content);
+                    totalChunks += 1;
+                }
             }
-        }
-    });
-    tx();
-    db.close();
-    return { totalFiles, totalChunks };
+        });
+        tx();
+        return { totalFiles, totalChunks };
+    } finally { db.close(); }
 }
 
 export function reindexSingleFile(root: string, file: string) {
     if (!fs.existsSync(file)) return 0;
     const db = getIndexDb();
-    const rel = relative(root, file).replace(/\\/g, '/');
-    const kind = kindForFile(root, file);
-    const now = new Date().toISOString();
-    const homeId = instanceId();
-
-    db.prepare('DELETE FROM chunks_fts WHERE rowid IN (SELECT id FROM chunks WHERE relpath = ?)').run(rel);
-    db.prepare('DELETE FROM chunks WHERE relpath = ?').run(rel);
-
-    const insertChunk = db.prepare(
-        'INSERT INTO chunks (path, relpath, kind, home_id, source_start_line, source_end_line, source_hash, content, content_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    );
-    const insertFts = db.prepare(
-        'INSERT INTO chunks_fts (rowid, content, relpath, kind) VALUES (?, ?, ?, ?)'
-    );
-    let count = 0;
-    const tx = db.transaction(() => {
-        for (const chunk of chunkMarkdown(file, rel, kind)) {
-            const contentHash = hashText(chunk.content);
-            const info = insertChunk.run(chunk.path, chunk.relpath, chunk.kind, homeId, chunk.source_start_line, chunk.source_end_line, chunk.source_hash, chunk.content, contentHash, now);
-            insertFts.run(Number(info.lastInsertRowid), chunk.content, chunk.relpath, chunk.kind);
-            count++;
-        }
-    });
-    tx();
-    db.close();
-    return count;
+    try {
+        const rel = relative(root, file).replace(/\\/g, '/');
+        const kind = kindForFile(root, file);
+        const now = new Date().toISOString();
+        const homeId = instanceId();
+        db.prepare('DELETE FROM chunks_fts WHERE rowid IN (SELECT id FROM chunks WHERE relpath = ?)').run(rel);
+        db.prepare('DELETE FROM chunks_trigram WHERE chunk_id IN (SELECT id FROM chunks WHERE relpath = ?)').run(rel);
+        db.prepare('DELETE FROM chunks WHERE relpath = ?').run(rel);
+        const insertChunk = db.prepare('INSERT INTO chunks (path, relpath, kind, home_id, source_start_line, source_end_line, source_hash, content, content_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+        const insertFts = db.prepare('INSERT INTO chunks_fts (rowid, content, relpath, kind) VALUES (?, ?, ?, ?)');
+        const insertTrigram = db.prepare('INSERT INTO chunks_trigram (chunk_id, relpath, body) VALUES (?, ?, ?)');
+        let count = 0;
+        const tx = db.transaction(() => {
+            for (const chunk of chunkMarkdown(file, rel, kind)) {
+                const contentHash = hashText(chunk.content);
+                const info = insertChunk.run(chunk.path, chunk.relpath, chunk.kind, homeId, chunk.source_start_line, chunk.source_end_line, chunk.source_hash, chunk.content, contentHash, now);
+                const chunkId = Number(info.lastInsertRowid);
+                insertFts.run(chunkId, chunk.content, chunk.relpath, chunk.kind);
+                insertTrigram.run(chunkId, chunk.relpath, chunk.content);
+                count++;
+            }
+        });
+        tx();
+        return count;
+    } finally { db.close(); }
 }
 
 export function reindexIntegratedMemoryFile(file: string) {
@@ -290,11 +292,20 @@ function tokenizeQuery(query: string) {
 }
 
 function tokenizeExpandedQuery(query: string, expanded?: string[]) {
-    if (expanded?.length) return sanitizeKeywords([query, ...expanded]).slice(0, 8);
-    return tokenizeQuery(query);
+    const raw = expanded?.length ? [query, ...expanded] : tokenizeQuery(query);
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const item of raw) {
+        const value = String(item || '').replace(/[;&|`$><]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 48);
+        if (!value) continue;
+        const key = value.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(value);
+        if (out.length >= 16) break;
+    }
+    return out;
 }
-
-// ─── Phase 2: Ranking helpers ───────────────────────
 
 function kindPriority(kind: string): number {
     if (kind === 'profile') return -4.0;
@@ -302,19 +313,27 @@ function kindPriority(kind: string): number {
     if (kind === 'procedure') return -2.5;
     if (kind === 'semantic') return -2.0;
     if (kind === 'episode') return 0;
+    if (kind === 'episode-cold') return 0;
     return 0;
 }
 
-function estimateRecencyBoost(relpath: string): number {
+const HALF_LIFE_HOURS: Record<string, number> = {
+    episode: 24 * 7,
+    'episode-cold': 24 * 180,
+    semantic: 24 * 30,
+    shared: 24 * 90,
+    procedure: Infinity,
+    profile: Infinity,
+};
+
+function recencyBoost(kind: string, relpath: string): number {
+    const halfLife = HALF_LIFE_HOURS[kind] ?? 24 * 7;
+    if (halfLife === Infinity) return 0;
     const dateMatch = /(\d{4}-\d{2}-\d{2})/.exec(relpath);
     if (!dateMatch) return 0;
-    const fileDate = new Date(dateMatch[1]!);
-    const now = new Date();
-    const daysDiff = (now.getTime() - fileDate.getTime()) / (1000 * 60 * 60 * 24);
-    if (daysDiff <= 1) return -1.5;
-    if (daysDiff <= 3) return -1.0;
-    if (daysDiff <= 7) return -0.5;
-    return 0;
+    const ageHours = (Date.now() - new Date(dateMatch[1]!).getTime()) / 3600000;
+    if (ageHours < 0) return -1.5;
+    return -1.5 * Math.exp(-Math.LN2 * ageHours / halfLife);
 }
 
 function computeFinalScore(hit: SearchHit, query: string): number {
@@ -323,7 +342,7 @@ function computeFinalScore(hit: SearchHit, query: string): number {
     const exactMatch = snippet.includes(q);
     const phraseMatch = snippet.includes(`header: ${q}`) || snippet.includes(`## ${q}`);
     const kw = kindPriority(hit.kind);
-    const rw = estimateRecencyBoost(hit.relpath);
+    const rw = recencyBoost(hit.kind, hit.relpath);
     const exactBoost = exactMatch ? -2.0 : 0;
     const phraseBoost = phraseMatch ? -1.0 : 0;
     return hit.score + kw + rw + exactBoost + phraseBoost;
@@ -340,16 +359,26 @@ export function formatHits(hits: SearchHit[], opts: { includeDebugMeta?: boolean
     }).join('\n\n---\n\n');
 }
 
-export function searchIndex(query: string, expanded?: string[]) {
-    const db = getIndexDb();
-    const searchTerms = tokenizeExpandedQuery(query, expanded);
-    if (!searchTerms.length) {
-        db.close();
-        return { hits: [] as SearchHit[] };
-    }
+function quoteFtsTerm(term: string): string {
+    const cleaned = String(term || '').replace(/"/g, '""').trim();
+    return cleaned ? `"${cleaned}"` : '';
+}
 
-    const byPathLine = new Map<string, SearchHit>();
-    const ftsStmt = db.prepare(`
+function toHit(row: ChunkRow, score: number): SearchHit {
+    return {
+        path: row.path,
+        relpath: row.relpath,
+        kind: row.kind,
+        source_start_line: row.source_start_line,
+        source_end_line: row.source_end_line,
+        snippet: String(row.content || '').slice(0, 700),
+        score,
+    };
+}
+
+function searchBM25(db: Database.Database, groups: string[][]): SearchHit[] {
+    const hits = new Map<string, SearchHit>();
+    const fts = db.prepare(`
         SELECT
             c.path,
             c.relpath,
@@ -364,58 +393,76 @@ export function searchIndex(query: string, expanded?: string[]) {
         ORDER BY score
         LIMIT 16
     `);
-    const likeStmt = db.prepare(`
+    const like = db.prepare(`
         SELECT path, relpath, kind, source_start_line, source_end_line, content
         FROM chunks
         WHERE content LIKE ? ESCAPE '\\'
         ORDER BY relpath ASC, source_start_line ASC
         LIMIT 16
     `);
-
-    for (const term of searchTerms) {
-        const ftsQuery = term.split(/\s+/).map(t => `"${t.replace(/"/g, '')}"`).join(' OR ');
+    for (const group of groups) {
+        const ftsQuery = group.map(quoteFtsTerm).filter(Boolean).join(' OR ');
         try {
-            const rows = ftsStmt.all(ftsQuery) as ChunkRow[];
-            for (const row of rows) {
+            for (const row of fts.all(ftsQuery) as ChunkRow[]) {
                 const key = `${row.relpath}:${row.source_start_line}:${row.source_end_line}`;
-                if (!byPathLine.has(key)) {
-                    byPathLine.set(key, {
-                        path: row.path,
-                        relpath: row.relpath,
-                        kind: row.kind,
-                        source_start_line: row.source_start_line,
-                        source_end_line: row.source_end_line,
-                        snippet: String(row.content || '').slice(0, 700),
-                        score: Number(row.score || 0),
-                    });
-                }
+                if (!hits.has(key)) hits.set(key, toHit(row, Number(row.score || 0)));
             }
-        } catch {
-            // ignore FTS parse issues, fallback to LIKE below
-        }
-        const likeRows = likeStmt.all(buildLikeTerm(term)) as ChunkRow[];
-        for (const row of likeRows) {
-            const key = `${row.relpath}:${row.source_start_line}:${row.source_end_line}`;
-            if (!byPathLine.has(key)) {
-                byPathLine.set(key, {
-                    path: row.path,
-                    relpath: row.relpath,
-                    kind: row.kind,
-                    source_start_line: row.source_start_line,
-                    source_end_line: row.source_end_line,
-                    snippet: String(row.content || '').slice(0, 700),
-                    score: 999,
-                });
+        } catch { /* fall through to LIKE */ }
+        for (const term of group) {
+            for (const row of like.all(buildLikeTerm(term)) as ChunkRow[]) {
+                const key = `${row.relpath}:${row.source_start_line}:${row.source_end_line}`;
+                if (!hits.has(key)) hits.set(key, toHit(row, 999));
             }
         }
     }
-    db.close();
-    const baseQuery = searchTerms[0] || query;
-    const hits = [...byPathLine.values()]
-        .map(hit => ({ ...hit, score: computeFinalScore(hit, baseQuery) }))
-        .sort((a, b) => a.score - b.score)
-        .slice(0, 8);
-    return { hits };
+    return [...hits.values()];
+}
+
+function searchTrigram(db: Database.Database, query: string): SearchHit[] {
+    const term = String(query || '').trim();
+    if (term.length < 3) return [];
+    try {
+        const rows = db.prepare(`
+            SELECT c.path, c.relpath, c.kind, c.source_start_line, c.source_end_line, c.content, 0 AS score
+            FROM chunks_trigram t
+            JOIN chunks c ON c.id = t.chunk_id
+            WHERE chunks_trigram MATCH ?
+            LIMIT 15
+        `).all(quoteFtsTerm(term)) as ChunkRow[];
+        return rows.map((row, idx) => toHit(row, idx));
+    } catch { return []; }
+}
+
+function reciprocalRankFusion(primary: SearchHit[], secondary: SearchHit[], k = 60): SearchHit[] {
+    const scores = new Map<string, { hit: SearchHit; score: number }>();
+    for (const [listIndex, list] of [primary, secondary].entries()) {
+        for (let i = 0; i < list.length; i++) {
+            const hit = list[i]!;
+            const key = `${hit.relpath}:${hit.source_start_line}:${hit.source_end_line}`;
+            const prev = scores.get(key);
+            scores.set(key, { hit: prev?.hit ?? hit, score: (prev?.score ?? 0) + (listIndex === 0 ? 1 : 0.8) / (k + i) });
+        }
+    }
+    return [...scores.values()].sort((a, b) => b.score - a.score).map(v => ({ ...v.hit, score: -v.score }));
+}
+
+export function searchIndex(query: string, expanded?: string[]): { hits: SearchHit[] } {
+    const db = getIndexDb();
+    const terms = tokenizeExpandedQuery(query, expanded);
+    if (!terms.length) {
+        db.close();
+        return { hits: [] };
+    }
+    try {
+        const groups = terms.map(term => expandSynonyms(db, term));
+        const merged = reciprocalRankFusion(searchBM25(db, groups), searchTrigram(db, query));
+        const baseQuery = terms[0] || query;
+        const hits = merged
+            .map(hit => ({ ...hit, score: computeFinalScore(hit, baseQuery) }))
+            .sort((a, b) => a.score - b.score)
+            .slice(0, 8);
+        return { hits };
+    } finally { db.close(); }
 }
 
 export function reindexIndexCounts(dbPath: string) {

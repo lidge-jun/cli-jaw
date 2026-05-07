@@ -9,7 +9,7 @@ aliases: [CLI-JAW Memory Architecture, advanced memory runtime, memory architect
 # Memory Architecture — 통합 메모리 시스템
 
 > 최종 갱신: 2026-05-05
-> 소스: `src/memory/runtime.ts` 375L (사실상 facade), `src/memory/shared.ts` 256L, `src/memory/bootstrap.ts` 517L, `src/memory/indexing.ts` 417L, `src/memory/keyword-expand.ts` 268L, `src/memory/reflect.ts` 256L, `src/memory/identity.ts` 86L, `src/memory/injection.ts` 69L, `src/memory/memory.ts` 154L, `src/memory/worklog.ts` 200L, `src/memory/heartbeat.ts` 205L, `src/memory/heartbeat-schedule.ts` 410L, `src/memory/advanced.ts` 1L (re-export shim), `src/agent/memory-flush-controller.ts` 157L, `src/agent/spawn.ts` 1451L, `src/prompt/builder.ts` 675L, `src/orchestrator/pipeline.ts` 462L, `src/routes/memory.ts`, `src/routes/jaw-memory.ts`, `src/cli/command-context.ts`, `src/cli/handlers-runtime.ts`
+> 소스: `src/memory/runtime.ts` 375L (사실상 facade), `src/memory/shared.ts` 256L, `src/memory/bootstrap.ts` 517L, `src/memory/indexing.ts` 474L, `src/memory/keyword-expand.ts` 294L, `src/memory/synonyms.ts` 60L, `src/memory/reflect.ts` 256L, `src/memory/identity.ts` 86L, `src/memory/injection.ts` 69L, `src/memory/memory.ts` 154L, `src/memory/worklog.ts` 200L, `src/memory/heartbeat.ts` 205L, `src/memory/heartbeat-schedule.ts` 410L, `src/memory/advanced.ts` 1L (re-export shim), `src/agent/memory-flush-controller.ts` 157L, `src/agent/spawn.ts` 1451L, `src/prompt/builder.ts` 675L, `src/orchestrator/pipeline.ts` 462L, `src/routes/memory.ts`, `src/routes/jaw-memory.ts`, `src/cli/command-context.ts`, `src/cli/handlers-runtime.ts`
 
 ---
 
@@ -177,7 +177,8 @@ Prefers ES Module only, no CommonJS.
 |------|-----|
 | **인덱스 빌드** | `src/memory/indexing.ts` `reindexAll(root)` |
 | **인덱스 DB** | `~/.cli-jaw/memory/structured/index.sqlite` |
-| **검색 방식** | FTS5 우선 + LIKE fallback |
+| **검색 방식** | FTS5 BM25 + synonym query expansion + trigram side index + LIKE fallback |
+| **검색 테이블** | `chunks`, `chunks_fts`, `chunks_trigram`, `memory_synonyms` |
 | **인덱싱 파일** | `profile.md`, `shared/**`, `episodes/**`, `semantic/**`, `procedures/**` |
 | **미인덱싱 파일** | `sessions/**`, `corrupted/**`, `legacy-unmapped/**` |
 | **bootstrap** | `src/memory/bootstrap.ts` `bootstrapAdvancedMemory()` |
@@ -204,7 +205,8 @@ Prefers ES Module only, no CommonJS.
 - `meta.json` 이 있으면 initialized 로 본다.
 - `writeMeta()` 가 `importedCounts`, `bootstrapStatus`, `lastError`, `sourceLayout` 등을 누적 관리한다.
 - `getMemoryStatus()` 는 `backupRoot`, `corruptedCount`, `lastExpansion`, `lastIndexedAt`, `lastError`, `importedCounts`까지 반환한다.
-- `expandSearchKeywords()` 는 현재 heuristic 키워드만 돌려주고 `lastExpansionTerms` 를 갱신한다. provider/Gemini/OpenAI/Vertex 헬퍼는 남아 있지만, 현재 runtime 검색 경로는 그 결과에 의존하지 않는다.
+- `expandSearchKeywords()` 는 heuristic/domain 키워드를 최대 16개까지 돌려주고 `lastExpansionTerms` 를 갱신한다. provider/Gemini/OpenAI/Vertex 헬퍼는 남아 있지만, 현재 runtime 검색 경로는 그 결과에 의존하지 않는다.
+- `searchIndex()` 는 `memory_synonyms`를 이용해 query-side synonym expansion을 적용하고, BM25/LIKE 결과와 `chunks_trigram` 부분 문자열 결과를 RRF로 병합한 뒤 kind priority, exact/phrase boost, kind별 recency half-life를 적용한다.
 
 ---
 

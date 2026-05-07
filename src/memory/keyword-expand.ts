@@ -60,7 +60,27 @@ function getAdvancedConfig(override: Partial<AdvancedConfig> = {}) {
     };
 }
 
-function heuristicKeywords(query: string) {
+function sanitizeKeywordsWithLimit(input: unknown, limit: number): string[] {
+    const raw = Array.isArray(input) ? input : [];
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const item of raw) {
+        const value = String(item || '')
+            .replace(/[;&|`$><]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 48);
+        if (!value) continue;
+        const key = value.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(value);
+        if (out.length >= limit) break;
+    }
+    return out;
+}
+
+export function heuristicKeywords(query: string, limit = 16): string[] {
     const q = String(query || '').trim();
     if (!q) return [];
     const tokens = q.split(/[\s,]+/).map(t => t.trim()).filter(Boolean);
@@ -77,7 +97,7 @@ function heuristicKeywords(query: string) {
         out.add('plist');
         out.add('service');
     }
-    return [...out].slice(0, 5);
+    return [...out].slice(0, limit);
 }
 
 function extractJsonArray(text: string) {
@@ -263,8 +283,8 @@ export function expandSearchKeywords(query: string): { exact: string[]; expanded
     const base = String(query || '').trim();
     if (!base) return { exact: [], expanded: [] };
     const heuristic = heuristicKeywords(base);
-    const expanded = sanitizeKeywords(heuristic.filter(term => term !== base));
-    lastExpansionTerms = [base, ...expanded];
+    const expanded = sanitizeKeywordsWithLimit(heuristic.filter(term => term !== base), 16);
+    lastExpansionTerms = [base, ...expanded].slice(0, 16);
     return { exact: [base], expanded };
 }
 

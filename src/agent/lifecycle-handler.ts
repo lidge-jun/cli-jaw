@@ -33,6 +33,14 @@ export function setMainMetaHandler(fn: (meta: any) => void): void {
     _setCurrentMainMeta = fn;
 }
 
+function isForcedGeminiProModel(model: string): boolean {
+    const normalized = model.trim().toLowerCase();
+    return normalized !== ''
+        && normalized !== 'default'
+        && normalized !== 'auto'
+        && normalized.includes('pro');
+}
+
 export interface ExitContext {
     fullText: string;
     sessionId: string | null;
@@ -134,6 +142,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                 ownerGeneration, forceNew, employeeSessionId: empSid,
                 sessionId: smokeSessionId, isFallback: opts._isFallback,
                 code, cli, model, resumeKey: params.resumeKey, effort: effortVal,
+                skipSessionPersist: opts._skipSessionPersist === true,
             });
             console.log(`[jaw:smoke] persisted session ${smokeSessionId.slice(0, 12)}... for continuation`);
         }
@@ -200,6 +209,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         ownerGeneration, forceNew, employeeSessionId: empSid,
         sessionId: persistedSessionId, isFallback: opts._isFallback,
         code, wasKilled, cli, model, resumeKey: params.resumeKey, effort: effortVal,
+        skipSessionPersist: opts._skipSessionPersist === true,
     })) {
         console.log(`[jaw:session] saved ${cli} session=${persistedSessionId.slice(0, 12)}...${wasKilled ? ' (post-kill)' : ''}`);
     }
@@ -306,8 +316,15 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         }
     } else if (mainManaged && code !== 0 && !wasKilled) {
         // ─── Error handling ───
-        const { is429, isStall, message: errMsg } = classifyExitError(cli, code, ctx.stderrBuf, ctx.stallReason);
-        recordError(cli, isStall ? 'stall' : is429 ? '429' : 'error');
+        const diagnosticText = `${ctx.fullText}\n${ctx.traceLog.join('\n')}`;
+        const { is429, isStall, isModelCapacity, message: errMsg } = classifyExitError(
+            cli,
+            code,
+            ctx.stderrBuf,
+            ctx.stallReason,
+            diagnosticText,
+        );
+        recordError(cli, isStall ? 'stall' : isModelCapacity ? 'model_capacity' : is429 ? '429' : 'error');
 
         if (isResume && shouldInvalidateResumeSession(cli, code, ctx.stderrBuf, ctx.fullText)) {
             if (empSid && opts.agentId) {
@@ -327,6 +344,41 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
             finalizeTraceRun(ctx.traceRunId, 'error', errMsg);
             resolve({ text: '', code: 1 });
             if (mainManaged && !opts.internal) processQueue();
+            return;
+        }
+
+        // ─── Gemini model capacity: one-request Auto fallback, preserving configured model ───
+        if (
+            cli === 'gemini'
+            && isModelCapacity
+            && isForcedGeminiProModel(model)
+            && !opts.internal
+            && !opts._isFallback
+            && !opts._isCapacityFallback
+        ) {
+            console.log(`[jaw:gemini] ${model} capacity exhausted — retrying current request with Auto`);
+            broadcast('agent_fallback', {
+                from: cli,
+                to: cli,
+                reason: `${errMsg} (Auto fallback for this request only)`,
+                model,
+                fallbackModel: 'default',
+                ...empTag,
+            }, isEmployee ? 'internal' : 'public');
+            finalizeTraceRun(ctx.traceRunId, 'error', errMsg);
+            const { promise: retryP } = _spawnAgent(prompt, {
+                ...opts,
+                model: 'default',
+                _skipResume: true,
+                _isCapacityFallback: true,
+                _skipInsert: true,
+                _skipSessionPersist: true,
+            });
+            retryP.then((r: any) => resolve(r)).catch(() => {
+                broadcast('agent_done', { text: `❌ ${errMsg} (Auto fallback failed)`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
+                resolve({ text: '', code: 1 });
+                if (mainManaged && !opts.internal) processQueue();
+            });
             return;
         }
 

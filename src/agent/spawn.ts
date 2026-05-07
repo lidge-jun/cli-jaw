@@ -691,9 +691,12 @@ interface SpawnOpts {
     internal?: boolean;
     _isFallback?: boolean;
     _isRetry?: boolean;      // 429 delay retry 중 여부
+    _isCapacityFallback?: boolean;
     _isSmokeContinuation?: boolean;  // Auto-retry after smoke response detected
     _skipInsert?: boolean;
     _skipHistory?: boolean;
+    _skipResume?: boolean;
+    _skipSessionPersist?: boolean;
     forceNew?: boolean;
     agentId?: string;
     sysPrompt?: string;
@@ -854,7 +857,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     );
     const isResume = empSid
         ? true
-        : (!forceNew && !!bucketSessionId && canResumeBucketSession);
+        : (!opts._skipResume && !forceNew && !!bucketSessionId && canResumeBucketSession);
 
     // ─── Bootstrap compact 1-shot injection (Phase 52: bucket-aware) ───
     // Vendor-agnostic: compact handler reset session_id and stored bootstrap in DB.
@@ -1214,6 +1217,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                     model,
                     resumeKey,
                     effort: cfg.effort || '',
+                    skipSessionPersist: opts._skipSessionPersist === true,
                 }))) {
                     console.log(`[jaw:session] saved ${cli} session=${persistedAcpSessionId.slice(0, 12)}... (pre-shutdown)`);
                 }
