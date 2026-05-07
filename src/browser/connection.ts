@@ -1,7 +1,7 @@
 import { JAW_HOME, deriveCdpPort, settings } from '../core/config.js';
 import { stripUndefined } from '../core/strip-undefined.js';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { join } from 'path';
+import { join, basename } from 'path';
 import fs from 'node:fs';
 import net from 'node:net';
 import { chromium, type Browser, type CDPSession, type Page } from 'playwright-core';
@@ -185,48 +185,78 @@ function isWSL() {
     }
 }
 
-function findChrome() {
+function validateProfileDir(dir: string): void {
+    const probe = join(dir, '.jaw-probe');
+    try {
+        fs.writeFileSync(probe, 'ok', { flag: 'w' });
+        fs.rmSync(probe, { force: true });
+    } catch (err) {
+        throw new Error(
+            `Profile directory is not writable: ${dir}\n` +
+            `Chrome will silently fall back to the default profile and singleton-absorb.\n` +
+            `Fix: ensure the directory exists and is writable, or set JAW_HOME to a writable path.\n` +
+            `Original error: ${(err as Error).message}`
+        );
+    }
+}
+
+function findChrome({ preferAlternate = false } = {}) {
     const platform = process.platform;
-    const paths: string[] = [];
+    const stable: string[] = [];
+    const alternate: string[] = [];
 
     if (platform === 'darwin') {
-        paths.push(
+        stable.push(
             '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+            `${os.homedir()}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`,
+        );
+        alternate.push(
+            '/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary',
             '/Applications/Chromium.app/Contents/MacOS/Chromium',
             '/Applications/Brave Browser.app/Contents/MacOS/Brave Browser',
-            `${os.homedir()}/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`,
         );
     } else if (platform === 'win32') {
         const pf = process.env["PROGRAMFILES"] || 'C:\\Program Files';
         const pf86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
         const local = process.env["LOCALAPPDATA"] || '';
-        paths.push(
+        stable.push(
             `${pf}\\Google\\Chrome\\Application\\chrome.exe`,
             `${pf86}\\Google\\Chrome\\Application\\chrome.exe`,
             `${local}\\Google\\Chrome\\Application\\chrome.exe`,
+        );
+        alternate.push(
+            `${local}\\Google\\Chrome SxS\\Application\\chrome.exe`,
+            `${local}\\Google\\Chrome Dev\\Application\\chrome.exe`,
+            `${local}\\Google\\Chrome Beta\\Application\\chrome.exe`,
+            `${local}\\Chromium\\Application\\chrome.exe`,
             `${pf}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe`,
         );
     } else {
-        paths.push(
+        stable.push(
             '/usr/bin/google-chrome-stable',
             '/usr/bin/google-chrome',
+        );
+        alternate.push(
             '/usr/bin/chromium-browser',
             '/usr/bin/chromium',
             '/snap/bin/chromium',
             '/usr/bin/brave-browser',
         );
         if (isWSL()) {
-            paths.push(
+            stable.push(
                 '/mnt/c/Program Files/Google/Chrome/Application/chrome.exe',
                 '/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe',
             );
         }
     }
 
-    for (const p of paths) {
+    const ordered = preferAlternate
+        ? [...alternate, ...stable]
+        : [...stable, ...alternate];
+    for (const p of ordered) {
         if (p && fs.existsSync(p)) return p;
     }
-    throw new Error('Chrome not found — install Google Chrome');
+    throw new Error('Chrome not found — install Google Chrome or Chromium');
 }
 
 function touchBrowserRuntime(): void {
@@ -402,15 +432,22 @@ export async function launchChrome(
         throw new Error(launchPolicy.denyReason || 'Browser launch denied by policy');
     }
 
+    fs.mkdirSync(PROFILE_DIR, { recursive: true });
+    validateProfileDir(PROFILE_DIR);
     const chrome = findChrome();
     const noSandbox = process.env["CHROME_NO_SANDBOX"] === '1';
     const headless = launchPolicy.headless;
+    const enableAutomation = process.env["AGBROWSE_ENABLE_AUTOMATION"] === '1';
 
     // Minimum window size to prevent responsive layout shifts
     // that cause Playwright "element is not stable" errors
     const minWidth = 1280;
     const minHeight = 720;
 
+    const stderrPath = join(JAW_HOME, 'chrome-stderr.log');
+    const stderrFd = fs.openSync(stderrPath, 'w');
+    console.error(`[browser] launching: ${chrome}`);
+    console.error(`[browser] user-data-dir: ${PROFILE_DIR}`);
     chromeProc = spawn(chrome, [
         `--remote-debugging-port=${port}`,
         `--user-data-dir=${PROFILE_DIR}`,
@@ -418,11 +455,13 @@ export async function launchChrome(
         '--no-first-run', '--no-default-browser-check',
         '--disable-dev-shm-usage',
         '--disable-background-networking',
+        ...(enableAutomation ? ['--enable-automation'] : []),
         ...(noSandbox ? ['--no-sandbox', '--disable-setuid-sandbox'] : []),
         ...(headless ? ['--headless=new'] : []),
         'about:blank',
-    ], { detached: true, stdio: 'ignore' });
+    ], { detached: true, stdio: ['ignore', 'ignore', stderrFd] });
     chromeProc.unref();
+    fs.closeSync(stderrFd);
 
     // 2. CDP readiness polling (replaces blind 2s sleep)
     const ready = await waitForCdpReady(port);
@@ -438,16 +477,42 @@ export async function launchChrome(
         writeDurableBrowserRuntimeOwner(owner);
         ensureIdleReaperStarted();
     } else {
+        const stderr = fs.existsSync(stderrPath)
+            ? fs.readFileSync(stderrPath, 'utf8').trim().slice(-2000) : '';
         if (chromeProc && !chromeProc.killed) {
+            console.error(`[browser] failed launch: spawned PID ${chromeProc.pid} but CDP did not respond after 10s`);
+            if (stderr) console.error(`[browser] chrome stderr:\n${stderr}`);
             chromeProc.kill('SIGTERM');
             chromeProc = null;
         }
+
+        if (!(opts as any)._retried) {
+            const altChrome = findChrome({ preferAlternate: true });
+            if (altChrome !== chrome) {
+                console.warn(`[browser] retrying with alternate browser: ${basename(altChrome)}`);
+                return launchChrome(port, { ...opts, _retried: true } as any);
+            }
+        }
+
+        const canaryHint = process.platform === 'win32'
+            ? 'Install Chrome Canary → https://www.google.com/chrome/canary/'
+            : process.platform === 'darwin'
+                ? 'brew install --cask google-chrome-canary'
+                : '';
         throw new Error(
-            `Chrome CDP not responding on port ${port} after 10s. ` +
-            `Possible causes:\n` +
-            `  - Windows: Chrome singleton absorbed the launch (close ALL Chrome windows first)\n` +
-            `  - No display available (try --headless or CHROME_HEADLESS=1)\n` +
-            `  - Port conflict (try --port <other>)`
+            `Chrome CDP not responding on port ${port} after 10s.\n` +
+            `\n` +
+            `Diagnose: cli-jaw browser doctor\n` +
+            (stderr ? `Chrome stderr: ${stderr.slice(0, 200)}\n` : '') +
+            `\n` +
+            `Likely causes (most common first):\n` +
+            `  1. Chrome singleton absorbed the launch.\n` +
+            `       → Close all Chrome windows, then: cli-jaw browser start\n` +
+            (canaryHint ? `       → Or: ${canaryHint}\n` : '') +
+            `  2. Port ${port} held by another process.\n` +
+            `       → cli-jaw browser start --port ${port + 1}\n` +
+            `  3. No display available.\n` +
+            `       → cli-jaw browser start --headless\n`
         );
     }
 }

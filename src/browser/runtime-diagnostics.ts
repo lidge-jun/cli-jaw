@@ -1,11 +1,17 @@
 import { getActivePort, getBrowserRuntimeStatus, getBrowserStatus } from './connection.js';
 import type { BrowserRuntimeStatus } from './runtime-owner.js';
 import { inspectBrowserRuntimeOrphans, type BrowserRuntimeOrphanCandidate } from './runtime-orphans.js';
+import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { JAW_HOME } from '../core/config.js';
 
 export type BrowserRuntimeIssueCode =
     | 'stale-jaw-owned-runtime'
     | 'external-runtime-not-autoclosed'
-    | 'orphan-runtime-candidate';
+    | 'orphan-runtime-candidate'
+    | 'chrome-singleton-risk'
+    | 'stale-singleton-lock';
 
 export interface BrowserRuntimeIssue {
     code: BrowserRuntimeIssueCode;
@@ -64,6 +70,8 @@ export async function getBrowserDiagnostics(port = getActivePort()): Promise<Bro
         recommendations.push('Run cli-jaw browser cleanup-runtimes for a dry-run, then add --close --force only if the candidate is expected.');
     }
 
+    detectChromeSingleton(issues, recommendations);
+
     const cleanup = {
         idleAutoClose: runtime.autoCloseEnabled === true,
         idleAutoCloseScope: runtime.ownership === 'jaw-owned'
@@ -76,4 +84,38 @@ export async function getBrowserDiagnostics(port = getActivePort()): Promise<Bro
 
     const ok = !issues.some((issue) => issue.severity === 'warn');
     return { ok, port, status, runtime, cleanup, orphanCandidates, issues, recommendations };
+}
+
+function detectChromeSingleton(issues: BrowserRuntimeIssue[], recommendations: string[]): void {
+    const PROFILE_DIR = join(JAW_HOME, 'browser-profile');
+
+    if (process.platform === 'win32') {
+        try {
+            const ps = spawnSync('tasklist', ['/FI', 'IMAGENAME eq chrome.exe', '/NH'], {
+                encoding: 'utf8', timeout: 3000,
+            });
+            const chromeLines = (ps.stdout || '').trim().split('\n')
+                .filter((l: string) => l.toLowerCase().includes('chrome.exe'));
+            if (chromeLines.length > 0) {
+                issues.push({
+                    code: 'chrome-singleton-risk',
+                    severity: 'warn',
+                    message: `${chromeLines.length} chrome.exe process(es) running — singleton risk if profile dir creation fails.`,
+                });
+                recommendations.push('cli-jaw uses unique profile to avoid absorption. If launch fails, close all Chrome windows.');
+            }
+        } catch {
+            // tasklist unavailable
+        }
+    } else if (process.platform === 'linux') {
+        const singletonLock = join(PROFILE_DIR, 'SingletonLock');
+        if (existsSync(singletonLock)) {
+            issues.push({
+                code: 'stale-singleton-lock',
+                severity: 'warn',
+                message: `Stale SingletonLock found at ${singletonLock}.`,
+            });
+            recommendations.push(`rm -f "${PROFILE_DIR}/Singleton*" then retry.`);
+        }
+    }
 }
