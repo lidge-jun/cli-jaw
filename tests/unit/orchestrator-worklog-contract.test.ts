@@ -36,3 +36,15 @@ test('OWC-004: distribute gates worklog prompt on truthy path', () => {
     assert.ok(distributeSrc.includes('const worklogBlock = worklogPath'));
     assert.ok(distributeSrc.includes('if (worklogPath) {'));
 });
+
+test('OWC-005: IDLE continue is not a worklog resume source', () => {
+    const start = pipelineSrc.indexOf('export async function orchestrateContinue');
+    const end = pipelineSrc.indexOf('// ─── Reset', start);
+    assert.notEqual(start, -1, 'orchestrateContinue must exist');
+    assert.notEqual(end, -1, 'reset section must follow orchestrateContinue');
+    const continueBlock = pipelineSrc.slice(start, end);
+
+    assert.ok(!continueBlock.includes('readLatestWorklog()'));
+    assert.ok(!continueBlock.includes('Read the previous worklog'));
+    assert.ok(continueBlock.includes("text: 'No pending work to continue.'"));
+});

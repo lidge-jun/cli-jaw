@@ -80,17 +80,61 @@ test('QP-002: batch tail goes after remaining (fair ordering)', () => {
 
 // ─── RC: orchestrateContinue PABCD-aware ─────────────
 
-test('RC-001: orchestrateContinue checks PABCD state before worklog', () => {
-    const continueBlock = pipelineSrc.slice(
-        pipelineSrc.indexOf('export async function orchestrateContinue'),
-    );
+function getOrchestrateContinueBlock(): string {
+    const start = pipelineSrc.indexOf('export async function orchestrateContinue');
+    const end = pipelineSrc.indexOf('// ─── Reset', start);
+    assert.notEqual(start, -1, 'orchestrateContinue must exist');
+    assert.notEqual(end, -1, 'reset section must follow orchestrateContinue');
+    return pipelineSrc.slice(start, end);
+}
+
+test('RC-001: orchestrateContinue keeps active PABCD continue behavior', () => {
+    const continueBlock = getOrchestrateContinueBlock();
     assert.ok(
         continueBlock.includes("state !== 'IDLE'"),
         'continue should check active PABCD state',
     );
     assert.ok(
+        continueBlock.includes("orchestrate('Please continue from where you left off.'"),
+        'active PABCD continue should call orchestrate with the continue prompt',
+    );
+    assert.ok(
         continueBlock.includes('_skipClear: true'),
-        'continue should preserve sessions (_skipClear)',
+        'active PABCD continue should preserve sessions (_skipClear)',
+    );
+});
+
+test('RC-004: idle orchestrateContinue does not read or inject worklogs', () => {
+    const continueBlock = getOrchestrateContinueBlock();
+    assert.ok(
+        !continueBlock.includes('readLatestWorklog()'),
+        'IDLE continue must not read latest worklog',
+    );
+    assert.ok(
+        !continueBlock.includes('worklog-based resume'),
+        'IDLE continue must not keep worklog fallback comments',
+    );
+    assert.ok(
+        !continueBlock.includes('Read the previous worklog'),
+        'IDLE continue must not inject previous worklog prompt',
+    );
+    assert.ok(
+        !continueBlock.includes('Worklog: ${latest.path}'),
+        'IDLE continue must not inject latest worklog path',
+    );
+});
+
+test('RC-005: idle orchestrateContinue returns no pending work', () => {
+    const continueBlock = pipelineSrc.slice(
+        pipelineSrc.indexOf('export async function orchestrateContinue'),
+    );
+    assert.ok(
+        continueBlock.includes("text: 'No pending work to continue.'"),
+        'IDLE continue should report no pending work',
+    );
+    assert.ok(
+        !continueBlock.includes("`Read the previous worklog and continue any incomplete tasks"),
+        'IDLE continue should not call orchestrate with a worklog prompt',
     );
 });
 

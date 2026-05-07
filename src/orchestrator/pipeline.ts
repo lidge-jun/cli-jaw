@@ -393,27 +393,13 @@ export async function orchestrateContinue(
         });
     }
 
-    // IDLE + incomplete worklog → worklog-based resume
-    const latest = readLatestWorklog();
-    if (
-        !latest ||
-        latest.content.includes('Status: done') ||
-        latest.content.includes('Status: reset')
-    ) {
-        broadcast('orchestrate_done', {
-            text: 'No pending work to continue.',
-            origin,
-            chatId,
-            target,
-            requestId,
-        });
-        return;
-    }
-
-    return orchestrate(
-        `Read the previous worklog and continue any incomplete tasks.\nWorklog: ${latest.path}`,
-        { ...meta, _skipClear: true },
-    );
+    broadcast('orchestrate_done', {
+        text: 'No pending work to continue.',
+        origin,
+        chatId,
+        target,
+        requestId,
+    });
 }
 
 // ─── Reset ──────────────────────────────────────────
