@@ -3,9 +3,10 @@ import type { TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import http from 'node:http';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import {
     createDashboardNotesRouter,
 } from '../../src/manager/notes/routes.js';
@@ -155,6 +156,28 @@ test('notes routes expose vault index and capabilities contracts', async (t) => 
         const capabilitiesBody = await readJson(capabilities);
         assert.equal(typeof (capabilitiesBody.git as { available: boolean }).available, 'boolean');
         assert.equal((capabilitiesBody.fileWatching as { provider: string }).provider, 'fs.watch');
+    });
+});
+
+test('notes search route returns markdown hits when ripgrep is available', async (t) => {
+    if (spawnSync('rg', ['--version']).status !== 0) {
+        t.skip('ripgrep is not available in this environment');
+        return;
+    }
+    await withNotesServer(t, async (baseUrl, root) => {
+        mkdirSync(join(root, 'daily'), { recursive: true });
+        writeFileSync(join(root, 'daily', 'today.md'), 'hello jawsidian\n');
+        writeFileSync(join(root, 'daily', 'other.txt'), 'hello hidden\n');
+        mkdirSync(join(root, 'daily', '.assets'), { recursive: true });
+        writeFileSync(join(root, 'daily', '.assets', 'ignored.md'), 'hello ignored\n');
+
+        const response = await fetch(`${baseUrl}/api/dashboard/notes/search?q=hello`);
+        assert.equal(response.status, 200);
+        const body = await response.json() as Array<{ path: string; line: number; context: string }>;
+
+        assert.deepEqual(body.map(hit => hit.path), ['daily/today.md']);
+        assert.equal(body[0]?.line, 1);
+        assert.equal(body[0]?.context, 'hello jawsidian');
     });
 });
 
