@@ -20,6 +20,7 @@ import type { DashboardTrashNoteKind } from '../types.js';
 import { createNotesWatcher, type NotesWatcher } from './watcher.js';
 import { NotesVaultIndex } from './vault-index.js';
 import { detectNotesCapabilities } from './capabilities.js';
+import { searchNotes } from './search.js';
 
 export type DashboardNotesRouterOptions = {
     managerPort: number;
@@ -194,6 +195,13 @@ export function createDashboardNotesRouter(options: DashboardNotesRouterOptions)
 
     router.get('/tree', asyncRoute(async (_req, res) => {
         res.json(await store.listTree());
+    }));
+
+    router.get('/search', asyncRoute(async (req, res) => {
+        const q = requireString(req.query["q"], 'invalid_note_search_query', 'q query param is required');
+        const limit = typeof req.query["limit"] === 'string' ? Number(req.query["limit"]) : undefined;
+        const regex = req.query["regex"] === 'true';
+        res.json(await searchNotes(store.rootPath(), q, { limit, regex }));
     }));
 
     router.get('/index', asyncRoute(async (_req, res) => {

@@ -3,6 +3,7 @@
 // PABCD state machine is the sole orchestration system.
 
 import crypto from 'crypto';
+import { resolve } from 'node:path';
 import { broadcast } from '../core/bus.js';
 import { settings } from '../core/config.js';
 import {
@@ -68,19 +69,24 @@ function pickWorklogSeed(...candidates: Array<string | null | undefined>) {
 export function buildApprovedPlanPromptBlock(
     ctx: OrcContext | null,
     state: OrcStateName,
+    workingDir?: string | null,
 ): string {
     if (!ctx?.plan) return '';
     if (!['A', 'B', 'C'].includes(state)) return '';
+    const projectRoot = workingDir ? resolve(workingDir) : '';
     return [
         '## Approved Plan (authoritative)',
+        projectRoot ? `Project root: ${projectRoot}` : '',
         ctx.plan,
         '---',
         '## Plan consistency guard',
         '- Treat the Approved Plan as the source of truth.',
+        '- Resolve all repository-relative paths against Project root.',
+        '- Do not infer repository paths from ~/.cli-jaw*, JAW_HOME, process.cwd(), or employee temp cwd.',
         '- Do not invent or change numeric targets, paths, resource IDs, dates, limits, or destructive operation parameters.',
         '- If your intended action conflicts with the Approved Plan, STOP and ask the user to confirm.',
         '---',
-    ].join('\n');
+    ].filter(Boolean).join('\n');
 }
 
 type WorkerTaskLike = Record<string, any>;
@@ -299,7 +305,7 @@ export async function orchestrate(
     if (prefix && !skipPrefix) {
         prompt = prefix + '\n' + prompt;
     }
-    const approvedPlanBlock = origin === 'heartbeat' ? '' : buildApprovedPlanPromptBlock(ctx, state);
+    const approvedPlanBlock = origin === 'heartbeat' ? '' : buildApprovedPlanPromptBlock(ctx, state, settings["workingDir"] || null);
     if (approvedPlanBlock) {
         prompt = `${approvedPlanBlock}\n${prompt}`;
     }

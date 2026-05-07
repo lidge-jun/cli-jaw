@@ -1,5 +1,6 @@
 import type {
     DashboardNoteFileResponse,
+    DashboardNoteSearchResult,
     DashboardNotesCapabilities,
     DashboardNoteTreeEntry,
     VaultIndexSnapshot,
@@ -20,5 +21,6 @@ export type NoteConflictState = {
 
 export type NotesTreeEntry = DashboardNoteTreeEntry;
 export type NoteFile = DashboardNoteFileResponse;
+export type NoteSearchResult = DashboardNoteSearchResult;
 export type NotesVaultIndexSnapshot = VaultIndexSnapshot;
 export type NotesCapabilities = DashboardNotesCapabilities;

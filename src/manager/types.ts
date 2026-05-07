@@ -239,6 +239,13 @@ export type DashboardNoteFileResponse = {
     size: number;
 };
 
+export type DashboardNoteSearchResult = {
+    path: string;
+    line: number;
+    content: string;
+    context: string;
+};
+
 export type DashboardPutNoteRequest = {
     path: string;
     content: string;

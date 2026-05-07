@@ -31,11 +31,15 @@ test('buildApprovedPlanPromptBlock returns empty outside active execution states
 });
 
 test('buildApprovedPlanPromptBlock includes numeric and destructive guard language', () => {
-    const block = buildApprovedPlanPromptBlock(ctx, 'B');
+    const block = buildApprovedPlanPromptBlock(ctx, 'B', '/repo/root');
 
     assert.ok(block.startsWith('## Approved Plan (authoritative)'));
+    assert.ok(block.includes('Project root: /repo/root'));
     assert.ok(block.includes('64GB to 50GB'));
     assert.ok(block.includes('Never use 8GB'));
+    assert.ok(block.includes('repository-relative paths'));
+    assert.ok(block.includes('~/.cli-jaw*'));
+    assert.ok(block.includes('employee temp cwd'));
     assert.ok(block.includes('numeric targets'));
     assert.ok(block.includes('paths'));
     assert.ok(block.includes('resource IDs'));
@@ -69,7 +73,9 @@ for (const state of ['A', 'B', 'C'] as OrcStateName[]) {
 test('B state prompt describes Boss and dispatch plan injection', () => {
     const prompt = getStatePrompt('B');
 
+    assert.ok(prompt.includes('Project root: <absolute path to the current working repository from pwd -P>'));
     assert.ok(prompt.includes('injects it into Boss prompts and dispatch tasks'));
+    assert.ok(prompt.includes('Resolve every repository-relative path against Project root'));
     assert.ok(prompt.includes('numeric, path, resource-id, date, limit, or destructive action'));
 });
 

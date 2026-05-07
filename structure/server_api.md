@@ -236,6 +236,7 @@ ensureDirs()
 - boss-scoped `x-jaw-boss-token`이 필수다. employee spawn 환경에서는 이 토큰이 제거되므로 직원이 다시 dispatch하는 흐름은 서버에서 `403`으로 막힌다.
 - PABCD A/B/C 상태에서는 phase가 각각 Plan Audit/Verifier 쪽으로 매핑된다. 특히 B phase에서는 implementation wording을 delegation guard가 차단하고, worker는 READ-ONLY verifier로만 동작해야 한다.
 - 현재 plan이 있으면 dispatch body 상단에 `## Approved Plan`으로 자동 주입된다. worker에게 별도 plan 파일을 읽으라고 지시하지 않는다.
+- PABCD Approved Plan 자동 주입 블록에는 `Project root: <absolute path>`와 path guard가 포함된다. A/B dispatch 예시도 task body 첫 줄에 Project root를 명시해 `~/.cli-jaw*`/JAW_HOME/employee temp cwd를 repo root로 착각하지 않게 한다.
 
 ---
 

@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MarkdownEditor } from './MarkdownEditor';
 import { MarkdownPreview } from './MarkdownPreview';
 import { NotesEmptyState } from './NotesEmptyState';
+import { NotesSearchPanel } from './NotesSearchPanel';
 import { NotesToolbar } from './NotesToolbar';
 import { renameNotePath } from './notes-api';
 import { useNoteDocument } from './useNoteDocument';
@@ -43,6 +44,7 @@ function primaryModeFor(viewMode: NotesViewMode, authoringMode: NotesAuthoringMo
 export function NotesWorkspace(props: NotesWorkspaceProps) {
     const document = useNoteDocument();
     const renamingRef = useRef(false);
+    const [searchOpen, setSearchOpen] = useState(false);
 
     useEffect(() => {
         if (!props.selectedPath) return;
@@ -84,6 +86,18 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
         return () => window.removeEventListener('keydown', handleModeShortcut);
     }, [props.active, props.viewMode, props.authoringMode, props.onViewModeChange, props.onAuthoringModeChange]);
 
+    useEffect(() => {
+        if (!props.active) return;
+        function handleSearchShortcut(event: KeyboardEvent): void {
+            if (!(event.metaKey || event.ctrlKey) || !event.shiftKey || event.key.toLowerCase() !== 'f') return;
+            event.preventDefault();
+            setSearchOpen(open => !open);
+        }
+
+        window.addEventListener('keydown', handleSearchShortcut);
+        return () => window.removeEventListener('keydown', handleSearchShortcut);
+    }, [props.active]);
+
     async function handleTitleBlur(event: React.FocusEvent<HTMLInputElement>): Promise<void> {
         if (renamingRef.current || !props.selectedPath) return;
         const newTitle = event.currentTarget.value.trim().replace(INVALID_TITLE_CHARS, '');
@@ -117,6 +131,14 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
 
     return (
         <section className="notes-workspace" aria-label="Notes workspace">
+            <NotesSearchPanel
+                open={searchOpen}
+                onSelect={path => {
+                    props.onSelectedPathChange(path);
+                    setSearchOpen(false);
+                }}
+                onClose={() => setSearchOpen(false)}
+            />
             <main className={`notes-main notes-mode-${props.viewMode}`}>
                 <NotesToolbar
                     selectedPath={props.selectedPath}

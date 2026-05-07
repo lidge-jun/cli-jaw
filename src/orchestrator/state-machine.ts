@@ -210,9 +210,14 @@ just write the audit task itself.
 
 Run this command now:
 \`\`\`bash
-cli-jaw dispatch --agent "Backend" --task "⛔ READ-ONLY: Do NOT create, modify, or delete ANY files. You are an auditor, not a builder.
+cli-jaw dispatch --agent "Backend" --task "Project root: <absolute path to the current working repository from pwd -P>
+
+⛔ READ-ONLY: Do NOT create, modify, or delete ANY files. You are an auditor, not a builder.
 
 The approved plan is already injected above under \`## Approved Plan\` — read it there.
+
+Resolve every repository-relative path against Project root.
+Do NOT use ~/.cli-jaw*, JAW_HOME, process.cwd(), or the employee temp cwd as the repository root.
 
 Audit the PLAN (not code). Verify:
 1) All imports in the plan resolve to real files.
@@ -246,9 +251,14 @@ Steps:
 3. After YOU finish implementing, dispatch a verification employee:
 
 \`\`\`bash
-cli-jaw dispatch --agent "Backend" --task "⛔ READ-ONLY: Do NOT create, modify, or delete ANY files. You are a verifier, not a builder.
+cli-jaw dispatch --agent "Backend" --task "Project root: <absolute path to the current working repository from pwd -P>
+
+⛔ READ-ONLY: Do NOT create, modify, or delete ANY files. You are a verifier, not a builder.
 
 The approved plan is already injected above under \`## Approved Plan\` — read it there.
+
+Resolve every repository-relative path against Project root.
+Do NOT use ~/.cli-jaw*, JAW_HOME, process.cwd(), or the employee temp cwd as the repository root.
 
 Verify:
 1) Files in plan exist with expected content.

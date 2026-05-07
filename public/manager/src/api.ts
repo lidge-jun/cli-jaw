@@ -4,6 +4,7 @@ import type {
     DashboardLifecycleResult,
     DashboardNoteAssetResponse,
     DashboardNoteFileResponse,
+    DashboardNoteSearchResult,
     DashboardNotesCapabilities,
     DashboardNoteTreeEntry,
     DashboardPutNoteRequest,
@@ -170,6 +171,20 @@ export async function fetchNotesIndex(): Promise<VaultIndexSnapshot> {
 export async function fetchNotesCapabilities(): Promise<DashboardNotesCapabilities> {
     const response = await fetch('/api/dashboard/notes/capabilities');
     return await parseNotesResponse<DashboardNotesCapabilities>(response, `notes capabilities fetch failed: ${response.status}`);
+}
+
+export async function searchNotes(
+    query: string,
+    options: { limit?: number; regex?: boolean; signal?: AbortSignal } = {},
+): Promise<DashboardNoteSearchResult[]> {
+    const params = new URLSearchParams({ q: query });
+    if (options.limit !== undefined) params.set('limit', String(options.limit));
+    if (options.regex) params.set('regex', 'true');
+    const response = await fetch(`/api/dashboard/notes/search?${params}`, { signal: options.signal });
+    return await parseNotesResponse<DashboardNoteSearchResult[]>(
+        response,
+        `notes search failed: ${response.status}`,
+    );
 }
 
 export async function fetchNoteFile(path: string): Promise<DashboardNoteFileResponse> {

@@ -1,0 +1,108 @@
+.notes-workspace {
+    position: relative;
+}
+
+.notes-search-panel {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 20;
+    width: min(420px, calc(100% - 24px));
+    max-height: min(520px, calc(100% - 24px));
+    display: grid;
+    grid-template-rows: max-content minmax(0, 1fr);
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--canvas-deep);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.34);
+}
+
+.notes-search-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.notes-search-input {
+    min-width: 0;
+    flex: 1 1 auto;
+    height: 34px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 7px;
+    padding: 0 10px;
+    background: var(--bg-panel);
+    color: var(--text-primary);
+    font: inherit;
+}
+
+.notes-search-close {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 7px;
+    background: var(--bg-panel);
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.notes-search-results {
+    min-height: 0;
+    overflow: auto;
+    padding: 6px;
+}
+
+.notes-search-result {
+    width: 100%;
+    display: grid;
+    gap: 3px;
+    padding: 9px 10px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-primary);
+    text-align: left;
+    cursor: pointer;
+}
+
+.notes-search-result:hover,
+.notes-search-result:focus-visible {
+    border-color: var(--border-subtle);
+    background: var(--canvas-mid);
+}
+
+.notes-search-result-path {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.notes-search-result-line {
+    color: var(--text-tertiary);
+    font-size: 11px;
+}
+
+.notes-search-result-context {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.notes-search-loading,
+.notes-search-empty,
+.notes-search-error {
+    padding: 14px 10px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.notes-search-error {
+    color: var(--danger, #c34a4a);
+}
