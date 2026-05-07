@@ -121,7 +121,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
         }
     }
 
-    async function moveNote(from: string, toFolder: string | null): Promise<void> {
+    async function movePath(from: string, toFolder: string | null): Promise<void> {
         const to = movePathToFolder(from, toFolder);
         if (from === to) return;
         try {
@@ -245,7 +245,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
                 notesRoot={props.notesRoot}
                 onSelectPath={props.onSelectedPathChange}
                 onSelectFolder={setSelectedFolderPath}
-                onMovePath={(from, toFolder) => void moveNote(from, toFolder)}
+                onMovePath={(from, toFolder) => void movePath(from, toFolder)}
                 onRenamePath={(path, kind) => void renamePath(path, kind)}
                 onTrashPath={(path, kind) => void trashPath(path, kind)}
                 onTrashPaths={items => void trashPaths(items)}

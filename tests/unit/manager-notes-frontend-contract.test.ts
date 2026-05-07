@@ -90,8 +90,8 @@ test('Notes API and create actions surface backend/fallback failures without unc
     assert.ok(sidebar.includes('selectedFolderPath'), 'notes sidebar must track the selected folder for nested note/folder creation');
     assert.ok(sidebar.includes('createNoteFolder(name)'), 'notes sidebar must call the folder creation API');
     assert.ok(sidebar.includes('renameNotePath'), 'notes sidebar must use notes rename API for drag-to-folder moves');
-    assert.ok(sidebar.includes('function movePathToFolder('), 'notes sidebar must derive the moved file path from the target folder');
-    assert.ok(sidebar.includes('async function moveNote('), 'notes sidebar must own drag move error handling');
+    assert.ok(sidebar.includes('function movePathToFolder('), 'notes sidebar must derive the moved path from the target folder');
+    assert.ok(sidebar.includes('async function movePath('), 'notes sidebar must own file and folder drag move error handling');
     assert.ok(sidebar.includes('function rebasePath('), 'notes sidebar must rebase selected paths after folder renames');
     assert.ok(sidebar.includes('function pathName('), 'notes sidebar must derive compact basename defaults for rename prompts');
     assert.ok(sidebar.includes('function renameTarget('), 'notes sidebar must preserve the current parent folder for basename-only renames');
@@ -147,8 +147,10 @@ test('Notes API and create actions surface backend/fallback failures without unc
     assert.equal(css.includes('.notes-tree-list button'), false, 'tree-wide button width must not stretch inline action buttons');
     assert.ok(css.includes('text-overflow: ellipsis'), 'long note and folder names must truncate with ellipsis');
     assert.ok(css.includes('white-space: nowrap'), 'note and folder names must stay on one line');
+    assert.match(tree, /className="notes-tree-folder-button"[\s\S]*?draggable/, 'note folders must be draggable in the tree');
+    assert.match(tree, /draggedPath !== entry\.path[\s\S]*?!entry\.path\.startsWith/, 'folder drops must reject self and descendant cycles');
     assert.ok(tree.includes('draggable'), 'note files must be draggable in the tree');
-    assert.ok(tree.includes('onDrop'), 'folders must accept dropped note files');
+    assert.ok(tree.includes('onDrop'), 'folders must accept dropped note files and folders');
     assert.ok(tree.includes('application/x-cli-jaw-note-path'), 'drag payload must carry a typed note path');
     assert.ok(tree.includes('notes-tree-dirty-dot'), 'dirty notes must render a VS Code-like unsaved marker in the tree');
     assert.ok(tree.includes('notes-tree-inline-action'), 'file and folder rows must expose compact inline actions');

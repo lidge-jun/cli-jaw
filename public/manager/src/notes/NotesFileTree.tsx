@@ -201,6 +201,12 @@ function renderEntry(
                         type="button"
                         className="notes-tree-folder-button"
                         aria-expanded={expanded}
+                        draggable
+                        onDragStart={(event) => {
+                            event.dataTransfer.effectAllowed = 'move';
+                            event.dataTransfer.setData('application/x-cli-jaw-note-path', entry.path);
+                            event.dataTransfer.setData('text/plain', entry.path);
+                        }}
                         onClick={(event) => {
                             if (event.shiftKey || event.metaKey || event.ctrlKey) {
                                 onEntryClick(entry.path, event);
@@ -224,7 +230,7 @@ function renderEntry(
                             event.stopPropagation();
                             const draggedPath = notePathFromDrag(event);
                             setDropTargetPath(null);
-                            if (draggedPath) props.onMovePath(draggedPath, entry.path);
+                            if (draggedPath && draggedPath !== entry.path && !entry.path.startsWith(`${draggedPath}/`)) props.onMovePath(draggedPath, entry.path);
                         }}
                         onKeyDown={(event) => {
                             if (event.key === 'ArrowRight' && !expanded) {
