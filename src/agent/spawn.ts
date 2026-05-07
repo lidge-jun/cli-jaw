@@ -814,6 +814,9 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     const ao = settings["activeOverrides"]?.[cli] || {};
     const model = opts.model || ao.model || cfg.model || 'default';
     const effort = opts.effort || ao.effort || cfg.effort || '';
+    const includeDirectories = Array.isArray(cfg.includeDirectories)
+        ? cfg.includeDirectories.filter((dir: unknown): dir is string => typeof dir === 'string' && dir.trim().length > 0)
+        : [];
 
     const sysPrompt = customSysPrompt !== undefined
         ? customSysPrompt
@@ -881,9 +884,9 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     if (isResume) {
         const sid = resumeSessionId || '';
         console.log(`[jaw:resume] ${cli} session=${sid.slice(0, 12)}...`);
-        args = buildResumeArgs(cli, model, effort, sid, prompt, permissions, { fastMode: cfg.fastMode, sysPrompt });
+        args = buildResumeArgs(cli, model, effort, sid, prompt, permissions, { fastMode: cfg.fastMode, sysPrompt, includeDirectories });
     } else {
-        args = buildArgs(cli, model, effort, promptForArgs, sysPrompt, permissions, { fastMode: cfg.fastMode });
+        args = buildArgs(cli, model, effort, promptForArgs, sysPrompt, permissions, { fastMode: cfg.fastMode, includeDirectories });
     }
 
     const agentLabel = agentId || 'main';

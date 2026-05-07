@@ -1,7 +1,80 @@
 // ─── Agent CLI Argument Builders ──────────────────────
 // Extracted from agent.js for 500-line compliance.
 
+import { existsSync } from 'node:fs';
+import os from 'node:os';
+
 const isCodexSparkModel = (model: string) => !!model && /spark/i.test(model);
+const GEMINI_MAX_INCLUDE_DIRECTORIES = 5;
+
+type BuildArgOptions = {
+    fastMode?: boolean;
+    sysPrompt?: string;
+    includeDirectories?: string[];
+    homedir?: string;
+    platform?: NodeJS.Platform;
+    release?: string;
+    env?: NodeJS.ProcessEnv;
+    pathExists?: (path: string) => boolean;
+};
+
+function normalizePathForDedupe(dir: string): string {
+    return dir.trim().replace(/[\\/]+$/, '');
+}
+
+function windowsPathToWslPath(dir: string): string | null {
+    const match = /^([A-Za-z]):[\\/](.*)$/.exec(dir.trim());
+    if (!match) return null;
+    const [, driveRaw, restRaw] = match;
+    if (!driveRaw || restRaw === undefined) return null;
+    const drive = driveRaw.toLowerCase();
+    const rest = restRaw.replace(/\\/g, '/');
+    return `/mnt/${drive}/${rest}`;
+}
+
+function isWslRuntime(options: BuildArgOptions): boolean {
+    const platform = options.platform ?? process.platform;
+    if (platform !== 'linux') return false;
+    const env = options.env ?? process.env;
+    const release = options.release ?? os.release();
+    return Boolean(env['WSL_DISTRO_NAME'] || env['WSL_INTEROP'] || /microsoft|wsl/i.test(release));
+}
+
+function detectWslWindowsHome(options: BuildArgOptions): string[] {
+    if (!isWslRuntime(options)) return [];
+    const env = options.env ?? process.env;
+    const pathExists = options.pathExists ?? existsSync;
+    const candidates: string[] = [];
+    const userProfileEnv = env['USERPROFILE'];
+    const userProfile = userProfileEnv ? windowsPathToWslPath(userProfileEnv) : null;
+    if (userProfile) candidates.push(userProfile);
+    const user = env['USERNAME'] || env['USER'];
+    if (user) candidates.push(`/mnt/c/Users/${user}`);
+    return candidates.filter((dir) => pathExists(dir));
+}
+
+export function resolveGeminiIncludeDirectories(options: BuildArgOptions = {}): string[] {
+    const dirs = [
+        options.homedir ?? os.homedir(),
+        ...detectWslWindowsHome(options),
+        ...(options.includeDirectories ?? []),
+    ];
+    const seen = new Set<string>();
+    const resolved: string[] = [];
+    for (const dir of dirs) {
+        const normalized = normalizePathForDedupe(dir || '');
+        if (!normalized || seen.has(normalized)) continue;
+        seen.add(normalized);
+        resolved.push(normalized);
+        if (resolved.length >= GEMINI_MAX_INCLUDE_DIRECTORIES) break;
+    }
+    return resolved;
+}
+
+function geminiIncludeDirectoryArgs(options: BuildArgOptions): string[] {
+    return resolveGeminiIncludeDirectories(options)
+        .flatMap((dir) => ['--include-directories', dir]);
+}
 
 /**
  * Session storage bucket — codex Spark lives in its own bucket so cross-model
@@ -13,7 +86,7 @@ export function resolveSessionBucket(cli: string | null | undefined, model: stri
     return cli || '';
 }
 
-export function buildArgs(cli: string, model: string, effort: string, prompt: string, sysPrompt: string, permissions = 'auto', options: { fastMode?: boolean } = {}) {
+export function buildArgs(cli: string, model: string, effort: string, prompt: string, sysPrompt: string, permissions = 'auto', options: BuildArgOptions = {}) {
     const autoPerm = permissions === 'auto';
     switch (cli) {
         case 'claude':
@@ -48,7 +121,10 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
         case 'gemini':
             return ['-p', prompt || '',
                 ...(model && model !== 'default' ? ['-m', model] : []),
-                '-y', '-o', 'stream-json'];
+                '--skip-trust',
+                '--approval-mode', 'yolo',
+                ...geminiIncludeDirectoryArgs(options),
+                '-o', 'stream-json'];
         case 'opencode':
             return ['run',
                 ...(model && model !== 'default' ? ['-m', model] : []),
@@ -61,7 +137,7 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
     }
 }
 
-export function buildResumeArgs(cli: string, model: string, effort: string, sessionId: string, prompt: string, permissions = 'auto', options: { fastMode?: boolean; sysPrompt?: string } = {}) {
+export function buildResumeArgs(cli: string, model: string, effort: string, sessionId: string, prompt: string, permissions = 'auto', options: BuildArgOptions = {}) {
     const autoPerm = permissions === 'auto';
     switch (cli) {
         case 'claude':
@@ -90,7 +166,10 @@ export function buildResumeArgs(cli: string, model: string, effort: string, sess
             return ['--resume', sessionId,
                 '-p', prompt || '',
                 ...(model && model !== 'default' ? ['-m', model] : []),
-                '-y', '-o', 'stream-json'];
+                '--skip-trust',
+                '--approval-mode', 'yolo',
+                ...geminiIncludeDirectoryArgs(options),
+                '-o', 'stream-json'];
         case 'opencode':
             return ['run', '-s', sessionId,
                 ...(model && model !== 'default' ? ['-m', model] : []),

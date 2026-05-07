@@ -2,6 +2,7 @@
 // 이미 export된 함수를 직접 검증 (추가 작업 없이 즉시 실행 가능)
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { resolveGeminiIncludeDirectories } from '../../src/agent/args.ts';
 import { buildArgs, buildResumeArgs, resolveSessionBucket, shouldResumeBucketSession } from '../../src/agent/spawn.ts';
 
 // ─── buildArgs: claude ───────────────────────────────
@@ -192,6 +193,49 @@ test('AG-012: gemini default model excludes -m', () => {
     assert.ok(!args.includes('-m'));
 });
 
+test('AG-012a: gemini fresh sessions include trusted full-home workspace access', () => {
+    const args = buildArgs('gemini', 'default', '', 'hi', '', 'auto', { homedir: '/home/jun' });
+    assert.ok(args.includes('--skip-trust'));
+    assert.ok(args.includes('--approval-mode'));
+    assert.ok(args.includes('yolo'));
+    const includeIdx = args.indexOf('--include-directories');
+    assert.ok(includeIdx >= 0);
+    assert.equal(args[includeIdx + 1], '/home/jun');
+    assert.ok(!args.includes('~'));
+    assert.ok(!args.includes('-y'));
+});
+
+test('AG-012b: gemini WSL sessions include Windows user home when available', () => {
+    const dirs = resolveGeminiIncludeDirectories({
+        homedir: '/home/jun',
+        platform: 'linux',
+        release: '5.15.90.1-microsoft-standard-WSL2',
+        env: { USER: 'jun' },
+        pathExists: (path) => path === '/mnt/c/Users/jun',
+    });
+    assert.deepEqual(dirs, ['/home/jun', '/mnt/c/Users/jun']);
+});
+
+test('AG-012c: gemini include directories are deduped and capped at five', () => {
+    const dirs = resolveGeminiIncludeDirectories({
+        homedir: '/home/jun/',
+        includeDirectories: ['/home/jun', '/a', '/b', '/c', '/d', '/e'],
+    });
+    assert.deepEqual(dirs, ['/home/jun', '/a', '/b', '/c', '/d']);
+});
+
+test('AG-012d: gemini configured include directories are passed as repeated flags', () => {
+    const args = buildArgs('gemini', 'default', '', 'hi', '', 'auto', {
+        homedir: '/home/jun',
+        includeDirectories: ['/mnt/c/Users/jun/Downloads'],
+    });
+    const pairs = args
+        .map((value, index) => [value, args[index + 1]] as const)
+        .filter(([value]) => value === '--include-directories')
+        .map(([, value]) => value);
+    assert.deepEqual(pairs, ['/home/jun', '/mnt/c/Users/jun/Downloads']);
+});
+
 // ─── buildArgs: unknown ──────────────────────────────
 
 test('AG-013: unknown CLI returns empty args', () => {
@@ -214,9 +258,12 @@ test('AG-015: codex resume includes session id', () => {
 });
 
 test('AG-016: gemini resume includes --resume', () => {
-    const args = buildResumeArgs('gemini', 'default', '', 'sess-456', 'go', 'safe');
+    const args = buildResumeArgs('gemini', 'default', '', 'sess-456', 'go', 'safe', { homedir: 'C:\\Users\\jun' });
     assert.ok(args.includes('--resume'));
     assert.ok(args.includes('sess-456'));
+    const includeIdx = args.indexOf('--include-directories');
+    assert.ok(includeIdx >= 0);
+    assert.equal(args[includeIdx + 1], 'C:\\Users\\jun');
 });
 
 test('AG-017: opencode auto permissions omit unsupported skip-permissions flag', () => {

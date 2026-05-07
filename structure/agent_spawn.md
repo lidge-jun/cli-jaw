@@ -66,8 +66,8 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 - `claude`는 stdin에 `withHistoryPrompt(prompt, historyBlock)`를 직접 쓴다.
 - `codex`는 resume가 아닐 때만 stdin에 `[User Message]` 블록을 쓴다.
 - `gemini`와 `opencode`는 `promptForArgs = withHistoryPrompt(prompt, historyBlock)`를 받아 인자 레벨에서 prompt/history를 합친다.
-- `gemini` fresh/resume 인자는 headless `-p`, model, stream JSON, auto-approval(`-y`/`--yolo` 또는 동등한 approval mode), 그리고 workspace 보정을 함께 다룬다.
-- Gemini CLI는 multi-directory workspace에 `--include-directories <dir1,dir2>`를 지원한다. cli-jaw의 Gemini spawn 경로는 configured `settings.workingDir`, employee tmp cwd의 `workspace` symlink 대상, task에서 요구한 외부 repo/folder 등 실제 접근해야 하는 루트를 include-directory로 넘겨야 한다.
+- `gemini` fresh/resume 인자는 headless `-p`, model, stream JSON, `--skip-trust`, `--approval-mode yolo`, 그리고 workspace 보정을 함께 다룬다.
+- Gemini CLI는 multi-directory workspace에 `--include-directories <dir1,dir2>` 또는 반복 플래그를 지원한다. cli-jaw의 Gemini spawn 경로는 OS home을 include-directory로 넘기고, WSL이면 Linux home에 더해 발견 가능한 Windows user home(`/mnt/c/Users/...`)도 넘긴다. 자동 감지가 부족하면 `perCli.gemini.includeDirectories` 값을 추가 include로 넘긴다.
 - 이 include-directory 보정이 빠지면 Gemini file tools가 cwd 밖의 폴더를 외부 경로로 보고 `Path not in workspace` 계열 오류를 낼 수 있다. 단순 trust env(`GEMINI_CLI_TRUST_WORKSPACE`)나 prompt 지침만으로는 workspace membership을 확장한 것으로 보지 않는다.
 - stdout NDJSON은 `logEventSummary()` → `extractSessionId()` → `extractFromEvent()` → `extractOutputChunk()` 순으로 처리된다.
 - `shouldInvalidateResumeSession()`가 true면 `updateSession.run(cli, null, model, settings.permissions, settings.workingDir, ...)`로 stale resume을 지운다.

@@ -50,7 +50,7 @@ Plus: explicit PABCD orchestration (`/orchestrate`, `/pabcd`, `/continue`), 230+
 | Area | Update |
 |---|---|
 | **PABCD** | Worklog resume is explicit: use `/continue`. Natural language “continue” stays a normal prompt |
-| **Gemini CLI** | Full-access Gemini runs use `--skip-trust --approval-mode yolo` for both fresh and resume sessions |
+| **Gemini CLI** | Full-access Gemini runs use `--skip-trust --approval-mode yolo` plus `--include-directories` for OS home access; WSL also includes the Windows user home when discoverable |
 | **Messaging** | `/api/channel/send` is the canonical Telegram/Discord outbound path; legacy channel-specific endpoints remain |
 | **Heartbeat** | Jobs support `every` and `cron` schedules with optional IANA time zones |
 | **Browser web-AI** | Runtime diagnostics/orphan cleanup, persistent tab lifecycle, session reattach, and ChatGPT/Gemini/Grok vendor paths are documented in `structure/` |

@@ -15,7 +15,7 @@
 When refreshing docs from recent non-strict commits, check these first:
 
 - `src/orchestrator/parser.ts` / `pipeline.ts`: `/continue` is slash-only; do not document natural-language continue as resume.
-- `src/agent/args.ts` + `src/agent/spawn.ts`: Gemini full-access must keep auto-approval and pass configured/working/external roots through `--include-directories` so cwd-external folders do not fail with `Path not in workspace`.
+- `src/agent/args.ts` + `src/agent/spawn.ts`: Gemini full-access must keep auto-approval and pass OS home roots through `--include-directories` so cwd-external folders do not fail with `Path not in workspace`; WSL should include both Linux home and the Windows user home when discoverable.
 - `src/shared/tool-log-sanitize.ts`: bounded tool-log storage/delivery protects Web UI and Manager ProcessBlock hydration.
 - `src/messaging/send.ts` + `src/routes/messaging.ts`: `/api/channel/send` is canonical outbound channel delivery.
 - `src/browser/runtime-*`, `src/browser/tab-lifecycle.ts`, `src/browser/web-ai/session*.ts`: browser docs should mention runtime diagnostics, orphan cleanup, tab lifecycle, and web-ai session reattach.

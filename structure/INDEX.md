@@ -108,7 +108,7 @@ Support labels must stay aligned with agbrowse:
 | Area | Current source of truth | Doc impact |
 | --- | --- | --- |
 | PABCD continue routing | `src/orchestrator/parser.ts`, `src/orchestrator/pipeline.ts` | natural-language “continue/계속/이어서”은 일반 프롬프트로 두고, worklog resume은 explicit `/continue`만 허용한다. |
-| Gemini CLI full access + workspace dirs | `src/agent/args.ts`, `src/agent/spawn-env.ts`, `src/agent/spawn.ts` | fresh/resume Gemini runs must preserve auto-approval while passing required roots via `--include-directories`; configured/working/external task directories must be included to avoid `Path not in workspace`. |
+| Gemini CLI full access + workspace dirs | `src/agent/args.ts`, `src/agent/spawn-env.ts`, `src/agent/spawn.ts` | fresh/resume Gemini runs must preserve auto-approval while passing OS home roots via `--include-directories`; WSL includes Linux home plus Windows user home when discoverable to avoid `Path not in workspace`. |
 | Bounded tool logs | `src/shared/tool-log-sanitize.ts`, `src/core/bus.ts`, `src/routes/orchestrate.ts` | WS `agent_tool`, `agent_done.toolLog`, `/api/orchestrate/snapshot.activeRun.toolLog` are sanitized before public/UI delivery. |
 | Unified channel send | `src/messaging/*`, `src/routes/messaging.ts`, `src/telegram/*`, `src/discord/*` | `/api/channel/send` is canonical; `/api/telegram/send` and `/api/discord/send` remain compatibility/direct paths. |
 | Browser runtime lifecycle | `src/browser/runtime-diagnostics.ts`, `src/browser/runtime-orphans.ts`, `src/browser/tab-lifecycle.ts`, `src/browser/web-ai/session*.ts` | browser docs should mention runtime doctor/orphan cleanup, persistent tab lifecycle, and web-ai session reattach. |
