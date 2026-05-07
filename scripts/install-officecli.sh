@@ -139,7 +139,7 @@ if [ "$OS" = "darwin" ]; then
   fi
 fi
 
-# ── Verify checksum (best-effort) ──
+# ── Verify checksum when available ──
 if command -v shasum &>/dev/null || command -v sha256sum &>/dev/null; then
   EXPECTED=$(curl -fsSL "$CHECKSUM_URL" 2>/dev/null | grep "$ASSET" | awk '{print $1}')
   if [ -n "$EXPECTED" ]; then
@@ -151,7 +151,7 @@ if command -v shasum &>/dev/null || command -v sha256sum &>/dev/null; then
     if [ "$EXPECTED" = "$ACTUAL" ]; then
       ok "Checksum verified"
     else
-      warn "Checksum mismatch (expected: ${EXPECTED:0:12}…, got: ${ACTUAL:0:12}…)"
+      fail "Checksum mismatch (expected: ${EXPECTED:0:12}…, got: ${ACTUAL:0:12}…)"
     fi
   fi
 fi

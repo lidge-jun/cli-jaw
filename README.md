@@ -60,6 +60,20 @@ Plus: explicit PABCD orchestration (`/orchestrate`, `/pabcd`, `/continue`), 230+
 
 ## Two-Line Install
 
+Existing users who already manage Codex, Gemini, Claude, MCP servers, OfficeCLI, or other tools can run a safe update first. Safe install creates `~/.cli-jaw` only, skips optional tool/runtime setup, and lets you run `jaw init` later when you want interactive setup.
+
+```bash
+# macOS/Linux safe update
+JAW_SAFE=1 npm install -g cli-jaw
+```
+
+```powershell
+# Windows PowerShell safe update
+$env:JAW_SAFE="1"; npm install -g cli-jaw
+```
+
+Normal install performs the full setup:
+
 ```bash
 npm install -g cli-jaw
 jaw dashboard

@@ -65,11 +65,23 @@ test('P2-005: tilde expansion resolves correctly', () => {
 });
 
 test('P23-001: postinstall legacy rename guard — custom home must not move ~/.cli-jaw', () => {
-    // Verify that postinstall.ts guards legacy rename with isCustomHome check
     const src = readFileSync(join(projectRoot, 'bin/postinstall.ts'), 'utf8');
+    const migrationBlock = src.slice(src.indexOf('const legacyHome'), src.indexOf('// 1. Ensure ~/.cli-jaw/ home directory'));
     assert.ok(
-        src.includes('isCustomHome') && src.includes('legacyHome'),
-        'postinstall must guard legacy rename with isCustomHome check'
+        src.includes('CLI_JAW_MIGRATE_LEGACY_HOME') && src.includes('npm_config_jaw_migrate_legacy_home'),
+        'postinstall legacy migration must expose env and npm-config opt-ins',
+    );
+    assert.ok(
+        migrationBlock.includes('shouldMigrateLegacyHome()'),
+        'postinstall legacy migration branch must check opt-in',
+    );
+    assert.ok(
+        migrationBlock.indexOf('shouldMigrateLegacyHome()') < migrationBlock.indexOf('fs.renameSync'),
+        'postinstall must check opt-in before renaming legacy home',
+    );
+    assert.ok(
+        migrationBlock.includes('not migrating') && migrationBlock.includes('to opt in'),
+        'postinstall default must log non-migration and opt-in hint',
     );
 });
 

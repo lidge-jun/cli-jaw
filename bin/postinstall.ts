@@ -29,6 +29,7 @@ import { execSync, execFileSync } from 'child_process';
 import { fileURLToPath } from 'node:url';
 import { ensureSharedHomeSkillsLinks, initMcpConfig, copyDefaultSkills, propagateSkillsToInstances, loadUnifiedMcp, saveUnifiedMcp } from '../lib/mcp-sync.js';
 import { resolveHomePath } from '../src/core/path-expand.js';
+import { buildServicePath } from '../src/core/runtime-path.js';
 import { asArray, asRecord, errString, fieldString } from './_http-client.js';
 
 // ─── JAW_HOME inline (config.ts → registry.ts import 체인 제거) ───
@@ -91,7 +92,15 @@ function ensureSymlink(target: string, linkPath: string) {
 
 function findBinaryPath(name: string): string | null {
     try {
-        const out = execFileSync(PATH_LOOKUP_CMD, [name], { encoding: 'utf8', stdio: 'pipe', timeout: 5000 }).trim();
+        const out = execFileSync(PATH_LOOKUP_CMD, [name], {
+            encoding: 'utf8',
+            stdio: 'pipe',
+            timeout: 5000,
+            env: {
+                ...process.env,
+                PATH: buildServicePath(process.env["PATH"] || ''),
+            },
+        }).trim();
         const first = out.split(/\r?\n/).map(x => x.trim()).find(Boolean);
         return first || null;
     } catch {
@@ -251,24 +260,87 @@ const CLI_PACKAGES: { bin: string; pkg: string; brew?: string; forceMgr?: PkgMgr
 
 type PkgMgr = 'bun' | 'npm' | 'brew';
 
-/** Detect which package manager originally installed a binary. */
-function detectInstaller(binName: string): PkgMgr | null {
+function truthyEnv(value: string | undefined): boolean {
+    return value === '1' || value?.toLowerCase() === 'true';
+}
+
+export function shouldInstallCliToolsDuringPostinstall(env: NodeJS.ProcessEnv = process.env): boolean {
+    return truthyEnv(env["CLI_JAW_INSTALL_CLI_TOOLS"]) || truthyEnv(env["npm_config_jaw_install_cli_tools"]);
+}
+
+export function shouldDedupeCliTools(env: NodeJS.ProcessEnv = process.env): boolean {
+    return truthyEnv(env["CLI_JAW_DEDUPE_CLI_TOOLS"]) || truthyEnv(env["npm_config_jaw_dedupe_cli_tools"]);
+}
+
+function shouldMigrateLegacyHome(env: NodeJS.ProcessEnv = process.env): boolean {
+    return truthyEnv(env["CLI_JAW_MIGRATE_LEGACY_HOME"]) || truthyEnv(env["npm_config_jaw_migrate_legacy_home"]);
+}
+
+function npmPrefixGlobal(): string | null {
     try {
-        const binPath = execSync(`${PATH_LOOKUP_CMD} ${binName}`, {
-            encoding: 'utf8', stdio: 'pipe', timeout: 3000,
-        }).trim().split(/\r?\n/)[0]!;
-        if (binPath.includes('/.bun/')) return 'bun';
-        if (binPath.includes('/Cellar/') || binPath.includes('/homebrew/')) return 'brew';
-        // npm: check against npm global prefix or nvm paths
-        try {
-            const npmPrefix = execSync('npm prefix -g', { encoding: 'utf8', stdio: 'pipe', timeout: 3000 }).trim();
-            if (binPath.startsWith(npmPrefix)) return 'npm';
-        } catch { /* npm unavailable */ }
-        if (binPath.includes('/.nvm/') || binPath.includes('/nodejs/')) return 'npm';
-        return null;
+        return execFileSync('npm', ['prefix', '-g'], {
+            encoding: 'utf8',
+            stdio: 'pipe',
+            timeout: 3000,
+            env: {
+                ...process.env,
+                PATH: buildServicePath(process.env["PATH"] || ''),
+            },
+        }).trim();
     } catch {
-        return null; // binary not found
+        return null;
     }
+}
+
+function pathHasSegment(candidate: string, segment: string): boolean {
+    return candidate.split(path.sep).includes(segment);
+}
+
+export function classifyInstallerFromPath(
+    binPath: string,
+    options: { binName?: string; npmPrefix?: string | null; realPath?: string | null } = {},
+): PkgMgr | null {
+    const cleanBinPath = path.normalize(binPath);
+    const realPath = path.normalize(options.realPath || binPath);
+    const npmPrefix = options.npmPrefix ? path.normalize(options.npmPrefix) : '';
+    const binName = options.binName || path.basename(cleanBinPath);
+
+    if (pathHasSegment(cleanBinPath, '.bun') || pathHasSegment(realPath, '.bun')) return 'bun';
+    if (pathHasSegment(realPath, 'Cellar')) return 'brew';
+
+    if (npmPrefix) {
+        const npmBin = path.join(npmPrefix, 'bin');
+        const npmModules = path.join(npmPrefix, 'lib', 'node_modules');
+        if (
+            cleanBinPath === path.join(npmBin, binName)
+            || cleanBinPath.startsWith(`${npmBin}${path.sep}`)
+            || realPath.startsWith(`${npmModules}${path.sep}`)
+            || realPath === path.join(npmModules, binName)
+        ) {
+            return 'npm';
+        }
+    }
+
+    if (pathHasSegment(cleanBinPath, '.nvm') || pathHasSegment(realPath, '.nvm')) return 'npm';
+    if (pathHasSegment(cleanBinPath, 'nodejs') || pathHasSegment(realPath, 'nodejs')) return 'npm';
+    return null;
+}
+
+/** Detect which package manager originally installed a binary. */
+export function detectInstaller(binName: string): PkgMgr | null {
+    const binPath = findBinaryPath(binName);
+    if (!binPath) return null;
+    let realPath: string | null = null;
+    try {
+        realPath = fs.realpathSync(binPath);
+    } catch {
+        realPath = null;
+    }
+    return classifyInstallerFromPath(binPath, {
+        binName,
+        npmPrefix: npmPrefixGlobal(),
+        realPath,
+    });
 }
 
 /** Detect the default package manager for fresh installs. */
@@ -315,8 +387,14 @@ function deduplicateCliTool(bin: string, pkg: string, brew?: string): void {
     const active = detectInstaller(bin);
     if (!active) return; // not installed at all
     const others: PkgMgr[] = (['bun', 'npm', 'brew'] as const).filter(m => m !== active);
-    for (const mgr of others) {
-        if (!isInstalledVia(mgr, pkg, brew)) continue;
+    const duplicates = others.filter(mgr => isInstalledVia(mgr, pkg, brew));
+    if (!duplicates.length) return;
+    if (!shouldDedupeCliTools()) {
+        console.log(`[jaw:init] ℹ️  ${bin}: duplicate install(s) detected via ${duplicates.join(', ')}; not removing automatically`);
+        console.log('[jaw:init]    set CLI_JAW_DEDUPE_CLI_TOOLS=1 to allow automatic duplicate removal');
+        return;
+    }
+    for (const mgr of duplicates) {
         const cmd = buildUninstallCmd(mgr, pkg, brew);
         console.log(`[jaw:init] 🧹 ${bin}: removing duplicate from ${mgr} (active: ${active})`);
         try {
@@ -462,10 +540,8 @@ export async function runPostinstall() {
         || process.env["JAW_SAFE"] === '1'
         || process.env["JAW_SAFE"] === 'true';
 
-    // 1. Ensure ~/.cli-jaw/ home directory
-    ensureDir(jawHome);
-
     if (isSafeMode) {
+        ensureDir(jawHome);
         console.log('[jaw:postinstall] 🔒 safe mode — home directory created only');
         console.log('[jaw:postinstall] Run `jaw init` to configure interactively');
         return;
@@ -474,13 +550,21 @@ export async function runPostinstall() {
     // ── Legacy migration (only in normal mode, NOT safe mode) ──
     const legacyHome = path.join(home, '.cli-jaw');
     const isCustomHome = jawHome !== legacyHome;
-    if (isCustomHome && fs.existsSync(legacyHome) && !fs.existsSync(jawHome)) {
-        console.log(`[jaw:init] migrating ~/.cli-jaw → ${jawHome} ...`);
-        fs.renameSync(legacyHome, jawHome);
-        console.log(`[jaw:init] ✅ migration complete`);
-    } else if (isCustomHome && fs.existsSync(legacyHome) && fs.existsSync(jawHome)) {
-        console.log(`[jaw:init] ⚠️ both ~/.cli-jaw and ${jawHome} exist — using ${jawHome}`);
+    if (isCustomHome && fs.existsSync(legacyHome)) {
+        if (fs.existsSync(jawHome)) {
+            console.log(`[jaw:init] ⚠️ both ~/.cli-jaw and ${jawHome} exist — using ${jawHome}`);
+        } else if (shouldMigrateLegacyHome()) {
+            console.log(`[jaw:init] migrating ~/.cli-jaw → ${jawHome} ...`);
+            fs.renameSync(legacyHome, jawHome);
+            console.log(`[jaw:init] ✅ migration complete`);
+        } else {
+            console.log(`[jaw:init] legacy ~/.cli-jaw detected; not migrating to ${jawHome} automatically`);
+            console.log('[jaw:init] to opt in: CLI_JAW_MIGRATE_LEGACY_HOME=1 npm install -g cli-jaw');
+        }
     }
+
+    // 1. Ensure ~/.cli-jaw/ home directory
+    ensureDir(jawHome);
 
     // 2. Ensure sub-directories (only in normal mode)
     ensureDir(path.join(jawHome, 'skills'));
@@ -529,8 +613,14 @@ export async function runPostinstall() {
     copyDefaultSkills();
     propagateSkillsToInstances();
 
-    // 7-9. Install CLI tools, MCP servers, skill deps, officecli runtime
-    await installCliTools();
+    // 7-9. Install MCP servers, skill deps, officecli runtime. CLI tools are opt-in:
+    // postinstall must not update or uninstall user-managed agent CLIs unexpectedly.
+    if (shouldInstallCliToolsDuringPostinstall()) {
+        await installCliTools();
+    } else {
+        console.log('[jaw:init] CLI tool install/update skipped by default');
+        console.log('[jaw:init] to opt in: CLI_JAW_INSTALL_CLI_TOOLS=1 npm install -g cli-jaw');
+    }
     await installMcpServers();
     await installSkillDeps();
     await installOfficeCli();

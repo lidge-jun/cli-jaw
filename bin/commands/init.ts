@@ -36,7 +36,7 @@ if (values.help) {
 Options:
   --help                Show this help
   --non-interactive     Skip prompts, use defaults
-  --safe                Safe install (home dir only)
+  --safe                Ask before optional installs
   --dry-run             Show what would be done without changes
   --force               Overwrite existing settings
   --working-dir <path>  Set working directory

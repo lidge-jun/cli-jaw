@@ -80,7 +80,7 @@ sequenceDiagram
 | 설치 위치 | `~/.local/bin/officecli` |
 | 지원 플랫폼 | macOS arm64/x64, Linux x64/arm64, Alpine musl 변형 |
 | 재실행 처리 | 기본은 idempotent, `--update`는 오래된 경우만 갱신, `--force`는 무조건 재설치 |
-| 검증 | 다운로드 후 실행 가능 여부 확인, checksum 검증은 best-effort |
+| 검증 | 다운로드 후 실행 가능 여부 확인, checksum 항목이 있으면 mismatch 시 실패 |
 | 설치 후 출력 | 설치된 버전과 실제 다운로드 소스를 함께 출력 |
 
 ### smoke test 8종

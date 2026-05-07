@@ -4,6 +4,11 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readSource } from './source-normalize.js';
+import {
+    classifyInstallerFromPath,
+    shouldDedupeCliTools,
+    shouldInstallCliToolsDuringPostinstall,
+} from '../../bin/postinstall.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -12,6 +17,7 @@ const postinstallSrc = readSource(join(__dirname, '../../bin/postinstall.ts'), '
 const initSrc = readSource(join(__dirname, '../../bin/commands/init.ts'), 'utf8');
 const officeCliShellSrc = readSource(join(__dirname, '../../scripts/install-officecli.sh'), 'utf8');
 const officeCliPowerShellSrc = readSource(join(__dirname, '../../scripts/install-officecli.ps1'), 'utf8');
+const readmeSrc = readSource(join(__dirname, '../../README.md'), 'utf8');
 
 // ── SAF-001: safe guard with JAW_SAFE ──
 
@@ -27,6 +33,15 @@ test('SAF-002: postinstall has npm_config_jaw_safe guard', () => {
     assert.ok(postinstallSrc.includes("npm_config_jaw_safe === 'true'"), 'checks npm_config_jaw_safe=true');
 });
 
+test('SAF-002b: README documents safe install/update before normal install', () => {
+    const safePos = readmeSrc.indexOf('JAW_SAFE=1 npm install -g cli-jaw');
+    const normalPos = readmeSrc.indexOf('npm install -g cli-jaw');
+    assert.ok(safePos >= 0, 'README should document macOS/Linux JAW_SAFE install');
+    assert.ok(readmeSrc.includes('$env:JAW_SAFE="1"; npm install -g cli-jaw'), 'README should document PowerShell JAW_SAFE install');
+    assert.ok(readmeSrc.includes('skips optional tool/runtime setup'), 'README should explain safe install boundary');
+    assert.ok(safePos <= normalPos, 'safe install should appear before normal install example');
+});
+
 // ── SAF-003: safe guard exits early ──
 
 test('SAF-003: safe mode returns early (no side effects)', () => {
@@ -40,6 +55,61 @@ test('SAF-003: safe mode returns early (no side effects)', () => {
 
 test('SAF-004: installCliTools is exported', () => {
     assert.ok(postinstallSrc.includes('export async function installCliTools'), 'installCliTools exported');
+});
+
+test('SAF-004b: postinstall skips CLI tool install/update by default', () => {
+    assert.equal(shouldInstallCliToolsDuringPostinstall({}), false);
+    assert.equal(shouldInstallCliToolsDuringPostinstall({ CLI_JAW_INSTALL_CLI_TOOLS: '1' }), true);
+    assert.equal(shouldInstallCliToolsDuringPostinstall({ npm_config_jaw_install_cli_tools: 'true' }), true);
+
+    const runBlock = postinstallSrc.slice(postinstallSrc.indexOf('export async function runPostinstall'));
+    assert.ok(runBlock.includes('shouldInstallCliToolsDuringPostinstall()'), 'runPostinstall must gate installCliTools');
+    assert.ok(runBlock.includes('CLI tool install/update skipped by default'), 'default skip must be visible');
+});
+
+test('SAF-004c: duplicate CLI uninstall is opt-in', () => {
+    assert.equal(shouldDedupeCliTools({}), false);
+    assert.equal(shouldDedupeCliTools({ CLI_JAW_DEDUPE_CLI_TOOLS: '1' }), true);
+    assert.equal(shouldDedupeCliTools({ npm_config_jaw_dedupe_cli_tools: 'true' }), true);
+
+    const dedupeBlock = postinstallSrc.slice(postinstallSrc.indexOf('function deduplicateCliTool'));
+    assert.ok(dedupeBlock.includes('shouldDedupeCliTools()'), 'dedupe must be opt-in before uninstall');
+    assert.ok(dedupeBlock.includes('not removing automatically'), 'dedupe default must avoid uninstalling user tools');
+});
+
+test('SAF-004d: Homebrew Node npm globals are classified as npm before brew', () => {
+    assert.equal(
+        classifyInstallerFromPath('/opt/homebrew/bin/codex', {
+            binName: 'codex',
+            npmPrefix: '/opt/homebrew',
+            realPath: '/opt/homebrew/lib/node_modules/@openai/codex/bin/codex.js',
+        }),
+        'npm',
+    );
+    assert.equal(
+        classifyInstallerFromPath('/usr/local/bin/gemini', {
+            binName: 'gemini',
+            npmPrefix: '/usr/local',
+            realPath: '/usr/local/lib/node_modules/@google/gemini-cli/dist/index.js',
+        }),
+        'npm',
+    );
+    assert.equal(
+        classifyInstallerFromPath('/opt/homebrew/bin/gemini', {
+            binName: 'gemini',
+            npmPrefix: '/opt/homebrew',
+            realPath: '/opt/homebrew/Cellar/gemini-cli/1.2.3/bin/gemini',
+        }),
+        'brew',
+    );
+    assert.equal(
+        classifyInstallerFromPath('/opt/homebrew/bin/codex', {
+            binName: 'codex',
+            npmPrefix: '/Users/test/.nvm/versions/node/v22.0.0',
+            realPath: '/opt/homebrew/bin/codex',
+        }),
+        null,
+    );
 });
 
 // ── SAF-005: installMcpServers exported ──
@@ -109,6 +179,8 @@ test('INIT-001: init.ts has --dry-run option', () => {
 
 test('INIT-002: init.ts has --safe option for safe install mode', () => {
     assert.ok(initSrc.includes("safe: { type: 'boolean'"), '--safe option defined in parseArgs');
+    assert.ok(initSrc.includes('--safe                Ask before optional installs'), '--safe help should describe prompt behavior');
+    assert.ok(!initSrc.includes('--safe                Safe install (home dir only)'), '--safe help should not promise home-only behavior');
 });
 
 // ── INIT-003: no direct import('../postinstall.js') side-effect ──
@@ -141,6 +213,14 @@ test('INIT-005: --dry-run guards settings/dir writes', () => {
 test('OFF-001: shell installer supports update mode', () => {
     assert.ok(officeCliShellSrc.includes('--update'), 'shell installer should expose --update');
     assert.ok(officeCliShellSrc.includes('get_latest_version'), 'shell installer should compare latest version');
+});
+
+test('OFF-001b: shell installer fails on checksum mismatch when expected checksum exists', () => {
+    const mismatchPos = officeCliShellSrc.indexOf('Checksum mismatch');
+    assert.ok(mismatchPos >= 0, 'shell installer should report checksum mismatch');
+    const mismatchBlock = officeCliShellSrc.slice(Math.max(0, mismatchPos - 80), mismatchPos + 160);
+    assert.ok(mismatchBlock.includes('fail "Checksum mismatch'), 'checksum mismatch should fail, not warn');
+    assert.ok(!mismatchBlock.includes('warn "Checksum mismatch'), 'checksum mismatch must not continue as warning');
 });
 
 test('OFF-002: PowerShell installer exists for win32 postinstall', () => {
