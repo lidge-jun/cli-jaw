@@ -79,7 +79,14 @@ function importCoreMemory(root: string) {
     if (!fs.existsSync(corePath)) return 0;
     const profilePath = join(root, 'profile.md');
     if (fs.existsSync(profilePath)) {
-        return 0;
+        const content = safeReadFile(profilePath);
+        const stripped = content
+            .replace(/^---[\s\S]*?---\n?/, '')
+            .replace(/^#+\s+.*$/gm, '')
+            .trim();
+        if (stripped.length > 0) {
+            return 0;
+        }
     }
     const content = safeReadFile(corePath);
     const parsed = parseLegacyMemorySections(content);

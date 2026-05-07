@@ -17,8 +17,10 @@ import {
 } from './shared.js';
 import { instanceId } from '../core/instance.js';
 import { applySoulUpdate, type SoulSection } from './identity.js';
+import { reindexIntegratedMemoryFile } from './indexing.js';
 
 type ReflectionTarget =
+    | 'profile.md'
     | 'shared/preferences.md'
     | 'shared/decisions.md'
     | 'shared/projects.md'
@@ -55,12 +57,67 @@ function pickRecentEpisodeFiles(sinceDays: number): string[] {
     }).sort();
 }
 
+function isLikelyNonClassifiable(line: string): boolean {
+    const lower = line.toLowerCase().trim();
+    if (/^(what|how|why|when|where|do you|can you|could you|should we|어떻게|왜|언제)\b/.test(lower)) return true;
+    if (/\b(not|never|don't|doesn't|아니|안 |없이)\b/.test(lower) && lower.length < 50) return true;
+    return false;
+}
+
+function scoreMatches(line: string, patterns: RegExp[]): number {
+    return patterns.filter(p => p.test(line)).length;
+}
+
+function isImperativeProcedure(line: string): boolean {
+    const lower = line.toLowerCase().trim();
+    if (/^(run|execute|create|build|deploy|setup|install|configure|start|stop|restart)\b/.test(lower)) return true;
+    if (/(하세요|해라|하시오|실행|시작|중지|배포|설치)$/.test(lower)) return true;
+    return false;
+}
+
+function hasListPattern(line: string): boolean {
+    return /^\s*[-*•]\s|^\s*\d+\.\s/.test(line);
+}
+
 function classifyLine(line: string): ReflectionTarget | null {
     const lower = line.toLowerCase();
-    if (/\bprefer|preference|설정|선호|config|default\b/.test(lower)) return 'shared/preferences.md';
-    if (/\bdecid|decision|결정|chose|선택|policy|approach\b/.test(lower)) return 'shared/decisions.md';
-    if (/\bproject|프로젝트|repo|deploy|release|roadmap\b/.test(lower)) return 'shared/projects.md';
-    if (/\brunbook|procedure|step|workflow|how.to|절차|방법\b/.test(lower)) return 'procedures/runbooks.md';
+
+    if (isLikelyNonClassifiable(line)) return null;
+
+    if (/(?:^|\s)(my role|i'm a|i am a|내 역할|내 직무|i work as|uses? macos|uses? linux|node v\d|m\d (max|pro)|developer|engineer|admin|작업 환경|개발 환경)(?:\s|$)/i.test(lower)) {
+        return 'profile.md';
+    }
+
+    const scores = {
+        runbooks: scoreMatches(lower, [
+            /\brunbook|procedure|절차/,
+            /\bstep [0-9]|단계 \d/,
+            /\bworkflow|how.to|방법/,
+        ]),
+        preferences: scoreMatches(lower, [
+            /\bprefer|preference|선호|취향/,
+            /\bconfig|setting|설정|환경설정/,
+            /\bdefault|기본값|디폴트/,
+        ]),
+        decisions: scoreMatches(lower, [
+            /\bdecid|decision|결정/,
+            /\bchose|choose|선택/,
+            /\bpolicy|approach|방침/,
+        ]),
+        projects: scoreMatches(lower, [
+            /\bproject|프로젝트/,
+            /\brepo|deploy|release|배포/,
+            /\broadmap|milestone|마일스톤/,
+        ]),
+    };
+
+    if (scores.runbooks >= 2 && (isImperativeProcedure(line) || hasListPattern(line))) {
+        return 'procedures/runbooks.md';
+    }
+    if (scores.preferences >= 1) return 'shared/preferences.md';
+    if (scores.decisions >= 1) return 'shared/decisions.md';
+    if (scores.projects >= 1) return 'shared/projects.md';
+
     return null;
 }
 
@@ -108,12 +165,21 @@ function extractRetainFacts(files: string[]): RetainFact[] {
 
     // Deduplicate by text similarity (exact prefix match)
     const seen = new Set<string>();
-    return facts.filter(f => {
+    const deduped = facts.filter(f => {
         const key = f.text.toLowerCase().slice(0, 80);
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
-    }).slice(0, 20); // Cap at 20 facts per reflection
+    });
+
+    const PER_TARGET_CAP = 6;
+    const byTarget = new Map<string, RetainFact[]>();
+    for (const fact of deduped) {
+        const list = byTarget.get(fact.target) || [];
+        if (list.length < PER_TARGET_CAP) list.push(fact);
+        byTarget.set(fact.target, list);
+    }
+    return [...byTarget.values()].flat().slice(0, 24);
 }
 
 function groupFactsByTarget(facts: RetainFact[]): Map<ReflectionTarget, RetainFact[]> {
@@ -150,6 +216,50 @@ function writeReflectionTargets(
                     reason: `reflection:${fact.sourceFile}`,
                     confidence: 'medium',
                 });
+            }
+            continue;
+        }
+
+        // Profile target: section-based upsert
+        if (target === 'profile.md') {
+            const existing = fs.existsSync(filePath) ? safeReadFile(filePath) : '';
+            const existingLower = existing.toLowerCase();
+
+            const newFacts = facts.filter(
+                f => !existingLower.includes(f.text.toLowerCase().slice(0, 60)),
+            );
+            if (!newFacts.length) continue;
+
+            const sectionBuckets: Record<string, string[]> = {
+                'User Preferences': [],
+                'Key Decisions': [],
+                'Active Projects': [],
+            };
+            for (const fact of newFacts) {
+                const fl = fact.text.toLowerCase();
+                if (/decid|chose|선택|결정|policy|approach/.test(fl)) {
+                    sectionBuckets['Key Decisions']!.push(`- ${fact.text}`);
+                } else if (/project|프로젝트|repo|deploy|release/.test(fl)) {
+                    sectionBuckets['Active Projects']!.push(`- ${fact.text}`);
+                } else {
+                    sectionBuckets['User Preferences']!.push(`- ${fact.text}`);
+                }
+            }
+
+            let content = existing;
+            for (const [heading, bullets] of Object.entries(sectionBuckets)) {
+                if (!bullets.length) continue;
+                const sectionRe = new RegExp(`(## ${heading}\\n)`, 'm');
+                if (sectionRe.test(content)) {
+                    content = content.replace(sectionRe, `$1${bullets.join('\n')}\n`);
+                } else {
+                    content += `\n## ${heading}\n${bullets.join('\n')}\n`;
+                }
+            }
+
+            if (content !== existing) {
+                fs.writeFileSync(filePath, content);
+                changedFiles.push(filePath);
             }
             continue;
         }
@@ -227,7 +337,20 @@ export async function maybeAutoReflect(): Promise<boolean> {
         ? (Date.now() - new Date(lastReflect).getTime()) / 3600000
         : Infinity;
     if (hoursSince < 24) return false;
-    reflectRecentEpisodes();
+
+    const result = reflectRecentEpisodes();
+
+    for (const changed of result.changedFiles) {
+        reindexIntegratedMemoryFile(changed);
+    }
+
+    if (result.changedFiles.length > 0) {
+        const metaPath = join(getAdvancedMemoryDir(), '.reflect-meta.json');
+        fs.writeFileSync(metaPath, JSON.stringify({
+            lastReflectedAt: new Date().toISOString(),
+        }));
+    }
+
     return true;
 }
 

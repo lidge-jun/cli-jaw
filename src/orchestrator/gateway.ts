@@ -29,6 +29,7 @@ export type SubmitResult = {
     // backward-compat for REST consumers (chat.js expects these)
     queued?: true;
     continued?: true;
+    noPendingContinue?: true;
 };
 
 // ── 5s dedup window ──
@@ -110,7 +111,7 @@ export function submitMessage(
                 { ...meta, requestId },
             );
         }
-        return { action: 'started', continued: true, requestId };
+        return { action: 'started', noPendingContinue: true, requestId };
     }
 
     // ── reset intent ──

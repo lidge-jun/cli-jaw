@@ -101,6 +101,21 @@ test('SF-003: buildHistoryBlock uses trace for assistant messages, preserving in
     );
 });
 
+test('SF-004: buildHistoryBlock filters stale worklog continue artifacts', () => {
+    const src = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
+    const fnIdx = src.indexOf('function buildHistoryBlock');
+    assert.ok(fnIdx > 0, 'buildHistoryBlock function should exist');
+    const fnBlock = src.slice(fnIdx, src.indexOf('function withHistoryPrompt'));
+
+    assert.ok(src.includes('function isStaleWorklogHistoryArtifact'), 'stale artifact helper should exist');
+    assert.ok(fnBlock.includes('!isStaleWorklogHistoryArtifact(summary)'), 'compact marker summaries must be filtered');
+    assert.ok(fnBlock.includes('content && !isStaleWorklogHistoryArtifact(content)'), 'normal content must be filtered');
+    assert.ok(fnBlock.includes("role === 'assistant' && row.trace && !isStaleWorklogHistoryArtifact(String(row.trace))"), 'assistant trace must be filtered');
+    assert.ok(src.includes('Read the previous worklog and continue any incomplete tasks.'), 'old fallback prompt marker should be filtered');
+    assert.ok(src.includes('이 워크로그는 스텁이네요'), 'old Korean stale worklog reply marker should be filtered');
+    assert.ok(src.includes('Continuing from previous worklog.'), 'old English locale marker should be filtered');
+});
+
 // ─── SF-EDGE: processQueue is called after mainManaged exit ───
 
 test('SF-EDGE: processQueue is triggered after mainManaged exit in both paths', () => {

@@ -46,9 +46,9 @@ test('SM-003: busy path enqueues only, does NOT call insertMessage', () => {
     assert.ok(busyBlock.includes('pending: messageQueue.length'), 'queued includes pending count');
 });
 
-// ─── SM-004: continue intent idle → started ───
+// ─── SM-004: continue intent idle → no pending continue ───
 
-test('SM-004: continue intent when idle → started + orchestrateContinue', () => {
+test('SM-004: continue intent when idle → noPendingContinue + orchestrateContinue', () => {
     const continueBlock = gatewaySrc.slice(
         gatewaySrc.indexOf('// ── continue'),
         gatewaySrc.indexOf('// ── reset'),
@@ -56,6 +56,8 @@ test('SM-004: continue intent when idle → started + orchestrateContinue', () =
     assert.ok(continueBlock.includes('isContinueIntent(trimmed)'), 'checks continue intent');
     assert.ok(continueBlock.includes('orchestrateContinue('), 'calls orchestrateContinue');
     assert.ok(continueBlock.includes("action: 'started'"), 'returns started');
+    assert.ok(continueBlock.includes('noPendingContinue: true'), 'idle continue returns no-pending contract');
+    assert.ok(!continueBlock.includes('continued: true'), 'idle continue must not trigger worklog continue UI copy');
 });
 
 // ─── SM-005: continue intent busy → rejected/busy ───

@@ -16,7 +16,7 @@ import { waitForSettingsSaveIdle } from './settings-core.js';
 let activeObjectURLs: string[] = [];
 
 interface CommandResult { code?: string; text?: string; type?: string; }
-interface MessageResult { queued?: boolean; pending?: number; continued?: boolean; error?: string; queuedId?: string; }
+interface MessageResult { queued?: boolean; pending?: number; continued?: boolean; noPendingContinue?: boolean; error?: string; queuedId?: string; }
 
 function getCommandTimeoutMs(text: string): number {
     // Native compaction can take materially longer than the default command round-trip.
@@ -177,6 +177,11 @@ export async function sendMessage(source: SendSource = 'enter'): Promise<void> {
                 // bubble when the message actually starts running.
                 const { updateQueueBadge } = await import('../ui.js');
                 updateQueueBadge(data.pending || 1);
+            } else if (data.noPendingContinue) {
+                // No system copy here: orchestrateContinue() emits the single
+                // user-facing no-pending response through orchestrate_done.
+                addMessage('user', text);
+                upsertMessage({ role: 'user', content: text, timestamp: Date.now() });
             } else if (data.continued) {
                 addMessage('user', text);
                 upsertMessage({ role: 'user', content: text, timestamp: Date.now() });

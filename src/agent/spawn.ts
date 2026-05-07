@@ -595,16 +595,16 @@ function buildHistoryBlock(currentPrompt: string, workingDir?: string | null, ma
 
         if (isCompactMarkerRow(row)) {
             const summary = String(row.trace || '').trim();
-            if (summary && charCount + summary.length <= maxTotalChars) {
+            if (summary && !isStaleWorklogHistoryArtifact(summary) && charCount + summary.length <= maxTotalChars) {
                 blocks.push(summary);
             }
             break;
         }
 
         let entry: string;
-        if (content) {
+        if (content && !isStaleWorklogHistoryArtifact(content)) {
             entry = `[${role || 'user'}] ${content}`;
-        } else if (role === 'assistant' && row.trace) {
+        } else if (role === 'assistant' && row.trace && !isStaleWorklogHistoryArtifact(String(row.trace))) {
             entry = `[assistant trace] ${String(row.trace).slice(0, 2000)}`;
         } else {
             entry = '';
@@ -617,6 +617,18 @@ function buildHistoryBlock(currentPrompt: string, workingDir?: string | null, ma
 
     if (!blocks.length) return '';
     return `[Recent Context]\n${blocks.reverse().join('\n\n')}`;
+}
+
+function isStaleWorklogHistoryArtifact(text: string): boolean {
+    const value = String(text || '');
+    return [
+        'Read the previous worklog and continue any incomplete tasks.',
+        '이 워크로그는 스텁이네요',
+        '이전 worklog 기준으로 이어서 진행합니다.',
+        'Continuing from previous worklog.',
+        '前回の worklog から続行しています。',
+        '正在从上一个 worklog 继续。',
+    ].some(marker => value.includes(marker));
 }
 
 function withHistoryPrompt(prompt: string, historyBlock: string) {
