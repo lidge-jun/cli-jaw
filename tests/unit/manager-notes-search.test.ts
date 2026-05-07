@@ -108,7 +108,7 @@ test('notes search maps missing rg and invalid regex to typed errors', async () 
     );
 
     await assert.rejects(
-        searchNotes(tmpRoot(), '(', {
+        searchNotes(tmpRoot(), '(a', {
             regex: true,
             spawnImpl: fakeSpawn({ code: 2, stderr: ['regex parse error: missing )'] }),
         }),
