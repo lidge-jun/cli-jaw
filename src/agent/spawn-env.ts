@@ -24,6 +24,25 @@ const OPENCODE_ALLOW_PERMISSIONS = [
     'websearch',
 ] as const;
 const GEMINI_TRUST_WORKSPACE_ENV = 'GEMINI_CLI_TRUST_WORKSPACE';
+const GEMINI_SYSTEM_SETTINGS_ENV = 'GEMINI_CLI_SYSTEM_SETTINGS_PATH';
+
+const GEMINI_SYSTEM_SETTINGS: Record<string, unknown> = {
+    general: {
+        maxAttempts: 3,
+        retryFetchErrors: true,
+    },
+};
+let _geminiSystemSettingsPath: string | null = null;
+
+function getGeminiSystemSettingsPath(): string {
+    if (_geminiSystemSettingsPath && fs.existsSync(_geminiSystemSettingsPath)) {
+        return _geminiSystemSettingsPath;
+    }
+    const tmpPath = join(os.tmpdir(), 'jaw-gemini-system-settings.json');
+    fs.writeFileSync(tmpPath, JSON.stringify(GEMINI_SYSTEM_SETTINGS, null, 2) + '\n');
+    _geminiSystemSettingsPath = tmpPath;
+    return tmpPath;
+}
 
 function prependPathDir(
     extraEnv: Record<string, string>,
@@ -48,12 +67,14 @@ export function applyCliEnvDefaults(
     inheritedEnv: NodeJS.ProcessEnv = process.env,
 ): Record<string, string> {
     if (cli === 'gemini') {
-        if (extraEnv[GEMINI_TRUST_WORKSPACE_ENV] !== undefined) return extraEnv;
-        if (inheritedEnv[GEMINI_TRUST_WORKSPACE_ENV] !== undefined) return extraEnv;
-        return {
-            ...extraEnv,
-            [GEMINI_TRUST_WORKSPACE_ENV]: 'true',
-        };
+        const merged = { ...extraEnv };
+        if (!merged[GEMINI_TRUST_WORKSPACE_ENV] && !inheritedEnv[GEMINI_TRUST_WORKSPACE_ENV]) {
+            merged[GEMINI_TRUST_WORKSPACE_ENV] = 'true';
+        }
+        if (!merged[GEMINI_SYSTEM_SETTINGS_ENV]) {
+            merged[GEMINI_SYSTEM_SETTINGS_ENV] = getGeminiSystemSettingsPath();
+        }
+        return merged;
     }
 
     if (cli !== 'opencode') return extraEnv;

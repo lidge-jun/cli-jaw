@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { setupWebUiDom, resetWebUiDom } from './web-ui-test-dom.ts';
 
 test.afterEach(() => {
@@ -52,4 +53,11 @@ test('ProcessBlock keeps huge details out of collapsed state and hydrates lazily
 
     releaseProcessBlockDetails(block);
     assert.equal(getStoredProcessStepDetail('step-huge'), '');
+});
+
+test('ProcessBlock trace control and chevron fit on one toggle row', () => {
+    const css = readFileSync(new URL('../../public/css/tool-ui.css', import.meta.url), 'utf8');
+    const toggleRule = css.match(/\.process-step-toggle\s*\{[\s\S]*?\}/)?.[0] ?? '';
+
+    assert.ok(toggleRule.includes('grid-template-columns: auto 16px auto minmax(0, 1fr) auto auto;'));
 });

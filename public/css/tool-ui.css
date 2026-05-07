@@ -372,7 +372,7 @@
 
 .process-step-toggle {
     display: grid;
-    grid-template-columns: auto 16px auto minmax(0, 1fr) auto;
+    grid-template-columns: auto 16px auto minmax(0, 1fr) auto auto;
     align-items: start;
     gap: var(--space-2);
     width: 100%;
@@ -464,6 +464,8 @@
 }
 
 .process-step-chevron {
+    align-self: start;
+    justify-self: end;
     color: var(--text-dim);
     transition: transform var(--duration-fast);
 }

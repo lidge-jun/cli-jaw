@@ -37,25 +37,25 @@ test('preserves inherited opencode env when already set', () => {
     );
 });
 
+function withoutGeminiSettings(env: Record<string, string>): Record<string, string> {
+    const { GEMINI_CLI_SYSTEM_SETTINGS_PATH: _p, ...rest } = env;
+    return rest;
+}
+
 test('trusts Gemini workspaces by default for headless boss and employee spawns', () => {
-    assert.deepEqual(
-        applyCliEnvDefaults('gemini', {}, {}),
-        { GEMINI_CLI_TRUST_WORKSPACE: 'true' },
-    );
+    const result = applyCliEnvDefaults('gemini', {}, {});
+    assert.deepEqual(withoutGeminiSettings(result), { GEMINI_CLI_TRUST_WORKSPACE: 'true' });
+    assert.ok(result.GEMINI_CLI_SYSTEM_SETTINGS_PATH, 'should inject system settings path');
 });
 
 test('preserves explicit Gemini trust override', () => {
-    assert.deepEqual(
-        applyCliEnvDefaults('gemini', { GEMINI_CLI_TRUST_WORKSPACE: 'false' }, {}),
-        { GEMINI_CLI_TRUST_WORKSPACE: 'false' },
-    );
+    const result = applyCliEnvDefaults('gemini', { GEMINI_CLI_TRUST_WORKSPACE: 'false' }, {});
+    assert.deepEqual(withoutGeminiSettings(result), { GEMINI_CLI_TRUST_WORKSPACE: 'false' });
 });
 
 test('preserves inherited Gemini trust env when already set', () => {
-    assert.deepEqual(
-        applyCliEnvDefaults('gemini', { OTHER_FLAG: '1' }, { GEMINI_CLI_TRUST_WORKSPACE: '1' }),
-        { OTHER_FLAG: '1' },
-    );
+    const result = applyCliEnvDefaults('gemini', { OTHER_FLAG: '1' }, { GEMINI_CLI_TRUST_WORKSPACE: '1' });
+    assert.deepEqual(withoutGeminiSettings(result), { OTHER_FLAG: '1' });
 });
 
 test('prefers bun-installed opencode before older path entries', () => {

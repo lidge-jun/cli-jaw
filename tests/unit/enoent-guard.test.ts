@@ -112,7 +112,7 @@ test('EG-005: stdSettled guard exists in both error and close handlers', () => {
     // Verify it's checked in the close handler
     const closeIdx = spawnSrc.indexOf("child.on('close'");
     assert.ok(closeIdx > 0, 'close handler should exist');
-    const closeBlock = spawnSrc.slice(closeIdx, closeIdx + 200);
+    const closeBlock = spawnSrc.slice(closeIdx, closeIdx + 300);
     assert.ok(
         closeBlock.includes('if (stdSettled) return;'),
         'close handler should check stdSettled',

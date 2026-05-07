@@ -10,6 +10,7 @@ import { resolveSessionBucket } from './args.js';
 import { buildContinuationPrompt } from './smoke-detector.js';
 import { shouldInvalidateResumeSession } from './resume-classifier.js';
 import { classifyExitError } from './error-classifier.js';
+import { recordError, clearErrors } from './alert-escalation.js';
 import { clearLiveRun, getLiveRun } from './live-run-state.js';
 import { sanitizeToolLogForDurableStorage, serializeSanitizedToolLog } from '../shared/tool-log-sanitize.js';
 import { finalizeTraceRun, linkTraceRunToMessage } from '../trace/store.js';
@@ -44,6 +45,7 @@ export interface ExitContext {
     turns?: number | null;
     duration?: number | null;
     cliNativeCompactDetected?: boolean;
+    stallReason?: string;
 }
 
 export interface ExitHandlerParams {
@@ -250,6 +252,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         console.log(`[jaw:fallback] ${cli} recovered — clearing fallback state`);
         fallbackState.delete(cli);
     }
+    if (code === 0) clearErrors(cli);
 
     // ─── Output handling ───
     if (ctx.fullText.trim()) {
@@ -303,7 +306,8 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         }
     } else if (mainManaged && code !== 0 && !wasKilled) {
         // ─── Error handling ───
-        const { is429, message: errMsg } = classifyExitError(cli, code, ctx.stderrBuf);
+        const { is429, isStall, message: errMsg } = classifyExitError(cli, code, ctx.stderrBuf, ctx.stallReason);
+        recordError(cli, isStall ? 'stall' : is429 ? '429' : 'error');
 
         if (isResume && shouldInvalidateResumeSession(cli, code, ctx.stderrBuf, ctx.fullText)) {
             if (empSid && opts.agentId) {
@@ -311,11 +315,19 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                 console.log(`[jaw:session] invalidated stale employee resume — ${cli} agent=${opts.agentId}`);
             } else {
                 updateSession.run(cli, null, model, settings["permissions"], settings["workingDir"], effortVal);
-                // Also clear the per-bucket entry so the next turn doesn't pick the dead session_id again.
                 const bucket = resolveSessionBucket(cli, model);
                 if (bucket) clearSessionBucket.run(bucket);
                 console.log(`[jaw:session] invalidated stale resume — ${cli}/${bucket} session cleared`);
             }
+        }
+
+        // ─── Stall kills: do NOT retry — escalate immediately ───
+        if (isStall) {
+            broadcast('agent_done', { text: `❌ ${errMsg}`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
+            finalizeTraceRun(ctx.traceRunId, 'error', errMsg);
+            resolve({ text: '', code: 1 });
+            if (mainManaged && !opts.internal) processQueue();
+            return;
         }
 
         // ─── 429 delay retry (same engine, 1회만) ───
@@ -382,11 +394,13 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         traceStatus === 'error' ? classifyExitError(cli, resolvedCode ?? 1, ctx.stderrBuf).message : null,
     );
     if (mainManaged) clearLiveRun(liveScope);
-    broadcast('agent_status', {
-        status: (resolvedCode === 0 || resolvedCode === null) ? 'done' : 'error',
-        agentId: agentLabel,
-        ...empTag,
-    });
+    if (!opts.internal) {
+        broadcast('agent_status', {
+            status: (resolvedCode === 0 || resolvedCode === null) ? 'done' : 'error',
+            agentId: agentLabel,
+            ...empTag,
+        }, isEmployee ? 'internal' : 'public');
+    }
     if (agentLabel !== 'main' || code !== null) {
         console.log(`[jaw:${agentLabel}] exited code=${code}, text=${ctx.fullText.length} chars`);
     }
@@ -399,7 +413,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         tools: ctx.toolLog, smoke: smokeResult,
         diagnostic,
     });
-    if (mainManaged && !opts.internal) processQueue();
+    if (mainManaged) processQueue();
 }
 
 // ─── Post-flush reindex (3-C) ────────────────────────

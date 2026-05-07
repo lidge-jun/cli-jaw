@@ -79,6 +79,7 @@ import './src/discord/bot.js'; // side-effect: registers discord transport
 import { initActiveMessagingRuntime, shutdownMessagingRuntime, hydrateTargetsFromSettings } from './src/messaging/runtime.js';
 
 import { startHeartbeat, stopHeartbeat, watchHeartbeatFile } from './src/memory/heartbeat.js';
+import { initAlertDelivery } from './src/agent/alert-escalation.js';
 
 import {
     clearMainSessionState,
@@ -710,6 +711,8 @@ server.listen(PORT, bindHost, async () => {
     } catch (e: unknown) {
         console.error('[messaging:boot]', (e as Error).message);
     }
+
+    initAlertDelivery();
 
     // ─── Seed default employees if none exist ────────
     const seeded = seedDefaultEmployees();

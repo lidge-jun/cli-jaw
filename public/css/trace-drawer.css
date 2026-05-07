@@ -20,7 +20,7 @@
     display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border);
 }
 .trace-drawer-meta span, .process-step-trace {
-    border-radius: 6px; padding: 4px 7px; color: var(--text-muted); font: 600 var(--text-xs)/1.2 var(--font-mono);
+    align-self: start; border-radius: 6px; padding: 4px 7px; color: var(--text-muted); font: 600 var(--text-xs)/1.2 var(--font-mono); white-space: nowrap;
 }
 .trace-drawer-meta b { color: var(--text-dim); margin-right: 6px; }
 .trace-drawer-body { display: grid; grid-template-columns: minmax(260px, 0.42fr) minmax(0, 0.58fr); min-height: 0; }

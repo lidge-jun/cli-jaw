@@ -35,6 +35,19 @@ function syncLiveTools(ctx: SpawnContext): void {
     }
 }
 
+function emitAgentTool(
+    ctx: SpawnContext,
+    agentLabel: string | undefined,
+    tool: object,
+    empTag: Record<string, unknown>,
+): void {
+    broadcast(
+        'agent_tool',
+        { agentId: agentLabel, ...tool, ...empTag },
+        ctx.traceAudience === 'internal' ? 'internal' : 'public',
+    );
+}
+
 /** Flush Claude-specific stream buffers (thinking + input_json).
  *  Call on stream close to avoid data loss if content_block_stop never arrives. */
 export function flushClaudeBuffers(ctx: SpawnContext, agentLabel?: string, empTag: Record<string, unknown> = {}) {
@@ -49,7 +62,7 @@ export function flushClaudeBuffers(ctx: SpawnContext, agentLabel?: string, empTa
             };
             ctx.toolLog.push(tool);
             syncLiveTools(ctx);
-            broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
+            emitAgentTool(ctx, agentLabel, tool, empTag);
             pushTrace(ctx, `[${agentLabel || 'agent'}] 💭 ${merged.slice(0, 200)}`);
         }
         ctx.claudeThinkingBuf = '';
@@ -66,7 +79,7 @@ export function flushClaudeBuffers(ctx: SpawnContext, agentLabel?: string, empTa
                 if (existing) {
                     existing.detail = detail;
                     syncLiveTools(ctx);
-                    broadcast('agent_tool', { agentId: agentLabel, ...existing, ...empTag });
+                    emitAgentTool(ctx, agentLabel, existing, empTag);
                 }
             }
         } catch { /* partial JSON — best effort */ }
@@ -159,7 +172,7 @@ function emitGeminiThought(
     };
     ctx.toolLog.push(tool);
     syncLiveTools(ctx);
-    broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
+    emitAgentTool(ctx, agentLabel, tool, empTag);
 }
 
 function extractGeminiThoughtText(content: unknown): string {
@@ -233,7 +246,7 @@ function finalizeOpencodePendingTools(
         existing.status = failed ? 'error' : 'done';
         existing.icon = failed ? '❌' : '✅';
         syncLiveTools(ctx);
-        broadcast('agent_tool', { agentId: agentLabel, ...existing, ...empTag });
+        emitAgentTool(ctx, agentLabel, existing, empTag);
     }
 }
 
@@ -368,7 +381,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                     };
                     ctx.toolLog.push(tool);
                     syncLiveTools(ctx);
-                    broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
+                    emitAgentTool(ctx, agentLabel, tool, empTag);
                 }
                 ctx.claudeThinkingBuf = '';
             } else if (ctx.claudeThinkingBlockOpen && !ctx.claudeThinkingHadDelta) {
@@ -386,7 +399,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                 };
                 ctx.toolLog.push(tool);
                 syncLiveTools(ctx);
-                broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
+                emitAgentTool(ctx, agentLabel, tool, empTag);
                 pushTrace(ctx, `[${agentLabel || 'agent'}] 🔒 encrypted thinking (sig ${sigLen}B)`);
             }
             if (ctx.claudeThinkingBlockOpen) {
@@ -409,7 +422,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                             existing.detail = detail;
                             syncLiveTools(ctx);
                             // Re-broadcast with detail
-                            broadcast('agent_tool', { agentId: agentLabel, ...existing, ...empTag });
+                            emitAgentTool(ctx, agentLabel, existing, empTag);
                         }
                     }
                 } catch { /* partial JSON */ }
@@ -430,7 +443,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                 };
                 ctx.toolLog.push(tool);
                 syncLiveTools(ctx);
-                broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
+                emitAgentTool(ctx, agentLabel, tool, empTag);
             }
             ctx.claudeThinkingBuf = '';
         }
@@ -459,7 +472,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                     ctx.opencodePendingToolRefs = ctx.opencodePendingToolRefs.filter(ref => ref !== toolLabel.stepRef);
                 }
                 syncLiveTools(ctx);
-                broadcast('agent_tool', { agentId: agentLabel, ...toolLabel, ...empTag });
+                emitAgentTool(ctx, agentLabel, toolLabel, empTag);
                 continue;
             }
         }
@@ -470,7 +483,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
             if (!ctx.opencodePendingToolRefs.includes(toolLabel.stepRef)) ctx.opencodePendingToolRefs.push(toolLabel.stepRef);
         }
         syncLiveTools(ctx);
-        broadcast('agent_tool', { agentId: agentLabel, ...toolLabel, ...empTag });
+        emitAgentTool(ctx, agentLabel, toolLabel, empTag);
     }
 
     switch (cli) {
@@ -503,7 +516,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                 const tool = { icon: '⚠️', label: buildPreview(msg, 60), toolType: 'tool' as const, status: 'warning' };
                 ctx.toolLog.push(tool);
                 syncLiveTools(ctx);
-                broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
+                emitAgentTool(ctx, agentLabel, tool, empTag);
             // [P0-1.2] Parse user/tool_result feedback (stdout/stderr/is_error)
             } else if (event.type === 'user' && event.message?.content) {
                 for (const block of event.message.content) {
@@ -517,7 +530,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                             const resultText = extractText(block.content);
                             if (resultText) existing.detail = (existing.detail || '') + '\n' + resultText;
                             syncLiveTools(ctx);
-                            broadcast('agent_tool', { agentId: agentLabel, ...existing, ...empTag });
+                            emitAgentTool(ctx, agentLabel, existing, empTag);
                         }
                     }
                 }
@@ -553,7 +566,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                             if (ctx.seenToolKeys) ctx.seenToolKeys.add(key);
                             ctx.toolLog.push(tool);
                             syncLiveTools(ctx);
-                            broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
+                            emitAgentTool(ctx, agentLabel, tool, empTag);
                         }
                     }
                 }
@@ -574,7 +587,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                         ctx.seenToolKeys?.add(doneKey);
                         ctx.toolLog.push(doneTool);
                         syncLiveTools(ctx);
-                        broadcast('agent_tool', { agentId: agentLabel, ...doneTool, ...empTag });
+                        emitAgentTool(ctx, agentLabel, doneTool, empTag);
                     }
                 }
                 if (event.item?.type === 'collab_tool_call'
@@ -597,7 +610,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                         ctx.seenToolKeys?.add(key);
                         ctx.toolLog.push(tool);
                         syncLiveTools(ctx);
-                        broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
+                        emitAgentTool(ctx, agentLabel, tool, empTag);
                     }
                 }
                 if (event.item?.type === 'collab_tool_call'
@@ -629,7 +642,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                 };
                 ctx.toolLog.push(tool);
                 syncLiveTools(ctx);
-                broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
+                emitAgentTool(ctx, agentLabel, tool, empTag);
                 pushTrace(ctx, `[${agentLabel}] codex ${event.type}: ${msg.slice(0, 200)}`);
             }
             break;
@@ -726,7 +739,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                     };
                     ctx.toolLog.push(thinkingTool);
                     syncLiveTools(ctx);
-                    broadcast('agent_tool', { agentId: agentLabel, ...thinkingTool, ...empTag });
+                    emitAgentTool(ctx, agentLabel, thinkingTool, empTag);
                     ctx.opencodeStepThinkingToolEmitted = true;
                     pushTrace(ctx, `[${agentLabel}] opencode reasoning (${text.length} chars)`);
                 }
@@ -786,7 +799,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                     };
                     ctx.toolLog.push(thinkingTool);
                     syncLiveTools(ctx);
-                    broadcast('agent_tool', { agentId: agentLabel, ...thinkingTool, ...empTag });
+                    emitAgentTool(ctx, agentLabel, thinkingTool, empTag);
                     ctx.opencodeStepThinkingToolEmitted = true;
                     pushTrace(ctx, `[${agentLabel}] opencode pre-tool intermediate text (${suppressedText.length} chars)`);
                 }
@@ -805,7 +818,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                     };
                     ctx.toolLog.push(thinkingTool);
                     syncLiveTools(ctx);
-                    broadcast('agent_tool', { agentId: agentLabel, ...thinkingTool, ...empTag });
+                    emitAgentTool(ctx, agentLabel, thinkingTool, empTag);
                     ctx.opencodeStepThinkingToolEmitted = true;
                     pushTrace(ctx, `[${agentLabel}] opencode reasoning token fallback (${reasoningTokens} tokens)`);
                 }

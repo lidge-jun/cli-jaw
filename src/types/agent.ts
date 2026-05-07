@@ -70,6 +70,7 @@ export interface SpawnContext {
   claudeThinkingHadDelta?: boolean;
   claudeSignatureLen?: number;
   cliNativeCompactDetected?: boolean;
+  stallReason?: string;
 }
 
 export interface SpawnResult {

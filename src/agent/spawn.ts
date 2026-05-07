@@ -40,6 +40,7 @@ import {
     triggerMemoryFlush,
 } from './memory-flush-controller.js';
 import { applyCliEnvDefaults, buildSessionResumeKey, ensureOpencodeAlwaysAllowPermissions } from './spawn-env.js';
+import { attachWatchdog } from './watchdog.js';
 import {
     buildOpencodeRuntimeSnapshot,
     buildOpencodeSpawnAudit,
@@ -680,6 +681,7 @@ interface SpawnOpts {
     _isRetry?: boolean;      // 429 delay retry 중 여부
     _isSmokeContinuation?: boolean;  // Auto-retry after smoke response detected
     _skipInsert?: boolean;
+    _skipHistory?: boolean;
     forceNew?: boolean;
     agentId?: string;
     sysPrompt?: string;
@@ -716,7 +718,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     const { forceNew = false, agentId, sysPrompt: customSysPrompt, memorySnapshot } = opts;
     const origin = opts.origin || 'web';
     const empSid = opts.employeeSessionId || null;
-    const mainManaged = !forceNew && !empSid;
+    const mainManaged = !forceNew && !empSid && !opts.internal;
     const gateEligibleMain = mainManaged && !opts.agentId && !opts.internal && !opts._isFallback && !opts._isSmokeContinuation;
     const isEmployee = !mainManaged;
     const empTag = isEmployee ? { isEmployee: true } : {};
@@ -871,7 +873,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     }
 
     const resumeSessionId = empSid || (isResume ? bucketSessionId : null);
-    const historyBlock = !isResume ? buildHistoryBlock(prompt, settings["workingDir"]) : '';
+    const historyBlock = !isResume && !opts._skipHistory ? buildHistoryBlock(prompt, settings["workingDir"]) : '';
     const promptForArgs = (cli === 'gemini' || cli === 'opencode')
         ? withHistoryPrompt(prompt, historyBlock)
         : prompt;
@@ -885,6 +887,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     }
 
     const agentLabel = agentId || 'main';
+    const traceAudience: 'public' | 'internal' = (opts.internal || isEmployee) ? 'internal' : 'public';
+    const parentLiveScopeForChild = !opts.internal && isEmployee ? liveScope : null;
 
     // ─── Universal employee isolation ────────────────────
     // All CLIs auto-read AGENTS.md/CLAUDE.md/GEMINI.md from cwd.
@@ -1008,9 +1012,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         if (mainManaged && !opts.internal && !opts._skipInsert) {
             insertMessage.run('user', prompt, cli, model, settings["workingDir"] || null);
         }
-        broadcast('agent_status', { status: 'running', cli, agentId: agentLabel, ...empTag });
+        if (!opts.internal) broadcast('agent_status', { status: 'running', cli, agentId: agentLabel, ...empTag }, traceAudience);
 
-        const traceAudience = (opts.internal || isEmployee) ? 'internal' : 'public';
         const traceRunId = startTraceRun({ cli, model, workingDir: settings["workingDir"] || null, agentLabel, audience: traceAudience });
         const ctx: CopilotSpawnContext = {
             fullText: '', traceLog: [], toolLog: [], seenToolKeys: new Set<string>(),
@@ -1018,7 +1021,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             turns: null as number | null, duration: null as number | null, tokens: null, stderrBuf: '',
             thinkingBuf: '',
             liveScope: effectiveLiveScope,
-            parentLiveScope: isEmployee ? liveScope : null,
+            parentLiveScope: parentLiveScopeForChild,
             traceRunId,
             traceAudience,
         };
@@ -1036,7 +1039,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 ctx.toolLog.push(tool);
                 if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
                 if (ctx.parentLiveScope) appendLiveRunTool(ctx.parentLiveScope, { ...tool, isEmployee: true });
-                broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag });
+                broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag }, traceAudience);
             }
             ctx.thinkingBuf = '';
         }
@@ -1070,7 +1073,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                     ctx.toolLog.push(parsedTool);
                     if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
                     if (ctx.parentLiveScope) appendLiveRunTool(ctx.parentLiveScope, { ...parsedTool, isEmployee: true });
-                    broadcast('agent_tool', { agentId: agentLabel, ...parsedTool, ...empTag });
+                    broadcast('agent_tool', { agentId: agentLabel, ...parsedTool, ...empTag }, traceAudience);
                     // Reset heartbeat gate on actually visible broadcast (not 💭)
                     lastVisibleBroadcastTs = Date.now();
                     heartbeatSent = false;
@@ -1096,7 +1099,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 ctx.toolLog.push(parsed.tool);
                 if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
                 if (ctx.parentLiveScope) appendLiveRunTool(ctx.parentLiveScope, { ...parsed.tool, isEmployee: true });
-                broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool, ...empTag });
+                broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool, ...empTag }, traceAudience);
             }
         });
 
@@ -1111,7 +1114,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 ctx.toolLog.push(parsed.tool);
                 if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
                 if (ctx.parentLiveScope) appendLiveRunTool(ctx.parentLiveScope, { ...parsed.tool, isEmployee: true });
-                broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool, ...empTag });
+                broadcast('agent_tool', { agentId: agentLabel, ...parsed.tool, ...empTag }, traceAudience);
             }
         });
 
@@ -1133,7 +1136,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                     icon: '⏳',
                     label: 'working... (no visible progress)',
                     ...empTag,
-                });
+                }, traceAudience);
             }
         });
 
@@ -1174,7 +1177,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
 
                 // If loadSession failed (or not resuming), inject history into prompt
                 const needsHistoryFallback = isResume && !loadSessionOk;
-                const fallbackHistory = needsHistoryFallback ? buildHistoryBlock(prompt, settings["workingDir"]) : '';
+                const fallbackHistory = needsHistoryFallback && !opts._skipHistory ? buildHistoryBlock(prompt, settings["workingDir"]) : '';
                 const acpPrompt = needsHistoryFallback
                     ? withHistoryPrompt(prompt, fallbackHistory)
                     : (isResume ? prompt : withHistoryPrompt(prompt, historyBlock));
@@ -1329,9 +1332,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     }
     child.stdin.end();
 
-    broadcast('agent_status', { status: 'running', cli, agentId: agentLabel, ...empTag });
+    if (!opts.internal) broadcast('agent_status', { status: 'running', cli, agentId: agentLabel, ...empTag }, traceAudience);
 
-    const traceAudience = (opts.internal || isEmployee) ? 'internal' : 'public';
     const traceRunId = startTraceRun({ cli, model, workingDir: settings["workingDir"] || null, agentLabel, audience: traceAudience });
     const ctx: SpawnContext = {
         fullText: '',
@@ -1349,13 +1351,31 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         showReasoning: settings["showReasoning"] === true,
         outputTextStarted: false,
         liveScope: effectiveLiveScope,
-        parentLiveScope: isEmployee ? liveScope : null,
+        parentLiveScope: parentLiveScopeForChild,
         traceRunId,
         traceAudience,
         geminiResultSeen: false,
         ...(opencodeSpawnAudit ? { opencodeSpawnAudit: opencodeSpawnAudit as Record<string, unknown> } : {}),
     };
     let geminiWatchdog: ReturnType<typeof setTimeout> | null = null;
+
+    // ─── Subprocess stall watchdog (Phase 1: #178 OAuth2 stall recovery) ───
+    const agentTimeoutCfg = (settings as Record<string, any>)["agentTimeout"] || {};
+    const stallWatchdog = attachWatchdog(child, agentLabel, (reason) => {
+        console.log(`[jaw:watchdog] killing ${agentLabel} — ${reason}`);
+        ctx.stallReason = reason;
+        if (child.pid) {
+            killProcessTree(child.pid, 'SIGTERM');
+            setTimeout(() => {
+                try { killProcessTree(child.pid!, 'SIGKILL'); } catch { /* already dead */ }
+            }, 5_000);
+        }
+    }, {
+        firstProgressMs: agentTimeoutCfg.firstProgressMs,
+        idleMs: agentTimeoutCfg.idleMs,
+        absoluteMs: agentTimeoutCfg.absoluteMs,
+    });
+
     let buffer = '';
     const recordOpencodeEvent = (line: string, event: CliEventRecord) => {
         if (cli !== 'opencode') return;
@@ -1447,6 +1467,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
 
     child.on('close', (code) => {
         clearOpencodeIdleTimer();
+        stallWatchdog.stop();
         if (geminiWatchdog) { clearTimeout(geminiWatchdog); geminiWatchdog = null; }
         if (stdSettled) return;  // error handler already resolved
         // [I1] Flush residual NDJSON buffer — last event may lack trailing newline

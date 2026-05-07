@@ -1,0 +1,82 @@
+import type { ChildProcess } from 'child_process';
+
+const RETRY_LOOP_PATTERN = /(RESOURCE_EXHAUSTED|Too Many Requests|\bstatus[=: ]*429\b|MODEL_CAPACITY_EXHAUSTED|\bstatus[=: ]*503\b|UNAVAILABLE|OAuth2Client\.requestAsync|retryWithBackoff|GeminiChat\.streamWithRetries|Attempt \d+(?:\/\d+)? failed)/i;
+
+interface WatchdogConfig {
+    firstProgressMs: number;
+    idleMs: number;
+    absoluteMs: number;
+}
+
+const DEFAULTS: WatchdogConfig = {
+    firstProgressMs: 120_000,
+    idleMs: 90_000,
+    absoluteMs: 600_000,
+};
+
+export interface WatchdogHandle {
+    markProgress(): void;
+    stop(): void;
+}
+
+export function attachWatchdog(
+    child: ChildProcess,
+    label: string,
+    onStall: (reason: string) => void,
+    config?: Partial<WatchdogConfig>,
+): WatchdogHandle {
+    const cfg = { ...DEFAULTS, ...config };
+    const startedAt = Date.now();
+    let lastProgressAt = 0;
+    let retryHits = 0;
+    let stopped = false;
+
+    function markProgress(): void {
+        lastProgressAt = Date.now();
+        retryHits = 0;
+    }
+
+    function observe(chunk: Buffer): void {
+        const text = chunk.toString('utf8');
+        if (RETRY_LOOP_PATTERN.test(text)) {
+            retryHits++;
+        } else if (text.trim().length > 10) {
+            markProgress();
+        }
+    }
+
+    child.stdout?.on('data', observe);
+    child.stderr?.on('data', observe);
+
+    const timer = setInterval(() => {
+        if (stopped) return;
+        const now = Date.now();
+        const elapsed = now - startedAt;
+
+        const noFirstProgress = lastProgressAt === 0 && elapsed > cfg.firstProgressMs;
+        const idleWithRetries = retryHits >= 3 && lastProgressAt > 0
+            && (now - lastProgressAt) > cfg.idleMs;
+        const absoluteExpired = elapsed > cfg.absoluteMs;
+
+        if (noFirstProgress || idleWithRetries || absoluteExpired) {
+            stopped = true;
+            clearInterval(timer);
+
+            const reason = absoluteExpired
+                ? `absolute timeout ${Math.round(elapsed / 1000)}s`
+                : noFirstProgress
+                    ? `no first progress after ${Math.round(elapsed / 1000)}s`
+                    : `idle ${Math.round((now - lastProgressAt) / 1000)}s with ${retryHits} retry hits`;
+
+            onStall(reason);
+        }
+    }, 2_000);
+
+    return {
+        markProgress,
+        stop() {
+            stopped = true;
+            clearInterval(timer);
+        },
+    };
+}
