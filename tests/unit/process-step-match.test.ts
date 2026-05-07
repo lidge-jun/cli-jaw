@@ -64,6 +64,14 @@ test('legacy match returns the one when exactly one candidate', () => {
     assert.equal(match, running);
 });
 
+test('legacy match keeps employee origin separate', () => {
+    const boss = makeStep({ id: 'boss', label: 'read_file' });
+    const employee = makeStep({ id: 'emp', label: 'read_file', isEmployee: true });
+    const step = makeStep({ id: 'done', label: 'read_file', status: 'done', isEmployee: true });
+    const match = findLegacyRunningMatch([boss, employee], step);
+    assert.equal(match, employee);
+});
+
 test('legacy match returns null when multiple candidates', () => {
     const running1 = makeStep({ id: 'a', label: 'read_file' });
     const running2 = makeStep({ id: 'b', label: 'read_file' });

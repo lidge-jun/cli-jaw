@@ -4,7 +4,8 @@ export function findLegacyRunningMatch(steps: ProcessStep[], step: ProcessStep):
     const matches = steps.filter(s => s.status === 'running'
         && !s.stepRef
         && s.label === step.label
-        && s.type === step.type);
+        && s.type === step.type
+        && Boolean(s.isEmployee) === Boolean(step.isEmployee));
     return matches.length === 1 ? matches[0]! : null;
 }
 

@@ -66,7 +66,7 @@ interface WsMessage {
     detailBytes?: number;
     rawRetentionStatus?: string;
     text?: string;
-    toolLog?: { icon: string; label: string; detail?: string; toolType?: string; stepRef?: string; traceRunId?: string; traceSeq?: number; detailAvailable?: boolean; detailBytes?: number; rawRetentionStatus?: string }[];
+    toolLog?: { icon: string; label: string; detail?: string; toolType?: string; stepRef?: string; isEmployee?: boolean; traceRunId?: string; traceSeq?: number; detailAvailable?: boolean; detailBytes?: number; rawRetentionStatus?: string }[];
     from?: string;
     to?: string;
     source?: string;
@@ -377,7 +377,6 @@ export function connect(): void {
                 addSystemMsg(t('ws.roundRetry', { round: msg.round || 0 }));
             }
         } else if (msg.type === 'agent_tool') {
-            const empPrefix = msg.isEmployee ? '(E) ' : '';
             const stepType = msg.toolType === 'thinking' ? 'thinking'
                 : msg.toolType === 'search' ? 'search'
                     : msg.toolType === 'subagent' ? 'subagent' : 'tool';
@@ -386,7 +385,8 @@ export function connect(): void {
                 type: stepType,
                 icon: msg.icon || ICONS.tool,
                 rawIcon: msg.rawIcon || msg.icon || '',
-                label: empPrefix + (msg.label || ''),
+                label: msg.label || '',
+                isEmployee: msg.isEmployee === true,
                 detail: msg.detail || '',
                 stepRef: msg.stepRef || '',
                 traceRunId: msg.traceRunId || '',

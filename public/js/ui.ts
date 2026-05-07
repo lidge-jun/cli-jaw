@@ -82,6 +82,7 @@ function toProcessSteps(tools: ToolLogEntry[], runStartedAt?: number): ProcessSt
         icon: tool.icon ? emojiToIcon(tool.icon) : ICONS.tool,
         rawIcon: tool.rawIcon || tool.icon || '',
         label: fallbackToolLabel(tool),
+        isEmployee: tool.isEmployee === true,
         type: processStepType(tool.toolType),
         detail: tool.detail || '',
         stepRef: tool.stepRef || '',
@@ -170,6 +171,7 @@ function processStepFromDom(row: HTMLElement): ProcessStep | null {
         icon: storedMeta?.icon || icon,
         rawIcon: storedMeta?.rawIcon,
         label: storedMeta?.label || label,
+        isEmployee: storedMeta?.isEmployee === true || row.dataset['isEmployee'] === 'true',
         detail,
         detailPreview: storedMeta?.preview,
         detailLength: storedMeta?.detailLength,
@@ -205,6 +207,7 @@ function processStepToToolLog(step: ProcessStep, finalize = false): ToolLogEntry
         icon: step.rawIcon || step.icon || ICONS.tool,
         rawIcon: step.rawIcon || step.icon || '',
         label: step.label || 'tool',
+        isEmployee: step.isEmployee === true,
         detail,
         toolType: step.type,
         stepRef: step.stepRef || '',
@@ -225,6 +228,7 @@ function processStepFromMeta(stepId: string, finalize = false): ToolLogEntry | n
         icon: meta.rawIcon || meta.icon || ICONS.tool,
         rawIcon: meta.rawIcon || meta.icon || '',
         label: meta.label || 'tool',
+        isEmployee: meta.isEmployee === true,
         detail: getStoredProcessStepDetail(stepId) || meta.preview || '',
         toolType: meta.type,
         stepRef: meta.stepRef || '',
@@ -473,6 +477,7 @@ export function showProcessStep(step: ProcessStep): void {
                 .find(s => s.status === 'running'
                     && s.label === step.label
                     && s.type === step.type
+                    && Boolean(s.isEmployee) === Boolean(step.isEmployee)
                     && !s.detail);
             if (ghost) {
                 replaceStep(state.currentProcessBlock, ghost.id, step);

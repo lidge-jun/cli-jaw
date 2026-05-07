@@ -6,6 +6,7 @@ export interface ProcessStep {
     icon: string;
     rawIcon?: string | undefined;
     label: string;
+    isEmployee?: boolean | undefined;
     detail?: string;
     detailPreview?: string | undefined;
     detailLength?: number | undefined;
@@ -36,6 +37,7 @@ export interface StoredProcessStepMeta {
     icon: string;
     rawIcon?: string | undefined;
     label: string;
+    isEmployee?: boolean | undefined;
     stepRef?: string | undefined;
     traceRunId?: string | undefined; traceSeq?: number | undefined; detailAvailable?: boolean | undefined; detailBytes?: number | undefined; rawRetentionStatus?: string | undefined;
     status: ProcessStep['status'];
@@ -117,6 +119,7 @@ export function compactProcessStepForStorage(step: ProcessStep): ProcessStep {
         icon: step.icon,
         rawIcon: step.rawIcon,
         label: step.label,
+        isEmployee: step.isEmployee,
         stepRef: step.stepRef,
         traceRunId: step.traceRunId, traceSeq: step.traceSeq, detailAvailable: step.detailAvailable,
         detailBytes: step.detailBytes, rawRetentionStatus: step.rawRetentionStatus,
@@ -164,6 +167,7 @@ function updateStoredStepMeta(step: ProcessStep): void {
         icon: compact.icon,
         rawIcon: compact.rawIcon,
         label: compact.label,
+        isEmployee: compact.isEmployee,
         stepRef: compact.stepRef,
         traceRunId: compact.traceRunId, traceSeq: compact.traceSeq, detailAvailable: compact.detailAvailable,
         detailBytes: compact.detailBytes, rawRetentionStatus: compact.rawRetentionStatus,
@@ -204,6 +208,9 @@ function renderStep(step: ProcessStep): string {
     const badgeClass = `process-step-badge ${step.type}`;
     const badgeText = step.type.toUpperCase();
     const label = escapeHtml(step.label || step.icon || '');
+    const employeeMarker = step.isEmployee
+        ? '<span class="process-step-origin" aria-label="Employee tool">(E)</span>'
+        : '';
     const icon = renderTrustedIcon(step.icon);
     const detail = step.detailPreview || step.detail || '';
     const detailId = `process-detail-${step.id}`;
@@ -217,6 +224,7 @@ function renderStep(step: ProcessStep): string {
         data-step-id="${step.id}"
         data-type="${escapeHtml(step.type)}"
         data-status="${escapeHtml(step.status)}"
+        data-is-employee="${step.isEmployee ? 'true' : ''}"
         data-step-ref="${escapeHtml(step.stepRef || '')}"
         data-trace-run-id="${escapeHtml(step.traceRunId || '')}"
         data-trace-seq="${String(step.traceSeq || '')}"
@@ -226,6 +234,7 @@ function renderStep(step: ProcessStep): string {
             <span class="process-step-icon" aria-hidden="true">${icon}</span>
             <span class="${badgeClass}">${badgeText}</span>
             <span class="process-step-main">
+                ${employeeMarker}
                 <span class="process-step-label">${label}</span>
                 ${snippetHtml}
             </span>
