@@ -1,0 +1,200 @@
+.dashboard-reminders-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px 8px;
+    color: var(--ink-primary);
+}
+
+.dashboard-reminders-sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 8px 8px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.dashboard-reminders-sidebar-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink-muted);
+}
+
+.dashboard-reminders-refresh,
+.dashboard-reminders-sync-button {
+    border: 1px solid var(--border-subtle);
+    background: var(--surface-raised);
+    color: var(--ink-primary);
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.dashboard-reminders-refresh:disabled,
+.dashboard-reminders-sync-button:disabled {
+    cursor: default;
+    opacity: 0.6;
+}
+
+.dashboard-reminders-source {
+    margin: 0 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: var(--surface-raised);
+    color: var(--ink-muted);
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashboard-reminders-source[data-state="error"] {
+    color: #c75353;
+}
+
+.dashboard-reminders-sidebar-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.dashboard-reminders-sidebar-item {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--ink-primary);
+    border-radius: 6px;
+    padding: 7px 9px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 2px 8px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.dashboard-reminders-sidebar-item:hover {
+    background: color-mix(in srgb, var(--ink-primary) 6%, transparent);
+}
+
+.dashboard-reminders-sidebar-item.is-active {
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+
+.dashboard-reminders-sidebar-item span {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.dashboard-reminders-sidebar-item small {
+    color: var(--ink-muted);
+    font-size: 11px;
+}
+
+.dashboard-reminders-sidebar-item b {
+    grid-row: 1 / span 2;
+    align-self: center;
+    min-width: 24px;
+    text-align: center;
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    padding: 1px 6px;
+    font-size: 11px;
+}
+
+.dashboard-reminders-workspace {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    height: 100%;
+    overflow: auto;
+    padding: 16px 20px;
+    background: var(--surface-base);
+    color: var(--ink-primary);
+}
+
+.dashboard-reminders-workspace-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.dashboard-reminders-workspace-header h2 {
+    margin: 0 0 4px;
+    font-size: 18px;
+}
+
+.dashboard-reminders-status {
+    margin: 0;
+    color: var(--ink-secondary);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-reminders-status[data-state="error"] {
+    color: #c75353;
+}
+
+.dashboard-reminders-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 10px;
+}
+
+.dashboard-reminders-card,
+.dashboard-reminders-empty {
+    background: var(--surface-panel);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 10px;
+}
+
+.dashboard-reminders-card[data-priority="high"] {
+    border-color: color-mix(in srgb, #c75353 70%, var(--border-subtle));
+}
+
+.dashboard-reminders-card[data-status="focused"] {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent-soft);
+}
+
+.dashboard-reminders-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.dashboard-reminders-card-title {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-reminders-card-source,
+.dashboard-reminders-card-meta {
+    color: var(--ink-muted);
+    font-size: 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.dashboard-reminders-card-notes {
+    margin: 8px 0;
+    color: var(--ink-secondary);
+    font-size: 13px;
+    overflow-wrap: anywhere;
+}
+
+.dashboard-reminders-subtasks {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    color: var(--ink-secondary);
+    font-size: 12px;
+}

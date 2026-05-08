@@ -59,6 +59,18 @@ const NotesHelp = (
     </>
 );
 
+const RemindersHelp = (
+    <>
+        <p className="help-lead">Jaw Reminders 스냅샷을 대시보드에서 읽고 확인하는 미러 화면이에요.</p>
+        <ul className="help-bullets">
+            <li><strong>All / Focused / Scheduled / High / Done</strong> 보기로 현재 reminder 상태를 훑어볼 수 있어요.</li>
+            <li>Refresh는 외부 Jaw Reminders 스냅샷을 다시 읽어서 대시보드용 row로 반영해요.</li>
+            <li>원본 reminder 저장소가 없거나 형식이 맞지 않아도 대시보드는 기존 미러 데이터를 유지하고 상태 메시지만 보여줘요.</li>
+        </ul>
+        <p className="help-tip">💡 Reminders는 실험 기능이라 개발 모드 또는 실험 플래그가 켜진 빌드에서만 보여요.</p>
+    </>
+);
+
 const SettingsHelp = (
     <>
         <p className="help-lead">대시보드 외형과 동작 옵션을 조정하는 곳이에요.</p>
@@ -75,6 +87,7 @@ export const HELP_CONTENT: Record<DashboardSidebarMode, HelpEntry> = {
     instances: { title: 'Instances', subtitle: '인스턴스 운영', body: InstancesHelp },
     board: { title: 'Board', subtitle: 'Cross-instance Kanban', body: BoardHelp },
     schedule: { title: 'Schedule', subtitle: '시간 기반 작업', body: ScheduleHelp },
+    reminders: { title: 'Reminders', subtitle: 'Jaw Reminders mirror', body: RemindersHelp },
     notes: { title: 'Notes', subtitle: '마크다운 노트', body: NotesHelp },
     settings: { title: 'Settings', subtitle: '대시보드 설정', body: SettingsHelp },
 };

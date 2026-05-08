@@ -149,6 +149,12 @@ jaw serve        # → http://localhost:3457
 `~/.local/bin` を `~/.bashrc` と `~/.profile` の両方に登録します。新しい
 Ubuntu シェルでも `jaw` と同梱 CLI ツールを検出できます。
 
+WSL スクリプトは統合 Linux セットアップ用の経路です。`jaw --version` を検証し、
+同梱 CLI ツールを strict mode で要求し、OfficeCLI のインストール後に
+`officecli --version` も確認してから成功を報告します。Chromium または
+Windows Chrome fallback が見つからない場合は、browser/web-ai が完全に準備済み
+であるとは言わず警告します。
+
 <details>
 <summary>WSL トラブルシューティング</summary>
 
@@ -156,6 +162,7 @@ Ubuntu シェルでも `jaw` と同梱 CLI ツールを検出できます。
 |---|---|
 | `unzip: command not found` | インストーラーを再実行 |
 | `jaw: command not found` | `source ~/.bashrc` または `export PATH="$HOME/.local/bin:$PATH"` |
+| `officecli: command not found` | WSL インストーラーを再実行、または `bash "$(npm root -g)/cli-jaw/scripts/install-officecli.sh"` |
 | Permission errors | `sudo chown -R $USER $(npm config get prefix)` |
 
 </details>
@@ -166,6 +173,16 @@ Ubuntu シェルでも `jaw` と同梱 CLI ツールを検出できます。
 ```bash
 npm install -g cli-jaw
 jaw serve
+```
+
+通常の Linux `npm install -g cli-jaw` は互換性のため optional helper の導入を
+best-effort として扱います。統合セットアップの保証が必要な場合は WSL
+ワンクリックスクリプトを使い、通常 Linux では次を確認してください。
+
+```bash
+jaw --version
+officecli --version
+jaw doctor
 ```
 
 systemd 環境なら `jaw service install` でサービス登録まで完了します。

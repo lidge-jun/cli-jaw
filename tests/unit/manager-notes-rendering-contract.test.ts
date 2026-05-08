@@ -3,12 +3,41 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { isValidElement, type ReactElement, type ReactNode } from 'react';
+import { buildWikiLinkLookup, splitTextWithWikiLinks } from '../../public/manager/src/notes/wiki-link-rendering';
+import type { NotesNoteLinkRef } from '../../public/manager/src/notes/notes-types';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..');
 
 function read(path: string): string {
     return readFileSync(join(projectRoot, path), 'utf8');
+}
+
+type WikiElementProps = {
+    className?: string | undefined;
+    href?: string | undefined;
+    title?: string | undefined;
+    children?: ReactNode;
+    onClick?: ((event: { preventDefault: () => void }) => void) | undefined;
+};
+
+function noteLink(raw: string, target: string, overrides: Partial<NotesNoteLinkRef> = {}): NotesNoteLinkRef {
+    return {
+        sourcePath: 'source.md',
+        raw,
+        target,
+        line: 1,
+        column: 1,
+        startOffset: 0,
+        endOffset: raw.length,
+        status: 'missing',
+        ...overrides,
+    };
+}
+
+function assertWikiElement(node: ReactNode): asserts node is ReactElement<WikiElementProps> {
+    assert.ok(isValidElement<WikiElementProps>(node), 'wikilink segment must be a React element');
 }
 
 test('Notes rich markdown renderer files exist', () => {
@@ -28,8 +57,12 @@ test('MarkdownPreview delegates to the shared renderer', () => {
 
     assert.ok(preview.includes("import { MarkdownRenderer } from './rendering/MarkdownRenderer';"),
         'MarkdownPreview must import the shared renderer');
-    assert.ok(preview.includes('<MarkdownRenderer markdown={props.markdown} />'),
-        'MarkdownPreview must delegate markdown content rendering');
+    assert.ok(preview.includes('markdown={props.markdown}'),
+        'MarkdownPreview must pass markdown content to the shared renderer');
+    assert.ok(preview.includes('outgoing={props.outgoing}'),
+        'MarkdownPreview must pass vault-index wikilinks to the shared renderer');
+    assert.ok(preview.includes('onWikiLinkNavigate={props.onWikiLinkNavigate}'),
+        'MarkdownPreview must pass wikilink navigation to the shared renderer');
     assert.equal(preview.includes('ReactMarkdown'), false,
         'MarkdownPreview must not own a second ReactMarkdown pipeline');
 });
@@ -52,6 +85,45 @@ test('MarkdownRenderer wires math, sanitize, safe links, and block routing', () 
     assert.ok(renderer.includes("language === 'mermaid'"), 'Mermaid must be selected from language-mermaid fenced code');
     assert.ok(renderer.includes('<CodeBlock code={code} language={language} />'), 'code fences must route to CodeBlock');
     assert.ok(renderer.includes('<code className={className}>{children}</code>'), 'inline code must remain inline');
+    assert.ok(renderer.includes('buildWikiLinkLookup(props.outgoing)'), 'MarkdownRenderer must derive wikilink lookup from vault-index outgoing links');
+    assert.ok(renderer.includes('splitChildrenWithWikiLinks'), 'MarkdownRenderer must transform only supported text children for wikilinks');
+});
+
+test('wiki link text rendering follows vault-index resolution', () => {
+    const lookup = buildWikiLinkLookup([
+        noteLink('[[Target|Label]]', 'Target', { status: 'resolved', resolvedPath: 'notes/target.md', displayText: 'Label' }),
+        noteLink('[[Target#Heading]]', 'Target', { status: 'resolved', resolvedPath: 'notes/target.md', heading: 'Heading' }),
+        noteLink('[[Missing]]', 'Missing', { status: 'missing', reason: 'not_found' }),
+    ]);
+    const navigated: string[] = [];
+    const segments = splitTextWithWikiLinks(
+        'Open [[Target|Label]], [[Target#Heading]], and [[Missing]]',
+        lookup,
+        path => navigated.push(path),
+    );
+
+    assert.equal(segments.length, 6);
+
+    const resolved = segments[1];
+    assertWikiElement(resolved);
+    assert.equal(resolved.props.className, 'notes-wikilink');
+    assert.equal(resolved.props.href, '#notes%2Ftarget.md');
+    assert.equal(resolved.props.children, 'Label');
+
+    let prevented = false;
+    resolved.props.onClick?.({ preventDefault: () => { prevented = true; } });
+    assert.equal(prevented, true);
+    assert.deepEqual(navigated, ['notes/target.md']);
+
+    const heading = segments[3];
+    assertWikiElement(heading);
+    assert.equal(heading.props.children, 'Target#Heading');
+
+    const broken = segments[5];
+    assertWikiElement(broken);
+    assert.equal(broken.props.className, 'notes-wikilink is-broken');
+    assert.equal(broken.props.title, 'No matching note');
+    assert.equal(broken.props.children, 'Missing');
 });
 
 test('MermaidBlock uses component-owned strict Mermaid rendering without iframe', () => {

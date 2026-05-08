@@ -81,13 +81,19 @@ copilot login    # or: claude auth / codex login / gemini
 jaw serve        # → http://localhost:3457
 ```
 
+WSL 脚本是集成 Linux 安装路径：它会验证 `jaw --version`，以 strict mode
+请求同捆 CLI 工具，安装 OfficeCLI，并在成功前验证 `officecli --version`。
+如果没有检测到可运行的 Chromium 或 Windows Chrome fallback，安装器会给出警告，
+不会把 browser/web-ai 说成已经完全可用。
+
 <details>
 <summary>WSL 故障排查</summary>
 
 | 问题 | 解决办法 |
 |---|---|
 | `unzip: command not found` | 重新运行 installer |
-| `jaw: command not found` | `source ~/.bashrc` |
+| `jaw: command not found` | `source ~/.bashrc` 或 `export PATH="$HOME/.local/bin:$PATH"` |
+| `officecli: command not found` | 重新运行 WSL installer，或执行 `bash "$(npm root -g)/cli-jaw/scripts/install-officecli.sh"` |
 | Permission errors | `sudo chown -R $USER $(npm config get prefix)` |
 
 </details>
@@ -119,6 +125,15 @@ jaw serve        # → http://localhost:3457
 ```bash
 npm install -g cli-jaw
 jaw serve
+```
+
+普通 Linux 的 `npm install -g cli-jaw` 为了兼容性仍把 optional helper 安装视为
+best-effort。需要集成安装保证时请使用 WSL 一键脚本；普通 Linux 安装后请手动验证：
+
+```bash
+jaw --version
+officecli --version
+jaw doctor
 ```
 
 打开 **http://localhost:3457**。需要 Node.js 22+，并且至少完成下面一个 AI CLI 的认证。

@@ -1,5 +1,5 @@
-import { isValidElement } from 'react';
-import type { ComponentProps, ReactNode } from 'react';
+import { createElement, isValidElement, useMemo } from 'react';
+import type { ComponentProps, CSSProperties, ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeKatex from 'rehype-katex';
 import rehypeSanitize from 'rehype-sanitize';
@@ -14,12 +14,40 @@ import {
     notesImageSrc,
     safeMarkdownUrl,
 } from './markdown-render-security';
+import { buildWikiLinkLookup, splitChildrenWithWikiLinks, type WikiLinkContext } from '../wiki-link-rendering';
+import type { NotesNoteLinkRef } from '../notes-types';
 
 type MarkdownRendererProps = {
     markdown: string;
+    outgoing?: NotesNoteLinkRef[] | undefined;
+    onWikiLinkNavigate?: ((path: string) => void) | undefined;
 };
 
 type MarkdownAnchorProps = ComponentProps<'a'> & {
+    node?: unknown;
+};
+
+type WikiContainerTag =
+    | 'p'
+    | 'li'
+    | 'h1'
+    | 'h2'
+    | 'h3'
+    | 'h4'
+    | 'h5'
+    | 'h6'
+    | 'blockquote'
+    | 'td'
+    | 'th'
+    | 'em'
+    | 'strong'
+    | 'del';
+
+type WikiContainerProps = {
+    children?: ReactNode;
+    className?: string | undefined;
+    id?: string | undefined;
+    style?: CSSProperties | undefined;
     node?: unknown;
 };
 
@@ -37,7 +65,20 @@ function languageFromCodeNode(node: ReactNode): string {
     return match?.[1] ?? 'text';
 }
 
+const NOOP_NAVIGATE = (_path: string): void => {};
+
 export function MarkdownRenderer(props: MarkdownRendererProps) {
+    const wikiCtx = useMemo<WikiLinkContext>(() => ({
+        lookup: buildWikiLinkLookup(props.outgoing),
+        onNavigate: props.onWikiLinkNavigate ?? NOOP_NAVIGATE,
+    }), [props.outgoing, props.onWikiLinkNavigate]);
+
+    const wikiTransform = (tag: WikiContainerTag) => (containerProps: WikiContainerProps) => {
+        const { children, node: _node, className, id, style } = containerProps;
+        const transformed = splitChildrenWithWikiLinks(children, wikiCtx, tag);
+        return createElement(tag, { className, id, style }, transformed);
+    };
+
     return (
         <ReactMarkdown
             skipHtml
@@ -76,6 +117,20 @@ export function MarkdownRenderer(props: MarkdownRendererProps) {
                     if (!safeSrc) return null;
                     return <img {...imageProps} src={safeSrc} alt={alt ?? ''} loading="lazy" />;
                 },
+                p: wikiTransform('p'),
+                li: wikiTransform('li'),
+                h1: wikiTransform('h1'),
+                h2: wikiTransform('h2'),
+                h3: wikiTransform('h3'),
+                h4: wikiTransform('h4'),
+                h5: wikiTransform('h5'),
+                h6: wikiTransform('h6'),
+                blockquote: wikiTransform('blockquote'),
+                td: wikiTransform('td'),
+                th: wikiTransform('th'),
+                em: wikiTransform('em'),
+                strong: wikiTransform('strong'),
+                del: wikiTransform('del'),
             }}
         >
             {props.markdown}

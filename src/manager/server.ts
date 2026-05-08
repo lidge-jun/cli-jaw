@@ -33,6 +33,8 @@ import { createDashboardBoardRouter } from './board/routes.js';
 import { createDashboardScheduleRouter } from './schedule/routes.js';
 import { ScheduleStore } from './schedule/store.js';
 import { startScheduleRunner } from './schedule/runner.js';
+import { createDashboardRemindersRouter } from './reminders/routes.js';
+import { RemindersStore } from './reminders/store.js';
 import { openUrlInBrowser } from '../core/browser-open.js';
 import type {
     DashboardInstance,
@@ -148,6 +150,8 @@ app.use('/api/dashboard/electron-metrics', createElectronMetricsRouter());
 app.use('/api/dashboard/board', createDashboardBoardRouter());
 const scheduleStore = new ScheduleStore();
 app.use('/api/dashboard/schedule', createDashboardScheduleRouter({ store: scheduleStore }));
+const remindersStore = new RemindersStore();
+app.use('/api/dashboard/reminders', createDashboardRemindersRouter({ store: remindersStore }));
 
 app.get('/api/dashboard/health', (_req, res) => {
     res.json({

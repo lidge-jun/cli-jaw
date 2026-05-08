@@ -49,6 +49,7 @@ const OFFICECLI_SKIP = process.env["CLI_JAW_SKIP_OFFICECLI"] === '1'
     || process.env["CLI_JAW_SKIP_OFFICECLI"] === 'true';
 const OFFICECLI_FORCE = process.env["CLI_JAW_FORCE_OFFICECLI"] === '1'
     || process.env["CLI_JAW_FORCE_OFFICECLI"] === 'true';
+const OFFICECLI_REQUIRE = shouldRequireOfficeCliDuringPostinstall();
 
 // ─── Legacy migration ───
 // Moved into runPostinstall() to prevent side effects on dynamic import.
@@ -186,6 +187,10 @@ export type InstallOpts = {
 };
 
 export async function installOfficeCli(opts: InstallOpts = {}) {
+    if (OFFICECLI_REQUIRE && OFFICECLI_SKIP) {
+        throw new Error('OfficeCLI install required but CLI_JAW_SKIP_OFFICECLI is set');
+    }
+
     if (OFFICECLI_SKIP) {
         console.log('[jaw:init] ⏭️  officecli skipped (CLI_JAW_SKIP_OFFICECLI)');
         return;
@@ -204,6 +209,7 @@ export async function installOfficeCli(opts: InstallOpts = {}) {
         const ps = findBinaryPath('pwsh') || findBinaryPath('powershell');
         const scriptPath = path.join(PROJECT_ROOT, 'scripts', 'install-officecli.ps1');
         if (!ps || !fs.existsSync(scriptPath)) {
+            if (OFFICECLI_REQUIRE) throw new Error(`OfficeCLI install required but installer unavailable on win32: ${scriptPath}`);
             console.log('[jaw:init] ⚠️  officecli installer unavailable on win32 — skipped');
             return;
         }
@@ -221,6 +227,9 @@ export async function installOfficeCli(opts: InstallOpts = {}) {
             execFileSync(ps, args, { stdio: 'inherit', timeout: 180000, env: process.env });
         } catch (e: unknown) {
             const status = asRecord(e)["status"];
+            if (OFFICECLI_REQUIRE) {
+                throw new Error(`OfficeCLI install required but failed (exit ${fieldString(status, '?')})`);
+            }
             console.warn(`[jaw:init] ⚠️  officecli install failed (exit ${fieldString(status, '?')}); skipping — run manually: install-officecli.sh`);
         }
         return;
@@ -228,6 +237,7 @@ export async function installOfficeCli(opts: InstallOpts = {}) {
 
     const scriptPath = path.join(PROJECT_ROOT, 'scripts', 'install-officecli.sh');
     if (!fs.existsSync(scriptPath)) {
+        if (OFFICECLI_REQUIRE) throw new Error(`OfficeCLI install required but installer script not found: ${scriptPath}`);
         console.log('[jaw:init] ⚠️  officecli installer script not found — skipped');
         return;
     }
@@ -246,6 +256,9 @@ export async function installOfficeCli(opts: InstallOpts = {}) {
         });
     } catch (e: unknown) {
         const status = asRecord(e)["status"];
+        if (OFFICECLI_REQUIRE) {
+            throw new Error(`OfficeCLI install required but failed (exit ${fieldString(status, '?')})`);
+        }
         console.warn(`[jaw:init] ⚠️  officecli install failed (exit ${fieldString(status, '?')}); skipping — run manually: bash scripts/install-officecli.sh`);
     }
 }
@@ -266,6 +279,14 @@ function truthyEnv(value: string | undefined): boolean {
 
 export function shouldInstallCliToolsDuringPostinstall(env: NodeJS.ProcessEnv = process.env): boolean {
     return truthyEnv(env["CLI_JAW_INSTALL_CLI_TOOLS"]) || truthyEnv(env["npm_config_jaw_install_cli_tools"]);
+}
+
+export function shouldRequireOfficeCliDuringPostinstall(env: NodeJS.ProcessEnv = process.env): boolean {
+    return truthyEnv(env["CLI_JAW_REQUIRE_OFFICECLI"]) || truthyEnv(env["npm_config_jaw_require_officecli"]);
+}
+
+export function shouldRequireCliToolsDuringPostinstall(env: NodeJS.ProcessEnv = process.env): boolean {
+    return truthyEnv(env["CLI_JAW_REQUIRE_CLI_TOOLS"]) || truthyEnv(env["npm_config_jaw_require_cli_tools"]);
 }
 
 export function shouldDedupeCliTools(env: NodeJS.ProcessEnv = process.env): boolean {
@@ -408,6 +429,7 @@ function deduplicateCliTool(bin: string, pkg: string, brew?: string): void {
 
 export async function installCliTools(opts: InstallOpts = {}) {
     const defaultMgr = detectDefaultPkgMgr();
+    const failed: string[] = [];
 
     console.log('[jaw:init] installing CLI tools @latest...');
     for (const { bin, pkg, brew, forceMgr } of CLI_PACKAGES) {
@@ -433,14 +455,20 @@ export async function installCliTools(opts: InstallOpts = {}) {
                     execSync(`npm i -g ${pkg}@latest`, { stdio: 'pipe', timeout: 180000 });
                     console.log(`[jaw:init] ✅ ${bin} installed (via npm fallback)`);
                 } catch {
+                    failed.push(`${bin} (${pkg})`);
                     console.error(`[jaw:init] ⚠️  ${bin}: auto-install failed — install manually: npm i -g ${pkg}`);
                 }
             } else {
+                failed.push(`${bin} (${pkg})`);
                 console.error(`[jaw:init] ⚠️  ${bin}: auto-install failed — install manually: npm i -g ${pkg}`);
             }
         }
         // Clean up duplicate installations from other package managers
         deduplicateCliTool(bin, pkg, brew);
+    }
+
+    if (failed.length > 0 && shouldRequireCliToolsDuringPostinstall()) {
+        throw new Error(`Required CLI tool install failed: ${failed.join(', ')}`);
     }
 }
 

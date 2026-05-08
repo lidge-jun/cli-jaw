@@ -1,0 +1,123 @@
+.notes-frontmatter-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    align-items: center;
+    padding: 6px 10px;
+    margin: 4px 0 10px;
+    border: 1px solid var(--border-subtle, rgba(120, 120, 140, 0.18));
+    border-radius: 6px;
+    background: var(--surface-soft, rgba(120, 120, 140, 0.06));
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.notes-frontmatter-section {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.notes-frontmatter-label {
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0;
+    color: var(--text-muted, rgba(140, 140, 160, 0.9));
+}
+
+.notes-frontmatter-value {
+    color: var(--text-primary, inherit);
+}
+
+.notes-frontmatter-error {
+    display: inline-flex;
+    align-items: center;
+    color: var(--danger-fg, #c0392b);
+    background: var(--danger-bg, rgba(192, 57, 43, 0.12));
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+}
+
+.notes-frontmatter-tags {
+    gap: 4px;
+}
+
+.notes-tag-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border-subtle, rgba(120, 120, 140, 0.25));
+    background: var(--surface-elevated, transparent);
+    color: var(--accent-fg, #4458dc);
+    font-size: 11px;
+    cursor: pointer;
+    user-select: none;
+    line-height: 1.4;
+}
+
+.notes-tag-chip:hover {
+    background: var(--accent-bg, rgba(68, 88, 220, 0.12));
+}
+
+.notes-tag-chip.is-active {
+    background: var(--accent-fg, #4458dc);
+    color: var(--accent-on, #fff);
+    border-color: var(--accent-fg, #4458dc);
+}
+
+.notes-tag-filter-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    margin: 0 8px 6px;
+    border-radius: 4px;
+    background: var(--accent-bg, rgba(68, 88, 220, 0.12));
+    color: var(--accent-fg, #4458dc);
+    font-size: 11px;
+}
+
+.notes-tag-filter-banner-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+}
+
+.notes-tag-filter-banner-hint {
+    font-size: 10px;
+    color: var(--text-muted, rgba(140, 140, 160, 0.9));
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.notes-tag-filter-clear {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+    font-size: 11px;
+    text-decoration: underline;
+}
+
+.notes-wikilink {
+    color: var(--accent-fg, #4458dc);
+    cursor: pointer;
+    text-decoration: none;
+    border-bottom: 1px solid currentColor;
+}
+
+.notes-wikilink:hover {
+    text-decoration: underline;
+}
+
+.notes-wikilink.is-broken {
+    color: var(--danger-fg, #c0392b);
+    border-bottom: 1px dashed currentColor;
+    cursor: help;
+}

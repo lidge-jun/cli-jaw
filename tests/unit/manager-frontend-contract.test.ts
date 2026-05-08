@@ -62,6 +62,7 @@ test('manager command bar exposes polished dashboard brand', () => {
 
 test('manager frontend exposes one-instance preview controls', () => {
     const app = read('public/manager/src/App.tsx');
+    const router = read('public/manager/src/SidebarRailRouter.tsx');
     const workbench = read('public/manager/src/components/Workbench.tsx');
     const header = read('public/manager/src/components/WorkbenchHeader.tsx');
     const hook = read('public/manager/src/hooks/useDashboardView.ts');
@@ -76,7 +77,7 @@ test('manager frontend exposes one-instance preview controls', () => {
 
     assert.ok(hook.includes('selectedPort'), 'manager UI must track a selected preview instance');
     assert.ok(app.includes('handleSelectInstance'), 'manager UI must allow selecting any instance row');
-    assert.ok(app.includes('InstancePreview'), 'manager UI must render preview component');
+    assert.ok(router.includes('InstancePreview'), 'manager UI must render preview component');
     assert.ok(app.includes('refreshInstance'), 'manager UI must refresh one selected instance without a full page reload');
     assert.ok(app.includes('fetchInstanceStatus(port)'), 'selected refresh must use the single-instance status endpoint');
     assert.equal(workbench.includes('contentByMode'), false, 'workbench must not unmount preview through contentByMode switching');
@@ -87,13 +88,13 @@ test('manager frontend exposes one-instance preview controls', () => {
     assert.ok(header.includes('role="switch"'), 'workbench header must expose a compact preview on/off switch');
     assert.ok(header.includes('onPreviewRefresh'), 'workbench header must expose iframe preview refresh');
     assert.ok(app.includes('previewRefreshKey'), 'App must track a preview refresh key');
-    assert.ok(app.includes('function WorkspaceSurface'), 'App must wrap top-level workspaces in persistent surfaces');
-    assert.ok(app.includes('workspace-surface-stack'), 'App must keep the top-level workspace stack mounted across sidebar mode changes');
-    assert.ok(app.includes('workspace-surface-layer'), 'App must separate persistent workspace surfaces from lifecycle messages');
-    assert.ok(app.includes("<WorkspaceSurface active={view.sidebarMode === 'instances'}>"), 'Instances workbench must hide without unmounting across sidebar mode changes');
-    assert.ok(app.includes("<WorkspaceSurface active={view.sidebarMode === 'notes'}>"), 'Notes workspace must hide without unmounting across sidebar mode changes');
-    assert.ok(app.includes("<WorkspaceSurface active={view.sidebarMode === 'settings'}>"), 'Dashboard settings workspace must hide without unmounting across sidebar mode changes');
-    assert.ok(app.includes('hidden={!props.active}'), 'inactive persistent workspace surfaces must use hidden instead of conditional unmounting');
+    assert.ok(router.includes('function WorkspaceSurface'), 'SidebarRailRouter must wrap top-level workspaces in persistent surfaces');
+    assert.ok(router.includes('workspace-surface-stack'), 'SidebarRailRouter must keep the top-level workspace stack mounted across sidebar mode changes');
+    assert.ok(router.includes('workspace-surface-layer'), 'SidebarRailRouter must separate persistent workspace surfaces from lifecycle messages');
+    assert.ok(router.includes("<WorkspaceSurface active={props.sidebarMode === 'instances'}>"), 'Instances workbench must hide without unmounting across sidebar mode changes');
+    assert.ok(router.includes("<WorkspaceSurface active={props.sidebarMode === 'notes'}>"), 'Notes workspace must hide without unmounting across sidebar mode changes');
+    assert.ok(router.includes("<WorkspaceSurface active={props.sidebarMode === 'settings'}>"), 'Dashboard settings workspace must hide without unmounting across sidebar mode changes');
+    assert.ok(router.includes('hidden={!props.active}'), 'inactive persistent workspace surfaces must use hidden instead of conditional unmounting');
     assert.ok(app.includes('theme.resolved'), 'App must pass the concrete resolved dashboard theme to preview');
     assert.ok(app.includes('theme.syncFromRegistry'), 'App must hydrate registry theme through hook state');
     assert.ok(themeHook.includes('syncFromRegistry'), 'theme hook must expose registry sync that updates React state');
@@ -196,7 +197,7 @@ test('manager instance activity unread badges are row-scoped and registry-backed
         false,
         'new message events must not auto-clear sidebar unread badges while Preview is selected',
     );
-    assert.ok(app.includes('onToggleActivity={activityUnread.openAndMarkSeen}'), 'mobile Activity open path must mark events as seen');
+    assert.ok(app.includes('onToggleActivityFromMobile={activityUnread.openAndMarkSeen}'), 'mobile Activity open path must mark events as seen');
     assert.ok(types.includes('activitySeenAt: string | null'), 'frontend registry UI type must include activitySeenAt');
     assert.ok(types.includes('activitySeenByPort: Record<string, string>'), 'frontend registry UI type must include per-port seen state');
     assert.ok(groups.includes('activityUnreadByPort'), 'InstanceGroups must accept per-port unread counts');
@@ -223,12 +224,12 @@ test('manager instance activity unread badges are row-scoped and registry-backed
 });
 
 test('manager lifecycle message can be dismissed', () => {
-    const app = read('public/manager/src/App.tsx');
+    const router = read('public/manager/src/SidebarRailRouter.tsx');
     const components = read('public/manager/src/manager-components.css');
 
-    assert.ok(app.includes('className="state lifecycle-state"'), 'lifecycle message must keep its status banner styling');
-    assert.ok(app.includes('aria-label="Dismiss lifecycle message"'), 'lifecycle message must expose a dismiss button');
-    assert.ok(app.includes('onClick={() => setLifecycleMessage(null)}'), 'dismiss button must clear lifecycleMessage');
+    assert.ok(router.includes('className="state lifecycle-state"'), 'lifecycle message must keep its status banner styling');
+    assert.ok(router.includes('aria-label="Dismiss lifecycle message"'), 'lifecycle message must expose a dismiss button');
+    assert.ok(router.includes('onClick={props.onDismissLifecycleMessage}'), 'dismiss button must clear lifecycleMessage');
     assert.ok(components.includes('.state-dismiss'), 'dismiss button must have dedicated compact styling');
     assert.ok(components.includes('overflow-wrap: anywhere'), 'long lifecycle errors must wrap inside the banner');
 });
@@ -280,12 +281,13 @@ test('manager instance rows support custom labels and latest activity titles', (
 
 test('manager workbench modes remain instance-only while Notes renders outside Workbench', () => {
     const app = read('public/manager/src/App.tsx');
+    const router = read('public/manager/src/SidebarRailRouter.tsx');
     const workbench = read('public/manager/src/components/Workbench.tsx');
 
-    assert.ok(app.includes('NotesWorkspace'), 'App must render the Notes workspace');
-    assert.ok(app.includes('DashboardSettingsWorkspace'), 'App must render Dashboard settings outside Workbench');
-    assert.ok(app.includes("view.sidebarMode === 'notes'"), 'Notes must be selected by workspace mode, not a Workbench tab');
-    assert.ok(app.includes("view.sidebarMode === 'settings'"), 'Dashboard settings must be selected by workspace mode, not a Workbench tab');
+    assert.ok(router.includes('NotesWorkspace'), 'SidebarRailRouter must render the Notes workspace');
+    assert.ok(router.includes('DashboardSettingsWorkspace'), 'SidebarRailRouter must render Dashboard settings outside Workbench');
+    assert.ok(router.includes("props.sidebarMode === 'notes'"), 'Notes must be selected by workspace mode, not a Workbench tab');
+    assert.ok(router.includes("props.sidebarMode === 'settings'"), 'Dashboard settings must be selected by workspace mode, not a Workbench tab');
     assert.ok(workbench.includes("const MODES: DashboardDetailTab[] = ['overview', 'preview', 'logs', 'settings']"), 'Workbench tabs must stay Overview/Preview/Logs/Settings only');
     assert.equal(workbench.includes("'notes'"), false, 'Workbench must not add Notes as a detail tab');
     assert.ok(app.includes('notesSelectedPath'), 'App must hydrate and persist selected note path');
@@ -432,13 +434,14 @@ test('manager profile rows keep Active/Running grouping while merging profile la
 
 test('manager frontend routes layout through responsive shell components', () => {
     const app = read('public/manager/src/App.tsx');
+    const router = read('public/manager/src/SidebarRailRouter.tsx');
     const detail = read('public/manager/src/components/InstanceDetailPanel.tsx');
     const workbench = read('public/manager/src/components/Workbench.tsx');
 
     assert.ok(app.includes('ManagerShell'), 'App must use ManagerShell after 10.5.2 extraction');
     assert.ok(app.includes('CommandBar'), 'App must render CommandBar');
     assert.ok(app.includes('InstanceListContent'), 'App must render grouped instance list through extracted content');
-    assert.ok(app.includes('ActivityDock'), 'App must render ActivityDock');
+    assert.ok(router.includes('ActivityDock'), 'SidebarRailRouter must render ActivityDock');
     assert.ok(workbench.includes("'overview'"), 'workbench must expose Overview tab');
     assert.ok(workbench.includes("'preview'"), 'workbench must expose Preview tab');
     assert.ok(workbench.includes("'logs'"), 'workbench must expose Logs tab');

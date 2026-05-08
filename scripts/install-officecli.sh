@@ -141,7 +141,7 @@ fi
 
 # ── Verify checksum when available ──
 if command -v shasum &>/dev/null || command -v sha256sum &>/dev/null; then
-  EXPECTED=$(curl -fsSL "$CHECKSUM_URL" 2>/dev/null | grep "$ASSET" | awk '{print $1}')
+  EXPECTED=$(curl -fsSL "$CHECKSUM_URL" 2>/dev/null | grep "$ASSET" | awk '{print $1}' || true)
   if [ -n "$EXPECTED" ]; then
     if command -v shasum &>/dev/null; then
       ACTUAL=$(shasum -a 256 "$DOWNLOAD_BIN" | awk '{print $1}')
@@ -153,6 +153,8 @@ if command -v shasum &>/dev/null || command -v sha256sum &>/dev/null; then
     else
       fail "Checksum mismatch (expected: ${EXPECTED:0:12}…, got: ${ACTUAL:0:12}…)"
     fi
+  else
+    warn "Checksum unavailable for ${ASSET}; continuing without checksum verification"
   fi
 fi
 

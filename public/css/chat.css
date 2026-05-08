@@ -404,26 +404,68 @@
 .msg-error .msg-content a { color: var(--error); }
 .msg-error .msg-content code { border-color: var(--error); }
 
-/* ── Message Copy Button ── */
-.msg-copy {
+/* ── Message Actions ── */
+.msg-actions {
     position: absolute;
     bottom: var(--space-2);
-    width: 12px;
-    height: 12px;
-    border: 1.5px solid var(--text-dim);
-    border-radius: 2px;
-    background: none;
-    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
     opacity: 0;
-    transition: opacity var(--duration-fast), transform 0.1s, background var(--duration-fast);
-    padding: 0;
+    transition: opacity var(--duration-fast);
 }
 
-.msg:hover .msg-copy { opacity: 0.7; }
-.msg-copy:hover { opacity: 1; color: var(--text); transform: scale(1.5); }
+.msg-agent .msg-actions { right: 0; }
+.msg-user .msg-actions { left: var(--space-2); }
+.msg:hover .msg-actions,
+.msg-actions:focus-within { opacity: 0.85; }
 
-.msg-agent .msg-copy { right: 0; bottom: var(--space-2); left: auto; top: auto; }
-.msg-user .msg-copy { left: var(--space-2); }
+.msg-copy,
+.msg-pin-reminder {
+    position: relative;
+    width: 12px;
+    height: 12px;
+    padding: 0;
+    background: none;
+    cursor: pointer;
+    opacity: 0.9;
+    transition: transform 0.1s, background var(--duration-fast), border-color var(--duration-fast);
+}
+
+.msg-copy {
+    border: 1.5px solid var(--text-dim);
+    border-radius: 2px;
+}
+
+.msg-pin-reminder {
+    border: 0;
+    color: var(--text-dim);
+}
+
+.msg-pin-reminder::before {
+    content: '';
+    position: absolute;
+    left: 3px;
+    top: 1px;
+    width: 6px;
+    height: 8px;
+    border: 1.5px solid currentColor;
+    border-bottom: 0;
+    transform: skewX(-8deg);
+}
+
+.msg-pin-reminder::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 8px;
+    width: 1.5px;
+    height: 4px;
+    background: currentColor;
+}
+
+.msg-copy:hover,
+.msg-pin-reminder:hover { color: var(--text); transform: scale(1.35); }
 
 .msg-copy:active {
     transform: scale(0.75);
@@ -441,6 +483,15 @@
     text-align: center;
     width: auto;
     min-width: 12px;
+}
+
+.msg-pin-reminder.is-pinning {
+    opacity: 1;
+    color: var(--accent);
+}
+
+.msg-pin-reminder.is-pinned {
+    color: var(--success);
 }
 
 /* ── Streaming Cursor ── */

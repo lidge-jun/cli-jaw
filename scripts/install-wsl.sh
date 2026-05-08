@@ -172,19 +172,15 @@ configure_npm_prefix() {
 }
 
 verify_jaw_command() {
+  local jaw_bin="$NPM_PREFIX/bin/jaw"
+  export PATH="$NPM_PREFIX/bin:$PATH"
   hash -r 2>/dev/null || true
-  if command -v jaw &>/dev/null; then
-    return 0
-  fi
-
-  if [ -x "$NPM_PREFIX/bin/jaw" ]; then
-    export PATH="$NPM_PREFIX/bin:$PATH"
-    hash -r 2>/dev/null || true
-  fi
 
   if ! command -v jaw &>/dev/null; then
-    fail "cli-jaw installed, but 'jaw' is not on PATH. Run: export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fail "cli-jaw installed, but 'jaw' is not on PATH. Expected $jaw_bin"
   fi
+
+  jaw --version >/dev/null 2>&1 || fail "jaw is on PATH but failed to run"
 }
 
 verify_officecli_command() {
@@ -214,14 +210,22 @@ install_jaw() {
   if command -v jaw &>/dev/null; then
     ok "cli-jaw already installed ($(jaw --version 2>/dev/null || echo 'unknown version'))"
     info "Updating to latest..."
-    CLI_JAW_INSTALL_CLI_TOOLS=1 npm install -g cli-jaw@latest
+    CLI_JAW_INSTALL_CLI_TOOLS=1 \
+      CLI_JAW_REQUIRE_CLI_TOOLS=1 \
+      CLI_JAW_REQUIRE_OFFICECLI=1 \
+      npm install -g cli-jaw@latest
   else
     info "Installing cli-jaw globally..."
-    CLI_JAW_INSTALL_CLI_TOOLS=1 npm install -g cli-jaw
+    CLI_JAW_INSTALL_CLI_TOOLS=1 \
+      CLI_JAW_REQUIRE_CLI_TOOLS=1 \
+      CLI_JAW_REQUIRE_OFFICECLI=1 \
+      npm install -g cli-jaw
   fi
 
   verify_jaw_command
-  ok "cli-jaw installed: $(jaw --version 2>/dev/null || echo 'done')"
+  local jaw_version
+  jaw_version="$(jaw --version)"
+  ok "cli-jaw installed: $jaw_version"
 }
 
 # ═══════════════════════════════════════
@@ -240,6 +244,33 @@ install_browser_deps() {
   else
     warn "Skipping Chromium apt install (sudo unavailable)"
   fi
+
+  verify_browser_readiness
+}
+
+verify_browser_readiness() {
+  if command -v chromium-browser &>/dev/null && chromium-browser --version >/dev/null 2>&1; then
+    ok "Chromium ready: $(chromium-browser --version)"
+    return 0
+  fi
+
+  if command -v chromium &>/dev/null && chromium --version >/dev/null 2>&1; then
+    ok "Chromium ready: $(chromium --version)"
+    return 0
+  fi
+
+  local win_chrome_paths=(
+    "/mnt/c/Program Files/Google/Chrome/Application/chrome.exe"
+    "/mnt/c/Program Files (x86)/Google/Chrome/Application/chrome.exe"
+  )
+  for chrome_path in "${win_chrome_paths[@]}"; do
+    if [ -f "$chrome_path" ]; then
+      ok "Windows Chrome fallback detected: $chrome_path"
+      return 0
+    fi
+  done
+
+  warn "No runnable Chromium or Windows Chrome fallback detected — browser/web-ai features may need manual Chrome setup"
 }
 
 install_officecli() {
@@ -312,4 +343,6 @@ main() {
   echo ""
 }
 
-main "$@"
+if [ "${CLI_JAW_SOURCE_ONLY:-}" != "1" ]; then
+  main "$@"
+fi

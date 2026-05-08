@@ -135,6 +135,12 @@ jaw serve        # -> http://localhost:3457
 `~/.local/bin`을 `~/.bashrc`와 `~/.profile`에 모두 등록합니다. 그래서 새
 Ubuntu 셸에서도 `jaw`와 함께 설치된 CLI 도구들을 바로 찾을 수 있습니다.
 
+WSL 스크립트는 통합 Linux 설치 경로입니다. `jaw --version`을 검증하고,
+bundled CLI 도구를 strict mode로 요청하며, OfficeCLI 설치 후
+`officecli --version`까지 확인한 뒤 성공을 보고합니다. Chromium 또는 Windows
+Chrome fallback을 찾지 못하면 browser/web-ai가 완전히 준비됐다고 말하지 않고
+경고를 출력합니다.
+
 <details>
 <summary>WSL 문제 해결</summary>
 
@@ -142,6 +148,7 @@ Ubuntu 셸에서도 `jaw`와 함께 설치된 CLI 도구들을 바로 찾을 수
 |---|---|
 | `unzip: command not found` | 설치 스크립트를 다시 실행합니다 |
 | `jaw: command not found` | `source ~/.bashrc` 또는 `export PATH="$HOME/.local/bin:$PATH"` 실행 |
+| `officecli: command not found` | WSL 설치 스크립트를 다시 실행하거나 `bash "$(npm root -g)/cli-jaw/scripts/install-officecli.sh"` 실행 |
 | Permission 에러 | `sudo chown -R $USER $(npm config get prefix)` |
 
 </details>
@@ -159,6 +166,16 @@ nvm install 22
 # CLI-JAW 설치
 npm install -g cli-jaw
 jaw serve
+```
+
+일반 Linux의 `npm install -g cli-jaw`는 호환성을 위해 optional helper 설치를
+best-effort로 유지합니다. 통합 설치 보장이 필요하면 WSL 원클릭 스크립트를 쓰고,
+일반 Linux에서는 아래 명령으로 직접 확인하세요.
+
+```bash
+jaw --version
+officecli --version
+jaw doctor
 ```
 
 </details>

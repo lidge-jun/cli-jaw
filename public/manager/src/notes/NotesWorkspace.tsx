@@ -2,23 +2,26 @@ import { useEffect, useRef, useState } from 'react';
 import { MarkdownEditor } from './MarkdownEditor';
 import { MarkdownPreview } from './MarkdownPreview';
 import { NotesEmptyState } from './NotesEmptyState';
+import { NotesFrontmatterStrip } from './NotesFrontmatterStrip';
 import { NotesQuickSwitcher } from './NotesQuickSwitcher';
 import { NotesToolbar } from './NotesToolbar';
 import { renameNotePath } from './notes-api';
 import { useNoteDocument } from './useNoteDocument';
 import { publishInvalidation } from '../sync/invalidation-bus';
-import type { NotesAuthoringMode, NotesVaultIndexSnapshot, NotesViewMode } from './notes-types';
+import type { NotesAuthoringMode, NotesNoteMetadata, NotesVaultIndexSnapshot, NotesViewMode } from './notes-types';
 
 type NotesPrimaryMode = 'raw' | 'preview' | 'wysiwyg';
 
 type NotesWorkspaceProps = {
     active: boolean;
     selectedPath: string | null;
+    selectedNote: NotesNoteMetadata | null;
     vaultIndex: NotesVaultIndexSnapshot | null;
     viewMode: NotesViewMode;
     authoringMode: NotesAuthoringMode;
     wordWrap: boolean;
     treeWidth: number;
+    tagFilter: string | null;
     onOpenSidebarSearch: () => void;
     onSelectedPathChange: (path: string | null) => void;
     onDirtyPathChange: (path: string | null) => void;
@@ -26,6 +29,8 @@ type NotesWorkspaceProps = {
     onAuthoringModeChange: (mode: NotesAuthoringMode) => void;
     onWordWrapChange: (value: boolean) => void;
     onTreeWidthChange: (value: number) => void;
+    onTagSelect: (tag: string | null) => void;
+    onWikiLinkNavigate: (path: string) => void;
 };
 
 const PRIMARY_MODE_CYCLE: NotesPrimaryMode[] = ['raw', 'preview', 'wysiwyg'];
@@ -202,10 +207,21 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
                                 spellCheck={false}
                                 aria-label="Note title"
                             />
+                            <NotesFrontmatterStrip
+                                note={props.selectedNote}
+                                activeTag={props.tagFilter}
+                                onTagClick={props.onTagSelect}
+                            />
                             {showEditor && <div className="notes-editor-pane">
                                 <MarkdownEditor key={props.selectedPath} active={props.active && showEditor} authoringMode={props.authoringMode} content={document.content} notePath={props.selectedPath} wordWrap={props.wordWrap} onChange={document.setContent} />
                             </div>}
-                            {showPreview && <MarkdownPreview markdown={document.content} />}
+                            {showPreview && (
+                                <MarkdownPreview
+                                    markdown={document.content}
+                                    outgoing={(props.selectedPath && props.vaultIndex?.outgoingLinks?.[props.selectedPath]) || []}
+                                    onWikiLinkNavigate={props.onWikiLinkNavigate}
+                                />
+                            )}
                         </div>
                     )}
                 </div>

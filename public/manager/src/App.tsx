@@ -1,42 +1,30 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { fetchInstances, fetchInstanceStatus, runLifecycleAction } from './api';
 import { pollUntilSettled } from './lifecycle-poll';
-import { ActivityDock } from './components/ActivityDock';
 import { CommandBar } from './components/CommandBar';
 import { CommandPalette } from './components/CommandPalette';
 import { InstanceDetailPanel } from './components/InstanceDetailPanel';
-import { InstanceDrawer } from './components/InstanceDrawer';
 import { InstanceListContent } from './components/InstanceListContent';
-import { InstanceNavigator } from './components/InstanceNavigator';
 import { ManagerShell } from './components/ManagerShell';
-import { MobileNav } from './components/MobileNav';
 import { ProfileChip } from './components/ProfileChip';
-import { SidebarRail } from './components/SidebarRail';
 import { HelpDrawer } from './help/HelpDrawer';
-import { Workbench } from './components/Workbench';
 import { WorkbenchHeader } from './components/WorkbenchHeader';
-import { WorkspaceLayout } from './components/WorkspaceLayout';
-import { InstancePreview } from './InstancePreview';
+import { SidebarRailRouter } from './SidebarRailRouter';
 import { ElectronMetricsPanel } from './electron-metrics';
 import { loadPreviewEnabled, savePreviewEnabled } from './lib/preview-prefs';
 import { useHiddenUnload } from './lib/use-hidden-unload';
-import { DashboardSettingsSidebar, type DashboardSettingsSection } from './dashboard-settings/DashboardSettingsSidebar';
-import { DashboardSettingsWorkspace } from './dashboard-settings/DashboardSettingsWorkspace';
+import { type DashboardSettingsSection } from './dashboard-settings/DashboardSettingsSidebar';
 import { summarizeActivityTitleSupport } from './dashboard-settings/activity-title-support';
 import { dashboardSettingsUiFromView } from './dashboard-settings/dashboard-settings-ui';
-import { NotesSidebar, type NotesSidebarMode } from './notes/NotesSidebar';
-import { NotesWorkspace } from './notes/NotesWorkspace';
+import { type NotesSidebarMode } from './notes/NotesSidebar';
 import { useNotesModel } from './notes/useNotesModel';
 import { publishInvalidation } from './sync/invalidation-bus';
 import { useInvalidationSubscription } from './sync/useInvalidationSubscription';
 import { IframeBridge } from './sync/IframeBridge';
 import { VisibilityBridge } from './sync/VisibilityBridge';
-import { DashboardBoardSidebar } from './dashboard-board/DashboardBoardSidebar';
-import { DashboardBoardWorkspace } from './dashboard-board/DashboardBoardWorkspace';
 import type { BoardView } from './dashboard-board/board-view';
-import { DashboardScheduleSidebar, type ScheduleGroup } from './dashboard-schedule/DashboardScheduleSidebar';
-import { DashboardScheduleWorkspace } from './dashboard-schedule/DashboardScheduleWorkspace';
-import { SCHEDULE_WORKSPACE_ENABLED, normalizeSidebarModeForBuild } from './dashboard-features';
+import { type ScheduleGroup } from './dashboard-schedule/DashboardScheduleSidebar';
+import { REMINDERS_WORKSPACE_ENABLED, SCHEDULE_WORKSPACE_ENABLED, normalizeSidebarModeForBuild } from './dashboard-features';
 import { useDashboardRegistry } from './hooks/useDashboardRegistry';
 import { useDashboardView } from './hooks/useDashboardView';
 import { useActivityUnread } from './hooks/useActivityUnread';
@@ -47,26 +35,7 @@ import { useInstanceMessageEvents } from './hooks/useInstanceMessageEvents';
 import { useManagerEvents } from './hooks/useManagerEvents';
 import { formatUptime, instanceLabel } from './instance-label';
 import { reconcileActiveProfileFilter } from './profile-filter';
-import type {
-    DashboardDetailTab,
-    DashboardInstance,
-    DashboardInstanceStatus,
-    DashboardLifecycleAction,
-    DashboardNotesAuthoringMode,
-    DashboardNotesViewMode,
-    DashboardProfile,
-    DashboardScanResult,
-    DashboardSidebarMode,
-} from './types';
-
-type WorkspaceSurfaceProps = {
-    active: boolean;
-    children: ReactNode;
-};
-
-function WorkspaceSurface(props: WorkspaceSurfaceProps) {
-    return <section className={`workspace-surface${props.active ? ' is-active' : ''}`} hidden={!props.active} aria-hidden={!props.active}>{props.children}</section>;
-}
+import type { DashboardDetailTab, DashboardInstance, DashboardInstanceStatus, DashboardLifecycleAction, DashboardNotesAuthoringMode, DashboardNotesViewMode, DashboardProfile, DashboardScanResult, DashboardSidebarMode } from './types';
 
 export function App() {
     const [data, setData] = useState<DashboardScanResult | null>(null);
@@ -370,6 +339,10 @@ export function App() {
         onSelectedPathChange: handleNotesSelectedPathChange,
     });
 
+    const notesSelectedNote = view.notesSelectedPath
+        ? notesModel.index?.notes.find(n => n.path === view.notesSelectedPath) ?? null
+        : null;
+
     function handleDashboardSettingsPatch(ui: NonNullable<Parameters<typeof saveUi>[0]>): void {
         if (ui.showLatestActivityTitles !== undefined) view.setShowLatestActivityTitles(ui.showLatestActivityTitles);
         if (ui.showInlineLabelEditor !== undefined) view.setShowInlineLabelEditor(ui.showInlineLabelEditor);
@@ -427,32 +400,16 @@ export function App() {
     }
 
     const instanceListContent = (
-        <InstanceListContent
-            error={error}
-            loading={loading}
-            instances={instances}
-            filtered={filtered}
-            selectedInstance={selectedInstance}
-            data={data}
-            lifecycleBusyPort={lifecycleBusyPort}
-            transitioningPort={transitioningPort}
-            transitionAction={transitionAction}
-            activityUnreadByPort={activityUnread.unreadByPort}
-            latestTitleByPort={messageActivity.titlesByPort}
-            busyPorts={messageActivity.busyPorts}
-            showLatestActivityTitles={view.showLatestActivityTitles}
-            showInlineLabelEditor={view.showInlineLabelEditor}
-            showSidebarRuntimeLine={view.showSidebarRuntimeLine}
-            showSelectedRowActions={view.showSelectedRowActions}
-            profiles={profiles}
-            getLabel={instanceLabel}
-            formatUptime={formatUptime}
-            onSelect={handleSelectInstance}
-            onPreview={handlePreview}
-            onMarkActivitySeen={activityUnread.markPortSeen}
-            onInstanceLabelSave={labelEditor.saveInstanceLabel}
-            onLifecycle={(action, instance) => void handleLifecycle(action, instance)}
-        />
+        <InstanceListContent error={error} loading={loading} instances={instances} filtered={filtered}
+            selectedInstance={selectedInstance} data={data} lifecycleBusyPort={lifecycleBusyPort}
+            transitioningPort={transitioningPort} transitionAction={transitionAction}
+            activityUnreadByPort={activityUnread.unreadByPort} latestTitleByPort={messageActivity.titlesByPort}
+            busyPorts={messageActivity.busyPorts} showLatestActivityTitles={view.showLatestActivityTitles}
+            showInlineLabelEditor={view.showInlineLabelEditor} showSidebarRuntimeLine={view.showSidebarRuntimeLine}
+            showSelectedRowActions={view.showSelectedRowActions} profiles={profiles} getLabel={instanceLabel}
+            formatUptime={formatUptime} onSelect={handleSelectInstance} onPreview={handlePreview}
+            onMarkActivitySeen={activityUnread.markPortSeen} onInstanceLabelSave={labelEditor.saveInstanceLabel}
+            onLifecycle={(action, instance) => void handleLifecycle(action, instance)} />
     );
 
     const workbenchHeader = <WorkbenchHeader instance={selectedInstance} previewEnabled={previewEnabled} onPreviewEnabledChange={setPreviewEnabled} onPreviewRefresh={() => setPreviewRefreshKey(key => key + 1)} />;
@@ -461,15 +418,7 @@ export function App() {
 
     const profileChipStrip = (chipProfiles: DashboardProfile[]) => chipProfiles.length > 0 ? (
         <div className="profile-chip-strip drawer-chip-strip" aria-label="Profile filters">
-            {chipProfiles.map(profile => (
-                <ProfileChip
-                    key={profile.profileId}
-                    profile={profile}
-                    active={activeProfileIds.includes(profile.profileId)}
-                    count={profileCounts[profile.profileId] || 0}
-                    onToggle={toggleProfile}
-                />
-            ))}
+            {chipProfiles.map(profile => <ProfileChip key={profile.profileId} profile={profile} active={activeProfileIds.includes(profile.profileId)} count={profileCounts[profile.profileId] || 0} onToggle={toggleProfile} />)}
         </div>
     ) : null;
 
@@ -479,16 +428,8 @@ export function App() {
             data={data}
             activeTab={tab}
             onSettingsDirtyChange={setSettingsDirty}
-            onSettingsSaved={() => {
-                if (selectedInstance) void refreshInstance(selectedInstance.port);
-                publishInvalidation({ topics: ['instances'], reason: 'instance:settings-saved', source: 'ui', sourceId: 'app' });
-            }}
-            onRegistryPatch={(port, patch) => {
-                void registry.save({ instances: { [String(port)]: patch } }).then(() => {
-                    load();
-                    publishInvalidation({ topics: ['instances'], reason: 'instance:registry-patched', source: 'ui', sourceId: 'app' });
-                });
-            }}
+            onSettingsSaved={() => { if (selectedInstance) void refreshInstance(selectedInstance.port); publishInvalidation({ topics: ['instances'], reason: 'instance:settings-saved', source: 'ui', sourceId: 'app' }); }}
+            onRegistryPatch={(port, patch) => { void registry.save({ instances: { [String(port)]: patch } }).then(() => { load(); publishInvalidation({ topics: ['instances'], reason: 'instance:registry-patched', source: 'ui', sourceId: 'app' }); }); }}
         />
     );
 
@@ -499,137 +440,45 @@ export function App() {
             <ManagerShell
                 sidebarCollapsed={view.sidebarCollapsed}
                 commandBar={(
-                    <CommandBar
-                        query={query}
-                        loading={loading}
-                        onQueryChange={setQuery}
-                        onRefresh={() => void load()}
-                        onOpenDrawer={() => view.setDrawerOpen(true)}
-                        theme={theme.theme}
-                        onThemeChange={theme.setTheme}
-                        onOpenPalette={palette.toggle}
-                    />
+                    <CommandBar query={query} loading={loading} onQueryChange={setQuery} onRefresh={() => void load()} onOpenDrawer={() => view.setDrawerOpen(true)} theme={theme.theme} onThemeChange={theme.setTheme} onOpenPalette={palette.toggle} />
                 )}
                 workspace={(
-                    <WorkspaceLayout
-                        sidebarCollapsed={view.sidebarCollapsed}
-                        inspectorCollapsed={view.activityDockCollapsed}
-                        inspectorHeight={view.activityDockCollapsed ? 48 : view.activityDockHeight}
-                        drawerOpen={view.drawerOpen}
-                        onCloseDrawer={() => view.setDrawerOpen(false)}
-                        navigator={(
-                            <>
-                                <SidebarRail onlineCount={summary['online'] || 0} collapsed={view.sidebarCollapsed} mode={view.sidebarMode} scheduleWorkspaceEnabled={SCHEDULE_WORKSPACE_ENABLED} onModeChange={handleSidebarModeChange} onToggleSidebar={handleSidebarToggle} helpOpen={helpOpen} onToggleHelp={() => setHelpOpen(open => !open)} />
-                                <div id="manager-sidebar-list" className="manager-sidebar-list">
-                                    {view.sidebarMode === 'settings' ? (
-                                        <DashboardSettingsSidebar activeSection={dashboardSettingsSection} locale={view.locale} onSectionChange={setDashboardSettingsSection} />
-                                    ) : view.sidebarMode === 'notes' ? (
-                                        <NotesSidebar tree={notesModel.tree} loading={notesModel.loading} error={notesModel.error} notesRoot={notesModel.notesRoot} selectedPath={view.notesSelectedPath} dirtyPath={notesDirtyPath} treeWidth={view.notesTreeWidth} mode={notesSidebarMode} searchFocusToken={notesSearchFocusToken} onModeChange={setNotesSidebarMode} onOpenSearch={openNotesSidebarSearch} onSelectedPathChange={handleNotesSelectedPathChange} onRefreshTree={notesModel.refresh} />
-                                    ) : view.sidebarMode === 'board' ? (
-                                        <DashboardBoardSidebar view={boardView} onViewChange={setBoardView} instances={instances} titlesByPort={messageActivity.titlesByPort} busyPorts={messageActivity.busyPorts} />
-                                    ) : SCHEDULE_WORKSPACE_ENABLED && view.sidebarMode === 'schedule' ? (
-                                        <DashboardScheduleSidebar activeGroup={scheduleGroup} onGroupChange={setScheduleGroup} />
-                                    ) : (
-                                        <InstanceNavigator active={selectedInstance} hiddenCount={instances.filter(instance => instance.hidden).length} collapsed={view.sidebarCollapsed}>
-                                            {instanceListContent}
-                                        </InstanceNavigator>
-                                    )}
-                                </div>
-                            </>
-                        )}
-                        workbench={(
-                            <div className="workspace-surface-stack">
-                                {lifecycleMessage && (
-                                    <section className="state lifecycle-state" role="status">
-                                        <span>{lifecycleMessage}</span>
-                                        <button
-                                            type="button"
-                                            className="state-dismiss"
-                                            aria-label="Dismiss lifecycle message"
-                                            onClick={() => setLifecycleMessage(null)}
-                                        >
-                                            X
-                                        </button>
-                                    </section>
-                                )}
-                                <div className="workspace-surface-layer">
-                                    <WorkspaceSurface active={view.sidebarMode === 'instances'}>
-                                        <Workbench mode={view.activeDetailTab} onModeChange={handleTabChange} header={workbenchHeader} overview={detailContent('overview')} preview={(
-                                            <InstancePreview instance={selectedInstance} data={data} enabled={previewEnabled} refreshKey={previewRefreshKey} theme={theme.resolved} />
-                                        )} logs={detailContent('logs')} settings={detailContent('settings')} />
-                                    </WorkspaceSurface>
-                                    <WorkspaceSurface active={view.sidebarMode === 'notes'}>
-                                        <NotesWorkspace active={view.sidebarMode === 'notes'} selectedPath={view.notesSelectedPath} vaultIndex={notesModel.index} viewMode={view.notesViewMode} authoringMode={view.notesAuthoringMode} wordWrap={view.notesWordWrap} treeWidth={view.notesTreeWidth} onOpenSidebarSearch={openNotesSidebarSearch} onSelectedPathChange={handleNotesSelectedPathChange} onDirtyPathChange={setNotesDirtyPath} onViewModeChange={handleNotesViewModeChange} onAuthoringModeChange={handleNotesAuthoringModeChange} onWordWrapChange={handleNotesWordWrapChange} onTreeWidthChange={handleNotesTreeWidthChange} />
-                                    </WorkspaceSurface>
-                                    <WorkspaceSurface active={view.sidebarMode === 'settings'}>
-                                        <DashboardSettingsWorkspace activeSection={dashboardSettingsSection} ui={dashboardSettingsUi} titleSupport={titleSupport} onUiPatch={handleDashboardSettingsPatch} />
-                                    </WorkspaceSurface>
-                                    <WorkspaceSurface active={view.sidebarMode === 'board'}>
-                                        <DashboardBoardWorkspace active={view.sidebarMode === 'board'} view={boardView} onViewChange={setBoardView} instances={instances} selectedPort={selectedInstance?.port ?? null} titlesByPort={messageActivity.titlesByPort} busyPorts={messageActivity.busyPorts} />
-                                    </WorkspaceSurface>
-                                    {SCHEDULE_WORKSPACE_ENABLED ? (
-                                        <>
-                                            <WorkspaceSurface active={view.sidebarMode === 'schedule'}>
-                                                <DashboardScheduleWorkspace active={view.sidebarMode === 'schedule'} activeGroup={scheduleGroup} busyPorts={messageActivity.busyPorts} />
-                                            </WorkspaceSurface>
-                                        </>
-                                    ) : null}
-                                </div>
-                            </div>
-                        )}
-                        inspector={(
-                            <ActivityDock
-                                collapsed={view.activityDockCollapsed}
-                                height={view.activityDockHeight}
-                                loading={loading}
-                                error={error}
-                                lifecycleMessage={lifecycleMessage}
-                                selectedInstance={selectedInstance}
-                                registryMessage={registry.error || labelEditor.error || managerEvents.error}
-                                events={managerEvents.events}
-                                onToggle={handleActivityToggle}
-                                onHeightChange={handleActivityHeight}
-                            />
-                        )}
-                        mobileNav={<MobileNav activeTab={view.activeDetailTab} onOpenInstances={() => view.setDrawerOpen(true)} onSelectTab={handleTabChange} onToggleActivity={activityUnread.openAndMarkSeen} />}
-                        drawer={(
-                            <InstanceDrawer open={view.drawerOpen} profileFilters={profileChipStrip(profiles)} onClose={() => view.setDrawerOpen(false)}>
-                                {instanceListContent}
-                            </InstanceDrawer>
-                        )}
-                    />
+                    <SidebarRailRouter sidebarCollapsed={view.sidebarCollapsed} activityDockCollapsed={view.activityDockCollapsed}
+                        activityDockHeight={view.activityDockHeight} drawerOpen={view.drawerOpen} onCloseDrawer={() => view.setDrawerOpen(false)}
+                        onlineCount={summary['online'] || 0} sidebarMode={view.sidebarMode} scheduleWorkspaceEnabled={SCHEDULE_WORKSPACE_ENABLED}
+                        remindersWorkspaceEnabled={REMINDERS_WORKSPACE_ENABLED} onSidebarModeChange={handleSidebarModeChange}
+                        onToggleSidebar={handleSidebarToggle} helpOpen={helpOpen} onToggleHelp={() => setHelpOpen(open => !open)}
+                        settingsSection={dashboardSettingsSection} locale={view.locale} onSettingsSectionChange={setDashboardSettingsSection}
+                        notesModel={notesModel} notesSelectedPath={view.notesSelectedPath} notesSelectedNote={notesSelectedNote}
+                        notesDirtyPath={notesDirtyPath} notesTreeWidth={view.notesTreeWidth} notesSidebarMode={notesSidebarMode}
+                        notesSearchFocusToken={notesSearchFocusToken} notesViewMode={view.notesViewMode} notesAuthoringMode={view.notesAuthoringMode}
+                        notesWordWrap={view.notesWordWrap} onNotesSidebarModeChange={setNotesSidebarMode} onOpenNotesSearch={openNotesSidebarSearch}
+                        onNotesSelectedPathChange={handleNotesSelectedPathChange} onNotesDirtyPathChange={setNotesDirtyPath}
+                        onNotesViewModeChange={handleNotesViewModeChange} onNotesAuthoringModeChange={handleNotesAuthoringModeChange}
+                        onNotesWordWrapChange={handleNotesWordWrapChange} onNotesTreeWidthChange={handleNotesTreeWidthChange}
+                        boardView={boardView} onBoardViewChange={setBoardView} scheduleGroup={scheduleGroup} onScheduleGroupChange={setScheduleGroup}
+                        instances={instances} selectedInstance={selectedInstance} data={data} titlesByPort={messageActivity.titlesByPort}
+                        busyPorts={messageActivity.busyPorts} activeDetailTab={view.activeDetailTab} onDetailTabChange={handleTabChange}
+                        workbenchHeader={workbenchHeader} detailContent={detailContent} previewEnabled={previewEnabled}
+                        previewRefreshKey={previewRefreshKey} previewTheme={theme.resolved} lifecycleMessage={lifecycleMessage}
+                        onDismissLifecycleMessage={() => setLifecycleMessage(null)} instanceListContent={instanceListContent} loading={loading}
+                        error={error} registryMessage={registry.error || labelEditor.error || managerEvents.error} managerEvents={managerEvents.events}
+                        onToggleActivity={handleActivityToggle} onActivityHeightChange={handleActivityHeight} onOpenDrawer={() => view.setDrawerOpen(true)}
+                        onSelectTab={handleTabChange} onToggleActivityFromMobile={activityUnread.openAndMarkSeen} drawerProfileFilters={profileChipStrip(profiles)}
+                        dashboardSettingsUi={dashboardSettingsUi} titleSupport={titleSupport} onDashboardSettingsPatch={handleDashboardSettingsPatch} />
                 )}
                 activityHeight={view.activityDockCollapsed ? 48 : view.activityDockHeight}
             />
-            <CommandPalette
-                open={palette.open}
-                onClose={palette.close}
-                instances={instances}
-                getLabel={instanceLabel}
-                onSelectInstance={handleSelectInstance}
-                theme={theme.theme}
-                onCycleTheme={cycleTheme}
-                onRefresh={() => void load()}
-                onToggleHidden={() => {
-                    const next = !showHidden;
-                    setShowHidden(next);
-                    void load(next);
-                }}
-                showHidden={showHidden}
-                onOpenSelected={openSelectedInBrowser}
-                selectedInstance={selectedInstance}
-            />
+            <CommandPalette open={palette.open} onClose={palette.close} instances={instances} getLabel={instanceLabel}
+                onSelectInstance={handleSelectInstance} theme={theme.theme} onCycleTheme={cycleTheme} onRefresh={() => void load()}
+                onToggleHidden={() => { const next = !showHidden; setShowHidden(next); void load(next); }}
+                showHidden={showHidden} onOpenSelected={openSelectedInBrowser} selectedInstance={selectedInstance} />
             <ElectronMetricsPanel onUnloadPreview={() => setPreviewEnabled(false)} />
             <HelpDrawer open={helpOpen} mode={view.sidebarMode} onClose={() => setHelpOpen(false)} />
             {autoUnloadNotice && (
                 <div className="preview-auto-unload-notice" role="status">
                     Preview was unloaded after 5 minutes of inactivity. Toggle the preview switch to re-enable.
-                    <button
-                        type="button"
-                        className="preview-auto-unload-dismiss"
-                        aria-label="Dismiss preview auto-unload notice"
-                        onClick={() => setAutoUnloadNotice(false)}
-                    >
+                    <button type="button" className="preview-auto-unload-dismiss" aria-label="Dismiss preview auto-unload notice" onClick={() => setAutoUnloadNotice(false)}>
                         ×
                     </button>
                 </div>

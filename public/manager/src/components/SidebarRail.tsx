@@ -5,6 +5,7 @@ type SidebarRailProps = {
     collapsed: boolean;
     mode: DashboardSidebarMode;
     scheduleWorkspaceEnabled: boolean;
+    remindersWorkspaceEnabled?: boolean;
     onModeChange: (mode: DashboardSidebarMode) => void;
     onToggleSidebar: () => void;
     helpOpen: boolean;
@@ -64,6 +65,15 @@ function ScheduleIcon() {
         <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
             <rect x="3" y="5" width="14" height="12" rx="1.5" />
             <path d="M3 9h14M7 3v4M13 3v4" />
+        </svg>
+    );
+}
+
+function ReminderIcon() {
+    return (
+        <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+            <path d="M5 4h10v13H5z" />
+            <path d="M8 2v4M12 2v4M8 10h4M8 13h3" />
         </svg>
     );
 }
@@ -134,6 +144,18 @@ export function SidebarRail(props: SidebarRailProps) {
                     title="Schedule"
                 >
                     <ScheduleIcon />
+                </button>
+            ) : null}
+            {props.remindersWorkspaceEnabled ? (
+                <button
+                    className={`rail-button rail-workspace-button${props.mode === 'reminders' ? ' is-active' : ''}`}
+                    type="button"
+                    onClick={() => props.onModeChange('reminders')}
+                    aria-label="Reminders"
+                    aria-pressed={props.mode === 'reminders'}
+                    title="Reminders"
+                >
+                    <ReminderIcon />
                 </button>
             ) : null}
             <button

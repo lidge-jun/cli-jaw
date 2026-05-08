@@ -12,7 +12,8 @@ import { getVirtualScroll, VS_THRESHOLD, type RestoreReason, type VirtualItem } 
 import { bootstrapVirtualHistory, type VirtualHistoryBootstrapDeps } from './virtual-scroll-bootstrap.js';
 import { createStreamRenderer, appendChunk, finalizeStream, hydrateStreamRenderer, type StreamState } from './streaming-render.js';
 import { activateWidgets } from './diagram/iframe-renderer.js';
-import { renderLiveToolActivity, cleanupToolElements, bindToolItemInteractions, type ToolLogEntry } from './features/tool-ui.js';
+import { renderLiveToolActivity, cleanupToolElements, type ToolLogEntry } from './features/tool-ui.js';
+import { initMessageActions, messageSourceAttributes, renderMessageActionsHtml } from './features/message-actions.js';
 import { ICONS, emojiToIcon, emojiToStatus, isCompletionEmoji } from './icons.js';
 import { providerIcon } from './provider-icons.js';
 import { findRunningProcessStepMatch } from './features/process-step-match.js';
@@ -30,7 +31,6 @@ import {
     collapseBlock,
     stopBlockTicker,
     buildProcessBlockHtml,
-    bindProcessBlockInteractions,
     getStoredProcessStepDetail,
     mergeStoredProcessStepDetail,
     processStepMetaFromStore,
@@ -663,7 +663,7 @@ export function finalizeAgent(text: string, toolLog?: ToolLogEntry[]): void {
                     content: finalText,
                     cli: null,
                     tool_log: durableToolLogJson,
-                }));
+                }, vs.count));
                 releaseProcessBlockDetails(div);
             } else {
                 vs.appendLiveItem(div);
@@ -725,12 +725,20 @@ export function addMessage(role: string, text: string, cli?: string | null): HTM
     const label = escapeHtml(role === 'user' ? t('msg.you') : getAppName());
 
     const div = document.createElement('div');
+    const turnIndex = container ? container.querySelectorAll('.msg').length : null;
+    const messageId = generateId();
+    div.setAttribute('data-message-role', role);
+    div.setAttribute('data-message-id', messageId);
+    if (turnIndex !== null) div.setAttribute('data-turn-index', String(turnIndex));
+    const port = Number(window.location.port);
+    if (Number.isFinite(port) && port > 0) div.setAttribute('data-instance-id', `port:${port}`);
+    const actions = renderMessageActionsHtml();
     if (role === 'agent') {
         div.className = 'msg msg-agent';
-        div.innerHTML = `<div class="agent-icon" aria-hidden="true">${getAgentIcon(cli)}</div><div class="agent-body"><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div>`;
+        div.innerHTML = `<div class="agent-icon" aria-hidden="true">${getAgentIcon(cli)}</div><div class="agent-body"><div class="msg-content">${rendered}</div>${actions}</div>`;
     } else {
         div.className = `msg msg-${role}`;
-        div.innerHTML = `<div class="user-body"><div class="msg-label">${label}</div><div class="msg-content">${rendered}</div><button class="msg-copy" title="Copy" aria-label="Copy message"></button></div><div class="user-icon" aria-hidden="true">${getUserAvatarMarkup()}</div>`;
+        div.innerHTML = `<div class="user-body"><div class="msg-label">${label}</div><div class="msg-content">${rendered}</div>${actions}</div><div class="user-icon" aria-hidden="true">${getUserAvatarMarkup()}</div>`;
     }
     const contentEl = div.querySelector('.msg-content');
     if (contentEl) contentEl.setAttribute('data-raw', stripOrchestration(text));
@@ -1007,8 +1015,10 @@ export async function loadStats(): Promise<void> {
 
 // ── Virtual scroll bootstrap helpers ──
 
-function buildLazyVirtualMessageItem(m: MessageItem): VirtualItem {
+function buildLazyVirtualMessageItem(m: MessageItem, index: number): VirtualItem {
         const role = m.role === 'assistant' ? 'agent' : m.role;
+        const messageId = generateId();
+        const sourceAttrs = messageSourceAttributes({ role, messageId, turnIndex: index });
         const rawContent = stripOrchestration(
             role === 'user' ? formatUserPrompt(m.content) : m.content,
         );
@@ -1019,14 +1029,15 @@ function buildLazyVirtualMessageItem(m: MessageItem): VirtualItem {
         const rawToolLog = sanitizedToolLog ? escapeHtml(sanitizedToolLog) : '';
         const toolAttr = rawToolLog ? ` data-tool-log="${rawToolLog}"` : '';
         const contentHtml = `<div class="msg-content lazy-pending" data-raw="${escapeHtml(rawContent)}"></div>`;
+        const actions = renderMessageActionsHtml();
         const html = role === 'agent'
-            ? `<div class="msg msg-agent"><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body"${toolAttr}>${contentHtml}<button class="msg-copy" title="Copy" aria-label="Copy message"></button></div></div>`
-            : `<div class="msg msg-${role}"><div class="user-body"><div class="msg-label">${label}</div>${contentHtml}<button class="msg-copy" title="Copy" aria-label="Copy message"></button></div><div class="user-icon" aria-hidden="true">${getUserAvatarMarkup()}</div></div>`;
+            ? `<div class="msg msg-agent" ${sourceAttrs}><div class="agent-icon" aria-hidden="true">${getAgentIcon(m.cli)}</div><div class="agent-body"${toolAttr}>${contentHtml}${actions}</div></div>`
+            : `<div class="msg msg-${role}" ${sourceAttrs}><div class="user-body"><div class="msg-label">${label}</div>${contentHtml}${actions}</div><div class="user-icon" aria-hidden="true">${getUserAvatarMarkup()}</div></div>`;
         return { id: generateId(), html, height: 80, rehydratesProcessDetails: Boolean(rawToolLog) };
 }
 
 function buildVirtualHistoryItems(msgs: MessageItem[]): VirtualItem[] {
-    return msgs.map((m) => buildLazyVirtualMessageItem(normalizeMessageToolLog(m)));
+    return msgs.map((m, index) => buildLazyVirtualMessageItem(normalizeMessageToolLog(m), index));
 }
 
 function registerVirtualScrollCallbacks(vs: ReturnType<typeof getVirtualScroll>): void {
@@ -1067,13 +1078,17 @@ function registerVirtualScrollCallbacks(vs: ReturnType<typeof getVirtualScroll>)
 
 function makeBootstrapDeps(
     vs: ReturnType<typeof getVirtualScroll>,
+    options: { forceInitialBottom?: boolean } = {},
 ): VirtualHistoryBootstrapDeps {
+    const shouldFollowBottom = options.forceInitialBottom
+        ? () => true
+        : canFollowAfterRestore;
     return {
         registerCallbacks: () => registerVirtualScrollCallbacks(vs),
         setItems: (items, opts) => vs.setItems(items, opts),
         activateIfNeeded: (toBottom) => vs.activateIfNeeded(toBottom),
         scrollToBottom: () => vs.scrollToBottom(),
-        shouldFollowBottom: canFollowAfterRestore,
+        shouldFollowBottom,
         onBeforeVirtualHistoryBootstrap: () => {
             ensureScrollTracking();
         },
@@ -1097,13 +1112,16 @@ export async function loadMessages(): Promise<void> {
 
     if (msgs !== null) {
         const safeMsgs = msgs.map(normalizeMessageToolLog);
+        const hadRenderedHistory = Boolean(chatEl?.querySelector('.msg')) || vs.active;
         // Successful fetch — clear DOM and render (even if empty array after /clear)
         vs.clear();
         if (chatEl) chatEl.innerHTML = '';
 
         if (safeMsgs.length >= VS_THRESHOLD) {
             const vsItems = buildVirtualHistoryItems(safeMsgs);
-            bootstrapVirtualHistory(vsItems, makeBootstrapDeps(vs));
+            bootstrapVirtualHistory(vsItems, makeBootstrapDeps(vs, {
+                forceInitialBottom: !hadRenderedHistory,
+            }));
         } else {
             safeMsgs.forEach(m => {
                 const div = addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content, m.cli);
@@ -1140,7 +1158,9 @@ export async function loadMessages(): Promise<void> {
         const safeCached = (cached as MessageItem[]).map(normalizeMessageToolLog);
         if (safeCached.length >= VS_THRESHOLD) {
             const vsItems = buildVirtualHistoryItems(safeCached);
-            bootstrapVirtualHistory(vsItems, makeBootstrapDeps(vs));
+            bootstrapVirtualHistory(vsItems, makeBootstrapDeps(vs, {
+                forceInitialBottom: true,
+            }));
         } else {
             safeCached.forEach(m => {
                 const div = addMessage(m.role === 'assistant' ? 'agent' : m.role, m.content, m.cli);
@@ -1166,43 +1186,7 @@ export async function loadMessages(): Promise<void> {
 // loadMemory removed — #memoryList element does not exist in HTML.
 // Memory is now handled by features/memory.ts via the modal UI.
 
-// ── Message copy delegation ──
+// ── Message action delegation ──
 export function initMsgCopy(): void {
-    const chatMessages = document.getElementById('chatMessages');
-    if (!chatMessages) return;
-    bindProcessBlockInteractions(chatMessages);
-    bindToolItemInteractions(chatMessages);
-    chatMessages.addEventListener('click', (e) => {
-        const target = e.target as HTMLElement;
-
-        // Tool group toggle (event delegation instead of inline onclick)
-        const summary = target.closest('.tool-group-summary') as HTMLElement | null;
-        if (summary) {
-            const group = summary.closest('.tool-group');
-            const details = summary.nextElementSibling as HTMLElement;
-            if (group && details) {
-                const isExpanding = !group.classList.contains('expanded');
-                group.classList.toggle('expanded');
-                details.classList.toggle('collapsed');
-                summary.setAttribute('aria-expanded', isExpanding ? 'true' : 'false');
-            }
-            return;
-        }
-
-        // Message copy
-        const btn = target.closest('.msg-copy') as HTMLElement | null;
-        if (!btn) return;
-        const msg = btn.closest('.msg');
-        const content = msg?.querySelector('.msg-content') as HTMLElement | null;
-        if (!content) return;
-        const text = content.getAttribute('data-raw') || content.innerText || content.textContent || '';
-        navigator.clipboard.writeText(text).then(() => {
-            btn.classList.add('copied');
-            btn.innerHTML = ICONS.checkSimple;
-            setTimeout(() => {
-                btn.classList.remove('copied');
-                btn.textContent = '';
-            }, 600);
-        }).catch(() => { });
-    });
+    initMessageActions({ onStatus: addSystemMsg });
 }

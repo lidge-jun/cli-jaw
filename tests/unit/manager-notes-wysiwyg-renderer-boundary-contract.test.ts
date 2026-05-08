@@ -14,7 +14,9 @@ test('MarkdownPreview remains backed by the shared MarkdownRenderer', () => {
     const preview = read('public/manager/src/notes/MarkdownPreview.tsx');
     assert.equal(WYSIWYG_PREVIEW_RENDERER_POLICY.previewRenderer, 'MarkdownRenderer');
     assert.ok(preview.includes("import { MarkdownRenderer } from './rendering/MarkdownRenderer';"));
-    assert.ok(preview.includes('<MarkdownRenderer markdown={props.markdown} />'));
+    assert.ok(preview.includes('markdown={props.markdown}'));
+    assert.ok(preview.includes('outgoing={props.outgoing}'));
+    assert.ok(preview.includes('onWikiLinkNavigate={props.onWikiLinkNavigate}'));
 });
 
 test('WYSIWYG contract files do not duplicate preview renderer dependencies', () => {

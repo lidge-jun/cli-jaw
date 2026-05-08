@@ -17,10 +17,13 @@ type NotesSidebarProps = {
     treeWidth: number;
     mode: NotesSidebarMode;
     searchFocusToken: number;
+    tagFilter: string | null;
+    selectedHiddenByFilter: boolean;
     onModeChange: (mode: NotesSidebarMode) => void;
     onOpenSearch: () => void;
     onSelectedPathChange: (path: string | null) => void;
     onRefreshTree: (selectPath?: string | null) => Promise<void>;
+    onClearTagFilter: () => void;
 };
 
 function movePathToFolder(path: string, folderPath: string | null): string {
@@ -274,20 +277,39 @@ export function NotesSidebar(props: NotesSidebarProps) {
                 </div>
             </div>
             {props.mode === 'files' ? (
-                <NotesFileTree
-                    entries={props.tree}
-                    selectedPath={props.selectedPath}
-                    selectedFolderPath={selectedFolderPath}
-                    dirtyPath={props.dirtyPath}
-                    loading={props.loading}
-                    notesRoot={props.notesRoot}
-                    onSelectPath={props.onSelectedPathChange}
-                    onSelectFolder={setSelectedFolderPath}
-                    onMovePath={(from, toFolder) => void movePath(from, toFolder)}
-                    onRenamePath={(path, kind) => void renamePath(path, kind)}
-                    onTrashPath={(path, kind) => void trashPath(path, kind)}
-                    onTrashPaths={items => void trashPaths(items)}
-                />
+                <>
+                    {props.tagFilter && (
+                        <div className="notes-tag-filter-banner" role="status">
+                            <span className="notes-tag-filter-banner-meta">
+                                <span>Tag: #{props.tagFilter}</span>
+                                {props.selectedHiddenByFilter && (
+                                    <span className="notes-tag-filter-banner-hint">Selected note hidden by filter</span>
+                                )}
+                            </span>
+                            <button
+                                type="button"
+                                className="notes-tag-filter-clear"
+                                onClick={props.onClearTagFilter}
+                            >
+                                Clear
+                            </button>
+                        </div>
+                    )}
+                    <NotesFileTree
+                        entries={props.tree}
+                        selectedPath={props.selectedPath}
+                        selectedFolderPath={selectedFolderPath}
+                        dirtyPath={props.dirtyPath}
+                        loading={props.loading}
+                        notesRoot={props.notesRoot}
+                        onSelectPath={props.onSelectedPathChange}
+                        onSelectFolder={setSelectedFolderPath}
+                        onMovePath={(from, toFolder) => void movePath(from, toFolder)}
+                        onRenamePath={(path, kind) => void renamePath(path, kind)}
+                        onTrashPath={(path, kind) => void trashPath(path, kind)}
+                        onTrashPaths={items => void trashPaths(items)}
+                    />
+                </>
             ) : (
                 <NotesSearchSidebar
                     focusToken={props.searchFocusToken}

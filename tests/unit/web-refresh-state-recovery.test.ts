@@ -155,6 +155,11 @@ test('WRS-007: ui exposes guarded restore helper used by restore and reconnect p
     assert.ok(uiSrc.includes("type ScrollIntent = 'unknown' | 'following' | 'pinnedAway'"), 'ui should track explicit bottom-follow intent');
     assert.ok(uiSrc.includes('const scrollIfFollowing = () =>'), 'non-VS restore should use a guarded final DOM scroll closure');
     assert.ok(uiSrc.includes('requestChatRestoreFrame(scrollIfFollowing)'), 'non-VS restore final RAF should re-check live intent');
-    assert.ok(uiSrc.includes('shouldFollowBottom: canFollowAfterRestore'), 'virtual-history bootstrap should not force bottom when user is pinned away');
+    assert.ok(uiSrc.includes('forceInitialBottom?: boolean'), 'bootstrap deps should expose an explicit initial-load bottom option');
+    assert.ok(uiSrc.includes('? () => true'), 'initial history bootstrap should force bottom even if restored browser scroll looks pinned away');
+    assert.ok(uiSrc.includes(': canFollowAfterRestore'), 'non-initial virtual-history bootstrap should not force bottom when user is pinned away');
+    assert.ok(uiSrc.includes('const hadRenderedHistory = Boolean(chatEl?.querySelector(\'.msg\')) || vs.active'), 'loadMessages should distinguish initial load from reconnect refresh');
+    assert.ok(uiSrc.includes('forceInitialBottom: !hadRenderedHistory'), 'fresh server history load should bottom, while reconnect refresh preserves pinned-away readers');
+    assert.ok(uiSrc.includes('forceInitialBottom: true'), 'offline cache initial load should also bottom');
     assert.ok(!uiSrc.includes('userNearBottom = true;\\n    const vs = getVirtualScroll();\\n    if (vs.active)'), 'restore helper should not reset near-bottom intent before guarded restore');
 });

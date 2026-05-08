@@ -3,7 +3,7 @@
  * Diagnoses installation and configuration health.
  */
 import { parseArgs } from 'node:util';
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -113,6 +113,24 @@ function getNpmPrefix() {
         return execSync('npm config get prefix', { encoding: 'utf8', stdio: 'pipe', timeout: 3000 }).trim();
     } catch {
         return null;
+    }
+}
+
+function verifyOfficeCli() {
+    const candidate = findBinaryPath('officecli') || path.join(os.homedir(), '.local', 'bin', 'officecli');
+    if (!candidate || !fs.existsSync(candidate)) {
+        throw new Error('WARN: not installed — run: bash "$(npm root -g)/cli-jaw/scripts/install-officecli.sh"');
+    }
+    try {
+        const version = execFileSync(candidate, ['--version'], {
+            encoding: 'utf8',
+            stdio: 'pipe',
+            timeout: 5000,
+        }).trim();
+        return `installed (${candidate}) version=${version}`;
+    } catch (e: unknown) {
+        const message = (e as Error).message || String(e);
+        throw new Error(`WARN: found but not runnable (${candidate}) — ${message}`);
     }
 }
 
@@ -323,9 +341,7 @@ if (isWSL()) {
     });
 
     check('OfficeCLI', () => {
-        const found = findBinaryPath('officecli') || path.join(os.homedir(), '.local', 'bin', 'officecli');
-        if (found && fs.existsSync(found)) return `installed (${found})`;
-        throw new Error('WARN: not installed — run: bash "$(npm root -g)/cli-jaw/scripts/install-officecli.sh"');
+        return verifyOfficeCli();
     });
 }
 

@@ -3,6 +3,8 @@ import type {
     DashboardNoteSearchResult,
     DashboardNotesCapabilities,
     DashboardNoteTreeEntry,
+    NoteLinkRef,
+    NoteMetadata,
     VaultIndexSnapshot,
 } from '../types';
 
@@ -23,4 +25,6 @@ export type NotesTreeEntry = DashboardNoteTreeEntry;
 export type NoteFile = DashboardNoteFileResponse;
 export type NoteSearchResult = DashboardNoteSearchResult;
 export type NotesVaultIndexSnapshot = VaultIndexSnapshot;
+export type NotesNoteMetadata = NoteMetadata;
+export type NotesNoteLinkRef = NoteLinkRef;
 export type NotesCapabilities = DashboardNotesCapabilities;

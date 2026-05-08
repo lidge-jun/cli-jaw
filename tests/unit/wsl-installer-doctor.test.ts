@@ -18,11 +18,15 @@ test('WSL installer configures user-local npm prefix', () => {
 });
 
 test('WSL installer makes jaw and bundled CLI tools available immediately', () => {
-    assert.ok(installerSrc.includes('CLI_JAW_INSTALL_CLI_TOOLS=1 npm install -g cli-jaw'));
-    assert.ok(installerSrc.includes('CLI_JAW_INSTALL_CLI_TOOLS=1 npm install -g cli-jaw@latest'));
+    assert.ok(installerSrc.includes('CLI_JAW_INSTALL_CLI_TOOLS=1'));
+    assert.ok(installerSrc.includes('CLI_JAW_REQUIRE_CLI_TOOLS=1'));
+    assert.ok(installerSrc.includes('CLI_JAW_REQUIRE_OFFICECLI=1'));
     assert.ok(installerSrc.includes('verify_jaw_command'));
     assert.ok(installerSrc.includes('command -v jaw'));
+    assert.ok(installerSrc.includes('jaw --version >/dev/null 2>&1 || fail "jaw is on PATH but failed to run"'));
     assert.ok(installerSrc.includes('hash -r 2>/dev/null || true'));
+    assert.equal(installerSrc.includes("|| echo 'done'"), false);
+    assert.ok(installerSrc.includes('CLI_JAW_SOURCE_ONLY'));
 });
 
 test('WSL installer installs browser and OfficeCLI helpers', () => {
@@ -40,6 +44,8 @@ test('doctor exposes WSL permission and OfficeCLI checks', () => {
     assert.ok(doctorSrc.includes("check('WSL sudo'"));
     assert.ok(doctorSrc.includes("check('npm global prefix'"));
     assert.ok(doctorSrc.includes("check('OfficeCLI'"));
+    assert.ok(doctorSrc.includes('verifyOfficeCli'));
+    assert.ok(doctorSrc.includes("execFileSync(candidate, ['--version']"));
     assert.ok(doctorSrc.includes('sudoNonInteractive'));
     assert.ok(doctorSrc.includes('npmPrefix'));
 });

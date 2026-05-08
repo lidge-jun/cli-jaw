@@ -135,6 +135,12 @@ The installer uses the user-local npm prefix (`~/.local`) and writes
 `~/.local/bin` to both `~/.bashrc` and `~/.profile`, so new Ubuntu shells can
 find `jaw` and the bundled CLI tools.
 
+The WSL script is the integrated Linux setup path: it verifies `jaw --version`,
+requests bundled CLI tools in strict mode, installs OfficeCLI, and verifies
+`officecli --version` before reporting success. Browser support is checked after
+Chromium/Windows Chrome detection; if no runnable browser is found, the installer
+prints a warning instead of pretending web-ai/browser automation is fully ready.
+
 <details>
 <summary>WSL Troubleshooting</summary>
 
@@ -142,6 +148,7 @@ find `jaw` and the bundled CLI tools.
 |---|---|
 | `unzip: command not found` | Rerun the installer |
 | `jaw: command not found` | Run `source ~/.bashrc` or `export PATH="$HOME/.local/bin:$PATH"` |
+| `officecli: command not found` | Rerun the WSL installer or `bash "$(npm root -g)/cli-jaw/scripts/install-officecli.sh"` |
 | Permission errors | `sudo chown -R $USER $(npm config get prefix)` |
 
 </details>
@@ -155,6 +162,16 @@ You know what to do.
 ```bash
 npm install -g cli-jaw
 jaw dashboard
+```
+
+Generic Linux `npm install -g cli-jaw` keeps optional helper installs
+best-effort for compatibility. Use the WSL one-click script when you want the
+stricter integrated setup guarantees, or verify manually with:
+
+```bash
+jaw --version
+officecli --version
+jaw doctor
 ```
 
 </details>

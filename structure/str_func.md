@@ -79,7 +79,7 @@ cli-jaw/
 │   │   ├── state-machine.ts ← PABCD 상태 머신 + broadcast(state,title) + worklog 타이틀 파싱 + employee terminology + OrcContext.workingDir + Project root dispatch contract (363L)
 │   │   ├── pipeline.ts       ← PABCD orchestration (explicit entry only) + plan context persistence + memorySnapshot injection + reset clears boss session + OrcContext workingDir init + Approved Plan Project root guard (455L)
 │   │   ├── distribute.ts     ← runSingleAgent + buildPlanPrompt + parallel helpers + tiered findEmployee + employee resume diagnostics (554L)
-│   │   ├── parser.ts         ← triage + subtask JSON + verdict 파싱 + isResetIntent (181L) [needsOrchestration/CODE_KEYWORDS/FILE_PATH_PATTERN/MULTI_TASK_PATTERN 제거됨]
+│   │   ├── parser.ts         ← triage + subtask JSON + verdict 파싱 + isResetIntent (176L) [needsOrchestration/CODE_KEYWORDS/FILE_PATH_PATTERN/MULTI_TASK_PATTERN 제거됨]
 │   │   ├── gateway.ts        ← submitMessage 통합 진입점 (WebUI+CLI+TG+Discord 공통) + working_dir scoped insertMessage (155L)
 │   │   ├── collect.ts        ← orchestrateAndCollect (bot.ts에서 분리) (65L)
 │   │   ├── scope.ts          ← 현재 단일 'default' scope를 반환하는 stub (resolveOrcScope/findActiveScope, 17L) — 멀티 scope 미사용
@@ -281,7 +281,7 @@ cli-jaw/
 │       ├── catalog.ts        ← COMMANDS → capability map 확장 (43L)
 │       ├── policy.ts         ← getVisibleCommands, getTelegramMenuCommands (39L)
 │       └── help-renderer.ts  ← renderHelp list/detail mode (44L)
-├── public/                   ← Web UI (Vite 8 + ES Modules, 411 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 456 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~58275L)
+├── public/                   ← Web UI (Vite 8 + ES Modules, 421 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 456 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~59359L)
 │   ├── index.html            ← 뼈대 (876L, CLI-JAW 대문자 로고, pill theme switch, data-i18n, 로컬 avatar 입력)
 │   ├── manifest.json         ← PWA 매니페스트 (20L) ✨
 │   ├── sw.js                 ← Service Worker 오프라인 캐시 (104L) ✨
@@ -358,13 +358,13 @@ cli-jaw/
 ├── bin/
 │   ├── cli-jaw.ts            ← 17개 user-facing 서브커맨드 라우팅 + --home flag (`browser-web-ai.ts` helper 포함 시 commands top-level 18 files) (187L)
 │   ├── star-prompt.ts        ← `gh` 기반 GitHub star 1회 프롬프트 (TTY 가드 + state 파일, 129L)
-│   ├── postinstall.ts        ← npm install 후 5-CLI + OfficeCLI 자동설치 + MCP + 스킬 + safe 가드 (636L, Node guard + inline JAW_HOME)
+│   ├── postinstall.ts        ← npm install 후 5-CLI + OfficeCLI 자동설치 + MCP + 스킬 + safe 가드 (664L, Node guard + inline JAW_HOME)
 │   └── commands/             ← 18 top-level ts files (`browser-web-ai.ts` helper 포함) + `tui/` 7 helper 모듈 (총 4130L + tui 1045L)
 │       ├── serve.ts          ← 서버 시작 (--port/--host/--open) + SIGINT child.kill('SIGINT') orphan fix (119L)
 │       ├── dispatch.ts       ← 직원 호출 (pipe mode 호환) + route contract bridge + worker result polling + ECONNREFUSED retry with escalating delays (197L)
 │       ├── chat.ts           ← 터미널 채팅 TUI (3모드, locale bootstrap, refreshInfo, active model 표시, no-arg `/model`·`/cli` selector intercept, transcript 축적, overlay wiring, 251L)
 │       ├── init.ts           ← 초기화 마법사 + --safe/--dry-run + --help (239L)
-│       ├── doctor.ts         ← 진단 (다중 체크 + headless 감지, --json) (522L)
+│       ├── doctor.ts         ← 진단 (다중 체크 + headless 감지, --json) (572L)
 │       ├── status.ts         ← 서버 상태 (--json) (85L)
 │       ├── mcp.ts            ← MCP 관리 (install/sync/list/reset) (227L)
 │       ├── skill.ts          ← 스킬 관리 (install/remove/info/list/reset soft·hard) (243L)
@@ -379,7 +379,7 @@ cli-jaw/
 │       ├── browser-web-ai.ts ← `jaw browser web-ai` ChatGPT/Gemini/Grok 자동화 helper (277L)
 │       ├── dashboard.ts      ← `jaw dashboard serve` — `dist/src/manager/server.js` 서브프로세스 기동 (255L)
 │       └── tui/              ← chat 터미널 TUI 분리 (api/input-handler/overlays/renderer/simple-mode/types/ws-handler, 7 files)
-├── tests/                    ← 회귀 방지 테스트 (342 .test.ts files: root 5 / unit 323 / integration 9 / browser 4 / fixtures + smoke)
+├── tests/                    ← 회귀 방지 테스트 (349 .test.ts files: root 5 / unit 330 / integration 9 / browser 5 / fixtures + smoke)
 │   ├── acp-client.test.ts     ← ACP client contract
 │   ├── employee-session.test.ts ← main-session ownership
 │   ├── events.test.ts        ← 이벤트 파서 단위 테스트 + stepRef + compact event parsing
@@ -426,17 +426,17 @@ cli-jaw/
 │   ├── frontend.d.ts         ← CDN 글로벌 타입 선언 (marked, hljs, katex, mermaid, DOMPurify) (137L) ✨
 │   └── global.d.ts           ← Node + Express 글로벌 타입 (64L) ✨
 ├── TESTS.md                  ← 테스트 상세
-├── scripts/                  ← 도구 스크립트 (14 files, 3 lang: TypeScript + Shell + CJS)
+├── scripts/                  ← 도구 스크립트 (21 files, 3 lang: TypeScript + Shell + CJS)
 │   ├── check-copilot-gap.ts  ← Copilot 통합 갭 체크 (75L) ✨
 │   ├── check-deps-offline.ts ← 오프라인 취약 버전 체크 (SemVer 타입) (98L) ✨
 │   ├── check-deps-online.sh  ← npm audit + semgrep (26L)
 │   ├── fresh-install-smoke.ts ← 클린 설치 스모크 테스트 (130L) ✨
 │   ├── i18n-registry.ts      ← skills registry i18n 필드 추가 (230L) ✨
 │   ├── install.sh            ← One-Click Installer (Node.js + npm i -g + Chromium + playwright-core) (372L)
-│   ├── install-wsl.sh        ← WSL 원클릭 설치 스크립트 (315L)
+│   ├── install-wsl.sh        ← WSL 원클릭 설치 스크립트 (348L)
 │   ├── postinstall-guard.cjs ← 크로스플랫폼 postinstall 가드 (CJS 유지, 68L)
 │   ├── ensure-native-modules.cjs ← better-sqlite3 등 네이티브 모듈 재빌드 가드 (CJS, 54L) ✨
-│   ├── install-officecli.sh  ← OfficeCLI 바이너리 크로스플랫폼 설치 (macOS/Linux, arm64/x86_64) (126L) ✨
+│   ├── install-officecli.sh  ← OfficeCLI 바이너리 크로스플랫폼 설치 (macOS/Linux, arm64/x86_64) (181L) ✨
 │   ├── install-officecli.ps1 ← OfficeCLI Windows PowerShell 설치 (96L) ✨
 │   ├── release.sh            ← 릴리즈 자동화 (56L)
 │   ├── release-preview.sh    ← 프리뷰 릴리즈 자동화 (78L)
@@ -695,7 +695,7 @@ graph LR
 | [🤖 agent_spawn.md](agent_spawn.md)                 | agent/ (spawn·args·events) + orchestrator/ (pipeline·parser) + cli/acp-client | spawn + ACP + 오케스트레이션           |
 | [📱 telegram.md](telegram.md)                       | telegram/ (bot·forwarder·telegram-file) + memory/heartbeat                    | 외부 인터페이스 + lifecycle + 파일전송 |
 | *(미작성)* discord.md                                | discord/ (bot·commands·forwarder·discord-file) + messaging/                   | Discord 인터페이스 + 메시징 런타임     |
-| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 411개, `public/dist` build 456파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
+| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 421개, `public/dist` build 456파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
 | [🧠 prompt_flow.md](prompt_flow.md)                 | prompt/builder.ts · 직원 프롬프트 · promptCache                               | **핵심** — 정적/동적 + Copilot ACP     |
 | [📄 prompt_basic_A1.md](prompt_basic_A1.md)         | A-1 기본 프롬프트 원문                                                        | EN 기본 프롬프트 레퍼런스              |
 | [📄 prompt_basic_A2.md](prompt_basic_A2.md)         | A-2 프롬프트 템플릿                                                           | 사용자 편집 가능                       |
