@@ -10,7 +10,7 @@ import { MarkdownPreview } from './MarkdownPreview';
 import { RichMarkdownPortalHost } from './rich-markdown/RichMarkdownPortalHost';
 import { richMarkdownExtension } from './rich-markdown/rich-markdown-extension';
 import { richMarkdownPastePolicy } from './rich-markdown/paste-policy';
-import type { NotesAuthoringMode } from './notes-types';
+import type { NotesAuthoringMode, NotesNoteLinkRef } from './notes-types';
 import type { RichMarkdownWidgetRegistration } from './rich-markdown/rich-markdown-types';
 
 const MilkdownWysiwygEditor = lazy(async () => {
@@ -23,8 +23,12 @@ type MarkdownEditorProps = {
     authoringMode: NotesAuthoringMode;
     content: string;
     notePath: string;
+    outgoing: readonly NotesNoteLinkRef[];
+    activeTag: string | null;
     wordWrap: boolean;
     onChange: (value: string) => void;
+    onTagSelect: (tag: string | null) => void;
+    onWikiLinkNavigate: (path: string) => void;
 };
 
 export function MarkdownEditor(props: MarkdownEditorProps) {
@@ -74,7 +78,16 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
         return (
             <div className="notes-editor notes-wysiwyg-editor">
                 <Suspense fallback={<div className="notes-wysiwyg-loading">Loading WYSIWYG editor...</div>}>
-                    <MilkdownWysiwygEditor active={props.active} content={props.content} notePath={props.notePath} onChange={props.onChange} />
+                    <MilkdownWysiwygEditor
+                        active={props.active}
+                        content={props.content}
+                        notePath={props.notePath}
+                        outgoing={props.outgoing}
+                        activeTag={props.activeTag}
+                        onChange={props.onChange}
+                        onTagSelect={props.onTagSelect}
+                        onWikiLinkNavigate={props.onWikiLinkNavigate}
+                    />
                 </Suspense>
             </div>
         );

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Editor, defaultValueCtx, editorViewCtx, rootCtx, schemaCtx } from '@milkdown/kit/core';
 import { commonmark } from '@milkdown/kit/preset/commonmark';
 import {
@@ -25,12 +25,20 @@ import { notesMilkdownGfm } from './milkdown-gfm-safe';
 import { notesMilkdownHeadingSourceView } from './milkdown-heading-source-view';
 import { notesMilkdownKatexOptionsCtx, notesMilkdownMath } from './milkdown-math';
 import { normalizeEscapedTaskMarkers, protectUnsupportedGfmForMilkdown } from './milkdown-task-markers';
+import { notesMilkdownWikiLinkPlugin, requestWysiwygWikiLinkRefresh } from './milkdown-wikilink-plugin';
+import { WysiwygFrontmatterPanel } from './WysiwygFrontmatterPanel';
+import { composeWysiwygFrontmatter, splitWysiwygFrontmatter, type WysiwygFrontmatterData } from './wysiwyg-frontmatter';
+import type { NotesNoteLinkRef } from '../notes-types';
 
 type MilkdownWysiwygEditorProps = {
     active: boolean;
     content: string;
     notePath: string;
+    outgoing: readonly NotesNoteLinkRef[];
+    activeTag: string | null;
     onChange: (value: string) => void;
+    onTagSelect: (tag: string | null) => void;
+    onWikiLinkNavigate: (path: string) => void;
 };
 
 type MilkdownCommand = (editor: Editor) => void;
@@ -67,29 +75,62 @@ function refreshMilkdownAssetImages(root: HTMLDivElement | null): void {
 }
 
 export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
+    const initialDocument = useMemo(() => splitWysiwygFrontmatter(props.content), []);
     const shellRef = useRef<HTMLDivElement | null>(null);
     const rootRef = useRef<HTMLDivElement | null>(null);
     const editorRef = useRef<Editor | null>(null);
-    const latestMarkdownRef = useRef(props.content);
-    const latestPropContentRef = useRef(props.content);
+    const latestBodyRef = useRef(initialDocument.body);
+    const latestFrontmatterRef = useRef<WysiwygFrontmatterData | null>(initialDocument.frontmatter);
+    const latestComposedRef = useRef(props.content);
     const onChangeRef = useRef(props.onChange);
     const notePathRef = useRef(props.notePath);
+    const wikiRuntimeRef = useRef({
+        outgoing: props.outgoing,
+        onNavigate: props.onWikiLinkNavigate,
+    });
     const syncingFromPropsRef = useRef(true);
     const [ready, setReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'error'>('idle');
+    const [frontmatterPanel, setFrontmatterPanel] = useState<WysiwygFrontmatterData | null>(initialDocument.frontmatter);
 
     useEffect(() => {
         onChangeRef.current = props.onChange;
     }, [props.onChange]);
 
     useEffect(() => {
-        latestPropContentRef.current = props.content;
-    }, [props.content]);
-
-    useEffect(() => {
         notePathRef.current = props.notePath;
     }, [props.notePath]);
+
+    useEffect(() => {
+        wikiRuntimeRef.current.onNavigate = props.onWikiLinkNavigate;
+    }, [props.onWikiLinkNavigate]);
+
+    useEffect(() => {
+        wikiRuntimeRef.current.outgoing = props.outgoing;
+        editorRef.current?.action(ctx => {
+            requestWysiwygWikiLinkRefresh(ctx.get(editorViewCtx));
+        });
+    }, [props.outgoing]);
+
+    function composeBody(body: string): string {
+        return composeWysiwygFrontmatter(latestFrontmatterRef.current, body);
+    }
+
+    function emitBodyChange(body: string): void {
+        latestBodyRef.current = body;
+        const composed = composeBody(body);
+        latestComposedRef.current = composed;
+        onChangeRef.current(composed);
+    }
+
+    function emitFrontmatterChange(next: WysiwygFrontmatterData | null): void {
+        latestFrontmatterRef.current = next;
+        setFrontmatterPanel(next);
+        const composed = composeBody(latestBodyRef.current);
+        latestComposedRef.current = composed;
+        onChangeRef.current(composed);
+    }
 
     useEffect(() => {
         let disposed = false;
@@ -100,17 +141,17 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         void Editor.make()
             .config(ctx => {
                 ctx.set(rootCtx, root);
-                ctx.set(defaultValueCtx, protectUnsupportedGfmForMilkdown(latestMarkdownRef.current));
+                ctx.set(defaultValueCtx, protectUnsupportedGfmForMilkdown(latestBodyRef.current));
                 ctx.set(notesMilkdownKatexOptionsCtx.key, {
                     throwOnError: false,
                     strict: 'warn',
                 });
                 ctx.get(listenerCtx).markdownUpdated((_, markdown) => {
-                    const normalizedMarkdown = normalizeEscapedTaskMarkers(markdown);
-                    latestMarkdownRef.current = normalizedMarkdown;
+                    const normalizedBody = normalizeEscapedTaskMarkers(markdown);
+                    latestBodyRef.current = normalizedBody;
                     queueMicrotask(() => refreshMilkdownAssetImages(rootRef.current));
                     if (syncingFromPropsRef.current) return;
-                    onChangeRef.current(normalizedMarkdown);
+                    emitBodyChange(normalizedBody);
                 });
             })
             .use(commonmark)
@@ -119,6 +160,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
             .use(notesMilkdownMath)
             .use(notesMilkdownCodeBlockView)
             .use(notesMilkdownBlockKeymap)
+            .use(notesMilkdownWikiLinkPlugin(wikiRuntimeRef.current))
             .use(history)
             .use(clipboard)
             .use(listener)
@@ -130,9 +172,12 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
                 }
                 editor = instance;
                 editorRef.current = instance;
-                if (latestPropContentRef.current !== latestMarkdownRef.current) {
-                    latestMarkdownRef.current = latestPropContentRef.current;
-                    instance.action(replaceAll(protectUnsupportedGfmForMilkdown(latestPropContentRef.current), true));
+                const nextDocument = splitWysiwygFrontmatter(latestComposedRef.current);
+                if (nextDocument.body !== latestBodyRef.current) {
+                    latestBodyRef.current = nextDocument.body;
+                    latestFrontmatterRef.current = nextDocument.frontmatter;
+                    setFrontmatterPanel(nextDocument.frontmatter);
+                    instance.action(replaceAll(protectUnsupportedGfmForMilkdown(nextDocument.body), true));
                 }
                 setReady(true);
                 queueMicrotask(() => {
@@ -158,10 +203,14 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
     useEffect(() => {
         const editor = editorRef.current;
         if (!editor) return;
-        if (props.content === latestMarkdownRef.current) return;
+        if (props.content === latestComposedRef.current) return;
+        const nextDocument = splitWysiwygFrontmatter(props.content);
         syncingFromPropsRef.current = true;
-        latestMarkdownRef.current = props.content;
-        editor.action(replaceAll(protectUnsupportedGfmForMilkdown(props.content), true));
+        latestBodyRef.current = nextDocument.body;
+        latestFrontmatterRef.current = nextDocument.frontmatter;
+        latestComposedRef.current = props.content;
+        setFrontmatterPanel(nextDocument.frontmatter);
+        editor.action(replaceAll(protectUnsupportedGfmForMilkdown(nextDocument.body), true));
         queueMicrotask(() => {
             syncingFromPropsRef.current = false;
             refreshMilkdownAssetImages(rootRef.current);
@@ -179,9 +228,9 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
 
         function handleHeadingSourceUpdated(): void {
             editorRef.current?.action(ctx => {
-                const markdown = normalizeEscapedTaskMarkers(getMarkdown()(ctx));
-                latestMarkdownRef.current = markdown;
-                if (!syncingFromPropsRef.current) onChangeRef.current(markdown);
+                const body = normalizeEscapedTaskMarkers(getMarkdown()(ctx));
+                latestBodyRef.current = body;
+                if (!syncingFromPropsRef.current) emitBodyChange(body);
             });
         }
 
@@ -240,10 +289,9 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
     }
 
     function insertTaskListItem(): void {
-        const currentMarkdown = latestMarkdownRef.current.trimEnd();
+        const currentMarkdown = latestBodyRef.current.trimEnd();
         const nextMarkdown = `${currentMarkdown}${currentMarkdown ? '\n\n' : ''}- [ ] `;
-        latestMarkdownRef.current = nextMarkdown;
-        onChangeRef.current(nextMarkdown);
+        emitBodyChange(nextMarkdown);
         run(editor => editor.action(replaceAll(protectUnsupportedGfmForMilkdown(nextMarkdown), true)));
     }
 
@@ -275,9 +323,9 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
                         ...node.attrs,
                         checked: !node.attrs['checked'],
                     }).scrollIntoView());
-                    const markdown = normalizeEscapedTaskMarkers(getMarkdown()(ctx));
-                    latestMarkdownRef.current = markdown;
-                    if (!syncingFromPropsRef.current) onChangeRef.current(markdown);
+                    const body = normalizeEscapedTaskMarkers(getMarkdown()(ctx));
+                    latestBodyRef.current = body;
+                    if (!syncingFromPropsRef.current) emitBodyChange(body);
                     queueMicrotask(syncTaskListAccessibility);
                     return;
                 }
@@ -459,6 +507,12 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
                 <button type="button" title="Table" aria-label="Table" disabled={!ready} onClick={insertTable}>Table</button>
                 <button type="button" title="Code block" aria-label="Code block" disabled={!ready} onClick={createLanguageCodeBlock}>Block</button>
             </div>
+            <WysiwygFrontmatterPanel
+                frontmatter={frontmatterPanel}
+                activeTag={props.activeTag}
+                onChange={emitFrontmatterChange}
+                onTagClick={props.onTagSelect}
+            />
             {error && <div className="notes-wysiwyg-error" role="alert">{error}</div>}
             {uploadStatus !== 'idle' && (
                 <div className="notes-wysiwyg-upload-status" role="status" data-status={uploadStatus}>

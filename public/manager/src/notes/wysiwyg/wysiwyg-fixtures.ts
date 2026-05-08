@@ -13,6 +13,8 @@ export type WysiwygFixtureId =
     | 'reference-links'
     | 'escaped-markdown'
     | 'frontmatter'
+    | 'frontmatter-wysiwyg-panel'
+    | 'wikilinks-live-preview'
     | 'math-inline-block'
     | 'mermaid-valid'
     | 'mermaid-invalid'
@@ -63,6 +65,8 @@ export const REQUIRED_WYSIWYG_FIXTURES: readonly WysiwygFixtureBehavior[] = [
     fixture('reference-links'),
     fixture('escaped-markdown'),
     fixture('frontmatter'),
+    fixture('frontmatter-wysiwyg-panel'),
+    fixture('wikilinks-live-preview'),
     fixture('math-inline-block'),
     fixture('mermaid-valid'),
     fixture('mermaid-invalid'),

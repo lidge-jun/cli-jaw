@@ -4,7 +4,13 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
-import { buildWikiLinkLookup, splitTextWithWikiLinks } from '../../public/manager/src/notes/wiki-link-rendering';
+import {
+    buildWikiLinkLookup,
+    parseWikiLinkToken,
+    splitTextWithWikiLinks,
+    wikiLinkDisplayText,
+    wikiLinkReasonLabel,
+} from '../../public/manager/src/notes/wiki-link-rendering';
 import type { NotesNoteLinkRef } from '../../public/manager/src/notes/notes-types';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -124,6 +130,24 @@ test('wiki link text rendering follows vault-index resolution', () => {
     assert.equal(broken.props.className, 'notes-wikilink is-broken');
     assert.equal(broken.props.title, 'No matching note');
     assert.equal(broken.props.children, 'Missing');
+});
+
+test('shared wikilink helpers preserve WYSIWYG and preview display labels', () => {
+    const parsed = parseWikiLinkToken('[[Target#Heading|Readable label]]');
+    assert.equal(parsed?.target, 'Target');
+    assert.equal(parsed?.heading, 'Heading');
+    assert.equal(parsed?.displayText, 'Readable label');
+
+    const resolved = noteLink('[[Target#Heading|Readable label]]', 'Target', {
+        status: 'resolved',
+        resolvedPath: 'target.md',
+        displayText: 'Readable label',
+    });
+    const broken = noteLink('[[Missing]]', 'Missing', { status: 'missing', reason: 'invalid_target' });
+
+    assert.equal(wikiLinkDisplayText(resolved, resolved.raw), 'Readable label');
+    assert.equal(wikiLinkDisplayText(broken, broken.raw), 'Missing');
+    assert.equal(wikiLinkReasonLabel(broken), 'Invalid link target');
 });
 
 test('MermaidBlock uses component-owned strict Mermaid rendering without iframe', () => {

@@ -58,3 +58,19 @@ test('WYSIWYG contract files do not duplicate preview renderer dependencies', ()
         );
     });
 });
+
+test('WYSIWYG owns wikilink and frontmatter live-preview behavior without preview renderer', () => {
+    const editor = read('public/manager/src/notes/wysiwyg/MilkdownWysiwygEditor.tsx');
+    const wikiPlugin = read('public/manager/src/notes/wysiwyg/milkdown-wikilink-plugin.ts');
+    const frontmatter = read('public/manager/src/notes/wysiwyg/wysiwyg-frontmatter.ts');
+
+    assert.ok(editor.includes('notesMilkdownWikiLinkPlugin'));
+    assert.ok(editor.includes('splitWysiwygFrontmatter'));
+    assert.ok(editor.includes('composeWysiwygFrontmatter'));
+    assert.ok(wikiPlugin.includes('DecorationSet'));
+    assert.ok(wikiPlugin.includes("label.addEventListener('click'"));
+    assert.ok(frontmatter.includes('document.errors.length > 0'));
+    assert.ok(frontmatter.includes('document.clone()'));
+    assert.ok(frontmatter.includes("document.set('tags'"));
+    assert.ok(frontmatter.includes("document.delete('alias'"));
+});

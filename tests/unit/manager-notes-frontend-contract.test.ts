@@ -318,6 +318,9 @@ test('App renders NotesWorkspace outside Workbench and imports notes CSS', () =>
     const router = read('public/manager/src/SidebarRailRouter.tsx');
     const main = read('public/manager/src/main.tsx');
     const workbench = read('public/manager/src/components/Workbench.tsx');
+    const workspace = read('public/manager/src/notes/NotesWorkspace.tsx');
+    const notesCss = read('public/manager/src/notes/notes-tags.css');
+    const milkdown = read('public/manager/src/notes/wysiwyg/MilkdownWysiwygEditor.tsx');
 
     assert.ok(router.includes('import { NotesWorkspace }'), 'SidebarRailRouter must import NotesWorkspace');
     assert.ok(router.includes('import { NotesSidebar, type NotesSidebarMode }'), 'SidebarRailRouter must import NotesSidebar for the existing navigator column and local search mode type');
@@ -334,6 +337,10 @@ test('App renders NotesWorkspace outside Workbench and imports notes CSS', () =>
     assert.ok(router.includes('onRefreshTree={props.notesModel.refresh}'), 'SidebarRailRouter must pass the parent-owned refresh action to the sidebar');
     assert.ok(router.includes('vaultIndex={props.notesModel.index}'), 'SidebarRailRouter must pass the parent-owned vault index toward the workspace');
     assert.ok(main.includes('./notes/notes-tags.css'), 'notes tag/wikilink CSS must be loaded');
+    assert.ok(workspace.includes('selectedOutgoingLinks'), 'WYSIWYG and preview must share selected outgoing links');
+    assert.ok(notesCss.includes('.notes-wysiwyg-frontmatter'), 'WYSIWYG frontmatter panel must be styled');
+    assert.ok(notesCss.includes('.notes-wikilink-live'), 'WYSIWYG wikilinks must be styled');
+    assert.ok(milkdown.includes('composeWysiwygFrontmatter'), 'WYSIWYG changes must recompose frontmatter with editor body');
     assert.ok(router.includes('<NotesWorkspace'), 'SidebarRailRouter must render NotesWorkspace');
     assert.ok(router.includes('<DashboardSettingsSidebar'), 'SidebarRailRouter must render Dashboard settings nav in the manager sidebar');
     assert.ok(router.includes('<DashboardSettingsWorkspace'), 'SidebarRailRouter must render Dashboard settings workspace');

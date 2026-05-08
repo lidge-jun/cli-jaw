@@ -146,6 +146,8 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
 
     const showEditor = props.viewMode === 'raw' || props.viewMode === 'split';
     const showPreview = props.viewMode === 'preview' || props.viewMode === 'split';
+    const selectedOutgoingLinks = (props.selectedPath && props.vaultIndex?.outgoingLinks?.[props.selectedPath]) || [];
+    const wysiwygOwnsFrontmatter = props.authoringMode === 'wysiwyg' && showEditor;
 
     return (
         <section className="notes-workspace" aria-label="Notes workspace">
@@ -207,18 +209,32 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
                                 spellCheck={false}
                                 aria-label="Note title"
                             />
-                            <NotesFrontmatterStrip
-                                note={props.selectedNote}
-                                activeTag={props.tagFilter}
-                                onTagClick={props.onTagSelect}
-                            />
+                            {!wysiwygOwnsFrontmatter && (
+                                <NotesFrontmatterStrip
+                                    note={props.selectedNote}
+                                    activeTag={props.tagFilter}
+                                    onTagClick={props.onTagSelect}
+                                />
+                            )}
                             {showEditor && <div className="notes-editor-pane">
-                                <MarkdownEditor key={props.selectedPath} active={props.active && showEditor} authoringMode={props.authoringMode} content={document.content} notePath={props.selectedPath} wordWrap={props.wordWrap} onChange={document.setContent} />
+                                <MarkdownEditor
+                                    key={props.selectedPath}
+                                    active={props.active && showEditor}
+                                    authoringMode={props.authoringMode}
+                                    content={document.content}
+                                    notePath={props.selectedPath}
+                                    outgoing={selectedOutgoingLinks}
+                                    activeTag={props.tagFilter}
+                                    wordWrap={props.wordWrap}
+                                    onChange={document.setContent}
+                                    onTagSelect={props.onTagSelect}
+                                    onWikiLinkNavigate={props.onWikiLinkNavigate}
+                                />
                             </div>}
                             {showPreview && (
                                 <MarkdownPreview
                                     markdown={document.content}
-                                    outgoing={(props.selectedPath && props.vaultIndex?.outgoingLinks?.[props.selectedPath]) || []}
+                                    outgoing={selectedOutgoingLinks}
                                     onWikiLinkNavigate={props.onWikiLinkNavigate}
                                 />
                             )}

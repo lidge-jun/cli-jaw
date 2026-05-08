@@ -8,7 +8,7 @@ import { REQUIRED_WYSIWYG_FIXTURES } from '../../public/manager/src/notes/wysiwy
 const projectRoot = join(import.meta.dirname, '..', '..');
 
 test('required WYSIWYG fixtures exist and normalize idempotently', () => {
-    assert.equal(REQUIRED_WYSIWYG_FIXTURES.length, 25);
+    assert.equal(REQUIRED_WYSIWYG_FIXTURES.length, 27);
     for (const fixture of REQUIRED_WYSIWYG_FIXTURES) {
         const inputPath = join(projectRoot, fixture.inputPath);
         const expectedPath = join(projectRoot, fixture.expectedPath);
@@ -32,4 +32,6 @@ test('fixture metadata marks security, paste, conflict, IME, and large-note case
     assert.equal(byId.get('large-note-many-blocks')?.largeNoteCase, true);
     assert.equal(byId.get('conflict-local-remote')?.conflictCase, true);
     assert.equal(byId.get('ime-korean-japanese')?.imeCase, true);
+    assert.equal(byId.has('wikilinks-live-preview'), true);
+    assert.equal(byId.has('frontmatter-wysiwyg-panel'), true);
 });
