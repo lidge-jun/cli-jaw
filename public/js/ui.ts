@@ -1073,6 +1073,7 @@ function makeBootstrapDeps(
         setItems: (items, opts) => vs.setItems(items, opts),
         activateIfNeeded: (toBottom) => vs.activateIfNeeded(toBottom),
         scrollToBottom: () => vs.scrollToBottom(),
+        shouldFollowBottom: canFollowAfterRestore,
         onBeforeVirtualHistoryBootstrap: () => {
             ensureScrollTracking();
         },

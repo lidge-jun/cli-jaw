@@ -89,6 +89,23 @@ describe('bootstrapVirtualHistory', () => {
         ]);
     });
 
+    it('does not force bottom or mark following when restore intent is pinned away', () => {
+        const log: string[] = [];
+        const items = makeMessageFixture(82);
+        const deps: VirtualHistoryBootstrapDeps = {
+            ...makeDeps(log),
+            shouldFollowBottom: mock.fn(() => false),
+        };
+        bootstrapVirtualHistory(items, deps);
+
+        assert.deepStrictEqual(log, [
+            'onBeforeVirtualHistoryBootstrap',
+            'registerCallbacks',
+            'setItems(count=82, autoActivate=false)',
+            'activateIfNeeded(toBottom=false)',
+        ]);
+    });
+
     it('setItems uses autoActivate=false', () => {
         const log: string[] = [];
         const items = makeMessageFixture(100);

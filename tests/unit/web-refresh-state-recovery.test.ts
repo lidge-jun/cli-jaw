@@ -155,5 +155,6 @@ test('WRS-007: ui exposes guarded restore helper used by restore and reconnect p
     assert.ok(uiSrc.includes("type ScrollIntent = 'unknown' | 'following' | 'pinnedAway'"), 'ui should track explicit bottom-follow intent');
     assert.ok(uiSrc.includes('const scrollIfFollowing = () =>'), 'non-VS restore should use a guarded final DOM scroll closure');
     assert.ok(uiSrc.includes('requestChatRestoreFrame(scrollIfFollowing)'), 'non-VS restore final RAF should re-check live intent');
+    assert.ok(uiSrc.includes('shouldFollowBottom: canFollowAfterRestore'), 'virtual-history bootstrap should not force bottom when user is pinned away');
     assert.ok(!uiSrc.includes('userNearBottom = true;\\n    const vs = getVirtualScroll();\\n    if (vs.active)'), 'restore helper should not reset near-bottom intent before guarded restore');
 });
