@@ -11,7 +11,18 @@ const doctorSrc = fs.readFileSync(join(root, 'bin/commands/doctor.ts'), 'utf8');
 
 test('WSL installer configures user-local npm prefix', () => {
     assert.ok(installerSrc.includes('npm config set prefix "$prefix"'));
-    assert.ok(installerSrc.includes('export PATH="$HOME/.local/bin:$PATH"'));
+    assert.ok(installerSrc.includes('NPM_PATH_LINE=\'export PATH="$HOME/.local/bin:$PATH"\''));
+    assert.ok(installerSrc.includes('add_npm_path_to_profile "$HOME/.bashrc"'));
+    assert.ok(installerSrc.includes('add_npm_path_to_profile "$HOME/.profile"'));
+    assert.equal(installerSrc.includes('[ -f "$HOME/.zshrc" ] && profile="$HOME/.zshrc"'), false);
+});
+
+test('WSL installer makes jaw and bundled CLI tools available immediately', () => {
+    assert.ok(installerSrc.includes('CLI_JAW_INSTALL_CLI_TOOLS=1 npm install -g cli-jaw'));
+    assert.ok(installerSrc.includes('CLI_JAW_INSTALL_CLI_TOOLS=1 npm install -g cli-jaw@latest'));
+    assert.ok(installerSrc.includes('verify_jaw_command'));
+    assert.ok(installerSrc.includes('command -v jaw'));
+    assert.ok(installerSrc.includes('hash -r 2>/dev/null || true'));
 });
 
 test('WSL installer installs browser and OfficeCLI helpers', () => {

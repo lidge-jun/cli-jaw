@@ -145,13 +145,17 @@ copilot login    # or: claude auth / codex login / gemini
 jaw serve        # → http://localhost:3457
 ```
 
+インストーラーは npm の global prefix をユーザーローカルの `~/.local` に設定し、
+`~/.local/bin` を `~/.bashrc` と `~/.profile` の両方に登録します。新しい
+Ubuntu シェルでも `jaw` と同梱 CLI ツールを検出できます。
+
 <details>
 <summary>WSL トラブルシューティング</summary>
 
 | 症状 | 対処 |
 |---|---|
 | `unzip: command not found` | インストーラーを再実行 |
-| `jaw: command not found` | `source ~/.bashrc` |
+| `jaw: command not found` | `source ~/.bashrc` または `export PATH="$HOME/.local/bin:$PATH"` |
 | Permission errors | `sudo chown -R $USER $(npm config get prefix)` |
 
 </details>
@@ -510,7 +514,7 @@ npm test               # Node.js ネイティブテストランナー
 
 | 症状 | 対処 |
 |---|---|
-| `cli-jaw: command not found` | `npm install -g cli-jaw` を再実行。`npm bin -g` が `$PATH` に含まれているか確認 |
+| `cli-jaw: command not found` | `npm install -g cli-jaw` を再実行。`~/.local/bin` または `npm bin -g` が `$PATH` に含まれているか確認 |
 | `Error: node version` | Node.js 22+ にアップグレード: `nvm install 22` |
 | `NODE_MODULE_VERSION` mismatch | `npm run ensure:native`（ネイティブモジュールの自動リビルド） |
 | `EADDRINUSE: port 3457` | 別のインスタンスが起動中。`--port 3458` で回避 |

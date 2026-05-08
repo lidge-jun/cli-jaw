@@ -34,6 +34,8 @@ echo ""
 NODE_MAJOR=22
 SUDO=""
 HAS_SUDO=false
+NPM_PREFIX="$HOME/.local"
+NPM_PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
 
 ensure_sudo() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -136,24 +138,53 @@ install_node() {
 # ═══════════════════════════════════════
 #  Step 2: Configure user-local npm prefix
 # ═══════════════════════════════════════
-configure_npm_prefix() {
-  local prefix="$HOME/.local"
-  mkdir -p "$prefix/bin" "$prefix/lib"
-  npm config set prefix "$prefix"
-  export PATH="$prefix/bin:$PATH"
+add_npm_path_to_profile() {
+  local profile="$1"
+  [ -n "$profile" ] || return 0
 
-  local profile="$HOME/.bashrc"
-  [ -f "$HOME/.zshrc" ] && profile="$HOME/.zshrc"
-  if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$profile" 2>/dev/null; then
+  mkdir -p "$(dirname "$profile")"
+  touch "$profile"
+
+  if ! grep -Fq "$NPM_PATH_LINE" "$profile" 2>/dev/null; then
     {
       echo ''
       echo '# CLI-JAW: user-local npm global bin'
-      echo 'export PATH="$HOME/.local/bin:$PATH"'
+      echo "$NPM_PATH_LINE"
     } >> "$profile"
-    ok "Added ~/.local/bin to $profile"
+    ok "Added ~/.local/bin to ${profile/#$HOME/~}"
+  fi
+}
+
+configure_npm_prefix() {
+  local prefix="$NPM_PREFIX"
+  mkdir -p "$prefix/bin" "$prefix/lib"
+  npm config set prefix "$prefix"
+  export PATH="$prefix/bin:$PATH"
+  hash -r 2>/dev/null || true
+
+  add_npm_path_to_profile "$HOME/.bashrc"
+  add_npm_path_to_profile "$HOME/.profile"
+  if [ -f "$HOME/.zshrc" ] || [ "${SHELL:-}" != "${SHELL%zsh}" ]; then
+    add_npm_path_to_profile "$HOME/.zshrc"
   fi
 
   ok "npm global prefix set to $(npm config get prefix)"
+}
+
+verify_jaw_command() {
+  hash -r 2>/dev/null || true
+  if command -v jaw &>/dev/null; then
+    return 0
+  fi
+
+  if [ -x "$NPM_PREFIX/bin/jaw" ]; then
+    export PATH="$NPM_PREFIX/bin:$PATH"
+    hash -r 2>/dev/null || true
+  fi
+
+  if ! command -v jaw &>/dev/null; then
+    fail "cli-jaw installed, but 'jaw' is not on PATH. Run: export PATH=\"\$HOME/.local/bin:\$PATH\""
+  fi
 }
 
 # ═══════════════════════════════════════
@@ -163,12 +194,13 @@ install_jaw() {
   if command -v jaw &>/dev/null; then
     ok "cli-jaw already installed ($(jaw --version 2>/dev/null || echo 'unknown version'))"
     info "Updating to latest..."
-    npm install -g cli-jaw@latest
+    CLI_JAW_INSTALL_CLI_TOOLS=1 npm install -g cli-jaw@latest
   else
     info "Installing cli-jaw globally..."
-    npm install -g cli-jaw
+    CLI_JAW_INSTALL_CLI_TOOLS=1 npm install -g cli-jaw
   fi
 
+  verify_jaw_command
   ok "cli-jaw installed: $(jaw --version 2>/dev/null || echo 'done')"
 }
 
@@ -208,6 +240,7 @@ install_officecli() {
 # ═══════════════════════════════════════
 run_doctor() {
   info "Running diagnostics..."
+  verify_jaw_command
   jaw doctor || true
 }
 
@@ -246,8 +279,9 @@ main() {
   echo -e "${GREEN}${BOLD}  🦈 CLI-JAW is ready!${NC}"
   echo -e "${GREEN}${BOLD}═══════════════════════════════════════${NC}"
   echo ""
-  echo -e "  Run:  ${CYAN}jaw serve${NC}"
-  echo -e "  Open: ${CYAN}http://localhost:3457${NC}"
+  echo -e "  Run:  ${CYAN}jaw dashboard${NC}"
+  echo -e "  Also: ${CYAN}jaw serve${NC}  ${DIM}# classic server mode${NC}"
+  echo -e "  If a new shell cannot find jaw: ${CYAN}source ~/.bashrc${NC}"
   echo ""
   echo -e "${DIM}  Tip: Authenticate at least one AI engine:${NC}"
   echo -e "${DIM}    gh auth login        # GitHub Copilot (free)${NC}"

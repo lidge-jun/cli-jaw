@@ -131,13 +131,17 @@ copilot login    # 또는: claude auth login / codex login / gemini
 jaw serve        # -> http://localhost:3457
 ```
 
+설치 스크립트는 npm 전역 prefix를 사용자 로컬 경로(`~/.local`)로 맞추고
+`~/.local/bin`을 `~/.bashrc`와 `~/.profile`에 모두 등록합니다. 그래서 새
+Ubuntu 셸에서도 `jaw`와 함께 설치된 CLI 도구들을 바로 찾을 수 있습니다.
+
 <details>
 <summary>WSL 문제 해결</summary>
 
 | 문제 | 해결 |
 |---|---|
 | `unzip: command not found` | 설치 스크립트를 다시 실행합니다 |
-| `jaw: command not found` | `source ~/.bashrc` |
+| `jaw: command not found` | `source ~/.bashrc` 또는 `export PATH="$HOME/.local/bin:$PATH"` 실행 |
 | Permission 에러 | `sudo chown -R $USER $(npm config get prefix)` |
 
 </details>
@@ -491,7 +495,7 @@ npm test               # Node.js 네이티브 테스트 러너
 
 | 문제 | 해결 방법 |
 |---|---|
-| `cli-jaw: command not found` | `npm install -g cli-jaw`를 다시 실행하세요. `npm bin -g`가 `$PATH`에 있는지 확인하세요 |
+| `cli-jaw: command not found` | `npm install -g cli-jaw`를 다시 실행하세요. `~/.local/bin` 또는 `npm bin -g`가 `$PATH`에 있는지 확인하세요 |
 | `Error: node version` | Node.js 22 이상으로 업그레이드: `nvm install 22` |
 | `NODE_MODULE_VERSION` mismatch | `npm run ensure:native` 실행 (자동 재빌드) |
 | `EADDRINUSE: port 3457` | 다른 인스턴스가 실행 중입니다. `--port 3458`을 사용하세요 |

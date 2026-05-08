@@ -131,13 +131,17 @@ source ~/.bashrc
 jaw dashboard
 ```
 
+The installer uses the user-local npm prefix (`~/.local`) and writes
+`~/.local/bin` to both `~/.bashrc` and `~/.profile`, so new Ubuntu shells can
+find `jaw` and the bundled CLI tools.
+
 <details>
 <summary>WSL Troubleshooting</summary>
 
 | Problem | Fix |
 |---|---|
 | `unzip: command not found` | Rerun the installer |
-| `jaw: command not found` | `source ~/.bashrc` |
+| `jaw: command not found` | Run `source ~/.bashrc` or `export PATH="$HOME/.local/bin:$PATH"` |
 | Permission errors | `sudo chown -R $USER $(npm config get prefix)` |
 
 </details>
@@ -525,7 +529,7 @@ Architecture details: [ARCHITECTURE.md](docs/ARCHITECTURE.md) · Test coverage: 
 
 | Problem | Solution |
 |---|---|
-| `cli-jaw: command not found` | `npm install -g cli-jaw` again. Check `npm bin -g` is in `$PATH` |
+| `cli-jaw: command not found` | `npm install -g cli-jaw` again. Check `~/.local/bin` or `npm bin -g` is in `$PATH` |
 | `Error: node version` | Upgrade to Node.js 22+: `nvm install 22` |
 | `NODE_MODULE_VERSION` mismatch | `npm run ensure:native` (auto-rebuilds native modules) |
 | `EADDRINUSE: port 3457` | Another instance running. Use `--port 3458` or stop it first |

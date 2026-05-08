@@ -281,7 +281,7 @@ cli-jaw/
 │       ├── catalog.ts        ← COMMANDS → capability map 확장 (43L)
 │       ├── policy.ts         ← getVisibleCommands, getTelegramMenuCommands (39L)
 │       └── help-renderer.ts  ← renderHelp list/detail mode (44L)
-├── public/                   ← Web UI (Vite 8 + ES Modules, 409 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 456 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~57694L)
+├── public/                   ← Web UI (Vite 8 + ES Modules, 409 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 456 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~57912L)
 │   ├── index.html            ← 뼈대 (876L, CLI-JAW 대문자 로고, pill theme switch, data-i18n, 로컬 avatar 입력)
 │   ├── manifest.json         ← PWA 매니페스트 (20L) ✨
 │   ├── sw.js                 ← Service Worker 오프라인 캐시 (104L) ✨
@@ -433,7 +433,7 @@ cli-jaw/
 │   ├── fresh-install-smoke.ts ← 클린 설치 스모크 테스트 (130L) ✨
 │   ├── i18n-registry.ts      ← skills registry i18n 필드 추가 (230L) ✨
 │   ├── install.sh            ← One-Click Installer (Node.js + npm i -g + Chromium + playwright-core) (372L)
-│   ├── install-wsl.sh        ← WSL 원클릭 설치 스크립트 (135L)
+│   ├── install-wsl.sh        ← WSL 원클릭 설치 스크립트 (294L)
 │   ├── postinstall-guard.cjs ← 크로스플랫폼 postinstall 가드 (CJS 유지, 68L)
 │   ├── ensure-native-modules.cjs ← better-sqlite3 등 네이티브 모듈 재빌드 가드 (CJS, 54L) ✨
 │   ├── install-officecli.sh  ← OfficeCLI 바이너리 크로스플랫폼 설치 (macOS/Linux, arm64/x86_64) (126L) ✨
