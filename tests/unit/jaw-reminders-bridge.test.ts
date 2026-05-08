@@ -103,6 +103,20 @@ test('validateReminderSnapshot enforces source invariants from jaw-reminders', (
   assert.equal(validateReminderSnapshot(blankReminderId).ok, false);
 });
 
+test('validateReminderSnapshot rejects leading or trailing whitespace in source identifiers', () => {
+  for (const mutate of [
+    (bad: ReminderSnapshot) => { bad.lists[0]!.id = ' today'; bad.reminders[0]!.listId = ' today'; },
+    (bad: ReminderSnapshot) => { bad.lists[0]!.name = 'Today '; },
+    (bad: ReminderSnapshot) => { bad.reminders[0]!.id = ' r1'; },
+    (bad: ReminderSnapshot) => { bad.reminders[0]!.title = 'A '; },
+    (bad: ReminderSnapshot) => { bad.reminders[0]!.listId = 'today '; },
+  ]) {
+    const bad = JSON.parse(JSON.stringify(VALID_SNAPSHOT)) as ReminderSnapshot;
+    mutate(bad);
+    assert.equal(validateReminderSnapshot(bad).ok, false);
+  }
+});
+
 test('loadJawRemindersSnapshot returns missing_file when no file', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'jaw-bridge-'));
   try {

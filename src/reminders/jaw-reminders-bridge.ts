@@ -93,10 +93,10 @@ function parseList(raw: unknown): ReminderList | string {
   const id = record['id'];
   const name = record['name'];
   const accent = record['accent'];
-  if (typeof id !== 'string' || id.trim().length === 0) {
+  if (typeof id !== 'string' || id.trim().length === 0 || id !== id.trim()) {
     return 'list id missing';
   }
-  if (typeof name !== 'string' || name.trim().length === 0) {
+  if (typeof name !== 'string' || name.trim().length === 0 || name !== name.trim()) {
     return `list ${id} name missing`;
   }
   if (typeof accent !== 'string') {
@@ -123,11 +123,11 @@ function parseReminder(raw: unknown): Reminder | string {
   }
   const record = raw as Record<string, unknown>;
   const id = record['id'];
-  if (typeof id !== 'string' || id.trim().length === 0) {
+  if (typeof id !== 'string' || id.trim().length === 0 || id !== id.trim()) {
     return 'reminder id missing';
   }
   const title = record['title'];
-  if (typeof title !== 'string') {
+  if (typeof title !== 'string' || title.trim().length === 0 || title !== title.trim()) {
     return `reminder ${id}: title missing`;
   }
   const notes = record['notes'];
@@ -135,7 +135,7 @@ function parseReminder(raw: unknown): Reminder | string {
     return `reminder ${id}: notes missing`;
   }
   const listId = record['listId'];
-  if (typeof listId !== 'string') {
+  if (typeof listId !== 'string' || listId.trim().length === 0 || listId !== listId.trim()) {
     return `reminder ${id}: listId missing`;
   }
   const status = record['status'];

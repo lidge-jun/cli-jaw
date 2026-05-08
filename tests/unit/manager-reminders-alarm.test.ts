@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { classifyReminderDue } from '../../src/manager/reminders/due-time.js';
 import { dispatchReminderNotification } from '../../src/manager/reminders/dispatcher.js';
+import { startRemindersScheduler } from '../../src/manager/reminders/scheduler.js';
 import { RemindersStore } from '../../src/manager/reminders/store.js';
 
 test('reminder due-time classifier handles due future invalid and attempted rows', () => {
@@ -63,6 +64,57 @@ test('dispatchReminderNotification maps channel results to typed notification st
         assert.equal(noChannel.status, 'no_channel');
         store.close();
     } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('startRemindersScheduler uses a stoppable timeout tick and records delivery attempts', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cli-jaw-reminders-scheduler-'));
+    const originalSetTimeout = globalThis.setTimeout;
+    const originalClearTimeout = globalThis.clearTimeout;
+    let scheduledCallback: (() => void) | null = null;
+    let scheduledDelay: number | undefined;
+    const fakeHandle = { unref: () => {} } as unknown as ReturnType<typeof setTimeout>;
+    let clearCalled = false;
+
+    try {
+        const store = new RemindersStore({ dbPath: join(dir, 'dashboard.db') });
+        const due = store.createLocal({ title: 'Due', remindAt: '2026-05-09T00:00:00.000Z', link: { instanceId: 'port:1', messageId: 'm1', port: 1 } });
+        const events: unknown[] = [];
+
+        globalThis.setTimeout = ((callback: TimerHandler, timeout?: number, ...args: unknown[]) => {
+            scheduledDelay = timeout;
+            scheduledCallback = () => {
+                if (typeof callback === 'function') callback(...args);
+            };
+            return fakeHandle;
+        }) as typeof setTimeout;
+        globalThis.clearTimeout = ((handle: ReturnType<typeof setTimeout>) => {
+            assert.equal(handle, fakeHandle);
+            clearCalled = true;
+        }) as typeof clearTimeout;
+
+        const stop = startRemindersScheduler({
+            intervalMs: 1,
+            store,
+            dispatcher: async () => ({ ok: true }),
+            observability: { publish: event => events.push(event) },
+            now: () => new Date('2026-05-09T00:00:01.000Z'),
+        });
+        assert.equal(scheduledDelay, 1000);
+        assert.ok(scheduledCallback);
+
+        scheduledCallback();
+        await new Promise<void>(resolve => originalSetTimeout(resolve, 0));
+
+        assert.equal(store.get(due.id)?.notificationStatus, 'delivered');
+        assert.equal(events.length, 1);
+        stop();
+        assert.equal(clearCalled, true);
+        store.close();
+    } finally {
+        globalThis.setTimeout = originalSetTimeout;
+        globalThis.clearTimeout = originalClearTimeout;
         rmSync(dir, { recursive: true, force: true });
     }
 });

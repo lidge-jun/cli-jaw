@@ -25,7 +25,7 @@ function apiOptions(store: RemindersStore, sourcePath: string | undefined): Dash
 }
 
 function optionalInteger(value: unknown, field: string): number | null {
-    if (value === null || value === undefined || value === '') return null;
+    if (value === null || value === undefined) return null;
     if (typeof value !== 'number' && typeof value !== 'string') throw new Error(`${field} must be an integer`);
     if (typeof value === 'string' && !/^-?\d+$/.test(value.trim())) throw new Error(`${field} must be an integer`);
     const parsed = typeof value === 'number' ? value : Number(value);

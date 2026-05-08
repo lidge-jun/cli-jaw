@@ -178,7 +178,7 @@ test('reminders routes reject invalid enum and non-integer link payloads', async
             });
             assert.equal(invalidPort.status, 400);
 
-            for (const badValue of [true, [1]]) {
+            for (const badValue of [true, [1], '']) {
                 const invalidCoercedPort = await fetch(`${baseUrl}/api/dashboard/reminders/from-message`, {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
@@ -192,7 +192,7 @@ test('reminders routes reject invalid enum and non-integer link payloads', async
                 assert.equal(invalidCoercedPort.status, 400);
             }
 
-            for (const badValue of [true, []]) {
+            for (const badValue of [true, [], '']) {
                 const invalidCoercedTurn = await fetch(`${baseUrl}/api/dashboard/reminders/from-message`, {
                     method: 'POST',
                     headers: { 'content-type': 'application/json' },
