@@ -281,7 +281,7 @@ cli-jaw/
 │       ├── catalog.ts        ← COMMANDS → capability map 확장 (43L)
 │       ├── policy.ts         ← getVisibleCommands, getTelegramMenuCommands (39L)
 │       └── help-renderer.ts  ← renderHelp list/detail mode (44L)
-├── public/                   ← Web UI (Vite 8 + ES Modules, 421 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 456 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~59359L)
+├── public/                   ← Web UI (Vite 8 + ES Modules, 429 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 456 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~59644L)
 │   ├── index.html            ← 뼈대 (876L, CLI-JAW 대문자 로고, pill theme switch, data-i18n, 로컬 avatar 입력)
 │   ├── manifest.json         ← PWA 매니페스트 (20L) ✨
 │   ├── sw.js                 ← Service Worker 오프라인 캐시 (104L) ✨
@@ -379,7 +379,7 @@ cli-jaw/
 │       ├── browser-web-ai.ts ← `jaw browser web-ai` ChatGPT/Gemini/Grok 자동화 helper (277L)
 │       ├── dashboard.ts      ← `jaw dashboard serve` — `dist/src/manager/server.js` 서브프로세스 기동 (255L)
 │       └── tui/              ← chat 터미널 TUI 분리 (api/input-handler/overlays/renderer/simple-mode/types/ws-handler, 7 files)
-├── tests/                    ← 회귀 방지 테스트 (349 .test.ts files: root 5 / unit 330 / integration 9 / browser 5 / fixtures + smoke)
+├── tests/                    ← 회귀 방지 테스트 (351 .test.ts files: root 5 / unit 332 / integration 9 / browser 5 / fixtures + smoke)
 │   ├── acp-client.test.ts     ← ACP client contract
 │   ├── employee-session.test.ts ← main-session ownership
 │   ├── events.test.ts        ← 이벤트 파서 단위 테스트 + stepRef + compact event parsing
@@ -695,7 +695,7 @@ graph LR
 | [🤖 agent_spawn.md](agent_spawn.md)                 | agent/ (spawn·args·events) + orchestrator/ (pipeline·parser) + cli/acp-client | spawn + ACP + 오케스트레이션           |
 | [📱 telegram.md](telegram.md)                       | telegram/ (bot·forwarder·telegram-file) + memory/heartbeat                    | 외부 인터페이스 + lifecycle + 파일전송 |
 | *(미작성)* discord.md                                | discord/ (bot·commands·forwarder·discord-file) + messaging/                   | Discord 인터페이스 + 메시징 런타임     |
-| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 421개, `public/dist` build 456파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
+| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 429개, `public/dist` build 456파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
 | [🧠 prompt_flow.md](prompt_flow.md)                 | prompt/builder.ts · 직원 프롬프트 · promptCache                               | **핵심** — 정적/동적 + Copilot ACP     |
 | [📄 prompt_basic_A1.md](prompt_basic_A1.md)         | A-1 기본 프롬프트 원문                                                        | EN 기본 프롬프트 레퍼런스              |
 | [📄 prompt_basic_A2.md](prompt_basic_A2.md)         | A-2 프롬프트 템플릿                                                           | 사용자 편집 가능                       |

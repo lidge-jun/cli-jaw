@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import type { DashboardSidebarMode } from '../types';
 
+export type HelpTopicId = DashboardSidebarMode | 'shortcuts' | 'routing' | 'processLifecycle' | 'dangerousActions';
+
 export type HelpEntry = {
     title: string;
     subtitle: string;
@@ -83,11 +85,80 @@ const SettingsHelp = (
     </>
 );
 
-export const HELP_CONTENT: Record<DashboardSidebarMode, HelpEntry> = {
+const ShortcutsHelp = (
+    <>
+        <p className="help-lead">반복 작업을 줄이는 Manager 전역 단축키예요.</p>
+        <ul className="help-bullets">
+            <li><kbd>?</kbd>는 이 도움말을 열어요. 입력창, 노트 에디터, WYSIWYG 편집 중에는 글자 입력을 방해하지 않아요.</li>
+            <li><kbd>⌘/Ctrl + S</kbd>는 Notes와 Settings처럼 저장 가능한 화면에서 현재 편집 내용을 저장해요.</li>
+            <li><kbd>⌘/Ctrl + E</kbd>는 Notes 편집 모드를 순환해요.</li>
+            <li>Preview 탭을 보는 동안 새 activity는 읽음으로 처리되고, 다른 탭에 있을 때는 Activity Dock에 쌓여요.</li>
+        </ul>
+        <p className="help-tip">단축키는 브라우저 기본 단축키와 에디터 입력을 우선합니다.</p>
+    </>
+);
+
+const RoutingHelp = (
+    <>
+        <p className="help-lead">jaw는 Boss가 직접 처리할지, Employee에게 보낼지 상황에 따라 나눠요.</p>
+        <ul className="help-bullets">
+            <li><strong>Boss</strong>는 현재 대화의 주 작업자예요. 단일 파일 수정, 상태 확인, GitHub 정리는 보통 Boss가 직접 처리해요.</li>
+            <li><strong>Employee</strong>는 <code>cli-jaw dispatch</code>로 보내는 독립 작업자예요. Backend, Frontend, Docs 같은 역할별 검증에 씁니다.</li>
+            <li><strong>PABCD</strong>에서는 A phase가 plan audit, B phase가 read-only verification 중심이에요. 구현은 Boss가 직접 합니다.</li>
+            <li><strong>$computer-use</strong> 요청은 desktop-control 규칙을 따라 real desktop 또는 browser automation 경로로 라우팅돼요.</li>
+        </ul>
+        <p className="help-tip">직원이 다른 repo로 착각하지 않도록 dispatch task에는 현재 repo 절대경로를 함께 넣는 게 원칙이에요.</p>
+    </>
+);
+
+const ProcessLifecycleHelp = (
+    <>
+        <p className="help-lead">Process 상태는 인스턴스 실행과 Manager가 관리하는 preview/runtime 상태를 구분해서 봐야 해요.</p>
+        <ul className="help-bullets">
+            <li><strong>online</strong>은 인스턴스 health check가 통과한 상태예요.</li>
+            <li><strong>offline / timeout / error</strong>는 프로세스가 없거나, 응답이 늦거나, health check가 실패한 상태예요.</li>
+            <li><strong>managed</strong>는 Manager가 띄우거나 복구 대상으로 추적하는 서버예요.</li>
+            <li>탭 전환 후 Preview가 다시 붙을 수 있지만, 인스턴스의 실제 실행 여부는 health/status 쪽을 기준으로 보세요.</li>
+        </ul>
+        <p className="help-tip">Process UI가 비어 보이면 먼저 Refresh로 registry와 health 상태를 다시 읽어보세요.</p>
+    </>
+);
+
+const DangerousActionsHelp = (
+    <>
+        <p className="help-lead">실행 상태를 바꾸는 버튼은 현재 선택한 인스턴스나 Manager-managed 프로세스에 영향을 줘요.</p>
+        <ul className="help-bullets">
+            <li><strong>Stop</strong>은 대상 인스턴스를 중지해요. service-owned 인스턴스는 persistent service 제거까지 포함될 수 있어요.</li>
+            <li><strong>Restart</strong>는 새 실행으로 바뀌므로 uptime과 elapsed time 판단 기준이 다시 시작돼요.</li>
+            <li><strong>Stop all managed</strong>는 Manager가 추적 중인 서버들을 한 번에 중지해요. 외부에서 직접 띄운 프로세스는 대상으로 삼지 않아요.</li>
+            <li><strong>Adopt/recover</strong>는 남아 있는 managed process 기록을 다시 연결하려는 복구 작업이에요.</li>
+        </ul>
+        <p className="help-tip">위험 작업은 가능한 한 확인창을 거치며, 진행 후 상태가 애매하면 Refresh로 실제 health를 확인하세요.</p>
+    </>
+);
+
+export const DASHBOARD_HELP_TOPIC_IDS: HelpTopicId[] = [
+    'instances',
+    'board',
+    'schedule',
+    'reminders',
+    'notes',
+    'settings',
+    'shortcuts',
+    'routing',
+    'processLifecycle',
+    'dangerousActions',
+];
+
+export const HELP_CONTENT: Record<HelpTopicId, HelpEntry> = {
     instances: { title: 'Instances', subtitle: '인스턴스 운영', body: InstancesHelp },
     board: { title: 'Board', subtitle: 'Cross-instance Kanban', body: BoardHelp },
     schedule: { title: 'Schedule', subtitle: '시간 기반 작업', body: ScheduleHelp },
     reminders: { title: 'Reminders', subtitle: 'Jaw Reminders mirror', body: RemindersHelp },
     notes: { title: 'Notes', subtitle: '마크다운 노트', body: NotesHelp },
     settings: { title: 'Settings', subtitle: '대시보드 설정', body: SettingsHelp },
+    shortcuts: { title: 'Shortcuts', subtitle: '전역 키보드 도움말', body: ShortcutsHelp },
+    routing: { title: 'Routing', subtitle: 'Boss / Employee 작업 흐름', body: RoutingHelp },
+    processLifecycle: { title: 'Process lifecycle', subtitle: '인스턴스와 managed process 상태', body: ProcessLifecycleHelp },
+    dangerousActions: { title: 'Dangerous actions', subtitle: '중지·재시작·복구 작업 영향', body: DangerousActionsHelp },
 };

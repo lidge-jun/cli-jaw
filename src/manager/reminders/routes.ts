@@ -24,37 +24,59 @@ function apiOptions(store: RemindersStore, sourcePath: string | undefined): Dash
     return sourcePath ? { store, sourcePath } : { store };
 }
 
-function pickPriority(value: unknown): ReminderPriority {
-    return value === 'low' || value === 'normal' || value === 'high' ? value : 'normal';
+function optionalInteger(value: unknown, field: string): number | null {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = typeof value === 'number' ? value : Number(value);
+    if (!Number.isInteger(parsed)) throw new Error(`${field} must be an integer`);
+    return parsed;
 }
 
-function pickStatus(value: unknown): ReminderStatus | null {
-    return value === 'open' || value === 'focused' || value === 'waiting' || value === 'done' ? value : null;
+function pickPriority(value: unknown, required = false): ReminderPriority | undefined {
+    if (value === undefined || value === null || value === '') {
+        if (required) throw new Error('priority required');
+        return undefined;
+    }
+    if (value === 'low' || value === 'normal' || value === 'high') return value;
+    throw new Error('invalid priority');
 }
 
-function pickPatchPriority(value: unknown): ReminderPriority | null {
-    return value === 'low' || value === 'normal' || value === 'high' ? value : null;
+function pickStatus(value: unknown): ReminderStatus | undefined {
+    if (value === undefined || value === null || value === '') return undefined;
+    if (value === 'open' || value === 'focused' || value === 'waiting' || value === 'done') return value;
+    throw new Error('invalid status');
+}
+
+function requiredStatus(value: unknown): ReminderStatus {
+    const status = pickStatus(value);
+    if (!status) throw new Error('invalid status');
+    return status;
+}
+
+function requiredPriority(value: unknown): ReminderPriority {
+    const priority = pickPriority(value, true);
+    if (!priority) throw new Error('invalid priority');
+    return priority;
 }
 
 function pickFromMessageInput(body: Record<string, unknown>): DashboardReminderInput {
-    const port = typeof body["port"] === 'number' ? body["port"] : Number(body["port"]);
-    const turnIndex = body["turnIndex"] === null || body["turnIndex"] === undefined
-        ? null
-        : typeof body["turnIndex"] === 'number' ? body["turnIndex"] : Number(body["turnIndex"]);
+    const port = optionalInteger(body["port"], 'port');
+    if (port !== null && port < 1) throw new Error('port must be positive');
+    const turnIndex = optionalInteger(body["turnIndex"], 'turnIndex');
+    if (turnIndex !== null && turnIndex < 0) throw new Error('turnIndex must be non-negative');
     const sourceText = typeof body["sourceText"] === 'string' ? body["sourceText"] : typeof body["notes"] === 'string' ? body["notes"] : null;
     return {
         title: typeof body["title"] === 'string' ? body["title"] : '',
         notes: typeof body["notes"] === 'string' ? body["notes"] : sourceText,
-        priority: pickPriority(body["priority"]),
+        priority: pickPriority(body["priority"]) ?? 'normal',
         dueAt: typeof body["dueAt"] === 'string' ? body["dueAt"] : null,
         remindAt: typeof body["remindAt"] === 'string' ? body["remindAt"] : null,
-        linkedInstance: Number.isFinite(port) && port > 0 ? String(port) : null,
+        linkedInstance: port ? String(port) : null,
         sourceText,
         link: {
-            instanceId: typeof body["instanceId"] === 'string' ? body["instanceId"] : Number.isFinite(port) ? `port:${port}` : '',
+            instanceId: typeof body["instanceId"] === 'string' ? body["instanceId"] : port ? `port:${port}` : '',
             messageId: typeof body["messageId"] === 'string' ? body["messageId"] : '',
             turnIndex,
-            port: Number.isFinite(port) ? port : null,
+            port,
             threadKey: typeof body["threadKey"] === 'string' ? body["threadKey"] : null,
             sourceText,
         },
@@ -65,10 +87,8 @@ function pickPatch(body: Record<string, unknown>): DashboardReminderPatch {
     const patch: DashboardReminderPatch = {};
     if (typeof body["title"] === 'string') patch.title = body["title"];
     if ('notes' in body) patch.notes = typeof body["notes"] === 'string' ? body["notes"] : null;
-    const status = pickStatus(body["status"]);
-    if (status) patch.status = status;
-    const priority = pickPatchPriority(body["priority"]);
-    if (priority) patch.priority = priority;
+    if ('status' in body) patch.status = requiredStatus(body["status"]);
+    if ('priority' in body) patch.priority = requiredPriority(body["priority"]);
     if ('dueAt' in body) patch.dueAt = typeof body["dueAt"] === 'string' ? body["dueAt"] : null;
     if ('remindAt' in body) patch.remindAt = typeof body["remindAt"] === 'string' ? body["remindAt"] : null;
     if ('linkedInstance' in body) patch.linkedInstance = typeof body["linkedInstance"] === 'string' ? body["linkedInstance"] : null;

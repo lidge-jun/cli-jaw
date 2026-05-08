@@ -144,6 +144,16 @@ function normalizeOptionalText(value: string | null | undefined, maxLength: numb
     return text;
 }
 
+function shouldResetNotification(
+    current: Pick<DashboardReminder, 'dueAt' | 'remindAt'>,
+    nextDueAt: string | null,
+    nextRemindAt: string | null,
+    nextStatus: ReminderStatus,
+): boolean {
+    if (nextStatus === 'done') return false;
+    return current.dueAt !== nextDueAt || current.remindAt !== nextRemindAt;
+}
+
 function rowToReminder(row: Row): DashboardReminder {
     return {
         id: row.id,
@@ -315,9 +325,17 @@ export class RemindersStore {
             if (!REMINDER_PRIORITIES.includes(patch.priority)) throw new Error('invalid priority');
             fields.push('priority = ?'); values.push(patch.priority);
         }
+        const nextStatus = patch.status !== undefined ? patch.status : existing.status;
+        const nextDueAt = patch.dueAt !== undefined ? patch.dueAt : existing.dueAt;
+        const nextRemindAt = patch.remindAt !== undefined ? patch.remindAt : existing.remindAt;
         if (patch.dueAt !== undefined) { fields.push('due_at = ?'); values.push(patch.dueAt); }
         if (patch.remindAt !== undefined) { fields.push('remind_at = ?'); values.push(patch.remindAt); }
         if (patch.linkedInstance !== undefined) { fields.push('linked_instance = ?'); values.push(patch.linkedInstance); }
+        if (shouldResetNotification(existing, nextDueAt, nextRemindAt, nextStatus)) {
+            fields.push("notification_status = 'pending'");
+            fields.push('notification_attempted_at = NULL');
+            fields.push('notification_error = NULL');
+        }
         if (fields.length === 0) return existing;
         fields.push('source_updated_at = ?'); values.push(new Date().toISOString());
         fields.push('mirrored_at = ?'); values.push(new Date().toISOString());
@@ -345,7 +363,26 @@ export class RemindersStore {
                 subtasks_json = excluded.subtasks_json,
                 source = 'jaw-reminders',
                 source_updated_at = excluded.source_updated_at,
-                mirrored_at = excluded.mirrored_at
+                mirrored_at = excluded.mirrored_at,
+                notification_status = CASE
+                    WHEN excluded.status = 'done' THEN dashboard_reminders.notification_status
+                    WHEN dashboard_reminders.due_at IS NOT excluded.due_at OR dashboard_reminders.remind_at IS NOT excluded.remind_at THEN 'pending'
+                    ELSE dashboard_reminders.notification_status
+                END,
+                notification_attempted_at = CASE
+                    WHEN excluded.status = 'done' THEN dashboard_reminders.notification_attempted_at
+                    WHEN dashboard_reminders.due_at IS NOT excluded.due_at OR dashboard_reminders.remind_at IS NOT excluded.remind_at THEN NULL
+                    ELSE dashboard_reminders.notification_attempted_at
+                END,
+                notification_error = CASE
+                    WHEN excluded.status = 'done' THEN dashboard_reminders.notification_error
+                    WHEN dashboard_reminders.due_at IS NOT excluded.due_at OR dashboard_reminders.remind_at IS NOT excluded.remind_at THEN NULL
+                    ELSE dashboard_reminders.notification_error
+                END
+        `);
+        const deleteMissing = this.db.prepare(`
+            DELETE FROM dashboard_reminders
+            WHERE source = 'jaw-reminders' AND id NOT IN (${snapshot.reminders.map(() => '?').join(',') || "''"})
         `);
         const sync = this.db.transaction((reminders: Reminder[]) => {
             let changes = 0;
@@ -367,6 +404,8 @@ export class RemindersStore {
                 );
                 changes += result.changes;
             }
+            const ids = reminders.map(reminder => reminder.id);
+            changes += deleteMissing.run(...ids).changes;
             return changes;
         });
         return sync(snapshot.reminders);

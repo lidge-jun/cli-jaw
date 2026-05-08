@@ -93,10 +93,10 @@ function parseList(raw: unknown): ReminderList | string {
   const id = record['id'];
   const name = record['name'];
   const accent = record['accent'];
-  if (typeof id !== 'string' || id.length === 0) {
+  if (typeof id !== 'string' || id.trim().length === 0) {
     return 'list id missing';
   }
-  if (typeof name !== 'string') {
+  if (typeof name !== 'string' || name.trim().length === 0) {
     return `list ${id} name missing`;
   }
   if (typeof accent !== 'string') {
@@ -108,13 +108,22 @@ function parseList(raw: unknown): ReminderList | string {
 const STATUS_VALUES = new Set(['open', 'focused', 'waiting', 'done']);
 const PRIORITY_VALUES = new Set(['low', 'normal', 'high']);
 
+function ensureUnique(values: string[], label: string): string | null {
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (seen.has(value)) return `duplicate ${label}: ${value}`;
+    seen.add(value);
+  }
+  return null;
+}
+
 function parseReminder(raw: unknown): Reminder | string {
   if (typeof raw !== 'object' || raw === null) {
     return 'reminder is not an object';
   }
   const record = raw as Record<string, unknown>;
   const id = record['id'];
-  if (typeof id !== 'string' || id.length === 0) {
+  if (typeof id !== 'string' || id.trim().length === 0) {
     return 'reminder id missing';
   }
   const title = record['title'];
@@ -197,9 +206,15 @@ export function validateReminderSnapshot(
   if (typeof schemaVersion !== 'number') {
     return { ok: false, error: 'schemaVersion missing or not a number' };
   }
+  if (schemaVersion !== 1) {
+    return { ok: false, error: 'unsupported schemaVersion' };
+  }
   const listsRaw = record['lists'];
   if (!Array.isArray(listsRaw)) {
     return { ok: false, error: 'lists must be an array' };
+  }
+  if (listsRaw.length === 0) {
+    return { ok: false, error: 'lists must not be empty' };
   }
   const remindersRaw = record['reminders'];
   if (!Array.isArray(remindersRaw)) {
@@ -220,6 +235,22 @@ export function validateReminderSnapshot(
       return { ok: false, error: parsed };
     }
     reminders.push(parsed);
+  }
+  const duplicateList = ensureUnique(lists.map(list => list.id), 'list id');
+  if (duplicateList) return { ok: false, error: duplicateList };
+  const duplicateReminder = ensureUnique(reminders.map(reminder => reminder.id), 'reminder id');
+  if (duplicateReminder) return { ok: false, error: duplicateReminder };
+  const listIds = new Set(lists.map(list => list.id));
+  for (const reminder of reminders) {
+    if (reminder.title.trim().length === 0) {
+      return { ok: false, error: `reminder ${reminder.id}: title empty` };
+    }
+    if (!listIds.has(reminder.listId)) {
+      return { ok: false, error: `reminder ${reminder.id}: unknown listId` };
+    }
+  }
+  if (reminders.filter(reminder => reminder.status === 'focused').length > 1) {
+    return { ok: false, error: 'at most one reminder may be focused' };
   }
   return {
     ok: true,

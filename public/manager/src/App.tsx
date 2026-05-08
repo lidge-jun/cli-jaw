@@ -8,6 +8,8 @@ import { InstanceListContent } from './components/InstanceListContent';
 import { ManagerShell } from './components/ManagerShell';
 import { ProfileChip } from './components/ProfileChip';
 import { HelpDrawer } from './help/HelpDrawer';
+import { type HelpTopicId } from './help/helpContent';
+import { isHelpShortcutEditableTarget } from './help/help-shortcuts';
 import { WorkbenchHeader } from './components/WorkbenchHeader';
 import { SidebarRailRouter } from './SidebarRailRouter';
 import { ElectronMetricsPanel } from './electron-metrics';
@@ -62,6 +64,7 @@ export function App() {
     const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
     const [autoUnloadNotice, setAutoUnloadNotice] = useState(false);
     const [helpOpen, setHelpOpen] = useState(false);
+    const [helpTopic, setHelpTopic] = useState<HelpTopicId | null>(null);
     useEffect(() => {
         savePreviewEnabled(previewEnabled);
     }, [previewEnabled]);
@@ -146,9 +149,17 @@ export function App() {
         window.open(selectedInstance.url, '_blank', 'noopener,noreferrer');
     }
 
+    useEffect(() => { document.documentElement.lang = view.locale; }, [view.locale]);
+
     useEffect(() => {
-        document.documentElement.lang = view.locale;
-    }, [view.locale]);
+        function onKeyDown(event: KeyboardEvent): void {
+            if (event.key !== '?' || event.metaKey || event.ctrlKey || event.altKey) return;
+            if (isHelpShortcutEditableTarget(event.target)) return;
+            event.preventDefault(); setHelpTopic('shortcuts'); setHelpOpen(true);
+        }
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, []);
 
     async function load(nextShowHidden = showHidden): Promise<void> {
         setLoading(true);
@@ -447,7 +458,7 @@ export function App() {
                         activityDockHeight={view.activityDockHeight} drawerOpen={view.drawerOpen} onCloseDrawer={() => view.setDrawerOpen(false)}
                         onlineCount={summary['online'] || 0} sidebarMode={view.sidebarMode} scheduleWorkspaceEnabled={SCHEDULE_WORKSPACE_ENABLED}
                         remindersWorkspaceEnabled={REMINDERS_WORKSPACE_ENABLED} onSidebarModeChange={handleSidebarModeChange}
-                        onToggleSidebar={handleSidebarToggle} helpOpen={helpOpen} onToggleHelp={() => setHelpOpen(open => !open)}
+                        onToggleSidebar={handleSidebarToggle} helpOpen={helpOpen} onToggleHelp={() => { setHelpTopic(null); setHelpOpen(open => !open); }}
                         settingsSection={dashboardSettingsSection} locale={view.locale} onSettingsSectionChange={setDashboardSettingsSection}
                         notesModel={notesModel} notesSelectedPath={view.notesSelectedPath} notesSelectedNote={notesSelectedNote}
                         notesDirtyPath={notesDirtyPath} notesTreeWidth={view.notesTreeWidth} notesSidebarMode={notesSidebarMode}
@@ -474,7 +485,7 @@ export function App() {
                 onToggleHidden={() => { const next = !showHidden; setShowHidden(next); void load(next); }}
                 showHidden={showHidden} onOpenSelected={openSelectedInBrowser} selectedInstance={selectedInstance} />
             <ElectronMetricsPanel onUnloadPreview={() => setPreviewEnabled(false)} />
-            <HelpDrawer open={helpOpen} mode={view.sidebarMode} onClose={() => setHelpOpen(false)} />
+            <HelpDrawer open={helpOpen} topic={helpTopic ?? view.sidebarMode} onClose={() => setHelpOpen(false)} />
             {autoUnloadNotice && (
                 <div className="preview-auto-unload-notice" role="status">
                     Preview was unloaded after 5 minutes of inactivity. Toggle the preview switch to re-enable.

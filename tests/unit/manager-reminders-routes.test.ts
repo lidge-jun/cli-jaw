@@ -148,3 +148,51 @@ test('reminders from-message route creates local linked reminders and allows loc
         rmSync(sourceDir, { recursive: true, force: true });
     }
 });
+
+test('reminders routes reject invalid enum and non-integer link payloads', async () => {
+    const sourceDir = mkdtempSync(join(tmpdir(), 'cli-jaw-reminders-invalid-'));
+    try {
+        await withRemindersServer(join(sourceDir, 'missing.json'), async (baseUrl) => {
+            const invalidPriority = await fetch(`${baseUrl}/api/dashboard/reminders/from-message`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Bad pin',
+                    priority: 'urgent',
+                    port: 24576,
+                    instanceId: 'port:24576',
+                    messageId: 'msg-42',
+                }),
+            });
+            assert.equal(invalidPriority.status, 400);
+
+            const invalidPort = await fetch(`${baseUrl}/api/dashboard/reminders/from-message`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Bad pin',
+                    port: 24576.5,
+                    instanceId: 'port:24576',
+                    messageId: 'msg-42',
+                }),
+            });
+            assert.equal(invalidPort.status, 400);
+
+            const created = await fetch(`${baseUrl}/api/dashboard/reminders/from-message`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ title: 'Pin', port: 24576, instanceId: 'port:24576', messageId: 'msg-1' }),
+            });
+            assert.equal(created.status, 201);
+            const body = await created.json() as { item: { id: string } };
+            const invalidStatus = await fetch(`${baseUrl}/api/dashboard/reminders/${body.item.id}`, {
+                method: 'PATCH',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ status: 'archived' }),
+            });
+            assert.equal(invalidStatus.status, 400);
+        });
+    } finally {
+        rmSync(sourceDir, { recursive: true, force: true });
+    }
+});

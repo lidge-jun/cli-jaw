@@ -1,14 +1,13 @@
 import { useEffect, useRef } from 'react';
-import type { DashboardSidebarMode } from '../types';
-import { HELP_CONTENT } from './helpContent';
+import { HELP_CONTENT, type HelpTopicId } from './helpContent';
 
 type HelpDrawerProps = {
     open: boolean;
-    mode: DashboardSidebarMode;
+    topic: HelpTopicId;
     onClose: () => void;
 };
 
-export function HelpDrawer({ open, mode, onClose }: HelpDrawerProps) {
+export function HelpDrawer({ open, topic, onClose }: HelpDrawerProps) {
     const closeRef = useRef<HTMLButtonElement | null>(null);
 
     useEffect(() => {
@@ -22,7 +21,7 @@ export function HelpDrawer({ open, mode, onClose }: HelpDrawerProps) {
     }, [open, onClose]);
 
     if (!open) return null;
-    const entry = HELP_CONTENT[mode];
+    const entry = HELP_CONTENT[topic];
     return (
         <>
             <div className="help-drawer-overlay" onClick={onClose} aria-hidden="true" />
@@ -43,7 +42,7 @@ export function HelpDrawer({ open, mode, onClose }: HelpDrawerProps) {
                 </header>
                 <div className="help-drawer-body">{entry.body}</div>
                 <footer className="help-drawer-footer">
-                    <span>모드를 바꾸시면 도움말도 자동으로 따라가요 🦈</span>
+                    <span>사이드바 도움말은 현재 모드를 따르고, ? 키는 단축키 도움말을 열어요.</span>
                 </footer>
             </aside>
         </>

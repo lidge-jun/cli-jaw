@@ -68,6 +68,9 @@ export function ProcessControlPanel() {
                     Force release port
                 </button>
             </div>
+            <p className="process-control-hint">
+                Stop all affects only dashboard-managed servers. Adopt/recover reconnects known managed process records without stopping external instances.
+            </p>
             <div className="process-control-list">
                 {state?.managed.map(entry => (
                     <div key={entry.port} className="process-control-row">

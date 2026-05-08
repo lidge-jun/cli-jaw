@@ -71,6 +71,38 @@ test('validateReminderSnapshot rejects subtask without id', () => {
   assert.equal(result.ok, false);
 });
 
+test('validateReminderSnapshot enforces source invariants from jaw-reminders', () => {
+  const duplicateList = JSON.parse(JSON.stringify(VALID_SNAPSHOT));
+  duplicateList.lists.push({ id: 'today', name: 'Duplicate', accent: '#fff' });
+  assert.equal(validateReminderSnapshot(duplicateList).ok, false);
+
+  const unknownList = JSON.parse(JSON.stringify(VALID_SNAPSHOT));
+  unknownList.reminders[0].listId = 'missing';
+  assert.equal(validateReminderSnapshot(unknownList).ok, false);
+
+  const focusedTwice = JSON.parse(JSON.stringify(VALID_SNAPSHOT));
+  focusedTwice.reminders[0].status = 'focused';
+  focusedTwice.reminders.push({ ...focusedTwice.reminders[0], id: 'r2' });
+  assert.equal(validateReminderSnapshot(focusedTwice).ok, false);
+
+  const emptyTitle = JSON.parse(JSON.stringify(VALID_SNAPSHOT));
+  emptyTitle.reminders[0].title = '   ';
+  assert.equal(validateReminderSnapshot(emptyTitle).ok, false);
+
+  const blankListId = JSON.parse(JSON.stringify(VALID_SNAPSHOT));
+  blankListId.lists[0].id = '   ';
+  blankListId.reminders[0].listId = '   ';
+  assert.equal(validateReminderSnapshot(blankListId).ok, false);
+
+  const blankListName = JSON.parse(JSON.stringify(VALID_SNAPSHOT));
+  blankListName.lists[0].name = '   ';
+  assert.equal(validateReminderSnapshot(blankListName).ok, false);
+
+  const blankReminderId = JSON.parse(JSON.stringify(VALID_SNAPSHOT));
+  blankReminderId.reminders[0].id = '   ';
+  assert.equal(validateReminderSnapshot(blankReminderId).ok, false);
+});
+
 test('loadJawRemindersSnapshot returns missing_file when no file', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'jaw-bridge-'));
   try {
@@ -104,7 +136,7 @@ test('loadJawRemindersSnapshot returns invalid_json when JSON broken', async () 
 test('loadJawRemindersSnapshot returns schema_mismatch on bad shape', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'jaw-bridge-'));
   const path = join(dir, 'reminders.json');
-  writeFileSync(path, JSON.stringify({ schemaVersion: 1, lists: [], reminders: 'oops' }), 'utf8');
+  writeFileSync(path, JSON.stringify({ schemaVersion: 1, lists: [{ id: 'today', name: 'Today', accent: '#ff0' }], reminders: 'oops' }), 'utf8');
   try {
     const status = await loadJawRemindersSnapshot({ sourcePath: path });
     assert.equal(status.ok, false);
@@ -166,7 +198,7 @@ test('resolveDefaultSnapshotPath uses Tauri identifier on darwin', () => {
 test('watchJawRemindersSnapshot emits repeated schema errors when the error detail changes', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'jaw-bridge-watch-'));
   const path = join(dir, 'reminders.json');
-  writeFileSync(path, JSON.stringify({ schemaVersion: 1, lists: [], reminders: 'oops' }), 'utf8');
+  writeFileSync(path, JSON.stringify({ schemaVersion: 1, lists: [{ id: 'today', name: 'Today', accent: '#ff0' }], reminders: 'oops' }), 'utf8');
   try {
     const seen: string[] = [];
     let stop: (() => void) | null = null;

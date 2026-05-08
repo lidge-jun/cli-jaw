@@ -24,8 +24,15 @@ test('BLP-003: manual mode respects explicit headless requests', () => {
     assert.equal(policy.headless, true);
 });
 
-test('BLP-004: agent mode always forces headless automation', () => {
+test('BLP-004: agent mode defaults to headed automation', () => {
     const policy = resolveLaunchPolicy({ mode: 'agent', headless: false, envHeadless: false });
+    assert.equal(policy.mode, 'agent');
+    assert.equal(policy.allowLaunch, true);
+    assert.equal(policy.headless, false);
+});
+
+test('BLP-004b: agent mode still honors explicit headless automation', () => {
+    const policy = resolveLaunchPolicy({ mode: 'agent', headless: true, envHeadless: false });
     assert.equal(policy.mode, 'agent');
     assert.equal(policy.allowLaunch, true);
     assert.equal(policy.headless, true);
