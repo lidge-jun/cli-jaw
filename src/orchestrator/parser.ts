@@ -1,15 +1,10 @@
 // ─── Orchestrator Parsing + Triage ───────────────────
 // Extracted from orchestrator.js for 500-line compliance.
 
-// "이어서 해줘" 계열은 명시적인 짧은 명령만 continue intent로 취급
+// Worklog/PABCD resume is explicit only. Natural-language "continue/계속" must
+// stay a normal user prompt so it never turns into a false no-pending response.
 const CONTINUE_PATTERNS = [
-    /^\/?continue$/i,
-    /^again$/i,
-    /^이어서(?:\s*해줘)?$/i,
-    /^계속(?:\s*해줘)?$/i,
-    /^다시(?:\s*해줘)?$/i,
-    /^다음(?:\s*해봐)?$/i,
-    /^리뷰(?:\s*해봐)?$/i,
+    /^\/continue$/i,
 ];
 
 export function isContinueIntent(text: string) {
