@@ -304,8 +304,8 @@ export class DashboardLifecycleManager {
             const sweepFailedSpawn = async (): Promise<void> => {
                 if (this.registry.get(port) === attached) {
                     this.registry.delete(port);
-                    await this.persistRegistry();
                 }
+                await this.persistRegistry();
                 await this.store.deleteMarker(attached.home);
             };
 
