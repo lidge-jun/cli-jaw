@@ -28,8 +28,16 @@ export function setSpawnAgent(fn: Function): void {
 }
 
 // Forward reference to setCurrentMainMeta — same reason.
-let _setCurrentMainMeta: ((meta: any) => void) | null = null;
-export function setMainMetaHandler(fn: (meta: any) => void): void {
+interface MainSessionMetaRef {
+    origin: string;
+    target?: string;
+    chatId?: string | number;
+    requestId?: string;
+    scopeId?: string;
+}
+
+let _setCurrentMainMeta: ((meta: MainSessionMetaRef | null) => void) | null = null;
+export function setMainMetaHandler(fn: (meta: MainSessionMetaRef | null) => void): void {
     _setCurrentMainMeta = fn;
 }
 
