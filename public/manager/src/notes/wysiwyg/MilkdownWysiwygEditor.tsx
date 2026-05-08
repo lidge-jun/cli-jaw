@@ -18,7 +18,13 @@ import { callCommand, getMarkdown, insert, insertPos, replaceAll } from '@milkdo
 import { safeMarkdownUrl } from '../markdown-security';
 import { hasImportableClipboardImage } from '../image-assets/clipboard-images';
 import { uploadClipboardImageMarkdown } from '../image-assets/insert-image-markdown';
-import { notesImageSrc } from '../rendering/markdown-render-security';
+import {
+    focusEditable,
+    htmlToPlainText,
+    isCodeBlockRawPasteTarget,
+    normalizeCodeLanguage,
+    refreshMilkdownAssetImages,
+} from './milkdown-editor-utils';
 import { notesMilkdownBlockKeymap } from './milkdown-block-keymap';
 import { notesMilkdownCodeBlockView } from './milkdown-code-block-view';
 import { notesMilkdownGfm } from './milkdown-gfm-safe';
@@ -28,51 +34,9 @@ import { normalizeEscapedTaskMarkers, protectUnsupportedGfmForMilkdown } from '.
 import { notesMilkdownWikiLinkPlugin, requestWysiwygWikiLinkRefresh } from './milkdown-wikilink-plugin';
 import { WysiwygFrontmatterPanel } from './WysiwygFrontmatterPanel';
 import { composeWysiwygFrontmatter, splitWysiwygFrontmatter, type WysiwygFrontmatterData } from './wysiwyg-frontmatter';
-import type { NotesNoteLinkRef } from '../notes-types';
-
-type MilkdownWysiwygEditorProps = {
-    active: boolean;
-    content: string;
-    notePath: string;
-    outgoing: readonly NotesNoteLinkRef[];
-    activeTag: string | null;
-    onChange: (value: string) => void;
-    onTagSelect: (tag: string | null) => void;
-    onWikiLinkNavigate: (path: string) => void;
-};
+import type { MilkdownWysiwygEditorProps } from './milkdown-wysiwyg-types';
 
 type MilkdownCommand = (editor: Editor) => void;
-
-function focusEditable(root: HTMLDivElement | null): void {
-    root?.querySelector<HTMLElement>('.ProseMirror')?.focus();
-}
-
-function htmlToPlainText(html: string): string {
-    const element = document.createElement('div');
-    element.innerHTML = html;
-    return element.textContent ?? '';
-}
-
-function isCodeBlockRawPasteTarget(target: EventTarget | null): boolean {
-    return target instanceof HTMLElement
-        && Boolean(target.closest('textarea.notes-code-raw'));
-}
-
-function normalizeCodeLanguage(language: string): string {
-    return language.trim().toLowerCase().replace(/[^a-z0-9_+-]/g, '');
-}
-
-function refreshMilkdownAssetImages(root: HTMLDivElement | null): void {
-    if (!root) return;
-    root.querySelectorAll<HTMLImageElement>('img[src]').forEach(image => {
-        const originalSrc = image.dataset['notesOriginalSrc'] || image.getAttribute('src') || '';
-        if (!originalSrc) return;
-        const resolvedSrc = notesImageSrc(originalSrc);
-        if (!resolvedSrc) return;
-        image.dataset['notesOriginalSrc'] = originalSrc;
-        if (image.getAttribute('src') !== resolvedSrc) image.setAttribute('src', resolvedSrc);
-    });
-}
 
 export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
     const initialDocument = useMemo(() => splitWysiwygFrontmatter(props.content), []);
