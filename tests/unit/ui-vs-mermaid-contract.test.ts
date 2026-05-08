@@ -9,6 +9,10 @@ const uiSrc = readFileSync(
     join(import.meta.dirname, '../../public/js/ui.ts'),
     'utf8',
 );
+const historySrc = readFileSync(
+    join(import.meta.dirname, '../../public/js/features/message-history.ts'),
+    'utf8',
+);
 const mainSrc = readFileSync(
     join(import.meta.dirname, '../../public/js/main.ts'),
     'utf8',
@@ -53,9 +57,9 @@ test('F9: finalizeAgent skips immediate Mermaid queue for DOM promoted to VS', (
 });
 
 test('F7a: VS onLazyRender triggers immediate mermaid render', () => {
-    const idx = uiSrc.indexOf('vs.onLazyRender = ');
+    const idx = historySrc.indexOf('vs.onLazyRender = ');
     assert.ok(idx >= 0, 'onLazyRender assignment must exist');
-    const block = uiSrc.slice(idx, idx + 1800);
+    const block = historySrc.slice(idx, idx + 1800);
     assert.ok(block.includes('renderMermaidBlocks('),
         'onLazyRender must trigger mermaid render on fresh markdown');
     assert.ok(block.includes('immediate: true'),
@@ -63,9 +67,9 @@ test('F7a: VS onLazyRender triggers immediate mermaid render', () => {
 });
 
 test('F7b: VS onPostRender triggers immediate mermaid render for mounted scope', () => {
-    const idx = uiSrc.indexOf('vs.onPostRender = ');
+    const idx = historySrc.indexOf('vs.onPostRender = ');
     assert.ok(idx >= 0, 'onPostRender assignment must exist');
-    const block = uiSrc.slice(idx, idx + 800);
+    const block = historySrc.slice(idx, idx + 800);
     assert.ok(block.includes('renderMermaidBlocks('),
         'onPostRender must trigger mermaid render for pre-rendered pending blocks');
     assert.ok(block.includes('immediate: true'),
@@ -77,9 +81,11 @@ test('F7b: VS onPostRender triggers immediate mermaid render for mounted scope',
 test('imports: renderMermaidBlocks is imported in ui.ts without touching existing render import', () => {
     assert.ok(uiSrc.includes("import { renderMermaidBlocks } from './render.js';"),
         'renderMermaidBlocks must be imported on its own line from ./render.js');
+    assert.ok(historySrc.includes("import { renderMermaidBlocks } from '../render.js';"),
+        'message-history must import renderMermaidBlocks for virtual-scroll callbacks');
     // Existing import must remain intact
     assert.ok(
-        uiSrc.includes("import { renderMarkdown, escapeHtml, sanitizeHtml, stripOrchestration, linkifyFilePaths } from './render.js';"),
+        uiSrc.includes("import { renderMarkdown, escapeHtml, stripOrchestration, linkifyFilePaths } from './render.js';"),
         'original render.js import line must be preserved untouched',
     );
     // activateWidgets must still come from iframe-renderer

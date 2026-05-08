@@ -5,6 +5,7 @@ import { join } from 'node:path';
 
 const root = process.cwd();
 const uiSrc = readFileSync(join(root, 'public/js/ui.ts'), 'utf8');
+const chatScrollSrc = readFileSync(join(root, 'public/js/features/chat-scroll.ts'), 'utf8');
 const wsSrc = readFileSync(join(root, 'public/js/ws.ts'), 'utf8');
 const chatCss = readFileSync(join(root, 'public/css/chat.css'), 'utf8');
 
@@ -17,15 +18,15 @@ function exportedFunctionBlock(source: string, name: string): string {
 }
 
 test('ui exposes restore indicator lifecycle helpers', () => {
-    assert.ok(uiSrc.includes('export function showChatRestoreIndicator'));
-    assert.ok(uiSrc.includes('export function hideChatRestoreIndicator'));
-    assert.ok(uiSrc.includes('export function hideChatRestoreIndicatorAfterSettle'));
-    assert.ok(uiSrc.includes('const RESTORE_INDICATOR_SETTLE_MS = 1100'));
-    assert.ok(uiSrc.includes('let chatRestoreIndicatorHideTimer'));
+    assert.ok(uiSrc.includes('showChatRestoreIndicator'));
+    assert.ok(uiSrc.includes('hideChatRestoreIndicator'));
+    assert.ok(uiSrc.includes('hideChatRestoreIndicatorAfterSettle'));
+    assert.ok(chatScrollSrc.includes('const RESTORE_INDICATOR_SETTLE_MS = 1100'));
+    assert.ok(chatScrollSrc.includes('let chatRestoreIndicatorHideTimer'));
 });
 
 test('restore indicator is chat-level and idempotent', () => {
-    const showBlock = exportedFunctionBlock(uiSrc, 'showChatRestoreIndicator');
+    const showBlock = exportedFunctionBlock(chatScrollSrc, 'showChatRestoreIndicator');
     assert.ok(showBlock.includes("document.querySelector('.chat-area')"), 'indicator should be anchored at chat viewport level');
     assert.ok(showBlock.includes('data-restore-indicator="true"'), 'indicator should use a stable data marker');
     assert.ok(showBlock.includes('chatRestoreIndicatorHideTimer'), 'show should clear pending hide timers');
@@ -35,14 +36,14 @@ test('restore indicator is chat-level and idempotent', () => {
 });
 
 test('restore indicator hide after settle resets one timer', () => {
-    const hideBlock = exportedFunctionBlock(uiSrc, 'hideChatRestoreIndicatorAfterSettle');
+    const hideBlock = exportedFunctionBlock(chatScrollSrc, 'hideChatRestoreIndicatorAfterSettle');
     assert.ok(hideBlock.includes('window.clearTimeout(chatRestoreIndicatorHideTimer)'), 'hide scheduling should reset previous timers');
     assert.ok(hideBlock.includes('window.setTimeout'), 'hide scheduling should wait for restore settle');
     assert.ok(hideBlock.includes('hideChatRestoreIndicator()'), 'scheduled callback should delegate to the immediate hide helper');
 });
 
 test('bottom restore owns indicator lifecycle', () => {
-    const restoreBlock = exportedFunctionBlock(uiSrc, 'reconcileChatBottomAfterRestore');
+    const restoreBlock = exportedFunctionBlock(chatScrollSrc, 'reconcileChatBottomAfterRestore');
     assert.ok(restoreBlock.includes('showChatRestoreIndicator(reason)'), 'bottom restore should show the indicator');
     assert.ok(restoreBlock.includes('hideChatRestoreIndicatorAfterSettle()'), 'bottom restore should schedule settle hide');
     assert.ok(restoreBlock.includes('vs.reconcileAfterRestore'), 'virtual-scroll restore path should use guarded reconciliation');

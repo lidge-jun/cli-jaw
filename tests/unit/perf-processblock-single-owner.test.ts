@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const uiSrc = readFileSync(join(import.meta.dirname, '../../public/js/ui.ts'), 'utf8');
+const processDomSrc = readFileSync(join(import.meta.dirname, '../../public/js/features/process-block-dom.ts'), 'utf8');
+const chatMessagesSrc = readFileSync(join(import.meta.dirname, '../../public/js/features/chat-messages.ts'), 'utf8');
 
 function functionBlock(source: string, signature: string): string {
     const start = source.indexOf(signature);
@@ -21,9 +23,9 @@ function functionBlock(source: string, signature: string): string {
 }
 
 test('ProcessBlock DOM has a single-owner selector covering canonical and legacy blocks', () => {
-    const block = uiSrc.slice(
-        uiSrc.indexOf('const TOOL_BLOCK_SELECTOR'),
-        uiSrc.indexOf('function agentBody'),
+    const block = processDomSrc.slice(
+        processDomSrc.indexOf('const TOOL_BLOCK_SELECTOR'),
+        processDomSrc.indexOf('function agentBody'),
     );
 
     assert.ok(block.includes('TOOL_BLOCK_SELECTOR'), 'TOOL_BLOCK_SELECTOR must exist');
@@ -36,14 +38,14 @@ test('ProcessBlock DOM has a single-owner selector covering canonical and legacy
 });
 
 test('ProcessBlock DOM helpers exist without exporting test-only APIs', () => {
-    assert.ok(uiSrc.includes('function normalizeAgentToolBlocks(agentMsg: HTMLElement): void'),
+    assert.ok(processDomSrc.includes('export function normalizeAgentToolBlocks(agentMsg: HTMLElement): void'),
         'normalizeAgentToolBlocks helper must exist');
-    assert.ok(uiSrc.includes('function hasAgentToolBlock(agentMsg: HTMLElement): boolean'),
+    assert.ok(processDomSrc.includes('export function hasAgentToolBlock(agentMsg: HTMLElement): boolean'),
         'hasAgentToolBlock helper must exist');
     assert.ok(!uiSrc.includes('export function normalizeAgentToolBlocks'),
-        'normalization helper should remain private');
+        'normalization helper should not be part of the ui.ts facade');
     assert.ok(!uiSrc.includes('export function hasAgentToolBlock'),
-        'presence helper should remain private');
+        'presence helper should not be part of the ui.ts facade');
 });
 
 test('finalizeAgent preserves canonical tool ownership', () => {
@@ -78,7 +80,7 @@ test('active hydration and live process steps normalize before block creation', 
 });
 
 test('virtual-scroll serialization normalizes agent messages first', () => {
-    const addBlock = functionBlock(uiSrc, 'export function addMessage');
+    const addBlock = functionBlock(chatMessagesSrc, 'export function addMessage');
 
     assert.ok(addBlock.includes("if (div.classList.contains('msg-agent')) normalizeAgentToolBlocks(div);"),
         'live append path must normalize agent messages before appendLiveItem');

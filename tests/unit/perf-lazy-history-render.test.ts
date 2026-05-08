@@ -4,7 +4,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { normalizeStrictPropertyAccess } from './source-normalize';
 
-const uiSrc = normalizeStrictPropertyAccess(readFileSync(join(import.meta.dirname, '../../public/js/ui.ts'), 'utf8'));
+const historySrc = normalizeStrictPropertyAccess(readFileSync(join(import.meta.dirname, '../../public/js/features/message-history.ts'), 'utf8'));
+const itemSrc = normalizeStrictPropertyAccess(readFileSync(join(import.meta.dirname, '../../public/js/features/message-item-html.ts'), 'utf8'));
 
 function functionBlock(source: string, signature: string): string {
     const start = source.indexOf(signature);
@@ -22,8 +23,8 @@ function functionBlock(source: string, signature: string): string {
 }
 
 test('buildVirtualHistoryItems stores lazy shells instead of rendered markdown HTML', () => {
-    const block = functionBlock(uiSrc, 'function buildVirtualHistoryItems');
-    const helper = functionBlock(uiSrc, 'function buildLazyVirtualMessageItem');
+    const block = functionBlock(historySrc, 'export function buildVirtualHistoryItems');
+    const helper = functionBlock(itemSrc, 'export function buildLazyVirtualMessageItem');
 
     assert.ok(helper.includes('lazy-pending'), 'history rows must use lazy-pending shells');
     assert.ok(helper.includes('data-raw="${escapeHtml(rawContent)}"'),
@@ -35,9 +36,9 @@ test('buildVirtualHistoryItems stores lazy shells instead of rendered markdown H
 });
 
 test('buildVirtualHistoryItems stores raw escaped tool_log without eager ProcessBlock detail HTML', () => {
-    const block = functionBlock(uiSrc, 'function buildVirtualHistoryItems');
+    const block = functionBlock(historySrc, 'export function buildVirtualHistoryItems');
 
-    const helper = functionBlock(uiSrc, 'function buildLazyVirtualMessageItem');
+    const helper = functionBlock(itemSrc, 'export function buildLazyVirtualMessageItem');
 
     assert.ok(helper.includes('data-tool-log="${rawToolLog}"'),
         'assistant history rows must carry raw tool_log in a lazy dataset');
@@ -50,7 +51,7 @@ test('buildVirtualHistoryItems stores raw escaped tool_log without eager Process
 });
 
 test('registerVirtualScrollCallbacks renders markdown and tool_log only after mount', () => {
-    const block = functionBlock(uiSrc, 'function registerVirtualScrollCallbacks');
+    const block = functionBlock(historySrc, 'export function registerVirtualScrollCallbacks');
 
     assert.ok(block.includes('const rawToolLog = body?.dataset.toolLog ||'),
         'lazy render must read stored tool_log from the mounted agent body');

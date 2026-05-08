@@ -28,11 +28,13 @@ test('message and orchestrate snapshot API boundaries sanitize before res.json',
 
 test('frontend history, cache, active-run, and virtual item paths use bounded tool logs', () => {
     const ui = src('public/js/ui.ts');
+    const adapter = src('public/js/features/process-log-adapter.ts');
+    const item = src('public/js/features/message-item-html.ts');
 
-    assert.ok(ui.includes('parseToolLogBounded(toolLog)'));
-    assert.ok(ui.includes('function normalizeMessageToolLog'));
-    assert.ok(ui.includes('buildLazyVirtualMessageItem'));
-    assert.ok(ui.includes('sanitizeToolLogForDurableStorage(entries)'));
+    assert.ok(adapter.includes('parseToolLogBounded(toolLog)'));
+    assert.ok(adapter.includes('function normalizeMessageToolLog'));
+    assert.ok(item.includes('buildLazyVirtualMessageItem'));
+    assert.ok(adapter.includes('sanitizeToolLogForDurableStorage(entries)'));
     assert.ok(ui.includes('const snapshotToolLog = sanitizedToolLogEntries(snapshot.toolLog || [])'));
     assert.ok(ui.includes('const durableToolLog = sanitizedToolLogEntries('));
     assert.ok(ui.includes('vs.appendItem(buildLazyVirtualMessageItem'));
