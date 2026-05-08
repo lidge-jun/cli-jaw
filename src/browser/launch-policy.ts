@@ -39,7 +39,7 @@ export function resolveLaunchPolicy(input: BrowserLaunchPolicyInput = {}): Brows
         return {
             mode,
             allowLaunch: true,
-            headless: true,
+            headless: requestedHeadless,
         };
     }
 

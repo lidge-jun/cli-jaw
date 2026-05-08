@@ -119,7 +119,7 @@ This is the fast path for browser automation. Use it for DOM pages, local apps, 
 
 ```bash
 cli-jaw browser status                         # check first
-cli-jaw browser start --agent                  # headless automation (default)
+cli-jaw browser start --agent                  # automation mode (headed by default)
 cli-jaw browser navigate "https://example.com"
 cli-jaw browser snapshot --interactive         # get ref IDs
 cli-jaw browser click e3
