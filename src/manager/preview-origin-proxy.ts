@@ -132,11 +132,21 @@ export function createPreviewOriginProxyController(
     }
 
     function validateIncoming(req: IncomingMessage, state: PreviewServerState): { ok: true } | { ok: false; status: number; reason: string } {
-        if (!isExpectedHostHeader(req.headers.host, { host: bindHost, port: state.previewPort })) {
+        if (!isExpectedHostHeader(req.headers.host, {
+            host: bindHost,
+            port: state.previewPort,
+            allowLocalhostAlias: true,
+        })) {
             return { ok: false, status: 403, reason: 'unexpected preview host header' };
         }
+        const previewOrigins = [
+            publicBase(state),
+            `http://localhost:${state.previewPort}`,
+            `http://${bindHost}:${options.managerPort}`,
+            `http://localhost:${options.managerPort}`,
+        ];
         if (!isAllowedOriginHeader(req.headers.origin, {
-            allowedOrigins: [publicBase(state), `http://${bindHost}:${options.managerPort}`],
+            allowedOrigins: previewOrigins,
             allowMissing: true,
         })) {
             return { ok: false, status: 403, reason: 'unexpected preview origin header' };

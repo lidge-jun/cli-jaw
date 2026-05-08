@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { appendPreviewTheme, buildPreviewState } from '../../public/manager/src/preview.js';
+import { appendPreviewTheme, buildPreviewState, normalizePreviewUrlForCurrentHost } from '../../public/manager/src/preview.js';
 import type { DashboardInstance, DashboardScanResult } from '../../public/manager/src/types.js';
 
 const online: DashboardInstance = {
@@ -118,6 +118,17 @@ test('preview helper appends theme to origin-port preview url', () => {
 
     assert.equal(state.src, 'http://127.0.0.1:24602/?x=1&jawTheme=light#frame');
     assert.equal(state.transport, 'origin-port');
+});
+
+test('preview helper rewrites loopback origin preview host to current dashboard host', () => {
+    assert.equal(
+        normalizePreviewUrlForCurrentHost('http://127.0.0.1:24602/?x=1', 'http://localhost:24576/'),
+        'http://localhost:24602/?x=1',
+    );
+    assert.equal(
+        normalizePreviewUrlForCurrentHost('http://127.0.0.1:24602/', 'http://example.com:24576/'),
+        'http://127.0.0.1:24602/',
+    );
 });
 
 test('preview helper falls back when origin-port preview is unavailable', () => {

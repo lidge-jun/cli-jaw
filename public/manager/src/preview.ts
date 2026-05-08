@@ -13,8 +13,27 @@ export type PreviewTransport = 'origin-port' | 'legacy-path' | 'none';
 
 type PreviewArgument = PreviewTheme | 'proxy' | 'direct' | undefined;
 
+function isLoopbackHost(hostname: string): boolean {
+    return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1' || hostname === '[::1]';
+}
+
 function isPreviewTheme(value: PreviewArgument): value is PreviewTheme {
     return value === 'dark' || value === 'light';
+}
+
+export function normalizePreviewUrlForCurrentHost(src: string, currentHref?: string): string {
+    const href = currentHref || (typeof window !== 'undefined' ? window.location.href : '');
+    if (!href || src.startsWith('/')) return src;
+    try {
+        const previewUrl = new URL(src);
+        const currentUrl = new URL(href);
+        if (isLoopbackHost(previewUrl.hostname) && isLoopbackHost(currentUrl.hostname)) {
+            previewUrl.hostname = currentUrl.hostname;
+        }
+        return previewUrl.toString();
+    } catch {
+        return src;
+    }
 }
 
 export function appendPreviewTheme(src: string, theme: PreviewTheme | null | undefined): string {
@@ -51,7 +70,7 @@ export function buildPreviewState(
     if (proxy.preview?.enabled && originPreview?.status === 'ready' && originPreview.url) {
         return {
             canPreview: true,
-            src: appendPreviewTheme(originPreview.url, theme),
+            src: appendPreviewTheme(normalizePreviewUrlForCurrentHost(originPreview.url), theme),
             reason: null,
             transport: 'origin-port',
             warning: 'origin proxy ready',

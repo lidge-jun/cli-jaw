@@ -190,6 +190,26 @@ test('preview proxy rewrites redirects and rejects unexpected Host', async () =>
     }
 });
 
+test('preview proxy accepts localhost alias for WSL-forwarded browser requests', async () => {
+    const { targetPort, previewFrom } = await freePortPair();
+    const target = await startTarget(targetPort);
+    const controller = createPreviewOriginProxyController({ scanFrom: targetPort, scanCount: 1, previewFrom, managerPort: 24576 });
+    try {
+        await controller.ensureTarget(targetPort);
+        const response = await requestText(previewFrom, '/api/health', {
+            host: `localhost:${previewFrom}`,
+            origin: `http://localhost:${previewFrom}`,
+        });
+        assert.equal(response.status, 200);
+        assert.equal(response.body, 'ok');
+        assert.equal(target.headers.at(-1)?.host, `127.0.0.1:${targetPort}`);
+        assert.equal(target.headers.at(-1)?.origin, `http://127.0.0.1:${targetPort}`);
+    } finally {
+        await controller.close();
+        await target.close();
+    }
+});
+
 test('reconcile closes previously online targets and busy ports become unavailable', async () => {
     const targetPort = await freePort();
     const busyPreview = await freePort();
