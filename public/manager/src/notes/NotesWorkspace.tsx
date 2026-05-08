@@ -1,7 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MarkdownEditor } from './MarkdownEditor';
 import { MarkdownPreview } from './MarkdownPreview';
 import { NotesEmptyState } from './NotesEmptyState';
+import { NotesQuickSwitcher } from './NotesQuickSwitcher';
 import { NotesToolbar } from './NotesToolbar';
 import { renameNotePath } from './notes-api';
 import { useNoteDocument } from './useNoteDocument';
@@ -44,6 +45,7 @@ function primaryModeFor(viewMode: NotesViewMode, authoringMode: NotesAuthoringMo
 export function NotesWorkspace(props: NotesWorkspaceProps) {
     const document = useNoteDocument();
     const renamingRef = useRef(false);
+    const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false);
 
     useEffect(() => {
         if (!props.selectedPath) return;
@@ -96,6 +98,18 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
         window.addEventListener('keydown', handleSearchShortcut);
         return () => window.removeEventListener('keydown', handleSearchShortcut);
     }, [props.active, props.onOpenSidebarSearch]);
+
+    useEffect(() => {
+        if (!props.active) return;
+        function handleQuickSwitcherShortcut(event: KeyboardEvent): void {
+            if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'p') return;
+            event.preventDefault();
+            setQuickSwitcherOpen(open => !open);
+        }
+
+        window.addEventListener('keydown', handleQuickSwitcherShortcut);
+        return () => window.removeEventListener('keydown', handleQuickSwitcherShortcut);
+    }, [props.active]);
 
     async function handleTitleBlur(event: React.FocusEvent<HTMLInputElement>): Promise<void> {
         if (renamingRef.current || !props.selectedPath) return;
@@ -196,6 +210,16 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
                     )}
                 </div>
             </main>
+            <NotesQuickSwitcher
+                open={quickSwitcherOpen}
+                notes={props.vaultIndex?.notes || []}
+                selectedPath={props.selectedPath}
+                onClose={() => setQuickSwitcherOpen(false)}
+                onSelect={(path) => {
+                    props.onSelectedPathChange(path);
+                    setQuickSwitcherOpen(false);
+                }}
+            />
         </section>
     );
 }

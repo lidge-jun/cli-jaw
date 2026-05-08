@@ -12,6 +12,7 @@ import './manager-p0-1-1.css';
 import './manager-dashboard-settings.css';
 import 'katex/dist/katex.min.css';
 import './manager-notes.css';
+import './notes/notes-quick-switcher.css';
 import './notes/notes-search.css';
 import './manager-dashboard-board.css';
 import './manager-dashboard-board-stages.css';

@@ -18,11 +18,13 @@ test('Notes workspace frontend files and API wrapper exist', () => {
         'public/manager/src/notes/useNotesModel.ts',
         'public/manager/src/notes/NotesFileTree.tsx',
         'public/manager/src/notes/NotesSearchSidebar.tsx',
+        'public/manager/src/notes/NotesQuickSwitcher.tsx',
         'public/manager/src/notes/NotesToolbar.tsx',
         'public/manager/src/notes/NotesEmptyState.tsx',
         'public/manager/src/notes/useNoteDocument.ts',
         'public/manager/src/notes/notes-api.ts',
         'public/manager/src/notes/notes-search.css',
+        'public/manager/src/notes/notes-quick-switcher.css',
         'public/manager/src/notes/editor-theme.ts',
         'public/manager/src/manager-notes.css',
     ].forEach(path => {
@@ -46,9 +48,14 @@ test('Notes API and create actions surface backend/fallback failures without unc
     const workspace = read('public/manager/src/notes/NotesWorkspace.tsx');
     const toolbar = read('public/manager/src/notes/NotesToolbar.tsx');
     const searchSidebar = read('public/manager/src/notes/NotesSearchSidebar.tsx');
+    const quickSwitcher = read('public/manager/src/notes/NotesQuickSwitcher.tsx');
     const searchCss = read('public/manager/src/notes/notes-search.css');
+    const quickSwitcherCss = read('public/manager/src/notes/notes-quick-switcher.css');
     const css = read('public/manager/src/manager-notes.css');
     const app = read('public/manager/src/App.tsx');
+    const main = read('public/manager/src/main.tsx');
+    const commandPalette = read('public/manager/src/components/CommandPalette.tsx');
+    const useCommandPalette = read('public/manager/src/hooks/useCommandPalette.ts');
 
     assert.ok(api.includes('response.text()'), 'notes response parsing must inspect text before JSON parsing');
     assert.ok(api.includes('invalid_json'), 'notes response parsing must classify non-JSON responses');
@@ -190,6 +197,13 @@ test('Notes API and create actions surface backend/fallback failures without unc
     assert.ok(workspace.includes('props.onOpenSidebarSearch()'), 'notes workspace shortcut must open sidebar Search mode');
     assert.ok(workspace.includes("event.key.toLowerCase() !== 'f'"), 'notes search shortcut must be bound to F');
     assert.ok(workspace.includes('!event.shiftKey'), 'notes search shortcut must require Shift');
+    assert.ok(workspace.includes("import { NotesQuickSwitcher } from './NotesQuickSwitcher'"), 'notes workspace must import the Notes quick switcher');
+    assert.ok(workspace.includes('const [quickSwitcherOpen, setQuickSwitcherOpen] = useState(false)'), 'notes workspace must own local quick switcher state');
+    assert.ok(workspace.includes("event.key.toLowerCase() !== 'p'"), 'notes quick switcher shortcut must be bound to P');
+    assert.ok(workspace.includes('setQuickSwitcherOpen(open => !open)'), 'Cmd/Ctrl+P must toggle the quick switcher');
+    assert.ok(workspace.includes('notes={props.vaultIndex?.notes || []}'), 'quick switcher must consume existing vault index notes');
+    assert.ok(workspace.includes('<NotesQuickSwitcher'), 'notes workspace must render the quick switcher');
+    assert.ok(workspace.includes('props.onSelectedPathChange(path)'), 'quick switcher selection must reuse notes selection callback');
     assert.equal(toolbar.includes('searchOpen: boolean'), false, 'notes toolbar must not accept search state after sidebar icon owns Search');
     assert.equal(toolbar.includes('onSearchToggle: () => void'), false, 'notes toolbar must not accept a search toggle after sidebar icon owns Search');
     assert.equal(toolbar.includes('aria-pressed={props.searchOpen}'), false, 'notes toolbar must not expose a Search pressed state');
@@ -222,7 +236,27 @@ test('Notes API and create actions surface backend/fallback failures without unc
     assert.equal(searchCss.includes('.notes-search-panel'), false, 'search CSS must not keep the floating overlay panel');
     assert.equal(searchCss.includes('position: absolute'), false, 'search CSS must not absolutely position search results over the editor');
     assert.equal(searchCss.includes('top: 12px'), false, 'search CSS must not cover the toolbar search button');
-    assert.ok(read('public/manager/src/main.tsx').includes("./notes/notes-search.css"), 'main entry must import the split notes search CSS');
+    assert.ok(quickSwitcher.includes("import type { NoteMetadata } from '../types'"), 'quick switcher must use shared vault index note metadata');
+    assert.ok(quickSwitcher.includes('export function filterQuickSwitcherNotes'), 'quick switcher scoring must be exported for focused unit tests');
+    assert.ok(quickSwitcher.includes('role="dialog"'), 'quick switcher must render a dialog');
+    assert.ok(quickSwitcher.includes('aria-modal="true"'), 'quick switcher dialog must be modal');
+    assert.ok(quickSwitcher.includes('role="listbox"'), 'quick switcher results must expose stable listbox semantics');
+    assert.ok(quickSwitcher.includes('role="option"'), 'quick switcher results must expose options');
+    assert.ok(quickSwitcher.includes("className={`notes-quick-switcher-item${active ? ' is-active' : ''}${current ? ' is-current' : ''}`"), 'quick switcher must mark active and current rows');
+    assert.ok(quickSwitcher.includes("current ? 'Current note'"), 'quick switcher must visibly label the current selected note');
+    assert.ok(quickSwitcher.includes('onClick={props.onClose}'), 'quick switcher backdrop click must close the dialog');
+    assert.ok(quickSwitcher.includes("event.key === 'ArrowDown'"), 'quick switcher must handle ArrowDown');
+    assert.ok(quickSwitcher.includes("event.key === 'ArrowUp'"), 'quick switcher must handle ArrowUp');
+    assert.ok(quickSwitcher.includes("event.key === 'Enter'"), 'quick switcher must handle Enter');
+    assert.ok(quickSwitcher.includes("event.key === 'Escape'"), 'quick switcher must handle Escape');
+    assert.ok(quickSwitcher.includes('note.aliases.map'), 'quick switcher must match aliases as well as title/path');
+    assert.ok(quickSwitcherCss.includes('.notes-quick-switcher-backdrop'), 'quick switcher CSS must style the backdrop');
+    assert.ok(quickSwitcherCss.includes('.notes-quick-switcher-list'), 'quick switcher CSS must keep results scrollable');
+    assert.ok(quickSwitcherCss.includes('.notes-quick-switcher-item.is-current'), 'quick switcher CSS must style the current note marker');
+    assert.ok(main.includes("./notes/notes-quick-switcher.css"), 'main entry must import the split notes quick switcher CSS');
+    assert.ok(main.includes("./notes/notes-search.css"), 'main entry must import the split notes search CSS');
+    assert.ok(commandPalette.includes('CommandPalette'), 'manager command palette must remain present');
+    assert.ok(useCommandPalette.includes("event.key !== 'k' && event.key !== 'K'"), 'manager command palette must remain on Cmd/Ctrl+K');
     assert.ok(workspace.includes('className="notes-content"'), 'notes toolbar body must be wrapped so document panes land in a constrained scroll row');
     assert.ok(css.includes('grid-template-rows: max-content minmax(0, 1fr);'), 'notes main grid must reserve a fixed toolbar row and a constrained scroll content row');
     assert.ok(css.includes('.notes-content'), 'notes content wrapper must own the error/conflict/document rows');
