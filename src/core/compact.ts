@@ -352,15 +352,18 @@ export async function autoCompactRefresh(opts: {
 
     const trace = `${BOOTSTRAP_TRACE_PREFIX}\n${bootstrap}`;
 
-    const { insertMessageWithTrace } = await import('./db.js');
+    const { insertMessageWithTrace, clearSessionBucket } = await import('./db.js');
+    const { resolveSessionBucket } = await import('../agent/args.js');
     const { bumpSessionOwnershipGeneration } = await import('../agent/session-persistence.js');
     const { clearBossSessionOnly, setPendingBootstrapPrompt } = await import('./main-session.js');
     const { broadcast } = await import('./bus.js');
+    const bucket = resolveSessionBucket(opts.cli, opts.model);
 
     insertMessageWithTrace.run('assistant', COMPACT_MARKER_CONTENT, opts.cli, opts.model, trace, null, opts.workDir);
     setPendingBootstrapPrompt(bootstrap);
     bumpSessionOwnershipGeneration();
     clearBossSessionOnly();
+    if (bucket) clearSessionBucket.run(bucket);
 
     broadcast('system_notice', { code: 'auto_compact_refresh', text: 'compact detected — session refreshed' }, 'public');
 }

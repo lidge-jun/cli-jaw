@@ -10,10 +10,12 @@ import path from 'node:path';
 
 const ROOT = process.cwd();
 const COMPACT = path.join(ROOT, 'src/core/compact.ts');
+const CLI_COMPACT = path.join(ROOT, 'src/cli/compact.ts');
 const RUNTIME = path.join(ROOT, 'src/core/runtime-settings.ts');
 const MAIN_SESSION = path.join(ROOT, 'src/core/main-session.ts');
 
 const compactSrc = readSource(COMPACT, 'utf8');
+const cliCompactSrc = readSource(CLI_COMPACT, 'utf8');
 const runtimeSrc = readSource(RUNTIME, 'utf8');
 const mainSessionSrc = readSource(MAIN_SESSION, 'utf8');
 
@@ -33,6 +35,17 @@ test('CSR-003: target bucket clear is inside transaction', () => {
     assert.match(compactSrc, /resolveSessionBucket\(opts\.toCli,\s*opts\.toModel\)/);
     // Inside tx: if (targetBucket) clearSessionBucket.run(targetBucket)
     assert.match(compactSrc, /db\.transaction\(\(\)\s*=>\s*\{[\s\S]*?if\s*\(\s*targetBucket\s*\)\s*clearSessionBucket\.run\(targetBucket\)[\s\S]*?\}\)/);
+});
+
+test('CSR-003b: auto compact clears active session bucket after bootstrap handoff', () => {
+    assert.match(compactSrc, /export\s+async\s+function\s+autoCompactRefresh/);
+    assert.match(compactSrc, /const\s+bucket\s*=\s*resolveSessionBucket\(opts\.cli,\s*opts\.model\)/);
+    assert.match(compactSrc, /clearBossSessionOnly\(\);\s*if\s*\(\s*bucket\s*\)\s*clearSessionBucket\.run\(bucket\)/);
+});
+
+test('CSR-003c: slash compact clears active session bucket after bootstrap handoff', () => {
+    assert.match(cliCompactSrc, /const\s+bucket\s*=\s*resolveSessionBucket\(activeCli,\s*model\)/);
+    assert.match(cliCompactSrc, /clearBossSessionOnly\(\);\s*if\s*\(\s*bucket\s*\)\s*clearSessionBucket\.run\(bucket\)/);
 });
 
 test('CSR-004: cli_switch_refresh notice broadcast includes both fromCli and toCli', () => {

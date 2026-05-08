@@ -144,9 +144,23 @@ test('AG-009p: shouldResumeBucketSession — Copilot normalizes deprecated fast 
     assert.equal(shouldResumeBucketSession('copilot', 'claude-opus-4.6', 'claude-opus-4.6-fast'), true);
 });
 
-test('AG-009q: shouldResumeBucketSession — non-Copilot CLIs keep current resume behavior', () => {
+test('AG-009q: shouldResumeBucketSession — non-Copilot/non-OpenCode/non-Gemini CLIs keep current resume behavior', () => {
     assert.equal(shouldResumeBucketSession('claude', 'claude-opus-4-6', 'claude-sonnet-4-6'), true);
-    assert.equal(shouldResumeBucketSession('gemini', 'gemini-2.5-pro', 'gemini-2.5-flash'), true);
+});
+
+test('AG-009q2: shouldResumeBucketSession — Gemini resumes only matching fresh concrete model buckets', () => {
+    const now = Date.parse('2026-05-08T00:00:00Z');
+    assert.equal(shouldResumeBucketSession('gemini', 'gemini-2.5-pro', 'gemini-2.5-pro', null, null, now, now), true);
+    assert.equal(shouldResumeBucketSession('gemini', 'gemini-2.5-pro', 'gemini-2.5-flash', null, null, now, now), false);
+    assert.equal(shouldResumeBucketSession('gemini', 'default', 'gemini-2.5-pro', null, null, now, now), false);
+    assert.equal(shouldResumeBucketSession('gemini', 'default', 'default', null, null, now, now), false);
+});
+
+test('AG-009q3: shouldResumeBucketSession — Gemini expired or missing bucket timestamp forces fresh session', () => {
+    const now = Date.parse('2026-05-08T00:00:00Z');
+    const stale = now - (73 * 60 * 60 * 1000);
+    assert.equal(shouldResumeBucketSession('gemini', 'gemini-2.5-pro', 'gemini-2.5-pro', null, null, stale, now), false);
+    assert.equal(shouldResumeBucketSession('gemini', 'gemini-2.5-pro', 'gemini-2.5-pro', null, null, null, now), false);
 });
 
 test('AG-009r: shouldResumeBucketSession — OpenCode stale resume key forces fresh session', () => {

@@ -66,6 +66,26 @@ test('Gemini capacity fallback keeps main ownership and skips only resume/sessio
     assert.doesNotMatch(branch, /forceNew:\s*true/);
 });
 
+test('Gemini resumed capacity fallback clears stale bucket before retrying without resume', () => {
+    const lifecycle = readSrc('../../src/agent/lifecycle-handler.ts');
+    const branch = lifecycle.slice(
+        lifecycle.indexOf('Gemini resumed capacity failure'),
+        lifecycle.indexOf('Gemini model capacity: one-request Auto fallback'),
+    );
+
+    assert.match(branch, /isResume/);
+    assert.match(branch, /const\s+bucket\s*=\s*resolveSessionBucket\(cli,\s*model\)/);
+    assert.match(branch, /clearSessionBucket\.run\(bucket\)/);
+    assert.match(branch, /_skipResume:\s*true/);
+    assert.match(branch, /_skipSessionPersist:\s*true/);
+    assert.match(branch, /_isCapacityFallback:\s*true/);
+});
+
+test('Gemini high-turn compact coordination clears session bucket like Codex/OpenCode', () => {
+    const lifecycle = readSrc('../../src/agent/lifecycle-handler.ts');
+    assert.match(lifecycle, /cli\s*===\s*'codex'\s*\|\|\s*cli\s*===\s*'opencode'\s*\|\|\s*cli\s*===\s*'gemini'/);
+});
+
 test('Gemini capacity fallback disables resume without changing mainManaged predicate', () => {
     const spawn = readSrc('../../src/agent/spawn.ts');
 

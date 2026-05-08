@@ -93,7 +93,8 @@ export async function compactHandler(args: string[], ctx: CliCommandContext): Pr
     const bootstrap = renderBootstrapPrompt(slots);
     const trace = `${BOOTSTRAP_TRACE_PREFIX}\n${bootstrap}`;
 
-    const { insertMessageWithTrace } = await import('../core/db.js');
+    const { insertMessageWithTrace, clearSessionBucket } = await import('../core/db.js');
+    const { resolveSessionBucket } = await import('../agent/args.js');
     const {
         bumpSessionOwnershipGeneration,
     } = await import('../agent/session-persistence.js');
@@ -103,6 +104,7 @@ export async function compactHandler(args: string[], ctx: CliCommandContext): Pr
     } = await import('../core/main-session.js');
 
     const model = getActiveModel(settings, session, activeCli);
+    const bucket = resolveSessionBucket(activeCli, model);
     insertMessageWithTrace.run(
         'assistant',
         COMPACT_MARKER_CONTENT,
@@ -115,6 +117,7 @@ export async function compactHandler(args: string[], ctx: CliCommandContext): Pr
     setPendingBootstrapPrompt(bootstrap);
     bumpSessionOwnershipGeneration();
     clearBossSessionOnly();
+    if (bucket) clearSessionBucket.run(bucket);
 
     return {
         ok: true,

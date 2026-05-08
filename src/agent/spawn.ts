@@ -94,6 +94,7 @@ interface SessionBucketRow {
     session_id?: string | null;
     model?: string | null;
     resume_key?: string | null;
+    updated_at?: string | number | null;
 }
 
 type SpawnPromiseResult = { text: string; code: number };
@@ -672,7 +673,17 @@ export function shouldResumeBucketSession(
     bucketModel: string | null | undefined,
     requestedResumeKey?: string | null,
     bucketResumeKey?: string | null,
+    bucketUpdatedAt?: string | number | null,
+    nowMs: number = Date.now(),
 ): boolean {
+    if (cli === 'gemini') {
+        if (!bucketModel) return false;
+        if (isExpiredBucket(bucketUpdatedAt, GEMINI_RESUME_TTL_MS, nowMs)) return false;
+        const requested = normalizeGeminiResumeModel(requestedModel);
+        const bucket = normalizeGeminiResumeModel(bucketModel);
+        if (!requested || !bucket) return false;
+        return requested === bucket;
+    }
     if (cli === 'copilot' && bucketModel) {
         return normalizeModelForCli(cli, requestedModel) === normalizeModelForCli(cli, bucketModel);
     }
@@ -680,6 +691,32 @@ export function shouldResumeBucketSession(
         return requestedResumeKey === (bucketResumeKey ?? null);
     }
     return true;
+}
+
+export const GEMINI_RESUME_TTL_MS = 72 * 60 * 60 * 1000;
+const GEMINI_HISTORY_MAX_SESSIONS = 4;
+const GEMINI_HISTORY_MAX_CHARS = 3000;
+
+function normalizeGeminiResumeModel(model: string | null | undefined): string {
+    const normalized = String(model || '').trim().toLowerCase();
+    if (!normalized || normalized === 'default' || normalized === 'auto') return '';
+    return normalized;
+}
+
+function parseBucketUpdatedAt(value: string | number | null | undefined): number | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value < 10_000_000_000 ? value * 1000 : value;
+    }
+    const text = String(value || '').trim();
+    if (!text) return null;
+    const parsed = Date.parse(text.includes('T') ? text : `${text.replace(' ', 'T')}Z`);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isExpiredBucket(value: string | number | null | undefined, ttlMs: number, nowMs: number): boolean {
+    const updatedAtMs = parseBucketUpdatedAt(value);
+    if (updatedAtMs === null) return true;
+    return nowMs - updatedAtMs > ttlMs;
 }
 
 export interface SpawnLifecycle {
@@ -847,6 +884,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     const bucketSessionId = bucketRow?.session_id || null;
     const bucketModel = typeof bucketRow?.model === 'string' ? bucketRow.model : null;
     const bucketResumeKey = typeof bucketRow?.resume_key === 'string' ? bucketRow.resume_key : null;
+    const bucketUpdatedAt = bucketRow?.updated_at ?? null;
     const resumeKey = buildSessionResumeKey(cli, spawnEnv);
     const canResumeBucketSession = !bucketSessionId || shouldResumeBucketSession(
         cli,
@@ -854,6 +892,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         bucketModel,
         resumeKey,
         bucketResumeKey,
+        bucketUpdatedAt,
     );
     const isResume = empSid
         ? true
@@ -873,7 +912,14 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     }
 
     if (!empSid && !forceNew && bucketSessionId && !canResumeBucketSession) {
-        if (cli === 'opencode' && resumeKey !== (bucketResumeKey ?? null)) {
+        try {
+            if (currentBucket) clearSessionBucket.run(currentBucket);
+        } catch (e) {
+            console.warn('[jaw:resume] stale bucket clear failed:', (e as Error).message);
+        }
+        if (cli === 'gemini') {
+            console.log(`[jaw:resume] ${cli} stale bucket rejected for model ${bucketModel ?? 'none'} → ${model}; starting fresh session`);
+        } else if (cli === 'opencode' && resumeKey !== (bucketResumeKey ?? null)) {
             console.log(`[jaw:resume] ${cli} resume key changed ${bucketResumeKey ?? 'none'} → ${resumeKey}; starting fresh session`);
         } else {
             console.log(`[jaw:resume] ${cli} model changed ${bucketModel} → ${model}; starting fresh session`);
@@ -891,7 +937,14 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     }
 
     const resumeSessionId = empSid || (isResume ? bucketSessionId : null);
-    const historyBlock = !isResume && !opts._skipHistory ? buildHistoryBlock(prompt, settings["workingDir"]) : '';
+    const historyBlock = !isResume && !opts._skipHistory
+        ? buildHistoryBlock(
+            prompt,
+            settings["workingDir"],
+            cli === 'gemini' ? GEMINI_HISTORY_MAX_SESSIONS : 10,
+            cli === 'gemini' ? GEMINI_HISTORY_MAX_CHARS : 8000,
+        )
+        : '';
     const promptForArgs = (cli === 'gemini' || cli === 'opencode')
         ? withHistoryPrompt(prompt, historyBlock)
         : prompt;
