@@ -14,11 +14,13 @@ function read(path: string): string {
 test('web chat exposes Pin as reminder through extracted message actions', () => {
     const ui = read('public/js/ui.ts');
     const actions = read('public/js/features/message-actions.ts');
+    const item = read('public/js/features/message-item-html.ts');
+    const chatMessages = read('public/js/features/chat-messages.ts');
     const css = read('public/css/chat.css');
 
     assert.ok(ui.includes("from './features/message-actions.js'"), 'ui.ts must delegate message actions to the extracted module');
-    assert.ok(ui.includes('messageSourceAttributes({ role, messageId, turnIndex: index })'), 'history messages must carry source metadata');
-    assert.ok(ui.includes("div.setAttribute('data-message-id', messageId)"), 'live messages must carry a generated message id');
+    assert.ok(item.includes('messageSourceAttributes({ role, messageId, turnIndex: index })'), 'history messages must carry source metadata');
+    assert.ok(chatMessages.includes("div.setAttribute('data-message-id', messageId)"), 'live messages must carry a generated message id');
     assert.ok(actions.includes("'/api/dashboard/reminders/from-message'"), 'pin action must call the reminders from-message endpoint');
     assert.ok(actions.includes("title: compactReminderTitle(text)"), 'pin payload must derive a readable reminder title');
     assert.ok(actions.includes("priority: 'normal'"), 'pin payload must default to normal priority');

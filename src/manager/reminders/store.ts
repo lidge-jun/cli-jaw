@@ -264,6 +264,30 @@ export class RemindersStore {
         return row ? rowToReminder(row) : null;
     }
 
+    listDueReminders(nowIso = new Date().toISOString()): DashboardReminder[] {
+        const rows = this.db.prepare(`
+            SELECT * FROM dashboard_reminders
+            WHERE status != 'done'
+              AND notification_status = 'pending'
+              AND remind_at IS NOT NULL
+              AND remind_at <= ?
+            ORDER BY remind_at ASC, source_updated_at ASC
+        `).all(nowIso) as Row[];
+        return rows.map(rowToReminder);
+    }
+
+    getNextReminderDueAt(): string | null {
+        const row = this.db.prepare(`
+            SELECT remind_at FROM dashboard_reminders
+            WHERE status != 'done'
+              AND notification_status = 'pending'
+              AND remind_at IS NOT NULL
+            ORDER BY remind_at ASC
+            LIMIT 1
+        `).get() as { remind_at: string | null } | undefined;
+        return row?.remind_at ?? null;
+    }
+
     createLocal(input: DashboardReminderInput): DashboardReminder {
         const title = String(input.title || '').trim();
         if (!title) throw new Error('title required');

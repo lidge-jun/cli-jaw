@@ -17,7 +17,8 @@ export type ManagerEvent =
     | { kind: 'lifecycle-result'; port: number; action: DashboardLifecycleAction; status: string; message: string; at: string }
     | { kind: 'health-changed'; port: number; from: DashboardInstanceStatus; to: DashboardInstanceStatus; reason: string | null; at: string }
     | { kind: 'version-mismatch'; port: number; expected: string | null; seen: string; at: string }
-    | { kind: 'port-collision'; port: number; pids: number[]; at: string };
+    | { kind: 'port-collision'; port: number; pids: number[]; at: string }
+    | { kind: 'reminder-delivery'; reminderId: string; status: string; error: string | null; at: string };
 
 export type Observability = {
     publish(event: ManagerEvent): void;

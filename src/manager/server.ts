@@ -35,6 +35,7 @@ import { ScheduleStore } from './schedule/store.js';
 import { startScheduleRunner } from './schedule/runner.js';
 import { createDashboardRemindersRouter } from './reminders/routes.js';
 import { RemindersStore } from './reminders/store.js';
+import { startRemindersScheduler } from './reminders/scheduler.js';
 import { openUrlInBrowser } from '../core/browser-open.js';
 import type {
     DashboardInstance,
@@ -152,6 +153,7 @@ const scheduleStore = new ScheduleStore();
 app.use('/api/dashboard/schedule', createDashboardScheduleRouter({ store: scheduleStore }));
 const remindersStore = new RemindersStore();
 app.use('/api/dashboard/reminders', createDashboardRemindersRouter({ store: remindersStore }));
+let stopRemindersScheduler: (() => void) | null = null;
 
 app.get('/api/dashboard/health', (_req, res) => {
     res.json({
@@ -426,8 +428,13 @@ const shutdown = createDashboardShutdown({
     exit: code => process.exit(code),
 });
 
-process.once('SIGINT', () => void shutdown());
-process.once('SIGTERM', () => void shutdown());
+async function shutdownDashboard(): Promise<void> {
+    stopRemindersScheduler?.();
+    await shutdown();
+}
+
+process.once('SIGINT', () => void shutdownDashboard());
+process.once('SIGTERM', () => void shutdownDashboard());
 
 async function main(): Promise<void> {
     previewProxy.validate();
@@ -448,6 +455,14 @@ async function main(): Promise<void> {
         startScheduleRunner(scheduleStore, {
             log: msg => console.log(msg),
         });
+        if (process.env["JAW_REMINDERS_SCHEDULER"] === '1') {
+            stopRemindersScheduler = startRemindersScheduler({
+                store: remindersStore,
+                observability,
+                log: msg => console.log(msg),
+            });
+            console.log('  Reminders scheduler: enabled');
+        }
 
         if (process.env["JAW_DASHBOARD_OPEN"] === '1') {
             openUrlInBrowser(url, { logPrefix: 'dashboard' });
