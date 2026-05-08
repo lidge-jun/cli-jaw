@@ -281,7 +281,7 @@ cli-jaw/
 │       ├── catalog.ts        ← COMMANDS → capability map 확장 (43L)
 │       ├── policy.ts         ← getVisibleCommands, getTelegramMenuCommands (39L)
 │       └── help-renderer.ts  ← renderHelp list/detail mode (44L)
-├── public/                   ← Web UI (Vite 8 + ES Modules, 409 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 456 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~57912L)
+├── public/                   ← Web UI (Vite 8 + ES Modules, 411 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 456 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~58275L)
 │   ├── index.html            ← 뼈대 (876L, CLI-JAW 대문자 로고, pill theme switch, data-i18n, 로컬 avatar 입력)
 │   ├── manifest.json         ← PWA 매니페스트 (20L) ✨
 │   ├── sw.js                 ← Service Worker 오프라인 캐시 (104L) ✨
@@ -375,7 +375,7 @@ cli-jaw/
 │       ├── launchd.ts        ← macOS LaunchAgent 관리 (instance.ts import, --port, xmlEsc, buildServicePath) (235L)
 │       ├── service.ts        ← 크로스 플랫폼 서비스 관리 (systemd/launchd/docker, buildServicePath, 289L)
 │       ├── orchestrate.ts    ← PABCD 상태 제어 CLI (jaw orchestrate [P|A|B|C|D|reset]) (143L)
-│       ├── browser.ts        ← 브라우저 CLI (primitive + tab/debug + web-ai delegator, 636L)
+│       ├── browser.ts        ← 브라우저 CLI (primitive + tab/debug + web-ai delegator, 788L)
 │       ├── browser-web-ai.ts ← `jaw browser web-ai` ChatGPT/Gemini/Grok 자동화 helper (277L)
 │       ├── dashboard.ts      ← `jaw dashboard serve` — `dist/src/manager/server.js` 서브프로세스 기동 (255L)
 │       └── tui/              ← chat 터미널 TUI 분리 (api/input-handler/overlays/renderer/simple-mode/types/ws-handler, 7 files)
@@ -433,7 +433,7 @@ cli-jaw/
 │   ├── fresh-install-smoke.ts ← 클린 설치 스모크 테스트 (130L) ✨
 │   ├── i18n-registry.ts      ← skills registry i18n 필드 추가 (230L) ✨
 │   ├── install.sh            ← One-Click Installer (Node.js + npm i -g + Chromium + playwright-core) (372L)
-│   ├── install-wsl.sh        ← WSL 원클릭 설치 스크립트 (294L)
+│   ├── install-wsl.sh        ← WSL 원클릭 설치 스크립트 (315L)
 │   ├── postinstall-guard.cjs ← 크로스플랫폼 postinstall 가드 (CJS 유지, 68L)
 │   ├── ensure-native-modules.cjs ← better-sqlite3 등 네이티브 모듈 재빌드 가드 (CJS, 54L) ✨
 │   ├── install-officecli.sh  ← OfficeCLI 바이너리 크로스플랫폼 설치 (macOS/Linux, arm64/x86_64) (126L) ✨
@@ -695,7 +695,7 @@ graph LR
 | [🤖 agent_spawn.md](agent_spawn.md)                 | agent/ (spawn·args·events) + orchestrator/ (pipeline·parser) + cli/acp-client | spawn + ACP + 오케스트레이션           |
 | [📱 telegram.md](telegram.md)                       | telegram/ (bot·forwarder·telegram-file) + memory/heartbeat                    | 외부 인터페이스 + lifecycle + 파일전송 |
 | *(미작성)* discord.md                                | discord/ (bot·commands·forwarder·discord-file) + messaging/                   | Discord 인터페이스 + 메시징 런타임     |
-| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 268개, `public/dist` build 302파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
+| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 411개, `public/dist` build 456파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
 | [🧠 prompt_flow.md](prompt_flow.md)                 | prompt/builder.ts · 직원 프롬프트 · promptCache                               | **핵심** — 정적/동적 + Copilot ACP     |
 | [📄 prompt_basic_A1.md](prompt_basic_A1.md)         | A-1 기본 프롬프트 원문                                                        | EN 기본 프롬프트 레퍼런스              |
 | [📄 prompt_basic_A2.md](prompt_basic_A2.md)         | A-2 프롬프트 템플릿                                                           | 사용자 편집 가능                       |

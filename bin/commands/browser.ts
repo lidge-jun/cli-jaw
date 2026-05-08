@@ -750,6 +750,9 @@ try {
                                        Pro: standard/extended
                                        Thinking: light/standard/extended/heavy
       --reasoning-effort <alias>       Alias for --effort
+      --timeout <sec>                  Poll timeout. Defaults: ChatGPT 1200 (20m),
+                                       Gemini 1200 (20m), Grok 600 (10m).
+                                       Pro models can take 10-20 min — do NOT cut short.
       --inline-only
       --file <path>
       --context-from-files <glob|path>
@@ -758,6 +761,8 @@ try {
       --new-tab                        Force a fresh provider tab; default reuses pooled or inactive provider tabs first.
       --reuse-tab
       --json
+
+    Full web-ai docs: cli-jaw skill read web-ai
 
     Tab lease policy:
       Completed provider tabs are runtime leases. The warm pool keeps max 1 owned

@@ -187,6 +187,26 @@ verify_jaw_command() {
   fi
 }
 
+verify_officecli_command() {
+  local officecli_bin="$NPM_PREFIX/bin/officecli"
+  hash -r 2>/dev/null || true
+
+  if command -v officecli &>/dev/null; then
+    officecli --version >/dev/null 2>&1 || fail "OfficeCLI is on PATH but failed to run"
+    return 0
+  fi
+
+  if [ -x "$officecli_bin" ]; then
+    export PATH="$NPM_PREFIX/bin:$PATH"
+    hash -r 2>/dev/null || true
+    "$officecli_bin" --version >/dev/null 2>&1 || fail "OfficeCLI installed at $officecli_bin but failed to run"
+  fi
+
+  if ! command -v officecli &>/dev/null; then
+    fail "OfficeCLI install failed. Expected executable at $officecli_bin"
+  fi
+}
+
 # ═══════════════════════════════════════
 #  Step 3: Install cli-jaw
 # ═══════════════════════════════════════
@@ -227,12 +247,13 @@ install_officecli() {
   global_root="$(npm root -g 2>/dev/null || true)"
   local installer="${global_root}/cli-jaw/scripts/install-officecli.sh"
   if [ ! -f "$installer" ]; then
-    warn "OfficeCLI installer not found in global package — skipping"
-    return 0
+    fail "OfficeCLI installer not found in global package: $installer"
   fi
 
   info "Installing OfficeCLI..."
-  bash "$installer" || warn "OfficeCLI install failed — rerun later: bash \"$installer\""
+  bash "$installer"
+  verify_officecli_command
+  ok "OfficeCLI installed: $(officecli --version 2>/dev/null || echo 'ready')"
 }
 
 # ═══════════════════════════════════════

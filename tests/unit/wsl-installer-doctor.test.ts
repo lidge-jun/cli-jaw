@@ -28,6 +28,11 @@ test('WSL installer makes jaw and bundled CLI tools available immediately', () =
 test('WSL installer installs browser and OfficeCLI helpers', () => {
     assert.ok(installerSrc.includes('npm install -g playwright-core'));
     assert.ok(installerSrc.includes('install_officecli'));
+    assert.ok(installerSrc.includes('verify_officecli_command'));
+    assert.ok(installerSrc.includes('officecli --version'));
+    assert.ok(installerSrc.includes('OfficeCLI install failed. Expected executable at $officecli_bin'));
+    assert.equal(installerSrc.includes('OfficeCLI install failed — rerun later'), false);
+    assert.equal(installerSrc.includes('OfficeCLI installer not found in global package — skipping'), false);
     assert.ok(installerSrc.includes('install-browser') === false);
 });
 
