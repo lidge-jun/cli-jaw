@@ -147,6 +147,7 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
     const showEditor = props.viewMode === 'raw' || props.viewMode === 'split';
     const showPreview = props.viewMode === 'preview' || props.viewMode === 'split';
     const selectedOutgoingLinks = (props.selectedPath && props.vaultIndex?.outgoingLinks?.[props.selectedPath]) || [];
+    const indexedNotes = props.vaultIndex?.notes || [];
     const wysiwygOwnsFrontmatter = props.authoringMode === 'wysiwyg' && showEditor;
 
     return (
@@ -224,6 +225,7 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
                                     content={document.content}
                                     notePath={props.selectedPath}
                                     outgoing={selectedOutgoingLinks}
+                                    notes={indexedNotes}
                                     activeTag={props.tagFilter}
                                     wordWrap={props.wordWrap}
                                     onChange={document.setContent}

@@ -15,8 +15,10 @@ test('Milkdown WYSIWYG editor receives vault index wikilinks and tag frontmatter
     const milkdown = read('public/manager/src/notes/wysiwyg/MilkdownWysiwygEditor.tsx');
 
     assert.ok(workspace.includes('selectedOutgoingLinks'));
+    assert.ok(workspace.includes('indexedNotes'));
     assert.ok(workspace.includes('onWikiLinkNavigate={props.onWikiLinkNavigate}'));
     assert.ok(markdownEditor.includes('outgoing={props.outgoing}'));
+    assert.ok(markdownEditor.includes('notes={props.notes}'));
     assert.ok(milkdown.includes('notesMilkdownWikiLinkPlugin'));
     assert.ok(milkdown.includes('WysiwygFrontmatterPanel'));
 });
@@ -32,4 +34,14 @@ test('WYSIWYG wikilink plugin protects code and handles resolved navigation', ()
     assert.ok(plugin.includes('selectionSet'));
     assert.ok(plugin.includes('data-notes-wiki-hidden'));
     assert.ok(plugin.includes("label.addEventListener('click'"));
+});
+
+test('WYSIWYG wikilink plugin decorates newly typed links before outgoing index refresh', () => {
+    const plugin = read('public/manager/src/notes/wysiwyg/milkdown-wikilink-plugin.ts');
+
+    assert.equal(plugin.includes('if (lookup.size === 0) return DecorationSet.empty'), false);
+    assert.ok(plugin.includes('fallbackLink(raw, runtime, from)'));
+    assert.ok(plugin.includes('runtime.notes.filter'));
+    assert.ok(plugin.includes("status: 'missing'"));
+    assert.ok(plugin.includes("status: 'resolved'"));
 });

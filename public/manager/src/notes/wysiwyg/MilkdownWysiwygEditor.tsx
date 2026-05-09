@@ -50,6 +50,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
     const notePathRef = useRef(props.notePath);
     const wikiRuntimeRef = useRef({
         outgoing: props.outgoing,
+        notes: props.notes,
         onNavigate: props.onWikiLinkNavigate,
     });
     const syncingFromPropsRef = useRef(true);
@@ -72,10 +73,11 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
 
     useEffect(() => {
         wikiRuntimeRef.current.outgoing = props.outgoing;
+        wikiRuntimeRef.current.notes = props.notes;
         editorRef.current?.action(ctx => {
             requestWysiwygWikiLinkRefresh(ctx.get(editorViewCtx));
         });
-    }, [props.outgoing]);
+    }, [props.outgoing, props.notes]);
 
     function composeBody(body: string): string {
         return composeWysiwygFrontmatter(latestFrontmatterRef.current, body);

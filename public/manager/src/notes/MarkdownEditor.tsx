@@ -10,7 +10,7 @@ import { MarkdownPreview } from './MarkdownPreview';
 import { RichMarkdownPortalHost } from './rich-markdown/RichMarkdownPortalHost';
 import { richMarkdownExtension } from './rich-markdown/rich-markdown-extension';
 import { richMarkdownPastePolicy } from './rich-markdown/paste-policy';
-import type { NotesAuthoringMode, NotesNoteLinkRef } from './notes-types';
+import type { NotesAuthoringMode, NotesNoteLinkRef, NotesNoteMetadata } from './notes-types';
 import type { RichMarkdownWidgetRegistration } from './rich-markdown/rich-markdown-types';
 
 const MilkdownWysiwygEditor = lazy(async () => {
@@ -24,6 +24,7 @@ type MarkdownEditorProps = {
     content: string;
     notePath: string;
     outgoing: readonly NotesNoteLinkRef[];
+    notes: readonly NotesNoteMetadata[];
     activeTag: string | null;
     wordWrap: boolean;
     onChange: (value: string) => void;
@@ -83,6 +84,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
                         content={props.content}
                         notePath={props.notePath}
                         outgoing={props.outgoing}
+                        notes={props.notes}
                         activeTag={props.activeTag}
                         onChange={props.onChange}
                         onTagSelect={props.onTagSelect}
