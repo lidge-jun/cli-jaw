@@ -10,7 +10,7 @@ aliases: [CLI-JAW Frontend, public architecture, frontend.md]
 
 > Web UI 본체는 Vanilla HTML + CSS + TypeScript ES Modules로 구성된다. Manager 대시보드는 `public/manager/`의 React 19 + TSX 앱이다.
 > 빌드는 Vite 8 기준이며, `vite.config.ts`는 `public/index.html`과 `public/manager/index.html`을 multi-entry로 빌드한다.
-> 현재 `public/`에서 `public/dist/*`를 제외한 소스/자산/legacy duplicate는 447개다. `public/public/dist/*`까지 generated로 보면 실제 편집 대상 소스/자산은 320개다. 생성 산출물은 `public/dist/` 456개와 별도 중복 트리 `public/public/dist/` 127개가 남아 있고, `public/dist/dist/`는 전자에 재귀 포함된 nested 복제본이다.
+> 현재 `public/`에서 `public/dist/*`를 제외한 소스/자산/legacy duplicate는 452개다. `public/public/dist/*`까지 generated로 보면 실제 편집 대상 소스/자산은 325개다. 생성 산출물은 `public/dist/` 456개와 별도 중복 트리 `public/public/dist/` 127개가 남아 있고, `public/dist/dist/`는 전자에 재귀 포함된 nested 복제본이다.
 > 메인 UI는 `index.html`에서 Google Fonts `Chakra Petch` + `Outfit`을 불러오고, 로컬 `public/assets/fonts/GeistVF.woff2`와 `JetBrainsMono-Variable.woff2`는 자산으로 보관 중이다.
 > PWA는 `manifest.json` + `sw.js` + `icons/`로 구성된다. 오프라인 메시지 캐시, virtual scroll, markdown/KaTeX/Mermaid 렌더링, sandboxed diagram widget, avatar emoji/image 커스터마이즈, voice recording, PABCD roadmap, subagent-aware ProcessBlock 렌더링, 반응형 사이드바, theme toggle이 현재 런타임의 핵심이다.
 
@@ -46,13 +46,13 @@ public/
 
 | 영역 | 파일 수 | 비고 |
 | --- | ---: | --- |
-| `public/` source/assets | 447 | 문서 관례상 `public/dist/*`만 제외, `public/public/dist/*`는 포함 |
-| `public/` source/assets (generated 제외) | 320 | `public/dist/*`, `public/public/dist/*` 모두 제외 |
+| `public/` source/assets | 452 | 문서 관례상 `public/dist/*`만 제외, `public/public/dist/*`는 포함 |
+| `public/` source/assets (generated 제외) | 325 | `public/dist/*`, `public/public/dist/*` 모두 제외 |
 | `public/js/` root | 17 | 전부 TypeScript ES modules, `mermaid-loader.ts`, `uuid.ts`, `virtual-scroll-bootstrap.ts` 포함 |
 | `public/js/diagram/` | 3 | SVG/iframe diagram pipeline |
 | `public/js/render/` | 11 | markdown/KaTeX/Mermaid/SVG/file-link/post-render 책임 분리 |
 | `public/js/features/` | 41 | settings 분해 + help/attention/orchestrate scope + process-step-match 포함 |
-| `public/manager/` | 213 | React 19 manager dashboard, notes/search, schedule, settings, sync, WYSIWYG source |
+| `public/manager/` | 218 | React 19 manager dashboard, notes/search, schedule, settings, sync, WYSIWYG source |
 | `public/css/` | 9 | theme/layout/chat/markdown/tool UI/diagram |
 | `public/locales/` | 4 | `ko.json`, `en.json`, `ja.json`, `zh.json` |
 | `public/assets/providers/` | 10 | provider SVG 세트 |

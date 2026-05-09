@@ -1,4 +1,5 @@
 import type { DashboardReminder } from './reminders-api';
+import { countRemindersView } from './reminders-view-model';
 
 export type RemindersView = 'matrix' | 'focused' | 'important' | 'waiting' | 'later' | 'done';
 
@@ -25,15 +26,6 @@ type Props = {
     onRefresh: () => void;
 };
 
-function countFor(view: RemindersView, items: DashboardReminder[]): number {
-    if (view === 'focused') return items.filter(item => item.status === 'focused').length;
-    if (view === 'important') return items.filter(item => item.status !== 'done' && item.status !== 'focused' && item.status !== 'waiting' && item.listId !== 'later' && item.priority === 'normal').length;
-    if (view === 'waiting') return items.filter(item => item.status === 'waiting').length;
-    if (view === 'later') return items.filter(item => item.status !== 'done' && (item.listId === 'later' || item.priority === 'low')).length;
-    if (view === 'done') return items.filter(item => item.status === 'done').length;
-    return items.filter(item => item.status !== 'done').length;
-}
-
 export function DashboardRemindersSidebar(props: Props) {
     const openCount = props.items.filter(item => item.status !== 'done').length;
     return (
@@ -58,7 +50,7 @@ export function DashboardRemindersSidebar(props: Props) {
                         >
                             <span>{view.label}</span>
                             <small>{view.detail}</small>
-                            <b>{countFor(view.id, props.items)}</b>
+                            <b>{countRemindersView(view.id, props.items)}</b>
                         </button>
                     </li>
                 ))}

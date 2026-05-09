@@ -48,7 +48,7 @@ export function DashboardBoardSidebar(props: Props) {
                                     event.dataTransfer.effectAllowed = 'copy';
                                     event.dataTransfer.setData(RUNNING_CHIP_MIME, encodeRunningChip(chip));
                                 }}
-                                title={chip.activity ? `${chip.label} — ${chip.activity}` : chip.label}
+                                aria-label={chip.activity ? `${chip.label} — ${chip.activity}` : chip.label}
                             >
                                 <span className="dashboard-board-running-chip-port">:{chip.port}</span>
                                 <span className="dashboard-board-running-chip-label">{chip.label}</span>

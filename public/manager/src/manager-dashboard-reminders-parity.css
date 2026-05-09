@@ -1,0 +1,116 @@
+.dashboard-reminders-row-more {
+    border: 0;
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    min-width: 28px;
+    min-height: 28px;
+}
+
+.dashboard-reminders-row-more:hover,
+.dashboard-reminders-row-more:focus-visible {
+    color: var(--ink-primary);
+    background: color-mix(in srgb, var(--ink-primary) 8%, transparent);
+    outline: none;
+}
+
+.dashboard-reminder-popover-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    background: color-mix(in srgb, var(--surface-base) 72%, transparent);
+    display: grid;
+    place-items: center;
+    padding: 24px;
+}
+
+.dashboard-reminder-popover {
+    width: min(520px, 100%);
+    max-height: min(680px, calc(100dvh - 48px));
+    overflow: auto;
+    background: var(--surface-panel);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 16px;
+    color: var(--ink-primary);
+}
+
+.dashboard-reminder-popover form,
+.dashboard-reminder-popover label {
+    display: grid;
+    gap: 8px;
+}
+
+.dashboard-reminder-popover form {
+    gap: 14px;
+}
+
+.dashboard-reminder-popover header,
+.dashboard-reminder-popover footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.dashboard-reminder-popover header span {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.dashboard-reminder-popover label span {
+    color: var(--ink-muted);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.dashboard-reminder-popover input,
+.dashboard-reminder-popover textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--surface-raised);
+    color: var(--ink-primary);
+    padding: 8px 10px;
+    font: inherit;
+}
+
+.dashboard-reminder-popover textarea {
+    resize: vertical;
+}
+
+.dashboard-reminder-popover-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.dashboard-reminder-popover button {
+    border: 1px solid var(--border-subtle);
+    border-radius: 7px;
+    background: var(--surface-raised);
+    color: var(--ink-primary);
+    cursor: pointer;
+    padding: 7px 10px;
+}
+
+.dashboard-reminder-popover button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.dashboard-reminders-quadrant[data-drop-target="true"] {
+    outline: 2px dashed var(--accent);
+    outline-offset: -2px;
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+@media (max-width: 720px) {
+    .dashboard-reminder-popover-grid {
+        grid-template-columns: 1fr;
+    }
+}

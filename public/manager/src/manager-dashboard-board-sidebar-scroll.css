@@ -1,0 +1,64 @@
+.dashboard-board-sidebar {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.dashboard-board-sidebar-running {
+    min-height: 0;
+}
+
+.dashboard-board-sidebar-running-list {
+    max-height: min(260px, 34dvh);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 2px;
+}
+
+.dashboard-board-sidebar-list {
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.dashboard-board-sidebar-running .dashboard-board-running-chip {
+    box-sizing: border-box;
+    min-height: 52px;
+    max-width: 100%;
+    grid-template-columns: 44px minmax(0, 1fr) max-content;
+    grid-template-rows: minmax(16px, auto) minmax(16px, auto);
+    align-items: start;
+    overflow: hidden;
+}
+
+.dashboard-board-sidebar-running .dashboard-board-running-chip-port {
+    grid-column: 1;
+    grid-row: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashboard-board-sidebar-running .dashboard-board-running-chip-label {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+.dashboard-board-sidebar-running .dashboard-board-running-chip-state {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    max-width: 64px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashboard-board-sidebar-running .dashboard-board-running-chip-activity {
+    grid-column: 2 / 4;
+    grid-row: 2;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

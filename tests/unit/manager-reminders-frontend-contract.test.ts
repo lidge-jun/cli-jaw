@@ -19,6 +19,8 @@ test('manager frontend exposes Reminders as a gated SidebarRail workspace', () =
     const app = read('public/manager/src/App.tsx');
     const urlState = read('public/manager/src/dashboard-url-state.ts');
     const main = read('public/manager/src/main.tsx');
+    const sidebar = read('public/manager/src/dashboard-reminders/DashboardRemindersSidebar.tsx');
+    const workspace = read('public/manager/src/dashboard-reminders/DashboardRemindersWorkspace.tsx');
 
     assert.ok(types.includes("'reminders'"), 'DashboardSidebarMode must include reminders');
     assert.ok(features.includes('REMINDERS_WORKSPACE_ENABLED = true'), 'Reminders workspace must always be available in SidebarRail');
@@ -32,6 +34,9 @@ test('manager frontend exposes Reminders as a gated SidebarRail workspace', () =
     assert.ok(app.includes('readInitialSidebarMode(window.location.search)'), 'App must allow sidebar URL entry');
     assert.ok(urlState.includes("'reminders'"), 'URL sidebar parser must allow reminders');
     assert.ok(main.includes('./manager-dashboard-reminders.css'), 'Reminders CSS must be loaded by the manager entry');
+    assert.ok(main.includes('./manager-dashboard-reminders-parity.css'), 'Reminders parity CSS must be loaded by the manager entry');
+    assert.ok(sidebar.includes('countRemindersView'), 'Reminders sidebar counts must use the shared view model');
+    assert.ok(workspace.includes('rankTopPriorityItems(props.feed.items'), 'Top Priority must rank across the full feed');
 });
 
 test('manager reminders frontend files and App line budget stay in bounds', () => {
@@ -41,7 +46,11 @@ test('manager reminders frontend files and App line budget stay in bounds', () =
         'public/manager/src/dashboard-reminders/useRemindersFeed.ts',
         'public/manager/src/dashboard-reminders/DashboardRemindersSidebar.tsx',
         'public/manager/src/dashboard-reminders/DashboardRemindersWorkspace.tsx',
+        'public/manager/src/dashboard-reminders/reminders-view-model.ts',
+        'public/manager/src/dashboard-reminders/ReminderDetailPopover.tsx',
+        'public/manager/src/dashboard-reminders/useDashboardReminderDrag.ts',
         'public/manager/src/manager-dashboard-reminders.css',
+        'public/manager/src/manager-dashboard-reminders-parity.css',
     ];
     for (const path of required) {
         assert.equal(existsSync(join(projectRoot, path)), true, `${path} must exist`);
