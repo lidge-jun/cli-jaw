@@ -50,6 +50,7 @@ test('Markdown editor exposes WYSIWYG toolbar without changing the save path', (
     const editor = read('public/manager/src/notes/MarkdownEditor.tsx');
     const workspace = read('public/manager/src/notes/NotesWorkspace.tsx');
     const milkdown = read('public/manager/src/notes/wysiwyg/MilkdownWysiwygEditor.tsx');
+    const milkdownUtils = read('public/manager/src/notes/wysiwyg/milkdown-editor-utils.ts');
     const gfmPlugin = read('public/manager/src/notes/wysiwyg/milkdown-gfm-safe.ts');
     const mathPlugin = read('public/manager/src/notes/wysiwyg/milkdown-math.ts');
     const codePlugin = read('public/manager/src/notes/wysiwyg/milkdown-code-block-view.ts');
@@ -158,12 +159,13 @@ test('Markdown editor exposes WYSIWYG toolbar without changing the save path', (
     assert.equal(mathPlugin.includes('function moveAfterMathNode'), false,
         'math node exit must not use the legacy multi-dispatch moveAfterMathNode helper');
     assert.ok(milkdown.includes('listenerCtx'), 'Milkdown WYSIWYG must publish markdown changes through listenerCtx');
-    assert.ok(milkdown.includes('onChangeRef.current(normalizedMarkdown)') || milkdown.includes('onChangeRef.current(markdown)'), 'Milkdown WYSIWYG must keep the existing markdown save path');
+    assert.ok(milkdown.includes('emitBodyChange(normalizedBody)') && milkdown.includes('onChangeRef.current(composed)'),
+        'Milkdown WYSIWYG must keep the existing markdown save path through composed markdown');
     assert.ok(milkdown.includes('syncingFromPropsRef'), 'Milkdown WYSIWYG must suppress controlled prop sync writes');
-    assert.ok(milkdown.includes('latestPropContentRef'), 'Milkdown WYSIWYG must reconcile async creation with latest props');
+    assert.ok(milkdown.includes('latestComposedRef'), 'Milkdown WYSIWYG must reconcile async creation with latest props');
     assert.ok(milkdown.includes('isCodeBlockRawPasteTarget'),
         'WYSIWYG shell paste handler must detect code block raw textarea targets');
-    assert.ok(milkdown.includes("target.closest('textarea.notes-code-raw')"),
+    assert.ok(milkdownUtils.includes("target.closest('textarea.notes-code-raw')"),
         'code block raw textarea paste must bypass shell-level HTML/image paste handling');
     assert.ok(
         milkdown.indexOf('isCodeBlockRawPasteTarget(event.target)') < milkdown.indexOf('hasImportableClipboardImage(data)'),

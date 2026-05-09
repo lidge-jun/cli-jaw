@@ -282,6 +282,18 @@ export function pruneSessions(input: {
     return { removed: toRemove.length, remaining: sessions.size };
 }
 
+export function discoverConversationUrl(sessionId: string, candidateUrl: string): boolean {
+    const session = getSession(sessionId);
+    if (!session) return false;
+    const hasConvoId = /\/c\/[a-f0-9-]+/i.test(candidateUrl);
+    const currentIsRoot = !session.conversationUrl || !session.conversationUrl.includes('/c/');
+    if (hasConvoId && currentIsRoot) {
+        updateSessionResult({ sessionId, status: session.status, conversationUrl: candidateUrl });
+        return true;
+    }
+    return false;
+}
+
 export function assertSameTarget(record: WebAiSessionRecord, actualTargetId: string): void {
     if (record.targetId !== actualTargetId) {
         throw new WrongTargetError(record.targetId, actualTargetId);

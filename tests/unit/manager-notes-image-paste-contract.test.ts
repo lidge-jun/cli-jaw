@@ -130,6 +130,7 @@ test('notes image paste is wired through JSON upload and all authoring surfaces'
     const editor = read('public/manager/src/notes/MarkdownEditor.tsx');
     const richPaste = read('public/manager/src/notes/rich-markdown/paste-policy.ts');
     const wysiwyg = read('public/manager/src/notes/wysiwyg/MilkdownWysiwygEditor.tsx');
+    const wysiwygUtils = read('public/manager/src/notes/wysiwyg/milkdown-editor-utils.ts');
     const workspace = read('public/manager/src/notes/NotesWorkspace.tsx');
     const renderer = read('public/manager/src/notes/rendering/MarkdownRenderer.tsx');
 
@@ -146,7 +147,7 @@ test('notes image paste is wired through JSON upload and all authoring surfaces'
     assert.ok(wysiwyg.includes('hasImportableClipboardImage('), 'WYSIWYG paste must inspect local and remote clipboard images');
     assert.ok(wysiwyg.includes("addEventListener('drop'") || wysiwyg.includes('onDropCapture={handleDropCapture}'), 'WYSIWYG must accept dropped images');
     assert.ok(wysiwyg.includes('uploadClipboardImageMarkdown(notePathRef.current') || wysiwyg.includes('uploadClipboardImageMarkdown(props.notePath'), 'WYSIWYG paste must upload against the current note path');
-    assert.ok(wysiwyg.includes('notesImageSrc(originalSrc)'), 'WYSIWYG must route local asset image nodes through the notes asset endpoint');
+    assert.ok(wysiwygUtils.includes('notesImageSrc(originalSrc)'), 'WYSIWYG must route local asset image nodes through the notes asset endpoint');
     assert.ok(wysiwyg.includes('new MutationObserver'), 'WYSIWYG must refresh image src after Milkdown renders image nodes');
     assert.ok(wysiwyg.includes('setUploadStatus'), 'WYSIWYG must show upload progress feedback');
 

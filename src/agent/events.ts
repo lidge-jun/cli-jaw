@@ -2,6 +2,7 @@
 
 import { broadcast } from '../core/bus.js';
 import { stripUndefined } from '../core/strip-undefined.js';
+import { detectLongRunningToolTimeout } from './tool-timeout.js';
 import type { SpawnContext, ToolEntry } from '../types/agent.js';
 import {
     asCliEventArray,
@@ -596,7 +597,19 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                 }
             } else if (event.type === 'item.started') {
                 if (event.item?.type === 'command_execution') {
-                    const cmd = (event.item.command || '').slice(0, 120);
+                    const fullCommand = String(event.item.command || '');
+                    const detectedTimeout = detectLongRunningToolTimeout(fullCommand);
+                    if (detectedTimeout) {
+                        const bufferMs = 600_000;
+                        ctx.stallWatchdog?.extendDeadline(
+                            detectedTimeout.timeoutMs + bufferMs,
+                            detectedTimeout.commandKind,
+                        );
+                        ctx.traceLog.push(
+                            `[watchdog] extended for ${detectedTimeout.commandKind} by ${Math.round((detectedTimeout.timeoutMs + bufferMs) / 1000)}s`,
+                        );
+                    }
+                    const cmd = fullCommand.slice(0, 120);
                     const itemId = event.item.id || '';
                     const tool = stripUndefined({
                         icon: '⚡',

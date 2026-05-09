@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+    createReminder,
     listReminders,
-    refreshReminders,
+    updateReminder,
     type DashboardReminder,
-    type DashboardRemindersSourceStatus,
+    type DashboardReminderCreateInput,
+    type DashboardReminderPatchInput,
 } from './reminders-api';
 
 export type RemindersFeedState = {
     items: DashboardReminder[];
-    sourceStatus: DashboardRemindersSourceStatus | null;
     loading: boolean;
     error: string | null;
     refresh: () => Promise<void>;
+    create: (input: DashboardReminderCreateInput) => Promise<void>;
+    update: (id: string, patch: DashboardReminderPatchInput) => Promise<void>;
 };
 
 type UseRemindersFeedOptions = {
@@ -20,17 +23,15 @@ type UseRemindersFeedOptions = {
 
 export function useRemindersFeed(options: UseRemindersFeedOptions): RemindersFeedState {
     const [items, setItems] = useState<DashboardReminder[]>([]);
-    const [sourceStatus, setSourceStatus] = useState<DashboardRemindersSourceStatus | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const load = useCallback(async (refresh: boolean): Promise<void> => {
+    const load = useCallback(async (): Promise<void> => {
         setLoading(true);
         setError(null);
         try {
-            const body = refresh ? await refreshReminders() : await listReminders();
+            const body = await listReminders();
             setItems(body.items || []);
-            setSourceStatus(body.sourceStatus ?? null);
         } catch (err) {
             setError((err as Error).message);
         } finally {
@@ -39,13 +40,33 @@ export function useRemindersFeed(options: UseRemindersFeedOptions): RemindersFee
     }, []);
 
     const refresh = useCallback(async (): Promise<void> => {
-        await load(true);
+        await load();
     }, [load]);
+
+    const create = useCallback(async (input: DashboardReminderCreateInput): Promise<void> => {
+        setError(null);
+        try {
+            const item = await createReminder(input);
+            setItems(current => [item, ...current.filter(existing => existing.id !== item.id)]);
+        } catch (err) {
+            setError((err as Error).message);
+        }
+    }, []);
+
+    const update = useCallback(async (id: string, patch: DashboardReminderPatchInput): Promise<void> => {
+        setError(null);
+        try {
+            const item = await updateReminder(id, patch);
+            setItems(current => current.map(existing => existing.id === id ? item : existing));
+        } catch (err) {
+            setError((err as Error).message);
+        }
+    }, []);
 
     useEffect(() => {
         if (!options.active) return;
-        void load(true);
+        void load();
     }, [options.active, load]);
 
-    return { items, sourceStatus, loading, error, refresh };
+    return { items, loading, error, refresh, create, update };
 }

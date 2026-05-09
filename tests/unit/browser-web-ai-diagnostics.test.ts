@@ -20,6 +20,7 @@ test('DIAG-002: normalizeFailureStage clamps unknown values to "unknown"', () =>
     assert.equal(normalizeFailureStage('poll-timeout'), 'poll-timeout');
     assert.equal(normalizeFailureStage('capability-preflight'), 'capability-preflight');
     assert.equal(normalizeFailureStage('provider-select-model'), 'provider-select-model');
+    assert.equal(normalizeFailureStage('provider-interstitial'), 'provider-interstitial');
 });
 
 test('DIAG-003: emptyDiagnostics has all required fields', () => {

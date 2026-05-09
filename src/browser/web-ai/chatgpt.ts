@@ -48,6 +48,7 @@ import { fromCliJawStructuredError, WebAiError } from './errors.js';
 import { listCapabilitySchemas } from './capability-registry.js';
 import { prepareContextForBrowser, summarizeContextPack } from './context-pack/index.js';
 import { appendTraceToSession, type TracePersistableValue } from './trace-persistence.js';
+import { detectInterstitial } from './interstitial.js';
 import type {
     QuestionEnvelopeInput,
     WebAiOutput,
@@ -258,6 +259,17 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
     }
     const envelope = normalizeEnvelope(input);
     const { page, targetId } = await ensureProviderTab(port, input);
+    const interstitial = await detectInterstitial(page);
+    if (interstitial.kind !== 'none') {
+        throw new WebAiError({
+            errorCode: 'provider.interstitial',
+            stage: 'provider-interstitial',
+            vendor: 'chatgpt',
+            retryHint: interstitial.retryHint,
+            message: `ChatGPT blocked by ${interstitial.kind}: ${interstitial.evidence}`,
+            evidence: interstitial,
+        });
+    }
     const contextPack = await prepareContextForBrowser(input);
     const rendered = contextPack
         ? contextPack.transport === 'inline'
@@ -345,6 +357,10 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
             if (!sentAttachment.ok) throw new Error(sentAttachment.error);
         }
         updateSessionStatus(session.sessionId, 'streaming');
+        const postSendUrl = page.url?.() || '';
+        if (postSendUrl.includes('/c/') && postSendUrl !== session.url) {
+            updateSessionResult({ sessionId: session.sessionId, status: 'streaming', conversationUrl: postSendUrl });
+        }
     } catch (e) {
         updateSessionStatus(session.sessionId, 'error');
         throw stageError(e, 'send-click');
@@ -433,6 +449,26 @@ export async function poll(port: number, input: {
     });
     if (session) assertSameTarget(session, targetId);
     const currentUrl = page.url?.() || session?.url || 'https://chatgpt.com';
+    if (session && currentUrl.includes('/c/') && session.conversationUrl !== currentUrl) {
+        updateSessionResult({ sessionId: session.sessionId, status: session.status, conversationUrl: currentUrl });
+    }
+    const pollInterstitial = await detectInterstitial(page);
+    if (pollInterstitial.kind !== 'none') {
+        return {
+            ok: false,
+            vendor,
+            status: 'interstitial',
+            url: currentUrl,
+            ...(session ? { sessionId: session.sessionId } : {}),
+            answerText: '',
+            baseline,
+            usedFallbacks: [],
+            warnings: [`interstitial: ${pollInterstitial.kind}`],
+            error: `page blocked: ${pollInterstitial.kind}`,
+            next: 'poll',
+            interstitial: pollInterstitial,
+        } satisfies WebAiOutput;
+    }
     const timeoutMs = Math.max(1, Number(input.timeout || 1200)) * 1000;
     const result = await captureAssistantResponse(page, {
         minTurnIndex: baseline.assistantCount,

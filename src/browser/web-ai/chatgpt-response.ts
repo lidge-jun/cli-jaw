@@ -34,6 +34,13 @@ export const STOP_BUTTON_SELECTORS = [
     'button[aria-label*="Stop" i]',
 ];
 
+const FINISHED_ACTIONS_SELECTOR = [
+    'button[data-testid="copy-turn-action-button"]',
+    'button[data-testid="good-response-turn-action-button"]',
+    'button[data-testid="bad-response-turn-action-button"]',
+    'button[aria-label="Share"]',
+].join(', ');
+
 const PLACEHOLDER_PATTERNS: RegExp[] = [
     /^answer now$/i,
     /^pro thinking/i,
@@ -142,7 +149,14 @@ export async function captureAssistantResponse(page: Page, options: CaptureOptio
         }
         if (!snap.streaming && snap.latestNewText) {
             if (snap.latestNewText === stableText) {
-                if (stableSince !== null && Date.now() - stableSince >= stableWindowMs) {
+                const finished = await isResponseFinished(page);
+                const textLen = snap.latestNewText.length;
+                const adaptiveMs = finished ? 1000
+                    : textLen < 16 ? 8000
+                    : textLen < 40 ? 3000
+                    : textLen < 500 ? 2000
+                    : 3000;
+                if (stableSince !== null && Date.now() - stableSince >= adaptiveMs) {
                     if (options.allowCopyMarkdownFallback) {
                         const copyTarget = await resolveOptionalChatGptCopyTarget(page, resolverTrace);
                         const copied = await captureCopiedResponseText(page, CHATGPT_COPY_SELECTORS, { copyTarget });
@@ -268,6 +282,21 @@ async function isStreaming(page: Page): Promise<boolean> {
         }
     }
     return false;
+}
+
+async function isResponseFinished(page: Page): Promise<boolean> {
+    try {
+        for (const sel of FINISHED_ACTIONS_SELECTOR.split(', ')) {
+            const count = await page.locator(sel).count().catch(() => 0);
+            if (count > 0) {
+                const visible = await page.locator(sel).last().isVisible().catch(() => false);
+                if (visible) return true;
+            }
+        }
+        return false;
+    } catch {
+        return false;
+    }
 }
 
 async function isCanvasOpened(page: Page): Promise<boolean> {

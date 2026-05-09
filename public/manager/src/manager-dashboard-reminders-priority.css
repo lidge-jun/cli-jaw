@@ -1,0 +1,75 @@
+.dashboard-reminders-top-priority {
+    display: grid;
+    grid-template-columns: 140px minmax(0, 1fr);
+    gap: 12px;
+    padding: 12px 22px 0 42px;
+    background: color-mix(in srgb, var(--surface-base) 94%, #ffffff);
+}
+
+.dashboard-reminders-top-priority > header {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 52px;
+    color: var(--ink-muted);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.dashboard-reminders-top-priority > header small {
+    margin-top: 4px;
+    color: #ff3b30;
+    font-size: 12px;
+    letter-spacing: 0;
+}
+
+.dashboard-reminders-top-priority ol {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.dashboard-reminders-top-priority li {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, #ff3b30 24%, var(--border-subtle));
+    border-radius: 8px;
+    background: #fff5f3;
+}
+
+.dashboard-reminders-top-priority .dashboard-reminders-row {
+    border-bottom: 0;
+    background: rgba(255, 255, 255, 0.68);
+}
+
+.dashboard-reminders-top-index {
+    display: block;
+    padding: 5px 10px 0;
+    color: #ff3b30;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.dashboard-reminders-top-empty {
+    grid-column: 1 / -1;
+    padding: 16px;
+    color: var(--ink-muted);
+    font-size: 12px;
+    font-style: italic;
+}
+
+@media (max-width: 900px) {
+    .dashboard-reminders-top-priority {
+        grid-template-columns: 1fr;
+        padding: 12px 14px 0;
+    }
+
+    .dashboard-reminders-top-priority ol {
+        grid-template-columns: 1fr;
+    }
+}

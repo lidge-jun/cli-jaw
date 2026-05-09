@@ -27,6 +27,7 @@ import { VisibilityBridge } from './sync/VisibilityBridge';
 import type { BoardView } from './dashboard-board/board-view';
 import { type ScheduleGroup } from './dashboard-schedule/DashboardScheduleSidebar';
 import { REMINDERS_WORKSPACE_ENABLED, SCHEDULE_WORKSPACE_ENABLED, normalizeSidebarModeForBuild } from './dashboard-features';
+import { readInitialSidebarMode } from './dashboard-url-state';
 import { useDashboardRegistry } from './hooks/useDashboardRegistry';
 import { useDashboardView } from './hooks/useDashboardView';
 import { useActivityUnread } from './hooks/useActivityUnread';
@@ -38,7 +39,6 @@ import { useManagerEvents } from './hooks/useManagerEvents';
 import { formatUptime, instanceLabel } from './instance-label';
 import { reconcileActiveProfileFilter } from './profile-filter';
 import type { DashboardDetailTab, DashboardInstance, DashboardInstanceStatus, DashboardLifecycleAction, DashboardNotesAuthoringMode, DashboardNotesViewMode, DashboardProfile, DashboardScanResult, DashboardSidebarMode } from './types';
-
 export function App() {
     const [data, setData] = useState<DashboardScanResult | null>(null);
     const [loading, setLoading] = useState(true);
@@ -143,12 +143,10 @@ export function App() {
         const next = order[(order.indexOf(theme.theme) + 1) % order.length];
         theme.setTheme(next);
     }
-
     function openSelectedInBrowser(): void {
         if (!selectedInstance) return;
         window.open(selectedInstance.url, '_blank', 'noopener,noreferrer');
     }
-
     useEffect(() => { document.documentElement.lang = view.locale; }, [view.locale]);
 
     useEffect(() => {
@@ -197,7 +195,7 @@ export function App() {
                 view.setSidebarCollapsed(ui.sidebarCollapsed);
                 view.setActivityDockCollapsed(ui.activityDockCollapsed);
                 view.setActivityDockHeight(ui.activityDockHeight);
-                const sidebarMode = normalizeSidebarModeForBuild(ui.sidebarMode);
+                const sidebarMode = normalizeSidebarModeForBuild(readInitialSidebarMode(window.location.search) ?? ui.sidebarMode);
                 view.setSidebarMode(sidebarMode);
                 if (sidebarMode !== ui.sidebarMode) void saveUi({ sidebarMode });
                 view.setNotesSelectedPath(ui.notesSelectedPath);

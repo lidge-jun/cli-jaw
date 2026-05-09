@@ -58,7 +58,7 @@ cli-jaw/
 │   │   ├── tcc.ts            ← macOS TCC / screen-recording 권한 점검 (55L)
 │   │   └── settings-merge.ts ← perCli/activeOverrides deep merge (52L)
 │   ├── agent/                ← CLI 에이전트 런타임 (12 files)
-│   │   ├── spawn.ts          ← CLI spawn + ACP 분기 + 큐 + 메모리 flush + 429 retry timer + isAgentBusy + buildHistoryBlock compact cutoff + working_dir scoping + enqueue→processQueue race fix + QueueItem persistent DB queue + makeCleanEnv PATH augment (1609L)
+│   │   ├── spawn.ts          ← CLI spawn + ACP 분기 + 큐 + 메모리 flush + 429 retry timer + isAgentBusy + buildHistoryBlock compact cutoff + working_dir scoping + enqueue→processQueue race fix + QueueItem persistent DB queue + makeCleanEnv PATH augment (1610L)
 │   │   ├── spawn-env.ts      ← spawn용 child env 빌더 (OpenCode/Gemini permissions config 주입 등, 120L)
 │   │   ├── args.ts           ← CLI별 인자 빌더 (183L)
 │   │   ├── error-classifier.ts ← stderr/result 기반 에러 분류 헬퍼 (23L)
@@ -69,7 +69,7 @@ cli-jaw/
 │   │   ├── session-persistence.ts ← main-session persistence policy + ownership generation (70L)
 │   │   ├── resume-classifier.ts ← stale resume signature classifier (51L)
 │   │   ├── smoke-detector.ts ← smoke response 감지 + auto-continue 판단 (141L)
-│   │   └── events.ts         ← NDJSON 파서 + ACP update + logEventSummary + summarizeToolInput(type-safe) + toolType/detail 필드 + Claude thinking_delta/input_json_delta 버퍼 + flushClaudeBuffers + stepRef correlation + compact event parsing + Codex toolLog running→done dedup (1513L)
+│   │   └── events.ts         ← NDJSON 파서 + ACP update + logEventSummary + summarizeToolInput(type-safe) + toolType/detail 필드 + Claude thinking_delta/input_json_delta 버퍼 + flushClaudeBuffers + stepRef correlation + compact event parsing + Codex toolLog running→done dedup (1526L)
 │   ├── messaging/            ← 통합 메시징 런타임 (신규)
 │   │   ├── runtime.ts        ← 채널 lifecycle (init/shutdown/restart) + transport registry (146L)
 │   │   ├── send.ts           ← 통합 아웃바운드 메시지 라우팅 (ChannelSendRequest) (147L)
@@ -281,7 +281,7 @@ cli-jaw/
 │       ├── catalog.ts        ← COMMANDS → capability map 확장 (43L)
 │       ├── policy.ts         ← getVisibleCommands, getTelegramMenuCommands (39L)
 │       └── help-renderer.ts  ← renderHelp list/detail mode (44L)
-├── public/                   ← Web UI (Vite 8 + ES Modules, 434 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 456 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~60157L)
+├── public/                   ← Web UI (Vite 8 + ES Modules, 436 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 456 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~60687L)
 │   ├── index.html            ← 뼈대 (876L, CLI-JAW 대문자 로고, pill theme switch, data-i18n, 로컬 avatar 입력)
 │   ├── manifest.json         ← PWA 매니페스트 (20L) ✨
 │   ├── sw.js                 ← Service Worker 오프라인 캐시 (104L) ✨
@@ -695,7 +695,7 @@ graph LR
 | [🤖 agent_spawn.md](agent_spawn.md)                 | agent/ (spawn·args·events) + orchestrator/ (pipeline·parser) + cli/acp-client | spawn + ACP + 오케스트레이션           |
 | [📱 telegram.md](telegram.md)                       | telegram/ (bot·forwarder·telegram-file) + memory/heartbeat                    | 외부 인터페이스 + lifecycle + 파일전송 |
 | *(미작성)* discord.md                                | discord/ (bot·commands·forwarder·discord-file) + messaging/                   | Discord 인터페이스 + 메시징 런타임     |
-| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 434개, `public/dist` build 456파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
+| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 436개, `public/dist` build 456파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
 | [🧠 prompt_flow.md](prompt_flow.md)                 | prompt/builder.ts · 직원 프롬프트 · promptCache                               | **핵심** — 정적/동적 + Copilot ACP     |
 | [📄 prompt_basic_A1.md](prompt_basic_A1.md)         | A-1 기본 프롬프트 원문                                                        | EN 기본 프롬프트 레퍼런스              |
 | [📄 prompt_basic_A2.md](prompt_basic_A2.md)         | A-2 프롬프트 템플릿                                                           | 사용자 편집 가능                       |

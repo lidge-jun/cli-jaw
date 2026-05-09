@@ -17,17 +17,20 @@ test('manager frontend exposes Reminders as a gated SidebarRail workspace', () =
     const rail = read('public/manager/src/components/SidebarRail.tsx');
     const router = read('public/manager/src/SidebarRailRouter.tsx');
     const app = read('public/manager/src/App.tsx');
+    const urlState = read('public/manager/src/dashboard-url-state.ts');
     const main = read('public/manager/src/main.tsx');
 
     assert.ok(types.includes("'reminders'"), 'DashboardSidebarMode must include reminders');
-    assert.ok(features.includes('REMINDERS_WORKSPACE_ENABLED'), 'Reminders workspace must be feature-gated');
-    assert.ok(features.includes("mode === 'reminders'"), 'unavailable reminders mode must normalize away');
+    assert.ok(features.includes('REMINDERS_WORKSPACE_ENABLED = true'), 'Reminders workspace must always be available in SidebarRail');
+    assert.doesNotMatch(features, /NPM_HIDDEN_WORKSPACE_MODES[^\n]+reminders/, 'Reminders must not be hidden behind the npm workspace gate');
     assert.ok(rail.includes('remindersWorkspaceEnabled'), 'SidebarRail must receive the reminders feature gate');
     assert.ok(rail.includes("onModeChange('reminders')"), 'SidebarRail must switch to reminders mode');
     assert.ok(rail.includes('aria-label="Reminders"'), 'SidebarRail must expose an accessible Reminders button');
     assert.ok(router.includes('<DashboardRemindersSidebar'), 'router must render the reminders sidebar');
     assert.ok(router.includes('<DashboardRemindersWorkspace'), 'router must render the reminders workspace');
     assert.ok(app.includes('<SidebarRailRouter'), 'App must delegate workspace routing out of the root shell');
+    assert.ok(app.includes('readInitialSidebarMode(window.location.search)'), 'App must allow sidebar URL entry');
+    assert.ok(urlState.includes("'reminders'"), 'URL sidebar parser must allow reminders');
     assert.ok(main.includes('./manager-dashboard-reminders.css'), 'Reminders CSS must be loaded by the manager entry');
 });
 

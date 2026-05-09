@@ -21,6 +21,7 @@ import './manager-dashboard-board-interactions.css';
 import './manager-help.css';
 import './manager-dashboard-schedule.css';
 import './manager-dashboard-reminders.css';
+import './manager-dashboard-reminders-priority.css';
 import './settings-shell.css';
 import './settings-controls.css';
 import './settings-agent.css';

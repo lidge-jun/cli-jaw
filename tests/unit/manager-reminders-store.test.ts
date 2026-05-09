@@ -5,56 +5,8 @@ import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import Database from 'better-sqlite3';
 import { RemindersStore } from '../../src/manager/reminders/store.js';
-import type { ReminderSnapshot } from '../../src/reminders/types.js';
 
-const SNAPSHOT: ReminderSnapshot = {
-    schemaVersion: 1,
-    lists: [{ id: 'today', name: 'Today', accent: '#0a84ff' }],
-    reminders: [
-        {
-            id: 'rem_1',
-            title: 'Follow up',
-            notes: 'Call clinic',
-            listId: 'today',
-            status: 'open',
-            priority: 'high',
-            dueAt: '2026-05-09T03:00:00.000Z',
-            remindAt: '2026-05-09T02:30:00.000Z',
-            linkedInstance: null,
-            subtasks: [{ id: 'sub_1', title: 'Find chart', done: false }],
-            createdAt: '2026-05-08T12:00:00.000Z',
-            updatedAt: '2026-05-08T12:10:00.000Z',
-        },
-    ],
-};
-
-test('RemindersStore mirrors jaw-reminders snapshots into dashboard rows', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'cli-jaw-reminders-store-'));
-    try {
-        const store = new RemindersStore({ dbPath: join(dir, 'dashboard.db') });
-        const changes = store.upsertFromSnapshot(SNAPSHOT, '2026-05-08T12:11:00.000Z');
-        assert.equal(changes, 1);
-
-        const reminders = store.list();
-        assert.equal(reminders.length, 1);
-        assert.equal(reminders[0]?.id, 'rem_1');
-        assert.equal(reminders[0]?.title, 'Follow up');
-        assert.equal(reminders[0]?.priority, 'high');
-        assert.equal(reminders[0]?.source, 'jaw-reminders');
-        assert.equal(reminders[0]?.notificationStatus, 'pending');
-        assert.equal(reminders[0]?.subtasks[0]?.title, 'Find chart');
-
-        const updated = store.markNotificationAttempt('rem_1', 'no_channel', 'No active channel', '2026-05-08T12:12:00.000Z');
-        assert.equal(updated?.notificationStatus, 'no_channel');
-        assert.equal(updated?.notificationError, 'No active channel');
-        assert.equal(updated?.notificationAttemptedAt, '2026-05-08T12:12:00.000Z');
-        store.close();
-    } finally {
-        rmSync(dir, { recursive: true, force: true });
-    }
-});
-
-test('RemindersStore creates and updates cli-jaw-local message reminders with link metadata', () => {
+test('RemindersStore creates and updates dashboard reminders with optional link metadata', () => {
     const dir = mkdtempSync(join(tmpdir(), 'cli-jaw-reminders-local-'));
     try {
         const store = new RemindersStore({ dbPath: join(dir, 'dashboard.db') });
@@ -71,7 +23,7 @@ test('RemindersStore creates and updates cli-jaw-local message reminders with li
                 sourceText: 'message body',
             },
         });
-        assert.equal(created.source, 'cli-jaw-local');
+        assert.equal(created.source, 'dashboard');
         assert.equal(created.instanceId, 'port:24576');
         assert.equal(created.messageId, 'msg-1');
         assert.equal(created.turnIndex, 3);
@@ -80,35 +32,6 @@ test('RemindersStore creates and updates cli-jaw-local message reminders with li
 
         const updated = store.updateLocal(created.id, { status: 'done' });
         assert.equal(updated?.status, 'done');
-        store.close();
-    } finally {
-        rmSync(dir, { recursive: true, force: true });
-    }
-});
-
-test('RemindersStore prunes stale jaw-reminders rows and resets notifications when schedule changes', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'cli-jaw-reminders-sync-'));
-    try {
-        const store = new RemindersStore({ dbPath: join(dir, 'dashboard.db') });
-        store.upsertFromSnapshot(SNAPSHOT, '2026-05-08T12:11:00.000Z');
-        const local = store.createLocal({ title: 'Local pin', link: { instanceId: 'port:1', messageId: 'msg-1', port: 1 } });
-        store.markNotificationAttempt('rem_1', 'delivered', null, '2026-05-08T12:12:00.000Z');
-
-        const updatedSnapshot: ReminderSnapshot = {
-            ...SNAPSHOT,
-            reminders: [{
-                ...SNAPSHOT.reminders[0]!,
-                remindAt: '2026-05-09T04:00:00.000Z',
-                updatedAt: '2026-05-08T12:13:00.000Z',
-            }],
-        };
-        store.upsertFromSnapshot(updatedSnapshot, '2026-05-08T12:14:00.000Z');
-        assert.equal(store.get('rem_1')?.notificationStatus, 'pending');
-        assert.equal(store.get('rem_1')?.notificationAttemptedAt, null);
-
-        store.upsertFromSnapshot({ ...SNAPSHOT, reminders: [] }, '2026-05-08T12:15:00.000Z');
-        assert.equal(store.get('rem_1'), null);
-        assert.equal(store.get(local.id)?.source, 'cli-jaw-local');
         store.close();
     } finally {
         rmSync(dir, { recursive: true, force: true });
@@ -150,26 +73,13 @@ test('RemindersStore resets notification state when done reminders are reopened 
         assert.equal(updated?.notificationStatus, 'pending');
         assert.equal(updated?.notificationAttemptedAt, null);
 
-        const doneSnapshot: ReminderSnapshot = {
-            ...SNAPSHOT,
-            reminders: [{ ...SNAPSHOT.reminders[0]!, status: 'done', remindAt: '2026-05-09T01:00:00.000Z' }],
-        };
-        store.upsertFromSnapshot(doneSnapshot, '2026-05-09T01:00:00.000Z');
-        store.markNotificationAttempt('rem_1', 'delivered', null, '2026-05-09T01:00:01.000Z');
-        const reopenedSnapshot: ReminderSnapshot = {
-            ...SNAPSHOT,
-            reminders: [{ ...SNAPSHOT.reminders[0]!, status: 'open', remindAt: '2026-05-09T02:00:00.000Z' }],
-        };
-        store.upsertFromSnapshot(reopenedSnapshot, '2026-05-09T02:00:00.000Z');
-        assert.equal(store.get('rem_1')?.notificationStatus, 'pending');
-        assert.equal(store.get('rem_1')?.notificationAttemptedAt, null);
         store.close();
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
 });
 
-test('RemindersStore migrates legacy mirror rows with notification/link columns', () => {
+test('RemindersStore migrates legacy reminder rows with notification/link columns and dashboard source', () => {
     const dir = mkdtempSync(join(tmpdir(), 'cli-jaw-reminders-legacy-'));
     try {
         const dbPath = join(dir, 'dashboard.db');
@@ -205,6 +115,7 @@ test('RemindersStore migrates legacy mirror rows with notification/link columns'
         assert.equal(row?.notificationStatus, 'pending');
         assert.equal(row?.instanceId, null);
         assert.equal(row?.messageId, null);
+        assert.equal(row?.source, 'dashboard');
         store.close();
     } finally {
         rmSync(dir, { recursive: true, force: true });

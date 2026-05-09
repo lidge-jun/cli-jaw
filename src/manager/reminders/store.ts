@@ -2,10 +2,10 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
 import { dashboardPath } from '../dashboard-home.js';
-import type { Reminder, ReminderPriority, ReminderSnapshot, ReminderStatus, ReminderSubtask } from '../../reminders/types.js';
+import type { ReminderPriority, ReminderStatus, ReminderSubtask } from '../../reminders/types.js';
 import { parseReminderInstanceLink, type ReminderInstanceLinkInput } from './instance-link.js';
 
-export type DashboardReminderSource = 'jaw-reminders' | 'cli-jaw-local';
+export type DashboardReminderSource = 'dashboard';
 export type DashboardReminderNotificationStatus =
     | 'pending'
     | 'delivered'
@@ -82,7 +82,6 @@ type Row = {
 
 const REMINDER_STATUSES: readonly ReminderStatus[] = ['open', 'focused', 'waiting', 'done'];
 const REMINDER_PRIORITIES: readonly ReminderPriority[] = ['low', 'normal', 'high'];
-const REMINDER_SOURCES: readonly DashboardReminderSource[] = ['jaw-reminders', 'cli-jaw-local'];
 const NOTIFICATION_STATUSES: readonly DashboardReminderNotificationStatus[] = [
     'pending',
     'delivered',
@@ -105,9 +104,8 @@ function normalizePriority(value: string): ReminderPriority {
 }
 
 function normalizeSource(value: string): DashboardReminderSource {
-    return REMINDER_SOURCES.includes(value as DashboardReminderSource)
-        ? value as DashboardReminderSource
-        : 'jaw-reminders';
+    void value;
+    return 'dashboard';
 }
 
 function normalizeNotificationStatus(value: string): DashboardReminderNotificationStatus {
@@ -205,7 +203,7 @@ export class RemindersStore {
                 remind_at                  TEXT,
                 linked_instance            TEXT,
                 subtasks_json              TEXT NOT NULL DEFAULT '[]',
-                source                     TEXT NOT NULL DEFAULT 'jaw-reminders',
+                source                     TEXT NOT NULL DEFAULT 'dashboard',
                 source_created_at          TEXT NOT NULL,
                 source_updated_at          TEXT NOT NULL,
                 mirrored_at                TEXT NOT NULL,
@@ -229,6 +227,11 @@ export class RemindersStore {
         this.ensureColumn('port', 'INTEGER');
         this.ensureColumn('thread_key', 'TEXT');
         this.ensureColumn('source_text', 'TEXT');
+        this.db.prepare(`
+            UPDATE dashboard_reminders
+            SET source = 'dashboard'
+            WHERE source != 'dashboard'
+        `).run();
         this.db.exec(`
             CREATE INDEX IF NOT EXISTS idx_dashboard_reminders_status ON dashboard_reminders(status);
             CREATE INDEX IF NOT EXISTS idx_dashboard_reminders_remind_at ON dashboard_reminders(remind_at);
@@ -303,7 +306,7 @@ export class RemindersStore {
                 subtasks_json, source, source_created_at, source_updated_at, mirrored_at,
                 instance_id, message_id, turn_index, port, thread_key, source_text
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'cli-jaw-local', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'dashboard', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
             id,
             title,
@@ -332,7 +335,6 @@ export class RemindersStore {
     updateLocal(id: string, patch: DashboardReminderPatch): DashboardReminder | null {
         const existing = this.get(id);
         if (!existing) return null;
-        if (existing.source !== 'cli-jaw-local') throw new Error('only cli-jaw-local reminders are writable');
         const fields: string[] = [];
         const values: unknown[] = [];
         if (patch.title !== undefined) {
@@ -366,73 +368,6 @@ export class RemindersStore {
         values.push(id);
         this.db.prepare(`UPDATE dashboard_reminders SET ${fields.join(', ')} WHERE id = ?`).run(...values);
         return this.get(id);
-    }
-
-    upsertFromSnapshot(snapshot: ReminderSnapshot, mirroredAt = new Date().toISOString()): number {
-        const upsert = this.db.prepare(`
-            INSERT INTO dashboard_reminders (
-                id, title, notes, list_id, status, priority, due_at, remind_at, linked_instance,
-                subtasks_json, source, source_created_at, source_updated_at, mirrored_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'jaw-reminders', ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                title = excluded.title,
-                notes = excluded.notes,
-                list_id = excluded.list_id,
-                status = excluded.status,
-                priority = excluded.priority,
-                due_at = excluded.due_at,
-                remind_at = excluded.remind_at,
-                linked_instance = excluded.linked_instance,
-                subtasks_json = excluded.subtasks_json,
-                source = 'jaw-reminders',
-                source_updated_at = excluded.source_updated_at,
-                mirrored_at = excluded.mirrored_at,
-                notification_status = CASE
-                    WHEN excluded.status = 'done' THEN dashboard_reminders.notification_status
-                    WHEN dashboard_reminders.due_at IS NOT excluded.due_at OR dashboard_reminders.remind_at IS NOT excluded.remind_at THEN 'pending'
-                    ELSE dashboard_reminders.notification_status
-                END,
-                notification_attempted_at = CASE
-                    WHEN excluded.status = 'done' THEN dashboard_reminders.notification_attempted_at
-                    WHEN dashboard_reminders.due_at IS NOT excluded.due_at OR dashboard_reminders.remind_at IS NOT excluded.remind_at THEN NULL
-                    ELSE dashboard_reminders.notification_attempted_at
-                END,
-                notification_error = CASE
-                    WHEN excluded.status = 'done' THEN dashboard_reminders.notification_error
-                    WHEN dashboard_reminders.due_at IS NOT excluded.due_at OR dashboard_reminders.remind_at IS NOT excluded.remind_at THEN NULL
-                    ELSE dashboard_reminders.notification_error
-                END
-        `);
-        const deleteMissing = this.db.prepare(`
-            DELETE FROM dashboard_reminders
-            WHERE source = 'jaw-reminders' AND id NOT IN (${snapshot.reminders.map(() => '?').join(',') || "''"})
-        `);
-        const sync = this.db.transaction((reminders: Reminder[]) => {
-            let changes = 0;
-            for (const reminder of reminders) {
-                const result = upsert.run(
-                    reminder.id,
-                    reminder.title,
-                    reminder.notes,
-                    reminder.listId,
-                    reminder.status,
-                    reminder.priority,
-                    reminder.dueAt,
-                    reminder.remindAt,
-                    reminder.linkedInstance,
-                    JSON.stringify(reminder.subtasks),
-                    reminder.createdAt,
-                    reminder.updatedAt,
-                    mirroredAt,
-                );
-                changes += result.changes;
-            }
-            const ids = reminders.map(reminder => reminder.id);
-            changes += deleteMissing.run(...ids).changes;
-            return changes;
-        });
-        return sync(snapshot.reminders);
     }
 
     markNotificationAttempt(

@@ -6,16 +6,21 @@ interface WatchdogConfig {
     firstProgressMs: number;
     idleMs: number;
     absoluteMs: number;
+    absoluteHardCapMs: number;
+    checkIntervalMs: number;
 }
 
 const DEFAULTS: WatchdogConfig = {
     firstProgressMs: 120_000,
     idleMs: 90_000,
     absoluteMs: 600_000,
+    absoluteHardCapMs: 60 * 60_000,
+    checkIntervalMs: 2_000,
 };
 
 export interface WatchdogHandle {
     markProgress(): void;
+    extendDeadline(extraMs: number, reason?: string): void;
     stop(): void;
 }
 
@@ -27,6 +32,7 @@ export function attachWatchdog(
 ): WatchdogHandle {
     const cfg = { ...DEFAULTS, ...config };
     const startedAt = Date.now();
+    let absoluteDeadline = startedAt + cfg.absoluteMs;
     let lastProgressAt = 0;
     let retryHits = 0;
     let stopped = false;
@@ -56,7 +62,7 @@ export function attachWatchdog(
         const noFirstProgress = lastProgressAt === 0 && elapsed > cfg.firstProgressMs;
         const idleWithRetries = retryHits >= 3 && lastProgressAt > 0
             && (now - lastProgressAt) > cfg.idleMs;
-        const absoluteExpired = elapsed > cfg.absoluteMs;
+        const absoluteExpired = now > absoluteDeadline;
 
         if (noFirstProgress || idleWithRetries || absoluteExpired) {
             stopped = true;
@@ -70,10 +76,19 @@ export function attachWatchdog(
 
             onStall(reason);
         }
-    }, 2_000);
+    }, cfg.checkIntervalMs);
 
     return {
         markProgress,
+        extendDeadline(extraMs: number) {
+            if (!Number.isFinite(extraMs) || extraMs <= 0) return;
+            const hardCapDeadline = startedAt + Math.max(cfg.absoluteMs, cfg.absoluteHardCapMs);
+            const requestedDeadline = Date.now() + extraMs;
+            absoluteDeadline = Math.min(
+                Math.max(absoluteDeadline, requestedDeadline),
+                hardCapDeadline,
+            );
+        },
         stop() {
             stopped = true;
             clearInterval(timer);

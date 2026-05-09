@@ -1450,6 +1450,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             }, 5_000);
         }
     }, watchdogConfig);
+    ctx.stallWatchdog = stallWatchdog;
 
     let buffer = '';
     const recordOpencodeEvent = (line: string, event: CliEventRecord) => {

@@ -1,6 +1,8 @@
 // ─── Agent Context Types ─────────────────────────────
 // Shared type definitions for agent spawn context objects.
 
+import type { WatchdogHandle } from '../agent/watchdog.js';
+
 export interface ToolEntry {
   icon: string;
   rawIcon?: string;
@@ -71,6 +73,7 @@ export interface SpawnContext {
   claudeSignatureLen?: number;
   cliNativeCompactDetected?: boolean;
   stallReason?: string;
+  stallWatchdog?: WatchdogHandle;
 }
 
 export interface SpawnResult {

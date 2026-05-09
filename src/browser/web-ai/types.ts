@@ -1,5 +1,5 @@
 export type WebAiVendor = 'chatgpt' | 'gemini' | 'grok';
-export type WebAiStatus = 'ready' | 'rendered' | 'sent' | 'streaming' | 'complete' | 'blocked' | 'timeout' | 'error';
+export type WebAiStatus = 'ready' | 'rendered' | 'sent' | 'streaming' | 'complete' | 'blocked' | 'timeout' | 'error' | 'interstitial';
 export type WebAiNotificationStatus = 'pending' | 'sent' | 'failed' | 'skipped';
 /**
  * ChatGPT supports the `upload` runtime after PRD32.7-B. Gemini upload remains
@@ -155,4 +155,5 @@ export interface WebAiOutput {
     usedFallbacks?: string[];
     warnings: string[];
     error?: string;
+    interstitial?: import('./interstitial.js').InterstitialResult;
 }

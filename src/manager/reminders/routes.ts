@@ -1,11 +1,10 @@
 import { Router, type Request, type Response } from 'express';
 import type { ReminderPriority, ReminderStatus } from '../../reminders/types.js';
-import { createLocalReminder, listDashboardReminders, refreshDashboardReminders, updateLocalReminder, type DashboardRemindersApiOptions } from './api.js';
+import { createLocalReminder, listDashboardReminders, updateLocalReminder } from './api.js';
 import { RemindersStore, type DashboardReminderInput, type DashboardReminderPatch } from './store.js';
 
 export type DashboardRemindersRouterOptions = {
     store?: RemindersStore;
-    sourcePath?: string;
 };
 
 function sendErr(res: Response, status: number, code: string, error: unknown): void {
@@ -14,14 +13,6 @@ function sendErr(res: Response, status: number, code: string, error: unknown): v
         code,
         error: error instanceof Error ? error.message : String(error),
     });
-}
-
-function wantsRefresh(req: Request): boolean {
-    return req.query["refresh"] === '1' || req.query["refresh"] === 'true';
-}
-
-function apiOptions(store: RemindersStore, sourcePath: string | undefined): DashboardRemindersApiOptions {
-    return sourcePath ? { store, sourcePath } : { store };
 }
 
 function optionalInteger(value: unknown, field: string): number | null {
@@ -85,6 +76,21 @@ function pickFromMessageInput(body: Record<string, unknown>): DashboardReminderI
     };
 }
 
+function pickCreateInput(body: Record<string, unknown>): DashboardReminderInput {
+    return {
+        title: typeof body["title"] === 'string' ? body["title"] : '',
+        notes: typeof body["notes"] === 'string' ? body["notes"] : null,
+        status: pickStatus(body["status"]) ?? 'open',
+        priority: pickPriority(body["priority"]) ?? 'normal',
+        dueAt: typeof body["dueAt"] === 'string' ? body["dueAt"] : null,
+        remindAt: typeof body["remindAt"] === 'string' ? body["remindAt"] : null,
+        listId: typeof body["listId"] === 'string' ? body["listId"] : null,
+        linkedInstance: typeof body["linkedInstance"] === 'string' ? body["linkedInstance"] : null,
+        sourceText: typeof body["sourceText"] === 'string' ? body["sourceText"] : null,
+        link: null,
+    };
+}
+
 function pickPatch(body: Record<string, unknown>): DashboardReminderPatch {
     const patch: DashboardReminderPatch = {};
     if (typeof body["title"] === 'string') patch.title = body["title"];
@@ -103,21 +109,20 @@ export function createDashboardRemindersRouter(options: DashboardRemindersRouter
 
     router.get('/', async (req: Request, res: Response) => {
         try {
-            const feed = wantsRefresh(req)
-                ? await refreshDashboardReminders(apiOptions(store, options.sourcePath))
-                : listDashboardReminders({ store });
+            void req;
+            const feed = listDashboardReminders({ store });
             res.json({ ok: true, ...feed });
         } catch (error) {
             sendErr(res, 500, 'reminders_list_failed', error);
         }
     });
 
-    router.post('/refresh', async (_req: Request, res: Response) => {
+    router.post('/', (req: Request, res: Response) => {
         try {
-            const feed = await refreshDashboardReminders(apiOptions(store, options.sourcePath));
-            res.json({ ok: true, ...feed });
+            const item = createLocalReminder(pickCreateInput((req.body || {}) as Record<string, unknown>), { store });
+            res.status(201).json({ ok: true, item });
         } catch (error) {
-            sendErr(res, 500, 'reminders_refresh_failed', error);
+            sendErr(res, 400, 'reminder_create_failed', error);
         }
     });
 

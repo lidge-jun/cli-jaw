@@ -22,6 +22,7 @@ export type WebAiFailureStage =
     | 'capability-preflight'
     | 'provider-select-model'
     | 'provider-select-mode'
+    | 'provider-interstitial'
     | 'session-reattach'
     | 'unknown';
 
@@ -83,6 +84,7 @@ const KNOWN_STAGES: ReadonlySet<WebAiFailureStage> = new Set([
     'capability-preflight',
     'provider-select-model',
     'provider-select-mode',
+    'provider-interstitial',
     'session-reattach',
     'unknown',
 ]);

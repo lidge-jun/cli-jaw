@@ -111,7 +111,7 @@ type Props = {
 };
 
 export function SidebarRailRouter(props: Props) {
-    const [remindersView, setRemindersView] = useState<RemindersView>('all');
+    const [remindersView, setRemindersView] = useState<RemindersView>('matrix');
     const remindersFeed = useRemindersFeed({ active: props.sidebarMode === 'reminders' });
     const notesSelectedHiddenByFilter = Boolean(
         props.notesModel.tagFilter
@@ -150,7 +150,7 @@ export function SidebarRailRouter(props: Props) {
                         ) : props.scheduleWorkspaceEnabled && props.sidebarMode === 'schedule' ? (
                             <DashboardScheduleSidebar activeGroup={props.scheduleGroup} onGroupChange={props.onScheduleGroupChange} />
                         ) : props.remindersWorkspaceEnabled && props.sidebarMode === 'reminders' ? (
-                            <DashboardRemindersSidebar view={remindersView} onViewChange={setRemindersView} items={remindersFeed.items} loading={remindersFeed.loading} sourceStatus={remindersFeed.sourceStatus} onRefresh={() => void remindersFeed.refresh()} />
+                            <DashboardRemindersSidebar view={remindersView} onViewChange={setRemindersView} items={remindersFeed.items} loading={remindersFeed.loading} onRefresh={() => void remindersFeed.refresh()} />
                         ) : (
                             <InstanceNavigator active={props.selectedInstance} hiddenCount={props.instances.filter(instance => instance.hidden).length} collapsed={props.sidebarCollapsed}>
                                 {props.instanceListContent}
@@ -189,7 +189,7 @@ export function SidebarRailRouter(props: Props) {
                         ) : null}
                         {props.remindersWorkspaceEnabled ? (
                             <WorkspaceSurface active={props.sidebarMode === 'reminders'}>
-                                <DashboardRemindersWorkspace active={props.sidebarMode === 'reminders'} view={remindersView} feed={remindersFeed} onRefresh={() => void remindersFeed.refresh()} />
+                                <DashboardRemindersWorkspace active={props.sidebarMode === 'reminders'} view={remindersView} feed={remindersFeed} onRefresh={() => void remindersFeed.refresh()} onCreate={(input) => void remindersFeed.create(input)} onUpdate={(id, patch) => void remindersFeed.update(id, patch)} />
                             </WorkspaceSurface>
                         ) : null}
                     </div>

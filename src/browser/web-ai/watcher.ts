@@ -3,11 +3,13 @@ import { stripUndefined } from '../../core/strip-undefined.js';
 import {
     enqueueWebAiSessionNotification,
     getSession,
+    incrementRecoveryCount,
     listSessions,
     setSessionNotifyOnComplete,
     updateSessionResult,
     updateSessionStatus,
 } from './session.js';
+import { isPageDeathError } from './interstitial.js';
 import type { WebAiOutput, WebAiSessionRecord, WebAiVendor } from './types.js';
 
 export interface StartWebAiWatcherInput {
@@ -108,12 +110,28 @@ async function runTick(input: StartWebAiWatcherInput, state: WebAiWatcherState &
         return;
     }
     try {
-        const result = await runSerializedPoll(() => input.pollOnce(stripUndefined({
-            vendor: input.vendor,
-            session: input.sessionId,
-            timeout: POLL_TICK_SECONDS,
-            allowCopyMarkdownFallback: input.allowCopyMarkdownFallback,
-        })));
+        let result: WebAiOutput;
+        try {
+            result = await runSerializedPoll(() => input.pollOnce(stripUndefined({
+                vendor: input.vendor,
+                session: input.sessionId,
+                timeout: POLL_TICK_SECONDS,
+                allowCopyMarkdownFallback: input.allowCopyMarkdownFallback,
+            })));
+        } catch (pollErr) {
+            const recoveryAttempts = (state as { recoveryAttempts?: number }).recoveryAttempts || 0;
+            if (isPageDeathError(pollErr) && recoveryAttempts < 2) {
+                (state as { recoveryAttempts?: number }).recoveryAttempts = recoveryAttempts + 1;
+                incrementRecoveryCount(input.sessionId);
+                scheduleTick(input, state, normalizedPollIntervalMs(input.pollIntervalSeconds));
+                return;
+            }
+            throw pollErr;
+        }
+        if (result.status === 'interstitial') {
+            scheduleTick(input, state, normalizedPollIntervalMs(input.pollIntervalSeconds));
+            return;
+        }
         if (result.ok && result.status === 'complete') {
             updateSessionResult({
                 sessionId: input.sessionId,

@@ -18,7 +18,7 @@ export type DashboardReminder = {
     remindAt: string | null;
     linkedInstance: string | null;
     subtasks: Array<{ id: string; title: string; done: boolean }>;
-    source: 'jaw-reminders' | 'cli-jaw-local';
+    source: 'dashboard';
     sourceCreatedAt: string;
     sourceUpdatedAt: string;
     mirroredAt: string;
@@ -33,29 +33,23 @@ export type DashboardReminder = {
     sourceText: string | null;
 };
 
-export type DashboardRemindersSourceStatus =
-    | {
-        ok: true;
-        sourcePath: string;
-        loadedAt: string;
-        schemaVersion: number;
-        lists: number;
-        reminders: number;
-        mirrored: number;
-    }
-    | {
-        ok: false;
-        code: 'missing_file' | 'invalid_json' | 'schema_mismatch' | 'read_failed' | 'platform_unsupported';
-        message: string;
-        sourcePath: string;
-        loadedAt: string;
-    };
-
 export type DashboardRemindersResponse = {
     ok: boolean;
     items?: DashboardReminder[];
-    sourceStatus?: DashboardRemindersSourceStatus | null;
 };
+
+export type DashboardReminderCreateInput = {
+    title: string;
+    notes?: string | null;
+    listId?: string | null;
+    status?: DashboardReminderStatus;
+    priority?: DashboardReminderPriority;
+    dueAt?: string | null;
+    remindAt?: string | null;
+    linkedInstance?: string | null;
+};
+
+export type DashboardReminderPatchInput = Partial<DashboardReminderCreateInput>;
 
 const BASE = '/api/dashboard/reminders';
 
@@ -63,6 +57,10 @@ async function asJson<T>(res: Response): Promise<T> {
     if (!res.ok) {
         const body = await res.text().catch(() => '');
         throw new Error(`${res.status} ${body || res.statusText}`);
+    }
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        throw new Error('Reminders API is not available in the running dashboard server. Rebuild and restart the dashboard backend to enable sync.');
     }
     return await res.json() as T;
 }
@@ -86,26 +84,33 @@ function normalizeReminder(item: DashboardReminder): DashboardReminder {
     };
 }
 
-export async function listReminders(options: { refresh?: boolean } = {}): Promise<DashboardRemindersResponse> {
-    const suffix = options.refresh ? '?refresh=1' : '';
-    const res = await fetch(`${BASE}${suffix}`, { credentials: 'same-origin', cache: 'no-store' });
+export async function listReminders(): Promise<DashboardRemindersResponse> {
+    const res = await fetch(BASE, { credentials: 'same-origin', cache: 'no-store' });
     const body = await asJson<DashboardRemindersResponse>(res);
     return {
         ...body,
         items: Array.isArray(body.items) ? body.items.map(normalizeReminder) : [],
-        sourceStatus: body.sourceStatus ?? null,
     };
 }
 
-export async function refreshReminders(): Promise<DashboardRemindersResponse> {
-    const res = await fetch(`${BASE}/refresh`, {
+export async function createReminder(input: DashboardReminderCreateInput): Promise<DashboardReminder> {
+    const res = await fetch(BASE, {
         method: 'POST',
         credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(input),
     });
-    const body = await asJson<DashboardRemindersResponse>(res);
-    return {
-        ...body,
-        items: Array.isArray(body.items) ? body.items.map(normalizeReminder) : [],
-        sourceStatus: body.sourceStatus ?? null,
-    };
+    const body = await asJson<{ item: DashboardReminder }>(res);
+    return normalizeReminder(body.item);
+}
+
+export async function updateReminder(id: string, patch: DashboardReminderPatchInput): Promise<DashboardReminder> {
+    const res = await fetch(`${BASE}/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(patch),
+    });
+    const body = await asJson<{ item: DashboardReminder }>(res);
+    return normalizeReminder(body.item);
 }
