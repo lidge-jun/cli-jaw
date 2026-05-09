@@ -89,12 +89,14 @@ describe('bootstrapVirtualHistory', () => {
         ]);
     });
 
-    it('does not force bottom or mark following when restore intent is pinned away', () => {
+    it('restores to saved index when restore intent is pinned away', () => {
         const log: string[] = [];
         const items = makeMessageFixture(82);
         const deps: VirtualHistoryBootstrapDeps = {
             ...makeDeps(log),
             shouldFollowBottom: mock.fn(() => false),
+            scrollToIndex: mock.fn((index: number) => { log.push(`scrollToIndex(${index})`); }),
+            restoreIndex: 42,
         };
         bootstrapVirtualHistory(items, deps);
 
@@ -103,6 +105,27 @@ describe('bootstrapVirtualHistory', () => {
             'registerCallbacks',
             'setItems(count=82, autoActivate=false)',
             'activateIfNeeded(toBottom=false)',
+            'scrollToIndex(42)',
+        ]);
+    });
+
+    it('falls back to bottom when pinned away but no restore index', () => {
+        const log: string[] = [];
+        const items = makeMessageFixture(82);
+        const deps: VirtualHistoryBootstrapDeps = {
+            ...makeDeps(log),
+            shouldFollowBottom: mock.fn(() => false),
+            restoreIndex: null,
+        };
+        bootstrapVirtualHistory(items, deps);
+
+        assert.deepStrictEqual(log, [
+            'onBeforeVirtualHistoryBootstrap',
+            'registerCallbacks',
+            'setItems(count=82, autoActivate=false)',
+            'activateIfNeeded(toBottom=true)',
+            'scrollToBottom',
+            'onAfterVirtualHistoryBottomed',
         ]);
     });
 

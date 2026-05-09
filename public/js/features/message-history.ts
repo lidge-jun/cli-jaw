@@ -50,7 +50,7 @@ export function registerVirtualScrollCallbacks(vs: ReturnType<typeof getVirtualS
 
 export function makeBootstrapDeps(
     vs: ReturnType<typeof getVirtualScroll>,
-    options: { forceInitialBottom?: boolean } = {},
+    options: { forceInitialBottom?: boolean; restoreIndex?: number | null } = {},
 ): VirtualHistoryBootstrapDeps {
     const shouldFollowBottom = options.forceInitialBottom ? () => true : canFollowAfterRestore;
     return {
@@ -58,7 +58,9 @@ export function makeBootstrapDeps(
         setItems: (items, opts) => vs.setItems(items, opts),
         activateIfNeeded: (toBottom) => vs.activateIfNeeded(toBottom),
         scrollToBottom: () => vs.scrollToBottom(),
+        scrollToIndex: (index) => vs.scrollToIndex(index),
         shouldFollowBottom,
+        restoreIndex: options.restoreIndex ?? null,
         onBeforeVirtualHistoryBootstrap: () => { ensureScrollTracking(); },
         onAfterVirtualHistoryBottomed: () => { markFollowingBottom(); },
     };
@@ -92,11 +94,13 @@ export async function loadMessages(): Promise<void> {
     if (msgs !== null) {
         const safeMsgs = msgs.map(normalizeMessageToolLog);
         const hadRenderedHistory = Boolean(chatEl?.querySelector('.msg')) || vs.active;
+        const savedIndex = vs.active ? vs.firstVisibleIndex() : null;
         vs.clear();
         if (chatEl) chatEl.innerHTML = '';
         if (safeMsgs.length >= VS_THRESHOLD) {
             bootstrapVirtualHistory(buildVirtualHistoryItems(safeMsgs), makeBootstrapDeps(vs, {
                 forceInitialBottom: !hadRenderedHistory,
+                restoreIndex: hadRenderedHistory ? savedIndex : null,
             }));
         } else {
             hydrateSmallHistory(safeMsgs);

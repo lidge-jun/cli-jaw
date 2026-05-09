@@ -194,6 +194,23 @@ export class VirtualScroll {
         this.container.scrollTop = this.container.scrollHeight;
     }
 
+    firstVisibleIndex(): number | null {
+        if (!this._active || !this.virtualizer) return null;
+        const virtualItems = this.virtualizer.getVirtualItems();
+        if (virtualItems.length === 0) return null;
+        const containerTop = this.container.scrollTop;
+        for (const vi of virtualItems) {
+            if (vi.end > containerTop) return vi.index;
+        }
+        return virtualItems[0].index;
+    }
+
+    scrollToIndex(index: number, align: 'start' | 'center' | 'end' = 'start'): void {
+        if (this._active && this.virtualizer && index >= 0 && index < this.items.length) {
+            this.virtualizer.scrollToIndex(index, { align });
+        }
+    }
+
     isNearBottom(threshold = BOTTOM_THRESHOLD): boolean {
         const dist = this.container.scrollHeight - this.container.scrollTop - this.container.clientHeight;
         return dist < threshold;
