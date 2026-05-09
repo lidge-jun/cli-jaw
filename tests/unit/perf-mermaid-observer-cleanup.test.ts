@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { normalizeStrictPropertyAccess } from './source-normalize';
 
-const renderSrc = normalizeStrictPropertyAccess(readFileSync(join(import.meta.dirname, '../../public/js/render.ts'), 'utf8'));
+const renderSrc = normalizeStrictPropertyAccess(readFileSync(join(import.meta.dirname, '../../public/js/render/mermaid.ts'), 'utf8'));
 const virtualScrollSrc = normalizeStrictPropertyAccess(readFileSync(join(import.meta.dirname, '../../public/js/virtual-scroll.ts'), 'utf8'));
 
 function functionBlock(source: string, signature: string): string {

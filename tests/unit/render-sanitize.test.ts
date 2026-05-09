@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const projectRoot = join(import.meta.dirname, '../..');
-const renderSrc = readFileSync(join(projectRoot, 'public/js/render.ts'), 'utf8');
+const renderSrc = readFileSync(join(projectRoot, 'public/js/render/html.ts'), 'utf8');
 
 // ── Test the regex fallback sanitizer (server-side, no DOMPurify) ──
 // In the browser, DOMPurify handles sanitization.

@@ -5,12 +5,15 @@ import { join } from 'node:path';
 import { normalizeStrictPropertyAccess } from './source-normalize';
 
 // Phase 127 (#127) mermaid render latency — source-string contract.
-// Avoids importing render.ts directly (it depends on browser globals/libs).
+// Avoids importing render modules directly (they depend on browser globals/libs).
 
-const renderSrc = normalizeStrictPropertyAccess(readFileSync(
-    join(import.meta.dirname, '../../public/js/render.ts'),
-    'utf8',
-));
+const renderSrc = normalizeStrictPropertyAccess([
+    '../../public/js/render.ts',
+    '../../public/js/render/markdown.ts',
+    '../../public/js/render/mermaid.ts',
+    '../../public/js/render/sanitize.ts',
+    '../../public/js/render/svg-actions.ts',
+].map(file => readFileSync(join(import.meta.dirname, file), 'utf8')).join('\n'));
 
 test('F1: mermaid fence emits skeleton + URI-encoded source attribute', () => {
     assert.ok(renderSrc.includes('mermaid-skeleton'),
@@ -131,14 +134,18 @@ test('D1: rendered Mermaid diagrams restore expand control and binding', () => {
 test('D1: shared zoom binder supports Mermaid without routing widget iframes through sanitizer overlay', () => {
     const bindIdx = renderSrc.indexOf('export function bindDiagramZoom');
     assert.ok(bindIdx >= 0, 'bindDiagramZoom must exist');
-    const bindBlock = renderSrc.slice(bindIdx, bindIdx + 900);
+    const bindBlock = renderSrc.slice(bindIdx, bindIdx + 1200);
 
     assert.ok(bindBlock.includes("'.diagram-zoom-btn, .mermaid-zoom-btn'"),
         'shared zoom binder must scan both SVG and Mermaid zoom buttons');
     assert.ok(bindBlock.includes("btn.closest('.diagram-widget')"),
         'shared zoom binder must skip widget iframe zoom buttons');
-    assert.ok(bindBlock.includes("btn.closest('.diagram-container, .mermaid-container')"),
-        'shared zoom binder must find Mermaid containers as well as SVG containers');
+    assert.ok(bindBlock.includes("btn.closest('.diagram-container')"),
+        'shared zoom binder must find inline SVG containers');
+    assert.ok(bindBlock.includes("btn.closest('.mermaid-container')"),
+        'shared zoom binder must find Mermaid containers');
+    assert.ok(bindBlock.includes("'mermaid' : 'inline-svg'"),
+        'shared zoom binder must preserve overlay kind for SVG styling scope');
     assert.ok(bindBlock.includes('.mermaid-copy-btn, .mermaid-save-btn'),
         'overlay clone must remove Mermaid action buttons before rendering overlay');
 });
