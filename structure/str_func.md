@@ -281,7 +281,7 @@ cli-jaw/
 │       ├── catalog.ts        ← COMMANDS → capability map 확장 (43L)
 │       ├── policy.ts         ← getVisibleCommands, getTelegramMenuCommands (39L)
 │       └── help-renderer.ts  ← renderHelp list/detail mode (44L)
-├── public/                   ← Web UI (Vite 8 + ES Modules, 436 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 456 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~60687L)
+├── public/                   ← Web UI (Vite 8 + ES Modules, 447 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 456 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~60687L)
 │   ├── index.html            ← 뼈대 (876L, CLI-JAW 대문자 로고, pill theme switch, data-i18n, 로컬 avatar 입력)
 │   ├── manifest.json         ← PWA 매니페스트 (20L) ✨
 │   ├── sw.js                 ← Service Worker 오프라인 캐시 (104L) ✨
@@ -695,7 +695,7 @@ graph LR
 | [🤖 agent_spawn.md](agent_spawn.md)                 | agent/ (spawn·args·events) + orchestrator/ (pipeline·parser) + cli/acp-client | spawn + ACP + 오케스트레이션           |
 | [📱 telegram.md](telegram.md)                       | telegram/ (bot·forwarder·telegram-file) + memory/heartbeat                    | 외부 인터페이스 + lifecycle + 파일전송 |
 | *(미작성)* discord.md                                | discord/ (bot·commands·forwarder·discord-file) + messaging/                   | Discord 인터페이스 + 메시징 런타임     |
-| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 436개, `public/dist` build 456파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
+| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 447개, `public/dist` build 456파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
 | [🧠 prompt_flow.md](prompt_flow.md)                 | prompt/builder.ts · 직원 프롬프트 · promptCache                               | **핵심** — 정적/동적 + Copilot ACP     |
 | [📄 prompt_basic_A1.md](prompt_basic_A1.md)         | A-1 기본 프롬프트 원문                                                        | EN 기본 프롬프트 레퍼런스              |
 | [📄 prompt_basic_A2.md](prompt_basic_A2.md)         | A-2 프롬프트 템플릿                                                           | 사용자 편집 가능                       |

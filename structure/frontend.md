@@ -10,7 +10,7 @@ aliases: [CLI-JAW Frontend, public architecture, frontend.md]
 
 > Web UI 본체는 Vanilla HTML + CSS + TypeScript ES Modules로 구성된다. Manager 대시보드는 `public/manager/`의 React 19 + TSX 앱이다.
 > 빌드는 Vite 8 기준이며, `vite.config.ts`는 `public/index.html`과 `public/manager/index.html`을 multi-entry로 빌드한다.
-> 현재 `public/`에서 `public/dist/*`를 제외한 소스/자산/legacy duplicate는 436개다. `public/public/dist/*`까지 generated로 보면 실제 편집 대상 소스/자산은 309개다. 생성 산출물은 `public/dist/` 456개와 별도 중복 트리 `public/public/dist/` 127개가 남아 있고, `public/dist/dist/`는 전자에 재귀 포함된 nested 복제본이다.
+> 현재 `public/`에서 `public/dist/*`를 제외한 소스/자산/legacy duplicate는 447개다. `public/public/dist/*`까지 generated로 보면 실제 편집 대상 소스/자산은 320개다. 생성 산출물은 `public/dist/` 456개와 별도 중복 트리 `public/public/dist/` 127개가 남아 있고, `public/dist/dist/`는 전자에 재귀 포함된 nested 복제본이다.
 > 메인 UI는 `index.html`에서 Google Fonts `Chakra Petch` + `Outfit`을 불러오고, 로컬 `public/assets/fonts/GeistVF.woff2`와 `JetBrainsMono-Variable.woff2`는 자산으로 보관 중이다.
 > PWA는 `manifest.json` + `sw.js` + `icons/`로 구성된다. 오프라인 메시지 캐시, virtual scroll, markdown/KaTeX/Mermaid 렌더링, sandboxed diagram widget, avatar emoji/image 커스터마이즈, voice recording, PABCD roadmap, subagent-aware ProcessBlock 렌더링, 반응형 사이드바, theme toggle이 현재 런타임의 핵심이다.
 
@@ -31,9 +31,10 @@ public/
 ├── css/                  ← 9 CSS files
 ├── icons/                ← 3 PWA icons
 ├── img/                  ← shark sprite
-├── js/                   ← 52 TypeScript modules
+├── js/                   ← 72 TypeScript modules
 │   ├── diagram/          ← 3 diagram pipeline modules
-│   └── features/         ← 32 feature modules
+│   ├── features/         ← 41 feature modules
+│   └── render/           ← 11 markdown/diagram rendering modules
 ├── locales/              ← ko/en/ja/zh JSON bundles
 ├── manager/              ← React manager dashboard + notes/search/settings workspaces (213 files)
 │   ├── index.html        ← Manager HTML entry
@@ -45,11 +46,12 @@ public/
 
 | 영역 | 파일 수 | 비고 |
 | --- | ---: | --- |
-| `public/` source/assets | 436 | 문서 관례상 `public/dist/*`만 제외, `public/public/dist/*`는 포함 |
-| `public/` source/assets (generated 제외) | 309 | `public/dist/*`, `public/public/dist/*` 모두 제외 |
+| `public/` source/assets | 447 | 문서 관례상 `public/dist/*`만 제외, `public/public/dist/*`는 포함 |
+| `public/` source/assets (generated 제외) | 320 | `public/dist/*`, `public/public/dist/*` 모두 제외 |
 | `public/js/` root | 17 | 전부 TypeScript ES modules, `mermaid-loader.ts`, `uuid.ts`, `virtual-scroll-bootstrap.ts` 포함 |
 | `public/js/diagram/` | 3 | SVG/iframe diagram pipeline |
-| `public/js/features/` | 32 | settings 분해 + help/attention/orchestrate scope + process-step-match 포함 |
+| `public/js/render/` | 11 | markdown/KaTeX/Mermaid/SVG/file-link/post-render 책임 분리 |
+| `public/js/features/` | 41 | settings 분해 + help/attention/orchestrate scope + process-step-match 포함 |
 | `public/manager/` | 213 | React 19 manager dashboard, notes/search, schedule, settings, sync, WYSIWYG source |
 | `public/css/` | 9 | theme/layout/chat/markdown/tool UI/diagram |
 | `public/locales/` | 4 | `ko.json`, `en.json`, `ja.json`, `zh.json` |
@@ -83,7 +85,14 @@ public/
 
 | 파일 | 역할 |
 | --- | --- |
-| `js/render.ts` | marked + highlight.js + KaTeX + Mermaid + diagram-html widget rendering, SVG/HTML sanitization, orchestration stripping, local file-path linkification + open interception, lazy Mermaid refresh, 100ms batched post-render debounce |
+| `js/render.ts` | render public API façade. 기존 caller는 계속 `./render.js`에서 `renderMarkdown`, sanitizer, file-link, Mermaid helper를 import한다 |
+| `js/render/markdown.ts` | marked pipeline, CJK punctuation fix, math/SVG shielding, sanitize/unshield, post-render scheduling |
+| `js/render/sanitize.ts` | DOMPurify 기반 HTML/SVG sanitizer. Mermaid SVG sanitizer는 `<style>`을 허용하고 user inline SVG sanitizer는 `<style>`을 차단 |
+| `js/render/mermaid.ts` | lazy Mermaid load, queued render, observer, rerender, prewarm, unmount release |
+| `js/render/svg-actions.ts` | inline SVG block render, diagram copy/save/zoom actions, SVG overlay kind 분리(`inline-svg` vs `mermaid`) |
+| `js/render/highlight.ts` | highlight.js language registration, code block highlight, mounted block rehighlight |
+| `js/render/file-links.ts` | local absolute path linkification and `/api/file/open` click delegation |
+| `js/render/post-render.ts` | Mermaid render, rehighlight, zoom binding, file-path linkify를 100ms debounce로 coalesce |
 | `js/ui.ts` | 메시지 렌더링, skeleton/empty state, virtual scroll 연동, ProcessBlock 오케스트레이션, subagent/tool step merge + dedup, copy button, markdown/file-path post-render linkification, avatar markup 주입, message finalization, `scrollIntent` 기반 bottom-follow/restore policy |
 | `js/ws.ts` | WebSocket 메시지 라우팅. agent status, queue update, `agent_tool`→typed ProcessStep, agent output/done, orchestration state, Telegram/Discord new message, reconnect snapshot, 10초 reload dedup, reconnect 후 bottom anchor reconciliation |
 | `js/streaming-render.ts` | 스트리밍 텍스트 렌더러 |
@@ -274,7 +283,8 @@ subagent 렌더링 변경 이후 tool history의 canonical UI는 `features/proce
 | `public/js/ws.ts` | 469L | `WsMessage`가 `toolType`, `detail`, `stepRef`, `isEmployee`를 받고 `agent_tool`을 typed ProcessStep으로 변환. reconnect 시 snapshot hydration과 bottom reconciliation 호출 |
 | `public/js/ui.ts` | 940L | ProcessBlock single-owner normalize, merge/dedup, active-run hydrate, lazy history markdown/tool-log render, bottom-follow intent helper가 포함되어 기존 단순 DOM util 설명보다 넓어짐 |
 | `public/js/main.ts` | 512L | bootstrap + event binding이 집중되어 500L를 넘음 |
-| `public/js/render.ts` | 1081L | markdown/KaTeX/Mermaid/diagram/file-path/post-render 책임이 모두 모여 있고, Mermaid observer release helper를 export함 |
+| `public/js/render.ts` | 17L | render public API façade. 기존 import surface를 유지하고 실제 구현은 `public/js/render/` 하위 모듈로 분리 |
+| `public/js/render/*.ts` | 11 files / max 291L | markdown/KaTeX/sanitize/Mermaid/SVG actions/highlight/file-links/post-render/delegation 책임 분리. `post-render.ts`는 `highlight.ts`를 import해 markdown cycle을 피함 |
 | `public/js/virtual-scroll.ts` | 504L | TanStack virtualizer activation, mounted row remeasure, Mermaid observer release before unmount/deactivate, `pageshow`/`visibilitychange`/`focus` 복귀 후 near-bottom일 때 bottom reconciliation |
 | `public/js/features/process-block.ts` | 272L | `subagent` type, type별 summary, trusted SVG row icon, expandable row detail |
 | `public/js/features/process-step-match.ts` | 18L | ProcessStep matching helper |
