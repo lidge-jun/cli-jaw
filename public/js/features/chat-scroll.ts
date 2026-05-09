@@ -174,6 +174,40 @@ export function reconcileChatBottomAfterRestore(reason: string): void {
     void document.fonts?.ready.then(runRestorePass);
 }
 
+export function settleChatBottomAfterInitialLoad(): void {
+    ensureScrollTracking();
+    markFollowingBottom();
+    const vs = getVirtualScroll();
+    if (vs.active) {
+        vs.reconcileAfterRestore('manual', canFollowAfterRestore);
+        return;
+    }
+    const scrollIfFollowing = () => {
+        if (!canFollowAfterRestore()) {
+            cancelPendingChatRestorePasses();
+            return;
+        }
+        const c = document.getElementById('chatMessages');
+        if (c) {
+            c.scrollTop = c.scrollHeight;
+            markFollowingBottom();
+        }
+    };
+    const runSettlePass = () => {
+        if (!canFollowAfterRestore()) {
+            cancelPendingChatRestorePasses();
+            return;
+        }
+        requestChatRestoreFrame(scrollIfFollowing);
+    };
+    runSettlePass();
+    requestChatRestoreFrame(runSettlePass);
+    requestChatRestoreFrame(() => requestChatRestoreFrame(runSettlePass));
+    scheduleChatRestoreTimer(runSettlePass, 250);
+    scheduleChatRestoreTimer(runSettlePass, 1000);
+    void document.fonts?.ready.then(runSettlePass);
+}
+
 export function scrollToBottom(force = false): void {
     ensureScrollTracking();
     if (!force && !userNearBottom) return;

@@ -12,7 +12,7 @@ import { buildLazyVirtualMessageItem } from './message-item-html.js';
 import { addStep, buildProcessBlockHtml, collapseBlock, createProcessBlock } from './process-block.js';
 import { hasAgentToolBlock, normalizeAgentToolBlocks } from './process-block-dom.js';
 import { normalizeMessageToolLog, parseToolLog, toProcessSteps, type MessageItem } from './process-log-adapter.js';
-import { canFollowAfterRestore, ensureScrollTracking, markFollowingBottom } from './chat-scroll.js';
+import { canFollowAfterRestore, ensureScrollTracking, markFollowingBottom, settleChatBottomAfterInitialLoad } from './chat-scroll.js';
 import { updateStatMsgs } from './ui-status.js';
 
 export function buildVirtualHistoryItems(msgs: MessageItem[]): VirtualItem[] {
@@ -62,7 +62,10 @@ export function makeBootstrapDeps(
         shouldFollowBottom,
         restoreIndex: options.restoreIndex ?? null,
         onBeforeVirtualHistoryBootstrap: () => { ensureScrollTracking(); },
-        onAfterVirtualHistoryBottomed: () => { markFollowingBottom(); },
+        onAfterVirtualHistoryBottomed: () => {
+            markFollowingBottom();
+            settleChatBottomAfterInitialLoad();
+        },
     };
 }
 
@@ -104,6 +107,7 @@ export async function loadMessages(): Promise<void> {
             }));
         } else {
             hydrateSmallHistory(safeMsgs);
+            if (!hadRenderedHistory) settleChatBottomAfterInitialLoad();
         }
         cacheMessages(safeMsgs.map(m => ({
             role: m.role, content: m.content, cli: m.cli ?? null, tool_log: m.tool_log ?? null, timestamp: Date.now(),
@@ -125,6 +129,7 @@ export async function loadMessages(): Promise<void> {
             }));
         } else {
             hydrateSmallHistory(safeCached);
+            settleChatBottomAfterInitialLoad();
         }
         addSystemMsg(`${ICONS.warning} ${t('ui.offline.banner')}`);
         updateStatMsgs(safeCached.length);
