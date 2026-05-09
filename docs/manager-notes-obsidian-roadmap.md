@@ -132,12 +132,45 @@ Recommended approach:
 - Resolve targets against the existing notes tree, but keep unresolved links
   visible and editable.
 
+2026-05-09 QA note:
+
+- WYSIWYG now has a client-side vault-note fallback so newly typed links can be
+  decorated before the backend outgoing-link index refreshes.
+- Preview still only receives `outgoingLinks[selectedPath]`, and
+  `MarkdownRenderer` only transforms links that already exist in that outgoing
+  lookup.
+- Result: newly typed or not-yet-indexed `[[...]]` links can remain raw in
+  Preview even when WYSIWYG resolves the same text. If saved links still remain
+  raw, first check whether the note scan has refreshed `VaultIndexSnapshot`.
+- Follow-up fix: share the same client-side wiki-link resolver between
+  WYSIWYG and Preview by passing indexed notes, or a prebuilt resolver, into
+  `MarkdownPreview`/`MarkdownRenderer`. Add a contract test that Preview renders
+  a newly typed `[[Note]]` using `vaultIndex.notes` before `outgoingLinks`
+  catches up.
+
+Obsidian-style `[[` autocomplete:
+
+- Feasible. It should not require a backend change for the current vault size;
+  the existing `VaultIndexSnapshot.notes` can drive suggestions.
+- Add a shared suggestion provider first. It should normalize note title, path,
+  aliases, and tags, then return filtered candidates for the text after `[[`.
+- Raw/rich Markdown can use a CodeMirror completion source triggered by `[[`.
+- WYSIWYG can use a bounded ProseMirror/Milkdown plugin: detect `[[` before the
+  selection, render a small popup widget, support arrow keys, Enter, Escape, and
+  insert the selected `[[target]]` with a normal transaction.
+- Keep unresolved manual input valid. Autocomplete is an assistive layer, not a
+  parser requirement.
+- Later enhancement: support `[[target|alias]]`, create-note actions, and fuzzy
+  ranking after the basic exact/substring list is stable.
+
 Likely files:
 
 - `public/manager/src/notes/rendering/MarkdownRenderer.tsx`
 - `public/manager/src/notes/rich-markdown/rich-markdown-extension.ts`
 - Future: `public/manager/src/notes/wysiwyg/milkdown-wiki-link.ts`
 - Future: `public/manager/src/notes/wiki-links.ts`
+- Future: `public/manager/src/notes/wiki-link-suggestions.ts`
+- Future: `public/manager/src/notes/wysiwyg/milkdown-wikilink-completion.ts`
 
 Risk: high. It adds custom parse/serialize behavior and navigation semantics.
 
@@ -251,4 +284,3 @@ Each feature should pass this minimum bar before being considered done:
 - Browser smoke in the real dashboard surface.
 - Regression smoke for task marker safe mode, code block source view, math node
   view, Preview rendering, and note scroll behavior.
-
