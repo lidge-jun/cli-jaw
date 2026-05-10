@@ -11,9 +11,18 @@ const renderSrc = normalizeStrictPropertyAccess([
     '../../public/js/render.ts',
     '../../public/js/render/markdown.ts',
     '../../public/js/render/mermaid.ts',
+    '../../public/js/render/mermaid-preprocess.ts',
     '../../public/js/render/sanitize.ts',
     '../../public/js/render/svg-actions.ts',
 ].map(file => readFileSync(join(import.meta.dirname, file), 'utf8')).join('\n'));
+
+const preprocessSrc = readFileSync(
+    join(import.meta.dirname, '../../public/js/render/mermaid-preprocess.ts'), 'utf8',
+);
+
+const notesMermaidSrc = readFileSync(
+    join(import.meta.dirname, '../../public/manager/src/notes/rendering/MermaidBlock.tsx'), 'utf8',
+);
 
 test('F1: mermaid fence emits skeleton + URI-encoded source attribute', () => {
     assert.ok(renderSrc.includes('mermaid-skeleton'),
@@ -50,7 +59,7 @@ test('F9: renderSingleMermaidImpl skips detached nodes instead of updating stale
     assert.ok(block.includes('delete el.dataset.mermaidQueued'),
         'detached guard must clear queued state on the stale element');
 
-    const renderIdx = block.indexOf('const { svg } = await mm.render');
+    const renderIdx = block.indexOf('await mm.render');
     const writeIdx = block.indexOf('el.innerHTML = sanitizeMermaidSvg(svg)');
     const guardIdx = block.indexOf('if (!el.isConnected)', renderIdx);
     assert.ok(renderIdx >= 0, 'must call mm.render in renderSingleMermaidImpl');
@@ -148,4 +157,74 @@ test('D1: shared zoom binder supports Mermaid without routing widget iframes thr
         'shared zoom binder must preserve overlay kind for SVG styling scope');
     assert.ok(bindBlock.includes('.mermaid-copy-btn, .mermaid-save-btn'),
         'overlay clone must remove Mermaid action buttons before rendering overlay');
+});
+
+// ── Mermaid preprocessor contract tests (#194) ──
+
+test('PP1: preprocessMermaid handles CRLF normalization, trailing semicolons, and node ID cleanup', () => {
+    assert.ok(preprocessSrc.includes('export function preprocessMermaid'),
+        'preprocessMermaid must be exported');
+    assert.ok(preprocessSrc.includes('\\r\\n'),
+        'preprocessMermaid must handle CRLF');
+    assert.ok(preprocessSrc.includes('/;\\s*$/gm'),
+        'preprocessMermaid must strip trailing semicolons');
+    assert.ok(preprocessSrc.includes('normalizeFlowchartNodeIds'),
+        'preprocessMermaid must normalize node IDs for flowchart/graph diagrams');
+    assert.ok(preprocessSrc.includes('RESERVED_NODE_IDS'),
+        'preprocessor must handle reserved keywords as node IDs');
+});
+
+test('PP2: sanitizeMermaidForRetry implements bracket-depth label quoting', () => {
+    assert.ok(preprocessSrc.includes('export function sanitizeMermaidForRetry'),
+        'sanitizeMermaidForRetry must be exported');
+    assert.ok(preprocessSrc.includes('flowchart|graph'),
+        'sanitizeMermaidForRetry must only apply to flowchart/graph diagrams');
+    assert.ok(preprocessSrc.includes('depth'),
+        'sanitizeMermaidForRetry must use bracket-depth tracking');
+    assert.ok(preprocessSrc.includes('#quot;'),
+        'sanitizeMermaidForRetry must escape double quotes in labels');
+});
+
+test('PP3: renderSingleMermaidImpl uses preprocessMermaid before render', () => {
+    const idx = renderSrc.indexOf('async function renderSingleMermaidImpl');
+    assert.ok(idx >= 0);
+    const block = renderSrc.slice(idx, idx + 2500);
+    assert.ok(block.includes('preprocessMermaid'),
+        'renderSingleMermaidImpl must call preprocessMermaid on raw code');
+});
+
+test('PP4: renderSingleMermaidImpl retries with sanitizeMermaidForRetry on failure', () => {
+    const idx = renderSrc.indexOf('async function renderSingleMermaidImpl');
+    assert.ok(idx >= 0);
+    const block = renderSrc.slice(idx, idx + 2500);
+    assert.ok(block.includes('sanitizeMermaidForRetry'),
+        'renderSingleMermaidImpl must call sanitizeMermaidForRetry on first render failure');
+    assert.ok(block.includes('-retry'),
+        'retry render must use a distinct mermaid ID to avoid registry collision');
+});
+
+test('PP5: rerenderMermaidDiagrams uses preprocess + retry path', () => {
+    const idx = renderSrc.indexOf('export async function rerenderMermaidDiagrams');
+    assert.ok(idx >= 0);
+    const block = renderSrc.slice(idx, idx + 2000);
+    assert.ok(block.includes('preprocessMermaid'),
+        'rerenderMermaidDiagrams must preprocess code');
+    assert.ok(block.includes('sanitizeMermaidForRetry'),
+        'rerenderMermaidDiagrams must retry with sanitized code on failure');
+});
+
+test('PP6: MermaidBlock.tsx imports from shared preprocessor and uses retry logic', () => {
+    assert.ok(notesMermaidSrc.includes('mermaid-preprocess'),
+        'MermaidBlock must import from shared mermaid-preprocess module');
+    assert.ok(notesMermaidSrc.includes('preprocessMermaid'),
+        'MermaidBlock must call preprocessMermaid');
+    assert.ok(notesMermaidSrc.includes('sanitizeMermaidForRetry'),
+        'MermaidBlock must call sanitizeMermaidForRetry on first render failure');
+    assert.ok(notesMermaidSrc.includes('-retry'),
+        'MermaidBlock retry must use a distinct mermaid ID');
+});
+
+test('PP7: mermaid.ts imports from mermaid-preprocess', () => {
+    assert.ok(renderSrc.includes("from './mermaid-preprocess"),
+        'mermaid.ts must import preprocessMermaid and sanitizeMermaidForRetry');
 });

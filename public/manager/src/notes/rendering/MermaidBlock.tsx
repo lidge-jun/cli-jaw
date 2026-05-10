@@ -1,4 +1,5 @@
 import { useEffect, useId, useState } from 'react';
+import { preprocessMermaid, sanitizeMermaidForRetry } from '../../../../js/render/mermaid-preprocess';
 
 type MermaidApi = {
     initialize(config: Record<string, unknown>): void;
@@ -40,7 +41,16 @@ export function MermaidBlock(props: MermaidBlockProps) {
             setState({ status: 'loading' });
             try {
                 const mermaid = await loadMermaid();
-                const { svg } = await mermaid.render(`notes-mermaid-${reactId}`, props.code);
+                const code = preprocessMermaid(props.code);
+                const id = `notes-mermaid-${reactId}`;
+                let svg: string;
+                try {
+                    ({ svg } = await mermaid.render(id, code));
+                } catch (firstErr: unknown) {
+                    const retryCode = sanitizeMermaidForRetry(code);
+                    if (!retryCode) throw firstErr;
+                    ({ svg } = await mermaid.render(`${id}-retry`, retryCode));
+                }
                 if (!cancelled) setState({ status: 'ready', svg });
             } catch (err) {
                 if (!cancelled) {

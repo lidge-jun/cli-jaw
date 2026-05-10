@@ -2,6 +2,7 @@
 import { t } from '../features/i18n.js';
 import { ICONS } from '../icons.js';
 import { escapeHtml } from './html.js';
+import { preprocessMermaid, sanitizeMermaidForRetry } from './mermaid-preprocess.js';
 import { sanitizeMermaidSvg } from './sanitize.js';
 import { appendMermaidActionBtns, bindDiagramZoom } from './svg-actions.js';
 
@@ -82,12 +83,21 @@ export async function rerenderMermaidDiagrams(): Promise<void> {
         const mm = await ensureMermaidLoaded();
         for (const el of rendered) {
             const htmlEl = el as HTMLElement;
-            const code = htmlEl.dataset['mermaidCode'];
-            if (!code || !htmlEl.isConnected) continue;
+            const rawCode = htmlEl.dataset['mermaidCode'];
+            if (!rawCode || !htmlEl.isConnected) continue;
+            const code = preprocessMermaid(rawCode);
             const id = `mermaid-${++mermaidId}`;
             try {
                 applyMermaidTheme();
-                const { svg } = await mm.render(id, code);
+                let svg: string;
+                try {
+                    ({ svg } = await mm.render(id, code));
+                } catch {
+                    const retryCode = sanitizeMermaidForRetry(code);
+                    if (!retryCode) continue;
+                    applyMermaidTheme();
+                    ({ svg } = await mm.render(`${id}-retry`, retryCode));
+                }
                 if (!htmlEl.isConnected) continue;
                 htmlEl.innerHTML = sanitizeMermaidSvg(svg);
                 appendMermaidActionBtns(htmlEl);
@@ -135,16 +145,23 @@ async function renderSingleMermaidImpl(el: HTMLElement): Promise<void> {
     el.classList.remove('mermaid-pending');
     // Phase 127-F1: raw source lives in data attribute (skeleton DOM has no source text).
     const encoded = el.dataset['mermaidCodeRaw'] || '';
-    const code = encoded ? decodeURIComponent(encoded) : (el.textContent || '');
+    const rawCode = encoded ? decodeURIComponent(encoded) : (el.textContent || '');
+    const code = preprocessMermaid(rawCode);
     el.dataset['mermaidCode'] = code;
     const id = `mermaid-${++mermaidId}`;
     el.dataset['mermaidInflight'] = '1';
     try {
         const mm = await ensureMermaidLoaded();
-        // Apply theme immediately before render — no intermediate parse()
-        // that could reset Mermaid's internal config state.
         applyMermaidTheme();
-        const { svg } = await mm.render(id, code);
+        let svg: string;
+        try {
+            ({ svg } = await mm.render(id, code));
+        } catch (firstErr: unknown) {
+            const retryCode = sanitizeMermaidForRetry(code);
+            if (!retryCode) throw firstErr;
+            applyMermaidTheme();
+            ({ svg } = await mm.render(`${id}-retry`, retryCode));
+        }
         if (!el.isConnected) {
             return;
         }
