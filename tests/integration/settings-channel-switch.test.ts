@@ -36,8 +36,7 @@ test('env-only Discord boot works without settings.json', () => {
         configSrc.indexOf('export function loadSettings'),
         configSrc.indexOf('\nexport function saveSettings'),
     );
-    const catchSection = loadSettingsFn.slice(loadSettingsFn.lastIndexOf('} catch'));
-    assert.ok(catchSection.includes('applyEnvOverrides'),
+    assert.match(loadSettingsFn, /catch\s*\([^)]*\)\s*{[\s\S]*applyEnvOverrides\(next\)/,
         'loadSettings catch path must apply env overrides for fresh-home boot');
 });
 

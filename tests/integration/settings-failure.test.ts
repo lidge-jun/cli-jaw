@@ -8,12 +8,13 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..');
 const serverSrc = readFileSync(join(projectRoot, 'server.ts'), 'utf8');
+const settingsRoutesSrc = readFileSync(join(projectRoot, 'src/routes/settings.ts'), 'utf8');
 const runtimeSettingsSrc = readFileSync(join(projectRoot, 'src/core/runtime-settings.ts'), 'utf8');
 
 // ─── Source wiring checks ────────────────────────────
 
 test('PUT /api/settings uses asyncHandler for error surface', () => {
-    assert.ok(serverSrc.includes("app.put('/api/settings', asyncHandler("),
+    assert.ok(settingsRoutesSrc.includes("app.put('/api/settings', requireAuth, asyncHandler("),
         'PUT /api/settings must use asyncHandler wrapper');
 });
 

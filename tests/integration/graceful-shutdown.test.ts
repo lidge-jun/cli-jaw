@@ -84,10 +84,10 @@ async function runSignalCase(
         const exitCode = await waitForExit(child, 8000);
         const elapsedMs = Date.now() - startedAt;
 
-        // Current implementation forces exit in ~3s when shutdown hangs.
+        // Graceful shutdown should finish before the force-exit safety timer.
         assert.ok(elapsedMs <= 4200, `shutdown took too long (${elapsedMs}ms)`);
-        // SIGINT may return 130 (128+2) on some platforms instead of 1
-        assert.ok([1, 130].includes(exitCode!), `unexpected exit code for ${signal}: ${exitCode}`);
+        // SIGINT may return 130 (128+2) on some platforms when the process exits by signal.
+        assert.ok([0, 1, 130, 143].includes(exitCode!), `unexpected exit code for ${signal}: ${exitCode}`);
 
         await sleep(600);
         assert.equal(await isHealthy(port), false, `port ${port} should be closed after ${signal}`);

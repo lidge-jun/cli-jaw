@@ -630,6 +630,12 @@ watchHeartbeatFile();
 // ─── Graceful Shutdown ──────────────────────────────
 const shutdown = async (sig: string) => {
     console.log(`\n[server] ${sig} received, shutting down...`);
+    const forceExitTimer = setTimeout(() => {
+        console.warn('[server] force exit (timeout)');
+        process.exit(1);
+    }, 5000);
+    forceExitTimer.unref();
+
     stopHeartbeat();
     killAllAgents('shutdown');
 
@@ -649,8 +655,10 @@ const shutdown = async (sig: string) => {
     console.log('[server] messaging stopped (or timed out)');
 
     wss.close();
-    server.close();
-    if (server.closeAllConnections) server.closeAllConnections();
+    await new Promise<void>(resolve => {
+        server.close(() => resolve());
+        if (server.closeAllConnections) server.closeAllConnections();
+    });
 
     // Flush WAL and close SQLite before exiting
     try {
@@ -660,10 +668,8 @@ const shutdown = async (sig: string) => {
         console.warn('[server] database close failed:', (e as Error).message);
     }
 
-    setTimeout(() => {
-        console.warn('[server] force exit (timeout)');
-        process.exit(1);
-    }, 5000).unref();
+    clearTimeout(forceExitTimer);
+    process.exit(0);
 };
 
 process.once('SIGTERM', () => shutdown('SIGTERM'));
