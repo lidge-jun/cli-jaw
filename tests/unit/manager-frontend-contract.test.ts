@@ -62,6 +62,7 @@ test('manager command bar exposes polished dashboard brand', () => {
 
 test('manager frontend exposes one-instance preview controls', () => {
     const app = read('public/manager/src/App.tsx');
+    const appChrome = read('public/manager/src/AppChrome.tsx');
     const router = read('public/manager/src/SidebarRailRouter.tsx');
     const workbench = read('public/manager/src/components/Workbench.tsx');
     const header = read('public/manager/src/components/WorkbenchHeader.tsx');
@@ -95,7 +96,7 @@ test('manager frontend exposes one-instance preview controls', () => {
     assert.ok(router.includes("<WorkspaceSurface active={props.sidebarMode === 'notes'}>"), 'Notes workspace must hide without unmounting across sidebar mode changes');
     assert.ok(router.includes("<WorkspaceSurface active={props.sidebarMode === 'settings'}>"), 'Dashboard settings workspace must hide without unmounting across sidebar mode changes');
     assert.ok(router.includes('hidden={!props.active}'), 'inactive persistent workspace surfaces must use hidden instead of conditional unmounting');
-    assert.ok(app.includes('theme.resolved'), 'App must pass the concrete resolved dashboard theme to preview');
+    assert.ok(appChrome.includes('theme.resolved'), 'AppChrome must pass the concrete resolved dashboard theme to preview');
     assert.ok(app.includes('theme.syncFromRegistry'), 'App must hydrate registry theme through hook state');
     assert.ok(themeHook.includes('syncFromRegistry'), 'theme hook must expose registry sync that updates React state');
     assert.ok(themeHook.includes('setThemeState(next)'), 'registry theme sync must update React state');
@@ -154,6 +155,7 @@ test('manager frontend exposes lifecycle controls without hiding discovery actio
 
 test('manager instance activity unread badges are row-scoped and registry-backed', () => {
     const app = read('public/manager/src/App.tsx');
+    const appChrome = read('public/manager/src/AppChrome.tsx');
     const groups = read('public/manager/src/components/InstanceGroups.tsx');
     const row = read('public/manager/src/components/InstanceRow.tsx');
     const rail = read('public/manager/src/components/SidebarRail.tsx');
@@ -192,7 +194,7 @@ test('manager instance activity unread badges are row-scoped and registry-backed
     assert.ok(app.includes('activityUnread.unreadByPort'), 'App must pass per-port unread counts into instance groups');
     assert.ok(app.includes('const activityEvents = useMemo'), 'App must derive one combined activity stream for dock and unread state');
     assert.ok(app.includes('return [...managerEvents.events, ...messageActivity.events]'), 'App must include instance message events in the Activity dock stream');
-    assert.ok(app.includes('managerEvents={activityEvents}'), 'SidebarRailRouter must receive the combined activity stream');
+    assert.ok(appChrome.includes('managerEvents={props.activityEvents}'), 'SidebarRailRouter must receive the combined activity stream');
     assert.ok(app.includes('useInstanceMessageEvents(instances)'), 'App must poll instance messages without dashboard refresh');
     assert.ok(app.includes('activityUnread.markPortSeen'), 'App must mark the selected instance as seen when clicked');
     assert.equal(
@@ -200,7 +202,8 @@ test('manager instance activity unread badges are row-scoped and registry-backed
         false,
         'new message events must not auto-clear sidebar unread badges while Preview is selected',
     );
-    assert.ok(app.includes('onToggleActivityFromMobile={activityUnread.openAndMarkSeen}'), 'mobile Activity open path must mark events as seen');
+    assert.ok(app.includes('activityUnreadOpenAndMarkSeen={activityUnread.openAndMarkSeen}'), 'App must pass the mobile Activity seen handler through AppChrome');
+    assert.ok(appChrome.includes('onToggleActivityFromMobile={props.activityUnreadOpenAndMarkSeen}'), 'mobile Activity open path must mark events as seen');
     assert.ok(types.includes('activitySeenAt: string | null'), 'frontend registry UI type must include activitySeenAt');
     assert.ok(types.includes('activitySeenByPort: Record<string, string>'), 'frontend registry UI type must include per-port seen state');
     assert.ok(groups.includes('activityUnreadByPort'), 'InstanceGroups must accept per-port unread counts');
@@ -337,6 +340,7 @@ test('manager frontend keeps rows compact while preserving model visibility', ()
 
 test('manager dashboard settings workspace controls sidebar display preferences', () => {
     const app = read('public/manager/src/App.tsx');
+    const appChrome = read('public/manager/src/AppChrome.tsx');
     const view = read('public/manager/src/hooks/useDashboardView.ts');
     const registry = read('src/manager/registry.ts');
     const workspace = read('public/manager/src/dashboard-settings/DashboardSettingsWorkspace.tsx');
@@ -345,22 +349,34 @@ test('manager dashboard settings workspace controls sidebar display preferences'
     const css = read('public/manager/src/manager-dashboard-settings.css');
     const types = read('public/manager/src/types.ts');
     const api = read('public/manager/src/api.ts');
+    const shortcuts = read('public/manager/src/manager-shortcuts.ts');
 
     assert.ok(app.includes('dashboardSettingsUiFromView'), 'App must derive settings UI from live view state');
     assert.ok(app.includes('handleDashboardSettingsPatch'), 'App must patch dashboard settings through registry UI');
+    assert.ok(app.includes('actionForShortcutEvent'), 'App must route Manager global shortcuts through the shortcut helper');
+    assert.ok(app.includes('isManagerShortcutEditableTarget'), 'App must ignore Manager shortcuts inside editors and inputs');
     assert.ok(view.includes('showLatestActivityTitles'), 'view hook must own latest title visibility');
     assert.ok(view.includes('showInlineLabelEditor'), 'view hook must own inline label editor visibility');
     assert.ok(view.includes('showSidebarRuntimeLine'), 'view hook must own runtime line visibility');
     assert.ok(view.includes('showSelectedRowActions'), 'view hook must own selected row action visibility');
+    assert.ok(view.includes('dashboardShortcutsEnabled'), 'view hook must own global shortcut enabled state');
+    assert.ok(view.includes('dashboardShortcutKeymap'), 'view hook must own the configurable shortcut keymap');
     assert.ok(registry.includes("'settings'"), 'registry sidebar mode must support Dashboard settings mode');
     assert.ok(registry.includes('showLatestActivityTitles: true'), 'registry defaults must enable latest activity titles');
+    assert.ok(registry.includes('dashboardShortcutsEnabled: true'), 'registry defaults must enable dashboard shortcuts');
+    assert.ok(registry.includes('DEFAULT_DASHBOARD_SHORTCUT_KEYMAP'), 'registry must normalize a configurable shortcut keymap');
+    assert.ok(shortcuts.includes('DEFAULT_MANAGER_SHORTCUT_KEYMAP'), 'frontend must define a default Manager shortcut map');
+    assert.ok(shortcuts.includes('shortcutMatches'), 'frontend must parse shortcut chords through a testable helper');
     assert.ok(types.includes("DashboardActivityTitleSupportStatus = 'ready' | 'legacy' | 'offline'"), 'frontend types must name latest-title support states');
+    assert.ok(types.includes('DashboardShortcutKeymap'), 'frontend types must include a configurable shortcut keymap');
     assert.equal(workspace.includes('ToggleField'), false, 'dashboard settings must not reuse the instance settings toggle layout');
     assert.ok(workspace.includes('Instance list display'), 'settings workspace must clarify the affected surface');
     assert.ok(workspace.includes('Recent activity preview'), 'settings workspace must expose latest title toggle with clear copy');
     assert.ok(workspace.includes('Rename control'), 'settings workspace must expose label editor toggle with clear copy');
     assert.ok(workspace.includes('Runtime line'), 'settings workspace must expose runtime line toggle with clear copy');
     assert.ok(workspace.includes('Expanded row actions'), 'settings workspace must expose selected actions toggle with clear copy');
+    assert.ok(workspace.includes('Global shortcuts'), 'settings workspace must expose shortcut enable/config controls');
+    assert.ok(workspace.includes('DashboardShortcutInput'), 'settings workspace must render shortcut keymap inputs');
     assert.ok(workspace.includes('Left instance list'), 'settings workspace must show setting scope labels');
     assert.ok(workspace.includes('Language'), 'settings workspace must expose a saved language menu');
     assert.ok(workspace.includes('인스턴스 목록 표시'), 'settings workspace must render Korean copy when locale=ko');
@@ -368,7 +384,7 @@ test('manager dashboard settings workspace controls sidebar display preferences'
     assert.ok(workspace.includes('언어'), 'settings workspace must localize the language row');
     assert.ok(workspace.includes('LOCALE_OPTIONS'), 'settings workspace must define supported locale options');
     assert.ok(sidebar.includes('사이드바 행'), 'settings sidebar must render Korean section copy when locale=ko');
-    assert.ok(app.includes('locale={view.locale}'), 'settings sidebar must receive the saved dashboard locale');
+    assert.ok(appChrome.includes('locale={props.view.locale}'), 'settings sidebar must receive the saved dashboard locale');
     assert.ok(workspace.includes("props.onUiPatch({ locale: next })"), 'settings workspace must save dashboard locale through manager registry UI');
     assert.equal(workspace.includes('fetchDashboardRuntimeSettings'), false, 'manager dashboard must not call missing root /api/settings for locale');
     assert.equal(workspace.includes('updateDashboardRuntimeSettings'), false, 'manager dashboard must not PUT missing root /api/settings for locale');
@@ -379,6 +395,7 @@ test('manager dashboard settings workspace controls sidebar display preferences'
     assert.ok(css.includes('.dashboard-settings-workspace'), 'settings CSS must use dashboard-settings prefix');
     assert.ok(css.includes('.dashboard-settings-row'), 'settings CSS must align each setting in a scoped row');
     assert.ok(css.includes('.dashboard-settings-select'), 'settings CSS must style dashboard language select');
+    assert.ok(css.includes('.dashboard-settings-shortcut-input'), 'settings CSS must size shortcut keymap inputs');
     assert.equal(css.includes('.settings-workspace'), false, 'settings CSS must not collide with existing settings-shell prefix');
 });
 
@@ -437,12 +454,13 @@ test('manager profile rows keep Active/Running grouping while merging profile la
 
 test('manager frontend routes layout through responsive shell components', () => {
     const app = read('public/manager/src/App.tsx');
+    const appChrome = read('public/manager/src/AppChrome.tsx');
     const router = read('public/manager/src/SidebarRailRouter.tsx');
     const detail = read('public/manager/src/components/InstanceDetailPanel.tsx');
     const workbench = read('public/manager/src/components/Workbench.tsx');
 
-    assert.ok(app.includes('ManagerShell'), 'App must use ManagerShell after 10.5.2 extraction');
-    assert.ok(app.includes('CommandBar'), 'App must render CommandBar');
+    assert.ok(appChrome.includes('ManagerShell'), 'AppChrome must use ManagerShell after 10.5.2 extraction');
+    assert.ok(appChrome.includes('CommandBar'), 'AppChrome must render CommandBar');
     assert.ok(app.includes('InstanceListContent'), 'App must render grouped instance list through extracted content');
     assert.ok(router.includes('ActivityDock'), 'SidebarRailRouter must render ActivityDock');
     assert.ok(workbench.includes("'overview'"), 'workbench must expose Overview tab');

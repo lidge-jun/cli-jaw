@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { after, test } from 'node:test';
+import { after, test, type TestContext } from 'node:test';
 import { chromium, type Browser, type Page } from 'playwright-core';
+import { withManagerBrowserLock } from './manager-browser-test-lock';
 
 type BoxMetrics = {
     selector: string;
@@ -40,8 +41,21 @@ const VIEWPORTS = [
 
 const browsers: Browser[] = [];
 
-async function pageForManager(): Promise<Page> {
-    const browser = await chromium.connectOverCDP(CDP_URL);
+function isDefaultMissingCdp(error: unknown): boolean {
+    return !process.env.MANAGER_BROWSER_CDP_URL && String(error).includes('ECONNREFUSED');
+}
+
+async function pageForManager(t: TestContext): Promise<Page | null> {
+    let browser: Browser;
+    try {
+        browser = await chromium.connectOverCDP(CDP_URL);
+    } catch (error) {
+        if (isDefaultMissingCdp(error)) {
+            t.skip(`manager CDP browser is not running at ${CDP_URL}`);
+            return null;
+        }
+        throw error;
+    }
     browsers.push(browser);
     const context = await browser.newContext();
     return context.newPage();
@@ -108,9 +122,10 @@ after(async () => {
     await Promise.allSettled(browsers.map(browser => browser.close()));
 });
 
-test('manager dashboard shell has measured layout coverage at critical viewports', async () => {
+test('manager dashboard shell has measured layout coverage at critical viewports', async (t) => await withManagerBrowserLock(async () => {
     mkdirSync(SCREENSHOT_DIR, { recursive: true });
-    const page = await pageForManager();
+    const page = await pageForManager(t);
+    if (!page) return;
 
     for (const viewport of VIEWPORTS) {
         await page.setViewportSize(viewport);
@@ -150,10 +165,11 @@ test('manager dashboard shell has measured layout coverage at critical viewports
             assert.ok(Math.abs(metrics.mobileNav.width - viewport.width) <= 1, `${viewport.width}x${viewport.height}: mobile nav uses full width`);
         }
     }
-});
+}));
 
-test('manager preview iframe survives Workbench tab changes', async () => {
-    const page = await pageForManager();
+test('manager preview iframe survives Workbench tab changes', async (t) => await withManagerBrowserLock(async () => {
+    const page = await pageForManager(t);
+    if (!page) return;
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(MANAGER_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.dashboard-shell.manager-shell');
@@ -207,10 +223,11 @@ test('manager preview iframe survives Workbench tab changes', async () => {
     assert.equal(after.hostHidden, false, 'preview host should show again on Preview tab');
     assert.equal(after.sameFrame, true, 'preview iframe must remain the same DOM node after returning');
     assert.equal(after.src, before.src, 'preview source should not change across tab-only navigation');
-});
+}));
 
-test('manager preview header toggles and refreshes the iframe', async () => {
-    const page = await pageForManager();
+test('manager preview header toggles and refreshes the iframe', async (t) => await withManagerBrowserLock(async () => {
+    const page = await pageForManager(t);
+    if (!page) return;
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
     await selectFirstOnlineInstance(page);
@@ -240,4 +257,4 @@ test('manager preview header toggles and refreshes the iframe', async () => {
     });
 
     assert.equal(afterRefresh, beforeRefresh, 'refresh must reload the existing preview URL without changing target');
-});
+}));

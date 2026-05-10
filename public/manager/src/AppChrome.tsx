@@ -1,0 +1,142 @@
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { CommandBar } from './components/CommandBar';
+import { CommandPalette } from './components/CommandPalette';
+import { ManagerShell } from './components/ManagerShell';
+import { HelpDrawer } from './help/HelpDrawer';
+import { type HelpTopicId } from './help/helpContent';
+import { SidebarRailRouter } from './SidebarRailRouter';
+import { ElectronMetricsPanel } from './electron-metrics';
+import { IframeBridge } from './sync/IframeBridge';
+import { VisibilityBridge } from './sync/VisibilityBridge';
+import { instanceLabel } from './instance-label';
+import type { BoardView } from './dashboard-board/board-view';
+import { type ScheduleGroup } from './dashboard-schedule/DashboardScheduleSidebar';
+import { REMINDERS_WORKSPACE_ENABLED, SCHEDULE_WORKSPACE_ENABLED } from './dashboard-features';
+import type { NotesModelState } from './notes/useNotesModel';
+import type { NotesSidebarMode } from './notes/NotesSidebar';
+import type { CommandPaletteApi } from './hooks/useCommandPalette';
+import type { ThemeApi } from './hooks/useTheme';
+import type { useDashboardView } from './hooks/useDashboardView';
+import type { DashboardDetailTab, DashboardInstance, DashboardNotesAuthoringMode, DashboardNotesViewMode, DashboardScanResult, ManagerEvent, NoteMetadata } from './types';
+
+type AppChromeProps = {
+    view: ReturnType<typeof useDashboardView>;
+    palette: CommandPaletteApi;
+    theme: ThemeApi;
+    query: string;
+    loading: boolean;
+    showHidden: boolean;
+    instances: DashboardInstance[];
+    selectedInstance: DashboardInstance | null;
+    data: DashboardScanResult | null;
+    summary: Record<string, number>;
+    scheduleGroup: ScheduleGroup;
+    boardView: BoardView;
+    notesModel: NotesModelState;
+    notesSelectedNote: NoteMetadata | null;
+    notesDirtyPath: string | null;
+    notesSidebarMode: NotesSidebarMode;
+    notesSearchFocusToken: number;
+    settingsSection: Parameters<typeof SidebarRailRouter>[0]['settingsSection'];
+    dashboardSettingsUi: Parameters<typeof SidebarRailRouter>[0]['dashboardSettingsUi'];
+    titleSupport: Parameters<typeof SidebarRailRouter>[0]['titleSupport'];
+    activityEvents: ManagerEvent[];
+    busyPorts: Set<number>;
+    titlesByPort: Record<number, string>;
+    lifecycleMessage: string | null;
+    error: string | null;
+    registryMessage: string | null;
+    workbenchHeader: ReactNode;
+    detailContent: (tab: DashboardDetailTab) => ReactNode;
+    instanceListContent: ReactNode;
+    drawerProfileFilters: ReactNode;
+    jawCeoWorkbenchButton?: ReactNode;
+    jawCeoVoiceOverlay?: ReactNode;
+    jawCeoConsoleContent?: ReactNode;
+    previewEnabled: boolean;
+    previewRefreshKey: number;
+    autoUnloadNotice: boolean;
+    helpOpen: boolean;
+    helpTopic: HelpTopicId | null;
+    setQuery: Dispatch<SetStateAction<string>>;
+    setShowHidden: Dispatch<SetStateAction<boolean>>;
+    setPreviewEnabled: Dispatch<SetStateAction<boolean>>;
+    setAutoUnloadNotice: Dispatch<SetStateAction<boolean>>;
+    setHelpOpen: Dispatch<SetStateAction<boolean>>;
+    setHelpTopic: Dispatch<SetStateAction<HelpTopicId | null>>;
+    setNotesSidebarMode: Dispatch<SetStateAction<NotesSidebarMode>>;
+    setBoardView: Dispatch<SetStateAction<BoardView>>;
+    setScheduleGroup: Dispatch<SetStateAction<ScheduleGroup>>;
+    setDashboardSettingsSection: Dispatch<SetStateAction<Parameters<typeof SidebarRailRouter>[0]['settingsSection']>>;
+    load: (nextShowHidden?: boolean) => Promise<void>;
+    cycleTheme: () => void;
+    openSelectedInBrowser: () => void;
+    handleSelectInstance: (instance: DashboardInstance) => void;
+    handleSidebarModeChange: Parameters<typeof SidebarRailRouter>[0]['onSidebarModeChange'];
+    handleSidebarToggle: () => void;
+    handleNotesSelectedPathChange: (path: string | null) => void;
+    handleNotesViewModeChange: (mode: DashboardNotesViewMode) => void;
+    handleNotesAuthoringModeChange: (mode: DashboardNotesAuthoringMode) => void;
+    handleNotesWordWrapChange: (value: boolean) => void;
+    handleNotesTreeWidthChange: (value: number) => void;
+    openNotesSidebarSearch: () => void;
+    setNotesDirtyPath: Dispatch<SetStateAction<string | null>>;
+    handleTabChange: (tab: DashboardDetailTab) => void;
+    handleActivityToggle: () => void;
+    handleActivityHeight: (height: number) => void;
+    onDismissLifecycleMessage: () => void;
+    handleDashboardSettingsPatch: Parameters<typeof SidebarRailRouter>[0]['onDashboardSettingsPatch'];
+    activityUnreadOpenAndMarkSeen: () => void;
+};
+
+export function AppChrome(props: AppChromeProps) {
+    return (
+        <>
+            <IframeBridge />
+            <VisibilityBridge />
+            <ManagerShell
+                sidebarCollapsed={props.view.sidebarCollapsed}
+                commandBar={<CommandBar query={props.query} loading={props.loading} onQueryChange={props.setQuery} onRefresh={() => void props.load()} onOpenDrawer={() => props.view.setDrawerOpen(true)} theme={props.theme.theme} onThemeChange={props.theme.setTheme} onOpenPalette={props.palette.toggle} />}
+                workspace={(
+                    <SidebarRailRouter sidebarCollapsed={props.view.sidebarCollapsed} activityDockCollapsed={props.view.activityDockCollapsed}
+                        activityDockHeight={props.view.activityDockHeight} drawerOpen={props.view.drawerOpen} onCloseDrawer={() => props.view.setDrawerOpen(false)}
+                        onlineCount={props.summary['online'] || 0} sidebarMode={props.view.sidebarMode} scheduleWorkspaceEnabled={SCHEDULE_WORKSPACE_ENABLED}
+                        remindersWorkspaceEnabled={REMINDERS_WORKSPACE_ENABLED} onSidebarModeChange={props.handleSidebarModeChange}
+                        onToggleSidebar={props.handleSidebarToggle} helpOpen={props.helpOpen} onToggleHelp={() => { props.setHelpTopic(null); props.setHelpOpen(open => !open); }}
+                        settingsSection={props.settingsSection} locale={props.view.locale} onSettingsSectionChange={props.setDashboardSettingsSection}
+                        notesModel={props.notesModel} notesSelectedPath={props.view.notesSelectedPath} notesSelectedNote={props.notesSelectedNote}
+                        notesDirtyPath={props.notesDirtyPath} notesTreeWidth={props.view.notesTreeWidth} notesSidebarMode={props.notesSidebarMode}
+                        notesSearchFocusToken={props.notesSearchFocusToken} notesViewMode={props.view.notesViewMode} notesAuthoringMode={props.view.notesAuthoringMode}
+                        notesWordWrap={props.view.notesWordWrap} onNotesSidebarModeChange={props.setNotesSidebarMode} onOpenNotesSearch={props.openNotesSidebarSearch}
+                        onNotesSelectedPathChange={props.handleNotesSelectedPathChange} onNotesDirtyPathChange={props.setNotesDirtyPath}
+                        onNotesViewModeChange={props.handleNotesViewModeChange} onNotesAuthoringModeChange={props.handleNotesAuthoringModeChange}
+                        onNotesWordWrapChange={props.handleNotesWordWrapChange} onNotesTreeWidthChange={props.handleNotesTreeWidthChange}
+                        boardView={props.boardView} onBoardViewChange={props.setBoardView} scheduleGroup={props.scheduleGroup} onScheduleGroupChange={props.setScheduleGroup}
+                        instances={props.instances} selectedInstance={props.selectedInstance} data={props.data} titlesByPort={props.titlesByPort}
+                        busyPorts={props.busyPorts} activeDetailTab={props.view.activeDetailTab} onDetailTabChange={props.handleTabChange}
+                        workbenchHeader={props.workbenchHeader} detailContent={props.detailContent} previewEnabled={props.previewEnabled}
+                        previewRefreshKey={props.previewRefreshKey} previewTheme={props.theme.resolved} lifecycleMessage={props.lifecycleMessage}
+                        onDismissLifecycleMessage={props.onDismissLifecycleMessage} instanceListContent={props.instanceListContent} loading={props.loading}
+                        jawCeoWorkbenchButton={props.jawCeoWorkbenchButton} jawCeoVoiceOverlay={props.jawCeoVoiceOverlay} jawCeoConsoleContent={props.jawCeoConsoleContent}
+                        error={props.error} registryMessage={props.registryMessage} managerEvents={props.activityEvents}
+                        onToggleActivity={props.handleActivityToggle} onActivityHeightChange={props.handleActivityHeight} onOpenDrawer={() => props.view.setDrawerOpen(true)}
+                        onSelectTab={props.handleTabChange} onToggleActivityFromMobile={props.activityUnreadOpenAndMarkSeen} drawerProfileFilters={props.drawerProfileFilters}
+                        dashboardSettingsUi={props.dashboardSettingsUi} titleSupport={props.titleSupport} onDashboardSettingsPatch={props.handleDashboardSettingsPatch} />
+                )}
+                activityHeight={props.view.activityDockCollapsed ? 48 : props.view.activityDockHeight}
+            />
+            <CommandPalette open={props.palette.open} onClose={props.palette.close} instances={props.instances} getLabel={instanceLabel}
+                onSelectInstance={props.handleSelectInstance} theme={props.theme.theme} onCycleTheme={props.cycleTheme} onRefresh={() => void props.load()}
+                onToggleHidden={() => { const next = !props.showHidden; props.setShowHidden(next); void props.load(next); }}
+                showHidden={props.showHidden} onOpenSelected={props.openSelectedInBrowser} selectedInstance={props.selectedInstance} />
+            <ElectronMetricsPanel onUnloadPreview={() => props.setPreviewEnabled(false)} />
+            <HelpDrawer open={props.helpOpen} topic={props.helpTopic ?? props.view.sidebarMode} onClose={() => props.setHelpOpen(false)} />
+            {props.autoUnloadNotice && (
+                <div className="preview-auto-unload-notice" role="status">
+                    Preview was unloaded after 5 minutes of inactivity. Toggle the preview switch to re-enable.
+                    <button type="button" className="preview-auto-unload-dismiss" aria-label="Dismiss preview auto-unload notice" onClick={() => props.setAutoUnloadNotice(false)}>x</button>
+                </div>
+            )}
+        </>
+    );
+}

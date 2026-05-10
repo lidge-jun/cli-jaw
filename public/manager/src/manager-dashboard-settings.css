@@ -127,7 +127,8 @@
     margin: 0;
 }
 
-.dashboard-settings-select {
+.dashboard-settings-select,
+.dashboard-settings-shortcut-input {
     min-width: 150px;
     max-width: 100%;
     border: 1px solid var(--border-subtle);
@@ -136,6 +137,14 @@
     background: var(--canvas);
     color: var(--text-strong);
     font: inherit;
+}
+
+.dashboard-settings-shortcut-input {
+    width: 120px;
+    min-width: 120px;
+    padding-right: 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    text-align: center;
 }
 
 .dashboard-settings-save-state {
@@ -199,7 +208,8 @@
         justify-content: flex-start;
     }
 
-    .dashboard-settings-select {
+    .dashboard-settings-select,
+    .dashboard-settings-shortcut-input {
         min-width: min(220px, 100%);
     }
 }

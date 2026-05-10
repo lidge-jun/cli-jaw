@@ -27,5 +27,7 @@ export function dashboardSettingsUiFromView(
         showInlineLabelEditor: view.showInlineLabelEditor,
         showSidebarRuntimeLine: view.showSidebarRuntimeLine,
         showSelectedRowActions: view.showSelectedRowActions,
+        dashboardShortcutsEnabled: view.dashboardShortcutsEnabled,
+        dashboardShortcutKeymap: view.dashboardShortcutKeymap,
     };
 }

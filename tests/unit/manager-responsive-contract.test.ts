@@ -151,7 +151,7 @@ test('manager Dashboard settings workspace has a compact mobile path', () => {
 });
 
 test('manager desktop layout uses one unified sidebar', () => {
-    const app = read('public/manager/src/App.tsx');
+    const appChrome = read('public/manager/src/AppChrome.tsx');
     const router = read('public/manager/src/SidebarRailRouter.tsx');
     const shell = read('public/manager/src/components/ManagerShell.tsx');
     const workspace = read('public/manager/src/components/WorkspaceLayout.tsx');
@@ -159,7 +159,7 @@ test('manager desktop layout uses one unified sidebar', () => {
 
     assert.ok(router.includes('<WorkspaceLayout'), 'SidebarRailRouter must assemble navigator/workbench/inspector through WorkspaceLayout');
     assert.ok(router.includes('navigator={'), 'SidebarRailRouter must pass one navigator surface to WorkspaceLayout');
-    assert.ok(app.includes('sidebarCollapsed={view.sidebarCollapsed}'), 'App must pass sidebar collapse state to ManagerShell');
+    assert.ok(appChrome.includes('sidebarCollapsed={props.view.sidebarCollapsed}'), 'AppChrome must pass sidebar collapse state to ManagerShell');
     assert.ok(router.includes('manager-sidebar-list'), 'SidebarRailRouter must place instance list inside the unified sidebar');
     assert.equal(shell.includes('manager-rail'), false, 'ManagerShell must not render a separate rail column');
     assert.equal(shell.includes('manager-list'), false, 'ManagerShell must not render a separate list column');
@@ -212,14 +212,16 @@ test('manager instance activity unread badge has compact row styling', () => {
 });
 
 test('manager activity dock is vertically resizable', () => {
+    const appChrome = read('public/manager/src/AppChrome.tsx');
     const app = read('public/manager/src/App.tsx');
     const router = read('public/manager/src/SidebarRailRouter.tsx');
     const shell = read('public/manager/src/components/ManagerShell.tsx');
     const dock = read('public/manager/src/components/ActivityDock.tsx');
     const css = readManagerCss();
 
-    assert.ok(app.includes('activityHeight={view.activityDockCollapsed ? 48 : view.activityDockHeight}'), 'App must drive shell activity height');
-    assert.ok(app.includes('onActivityHeightChange={handleActivityHeight}'), 'App must wire activity resize state');
+    assert.ok(appChrome.includes('activityHeight={props.view.activityDockCollapsed ? 48 : props.view.activityDockHeight}'), 'AppChrome must drive shell activity height');
+    assert.ok(app.includes('handleActivityHeight={handleActivityHeight}'), 'App must pass activity resize handler into AppChrome');
+    assert.ok(appChrome.includes('onActivityHeightChange={props.handleActivityHeight}'), 'AppChrome must wire activity resize state');
     assert.ok(router.includes('onHeightChange={props.onActivityHeightChange}'), 'SidebarRailRouter must connect ActivityDock resize events to App state');
     assert.ok(shell.includes("'--activity-dock-height'"), 'ManagerShell must expose activity height as CSS variable');
     assert.ok(dock.includes('activity-resize-handle'), 'ActivityDock must render a resize handle');

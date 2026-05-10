@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { DEFAULT_MANAGER_SHORTCUT_KEYMAP, formatShortcut } from '../manager-shortcuts';
 import type { DashboardSidebarMode } from '../types';
 
 export type HelpTopicId = DashboardSidebarMode | 'shortcuts' | 'routing' | 'processLifecycle' | 'dangerousActions';
@@ -90,8 +91,13 @@ const ShortcutsHelp = (
         <p className="help-lead">반복 작업을 줄이는 Manager 전역 단축키예요.</p>
         <ul className="help-bullets">
             <li><kbd>?</kbd>는 이 도움말을 열어요. 입력창, 노트 에디터, WYSIWYG 편집 중에는 글자 입력을 방해하지 않아요.</li>
+            <li><kbd>{formatShortcut(DEFAULT_MANAGER_SHORTCUT_KEYMAP.focusInstances)}</kbd>는 Instances workspace로 이동해요.</li>
+            <li><kbd>{formatShortcut(DEFAULT_MANAGER_SHORTCUT_KEYMAP.focusActiveSession)}</kbd>는 선택된 인스턴스의 Preview 탭으로 이동해요.</li>
+            <li><kbd>{formatShortcut(DEFAULT_MANAGER_SHORTCUT_KEYMAP.focusNotes)}</kbd>는 Notes workspace로 이동해요.</li>
+            <li><kbd>{formatShortcut(DEFAULT_MANAGER_SHORTCUT_KEYMAP.previousInstance)}</kbd> / <kbd>{formatShortcut(DEFAULT_MANAGER_SHORTCUT_KEYMAP.nextInstance)}</kbd>는 현재 필터된 인스턴스 목록에서 이전/다음 행을 선택해요.</li>
             <li><kbd>⌘/Ctrl + S</kbd>는 Notes와 Settings처럼 저장 가능한 화면에서 현재 편집 내용을 저장해요.</li>
             <li><kbd>⌘/Ctrl + E</kbd>는 Notes 편집 모드를 순환해요.</li>
+            <li>Manager 단축키는 Dashboard settings에서 켜고 끄거나 keymap을 바꿀 수 있어요.</li>
             <li>Preview 탭을 보는 동안 새 activity는 읽음으로 처리되고, 다른 탭에 있을 때는 Activity Dock에 쌓여요.</li>
         </ul>
         <p className="help-tip">단축키는 브라우저 기본 단축키와 에디터 입력을 우선합니다.</p>

@@ -19,6 +19,8 @@ import type {
     DashboardRegistryPatch,
     DashboardRegistryStatus,
     DashboardRegistryUi,
+    DashboardShortcutAction,
+    DashboardShortcutKeymap,
     DashboardScanResult,
     DashboardSidebarMode,
     DashboardNotesAuthoringMode,
@@ -40,6 +42,21 @@ const LOCALES: DashboardLocale[] = ['ko', 'en', 'zh', 'ja'];
 const SIDEBAR_MODES: DashboardSidebarMode[] = ['instances', 'board', 'schedule', 'notes', 'settings'];
 const NOTES_VIEW_MODES: DashboardNotesViewMode[] = ['raw', 'split', 'preview', 'settings'];
 const NOTES_AUTHORING_MODES: DashboardNotesAuthoringMode[] = ['plain', 'rich', 'wysiwyg'];
+const SHORTCUT_ACTIONS: DashboardShortcutAction[] = [
+    'focusInstances',
+    'focusActiveSession',
+    'focusNotes',
+    'previousInstance',
+    'nextInstance',
+];
+
+export const DEFAULT_DASHBOARD_SHORTCUT_KEYMAP: DashboardShortcutKeymap = {
+    focusInstances: 'Alt+I',
+    focusActiveSession: 'Alt+P',
+    focusNotes: 'Alt+N',
+    previousInstance: 'Alt+K',
+    nextInstance: 'Alt+J',
+};
 
 export type DashboardRegistryLoadResult = {
     registry: DashboardRegistry;
@@ -110,6 +127,36 @@ function normalizeActivitySeenByPort(value: unknown): Record<string, string> {
     return seenByPort;
 }
 
+function normalizeShortcutChord(value: unknown, fallback: string): string {
+    if (typeof value !== 'string') return fallback;
+    const trimmed = value.trim().replace(/\s+/g, '');
+    if (!trimmed || trimmed.length > 40) return fallback;
+    const parts = trimmed.split('+').filter(Boolean);
+    if (parts.length === 0) return fallback;
+    return parts.map(part => {
+        const lower = part.toLowerCase();
+        if (lower === 'cmd' || lower === 'meta') return 'Meta';
+        if (lower === 'ctrl' || lower === 'control') return 'Ctrl';
+        if (lower === 'alt' || lower === 'option') return 'Alt';
+        if (lower === 'shift') return 'Shift';
+        if (lower.length === 1) return lower.toUpperCase();
+        if (lower === 'arrowup') return 'ArrowUp';
+        if (lower === 'arrowdown') return 'ArrowDown';
+        if (lower === 'arrowleft') return 'ArrowLeft';
+        if (lower === 'arrowright') return 'ArrowRight';
+        return part;
+    }).join('+');
+}
+
+function normalizeShortcutKeymap(value: unknown): DashboardShortcutKeymap {
+    const input = isRecord(value) ? value : {};
+    const keymap = { ...DEFAULT_DASHBOARD_SHORTCUT_KEYMAP };
+    for (const action of SHORTCUT_ACTIONS) {
+        keymap[action] = normalizeShortcutChord(input[action], DEFAULT_DASHBOARD_SHORTCUT_KEYMAP[action]);
+    }
+    return keymap;
+}
+
 function defaultUi(): DashboardRegistryUi {
     return {
         selectedPort: null,
@@ -131,6 +178,8 @@ function defaultUi(): DashboardRegistryUi {
         showInlineLabelEditor: true,
         showSidebarRuntimeLine: true,
         showSelectedRowActions: true,
+        dashboardShortcutsEnabled: true,
+        dashboardShortcutKeymap: { ...DEFAULT_DASHBOARD_SHORTCUT_KEYMAP },
     };
 }
 
@@ -189,6 +238,8 @@ function normalizeUi(value: unknown): DashboardRegistryUi {
         showInlineLabelEditor: typeof input["showInlineLabelEditor"] === 'boolean' ? input["showInlineLabelEditor"] : fallback.showInlineLabelEditor,
         showSidebarRuntimeLine: typeof input["showSidebarRuntimeLine"] === 'boolean' ? input["showSidebarRuntimeLine"] : fallback.showSidebarRuntimeLine,
         showSelectedRowActions: typeof input["showSelectedRowActions"] === 'boolean' ? input["showSelectedRowActions"] : fallback.showSelectedRowActions,
+        dashboardShortcutsEnabled: typeof input["dashboardShortcutsEnabled"] === 'boolean' ? input["dashboardShortcutsEnabled"] : fallback.dashboardShortcutsEnabled,
+        dashboardShortcutKeymap: normalizeShortcutKeymap(input["dashboardShortcutKeymap"]),
     };
 }
 

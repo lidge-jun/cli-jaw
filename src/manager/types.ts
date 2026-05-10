@@ -13,6 +13,13 @@ export type DashboardDetailTab = 'overview' | 'preview' | 'logs' | 'settings';
 export type DashboardUiTheme = 'auto' | 'dark' | 'light';
 export type DashboardLocale = 'ko' | 'en' | 'zh' | 'ja';
 export type DashboardSidebarMode = 'instances' | 'board' | 'schedule' | 'notes' | 'settings';
+export type DashboardShortcutAction =
+    | 'focusInstances'
+    | 'focusActiveSession'
+    | 'focusNotes'
+    | 'previousInstance'
+    | 'nextInstance';
+export type DashboardShortcutKeymap = Record<DashboardShortcutAction, string>;
 export type DashboardNotesViewMode = 'raw' | 'split' | 'preview' | 'settings';
 export type DashboardNotesAuthoringMode = 'plain' | 'rich' | 'wysiwyg';
 export type DashboardProfileId = string;
@@ -186,6 +193,8 @@ export type DashboardRegistryUi = {
     showInlineLabelEditor: boolean;
     showSidebarRuntimeLine: boolean;
     showSelectedRowActions: boolean;
+    dashboardShortcutsEnabled: boolean;
+    dashboardShortcutKeymap: DashboardShortcutKeymap;
 };
 
 export type DashboardRegistryInstance = {

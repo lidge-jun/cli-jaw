@@ -1,5 +1,6 @@
 import { useEffect, type ReactNode } from 'react';
-import type { DashboardLocale, DashboardRegistryUi } from '../types';
+import { formatShortcut, MANAGER_SHORTCUT_ACTIONS } from '../manager-shortcuts';
+import type { DashboardLocale, DashboardRegistryUi, DashboardShortcutAction } from '../types';
 import type { DashboardActivityTitleSupport } from './activity-title-support';
 
 type DashboardSettingsWorkspaceProps = {
@@ -56,6 +57,36 @@ const COPY = {
                 scope: '전체 Jaw UI',
                 description: 'i18n을 지원하는 매니저 대시보드 화면에 사용할 언어를 저장합니다.',
             },
+            shortcuts: {
+                label: '전역 단축키',
+                scope: 'Manager dashboard',
+                description: '입력창과 에디터 바깥에서만 작동하는 Manager 이동 단축키를 켭니다.',
+            },
+            shortcutFocusInstances: {
+                label: '인스턴스 목록',
+                scope: '단축키',
+                description: 'Instances workspace로 이동합니다.',
+            },
+            shortcutFocusActiveSession: {
+                label: '활성 세션',
+                scope: '단축키',
+                description: '선택된 인스턴스의 Preview 탭으로 이동합니다.',
+            },
+            shortcutFocusNotes: {
+                label: '노트',
+                scope: '단축키',
+                description: 'Notes workspace로 이동합니다.',
+            },
+            shortcutPreviousInstance: {
+                label: '이전 인스턴스',
+                scope: '단축키',
+                description: '현재 필터 목록에서 이전 인스턴스를 선택합니다.',
+            },
+            shortcutNextInstance: {
+                label: '다음 인스턴스',
+                scope: '단축키',
+                description: '현재 필터 목록에서 다음 인스턴스를 선택합니다.',
+            },
         },
         support: {
             ariaLabel: '작업 제목 출처 준비 상태',
@@ -99,6 +130,36 @@ const COPY = {
                 label: 'Language',
                 scope: 'Global Jaw UI',
                 description: 'Sets the saved manager dashboard locale for i18n-aware surfaces.',
+            },
+            shortcuts: {
+                label: 'Global shortcuts',
+                scope: 'Manager dashboard',
+                description: 'Enable Manager navigation shortcuts outside inputs and editors.',
+            },
+            shortcutFocusInstances: {
+                label: 'Instance list',
+                scope: 'Shortcut',
+                description: 'Move to the Instances workspace.',
+            },
+            shortcutFocusActiveSession: {
+                label: 'Active session',
+                scope: 'Shortcut',
+                description: 'Move to the selected instance Preview tab.',
+            },
+            shortcutFocusNotes: {
+                label: 'Notes',
+                scope: 'Shortcut',
+                description: 'Move to the Notes workspace.',
+            },
+            shortcutPreviousInstance: {
+                label: 'Previous instance',
+                scope: 'Shortcut',
+                description: 'Select the previous instance in the current filtered list.',
+            },
+            shortcutNextInstance: {
+                label: 'Next instance',
+                scope: 'Shortcut',
+                description: 'Select the next instance in the current filtered list.',
             },
         },
         support: {
@@ -144,6 +205,36 @@ const COPY = {
                 scope: '整个 Jaw 界面',
                 description: '为支持 i18n 的管理器仪表盘界面设置已保存的语言。',
             },
+            shortcuts: {
+                label: '全局快捷键',
+                scope: 'Manager dashboard',
+                description: '在输入框和编辑器外启用 Manager 导航快捷键。',
+            },
+            shortcutFocusInstances: {
+                label: '实例列表',
+                scope: '快捷键',
+                description: '切换到 Instances 工作区。',
+            },
+            shortcutFocusActiveSession: {
+                label: '活动会话',
+                scope: '快捷键',
+                description: '切换到已选实例的 Preview 标签。',
+            },
+            shortcutFocusNotes: {
+                label: 'Notes',
+                scope: '快捷键',
+                description: '切换到 Notes 工作区。',
+            },
+            shortcutPreviousInstance: {
+                label: '上一个实例',
+                scope: '快捷键',
+                description: '选择当前筛选列表中的上一个实例。',
+            },
+            shortcutNextInstance: {
+                label: '下一个实例',
+                scope: '快捷键',
+                description: '选择当前筛选列表中的下一个实例。',
+            },
         },
         support: {
             ariaLabel: '活动标题来源就绪状态',
@@ -187,6 +278,36 @@ const COPY = {
                 label: '言語',
                 scope: 'Jaw UI 全体',
                 description: 'i18n 対応のマネージャーダッシュボード画面で使用する言語を保存します。',
+            },
+            shortcuts: {
+                label: 'グローバルショートカット',
+                scope: 'Manager dashboard',
+                description: '入力欄とエディタ外で Manager ナビゲーションショートカットを有効にします。',
+            },
+            shortcutFocusInstances: {
+                label: 'インスタンス一覧',
+                scope: 'ショートカット',
+                description: 'Instances ワークスペースへ移動します。',
+            },
+            shortcutFocusActiveSession: {
+                label: 'アクティブセッション',
+                scope: 'ショートカット',
+                description: '選択中インスタンスの Preview タブへ移動します。',
+            },
+            shortcutFocusNotes: {
+                label: 'Notes',
+                scope: 'ショートカット',
+                description: 'Notes ワークスペースへ移動します。',
+            },
+            shortcutPreviousInstance: {
+                label: '前のインスタンス',
+                scope: 'ショートカット',
+                description: '現在のフィルタ一覧で前のインスタンスを選択します。',
+            },
+            shortcutNextInstance: {
+                label: '次のインスタンス',
+                scope: 'ショートカット',
+                description: '現在のフィルタ一覧で次のインスタンスを選択します。',
             },
         },
         support: {
@@ -258,6 +379,15 @@ type DashboardSettingSelectProps = {
     onChange: (value: DashboardLocale) => void;
 };
 
+type DashboardShortcutInputProps = {
+    action: DashboardShortcutAction;
+    label: string;
+    scope: string;
+    description: string;
+    value: string;
+    onChange: (action: DashboardShortcutAction, value: string) => void;
+};
+
 function DashboardSettingSelect(props: DashboardSettingSelectProps) {
     return (
         <DashboardSettingRow id={props.id} label={props.label} scope={props.scope} description={props.description}>
@@ -273,6 +403,30 @@ function DashboardSettingSelect(props: DashboardSettingSelectProps) {
             </select>
         </DashboardSettingRow>
     );
+}
+
+function DashboardShortcutInput(props: DashboardShortcutInputProps) {
+    return (
+        <DashboardSettingRow id={`dashboard-shortcut-${props.action}`} label={props.label} scope={props.scope} description={props.description}>
+            <input
+                id={`dashboard-shortcut-${props.action}`}
+                className="dashboard-settings-shortcut-input"
+                type="text"
+                value={props.value}
+                aria-label={`${props.label} shortcut`}
+                placeholder="Alt+I"
+                onChange={(event) => props.onChange(props.action, event.currentTarget.value)}
+            />
+        </DashboardSettingRow>
+    );
+}
+
+function shortcutCopyKey(action: DashboardShortcutAction): keyof typeof COPY.ko.fields {
+    if (action === 'focusInstances') return 'shortcutFocusInstances';
+    if (action === 'focusActiveSession') return 'shortcutFocusActiveSession';
+    if (action === 'focusNotes') return 'shortcutFocusNotes';
+    if (action === 'previousInstance') return 'shortcutPreviousInstance';
+    return 'shortcutNextInstance';
 }
 
 function TitleSupportSummary({ support, locale }: { support: DashboardActivityTitleSupport; locale: DashboardLocale }) {
@@ -304,6 +458,15 @@ export function DashboardSettingsWorkspace(props: DashboardSettingsWorkspaceProp
     useEffect(() => {
         document.documentElement.lang = locale;
     }, [locale]);
+
+    function patchShortcut(action: DashboardShortcutAction, value: string): void {
+        props.onUiPatch({
+            dashboardShortcutKeymap: {
+                ...props.ui.dashboardShortcutKeymap,
+                [action]: value,
+            },
+        });
+    }
 
     return (
         <main className="dashboard-settings-workspace" aria-label={copy.ariaLabel}>
@@ -359,6 +522,28 @@ export function DashboardSettingsWorkspace(props: DashboardSettingsWorkspaceProp
                             description={copy.fields.language.description}
                             onChange={(next) => props.onUiPatch({ locale: next })}
                         />
+                        <DashboardSettingToggle
+                            id="dashboard-shortcuts-enabled"
+                            label={copy.fields.shortcuts.label}
+                            scope={copy.fields.shortcuts.scope}
+                            value={props.ui.dashboardShortcutsEnabled}
+                            description={copy.fields.shortcuts.description}
+                            onChange={(next) => props.onUiPatch({ dashboardShortcutsEnabled: next })}
+                        />
+                        {MANAGER_SHORTCUT_ACTIONS.map(action => {
+                            const field = copy.fields[shortcutCopyKey(action)];
+                            return (
+                                <DashboardShortcutInput
+                                    key={action}
+                                    action={action}
+                                    label={field.label}
+                                    scope={field.scope}
+                                    value={props.ui.dashboardShortcutKeymap[action]}
+                                    description={`${field.description} Current: ${formatShortcut(props.ui.dashboardShortcutKeymap[action])}`}
+                                    onChange={patchShortcut}
+                                />
+                            );
+                        })}
                     </div>
                 </section>
             ) : (

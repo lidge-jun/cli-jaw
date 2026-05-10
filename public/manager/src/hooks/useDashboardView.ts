@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import type { DashboardDetailTab, DashboardLocale, DashboardNotesAuthoringMode, DashboardNotesViewMode, DashboardSidebarMode } from '../types';
+import { DEFAULT_MANAGER_SHORTCUT_KEYMAP } from '../manager-shortcuts';
+import type { DashboardDetailTab, DashboardLocale, DashboardNotesAuthoringMode, DashboardNotesViewMode, DashboardShortcutKeymap, DashboardSidebarMode } from '../types';
 
 export function useDashboardView() {
     const [selectedPort, setSelectedPort] = useState<number | null>(null);
@@ -18,6 +19,8 @@ export function useDashboardView() {
     const [showInlineLabelEditor, setShowInlineLabelEditor] = useState(true);
     const [showSidebarRuntimeLine, setShowSidebarRuntimeLine] = useState(true);
     const [showSelectedRowActions, setShowSelectedRowActions] = useState(true);
+    const [dashboardShortcutsEnabled, setDashboardShortcutsEnabled] = useState(true);
+    const [dashboardShortcutKeymap, setDashboardShortcutKeymap] = useState<DashboardShortcutKeymap>({ ...DEFAULT_MANAGER_SHORTCUT_KEYMAP });
     const [locale, setLocale] = useState<DashboardLocale>('ko');
 
     return {
@@ -53,6 +56,10 @@ export function useDashboardView() {
         setShowSidebarRuntimeLine,
         showSelectedRowActions,
         setShowSelectedRowActions,
+        dashboardShortcutsEnabled,
+        setDashboardShortcutsEnabled,
+        dashboardShortcutKeymap,
+        setDashboardShortcutKeymap,
         locale,
         setLocale,
     };

@@ -63,6 +63,12 @@ test('manager registry defaults when file is missing', () => {
     assert.equal(loaded.registry.ui.showInlineLabelEditor, true);
     assert.equal(loaded.registry.ui.showSidebarRuntimeLine, true);
     assert.equal(loaded.registry.ui.showSelectedRowActions, true);
+    assert.equal(loaded.registry.ui.dashboardShortcutsEnabled, true);
+    assert.equal(loaded.registry.ui.dashboardShortcutKeymap.focusInstances, 'Alt+I');
+    assert.equal(loaded.registry.ui.dashboardShortcutKeymap.focusActiveSession, 'Alt+P');
+    assert.equal(loaded.registry.ui.dashboardShortcutKeymap.focusNotes, 'Alt+N');
+    assert.equal(loaded.registry.ui.dashboardShortcutKeymap.previousInstance, 'Alt+K');
+    assert.equal(loaded.registry.ui.dashboardShortcutKeymap.nextInstance, 'Alt+J');
     assert.deepEqual(loaded.registry.profiles, {});
     assert.deepEqual(loaded.registry.activeProfileFilter, []);
     assert.equal(loaded.status.loaded, true);
@@ -106,6 +112,14 @@ test('manager registry clamps scan and UI values', () => {
             showInlineLabelEditor: 'bad',
             showSidebarRuntimeLine: false,
             showSelectedRowActions: 'bad',
+            dashboardShortcutsEnabled: false,
+            dashboardShortcutKeymap: {
+                focusInstances: 'alt+i',
+                focusActiveSession: '',
+                focusNotes: 'Ctrl+Shift+n',
+                previousInstance: 'Option+ArrowUp',
+                nextInstance: 42,
+            },
         },
         instances: {
             3457: { label: ' main ', favorite: true, group: 'daily', hidden: false },
@@ -134,6 +148,12 @@ test('manager registry clamps scan and UI values', () => {
     assert.equal(loaded.registry.ui.showInlineLabelEditor, true);
     assert.equal(loaded.registry.ui.showSidebarRuntimeLine, false);
     assert.equal(loaded.registry.ui.showSelectedRowActions, true);
+    assert.equal(loaded.registry.ui.dashboardShortcutsEnabled, false);
+    assert.equal(loaded.registry.ui.dashboardShortcutKeymap.focusInstances, 'Alt+I');
+    assert.equal(loaded.registry.ui.dashboardShortcutKeymap.focusActiveSession, 'Alt+P');
+    assert.equal(loaded.registry.ui.dashboardShortcutKeymap.focusNotes, 'Ctrl+Shift+N');
+    assert.equal(loaded.registry.ui.dashboardShortcutKeymap.previousInstance, 'Alt+ArrowUp');
+    assert.equal(loaded.registry.ui.dashboardShortcutKeymap.nextInstance, 'Alt+J');
     assert.equal(loaded.registry.instances['3457']?.label, 'main');
     assert.equal(loaded.registry.instances.bad, undefined);
     assert.equal(loaded.registry.profiles.default?.label, 'Default');
@@ -155,6 +175,14 @@ test('manager registry patch persists instance preferences', () => {
             showInlineLabelEditor: false,
             showSidebarRuntimeLine: false,
             showSelectedRowActions: false,
+            dashboardShortcutsEnabled: false,
+            dashboardShortcutKeymap: {
+                focusInstances: 'Alt+1',
+                focusActiveSession: 'Alt+2',
+                focusNotes: 'Alt+3',
+                previousInstance: 'Alt+ArrowUp',
+                nextInstance: 'Alt+ArrowDown',
+            },
         },
         instances: { 3461: { label: 'worker', favorite: true, hidden: true } },
         profiles: { default: { label: 'Default', homePath: '/Users/jun/.cli-jaw', pinned: true } },
@@ -172,6 +200,9 @@ test('manager registry patch persists instance preferences', () => {
     assert.equal(saved.registry.ui.showInlineLabelEditor, false);
     assert.equal(saved.registry.ui.showSidebarRuntimeLine, false);
     assert.equal(saved.registry.ui.showSelectedRowActions, false);
+    assert.equal(saved.registry.ui.dashboardShortcutsEnabled, false);
+    assert.equal(saved.registry.ui.dashboardShortcutKeymap.focusInstances, 'Alt+1');
+    assert.equal(saved.registry.ui.dashboardShortcutKeymap.nextInstance, 'Alt+ArrowDown');
     assert.equal(saved.registry.instances['3461']?.label, 'worker');
     assert.equal(saved.registry.instances['3461']?.favorite, true);
     assert.equal(saved.registry.instances['3461']?.hidden, true);
