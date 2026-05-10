@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, test, type TestContext } from 'node:test';
 import { chromium, type Browser, type Locator, type Page } from 'playwright-core';
+import { cleanupDashboardNotes } from './manager-notes-cleanup';
 import { withManagerBrowserLock } from './manager-browser-test-lock';
 
 const MANAGER_URL = process.env.MANAGER_DASHBOARD_URL || 'http://127.0.0.1:24576/';
@@ -173,6 +174,7 @@ serialTest('notes WYSIWYG authoring keeps the primary toolbar compact', async ()
     const page = await pageForManager();
     const noteName = `browser-rich-${Date.now()}.md`;
 
+    try {
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
     await seedRichNote(page, noteName);
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
@@ -270,12 +272,16 @@ serialTest('notes WYSIWYG authoring keeps the primary toolbar compact', async ()
         'WYSIWYG code blocks must preserve the selected language');
     assert.ok(savedContent.includes('const milkdownCodeBlock = true;'),
         'WYSIWYG code block content must round-trip back to canonical markdown');
+    } finally {
+        await cleanupDashboardNotes(page, [{ path: noteName, kind: 'file' }]);
+    }
 });
 
 serialTest('notes WYSIWYG code block raw editor keeps rich paste inside textarea', async () => {
     const page = await pageForManager();
     const noteName = `browser-code-paste-${Date.now()}.md`;
 
+    try {
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
     await seedRichNote(page, noteName);
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
@@ -310,12 +316,16 @@ serialTest('notes WYSIWYG code block raw editor keeps rich paste inside textarea
         'raw code textarea must keep focus after rich paste event');
     assert.equal(pasteResult.editingCount, 1,
         'code block must remain in raw editing mode after rich paste event');
+    } finally {
+        await cleanupDashboardNotes(page, [{ path: noteName, kind: 'file' }]);
+    }
 });
 
 serialTest('notes WYSIWYG toolbar commands can be used together without conflicts', async () => {
     const page = await pageForManager();
     const noteName = `browser-toolbar-all-${Date.now()}.md`;
 
+    try {
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
     await seedSimpleNote(page, noteName);
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
@@ -411,12 +421,16 @@ serialTest('notes WYSIWYG toolbar commands can be used together without conflict
     assert.ok(savedContent.includes('quote toolbar'), 'Quote command must preserve typed content');
     assert.ok(savedContent.includes('```ts'), 'Code block command must insert a language-aware fenced block');
     assert.ok(savedContent.includes('|'), 'Table command must insert table markdown');
+    } finally {
+        await cleanupDashboardNotes(page, [{ path: noteName, kind: 'file' }]);
+    }
 });
 
 serialTest('notes WYSIWYG heading marker supports level 6 source editing', async () => {
     const page = await pageForManager();
     const noteName = `browser-heading-six-${Date.now()}.md`;
 
+    try {
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
     await seedSimpleNote(page, noteName);
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
@@ -447,12 +461,16 @@ serialTest('notes WYSIWYG heading marker supports level 6 source editing', async
         'WYSIWYG heading marker changes must save before assertions read the file');
     assert.ok(savedContent.includes('###### Task toolbar smoke'),
         'WYSIWYG heading marker must serialize six # characters as an h6 heading');
+    } finally {
+        await cleanupDashboardNotes(page, [{ path: noteName, kind: 'file' }]);
+    }
 });
 
 serialTest('notes WYSIWYG Task toolbar stays in Milkdown without fallback', async () => {
     const page = await pageForManager();
     const noteName = `browser-task-toolbar-${Date.now()}.md`;
 
+    try {
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
     await seedSimpleNote(page, noteName);
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
@@ -474,6 +492,9 @@ serialTest('notes WYSIWYG Task toolbar stays in Milkdown without fallback', asyn
         'WYSIWYG task toolbar changes must save before assertions read the file');
     assert.ok(/(^|\n)- \[ \](\s|$)/.test(savedContent),
         'WYSIWYG Task toolbar must save canonical task markdown without fallback rendering');
+    } finally {
+        await cleanupDashboardNotes(page, [{ path: noteName, kind: 'file' }]);
+    }
 });
 
 serialTest('notes render and edit GitHub Flavored Markdown affordances', async () => {
@@ -482,6 +503,7 @@ serialTest('notes render and edit GitHub Flavored Markdown affordances', async (
     const wysiwygNoteName = `browser-gfm-wysiwyg-${Date.now()}.md`;
     const taskOnlyNoteName = `browser-gfm-task-only-${Date.now()}.md`;
 
+    try {
     await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
     await seedGfmNote(page, noteName);
     await seedGfmNote(page, wysiwygNoteName, { includeFootnotes: false });
@@ -549,6 +571,13 @@ serialTest('notes render and edit GitHub Flavored Markdown affordances', async (
     }, { noteName });
     assert.ok(footnoteContent.includes('A note[^1]') && footnoteContent.includes('[^1]: footnote body'),
         'GFM footnotes must round-trip back to markdown');
+    } finally {
+        await cleanupDashboardNotes(page, [
+            { path: noteName, kind: 'file' },
+            { path: wysiwygNoteName, kind: 'file' },
+            { path: taskOnlyNoteName, kind: 'file' },
+        ]);
+    }
 });
 
 async function expectInputValue(locator: Locator, expected: string): Promise<void> {

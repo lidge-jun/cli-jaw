@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import { chromium, type Browser, type Page } from 'playwright-core';
+import { cleanupDashboardNotes } from './manager-notes-cleanup';
 import { withManagerBrowserLock } from './manager-browser-test-lock';
 
 const MANAGER_URL = process.env.MANAGER_DASHBOARD_URL || 'http://127.0.0.1:24576/';
@@ -83,28 +84,32 @@ test('notes keyboard trash confirms dirty notes and repairs selection', async ()
     const noteName = `browser-smoke-${runId}-dirty-delete.md`;
     const notePath = noteName;
 
-    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
-    await seedNote(page, notePath);
-    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
-    await page.waitForSelector('.notes-tree');
+    try {
+        await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+        await seedNote(page, notePath);
+        await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+        await page.waitForSelector('.notes-tree');
 
-    const noteButton = page.locator('.notes-tree-file-button').filter({ hasText: noteName }).first();
-    await noteButton.click();
-    await page.waitForSelector('.cm-content[contenteditable="true"]');
-    await page.locator('.cm-content[contenteditable="true"]').click();
-    await page.keyboard.press('Meta+A');
-    await page.keyboard.type('# Dirty local edit');
-    await page.waitForSelector('.notes-tree-dirty-dot');
+        const noteButton = page.locator('.notes-tree-file-button').filter({ hasText: noteName }).first();
+        await noteButton.click();
+        await page.waitForSelector('.cm-content[contenteditable="true"]');
+        await page.locator('.cm-content[contenteditable="true"]').click();
+        await page.keyboard.press('Meta+A');
+        await page.keyboard.type('# Dirty local edit');
+        await page.waitForSelector('.notes-tree-dirty-dot');
 
-    const cancelMessage = await pressDeleteAndHandleDialog(page, noteButton, 'dismiss');
-    assert.match(cancelMessage, /unsaved changes/i);
-    assert.equal(await pageApiStatus(page, notePath), 200, 'canceling trash must preserve the dirty note');
+        const cancelMessage = await pressDeleteAndHandleDialog(page, noteButton, 'dismiss');
+        assert.match(cancelMessage, /unsaved changes/i);
+        assert.equal(await pageApiStatus(page, notePath), 200, 'canceling trash must preserve the dirty note');
 
-    const confirmMessage = await pressDeleteAndHandleDialog(page, noteButton, 'accept');
-    assert.match(confirmMessage, /unsaved changes/i);
+        const confirmMessage = await pressDeleteAndHandleDialog(page, noteButton, 'accept');
+        assert.match(confirmMessage, /unsaved changes/i);
 
-    await waitForPageApiStatus(page, notePath, 404);
-    assert.equal(await pageApiStatus(page, notePath), 404, 'confirming trash must move the note out of the notes tree');
+        await waitForPageApiStatus(page, notePath, 404);
+        assert.equal(await pageApiStatus(page, notePath), 404, 'confirming trash must move the note out of the notes tree');
+    } finally {
+        await cleanupDashboardNotes(page, [{ path: notePath, kind: 'file' }]);
+    }
 }));
 
 test('notes Alt/Option+N creates a note from a file path prompt', async () => await withManagerBrowserLock(async () => {
@@ -112,39 +117,43 @@ test('notes Alt/Option+N creates a note from a file path prompt', async () => aw
     const runId = `shortcut-${Date.now()}`;
     const notePath = `${runId}.md`;
 
-    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
-    await page.evaluate(async () => {
-        const headers = { 'content-type': 'application/json' };
-        await fetch('/api/dashboard/registry', {
-            method: 'PATCH',
-            headers,
-            body: JSON.stringify({ ui: { sidebarMode: 'notes', notesSelectedPath: null, notesViewMode: 'raw', notesAuthoringMode: 'plain' } }),
+    try {
+        await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+        await page.evaluate(async () => {
+            const headers = { 'content-type': 'application/json' };
+            await fetch('/api/dashboard/registry', {
+                method: 'PATCH',
+                headers,
+                body: JSON.stringify({ ui: { sidebarMode: 'notes', notesSelectedPath: null, notesViewMode: 'raw', notesAuthoringMode: 'plain' } }),
+            });
         });
-    });
-    await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
-    await page.waitForSelector('.notes-tree');
+        await page.goto(MANAGER_URL, { waitUntil: 'networkidle' });
+        await page.waitForSelector('.notes-tree');
 
-    const dialogPromise = new Promise<string>((resolve) => {
-        page.once('dialog', async (dialog) => {
-            const message = dialog.message();
-            await dialog.accept(notePath);
-            resolve(message);
+        const dialogPromise = new Promise<string>((resolve) => {
+            page.once('dialog', async (dialog) => {
+                const message = dialog.message();
+                await dialog.accept(notePath);
+                resolve(message);
+            });
         });
-    });
-    await page.locator('.notes-tree').click();
-    await page.keyboard.press('Alt+N');
-    const message = await Promise.race([
-        dialogPromise,
-        new Promise<string>((_, reject) => {
-            setTimeout(() => reject(new Error('notes create shortcut prompt did not appear')), 5000);
-        }),
-    ]);
+        await page.locator('.notes-tree').click();
+        await page.keyboard.press('Alt+N');
+        const message = await Promise.race([
+            dialogPromise,
+            new Promise<string>((_, reject) => {
+                setTimeout(() => reject(new Error('notes create shortcut prompt did not appear')), 5000);
+            }),
+        ]);
 
-    assert.match(message, /note path/i);
-    await waitForPageApiStatus(page, notePath, 200);
-    await page.waitForSelector('.cm-content[contenteditable="true"]', { timeout: 5000 });
-    const createdNoteButton = page.locator('.notes-tree-file-button').filter({ hasText: `${runId}.md` }).first();
-    await createdNoteButton.waitFor({ state: 'visible', timeout: 5000 });
-    assert.equal(await page.locator('.notes-tree-file-button').filter({ hasText: `${runId}.md` }).count(), 1,
-        'shortcut-created note must appear in the notes tree');
+        assert.match(message, /note path/i);
+        await waitForPageApiStatus(page, notePath, 200);
+        await page.waitForSelector('.cm-content[contenteditable="true"]', { timeout: 5000 });
+        const createdNoteButton = page.locator('.notes-tree-file-button').filter({ hasText: `${runId}.md` }).first();
+        await createdNoteButton.waitFor({ state: 'visible', timeout: 5000 });
+        assert.equal(await page.locator('.notes-tree-file-button').filter({ hasText: `${runId}.md` }).count(), 1,
+            'shortcut-created note must appear in the notes tree');
+    } finally {
+        await cleanupDashboardNotes(page, [{ path: notePath, kind: 'file' }]);
+    }
 }));
