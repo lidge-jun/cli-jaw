@@ -25,6 +25,10 @@ test('Notes workspace frontend files and API wrapper exist', () => {
         'public/manager/src/notes/notes-api.ts',
         'public/manager/src/notes/notes-search.css',
         'public/manager/src/notes/notes-quick-switcher.css',
+        'public/manager/src/notes/wiki-link-resolver.ts',
+        'public/manager/src/notes/wiki-link-suggestions.ts',
+        'public/manager/src/notes/wiki-link-codemirror-completion.ts',
+        'public/manager/src/notes/wysiwyg/milkdown-wikilink-completion.ts',
         'public/manager/src/notes/editor-theme.ts',
         'public/manager/src/manager-notes.css',
     ].forEach(path => {
@@ -320,6 +324,7 @@ test('App renders NotesWorkspace outside Workbench and imports notes CSS', () =>
     const workbench = read('public/manager/src/components/Workbench.tsx');
     const workspace = read('public/manager/src/notes/NotesWorkspace.tsx');
     const notesCss = read('public/manager/src/notes/notes-tags.css');
+    const managerNotesCss = read('public/manager/src/manager-notes.css');
     const milkdown = read('public/manager/src/notes/wysiwyg/MilkdownWysiwygEditor.tsx');
 
     assert.ok(router.includes('import { NotesWorkspace }'), 'SidebarRailRouter must import NotesWorkspace');
@@ -341,6 +346,13 @@ test('App renders NotesWorkspace outside Workbench and imports notes CSS', () =>
     assert.ok(notesCss.includes('.notes-wysiwyg-frontmatter'), 'WYSIWYG frontmatter panel must be styled');
     assert.ok(notesCss.includes('.notes-wikilink-live'), 'WYSIWYG wikilinks must be styled');
     assert.ok(milkdown.includes('composeWysiwygFrontmatter'), 'WYSIWYG changes must recompose frontmatter with editor body');
+    assert.ok(milkdown.includes('notes-milkdown-scroll'), 'WYSIWYG frontmatter must live inside the editor scroll flow');
+    assert.ok(
+        milkdown.indexOf('<WysiwygFrontmatterPanel') < milkdown.indexOf('className="notes-milkdown-root"'),
+        'WYSIWYG frontmatter must render above the Milkdown root, not as an overlay over document content',
+    );
+    assert.ok(managerNotesCss.includes('flex-direction: column'), 'WYSIWYG shell must use column flow for toolbar, status, frontmatter, and editor');
+    assert.ok(managerNotesCss.includes('.notes-milkdown-scroll'), 'WYSIWYG shell must provide one shared scroll container for frontmatter and document body');
     assert.ok(router.includes('<NotesWorkspace'), 'SidebarRailRouter must render NotesWorkspace');
     assert.ok(router.includes('<DashboardSettingsSidebar'), 'SidebarRailRouter must render Dashboard settings nav in the manager sidebar');
     assert.ok(router.includes('<DashboardSettingsWorkspace'), 'SidebarRailRouter must render Dashboard settings workspace');

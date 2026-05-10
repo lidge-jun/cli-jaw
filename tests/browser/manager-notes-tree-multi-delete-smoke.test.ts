@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import { chromium, type Browser, type Page } from 'playwright-core';
+import { withManagerBrowserLock } from './manager-browser-test-lock';
 
 const MANAGER_URL = process.env.MANAGER_DASHBOARD_URL || 'http://127.0.0.1:24576/';
 const browsers: Browser[] = [];
@@ -34,7 +35,7 @@ after(async () => {
     await Promise.allSettled(browsers.map(browser => browser.close()));
 });
 
-test('notes tree multi-select Delete trashes every selected entry in one keystroke', async () => {
+test('notes tree multi-select Delete trashes every selected entry in one keystroke', async () => await withManagerBrowserLock(async () => {
     const page = await pageForManager();
     const runId = `multidel-${Date.now()}`;
     const noteA = `browser-multi-${runId}-a.md`;
@@ -113,9 +114,9 @@ test('notes tree multi-select Delete trashes every selected entry in one keystro
     })(tree as Array<{ path: string; children?: never }>);
     assert.equal(flatPaths.includes(noteA), false, 'tree response must omit trashed note A');
     assert.equal(flatPaths.includes(noteB), false, 'tree response must omit trashed note B');
-});
+}));
 
-test('notes tree single click clears existing multi-selection', async () => {
+test('notes tree single click clears existing multi-selection', async () => await withManagerBrowserLock(async () => {
     const page = await pageForManager();
     const runId = `multiclear-${Date.now()}`;
     const noteA = `browser-clear-${runId}-a.md`;
@@ -172,9 +173,9 @@ test('notes tree single click clears existing multi-selection', async () => {
     await page.waitForSelector('.notes-tree-selection-info', { state: 'detached', timeout: 2000 });
     assert.equal(await page.locator('.notes-tree-file-row.is-multi-selected, .notes-tree-folder-row.is-multi-selected').count(), 0,
         'plain folder click must clear multi-selected rows');
-});
+}));
 
-test('notes tree Cmd+Delete trashes the selected folder', async () => {
+test('notes tree Cmd+Delete trashes the selected folder', async () => await withManagerBrowserLock(async () => {
     const page = await pageForManager();
     const runId = `folder-cmd-delete-${Date.now()}`;
     const folderName = `browser-folder-trash-${runId}`;
@@ -237,9 +238,9 @@ test('notes tree Cmd+Delete trashes the selected folder', async () => {
         await page.waitForTimeout(150);
     }
     assert.equal(await pageApiStatus(page, notePath), 404, 'Cmd+Delete must trash the selected folder and nested note');
-});
+}));
 
-test('notes tree Cmd+Shift+C copies the selected folder path instead of stale file path', async () => {
+test('notes tree Cmd+Shift+C copies the selected folder path instead of stale file path', async () => await withManagerBrowserLock(async () => {
     const page = await pageForManager();
     const runId = `folder-copy-${Date.now()}`;
     const folderName = `browser-folder-copy-${runId}`;
@@ -293,4 +294,4 @@ test('notes tree Cmd+Shift+C copies the selected folder path instead of stale fi
         'folder copy shortcut must copy the selected folder absolute path');
     assert.equal(copied.endsWith(`/${notePath}`), false,
         'folder copy shortcut must not copy a stale nested file path');
-});
+}));

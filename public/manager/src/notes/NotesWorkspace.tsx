@@ -237,6 +237,7 @@ export function NotesWorkspace(props: NotesWorkspaceProps) {
                                 <MarkdownPreview
                                     markdown={document.content}
                                     outgoing={selectedOutgoingLinks}
+                                    notes={indexedNotes}
                                     onWikiLinkNavigate={props.onWikiLinkNavigate}
                                 />
                             )}

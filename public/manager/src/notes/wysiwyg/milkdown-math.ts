@@ -10,6 +10,7 @@ import { $ctx, $inputRule, $nodeSchema, $remark, $view } from '@milkdown/kit/uti
 
 const mathInlineId = 'math_inline';
 const mathBlockId = 'math_block';
+export const MATH_SOURCE_UPDATED_EVENT = 'notes-math-source-updated';
 
 export const notesMilkdownKatexOptionsCtx = $ctx<KatexOptions, 'notesKatexOptions'>(
     {},
@@ -36,6 +37,11 @@ function updateMathNode(view: EditorView, getPos: () => number | undefined, valu
     const node = view.state.doc.nodeAt(pos);
     if (!node) return;
     view.dispatch(view.state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, value }).scrollIntoView());
+    notifyMathSourceUpdated(view);
+}
+
+function notifyMathSourceUpdated(view: EditorView): void {
+    view.dom.dispatchEvent(new CustomEvent(MATH_SOURCE_UPDATED_EVENT, { bubbles: true }));
 }
 
 function inlineMathSource(value: string): string {
@@ -112,6 +118,7 @@ function commitAndExitMathNode(
             if (prevNode.isTextblock) {
                 tr.setSelection(TextSelection.create(tr.doc, pos - 1));
                 view.dispatch(tr.scrollIntoView());
+                notifyMathSourceUpdated(view);
                 return;
             }
         }
@@ -120,6 +127,7 @@ function commitAndExitMathNode(
         tr.insert(pos, paragraph);
         tr.setSelection(TextSelection.create(tr.doc, pos + 1));
         view.dispatch(tr.scrollIntoView());
+        notifyMathSourceUpdated(view);
         return;
     }
 
@@ -147,6 +155,7 @@ function commitAndExitMathNode(
         tr.setSelection(TextSelection.near(tr.doc.resolve(after), 1));
     }
     view.dispatch(tr.scrollIntoView());
+    notifyMathSourceUpdated(view);
 }
 
 function exitDirectionForMathCaret(raw: HTMLInputElement | HTMLTextAreaElement, block: boolean): 'above' | 'below' {

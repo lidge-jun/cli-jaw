@@ -26,11 +26,12 @@ import {
     refreshMilkdownAssetImages,
 } from './milkdown-editor-utils';
 import { notesMilkdownBlockKeymap } from './milkdown-block-keymap';
-import { notesMilkdownCodeBlockView } from './milkdown-code-block-view';
+import { CODE_SOURCE_UPDATED_EVENT, notesMilkdownCodeBlockView } from './milkdown-code-block-view';
 import { notesMilkdownGfm } from './milkdown-gfm-safe';
 import { notesMilkdownHeadingSourceView } from './milkdown-heading-source-view';
-import { notesMilkdownKatexOptionsCtx, notesMilkdownMath } from './milkdown-math';
+import { MATH_SOURCE_UPDATED_EVENT, notesMilkdownKatexOptionsCtx, notesMilkdownMath } from './milkdown-math';
 import { normalizeEscapedTaskMarkers, protectUnsupportedGfmForMilkdown } from './milkdown-task-markers';
+import { notesMilkdownWikiLinkCompletionPlugin, requestWysiwygWikiLinkCompletionRefresh } from './milkdown-wikilink-completion';
 import { notesMilkdownWikiLinkPlugin, requestWysiwygWikiLinkRefresh } from './milkdown-wikilink-plugin';
 import { WysiwygFrontmatterPanel } from './WysiwygFrontmatterPanel';
 import { composeWysiwygFrontmatter, splitWysiwygFrontmatter, type WysiwygFrontmatterData } from './wysiwyg-frontmatter';
@@ -53,6 +54,9 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         notes: props.notes,
         onNavigate: props.onWikiLinkNavigate,
     });
+    const wikiCompletionRuntimeRef = useRef({
+        notes: props.notes,
+    });
     const syncingFromPropsRef = useRef(true);
     const [ready, setReady] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -74,8 +78,11 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
     useEffect(() => {
         wikiRuntimeRef.current.outgoing = props.outgoing;
         wikiRuntimeRef.current.notes = props.notes;
+        wikiCompletionRuntimeRef.current.notes = props.notes;
         editorRef.current?.action(ctx => {
-            requestWysiwygWikiLinkRefresh(ctx.get(editorViewCtx));
+            const view = ctx.get(editorViewCtx);
+            requestWysiwygWikiLinkRefresh(view);
+            requestWysiwygWikiLinkCompletionRefresh(view);
         });
     }, [props.outgoing, props.notes]);
 
@@ -127,6 +134,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
             .use(notesMilkdownCodeBlockView)
             .use(notesMilkdownBlockKeymap)
             .use(notesMilkdownWikiLinkPlugin(wikiRuntimeRef.current))
+            .use(notesMilkdownWikiLinkCompletionPlugin(wikiCompletionRuntimeRef.current))
             .use(history)
             .use(clipboard)
             .use(listener)
@@ -192,17 +200,23 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         const root = rootRef.current;
         if (!root) return undefined;
 
-        function handleHeadingSourceUpdated(): void {
-            editorRef.current?.action(ctx => {
-                const body = normalizeEscapedTaskMarkers(getMarkdown()(ctx));
-                latestBodyRef.current = body;
-                if (!syncingFromPropsRef.current) emitBodyChange(body);
+        function handleExternalNodeSourceUpdated(): void {
+            queueMicrotask(() => {
+                editorRef.current?.action(ctx => {
+                    const body = normalizeEscapedTaskMarkers(getMarkdown()(ctx));
+                    latestBodyRef.current = body;
+                    if (!syncingFromPropsRef.current) emitBodyChange(body);
+                });
             });
         }
 
-        root.addEventListener('notes-heading-source-updated', handleHeadingSourceUpdated);
+        root.addEventListener('notes-heading-source-updated', handleExternalNodeSourceUpdated);
+        root.addEventListener(MATH_SOURCE_UPDATED_EVENT, handleExternalNodeSourceUpdated);
+        root.addEventListener(CODE_SOURCE_UPDATED_EVENT, handleExternalNodeSourceUpdated);
         return () => {
-            root.removeEventListener('notes-heading-source-updated', handleHeadingSourceUpdated);
+            root.removeEventListener('notes-heading-source-updated', handleExternalNodeSourceUpdated);
+            root.removeEventListener(MATH_SOURCE_UPDATED_EVENT, handleExternalNodeSourceUpdated);
+            root.removeEventListener(CODE_SOURCE_UPDATED_EVENT, handleExternalNodeSourceUpdated);
         };
     }, [ready]);
 
@@ -473,26 +487,28 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
                 <button type="button" title="Table" aria-label="Table" disabled={!ready} onClick={insertTable}>Table</button>
                 <button type="button" title="Code block" aria-label="Code block" disabled={!ready} onClick={createLanguageCodeBlock}>Block</button>
             </div>
-            <WysiwygFrontmatterPanel
-                frontmatter={frontmatterPanel}
-                activeTag={props.activeTag}
-                onChange={emitFrontmatterChange}
-                onTagClick={props.onTagSelect}
-            />
             {error && <div className="notes-wysiwyg-error" role="alert">{error}</div>}
             {uploadStatus !== 'idle' && (
                 <div className="notes-wysiwyg-upload-status" role="status" data-status={uploadStatus}>
                     {uploadStatus === 'uploading' ? 'Uploading image…' : 'Image upload failed'}
                 </div>
             )}
-            <div
-                ref={rootRef}
-                className="notes-milkdown-root"
-                data-ready={ready ? 'true' : 'false'}
-                aria-label="Milkdown WYSIWYG markdown editor"
-                role="textbox"
-                aria-multiline="true"
-            />
+            <div className="notes-milkdown-scroll">
+                <WysiwygFrontmatterPanel
+                    frontmatter={frontmatterPanel}
+                    activeTag={props.activeTag}
+                    onChange={emitFrontmatterChange}
+                    onTagClick={props.onTagSelect}
+                />
+                <div
+                    ref={rootRef}
+                    className="notes-milkdown-root"
+                    data-ready={ready ? 'true' : 'false'}
+                    aria-label="Milkdown WYSIWYG markdown editor"
+                    role="textbox"
+                    aria-multiline="true"
+                />
+            </div>
         </div>
     );
 }

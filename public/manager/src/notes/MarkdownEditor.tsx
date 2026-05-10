@@ -10,6 +10,7 @@ import { MarkdownPreview } from './MarkdownPreview';
 import { RichMarkdownPortalHost } from './rich-markdown/RichMarkdownPortalHost';
 import { richMarkdownExtension } from './rich-markdown/rich-markdown-extension';
 import { richMarkdownPastePolicy } from './rich-markdown/paste-policy';
+import { wikiLinkCodeMirrorCompletion } from './wiki-link-codemirror-completion';
 import type { NotesAuthoringMode, NotesNoteLinkRef, NotesNoteMetadata } from './notes-types';
 import type { RichMarkdownWidgetRegistration } from './rich-markdown/rich-markdown-types';
 
@@ -59,6 +60,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
             notesEditorTheme,
             notesSyntaxHighlighting,
             markdown({ codeLanguages: languages }),
+            wikiLinkCodeMirrorCompletion(props.notes),
             richMarkdownPastePolicy({
                 notePath: props.notePath,
                 onError: error => console.warn('[notes-image-paste]', error),
@@ -73,7 +75,7 @@ export function MarkdownEditor(props: MarkdownEditorProps) {
         ];
         if (props.wordWrap) base.push(EditorView.lineWrapping);
         return base;
-    }, [props.active, props.authoringMode, props.notePath, props.wordWrap, registerWidget, requestMeasure, unregisterWidget]);
+    }, [props.active, props.authoringMode, props.notePath, props.notes, props.wordWrap, registerWidget, requestMeasure, unregisterWidget]);
 
     if (isWysiwyg) {
         return (

@@ -6,12 +6,14 @@ import { fileURLToPath } from 'node:url';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import {
     buildWikiLinkLookup,
+    invalidWikiLinkTarget,
     parseWikiLinkToken,
+    splitChildrenWithWikiLinks,
     splitTextWithWikiLinks,
     wikiLinkDisplayText,
     wikiLinkReasonLabel,
 } from '../../public/manager/src/notes/wiki-link-rendering';
-import type { NotesNoteLinkRef } from '../../public/manager/src/notes/notes-types';
+import type { NotesNoteLinkRef, NotesNoteMetadata } from '../../public/manager/src/notes/notes-types';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..');
@@ -42,6 +44,19 @@ function noteLink(raw: string, target: string, overrides: Partial<NotesNoteLinkR
     };
 }
 
+function noteMetadata(path: string, title: string, overrides: Partial<NotesNoteMetadata> = {}): NotesNoteMetadata {
+    return {
+        path,
+        title,
+        aliases: [],
+        tags: [],
+        mtimeMs: 1,
+        size: 1,
+        revision: 'rev',
+        ...overrides,
+    };
+}
+
 function assertWikiElement(node: ReactNode): asserts node is ReactElement<WikiElementProps> {
     assert.ok(isValidElement<WikiElementProps>(node), 'wikilink segment must be a React element');
 }
@@ -67,6 +82,8 @@ test('MarkdownPreview delegates to the shared renderer', () => {
         'MarkdownPreview must pass markdown content to the shared renderer');
     assert.ok(preview.includes('outgoing={props.outgoing}'),
         'MarkdownPreview must pass vault-index wikilinks to the shared renderer');
+    assert.ok(preview.includes('notes={props.notes}'),
+        'MarkdownPreview must pass vault notes to the shared renderer for client-side wikilink fallback');
     assert.ok(preview.includes('onWikiLinkNavigate={props.onWikiLinkNavigate}'),
         'MarkdownPreview must pass wikilink navigation to the shared renderer');
     assert.equal(preview.includes('ReactMarkdown'), false,
@@ -92,6 +109,7 @@ test('MarkdownRenderer wires math, sanitize, safe links, and block routing', () 
     assert.ok(renderer.includes('<CodeBlock code={code} language={language} />'), 'code fences must route to CodeBlock');
     assert.ok(renderer.includes('<code className={className}>{children}</code>'), 'inline code must remain inline');
     assert.ok(renderer.includes('buildWikiLinkLookup(props.outgoing)'), 'MarkdownRenderer must derive wikilink lookup from vault-index outgoing links');
+    assert.ok(renderer.includes('notes: props.notes'), 'MarkdownRenderer must pass vault notes into wikilink fallback context');
     assert.ok(renderer.includes('splitChildrenWithWikiLinks'), 'MarkdownRenderer must transform only supported text children for wikilinks');
 });
 
@@ -148,6 +166,46 @@ test('shared wikilink helpers preserve WYSIWYG and preview display labels', () =
     assert.equal(wikiLinkDisplayText(resolved, resolved.raw), 'Readable label');
     assert.equal(wikiLinkDisplayText(broken, broken.raw), 'Missing');
     assert.equal(wikiLinkReasonLabel(broken), 'Invalid link target');
+});
+
+test('preview wikilink fallback resolves newly typed links from vault notes', () => {
+    const notes = [
+        noteMetadata('Projects/Project Alpha.md', 'Project Alpha', { aliases: ['Alpha'] }),
+    ];
+    const navigated: string[] = [];
+    const transformed = splitChildrenWithWikiLinks('See [[Project Alpha]] and [[Alpha|A]]', {
+        lookup: buildWikiLinkLookup([]),
+        outgoing: [],
+        notes,
+        onNavigate: path => navigated.push(path),
+    }, 'preview');
+
+    assert.ok(Array.isArray(transformed), 'fallback transformation must split text into segments');
+    assert.equal(transformed.length, 4);
+    const resolved = transformed[1];
+    assertWikiElement(resolved);
+    assert.equal(resolved.props.className, 'notes-wikilink');
+    assert.equal(resolved.props.href, '#Projects%2FProject%20Alpha.md');
+    assert.equal(resolved.props.children, 'Project Alpha');
+    resolved.props.onClick?.({ preventDefault: () => {} });
+    assert.deepEqual(navigated, ['Projects/Project Alpha.md']);
+
+    const alias = transformed[3];
+    assertWikiElement(alias);
+    assert.equal(alias.props.children, 'A');
+});
+
+test('shared wikilink parser matches backend escaped delimiters and invalid reserved paths', () => {
+    const pipe = parseWikiLinkToken('[[foo\\|bar|Readable]]');
+    assert.equal(pipe?.target, 'foo\\|bar');
+    assert.equal(pipe?.displayText, 'Readable');
+
+    const heading = parseWikiLinkToken('[[foo\\#bar#Heading]]');
+    assert.equal(heading?.target, 'foo\\#bar');
+    assert.equal(heading?.heading, 'Heading');
+
+    assert.equal(invalidWikiLinkTarget('.assets/file'), true);
+    assert.equal(invalidWikiLinkTarget('_templates/template'), true);
 });
 
 test('MermaidBlock uses component-owned strict Mermaid rendering without iframe', () => {

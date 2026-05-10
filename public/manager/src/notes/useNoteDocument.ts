@@ -20,6 +20,11 @@ export type UseNoteDocumentResult = {
     clearConflict: () => void;
 };
 
+async function settlePendingEditorChanges(): Promise<void> {
+    await Promise.resolve();
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+}
+
 export function useNoteDocument(): UseNoteDocumentResult {
     const [file, setFile] = useState<DashboardNoteFileResponse | null>(null);
     const [content, setContentState] = useState('');
@@ -29,6 +34,7 @@ export function useNoteDocument(): UseNoteDocumentResult {
     const [error, setError] = useState<string | null>(null);
     const [conflict, setConflict] = useState<NoteConflictState | null>(null);
     const latestContentRef = useRef('');
+    const dirtyRef = useRef(false);
     const savingRef = useRef(false);
 
     const load = useCallback(async (path: string): Promise<void> => {
@@ -39,6 +45,7 @@ export function useNoteDocument(): UseNoteDocumentResult {
             const next = await fetchNoteFile(path);
             setFile(next);
             latestContentRef.current = next.content;
+            dirtyRef.current = false;
             setContentState(next.content);
             setDirty(false);
         } catch (err) {
@@ -50,12 +57,14 @@ export function useNoteDocument(): UseNoteDocumentResult {
 
     function setContent(value: string): void {
         latestContentRef.current = value;
+        dirtyRef.current = true;
         setContentState(value);
         setDirty(true);
     }
 
     const save = useCallback(async (): Promise<void> => {
-        if (!file || !dirty || savingRef.current) return;
+        await settlePendingEditorChanges();
+        if (!file || !dirtyRef.current || savingRef.current) return;
         const contentSnapshot = latestContentRef.current;
         savingRef.current = true;
         setSaving(true);
@@ -70,6 +79,7 @@ export function useNoteDocument(): UseNoteDocumentResult {
             setFile(saved);
             if (latestContentRef.current === contentSnapshot) {
                 latestContentRef.current = saved.content;
+                dirtyRef.current = false;
                 setContentState(saved.content);
                 setDirty(false);
             }
@@ -95,7 +105,7 @@ export function useNoteDocument(): UseNoteDocumentResult {
             savingRef.current = false;
             setSaving(false);
         }
-    }, [dirty, file]);
+    }, [file]);
 
     const reloadFromDisk = useCallback(async (): Promise<void> => {
         if (!file) return;
@@ -103,6 +113,7 @@ export function useNoteDocument(): UseNoteDocumentResult {
     }, [file, load]);
 
     const overwrite = useCallback(async (): Promise<void> => {
+        await settlePendingEditorChanges();
         if (!file || savingRef.current) return;
         const contentSnapshot = latestContentRef.current;
         savingRef.current = true;
@@ -113,6 +124,7 @@ export function useNoteDocument(): UseNoteDocumentResult {
             setFile(saved);
             if (latestContentRef.current === contentSnapshot) {
                 latestContentRef.current = saved.content;
+                dirtyRef.current = false;
                 setContentState(saved.content);
                 setDirty(false);
             }

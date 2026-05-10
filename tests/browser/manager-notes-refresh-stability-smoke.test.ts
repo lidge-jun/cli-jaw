@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import { chromium, type Browser } from 'playwright-core';
+import { withManagerBrowserLock } from './manager-browser-test-lock';
 
 const MANAGER_URL = process.env.MANAGER_DASHBOARD_URL || 'http://127.0.0.1:24576/';
 const browsers: Browser[] = [];
@@ -9,7 +10,7 @@ after(async () => {
     await Promise.allSettled(browsers.map(browser => browser.close()));
 });
 
-test('notes sidebar does not refetch tree/index on every render while active', async () => {
+test('notes sidebar does not refetch tree/index on every render while active', async () => await withManagerBrowserLock(async () => {
     const browser = await chromium.launch({ headless: true });
     browsers.push(browser);
     const context = await browser.newContext();
@@ -44,4 +45,4 @@ test('notes sidebar does not refetch tree/index on every render while active', a
 
     assert.ok(counts.tree <= 2, `notes tree refetched too often: ${counts.tree}`);
     assert.ok(counts.index <= 2, `notes index refetched too often: ${counts.index}`);
-});
+}));

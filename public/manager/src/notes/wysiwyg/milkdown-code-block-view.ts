@@ -6,6 +6,8 @@ import type { EditorView, NodeView, NodeViewConstructor } from '@milkdown/kit/pr
 import { $view } from '@milkdown/kit/utils';
 import { highlightCode } from '../rendering/highlight-languages';
 
+export const CODE_SOURCE_UPDATED_EVENT = 'notes-code-source-updated';
+
 function codeText(node: ProseMirrorNode): string {
     return node.textContent;
 }
@@ -50,6 +52,10 @@ function isCaretAtFenceBoundary(input: HTMLTextAreaElement): boolean {
     return /^```[^\n`]*$/.test(line);
 }
 
+function notifyCodeSourceUpdated(view: EditorView): void {
+    view.dom.dispatchEvent(new CustomEvent(CODE_SOURCE_UPDATED_EVENT, { bubbles: true }));
+}
+
 function updateCodeBlockNode(view: EditorView, getPos: () => number | undefined, source: string): void {
     const pos = getPos();
     if (pos === undefined) return;
@@ -62,6 +68,7 @@ function updateCodeBlockNode(view: EditorView, getPos: () => number | undefined,
         .replaceWith(pos + 1, pos + current.nodeSize - 1, nextText)
         .scrollIntoView();
     view.dispatch(tr);
+    notifyCodeSourceUpdated(view);
 }
 
 function commitAndExitCodeBlock(
@@ -89,6 +96,7 @@ function commitAndExitCodeBlock(
             if (nextNode.isTextblock && nextNode.content.size === 0) {
                 tr.setSelection(TextSelection.create(tr.doc, codeAfter + 1));
                 view.dispatch(tr.scrollIntoView());
+                notifyCodeSourceUpdated(view);
                 return;
             }
         }
@@ -97,6 +105,7 @@ function commitAndExitCodeBlock(
         tr.insert(codeAfter, paragraph);
         tr.setSelection(TextSelection.create(tr.doc, codeAfter + 1));
         view.dispatch(tr.scrollIntoView());
+        notifyCodeSourceUpdated(view);
         return;
     }
 
@@ -108,6 +117,7 @@ function commitAndExitCodeBlock(
             const prevEnd = pos - 1;
             tr.setSelection(TextSelection.create(tr.doc, prevEnd));
             view.dispatch(tr.scrollIntoView());
+            notifyCodeSourceUpdated(view);
             return;
         }
     }
@@ -117,6 +127,7 @@ function commitAndExitCodeBlock(
     tr.insert(pos, paragraph);
     tr.setSelection(TextSelection.create(tr.doc, pos + 1));
     view.dispatch(tr.scrollIntoView());
+    notifyCodeSourceUpdated(view);
 }
 
 function exitDirectionForCaret(raw: HTMLTextAreaElement): 'above' | 'below' {

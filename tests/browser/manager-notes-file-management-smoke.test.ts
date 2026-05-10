@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, test } from 'node:test';
 import { chromium, type Browser, type Page } from 'playwright-core';
+import { withManagerBrowserLock } from './manager-browser-test-lock';
 
 const MANAGER_URL = process.env.MANAGER_DASHBOARD_URL || 'http://127.0.0.1:24576/';
 
@@ -76,7 +77,7 @@ async function pressDeleteAndHandleDialog(
     ]);
 }
 
-test('notes keyboard trash confirms dirty notes and repairs selection', async () => {
+test('notes keyboard trash confirms dirty notes and repairs selection', async () => await withManagerBrowserLock(async () => {
     const page = await pageForManager();
     const runId = `smoke-${Date.now()}`;
     const noteName = `browser-smoke-${runId}-dirty-delete.md`;
@@ -104,9 +105,9 @@ test('notes keyboard trash confirms dirty notes and repairs selection', async ()
 
     await waitForPageApiStatus(page, notePath, 404);
     assert.equal(await pageApiStatus(page, notePath), 404, 'confirming trash must move the note out of the notes tree');
-});
+}));
 
-test('notes Alt/Option+N creates a note from a file path prompt', async () => {
+test('notes Alt/Option+N creates a note from a file path prompt', async () => await withManagerBrowserLock(async () => {
     const page = await pageForManager();
     const runId = `shortcut-${Date.now()}`;
     const notePath = `${runId}.md`;
@@ -142,6 +143,8 @@ test('notes Alt/Option+N creates a note from a file path prompt', async () => {
     assert.match(message, /note path/i);
     await waitForPageApiStatus(page, notePath, 200);
     await page.waitForSelector('.cm-content[contenteditable="true"]', { timeout: 5000 });
+    const createdNoteButton = page.locator('.notes-tree-file-button').filter({ hasText: `${runId}.md` }).first();
+    await createdNoteButton.waitFor({ state: 'visible', timeout: 5000 });
     assert.equal(await page.locator('.notes-tree-file-button').filter({ hasText: `${runId}.md` }).count(), 1,
         'shortcut-created note must appear in the notes tree');
-});
+}));

@@ -96,6 +96,7 @@
     "check:electron-no-native": "node scripts/check-electron-no-native.cjs"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.1",
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/language-data": "^6.5.2",
     "@grammyjs/runner": "^2.0.3",

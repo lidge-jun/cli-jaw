@@ -398,8 +398,8 @@
     min-width: 0;
     min-height: 0;
     height: 100%;
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
 }
 
@@ -446,11 +446,20 @@
     opacity: 0.55;
 }
 
+.notes-milkdown-scroll {
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    overflow: auto;
+    background: var(--canvas-base);
+}
+
 .notes-milkdown-root {
     min-width: 0;
     min-height: 0;
-    height: 100%;
-    overflow: auto;
+    flex: 1 1 auto;
     background: var(--canvas-base);
 }
 

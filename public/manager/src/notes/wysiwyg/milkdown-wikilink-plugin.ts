@@ -5,7 +5,7 @@ import { Plugin, PluginKey } from '@milkdown/kit/prose/state';
 import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/view';
 import { $prose } from '@milkdown/kit/utils';
 import type { NotesNoteLinkRef, NotesNoteMetadata } from '../notes-types';
-import { parseWikiLinkToken, WIKI_LINK_RE, wikiLinkDisplayText, wikiLinkReasonLabel } from '../wiki-link-rendering';
+import { resolveClientWikiLink, WIKI_LINK_RE, wikiLinkDisplayText, wikiLinkReasonLabel } from '../wiki-link-resolver';
 
 export type MilkdownWikiLinkRuntime = {
     outgoing: readonly NotesNoteLinkRef[];
@@ -21,66 +21,6 @@ export function requestWysiwygWikiLinkRefresh(view: EditorView): void {
 
 function shouldSkipTextNode(node: ProseMirrorNode): boolean {
     return node.marks.some(mark => mark.type.name === 'inlineCode' || mark.type.name === 'link');
-}
-
-function buildLookup(outgoing: readonly NotesNoteLinkRef[]): Map<string, NotesNoteLinkRef> {
-    const lookup = new Map<string, NotesNoteLinkRef>();
-    for (const link of outgoing) {
-        if (!lookup.has(link.raw)) lookup.set(link.raw, link);
-    }
-    return lookup;
-}
-
-function noteStem(path: string): string {
-    const filename = path.split('/').at(-1) || path;
-    return filename.endsWith('.md') ? filename.slice(0, -3) : filename;
-}
-
-function invalidTarget(target: string): boolean {
-    if (!target || target.includes('\0') || target.includes('\\') || target.startsWith('/')) return true;
-    if (target.includes('../')) return true;
-    return target.split('/').some(part => !part || part === '.' || part === '..');
-}
-
-function fallbackLink(raw: string, runtime: MilkdownWikiLinkRuntime, startOffset: number): NotesNoteLinkRef | null {
-    const parsed = parseWikiLinkToken(raw);
-    if (!parsed) return null;
-    const base: NotesNoteLinkRef = {
-        sourcePath: '',
-        raw,
-        target: parsed.target,
-        ...(parsed.displayText ? { displayText: parsed.displayText } : {}),
-        ...(parsed.heading ? { heading: parsed.heading } : {}),
-        line: 0,
-        column: 0,
-        startOffset,
-        endOffset: startOffset + raw.length,
-        status: 'missing',
-        reason: invalidTarget(parsed.target) ? 'invalid_target' : 'not_found',
-    };
-    if (base.reason === 'invalid_target') return base;
-
-    const targetNoExt = parsed.target.endsWith('.md') ? parsed.target.slice(0, -3) : parsed.target;
-    const candidates = runtime.notes.filter(note => {
-        const pathNoExt = note.path.endsWith('.md') ? note.path.slice(0, -3) : note.path;
-        return note.path === parsed.target
-            || pathNoExt === targetNoExt
-            || note.aliases.includes(parsed.target)
-            || (!parsed.target.includes('/') && noteStem(note.path) === targetNoExt);
-    });
-    if (candidates.length === 1 && candidates[0]) {
-        const { reason: _reason, ...withoutReason } = base;
-        return { ...withoutReason, status: 'resolved', resolvedPath: candidates[0].path };
-    }
-    if (candidates.length > 1) {
-        return {
-            ...base,
-            status: 'ambiguous',
-            reason: 'ambiguous',
-            candidatePaths: candidates.map(note => note.path).sort((a, b) => a.localeCompare(b)),
-        };
-    }
-    return base;
 }
 
 function selectionOverlaps(from: number, to: number, selectionFrom: number, selectionTo: number): boolean {
@@ -112,7 +52,6 @@ function buildWikiLinkDecorations(
     state: EditorState,
     runtime: MilkdownWikiLinkRuntime,
 ): DecorationSet {
-    const lookup = buildLookup(runtime.outgoing);
     const decorations: Decoration[] = [];
     const { from: selectionFrom, to: selectionTo } = state.selection;
 
@@ -125,7 +64,7 @@ function buildWikiLinkDecorations(
         while ((match = WIKI_LINK_RE.exec(text)) !== null) {
             const raw = match[0];
             const from = pos + match.index;
-            const link = lookup.get(raw) ?? fallbackLink(raw, runtime, from);
+            const link = resolveClientWikiLink(raw, runtime.outgoing, runtime.notes, from);
             if (!link) continue;
             const to = from + raw.length;
             const hidden = !selectionOverlaps(from, to, selectionFrom, selectionTo);

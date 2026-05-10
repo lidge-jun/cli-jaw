@@ -40,8 +40,8 @@ test('WYSIWYG wikilink plugin decorates newly typed links before outgoing index 
     const plugin = read('public/manager/src/notes/wysiwyg/milkdown-wikilink-plugin.ts');
 
     assert.equal(plugin.includes('if (lookup.size === 0) return DecorationSet.empty'), false);
-    assert.ok(plugin.includes('fallbackLink(raw, runtime, from)'));
-    assert.ok(plugin.includes('runtime.notes.filter'));
-    assert.ok(plugin.includes("status: 'missing'"));
-    assert.ok(plugin.includes("status: 'resolved'"));
+    assert.ok(plugin.includes('resolveClientWikiLink(raw, runtime.outgoing, runtime.notes, from)'));
+    assert.equal(plugin.includes('function fallbackLink'), false);
+    assert.equal(plugin.includes('function noteStem'), false);
+    assert.equal(plugin.includes('function invalidTarget'), false);
 });

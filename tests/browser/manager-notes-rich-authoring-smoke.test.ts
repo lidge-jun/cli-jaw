@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
-import { after, test } from 'node:test';
+import { after, test, type TestContext } from 'node:test';
 import { chromium, type Browser, type Locator, type Page } from 'playwright-core';
+import { withManagerBrowserLock } from './manager-browser-test-lock';
 
 const MANAGER_URL = process.env.MANAGER_DASHBOARD_URL || 'http://127.0.0.1:24576/';
 const browsers: Browser[] = [];
+
+function serialTest(name: string, fn: (t: TestContext) => unknown | Promise<unknown>): void {
+    test(name, { concurrency: false }, async t => await withManagerBrowserLock(async () => await fn(t)));
+}
 
 async function pageForManager(): Promise<Page> {
     const browser = await chromium.launch({ headless: true });
@@ -135,11 +140,36 @@ async function seedTaskOnlyNote(page: Page, notePath: string): Promise<void> {
     }, { notePath });
 }
 
+async function readNoteContent(page: Page, noteName: string): Promise<string> {
+    return await page.evaluate(async ({ noteName }) => {
+        const response = await fetch(`/api/dashboard/notes/file?path=${encodeURIComponent(noteName)}`);
+        const body = await response.json();
+        return body.content as string;
+    }, { noteName });
+}
+
+async function waitForSavedContent(
+    page: Page,
+    noteName: string,
+    predicate: (content: string) => boolean,
+    message: string,
+): Promise<string> {
+    const deadline = Date.now() + 5000;
+    let latest = await readNoteContent(page, noteName);
+    while (Date.now() < deadline) {
+        if (predicate(latest)) return latest;
+        await page.waitForTimeout(100);
+        latest = await readNoteContent(page, noteName);
+    }
+    assert.ok(predicate(latest), `${message}\nLatest content:\n${latest}`);
+    return latest;
+}
+
 after(async () => {
     await Promise.allSettled(browsers.map(browser => browser.close()));
 });
 
-test('notes WYSIWYG authoring keeps the primary toolbar compact', async () => {
+serialTest('notes WYSIWYG authoring keeps the primary toolbar compact', async () => {
     const page = await pageForManager();
     const noteName = `browser-rich-${Date.now()}.md`;
 
@@ -226,11 +256,12 @@ test('notes WYSIWYG authoring keeps the primary toolbar compact', async () => {
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
 
-    const savedContent = await page.evaluate(async ({ noteName }) => {
-        const response = await fetch(`/api/dashboard/notes/file?path=${encodeURIComponent(noteName)}`);
-        const body = await response.json();
-        return body.content as string;
-    }, { noteName });
+    const savedContent = await waitForSavedContent(page, noteName, content =>
+        content.includes('$a^2 + b^2 = c^2 + d^2$')
+        && content.includes('\\int_0^1 x^2 dx = 1/3')
+        && content.includes('```ts')
+        && content.includes('const milkdownCodeBlock = true;'),
+    'WYSIWYG rich authoring changes must save before assertions read the file');
     assert.ok(savedContent.includes('$a^2 + b^2 = c^2 + d^2$'),
         'WYSIWYG inline math raw edits must round-trip back to canonical markdown');
     assert.ok(savedContent.includes('\\int_0^1 x^2 dx = 1/3'),
@@ -241,7 +272,7 @@ test('notes WYSIWYG authoring keeps the primary toolbar compact', async () => {
         'WYSIWYG code block content must round-trip back to canonical markdown');
 });
 
-test('notes WYSIWYG code block raw editor keeps rich paste inside textarea', async () => {
+serialTest('notes WYSIWYG code block raw editor keeps rich paste inside textarea', async () => {
     const page = await pageForManager();
     const noteName = `browser-code-paste-${Date.now()}.md`;
 
@@ -281,7 +312,7 @@ test('notes WYSIWYG code block raw editor keeps rich paste inside textarea', asy
         'code block must remain in raw editing mode after rich paste event');
 });
 
-test('notes WYSIWYG toolbar commands can be used together without conflicts', async () => {
+serialTest('notes WYSIWYG toolbar commands can be used together without conflicts', async () => {
     const page = await pageForManager();
     const noteName = `browser-toolbar-all-${Date.now()}.md`;
 
@@ -359,11 +390,14 @@ test('notes WYSIWYG toolbar commands can be used together without conflicts', as
         'Table command must keep the WYSIWYG surface mounted');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
 
-    const savedContent = await page.evaluate(async ({ noteName }) => {
-        const response = await fetch(`/api/dashboard/notes/file?path=${encodeURIComponent(noteName)}`);
-        const body = await response.json();
-        return body.content as string;
-    }, { noteName });
+    const savedContent = await waitForSavedContent(page, noteName, content =>
+        content.includes('bold toolbar')
+        && content.includes('italic toolbar')
+        && content.includes('strike toolbar')
+        && content.includes('code toolbar')
+        && content.includes('```ts')
+        && content.includes('|'),
+    'WYSIWYG toolbar command changes must save before assertions read the file');
 
     assert.ok(savedContent.includes('bold toolbar'), 'Bold command must leave editable content intact');
     assert.ok(savedContent.includes('italic toolbar'), 'Italic command must leave editable content intact');
@@ -379,7 +413,7 @@ test('notes WYSIWYG toolbar commands can be used together without conflicts', as
     assert.ok(savedContent.includes('|'), 'Table command must insert table markdown');
 });
 
-test('notes WYSIWYG heading marker supports level 6 source editing', async () => {
+serialTest('notes WYSIWYG heading marker supports level 6 source editing', async () => {
     const page = await pageForManager();
     const noteName = `browser-heading-six-${Date.now()}.md`;
 
@@ -408,16 +442,14 @@ test('notes WYSIWYG heading marker supports level 6 source editing', async () =>
     await page.waitForSelector('.notes-heading-source-node[data-level="6"]', { timeout: 5000 });
     await page.getByRole('button', { name: 'Save', exact: true }).click();
 
-    const savedContent = await page.evaluate(async ({ noteName }) => {
-        const response = await fetch(`/api/dashboard/notes/file?path=${encodeURIComponent(noteName)}`);
-        const body = await response.json();
-        return body.content as string;
-    }, { noteName });
+    const savedContent = await waitForSavedContent(page, noteName,
+        content => content.includes('###### Task toolbar smoke'),
+        'WYSIWYG heading marker changes must save before assertions read the file');
     assert.ok(savedContent.includes('###### Task toolbar smoke'),
         'WYSIWYG heading marker must serialize six # characters as an h6 heading');
 });
 
-test('notes WYSIWYG Task toolbar stays in Milkdown without fallback', async () => {
+serialTest('notes WYSIWYG Task toolbar stays in Milkdown without fallback', async () => {
     const page = await pageForManager();
     const noteName = `browser-task-toolbar-${Date.now()}.md`;
 
@@ -437,16 +469,14 @@ test('notes WYSIWYG Task toolbar stays in Milkdown without fallback', async () =
         'WYSIWYG must not mount the CodeMirror task fallback');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
 
-    const savedContent = await page.evaluate(async ({ noteName }) => {
-        const response = await fetch(`/api/dashboard/notes/file?path=${encodeURIComponent(noteName)}`);
-        const body = await response.json();
-        return body.content as string;
-    }, { noteName });
+    const savedContent = await waitForSavedContent(page, noteName,
+        content => /(^|\n)- \[ \](\s|$)/.test(content),
+        'WYSIWYG task toolbar changes must save before assertions read the file');
     assert.ok(/(^|\n)- \[ \](\s|$)/.test(savedContent),
         'WYSIWYG Task toolbar must save canonical task markdown without fallback rendering');
 });
 
-test('notes render and edit GitHub Flavored Markdown affordances', async () => {
+serialTest('notes render and edit GitHub Flavored Markdown affordances', async () => {
     const page = await pageForManager();
     const noteName = `browser-gfm-${Date.now()}.md`;
     const wysiwygNoteName = `browser-gfm-wysiwyg-${Date.now()}.md`;

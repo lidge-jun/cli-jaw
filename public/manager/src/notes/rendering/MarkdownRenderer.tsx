@@ -15,11 +15,12 @@ import {
     safeMarkdownUrl,
 } from './markdown-render-security';
 import { buildWikiLinkLookup, splitChildrenWithWikiLinks, type WikiLinkContext } from '../wiki-link-rendering';
-import type { NotesNoteLinkRef } from '../notes-types';
+import type { NotesNoteLinkRef, NotesNoteMetadata } from '../notes-types';
 
 type MarkdownRendererProps = {
     markdown: string;
     outgoing?: NotesNoteLinkRef[] | undefined;
+    notes?: readonly NotesNoteMetadata[] | undefined;
     onWikiLinkNavigate?: ((path: string) => void) | undefined;
 };
 
@@ -70,8 +71,10 @@ const NOOP_NAVIGATE = (_path: string): void => {};
 export function MarkdownRenderer(props: MarkdownRendererProps) {
     const wikiCtx = useMemo<WikiLinkContext>(() => ({
         lookup: buildWikiLinkLookup(props.outgoing),
+        outgoing: props.outgoing,
+        notes: props.notes,
         onNavigate: props.onWikiLinkNavigate ?? NOOP_NAVIGATE,
-    }), [props.outgoing, props.onWikiLinkNavigate]);
+    }), [props.outgoing, props.notes, props.onWikiLinkNavigate]);
 
     const wikiTransform = (tag: WikiContainerTag) => (containerProps: WikiContainerProps) => {
         const { children, node: _node, className, id, style } = containerProps;

@@ -126,6 +126,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(120px, 180px);
     gap: 8px 12px;
+    flex: 0 0 auto;
     padding: 8px 10px;
     border-bottom: 1px solid var(--border-subtle, rgba(120, 120, 140, 0.18));
     background: var(--surface-soft, rgba(120, 120, 140, 0.06));
@@ -179,4 +180,78 @@
 .notes-milkdown-root .notes-wikilink-source:hover {
     color: inherit;
     font-size: inherit;
+}
+
+.notes-wikilink-completion-anchor {
+    position: relative;
+    display: inline-block;
+    width: 0;
+    height: 1em;
+    vertical-align: baseline;
+}
+
+.notes-wikilink-completion {
+    position: absolute;
+    z-index: 24;
+    top: 1.35em;
+    left: 0;
+    display: grid;
+    width: min(280px, calc(100vw - 48px));
+    max-height: 220px;
+    overflow: auto;
+    padding: 4px;
+    border: 1px solid var(--border-subtle, rgba(120, 120, 140, 0.24));
+    border-radius: 6px;
+    background: var(--surface-elevated, #fff);
+    box-shadow: 0 12px 28px rgba(20, 24, 40, 0.16);
+}
+
+.notes-wikilink-completion-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 8px;
+    width: 100%;
+    min-width: 0;
+    padding: 6px 8px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.notes-wikilink-completion-item:hover,
+.notes-wikilink-completion-item[aria-selected='true'] {
+    background: var(--accent-bg, rgba(68, 88, 220, 0.12));
+}
+
+.notes-wikilink-completion-title,
+.notes-wikilink-completion-path {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.notes-wikilink-completion-title {
+    grid-column: 1;
+    color: var(--text-primary, inherit);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.notes-wikilink-completion-path {
+    grid-column: 1;
+    color: var(--text-muted, rgba(140, 140, 160, 0.9));
+    font-size: 10px;
+}
+
+.notes-wikilink-completion-meta {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+    color: var(--accent-fg, #4458dc);
+    font-size: 10px;
 }

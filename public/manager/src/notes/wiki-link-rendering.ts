@@ -1,62 +1,46 @@
 import { Children, createElement, isValidElement, type MouseEvent, type ReactNode } from 'react';
-import type { NotesNoteLinkRef } from './notes-types';
+import type { NotesNoteLinkRef, NotesNoteMetadata } from './notes-types';
+import {
+    buildOutgoingWikiLinkLookup,
+    isEscaped,
+    resolveClientWikiLink,
+    WIKI_LINK_RE,
+    wikiLinkDisplayText,
+    wikiLinkReasonLabel,
+    type ClientWikiLinkResolution,
+} from './wiki-link-resolver';
 
-export const WIKI_LINK_RE = /\[\[([^\[\]\n]+)\]\]/g;
-const WIKI_LINK_TOKEN_RE = /^\[\[([^\[\]\n]+)\]\]$/;
+export {
+    firstUnescaped,
+    invalidWikiLinkTarget,
+    isEscaped,
+    parseWikiLinkToken,
+    WIKI_LINK_RE,
+    wikiLinkDisplayText,
+    wikiLinkReasonLabel,
+    type ClientWikiLinkResolution,
+    type ParsedWikiLinkToken,
+} from './wiki-link-resolver';
 
-export type ParsedWikiLinkToken = {
-    raw: string;
-    inner: string;
-    target: string;
-    heading: string | null;
-    displayText: string | null;
-};
+type RenderableWikiLink = NotesNoteLinkRef | ClientWikiLinkResolution;
 
-export function parseWikiLinkToken(raw: string): ParsedWikiLinkToken | null {
-    const match = raw.match(WIKI_LINK_TOKEN_RE);
-    if (!match) return null;
-    const inner = match[1]?.trim() ?? '';
-    if (!inner) return null;
-    const [targetPart, displayPart] = inner.split('|', 2);
-    const [target, heading] = (targetPart ?? '').split('#', 2);
-    const normalizedTarget = target?.trim() ?? '';
-    if (!normalizedTarget) return null;
-    return {
-        raw,
-        inner,
-        target: normalizedTarget,
-        heading: heading?.trim() || null,
-        displayText: displayPart?.trim() || null,
-    };
-}
-
-export function buildWikiLinkLookup(outgoing: NotesNoteLinkRef[] | undefined | null): Map<string, NotesNoteLinkRef> {
-    const map = new Map<string, NotesNoteLinkRef>();
-    if (!outgoing) return map;
-    for (const link of outgoing) {
-        if (!map.has(link.raw)) map.set(link.raw, link);
-    }
-    return map;
-}
-
-export function wikiLinkDisplayText(link: NotesNoteLinkRef, raw: string): string {
-    const parsed = parseWikiLinkToken(raw);
-    return link.displayText || parsed?.displayText || parsed?.inner || link.target || raw;
-}
-
-export function wikiLinkReasonLabel(link: NotesNoteLinkRef): string {
-    if (link.reason === 'ambiguous') return 'Ambiguous link target';
-    if (link.reason === 'invalid_target') return 'Invalid link target';
-    return 'No matching note';
+export function buildWikiLinkLookup(
+    outgoing: readonly NotesNoteLinkRef[] | undefined | null,
+): Map<string, ClientWikiLinkResolution> {
+    return buildOutgoingWikiLinkLookup(outgoing);
 }
 
 export type WikiLinkContext = {
-    lookup: Map<string, NotesNoteLinkRef>;
+    lookup: Map<string, RenderableWikiLink>;
+    outgoing?: readonly NotesNoteLinkRef[] | undefined;
+    notes?: readonly NotesNoteMetadata[] | undefined;
     onNavigate: (path: string) => void;
 };
 
 function transformString(text: string, ctx: WikiLinkContext, keyPrefix: string): ReactNode[] {
-    if (!text || ctx.lookup.size === 0) return [text];
+    if (!text) return [text];
+    const hasFallback = Boolean(ctx.notes?.length);
+    if (ctx.lookup.size === 0 && !hasFallback) return [text];
     WIKI_LINK_RE.lastIndex = 0;
     const result: ReactNode[] = [];
     let cursor = 0;
@@ -65,7 +49,8 @@ function transformString(text: string, ctx: WikiLinkContext, keyPrefix: string):
     while ((match = WIKI_LINK_RE.exec(text)) !== null) {
         const start = match.index;
         const end = start + match[0].length;
-        const link = ctx.lookup.get(match[0]);
+        if (isEscaped(text, start)) continue;
+        const link = ctx.lookup.get(match[0]) ?? resolveClientWikiLink(match[0], ctx.outgoing, ctx.notes, start);
         if (!link) continue;
         if (start > cursor) result.push(text.slice(cursor, start));
         const display = wikiLinkDisplayText(link, match[0]);
@@ -80,6 +65,7 @@ function transformString(text: string, ctx: WikiLinkContext, keyPrefix: string):
                         className: 'notes-wikilink',
                         href: `#${encodeURIComponent(target)}`,
                         title: target,
+                        'data-notes-wiki-status': link.status,
                         onClick: (event: MouseEvent<HTMLAnchorElement>) => {
                             event.preventDefault();
                             ctx.onNavigate(target);
@@ -97,6 +83,7 @@ function transformString(text: string, ctx: WikiLinkContext, keyPrefix: string):
                         key,
                         className: 'notes-wikilink is-broken',
                         title: reasonLabel,
+                        'data-notes-wiki-status': link.status,
                         'aria-label': `Broken wikilink: ${match[1]}`,
                     },
                     display,
@@ -112,14 +99,14 @@ function transformString(text: string, ctx: WikiLinkContext, keyPrefix: string):
 
 export function splitTextWithWikiLinks(
     text: string,
-    lookup: Map<string, NotesNoteLinkRef>,
+    lookup: Map<string, RenderableWikiLink>,
     onNavigate: (path: string) => void,
 ): ReactNode[] {
     return transformString(text, { lookup, onNavigate }, 'text');
 }
 
 export function splitChildrenWithWikiLinks(children: ReactNode, ctx: WikiLinkContext, keyPrefix: string): ReactNode {
-    if (ctx.lookup.size === 0) return children;
+    if (ctx.lookup.size === 0 && !ctx.notes?.length) return children;
     const out: ReactNode[] = [];
     let stringIndex = 0;
     Children.forEach(children, (child, i) => {
