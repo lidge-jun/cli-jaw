@@ -63,6 +63,95 @@
     font-style: italic;
 }
 
+.dashboard-reminders-top-priority[data-drop-target="true"],
+.dashboard-reminders-sidebar-priority[data-drop-target="true"] {
+    outline: 2px dashed var(--accent);
+    outline-offset: -2px;
+}
+
+.dashboard-reminders-sidebar-priority {
+    display: grid;
+    gap: 8px;
+    margin: 10px 8px 12px;
+    padding: 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--surface-base) 92%, #ffffff);
+}
+
+.dashboard-reminders-sidebar-priority header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: var(--ink-muted);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.dashboard-reminders-sidebar-priority header small {
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.dashboard-reminders-sidebar-priority ol {
+    display: grid;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.dashboard-reminders-sidebar-priority li {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 7px;
+    align-items: start;
+    min-width: 0;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    padding: 7px;
+    cursor: grab;
+}
+
+.dashboard-reminders-sidebar-priority li[data-drop-target="true"] {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.dashboard-reminders-sidebar-priority-index {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    background: color-mix(in srgb, #ff3b30 12%, transparent);
+    color: #ff3b30;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.dashboard-reminders-sidebar-priority b,
+.dashboard-reminders-sidebar-priority small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashboard-reminders-sidebar-priority b {
+    color: var(--ink-primary);
+    font-size: 12px;
+}
+
+.dashboard-reminders-sidebar-priority small,
+.dashboard-reminders-sidebar-priority-empty {
+    color: var(--ink-muted);
+    font-size: 11px;
+}
+
 @media (max-width: 900px) {
     .dashboard-reminders-top-priority {
         grid-template-columns: 1fr;

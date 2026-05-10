@@ -155,7 +155,7 @@ export function SidebarRailRouter(props: Props) {
                         ) : props.scheduleWorkspaceEnabled && props.sidebarMode === 'schedule' ? (
                             <DashboardScheduleSidebar activeGroup={props.scheduleGroup} onGroupChange={props.onScheduleGroupChange} />
                         ) : props.remindersWorkspaceEnabled && props.sidebarMode === 'reminders' ? (
-                            <DashboardRemindersSidebar view={remindersView} onViewChange={setRemindersView} items={remindersFeed.items} loading={remindersFeed.loading} onRefresh={() => void remindersFeed.refresh()} />
+                            <DashboardRemindersSidebar view={remindersView} onViewChange={setRemindersView} items={remindersFeed.items} loading={remindersFeed.loading} onRefresh={() => void remindersFeed.refresh()} onUpdate={(id, patch) => void remindersFeed.update(id, patch)} />
                         ) : (
                             <InstanceNavigator active={props.selectedInstance} hiddenCount={props.instances.filter(instance => instance.hidden).length} collapsed={props.sidebarCollapsed}>
                                 {props.instanceListContent}

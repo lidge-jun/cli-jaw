@@ -17,6 +17,7 @@ test('manager frontend exposes Reminders as a gated SidebarRail workspace', () =
     const rail = read('public/manager/src/components/SidebarRail.tsx');
     const router = read('public/manager/src/SidebarRailRouter.tsx');
     const app = read('public/manager/src/App.tsx');
+    const appChrome = read('public/manager/src/AppChrome.tsx');
     const urlState = read('public/manager/src/dashboard-url-state.ts');
     const main = read('public/manager/src/main.tsx');
     const sidebar = read('public/manager/src/dashboard-reminders/DashboardRemindersSidebar.tsx');
@@ -30,12 +31,19 @@ test('manager frontend exposes Reminders as a gated SidebarRail workspace', () =
     assert.ok(rail.includes('aria-label="Reminders"'), 'SidebarRail must expose an accessible Reminders button');
     assert.ok(router.includes('<DashboardRemindersSidebar'), 'router must render the reminders sidebar');
     assert.ok(router.includes('<DashboardRemindersWorkspace'), 'router must render the reminders workspace');
-    assert.ok(app.includes('<SidebarRailRouter'), 'App must delegate workspace routing out of the root shell');
+    assert.ok(app.includes('<AppChrome'), 'App must delegate dashboard chrome out of the root shell');
+    assert.ok(appChrome.includes('<SidebarRailRouter'), 'AppChrome must delegate workspace routing out of the root shell');
     assert.ok(app.includes('readInitialSidebarMode(window.location.search)'), 'App must allow sidebar URL entry');
     assert.ok(urlState.includes("'reminders'"), 'URL sidebar parser must allow reminders');
     assert.ok(main.includes('./manager-dashboard-reminders.css'), 'Reminders CSS must be loaded by the manager entry');
+    assert.ok(main.includes('./manager-dashboard-reminders-priority.css'), 'Reminders priority CSS must be loaded by the manager entry');
     assert.ok(main.includes('./manager-dashboard-reminders-parity.css'), 'Reminders parity CSS must be loaded by the manager entry');
     assert.ok(sidebar.includes('countRemindersView'), 'Reminders sidebar counts must use the shared view model');
+    assert.ok(sidebar.includes('PrioritySidebarList'), 'Reminders sidebar must expose draggable manual priority ordering');
+    assert.ok(sidebar.includes('manualRank'), 'Reminders sidebar drag must persist manualRank updates');
+    assert.ok(router.includes('onUpdate={(id, patch) => void remindersFeed.update(id, patch)}'), 'Reminders sidebar must receive update wiring');
+    assert.ok(workspace.includes('InlineReminderTitle'), 'Reminders rows must support double-click inline title editing');
+    assert.ok(workspace.includes('data-reminder-drop-before-id'), 'Reminders row drop targets must expose before/after order metadata');
     assert.ok(workspace.includes('rankTopPriorityItems(props.feed.items'), 'Top Priority must rank across the full feed');
 });
 
@@ -46,10 +54,13 @@ test('manager reminders frontend files and App line budget stay in bounds', () =
         'public/manager/src/dashboard-reminders/useRemindersFeed.ts',
         'public/manager/src/dashboard-reminders/DashboardRemindersSidebar.tsx',
         'public/manager/src/dashboard-reminders/DashboardRemindersWorkspace.tsx',
+        'public/manager/src/dashboard-reminders/InlineReminderTitle.tsx',
+        'public/manager/src/dashboard-reminders/reminder-order.ts',
         'public/manager/src/dashboard-reminders/reminders-view-model.ts',
         'public/manager/src/dashboard-reminders/ReminderDetailPopover.tsx',
         'public/manager/src/dashboard-reminders/useDashboardReminderDrag.ts',
         'public/manager/src/manager-dashboard-reminders.css',
+        'public/manager/src/manager-dashboard-reminders-priority.css',
         'public/manager/src/manager-dashboard-reminders-parity.css',
     ];
     for (const path of required) {

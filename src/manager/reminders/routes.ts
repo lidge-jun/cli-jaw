@@ -24,6 +24,15 @@ function optionalInteger(value: unknown, field: string): number | null {
     return parsed;
 }
 
+function optionalRank(value: unknown): number | null | undefined {
+    if (value === undefined) return undefined;
+    if (value === null) return null;
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        throw new Error('manualRank must be a finite number or null');
+    }
+    return value;
+}
+
 function pickPriority(value: unknown, required = false): ReminderPriority | undefined {
     if (value === undefined || value === null || value === '') {
         if (required) throw new Error('priority required');
@@ -82,6 +91,7 @@ function pickCreateInput(body: Record<string, unknown>): DashboardReminderInput 
         notes: typeof body["notes"] === 'string' ? body["notes"] : null,
         status: pickStatus(body["status"]) ?? 'open',
         priority: pickPriority(body["priority"]) ?? 'normal',
+        manualRank: optionalRank(body["manualRank"]) ?? null,
         dueAt: typeof body["dueAt"] === 'string' ? body["dueAt"] : null,
         remindAt: typeof body["remindAt"] === 'string' ? body["remindAt"] : null,
         listId: typeof body["listId"] === 'string' ? body["listId"] : null,
@@ -97,6 +107,7 @@ function pickPatch(body: Record<string, unknown>): DashboardReminderPatch {
     if ('notes' in body) patch.notes = typeof body["notes"] === 'string' ? body["notes"] : null;
     if ('status' in body) patch.status = requiredStatus(body["status"]);
     if ('priority' in body) patch.priority = requiredPriority(body["priority"]);
+    if ('manualRank' in body) patch.manualRank = optionalRank(body["manualRank"]) ?? null;
     if ('dueAt' in body) patch.dueAt = typeof body["dueAt"] === 'string' ? body["dueAt"] : null;
     if ('remindAt' in body) patch.remindAt = typeof body["remindAt"] === 'string' ? body["remindAt"] : null;
     if ('linkedInstance' in body) patch.linkedInstance = typeof body["linkedInstance"] === 'string' ? body["linkedInstance"] : null;

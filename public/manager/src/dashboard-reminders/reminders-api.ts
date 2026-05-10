@@ -14,6 +14,7 @@ export type DashboardReminder = {
     listId: string;
     status: DashboardReminderStatus;
     priority: DashboardReminderPriority;
+    manualRank: number | null;
     dueAt: string | null;
     remindAt: string | null;
     linkedInstance: string | null;
@@ -44,6 +45,7 @@ export type DashboardReminderCreateInput = {
     listId?: string | null;
     status?: DashboardReminderStatus;
     priority?: DashboardReminderPriority;
+    manualRank?: number | null;
     dueAt?: string | null;
     remindAt?: string | null;
     linkedInstance?: string | null;
@@ -69,6 +71,7 @@ function normalizeReminder(item: DashboardReminder): DashboardReminder {
     return {
         ...item,
         notes: item.notes ?? '',
+        manualRank: typeof item.manualRank === 'number' && Number.isFinite(item.manualRank) ? item.manualRank : null,
         dueAt: item.dueAt ?? null,
         remindAt: item.remindAt ?? null,
         linkedInstance: item.linkedInstance ?? null,

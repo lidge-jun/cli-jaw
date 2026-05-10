@@ -38,12 +38,22 @@ test('reminders routes create and list dashboard-native reminders', async () => 
         const created = await fetch(`${baseUrl}/api/dashboard/reminders`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ title: 'Route reminder', listId: 'today', priority: 'high' }),
+            body: JSON.stringify({ title: 'Route reminder', listId: 'today', priority: 'high', manualRank: 1200 }),
         });
         assert.equal(created.status, 201);
-        const createdBody = await created.json() as { item: { id: string; title: string; source: string } };
+        const createdBody = await created.json() as { item: { id: string; title: string; source: string; manualRank: number | null } };
         assert.equal(createdBody.item.title, 'Route reminder');
         assert.equal(createdBody.item.source, 'dashboard');
+        assert.equal(createdBody.item.manualRank, 1200);
+
+        const patched = await fetch(`${baseUrl}/api/dashboard/reminders/${createdBody.item.id}`, {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ manualRank: 600 }),
+        });
+        assert.equal(patched.status, 200);
+        const patchedBody = await patched.json() as { item: { manualRank: number | null } };
+        assert.equal(patchedBody.item.manualRank, 600);
 
         const listed = await fetch(`${baseUrl}/api/dashboard/reminders`);
         assert.equal(listed.status, 200);
@@ -147,6 +157,13 @@ test('reminders routes reject invalid enum and non-integer link payloads', async
             assert.equal(invalidCoercedTurn.status, 400);
         }
 
+        const invalidManualRank = await fetch(`${baseUrl}/api/dashboard/reminders`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ title: 'Bad rank', manualRank: '1' }),
+        });
+        assert.equal(invalidManualRank.status, 400);
+
         const created = await fetch(`${baseUrl}/api/dashboard/reminders/from-message`, {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -160,5 +177,12 @@ test('reminders routes reject invalid enum and non-integer link payloads', async
             body: JSON.stringify({ status: 'archived' }),
         });
         assert.equal(invalidStatus.status, 400);
+
+        const invalidRankPatch = await fetch(`${baseUrl}/api/dashboard/reminders/${body.item.id}`, {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ manualRank: 'bad' }),
+        });
+        assert.equal(invalidRankPatch.status, 400);
     });
 });

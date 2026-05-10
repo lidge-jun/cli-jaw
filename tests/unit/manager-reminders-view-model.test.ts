@@ -18,6 +18,7 @@ function reminder(partial: Partial<DashboardReminder> & { id: string; title?: st
         listId: partial.listId ?? 'today',
         status: partial.status ?? 'open',
         priority: partial.priority ?? 'normal',
+        manualRank: partial.manualRank ?? null,
         dueAt: partial.dueAt ?? null,
         remindAt: partial.remindAt ?? null,
         linkedInstance: partial.linkedInstance ?? null,
@@ -85,4 +86,16 @@ test('top priority ranks focused, due time, priority, then creation time', () =>
     ];
 
     assert.deepEqual(rankTopPriorityItems(items, 3).map(item => item.id), ['focused', 'remind-low', 'due-high']);
+});
+
+test('manual rank overrides automatic priority ordering inside matrix and top priority views', () => {
+    const items = [
+        reminder({ id: 'third', priority: 'high', manualRank: 3000 }),
+        reminder({ id: 'first', priority: 'normal', manualRank: 1000 }),
+        reminder({ id: 'second', priority: 'low', manualRank: 2000 }),
+        reminder({ id: 'fallback', priority: 'high' }),
+    ];
+
+    assert.deepEqual(rankTopPriorityItems(items, 4).map(item => item.id), ['first', 'second', 'third', 'fallback']);
+    assert.deepEqual(matrixItems('urgentImportant', items).map(item => item.id), ['third', 'fallback']);
 });

@@ -15,6 +15,46 @@
     outline: none;
 }
 
+.dashboard-reminders-inline-title {
+    min-width: 0;
+    max-width: 100%;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    cursor: text;
+    font: inherit;
+    font-weight: 700;
+    line-height: 1.25;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.dashboard-reminders-inline-title:hover,
+.dashboard-reminders-inline-title:focus-visible {
+    color: var(--accent);
+    outline: none;
+}
+
+.dashboard-reminders-inline-title-input {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    background: var(--surface-raised);
+    color: var(--ink-primary);
+    font: inherit;
+    font-weight: 700;
+    padding: 3px 6px;
+}
+
+.dashboard-reminders-row[data-drop-target="true"] {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
 .dashboard-reminder-popover-scrim {
     position: fixed;
     inset: 0;

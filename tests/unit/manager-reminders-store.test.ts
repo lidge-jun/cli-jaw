@@ -79,6 +79,24 @@ test('RemindersStore resets notification state when done reminders are reopened 
     }
 });
 
+test('RemindersStore persists manual rank and sorts ranked reminders before unranked fallbacks', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cli-jaw-reminders-rank-'));
+    try {
+        const store = new RemindersStore({ dbPath: join(dir, 'dashboard.db') });
+        const unranked = store.createLocal({ title: 'Unranked', priority: 'high' });
+        const second = store.createLocal({ title: 'Second', priority: 'normal', manualRank: 2000 });
+        const first = store.createLocal({ title: 'First', priority: 'low', manualRank: 1000 });
+        assert.equal(store.get(second.id)?.manualRank, 2000);
+
+        const updated = store.updateLocal(unranked.id, { manualRank: 500 });
+        assert.equal(updated?.manualRank, 500);
+        assert.deepEqual(store.list().slice(0, 3).map(item => item.id), [unranked.id, first.id, second.id]);
+        store.close();
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 test('RemindersStore migrates legacy reminder rows with notification/link columns and dashboard source', () => {
     const dir = mkdtempSync(join(tmpdir(), 'cli-jaw-reminders-legacy-'));
     try {
@@ -113,6 +131,7 @@ test('RemindersStore migrates legacy reminder rows with notification/link column
         const store = new RemindersStore({ dbPath });
         const row = store.get('legacy');
         assert.equal(row?.notificationStatus, 'pending');
+        assert.equal(row?.manualRank, null);
         assert.equal(row?.instanceId, null);
         assert.equal(row?.messageId, null);
         assert.equal(row?.source, 'dashboard');

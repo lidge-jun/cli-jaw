@@ -20,6 +20,7 @@ export type DashboardReminder = {
     listId: string;
     status: ReminderStatus;
     priority: ReminderPriority;
+    manualRank: number | null;
     dueAt: string | null;
     remindAt: string | null;
     linkedInstance: string | null;
@@ -44,6 +45,7 @@ export type DashboardReminderInput = {
     notes?: string | null;
     status?: ReminderStatus | undefined;
     priority?: ReminderPriority | undefined;
+    manualRank?: number | null | undefined;
     dueAt?: string | null;
     remindAt?: string | null;
     listId?: string | null;
@@ -52,7 +54,7 @@ export type DashboardReminderInput = {
     link?: ReminderInstanceLinkInput | null;
 };
 
-export type DashboardReminderPatch = Partial<Pick<DashboardReminderInput, 'title' | 'notes' | 'status' | 'priority' | 'dueAt' | 'remindAt' | 'linkedInstance'>>;
+export type DashboardReminderPatch = Partial<Pick<DashboardReminderInput, 'title' | 'notes' | 'status' | 'priority' | 'manualRank' | 'dueAt' | 'remindAt' | 'linkedInstance'>>;
 
 type Row = {
     id: string;
@@ -61,6 +63,7 @@ type Row = {
     list_id: string;
     status: string;
     priority: string;
+    manual_rank: number | null;
     due_at: string | null;
     remind_at: string | null;
     linked_instance: string | null;
@@ -114,6 +117,12 @@ function normalizeNotificationStatus(value: string): DashboardReminderNotificati
         : 'pending';
 }
 
+function normalizeManualRank(value: unknown): number | null {
+    if (value === null || value === undefined) return null;
+    const rank = Number(value);
+    return Number.isFinite(rank) ? rank : null;
+}
+
 function parseSubtasks(raw: string, reminderId: string): ReminderSubtask[] {
     try {
         const parsed = JSON.parse(raw) as unknown;
@@ -160,6 +169,7 @@ function rowToReminder(row: Row): DashboardReminder {
         listId: row.list_id,
         status: normalizeStatus(row.status),
         priority: normalizePriority(row.priority),
+        manualRank: normalizeManualRank(row.manual_rank),
         dueAt: row.due_at,
         remindAt: row.remind_at,
         linkedInstance: row.linked_instance,
@@ -199,6 +209,7 @@ export class RemindersStore {
                 list_id                    TEXT NOT NULL,
                 status                     TEXT NOT NULL,
                 priority                   TEXT NOT NULL,
+                manual_rank                REAL,
                 due_at                     TEXT,
                 remind_at                  TEXT,
                 linked_instance            TEXT,
@@ -221,6 +232,7 @@ export class RemindersStore {
         this.ensureColumn('notification_status', "TEXT NOT NULL DEFAULT 'pending'");
         this.ensureColumn('notification_attempted_at', 'TEXT');
         this.ensureColumn('notification_error', 'TEXT');
+        this.ensureColumn('manual_rank', 'REAL');
         this.ensureColumn('instance_id', 'TEXT');
         this.ensureColumn('message_id', 'TEXT');
         this.ensureColumn('turn_index', 'INTEGER');
@@ -237,6 +249,7 @@ export class RemindersStore {
             CREATE INDEX IF NOT EXISTS idx_dashboard_reminders_remind_at ON dashboard_reminders(remind_at);
             CREATE INDEX IF NOT EXISTS idx_dashboard_reminders_source ON dashboard_reminders(source);
             CREATE INDEX IF NOT EXISTS idx_dashboard_reminders_notification ON dashboard_reminders(notification_status);
+            CREATE INDEX IF NOT EXISTS idx_dashboard_reminders_manual_rank ON dashboard_reminders(manual_rank);
         `);
     }
 
@@ -257,6 +270,8 @@ export class RemindersStore {
                     WHEN 'done' THEN 3
                     ELSE 4
                 END,
+                CASE WHEN manual_rank IS NULL THEN 1 ELSE 0 END,
+                manual_rank ASC,
                 COALESCE(remind_at, due_at, source_updated_at) ASC
         `).all() as Row[];
         return rows.map(rowToReminder);
@@ -302,11 +317,11 @@ export class RemindersStore {
         const now = new Date().toISOString();
         this.db.prepare(`
             INSERT INTO dashboard_reminders (
-                id, title, notes, list_id, status, priority, due_at, remind_at, linked_instance,
+                id, title, notes, list_id, status, priority, manual_rank, due_at, remind_at, linked_instance,
                 subtasks_json, source, source_created_at, source_updated_at, mirrored_at,
                 instance_id, message_id, turn_index, port, thread_key, source_text
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'dashboard', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', 'dashboard', ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
             id,
             title,
@@ -314,6 +329,7 @@ export class RemindersStore {
             normalizeOptionalText(input.listId, 200) ?? 'cli-jaw',
             input.status ?? 'open',
             input.priority ?? 'normal',
+            normalizeManualRank(input.manualRank),
             input.dueAt ?? null,
             input.remindAt ?? null,
             input.linkedInstance ?? (link?.port ? String(link.port) : null),
@@ -350,6 +366,9 @@ export class RemindersStore {
         if (patch.priority !== undefined) {
             if (!REMINDER_PRIORITIES.includes(patch.priority)) throw new Error('invalid priority');
             fields.push('priority = ?'); values.push(patch.priority);
+        }
+        if (patch.manualRank !== undefined) {
+            fields.push('manual_rank = ?'); values.push(normalizeManualRank(patch.manualRank));
         }
         const nextStatus = patch.status !== undefined ? patch.status : existing.status;
         const nextDueAt = patch.dueAt !== undefined ? patch.dueAt : existing.dueAt;
