@@ -14,7 +14,7 @@ const DEFAULTS: WatchdogConfig = {
     firstProgressMs: 120_000,
     idleMs: 90_000,
     absoluteMs: 600_000,
-    absoluteHardCapMs: 60 * 60_000,
+    absoluteHardCapMs: 4 * 60 * 60_000,
     checkIntervalMs: 2_000,
 };
 
@@ -38,8 +38,14 @@ export function attachWatchdog(
     let stopped = false;
 
     function markProgress(): void {
-        lastProgressAt = Date.now();
+        const now = Date.now();
+        lastProgressAt = now;
         retryHits = 0;
+        const progressDeadline = now + cfg.absoluteMs;
+        const hardCapDeadline = startedAt + cfg.absoluteHardCapMs;
+        if (progressDeadline > absoluteDeadline && progressDeadline <= hardCapDeadline) {
+            absoluteDeadline = progressDeadline;
+        }
     }
 
     function observe(chunk: Buffer): void {

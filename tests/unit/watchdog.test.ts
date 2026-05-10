@@ -26,26 +26,44 @@ function waitForStall(
     });
 }
 
-test('absolute timeout fires even when progress is observed', async () => {
+test('active progress extends absolute deadline past original absoluteMs', async () => {
     const child = fakeChild();
     let handle: WatchdogHandle | undefined;
+    let stalled = false;
     const progress = setInterval(() => {
         child.stdout?.emit('data', Buffer.from('ordinary progress output\n'));
     }, 5);
     try {
-        const reason = await new Promise<string>((resolve) => {
+        const stallPromise = new Promise<string>((resolve) => {
             handle = attachWatchdog(child, 'test', resolve, {
                 firstProgressMs: 1_000,
                 idleMs: 1_000,
-                absoluteMs: 35,
+                absoluteMs: 30,
+                absoluteHardCapMs: 200,
                 checkIntervalMs: 5,
             });
-        });
+        }).then(reason => { stalled = true; return reason; });
+
+        await sleep(80);
+        assert.equal(stalled, false, 'active progress should extend deadline past original absoluteMs');
+
+        const reason = await stallPromise;
         assert.match(reason, /absolute timeout/);
     } finally {
         clearInterval(progress);
         handle?.stop();
     }
+});
+
+test('absolute timeout fires without any progress', async () => {
+    const handleRef: { handle?: WatchdogHandle } = {};
+    const reason = await waitForStall(handleRef, {
+        firstProgressMs: 1_000,
+        idleMs: 1_000,
+        absoluteMs: 30,
+        checkIntervalMs: 5,
+    });
+    assert.match(reason, /absolute timeout/);
 });
 
 test('extendDeadline delays absolute timeout', async () => {
