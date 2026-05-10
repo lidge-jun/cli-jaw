@@ -6,6 +6,7 @@ import { loadSettings, getServerUrl } from '../../src/core/config.js';
 import { cliFetch, getCliAuthToken } from '../../src/cli/api-auth.js';
 import { shouldShowHelp, printAndExit } from '../helpers/help.js';
 import { errString, isConnRefused } from '../_http-client.js';
+import { unwrapEmployeeSummaries } from './dispatch-helpers.js';
 
 if (shouldShowHelp(process.argv)) printAndExit(`
   jaw dispatch — send task to an employee agent
@@ -61,11 +62,6 @@ if (!agent || !task) {
 
 const STARTUP_RETRY_DELAYS_MS = [500, 1000, 1500, 2000, 3000];
 
-interface EmployeeSummary {
-    id?: string;
-    name?: string;
-}
-
 interface DispatchResultBody {
     state?: string;
     result?: { status?: string; text?: string } | string;
@@ -88,7 +84,7 @@ function sleep(ms: number): Promise<void> {
 async function resolveAgentId(name: string): Promise<string | null> {
     const res = await cliFetch(`${BASE}/api/employees`);
     if (!res.ok) return null;
-    const employees = await res.json() as EmployeeSummary[];
+    const employees = unwrapEmployeeSummaries(await res.json() as unknown);
     const found = employees.find(e => e.name === name || e.id === name);
     return found?.id || null;
 }
@@ -179,8 +175,12 @@ try {
 
     const body = await res.json() as DispatchResultBody;
     if (!res.ok) {
-        const pollAgentId = body?.worker?.agentId || body?.existing?.agentId || await resolveAgentId(agent);
-        if (res.status === 409 && pollAgentId) {
+        if (res.status === 409) {
+            const pollAgentId = body?.worker?.agentId || body?.existing?.agentId || await resolveAgentId(agent);
+            if (!pollAgentId) {
+                console.error(`❌ ${body.error || `Failed: ${res.status}`}`);
+                process.exit(1);
+            }
             console.error(`⏳ ${agent} is already running, polling worker result...`);
             const polled = await pollWorkerResult(pollAgentId);
             printDispatchResult(agent, polled);

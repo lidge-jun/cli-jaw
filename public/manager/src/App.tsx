@@ -37,8 +37,10 @@ import { useInstanceLabelEditor } from './hooks/useInstanceLabelEditor';
 import { useInstanceMessageEvents } from './hooks/useInstanceMessageEvents';
 import { useManagerEvents } from './hooks/useManagerEvents';
 import { formatUptime, instanceLabel } from './instance-label';
+import { useJawCeoDashboardBridge } from './jaw-ceo/useJawCeoDashboardBridge';
 import { reconcileActiveProfileFilter } from './profile-filter';
 import type { DashboardDetailTab, DashboardInstance, DashboardInstanceStatus, DashboardLifecycleAction, DashboardNotesAuthoringMode, DashboardNotesViewMode, DashboardProfile, DashboardScanResult, DashboardSidebarMode } from './types';
+
 export function App() {
     const [data, setData] = useState<DashboardScanResult | null>(null);
     const [loading, setLoading] = useState(true);
@@ -124,14 +126,16 @@ export function App() {
         if (view.selectedPort == null) return filtered.find(instance => instance.ok) || null;
         return instances.find(instance => instance.port === view.selectedPort) || null;
     }, [filtered, instances, view.selectedPort]);
-
-    // activity-unread must see the *resolved* selected port so the
-    // auto-fallback instance (selectedPort == null) is also suppressed.
+    const activeJawCeoPort = selectedInstance?.port ?? view.selectedPort ?? null;
+    const jawCeoBridge = useJawCeoDashboardBridge({ selectedPort: activeJawCeoPort, managerEvents: managerEvents.events, messageEvents: messageActivity.events, onOpenWorker: handleOpenJawCeoWorker });
     const activePreviewPort = view.activeDetailTab === 'preview' && view.sidebarMode === 'instances'
         ? (selectedInstance?.port ?? null)
         : null;
+    const activityEvents = useMemo(() => {
+        return [...managerEvents.events, ...messageActivity.events];
+    }, [managerEvents.events, messageActivity.events]);
     const activityUnread = useActivityUnread({
-        events: [...managerEvents.events, ...messageActivity.events],
+        events: activityEvents,
         activityDockCollapsed: view.activityDockCollapsed,
         setActivityDockCollapsed: view.setActivityDockCollapsed,
         saveUi,
@@ -261,6 +265,8 @@ export function App() {
         view.setDrawerOpen(false);
         void saveUi({ selectedPort: instance.port, selectedTab: 'preview', activityDockCollapsed: true });
     }
+
+    function handleOpenJawCeoWorker(port: number): void { const instance = instances.find(row => row.port === port); if (instance) handlePreview(instance); }
 
     function handleSelectInstance(instance: DashboardInstance): void {
         if (!canLeaveDirtySettings()) return;
@@ -422,14 +428,8 @@ export function App() {
     );
 
     const workbenchHeader = <WorkbenchHeader instance={selectedInstance} previewEnabled={previewEnabled} onPreviewEnabledChange={setPreviewEnabled} onPreviewRefresh={() => setPreviewRefreshKey(key => key + 1)} />;
-    const dashboardSettingsUi = dashboardSettingsUiFromView(view, theme.theme);
-    const titleSupport = summarizeActivityTitleSupport(messageActivity.titleSupportByPort);
-
-    const profileChipStrip = (chipProfiles: DashboardProfile[]) => chipProfiles.length > 0 ? (
-        <div className="profile-chip-strip drawer-chip-strip" aria-label="Profile filters">
-            {chipProfiles.map(profile => <ProfileChip key={profile.profileId} profile={profile} active={activeProfileIds.includes(profile.profileId)} count={profileCounts[profile.profileId] || 0} onToggle={toggleProfile} />)}
-        </div>
-    ) : null;
+    const dashboardSettingsUi = dashboardSettingsUiFromView(view, theme.theme), titleSupport = summarizeActivityTitleSupport(messageActivity.titleSupportByPort);
+    const profileChipStrip = (chipProfiles: DashboardProfile[]) => chipProfiles.length > 0 ? <div className="profile-chip-strip drawer-chip-strip" aria-label="Profile filters">{chipProfiles.map(profile => <ProfileChip key={profile.profileId} profile={profile} active={activeProfileIds.includes(profile.profileId)} count={profileCounts[profile.profileId] || 0} onToggle={toggleProfile} />)}</div> : null;
 
     const detailContent = (tab: DashboardDetailTab) => (
         <InstanceDetailPanel
@@ -471,7 +471,8 @@ export function App() {
                         workbenchHeader={workbenchHeader} detailContent={detailContent} previewEnabled={previewEnabled}
                         previewRefreshKey={previewRefreshKey} previewTheme={theme.resolved} lifecycleMessage={lifecycleMessage}
                         onDismissLifecycleMessage={() => setLifecycleMessage(null)} instanceListContent={instanceListContent} loading={loading}
-                        error={error} registryMessage={registry.error || labelEditor.error || managerEvents.error} managerEvents={managerEvents.events}
+                        jawCeoWorkbenchButton={jawCeoBridge.workbenchButton} jawCeoVoiceOverlay={jawCeoBridge.voiceOverlay} jawCeoConsoleContent={jawCeoBridge.consoleContent}
+                        error={error} registryMessage={registry.error || labelEditor.error || managerEvents.error} managerEvents={activityEvents}
                         onToggleActivity={handleActivityToggle} onActivityHeightChange={handleActivityHeight} onOpenDrawer={() => view.setDrawerOpen(true)}
                         onSelectTab={handleTabChange} onToggleActivityFromMobile={activityUnread.openAndMarkSeen} drawerProfileFilters={profileChipStrip(profiles)}
                         dashboardSettingsUi={dashboardSettingsUi} titleSupport={titleSupport} onDashboardSettingsPatch={handleDashboardSettingsPatch} />

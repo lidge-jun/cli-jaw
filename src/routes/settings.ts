@@ -15,6 +15,48 @@ import { CLI_REGISTRY } from '../cli/registry.js';
 import { readClaudeCreds, readCodexTokens, fetchClaudeUsage, fetchCodexUsage, readGeminiAccount, fetchGeminiUsage } from './quota.js';
 import { fetchCopilotQuota, refreshCopilotFromKeychain } from '../../lib/quota-copilot.js';
 import { migrateLegacyClaudeValue } from '../cli/claude-models.js';
+import { extractOpenAiApiKey, hasInvalidOpenAiApiKeyInput } from '../jaw-ceo/openai-key.js';
+
+function redactSttSettings(input: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+    if (!input) return input;
+    const gKey = String(input["geminiApiKey"] || process.env["GEMINI_API_KEY"] || '');
+    const oKey = String(input["openaiApiKey"] || '');
+    return {
+        ...input,
+        geminiApiKey: undefined,
+        geminiKeySet: !!gKey,
+        geminiKeyLast4: gKey.slice(-4) || '',
+        openaiApiKey: undefined,
+        openaiKeySet: !!oKey,
+        openaiKeyLast4: oKey.slice(-4) || '',
+    };
+}
+
+function redactJawCeoSettings(input: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+    if (!input) return input;
+    const settingsKey = extractOpenAiApiKey(input["openaiApiKey"]);
+    const envKey = extractOpenAiApiKey(process.env["OPENAI_API_KEY"]);
+    const key = envKey || settingsKey;
+    return {
+        ...input,
+        openaiApiKey: undefined,
+        openaiKeySet: !!key,
+        openaiKeyLast4: key.slice(-4) || '',
+        openaiKeySource: envKey ? 'env' : settingsKey ? 'settings' : 'none',
+        openaiKeyInvalid: hasInvalidOpenAiApiKeyInput(input["openaiApiKey"]),
+    };
+}
+
+function redactRuntimeSettings<T extends Record<string, unknown>>(input: T): T {
+    const safe = { ...input } as T & { stt?: Record<string, unknown>; jawCeo?: Record<string, unknown> };
+    const stt = redactSttSettings(safe.stt);
+    const jawCeo = redactJawCeoSettings(safe.jawCeo);
+    if (stt) safe.stt = stt;
+    else delete safe.stt;
+    if (jawCeo) safe.jawCeo = jawCeo;
+    else delete safe.jawCeo;
+    return safe as T;
+}
 
 export function registerSettingsRoutes(
     app: Express,
@@ -23,23 +65,13 @@ export function registerSettingsRoutes(
     projectRoot: string,
 ): void {
     app.get('/api/settings', (_, res) => {
-        const safe = { ...settings };
-        if (safe["stt"]) {
-            const gKey = safe["stt"].geminiApiKey || process.env["GEMINI_API_KEY"] || '';
-            const oKey = safe["stt"].openaiApiKey || '';
-            safe["stt"] = { ...safe["stt"], geminiApiKey: undefined, geminiKeySet: !!gKey, geminiKeyLast4: gKey.slice(-4) || '', openaiApiKey: undefined, openaiKeySet: !!oKey, openaiKeyLast4: oKey.slice(-4) || '' };
-        }
+        const safe = redactRuntimeSettings(settings);
         ok(res, safe, safe);
     });
 
     app.put('/api/settings', requireAuth, asyncHandler(async (req, res) => {
-        const result = await applySettings(req.body) as { stt?: Record<string, unknown> };
-        const safe: { stt?: Record<string, unknown> } = { ...result };
-        if (safe.stt) {
-            const gKey2 = String(safe.stt["geminiApiKey"] || process.env["GEMINI_API_KEY"] || '');
-            const oKey2 = String(safe.stt["openaiApiKey"] || '');
-            safe.stt = { ...safe.stt, geminiApiKey: undefined, geminiKeySet: !!gKey2, geminiKeyLast4: gKey2.slice(-4) || '', openaiApiKey: undefined, openaiKeySet: !!oKey2, openaiKeyLast4: oKey2.slice(-4) || '' };
-        }
+        const result = await applySettings(req.body) as Record<string, unknown>;
+        const safe = redactRuntimeSettings(result);
         ok(res, safe);
     }));
 

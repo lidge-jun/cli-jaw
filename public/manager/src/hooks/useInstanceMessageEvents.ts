@@ -13,6 +13,7 @@ export type MessageRow = {
     id: number;
     role: string;
     created_at?: string;
+    text?: string;
 };
 
 export type MessageEnvelope = {
@@ -78,7 +79,7 @@ async function fetchLatestAssistantMessage(port: number): Promise<{
     support: DashboardActivityTitleSupportStatus;
     busy: boolean;
 }> {
-    const response = await fetch(`/i/${port}/api/messages/latest`);
+    const response = await fetch(`/i/${port}/api/messages/latest?includeContent=1`);
     if (!response.ok) return { latest: null, title: null, support: 'offline', busy: false };
     const body = await response.json() as MessageEnvelope;
     return {
@@ -148,6 +149,7 @@ export function useInstanceMessageEvents(instances: DashboardInstance[]): Instan
                     at: latest.created_at && !Number.isNaN(Date.parse(latest.created_at))
                         ? latest.created_at
                         : new Date().toISOString(),
+                    ...(title ? { title } : {}),
                 });
             }
             if (cancelled) return;

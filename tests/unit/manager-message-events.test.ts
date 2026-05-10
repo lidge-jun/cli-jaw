@@ -5,6 +5,7 @@ import {
     notifiableAssistantFromEnvelope,
     type MessageEnvelope,
 } from '../../public/manager/src/hooks/useInstanceMessageEvents.ts';
+import { eventToEntry } from '../../public/manager/src/components/ActivityTimeline.tsx';
 
 test('latest envelope keeps assistant baseline but waits for notifiable assistant activity', () => {
     const inProgress: MessageEnvelope['data'] = {
@@ -52,4 +53,21 @@ test('legacy latest endpoint remains id-based for old runtimes', () => {
     };
 
     assert.equal(notifiableAssistantFromEnvelope(legacy)?.id, 44);
+});
+
+test('instance message events render assistant titles in the activity timeline', () => {
+    const entry = eventToEntry({
+        kind: 'instance-message',
+        port: 3468,
+        messageId: 158,
+        role: 'assistant',
+        at: '2026-05-10T07:22:54.000Z',
+        title: 'patched dispatch summary',
+    });
+
+    assert.deepEqual(entry, {
+        at: '2026-05-10T07:22:54.000Z',
+        source: ':3468',
+        message: 'assistant: patched dispatch summary',
+    });
 });

@@ -1,0 +1,481 @@
+.jaw-ceo-console {
+    --ceo-panel: color-mix(in srgb, var(--bg-panel) 96%, var(--canvas-deep));
+    --ceo-ink: var(--text-primary);
+    --ceo-muted: var(--text-secondary);
+    --ceo-line: color-mix(in srgb, var(--border-subtle) 78%, transparent);
+    background:
+        linear-gradient(180deg, color-mix(in srgb, var(--bg-raised) 72%, transparent), transparent 34%),
+        var(--ceo-panel);
+}
+.jaw-ceo-console-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 14px;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid var(--ceo-line);
+}
+.jaw-ceo-console-titlebar {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+}
+.jaw-ceo-console-mark {
+    width: 42px;
+    height: 42px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    background: var(--canvas-deep);
+    color: var(--ceo-ink);
+    font-family: "Geist Mono", "JetBrains Mono", monospace;
+    font-size: 11px;
+    font-weight: 900;
+}
+.jaw-ceo-console-mark.status-active,
+.jaw-ceo-console-mark.status-silent,
+.jaw-ceo-console-mark.status-connecting {
+    border-color: color-mix(in srgb, var(--status-running) 55%, var(--border-strong));
+    color: var(--status-running);
+}
+.jaw-ceo-console-mark.status-paused,
+.jaw-ceo-console-mark.status-sleeping {
+    border-color: color-mix(in srgb, var(--status-warn) 48%, var(--border-strong));
+    color: var(--status-warn);
+}
+.jaw-ceo-console-heading {
+    min-width: 0;
+    display: grid;
+    gap: 1px;
+}
+.jaw-ceo-console-heading span {
+    color: var(--ceo-muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+.jaw-ceo-console-heading h3 {
+    margin: 0;
+    color: var(--ceo-ink);
+    font-size: 25px;
+    font-weight: 850;
+    line-height: 1.05;
+}
+.jaw-ceo-console-header-actions {
+    display: inline-flex;
+    gap: 8px;
+}
+.jaw-ceo-icon-btn,
+.jaw-ceo-console-close {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 8px;
+    background: var(--canvas-deep);
+    color: var(--ceo-ink);
+}
+.jaw-ceo-icon-btn:hover,
+.jaw-ceo-console-close:hover {
+    border-color: color-mix(in srgb, var(--accent) 44%, var(--border-strong));
+    color: var(--accent);
+}
+.jaw-ceo-console-summary {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+.jaw-ceo-console-summary span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 7px 8px;
+    border: 1px solid var(--ceo-line);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--canvas-deep) 72%, transparent);
+    color: var(--ceo-muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+.jaw-ceo-console-summary .voice-tone-live { color: var(--status-running); }
+.jaw-ceo-console-summary .voice-tone-paused { color: var(--status-warn); }
+.jaw-ceo-console-summary .voice-tone-issue { color: var(--status-error); }
+.jaw-ceo-tabs {
+    gap: 3px;
+    padding: 10px 20px;
+    background: color-mix(in srgb, var(--canvas-deep) 52%, transparent);
+}
+.jaw-ceo-tabs button {
+    min-height: 32px;
+    border-radius: 8px;
+    background: transparent;
+    font-weight: 700;
+}
+.jaw-ceo-tabs button.is-active {
+    background: var(--bg-raised);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+.jaw-ceo-console-body {
+    background:
+        linear-gradient(180deg, transparent, color-mix(in srgb, var(--canvas-deep) 36%, transparent)),
+        var(--bg-panel);
+}
+.jaw-ceo-chat-panel,
+.jaw-ceo-settings-panel {
+    padding: 18px 20px;
+}
+.jaw-ceo-chat-log {
+    gap: 16px;
+}
+.jaw-ceo-timeline {
+    min-height: 0;
+}
+.jaw-ceo-message-row {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+}
+.jaw-ceo-message-row.role-user {
+    grid-template-columns: minmax(0, 1fr) 36px;
+}
+.jaw-ceo-message-row.role-user .jaw-ceo-message-avatar {
+    order: 2;
+}
+.jaw-ceo-message-row.role-user .jaw-ceo-message-bubble {
+    order: 1;
+    justify-self: end;
+    max-width: 92%;
+    border-color: color-mix(in srgb, var(--accent) 28%, var(--ceo-line));
+    background: color-mix(in srgb, var(--accent-soft) 76%, var(--bg-raised));
+}
+.jaw-ceo-message-avatar,
+.jaw-ceo-activity-avatar {
+    width: 32px;
+    height: 32px;
+    display: inline-grid;
+    place-items: center;
+    border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--ceo-line));
+    border-radius: 999px;
+    background: var(--bg-raised);
+    color: var(--ceo-ink);
+    font-family: "Geist Mono", "JetBrains Mono", monospace;
+    font-size: 9px;
+    font-weight: 900;
+}
+.jaw-ceo-message-avatar.is-live {
+    color: var(--status-running);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--status-running) 13%, transparent);
+}
+.jaw-ceo-message-bubble {
+    min-width: 0;
+    display: grid;
+    gap: 8px;
+    padding: 12px 14px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+}
+.jaw-ceo-message-row.role-tool .jaw-ceo-message-bubble {
+    border-color: var(--ceo-line);
+    background: color-mix(in srgb, var(--canvas-deep) 62%, transparent);
+}
+.jaw-ceo-message-row.is-live .jaw-ceo-message-bubble {
+    border-color: color-mix(in srgb, var(--status-running) 34%, var(--ceo-line));
+    background: color-mix(in srgb, var(--bg-raised) 78%, transparent);
+}
+.jaw-ceo-message-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+.jaw-ceo-message-meta strong {
+    color: var(--ceo-ink);
+    font-size: 12px;
+    font-weight: 850;
+}
+.jaw-ceo-message-meta small,
+.jaw-ceo-activity-copy small {
+    color: var(--text-tertiary);
+    font-family: "Geist Mono", "JetBrains Mono", monospace;
+    font-size: 10px;
+}
+.jaw-ceo-message-text {
+    color: var(--ceo-ink);
+    font-size: 13px;
+    line-height: 1.52;
+}
+.jaw-ceo-message-row.role-ceo .jaw-ceo-message-text {
+    font-size: 13.5px;
+}
+.jaw-ceo-message-text p,
+.jaw-ceo-message-text ul {
+    margin: 0;
+}
+.jaw-ceo-message-text p + p,
+.jaw-ceo-message-text p + ul,
+.jaw-ceo-message-text ul + p {
+    margin-top: 7px;
+}
+.jaw-ceo-message-text ul {
+    padding-left: 17px;
+}
+.jaw-ceo-message-text li + li {
+    margin-top: 4px;
+}
+.jaw-ceo-activity-shell {
+    position: relative;
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 10px;
+    align-items: start;
+}
+.jaw-ceo-activity-shell::before {
+    content: "";
+    position: absolute;
+    left: 15px;
+    top: 35px;
+    bottom: 4px;
+    width: 2px;
+    background: color-mix(in srgb, var(--status-running) 36%, var(--ceo-line));
+}
+.jaw-ceo-activity-group {
+    min-width: 0;
+}
+.jaw-ceo-activity-group summary {
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border: 1px solid var(--ceo-line);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-raised) 82%, transparent);
+    color: var(--ceo-muted);
+    cursor: pointer;
+    list-style: none;
+}
+.jaw-ceo-activity-group summary::-webkit-details-marker {
+    display: none;
+}
+.jaw-ceo-activity-group summary::after {
+    content: "";
+    width: 7px;
+    height: 7px;
+    margin-left: auto;
+    border-right: 1.5px solid currentColor;
+    border-bottom: 1.5px solid currentColor;
+    transform: rotate(45deg);
+    transition: transform 160ms ease;
+}
+.jaw-ceo-activity-group[open] summary::after {
+    transform: rotate(-135deg);
+}
+.jaw-ceo-activity-group summary strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 800;
+}
+.jaw-ceo-activity-status,
+.jaw-ceo-activity-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background: var(--status-running);
+}
+.jaw-ceo-activity-list {
+    display: grid;
+    gap: 8px;
+    padding: 8px 0 0;
+}
+.jaw-ceo-activity-row {
+    display: grid;
+    grid-template-columns: 10px 24px auto minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: start;
+    padding: 4px 0;
+}
+.jaw-ceo-activity-icon {
+    width: 22px;
+    height: 22px;
+    display: inline-grid;
+    place-items: center;
+    color: var(--ceo-muted);
+}
+.jaw-ceo-activity-icon svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+.jaw-ceo-activity-badge {
+    align-self: start;
+    padding: 3px 7px;
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--status-warn) 17%, var(--bg-raised));
+    color: color-mix(in srgb, var(--status-warn) 86%, var(--ceo-ink));
+    font-family: "Geist Mono", "JetBrains Mono", monospace;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.jaw-ceo-activity-row.tone-thinking .jaw-ceo-activity-badge {
+    background: color-mix(in srgb, var(--accent) 14%, var(--bg-raised));
+    color: var(--accent);
+}
+.jaw-ceo-activity-row.tone-subagent .jaw-ceo-activity-badge {
+    background: color-mix(in srgb, var(--status-running) 14%, var(--bg-raised));
+    color: var(--status-running);
+}
+.jaw-ceo-activity-row.is-error .jaw-ceo-activity-dot {
+    background: var(--status-error);
+}
+.jaw-ceo-activity-copy {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+}
+.jaw-ceo-activity-copy strong {
+    color: var(--ceo-ink);
+    font-size: 12px;
+    font-weight: 850;
+}
+.jaw-ceo-activity-copy p {
+    margin: 0;
+    overflow: hidden;
+    color: var(--ceo-muted);
+    font-size: 11.5px;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.jaw-ceo-trace-chip,
+.jaw-ceo-activity-actions button {
+    min-height: 26px;
+    padding: 3px 8px;
+    border: 1px solid var(--ceo-line);
+    border-radius: 8px;
+    background: var(--bg-raised);
+    color: var(--ceo-ink);
+    font-size: 11px;
+    font-weight: 800;
+}
+.jaw-ceo-trace-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.jaw-ceo-activity-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 5px;
+}
+.jaw-ceo-empty-state {
+    min-height: 260px;
+    display: grid;
+    align-content: center;
+    gap: 12px;
+    padding: 18px;
+    border: 1px solid var(--ceo-line);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-raised) 62%, transparent);
+}
+.jaw-ceo-empty-kicker {
+    width: fit-content;
+    padding: 5px 8px;
+    border: 1px solid var(--ceo-line);
+    border-radius: 7px;
+    color: var(--accent);
+    font-family: "Geist Mono", "JetBrains Mono", monospace;
+    font-size: 11px;
+    font-weight: 800;
+}
+.jaw-ceo-empty-state strong {
+    color: var(--ceo-ink);
+    font-size: 17px;
+    line-height: 1.15;
+}
+.jaw-ceo-quick-prompts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.jaw-ceo-quick-prompts button {
+    min-height: 28px;
+    border-radius: 8px;
+    background: var(--canvas-deep);
+    font-size: 11px;
+    font-weight: 700;
+}
+.jaw-ceo-settings-form {
+    border-color: var(--ceo-line);
+    background: color-mix(in srgb, var(--bg-raised) 72%, transparent);
+}
+.jaw-ceo-message-form {
+    padding: 12px;
+    border: 1px solid var(--ceo-line);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--bg-raised) 82%, transparent);
+}
+.jaw-ceo-message-form textarea {
+    min-height: 92px;
+    resize: vertical;
+    border-color: transparent;
+    background: var(--canvas-deep);
+    font-size: 13px;
+}
+.jaw-ceo-form-row select {
+    min-height: 38px;
+    border-color: transparent;
+    background: var(--canvas-deep);
+    font-weight: 700;
+}
+.jaw-ceo-form-row button,
+.jaw-ceo-voice-action {
+    min-height: 38px;
+    border-radius: 8px;
+    font-weight: 800;
+}
+.jaw-ceo-form-row button:not(:disabled),
+.jaw-ceo-voice-action {
+    border-color: transparent;
+    background: var(--accent);
+    color: var(--bg-panel);
+}
+.jaw-ceo-console-footer {
+    padding: 14px 20px;
+    border-top: 1px solid var(--ceo-line);
+    background: color-mix(in srgb, var(--bg-raised) 72%, transparent);
+}
+.jaw-ceo-realtime-status span {
+    font-weight: 700;
+}
+.jaw-ceo-voice-action {
+    min-width: 104px;
+}
+@media (max-width: 767px) {
+    .jaw-ceo-console-header,
+    .jaw-ceo-chat-panel,
+    .jaw-ceo-settings-panel,
+    .jaw-ceo-console-footer {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+    .jaw-ceo-console-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

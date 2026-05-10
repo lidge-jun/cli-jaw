@@ -81,6 +81,16 @@ function findBinaryPath(name: string): string | null {
     return detectCli(name).path;
 }
 
+function rejectedCliDetail(name: string): string {
+    const rejected = detectCli(name).rejected || [];
+    if (!rejected.length) return '';
+    const detail = rejected
+        .slice(0, 2)
+        .map((entry) => `${entry.path} (${entry.reason})`)
+        .join('; ');
+    return `; skipped non-spawnable candidate${rejected.length > 1 ? 's' : ''}: ${detail}`;
+}
+
 function isWSL() {
     if (process.platform !== 'linux') return false;
     try {
@@ -197,17 +207,18 @@ check('heartbeat.json', () => {
 for (const cli of ['claude', 'codex', 'gemini', 'opencode', 'copilot']) {
     check(`CLI: ${cli}`, () => {
         const found = findBinaryPath(cli);
+        const skipped = rejectedCliDetail(cli);
         if (found) {
             if (cli === 'claude') {
                 const kind = classifyClaudeInstall(found);
                 if (kind === 'node-managed') {
-                    return `installed (${found}) — npm/bun build detected; computer-use MCP is safer with native Claude install`;
+                    return `installed (${found}) — npm/bun build detected; computer-use MCP is safer with native Claude install${skipped}`;
                 }
                 if (kind === 'native') {
-                    return `installed (${found}) — native install detected`;
+                    return `installed (${found}) — native install detected${skipped}`;
                 }
             }
-            return `installed (${found})`;
+            return `installed (${found})${skipped}`;
         }
         throw new Error('WARN: not installed');
     });

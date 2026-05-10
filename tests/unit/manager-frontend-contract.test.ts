@@ -190,6 +190,9 @@ test('manager instance activity unread badges are row-scoped and registry-backed
     );
     assert.ok(hook.includes('activePreviewPort'), 'activity unread hook must accept the currently-viewed iframe port to suppress its own badge only');
     assert.ok(app.includes('activityUnread.unreadByPort'), 'App must pass per-port unread counts into instance groups');
+    assert.ok(app.includes('const activityEvents = useMemo'), 'App must derive one combined activity stream for dock and unread state');
+    assert.ok(app.includes('return [...managerEvents.events, ...messageActivity.events]'), 'App must include instance message events in the Activity dock stream');
+    assert.ok(app.includes('managerEvents={activityEvents}'), 'SidebarRailRouter must receive the combined activity stream');
     assert.ok(app.includes('useInstanceMessageEvents(instances)'), 'App must poll instance messages without dashboard refresh');
     assert.ok(app.includes('activityUnread.markPortSeen'), 'App must mark the selected instance as seen when clicked');
     assert.equal(

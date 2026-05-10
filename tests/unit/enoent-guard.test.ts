@@ -23,9 +23,9 @@ test('EG-001: spawnAgent calls detectCli() before any spawn', () => {
     const detectIdx = spawnSrc.indexOf('detectCli(cli)', spawnAgentIdx);
     assert.ok(detectIdx > spawnAgentIdx, 'should call detectCli(cli) within spawnAgent');
 
-    // Verify user-facing error message exists after detectCli
-    const notFoundIdx = spawnSrc.indexOf('not found in PATH', detectIdx);
-    assert.ok(notFoundIdx > detectIdx, 'should have user-facing message when CLI not found');
+    // Verify user-facing error message helper is used after detectCli.
+    const messageIdx = spawnSrc.indexOf('formatCliUnavailableMessage(cli, detected)', detectIdx);
+    assert.ok(messageIdx > detectIdx, 'should have user-facing message when CLI is unavailable');
 
     // Verify exit code 127
     const code127Idx = spawnSrc.indexOf('code: 127', detectIdx);
@@ -156,7 +156,7 @@ test('EG-006: acpSettled guard exists in both error and exit handlers', () => {
 test('EG-007: settled flag is set before resolve() in error handlers', () => {
     // Standard CLI error handler: stdSettled = true must come before resolve
     const errorIdx = spawnSrc.indexOf("child.on('error'");
-    const errorBlock = spawnSrc.slice(errorIdx, errorIdx + 900);
+    const errorBlock = spawnSrc.slice(errorIdx, errorIdx + 1400);
     const settledIdx = errorBlock.indexOf('stdSettled = true;');
     const resolveIdx = errorBlock.indexOf('resolve!(');
     assert.ok(settledIdx > 0, 'stdSettled assignment should exist in error handler');
@@ -200,7 +200,7 @@ test('EG-009: quota-copilot keychain lookup is darwin-only', () => {
 // ─── EG-010: preflight resolves with child: null ───
 
 test('EG-010: preflight failure returns child: null', () => {
-    const preflightIdx = spawnSrc.indexOf('not found in PATH');
+    const preflightIdx = spawnSrc.indexOf('formatCliUnavailableMessage(cli, detected)');
     assert.ok(preflightIdx > 0, 'preflight block should exist');
     const pfBlock = spawnSrc.slice(preflightIdx, preflightIdx + 500);
     assert.ok(

@@ -5,6 +5,7 @@ import { MANAGED_INSTANCE_HOST } from './constants.js';
 const LSOF_TIMEOUT_MS = 750;
 const PORT_PROBE_TIMEOUT_MS = 300;
 const PORT_FREE_POLL_INTERVAL_MS = 100;
+const LSOF_BIN_ENV = 'CLI_JAW_LSOF_BIN';
 
 export type ProcessVerifyImpl = {
     isPidAlive: (pid: number) => boolean;
@@ -64,9 +65,11 @@ async function resolveListeningPidWin32(port: number): Promise<number | null> {
 
 async function resolveListeningPidLsof(port: number): Promise<number | null> {
     return await new Promise<number | null>((resolve) => {
+        const override = process.env[LSOF_BIN_ENV];
+        const args = ['-nP', '-a', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'];
         execFile(
-            'lsof',
-            ['-nP', '-a', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'],
+            override ? '/bin/sh' : 'lsof',
+            override ? [override, ...args] : args,
             { timeout: LSOF_TIMEOUT_MS },
             (err, stdout) => {
                 if (err) return resolve(null);

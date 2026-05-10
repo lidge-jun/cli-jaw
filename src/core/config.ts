@@ -3,11 +3,10 @@
 import os from 'os';
 import fs from 'fs';
 import { join, resolve } from 'path';
-import { execFileSync } from 'child_process';
 import { CLI_REGISTRY, CLI_KEYS, DEFAULT_CLI, buildDefaultPerCli } from '../cli/registry.js';
 import { pickFirstReadyCli } from '../cli/readiness.js';
 import { migrateLegacyClaudeValue } from '../cli/claude-models.js';
-import { buildServicePath } from './runtime-path.js';
+import { detectCliBinary, type CliDetection } from './cli-detect.js';
 import { resolveHomePath } from './path-expand.js';
 
 // ─── Version (single source of truth: package.json) ──
@@ -184,6 +183,9 @@ function createDefaultSettings() {
             openaiModel: '',
             vertexConfig: '',
         },
+        jawCeo: {
+            openaiApiKey: '',
+        },
         network: {
             bindHost: '127.0.0.1',
             lanBypass: false,
@@ -274,6 +276,9 @@ export function migrateSettings(s: Record<string, any>) {
             lastActive: { telegram: null, discord: null },
         };
     }
+    if (!s["jawCeo"]) {
+        s["jawCeo"] = { openaiApiKey: '' };
+    }
     return s;
 }
 
@@ -337,6 +342,7 @@ export function loadSettings() {
                 latestSeen: { ...defaults.messaging.latestSeen, ...(raw.messaging?.latestSeen || {}) },
                 lastActive: { ...defaults.messaging.lastActive, ...(raw.messaging?.lastActive || {}) },
             },
+            jawCeo: { ...defaults.jawCeo, ...(raw.jawCeo || {}) },
             network: { ...defaults.network, ...(raw.network || {}) },
         });
         // --home (JAW_HOME) always wins over persisted workingDir (#64 hotfix)
@@ -413,22 +419,8 @@ export function saveHeartbeatFile(data: HeartbeatFile | Record<string, unknown>)
 
 // ─── CLI Detection ───────────────────────────────────
 
-export function detectCli(name: string) {
-    if (!/^[a-z0-9_-]+$/i.test(name)) return { available: false, path: null };
-    try {
-        const cmd = process.platform === 'win32' ? 'where' : 'which';
-        const raw = execFileSync(cmd, [name], {
-            encoding: 'utf8',
-            timeout: 3000,
-            env: {
-                ...process.env,
-                PATH: buildServicePath(process.env["PATH"] || ''),
-            },
-        }).trim();
-        const firstLine = raw.split(/\r?\n/).map(x => x.trim()).find(Boolean) || '';
-        if (!firstLine) return { available: false, path: null };
-        return { available: true, path: firstLine };
-    } catch { /* expected: CLI binary may not be installed */ return { available: false, path: null }; }
+export function detectCli(name: string): CliDetection {
+    return detectCliBinary(name);
 }
 
 export function detectAllCli() {

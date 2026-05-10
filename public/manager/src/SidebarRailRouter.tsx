@@ -95,6 +95,9 @@ type Props = {
     lifecycleMessage: string | null;
     onDismissLifecycleMessage: () => void;
     instanceListContent: ReactNode;
+    jawCeoWorkbenchButton?: ReactNode;
+    jawCeoVoiceOverlay?: ReactNode;
+    jawCeoConsoleContent?: ReactNode;
     loading: boolean;
     error: string | null;
     registryMessage: string | null;
@@ -121,6 +124,8 @@ export function SidebarRailRouter(props: Props) {
     );
 
     return (
+        <>
+        {props.jawCeoVoiceOverlay}
         <WorkspaceLayout
             sidebarCollapsed={props.sidebarCollapsed}
             inspectorCollapsed={props.activityDockCollapsed}
@@ -169,7 +174,7 @@ export function SidebarRailRouter(props: Props) {
                     )}
                     <div className="workspace-surface-layer">
                         <WorkspaceSurface active={props.sidebarMode === 'instances'}>
-                            <Workbench mode={props.activeDetailTab} onModeChange={props.onDetailTabChange} header={props.workbenchHeader} overview={props.detailContent('overview')} preview={(
+                            <Workbench mode={props.activeDetailTab} onModeChange={props.onDetailTabChange} header={props.workbenchHeader} modeActions={props.jawCeoWorkbenchButton} overview={props.detailContent('overview')} preview={(
                                 <InstancePreview instance={props.selectedInstance} data={props.data} enabled={props.previewEnabled} refreshKey={props.previewRefreshKey} theme={props.previewTheme} />
                             )} logs={props.detailContent('logs')} settings={props.detailContent('settings')} />
                         </WorkspaceSurface>
@@ -209,6 +214,7 @@ export function SidebarRailRouter(props: Props) {
                     onHeightChange={props.onActivityHeightChange}
                 />
             )}
+            sidePanel={props.jawCeoConsoleContent}
             mobileNav={<MobileNav activeTab={props.activeDetailTab} onOpenInstances={props.onOpenDrawer} onSelectTab={props.onSelectTab} onToggleActivity={props.onToggleActivityFromMobile} />}
             drawer={(
                 <InstanceDrawer open={props.drawerOpen} profileFilters={props.drawerProfileFilters} onClose={props.onCloseDrawer}>
@@ -216,5 +222,6 @@ export function SidebarRailRouter(props: Props) {
                 </InstanceDrawer>
             )}
         />
+        </>
     );
 }

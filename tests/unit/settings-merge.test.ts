@@ -59,3 +59,10 @@ test('SM-006: tui deep merge preserves sibling keys', () => {
     assert.equal(next.tui.pasteCollapseLines, 2);
     assert.equal(next.tui.diffStyle, 'summary');
 });
+
+test('SM-007: jawCeo deep merge preserves saved voice settings siblings', () => {
+    const current = { jawCeo: { openaiApiKey: 'sk-old', other: 'keep' } };
+    const next = mergeSettingsPatch(current, { jawCeo: { openaiApiKey: 'sk-new' } });
+    assert.equal(next.jawCeo.openaiApiKey, 'sk-new');
+    assert.equal(next.jawCeo.other, 'keep');
+});

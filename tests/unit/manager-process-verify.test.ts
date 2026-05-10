@@ -9,23 +9,30 @@ import { isPidAlive, resolveListeningPid, waitForPortFree } from '../../src/mana
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = join(__dirname, '..', '..');
 const processVerifySrc = readFileSync(join(projectRoot, 'src', 'manager', 'process-verify.ts'), 'utf8');
+let fakeLsofQueue = Promise.resolve();
+const LSOF_BIN_ENV = 'CLI_JAW_LSOF_BIN';
 
 function withFakeLsof(script: string, fn: () => Promise<void>): () => Promise<void> {
     return async () => {
-        const dir = mkdtempSync(join(tmpdir(), 'jaw-lsof-stub-'));
-        const binDir = join(dir, 'bin');
-        mkdirSync(binDir);
-        const lsofPath = join(binDir, 'lsof');
-        writeFileSync(lsofPath, `#!/bin/sh\n${script}\n`);
-        chmodSync(lsofPath, 0o755);
-        const originalPath = process.env.PATH;
-        process.env.PATH = `${binDir}:${originalPath || ''}`;
-        try {
-            await fn();
-        } finally {
-            process.env.PATH = originalPath;
-            rmSync(dir, { recursive: true, force: true });
-        }
+        const run = fakeLsofQueue.then(async () => {
+            const dir = mkdtempSync(join(tmpdir(), 'jaw-lsof-stub-'));
+            const binDir = join(dir, 'bin');
+            mkdirSync(binDir);
+            const lsofPath = join(binDir, 'lsof');
+            writeFileSync(lsofPath, `#!/bin/sh\n${script}\n`);
+            chmodSync(lsofPath, 0o755);
+            const originalLsofBin = process.env[LSOF_BIN_ENV];
+            process.env[LSOF_BIN_ENV] = lsofPath;
+            try {
+                await fn();
+            } finally {
+                if (originalLsofBin === undefined) delete process.env[LSOF_BIN_ENV];
+                else process.env[LSOF_BIN_ENV] = originalLsofBin;
+                rmSync(dir, { recursive: true, force: true });
+            }
+        });
+        fakeLsofQueue = run.catch(() => undefined);
+        await run;
     };
 }
 

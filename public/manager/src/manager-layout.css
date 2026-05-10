@@ -15,8 +15,14 @@
     grid-template-areas: "sidebar detail" "sidebar activity";
     overflow: hidden;
 }
+.manager-workspace.is-side-panel-open {
+    grid-template-columns: 340px minmax(0, 1fr) 420px;
+    grid-template-areas: "sidebar detail ceo" "sidebar activity ceo";
+}
 .manager-shell.is-sidebar-collapsed .manager-workspace,
 .manager-workspace.is-sidebar-collapsed { grid-template-columns: 56px minmax(0, 1fr); }
+.manager-shell.is-sidebar-collapsed .manager-workspace.is-side-panel-open,
+.manager-workspace.is-sidebar-collapsed.is-side-panel-open { grid-template-columns: 56px minmax(0, 1fr) 420px; }
 .manager-sidebar { grid-area: sidebar; min-width: 0; min-height: 0; overflow: hidden; border-right: 1px solid var(--border-subtle); background: var(--canvas-deep); }
 .manager-command {
     grid-area: command;
@@ -25,6 +31,7 @@
     background: var(--bg-panel);
 }
 .manager-detail { grid-area: detail; min-width: 0; min-height: 0; overflow: hidden; background: var(--bg-panel); }
+.manager-ceo-panel { grid-area: ceo; min-width: 0; min-height: 0; overflow: hidden; border-left: 1px solid var(--border-subtle); background: var(--bg-panel); }
 .workspace-surface-stack {
     min-width: 0;
     min-height: 0;
@@ -68,11 +75,17 @@
     .dashboard-shell.manager-shell:not(.is-sidebar-collapsed) .manager-workspace {
         grid-template-columns: 360px minmax(0, 1fr);
     }
+    .dashboard-shell.manager-shell:not(.is-sidebar-collapsed) .manager-workspace.is-side-panel-open {
+        grid-template-columns: 360px minmax(0, 1fr) 520px;
+    }
 }
 @media (max-width: 1279px) and (min-width: 1024px) {
     .dashboard-shell.manager-shell:not(.is-sidebar-collapsed) .manager-workspace {
         grid-template-columns: 300px minmax(0, 1fr);
         grid-template-rows: minmax(0, 1fr) var(--activity-dock-height, 150px);
+    }
+    .dashboard-shell.manager-shell:not(.is-sidebar-collapsed) .manager-workspace.is-side-panel-open {
+        grid-template-columns: 300px minmax(0, 1fr) 360px;
     }
     .command-primary { grid-template-columns: minmax(120px, 180px) max-content minmax(max-content, 1fr); }
     .command-search { width: clamp(260px, 38vw, 620px); }
@@ -105,6 +118,7 @@
     .manager-workspace > .drawer-backdrop { position: fixed; inset: 0; z-index: 20; background: var(--scrim-overlay); }
     .drawer-trigger { display: inline-flex; grid-area: drawer; }
     .manager-mobile-nav { display: block; border-top: 1px solid var(--border-subtle); }
+    .manager-ceo-panel { display: contents; }
     .command-primary {
         grid-template-columns: auto minmax(0, 1fr) auto;
         grid-template-areas: "drawer title actions" "search search search";
@@ -169,6 +183,11 @@
         grid-template-columns: minmax(0, 1fr);
         gap: 8px;
         padding: 8px 10px;
+    }
+    .workbench-mode-bar {
+        justify-content: flex-start;
+        overflow-x: auto;
+        padding-bottom: 1px;
     }
     .workbench-mode-tabs {
         flex-wrap: nowrap;

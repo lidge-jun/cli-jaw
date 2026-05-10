@@ -25,7 +25,7 @@ type ActivityTimelineProps = {
     emptyMessage?: string;
 };
 
-function eventToEntry(event: ManagerEvent): ActivityEntry {
+export function eventToEntry(event: ManagerEvent): ActivityEntry {
     switch (event.kind) {
         case 'scan-completed':
             return { at: event.at, source: 'scan', message: `range ${event.from}-${event.to}, ${event.reachable} reachable` };
@@ -35,6 +35,14 @@ function eventToEntry(event: ManagerEvent): ActivityEntry {
             return { at: event.at, source: event.action, message: `:${event.port} ${event.status}` };
         case 'health-changed':
             return { at: event.at, source: 'health', message: `:${event.port} ${event.from} → ${event.to}` };
+        case 'instance-message': {
+            const title = event.title?.trim();
+            return {
+                at: event.at,
+                source: `:${event.port}`,
+                message: `${event.role}: ${title || `message #${event.messageId}`}`,
+            };
+        }
         case 'version-mismatch':
             return { at: event.at, source: 'version', message: `:${event.port} ${event.expected || '?'} → ${event.seen}` };
         case 'port-collision':

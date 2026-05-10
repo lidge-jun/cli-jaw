@@ -36,7 +36,10 @@ import { startScheduleRunner } from './schedule/runner.js';
 import { createDashboardRemindersRouter } from './reminders/routes.js';
 import { RemindersStore } from './reminders/store.js';
 import { startRemindersScheduler } from './reminders/scheduler.js';
+import { fetchWorkerAssistantTextById } from './worker-messages.js';
 import { openUrlInBrowser } from '../core/browser-open.js';
+import { ensureDirs, loadSettings } from '../core/config.js';
+import { createJawCeoRouter } from '../routes/jaw-ceo.js';
 import type {
     DashboardInstance,
     DashboardServiceState,
@@ -54,6 +57,8 @@ const projectRoot = existsSync(join(serverRoot, 'package.json'))
     ? serverRoot
     : join(serverRoot, '..');
 const app = express();
+ensureDirs();
+loadSettings();
 
 const port = parsePositivePort(process.env["DASHBOARD_PORT"], Number(DASHBOARD_DEFAULT_PORT));
 const scanFrom = parsePositivePort(process.env["DASHBOARD_SCAN_FROM"], MANAGED_INSTANCE_PORT_FROM);
@@ -154,6 +159,89 @@ app.use('/api/dashboard/schedule', createDashboardScheduleRouter({ store: schedu
 const remindersStore = new RemindersStore();
 app.use('/api/dashboard/reminders', createDashboardRemindersRouter({ store: remindersStore }));
 let stopRemindersScheduler: (() => void) | null = null;
+
+app.use('/api/jaw-ceo', createJawCeoRouter({
+    repoRoot: projectRoot,
+    listInstances: async () => {
+        const loaded = loadDashboardRegistry({ from: scanFrom, count: scanCount });
+        const result = await scanDashboardInstances({ from: loaded.registry.scan.from, count: loaded.registry.scan.count, managerPort: port });
+        const serviceStates = await serviceDetect({
+            from: loaded.registry.scan.from,
+            to: loaded.registry.scan.from + loaded.registry.scan.count - 1,
+        });
+        const decorated = lifecycle.decorateScanResult(result, serviceStates);
+        const applied = applyDashboardRegistry(attachPreviewSnapshot(decorated), loaded.registry, loaded.status, { showHidden: false });
+        return applied.instances.map(instance => ({
+            port: instance.port,
+            label: instance.label || instance.profileId || `:${instance.port}`,
+            status: instance.status,
+            ok: instance.ok,
+            url: instance.url,
+            currentCli: instance.currentCli,
+            currentModel: instance.currentModel,
+            workingDir: instance.workingDir,
+        }));
+    },
+    fetchLatestMessage: async (targetPort) => {
+        const response = await fetch(`http://127.0.0.1:${targetPort}/api/messages/latest?includeContent=1`);
+        if (!response.ok) return null;
+        const body = await response.json() as {
+            ok?: boolean;
+            data?: {
+                latestAssistant?: { id?: number; role?: string; created_at?: string; text?: string; content?: string } | null;
+                activity?: { messageId?: number; role?: string; title?: string; updatedAt?: string } | null;
+            } | null;
+        };
+        const latest = body.data?.latestAssistant;
+        const latestId = latest?.id ? Number(latest.id) : null;
+        const directText = latest && typeof latest.text === 'string' ? latest.text : String(latest?.content || '');
+        const fallbackText = latestId && !directText.trim()
+            ? await fetchWorkerAssistantTextById(fetch, targetPort, latestId).catch(() => '')
+            : '';
+        return {
+            latestAssistant: latest && latestId ? {
+                id: latestId,
+                role: 'assistant',
+                ...(latest.created_at ? { created_at: String(latest.created_at) } : {}),
+                text: directText || fallbackText,
+            } : null,
+            activity: body.data?.activity?.messageId ? {
+                messageId: Number(body.data.activity.messageId),
+                role: String(body.data.activity.role || ''),
+                ...(body.data.activity.title ? { title: String(body.data.activity.title) } : {}),
+                ...(body.data.activity.updatedAt ? { updatedAt: String(body.data.activity.updatedAt) } : {}),
+            } : null,
+        };
+    },
+    sendWorkerMessage: async ({ port: targetPort, prompt }) => {
+        const response = await fetch(`http://127.0.0.1:${targetPort}/api/message`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ prompt }),
+        });
+        const data = await response.json().catch(() => null) as unknown;
+        return {
+            ok: response.ok,
+            status: response.status,
+            message: response.ok ? 'sent' : `worker send failed: ${response.status}`,
+            data,
+        };
+    },
+    runLifecycleAction: async ({ action, port: targetPort }) => {
+        const response = await fetch(`http://127.0.0.1:${port}/api/dashboard/lifecycle/${action}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ port: targetPort }),
+        });
+        const data = await response.json().catch(() => null) as DashboardLifecycleResult | null;
+        return {
+            ok: Boolean(response.ok && data?.ok),
+            message: data?.message || `lifecycle ${action} failed: ${response.status}`,
+            ...(data?.status ? { status: data.status } : {}),
+            data,
+        };
+    },
+}));
 
 app.get('/api/dashboard/health', (_req, res) => {
     res.json({

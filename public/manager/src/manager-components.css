@@ -423,6 +423,13 @@ h2 { font-size: 13px; }
     gap: 6px;
     justify-content: flex-end;
 }
+.workbench-mode-bar {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
 .workbench-mode-tabs button {
     min-height: 28px;
     padding: 5px 9px;

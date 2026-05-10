@@ -23,6 +23,7 @@ import { registerSettingsRoutes } from './src/routes/settings.js';
 import { registerMessagingRoutes } from './src/routes/messaging.js';
 import { registerAvatarRoutes } from './src/routes/avatar.js';
 import { registerTraceRoutes } from './src/routes/traces.js';
+import { registerJawCeoRoutes } from './src/routes/jaw-ceo.js';
 import { createDashboardBoardRouter } from './src/manager/board/routes.js';
 import { createDashboardScheduleRouter } from './src/manager/schedule/routes.js';
 import {
@@ -429,7 +430,13 @@ app.get('/api/messages', (req, res) => {
     ok(res, safeRows);
 });
 app.get('/api/messages/latest', (_req, res) => {
-    const latestAssistant = getLatestAssistantMessage.get() || null;
+    const includeContent = ['1', 'true', 'yes'].includes(String(_req.query["includeContent"] || '').toLowerCase());
+    const latestRow = getLatestAssistantMessage.get() as {
+        id?: number;
+        role?: string;
+        content?: string | null;
+        created_at?: string;
+    } | null;
     const activityRow = getLatestDashboardActivityMessage.get() as {
         id?: number;
         role?: string;
@@ -438,7 +445,12 @@ app.get('/api/messages/latest', (_req, res) => {
     } | null;
     const title = dashboardActivityTitleFromExcerpt(activityRow?.excerpt || null);
     ok(res, {
-        latestAssistant,
+        latestAssistant: latestRow?.id ? {
+            id: Number(latestRow.id),
+            role: 'assistant',
+            ...(latestRow.created_at ? { created_at: String(latestRow.created_at) } : {}),
+            ...(includeContent ? { text: String(latestRow.content || '') } : {}),
+        } : null,
         activity: activityRow && title ? {
             messageId: Number(activityRow.id),
             role: String(activityRow.role || ''),
@@ -550,6 +562,54 @@ registerSettingsRoutes(app, requireAuth, applySettingsPatch, projectRoot);
 registerMessagingRoutes(app, requireAuth);
 registerAvatarRoutes(app, requireAuth);
 registerTraceRoutes(app, requireAuth);
+registerJawCeoRoutes(app, requireAuth, {
+    repoRoot: projectRoot,
+    listInstances: async () => [{
+        port: Number(PORT),
+        label: `Jaw :${PORT}`,
+        status: 'online',
+        ok: true,
+        currentCli: settings["cli"] || null,
+        currentModel: settings["cli"] ? getCliModelAndEffort(settings["cli"], settings).model : null,
+        workingDir: settings["workingDir"] || null,
+    }],
+    fetchLatestMessage: async (targetPort) => {
+        if (targetPort !== Number(PORT)) return null;
+        const latestAssistant = getLatestAssistantMessage.get() as { id?: number; role?: string; content?: string | null; created_at?: string } | undefined;
+        if (!latestAssistant?.id) return { latestAssistant: null, activity: null };
+        return {
+            latestAssistant: {
+                id: Number(latestAssistant.id),
+                role: 'assistant',
+                ...(latestAssistant.created_at ? { created_at: String(latestAssistant.created_at) } : {}),
+                text: String(latestAssistant.content || ''),
+            },
+            activity: null,
+        };
+    },
+    sendWorkerMessage: async ({ port: targetPort, prompt }) => {
+        if (targetPort === Number(PORT)) {
+            const result = submitMessage(prompt.trim(), { origin: 'web' });
+            return {
+                ok: result.action !== 'rejected',
+                message: result.action === 'rejected' ? result.reason || 'rejected' : 'sent',
+                data: result,
+            };
+        }
+        const response = await fetch(`http://127.0.0.1:${targetPort}/api/message`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ prompt }),
+        });
+        const data = await response.json().catch(() => null) as unknown;
+        return {
+            ok: response.ok,
+            status: response.status,
+            message: response.ok ? 'sent' : `worker send failed: ${response.status}`,
+            data,
+        };
+    },
+});
 
 // ─── Dashboard Board / Schedule (P3) ─────────────────
 app.use('/api/dashboard/board', requireAuth, createDashboardBoardRouter());

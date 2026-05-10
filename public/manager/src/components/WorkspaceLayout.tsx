@@ -4,6 +4,7 @@ type WorkspaceLayoutProps = {
     navigator: ReactNode;
     workbench: ReactNode;
     inspector: ReactNode;
+    sidePanel?: ReactNode;
     mobileNav: ReactNode;
     drawer: ReactNode;
     drawerOpen: boolean;
@@ -26,6 +27,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
         'manager-workspace',
         props.sidebarCollapsed && 'is-sidebar-collapsed',
         props.inspectorCollapsed && 'is-inspector-collapsed',
+        props.sidePanel && 'is-side-panel-open',
         props.drawerOpen && 'is-drawer-open',
     ].filter(Boolean).join(' ');
 
@@ -35,6 +37,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
             <aside className="manager-sidebar" aria-label="Jaw instances">{props.navigator}</aside>
             <section className="manager-detail" aria-label="Manager workbench">{props.workbench}</section>
             <section className="manager-activity" aria-label="Manager inspector">{props.inspector}</section>
+            {props.sidePanel && <aside className="manager-ceo-panel" aria-label="Jaw CEO console">{props.sidePanel}</aside>}
             <nav className="manager-mobile-nav" aria-label="Mobile dashboard navigation">
                 {props.mobileNav}
             </nav>

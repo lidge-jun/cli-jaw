@@ -5,6 +5,7 @@ type WorkbenchProps = {
     mode: DashboardDetailTab;
     onModeChange: (mode: DashboardDetailTab) => void;
     header: ReactNode;
+    modeActions?: ReactNode;
     overview: ReactNode;
     preview: ReactNode;
     logs: ReactNode;
@@ -22,19 +23,22 @@ export function Workbench(props: WorkbenchProps) {
         <section className={`workbench workbench-${props.mode}`} aria-label="Selected instance workbench">
             <div className="workbench-header">
                 {props.header}
-                <div className="workbench-mode-tabs" role="tablist" aria-label="Workbench modes">
-                    {MODES.map(mode => (
-                        <button
-                            key={mode}
-                            type="button"
-                            role="tab"
-                            aria-selected={props.mode === mode}
-                            className={props.mode === mode ? 'is-active' : ''}
-                            onClick={() => props.onModeChange(mode)}
-                        >
-                            {modeLabel(mode)}
-                        </button>
-                    ))}
+                <div className="workbench-mode-bar">
+                    <div className="workbench-mode-tabs" role="tablist" aria-label="Workbench modes">
+                        {MODES.map(mode => (
+                            <button
+                                key={mode}
+                                type="button"
+                                role="tab"
+                                aria-selected={props.mode === mode}
+                                className={props.mode === mode ? 'is-active' : ''}
+                                onClick={() => props.onModeChange(mode)}
+                            >
+                                {modeLabel(mode)}
+                            </button>
+                        ))}
+                    </div>
+                    {props.modeActions}
                 </div>
             </div>
             <div className="workbench-body">

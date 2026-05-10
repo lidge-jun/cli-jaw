@@ -572,6 +572,19 @@ function makeCleanEnv(extraEnv: Record<string, string> = {}) {
     } as NodeJS.ProcessEnv;
 }
 
+function formatCliUnavailableMessage(cli: string, detected: ReturnType<typeof detectCli>): string {
+    const rejected = detected.rejected || [];
+    if (rejected.length > 0) {
+        const details = rejected
+            .slice(0, 3)
+            .map((entry) => `${entry.path} (${entry.reason})`)
+            .join('; ');
+        const suffix = rejected.length > 3 ? `; +${rejected.length - 3} more` : '';
+        return `CLI '${cli}' found on PATH but no spawnable executable was available. Rejected: ${details}${suffix}. Run \`jaw doctor --json\`.`;
+    }
+    return `CLI '${cli}' not found in PATH. Run \`jaw doctor --json\`.`;
+}
+
 function buildHistoryBlock(currentPrompt: string, workingDir?: string | null, maxSessions = 10, maxTotalChars = 8000) {
     const recent = getRecentMessages.all(workingDir || null, Math.max(1, maxSessions * 2)) as RecentMessageRow[];
     if (!recent.length) return '';
@@ -999,7 +1012,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         ? detected.available || !!resolvedOpencodeBinary
         : detected.available;
     if (!cliAvailable) {
-        const msg = `CLI '${cli}' not found in PATH. Run \`jaw doctor --json\`.`;
+        const msg = formatCliUnavailableMessage(cli, detected);
         console.error(`[jaw:${agentLabel}] ${msg}`);
         if (mainManaged) clearLiveRun(liveScope);
         broadcast('agent_done', { text: `❌ ${msg}`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
@@ -1377,7 +1390,9 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         opts.lifecycle?.onExit?.(null);
         const msg = err.code === 'ENOENT'
             ? `CLI '${cli}' 실행 실패 (ENOENT). 설치/경로를 확인하세요.`
-            : `CLI '${cli}' 실행 실패: ${err.message}`;
+            : err.code === 'ENOEXEC'
+                ? `CLI '${cli}' 실행 실패 (ENOEXEC). PATH의 실행 파일이 바이너리 또는 shebang 스크립트가 아닙니다. \`jaw doctor --json\`으로 깨진 shim을 확인하세요.`
+                : `CLI '${cli}' 실행 실패: ${err.message}`;
         console.error(`[jaw:${agentLabel}:error] ${msg}`);
         activeProcesses.delete(agentLabel);
         if (mainManaged) {
