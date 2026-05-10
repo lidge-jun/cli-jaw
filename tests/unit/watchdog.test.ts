@@ -134,6 +134,33 @@ test('extendDeadline respects absolute hard cap', async () => {
     assert.ok(elapsed < 250, `expected hard cap to bound timeout, elapsed=${elapsed}`);
 });
 
+test('markProgress clamps to hard cap instead of skipping extension', async () => {
+    const child = fakeChild();
+    let handle: WatchdogHandle | undefined;
+    const startedAt = Date.now();
+    const stallPromise = new Promise<string>((resolve) => {
+        handle = attachWatchdog(child, 'test', resolve, {
+            firstProgressMs: 1_000,
+            idleMs: 1_000,
+            absoluteMs: 60,
+            absoluteHardCapMs: 90,
+            checkIntervalMs: 5,
+        });
+    });
+
+    await sleep(50);
+    child.stdout?.emit('data', Buffer.from('progress near hard cap boundary\n'));
+    await sleep(20);
+    child.stdout?.emit('data', Buffer.from('more progress past hard cap\n'));
+
+    const reason = await stallPromise;
+    const elapsed = Date.now() - startedAt;
+    assert.match(reason, /absolute timeout/);
+    assert.ok(elapsed >= 85, `should extend to hard cap, not skip; elapsed=${elapsed}`);
+    assert.ok(elapsed < 200, `should not exceed hard cap; elapsed=${elapsed}`);
+    handle?.stop();
+});
+
 test('stop prevents future stall callbacks', async () => {
     const child = fakeChild();
     let called = false;

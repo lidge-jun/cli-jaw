@@ -33,7 +33,7 @@ graph LR
     ORC --> AGT
 ```
 
-4개 인터페이스(CLI, Web, Telegram, Discord)는 `server.ts`를 경유하고, `server.ts`는 인증/보안/WS/bootstrap을 맡은 뒤 `src/routes/`의 12개 route registrar와 2개 shared helper(`types.ts`, `quota.ts`)로 API를 위임합니다. Browser route registrar는 일반 CDP primitive, runtime doctor/cleanup, `web-ai` ChatGPT/Gemini/Grok 자동화 API를 함께 제공하므로 route 수가 가장 큽니다. Process/tool logs는 `src/shared/tool-log-sanitize.ts`에서 WS와 snapshot 저장 전에 cap/truncate되어 Manager 대시보드 메모리 폭주를 막습니다.
+4개 인터페이스(CLI, Web, Telegram, Discord)는 `server.ts`를 경유하고, `server.ts`는 인증/보안/WS/bootstrap을 맡은 뒤 `src/routes/`의 12개 route registrar와 2개 shared helper(`types.ts`, `quota.ts`)로 API를 위임합니다. Browser route registrar는 일반 CDP primitive, runtime doctor/cleanup, `web-ai` ChatGPT/Gemini/Grok 자동화 API를 함께 제공하므로 route 수가 가장 큽니다. 별도 `jaw dashboard serve` manager 서버는 notes/search/schedule/reminders/board surface를 `src/manager/`에서 제공한다. Process/tool logs는 `src/shared/tool-log-sanitize.ts`에서 WS와 snapshot 저장 전에 cap/truncate되어 Manager 대시보드 메모리 폭주를 막습니다.
 
 ---
 
@@ -63,7 +63,7 @@ graph LR
 | [commands.md](commands.md) | 24개 슬래시 커맨드 + root CLI 18개 서브커맨드 + `browser web-ai` + explicit `/continue` note | 커맨드, 디스패처, 레지스트리 |
 | [server_api.md](server_api.md) | `server.ts` 글루 + `src/routes/` API 131 handlers / 130 endpoints | REST, WebSocket, 라우트 |
 | [stream-events.md](stream-events.md) | CLI NDJSON 이벤트 트레이스 + ProcessBlock 매핑 | NDJSON, stepRef, ProcessBlock |
-| [🎨 frontend.md](frontend.md) | `public/` 소스/자산 282개 + `public/dist/` 생성물 456개, Manager notes/search/settings/WYSIWYG, ProcessBlock 렌더링, bounded tool-log hydration | 프론트엔드, Vite 8, PWA, ProcessBlock |
+| [🎨 frontend.md](frontend.md) | `public/` 소스/자산 452개(`dist` 제외) / 325개(generated 제외) + `public/dist/` 생성물 456개, Manager notes/search/settings/reminders/WYSIWYG, ProcessBlock 렌더링, bounded tool-log hydration | 프론트엔드, Vite 8, PWA, ProcessBlock |
 | [frontend_modernization_analysis.md](frontend_modernization_analysis.md) | 8개 현대화 제안의 비용-편익 분석 | 리팩터링, 비용분석, 마이그레이션 |
 | [telegram.md](telegram.md) | Telegram 봇 + heartbeat + 음성 STT | 텔레그램, 하트비트, STT |
 | [prompt_basic_A1.md](prompt_basic_A1.md) | 시스템 프롬프트 기본값 (A-1.md) | 시스템규칙, 기본값 |
@@ -112,8 +112,12 @@ Support labels must stay aligned with agbrowse:
 | Bounded tool logs | `src/shared/tool-log-sanitize.ts`, `src/core/bus.ts`, `src/routes/orchestrate.ts` | WS `agent_tool`, `agent_done.toolLog`, `/api/orchestrate/snapshot.activeRun.toolLog` are sanitized before public/UI delivery. |
 | Unified channel send | `src/messaging/*`, `src/routes/messaging.ts`, `src/telegram/*`, `src/discord/*` | `/api/channel/send` is canonical; `/api/telegram/send` and `/api/discord/send` remain compatibility/direct paths. |
 | Browser runtime lifecycle | `src/browser/runtime-diagnostics.ts`, `src/browser/runtime-orphans.ts`, `src/browser/tab-lifecycle.ts`, `src/browser/web-ai/session*.ts` | browser docs should mention runtime doctor/orphan cleanup, persistent tab lifecycle, and web-ai session reattach. |
+| Render helper split | `public/js/render.ts`, `public/js/render/*` | Frontend docs should describe `render.ts` as a 17L stable façade and keep markdown/sanitize/Mermaid/SVG/file-link/post-render ownership under `public/js/render/`. |
+| Diagram overlay styling | `public/css/diagram.css`, `public/js/render/sanitize.ts`, `public/js/render/svg-actions.ts` | Inline SVG overlay clones preserve semantic diagram classes via `.diagram-svg-overlay`; docs should not treat `diagram.css` as Mermaid-only. |
 | Release gates | `scripts/release-gates.mjs`, `package.json` | `gate:all` now owns named docs/parity gates in addition to typecheck/tests. |
-| Manager notes search | `src/manager/notes/search.ts`, `src/manager/notes/routes.ts`, `public/manager/src/notes/NotesSearchPanel.tsx` | Manager notes docs should describe ripgrep-backed markdown search, `/api/dashboard/notes/search`, abortable frontend search, and typed search errors. |
+| Manager notes search | `src/manager/notes/search.ts`, `src/manager/notes/routes.ts`, `public/manager/src/notes/NotesSearchSidebar.tsx` | Manager notes docs should describe ripgrep-backed markdown search, `/api/dashboard/notes/search`, sidebar-mode abortable frontend search, and typed search errors. |
+| Manager reminders parity | `src/manager/reminders/*`, `public/manager/src/dashboard-reminders/*` | Manager docs should describe dashboard reminders API, matrix buckets, top-priority strip, detail popover, drag/drop bucket moves, and reminder notification scheduler. |
+| WYSIWYG wikilink fallback | `public/manager/src/notes/wysiwyg/milkdown-wikilink-plugin.ts`, `public/manager/src/notes/wiki-link-rendering.ts` | WYSIWYG docs should mention `outgoingLinks` lookup plus `vaultIndex.notes` client-side fallback before backend index refresh; preview resolver parity remains tracked as a follow-up. |
 | Trace read API | `src/routes/traces.ts`, `src/trace/store.ts` | Server API docs should list public trace summary/event routes and the `alert_escalation` WS event. |
 | PABCD Project root guard + Jawdev skill guidance | `src/orchestrator/pipeline.ts`, `src/orchestrator/state-machine.ts`, `skills_ref/dev*/SKILL.md`, `structure/prompt_basic_B.md` | PABCD docs should require `Project root: <absolute path>` in injected/dispatch examples and skill docs should prefer strict TypeScript plus existing `structure/`/`devlog`/SOT discovery. |
 
@@ -150,4 +154,4 @@ Support labels must stay aligned with agbrowse:
 
 ---
 
-*마지막 갱신: 2026-05-08 (`server.ts` 741L, `src/routes/` 131 route handlers / 130 API endpoints, `src/manager/` 46 TS/TSX files / 7559L, `src/browser/web-ai/` 57 TS files / 10238L, `bin/commands/` 18 top-level ts subcommands + `tui/` 7 helper, `public/js/` 52 .ts (root 17 + features 32 + diagram 3), `public/manager/` 194 files, tests 342 .test.ts 기준)*
+*마지막 갱신: 2026-05-10 (`server.ts` 741L, `src/routes/` 131 route handlers / 130 API endpoints, `src/manager/` 53 TS/TSX files / 8428L, `src/browser/web-ai/` 67 TS files / 12263L, `bin/commands/` 18 top-level ts subcommands + `tui/` 7 helper, `public/js/` 72 .ts (root 17 + features 41 + diagram 3 + render 11), `public/manager/` 218 files, tests 366 .test.ts 기준)*

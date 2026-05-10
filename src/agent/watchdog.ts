@@ -43,8 +43,9 @@ export function attachWatchdog(
         retryHits = 0;
         const progressDeadline = now + cfg.absoluteMs;
         const hardCapDeadline = startedAt + cfg.absoluteHardCapMs;
-        if (progressDeadline > absoluteDeadline && progressDeadline <= hardCapDeadline) {
-            absoluteDeadline = progressDeadline;
+        const nextDeadline = Math.min(progressDeadline, hardCapDeadline);
+        if (nextDeadline > absoluteDeadline) {
+            absoluteDeadline = nextDeadline;
         }
     }
 

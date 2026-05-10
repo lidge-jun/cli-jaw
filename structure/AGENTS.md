@@ -20,6 +20,7 @@ When refreshing docs from recent non-strict commits, check these first:
 - `src/messaging/send.ts` + `src/routes/messaging.ts`: `/api/channel/send` is canonical outbound channel delivery.
 - `src/browser/runtime-*`, `src/browser/tab-lifecycle.ts`, `src/browser/web-ai/session*.ts`: browser docs should mention runtime diagnostics, orphan cleanup, tab lifecycle, and web-ai session reattach.
 - `src/routes/traces.ts` / `src/trace/*`: server docs should include public trace read routes and related WebSocket/event surfaces such as `alert_escalation`.
-- `src/manager/notes/search.ts` / `src/manager/notes/routes.ts` / `public/manager/src/notes/NotesSearchPanel.tsx`: Manager notes docs should include ripgrep-backed search, `/api/dashboard/notes/search`, typed errors, abortable frontend search, and search CSS.
+- `src/manager/notes/search.ts` / `src/manager/notes/routes.ts` / `public/manager/src/notes/NotesSearchSidebar.tsx`: Manager notes docs should include ripgrep-backed search, `/api/dashboard/notes/search`, typed errors, abortable sidebar search, and search CSS.
+- `src/manager/reminders/*` / `public/manager/src/dashboard-reminders/*`: Manager docs should include dashboard reminders API, notification scheduler, matrix buckets, top-priority strip, detail popover, and drag/drop bucket moves.
 - `src/orchestrator/pipeline.ts` / `src/orchestrator/state-machine.ts` / `skills_ref/dev*/SKILL.md`: PABCD docs should keep the `Project root: <absolute path>` dispatch contract and strict TypeScript + existing SOT/devlog discovery guidance aligned.
 - Keep root `AGENTS.md` and `CLAUDE.md` aligned with this folder when the architecture map changes.

@@ -9,7 +9,7 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 # Agent Spawn — agent/ · orchestrator/ · cli/acp-client
 
 > CLI spawn + ACP 분기 + 스트림 + 큐 + 메모리 flush + PABCD 오케스트레이션
-> 현재 기준: `src/agent/*` 12개 파일, `src/orchestrator/*` 10개 파일, `src/cli/acp-client.ts`
+> 현재 기준: `src/agent/*` 15개 파일, `src/orchestrator/*` 10개 파일, `src/cli/acp-client.ts`
 
 ---
 
@@ -17,18 +17,21 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 
 | File | Line count | Role |
 | --- | ---: | --- |
-| `src/agent/args.ts` | 119L | CLI별 신규/재개 인자 생성; Gemini full-access + workspace include-directory flags 포함 |
-| `src/agent/error-classifier.ts` | 23L | stderr/result 기반 에러 분류 helper |
-| `src/agent/events.ts` | 1418L | NDJSON 파서 + ACP `session/update` / subagent lifecycle 매핑 |
-| `src/agent/lifecycle-handler.ts` | 395L | child lifecycle, fallback, retry, queue resume orchestration |
-| `src/agent/live-run-state.ts` | 53L | active run snapshot / hydrate helper |
-| `src/agent/memory-flush-controller.ts` | 157L | memory flush lock + post-response trigger |
-| `src/agent/opencode-diagnostics.ts` | 155L | OpenCode binary/permission 점검 + raw event 버퍼 |
+| `src/agent/alert-escalation.ts` | 80L | alert escalation event helper |
+| `src/agent/args.ts` | 183L | CLI별 신규/재개 인자 생성; Gemini full-access + workspace include-directory flags 포함 |
+| `src/agent/error-classifier.ts` | 38L | stderr/result 기반 에러 분류 helper |
+| `src/agent/events.ts` | 1526L | NDJSON 파서 + ACP `session/update` / subagent lifecycle 매핑 |
+| `src/agent/lifecycle-handler.ts` | 531L | child lifecycle, fallback, retry, queue resume orchestration |
+| `src/agent/live-run-state.ts` | 64L | active run snapshot / hydrate helper |
+| `src/agent/memory-flush-controller.ts` | 159L | memory flush lock + post-response trigger |
+| `src/agent/opencode-diagnostics.ts` | 156L | OpenCode binary/permission 점검 + raw event 버퍼 |
 | `src/agent/resume-classifier.ts` | 51L | stale resume 판별 |
-| `src/agent/session-persistence.ts` | 70L | main session persistence gate |
+| `src/agent/session-persistence.ts` | 72L | main session persistence gate |
 | `src/agent/smoke-detector.ts` | 141L | smoke response 감지 + auto-continue 판단 |
-| `src/agent/spawn-env.ts` | 119L | OpenCode/Gemini 전용 env/permission 보정 |
-| `src/agent/spawn.ts` | 1439L | spawn/ACP/stream/DB/broadcast + queue drain 핵심 |
+| `src/agent/spawn-env.ts` | 141L | OpenCode/Gemini 전용 env/permission 보정 |
+| `src/agent/spawn.ts` | 1610L | spawn/ACP/stream/DB/broadcast + queue drain 핵심 |
+| `src/agent/tool-timeout.ts` | 33L | tool inactivity timeout helper |
+| `src/agent/watchdog.ts` | 104L | idle/progress watchdog; progress extends deadline within 4h hard cap |
 
 ### `spawn.ts` 핵심 흐름
 
@@ -48,6 +51,7 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 - `enqueueMessage()`는 queue push 직후 `processQueue()`를 즉시 한 번 더 호출한다. 게이트웨이의 busy 체크 직후 agent가 종료해 close handler가 빈 큐를 본 경우를 다시 잡기 위한 race fix다.
 - `processQueue()`는 `queueProcessing` 플래그와 `queueMicrotask(() => processQueue())` 재드레인으로 중복 drain을 막고, `source+target` 첫 그룹만 처리한 뒤 나머지를 다시 큐에 넣는 fair policy를 유지한다.
 - `processQueue()`는 `let inserted = false` 플래그 패턴으로 race condition을 방지한다. `insertMessage.run()`이 아직 실행되지 않았다면 실패 시 requeue가 안전하고, `insertMessage.run()` 이후 setup이 실패하면 broadcast error만 보내고 requeue하지 않아 메시지 중복을 막는다.
+- `watchdog.ts`는 idle/progress watchdog을 분리해 activity마다 deadline을 연장한다. `markProgress()`는 `now + idleMs`로 다음 deadline을 갱신하되 absolute hard cap 4h를 넘기지 않는다.
 - `killProcessTree()`는 `execSync` 대신 `execFileSync`를 사용한다. shell injection 방지를 위해 pid를 문자열 인자로 넘기고, shell을 경유하지 않는다.
 
 ### Copilot ACP branch
@@ -77,7 +81,7 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 
 | File | Line count | Role |
 | --- | ---: | --- |
-| `src/agent/session-persistence.ts` | 70L | `ownerGeneration` 가드 + bucket-aware `updateSession.run()` 래퍼 |
+| `src/agent/session-persistence.ts` | 72L | `ownerGeneration` 가드 + bucket-aware `updateSession.run()` 래퍼 |
 | `src/agent/resume-classifier.ts` | 51L | CLI별 stale session regex |
 
 - `persistMainSession()`는 `forceNew`, `employeeSessionId`, `!sessionId`, `isFallback`, 비정상 exit를 모두 차단한다.
@@ -101,7 +105,7 @@ Limits are intentionally bounded (`MAX_TOOL_LOG_ENTRIES`, per-detail cap, total-
 
 ---
 
-## src/cli/acp-client.ts — Copilot ACP JSON-RPC Client (348L)
+## src/cli/acp-client.ts — Copilot ACP JSON-RPC Client (382L)
 
 | Method | Role |
 | --- | --- |
@@ -133,14 +137,14 @@ Limits are intentionally bounded (`MAX_TOOL_LOG_ENTRIES`, per-detail cap, total-
 | File | Line count | Role |
 | --- | ---: | --- |
 | `src/orchestrator/collect.ts` | 65L | orchestrate 결과 수집 |
-| `src/orchestrator/distribute.ts` | 485L | employee dispatch + parallel safety |
-| `src/orchestrator/gateway.ts` | 153L | queue / intent gateway |
-| `src/orchestrator/parser.ts` | 181L | legacy subtask JSON 파서 + intent matcher + numeric reference + verdict 파서 |
-| `src/orchestrator/pipeline.ts` | 436L | PABCD sole entry point |
+| `src/orchestrator/distribute.ts` | 554L | employee dispatch + parallel safety |
+| `src/orchestrator/gateway.ts` | 155L | queue / intent gateway |
+| `src/orchestrator/parser.ts` | 176L | legacy subtask JSON 파서 + intent matcher + numeric reference + verdict 파서 |
+| `src/orchestrator/pipeline.ts` | 455L | PABCD sole entry point |
 | `src/orchestrator/scope.ts` | 17L | scope stub — 항상 `'default'` 반환 |
-| `src/orchestrator/state-machine.ts` | 343L | PABCD state + prompts + audit/verification verdict |
+| `src/orchestrator/state-machine.ts` | 363L | PABCD state + prompts + audit/verification verdict |
 | `src/orchestrator/worker-monitor.ts` | 58L | stall/disconnect/timeout monitor |
-| `src/orchestrator/worker-registry.ts` | 167L | worker ownership + replay registry |
+| `src/orchestrator/worker-registry.ts` | 171L | worker ownership + replay registry |
 | `src/orchestrator/workspace-context.ts` | 65L | task에서 repo path hint 추출, project root resolve |
 
 ### `pipeline.ts` 실제 흐름

@@ -8,8 +8,8 @@ aliases: [CLI-JAW Source Structure, str_func, source structure reference]
 
 # CLI-JAW — Source Structure & Function Reference
 
-> 마지막 검증: 2026-05-08 (실제 코드베이스 재측정)
-> `server.ts` 741L / `src/routes/` 15 files (12 registrar + `quota.ts` helper + `types.ts` + trace routes, 131 route handlers) / `src/cli/handlers*.ts` 363L + 449L + 92L / `src/cli/api-auth.ts` 45L / `src/agent/spawn.ts` 1556L / `src/manager/` 46 TS/TSX files (7559L, dashboard manager + board/notes/search/schedule/routes + notes assets/watcher 서브모듈) / `src/browser/web-ai/` 57 files (10238L, ChatGPT/Gemini/Grok 멀티벤더 자동화 + context-pack/tab-pool) / `src/types/` 1 file (75L) / `bin/commands/` 18 top-level ts files + `tui/` 7 helper files
+> 마지막 검증: 2026-05-10 (실제 코드베이스 재측정)
+> `server.ts` 741L / `src/routes/` 15 files (12 registrar + `quota.ts` helper + `types.ts` + trace routes, 131 route handlers) / `src/cli/handlers*.ts` 383L + 461L + 95L / `src/cli/api-auth.ts` 45L / `src/agent/spawn.ts` 1610L + `src/agent/watchdog.ts` 104L / `src/manager/` 53 TS/TSX files (8428L, dashboard manager + board/notes/search/schedule/reminders/routes + notes assets/watcher 서브모듈) / `src/browser/web-ai/` 67 TS files (12263L, ChatGPT/Gemini/Grok 멀티벤더 자동화 + resolver/source-audit/observation helpers + context-pack/tab-pool) / `src/types/` 1 file (75L) / `bin/commands/` 18 top-level ts files + `tui/` 7 helper files
 > issue #91: OfficeCLI 10-phase integration (dual-audited, 94/94 tests) — closed
 > issue #92: Phase 20 overlay consolidation + GitHub Release v1.0.28-lidge.1 (3 audits passed: A-/A/A) — closed
 > issue #95: Avatar image upload — emoji+image dual support, 4 API endpoints, secure path serving — closed
@@ -57,25 +57,28 @@ cli-jaw/
 │   │   ├── launchd-plist.ts  ← launchd plist 생성 helper (61L)
 │   │   ├── tcc.ts            ← macOS TCC / screen-recording 권한 점검 (55L)
 │   │   └── settings-merge.ts ← perCli/activeOverrides deep merge (52L)
-│   ├── agent/                ← CLI 에이전트 런타임 (12 files)
+│   ├── agent/                ← CLI 에이전트 런타임 (15 files)
+│   │   ├── alert-escalation.ts ← alert escalation event helper (80L)
 │   │   ├── spawn.ts          ← CLI spawn + ACP 분기 + 큐 + 메모리 flush + 429 retry timer + isAgentBusy + buildHistoryBlock compact cutoff + working_dir scoping + enqueue→processQueue race fix + QueueItem persistent DB queue + makeCleanEnv PATH augment (1610L)
-│   │   ├── spawn-env.ts      ← spawn용 child env 빌더 (OpenCode/Gemini permissions config 주입 등, 120L)
+│   │   ├── spawn-env.ts      ← spawn용 child env 빌더 (OpenCode/Gemini permissions config 주입 등, 141L)
 │   │   ├── args.ts           ← CLI별 인자 빌더 (183L)
-│   │   ├── error-classifier.ts ← stderr/result 기반 에러 분류 헬퍼 (23L)
-│   │   ├── lifecycle-handler.ts ← child lifecycle + fallback/retry + queue resume orchestration + clearEmployeeSession on resume failure (391L)
-│   │   ├── live-run-state.ts ← active run snapshot / hydrate helper (53L)
-│   │   ├── memory-flush-controller.ts ← assistant 완료 후 메모리 flush lock + trigger 제어 (157L)
-│   │   ├── opencode-diagnostics.ts ← OpenCode permissions/env audit + raw event 진단 헬퍼 (155L)
-│   │   ├── session-persistence.ts ← main-session persistence policy + ownership generation (70L)
+│   │   ├── error-classifier.ts ← stderr/result 기반 에러 분류 헬퍼 (38L)
+│   │   ├── lifecycle-handler.ts ← child lifecycle + fallback/retry + queue resume orchestration + clearEmployeeSession on resume failure (531L)
+│   │   ├── live-run-state.ts ← active run snapshot / hydrate helper (64L)
+│   │   ├── memory-flush-controller.ts ← assistant 완료 후 메모리 flush lock + trigger 제어 (159L)
+│   │   ├── opencode-diagnostics.ts ← OpenCode permissions/env audit + raw event 진단 헬퍼 (156L)
+│   │   ├── session-persistence.ts ← main-session persistence policy + ownership generation (72L)
 │   │   ├── resume-classifier.ts ← stale resume signature classifier (51L)
 │   │   ├── smoke-detector.ts ← smoke response 감지 + auto-continue 판단 (141L)
+│   │   ├── tool-timeout.ts   ← tool inactivity timeout helper (33L)
+│   │   ├── watchdog.ts       ← idle/progress watchdog + 4h absolute hard cap with progress deadline extension (104L)
 │   │   └── events.ts         ← NDJSON 파서 + ACP update + logEventSummary + summarizeToolInput(type-safe) + toolType/detail 필드 + Claude thinking_delta/input_json_delta 버퍼 + flushClaudeBuffers + stepRef correlation + compact event parsing + Codex toolLog running→done dedup (1526L)
 │   ├── messaging/            ← 통합 메시징 런타임 (신규)
 │   │   ├── runtime.ts        ← 채널 lifecycle (init/shutdown/restart) + transport registry (146L)
 │   │   ├── send.ts           ← 통합 아웃바운드 메시지 라우팅 (ChannelSendRequest) (147L)
 │   │   ├── session-key.ts    ← 세션 키 헬퍼 (27L)
 │   │   └── types.ts          ← MessengerChannel, OutboundType, RemoteTarget 타입 (27L)
-│   ├── orchestrator/         ← 직원 오케스트레이션 + 인터페이스 통합 (9 files)
+│   ├── orchestrator/         ← 직원 오케스트레이션 + 인터페이스 통합 (10 files)
 │   │   ├── state-machine.ts ← PABCD 상태 머신 + broadcast(state,title) + worklog 타이틀 파싱 + employee terminology + OrcContext.workingDir + Project root dispatch contract (363L)
 │   │   ├── pipeline.ts       ← PABCD orchestration (explicit entry only) + plan context persistence + memorySnapshot injection + reset clears boss session + OrcContext workingDir init + Approved Plan Project root guard (455L)
 │   │   ├── distribute.ts     ← runSingleAgent + buildPlanPrompt + parallel helpers + tiered findEmployee + employee resume diagnostics (554L)
@@ -84,46 +87,47 @@ cli-jaw/
 │   │   ├── collect.ts        ← orchestrateAndCollect (bot.ts에서 분리) (65L)
 │   │   ├── scope.ts          ← 현재 단일 'default' scope를 반환하는 stub (resolveOrcScope/findActiveScope, 17L) — 멀티 scope 미사용
 │   │   ├── worker-monitor.ts ← Worker stall detection — activity timestamps + stall/disconnect/timeout callbacks (58L)
-│   │   └── worker-registry.ts ← Worker 프로세스 레지스트리 (167L)
+│   │   ├── worker-registry.ts ← Worker 프로세스 레지스트리 (171L)
+│   │   └── workspace-context.ts ← Project root/path hint resolver for employee dispatch context (65L)
 │   ├── prompt/               ← 프롬프트 조립 (3 files)
 │   │   ├── builder.ts        ← A-1/A-2 + 스킬 + 직원 프롬프트 v2 + promptCache (4-segment key: emp:role:phase:workingDir) + dev skill rules + **advanced memory mode branch + task snapshot injection** (677L)
 │   │   ├── soul-bootstrap-prompt.ts ← LLM 기반 soul.md 개인화 부트스트랩 프롬프트 빌더 (52L)
 │   │   └── template-loader.ts ← 프롬프트 템플릿 로더 (50L)
-│   ├── manager/              ← Multi-instance 대시보드 매니저 (46 TS/TSX files, 7559L; `jaw dashboard serve` + board/notes/search/schedule/routes/notes assets/watcher 서브모듈)
-│   │   ├── server.ts         ← Express 대시보드 서버 + helmet + 헬스/스캔/액션 라우트 + board/notes/schedule/routes 라우터 마운트 (461L)
+│   ├── manager/              ← Multi-instance 대시보드 매니저 (53 TS/TSX files, 8428L; `jaw dashboard serve` + board/notes/search/schedule/reminders/routes/notes assets/watcher 서브모듈)
+│   │   ├── server.ts         ← Express 대시보드 서버 + helmet + 헬스/스캔/액션 라우트 + board/notes/schedule/reminders/routes 라우터 마운트 (477L)
 │   │   ├── scan.ts           ← 포트 범위 스캔 + 인스턴스 감지 (148L)
 │   │   ├── proxy.ts          ← 인스턴스 reverse proxy 미들웨어 (231L)
-│   │   ├── lifecycle.ts      ← 인스턴스 lifecycle (start/stop/spawn) 매니저 (530L)
-│   │   ├── lifecycle-helpers.ts ← lifecycle 공용 헬퍼 (grace timer, port wait, capability builder, error result) (187L)
+│   │   ├── lifecycle.ts      ← 인스턴스 lifecycle (start/stop/spawn) 매니저 (531L)
+│   │   ├── lifecycle-helpers.ts ← lifecycle 공용 헬퍼 (grace timer, port wait, capability builder, error result) (188L)
 │   │   ├── lifecycle-store.ts ← PersistedRegistry/HomeMarker 영속화 + LifecycleStore 클래스 (194L)
-│   │   ├── registry.ts       ← `manager-instances.json` 영속화 + UI status 패치 (405L)
-│   │   ├── metadata.ts       ← 인스턴스 메타데이터 헬퍼 (43L)
+│   │   ├── registry.ts       ← `manager-instances.json` 영속화 + UI status 패치 (407L)
+│   │   ├── metadata.ts       ← 인스턴스 메타데이터 헬퍼 (52L)
 │   │   ├── constants.ts      ← DASHBOARD_DEFAULT_PORT / MANAGED_INSTANCE_PORT_FROM/COUNT (13L)
-│   │   ├── types.ts          ← Dashboard 타입 (DashboardInstance/Registry/ScanResult/NoteSearchResult 등, 363L)
-│   │   ├── dashboard-home.ts ← DASHBOARD_HOME_ENV + resolveDashboardHome + dashboardPath 헬퍼 (22L)
+│   │   ├── types.ts          ← Dashboard 타입 (DashboardInstance/Registry/ScanResult/NoteSearchResult 등, 364L)
+│   │   ├── dashboard-home.ts ← DASHBOARD_HOME_ENV + resolveDashboardHome + dashboardPath 헬퍼 (19L)
 │   │   ├── dashboard-service.ts ← permDashboard/unpermDashboard/dashboardServiceStatus 서비스 관리 (214L)
-│   │   ├── health-history.ts ← HealthEvent/HealthHistory 건강 이력 추적 + createHealthHistory (138L)
+│   │   ├── health-history.ts ← HealthEvent/HealthHistory 건강 이력 추적 + createHealthHistory (139L)
 │   │   ├── launchd-service.ts ← macOS launchd 서비스 백엔드 (detect/perm/unperm/stop/start/restart) (235L)
 │   │   ├── systemd-service.ts ← Linux systemd 서비스 백엔드 (detect/perm/unperm/stop/start/restart) (236L)
 │   │   ├── platform-service.ts ← 크로스플랫폼 서비스 추상화 (detectBackend launchd/systemd/none 자동감지) (113L)
 │   │   ├── logs.ts           ← 인스턴스 로그 조회 (fetchInstanceLogs, InstanceLogSnapshot) (125L)
-│   │   ├── observability.ts  ← ManagerEvent 옵저버빌리티 + createObservability (58L)
-│   │   ├── preview-origin-proxy.ts ← 프리뷰 origin 프록시 (포트 매핑, PreviewOriginProxyController) (288L)
-│   │   ├── process-verify.ts ← 프로세스 검증 (isPidAlive, resolveListeningPid, isPortOccupied, waitForPortFree) (88L)
-│   │   ├── profiles.ts       ← 프로파일 관리 (deriveProfile, mergeProfiles, sortProfiles, filterByProfile) (102L)
+│   │   ├── observability.ts  ← ManagerEvent 옵저버빌리티 + createObservability (59L)
+│   │   ├── preview-origin-proxy.ts ← 프리뷰 origin 프록시 (포트 매핑, PreviewOriginProxyController) (298L)
+│   │   ├── process-verify.ts ← 프로세스 검증 (isPidAlive, resolveListeningPid, isPortOccupied, waitForPortFree) (121L)
+│   │   ├── profiles.ts       ← 프로파일 관리 (deriveProfile, mergeProfiles, sortProfiles, filterByProfile) (103L)
 │   │   ├── security.ts       ← 포트/호스트/Origin 보안 검증 (parsePositivePort, isLoopbackHost, isExpectedHostHeader, isAllowedOriginHeader 등 18종) (129L)
 │   │   ├── shutdown.ts       ← 대시보드 graceful shutdown (createDashboardShutdown) (71L)
 │   │   ├── board/            ← 칸반 보드 서브모듈 (2 files, 307L)
 │   │   │   ├── store.ts      ← BoardStore 클래스 + DashboardTask/TaskLane CRUD (SQLite) (209L)
 │   │   │   └── routes.ts     ← 칸반 보드 Express 라우터 (createDashboardBoardRouter) (98L)
-│   │   ├── notes/            ← 대시보드 노트 서브모듈 (15 files, 1963L)
-│   │   │   ├── assets.ts     ← note asset path/metadata helpers (65L)
+│   │   ├── notes/            ← 대시보드 노트 서브모듈 (15 files, 2266L)
+│   │   │   ├── assets.ts     ← note asset path/metadata helpers (278L)
 │   │   │   ├── capabilities.ts ← notes feature capability summary (58L)
 │   │   │   ├── constants.ts  ← notes reserved path constants (11L)
 │   │   │   ├── frontmatter.ts ← frontmatter parse/stringify helpers (159L)
 │   │   │   ├── link-resolver.ts ← note link/wiki-link resolver (107L)
 │   │   │   ├── remote-assets.ts ← remote image fetch/cache helpers (139L)
-│   │   │   ├── search.ts     ← ripgrep-backed markdown search + typed errors + reserved-folder filter (197L)
+│   │   │   ├── search.ts     ← ripgrep-backed markdown search + typed errors + reserved-folder filter (290L)
 │   │   │   ├── store.ts      ← NotesStore 클래스 — 마크다운 노트 CRUD (파일시스템 기반) (297L)
 │   │   │   ├── routes.ts     ← 노트 Express 라우터 (createDashboardNotesRouter) + `/search` + JSON 에러 핸들러 (257L)
 │   │   │   ├── trash.ts      ← NotesTrash 클래스 — os-trash/dashboard-trash 이중 경로 (129L)
@@ -132,9 +136,17 @@ cli-jaw/
 │   │   │   ├── system-trash.ts ← macOS system trash 이동 헬퍼 (moveToSystemTrash) (20L)
 │   │   │   ├── watcher.ts    ← notes external file watcher (33L)
 │   │   │   └── wiki-links.ts ← wiki-link extraction/update helpers (121L)
-│   │   ├── schedule/         ← 스케줄 관리 서브모듈 (4 files, 458L)
+│   │   ├── reminders/        ← 대시보드 reminders 서브모듈 (7 files, 745L)
+│   │   │   ├── api.ts        ← dashboard reminder list/create/update API helpers (26L)
+│   │   │   ├── dispatcher.ts ← reminder notification dispatch helper (55L)
+│   │   │   ├── due-time.ts   ← reminder due/remind time classification (20L)
+│   │   │   ├── instance-link.ts ← reminder source instance/message link parser (35L)
+│   │   │   ├── routes.ts     ← `/api/dashboard/reminders` Express router (list/create/from-message/update) (150L)
+│   │   │   ├── scheduler.ts  ← reminder notification scheduler loop (71L)
+│   │   │   └── store.ts      ← SQLite-backed dashboard reminders store + notification status (388L)
+│   │   ├── schedule/         ← 스케줄 관리 서브모듈 (4 files, 459L)
 │   │   │   ├── store.ts      ← ScheduleStore 클래스 + DashboardScheduledWork CRUD (SQLite) (230L)
-│   │   │   ├── routes.ts     ← 스케줄 Express 라우터 (createDashboardScheduleRouter) (111L)
+│   │   │   ├── routes.ts     ← 스케줄 Express 라우터 (createDashboardScheduleRouter) (112L)
 │   │   │   ├── runner.ts     ← 스케줄 실행기 (startScheduleRunner, cron/interval 기반) (74L)
 │   │   │   └── dispatcher.ts ← 스케줄 작업 디스패치 (dispatchScheduledWork, DispatchResult) (43L)
 │   │   └── routes/           ← 대시보드 전용 라우트 (2 files, 183L)
@@ -191,55 +203,65 @@ cli-jaw/
 │   │   ├── actions.ts        ← snapshot/click/type/navigate/screenshot + browser primitive actions (527L)
 │   │   ├── vision.ts         ← vision-click 파이프라인 + Codex provider + guardrail options (204L)
 │   │   ├── index.ts          ← re-export hub (33L)
-│   │   └── web-ai/           ← Web AI 브라우저 자동화 (57 files, 10238L; ChatGPT/Gemini/Grok 멀티벤더 + context-pack + tab lifecycle/pool)
-│   │       ├── index.ts      ← web-ai barrel hub (32L)
-│   │       ├── types.ts      ← WebAiVendor, WebAiStatus, QuestionEnvelope, WebAiSessionRecord, WebAiOutput 등 핵심 타입 (136L)
+│   │   └── web-ai/           ← Web AI 브라우저 자동화 (67 TS files, 12263L; ChatGPT/Gemini/Grok 멀티벤더 + resolver/source-audit/observation helpers + context-pack + tab lifecycle/pool)
+│   │       ├── index.ts      ← web-ai barrel hub (37L)
+│   │       ├── types.ts      ← WebAiVendor, WebAiStatus, QuestionEnvelope, WebAiSessionRecord, WebAiOutput 등 핵심 타입 (159L)
 │   │       ├── constants.ts  ← CACHE_SCHEMA_VERSION, VALIDATION_THRESHOLD, MAX_TRACE_STEPS, RESOLUTION_SOURCES (30L)
-│   │       ├── errors.ts     ← WebAiError 클래스 + wrapError/providerError/contextError/toErrorJson (148L)
-│   │       ├── question.ts   ← normalizeEnvelope + renderQuestionEnvelope + renderQuestionEnvelopeWithContext (91L)
-│   │       ├── session.ts    ← 세션 CRUD (createSession/getSession/listSessions/updateSessionResult/pruneSessions) + baseline 관리 (394L)
-│   │       ├── session-store.ts ← SessionStore JSON 영속화 + withStoreLock + insertSession/patchSession/listStoredSessions/pruneSessions (227L)
-│   │       ├── cli-sessions.ts ← CLI sessions 커맨드 실행 (runSessionsCommand, printSessionsHuman) (187L)
-│   │       ├── chatgpt.ts    ← ChatGPT 벤더: render/status/send/poll/query/watch/sessions/stop/diagnose (546L)
-│   │       ├── chatgpt-composer.ts ← ChatGPT 컴포저 조작 (findComposerCandidate, insertPromptIntoComposer, submitPromptFromComposer) (315L)
-│   │       ├── chatgpt-response.ts ← ChatGPT 응답 캡처 (readAssistantSnapshot, captureAssistantResponse) (216L)
-│   │       ├── chatgpt-model.ts ← ChatGPT 모델 선택 (selectChatGptModel, instant/thinking/pro) (182L)
+│   │       ├── errors.ts     ← WebAiError 클래스 + wrapError/providerError/contextError/toErrorJson (150L)
+│   │       ├── question.ts   ← normalizeEnvelope + renderQuestionEnvelope + renderQuestionEnvelopeWithContext (98L)
+│   │       ├── session.ts    ← 세션 CRUD (createSession/getSession/listSessions/updateSessionResult/pruneSessions) + baseline 관리 (449L)
+│   │       ├── session-store.ts ← SessionStore JSON 영속화 + withStoreLock + insertSession/patchSession/listStoredSessions/pruneSessions (278L)
+│   │       ├── cli-sessions.ts ← CLI sessions 커맨드 실행 (runSessionsCommand, printSessionsHuman) (208L)
+│   │       ├── chatgpt.ts    ← ChatGPT 벤더: render/status/send/poll/query/watch/sessions/stop/diagnose (891L)
+│   │       ├── chatgpt-composer.ts ← ChatGPT 컴포저 조작 (findComposerCandidate, insertPromptIntoComposer, submitPromptFromComposer) (363L)
+│   │       ├── chatgpt-response.ts ← ChatGPT 응답 캡처 (readAssistantSnapshot, captureAssistantResponse) (320L)
+│   │       ├── chatgpt-model.ts ← ChatGPT 모델 선택 (selectChatGptModel, instant/thinking/pro) (580L)
 │   │       ├── chatgpt-attachments.ts ← ChatGPT 파일 첨부 (preflightAttachment, attachLocalFileLive, clearComposerAttachmentsLive) (378L)
-│   │       ├── gemini-live.ts ← Gemini 벤더: geminiStatus/geminiSend/geminiPoll/geminiStop (569L)
+│   │       ├── gemini-live.ts ← Gemini 벤더: geminiStatus/geminiSend/geminiPoll/geminiStop (573L)
 │   │       ├── gemini-model.ts ← Gemini 모델 선택 (selectGeminiModel, fast/thinking/pro) (115L)
 │   │       ├── gemini-contract.ts ← Gemini Deep Think 계약/제약/상태 리포트 (116L)
-│   │       ├── grok-live.ts  ← Grok 벤더: grokStatus/grokSend/grokPoll/grokStop (399L)
+│   │       ├── grok-live.ts  ← Grok 벤더: grokStatus/grokSend/grokPoll/grokStop (427L)
 │   │       ├── grok-model.ts ← Grok 모델 선택 (selectGrokModel, auto/fast/expert/heavy) (120L)
-│   │       ├── ax-snapshot.ts ← 접근성 트리 스냅샷 (buildWebAiSnapshot, extractInteractiveRefs, hashAccessibilitySnapshot) (366L)
-│   │       ├── annotated-screenshot.ts ← 주석 스크린샷 빌더 (buildAnnotatedScreenshot) (143L)
-│   │       ├── browser-primitives.ts ← 브라우저 기본 동작 (findVisibleCandidate, captureTextBaseline, waitForStableTextAfterBaseline, clickResolvedTarget, fillResolvedTarget) (239L)
-│   │       ├── self-heal.ts  ← 셀프힐 타겟 해석 (resolveActionTarget, validateResolvedTarget, locatorForResolvedTarget, rankTargetCandidates) (425L)
-│   │       ├── action-cache.ts ← 액션 캐시 (loadActionCache/saveActionCache/getCachedTarget/updateCacheEntry) (249L)
-│   │       ├── action-trace.ts ← 액션 추적 (createTraceContext, recordTraceStep, getSessionTrace, summarizeTrace) (80L)
-│   │       ├── trace-persistence.ts ← 추적 영속화 (appendTraceToSession, redactSensitive) (55L)
-│   │       ├── ref-registry.ts ← Ref 레지스트리 (createRefRegistry, resolveRef, invalidateRefsOnDomChange, isRegistryStale) (151L)
-│   │       ├── dom-hash.ts   ← DOM 해시 (domHashAround, normalizeDomForHash, selectorMatchSummary) (73L)
-│   │       ├── post-action-assert.ts ← 액션 후 검증 (assertPostAction, clickWithPostAssert, fillWithPostAssert) (174L)
-│   │       ├── observe-targets.ts ← 시맨틱 타겟 관찰 (observeProviderTargets, rankTargetCandidates) (127L)
+│   │       ├── ax-snapshot.ts ← 접근성 트리 스냅샷 (buildWebAiSnapshot, extractInteractiveRefs, hashAccessibilitySnapshot) (375L)
+│   │       ├── annotated-screenshot.ts ← 주석 스크린샷 빌더 (buildAnnotatedScreenshot) (153L)
+│   │       ├── browser-primitives.ts ← 브라우저 기본 동작 (findVisibleCandidate, captureTextBaseline, waitForStableTextAfterBaseline, clickResolvedTarget, fillResolvedTarget) (259L)
+│   │       ├── self-heal.ts  ← 셀프힐 타겟 해석 (resolveActionTarget, validateResolvedTarget, locatorForResolvedTarget, rankTargetCandidates) (439L)
+│   │       ├── action-breadth.ts ← broad action expansion helper (74L)
+│   │       ├── action-cache.ts ← 액션 캐시 (loadActionCache/saveActionCache/getCachedTarget/updateCacheEntry) (250L)
+│   │       ├── action-intent.ts ← action intent normalization/resolution (92L)
+│   │       ├── action-memory.ts ← action memory scoring/cache helper (108L)
+│   │       ├── action-trace.ts ← 액션 추적 (createTraceContext, recordTraceStep, getSessionTrace, summarizeTrace) (85L)
+│   │       ├── trace-persistence.ts ← 추적 영속화 (appendTraceToSession, redactSensitive) (58L)
+│   │       ├── ref-registry.ts ← Ref 레지스트리 (createRefRegistry, resolveRef, invalidateRefsOnDomChange, isRegistryStale) (150L)
+│   │       ├── dom-hash.ts   ← DOM 해시 (domHashAround, normalizeDomForHash, selectorMatchSummary) (74L)
+│   │       ├── post-action-assert.ts ← 액션 후 검증 (assertPostAction, clickWithPostAssert, fillWithPostAssert) (186L)
+│   │       ├── observe-actions.ts ← observed action extraction/helper layer (231L)
+│   │       ├── observe-targets.ts ← 시맨틱 타겟 관찰 (observeProviderTargets, rankTargetCandidates) (129L)
+│   │       ├── observation-bundle.ts ← observation bundle builder (138L)
+│   │       ├── target-resolver.ts ← target resolver helper (48L)
 │   │       ├── capability-registry.ts ← 기능 레지스트리 (listCapabilities, lookupCapability, isCapabilityEnabled, requireCapabilityOrFailClosed) (499L)
 │   │       ├── capability-types.ts ← 기능 타입 (WebAiVendorScope, CapabilityStatus, CapabilityFamily, CapabilityEntry) (67L)
 │   │       ├── capability-freshness.ts ← 기능 freshness 게이트 (validateFreshnessGate) (38L)
 │   │       ├── capability-observation-presets.ts ← ChatGPT/Gemini 기능 관찰 프리셋 (모델선택기, 첨부, 웹검색, 이미지생성, deep think 등) (113L)
 │   │       ├── capability-observed-tool-entries.ts ← 관찰된 도구 기능 엔트리 (OBSERVED_TOOL_CAPABILITY_ENTRIES) (92L)
-│   │       ├── provider-adapter.ts ← 벤더 어댑터 인터페이스 (WebAiProviderAdapter, ProviderRuntimeDisabledError, createDisabledProviderAdapter) (68L)
-│   │       ├── vendor-editor-contract.ts ← 벤더 에디터 계약 (createChatGptEditorAdapter, 셀렉터 상수 모음) (154L)
-│   │       ├── copy-markdown.ts ← 응답 복사 마크다운 캡처 (captureCopiedResponseText, preferCopiedText) (176L)
-│   │       ├── product-surfaces.ts ← 프로덕트 서피스 감지 (detectChatGptProductSurfaces, detectGeminiProductSurfaces) (73L)
-│   │       ├── diagnostics.ts ← Web AI 진단 (captureWebAiDiagnostics, toWebAiErrorEnvelope, redactDiagnosticText) (271L)
-│   │       ├── doctor.ts     ← 기능 진단 (runDoctor, diagnoseFeature, featureDefinitionsForVendor) (274L)
+│   │       ├── provider-adapter.ts ← 벤더 어댑터 인터페이스 (WebAiProviderAdapter, ProviderRuntimeDisabledError, createDisabledProviderAdapter) (70L)
+│   │       ├── vendor-editor-contract.ts ← 벤더 에디터 계약 (createChatGptEditorAdapter, 셀렉터 상수 모음) (155L)
+│   │       ├── copy-markdown.ts ← 응답 복사 마크다운 캡처 (captureCopiedResponseText, preferCopiedText) (230L)
+│   │       ├── answer-artifact.ts ← assistant answer artifact capture/formatting helper (128L)
+│   │       ├── source-audit.ts ← answer/source audit helper (152L)
+│   │       ├── product-surfaces.ts ← 프로덕트 서피스 감지 (detectChatGptProductSurfaces, detectGeminiProductSurfaces) (85L)
+│   │       ├── diagnostics.ts ← Web AI 진단 (captureWebAiDiagnostics, toWebAiErrorEnvelope, redactDiagnosticText) (289L)
+│   │       ├── doctor.ts     ← 기능 진단 (runDoctor, diagnoseFeature, featureDefinitionsForVendor) (291L)
 │   │       ├── contract-audit.ts ← 계약 감사 (auditContractAgainstSnapshot) (127L)
 │   │       ├── cache-metrics.ts ← 캐시 메트릭스 (recordCacheEvent, reportCacheMetricsFromEvents) (105L)
 │   │       ├── churn-log.ts  ← 기능 이탈 로그 (readChurnLog, appendChurnRecord, compactChurnLog, maybeRecordChurn) (94L)
 │   │       ├── notifications.ts ← Web AI 알림 (drainPendingWebAiNotifications, formatWebAiNotification) (76L)
-│   │       ├── watcher.ts    ← 응답 워처 (startWebAiWatcher, listActiveWebAiWatchers, stopWebAiWatchers, resumeStoredWebAiWatchers) (227L)
-│   │       ├── tab-finalizer.ts ← tab lifecycle finalizer (53L)
-│   │       ├── tab-lease-store.ts ← web-ai tab lease store (96L)
-│   │       ├── tab-pool.ts   ← provider tab pooling/cleanup (359L)
+│   │       ├── interstitial.ts ← provider interstitial handling (87L)
+│   │       ├── planner-contract.ts ← web-ai planner contract helper (73L)
+│   │       ├── watcher.ts    ← 응답 워처 (startWebAiWatcher, listActiveWebAiWatchers, stopWebAiWatchers, resumeStoredWebAiWatchers) (246L)
+│   │       ├── tab-finalizer.ts ← tab lifecycle finalizer (29L)
+│   │       ├── tab-lease-store.ts ← web-ai tab lease store (440L)
+│   │       ├── tab-pool.ts   ← provider tab pooling/cleanup (69L)
 │   │       └── context-pack/ ← 컨텍스트 패키지 서브모듈 (9 files, 567L)
 │   │           ├── index.ts  ← context-pack barrel hub (8L)
 │   │           ├── types.ts  ← ContextPackInput, SelectedContextFile, ContextPackResult, ContextPackSummary (64L)
@@ -287,24 +309,25 @@ cli-jaw/
 │   ├── sw.js                 ← Service Worker 오프라인 캐시 (104L) ✨
 │   ├── icons/                ← PWA 아이콘 세트 ✨
 │   ├── theme-test.html       ← 테마 테스트 페이지
-│   ├── css/                  ← 9 files (~4834L)
+│   ├── css/                  ← 10 files (4749L)
 │   │   ├── variables.css     ← Arctic Cyan 테마 + will-change + scrollbar tint + opacity 애니메이션(@keyframes revealUp/Left/Right) + avatar input 스타일 (491L)
-│   │   ├── layout.css        ← opacity 전환 + contain 격리 + 로고 글로우 + status-badge + avatar 업로드 컨트롤 (491L)
+│   │   ├── layout.css        ← opacity 전환 + contain 격리 + 로고 글로우 + status-badge + avatar 업로드 컨트롤 (527L)
 │   │   ├── markdown.css      ← rendering (table·code·KaTeX·Mermaid) + mermaid overlay popup + copy btn (505L)
-│   │   ├── chat.css          ← 채팅 UI (agent-icon+agent-body / user-icon+user-body 레이아웃·입력·첨부·스피너·stream cursor) + contain: content/layout style + empty-state fade hide + .avatar-image 스타일 (1235L)
-│   │   ├── diagram.css       ← Mermaid/HTML 다이어그램 위젯 스타일 + iframe wrapper + 라벨/커넥터 컬러 토큰 (400L) ✨
+│   │   ├── chat.css          ← 채팅 UI (agent-icon+agent-body / user-icon+user-body 레이아웃·입력·첨부·스피너·stream cursor) + contain: content/layout style + empty-state fade hide + .avatar-image 스타일 (1286L)
+│   │   ├── diagram.css       ← Mermaid/HTML 다이어그램 위젯 스타일 + iframe wrapper + overlay clone + semantic SVG 라벨/커넥터 컬러 토큰 (400L) ✨
 │   │   ├── orc-state.css    ← PABCD 상태 글로우 + 펄스 + 배지 + 로드맵 바 + 상어 스프라이트 + light mode (239L)
-│   │   ├── sidebar.css       ← 설정탭·스킬카드·토글·cli-dot(ok/warn/missing) + pulse-warn + cwd-display (289L)
+│   │   ├── sidebar.css       ← 설정탭·스킬카드·토글·cli-dot(ok/warn/missing) + pulse-warn + cwd-display (340L)
 │   │   ├── modals.css        ← 모달·탭·설정 패널 + heartbeat validation hint/error row + contextual help dialog/button styles (363L)
-│   │   └── tool-ui.css       ← process-block 접기/펼치기 + grid collapse + 상태 dot + running 애니메이션 + orchestrate-placeholder 숨김 (548L)
+│   │   ├── tool-ui.css       ← process-block 접기/펼치기 + grid collapse + 상태 dot + running 애니메이션 + orchestrate-placeholder 숨김 (550L)
+│   │   └── trace-drawer.css  ← trace drawer panel/event list styling (48L)
 │   ├── locales/              ← i18n 로케일
 │   │   ├── ko.json           ← 한국어 (377키)
 │   │   ├── en.json           ← 영어 (377키)
 │   │   ├── ja.json           ← 일본어
 │   │   └── zh.json           ← 중국어
-│   └── js/                   ← 52 .ts files (root 17 + features/ 32 + diagram/ 3, 전 파일 TypeScript)
+│   └── js/                   ← 72 .ts files (root 17 + features/ 41 + diagram/ 3 + render/ 11, 전 파일 TypeScript)
 │       ├── main.ts           ← 앱 진입점 + 모듈 wire + heartbeat schedule validation/save guard + initAvatar() + initHelpDialog() 포함 (512L)
-│       ├── render.ts         ← marked+hljs+KaTeX+Mermaid 렌더러 + sanitize + shield/unshield + stripOrchestration(ORCH_KEYS targeted) + 다이어그램 iframe wiring (1081L)
+│       ├── render.ts         ← render public API façade. 기존 caller import surface를 유지하고 실제 구현은 `render/` 하위 모듈로 분리 (17L)
 │       ├── constants.ts      ← CLI_REGISTRY 동적 로딩 + ROLE_PRESETS (CliEntry, CliRegistry 타입) (149L)
 │       ├── api.ts            ← fetch 래퍼 + REST 엔드포인트 (generic api<T>(), ApiResponse) (61L)
 │       ├── icons.ts          ← inline SVG 아이콘 레지스트리 (278L)
@@ -312,48 +335,69 @@ cli-jaw/
 │       ├── locale.ts         ← 로케일 셀렉터 (23L)
 │       ├── state.ts          ← 전역 상태 (AppState + OrcStateName + heartbeatErrors + ProcessBlockState) (89L)
 │       ├── cjk-fix.ts        ← CJK bold/italic 인접 텍스트 파싱 보정 (38L)
-│       ├── streaming-render.ts ← rAF 스트리밍 렌더러 (threshold 기반 throttle + trailing rAF 보장) (78L)
-│       ├── virtual-scroll.ts ← TanStack Virtualizer 기반 DOM 풀링 + measured height cache + mounted row remeasure + setItems(autoActivate) + seedMeasuredHeights + activateIfNeeded + scrollToIndex 기반 scrollToBottom + pageshow/visibilitychange/focus 복귀 bottom-follow reconciliation + generateId import (504L) ✨
-│       ├── virtual-scroll-bootstrap.ts ← 순수 로직 bootstrap 오케스트레이터 — registerCallbacks → setItems(autoActivate:false) → activateIfNeeded(true) → scrollToBottom (29L) ✨
+│       ├── streaming-render.ts ← rAF 스트리밍 렌더러 (threshold 기반 throttle + trailing rAF 보장) (92L)
+│       ├── virtual-scroll.ts ← TanStack Virtualizer 기반 DOM 풀링 + measured height cache + mounted row remeasure + reconnect/restore anchor 보존 + setItems(autoActivate) + seedMeasuredHeights + activateIfNeeded + scrollToIndex 기반 scrollToBottom + pageshow/visibilitychange/focus 복귀 bottom-follow reconciliation + generateId import (577L) ✨
+│       ├── virtual-scroll-bootstrap.ts ← 순수 로직 bootstrap 오케스트레이터 — registerCallbacks → setItems(autoActivate:false) → activateIfNeeded(true) → scrollToBottom + following intent hook (49L) ✨
 │       ├── uuid.ts           ← Secure UUID v4 생성기 (crypto.randomUUID → getRandomValues → Math.random 3단 폴백) (24L)
-│       ├── ui.ts             ← DOM 유틸 + buildVirtualHistoryItems + registerVirtualScrollCallbacks + makeBootstrapDeps + bootstrapVirtualHistory 통합 (server+cache 공통) + ProcessBlock merge/dedup + bottom-follow intent helper + scrollToBottom VS 위임 + generateId UUID 폴리필 적용 (940L)
-│       ├── ws.ts             ← WebSocket + WsMessage(toolType/detail 필드) + agent_tool→showProcessStep 라우팅 + 로드맵 DOM + reconnect snapshot hydration + bottom anchor reconciliation + clear 시 IDB cache purge + loadMessages try/catch 방어 (469L)
+│       ├── ui.ts             ← DOM 유틸 + message rendering orchestration shell + ProcessBlock helper delegation + bottom-follow intent helper + scrollToBottom VS 위임 + generateId UUID 폴리필 적용 (390L)
+│       ├── ws.ts             ← WebSocket + WsMessage(toolType/detail/stepRef 필드) + agent_tool→showProcessStep 라우팅 + 로드맵 DOM + reconnect snapshot hydration + bottom anchor reconciliation + clear 시 IDB cache purge + loadMessages try/catch 방어 (481L)
 │       ├── diagram/          ← 다이어그램 iframe 위젯 (3 files, 889L)
 │       │   ├── iframe-renderer.ts  ← Mermaid/HTML 다이어그램을 sandbox iframe에 격리 렌더 (678L) ✨
 │       │   ├── types.ts            ← 위젯 페이로드 타입 (129L) ✨
 │       │   └── widget-validator.ts ← 위젯 입력 검증 (82L) ✨
-│       └── features/         ← 32 도메인 모듈
-│           ├── i18n.ts       ← 프론트엔드 i18n + applyI18n() (125L)
-│           ├── help-content.ts ← contextual help topic registry + locale key map (62L)
-│           ├── help-dialog.ts ← 전역 help dialog event delegation + safe textContent render + focus restore/Escape capture (160L)
-│           ├── chat.ts       ← 채팅 입력 + 파일 첨부 + 전송 (343L)
-│           ├── employees.ts  ← 직원 관리 UI (154L)
+│       ├── render/           ← markdown/diagram rendering helpers (11 files, 1103L)
+│       │   ├── code-copy.ts  ← 코드 블록 copy button helper (47L)
+│       │   ├── delegations.ts ← render delegation once-guard helper (10L)
+│       │   ├── file-links.ts ← local file path linkification + `/api/file/open` delegation (150L)
+│       │   ├── highlight.ts  ← highlight.js language registration + mounted block rehighlight (83L)
+│       │   ├── html.ts       ← escape/strip helper (26L)
+│       │   ├── markdown.ts   ← marked pipeline + math/SVG shielding + post-render scheduling (84L)
+│       │   ├── math.ts       ← KaTeX shield/unshield (76L)
+│       │   ├── mermaid.ts    ← lazy Mermaid load + queue + observer + render/release/prewarm (250L)
+│       │   ├── post-render.ts ← debounced post-render orchestration (35L)
+│       │   ├── sanitize.ts   ← HTML/SVG sanitizer policy split (51L)
+│       │   └── svg-actions.ts ← inline SVG block render + copy/save/zoom actions + overlay kind split (291L)
+│       └── features/         ← 41 도메인 모듈 (6103L)
+│           ├── i18n.ts       ← 프론트엔드 i18n + applyI18n() (130L)
+│           ├── help-content.ts ← contextual help topic registry + locale key map (75L)
+│           ├── help-dialog.ts ← 전역 help dialog event delegation + safe textContent render + focus restore/Escape capture (164L)
+│           ├── chat-scroll.ts ← chat bottom-follow/scroll intent helpers + initial settle support (226L)
+│           ├── chat-messages.ts ← chat message DOM/finalization helpers (132L)
+│           ├── message-actions.ts ← message action buttons and event handlers (157L)
+│           ├── message-history.ts ← message history loading/reconnect restore flow (138L)
+│           ├── message-item-html.ts ← message item HTML helper (34L)
+│           ├── chat.ts       ← 채팅 입력 + 파일 첨부 + 전송 (416L)
+│           ├── employees.ts  ← 직원 관리 UI (190L)
 │           ├── attention-badge.ts ← 사이드바/탭 attention 뱃지 + 깜빡임 + clear 트리거 (151L) ✨
 │           ├── orchestrate-scope.ts ← PABCD scope barrel re-export (4L) ✨
 │           ├── heartbeat.ts  ← Heartbeat 모달 + cron/timeZone validation + 저장 차단 + 브라우저 timeZone 기본값 (217L)
-│           ├── memory.ts     ← 메모리 관리 UI (343L)
+│           ├── memory.ts     ← 메모리 관리 UI (449L)
 │           ├── pending-queue.ts ← queued prompt overlay / pending queue 렌더 (168L) ✨
-│           ├── process-block.ts ← ProcessBlock 접기/펼치기 컴포넌트 (ProcessStep 인터페이스 + 렌더링) (272L) ✨
-│           ├── process-step-match.ts ← ProcessStep 매칭 헬퍼 (18L) ✨
+│           ├── process-block.ts ← ProcessBlock 접기/펼치기 컴포넌트 (ProcessStep 인터페이스 + 렌더링) (528L) ✨
+│           ├── process-block-dom.ts ← ProcessBlock DOM ownership/row replacement helpers (175L) ✨
+│           ├── process-log-adapter.ts ← persisted tool log to ProcessStep adapter (104L) ✨
+│           ├── process-step-match.ts ← ProcessStep 매칭 헬퍼 (19L) ✨
 │           ├── settings.ts   ← barrel re-export (9개 도메인 모듈 통합, was 902L monolith) (9L)
 │           ├── settings-types.ts ← Settings 타입 정의 (PerCliConfig, TelegramConfig, DiscordConfig, QuotaWindow 등) (24L) ✨
-│           ├── settings-core.ts ← 핵심 설정 로직 (loadSettings, updateSettings, model/cli 선택, perCli 저장) (367L) ✨
-│           ├── settings-telegram.ts ← Telegram 설정 (setTelegram, saveTelegramSettings) (40L) ✨
+│           ├── settings-core.ts ← 핵심 설정 로직 (loadSettings, updateSettings, model/cli 선택, perCli 저장) (435L) ✨
+│           ├── settings-telegram.ts ← Telegram 설정 (setTelegram, saveTelegramSettings) (49L) ✨
 │           ├── settings-discord.ts ← Discord 설정 (setDiscord, saveDiscordSettings) (61L) ✨
 │           ├── settings-channel.ts ← Channel 설정 (setActiveChannel, loadFallbackOrder, saveFallbackOrder) (53L) ✨
-│           ├── settings-stt.ts ← STT 설정 (엔진 선택, Gemini/Whisper 설정) (78L) ✨
 │           ├── settings-mcp.ts ← MCP 설정 (loadMcpServers, syncMcpServers, installMcpGlobal) (55L) ✨
-│           ├── settings-cli-status.ts ← CLI 상태 표시 (loadCliStatus, 인증/설치 상태 점검) (167L) ✨
-│           ├── settings-templates.ts ← 프롬프트 템플릿 모달 (openPromptModal, savePromptFromModal, toggleDevMode) (131L) ✨
+│           ├── settings-cli-status.ts ← CLI 상태 표시 (loadCliStatus, 인증/설치 상태 점검) (229L) ✨
+│           ├── settings-stt.ts ← STT 설정 (엔진 선택, Gemini/Whisper 설정) (109L) ✨
+│           ├── settings-templates.ts ← 프롬프트 템플릿 모달 (openPromptModal, savePromptFromModal, toggleDevMode) (132L) ✨
 │           ├── voice-recorder.ts ← MediaRecorder 래퍼 + MIME 자동탐지 + 에러 분류 + 녹음 타이머 (175L)
-│           ├── skills.ts     ← 스킬 관리 UI (83L)
+│           ├── skills.ts     ← 스킬 관리 UI (111L)
 │           ├── slash-commands.ts ← 슬래시 커맨드 자동완성 (229L)
 │           ├── sidebar.ts    ← 사이드바 접기 (이중 모드) (119L)
-│           ├── theme.ts      ← pill switch 다크/라이트 (HTMLLinkElement cast) (50L)
+│           ├── theme.ts      ← pill switch 다크/라이트 (HTMLLinkElement cast) (84L)
 │           ├── appname.ts    ← Agent Name (HTMLInputElement, KeyboardEvent) (44L)
-│           ├── avatar.ts     ← Agent/User avatar 이모지+이미지 이중 관리 + 서버 업로드/삭제/복원 + getAgentAvatarMarkup/getUserAvatarMarkup + live DOM sync (224L) ✨
-│           ├── tool-ui.ts    ← 도구 호출 그룹 렌더링 (buildToolGroupHtml + live activity) (116L) ✨
-│           ├── idb-cache.ts  ← IndexedDB 대화 캐시 v3 (scope별, upsert, versionchange, empty-array wipe guard) (164L) ✨
+│           ├── avatar.ts     ← Agent/User avatar 이모지+이미지 이중 관리 + 서버 업로드/삭제/복원 + getAgentAvatarMarkup/getUserAvatarMarkup + live DOM sync (187L) ✨
+│           ├── tool-ui.ts    ← 도구 호출 그룹 렌더링 (buildToolGroupHtml + live activity) (122L) ✨
+│           ├── trace-drawer.ts ← Trace drawer UI controls (122L) ✨
+│           ├── ui-status.ts  ← compact UI status helper (47L) ✨
+│           ├── idb-cache.ts  ← IndexedDB 대화 캐시 v3 (scope별, upsert, versionchange, empty-array wipe guard) (169L) ✨
 │           └── gesture.ts    ← 터치/스와이프 제스처 핸들러 (61L) ✨
 ├── bin/
 │   ├── cli-jaw.ts            ← 17개 user-facing 서브커맨드 라우팅 + --home flag (`browser-web-ai.ts` helper 포함 시 commands top-level 18 files) (187L)
@@ -379,15 +423,15 @@ cli-jaw/
 │       ├── browser-web-ai.ts ← `jaw browser web-ai` ChatGPT/Gemini/Grok 자동화 helper (277L)
 │       ├── dashboard.ts      ← `jaw dashboard serve` — `dist/src/manager/server.js` 서브프로세스 기동 (255L)
 │       └── tui/              ← chat 터미널 TUI 분리 (api/input-handler/overlays/renderer/simple-mode/types/ws-handler, 7 files)
-├── tests/                    ← 회귀 방지 테스트 (351 .test.ts files: root 5 / unit 332 / integration 9 / browser 5 / fixtures + smoke)
+├── tests/                    ← 회귀 방지 테스트 (366 .test.ts files: root 5 / unit 347 / integration 9 / browser 5 / fixtures + smoke)
 │   ├── acp-client.test.ts     ← ACP client contract
 │   ├── employee-session.test.ts ← main-session ownership
 │   ├── events.test.ts        ← 이벤트 파서 단위 테스트 + stepRef + compact event parsing
 │   ├── events-acp.test.ts    ← ACP session/update 이벤트 테스트
 │   ├── telegram-forwarding.test.ts ← Telegram 포워딩 동작 테스트
 │   ├── plan.md               ← 테스트 인벤토리/상태 추적 노트
-│   ├── fixtures/             ← 테스트 페이로드 픽스처 (17 files)
-│   ├── unit/                 ← Tier 1-2 단위 테스트 (167 files)
+│   ├── fixtures/             ← 테스트 페이로드 픽스처 (71 files)
+│   ├── unit/                 ← Tier 1-2 단위 테스트 (347 .test.ts files)
 │   │   ├── employee-prompt.test.ts ← 직원 프롬프트 14건
 │   │   ├── orchestrator-parsing.test.ts ← subtask 파싱 13건
 │   │   ├── orchestrator-triage.test.ts  ← triage 판단 10건
@@ -411,7 +455,7 @@ cli-jaw/
 │   │   ├── service.test.ts           ← 크로스 플랫폼 서비스 27건
 │   │   ├── streaming-render.test.ts ← rAF 스트리밍 렌더러 15건 ✨
 │   │   ├── tool-ui.test.ts          ← 도구 호출 그룹 렌더링 11건 ✨
-│   │   └── ... (115 files total)
+│   │   └── ... (347 .test.ts files total)
 │   ├── integration/          ← Tier 3-4 통합 테스트 (9 files)
 │   │   ├── cli-basic.test.ts         ← CLI 기본 통합
 │   │   ├── api-smoke.test.ts         ← API 스모크 (서버 기동)
@@ -444,7 +488,7 @@ cli-jaw/
 ├── officecli/                ← OfficeCLI 포크 서브모듈 (lidge-jun/OfficeCLI, Apache 2.0)
 │   ├── src/officecli/Core/CjkHelper.cs ← CJK 폰트 처리 모듈 (260L) ✨
 │   └── tests/OfficeCli.Tests/ ← xUnit 테스트 (41 tests)
-├── skills_ref/               ← 레퍼런스 스킬 (118개, 별도 레포) — officecli-cjk/accessibility/data-pipeline 포함
+├── skills_ref/               ← 레퍼런스 스킬 (233 top-level dirs, 별도 레포) — officecli-cjk/accessibility/data-pipeline 포함
 ├── tests/smoke/              ← OfficeCLI 통합 스모크 테스트 (8 scenarios)
 ├── docs/officecli-integration.md ← OfficeCLI 통합 가이드
 └── devlog/                   ← MVP 12 Phase + Post-MVP devlogs

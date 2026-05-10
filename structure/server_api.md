@@ -188,8 +188,6 @@ ensureDirs()
 - browser API는 primitive/tab/debug/doctor/runtime-cleanup 라우트와 web-ai provider automation 라우트를 합쳐 40개 route로 확장됐다.
 - trace API는 public trace summary와 bounded event page/read를 `GET /api/traces/:runId*` 3개 route로 노출한다.
 
----
-
 ## Selected Route Notes
 
 ### `/api/command`
@@ -271,3 +269,20 @@ ensureDirs()
 - 새 연결 시 서버는 필요하면 `agent_status`, `queue_update`, non-IDLE `orc_state`를 먼저 push 한다.
 - 실제 broadcast 함수는 `src/core/bus.ts`의 `broadcast(type, data)` 하나다. WebSocket 전송과 내부 listener fan-out을 동시에 처리한다.
 - Web UI가 소비하는 이벤트별 상세 흐름은 [stream-events.md](stream-events.md)에 정리한다.
+
+---
+
+## Manager Dashboard Server Surface
+
+`jaw dashboard serve`가 띄우는 별도 manager 서버(`src/manager/server.ts`)는 core `server.ts` route count에 포함하지 않는다. 현재 manager 전용 API는 scan/proxy/lifecycle 외에 board, notes, schedule, reminders를 함께 제공한다.
+
+| Surface | Endpoints |
+| --- | --- |
+| Manager health/scan | `GET /api/dashboard/health` `GET /api/dashboard/instances` `GET /api/dashboard/instances/:port` |
+| Notes | `GET /api/dashboard/notes/info` `GET /api/dashboard/notes/version` `GET /api/dashboard/notes/tree` `GET /api/dashboard/notes/index` `GET /api/dashboard/notes/capabilities` `GET /api/dashboard/notes/search` `GET/POST/PUT /api/dashboard/notes/file` `POST /api/dashboard/notes/asset` |
+| Board | `GET/POST/PATCH/DELETE /api/dashboard/board/tasks` and lane/task ordering routes under `/api/dashboard/board` |
+| Schedule | `GET/POST/PATCH/DELETE /api/dashboard/schedule` plus schedule runner-backed dispatch |
+| Reminders | `GET /api/dashboard/reminders` `POST /api/dashboard/reminders` `POST /api/dashboard/reminders/from-message` `PATCH /api/dashboard/reminders/:id` |
+| Desktop/Electron | `GET /api/dashboard/desktop-status` `GET/POST /api/dashboard/electron-metrics` |
+
+Reminders are backed by `src/manager/reminders/store.ts` and normalized through `src/manager/reminders/api.ts`. The scheduler checks due reminders, dispatches channel notifications, and records `notificationStatus`/attempt metadata.
