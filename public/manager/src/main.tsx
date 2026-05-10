@@ -29,6 +29,7 @@ import './settings-controls.css';
 import './settings-agent.css';
 import './jaw-ceo/jaw-ceo.css';
 import './jaw-ceo/jaw-ceo-console.css';
+import './jaw-ceo/jaw-ceo-virtual.css';
 
 const root = document.getElementById('manager-root');
 if (!root) throw new Error('manager-root not found');

@@ -1,0 +1,24 @@
+.jaw-ceo-chat-log.is-virtual {
+    position: relative;
+    display: block;
+    overflow: auto;
+}
+
+.jaw-ceo-virtual-spacer {
+    position: relative;
+    min-height: 100%;
+}
+
+.jaw-ceo-virtual-row {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding-bottom: 10px;
+    will-change: transform;
+}
+
+.jaw-ceo-virtual-row > .jaw-ceo-activity-shell,
+.jaw-ceo-virtual-row > .jaw-ceo-message-row {
+    min-height: 0;
+}

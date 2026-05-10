@@ -11,20 +11,20 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
-    gap: 14px;
-    padding: 18px 20px 14px;
+    gap: 12px;
+    padding: 14px 18px 12px;
     border-bottom: 1px solid var(--ceo-line);
 }
 .jaw-ceo-console-titlebar {
     min-width: 0;
     display: grid;
-    grid-template-columns: 42px minmax(0, 1fr);
+    grid-template-columns: 34px minmax(0, 1fr);
     align-items: center;
     gap: 12px;
 }
 .jaw-ceo-console-mark {
-    width: 42px;
-    height: 42px;
+    width: 34px;
+    height: 34px;
     display: inline-grid;
     place-items: center;
     border: 1px solid var(--border-strong);
@@ -32,7 +32,7 @@
     background: var(--canvas-deep);
     color: var(--ceo-ink);
     font-family: "Geist Mono", "JetBrains Mono", monospace;
-    font-size: 11px;
+    font-size: 9px;
     font-weight: 900;
 }
 .jaw-ceo-console-mark.status-active,
@@ -53,13 +53,13 @@
 }
 .jaw-ceo-console-heading span {
     color: var(--ceo-muted);
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
 }
 .jaw-ceo-console-heading h3 {
     margin: 0;
     color: var(--ceo-ink);
-    font-size: 25px;
+    font-size: 19px;
     font-weight: 850;
     line-height: 1.05;
 }
@@ -69,9 +69,9 @@
 }
 .jaw-ceo-icon-btn,
 .jaw-ceo-console-close {
-    width: 38px;
-    min-width: 38px;
-    height: 38px;
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
     display: inline-grid;
     place-items: center;
     border-radius: 8px;
@@ -94,12 +94,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    padding: 7px 8px;
+    padding: 6px 7px;
     border: 1px solid var(--ceo-line);
     border-radius: 8px;
     background: color-mix(in srgb, var(--canvas-deep) 72%, transparent);
     color: var(--ceo-muted);
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
 }
 .jaw-ceo-console-summary .voice-tone-live { color: var(--status-running); }
@@ -107,11 +107,11 @@
 .jaw-ceo-console-summary .voice-tone-issue { color: var(--status-error); }
 .jaw-ceo-tabs {
     gap: 3px;
-    padding: 10px 20px;
+    padding: 8px 18px;
     background: color-mix(in srgb, var(--canvas-deep) 52%, transparent);
 }
 .jaw-ceo-tabs button {
-    min-height: 32px;
+    min-height: 29px;
     border-radius: 8px;
     background: transparent;
     font-weight: 700;
@@ -127,10 +127,10 @@
 }
 .jaw-ceo-chat-panel,
 .jaw-ceo-settings-panel {
-    padding: 18px 20px;
+    padding: 14px 18px;
 }
 .jaw-ceo-chat-log {
-    gap: 16px;
+    gap: 10px;
 }
 .jaw-ceo-timeline {
     min-height: 0;
@@ -197,7 +197,7 @@
 }
 .jaw-ceo-message-meta strong {
     color: var(--ceo-ink);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 850;
 }
 .jaw-ceo-message-meta small,
@@ -208,11 +208,11 @@
 }
 .jaw-ceo-message-text {
     color: var(--ceo-ink);
-    font-size: 13px;
-    line-height: 1.52;
+    font-size: 12px;
+    line-height: 1.48;
 }
 .jaw-ceo-message-row.role-ceo .jaw-ceo-message-text {
-    font-size: 13.5px;
+    font-size: 12.25px;
 }
 .jaw-ceo-message-text p,
 .jaw-ceo-message-text ul {
@@ -221,13 +221,13 @@
 .jaw-ceo-message-text p + p,
 .jaw-ceo-message-text p + ul,
 .jaw-ceo-message-text ul + p {
-    margin-top: 7px;
+    margin-top: 5px;
 }
 .jaw-ceo-message-text ul {
-    padding-left: 17px;
+    padding-left: 15px;
 }
 .jaw-ceo-message-text li + li {
-    margin-top: 4px;
+    margin-top: 3px;
 }
 .jaw-ceo-activity-shell {
     position: relative;
@@ -249,11 +249,11 @@
     min-width: 0;
 }
 .jaw-ceo-activity-group summary {
-    min-height: 38px;
+    min-height: 32px;
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 7px 10px;
+    padding: 6px 9px;
     border: 1px solid var(--ceo-line);
     border-radius: 8px;
     background: color-mix(in srgb, var(--bg-raised) 82%, transparent);
@@ -282,7 +282,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 800;
 }
 .jaw-ceo-activity-status,
@@ -327,7 +327,7 @@
     background: color-mix(in srgb, var(--status-warn) 17%, var(--bg-raised));
     color: color-mix(in srgb, var(--status-warn) 86%, var(--ceo-ink));
     font-family: "Geist Mono", "JetBrains Mono", monospace;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 900;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -350,27 +350,27 @@
 }
 .jaw-ceo-activity-copy strong {
     color: var(--ceo-ink);
-    font-size: 12px;
+    font-size: 11.5px;
     font-weight: 850;
 }
 .jaw-ceo-activity-copy p {
     margin: 0;
     overflow: hidden;
     color: var(--ceo-muted);
-    font-size: 11.5px;
+    font-size: 10.75px;
     line-height: 1.35;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 .jaw-ceo-trace-chip,
 .jaw-ceo-activity-actions button {
-    min-height: 26px;
-    padding: 3px 8px;
+    min-height: 24px;
+    padding: 3px 7px;
     border: 1px solid var(--ceo-line);
     border-radius: 8px;
     background: var(--bg-raised);
     color: var(--ceo-ink);
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 800;
 }
 .jaw-ceo-trace-chip {
@@ -406,7 +406,7 @@
 }
 .jaw-ceo-empty-state strong {
     color: var(--ceo-ink);
-    font-size: 17px;
+    font-size: 15px;
     line-height: 1.15;
 }
 .jaw-ceo-quick-prompts {
@@ -418,7 +418,7 @@
     min-height: 28px;
     border-radius: 8px;
     background: var(--canvas-deep);
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 700;
 }
 .jaw-ceo-settings-form {
@@ -436,7 +436,7 @@
     resize: vertical;
     border-color: transparent;
     background: var(--canvas-deep);
-    font-size: 13px;
+    font-size: 12px;
 }
 .jaw-ceo-form-row select {
     min-height: 38px;

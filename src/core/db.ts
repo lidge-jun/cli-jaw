@@ -122,6 +122,16 @@ db.exec(`
         visible       INTEGER NOT NULL DEFAULT 0
     );
 
+    CREATE TABLE IF NOT EXISTS jaw_ceo_transcript (
+        id          TEXT PRIMARY KEY,
+        at          TEXT NOT NULL,
+        role        TEXT NOT NULL,
+        text        TEXT NOT NULL,
+        source      TEXT,
+        created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_jaw_ceo_transcript_at ON jaw_ceo_transcript(at);
+
     CREATE TABLE IF NOT EXISTS trace_runs (
         id TEXT PRIMARY KEY,
         message_id INTEGER,
@@ -206,6 +216,9 @@ export const getLatestDashboardActivityMessage = db.prepare("SELECT id, role, su
 export const getRecentMessages = db.prepare('SELECT id, role, content, cli, model, trace, created_at FROM messages WHERE working_dir = ? OR working_dir IS NULL ORDER BY id DESC LIMIT ?');
 export const clearMessages = db.prepare('DELETE FROM messages');
 export const clearMessagesScoped = db.prepare('DELETE FROM messages WHERE working_dir = ?');
+export const insertJawCeoTranscript = db.prepare('INSERT OR REPLACE INTO jaw_ceo_transcript (id, at, role, text, source) VALUES (?, ?, ?, ?, ?)');
+export const getJawCeoTranscript = db.prepare('SELECT id, at, role, text, source FROM jaw_ceo_transcript ORDER BY at DESC, created_at DESC LIMIT ?');
+export const pruneJawCeoTranscript = db.prepare('DELETE FROM jaw_ceo_transcript WHERE id NOT IN (SELECT id FROM jaw_ceo_transcript ORDER BY at DESC, created_at DESC LIMIT ?)');
 export const getMemory = db.prepare('SELECT key, value, source FROM memory ORDER BY updated_at DESC');
 export const upsertMemory = db.prepare(`
     INSERT INTO memory (key, value, source) VALUES (?, ?, ?)

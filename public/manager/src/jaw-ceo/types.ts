@@ -16,6 +16,7 @@ export type JawCeoCompletionSource = 'agent_done' | 'orchestrate_done' | 'latest
 export type JawCeoPendingStatus = 'pending' | 'spoken' | 'acknowledged' | 'dismissed';
 export type JawCeoWatchReason = 'voice_started_task' | 'ceo_routed_task' | 'manual_watch';
 export type JawCeoAuditKind = 'tool' | 'policy' | 'lifecycle' | 'completion' | 'docs_edit';
+export type JawCeoTranscriptRole = 'user' | 'ceo' | 'tool';
 
 export type JawCeoLatestMessageFallback = {
     mode: 'enabled' | 'disabled' | 'requires_post_watch_proof';
@@ -91,6 +92,14 @@ export type JawCeoAuditRecord = {
     meta?: Record<string, unknown>;
 };
 
+export type JawCeoTranscriptEntry = {
+    id: string;
+    at: string;
+    role: JawCeoTranscriptRole;
+    text: string;
+    source: 'text' | 'voice' | 'completion' | 'system';
+};
+
 export type JawCeoVoiceRuntimeState = {
     status: JawCeoVoiceStatus;
     sessionId: string | null;
@@ -101,6 +110,7 @@ export type JawCeoVoiceRuntimeState = {
 
 export type JawCeoPublicState = {
     session: JawCeoSessionContext;
+    transcript: JawCeoTranscriptEntry[];
     watches: JawCeoWatch[];
     pending: JawCeoCompletion[];
     auditTail: JawCeoAuditRecord[];

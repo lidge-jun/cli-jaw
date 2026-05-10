@@ -8,6 +8,7 @@ import {
     type JawCeoPendingStatus,
     type JawCeoPublicState,
     type JawCeoSessionContext,
+    type JawCeoTranscriptEntry,
     type JawCeoVoiceRuntimeState,
     type JawCeoWatch,
 } from './types.js';
@@ -17,6 +18,9 @@ export type JawCeoStore = ReturnType<typeof createJawCeoStore>;
 export type JawCeoStoreOptions = {
     maxPending?: number;
     maxAudit?: number;
+    maxTranscript?: number;
+    initialTranscript?: JawCeoTranscriptEntry[];
+    onTranscriptAppend?: (entry: JawCeoTranscriptEntry) => void;
     now?: () => Date;
 };
 
@@ -52,6 +56,7 @@ function createDefaultVoiceState(): JawCeoVoiceRuntimeState {
 export function createJawCeoStore(options: JawCeoStoreOptions = {}) {
     const maxPending = Math.max(1, options.maxPending ?? 100);
     const maxAudit = Math.max(1, options.maxAudit ?? 300);
+    const maxTranscript = Math.max(1, options.maxTranscript ?? 500);
     const now = options.now ?? (() => new Date());
     let session = createDefaultSession(now);
     let voice = createDefaultVoiceState();
@@ -59,6 +64,7 @@ export function createJawCeoStore(options: JawCeoStoreOptions = {}) {
     const completions = new Map<string, JawCeoCompletion>();
     const completionAliases = new Map<string, string>();
     const audit: JawCeoAuditRecord[] = [];
+    const transcript: JawCeoTranscriptEntry[] = (options.initialTranscript ?? []).slice(-maxTranscript).map(entry => ({ ...entry }));
     const confirmations = new Map<string, JawCeoConfirmationRecord>();
 
     function trimPending(): void {
@@ -94,6 +100,7 @@ export function createJawCeoStore(options: JawCeoStoreOptions = {}) {
         getState(): JawCeoPublicState {
             return {
                 session: { ...session },
+                transcript: transcript.slice(-maxTranscript).map(entry => ({ ...entry })),
                 watches: Array.from(watches.values()).map(watch => ({ ...watch })),
                 pending: Array.from(completions.values()).map(completion => ({ ...completion })),
                 auditTail: audit.slice(-50).map(record => ({ ...record })),
@@ -178,6 +185,23 @@ export function createJawCeoStore(options: JawCeoStoreOptions = {}) {
             return { ...next };
         },
         appendAudit,
+        appendTranscript(input: Omit<JawCeoTranscriptEntry, 'id' | 'at'> & { id?: string; at?: string }): JawCeoTranscriptEntry {
+            const entry: JawCeoTranscriptEntry = {
+                id: input.id || `msg_${randomUUID()}`,
+                at: input.at || iso(now),
+                role: input.role,
+                text: input.text,
+                source: input.source,
+            };
+            transcript.push(entry);
+            while (transcript.length > maxTranscript) transcript.shift();
+            try {
+                options.onTranscriptAppend?.({ ...entry });
+            } catch (error) {
+                console.warn('[jaw-ceo:transcript-persist]', error instanceof Error ? error.message : String(error));
+            }
+            return { ...entry };
+        },
         listAudit(limit = 50, filter?: { kind?: JawCeoAuditKind; port?: number }): JawCeoAuditRecord[] {
             const boundedLimit = Math.max(1, Math.min(300, limit));
             return audit

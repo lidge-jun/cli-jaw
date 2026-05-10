@@ -56,9 +56,10 @@ async function json<T>(response: Response): Promise<T> {
 
 test('jaw-ceo routes expose state and server-owned pending completion flow', async () => {
     await withJawCeoServer(async (baseUrl) => {
-        const state = await json<{ ok: boolean; data: { session: { sessionId: string } } }>(await fetch(`${baseUrl}/api/jaw-ceo/state`));
+        const state = await json<{ ok: boolean; data: { session: { sessionId: string }; transcript: unknown[] } }>(await fetch(`${baseUrl}/api/jaw-ceo/state`));
         assert.equal(state.ok, true);
         assert.match(state.data.session.sessionId, /^jaw-ceo-/);
+        assert.deepEqual(state.data.transcript, []);
 
         const sent = await json<{ ok: boolean; data: { ok: boolean; data: { pending: unknown[] } } }>(await fetch(`${baseUrl}/api/jaw-ceo/message`, {
             method: 'POST',
@@ -68,6 +69,12 @@ test('jaw-ceo routes expose state and server-owned pending completion flow', asy
         assert.equal(sent.ok, true);
         assert.equal(sent.data.ok, true);
         assert.equal(sent.data.data.pending.length, 0);
+
+        const afterMessage = await json<{ ok: boolean; data: { transcript: Array<{ role: string; text: string }> } }>(await fetch(`${baseUrl}/api/jaw-ceo/state`));
+        assert.equal(afterMessage.data.transcript[0]?.role, 'user');
+        assert.equal(afterMessage.data.transcript[0]?.text, 'ship it');
+        assert.equal(afterMessage.data.transcript[1]?.role, 'ceo');
+        assert.match(afterMessage.data.transcript[1]?.text || '', /registered a completion watch/);
 
         const refreshed = await json<{ ok: boolean; data: { pending: Array<{ completionKey: string; port: number; resultText?: string; summary?: string }> } }>(await fetch(`${baseUrl}/api/jaw-ceo/events/refresh`, {
             method: 'POST',
@@ -87,6 +94,9 @@ test('jaw-ceo routes expose state and server-owned pending completion flow', asy
         }));
         assert.equal(summarized.ok, true);
         assert.match(summarized.data.data.summary, /Patched dispatch/);
+
+        const afterSummary = await json<{ ok: boolean; data: { transcript: Array<{ role: string; text: string }> } }>(await fetch(`${baseUrl}/api/jaw-ceo/state`));
+        assert.match(afterSummary.data.transcript.at(-1)?.text || '', /Patched dispatch/);
 
         const continued = await json<{ ok: boolean; data: { ok: boolean; data: { response: string }; untrustedText?: string } }>(await fetch(`${baseUrl}/api/jaw-ceo/pending/${key}/continue`, {
             method: 'POST',

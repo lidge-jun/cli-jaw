@@ -37,6 +37,7 @@ function emptyState(selectedPort: number | null): JawCeoPublicState {
             frontendPresence: 'visible',
             autoRead: false,
         },
+        transcript: [],
         watches: [],
         pending: [],
         auditTail: [],
@@ -46,6 +47,27 @@ function emptyState(selectedPort: number | null): JawCeoPublicState {
             model: 'gpt-realtime-2',
             voice: 'marin',
             error: null,
+        },
+    };
+}
+
+function normalizeState(raw: Partial<JawCeoPublicState>, selectedPort: number | null): JawCeoPublicState {
+    const fallback = emptyState(selectedPort);
+    return {
+        ...fallback,
+        ...raw,
+        session: {
+            ...fallback.session,
+            ...(raw.session ?? {}),
+            selectedPort: raw.session?.selectedPort ?? selectedPort,
+        },
+        transcript: Array.isArray(raw.transcript) ? raw.transcript : [],
+        watches: Array.isArray(raw.watches) ? raw.watches : [],
+        pending: Array.isArray(raw.pending) ? raw.pending : [],
+        auditTail: Array.isArray(raw.auditTail) ? raw.auditTail : [],
+        voice: {
+            ...fallback.voice,
+            ...(raw.voice ?? {}),
         },
     };
 }
@@ -104,10 +126,10 @@ export function useJawCeo(args: UseJawCeoArgs): JawCeoController {
     const refresh = useCallback(async () => {
         setBusyAction(current => current || 'refresh');
         try {
-            const currentState = await fetchJawCeoState();
+            const currentState = normalizeState(await fetchJawCeoState(), args.selectedPort);
             const ports = Array.from(new Set(currentState.watches.map(watch => watch.port)));
             if (ports.length > 0) await refreshJawCeoEvents({ ports });
-            const nextState = await fetchJawCeoState();
+            const nextState = normalizeState(await fetchJawCeoState(), args.selectedPort);
             setState(nextState);
             setError(null);
         } catch (err) {
@@ -115,7 +137,7 @@ export function useJawCeo(args: UseJawCeoArgs): JawCeoController {
         } finally {
             setBusyAction(current => current === 'refresh' ? null : current);
         }
-    }, []);
+    }, [args.selectedPort]);
 
     useEffect(() => {
         if (!args.documentVisible) return undefined;

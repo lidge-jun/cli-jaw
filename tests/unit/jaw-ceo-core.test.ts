@@ -52,6 +52,38 @@ test('jaw-ceo-store keeps pending completions bounded and auditable', () => {
     assert.equal(store.listAudit(1)[0]?.message, 'created');
 });
 
+test('jaw-ceo-store keeps a bounded server transcript for reconnecting consoles', () => {
+    const store = createJawCeoStore({ maxTranscript: 2, now: fixedNow });
+    store.appendTranscript({ role: 'user', text: 'first', source: 'text' });
+    store.appendTranscript({ role: 'ceo', text: 'second', source: 'system' });
+    store.appendTranscript({ role: 'tool', text: 'third', source: 'completion' });
+
+    const transcript = store.getState().transcript;
+    assert.equal(transcript.length, 2);
+    assert.equal(transcript[0]?.text, 'second');
+    assert.equal(transcript[1]?.text, 'third');
+    assert.match(transcript[1]?.id || '', /^msg_/);
+});
+
+test('jaw-ceo-store can hydrate and persist transcript entries across process restarts', () => {
+    const saved: string[] = [];
+    const store = createJawCeoStore({
+        maxTranscript: 3,
+        now: fixedNow,
+        initialTranscript: [
+            { id: 'old_1', at: '2026-05-09T23:58:00.000Z', role: 'user', text: 'before restart', source: 'text' },
+            { id: 'old_2', at: '2026-05-09T23:59:00.000Z', role: 'ceo', text: 'loaded after restart', source: 'system' },
+        ],
+        onTranscriptAppend: entry => saved.push(entry.text),
+    });
+
+    assert.deepEqual(store.getState().transcript.map(entry => entry.text), ['before restart', 'loaded after restart']);
+    store.appendTranscript({ role: 'user', text: 'after reconnect', source: 'text' });
+
+    assert.deepEqual(saved, ['after reconnect']);
+    assert.deepEqual(store.getState().transcript.map(entry => entry.text), ['before restart', 'loaded after restart', 'after reconnect']);
+});
+
 test('jaw-ceo completion stores worker final text separately from preview summary', () => {
     const watch = sampleWatch();
     const finalText = [
@@ -116,6 +148,7 @@ test('jaw-ceo-coordinator sends worker messages with baseline watch and server-o
     const coordinator = new JawCeoCoordinator({
         repoRoot: process.cwd(),
         now: fixedNow,
+        store: createJawCeoStore({ now: fixedNow }),
         fetchLatestMessage: async () => ({
             latestAssistant: {
                 id: latestId,
@@ -176,6 +209,29 @@ test('jaw-ceo-coordinator sends worker messages with baseline watch and server-o
     const both = coordinator.continueCompletion(completionKey, 'both');
     assert.equal(coordinator.store.getCompletion(completionKey)?.status, 'spoken');
     assert.match(String((both.data as { response?: string } | undefined)?.response || ''), /real final worker response/);
+});
+
+test('jaw-ceo-coordinator persists user and CEO messages into public state', async () => {
+    const coordinator = new JawCeoCoordinator({
+        repoRoot: process.cwd(),
+        now: fixedNow,
+        store: createJawCeoStore({ now: fixedNow }),
+    });
+
+    const result = await coordinator.message({
+        text: 'what is happening?',
+        selectedPort: null,
+        inputMode: 'text',
+        responseMode: 'text',
+    });
+
+    assert.equal(result.ok, true);
+    const transcript = coordinator.state().transcript;
+    assert.equal(transcript.length, 2);
+    assert.equal(transcript[0]?.role, 'user');
+    assert.equal(transcript[0]?.text, 'what is happening?');
+    assert.equal(transcript[1]?.role, 'ceo');
+    assert.match(transcript[1]?.text || '', /ready/i);
 });
 
 test('jaw-ceo-docs-edit allows approved markdown and rejects code paths', async () => {
@@ -245,6 +301,7 @@ test('jaw-ceo-lifecycle realtime tools require confirmation before destructive a
     const coordinator = new JawCeoCoordinator({
         repoRoot: process.cwd(),
         now: fixedNow,
+        store: createJawCeoStore({ now: fixedNow }),
         runLifecycleAction: async ({ action, port }) => {
             executed.push(`${action}:${port}`);
             return { ok: true, message: `${action} :${port}`, data: { action, port } };

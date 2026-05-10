@@ -92,6 +92,11 @@ export async function message(ctx: JawCeoCoordinatorContext, input: JawCeoMessag
         responseMode,
         selectedPort: selectedPort ?? null,
     });
+    ctx.store.appendTranscript({
+        role: 'user',
+        text,
+        source: input.inputMode === 'voice' ? 'voice' : 'text',
+    });
     if (selectedPort != null) {
         const dispatchRef = `dispatch_${randomUUID()}`;
         const result = await sendMessage(ctx, {
@@ -105,6 +110,11 @@ export async function message(ctx: JawCeoCoordinatorContext, input: JawCeoMessag
         const response = result.ok
             ? `Sent to worker :${selectedPort} and registered a completion watch.`
             : `I could not send to worker :${selectedPort}: ${result.error?.message || 'unknown error'}`;
+        ctx.store.appendTranscript({
+            role: result.ok ? 'ceo' : 'tool',
+            text: response,
+            source: 'system',
+        });
         return auditTool(ctx.store, {
             tool: 'ceo.message',
             ok: result.ok,
@@ -116,6 +126,7 @@ export async function message(ctx: JawCeoCoordinatorContext, input: JawCeoMessag
         });
     }
     const response = 'Jaw CEO is ready. Select a worker or ask a dashboard question.';
+    ctx.store.appendTranscript({ role: 'ceo', text: response, source: 'system' });
     return auditTool(ctx.store, {
         tool: 'ceo.message',
         ok: true,

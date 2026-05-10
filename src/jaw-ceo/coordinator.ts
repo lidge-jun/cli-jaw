@@ -27,6 +27,7 @@ import type {
 import { getInstanceActivity, inspectInstance, listInstances, message, sendMessage, watchCompletion } from './coordinator-workers.js';
 import { buildJawCeoDocsEditPolicy, type JawCeoDocsEditPolicy } from './docs-edit.js';
 import { createJawCeoStore, type JawCeoStore } from './store.js';
+import { loadJawCeoTranscript, persistJawCeoTranscript } from './transcript-persistence.js';
 import type {
     JawCeoCompletion,
     JawCeoLatestMessageFallback,
@@ -58,7 +59,11 @@ export class JawCeoCoordinator {
     constructor(deps: JawCeoCoordinatorDeps) {
         this.deps = deps;
         this.now = deps.now ?? (() => new Date());
-        this.store = deps.store || createJawCeoStore({ now: this.now });
+        this.store = deps.store || createJawCeoStore({
+            now: this.now,
+            initialTranscript: loadJawCeoTranscript(),
+            onTranscriptAppend: entry => persistJawCeoTranscript(entry),
+        });
         this.repoRoot = path.resolve(deps.repoRoot);
         this.docsPolicy = buildJawCeoDocsEditPolicy({
             repoRoot: this.repoRoot,

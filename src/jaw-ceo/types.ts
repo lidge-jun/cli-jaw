@@ -31,6 +31,7 @@ export type JawCeoWatchReason =
     | 'manual_watch';
 
 export type JawCeoAuditKind = 'tool' | 'policy' | 'lifecycle' | 'completion' | 'docs_edit';
+export type JawCeoTranscriptRole = 'user' | 'ceo' | 'tool';
 
 export interface JawCeoLatestMessageFallback {
     mode: 'enabled' | 'disabled' | 'requires_post_watch_proof';
@@ -106,6 +107,14 @@ export interface JawCeoAuditRecord {
     meta?: Record<string, unknown> | undefined;
 }
 
+export interface JawCeoTranscriptEntry {
+    id: string;
+    at: string;
+    role: JawCeoTranscriptRole;
+    text: string;
+    source: 'text' | 'voice' | 'completion' | 'system';
+}
+
 export interface JawCeoVoiceRuntimeState {
     status: JawCeoVoiceStatus;
     sessionId: string | null;
@@ -116,6 +125,7 @@ export interface JawCeoVoiceRuntimeState {
 
 export interface JawCeoPublicState {
     session: JawCeoSessionContext;
+    transcript: JawCeoTranscriptEntry[];
     watches: JawCeoWatch[];
     pending: JawCeoCompletion[];
     auditTail: JawCeoAuditRecord[];

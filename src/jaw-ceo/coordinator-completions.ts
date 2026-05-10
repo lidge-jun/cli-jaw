@@ -107,6 +107,11 @@ function publicContinuationCompletion(completion: JawCeoCompletion): Omit<JawCeo
 export function continueCompletion(ctx: JawCeoCoordinatorContext, completionKey: string, mode: JawCeoResponseMode = 'text'): JawCeoToolResult {
     const completion = ctx.store.updateCompletionStatus(completionKey, mode === 'voice' || mode === 'both' ? 'spoken' : 'acknowledged');
     if (!completion) {
+        ctx.store.appendTranscript({
+            role: 'tool',
+            text: 'Pending completion was not found.',
+            source: 'completion',
+        });
         return auditTool(ctx.store, {
             tool: 'ceo.continue_completion',
             ok: false,
@@ -116,6 +121,13 @@ export function continueCompletion(ctx: JawCeoCoordinatorContext, completionKey:
         });
     }
     const silent = mode === 'silent';
+    if (!silent) {
+        ctx.store.appendTranscript({
+            role: 'ceo',
+            text: completionResultText(completion),
+            source: 'completion',
+        });
+    }
     return auditTool(ctx.store, {
         tool: 'ceo.continue_completion',
         ok: true,
@@ -137,6 +149,11 @@ export function continueCompletion(ctx: JawCeoCoordinatorContext, completionKey:
 export function summarizeCompletion(ctx: JawCeoCoordinatorContext, completionKey: string, format: 'short' | 'detailed' = 'short'): JawCeoToolResult {
     const completion = ctx.store.getCompletion(completionKey);
     if (!completion) {
+        ctx.store.appendTranscript({
+            role: 'tool',
+            text: 'Pending completion was not found.',
+            source: 'completion',
+        });
         return auditTool(ctx.store, {
             tool: 'ceo.summarize_completion',
             ok: false,
@@ -152,6 +169,11 @@ export function summarizeCompletion(ctx: JawCeoCoordinatorContext, completionKey
         : format === 'detailed'
             ? `${completion.summary || 'Worker result is ready.'} Open worker :${completion.port} for the full result.`
             : completion.summary || `Worker :${completion.port} has a result ready.`;
+    ctx.store.appendTranscript({
+        role: 'ceo',
+        text: summary,
+        source: 'completion',
+    });
     return auditTool(ctx.store, {
         tool: 'ceo.summarize_completion',
         ok: true,

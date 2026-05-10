@@ -1,8 +1,9 @@
-import type { ReactElement } from 'react';
+import { useCallback, useMemo, type ReactElement } from 'react';
 import type { JawCeoController } from './useJawCeo';
 import type { JawCeoVoiceController } from './useJawCeoVoice';
 import type { JawCeoAuditRecord, JawCeoCompletion, JawCeoResponseMode, JawCeoWatch } from './types';
 import type { JawCeoConsoleModel } from './useJawCeoConsoleModel';
+import { useJawCeoVirtualTimeline } from './useJawCeoVirtualTimeline';
 import { JawCeoSettingsPanel } from './JawCeoSettingsPanel';
 
 type TimelineEntry =
@@ -43,13 +44,16 @@ function quickPrompts(selectedPort: number | null): Array<{ label: string; text:
 }
 
 function buildTimeline(args: { model: JawCeoConsoleModel; ceo: JawCeoController; voice: JawCeoVoiceController }): TimelineEntry[] {
+    const transcript = Array.isArray(args.ceo.state.transcript) ? args.ceo.state.transcript : [];
+    const watches = Array.isArray(args.ceo.state.watches) ? args.ceo.state.watches : [];
+    const audit = Array.isArray(args.ceo.audit) ? args.ceo.audit : [];
     const entries: TimelineEntry[] = [
-        ...args.model.chat.map(entry => ({ kind: 'chat' as const, id: entry.id, at: entry.at, role: entry.role, text: entry.text })),
+        ...transcript.map(entry => ({ kind: 'chat' as const, id: entry.id, at: entry.at, role: entry.role, text: entry.text })),
         ...args.ceo.pending
             .filter(completion => completion.status === 'pending' || completion.status === 'spoken')
             .map(completion => ({ kind: 'result' as const, id: `result-${completion.completionKey}`, at: completion.detectedAt, completion })),
-        ...args.ceo.state.watches.map(watch => ({ kind: 'watch' as const, id: `watch-${watch.watchId}`, at: watch.createdAt, watch })),
-        ...args.ceo.audit.slice(-24).map(record => ({ kind: 'tool' as const, id: `audit-${record.id}`, at: record.at, record })),
+        ...watches.map(watch => ({ kind: 'watch' as const, id: `watch-${watch.watchId}`, at: watch.createdAt, watch })),
+        ...audit.slice(-24).map(record => ({ kind: 'tool' as const, id: `audit-${record.id}`, at: record.at, record })),
     ];
     entries.sort((a, b) => {
         const diff = Date.parse(a.at) - Date.parse(b.at);
@@ -59,6 +63,13 @@ function buildTimeline(args: { model: JawCeoConsoleModel; ceo: JawCeoController;
         entries.push({ kind: 'live', id: 'live-voice-transcript', at: new Date().toISOString(), text: args.voice.lastTranscript, eventType: args.voice.lastEventType });
     }
     return entries;
+}
+
+function estimateTimelineItemSize(entry: RenderItem | undefined): number {
+    if (!entry) return 76;
+    if (entry.kind === 'activity-group') return 52;
+    const lineCount = Math.max(1, entry.text.split(/\r?\n/).filter(Boolean).length);
+    return Math.min(220, 54 + lineCount * 18);
 }
 
 function groupTimeline(entries: TimelineEntry[]): RenderItem[] {
@@ -183,7 +194,7 @@ function ActivityGroup(props: {
     return (
         <section className="jaw-ceo-activity-shell" aria-label="CEO activity">
             <span className="jaw-ceo-activity-avatar" aria-hidden="true">CEO</span>
-            <details className="jaw-ceo-activity-group" open>
+            <details className="jaw-ceo-activity-group">
                 <summary>
                     <span className="jaw-ceo-activity-status" aria-hidden="true" />
                     <strong>{activitySummary(props.entries) || 'Activity'}</strong>
@@ -256,10 +267,21 @@ function TimelineEntryView(props: {
 }
 
 function ChatPanel(props: { model: JawCeoConsoleModel; ceo: JawCeoController; voice: JawCeoVoiceController; selectedPort: number | null; onOpenWorker: (port: number, messageId?: number) => void }) {
-    const timeline = groupTimeline(buildTimeline({ model: props.model, ceo: props.ceo, voice: props.voice }));
+    const timeline = useMemo(() => groupTimeline(buildTimeline({ model: props.model, ceo: props.ceo, voice: props.voice })), [
+        props.model,
+        props.ceo.state.transcript,
+        props.ceo.pending,
+        props.ceo.state.watches,
+        props.ceo.audit,
+        props.voice.lastTranscript,
+        props.voice.lastEventType,
+    ]);
+    const getItemKey = useCallback((index: number) => timeline[index]?.id || index, [timeline]);
+    const estimateSize = useCallback((index: number) => estimateTimelineItemSize(timeline[index]), [timeline]);
+    const virtual = useJawCeoVirtualTimeline({ count: timeline.length, getItemKey, estimateSize });
     return (
         <section className="jaw-ceo-chat-panel" aria-label="Jaw CEO chat">
-            <div className="jaw-ceo-chat-log jaw-ceo-timeline" aria-live="polite">
+            <div ref={virtual.scrollRef} onScroll={virtual.onScroll} className="jaw-ceo-chat-log jaw-ceo-timeline is-virtual" aria-live="polite">
                 {timeline.length === 0 ? (
                     <div className="jaw-ceo-empty-state">
                         <span className="jaw-ceo-empty-kicker">Ready</span>
@@ -270,7 +292,25 @@ function ChatPanel(props: { model: JawCeoConsoleModel; ceo: JawCeoController; vo
                             ))}
                         </div>
                     </div>
-                ) : timeline.map(entry => <TimelineEntryView key={entry.id} entry={entry} model={props.model} ceo={props.ceo} voice={props.voice} onOpenWorker={props.onOpenWorker} />)}
+                ) : (
+                    <div className="jaw-ceo-virtual-spacer" style={{ height: `${virtual.totalSize}px` }}>
+                        {virtual.virtualItems.map(virtualItem => {
+                            const entry = timeline[virtualItem.index];
+                            if (!entry) return null;
+                            return (
+                                <div
+                                    key={virtualItem.key}
+                                    ref={virtual.measureElement}
+                                    className="jaw-ceo-virtual-row"
+                                    data-jaw-ceo-idx={virtualItem.index}
+                                    style={{ transform: `translateY(${virtualItem.start}px)` }}
+                                >
+                                    <TimelineEntryView entry={entry} model={props.model} ceo={props.ceo} voice={props.voice} onOpenWorker={props.onOpenWorker} />
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
             <form className="jaw-ceo-message-form" onSubmit={(event) => void props.model.submitMessage(event)}>
                 <textarea value={props.model.message} rows={3} placeholder="Send a task to the selected worker or ask about the dashboard." onChange={event => props.model.setMessage(event.target.value)} />

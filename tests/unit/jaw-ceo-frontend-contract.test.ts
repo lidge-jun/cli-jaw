@@ -59,6 +59,7 @@ test('jaw-ceo frontend module file set stays explicit and bounded', () => {
         'public/manager/src/jaw-ceo/types.ts',
         'public/manager/src/jaw-ceo/api.ts',
         'public/manager/src/jaw-ceo/useJawCeo.ts',
+        'public/manager/src/jaw-ceo/useJawCeoVirtualTimeline.ts',
         'public/manager/src/jaw-ceo/voice-session.ts',
         'public/manager/src/jaw-ceo/useJawCeoVoice.ts',
         'public/manager/src/jaw-ceo/voice-cues.ts',
@@ -69,6 +70,7 @@ test('jaw-ceo frontend module file set stays explicit and bounded', () => {
         'public/manager/src/jaw-ceo/JawCeoTabs.tsx',
         'public/manager/src/jaw-ceo/jaw-ceo.css',
         'public/manager/src/jaw-ceo/jaw-ceo-console.css',
+        'public/manager/src/jaw-ceo/jaw-ceo-virtual.css',
     ];
 
     for (const file of files) {
@@ -81,6 +83,8 @@ test('jaw-ceo frontend exposes masked voice key settings inside CEO console', ()
     const api = read('public/manager/src/jaw-ceo/api.ts');
     const tabs = read('public/manager/src/jaw-ceo/JawCeoTabs.tsx');
     const panels = read('public/manager/src/jaw-ceo/JawCeoConsolePanels.tsx');
+    const model = read('public/manager/src/jaw-ceo/useJawCeoConsoleModel.ts');
+    const virtualHook = read('public/manager/src/jaw-ceo/useJawCeoVirtualTimeline.ts');
     const settings = read('public/manager/src/jaw-ceo/JawCeoSettingsPanel.tsx');
 
     assert.ok(api.includes('/api/jaw-ceo/settings'), 'frontend must use the Jaw CEO scoped settings endpoint');
@@ -90,6 +94,13 @@ test('jaw-ceo frontend exposes masked voice key settings inside CEO console', ()
     assert.equal(tabs.includes("label: 'Watched'"), false, 'watched workers must render inside Chat, not a separate tab');
     assert.equal(tabs.includes("label: 'Tools'"), false, 'tool use must render inside Chat, not a separate tab');
     assert.ok(panels.includes('<JawCeoSettingsPanel />'), 'settings tab must render the key settings panel');
+    assert.ok(panels.includes('args.ceo.state.transcript'), 'chat timeline must hydrate from server-owned transcript');
+    assert.ok(panels.includes('Array.isArray(args.ceo.state.transcript)'), 'chat timeline must tolerate older state responses before server restart');
+    assert.equal(model.includes('useState<ChatEntry[]>'), false, 'chat transcript must not be local component state');
+    assert.ok(virtualHook.includes("@tanstack/virtual-core"), 'CEO chat must use existing TanStack virtual-core dependency');
+    assert.ok(virtualHook.includes('count: args.count'), 'virtualization must be active from item count zero');
+    assert.ok(panels.includes('useJawCeoVirtualTimeline'), 'chat panel must render through the CEO virtual timeline hook');
+    assert.equal(panels.includes('className="jaw-ceo-activity-group" open'), false, 'tool activity details must default collapsed');
     assert.ok(settings.includes('type="password"'), 'API key input must not be plain text');
     assert.equal(settings.includes('localStorage'), false, 'API key must not be stored in browser localStorage');
 });
@@ -149,8 +160,8 @@ test('jaw-ceo frontend renders realtime voice overlay and silent state without i
     assert.ok(consolePanels.includes('jaw-ceo-message-row'), 'chat panel must render chatbot-style message rows');
     assert.ok(consolePanels.includes('jaw-ceo-activity-group'), 'chat panel must render tool/result activity groups');
     assert.ok(consolePanels.includes('args.ceo.pending'), 'pending worker results must be folded into the chat timeline');
-    assert.ok(consolePanels.includes('args.ceo.state.watches'), 'watched worker state must be folded into the chat timeline');
-    assert.ok(consolePanels.includes('args.ceo.audit.slice'), 'tool/audit records must be folded into the chat timeline');
+    assert.ok(consolePanels.includes('watches.map'), 'watched worker state must be folded into the chat timeline');
+    assert.ok(consolePanels.includes('audit.slice'), 'tool/audit records must be folded into the chat timeline');
     assert.ok(consolePanels.includes('args.voice.lastTranscript'), 'realtime voice transcript must render inside the chat timeline');
     assert.ok(consolePanel.includes('lastTranscript'), 'console footer must surface realtime transcript hints');
     assert.ok(consolePanel.includes("voice-${props.voice.status}"), 'console footer must expose voice status styling hooks');
