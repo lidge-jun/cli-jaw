@@ -4,6 +4,7 @@ import {
     actionForShortcutEvent,
     DEFAULT_MANAGER_SHORTCUT_KEYMAP,
     formatShortcut,
+    normalizeManagerShortcutKeymap,
     shortcutMatches,
 } from '../../public/manager/src/manager-shortcuts.js';
 
@@ -43,4 +44,19 @@ test('manager shortcut action lookup uses the configured keymap', () => {
 test('manager shortcut labels render readable chords', () => {
     assert.equal(formatShortcut('Alt+I'), 'Alt + I');
     assert.equal(formatShortcut('Ctrl + Shift + N'), 'Ctrl + Shift + N');
+});
+
+test('manager shortcut keymap normalizes legacy registry values', () => {
+    const normalized = normalizeManagerShortcutKeymap({
+        focusInstances: undefined,
+        focusActiveSession: '',
+        focusNotes: 'Ctrl+Shift+N',
+    });
+
+    assert.equal(normalized.focusInstances, DEFAULT_MANAGER_SHORTCUT_KEYMAP.focusInstances);
+    assert.equal(normalized.focusActiveSession, DEFAULT_MANAGER_SHORTCUT_KEYMAP.focusActiveSession);
+    assert.equal(normalized.focusNotes, 'Ctrl+Shift+N');
+    assert.equal(normalized.previousInstance, DEFAULT_MANAGER_SHORTCUT_KEYMAP.previousInstance);
+    assert.equal(normalized.nextInstance, DEFAULT_MANAGER_SHORTCUT_KEYMAP.nextInstance);
+    assert.equal(actionForShortcutEvent(keyEvent('i', { altKey: true }), undefined), 'focusInstances');
 });

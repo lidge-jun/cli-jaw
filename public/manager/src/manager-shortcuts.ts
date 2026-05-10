@@ -57,6 +57,16 @@ function parseShortcut(raw: string): ParsedShortcut | null {
     return parsed.key ? parsed : null;
 }
 
+export function normalizeManagerShortcutKeymap(value: unknown): DashboardShortcutKeymap {
+    const input = value && typeof value === 'object' ? value as Partial<Record<DashboardShortcutAction, unknown>> : {};
+    const keymap = { ...DEFAULT_MANAGER_SHORTCUT_KEYMAP };
+    for (const action of MANAGER_SHORTCUT_ACTIONS) {
+        const shortcut = input[action];
+        keymap[action] = typeof shortcut === 'string' && shortcut.trim() ? shortcut : DEFAULT_MANAGER_SHORTCUT_KEYMAP[action];
+    }
+    return keymap;
+}
+
 export function shortcutMatches(event: KeyboardEvent, raw: string): boolean {
     const parsed = parseShortcut(raw);
     if (!parsed) return false;
@@ -69,10 +79,11 @@ export function shortcutMatches(event: KeyboardEvent, raw: string): boolean {
 
 export function actionForShortcutEvent(
     event: KeyboardEvent,
-    keymap: DashboardShortcutKeymap,
+    keymap: unknown,
 ): DashboardShortcutAction | null {
+    const shortcuts = normalizeManagerShortcutKeymap(keymap);
     for (const action of MANAGER_SHORTCUT_ACTIONS) {
-        if (shortcutMatches(event, keymap[action])) return action;
+        if (shortcutMatches(event, shortcuts[action])) return action;
     }
     return null;
 }
