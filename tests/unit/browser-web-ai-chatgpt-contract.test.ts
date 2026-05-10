@@ -9,6 +9,7 @@ import { normalizeEnvelope } from '../../src/browser/web-ai/question.ts';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const chatgptSrc = fs.readFileSync(join(root, 'src/browser/web-ai/chatgpt.ts'), 'utf8');
+const chatgptModelSrc = fs.readFileSync(join(root, 'src/browser/web-ai/chatgpt-model.ts'), 'utf8');
 
 test('BWAC-001: ChatGPT URL allowlist is narrow', () => {
     assert.equal(isChatGptUrl('https://chatgpt.com/'), true);
@@ -51,4 +52,18 @@ test('BWAC-005: placeholder answers are filtered', () => {
     assert.match(chatgptSrc, /finalizing answer/i);
     assert.match(chatgptSrc, /cleanAssistantText/);
     assert.match(chatgptSrc, /Thought for\\s\+\\d\+s/);
+});
+
+test('BWAC-006: ChatGPT selector drift is surfaced as warnings instead of blocking send', () => {
+    assert.match(chatgptModelSrc, /model-selector-unavailable-current-model/);
+    assert.match(chatgptModelSrc, /reasoning-effort-unavailable-current-effort/);
+    assert.match(chatgptModelSrc, /requested effort .* was not enforced/);
+    assert.match(chatgptSrc, /selectedModel\?\.warnings/);
+    assert.match(chatgptSrc, /selectedModel\?\.selected \? \[`model selected:/);
+});
+
+test('BWAC-007: sent-turn attachment evidence can warn without stopping poll', () => {
+    assert.match(chatgptSrc, /sent-attachment-evidence-unavailable/);
+    assert.match(chatgptSrc, /sent attachment evidence unavailable after submit/);
+    assert.doesNotMatch(chatgptSrc, /if \(!sentAttachment\.ok\) throw new Error\(sentAttachment\.error\)/);
 });

@@ -30,3 +30,10 @@ test('GEM-LIVE-003: Gemini supports observed mode picker choices when --model is
     assert.match(geminiLiveSrc, /selectGeminiModel/);
     assert.match(geminiLiveSrc, /model selected:/);
 });
+
+test('GEM-LIVE-004: Gemini new chat click retries transient Angular detach failures', () => {
+    assert.match(geminiLiveSrc, /clickFirstSelectorWithRetry/);
+    assert.match(geminiLiveSrc, /'gemini new chat'/);
+    assert.match(geminiLiveSrc, /click retry:\$\{sel\}/);
+    assert.match(geminiLiveSrc, /detached\|Timeout\|not attached\|not stable/);
+});

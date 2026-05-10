@@ -71,6 +71,33 @@ async function findFirstSelector(page: Page, selectors: readonly string[], timeo
     return null;
 }
 
+async function clickFirstSelectorWithRetry(
+    page: Page,
+    selectors: readonly string[],
+    timeoutMs: number,
+    warnings: string[],
+    label: string,
+): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const sel = await findFirstSelector(page, selectors, Math.min(1_000, Math.max(250, deadline - Date.now())));
+        if (!sel) {
+            await page.waitForTimeout(250).catch(() => undefined);
+            continue;
+        }
+        try {
+            await page.locator(sel).first().click({ timeout: 2_000 });
+            return true;
+        } catch (e) {
+            const message = (e as Error).message || String(e);
+            if (!/detached|Timeout|not attached|not stable/i.test(message)) throw e;
+            warnings.push(`${label} click retry:${sel}:${message.split('\n')[0]}`);
+            await page.waitForTimeout(250).catch(() => undefined);
+        }
+    }
+    return false;
+}
+
 export interface GeminiLiveStatusReport extends Omit<GeminiStatusReport, 'runtimeEnabled' | 'status'> {
     runtimeEnabled: true;
     status: GeminiAccountStatus | 'ready';
@@ -426,13 +453,12 @@ function stripExtension(name: string): string {
 
 async function openFreshGeminiChat(page: Page, warnings: string[]): Promise<void> {
     const beforeUrl = page.url();
-    const newChatSel = await findFirstSelector(page, GEMINI_DEEP_THINK_SELECTORS.newChat, 5_000);
-    if (!newChatSel) {
+    const clickedNewChat = await clickFirstSelectorWithRetry(page, GEMINI_DEEP_THINK_SELECTORS.newChat, 8_000, warnings, 'gemini new chat');
+    if (!clickedNewChat) {
         const existingTurns = await page.locator(GEMINI_DEEP_THINK_SELECTORS.responseTurn[0]).count().catch(() => 0);
         if (existingTurns === 0) return;
         throw new Error('gemini new chat control not visible');
     }
-    await page.locator(newChatSel).first().click({ timeout: 5_000 });
     await page.waitForTimeout(1_000).catch(() => undefined);
     await findFirstSelector(page, GEMINI_DEEP_THINK_SELECTORS.input, 10_000);
     const existingTurns = await page.locator(GEMINI_DEEP_THINK_SELECTORS.responseTurn[0]).count().catch(() => 0);

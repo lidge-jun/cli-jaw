@@ -1,4 +1,5 @@
 import type { Page } from 'playwright-core';
+import { WebAiError } from './errors.js';
 
 type BoxLike = { x: number; y: number; width: number; height: number };
 type BrowserNodeLike = {
@@ -14,12 +15,13 @@ export type ChatGptModelChoice = 'instant' | 'thinking' | 'pro';
 export type ChatGptEffortChoice = 'light' | 'standard' | 'extended' | 'heavy';
 
 export interface ChatGptModelSelectionResult {
-    requested: ChatGptModelChoice;
-    selected: ChatGptModelChoice;
+    requested: ChatGptModelChoice | null;
+    selected: ChatGptModelChoice | null;
     alreadySelected: boolean;
     effort?: ChatGptEffortChoice | null;
     requestedEffort?: ChatGptEffortChoice | null;
     usedFallbacks: string[];
+    warnings: string[];
 }
 
 export const CHATGPT_MODEL_SELECTOR_BUTTONS = [
@@ -49,7 +51,7 @@ const CHATGPT_EFFORT_TRIGGER_SELECTORS = [
 ] as const;
 
 export const CHATGPT_MODEL_OPTIONS: Record<ChatGptModelChoice, { testIds: string[]; labels: string[] }> = {
-    instant: { testIds: ['model-switcher-gpt-5-3'], labels: ['Instant'] },
+    instant: { testIds: ['model-switcher-gpt-5-5', 'model-switcher-gpt-5-3'], labels: ['Instant'] },
     thinking: { testIds: ['model-switcher-gpt-5-5-thinking', 'model-switcher-gpt-5-5-thinking-thinking-effort'], labels: ['Thinking'] },
     pro: { testIds: ['model-switcher-gpt-5-5-pro', 'model-switcher-gpt-5-5-pro-thinking-effort'], labels: ['Pro', 'Heavy'] },
 };
@@ -122,25 +124,67 @@ export async function selectChatGptModel(page: Page, model: string | undefined, 
     const requested = normalizeChatGptModelChoice(model);
     const requestedEffort = normalizeChatGptEffortChoice(options.effort || options.reasoningEffort);
     if (!requested) {
-        if (model) throw new Error(`unsupported ChatGPT model selection: ${model}`);
+        if (model) throw new WebAiError({
+            errorCode: 'provider.model-mismatch',
+            stage: 'provider-select-mode',
+            vendor: 'chatgpt',
+            retryHint: 'model-fallback',
+            message: `unsupported ChatGPT model selection: ${model}`,
+            evidence: { model },
+        });
         if (!requestedEffort) return null;
     }
     if ((options.effort || options.reasoningEffort) && !requestedEffort) {
-        throw new Error(`unsupported ChatGPT reasoning effort: ${options.effort || options.reasoningEffort}`);
+        throw new WebAiError({
+            errorCode: 'provider.model-mismatch',
+            stage: 'provider-select-mode',
+            vendor: 'chatgpt',
+            retryHint: 'model-fallback',
+            message: `unsupported ChatGPT reasoning effort: ${options.effort || options.reasoningEffort}`,
+            evidence: { effort: options.effort || options.reasoningEffort },
+        });
     }
 
     const usedFallbacks: string[] = [];
-    await openModelMenu(page, usedFallbacks);
+    const warnings: string[] = [];
+    try {
+        await openModelMenu(page, usedFallbacks);
+    } catch (err) {
+        if (!isSelectionUnavailable(err)) throw err;
+        return {
+            requested: requested || null,
+            selected: null,
+            alreadySelected: true,
+            effort: null,
+            requestedEffort: requestedEffort || null,
+            usedFallbacks: [...usedFallbacks, 'model-selector-unavailable-current-model'],
+            warnings: [buildModelSelectionWarning(requested, requestedEffort, err)],
+        };
+    }
     let currentModel = await readCheckedModel(page, requested || null);
     const targetModel = requested || currentModel;
     let modelChanged = false;
     if (!targetModel) {
         await closeModelMenu(page);
-        throw new Error('ChatGPT model must be selected before setting reasoning effort');
+        throw new WebAiError({
+            errorCode: 'provider.model-mismatch',
+            stage: 'provider-select-mode',
+            vendor: 'chatgpt',
+            retryHint: 'model-fallback',
+            message: 'ChatGPT model must be selected before setting reasoning effort',
+            evidence: { effort: requestedEffort },
+        });
     }
     if (requested && currentModel !== requested) {
         const option = await findModelOption(page, requested);
-        if (!option) throw new Error(`ChatGPT model option not found: ${requested}`);
+        if (!option) throw new WebAiError({
+            errorCode: 'provider.model-mismatch',
+            stage: 'provider-select-mode',
+            vendor: 'chatgpt',
+            retryHint: 'model-fallback',
+            message: `ChatGPT model option not found: ${requested}`,
+            evidence: { requested },
+        });
         await option.click({ timeout: 5_000 });
         await page.waitForTimeout(750).catch(() => undefined);
         await openModelMenu(page, usedFallbacks);
@@ -150,12 +194,22 @@ export async function selectChatGptModel(page: Page, model: string | undefined, 
 
     let selectedEffort: { selected: ChatGptEffortChoice; changed: boolean } | null = null;
     if (requestedEffort) {
-        selectedEffort = await selectChatGptEffort(page, targetModel, requestedEffort, usedFallbacks);
-        await openModelMenu(page, usedFallbacks);
+        try {
+            selectedEffort = await selectChatGptEffort(page, targetModel, requestedEffort, usedFallbacks);
+            await openModelMenu(page, usedFallbacks);
+        } catch (err) {
+            if (!isSelectionUnavailable(err)) throw err;
+            usedFallbacks.push('reasoning-effort-unavailable-current-effort');
+            warnings.push(`reasoning effort ${requestedEffort} was not enforced: ${errorMessage(err)}`);
+            await closeModelMenu(page);
+        }
     }
     const after = await readCheckedModel(page, targetModel);
     await closeModelMenu(page);
-    if (after !== targetModel) throw new Error(`ChatGPT model verification failed: expected ${targetModel}, got ${after || 'none'}`);
+    if (after !== targetModel) {
+        usedFallbacks.push('model-verification-unavailable-current-model');
+        warnings.push(`model ${targetModel} was not verified; current detected model is ${after || 'unknown'}`);
+    }
     return {
         requested: requested || targetModel,
         selected: after,
@@ -163,7 +217,34 @@ export async function selectChatGptModel(page: Page, model: string | undefined, 
         effort: selectedEffort?.selected || null,
         requestedEffort: requestedEffort || null,
         usedFallbacks,
+        warnings,
     };
+}
+
+function isSelectionUnavailable(err: unknown): boolean {
+    const message = errorMessage(err);
+    if (err instanceof WebAiError && err.errorCode === 'provider.model-mismatch' && err.stage === 'provider-select-mode') {
+        return /ChatGPT model selector not found/i.test(message);
+    }
+    return /ChatGPT model selector not found/i.test(message);
+}
+
+function buildModelSelectionWarning(
+    requested: ChatGptModelChoice | null,
+    requestedEffort: ChatGptEffortChoice | null,
+    err: unknown,
+): string {
+    const modelText = requested
+        ? `requested ${requested} was not enforced`
+        : 'model selector unavailable';
+    const effortText = requestedEffort
+        ? `; requested effort ${requestedEffort} was not enforced`
+        : '';
+    return `${modelText}${effortText}, continuing with current ChatGPT model: ${errorMessage(err)}`;
+}
+
+function errorMessage(err: unknown): string {
+    return (err as { message?: string })?.message || String(err);
 }
 
 async function closeModelMenu(page: Page): Promise<void> {
@@ -201,11 +282,18 @@ async function openModelMenu(page: Page, usedFallbacks: string[]): Promise<void>
         await page.waitForTimeout(400).catch(() => undefined);
         if (await isModelMenuOpen(page)) return;
     }
-    throw new Error(`ChatGPT model selector not found. Tried: ${[...CHATGPT_MODEL_SELECTOR_BUTTONS, ...CHATGPT_COMPOSER_MODEL_PILL_SELECTORS].join(', ')}`);
+    throw new WebAiError({
+        errorCode: 'provider.model-mismatch',
+        stage: 'provider-select-mode',
+        vendor: 'chatgpt',
+        retryHint: 'model-fallback',
+        message: `ChatGPT model selector not found. Tried: ${[...CHATGPT_MODEL_SELECTOR_BUTTONS, ...CHATGPT_COMPOSER_MODEL_PILL_SELECTORS].join(', ')}`,
+        selectorsTried: [...CHATGPT_MODEL_SELECTOR_BUTTONS, ...CHATGPT_COMPOSER_MODEL_PILL_SELECTORS],
+    });
 }
 
 async function findComposerModelPill(page: Page): Promise<ReturnType<Page['locator']> | null> {
-    let standaloneHeavy: ReturnType<Page['locator']> | null = null;
+    let standaloneEffort: ReturnType<Page['locator']> | null = null;
     for (const selector of CHATGPT_COMPOSER_MODEL_PILL_SELECTORS) {
         const candidates = await page.locator(selector).count().catch(() => 0);
         for (let index = candidates - 1; index >= 0; index -= 1) {
@@ -215,17 +303,17 @@ async function findComposerModelPill(page: Page): Promise<ReturnType<Page['locat
             const trimmed = text.trim();
             if (!isModelPillText(trimmed)) continue;
             if (isStandaloneEffortLabel(trimmed)) {
-                if (/^Heavy$/i.test(trimmed) && !standaloneHeavy) standaloneHeavy = loc;
+                if (!standaloneEffort) standaloneEffort = loc;
                 continue;
             }
             return loc;
         }
     }
-    return standaloneHeavy || findModelTextButton(page);
+    return standaloneEffort || findModelTextButton(page);
 }
 
 async function findModelTextButton(page: Page): Promise<ReturnType<Page['locator']> | null> {
-    let standaloneHeavy: ReturnType<Page['locator']> | null = null;
+    let standaloneEffort: ReturnType<Page['locator']> | null = null;
     const candidates = await page.locator('button').count().catch(() => 0);
     for (let index = candidates - 1; index >= 0; index -= 1) {
         const loc = page.locator('button').nth(index);
@@ -233,12 +321,12 @@ async function findModelTextButton(page: Page): Promise<ReturnType<Page['locator
         const text = (await loc.innerText({ timeout: 500 }).catch(() => '')).trim();
         if (!isModelPillText(text)) continue;
         if (isStandaloneEffortLabel(text)) {
-            if (/^Heavy$/i.test(text) && !standaloneHeavy) standaloneHeavy = loc;
+            if (!standaloneEffort) standaloneEffort = loc;
             continue;
         }
         return loc;
     }
-    return standaloneHeavy;
+    return standaloneEffort;
 }
 
 async function findModelOption(page: Page, choice: ChatGptModelChoice): Promise<ReturnType<Page['locator']> | null> {

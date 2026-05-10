@@ -6,6 +6,7 @@ import {
     discoverConversationUrl,
     __resetSessionState,
 } from '../../src/browser/web-ai/session.js';
+import { readFileSync } from 'node:fs';
 
 const baseEnvelope = { vendor: 'chatgpt' as const, prompt: 'hi', attachmentPolicy: 'inline-only' as const };
 
@@ -49,4 +50,10 @@ test('URL-004: nonexistent session returns false', () => {
     __resetSessionState();
     const updated = discoverConversationUrl('nonexistent-id', 'https://chatgpt.com/c/abc');
     assert.equal(updated, false);
+});
+
+test('URL-005: session page binding trusts live post-submit conversation URL', () => {
+    const src = readFileSync(new URL('../../src/browser/web-ai/chatgpt.ts', import.meta.url), 'utf8');
+    assert.match(src, /discoverConversationUrl\(sessionId, liveUrl\)/);
+    assert.match(src, /updated \|\| current/);
 });

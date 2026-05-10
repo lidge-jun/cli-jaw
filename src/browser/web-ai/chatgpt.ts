@@ -22,6 +22,7 @@ import {
     findSessionByTarget,
     getBaseline,
     getSession,
+    discoverConversationUrl,
     incrementRecoveryCount,
     listSessions,
     pruneSessions,
@@ -48,7 +49,7 @@ import { fromCliJawStructuredError, WebAiError } from './errors.js';
 import { listCapabilitySchemas } from './capability-registry.js';
 import { prepareContextForBrowser, summarizeContextPack } from './context-pack/index.js';
 import { appendTraceToSession, type TracePersistableValue } from './trace-persistence.js';
-import { detectInterstitial } from './interstitial.js';
+import { detectInterstitial, isPageDeathError } from './interstitial.js';
 import type {
     QuestionEnvelopeInput,
     WebAiOutput,
@@ -212,15 +213,18 @@ async function withSessionPage<T>(port: number, sessionId: string, fn: (ctx: Ses
         }
         const page = await getPageByTargetId(port, current.targetId);
         if (!page) throw new Error(`Session ${sessionId} page not found for targetId ${current.targetId}`);
+        const liveUrl = page.url?.() || '';
+        if (discoverConversationUrl(sessionId, liveUrl)) {
+            const updated = getSession(sessionId);
+            return { page, targetId: current.targetId, session: updated || current };
+        }
         return { page, targetId: current.targetId, session: current };
     }
     const first = await resolvePage();
     try {
         return await fn(first);
     } catch (err: unknown) {
-        const msg = errorMessage(err).toLowerCase();
-        const isPageDeath = msg.includes('target closed') || msg.includes('page closed') || msg.includes('browser has been closed') || msg.includes('crash');
-        if (!isPageDeath) throw err;
+        if (!isPageDeathError(err)) throw err;
         const recovered = await resolvePage(true);
         return fn(recovered);
     }
@@ -318,6 +322,8 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
             }
         },
     });
+    const attachmentWarnings: string[] = [];
+    const usedFallbacks: string[] = [];
     try {
         const composerTarget = await resolveTargetForIntent(page, {
             provider: envelope.vendor,
@@ -342,6 +348,8 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
             const info = localFileInfo(uploadPath);
             const uploaded = await attachLocalFileLive(page, info);
             if (!uploaded.ok) throw new Error(uploaded.error);
+            usedFallbacks.push(...uploaded.usedFallbacks);
+            attachmentWarnings.push(...uploaded.warnings);
         }
         const sendTarget = await resolveTargetForIntent(page, {
             provider: envelope.vendor,
@@ -354,7 +362,10 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
         await adapter.verifyPromptCommitted(rendered.composerText, commitBaseline);
         if (uploadPath) {
             const sentAttachment = await verifySentTurnAttachmentLive(page, localFileInfo(uploadPath));
-            if (!sentAttachment.ok) throw new Error(sentAttachment.error);
+            if (!sentAttachment.ok) {
+                usedFallbacks.push('sent-attachment-evidence-unavailable');
+                attachmentWarnings.push(`sent attachment evidence unavailable after submit: ${sentAttachment.error}`);
+            }
         }
         updateSessionStatus(session.sessionId, 'streaming');
         const postSendUrl = page.url?.() || '';
@@ -373,12 +384,14 @@ export async function send(port: number, input: QuestionEnvelopeInput = {}): Pro
         baseline,
         sessionId: session.sessionId,
         ...(contextPack ? { contextPack: summarizeContextPack(contextPack) } : {}),
-        usedFallbacks: selectedModel?.usedFallbacks,
+        usedFallbacks: [...usedFallbacks, ...(selectedModel?.usedFallbacks || [])],
         warnings: [
             ...rendered.warnings,
             ...(contextPack?.warnings || []),
             ...(contextPack?.attachments?.[0] ? [`context package attached: ${contextPack.attachments[0].displayPath}`] : []),
-            ...(selectedModel ? [`model selected: ${selectedModel.selected}${selectedModel.alreadySelected ? ' (already selected)' : ''}`] : []),
+            ...attachmentWarnings,
+            ...(selectedModel?.warnings || []),
+            ...(selectedModel?.selected ? [`model selected: ${selectedModel.selected}${selectedModel.alreadySelected ? ' (already selected)' : ''}`] : []),
             ...(selectedModel?.effort ? [`reasoning effort selected: ${selectedModel.effort}`] : []),
         ],
     });
