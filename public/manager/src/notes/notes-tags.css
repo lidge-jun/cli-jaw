@@ -132,6 +132,39 @@
     background: var(--surface-soft, rgba(120, 120, 140, 0.06));
 }
 
+.notes-wysiwyg-frontmatter-empty {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 4px 10px;
+}
+
+.notes-wysiwyg-frontmatter-add {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    padding: 3px 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted, rgba(140, 140, 160, 0.9));
+    font: inherit;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.notes-wysiwyg-frontmatter-add:hover,
+.notes-wysiwyg-frontmatter-add:focus-visible {
+    color: var(--accent-fg, #4458dc);
+}
+
+.notes-wysiwyg-frontmatter-add strong {
+    flex: 0 0 auto;
+    color: inherit;
+    font-size: 10px;
+    font-weight: 600;
+}
+
 .notes-wysiwyg-frontmatter-field {
     display: grid;
     gap: 4px;

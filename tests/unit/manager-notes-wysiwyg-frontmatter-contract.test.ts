@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
     composeWysiwygFrontmatter,
+    createEmptyWysiwygFrontmatter,
     splitWysiwygFrontmatter,
     updateWysiwygFrontmatter,
 } from '../../public/manager/src/notes/wysiwyg/wysiwyg-frontmatter';
@@ -33,4 +34,18 @@ test('WYSIWYG frontmatter preserves invalid YAML as non-editable raw metadata', 
     assert.match(doc.frontmatter?.error ?? '', /flow|sequence|collection|end/i);
     assert.equal(next?.raw, doc.frontmatter?.raw);
     assert.equal(composeWysiwygFrontmatter(next, doc.body), `${doc.frontmatter?.raw}${doc.body}`);
+});
+
+test('WYSIWYG can create editable frontmatter from the empty properties bar', () => {
+    const created = createEmptyWysiwygFrontmatter();
+    const tagged = updateWysiwygFrontmatter(created, { tags: ['work'], aliases: ['Alpha'] });
+    const recomposed = composeWysiwygFrontmatter(tagged, '# Body\n');
+
+    assert.equal(created.editable, true);
+    assert.match(recomposed, /^---\n/);
+    assert.match(recomposed, /aliases:/);
+    assert.match(recomposed, /- Alpha/);
+    assert.match(recomposed, /tags:/);
+    assert.match(recomposed, /- work/);
+    assert.match(recomposed, /# Body/);
 });

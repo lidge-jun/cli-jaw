@@ -105,6 +105,20 @@ export function composeWysiwygFrontmatter(frontmatter: WysiwygFrontmatterData | 
     return `${frontmatter.raw}${body}`;
 }
 
+export function createEmptyWysiwygFrontmatter(): WysiwygFrontmatterData {
+    const raw = '---\naliases: []\ntags: []\n---\n';
+    const document = parseDocument('aliases: []\ntags: []\n');
+    return {
+        aliases: [],
+        tags: [],
+        created: null,
+        raw,
+        error: null,
+        editable: true,
+        document,
+    };
+}
+
 export function updateWysiwygFrontmatter(
     current: WysiwygFrontmatterData | null,
     patch: Partial<Pick<WysiwygFrontmatterData, 'aliases' | 'tags' | 'created'>>,

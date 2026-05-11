@@ -1,4 +1,8 @@
-import { updateWysiwygFrontmatter, type WysiwygFrontmatterData } from './wysiwyg-frontmatter';
+import {
+    createEmptyWysiwygFrontmatter,
+    updateWysiwygFrontmatter,
+    type WysiwygFrontmatterData,
+} from './wysiwyg-frontmatter';
 
 type WysiwygFrontmatterPanelProps = {
     frontmatter: WysiwygFrontmatterData | null;
@@ -19,7 +23,20 @@ function parseTagsInput(value: string): string[] {
 
 export function WysiwygFrontmatterPanel(props: WysiwygFrontmatterPanelProps) {
     const frontmatter = props.frontmatter;
-    if (!frontmatter) return null;
+    if (!frontmatter) {
+        return (
+            <section className="notes-wysiwyg-frontmatter notes-wysiwyg-frontmatter-empty" aria-label="Frontmatter">
+                <button
+                    type="button"
+                    className="notes-wysiwyg-frontmatter-add"
+                    onClick={() => props.onChange(createEmptyWysiwygFrontmatter())}
+                >
+                    <span>Properties</span>
+                    <strong>Add</strong>
+                </button>
+            </section>
+        );
+    }
     if (frontmatter.error || !frontmatter.editable) {
         return (
             <section className="notes-wysiwyg-frontmatter" aria-label="Frontmatter">

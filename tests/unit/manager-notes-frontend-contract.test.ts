@@ -344,8 +344,14 @@ test('App renders NotesWorkspace outside Workbench and imports notes CSS', () =>
     assert.ok(main.includes('./notes/notes-tags.css'), 'notes tag/wikilink CSS must be loaded');
     assert.ok(workspace.includes('selectedOutgoingLinks'), 'WYSIWYG and preview must share selected outgoing links');
     assert.ok(notesCss.includes('.notes-wysiwyg-frontmatter'), 'WYSIWYG frontmatter panel must be styled');
+    assert.ok(notesCss.includes('.notes-wysiwyg-frontmatter-empty'), 'WYSIWYG must expose a compact empty frontmatter bar');
+    assert.ok(notesCss.includes('.notes-wysiwyg-frontmatter-add'), 'empty frontmatter bar must expose an Add action');
     assert.ok(notesCss.includes('.notes-wikilink-live'), 'WYSIWYG wikilinks must be styled');
     assert.ok(milkdown.includes('composeWysiwygFrontmatter'), 'WYSIWYG changes must recompose frontmatter with editor body');
+    assert.ok(
+        read('public/manager/src/notes/wysiwyg/WysiwygFrontmatterPanel.tsx').includes('createEmptyWysiwygFrontmatter()'),
+        'WYSIWYG must let empty notes create frontmatter from the top properties bar',
+    );
     assert.ok(milkdown.includes('notes-milkdown-scroll'), 'WYSIWYG frontmatter must live inside the editor scroll flow');
     assert.ok(
         milkdown.indexOf('<WysiwygFrontmatterPanel') < milkdown.indexOf('className="notes-milkdown-root"'),
