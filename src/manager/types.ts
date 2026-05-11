@@ -12,7 +12,13 @@ export type DashboardLifecycleOwner = 'none' | 'external' | 'manager' | 'service
 export type DashboardDetailTab = 'overview' | 'preview' | 'logs' | 'settings';
 export type DashboardUiTheme = 'auto' | 'dark' | 'light';
 export type DashboardLocale = 'ko' | 'en' | 'zh' | 'ja';
-export type DashboardSidebarMode = 'instances' | 'board' | 'schedule' | 'notes' | 'settings';
+export type DashboardSidebarMode =
+    | 'instances'
+    | 'board'
+    | 'schedule'
+    | 'notes'
+    | 'reminders'
+    | 'settings';
 export type DashboardShortcutAction =
     | 'focusInstances'
     | 'focusActiveSession'

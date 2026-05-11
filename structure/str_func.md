@@ -303,7 +303,7 @@ cli-jaw/
 │       ├── catalog.ts        ← COMMANDS → capability map 확장 (43L)
 │       ├── policy.ts         ← getVisibleCommands, getTelegramMenuCommands (39L)
 │       └── help-renderer.ts  ← renderHelp list/detail mode (44L)
-├── public/                   ← Web UI (Vite 8 + ES Modules, 479 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 457 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~65884L)
+├── public/                   ← Web UI (Vite 8 + ES Modules, 479 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 458 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~65884L)
 │   ├── index.html            ← 뼈대 (876L, CLI-JAW 대문자 로고, pill theme switch, data-i18n, 로컬 avatar 입력)
 │   ├── manifest.json         ← PWA 매니페스트 (20L) ✨
 │   ├── sw.js                 ← Service Worker 오프라인 캐시 (104L) ✨

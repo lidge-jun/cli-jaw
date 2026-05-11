@@ -107,7 +107,7 @@ test('manager registry clamps scan and UI values', () => {
                 3463: 'bad-date',
             },
             locale: 'en',
-            sidebarMode: 'settings',
+            sidebarMode: 'reminders',
             showLatestActivityTitles: false,
             showInlineLabelEditor: 'bad',
             showSidebarRuntimeLine: false,
@@ -143,7 +143,7 @@ test('manager registry clamps scan and UI values', () => {
     assert.equal(loaded.registry.ui.activitySeenAt, null);
     assert.deepEqual(loaded.registry.ui.activitySeenByPort, { 3462: '2026-04-29T04:40:00.000Z' });
     assert.equal(loaded.registry.ui.locale, 'en');
-    assert.equal(loaded.registry.ui.sidebarMode, 'settings');
+    assert.equal(loaded.registry.ui.sidebarMode, 'reminders');
     assert.equal(loaded.registry.ui.showLatestActivityTitles, false);
     assert.equal(loaded.registry.ui.showInlineLabelEditor, true);
     assert.equal(loaded.registry.ui.showSidebarRuntimeLine, false);
@@ -167,7 +167,7 @@ test('manager registry patch persists instance preferences', () => {
         ui: {
             selectedPort: 3461,
             selectedTab: 'settings',
-            sidebarMode: 'settings',
+            sidebarMode: 'reminders',
             activitySeenAt: '2026-04-29T04:40:00.000Z',
             activitySeenByPort: { 3461: '2026-04-29T04:41:00.000Z' },
             locale: 'en',
@@ -192,7 +192,7 @@ test('manager registry patch persists instance preferences', () => {
     assert.equal(saved.registry.scan.from, 3460);
     assert.equal(saved.registry.scan.count, 8);
     assert.equal(saved.registry.ui.selectedTab, 'settings');
-    assert.equal(saved.registry.ui.sidebarMode, 'settings');
+    assert.equal(saved.registry.ui.sidebarMode, 'reminders');
     assert.equal(saved.registry.ui.activitySeenAt, '2026-04-29T04:40:00.000Z');
     assert.deepEqual(saved.registry.ui.activitySeenByPort, { 3461: '2026-04-29T04:41:00.000Z' });
     assert.equal(saved.registry.ui.locale, 'en');

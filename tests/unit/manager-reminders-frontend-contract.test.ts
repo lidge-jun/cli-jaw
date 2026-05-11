@@ -19,11 +19,15 @@ test('manager frontend exposes Reminders as a gated SidebarRail workspace', () =
     const app = read('public/manager/src/App.tsx');
     const appChrome = read('public/manager/src/AppChrome.tsx');
     const urlState = read('public/manager/src/dashboard-url-state.ts');
+    const serverTypes = read('src/manager/types.ts');
+    const registry = read('src/manager/registry.ts');
     const main = read('public/manager/src/main.tsx');
     const sidebar = read('public/manager/src/dashboard-reminders/DashboardRemindersSidebar.tsx');
     const workspace = read('public/manager/src/dashboard-reminders/DashboardRemindersWorkspace.tsx');
 
     assert.ok(types.includes("'reminders'"), 'DashboardSidebarMode must include reminders');
+    assert.ok(serverTypes.includes("'reminders'"), 'server DashboardSidebarMode must include reminders');
+    assert.ok(registry.includes("'reminders'"), 'server registry allowlist must preserve reminders sidebar mode');
     assert.ok(features.includes('REMINDERS_WORKSPACE_ENABLED = true'), 'Reminders workspace must always be available in SidebarRail');
     assert.doesNotMatch(features, /NPM_HIDDEN_WORKSPACE_MODES[^\n]+reminders/, 'Reminders must not be hidden behind the npm workspace gate');
     assert.ok(rail.includes('remindersWorkspaceEnabled'), 'SidebarRail must receive the reminders feature gate');
