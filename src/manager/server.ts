@@ -36,6 +36,7 @@ import { startScheduleRunner } from './schedule/runner.js';
 import { createDashboardRemindersRouter } from './reminders/routes.js';
 import { RemindersStore } from './reminders/store.js';
 import { startRemindersScheduler } from './reminders/scheduler.js';
+import { createDashboardWorkspaceRouter } from './workspace/routes.js';
 import { fetchWorkerAssistantTextById } from './worker-messages.js';
 import { openUrlInBrowser } from '../core/browser-open.js';
 import { ensureDirs, loadSettings } from '../core/config.js';
@@ -158,6 +159,7 @@ const scheduleStore = new ScheduleStore();
 app.use('/api/dashboard/schedule', createDashboardScheduleRouter({ store: scheduleStore }));
 const remindersStore = new RemindersStore();
 app.use('/api/dashboard/reminders', createDashboardRemindersRouter({ store: remindersStore }));
+app.use('/api/dashboard/workspace', createDashboardWorkspaceRouter());
 let stopRemindersScheduler: (() => void) | null = null;
 
 app.use('/api/jaw-ceo', createJawCeoRouter({
@@ -462,7 +464,12 @@ const managerHtmlCandidates = [
     join(sourceRoot, 'manager', 'index.html'),
 ];
 
+function managerUiSource(htmlPath: string): 'dist' | 'source' {
+    return htmlPath.startsWith(distRoot) ? 'dist' : 'source';
+}
+
 function sendManagerHtml(res: express.Response, htmlPath: string): void {
+    res.setHeader('x-jaw-manager-ui', managerUiSource(htmlPath));
     res.sendFile(basename(htmlPath), { root: dirname(htmlPath) }, error => {
         if (!error || res.headersSent) return;
 
@@ -474,7 +481,7 @@ function sendManagerHtml(res: express.Response, htmlPath: string): void {
 app.use('/dist', express.static(distRoot));
 app.use('/assets', express.static(join(distRoot, 'assets')));
 app.use('/icons', express.static(join(sourceRoot, 'icons')));
-app.use('/manager', express.static(join(sourceRoot, 'manager')));
+app.use('/manager', express.static(join(sourceRoot, 'manager'), { index: false }));
 
 app.get('/.well-known/appspecific/com.chrome.devtools.json', (_req, res) => {
     res.status(204).end();

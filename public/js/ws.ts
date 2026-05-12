@@ -174,6 +174,11 @@ function registerOrchestrateRestoreHooks(): void {
         && Boolean((document as Document & { wasDiscarded?: boolean }).wasDiscarded)) {
         requestBrowserRestoreSync('discard');
     }
+    window.addEventListener('message', (event: MessageEvent) => {
+        if (event.data?.type === 'jaw-preview-visibility' && event.data.visible) {
+            requestBrowserRestoreSync('iframe-visible');
+        }
+    });
 }
 
 /** Hydrate agent phase cache from snapshot (used after reconnect) */

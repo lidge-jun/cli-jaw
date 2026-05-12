@@ -7,6 +7,7 @@ type InstancePreviewProps = {
     instance: DashboardInstance | null;
     data: DashboardScanResult | null;
     enabled: boolean;
+    active: boolean;
     refreshKey: number;
     theme: PreviewTheme;
 };
@@ -58,6 +59,23 @@ export function InstancePreview(props: InstancePreviewProps) {
     useEffect(() => {
         syncTheme();
     }, [syncTheme]);
+
+    const prevActiveRef = useRef(false);
+    useEffect(() => {
+        const wasActive = prevActiveRef.current;
+        prevActiveRef.current = props.active;
+        if (!wasActive && props.active && iframeRef.current?.contentWindow && state.src) {
+            const origin = previewTargetOrigin(state.src, iframeRef.current);
+            if (origin && origin !== 'null') {
+                try {
+                    iframeRef.current.contentWindow.postMessage(
+                        { type: 'jaw-preview-visibility', visible: true },
+                        origin,
+                    );
+                } catch { /* cross-origin guard */ }
+            }
+        }
+    }, [props.active, state.src]);
 
     return (
         <aside className="preview-panel" aria-label="Instance preview">
