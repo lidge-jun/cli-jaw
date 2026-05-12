@@ -7,7 +7,9 @@ import type { NotesNoteMetadata } from '../../public/manager/src/notes/notes-typ
 import {
     formatWikiLinkCompletion,
     getWikiLinkCompletionRange,
+    getWikiLinkCompletionRangeAtCursor,
     getWikiLinkSuggestions,
+    type WikiLinkSuggestion,
 } from '../../public/manager/src/notes/wiki-link-suggestions';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -37,6 +39,44 @@ test('wikilink completion range detects unmatched current-line [[ tokens', () =>
     assert.equal(getWikiLinkCompletionRange('See [[Line\nbreak'), null);
     assert.equal(getWikiLinkCompletionRange('No token'), null);
     assert.equal(getWikiLinkCompletionRange('Escaped \\[['), null);
+});
+
+test('wikilink completion range consumes an existing closing suffix at cursor', () => {
+    assert.deepEqual(getWikiLinkCompletionRangeAtCursor('[[abo', 5), {
+        from: 2,
+        to: 5,
+        query: 'abo',
+        hasClosingSuffix: false,
+    });
+    assert.deepEqual(getWikiLinkCompletionRangeAtCursor('[[abo]]', 5), {
+        from: 2,
+        to: 7,
+        query: 'abo',
+        hasClosingSuffix: true,
+    });
+    assert.equal(getWikiLinkCompletionRangeAtCursor('[[abo]]', 7), null);
+});
+
+test('wikilink completion apply text does not duplicate existing closing suffix', () => {
+    const suggestion: WikiLinkSuggestion = {
+        path: 'about-jaw.md',
+        title: 'about-jaw',
+        aliases: [],
+        tags: [],
+        insertText: 'about-jaw',
+        matchKind: 'title',
+        score: 100,
+    };
+
+    function apply(line: string, cursorOffset: number): string {
+        const range = getWikiLinkCompletionRangeAtCursor(line, cursorOffset);
+        assert.ok(range);
+        return `${line.slice(0, range.from)}${formatWikiLinkCompletion(suggestion)}${line.slice(range.to)}`;
+    }
+
+    assert.equal(apply('[[abo', 5), '[[about-jaw]]');
+    assert.equal(apply('[[abo]]', 5), '[[about-jaw]]');
+    assert.equal(apply('[[about-jaw]]', 11), '[[about-jaw]]');
 });
 
 test('wikilink suggestions match title alias path stem and tag with stable insertion', () => {
@@ -74,10 +114,17 @@ test('CodeMirror and WYSIWYG completion modules wire expected editor APIs', () =
 
     assert.ok(codeMirror.includes("@codemirror/autocomplete"));
     assert.ok(codeMirror.includes('autocompletion'));
+    assert.ok(codeMirror.includes('insertCompletionText'));
+    assert.ok(codeMirror.includes('pickedCompletion'));
+    assert.ok(codeMirror.includes('getWikiLinkCompletionRangeAtCursor(lineText, context.pos - line.from)'));
+    assert.ok(codeMirror.includes('range.hasClosingSuffix ? 2 : 0'));
+    assert.ok(codeMirror.includes("view.state.sliceDoc(to, to + 2) === ']]'"));
     assert.ok(codeMirror.includes('validFor'));
     assert.ok(markdownEditor.includes('wikiLinkCodeMirrorCompletion(props.notes)'));
     assert.ok(wysiwyg.includes('PluginKey'));
     assert.ok(wysiwyg.includes('Decoration.widget'));
+    assert.ok(wysiwyg.includes('const blockText = state.doc.textBetween(blockStart, blockEnd'));
+    assert.ok(wysiwyg.includes('getWikiLinkCompletionRangeAtCursor(blockText, $from.pos - blockStart)'));
     assert.ok(wysiwyg.includes('getWikiLinkSuggestions(runtime.notes'));
     assert.ok(wysiwyg.includes("event.key === 'ArrowDown'"));
     assert.ok(wysiwyg.includes("event.key === 'ArrowUp'"));

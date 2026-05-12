@@ -15,6 +15,7 @@ import {
     safeMarkdownUrl,
 } from './markdown-render-security';
 import { buildWikiLinkLookup, splitChildrenWithWikiLinks, type WikiLinkContext } from '../wiki-link-rendering';
+import { splitPreviewFrontmatter } from '../frontmatter-preview';
 import type { NotesNoteLinkRef, NotesNoteMetadata } from '../notes-types';
 
 type MarkdownRendererProps = {
@@ -69,6 +70,11 @@ function languageFromCodeNode(node: ReactNode): string {
 const NOOP_NAVIGATE = (_path: string): void => {};
 
 export function MarkdownRenderer(props: MarkdownRendererProps) {
+    const renderedMarkdown = useMemo(
+        () => splitPreviewFrontmatter(props.markdown).body,
+        [props.markdown],
+    );
+
     const wikiCtx = useMemo<WikiLinkContext>(() => ({
         lookup: buildWikiLinkLookup(props.outgoing),
         outgoing: props.outgoing,
@@ -136,7 +142,7 @@ export function MarkdownRenderer(props: MarkdownRendererProps) {
                 del: wikiTransform('del'),
             }}
         >
-            {props.markdown}
+            {renderedMarkdown}
         </ReactMarkdown>
     );
 }

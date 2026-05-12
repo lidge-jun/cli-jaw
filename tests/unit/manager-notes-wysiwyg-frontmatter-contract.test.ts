@@ -37,12 +37,14 @@ test('WYSIWYG frontmatter preserves invalid YAML as non-editable raw metadata', 
 });
 
 test('WYSIWYG can create editable frontmatter from the empty properties bar', () => {
-    const created = createEmptyWysiwygFrontmatter();
+    const created = createEmptyWysiwygFrontmatter(new Date(2026, 4, 11, 9, 30, 0));
     const tagged = updateWysiwygFrontmatter(created, { tags: ['work'], aliases: ['Alpha'] });
     const recomposed = composeWysiwygFrontmatter(tagged, '# Body\n');
 
     assert.equal(created.editable, true);
+    assert.equal(created.created, '2026-05-11');
     assert.match(recomposed, /^---\n/);
+    assert.match(recomposed, /created: 2026-05-11/);
     assert.match(recomposed, /aliases:/);
     assert.match(recomposed, /- Alpha/);
     assert.match(recomposed, /tags:/);

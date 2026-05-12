@@ -134,7 +134,9 @@
 
 .notes-wysiwyg-frontmatter-empty {
     grid-template-columns: minmax(0, 1fr);
-    padding: 4px 10px;
+    min-height: 28px;
+    padding: 5px 12px;
+    background: color-mix(in srgb, var(--canvas-panel) 70%, var(--accent-soft));
 }
 
 .notes-wysiwyg-frontmatter-add {
@@ -147,9 +149,9 @@
     padding: 3px 0;
     border: 0;
     background: transparent;
-    color: var(--text-muted, rgba(140, 140, 160, 0.9));
+    color: var(--text-secondary, rgba(92, 92, 110, 0.96));
     font: inherit;
-    font-size: 11px;
+    font-size: 12px;
     cursor: pointer;
 }
 
@@ -161,7 +163,7 @@
 .notes-wysiwyg-frontmatter-add strong {
     flex: 0 0 auto;
     color: inherit;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
 }
 

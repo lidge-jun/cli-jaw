@@ -9,6 +9,10 @@ export type WikiLinkCompletionRange = {
     query: string;
 };
 
+export type WikiLinkCompletionRangeAtCursor = WikiLinkCompletionRange & {
+    hasClosingSuffix: boolean;
+};
+
 export type WikiLinkSuggestion = {
     path: string;
     title: string;
@@ -99,6 +103,21 @@ export function getWikiLinkCompletionRange(textBeforeCursor: string): WikiLinkCo
     if (query.includes('\n') || query.includes(']') || query.includes('[')) return null;
     if (textBeforeCursor.slice(queryStart).includes(']]')) return null;
     return { from: queryStart, to: textBeforeCursor.length, query };
+}
+
+export function getWikiLinkCompletionRangeAtCursor(
+    lineText: string,
+    cursorOffset: number,
+): WikiLinkCompletionRangeAtCursor | null {
+    if (cursorOffset < 0 || cursorOffset > lineText.length) return null;
+    const prefix = getWikiLinkCompletionRange(lineText.slice(0, cursorOffset));
+    if (!prefix) return null;
+    const hasClosingSuffix = lineText.slice(cursorOffset, cursorOffset + 2) === ']]';
+    return {
+        ...prefix,
+        to: prefix.to + (hasClosingSuffix ? 2 : 0),
+        hasClosingSuffix,
+    };
 }
 
 export function getWikiLinkSuggestions(

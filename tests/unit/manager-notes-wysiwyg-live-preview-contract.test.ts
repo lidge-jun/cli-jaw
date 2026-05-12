@@ -34,6 +34,11 @@ test('WYSIWYG wikilink plugin protects code and handles resolved navigation', ()
     assert.ok(plugin.includes('selectionSet'));
     assert.ok(plugin.includes('data-notes-wiki-hidden'));
     assert.ok(plugin.includes("label.addEventListener('click'"));
+    assert.ok(plugin.includes('type WikiLinkPluginState'));
+    assert.ok(plugin.includes('shouldHideWikiLinkSource'));
+    assert.ok(plugin.includes('handleDOMEvents'));
+    assert.ok(plugin.includes('focused: true'));
+    assert.ok(plugin.includes('focused: false'));
 });
 
 test('WYSIWYG wikilink plugin decorates newly typed links before outgoing index refresh', () => {
@@ -44,4 +49,16 @@ test('WYSIWYG wikilink plugin decorates newly typed links before outgoing index 
     assert.equal(plugin.includes('function fallbackLink'), false);
     assert.equal(plugin.includes('function noteStem'), false);
     assert.equal(plugin.includes('function invalidTarget'), false);
+});
+
+test('WYSIWYG wikilink plugin hides source while editor is blurred', () => {
+    const plugin = read('public/manager/src/notes/wysiwyg/milkdown-wikilink-plugin.ts');
+    const editor = read('public/manager/src/notes/wysiwyg/MilkdownWysiwygEditor.tsx');
+
+    assert.ok(plugin.includes('buildWikiLinkDecorations(state, runtime, false)'));
+    assert.ok(plugin.includes('buildWikiLinkDecorations(newState, runtime, focused)'));
+    assert.ok(plugin.includes('if (!focused) return true;'));
+    assert.ok(plugin.includes("view.state.tr.setMeta(notesWikiLinkPluginKey, { focused: false, refresh: true })"));
+    assert.ok(editor.includes('refreshWikiLinkPluginsAfterFrame'));
+    assert.ok(editor.includes('requestAnimationFrame(() => refreshWikiLinkPlugins())'));
 });

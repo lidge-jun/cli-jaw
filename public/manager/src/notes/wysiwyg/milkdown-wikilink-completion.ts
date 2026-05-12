@@ -5,7 +5,7 @@ import { $prose } from '@milkdown/kit/utils';
 import type { NotesNoteMetadata } from '../notes-types';
 import {
     formatWikiLinkCompletion,
-    getWikiLinkCompletionRange,
+    getWikiLinkCompletionRangeAtCursor,
     getWikiLinkSuggestions,
     type WikiLinkSuggestion,
 } from '../wiki-link-suggestions';
@@ -57,8 +57,9 @@ function buildCompletionState(
     if (!state.selection.empty) return inactiveState;
     const { $from } = state.selection;
     const blockStart = $from.start();
-    const textBeforeCursor = state.doc.textBetween(blockStart, $from.pos, '\n', '\n');
-    const range = getWikiLinkCompletionRange(textBeforeCursor);
+    const blockEnd = $from.end();
+    const blockText = state.doc.textBetween(blockStart, blockEnd, '\n', '\n');
+    const range = getWikiLinkCompletionRangeAtCursor(blockText, $from.pos - blockStart);
     if (!range) return inactiveState;
     const suggestions = getWikiLinkSuggestions(runtime.notes, range.query);
     const selected = previous?.active && previous.query === range.query

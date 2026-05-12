@@ -13,7 +13,17 @@ export type MilkdownWikiLinkRuntime = {
     onNavigate: (path: string) => void;
 };
 
-export const notesWikiLinkPluginKey = new PluginKey<DecorationSet>('NOTES_WYSIWYG_WIKILINKS');
+type WikiLinkPluginState = {
+    decorations: DecorationSet;
+    focused: boolean;
+};
+
+type WikiLinkPluginMeta = {
+    focused?: boolean;
+    refresh?: boolean;
+};
+
+export const notesWikiLinkPluginKey = new PluginKey<WikiLinkPluginState>('NOTES_WYSIWYG_WIKILINKS');
 
 export function requestWysiwygWikiLinkRefresh(view: EditorView): void {
     view.dispatch(view.state.tr.setMeta(notesWikiLinkPluginKey, { refresh: true }));
@@ -24,7 +34,19 @@ function shouldSkipTextNode(node: ProseMirrorNode): boolean {
 }
 
 function selectionOverlaps(from: number, to: number, selectionFrom: number, selectionTo: number): boolean {
-    return selectionFrom <= to && selectionTo >= from;
+    if (selectionFrom === selectionTo) return selectionFrom > from && selectionFrom < to;
+    return selectionFrom < to && selectionTo > from;
+}
+
+export function shouldHideWikiLinkSource(
+    from: number,
+    to: number,
+    selectionFrom: number,
+    selectionTo: number,
+    focused: boolean,
+): boolean {
+    if (!focused) return true;
+    return !selectionOverlaps(from, to, selectionFrom, selectionTo);
 }
 
 function createWikiLinkLabel(link: NotesNoteLinkRef, raw: string, runtime: MilkdownWikiLinkRuntime): HTMLElement {
@@ -51,6 +73,7 @@ function createWikiLinkLabel(link: NotesNoteLinkRef, raw: string, runtime: Milkd
 function buildWikiLinkDecorations(
     state: EditorState,
     runtime: MilkdownWikiLinkRuntime,
+    focused: boolean,
 ): DecorationSet {
     const decorations: Decoration[] = [];
     const { from: selectionFrom, to: selectionTo } = state.selection;
@@ -67,7 +90,7 @@ function buildWikiLinkDecorations(
             const link = resolveClientWikiLink(raw, runtime.outgoing, runtime.notes, from);
             if (!link) continue;
             const to = from + raw.length;
-            const hidden = !selectionOverlaps(from, to, selectionFrom, selectionTo);
+            const hidden = shouldHideWikiLinkSource(from, to, selectionFrom, selectionTo, focused);
             decorations.push(Decoration.inline(from, to, {
                 class: 'notes-wikilink-source',
                 'data-notes-wiki-raw': raw,
@@ -87,20 +110,41 @@ function buildWikiLinkDecorations(
 }
 
 export function notesMilkdownWikiLinkPlugin(runtime: MilkdownWikiLinkRuntime): MilkdownPlugin[] {
-    const plugin = $prose(() => new Plugin<DecorationSet>({
+    const plugin = $prose(() => new Plugin<WikiLinkPluginState>({
         key: notesWikiLinkPluginKey,
         state: {
-            init: (_, state) => buildWikiLinkDecorations(state, runtime),
+            init: (_, state) => ({
+                decorations: buildWikiLinkDecorations(state, runtime, false),
+                focused: false,
+            }),
             apply: (tr, value, _oldState, newState) => {
-                if (!tr.docChanged && !tr.selectionSet && !tr.getMeta(notesWikiLinkPluginKey)) {
-                    return value.map(tr.mapping, tr.doc);
+                const meta = tr.getMeta(notesWikiLinkPluginKey) as WikiLinkPluginMeta | undefined;
+                const focused = typeof meta?.focused === 'boolean' ? meta.focused : value.focused;
+                if (!tr.docChanged && !tr.selectionSet && !meta?.refresh && meta?.focused == null) {
+                    return {
+                        focused,
+                        decorations: value.decorations.map(tr.mapping, tr.doc),
+                    };
                 }
-                return buildWikiLinkDecorations(newState, runtime);
+                return {
+                    focused,
+                    decorations: buildWikiLinkDecorations(newState, runtime, focused),
+                };
             },
         },
         props: {
-            decorations(this: Plugin<DecorationSet>, state) {
-                return this.getState(state);
+            decorations(this: Plugin<WikiLinkPluginState>, state) {
+                return this.getState(state)?.decorations ?? DecorationSet.empty;
+            },
+            handleDOMEvents: {
+                focus(view) {
+                    view.dispatch(view.state.tr.setMeta(notesWikiLinkPluginKey, { focused: true, refresh: true }));
+                    return false;
+                },
+                blur(view) {
+                    view.dispatch(view.state.tr.setMeta(notesWikiLinkPluginKey, { focused: false, refresh: true }));
+                    return false;
+                },
             },
         },
     }));

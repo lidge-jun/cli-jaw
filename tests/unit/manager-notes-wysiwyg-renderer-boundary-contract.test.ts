@@ -75,6 +75,8 @@ test('WYSIWYG owns wikilink and frontmatter live-preview behavior without previe
     assert.ok(wikiPlugin.includes('DecorationSet'));
     assert.ok(wikiPlugin.includes('resolveClientWikiLink'));
     assert.ok(wikiPlugin.includes("label.addEventListener('click'"));
+    assert.ok(wikiPlugin.includes('focused: false'));
+    assert.ok(wikiPlugin.includes('handleDOMEvents'));
     assert.ok(wikiCompletion.includes('PluginKey'));
     assert.ok(wikiCompletion.includes('Decoration.widget'));
     assert.ok(wikiCompletion.includes('getWikiLinkSuggestions'));

@@ -17,6 +17,13 @@ export type WysiwygFrontmatterDocument = {
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/;
 
+export function formatWysiwygCreatedDate(date: Date = new Date()): string {
+    const year = String(date.getFullYear()).padStart(4, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 function dedupeStable(values: string[]): string[] {
     const seen = new Set<string>();
     const result: string[] = [];
@@ -105,13 +112,15 @@ export function composeWysiwygFrontmatter(frontmatter: WysiwygFrontmatterData | 
     return `${frontmatter.raw}${body}`;
 }
 
-export function createEmptyWysiwygFrontmatter(): WysiwygFrontmatterData {
-    const raw = '---\naliases: []\ntags: []\n---\n';
-    const document = parseDocument('aliases: []\ntags: []\n');
+export function createEmptyWysiwygFrontmatter(date: Date = new Date()): WysiwygFrontmatterData {
+    const created = formatWysiwygCreatedDate(date);
+    const source = `created: ${created}\naliases: []\ntags: []\n`;
+    const raw = `---\n${source}---\n`;
+    const document = parseDocument(source);
     return {
         aliases: [],
         tags: [],
-        created: null,
+        created,
         raw,
         error: null,
         editable: true,

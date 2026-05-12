@@ -13,6 +13,7 @@ import {
     wikiLinkDisplayText,
     wikiLinkReasonLabel,
 } from '../../public/manager/src/notes/wiki-link-rendering';
+import { splitPreviewFrontmatter } from '../../public/manager/src/notes/frontmatter-preview';
 import type { NotesNoteLinkRef, NotesNoteMetadata } from '../../public/manager/src/notes/notes-types';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -110,7 +111,23 @@ test('MarkdownRenderer wires math, sanitize, safe links, and block routing', () 
     assert.ok(renderer.includes('<code className={className}>{children}</code>'), 'inline code must remain inline');
     assert.ok(renderer.includes('buildWikiLinkLookup(props.outgoing)'), 'MarkdownRenderer must derive wikilink lookup from vault-index outgoing links');
     assert.ok(renderer.includes('notes: props.notes'), 'MarkdownRenderer must pass vault notes into wikilink fallback context');
+    assert.ok(renderer.includes('splitPreviewFrontmatter(props.markdown).body'), 'MarkdownRenderer must strip leading YAML frontmatter before rendering');
     assert.ok(renderer.includes('splitChildrenWithWikiLinks'), 'MarkdownRenderer must transform only supported text children for wikilinks');
+});
+
+test('preview strips leading YAML frontmatter without losing body wikilinks', () => {
+    const withFrontmatter = splitPreviewFrontmatter('---\naliases: []\ntags: []\n---\n[[about-jaw]]\n');
+
+    assert.equal(withFrontmatter.frontmatterRaw, '---\naliases: []\ntags: []\n---\n');
+    assert.equal(withFrontmatter.body, '[[about-jaw]]\n');
+
+    const withoutClosingFence = splitPreviewFrontmatter('---\naliases: []\n[[about-jaw]]');
+    assert.equal(withoutClosingFence.frontmatterRaw, null);
+    assert.equal(withoutClosingFence.body, '---\naliases: []\n[[about-jaw]]');
+
+    const nonLeadingFence = splitPreviewFrontmatter('# Title\n---\n[[about-jaw]]');
+    assert.equal(nonLeadingFence.frontmatterRaw, null);
+    assert.equal(nonLeadingFence.body, '# Title\n---\n[[about-jaw]]');
 });
 
 test('wiki link text rendering follows vault-index resolution', () => {

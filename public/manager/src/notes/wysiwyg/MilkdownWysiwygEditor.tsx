@@ -79,11 +79,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         wikiRuntimeRef.current.outgoing = props.outgoing;
         wikiRuntimeRef.current.notes = props.notes;
         wikiCompletionRuntimeRef.current.notes = props.notes;
-        editorRef.current?.action(ctx => {
-            const view = ctx.get(editorViewCtx);
-            requestWysiwygWikiLinkRefresh(view);
-            requestWysiwygWikiLinkCompletionRefresh(view);
-        });
+        refreshWikiLinkPlugins();
     }, [props.outgoing, props.notes]);
 
     function composeBody(body: string): string {
@@ -103,6 +99,18 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         const composed = composeBody(latestBodyRef.current);
         latestComposedRef.current = composed;
         onChangeRef.current(composed);
+    }
+
+    function refreshWikiLinkPlugins(): void {
+        editorRef.current?.action(ctx => {
+            const view = ctx.get(editorViewCtx);
+            requestWysiwygWikiLinkRefresh(view);
+            requestWysiwygWikiLinkCompletionRefresh(view);
+        });
+    }
+
+    function refreshWikiLinkPluginsAfterFrame(): void {
+        requestAnimationFrame(() => refreshWikiLinkPlugins());
     }
 
     useEffect(() => {
@@ -152,6 +160,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
                     latestFrontmatterRef.current = nextDocument.frontmatter;
                     setFrontmatterPanel(nextDocument.frontmatter);
                     instance.action(replaceAll(protectUnsupportedGfmForMilkdown(nextDocument.body), true));
+                    refreshWikiLinkPluginsAfterFrame();
                 }
                 setReady(true);
                 queueMicrotask(() => {
@@ -185,6 +194,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         latestComposedRef.current = props.content;
         setFrontmatterPanel(nextDocument.frontmatter);
         editor.action(replaceAll(protectUnsupportedGfmForMilkdown(nextDocument.body), true));
+        refreshWikiLinkPluginsAfterFrame();
         queueMicrotask(() => {
             syncingFromPropsRef.current = false;
             refreshMilkdownAssetImages(rootRef.current);
@@ -273,6 +283,7 @@ export function MilkdownWysiwygEditor(props: MilkdownWysiwygEditorProps) {
         const nextMarkdown = `${currentMarkdown}${currentMarkdown ? '\n\n' : ''}- [ ] `;
         emitBodyChange(nextMarkdown);
         run(editor => editor.action(replaceAll(protectUnsupportedGfmForMilkdown(nextMarkdown), true)));
+        refreshWikiLinkPluginsAfterFrame();
     }
 
     useEffect(() => {
