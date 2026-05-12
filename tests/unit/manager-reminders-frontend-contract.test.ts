@@ -45,9 +45,14 @@ test('manager frontend exposes Reminders as a gated SidebarRail workspace', () =
     assert.ok(sidebar.includes('countRemindersView'), 'Reminders sidebar counts must use the shared view model');
     assert.ok(sidebar.includes('PrioritySidebarList'), 'Reminders sidebar must expose draggable manual priority ordering');
     assert.ok(sidebar.includes('manualRank'), 'Reminders sidebar drag must persist manualRank updates');
+    assert.ok(read('public/manager/src/dashboard-reminders/reminders-api.ts').includes('assertManualRankSupport'), 'manualRank PATCH must fail visibly when the running backend is stale');
     assert.ok(router.includes('onUpdate={(id, patch) => void remindersFeed.update(id, patch)}'), 'Reminders sidebar must receive update wiring');
     assert.ok(workspace.includes('InlineReminderTitle'), 'Reminders rows must support double-click inline title editing');
     assert.ok(workspace.includes('data-reminder-drop-before-id'), 'Reminders row drop targets must expose before/after order metadata');
+    assert.ok(workspace.includes('isAfterRowDrop'), 'Reminders row drops must distinguish upper/lower row halves for same-bucket reorder');
+    assert.ok(workspace.includes('targetAfterBucketRow'), 'Matrix row drops must support inserting after the hovered row');
+    assert.ok(workspace.includes('targetAfterPriorityRow'), 'Top Priority row drops must support inserting after the hovered row');
+    assert.ok(workspace.includes('resolveDropTarget={resolveDropTarget}'), 'Rows must resolve precise drop target from pointer position');
     assert.ok(workspace.includes('rankTopPriorityItems(props.feed.items'), 'Top Priority must rank across the full feed');
 });
 

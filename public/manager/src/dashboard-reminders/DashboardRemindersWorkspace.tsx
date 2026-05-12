@@ -64,6 +64,10 @@ function targetAtBucketRow(bucket: MatrixBucket, items: DashboardReminder[], ind
     return { kind: 'bucket', bucket, beforeId: items[index - 1]?.id ?? null, afterId: items[index]?.id ?? null };
 }
 
+function targetAfterBucketRow(bucket: MatrixBucket, items: DashboardReminder[], index: number): DashboardReminderDropTarget {
+    return { kind: 'bucket', bucket, beforeId: items[index]?.id ?? null, afterId: items[index + 1]?.id ?? null };
+}
+
 function targetAtBucketEnd(bucket: MatrixBucket, items: DashboardReminder[]): DashboardReminderDropTarget {
     return { kind: 'bucket', bucket, beforeId: lastItem(items)?.id ?? null, afterId: null };
 }
@@ -72,8 +76,17 @@ function targetAtPriorityRow(items: DashboardReminder[], index: number): Dashboa
     return { kind: 'priority', beforeId: items[index - 1]?.id ?? null, afterId: items[index]?.id ?? null };
 }
 
+function targetAfterPriorityRow(items: DashboardReminder[], index: number): DashboardReminderDropTarget {
+    return { kind: 'priority', beforeId: items[index]?.id ?? null, afterId: items[index + 1]?.id ?? null };
+}
+
 function targetAtPriorityEnd(items: DashboardReminder[]): DashboardReminderDropTarget {
     return { kind: 'priority', beforeId: lastItem(items)?.id ?? null, afterId: null };
+}
+
+function isAfterRowDrop(event: DragEvent<HTMLElement>): boolean {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return event.clientY > rect.top + rect.height / 2;
 }
 
 function orderedItemsForTarget(items: DashboardReminder[], target: DashboardReminderDropTarget): DashboardReminder[] {
@@ -119,6 +132,7 @@ function ReminderRow(props: {
     onDragOverTarget?: (target: DashboardReminderDropTarget, event: DragEvent) => void;
     onDragLeaveTarget?: () => void;
     onDropTarget?: (target: DashboardReminderDropTarget, event: DragEvent) => void;
+    resolveDropTarget?: (event: DragEvent<HTMLElement>) => DashboardReminderDropTarget;
 }) {
     const done = props.item.status === 'done';
     const dropActive = props.dropTarget ? sameDropTarget(props.activeDropTarget ?? null, props.dropTarget) : false;
@@ -134,9 +148,10 @@ function ReminderRow(props: {
             onDragStart={event => props.onDragStart?.(props.item, event)}
             onDragEnd={props.onDragEnd}
             onDragOver={event => {
-                if (!props.dropTarget) return;
+                const target = props.resolveDropTarget?.(event) ?? props.dropTarget;
+                if (!target) return;
                 event.stopPropagation();
-                props.onDragOverTarget?.(props.dropTarget, event);
+                props.onDragOverTarget?.(target, event);
             }}
             onDragLeave={event => {
                 if (!props.dropTarget) return;
@@ -144,9 +159,10 @@ function ReminderRow(props: {
                 props.onDragLeaveTarget?.();
             }}
             onDrop={event => {
-                if (!props.dropTarget) return;
+                const target = props.resolveDropTarget?.(event) ?? props.dropTarget;
+                if (!target) return;
                 event.stopPropagation();
-                props.onDropTarget?.(props.dropTarget, event);
+                props.onDropTarget?.(target, event);
             }}
         >
             <button type="button" className="dashboard-reminders-row-check" aria-label={done ? 'Mark open' : 'Mark done'} onClick={() => props.onToggleDone(props.item)}>
@@ -218,6 +234,9 @@ function MatrixQuadrant(props: {
             <ul>
                 {props.items.map((item, index) => {
                     const rowDropTarget = targetAtBucketRow(props.section.id, props.items, index);
+                    const resolveDropTarget = (event: DragEvent<HTMLElement>) => isAfterRowDrop(event)
+                        ? targetAfterBucketRow(props.section.id, props.items, index)
+                        : rowDropTarget;
                     return (
                         <ReminderRow
                             key={item.id}
@@ -229,6 +248,7 @@ function MatrixQuadrant(props: {
                             onDragStart={props.onDragStart}
                             onDragEnd={props.onDragEnd}
                             dropTarget={rowDropTarget}
+                            resolveDropTarget={resolveDropTarget}
                             activeDropTarget={props.dropTarget}
                             onDragOverTarget={props.onDragOver}
                             onDragLeaveTarget={props.onDragLeave}
@@ -315,6 +335,9 @@ function TopPriorityStrip(props: {
             <ol>
                 {props.items.map((item, index) => {
                     const rowDropTarget = targetAtPriorityRow(props.items, index);
+                    const resolveDropTarget = (event: DragEvent<HTMLElement>) => isAfterRowDrop(event)
+                        ? targetAfterPriorityRow(props.items, index)
+                        : rowDropTarget;
                     return (
                         <li key={item.id}>
                             <span className="dashboard-reminders-top-index">{index + 1}</span>
@@ -327,6 +350,7 @@ function TopPriorityStrip(props: {
                                 onDragStart={props.onDragStart}
                                 onDragEnd={props.onDragEnd}
                                 dropTarget={rowDropTarget}
+                                resolveDropTarget={resolveDropTarget}
                                 activeDropTarget={props.dropTarget}
                                 onDragOverTarget={props.onDragOver}
                                 onDragLeaveTarget={props.onDragLeave}

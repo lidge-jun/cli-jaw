@@ -76,7 +76,7 @@ test('matrix bucket patches map movement targets to dashboard reminder patches',
     assert.deepEqual(matrixBucketToPatch('later'), { listId: 'later', status: 'open', priority: 'low' });
 });
 
-test('top priority ranks focused, due time, priority, then creation time', () => {
+test('top priority ranks focused, urgency, manual rank, then due time', () => {
     const items = [
         reminder({ id: 'old-normal', priority: 'normal', sourceCreatedAt: '2026-05-09T00:00:00.000Z' }),
         reminder({ id: 'due-high', priority: 'high', dueAt: '2026-05-10T03:00:00.000Z', sourceCreatedAt: '2026-05-09T01:00:00.000Z' }),
@@ -85,17 +85,17 @@ test('top priority ranks focused, due time, priority, then creation time', () =>
         reminder({ id: 'done', status: 'done', priority: 'high', dueAt: '2026-05-10T00:00:00.000Z' }),
     ];
 
-    assert.deepEqual(rankTopPriorityItems(items, 3).map(item => item.id), ['focused', 'remind-low', 'due-high']);
+    assert.deepEqual(rankTopPriorityItems(items, 3).map(item => item.id), ['focused', 'due-high', 'old-normal']);
 });
 
-test('manual rank overrides automatic priority ordering inside matrix and top priority views', () => {
+test('manual rank orders reminders inside each urgency tier', () => {
     const items = [
-        reminder({ id: 'third', priority: 'high', manualRank: 3000 }),
-        reminder({ id: 'first', priority: 'normal', manualRank: 1000 }),
-        reminder({ id: 'second', priority: 'low', manualRank: 2000 }),
+        reminder({ id: 'second-high', priority: 'high', manualRank: 3000 }),
+        reminder({ id: 'first-normal', priority: 'normal', manualRank: 1000 }),
+        reminder({ id: 'second-normal', priority: 'normal', manualRank: 2000 }),
         reminder({ id: 'fallback', priority: 'high' }),
     ];
 
-    assert.deepEqual(rankTopPriorityItems(items, 4).map(item => item.id), ['first', 'second', 'third', 'fallback']);
-    assert.deepEqual(matrixItems('urgentImportant', items).map(item => item.id), ['third', 'fallback']);
+    assert.deepEqual(rankTopPriorityItems(items, 4).map(item => item.id), ['second-high', 'fallback', 'first-normal', 'second-normal']);
+    assert.deepEqual(matrixItems('urgentImportant', items).map(item => item.id), ['second-high', 'fallback']);
 });

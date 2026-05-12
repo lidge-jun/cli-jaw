@@ -87,6 +87,12 @@ function normalizeReminder(item: DashboardReminder): DashboardReminder {
     };
 }
 
+function assertManualRankSupport(patch: DashboardReminderPatchInput, item: DashboardReminder): void {
+    if ('manualRank' in patch && !Object.hasOwn(item, 'manualRank')) {
+        throw new Error('Manual reminder ordering requires the dashboard backend to be rebuilt and restarted.');
+    }
+}
+
 export async function listReminders(): Promise<DashboardRemindersResponse> {
     const res = await fetch(BASE, { credentials: 'same-origin', cache: 'no-store' });
     const body = await asJson<DashboardRemindersResponse>(res);
@@ -115,5 +121,6 @@ export async function updateReminder(id: string, patch: DashboardReminderPatchIn
         body: JSON.stringify(patch),
     });
     const body = await asJson<{ item: DashboardReminder }>(res);
+    assertManualRankSupport(patch, body.item);
     return normalizeReminder(body.item);
 }
