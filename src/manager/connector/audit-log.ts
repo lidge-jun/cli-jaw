@@ -60,6 +60,15 @@ export class ConnectorAuditLog {
         this.db = new Database(path);
         this.db.pragma('journal_mode = WAL');
         this.db.pragma('busy_timeout = 5000');
+        // Idempotent cleanup of the 2026-05-11 canonical workspace tables. The
+        // tables were created by the now-archived `src/manager/workspace/` store.
+        // They are always empty in real installs because no UI ever wrote to
+        // them; the DROPs run once per server boot and become no-ops afterwards.
+        this.db.exec(`
+            DROP TABLE IF EXISTS dashboard_workspace_note_links;
+            DROP TABLE IF EXISTS dashboard_workspace_events;
+            DROP TABLE IF EXISTS dashboard_work_items;
+        `);
         this.db.exec(`
             CREATE TABLE IF NOT EXISTS dashboard_connector_audit (
                 id                TEXT PRIMARY KEY,

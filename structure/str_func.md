@@ -9,7 +9,7 @@ aliases: [CLI-JAW Source Structure, str_func, source structure reference]
 # CLI-JAW — Source Structure & Function Reference
 
 > 마지막 검증: 2026-05-12 (실제 코드베이스 재측정)
-> `server.ts` 789L / `src/routes/` 15 files (12 registrar + `quota.ts` helper + `types.ts` + trace routes, 131 route handlers) / `src/cli/handlers*.ts` 383L + 461L + 95L / `src/cli/api-auth.ts` 45L / `src/agent/spawn.ts` 1610L + `src/agent/watchdog.ts` 104L / `src/manager/` 57 TS/TSX files (9103L, dashboard manager + board/notes/search/schedule/reminders/connector/routes + notes assets/watcher 서브모듈) / `src/browser/web-ai/` 67 TS files (12263L, ChatGPT/Gemini/Grok 멀티벤더 자동화 + resolver/source-audit/observation helpers + context-pack/tab-pool) / `src/types/` 1 file (75L) / `bin/commands/` 18 top-level ts files + `tui/` 7 helper files
+> `server.ts` 789L / `src/routes/` 15 files (12 registrar + `quota.ts` helper + `types.ts` + trace routes, 131 route handlers) / `src/cli/handlers*.ts` 383L + 461L + 95L / `src/cli/api-auth.ts` 45L / `src/agent/spawn.ts` 1610L + `src/agent/watchdog.ts` 104L / `src/manager/` 57 TS/TSX files (9112L, dashboard manager + board/notes/search/schedule/reminders/connector/routes + notes assets/watcher 서브모듈) / `src/browser/web-ai/` 67 TS files (12263L, ChatGPT/Gemini/Grok 멀티벤더 자동화 + resolver/source-audit/observation helpers + context-pack/tab-pool) / `src/types/` 1 file (75L) / `bin/commands/` 18 top-level ts files + `tui/` 7 helper files
 > issue #91: OfficeCLI 10-phase integration (dual-audited, 94/94 tests) — closed
 > issue #92: Phase 20 overlay consolidation + GitHub Release v1.0.28-lidge.1 (3 audits passed: A-/A/A) — closed
 > issue #95: Avatar image upload — emoji+image dual support, 4 API endpoints, secure path serving — closed
@@ -93,7 +93,7 @@ cli-jaw/
 │   │   ├── builder.ts        ← A-1/A-2 + 스킬 + 직원 프롬프트 v2 + promptCache (4-segment key: emp:role:phase:workingDir) + dev skill rules + **advanced memory mode branch + task snapshot injection** + dashboard-connector anchor preserve (714L)
 │   │   ├── soul-bootstrap-prompt.ts ← LLM 기반 soul.md 개인화 부트스트랩 프롬프트 빌더 (52L)
 │   │   └── template-loader.ts ← 프롬프트 템플릿 로더 (50L)
-│   ├── manager/              ← Multi-instance 대시보드 매니저 (57 TS/TSX files, 9103L; `jaw dashboard serve` + board/notes/search/schedule/reminders/connector/routes/notes assets/watcher 서브모듈)
+│   ├── manager/              ← Multi-instance 대시보드 매니저 (57 TS/TSX files, 9112L; `jaw dashboard serve` + board/notes/search/schedule/reminders/connector/routes/notes assets/watcher 서브모듈)
 │   │   ├── server.ts         ← Express 대시보드 서버 + helmet + 헬스/스캔/액션 라우트 + board/notes/schedule/reminders/connector/routes 라우터 마운트 (572L)
 │   │   ├── scan.ts           ← 포트 범위 스캔 + 인스턴스 감지 (148L)
 │   │   ├── proxy.ts          ← 인스턴스 reverse proxy 미들웨어 (231L)
@@ -144,9 +144,9 @@ cli-jaw/
 │   │   │   ├── routes.ts     ← `/api/dashboard/reminders` Express router (list/create/from-message/update) (161L)
 │   │   │   ├── scheduler.ts  ← reminder notification scheduler loop (71L)
 │   │   │   └── store.ts      ← SQLite-backed dashboard reminders store + notification status (407L)
-│   │   ├── connector/        ← on-demand dashboard connector 서브모듈 (3 files, 409L) — agent writes go through here only when userRequested:true
+│   │   ├── connector/        ← on-demand dashboard connector 서브모듈 (3 files, 418L) — agent writes go through here only when userRequested:true
 │   │   │   ├── routes.ts     ← `/api/dashboard/connector` Express router (board/reminders/notes adapters + audit + parent-folder auto-create) (259L)
-│   │   │   ├── audit-log.ts  ← SQLite-backed connector audit event log (124L)
+│   │   │   ├── audit-log.ts  ← SQLite-backed connector audit event log + idempotent DROP of 2026-05-11 canonical workspace tables (133L)
 │   │   │   └── types.ts      ← ConnectorActor/Surface/InstanceLink/AuditEvent/ErrorCode 타입 (26L)
 │   │   ├── schedule/         ← 스케줄 관리 서브모듈 (4 files, 459L)
 │   │   │   ├── store.ts      ← ScheduleStore 클래스 + DashboardScheduledWork CRUD (SQLite) (230L)

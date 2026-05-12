@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
 import http from 'node:http';
+import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -150,6 +151,36 @@ test('POST /notes with unsafe path is rejected with 400 and no audit row', async
         assert.equal(res.status, 400);
         assert.equal(audit.list().length, 0);
     });
+});
+
+test('ConnectorAuditLog drops the 2026-05-11 canonical workspace tables on init', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'cli-jaw-connector-cleanup-'));
+    const dbPath = join(dir, 'dashboard.db');
+    const seed = new Database(dbPath);
+    seed.exec(`
+        CREATE TABLE dashboard_work_items (id TEXT PRIMARY KEY);
+        CREATE TABLE dashboard_workspace_events (id TEXT PRIMARY KEY);
+        CREATE TABLE dashboard_workspace_note_links (id TEXT PRIMARY KEY);
+    `);
+    seed.close();
+
+    const audit = new ConnectorAuditLog({ dbPath });
+    try {
+        const inspector = new Database(dbPath);
+        try {
+            const rows = inspector.prepare(`
+                SELECT name FROM sqlite_master
+                WHERE type='table'
+                  AND name IN ('dashboard_work_items', 'dashboard_workspace_events', 'dashboard_workspace_note_links')
+            `).all() as Array<{ name: string }>;
+            assert.equal(rows.length, 0, 'old workspace tables must be dropped');
+        } finally {
+            inspector.close();
+        }
+    } finally {
+        audit.close();
+        rmSync(dir, { recursive: true, force: true });
+    }
 });
 
 test('GET /audit returns recent events without requiring userRequested', async () => {
