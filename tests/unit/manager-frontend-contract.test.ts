@@ -48,6 +48,24 @@ test('manager frontend has API entry and Open action', () => {
     assert.ok(command.includes('Search port, home, CLI, model'), 'manager UI must include search');
 });
 
+test('manager server serves built dashboard HTML at /manager while preserving static manager assets', () => {
+    const server = read('src/manager/server.ts');
+    const pkg = read('package.json');
+
+    assert.ok(server.includes("join(distRoot, 'manager', 'index.html')"), 'built manager HTML must remain the first /manager fallback candidate');
+    assert.ok(server.includes("join(sourceRoot, 'manager', 'index.html')"), 'source manager HTML may remain a last-resort development fallback');
+    assert.ok(
+        server.includes("app.use('/manager', express.static(join(sourceRoot, 'manager'), { index: false }))"),
+        '/manager static assets must not shadow the built manager HTML index',
+    );
+    assert.ok(server.includes("htmlPath.startsWith(distRoot) ? 'dist' : 'source'"),
+        'manager UI source marker must reflect the actual selected HTML path');
+    assert.ok(server.includes("res.setHeader('x-jaw-manager-ui', managerUiSource(htmlPath))"),
+        'manager HTML responses must expose a QA source marker');
+    assert.ok(pkg.includes('"qa:manager-frontend": "npm run build:frontend && npm run typecheck:frontend"'),
+        'manual manager QA must have a build-first helper script');
+});
+
 test('manager command bar exposes polished dashboard brand', () => {
     const command = read('public/manager/src/components/CommandBar.tsx');
     const compact = read('public/manager/src/manager-p0-1-1.css');
@@ -289,6 +307,7 @@ test('manager workbench modes remain instance-only while Notes renders outside W
     const app = read('public/manager/src/App.tsx');
     const router = read('public/manager/src/SidebarRailRouter.tsx');
     const workbench = read('public/manager/src/components/Workbench.tsx');
+    const renderer = read('public/manager/src/notes/rendering/MarkdownRenderer.tsx');
 
     assert.ok(router.includes('NotesWorkspace'), 'SidebarRailRouter must render the Notes workspace');
     assert.ok(router.includes('DashboardSettingsWorkspace'), 'SidebarRailRouter must render Dashboard settings outside Workbench');
@@ -298,6 +317,8 @@ test('manager workbench modes remain instance-only while Notes renders outside W
     assert.equal(workbench.includes("'notes'"), false, 'Workbench must not add Notes as a detail tab');
     assert.ok(app.includes('notesSelectedPath'), 'App must hydrate and persist selected note path');
     assert.ok(app.includes('notesViewMode'), 'App must hydrate and persist Notes view mode');
+    assert.ok(renderer.includes('splitPreviewFrontmatter'), 'Preview must strip leading YAML frontmatter before rendering body prose');
+    assert.equal(renderer.includes('./wysiwyg/'), false, 'MarkdownRenderer must not import WYSIWYG-only frontmatter helpers');
 });
 
 test('manager process control panel exposes safe managed-process actions only', () => {

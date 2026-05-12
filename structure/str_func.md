@@ -8,8 +8,8 @@ aliases: [CLI-JAW Source Structure, str_func, source structure reference]
 
 # CLI-JAW — Source Structure & Function Reference
 
-> 마지막 검증: 2026-05-10 (실제 코드베이스 재측정)
-> `server.ts` 789L / `src/routes/` 15 files (12 registrar + `quota.ts` helper + `types.ts` + trace routes, 131 route handlers) / `src/cli/handlers*.ts` 383L + 461L + 95L / `src/cli/api-auth.ts` 45L / `src/agent/spawn.ts` 1610L + `src/agent/watchdog.ts` 104L / `src/manager/` 53 TS/TSX files (8428L, dashboard manager + board/notes/search/schedule/reminders/routes + notes assets/watcher 서브모듈) / `src/browser/web-ai/` 67 TS files (12263L, ChatGPT/Gemini/Grok 멀티벤더 자동화 + resolver/source-audit/observation helpers + context-pack/tab-pool) / `src/types/` 1 file (75L) / `bin/commands/` 18 top-level ts files + `tui/` 7 helper files
+> 마지막 검증: 2026-05-11 (실제 코드베이스 재측정)
+> `server.ts` 789L / `src/routes/` 15 files (12 registrar + `quota.ts` helper + `types.ts` + trace routes, 131 route handlers) / `src/cli/handlers*.ts` 383L + 461L + 95L / `src/cli/api-auth.ts` 45L / `src/agent/spawn.ts` 1610L + `src/agent/watchdog.ts` 104L / `src/manager/` 57 TS/TSX files (9432L, dashboard manager + board/notes/search/schedule/reminders/workspace/routes + notes assets/watcher 서브모듈) / `src/browser/web-ai/` 67 TS files (12263L, ChatGPT/Gemini/Grok 멀티벤더 자동화 + resolver/source-audit/observation helpers + context-pack/tab-pool) / `src/types/` 1 file (75L) / `bin/commands/` 18 top-level ts files + `tui/` 7 helper files
 > issue #91: OfficeCLI 10-phase integration (dual-audited, 94/94 tests) — closed
 > issue #92: Phase 20 overlay consolidation + GitHub Release v1.0.28-lidge.1 (3 audits passed: A-/A/A) — closed
 > issue #95: Avatar image upload — emoji+image dual support, 4 API endpoints, secure path serving — closed
@@ -93,8 +93,8 @@ cli-jaw/
 │   │   ├── builder.ts        ← A-1/A-2 + 스킬 + 직원 프롬프트 v2 + promptCache (4-segment key: emp:role:phase:workingDir) + dev skill rules + **advanced memory mode branch + task snapshot injection** (677L)
 │   │   ├── soul-bootstrap-prompt.ts ← LLM 기반 soul.md 개인화 부트스트랩 프롬프트 빌더 (52L)
 │   │   └── template-loader.ts ← 프롬프트 템플릿 로더 (50L)
-│   ├── manager/              ← Multi-instance 대시보드 매니저 (53 TS/TSX files, 8428L; `jaw dashboard serve` + board/notes/search/schedule/reminders/routes/notes assets/watcher 서브모듈)
-│   │   ├── server.ts         ← Express 대시보드 서버 + helmet + 헬스/스캔/액션 라우트 + board/notes/schedule/reminders/routes 라우터 마운트 (477L)
+│   ├── manager/              ← Multi-instance 대시보드 매니저 (57 TS/TSX files, 9432L; `jaw dashboard serve` + board/notes/search/schedule/reminders/workspace/routes/notes assets/watcher 서브모듈)
+│   │   ├── server.ts         ← Express 대시보드 서버 + helmet + 헬스/스캔/액션 라우트 + board/notes/schedule/reminders/workspace/routes 라우터 마운트 (567L)
 │   │   ├── scan.ts           ← 포트 범위 스캔 + 인스턴스 감지 (148L)
 │   │   ├── proxy.ts          ← 인스턴스 reverse proxy 미들웨어 (231L)
 │   │   ├── lifecycle.ts      ← 인스턴스 lifecycle (start/stop/spawn) 매니저 (531L)
@@ -136,14 +136,18 @@ cli-jaw/
 │   │   │   ├── system-trash.ts ← macOS system trash 이동 헬퍼 (moveToSystemTrash) (20L)
 │   │   │   ├── watcher.ts    ← notes external file watcher (33L)
 │   │   │   └── wiki-links.ts ← wiki-link extraction/update helpers (121L)
-│   │   ├── reminders/        ← 대시보드 reminders 서브모듈 (7 files, 745L)
+│   │   ├── reminders/        ← 대시보드 reminders 서브모듈 (7 files, 775L)
 │   │   │   ├── api.ts        ← dashboard reminder list/create/update API helpers (26L)
 │   │   │   ├── dispatcher.ts ← reminder notification dispatch helper (55L)
 │   │   │   ├── due-time.ts   ← reminder due/remind time classification (20L)
 │   │   │   ├── instance-link.ts ← reminder source instance/message link parser (35L)
-│   │   │   ├── routes.ts     ← `/api/dashboard/reminders` Express router (list/create/from-message/update) (150L)
+│   │   │   ├── routes.ts     ← `/api/dashboard/reminders` Express router (list/create/from-message/update) (161L)
 │   │   │   ├── scheduler.ts  ← reminder notification scheduler loop (71L)
-│   │   │   └── store.ts      ← SQLite-backed dashboard reminders store + notification status (388L)
+│   │   │   └── store.ts      ← SQLite-backed dashboard reminders store + notification status (407L)
+│   │   ├── workspace/        ← agent-managed dashboard workspace 서브모듈 (3 files, 743L)
+│   │   │   ├── routes.ts     ← `/api/dashboard/workspace` Express router (snapshot/items/move/link-note/link-instance/events) (231L)
+│   │   │   ├── types.ts      ← Workspace item/status/priority/matrix/link/event 타입과 enum 값 (87L)
+│   │   │   └── store.ts      ← SQLite-backed canonical workspace store + revision guard + event audit trail (425L)
 │   │   ├── schedule/         ← 스케줄 관리 서브모듈 (4 files, 459L)
 │   │   │   ├── store.ts      ← ScheduleStore 클래스 + DashboardScheduledWork CRUD (SQLite) (230L)
 │   │   │   ├── routes.ts     ← 스케줄 Express 라우터 (createDashboardScheduleRouter) (112L)
@@ -303,7 +307,7 @@ cli-jaw/
 │       ├── catalog.ts        ← COMMANDS → capability map 확장 (43L)
 │       ├── policy.ts         ← getVisibleCommands, getTelegramMenuCommands (39L)
 │       └── help-renderer.ts  ← renderHelp list/detail mode (44L)
-├── public/                   ← Web UI (Vite 8 + ES Modules, 479 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 458 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~65884L)
+├── public/                   ← Web UI (Vite 8 + ES Modules, 482 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 458 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~66341L)
 │   ├── index.html            ← 뼈대 (876L, CLI-JAW 대문자 로고, pill theme switch, data-i18n, 로컬 avatar 입력)
 │   ├── manifest.json         ← PWA 매니페스트 (20L) ✨
 │   ├── sw.js                 ← Service Worker 오프라인 캐시 (104L) ✨
@@ -739,7 +743,7 @@ graph LR
 | [🤖 agent_spawn.md](agent_spawn.md)                 | agent/ (spawn·args·events) + orchestrator/ (pipeline·parser) + cli/acp-client | spawn + ACP + 오케스트레이션           |
 | [📱 telegram.md](telegram.md)                       | telegram/ (bot·forwarder·telegram-file) + memory/heartbeat                    | 외부 인터페이스 + lifecycle + 파일전송 |
 | *(미작성)* discord.md                                | discord/ (bot·commands·forwarder·discord-file) + messaging/                   | Discord 인터페이스 + 메시징 런타임     |
-| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 479개, `public/dist` build 457파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
+| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 482개, `public/dist` build 458파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
 | [🧠 prompt_flow.md](prompt_flow.md)                 | prompt/builder.ts · 직원 프롬프트 · promptCache                               | **핵심** — 정적/동적 + Copilot ACP     |
 | [📄 prompt_basic_A1.md](prompt_basic_A1.md)         | A-1 기본 프롬프트 원문                                                        | EN 기본 프롬프트 레퍼런스              |
 | [📄 prompt_basic_A2.md](prompt_basic_A2.md)         | A-2 프롬프트 템플릿                                                           | 사용자 편집 가능                       |

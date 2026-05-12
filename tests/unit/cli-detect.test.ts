@@ -6,6 +6,7 @@ import path from 'node:path';
 
 import {
     isSpawnableCliFile,
+    prioritizeCliCandidates,
     selectSpawnableCliPath,
 } from '../../src/core/cli-detect.ts';
 
@@ -47,4 +48,25 @@ test('selectSpawnableCliPath reports rejected candidates when none are spawnable
     assert.equal(result.available, false);
     assert.equal(result.path, null);
     assert.deepEqual(result.rejected, [{ path: broken, reason: 'text file without shebang' }]);
+});
+
+test('prioritizeCliCandidates moves bun shims behind managed node bins for claude', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-cli-detect-home-'));
+    const bunClaude = path.join(home, '.bun', 'bin', 'claude');
+    const nvmClaude = path.join(home, '.nvm', 'versions', 'node', 'v22.18.0', 'bin', 'claude');
+    const otherClaude = path.join('/opt/homebrew/bin', 'claude');
+
+    const result = prioritizeCliCandidates('claude', [bunClaude, otherClaude, nvmClaude], home);
+
+    assert.deepEqual(result, [nvmClaude, otherClaude, bunClaude]);
+});
+
+test('prioritizeCliCandidates keeps PATH order for codex/gemini/copilot/opencode (no bun deprio)', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-cli-detect-home-'));
+    for (const cli of ['codex', 'gemini', 'copilot', 'opencode']) {
+        const bunPath = path.join(home, '.bun', 'bin', cli);
+        const nvmPath = path.join(home, '.nvm', 'versions', 'node', 'v22.18.0', 'bin', cli);
+        const result = prioritizeCliCandidates(cli, [bunPath, nvmPath], home);
+        assert.deepEqual(result, [bunPath, nvmPath], `${cli} order should be unchanged`);
+    }
 });

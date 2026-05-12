@@ -1,4 +1,6 @@
 import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { buildServicePath } from './runtime-path.js';
 
@@ -23,6 +25,64 @@ function uniqueLines(raw: string): string[] {
         out.push(candidate);
     }
     return out;
+}
+
+const BUN_DEPRIO_CLIS = new Set(['claude']);
+
+function normalizedPath(filePath: string): string {
+    return path.normalize(filePath);
+}
+
+function isPathInside(candidate: string, dir: string): boolean {
+    const relative = path.relative(dir, candidate);
+    return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function isBunBinCandidate(candidate: string, homeDir = os.homedir()): boolean {
+    const normalized = normalizedPath(candidate);
+    return isPathInside(normalized, path.join(homeDir, '.bun', 'bin'));
+}
+
+function isManagedNodeCandidate(candidate: string, homeDir = os.homedir()): boolean {
+    const normalized = normalizedPath(candidate);
+    const candidateDir = path.dirname(normalized);
+    const preferredDirs = [
+        path.dirname(process.execPath),
+        path.join(homeDir, '.local', 'bin'),
+        path.join(homeDir, '.claude', 'local', 'bin'),
+        path.join(homeDir, 'bin'),
+        path.join(homeDir, '.npm-global', 'bin'),
+        path.join(homeDir, '.yarn', 'bin'),
+        path.join(homeDir, '.pnpm'),
+        path.join(homeDir, '.volta', 'bin'),
+    ];
+    if (preferredDirs.some((dir) => candidateDir === path.normalize(dir))) return true;
+
+    const managedRoots = [
+        path.join(homeDir, '.nvm', 'versions', 'node'),
+        path.join(homeDir, '.local', 'share', 'fnm', 'node-versions'),
+        path.join(homeDir, '.fnm', 'node-versions'),
+    ];
+    return managedRoots.some((root) => isPathInside(normalized, path.normalize(root)));
+}
+
+function candidatePriority(cliName: string, candidate: string, index: number, homeDir = os.homedir()): number {
+    if (!BUN_DEPRIO_CLIS.has(cliName)) return index;
+    if (isManagedNodeCandidate(candidate, homeDir)) return index;
+    if (isBunBinCandidate(candidate, homeDir)) return 10_000 + index;
+    return 5_000 + index;
+}
+
+export function prioritizeCliCandidates(
+    cliName: string,
+    candidates: string[],
+    homeDir = os.homedir(),
+): string[] {
+    if (!BUN_DEPRIO_CLIS.has(cliName)) return candidates;
+    return candidates
+        .map((candidate, index) => ({ candidate, priority: candidatePriority(cliName, candidate, index, homeDir) }))
+        .sort((a, b) => a.priority - b.priority)
+        .map((entry) => entry.candidate);
 }
 
 function readHead(filePath: string, length = 64): Buffer {
@@ -106,7 +166,7 @@ export function detectCliBinary(name: string, seedPath = process.env["PATH"] || 
                 PATH: buildServicePath(seedPath),
             },
         }).trim();
-        return selectSpawnableCliPath(uniqueLines(raw));
+        return selectSpawnableCliPath(prioritizeCliCandidates(name, uniqueLines(raw)));
     } catch {
         return { available: false, path: null };
     }
