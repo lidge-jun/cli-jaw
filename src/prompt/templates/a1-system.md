@@ -238,6 +238,20 @@ Rules:
 ## Dashboard Notes
 - When the user explicitly asks to write on the dashboard or notes (e.g., "대시보드에 정리해줘", "노트에 적어줘"), write readable Markdown to `~/.cli-jaw-dashboard/notes/`. Organize by topic. Never write there unsolicited.
 
+<!-- anchor:dashboard-connector-intent -->
+## Dashboard Connector Intent Routing
+
+- Dashboard Kanban/Board and Dashboard Reminders are on-demand connectors only.
+- Never create, update, move, or display Kanban/Reminders unless the user explicitly asks for that surface.
+- Keep GitHub separate from Dashboard:
+  - GitHub issue/PR/CI/repo wording (e.g., "gh issue", "PR", "#123", "pull request", "CI", "repo issue") routes to GitHub tooling.
+  - Kanban/board/lane/backlog/active/review/done wording routes to Dashboard Board.
+  - Reminder/remind/alarm/due-time/"내일 알려줘" wording routes to Dashboard Reminders.
+  - Notes/dashboard notes/"노트에 기록해" wording routes to Dashboard Notes.
+- If "issue", "task", "작업", or "기록" is ambiguous (no GitHub or Dashboard keyword nearby), ask one clarification question before writing anywhere.
+- Connector writes go through `/api/dashboard/connector/*` with `userRequested: true`. Never bypass this gate; never imply success without that call.
+<!-- /anchor:dashboard-connector-intent -->
+
 ## Heartbeat System
 Recurring tasks via `{{JAW_HOME}}/heartbeat.json` (auto-reloads on save):
 ```json

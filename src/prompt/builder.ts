@@ -160,6 +160,28 @@ export const HEARTBEAT_PATH = join(PROMPTS_DIR, 'HEARTBEAT.md');
 
 const DESKTOP_CONTROL_ANCHOR_OPEN = '<!-- anchor:desktop-control -->';
 const DESKTOP_CONTROL_ANCHOR_CLOSE = '<!-- /anchor:desktop-control -->';
+const DASHBOARD_CONNECTOR_ANCHOR_OPEN = '<!-- anchor:dashboard-connector-intent -->';
+const DASHBOARD_CONNECTOR_ANCHOR_CLOSE = '<!-- /anchor:dashboard-connector-intent -->';
+
+function extractAnchorBlock(rendered: string, open: string, close: string): string | null {
+    const start = rendered.indexOf(open);
+    const end = rendered.indexOf(close);
+    if (start === -1 || end === -1 || end <= start) return null;
+    return rendered.slice(start, end + close.length);
+}
+
+function appendAnchorIfMissing(
+    fileContent: string,
+    rendered: string,
+    open: string,
+    close: string,
+): string | null {
+    if (fileContent.includes(open)) return null;
+    const block = extractAnchorBlock(rendered, open, close);
+    if (!block) return null;
+    const sep = fileContent.endsWith('\n') ? '\n' : '\n\n';
+    return fileContent + sep + block + '\n';
+}
 
 /**
  * Extract the Desktop/Browser Control anchor block from the rendered A1
@@ -167,10 +189,7 @@ const DESKTOP_CONTROL_ANCHOR_CLOSE = '<!-- /anchor:desktop-control -->';
  * future refactors from silently producing empty appends).
  */
 function extractDesktopControlAnchor(rendered: string): string | null {
-    const start = rendered.indexOf(DESKTOP_CONTROL_ANCHOR_OPEN);
-    const end = rendered.indexOf(DESKTOP_CONTROL_ANCHOR_CLOSE);
-    if (start === -1 || end === -1 || end <= start) return null;
-    return rendered.slice(start, end + DESKTOP_CONTROL_ANCHOR_CLOSE.length);
+    return extractAnchorBlock(rendered, DESKTOP_CONTROL_ANCHOR_OPEN, DESKTOP_CONTROL_ANCHOR_CLOSE);
 }
 
 /**
@@ -178,11 +197,21 @@ function extractDesktopControlAnchor(rendered: string): string | null {
  * A1 file when the anchor is missing. Returns true when an append was made.
  */
 function ensureDesktopControlAnchor(fileContent: string, rendered: string): string | null {
-    if (fileContent.includes(DESKTOP_CONTROL_ANCHOR_OPEN)) return null;
-    const block = extractDesktopControlAnchor(rendered);
-    if (!block) return null;
-    const sep = fileContent.endsWith('\n') ? '\n' : '\n\n';
-    return fileContent + sep + block + '\n';
+    return appendAnchorIfMissing(
+        fileContent,
+        rendered,
+        DESKTOP_CONTROL_ANCHOR_OPEN,
+        DESKTOP_CONTROL_ANCHOR_CLOSE,
+    );
+}
+
+function ensureDashboardConnectorAnchor(fileContent: string, rendered: string): string | null {
+    return appendAnchorIfMissing(
+        fileContent,
+        rendered,
+        DASHBOARD_CONNECTOR_ANCHOR_OPEN,
+        DASHBOARD_CONNECTOR_ANCHOR_CLOSE,
+    );
 }
 
 // ─── Initialize prompt files ─────────────────────────
@@ -209,11 +238,19 @@ export function initPromptFiles() {
             } else {
                 // User edited — preserve their changes, but advance hash baseline.
                 // Safe-append new anchor blocks the user hasn't opted in to yet.
-                const userText = fs.readFileSync(A1_PATH, 'utf8');
-                const appended = ensureDesktopControlAnchor(userText, a1Content);
-                if (appended) {
-                    fs.writeFileSync(A1_PATH, appended);
+                let userText = fs.readFileSync(A1_PATH, 'utf8');
+                const appendedDesktop = ensureDesktopControlAnchor(userText, a1Content);
+                if (appendedDesktop) {
+                    userText = appendedDesktop;
                     console.log('[prompt] A-1.md: appended desktop-control anchor (user edits preserved)');
+                }
+                const appendedConnector = ensureDashboardConnectorAnchor(userText, a1Content);
+                if (appendedConnector) {
+                    userText = appendedConnector;
+                    console.log('[prompt] A-1.md: appended dashboard-connector-intent anchor (user edits preserved)');
+                }
+                if (appendedDesktop || appendedConnector) {
+                    fs.writeFileSync(A1_PATH, userText);
                 } else {
                     console.log('[prompt] A-1.md has user edits — preserved');
                 }
