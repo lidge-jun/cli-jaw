@@ -36,7 +36,7 @@ import { startScheduleRunner } from './schedule/runner.js';
 import { createDashboardRemindersRouter } from './reminders/routes.js';
 import { RemindersStore } from './reminders/store.js';
 import { startRemindersScheduler } from './reminders/scheduler.js';
-import { createDashboardWorkspaceRouter } from './workspace/routes.js';
+import { createDashboardConnectorRouter } from './connector/routes.js';
 import { fetchWorkerAssistantTextById } from './worker-messages.js';
 import { openUrlInBrowser } from '../core/browser-open.js';
 import { ensureDirs, loadSettings } from '../core/config.js';
@@ -159,7 +159,7 @@ const scheduleStore = new ScheduleStore();
 app.use('/api/dashboard/schedule', createDashboardScheduleRouter({ store: scheduleStore }));
 const remindersStore = new RemindersStore();
 app.use('/api/dashboard/reminders', createDashboardRemindersRouter({ store: remindersStore }));
-app.use('/api/dashboard/workspace', createDashboardWorkspaceRouter());
+app.use('/api/dashboard/connector', createDashboardConnectorRouter({ remindersStore }));
 let stopRemindersScheduler: (() => void) | null = null;
 
 app.use('/api/jaw-ceo', createJawCeoRouter({
