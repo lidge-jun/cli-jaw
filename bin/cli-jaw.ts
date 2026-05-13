@@ -37,7 +37,7 @@ const _homeEqArg = process.argv.find(a => a.startsWith('--home='));
 if (_homeIdx !== -1 && process.argv[_homeIdx + 1]) {
     const _homeVal = process.argv[_homeIdx + 1]!;
     // Guard: if the "value" looks like a known subcommand, user forgot the path
-    const _knownCmds = ['serve', 'init', 'doctor', 'chat', 'employee', 'reset', 'mcp', 'skill', 'status', 'browser', 'memory', 'launchd', 'clone', 'service', 'dashboard', 'reminders', 'orchestrate', 'dispatch'];
+    const _knownCmds = ['serve', 'init', 'doctor', 'chat', 'employee', 'reset', 'mcp', 'skill', 'status', 'browser', 'memory', 'launchd', 'clone', 'service', 'dashboard', 'connector', 'reminders', 'orchestrate', 'dispatch'];
     if (_knownCmds.includes(_homeVal)) {
         console.error(`  ❌ --home requires a path argument (got subcommand '${_homeVal}')`);
         console.error(`  Usage: jaw --home <path> ${_homeVal}`);
@@ -178,6 +178,9 @@ switch (command) {
         break;
     case 'dashboard':
         await import('./commands/dashboard.js');
+        break;
+    case 'connector':
+        await import('./commands/connector.js');
         break;
     case 'reminders':
         await import('./commands/reminders.js');
