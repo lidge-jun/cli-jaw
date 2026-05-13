@@ -15,7 +15,12 @@ export type HelpTopicId =
     | 'mcp'
     | 'memory'
     | 'stt'
-    | 'promptTemplates';
+    | 'promptTemplates'
+    | 'chatInput'
+    | 'orchestration'
+    | 'attachments'
+    | 'diagrams'
+    | 'keyboardShortcuts';
 
 export interface HelpTopic {
     titleKey: string;
@@ -44,6 +49,11 @@ export const HELP_TOPICS: Record<HelpTopicId, HelpTopic> = {
     memory: topic('memory', 2, 1, 2),
     stt: topic('stt', 2, 1, 1),
     promptTemplates: topic('promptTemplates', 2, 1, 1),
+    chatInput: topic('chatInput', 3, 2, 2),
+    orchestration: topic('orchestration', 3, 2, 2),
+    attachments: topic('attachments', 3, 2, 2),
+    diagrams: topic('diagrams', 3, 2, 2),
+    keyboardShortcuts: topic('keyboardShortcuts', 3, 2, 2),
 };
 
 export function isHelpTopicId(value: string | null | undefined): value is HelpTopicId {

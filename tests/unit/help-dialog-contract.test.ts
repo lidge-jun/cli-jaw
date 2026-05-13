@@ -13,8 +13,7 @@ const dialogPath = join(root, 'public/js/features/help-dialog.ts');
 const mainPath = join(root, 'public/js/main.ts');
 const indexPath = join(root, 'public/index.html');
 const cssPath = join(root, 'public/css/modals.css');
-const koPath = join(root, 'public/locales/ko.json');
-const enPath = join(root, 'public/locales/en.json');
+const localePaths = ['ko', 'en', 'ja', 'zh'].map(locale => join(root, `public/locales/${locale}.json`));
 const planPath = join(root, 'devlog/_plan/260425_help_dialog/plan.md');
 
 const topicIds = Object.keys(HELP_TOPICS).sort();
@@ -87,23 +86,25 @@ test('HD-003: HTML help topics and HELP_TOPICS stay in sync', () => {
     const htmlTopics = uniqueMatches(html, /data-help-topic="([^"]+)"/g);
 
     assert.deepEqual(htmlTopics, topicIds, 'index.html data-help-topic values should exactly match HELP_TOPICS');
+    for (const topic of ['chatInput', 'orchestration', 'attachments', 'diagrams', 'keyboardShortcuts']) {
+        assert.ok(topicIds.includes(topic), `missing classic help topic: ${topic}`);
+    }
 });
 
-test('HD-004: help locale keys exist in ko and en', () => {
-    const ko = json(koPath);
-    const en = json(enPath);
-
-    for (const key of flattenHelpKeys()) {
-        assert.equal(typeof ko[key], 'string', `missing ko locale key: ${key}`);
-        assert.ok(ko[key].trim(), `empty ko locale key: ${key}`);
-        assert.equal(typeof en[key], 'string', `missing en locale key: ${key}`);
-        assert.ok(en[key].trim(), `empty en locale key: ${key}`);
-    }
+test('HD-004: help locale keys exist in all supported web locales', () => {
+    const locales = localePaths.map(path => ({ path, values: json(path) }));
 
     const html = read(indexPath);
-    for (const key of uniqueMatches(html, /data-i18n-aria="([^"]+)"/g)) {
-        assert.equal(typeof ko[key], 'string', `missing ko aria locale key: ${key}`);
-        assert.equal(typeof en[key], 'string', `missing en aria locale key: ${key}`);
+    const requiredKeys = new Set([
+        ...flattenHelpKeys(),
+        ...uniqueMatches(html, /data-i18n-aria="([^"]+)"/g),
+    ]);
+
+    for (const { path, values } of locales) {
+        for (const key of requiredKeys) {
+            assert.equal(typeof values[key], 'string', `missing locale key in ${path}: ${key}`);
+            assert.ok(values[key].trim(), `empty locale key in ${path}: ${key}`);
+        }
     }
 });
 

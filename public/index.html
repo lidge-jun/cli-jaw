@@ -152,9 +152,13 @@
         <div class="drag-overlay" id="dragOverlay" data-i18n="drag.drop"><span data-icon="paperclip"></span> 파일을 여기에 드랍하세요</div>
         <div class="chat-header">
             <span>CLI-JAW ● <span id="headerCli">claude</span></span>
-            <button class="theme-switch" id="toggleTheme" title="Toggle Theme" aria-label="Toggle dark/light mode">
-                <span class="theme-switch-knob"></span>
-            </button>
+            <div class="chat-header-actions">
+                <button class="help-trigger" type="button" data-help-topic="diagrams"
+                    data-i18n-aria="help.diagrams.aria" aria-label="다이어그램 도움말">?</button>
+                <button class="theme-switch" id="toggleTheme" title="Toggle Theme" aria-label="Toggle dark/light mode">
+                    <span class="theme-switch-knob"></span>
+                </button>
+            </div>
         </div>
         <div class="pabc-roadmap" id="pabcRoadmap">
             <div class="shark-runner" id="sharkRunner"></div>
@@ -166,6 +170,8 @@
                 <div class="pabc-brand" id="pabcBrand">PABCD</div>
                 <div class="pabc-tagline">Ultimate Agent Workflow</div>
             </div>
+            <button class="help-trigger" type="button" data-help-topic="orchestration"
+                data-i18n-aria="help.orchestration.aria" aria-label="PABCD 도움말">?</button>
             <div class="pabc-connector" id="pabc-conn-2"></div>
             <div class="pabc-dot future" data-phase="B" id="dot-B">B</div>
             <div class="pabc-connector" id="pabc-conn-3"></div>
@@ -191,6 +197,8 @@
         <div class="file-preview" id="filePreview">
             <div class="file-preview-header">
                 <span class="file-preview-title"><span data-icon="paperclip"></span> Files</span>
+                <button class="help-trigger" type="button" data-help-topic="attachments"
+                    data-i18n-aria="help.attachments.aria" aria-label="첨부 파일 도움말">?</button>
                 <button class="file-preview-clear" id="filePreviewClear">✕ Clear all</button>
             </div>
             <div class="file-preview-list" id="filePreviewList"></div>
@@ -206,6 +214,10 @@
             <textarea class="chat-input" id="chatInput" rows="1" data-i18n-placeholder="input.placeholder"
                 placeholder="메시지 입력..." aria-label="Chat message input" aria-haspopup="listbox" aria-expanded="false"
                 aria-controls="cmdDropdown" aria-autocomplete="list" aria-activedescendant=""></textarea>
+            <button class="help-trigger" type="button" data-help-topic="chatInput"
+                data-i18n-aria="help.chatInput.aria" aria-label="채팅 입력 도움말">?</button>
+            <button class="help-trigger" type="button" data-help-topic="keyboardShortcuts"
+                data-i18n-aria="help.keyboardShortcuts.aria" aria-label="키보드 단축키 도움말">?</button>
             <button class="btn-send" id="btnSend" aria-label="Send message"><span data-icon="send"></span></button>
         </div>
     </div>
