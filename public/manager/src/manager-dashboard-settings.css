@@ -46,6 +46,10 @@
 }
 
 .dashboard-settings-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
     margin-bottom: 14px;
 }
 

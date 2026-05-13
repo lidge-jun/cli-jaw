@@ -147,6 +147,13 @@
     line-height: 0.95;
 }
 
+.dashboard-reminders-workspace-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
 .dashboard-reminders-status {
     margin: 0;
     color: var(--ink-secondary);

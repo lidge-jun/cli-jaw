@@ -17,6 +17,8 @@ import {
     type MatrixBucket,
     type MatrixSection,
 } from './reminders-view-model';
+import { HelpTopicButton } from '../help/HelpTopicButton';
+import type { HelpTopicId } from '../help/helpContent';
 
 type Props = {
     active: boolean;
@@ -25,6 +27,7 @@ type Props = {
     onRefresh: () => void;
     onCreate: (input: DashboardReminderCreateInput) => void;
     onUpdate: (id: string, patch: DashboardReminderPatchInput) => void;
+    onOpenHelpTopic: (topic: HelpTopicId) => void;
 };
 
 const VIEW_TITLES: Record<RemindersView, string> = {
@@ -436,9 +439,12 @@ export function DashboardRemindersWorkspace(props: Props) {
                     <h2>{title}</h2>
                     <StorageStatus feed={props.feed} />
                 </div>
-                <button type="button" className="dashboard-reminders-sync-button" onClick={props.onRefresh} disabled={props.feed.loading}>
-                    {props.feed.loading ? 'Loading...' : 'Refresh'}
-                </button>
+                <div className="dashboard-reminders-workspace-actions">
+                    <HelpTopicButton topic="reminders" label="Open Reminders help" onOpen={props.onOpenHelpTopic} />
+                    <button type="button" className="dashboard-reminders-sync-button" onClick={props.onRefresh} disabled={props.feed.loading}>
+                        {props.feed.loading ? 'Loading...' : 'Refresh'}
+                    </button>
+                </div>
             </header>
             {props.view === 'matrix' ? (
                 <>

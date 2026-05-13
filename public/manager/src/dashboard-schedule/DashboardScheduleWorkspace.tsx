@@ -9,6 +9,8 @@ import {
     type DashboardScheduledWork,
     type DispatchResult,
 } from './schedule-api';
+import { HelpTopicButton } from '../help/HelpTopicButton';
+import type { HelpTopicId } from '../help/helpContent';
 
 type HeartbeatJob = {
     id: string;
@@ -21,6 +23,7 @@ type Props = {
     active: boolean;
     activeGroup: ScheduleGroup;
     busyPorts?: ReadonlySet<number> | number[];
+    onOpenHelpTopic: (topic: HelpTopicId) => void;
 };
 
 async function fetchHeartbeatJobs(): Promise<HeartbeatJob[]> {
@@ -134,10 +137,13 @@ export function DashboardScheduleWorkspace(props: Props) {
     return (
         <section className="dashboard-schedule-workspace" aria-hidden={!props.active}>
             <header className="dashboard-schedule-workspace-header">
-                <h2>Automations</h2>
-                <p className="dashboard-schedule-workspace-subtitle">
-                    Manager-owned scheduled work. The dashboard ticks once a minute and dispatches due items.
-                </p>
+                <div>
+                    <h2>Automations</h2>
+                    <p className="dashboard-schedule-workspace-subtitle">
+                        Manager-owned scheduled work. The dashboard ticks once a minute and dispatches due items.
+                    </p>
+                </div>
+                <HelpTopicButton topic="schedule" label="Open Automations help" onOpen={props.onOpenHelpTopic} />
                 {jobs.length > 0 ? (
                     <p className="dashboard-schedule-legacy-notice" role="note">
                         ⚠️ {jobs.length} legacy heartbeat job(s) detected in this instance's <code>heartbeat.json</code>. They are

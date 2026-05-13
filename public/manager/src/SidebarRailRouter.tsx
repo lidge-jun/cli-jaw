@@ -19,6 +19,7 @@ import { DashboardScheduleWorkspace } from './dashboard-schedule/DashboardSchedu
 import { DashboardRemindersSidebar, type RemindersView } from './dashboard-reminders/DashboardRemindersSidebar';
 import { DashboardRemindersWorkspace } from './dashboard-reminders/DashboardRemindersWorkspace';
 import { useRemindersFeed } from './dashboard-reminders/useRemindersFeed';
+import type { HelpTopicId } from './help/helpContent';
 import type { NotesModelState } from './notes/useNotesModel';
 import type {
     DashboardDetailTab,
@@ -55,6 +56,7 @@ type Props = {
     onToggleSidebar: () => void;
     helpOpen: boolean;
     onToggleHelp: () => void;
+    onOpenHelpTopic: (topic: HelpTopicId) => void;
     settingsSection: DashboardSettingsSection;
     locale: DashboardLocale;
     onSettingsSectionChange: (section: DashboardSettingsSection) => void;
@@ -182,19 +184,19 @@ export function SidebarRailRouter(props: Props) {
                             <NotesWorkspace active={props.sidebarMode === 'notes'} selectedPath={props.notesSelectedPath} selectedNote={props.notesSelectedNote} vaultIndex={props.notesModel.index} viewMode={props.notesViewMode} authoringMode={props.notesAuthoringMode} wordWrap={props.notesWordWrap} treeWidth={props.notesTreeWidth} tagFilter={props.notesModel.tagFilter} onOpenSidebarSearch={props.onOpenNotesSearch} onSelectedPathChange={props.onNotesSelectedPathChange} onDirtyPathChange={props.onNotesDirtyPathChange} onViewModeChange={props.onNotesViewModeChange} onAuthoringModeChange={props.onNotesAuthoringModeChange} onWordWrapChange={props.onNotesWordWrapChange} onTreeWidthChange={props.onNotesTreeWidthChange} onTagSelect={props.notesModel.setTagFilter} onWikiLinkNavigate={props.onNotesSelectedPathChange} />
                         </WorkspaceSurface>
                         <WorkspaceSurface active={props.sidebarMode === 'settings'}>
-                            <DashboardSettingsWorkspace activeSection={props.settingsSection} ui={props.dashboardSettingsUi} titleSupport={props.titleSupport} onUiPatch={props.onDashboardSettingsPatch} />
+                            <DashboardSettingsWorkspace activeSection={props.settingsSection} ui={props.dashboardSettingsUi} titleSupport={props.titleSupport} onUiPatch={props.onDashboardSettingsPatch} onOpenHelpTopic={props.onOpenHelpTopic} />
                         </WorkspaceSurface>
                         <WorkspaceSurface active={props.sidebarMode === 'board'}>
-                            <DashboardBoardWorkspace active={props.sidebarMode === 'board'} view={props.boardView} onViewChange={props.onBoardViewChange} instances={props.instances} selectedPort={props.selectedInstance?.port ?? null} titlesByPort={props.titlesByPort} busyPorts={props.busyPorts} />
+                            <DashboardBoardWorkspace active={props.sidebarMode === 'board'} view={props.boardView} onViewChange={props.onBoardViewChange} instances={props.instances} selectedPort={props.selectedInstance?.port ?? null} titlesByPort={props.titlesByPort} busyPorts={props.busyPorts} onOpenHelpTopic={props.onOpenHelpTopic} />
                         </WorkspaceSurface>
                         {props.scheduleWorkspaceEnabled ? (
                             <WorkspaceSurface active={props.sidebarMode === 'schedule'}>
-                                <DashboardScheduleWorkspace active={props.sidebarMode === 'schedule'} activeGroup={props.scheduleGroup} busyPorts={props.busyPorts} />
+                                <DashboardScheduleWorkspace active={props.sidebarMode === 'schedule'} activeGroup={props.scheduleGroup} busyPorts={props.busyPorts} onOpenHelpTopic={props.onOpenHelpTopic} />
                             </WorkspaceSurface>
                         ) : null}
                         {props.remindersWorkspaceEnabled ? (
                             <WorkspaceSurface active={props.sidebarMode === 'reminders'}>
-                                <DashboardRemindersWorkspace active={props.sidebarMode === 'reminders'} view={remindersView} feed={remindersFeed} onRefresh={() => void remindersFeed.refresh()} onCreate={(input) => void remindersFeed.create(input)} onUpdate={(id, patch) => void remindersFeed.update(id, patch)} />
+                                <DashboardRemindersWorkspace active={props.sidebarMode === 'reminders'} view={remindersView} feed={remindersFeed} onRefresh={() => void remindersFeed.refresh()} onCreate={(input) => void remindersFeed.create(input)} onUpdate={(id, patch) => void remindersFeed.update(id, patch)} onOpenHelpTopic={props.onOpenHelpTopic} />
                             </WorkspaceSurface>
                         ) : null}
                     </div>

@@ -1,5 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { formatShortcut, MANAGER_SHORTCUT_ACTIONS } from '../manager-shortcuts';
+import { HelpTopicButton } from '../help/HelpTopicButton';
+import type { HelpTopicId } from '../help/helpContent';
 import type { DashboardLocale, DashboardRegistryUi, DashboardShortcutAction } from '../types';
 import type { DashboardActivityTitleSupport } from './activity-title-support';
 
@@ -8,6 +10,7 @@ type DashboardSettingsWorkspaceProps = {
     ui: DashboardRegistryUi;
     titleSupport: DashboardActivityTitleSupport;
     onUiPatch: (patch: Partial<DashboardRegistryUi>) => void;
+    onOpenHelpTopic: (topic: HelpTopicId) => void;
 };
 
 const LOCALE_OPTIONS = [
@@ -471,8 +474,11 @@ export function DashboardSettingsWorkspace(props: DashboardSettingsWorkspaceProp
     return (
         <main className="dashboard-settings-workspace" aria-label={copy.ariaLabel}>
             <header className="dashboard-settings-header">
-                <span className="eyebrow">{copy.eyebrow}</span>
-                <h2>{copy.title}</h2>
+                <div>
+                    <span className="eyebrow">{copy.eyebrow}</span>
+                    <h2>{copy.title}</h2>
+                </div>
+                <HelpTopicButton topic="settings" label="Open Settings help" onOpen={props.onOpenHelpTopic} />
             </header>
             {props.activeSection === 'display' ? (
                 <section className="dashboard-settings-section">

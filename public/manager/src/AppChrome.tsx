@@ -64,6 +64,7 @@ type AppChromeProps = {
     setAutoUnloadNotice: Dispatch<SetStateAction<boolean>>;
     setHelpOpen: Dispatch<SetStateAction<boolean>>;
     setHelpTopic: Dispatch<SetStateAction<HelpTopicId | null>>;
+    onOpenHelpTopic: (topic: HelpTopicId) => void;
     setNotesSidebarMode: Dispatch<SetStateAction<NotesSidebarMode>>;
     setBoardView: Dispatch<SetStateAction<BoardView>>;
     setScheduleGroup: Dispatch<SetStateAction<ScheduleGroup>>;
@@ -103,6 +104,7 @@ export function AppChrome(props: AppChromeProps) {
                         onlineCount={props.summary['online'] || 0} sidebarMode={props.view.sidebarMode} scheduleWorkspaceEnabled={SCHEDULE_WORKSPACE_ENABLED}
                         remindersWorkspaceEnabled={REMINDERS_WORKSPACE_ENABLED} onSidebarModeChange={props.handleSidebarModeChange}
                         onToggleSidebar={props.handleSidebarToggle} helpOpen={props.helpOpen} onToggleHelp={() => { props.setHelpTopic(null); props.setHelpOpen(open => !open); }}
+                        onOpenHelpTopic={props.onOpenHelpTopic}
                         settingsSection={props.settingsSection} locale={props.view.locale} onSettingsSectionChange={props.setDashboardSettingsSection}
                         notesModel={props.notesModel} notesSelectedPath={props.view.notesSelectedPath} notesSelectedNote={props.notesSelectedNote}
                         notesDirtyPath={props.notesDirtyPath} notesTreeWidth={props.view.notesTreeWidth} notesSidebarMode={props.notesSidebarMode}

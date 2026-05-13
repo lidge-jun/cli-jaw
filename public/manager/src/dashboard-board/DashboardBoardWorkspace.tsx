@@ -6,6 +6,8 @@ import { listTasks, createTask, updateTask, deleteTask, type DashboardTask, type
 import { DONE_PREVIEW_LIMIT, type BoardCard, type BoardView } from './board-view';
 import { DashboardBoardTaskDialog, type BoardTaskDialogCard } from './DashboardBoardTaskDialog';
 import { RUNNING_CHIP_MIME, decodeRunningChip, deriveRunningChips, encodeRunningChip } from './running-chips';
+import { HelpTopicButton } from '../help/HelpTopicButton';
+import type { HelpTopicId } from '../help/helpContent';
 
 type Props = {
     active: boolean;
@@ -15,6 +17,7 @@ type Props = {
     selectedPort: number | null;
     titlesByPort: Record<number, string>;
     busyPorts: Set<number>;
+    onOpenHelpTopic: (topic: HelpTopicId) => void;
 };
 
 const BOARD_TASK_MIME = 'application/x-jaw-board-task';
@@ -227,6 +230,9 @@ export function DashboardBoardWorkspace(props: Props) {
                     <p className="dashboard-board-workspace-subtitle">
                         Create human-owned kanban blocks, then drag running instance blocks into a card to attach context without touching the instance itself.
                     </p>
+                </div>
+                <div className="dashboard-board-workspace-controls">
+                    <HelpTopicButton topic="board" label="Open Board help" onOpen={props.onOpenHelpTopic} />
                 </div>
             </header>
             {detailLane === null ? (

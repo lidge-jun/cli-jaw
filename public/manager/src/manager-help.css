@@ -163,6 +163,33 @@
     text-align: center;
 }
 
+.help-topic-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border-subtle, #d0d7de);
+    border-radius: 999px;
+    background: var(--bg-raised, #f6f8fa);
+    color: var(--text-secondary, #57606a);
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.help-topic-button:hover {
+    border-color: var(--border-strong, #8c959f);
+    color: var(--text-primary, #1f2328);
+}
+
+.help-topic-button:focus-visible {
+    outline: 2px solid var(--accent, #4f8cff);
+    outline-offset: 2px;
+}
+
 /* Board workspace control row additions */
 .dashboard-board-workspace-header {
     display: flex;

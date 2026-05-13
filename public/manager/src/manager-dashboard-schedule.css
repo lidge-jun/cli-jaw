@@ -74,6 +74,18 @@
     color: var(--ink-primary);
 }
 
+.dashboard-schedule-workspace-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.dashboard-schedule-workspace-header > div {
+    min-width: 0;
+}
+
 .dashboard-schedule-workspace-subtitle {
     margin: 0;
     color: var(--ink-secondary);

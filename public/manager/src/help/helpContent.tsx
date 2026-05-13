@@ -18,7 +18,17 @@ const InstancesHelp = (
             <li>우측 상단 상태 점이 초록이면 온라인, 회색이면 오프라인이에요.</li>
             <li>인스턴스에 직접 메시지를 보내실 땐 Preview 탭의 채팅 입력을 쓰세요.</li>
         </ul>
-        <p className="help-tip">💡 인스턴스가 안 보이시면 터미널에서 <code>cli-jaw start</code>로 새 jaw를 띄워보세요 — 자동으로 목록에 떠요.</p>
+        <div className="help-deep">
+            <h4>빠른 판단 기준</h4>
+            <table className="help-table">
+                <tbody>
+                    <tr><th>Preview</th><td>실제 인스턴스 화면을 보거나 메시지를 보낼 때</td></tr>
+                    <tr><th>Logs</th><td>응답이 멈췄거나 dispatch 실패 원인을 확인할 때</td></tr>
+                    <tr><th>Settings</th><td>해당 인스턴스의 CLI, 모델, 권한을 조정할 때</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p className="help-tip">인스턴스가 안 보이시면 터미널에서 <code>cli-jaw start</code>로 새 jaw를 띄워보세요. 자동으로 목록에 떠요.</p>
     </>
 );
 
@@ -34,7 +44,17 @@ const BoardHelp = (
             <li>인스턴스 블럭을 일반 칸반 블럭 안의 드롭 영역으로 끌어 넣으면 내부 자식 블럭으로 병합돼요. 인스턴스 실행에는 영향 없어요.</li>
             <li>일반 칸반 블럭은 직접 드래그해서 다른 레인으로 옮길 수 있고, <strong>Move</strong> / <strong>Delete</strong>도 유지돼요.</li>
         </ul>
-        <p className="help-tip">💡 인스턴스가 없어도 일반 칸반 블럭은 계속 남아요. 그래서 쿼리·아이디어·작업 단위를 먼저 적고, 필요할 때만 실행 인스턴스를 붙이면 돼요.</p>
+        <div className="help-deep">
+            <h4>상태를 나눠 쓰는 법</h4>
+            <table className="help-table">
+                <tbody>
+                    <tr><th>Ready</th><td>바로 구현하거나 검증할 수 있는 작업</td></tr>
+                    <tr><th>Review</th><td>직원 감사, Pro 검증, 수동 smoke가 필요한 작업</td></tr>
+                    <tr><th>Done</th><td>커밋, 푸시, 이슈 close까지 끝난 작업</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p className="help-tip">인스턴스가 없어도 일반 칸반 블럭은 계속 남아요. 쿼리·아이디어·작업 단위를 먼저 적고, 필요할 때만 실행 인스턴스를 붙이면 돼요.</p>
     </>
 );
 
@@ -46,7 +66,17 @@ const ScheduleHelp = (
             <li>Run 버튼으로 즉시 dispatch, 대상 인스턴스가 바쁘면 자동 큐잉이에요. last/next 컬럼으로 실행 이력이 보여요.</li>
             <li>예전엔 인스턴스마다 자기 <code>heartbeat.json</code>을 setInterval로 돌리던 구조였는데, 지금은 <strong>매니저가 단일 ticker</strong>로 돌려요. heartbeat.json은 legacy로만 표시되고 자동 실행은 안 돼요.</li>
         </ul>
-        <p className="help-tip">💡 새 작업은 여기서 만들고, 기존 heartbeat job은 같은 cron으로 옮겨 등록하시면 돼요. (마이그레이션 자동화는 추후 추가)</p>
+        <div className="help-deep">
+            <h4>실패를 볼 때</h4>
+            <table className="help-table">
+                <tbody>
+                    <tr><th>queued</th><td>대상 인스턴스가 바빠서 대기 중</td></tr>
+                    <tr><th>blocked</th><td>비활성화했거나 실행 조건이 아직 맞지 않음</td></tr>
+                    <tr><th>last/next</th><td>최근 실행 결과와 다음 실행 예측을 확인하는 기준</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p className="help-tip">새 작업은 여기서 만들고, 기존 heartbeat job은 같은 cron으로 옮겨 등록하시면 돼요. 마이그레이션 자동화는 추후 추가됩니다.</p>
     </>
 );
 
@@ -70,7 +100,17 @@ const RemindersHelp = (
             <li>Refresh는 외부 Jaw Reminders 스냅샷을 다시 읽어서 대시보드용 row로 반영해요.</li>
             <li>원본 reminder 저장소가 없거나 형식이 맞지 않아도 대시보드는 기존 미러 데이터를 유지하고 상태 메시지만 보여줘요.</li>
         </ul>
-        <p className="help-tip">💡 Reminders는 실험 기능이라 개발 모드 또는 실험 플래그가 켜진 빌드에서만 보여요.</p>
+        <div className="help-deep">
+            <h4>Matrix 보기</h4>
+            <table className="help-table">
+                <tbody>
+                    <tr><th>Top Priority</th><td>지금 먼저 처리할 3개를 따로 고정</td></tr>
+                    <tr><th>Important</th><td>중요하지만 급하지 않은 장기 작업</td></tr>
+                    <tr><th>Waiting</th><td>다른 사람, 직원, 외부 검증을 기다리는 작업</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p className="help-tip">Reminders는 실험 기능이라 개발 모드 또는 실험 플래그가 켜진 빌드에서만 보여요.</p>
     </>
 );
 
@@ -82,7 +122,17 @@ const SettingsHelp = (
             <li>인스턴스 자체 설정이 아니라 <strong>이 대시보드 UI의 환경설정</strong>이에요.</li>
             <li>변경 사항은 즉시 저장돼요.</li>
         </ul>
-        <p className="help-tip">💡 인스턴스 동작을 바꾸시려면 여기가 아니라 <strong>Instances → 해당 인스턴스 → Settings 탭</strong>으로 가세요.</p>
+        <div className="help-deep">
+            <h4>설정 범위</h4>
+            <table className="help-table">
+                <tbody>
+                    <tr><th>Display</th><td>목록, 언어, 단축키 같은 dashboard UI 선호도</td></tr>
+                    <tr><th>Activity</th><td>최근 작업 제목이 어떤 인스턴스에서 준비됐는지 확인</td></tr>
+                    <tr><th>Instance settings</th><td>개별 인스턴스 동작은 Instances workspace에서 수정</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p className="help-tip">인스턴스 동작을 바꾸시려면 여기가 아니라 <strong>Instances → 해당 인스턴스 → Settings 탭</strong>으로 가세요.</p>
     </>
 );
 
@@ -100,6 +150,16 @@ const ShortcutsHelp = (
             <li>Manager 단축키는 Dashboard settings에서 켜고 끄거나 keymap을 바꿀 수 있어요.</li>
             <li>Preview 탭을 보는 동안 새 activity는 읽음으로 처리되고, 다른 탭에 있을 때는 Activity Dock에 쌓여요.</li>
         </ul>
+        <div className="help-deep">
+            <h4>충돌이 날 때</h4>
+            <table className="help-table">
+                <tbody>
+                    <tr><th>입력 중</th><td>글자 입력을 우선하고 전역 shortcut은 실행하지 않음</td></tr>
+                    <tr><th>브라우저 충돌</th><td>Dashboard settings에서 keymap을 바꾸는 것이 안전함</td></tr>
+                    <tr><th>도움말</th><td><kbd>?</kbd>는 현재 workspace 도움말과 shortcut 도움말의 진입점</td></tr>
+                </tbody>
+            </table>
+        </div>
         <p className="help-tip">단축키는 브라우저 기본 단축키와 에디터 입력을 우선합니다.</p>
     </>
 );
