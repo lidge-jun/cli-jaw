@@ -30,6 +30,13 @@ function uniqueMatches(source: string, pattern: RegExp): string[] {
     return [...new Set([...source.matchAll(pattern)].map(match => match[1]))].sort();
 }
 
+function findHelpButton(html: string, topicId: string): { attrs: string; body: string } {
+    const escapedTopic = topicId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = html.match(new RegExp(`<button\\b([^>]*data-help-topic="${escapedTopic}"[^>]*)>([\\s\\S]*?)<\\/button>`));
+    assert.ok(match, `missing help button for topic: ${topicId}`);
+    return { attrs: match[1] ?? '', body: match[2] ?? '' };
+}
+
 function flattenHelpKeys(): string[] {
     const keys = new Set([
         'help.section.what',
@@ -120,7 +127,28 @@ test('HD-005: help triggers do not nest inside translatable leaf nodes or button
     }
 });
 
-test('HD-006: help dialog uses safe text rendering and focus-aware modal behavior', () => {
+test('HD-006: adjacent chat input help triggers are visually distinct', () => {
+    const html = read(indexPath);
+    const chatInput = findHelpButton(html, 'chatInput');
+    const keyboardShortcuts = findHelpButton(html, 'keyboardShortcuts');
+
+    assert.equal(chatInput.body.trim(), '?', 'chat input help should stay the standard question trigger');
+    assert.ok(
+        keyboardShortcuts.attrs.includes('help-trigger--shortcut'),
+        'keyboard shortcuts trigger should have a distinct visual variant',
+    );
+    assert.ok(
+        keyboardShortcuts.body.includes('data-icon="key"'),
+        'keyboard shortcuts trigger should render a key icon instead of another bare question mark',
+    );
+    assert.notEqual(
+        chatInput.body.trim(),
+        keyboardShortcuts.body.trim(),
+        'chat input and shortcut help triggers should not render as identical adjacent buttons',
+    );
+});
+
+test('HD-007: help dialog uses safe text rendering and focus-aware modal behavior', () => {
     const src = read(dialogPath);
 
     assert.ok(!src.includes('innerHTML'), 'help-dialog.ts should not use innerHTML');
@@ -138,10 +166,10 @@ test('HD-006: help dialog uses safe text rendering and focus-aware modal behavio
     assert.ok(src.includes('closeHelpDialog();'), 'dismiss paths should route through closeHelpDialog()');
 });
 
-test('HD-007: help styles provide restrained desktop controls and mobile hit targets', () => {
+test('HD-008: help styles provide restrained desktop controls and mobile hit targets', () => {
     const css = read(cssPath);
 
-    for (const selector of ['.label-with-help', '.section-title-row', '.help-trigger', '.help-dialog-box', '.help-dialog-body']) {
+    for (const selector of ['.label-with-help', '.section-title-row', '.help-trigger', '.help-trigger--shortcut', '.help-dialog-box', '.help-dialog-body']) {
         assert.ok(css.includes(selector), `missing CSS selector: ${selector}`);
     }
 
@@ -153,7 +181,41 @@ test('HD-007: help styles provide restrained desktop controls and mobile hit tar
     assert.ok(css.includes('backdrop-filter: none'), 'help dialog surface should disable translucent backdrop blur');
 });
 
-test('HD-008: plan records audit-sensitive integration requirements', (t) => {
+test('HD-009: shortcut help content names the actual supported key bindings', () => {
+    const requiredTokens = [
+        '?',
+        '/',
+        'Enter',
+        'Shift+Enter',
+        'Alt+I',
+        'Alt+P',
+        'Alt+N',
+        'Alt+K',
+        'Alt+J',
+        'Cmd/Ctrl+S',
+        'Cmd/Ctrl+E',
+        'Cmd/Ctrl+Shift+F',
+        'Cmd/Ctrl+P',
+        'Cmd/Ctrl+Delete',
+        'Cmd/Ctrl+Backspace',
+    ];
+
+    for (const path of localePaths) {
+        const values = json(path);
+        const text = [
+            values['help.keyboardShortcuts.howTo.1'],
+            values['help.keyboardShortcuts.howTo.2'],
+            values['help.keyboardShortcuts.howTo.3'],
+            values['help.keyboardShortcuts.example.1'],
+            values['help.keyboardShortcuts.example.2'],
+        ].join(' ');
+        for (const token of requiredTokens) {
+            assert.ok(text.includes(token), `shortcut help in ${path} should mention ${token}`);
+        }
+    }
+});
+
+test('HD-010: plan records audit-sensitive integration requirements', (t) => {
     if (!existsSync(planPath)) {
         t.skip('help dialog plan is stored in optional devlog submodule');
         return;

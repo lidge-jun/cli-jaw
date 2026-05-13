@@ -53,7 +53,7 @@ export const HELP_TOPICS: Record<HelpTopicId, HelpTopic> = {
     orchestration: topic('orchestration', 3, 2, 2),
     attachments: topic('attachments', 3, 2, 2),
     diagrams: topic('diagrams', 3, 2, 2),
-    keyboardShortcuts: topic('keyboardShortcuts', 3, 2, 2),
+    keyboardShortcuts: topic('keyboardShortcuts', 3, 2, 2, 3, 2),
 };
 
 export function isHelpTopicId(value: string | null | undefined): value is HelpTopicId {

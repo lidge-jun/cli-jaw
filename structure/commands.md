@@ -92,7 +92,7 @@ prompt, quit, file, steer, ide, orchestrate
 | `orchestrate` | `bin/commands/orchestrate.ts` | `[P\|A\|B\|C\|D\|status\|reset] [--force] [--json] [--port <port>]` |
 | `dispatch` | `bin/commands/dispatch.ts` | `--agent <name> --task <task> [--port <port>]` |
 | `service` | `bin/commands/service.ts` | `[--port PORT] [--backend launchd\|systemd\|docker] [status\|unset\|logs]` |
-| `dashboard` | `bin/commands/dashboard.ts` | `serve [--port 24576] [--from 3457] [--count 50] [--no-open]` |
+| `dashboard` | `bin/commands/dashboard.ts` | `serve [--port 24576] [--from 3457] [--count 50] [--no-open]`, `memory {search\|instances\|read\|help} [--instance <ids>] [--limit N] [--json] [--port <port>]` |
 
 ---
 
@@ -200,6 +200,28 @@ prompt, quit, file, steer, ide, orchestrate
 - auto-activation 제거 후 명시적 진입점으로만 유지된다.
 - `jaw orchestrate P|A|B|C|D|status|reset`는 root CLI transition/control surface다.
 - `/continue`는 worklog/PABCD resume 전용 intent다. Natural-language “continue/계속/이어서”은 더 이상 resume trigger가 아니다.
+
+---
+
+### `jaw dashboard memory` (federation search)
+
+L2 cross-instance read-only memory search. Fans out queries to all `~/.cli-jaw-*` instance SQLite indexes via the dashboard manager server.
+
+| Subcommand | 동작 |
+| --- | --- |
+| `search <query...>` | FTS5 BM25 + trigram fan-out search across instances |
+| `instances` / `list` | List discovered instances with DB status |
+| `read <instanceId:path>` | Read a `.md` memory file from a specific instance |
+| `help` | Show subcommand help |
+
+| Option | 동작 |
+| --- | --- |
+| `--instance <ids>` | Comma-separated instance filter (e.g., `3457,3458`) |
+| `--limit <N>` | Max results (default: 20) |
+| `--json` | Raw JSON output |
+| `--port <port>` | Dashboard manager port (default: `DASHBOARD_PORT` env or 24576) |
+
+Security: `/read` rejects symlinks, path traversal, non-`.md` extensions, and files > 256KB. Origin guard (`requireManagerOrigin`) protects all routes.
 
 ---
 

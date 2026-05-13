@@ -446,22 +446,65 @@ function reciprocalRankFusion(primary: SearchHit[], secondary: SearchHit[], k = 
     return [...scores.values()].sort((a, b) => b.score - a.score).map(v => ({ ...v.hit, score: -v.score }));
 }
 
+interface SchemaCapability {
+    hasSynonyms: boolean;
+    hasTrigram: boolean;
+    chunksColumns: Set<string>;
+}
+
+function probeSchema(db: Database.Database): SchemaCapability {
+    const tables = new Set<string>(
+        (db.prepare(`SELECT name FROM sqlite_master WHERE type IN ('table')`).all() as Array<{ name: string }>)
+            .map(r => r.name)
+    );
+    const cols = new Set<string>(
+        (db.prepare(`PRAGMA table_info(chunks)`).all() as Array<{ name: string }>).map(r => r.name)
+    );
+    return { hasSynonyms: tables.has('memory_synonyms'), hasTrigram: tables.has('chunks_trigram'), chunksColumns: cols };
+}
+
+function searchIndexCore(
+    db: Database.Database,
+    query: string,
+    expanded: string[] | undefined,
+    cap: SchemaCapability,
+): { hits: SearchHit[]; degraded: string[] } {
+    const terms = tokenizeExpandedQuery(query, expanded);
+    if (!terms.length) return { hits: [], degraded: [] };
+    const degraded: string[] = [];
+    const groups = cap.hasSynonyms
+        ? terms.map(term => expandSynonyms(db, term))
+        : (degraded.push('memory_synonyms'), terms.map(t => [t]));
+    const bm25 = searchBM25(db, groups);
+    const trigram = cap.hasTrigram ? searchTrigram(db, query) : (degraded.push('chunks_trigram'), [] as SearchHit[]);
+    const merged = reciprocalRankFusion(bm25, trigram);
+    const baseQuery = terms[0] || query;
+    const hits = merged
+        .map(hit => ({ ...hit, score: computeFinalScore(hit, baseQuery) }))
+        .sort((a, b) => a.score - b.score)
+        .slice(0, 8);
+    return { hits, degraded };
+}
+
 export function searchIndex(query: string, expanded?: string[]): { hits: SearchHit[] } {
     const db = getIndexDb();
-    const terms = tokenizeExpandedQuery(query, expanded);
-    if (!terms.length) {
-        db.close();
-        return { hits: [] };
-    }
     try {
-        const groups = terms.map(term => expandSynonyms(db, term));
-        const merged = reciprocalRankFusion(searchBM25(db, groups), searchTrigram(db, query));
-        const baseQuery = terms[0] || query;
-        const hits = merged
-            .map(hit => ({ ...hit, score: computeFinalScore(hit, baseQuery) }))
-            .sort((a, b) => a.score - b.score)
-            .slice(0, 8);
-        return { hits };
+        const cap: SchemaCapability = { hasSynonyms: true, hasTrigram: true, chunksColumns: new Set() };
+        return { hits: searchIndexCore(db, query, expanded, cap).hits };
+    } finally { db.close(); }
+}
+
+export interface ReadOnlySearchResult { hits: SearchHit[]; degraded: string[]; }
+
+export function searchIndexReadOnly(dbPath: string, query: string, expanded?: string[]): ReadOnlySearchResult {
+    const db = new Database(dbPath, { readonly: true, fileMustExist: true });
+    db.pragma('busy_timeout = 3000');
+    try {
+        const cap = probeSchema(db);
+        if (!cap.chunksColumns.has('content') || !cap.chunksColumns.has('relpath')) {
+            return { hits: [], degraded: ['chunks.core'] };
+        }
+        return searchIndexCore(db, query, expanded, cap);
     } finally { db.close(); }
 }
 

@@ -120,6 +120,7 @@ Support labels must stay aligned with agbrowse:
 | WYSIWYG wikilink fallback | `public/manager/src/notes/wysiwyg/milkdown-wikilink-plugin.ts`, `public/manager/src/notes/wiki-link-rendering.ts` | WYSIWYG docs should mention `outgoingLinks` lookup plus `vaultIndex.notes` client-side fallback before backend index refresh; preview resolver parity remains tracked as a follow-up. |
 | Trace read API | `src/routes/traces.ts`, `src/trace/store.ts` | Server API docs should list public trace summary/event routes and the `alert_escalation` WS event. |
 | PABCD Project root guard + Jawdev skill guidance | `src/orchestrator/pipeline.ts`, `src/orchestrator/state-machine.ts`, `skills_ref/dev*/SKILL.md`, `structure/prompt_basic_B.md` | PABCD docs should require `Project root: <absolute path>` in injected/dispatch examples and skill docs should prefer strict TypeScript plus existing `structure/`/`devlog`/SOT discovery. |
+| Dashboard Memory Federation (L1/L2) | `src/manager/memory/`, `src/manager/routes/dashboard-memory.ts`, `bin/commands/dashboard-memory.ts` | Dual-memory: L1 = instance-local `jaw memory` (read/write), L2 = dashboard `jaw dashboard memory` (read-only cross-instance FTS5 federation with RRF reranking). Schema-aware probing degrades gracefully for older instances. Dashboard-less users are unaffected. |
 
 ---
 

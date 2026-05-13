@@ -37,6 +37,7 @@ import { createDashboardRemindersRouter } from './reminders/routes.js';
 import { RemindersStore } from './reminders/store.js';
 import { startRemindersScheduler } from './reminders/scheduler.js';
 import { createDashboardConnectorRouter } from './connector/routes.js';
+import { createDashboardMemoryRouter } from './routes/dashboard-memory.js';
 import { fetchWorkerAssistantTextById } from './worker-messages.js';
 import { openUrlInBrowser } from '../core/browser-open.js';
 import { ensureDirs, loadSettings } from '../core/config.js';
@@ -160,6 +161,25 @@ app.use('/api/dashboard/schedule', createDashboardScheduleRouter({ store: schedu
 const remindersStore = new RemindersStore();
 app.use('/api/dashboard/reminders', createDashboardRemindersRouter({ store: remindersStore }));
 app.use('/api/dashboard/connector', createDashboardConnectorRouter({ remindersStore }));
+
+const memoryScanSupplier = async () => {
+    const loaded = loadDashboardRegistry({ from: scanFrom, count: scanCount });
+    const scan = await scanDashboardInstances({
+        from: loaded.registry.scan.from,
+        count: loaded.registry.scan.count,
+        managerPort: port,
+    });
+    return scan.instances.map(i => ({
+        port: i.port,
+        profileId: i.profileId ?? null,
+        homeDisplay: i.homeDisplay ?? null,
+    }));
+};
+app.use('/api/dashboard/memory', createDashboardMemoryRouter({
+    managerPort: port,
+    scanSupplier: memoryScanSupplier,
+}));
+
 let stopRemindersScheduler: (() => void) | null = null;
 
 app.use('/api/jaw-ceo', createJawCeoRouter({

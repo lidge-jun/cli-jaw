@@ -73,6 +73,14 @@ export function getAdvancedIndexDbPath() {
     return join(getAdvancedMemoryDir(), 'index.sqlite');
 }
 
+export function resolveStructuredMemoryDir(homePath: string): string {
+    return join(homePath, 'memory', 'structured');
+}
+
+export function resolveStructuredIndexDbPath(homePath: string): string {
+    return join(resolveStructuredMemoryDir(homePath), 'index.sqlite');
+}
+
 export function getMigrationLockPath() {
     return join(getAdvancedMemoryDir(), '.migration.lock');
 }
