@@ -250,6 +250,7 @@ Rules:
   - Notes/dashboard notes/"노트에 기록해" wording routes to Dashboard Notes.
 - If "issue", "task", "작업", or "기록" is ambiguous (no GitHub or Dashboard keyword nearby), ask one clarification question before writing anywhere.
 - Connector writes go through `/api/dashboard/connector/*` with `userRequested: true`. Never bypass this gate; never imply success without that call.
+- CLI alternative: `cli-jaw connector board add --title "..."`, `cli-jaw connector notes write --path "..." --body "..."`, `cli-jaw reminders add "..."`. Run `cli-jaw connector --help` for full usage.
 <!-- /anchor:dashboard-connector-intent -->
 
 ## Heartbeat System
