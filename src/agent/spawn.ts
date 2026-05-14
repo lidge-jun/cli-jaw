@@ -399,6 +399,38 @@ export async function steerAgent(newPrompt: string, source: string) {
     });
 }
 
+// ─── Queue Hold (steer arm) ─────────────────────────
+let queueHoldId: string | null = null;
+let queueHoldTimer: ReturnType<typeof setTimeout> | null = null;
+const QUEUE_HOLD_TIMEOUT_MS = 10_000;
+
+export function setQueueHold(id: string): void {
+    if (queueHoldId && queueHoldId !== id) clearQueueHold();
+    queueHoldId = id;
+    if (queueHoldTimer) clearTimeout(queueHoldTimer);
+    const holdId = id;
+    queueHoldTimer = setTimeout(() => {
+        if (queueHoldId !== holdId) return;
+        console.warn(`[queue:hold] hold for ${holdId} expired after ${QUEUE_HOLD_TIMEOUT_MS}ms`);
+        clearQueueHold();
+    }, QUEUE_HOLD_TIMEOUT_MS);
+    console.log(`[queue:hold] set for ${id}`);
+}
+
+export function clearQueueHold(id?: string): void {
+    if (id && queueHoldId !== id) return;
+    if (queueHoldTimer) clearTimeout(queueHoldTimer);
+    queueHoldTimer = null;
+    const hadHold = queueHoldId !== null;
+    if (hadHold) console.log(`[queue:hold] cleared (was ${queueHoldId})`);
+    queueHoldId = null;
+    if (hadHold) queueMicrotask(() => processQueue());
+}
+
+export function getQueueHoldId(): string | null {
+    return queueHoldId;
+}
+
 // ─── Message Queue ───────────────────────────────────
 
 export function getQueuedMessageSnapshotForScope(scope: string): Array<{
@@ -471,6 +503,7 @@ export async function processQueue() {
         || mainSpawnStarting
         || hasBlockingWorkers()
         || messageQueue.length === 0
+        || queueHoldId
     ) return;
     // NOTE: hasPendingWorkerReplays() is intentionally NOT gated here —
     // orchestrate() drains pending replays at entry (pipeline.ts drainPendingReplays),

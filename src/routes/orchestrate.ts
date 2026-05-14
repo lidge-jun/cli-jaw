@@ -1,7 +1,7 @@
 import type { Express } from 'express';
 import type { AuthMiddleware } from './types.js';
 import { ok, fail } from '../http/response.js';
-import { isAgentBusy, messageQueue, getQueuedMessageSnapshotForScope, removeQueuedMessage, killActiveAgent, waitForProcessEnd, getCurrentMainMeta } from '../agent/spawn.js';
+import { isAgentBusy, messageQueue, getQueuedMessageSnapshotForScope, removeQueuedMessage, killActiveAgent, waitForProcessEnd, getCurrentMainMeta, setQueueHold, clearQueueHold } from '../agent/spawn.js';
 import { getLiveRun } from '../agent/live-run-state.js';
 import { orchestrate, orchestrateReset, isResetIntent, drainPendingReplays } from '../orchestrator/pipeline.js';
 import { insertMessage } from '../core/db.js';
@@ -113,14 +113,29 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         res.json({ ok: true, pending: result.pending });
     });
 
+    app.post('/api/orchestrate/queue/:id/hold', requireAuth, (req, res) => {
+        const id = String(req.params["id"] || '');
+        if (!id) return fail(res, 400, 'missing id');
+        const exists = messageQueue.find(item => item.id === id);
+        if (!exists) return fail(res, 404, 'queued item not found');
+        setQueueHold(id);
+        res.json({ ok: true, held: id });
+    });
+
+    app.delete('/api/orchestrate/queue/:id/hold', requireAuth, (req, res) => {
+        const id = String(req.params["id"] || '');
+        clearQueueHold(id || undefined);
+        res.json({ ok: true, released: id });
+    });
+
     app.post('/api/orchestrate/queue/:id/steer', requireAuth, async (req, res) => {
         const id = String(req.params["id"] || '');
         if (!id) return fail(res, 400, 'missing id');
-        // Fix B (W-1+W-2): peek 먼저 → kill+wait → remove → DB insert (processQueue 미러)
-        // → orchestrate(_skipInsert). submitMessage idle 분기를 거치지 않아 두 번째
-        // insertMessage / broadcast('new_message')가 발생하지 않는다.
         const peek = messageQueue.find(item => item.id === id);
-        if (!peek) return fail(res, 404, 'queued item not found');
+        if (!peek) {
+            clearQueueHold(id);
+            return fail(res, 404, 'queued item not found');
+        }
         const prompt = peek.prompt;
         const origin = peek.source || 'web';
         if (isAgentBusy()) {
@@ -128,15 +143,13 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
             await waitForProcessEnd(3000);
         }
         const result = removeQueuedMessage(id);
+        clearQueueHold(id);
         if (!result.removed) return fail(res, 404, 'queued item disappeared during steer');
         try {
             insertMessage.run('user', prompt, origin, '', settings["workingDir"] || null);
         } catch (err) {
             console.warn('[steer:insert]', (err as Error).message);
         }
-        // Web client renders user bubble only on fromQueue=true (chat.ts dropped
-        // the optimistic bubble at enqueue time). processQueue does the same broadcast
-        // when an item drains naturally; steer is the manual equivalent.
         const { broadcast } = await import('../core/bus.js');
         broadcast('new_message', { role: 'user', content: prompt, source: origin, fromQueue: true });
         const task = isResetIntent(prompt)

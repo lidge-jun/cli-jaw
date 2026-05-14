@@ -345,8 +345,10 @@ export function loadSettings() {
             jawCeo: { ...defaults.jawCeo, ...(raw.jawCeo || {}) },
             network: { ...defaults.network, ...(raw.network || {}) },
         });
-        // --home (JAW_HOME) always wins over persisted workingDir (#64 hotfix)
-        if (merged["workingDir"] !== JAW_HOME) {
+        // #64 safety: auto-correct stale workingDir (e.g. copied instance)
+        // but allow valid paths to persist (dynamic project targeting)
+        if (typeof merged["workingDir"] === 'string' && merged["workingDir"] !== JAW_HOME && !fs.existsSync(merged["workingDir"])) {
+            console.warn(`[jaw:workingDir] stale path ${merged["workingDir"]}, resetting to JAW_HOME`);
             merged["workingDir"] = JAW_HOME;
             saveSettings(merged);
         }
