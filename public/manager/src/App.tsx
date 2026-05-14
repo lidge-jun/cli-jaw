@@ -316,30 +316,12 @@ export function App() {
         view.setSidebarMode(sidebarMode); void saveUi({ sidebarMode });
     }
 
-    function handleNotesSelectedPathChange(path: string | null): void {
-        view.setNotesSelectedPath(path); void saveUi({ notesSelectedPath: path });
-    }
-
-    function openNotesSidebarSearch(): void {
-        setNotesSidebarMode('search');
-        setNotesSearchFocusToken(token => token + 1);
-    }
-
-    function handleNotesViewModeChange(mode: DashboardNotesViewMode): void {
-        view.setNotesViewMode(mode); void saveUi({ notesViewMode: mode });
-    }
-
-    function handleNotesAuthoringModeChange(mode: DashboardNotesAuthoringMode): void {
-        view.setNotesAuthoringMode(mode); void saveUi({ notesAuthoringMode: mode });
-    }
-
-    function handleNotesWordWrapChange(value: boolean): void {
-        view.setNotesWordWrap(value); void saveUi({ notesWordWrap: value });
-    }
-
-    function handleNotesTreeWidthChange(value: number): void {
-        view.setNotesTreeWidth(value); void saveUi({ notesTreeWidth: value });
-    }
+    function handleNotesSelectedPathChange(path: string | null): void { view.setNotesSelectedPath(path); void saveUi({ notesSelectedPath: path }); }
+    function openNotesSidebarSearch(): void { setNotesSidebarMode('search'); setNotesSearchFocusToken(token => token + 1); }
+    function handleNotesViewModeChange(mode: DashboardNotesViewMode): void { view.setNotesViewMode(mode); void saveUi({ notesViewMode: mode }); }
+    function handleNotesAuthoringModeChange(mode: DashboardNotesAuthoringMode): void { view.setNotesAuthoringMode(mode); void saveUi({ notesAuthoringMode: mode }); }
+    function handleNotesWordWrapChange(value: boolean): void { view.setNotesWordWrap(value); void saveUi({ notesWordWrap: value }); }
+    function handleNotesTreeWidthChange(value: number): void { view.setNotesTreeWidth(value); void saveUi({ notesTreeWidth: value }); }
 
     const notesModel = useNotesModel({
         active: view.sidebarMode === 'notes',
@@ -414,15 +396,7 @@ export function App() {
         }
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [
-        filtered,
-        selectedInstance,
-        view.dashboardShortcutsEnabled,
-        view.dashboardShortcutKeymap,
-        view.sidebarMode,
-        view.activeDetailTab,
-        settingsDirty,
-    ]);
+    }, [filtered, selectedInstance, view.dashboardShortcutsEnabled, view.dashboardShortcutKeymap, view.sidebarMode, view.activeDetailTab, settingsDirty]);
 
     useEffect(() => {
         function onPreviewShortcut(event: MessageEvent): void {
@@ -435,15 +409,7 @@ export function App() {
         }
         window.addEventListener('message', onPreviewShortcut);
         return () => window.removeEventListener('message', onPreviewShortcut);
-    }, [
-        filtered,
-        selectedInstance,
-        view.dashboardShortcutsEnabled,
-        view.dashboardShortcutKeymap,
-        view.sidebarMode,
-        view.activeDetailTab,
-        settingsDirty,
-    ]);
+    }, [filtered, selectedInstance, view.dashboardShortcutsEnabled, view.dashboardShortcutKeymap, view.sidebarMode, view.activeDetailTab, settingsDirty]);
 
     async function handleLifecycle(action: DashboardLifecycleAction, instance: DashboardInstance): Promise<void> {
         const lifecycle = instance.lifecycle;
