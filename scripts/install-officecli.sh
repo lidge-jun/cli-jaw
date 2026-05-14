@@ -21,6 +21,7 @@ REPO="${ENV_REPO:-lidge-jun/OfficeCLI}"
 INSTALL_DIR="${HOME}/.local/bin"
 TARGET_BIN="${INSTALL_DIR}/officecli"
 DOWNLOAD_BIN="${INSTALL_DIR}/officecli.download"
+SIDECAR_DOWNLOAD="${INSTALL_DIR}/officecli-sidecar.download"
 
 UPSTREAM=false
 FORCE=false
@@ -98,20 +99,28 @@ get_latest_version() {
 # ── Check existing installation ──
 if [ -f "$TARGET_BIN" ] && [ "$FORCE" = "false" ] && [ "$UPDATE" = "false" ]; then
   if CURRENT=$("$TARGET_BIN" --version 2>/dev/null); then
-    ok "officecli already installed: v${CURRENT}"
-    echo "  Use --force to reinstall or --update to refresh only when outdated"
-    exit 0
-  fi
+    if [ -f "${INSTALL_DIR}/rhwp-field-bridge" ] && [ -f "${INSTALL_DIR}/rhwp-officecli-bridge" ]; then
+      ok "officecli already installed: v${CURRENT}"
+      echo "  Use --force to reinstall or --update to refresh only when outdated"
+      exit 0
+    fi
 
-  warn "Existing officecli is not executable; reinstalling"
+    warn "officecli is installed, but HWP sidecars are missing; refreshing installation"
+  else
+    warn "Existing officecli is not executable; reinstalling"
+  fi
 fi
 
 if [ -f "$TARGET_BIN" ] && [ "$FORCE" = "false" ] && [ "$UPDATE" = "true" ]; then
   CURRENT=$("$TARGET_BIN" --version 2>/dev/null || true)
   LATEST=$(get_latest_version)
   if [ -n "$CURRENT" ] && [ -n "$LATEST" ] && [ "$(normalize_version "$CURRENT")" = "$(normalize_version "$LATEST")" ]; then
-    ok "officecli already up to date: v$(normalize_version "$CURRENT")"
-    exit 0
+    if [ ! -f "${INSTALL_DIR}/rhwp-field-bridge" ] || [ ! -f "${INSTALL_DIR}/rhwp-officecli-bridge" ]; then
+      warn "officecli is current, but HWP sidecars are missing; refreshing installation"
+    else
+      ok "officecli already up to date: v$(normalize_version "$CURRENT")"
+      exit 0
+    fi
   fi
   if [ -n "$CURRENT" ] && [ -n "$LATEST" ]; then
     info "Updating officecli v$(normalize_version "$CURRENT") → v$(normalize_version "$LATEST")"
@@ -124,9 +133,14 @@ fi
 mkdir -p "$INSTALL_DIR"
 DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
 CHECKSUM_URL="https://github.com/${REPO}/releases/latest/download/SHA256SUMS"
+ASSET_BASE="${ASSET%.exe}"
+SIDECAR_EXT=""
+if [[ "$ASSET" == *.exe ]]; then
+  SIDECAR_EXT=".exe"
+fi
 
 info "Downloading officecli from ${REPO}..."
-trap 'rm -f "$DOWNLOAD_BIN"' EXIT
+trap 'rm -f "$DOWNLOAD_BIN" "$SIDECAR_DOWNLOAD"' EXIT
 curl -fsSL "$DOWNLOAD_URL" -o "$DOWNLOAD_BIN" || fail "Download failed: $DOWNLOAD_URL"
 chmod +x "$DOWNLOAD_BIN"
 
@@ -162,6 +176,36 @@ fi
 VERSION=$("$DOWNLOAD_BIN" --version 2>/dev/null) || fail "Binary exists but won't execute"
 mv "$DOWNLOAD_BIN" "$TARGET_BIN"
 ok "officecli v${VERSION} installed → ${TARGET_BIN}"
+
+install_sidecar() {
+  local sidecar="$1"
+  local sidecar_asset="${ASSET_BASE}-${sidecar}${SIDECAR_EXT}"
+  local sidecar_target="${INSTALL_DIR}/${sidecar}${SIDECAR_EXT}"
+  local sidecar_url="https://github.com/${REPO}/releases/latest/download/${sidecar_asset}"
+
+  info "Checking optional HWP sidecar ${sidecar_asset}..."
+  if ! curl -fsSL "$sidecar_url" -o "$SIDECAR_DOWNLOAD"; then
+    warn "Optional HWP sidecar unavailable: ${sidecar_asset}. Binary .hwp create/read/edit will be dependency-gated."
+    rm -f "$SIDECAR_DOWNLOAD"
+    return 0
+  fi
+
+  chmod +x "$SIDECAR_DOWNLOAD"
+  if [ "$OS" = "darwin" ]; then
+    if command -v xattr >/dev/null 2>&1; then
+      xattr -d com.apple.quarantine "$SIDECAR_DOWNLOAD" >/dev/null 2>&1 || true
+    fi
+    if command -v codesign >/dev/null 2>&1; then
+      codesign --force --deep --sign - "$SIDECAR_DOWNLOAD" >/dev/null 2>&1 || warn "Ad-hoc codesign failed for ${sidecar}; continuing"
+    fi
+  fi
+
+  mv "$SIDECAR_DOWNLOAD" "$sidecar_target"
+  ok "HWP sidecar installed → ${sidecar_target}"
+}
+
+install_sidecar "rhwp-field-bridge"
+install_sidecar "rhwp-officecli-bridge"
 
 # ── Source info ──
 echo "Installed: $("$TARGET_BIN" --version 2>/dev/null || echo 'unknown')"

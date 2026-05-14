@@ -89,7 +89,7 @@ tags: [cli-jaw, ...]
 
 ### OfficeCLI
 
-OfficeCLI is available for Office document operations (.docx, .xlsx, .pptx). Single binary, no Office install needed.
+OfficeCLI is available for Office document operations (.docx, .xlsx, .pptx, .hwpx, and rhwp-backed .hwp). OOXML formats use the main binary. Binary HWP features are operation-gated by `officecli hwp doctor --json` and `officecli capabilities --json`; when rhwp sidecars are missing, commands must fail with explicit dependency reasons rather than silently converting to `.hwpx`.
 
 ```bash
 officecli create file.docx                                          # create blank
@@ -97,6 +97,9 @@ officecli view file.docx text                                       # view conte
 officecli add file.docx /body --type paragraph --prop text="..."    # add content
 officecli set data.xlsx /Sheet1/A1 --prop value="42"                # set cell
 officecli add deck.pptx / --type slide --prop title="Title"         # add slide
+officecli create file.hwpx                                          # create blank HWPX
+officecli hwp doctor --json                                         # HWP/rhwp readiness
+officecli create file.hwp --json                                    # create blank HWP when rhwp-field-bridge is ready
 officecli validate file.docx                                        # validate
 officecli get file.docx / --json                                    # JSON output
 echo '[...]' | officecli batch data.xlsx --json                     # batch ops
@@ -104,8 +107,9 @@ echo '[...]' | officecli batch data.xlsx --json                     # batch ops
 
 - Install: `bash scripts/install-officecli.sh`
 - Smoke test: `bash tests/smoke/test_officecli_integration.sh`
-- Binary selection: smoke test prefers `OFFICECLI_BIN`, then global `officecli` on PATH, then `officecli/build-local/officecli` as fallback
-- CJK-enhanced binary: global install defaults to `lidge-jun/OfficeCLI`; repo-local `officecli/build-local/officecli` is fallback/dev-only
+- Binary selection: smoke test prefers `OFFICECLI_BIN`, then global `officecli` on PATH, then `officecli/bin/release/officecli-*`, then `officecli/build-local/officecli` as compatibility fallback
+- CJK/HWP-enhanced binary: global install defaults to `lidge-jun/OfficeCLI`; HWP sidecars should sit beside `officecli` as `rhwp-field-bridge` and `rhwp-officecli-bridge` or platform-suffixed equivalents
+- Same-package safety: do not run multiple `officecli` processes in parallel against the same `.docx`, `.xlsx`, `.pptx`, `.hwpx`, or `.hwp` package; run inspections sequentially to avoid package lock collisions
 - Full docs: [`docs/officecli-integration.md`](docs/officecli-integration.md)
 
 #### OfficeCLI Rebase Hygiene

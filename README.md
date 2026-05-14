@@ -54,6 +54,7 @@ Plus: explicit PABCD orchestration (`/orchestrate`, `/pabcd`, `/continue`), 230+
 | **Messaging** | `/api/channel/send` is the canonical Telegram/Discord outbound path; legacy channel-specific endpoints remain |
 | **Heartbeat** | Jobs support `every` and `cron` schedules with optional IANA time zones |
 | **Browser web-AI** | Runtime diagnostics/orphan cleanup, persistent tab lifecycle, session reattach, and ChatGPT/Gemini/Grok vendor paths are documented in `structure/` |
+| **OfficeCLI** | Office skills now treat HWP/HWPX separately: HWPX is a stable primary path, while binary HWP is rhwp sidecar-gated through `officecli hwp doctor --json` and `officecli capabilities --json` |
 | **Release gates** | `npm run gate:all` runs named release/doc parity checks when developing locally |
 
 ---
@@ -355,7 +356,7 @@ jaw memory search "how did we set up the API auth?"
 
 | Category | Skills | What they cover |
 |---|---|---|
-| **Office** | `pdf`, `docx`, `xlsx`, `pptx`, `hwp` | Read, create, edit documents. Korean HWP/HWPX via OfficeCLI |
+| **Office** | `pdf`, `docx`, `xlsx`, `pptx`, `hwp` | Read, create, edit documents. HWPX is the stable Korean document path; binary HWP is rhwp-backed and capability-gated via OfficeCLI |
 | **Automation** | `browser`, `vision-click`, `screen-capture`, `desktop-control` | Chrome CDP, AI-powered coordinate click, macOS screenshots, Computer Use |
 | **Media** | `video`, `imagegen`, `lecture-stt`, `tts` | Remotion video, OpenAI image generation, lecture transcription, text-to-speech |
 | **Integration** | `github`, `notion`, `telegram-send`, `memory` | Issues/PRs/CI, Notion pages, Telegram media delivery, persistent memory |
