@@ -217,17 +217,13 @@ export function copyDefaultSkills() {
             autoCount++;
             console.log(`[skills] auto-activated: ${id}`);
         } else {
-            // Sync active copy if ref was updated (mtime-based)
-            try {
-                const srcMtime = fs.statSync(join(src, 'SKILL.md')).mtimeMs;
-                const dstMtime = fs.statSync(join(dst, 'SKILL.md')).mtimeMs;
-                if (srcMtime > dstMtime) {
-                    fs.rmSync(dst, { recursive: true, force: true });
-                    copyDirRecursive(src, dst);
-                    autoCount++;
-                    console.log(`[skills] active synced: ${id}`);
-                }
-            } catch { /* SKILL.md missing in one side — skip */ }
+            // Sync active copy if any source file changed, not only SKILL.md.
+            if (shouldUpdateSkillDirectory(id, src, dst, { skills: {} }, { skills: {} })) {
+                fs.rmSync(dst, { recursive: true, force: true });
+                copyDirRecursive(src, dst);
+                autoCount++;
+                console.log(`[skills] active synced: ${id}`);
+            }
         }
     }
     if (autoCount > 0) console.log(`[skills] Total auto-activated/synced: ${autoCount}`);
@@ -305,20 +301,14 @@ export function propagateSkillsToInstances() {
                 if (!entry.isDirectory() || !isDiscoverableSkillDirName(entry.name)) continue;
                 const src = join(baseActive, entry.name);
                 const dst = join(instActive, entry.name);
-                const srcSkill = join(src, 'SKILL.md');
-                const dstSkill = join(dst, 'SKILL.md');
 
                 if (fs.existsSync(dst)) {
-                    // Update existing active skill if source is newer
-                    try {
-                        const srcMtime = fs.statSync(srcSkill).mtimeMs;
-                        const dstMtime = fs.statSync(dstSkill).mtimeMs;
-                        if (srcMtime > dstMtime) {
-                            fs.rmSync(dst, { recursive: true, force: true });
-                            copyDirRecursive(src, dst);
-                            activeUpdated++;
-                        }
-                    } catch { /* SKILL.md missing — skip */ }
+                    // Update existing active skill if any source file is newer.
+                    if (shouldUpdateSkillDirectory(entry.name, src, dst, { skills: {} }, { skills: {} })) {
+                        fs.rmSync(dst, { recursive: true, force: true });
+                        copyDirRecursive(src, dst);
+                        activeUpdated++;
+                    }
                 } else if (autoActivate.has(entry.name)) {
                     copyDirRecursive(src, dst);
                     autoActivated++;

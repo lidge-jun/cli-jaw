@@ -5,7 +5,8 @@
  */
 import fs from 'fs';
 import os from 'os';
-import { join, dirname } from 'path';
+import { createHash } from 'crypto';
+import { join, dirname, relative } from 'path';
 import { fileURLToPath } from 'url';
 import { resolveHomePath } from '../../src/core/path-expand.js';
 
@@ -58,11 +59,11 @@ export function shouldUseLocalSkillsSource(): boolean {
 }
 
 export function isDiscoverableSkillDirName(name: string): boolean {
-    return !name.startsWith('.') && !name.endsWith('.bak');
+    return !name.startsWith('.') && !name.endsWith('.bak') && !name.endsWith('_original');
 }
 
 export function isSkillSourceEntryName(name: string): boolean {
-    return name !== '.git' && !name.endsWith('.bak');
+    return name !== '.git' && isDiscoverableSkillDirName(name);
 }
 
 // ─── Skill activation sets (shared by copyDefaultSkills / softResetSkills) ───
@@ -118,6 +119,43 @@ export function getSkillVersion(id: string, registry: SkillRegistry): string | n
     return registry?.skills?.[id]?.version ?? null;
 }
 
+const SKILL_SYNC_IGNORED_DIRS = new Set(['.git', '__pycache__', 'node_modules']);
+const SKILL_SYNC_IGNORED_FILES = new Set(['.DS_Store']);
+
+function updateSkillTreeHash(hash: ReturnType<typeof createHash>, dir: string, root: string): void {
+    let entries: fs.Dirent[];
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+        return;
+    }
+
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+        if (entry.name.startsWith('.') && entry.name !== '.well-known') continue;
+        const path = join(dir, entry.name);
+        try {
+            if (entry.isDirectory()) {
+                if (SKILL_SYNC_IGNORED_DIRS.has(entry.name)) continue;
+                updateSkillTreeHash(hash, path, root);
+            } else if (entry.isFile()) {
+                if (SKILL_SYNC_IGNORED_FILES.has(entry.name) || entry.name.endsWith('.pyc')) continue;
+                hash.update(relative(root, path).replace(/\\/g, '/'));
+                hash.update('\0');
+                hash.update(fs.readFileSync(path));
+                hash.update('\0');
+            }
+        } catch {
+            // Ignore disappearing files during concurrent install/sync.
+        }
+    }
+}
+
+function skillTreeFingerprint(dir: string): string {
+    const hash = createHash('sha256');
+    updateSkillTreeHash(hash, dir, dir);
+    return hash.digest('hex');
+}
+
 export function shouldUpdateSkillDirectory(
     id: string,
     src: string,
@@ -129,7 +167,7 @@ export function shouldUpdateSkillDirectory(
     const dv = getSkillVersion(id, dstRegistry);
     if (sv && (!dv || semverGt(sv, dv))) return true;
     try {
-        return fs.statSync(join(src, 'SKILL.md')).mtimeMs > fs.statSync(join(dst, 'SKILL.md')).mtimeMs;
+        return skillTreeFingerprint(src) !== skillTreeFingerprint(dst);
     } catch {
         return false;
     }

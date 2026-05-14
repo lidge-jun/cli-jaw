@@ -40,10 +40,12 @@ function makeSkillDir(parent: string, name: string, content: string, mtime: Date
 test('skills policy excludes backup directories from discovery and source sync', () => {
     assert.equal(isDiscoverableSkillDirName('hwp'), true);
     assert.equal(isDiscoverableSkillDirName('hwp.bak'), false);
+    assert.equal(isDiscoverableSkillDirName('pptx_original'), false);
     assert.equal(isDiscoverableSkillDirName('.shadow'), false);
 
     assert.equal(isSkillSourceEntryName('hwp'), true);
     assert.equal(isSkillSourceEntryName('hwp.bak'), false);
+    assert.equal(isSkillSourceEntryName('xlsx_original'), false);
     assert.equal(isSkillSourceEntryName('.git'), false);
 });
 
@@ -67,6 +69,33 @@ test('skills policy updates same-version skills when source SKILL.md is newer', 
 
         assert.equal(
             shouldUpdateSkillDirectory('hwp', join(srcRoot, 'hwp'), join(dstRoot, 'hwp'), { skills: {} }, { skills: {} }),
+            true,
+        );
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('skills policy updates same-version skills when only a nested script is newer', () => {
+    const root = fs.mkdtempSync(join(os.tmpdir(), 'jaw-skills-policy-'));
+    try {
+        const srcRoot = join(root, 'src');
+        const dstRoot = join(root, 'dst');
+        const oldTime = new Date('2026-01-01T00:00:00Z');
+        const newTime = new Date('2026-01-02T00:00:00Z');
+        const src = makeSkillDir(srcRoot, 'pptx', 'source skill', oldTime);
+        const dst = makeSkillDir(dstRoot, 'pptx', 'dest skill', newTime);
+
+        fs.mkdirSync(join(src, 'scripts'), { recursive: true });
+        fs.writeFileSync(join(src, 'scripts', 'thumbnail.py'), 'source script');
+        fs.utimesSync(join(src, 'scripts', 'thumbnail.py'), newTime, newTime);
+
+        fs.mkdirSync(join(dst, 'scripts'), { recursive: true });
+        fs.writeFileSync(join(dst, 'scripts', 'thumbnail.py'), 'dest script');
+        fs.utimesSync(join(dst, 'scripts', 'thumbnail.py'), oldTime, oldTime);
+
+        assert.equal(
+            shouldUpdateSkillDirectory('pptx', src, dst, { skills: {} }, { skills: {} }),
             true,
         );
     } finally {
