@@ -175,8 +175,16 @@ export function copyDefaultSkills() {
     if (!skillsSourceResolved) {
         const hasExisting = fs.existsSync(join(refDir, 'registry.json'));
         if (!hasExisting) {
-            console.warn(`[skills] ⚠️ no source available (no network + no bundled skills)`);
-            console.warn(`[skills] offline mode — skills will be available after 'jaw init'`);
+            const refDirDisplay = refDir.replace(/\\/g, '/');
+            console.warn('');
+            console.warn('[skills] ⚠️  Skills not available (GitHub clone failed)');
+            console.warn('');
+            console.warn('  Run manually:');
+            console.warn(`    git clone --depth 1 ${SKILLS_REPO} "${refDirDisplay}"`);
+            console.warn('    jaw skill reset');
+            console.warn('');
+            console.warn('  This fetches all skills and activates defaults.');
+            console.warn('');
         }
     }
 

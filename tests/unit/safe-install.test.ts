@@ -153,6 +153,29 @@ test('SAF-004e: Claude CLI install uses the official native installer', () => {
     assert.ok(!cliBlock.includes("process.platform === 'win32' && found"), 'Windows success must require a native Claude binary');
 });
 
+test('SAF-004e1: Claude postinstall skips runnable existing CLIs, including Bun/npm installs', () => {
+    const installBlock = postinstallSrc.slice(
+        postinstallSrc.indexOf('function isRunnableClaudeBinary'),
+        postinstallSrc.indexOf('/** Check if a package is installed via a specific manager'),
+    );
+    assert.ok(installBlock.includes('function isRunnableClaudeBinary'), 'existing Claude should be validated by execution');
+    assert.ok(installBlock.includes('runClaudeVersionCheck(binaryPath)'), 'validation should use claude --version');
+    assert.ok(installBlock.includes('isRunnableClaudeBinary(existingPath)'), 'runnable existing Claude should skip install');
+    assert.ok(installBlock.includes('claude already present'), 'postinstall should still skip working existing Claude');
+    assert.ok(!installBlock.includes('non-native claude detected'), 'postinstall must not treat Bun/npm Claude as broken solely by installer kind');
+});
+
+test('SAF-004e1b: Claude runnable check is explicit for Windows and Unix', () => {
+    const checkBlock = postinstallSrc.slice(
+        postinstallSrc.indexOf('function runClaudeVersionCheck'),
+        postinstallSrc.indexOf('function isRunnableClaudeBinary'),
+    );
+    assert.ok(checkBlock.includes("process.platform === 'win32'"), 'Windows must use its own version-check branch');
+    assert.ok(checkBlock.includes("execFileSync('powershell'"), 'Windows check should use PowerShell for .cmd/.exe paths');
+    assert.ok(checkBlock.includes("'& $args[0] --version'"), 'PowerShell should invoke the detected Claude path safely');
+    assert.ok(checkBlock.includes("execFileSync(binaryPath, ['--version']"), 'macOS/Linux should run the detected binary directly');
+});
+
 test('SAF-004e2: Claude native install classification covers Windows native path', () => {
     assert.equal(classifyClaudeInstall(join(os.homedir(), '.local', 'bin', 'claude')), 'native');
     assert.equal(classifyClaudeInstall(join(os.homedir(), '.local', 'bin', 'claude.exe')), 'native');

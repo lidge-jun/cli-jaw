@@ -156,6 +156,7 @@ switch (sub) {
         break;
     }
 
+    case 'read':
     case 'info': {
         if (!arg) {
             console.log(`  Usage: cli-jaw skill info <name>`);

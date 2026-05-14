@@ -275,12 +275,12 @@ export async function installOfficeCli(opts: InstallOpts = {}) {
     }
 }
 
-const CLI_PACKAGES: { bin: string; pkg: string; brew?: string; forceMgr?: PkgMgr }[] = [
+const CLI_PACKAGES: { bin: string; pkg: string; brew?: string }[] = [
     { bin: 'claude', pkg: '@anthropic-ai/claude-code' },
-    { bin: 'codex', pkg: '@openai/codex', forceMgr: 'npm' },
-    { bin: 'gemini', pkg: '@google/gemini-cli', forceMgr: 'npm' },
-    { bin: 'copilot', pkg: '@github/copilot', forceMgr: 'npm' },
-    { bin: 'opencode', pkg: 'opencode-ai', forceMgr: 'npm' },
+    { bin: 'codex', pkg: '@openai/codex' },
+    { bin: 'gemini', pkg: '@google/gemini-cli' },
+    { bin: 'copilot', pkg: '@github/copilot' },
+    { bin: 'opencode', pkg: 'opencode-ai' },
 ];
 
 type PkgMgr = 'bun' | 'npm' | 'brew';
@@ -448,14 +448,68 @@ function findClaudeNativeBinary(): string | null {
     return null;
 }
 
-function findExistingClaudeBinary(): string | null {
-    const detected = detectCliBinary('claude', process.env["PATH"] || '');
+function findExistingCliBinary(name: string): string | null {
+    const detected = detectCliBinary(name, process.env["PATH"] || '');
     return detected.available ? detected.path : null;
+}
+
+function findExistingClaudeBinary(): string | null {
+    return findExistingCliBinary('claude');
+}
+
+function outputText(value: unknown): string {
+    if (Buffer.isBuffer(value)) return value.toString('utf8');
+    return fieldString(value);
+}
+
+function childFailureOutput(error: unknown): string {
+    const err = asRecord(error);
+    return [outputText(err["stderr"]), outputText(err["stdout"]), errString(error)]
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .join('\n');
+}
+
+function runCliVersionCheck(binaryPath: string): void {
+    const common = {
+        encoding: 'utf8' as const,
+        stdio: 'pipe' as const,
+        timeout: 5000,
+        env: postinstallExecEnv(),
+    };
+    if (process.platform === 'win32') {
+        execFileSync('powershell', [
+            '-NoProfile',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-Command',
+            '& $args[0] --version',
+            binaryPath,
+        ], common);
+        return;
+    }
+    execFileSync(binaryPath, ['--version'], common);
+}
+
+function isRunnableCliBinary(name: string, binaryPath: string): boolean {
+    try {
+        runCliVersionCheck(binaryPath);
+        return true;
+    } catch (e: unknown) {
+        const output = childFailureOutput(e);
+        console.log(`[jaw:init] ⚠️  ${name} exists but failed --version → ${binaryPath}`);
+        if (output) console.log(`             ${output.slice(0, 160)}`);
+        return false;
+    }
+}
+
+function isRunnableClaudeBinary(binaryPath: string): boolean {
+    return isRunnableCliBinary('claude', binaryPath);
 }
 
 function installClaudeCli(options: { force?: boolean } = {}): boolean {
     const existingPath = findExistingClaudeBinary();
-    if (existingPath && !options.force) {
+    if (existingPath && !options.force && isRunnableClaudeBinary(existingPath)) {
         console.log(`[jaw:init] ⏭️  claude already present → ${existingPath}`);
         return true;
     }

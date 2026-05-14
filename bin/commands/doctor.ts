@@ -273,7 +273,25 @@ check('Channel consistency', () => {
 check('Skills directory', () => {
     const skillsDir = settings?.skillsDir || path.join(JAW_HOME, 'skills');
     if (!fs.existsSync(skillsDir)) throw new Error('WARN: not found');
-    return skillsDir;
+    const entries = fs.readdirSync(skillsDir, { withFileTypes: true })
+        .filter(d => d.isDirectory() && !d.name.startsWith('.'));
+    if (entries.length === 0) {
+        const refDir = path.join(JAW_HOME, 'skills_ref').replace(/\\/g, '/');
+        throw new Error(
+            'WARN: skills directory is empty — agents will not work correctly\n'
+            + `     Run: git clone --depth 1 https://github.com/lidge-jun/cli-jaw-skills.git "${refDir}"\n`
+            + '     Then: jaw skill reset'
+        );
+    }
+    const required = ['dev', 'diagram'];
+    const missing = required.filter(s => !fs.existsSync(path.join(skillsDir, s, 'SKILL.md')));
+    if (missing.length > 0) {
+        throw new Error(
+            `WARN: missing required skills: ${missing.join(', ')}\n`
+            + '     Run: jaw skill reset'
+        );
+    }
+    return `${skillsDir} (${entries.length} active)`;
 });
 
 // 7b. Shared path isolation (Issue #58)
