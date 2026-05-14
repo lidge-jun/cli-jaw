@@ -1,14 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { readSource } from './source-normalize.js';
 import {
     classifyInstallerFromPath,
     shouldDedupeCliTools,
+    shouldForceClaudeDuringPostinstall,
+    shouldInstallClaudeDuringPostinstall,
     shouldInstallCliToolsDuringPostinstall,
 } from '../../bin/postinstall.js';
+import { classifyClaudeInstall } from '../../src/core/claude-install.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -61,9 +65,16 @@ test('SAF-004b: postinstall skips CLI tool install/update by default', () => {
     assert.equal(shouldInstallCliToolsDuringPostinstall({}), false);
     assert.equal(shouldInstallCliToolsDuringPostinstall({ CLI_JAW_INSTALL_CLI_TOOLS: '1' }), true);
     assert.equal(shouldInstallCliToolsDuringPostinstall({ npm_config_jaw_install_cli_tools: 'true' }), true);
+    assert.equal(shouldInstallClaudeDuringPostinstall({}), true);
+    assert.equal(shouldInstallClaudeDuringPostinstall({ CLI_JAW_SKIP_CLAUDE: '1' }), false);
+    assert.equal(shouldInstallClaudeDuringPostinstall({ npm_config_jaw_skip_claude: 'true' }), false);
+    assert.equal(shouldForceClaudeDuringPostinstall({}), false);
+    assert.equal(shouldForceClaudeDuringPostinstall({ CLI_JAW_FORCE_CLAUDE: '1' }), true);
+    assert.equal(shouldForceClaudeDuringPostinstall({ npm_config_jaw_force_claude: 'true' }), true);
 
     const runBlock = postinstallSrc.slice(postinstallSrc.indexOf('export async function runPostinstall'));
     assert.ok(runBlock.includes('shouldInstallCliToolsDuringPostinstall()'), 'runPostinstall must gate installCliTools');
+    assert.ok(runBlock.includes('shouldInstallClaudeDuringPostinstall()'), 'runPostinstall must install Claude unless explicitly skipped');
     assert.ok(runBlock.includes('CLI tool install/update skipped by default'), 'default skip must be visible');
 });
 
@@ -75,6 +86,16 @@ test('SAF-004c: duplicate CLI uninstall is opt-in', () => {
     const dedupeBlock = postinstallSrc.slice(postinstallSrc.indexOf('function deduplicateCliTool'));
     assert.ok(dedupeBlock.includes('shouldDedupeCliTools()'), 'dedupe must be opt-in before uninstall');
     assert.ok(dedupeBlock.includes('not removing automatically'), 'dedupe default must avoid uninstalling user tools');
+});
+
+test('SAF-004c2: forced npm installs are preferred during duplicate cleanup', () => {
+    const dedupeBlock = postinstallSrc.slice(postinstallSrc.indexOf('function deduplicateCliTool'));
+    assert.ok(dedupeBlock.includes('preferredActive?: PkgMgr'), 'dedupe should accept the manager postinstall intentionally used');
+    assert.ok(dedupeBlock.includes('isInstalledVia(preferredActive'), 'dedupe should verify the preferred manager was actually installed');
+    assert.ok(
+        postinstallSrc.includes('deduplicateCliTool(bin, pkg, brew, forceMgr)'),
+        'forceMgr must be passed through so bun PATH shims do not win over npm-forced installs',
+    );
 });
 
 test('SAF-004d: Homebrew Node npm globals are classified as npm before brew', () => {
@@ -110,6 +131,59 @@ test('SAF-004d: Homebrew Node npm globals are classified as npm before brew', ()
         }),
         null,
     );
+});
+
+test('SAF-004e: Claude CLI install uses the official native installer', () => {
+    const cliBlock = postinstallSrc.slice(
+        postinstallSrc.indexOf('function buildClaudeNativeInstallCmd'),
+        postinstallSrc.indexOf('const MCP_PACKAGES'),
+    );
+    assert.ok(postinstallSrc.includes('https://claude.ai/install.sh'), 'Claude install should use the official native installer');
+    assert.ok(postinstallSrc.includes('https://claude.ai/install.ps1'), 'Windows Claude install should use the official native PowerShell installer');
+    assert.ok(cliBlock.includes('CLAUDE_NATIVE_INSTALL_URL'), 'Claude install command should route through the native installer URL');
+    assert.ok(cliBlock.includes('CLAUDE_NATIVE_INSTALL_PS_URL'), 'Windows Claude install command should route through the native installer URL');
+    assert.ok(cliBlock.includes('execFileSync'), 'Windows Claude install should avoid cmd.exe nested quote parsing');
+    assert.ok(cliBlock.includes('findClaudeNativeBinary'), 'postinstall should verify the native Claude binary location');
+    assert.ok(cliBlock.includes('findExistingClaudeBinary'), 'postinstall should check existing Claude before installing');
+    assert.ok(cliBlock.includes('isSpawnableCliFile'), 'postinstall should avoid accepting broken Unix Claude shims as existing installs');
+    assert.ok(cliBlock.includes("detectCliBinary('claude'"), 'postinstall existing-Claude detection should scan all PATH candidates');
+    assert.ok(cliBlock.includes('claude already present'), 'postinstall should skip reinstalling existing Claude by default');
+    assert.ok(cliBlock.includes('shouldForceClaudeDuringPostinstall()'), 'postinstall should expose an explicit force-update path for native Claude');
+    assert.ok(cliBlock.includes('claude (native installer)'), 'strict failure reporting should identify the native installer path');
+    assert.ok(!cliBlock.includes("process.platform === 'win32' && found"), 'Windows success must require a native Claude binary');
+});
+
+test('SAF-004e2: Claude native install classification covers Windows native path', () => {
+    assert.equal(classifyClaudeInstall(join(os.homedir(), '.local', 'bin', 'claude')), 'native');
+    assert.equal(classifyClaudeInstall(join(os.homedir(), '.local', 'bin', 'claude.exe')), 'native');
+});
+
+test('SAF-004f: bundled non-Claude CLI tools force npm install manager', () => {
+    const packageBlock = postinstallSrc.slice(
+        postinstallSrc.indexOf('const CLI_PACKAGES'),
+        postinstallSrc.indexOf('type PkgMgr'),
+    );
+    assert.ok(packageBlock.includes("{ bin: 'codex', pkg: '@openai/codex', forceMgr: 'npm' }"), 'codex should force npm');
+    assert.ok(packageBlock.includes("{ bin: 'gemini', pkg: '@google/gemini-cli', forceMgr: 'npm' }"), 'gemini should force npm');
+    assert.ok(packageBlock.includes("{ bin: 'copilot', pkg: '@github/copilot', forceMgr: 'npm' }"), 'copilot should force npm');
+    assert.ok(packageBlock.includes("{ bin: 'opencode', pkg: 'opencode-ai', forceMgr: 'npm' }"), 'opencode should force npm');
+    assert.ok(!packageBlock.includes("brew: 'gemini-cli'"), 'gemini should not route through brew');
+});
+
+test('SAF-004g: postinstall child processes use service-safe PATH consistently', () => {
+    assert.ok(postinstallSrc.includes('function postinstallExecEnv'), 'postinstall should centralize child-process env construction');
+    assert.ok(postinstallSrc.includes('delete out.PATH'), 'postinstall env should avoid duplicate PATH variants');
+    assert.ok(postinstallSrc.includes('delete out.Path'), 'postinstall env should avoid duplicate Windows Path variants');
+    assert.ok(postinstallSrc.includes("process.platform === 'win32' ? 'Path' : 'PATH'"), 'postinstall env should use one platform-appropriate PATH key');
+
+    const depsBlock = postinstallSrc.slice(postinstallSrc.indexOf('export async function installSkillDeps'));
+    assert.ok(depsBlock.includes('env: postinstallExecEnv()'), 'skill dependency checks/installers should see service-safe PATH');
+
+    const installBlock = postinstallSrc.slice(postinstallSrc.indexOf('export async function installCliTools'));
+    assert.ok(installBlock.includes('env: postinstallExecEnv()'), 'CLI package installs should see service-safe PATH');
+
+    const mcpBlock = postinstallSrc.slice(postinstallSrc.indexOf('export async function installMcpServers'));
+    assert.ok(mcpBlock.includes('env: postinstallExecEnv()'), 'MCP global installs should see service-safe PATH');
 });
 
 // ── SAF-005: installMcpServers exported ──
@@ -226,4 +300,13 @@ test('OFF-001b: shell installer fails on checksum mismatch when expected checksu
 test('OFF-002: PowerShell installer exists for win32 postinstall', () => {
     assert.ok(officeCliPowerShellSrc.includes('officecli-win-x64.exe'), 'PowerShell installer should map Windows x64 asset');
     assert.ok(officeCliPowerShellSrc.includes('$env:LOCALAPPDATA'), 'PowerShell installer should install under LOCALAPPDATA');
+});
+
+test('OFF-002b: win32 OfficeCLI failure hint points to PowerShell installer', () => {
+    const windowsBlock = postinstallSrc.slice(
+        postinstallSrc.indexOf("if (process.platform === 'win32')"),
+        postinstallSrc.indexOf("const scriptPath = path.join(PROJECT_ROOT, 'scripts', 'install-officecli.sh')"),
+    );
+    assert.ok(windowsBlock.includes('install-officecli.ps1'), 'Windows failure hint should mention the PowerShell installer');
+    assert.ok(!windowsBlock.includes('run manually: install-officecli.sh'), 'Windows failure hint must not point to the Unix shell installer');
 });

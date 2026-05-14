@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { buildServicePath } from './runtime-path.js';
+import { classifyClaudeInstall } from './claude-install.js';
 
 export interface RejectedCliCandidate {
     path: string;
@@ -27,7 +28,7 @@ function uniqueLines(raw: string): string[] {
     return out;
 }
 
-const BUN_DEPRIO_CLIS = new Set(['claude']);
+const BUN_DEPRIO_CLIS = new Set(['claude', 'codex', 'gemini', 'copilot', 'opencode']);
 
 function normalizedPath(filePath: string): string {
     return path.normalize(filePath);
@@ -41,6 +42,24 @@ function isPathInside(candidate: string, dir: string): boolean {
 function isBunBinCandidate(candidate: string, homeDir = os.homedir()): boolean {
     const normalized = normalizedPath(candidate);
     return isPathInside(normalized, path.join(homeDir, '.bun', 'bin'));
+}
+
+function isClaudeNativeCandidate(candidate: string, homeDir = os.homedir()): boolean {
+    const normalized = normalizedPath(candidate);
+    const nativeBins = [
+        path.join(homeDir, '.local', 'bin', 'claude'),
+        path.join(homeDir, '.local', 'bin', 'claude.exe'),
+        path.join(homeDir, '.claude', 'local', 'bin', 'claude'),
+        path.join(homeDir, '.claude', 'local', 'bin', 'claude.exe'),
+    ].map(normalizedPath);
+    if (nativeBins.includes(normalized)) return true;
+
+    try {
+        const realPath = fs.realpathSync(candidate);
+        return classifyClaudeInstall(realPath) === 'native';
+    } catch {
+        return classifyClaudeInstall(normalized) === 'native';
+    }
 }
 
 function isManagedNodeCandidate(candidate: string, homeDir = os.homedir()): boolean {
@@ -68,7 +87,8 @@ function isManagedNodeCandidate(candidate: string, homeDir = os.homedir()): bool
 
 function candidatePriority(cliName: string, candidate: string, index: number, homeDir = os.homedir()): number {
     if (!BUN_DEPRIO_CLIS.has(cliName)) return index;
-    if (isManagedNodeCandidate(candidate, homeDir)) return index;
+    if (cliName === 'claude' && isClaudeNativeCandidate(candidate, homeDir)) return index;
+    if (isManagedNodeCandidate(candidate, homeDir)) return 1_000 + index;
     if (isBunBinCandidate(candidate, homeDir)) return 10_000 + index;
     return 5_000 + index;
 }

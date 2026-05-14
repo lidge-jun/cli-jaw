@@ -1348,10 +1348,12 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     }
 
     // ─── Standard CLI branch (claude/codex/gemini/opencode) ──────
-    // DIFF-B: Windows needs shell:true to resolve .cmd shims (npm global installs)
+    // DIFF-B: Windows needs shell:true only when falling back to .cmd shims.
     const spawnCommand = cli === 'opencode' && process.platform !== 'win32'
         ? (resolvedOpencodeBinary || detected.path || cli)
-        : (process.platform === 'win32' ? cli : (detected.path || cli));
+        : (detected.path || cli);
+    const windowsSpawnUsesShell = process.platform === 'win32'
+        && !spawnCommand.toLowerCase().endsWith('.exe');
     const opencodeSpawnAudit = cli === 'opencode'
         ? buildOpencodeSpawnAudit({ args, cwd: spawnCwd, env: spawnEnv, binary: spawnCommand })
         : undefined;
@@ -1362,7 +1364,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         cwd: spawnCwd,
         env: spawnEnv,
         stdio: ['pipe', 'pipe', 'pipe'],
-        ...(process.platform === 'win32' ? { shell: true } : {}),
+        ...(windowsSpawnUsesShell ? { shell: true } : {}),
     });
     if (mainManaged) activeProcess = child;
     // Phase 7-3: detect duplicate spawn for same agentLabel.

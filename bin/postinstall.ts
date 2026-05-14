@@ -30,6 +30,8 @@ import { fileURLToPath } from 'node:url';
 import { ensureSharedHomeSkillsLinks, initMcpConfig, copyDefaultSkills, propagateSkillsToInstances, loadUnifiedMcp, saveUnifiedMcp } from '../lib/mcp-sync.js';
 import { resolveHomePath } from '../src/core/path-expand.js';
 import { buildServicePath } from '../src/core/runtime-path.js';
+import { classifyClaudeInstall } from '../src/core/claude-install.js';
+import { detectCliBinary, isSpawnableCliFile } from '../src/core/cli-detect.js';
 import { asArray, asRecord, errString, fieldString } from './_http-client.js';
 
 // ─── JAW_HOME inline (config.ts → registry.ts import 체인 제거) ───
@@ -50,10 +52,23 @@ const OFFICECLI_SKIP = process.env["CLI_JAW_SKIP_OFFICECLI"] === '1'
 const OFFICECLI_FORCE = process.env["CLI_JAW_FORCE_OFFICECLI"] === '1'
     || process.env["CLI_JAW_FORCE_OFFICECLI"] === 'true';
 const OFFICECLI_REQUIRE = shouldRequireOfficeCliDuringPostinstall();
+const CLAUDE_NATIVE_INSTALL_URL = 'https://claude.ai/install.sh';
+const CLAUDE_NATIVE_INSTALL_PS_URL = 'https://claude.ai/install.ps1';
 
 // ─── Legacy migration ───
 // Moved into runPostinstall() to prevent side effects on dynamic import.
 // (init.ts imports this module for installCliTools/etc — must not trigger fs.renameSync)
+
+function postinstallExecEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+    const currentPath = env["PATH"] || env["Path"] || env["path"] || '';
+    const safePath = buildServicePath(currentPath);
+    const out: NodeJS.ProcessEnv = { ...env };
+    delete out["PATH"];
+    delete out["Path"];
+    delete out["path"];
+    out[process.platform === 'win32' ? 'Path' : 'PATH'] = safePath;
+    return out;
+}
 
 function ensureDir(dir: string) {
     if (!fs.existsSync(dir)) {
@@ -97,10 +112,7 @@ function findBinaryPath(name: string): string | null {
             encoding: 'utf8',
             stdio: 'pipe',
             timeout: 5000,
-            env: {
-                ...process.env,
-                PATH: buildServicePath(process.env["PATH"] || ''),
-            },
+            env: postinstallExecEnv(),
         }).trim();
         const first = out.split(/\r?\n/).map(x => x.trim()).find(Boolean);
         return first || null;
@@ -170,7 +182,7 @@ async function maybeReregisterLaunchd() {
         return;
     }
     try {
-        execFileSync(jawBin, ['launchd'], { stdio: 'inherit', timeout: 30000 });
+        execFileSync(jawBin, ['launchd'], { stdio: 'inherit', timeout: 30000, env: postinstallExecEnv() });
     } catch (e: unknown) {
         console.warn(`[jaw:init] ⚠️  launchd 재등록 실패 — 수동: jaw launchd`);
         const message = errString(e);
@@ -224,13 +236,13 @@ export async function installOfficeCli(opts: InstallOpts = {}) {
         }
         console.log(`[jaw:init] 📦 ensuring officecli (${repo}) via PowerShell installer...`);
         try {
-            execFileSync(ps, args, { stdio: 'inherit', timeout: 180000, env: process.env });
+            execFileSync(ps, args, { stdio: 'inherit', timeout: 180000, env: postinstallExecEnv() });
         } catch (e: unknown) {
             const status = asRecord(e)["status"];
             if (OFFICECLI_REQUIRE) {
                 throw new Error(`OfficeCLI install required but failed (exit ${fieldString(status, '?')})`);
             }
-            console.warn(`[jaw:init] ⚠️  officecli install failed (exit ${fieldString(status, '?')}); skipping — run manually: install-officecli.sh`);
+            console.warn(`[jaw:init] ⚠️  officecli install failed (exit ${fieldString(status, '?')}); skipping — run manually: powershell -ExecutionPolicy Bypass -File scripts/install-officecli.ps1 -Update`);
         }
         return;
     }
@@ -252,7 +264,7 @@ export async function installOfficeCli(opts: InstallOpts = {}) {
         execFileSync('bash', args, {
             stdio: 'inherit',
             timeout: 180000,
-            env: { ...process.env, OFFICECLI_REPO: repo },
+            env: postinstallExecEnv({ ...process.env, OFFICECLI_REPO: repo }),
         });
     } catch (e: unknown) {
         const status = asRecord(e)["status"];
@@ -265,10 +277,10 @@ export async function installOfficeCli(opts: InstallOpts = {}) {
 
 const CLI_PACKAGES: { bin: string; pkg: string; brew?: string; forceMgr?: PkgMgr }[] = [
     { bin: 'claude', pkg: '@anthropic-ai/claude-code' },
-    { bin: 'codex', pkg: '@openai/codex' },
-    { bin: 'gemini', pkg: '@google/gemini-cli', brew: 'gemini-cli' },
+    { bin: 'codex', pkg: '@openai/codex', forceMgr: 'npm' },
+    { bin: 'gemini', pkg: '@google/gemini-cli', forceMgr: 'npm' },
     { bin: 'copilot', pkg: '@github/copilot', forceMgr: 'npm' },
-    { bin: 'opencode', pkg: 'opencode-ai' },
+    { bin: 'opencode', pkg: 'opencode-ai', forceMgr: 'npm' },
 ];
 
 type PkgMgr = 'bun' | 'npm' | 'brew';
@@ -289,6 +301,14 @@ export function shouldRequireCliToolsDuringPostinstall(env: NodeJS.ProcessEnv = 
     return truthyEnv(env["CLI_JAW_REQUIRE_CLI_TOOLS"]) || truthyEnv(env["npm_config_jaw_require_cli_tools"]);
 }
 
+export function shouldInstallClaudeDuringPostinstall(env: NodeJS.ProcessEnv = process.env): boolean {
+    return !truthyEnv(env["CLI_JAW_SKIP_CLAUDE"]) && !truthyEnv(env["npm_config_jaw_skip_claude"]);
+}
+
+export function shouldForceClaudeDuringPostinstall(env: NodeJS.ProcessEnv = process.env): boolean {
+    return truthyEnv(env["CLI_JAW_FORCE_CLAUDE"]) || truthyEnv(env["npm_config_jaw_force_claude"]);
+}
+
 export function shouldDedupeCliTools(env: NodeJS.ProcessEnv = process.env): boolean {
     return truthyEnv(env["CLI_JAW_DEDUPE_CLI_TOOLS"]) || truthyEnv(env["npm_config_jaw_dedupe_cli_tools"]);
 }
@@ -303,10 +323,7 @@ function npmPrefixGlobal(): string | null {
             encoding: 'utf8',
             stdio: 'pipe',
             timeout: 3000,
-            env: {
-                ...process.env,
-                PATH: buildServicePath(process.env["PATH"] || ''),
-            },
+            env: postinstallExecEnv(),
         }).trim();
     } catch {
         return null;
@@ -366,7 +383,7 @@ export function detectInstaller(binName: string): PkgMgr | null {
 
 /** Detect the default package manager for fresh installs. */
 function detectDefaultPkgMgr(): Exclude<PkgMgr, 'brew'> {
-    try { execSync('bun --version', { stdio: 'pipe' }); return 'bun'; } catch { return 'npm'; }
+    try { execSync('bun --version', { stdio: 'pipe', env: postinstallExecEnv() }); return 'bun'; } catch { return 'npm'; }
 }
 
 function buildInstallCmd(mgr: PkgMgr, pkg: string, brewFormula?: string): string {
@@ -377,19 +394,108 @@ function buildInstallCmd(mgr: PkgMgr, pkg: string, brewFormula?: string): string
     }
 }
 
+function buildClaudeNativeInstallCmd(): string {
+    if (process.platform === 'win32') {
+        return `powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-Expression (Invoke-RestMethod '${CLAUDE_NATIVE_INSTALL_PS_URL}')"`;
+    }
+    return `curl -fsSL ${CLAUDE_NATIVE_INSTALL_URL} | bash`;
+}
+
+function runClaudeNativeInstall(cmd: string): void {
+    const env = postinstallExecEnv();
+    if (process.platform === 'win32') {
+        execFileSync('powershell', [
+            '-NoProfile',
+            '-ExecutionPolicy',
+            'Bypass',
+            '-Command',
+            `Invoke-Expression (Invoke-RestMethod '${CLAUDE_NATIVE_INSTALL_PS_URL}')`,
+        ], {
+            stdio: 'pipe',
+            timeout: 180000,
+            env,
+        });
+        return;
+    }
+    execSync(cmd, {
+        stdio: 'pipe',
+        timeout: 180000,
+        env,
+    });
+}
+
+function findClaudeNativeBinary(): string | null {
+    const candidates = [
+        path.join(home, '.local', 'bin', process.platform === 'win32' ? 'claude.exe' : 'claude'),
+        path.join(home, '.local', 'bin', 'claude'),
+        path.join(home, '.claude', 'local', 'bin', process.platform === 'win32' ? 'claude.exe' : 'claude'),
+        path.join(home, '.claude', 'local', 'bin', 'claude'),
+        findBinaryPath('claude'),
+    ].filter((candidate): candidate is string => !!candidate);
+
+    for (const candidate of candidates) {
+        if (!fs.existsSync(candidate)) continue;
+        if (process.platform !== 'win32' && !isSpawnableCliFile(candidate, process.platform).ok) continue;
+        try {
+            const realPath = fs.realpathSync(candidate);
+            if (classifyClaudeInstall(candidate) === 'native' || classifyClaudeInstall(realPath) === 'native') {
+                return candidate;
+            }
+        } catch {
+            if (classifyClaudeInstall(candidate) === 'native') return candidate;
+        }
+    }
+    return null;
+}
+
+function findExistingClaudeBinary(): string | null {
+    const detected = detectCliBinary('claude', process.env["PATH"] || '');
+    return detected.available ? detected.path : null;
+}
+
+function installClaudeCli(options: { force?: boolean } = {}): boolean {
+    const existingPath = findExistingClaudeBinary();
+    if (existingPath && !options.force) {
+        console.log(`[jaw:init] ⏭️  claude already present → ${existingPath}`);
+        return true;
+    }
+
+    const cmd = buildClaudeNativeInstallCmd();
+    const label = process.platform === 'win32' ? 'native PowerShell installer' : 'native installer';
+    console.log(`[jaw:init] 📦 claude (${label}): ${cmd}`);
+    try {
+        runClaudeNativeInstall(cmd);
+    } catch (e: unknown) {
+        console.error(`[jaw:init] ⚠️  claude: auto-install failed — install manually: ${cmd}`);
+        const message = errString(e);
+        if (message) console.error(`             ${message.slice(0, 160)}`);
+        return false;
+    }
+
+    const nativePath = findClaudeNativeBinary();
+    if (nativePath) {
+        console.log(`[jaw:init] ✅ claude native binary → ${nativePath}`);
+        return true;
+    }
+
+    console.error('[jaw:init] ⚠️  claude: installer completed but native binary was not found');
+    console.error('[jaw:init]    expected ~/.local/bin/claude, ~/.claude/local/bin/claude, or %USERPROFILE%\\.local\\bin\\claude.exe');
+    return false;
+}
+
 /** Check if a package is installed via a specific manager (independent of PATH order). */
 function isInstalledVia(mgr: PkgMgr, pkg: string, brewFormula?: string): boolean {
     try {
         switch (mgr) {
             case 'npm':
-                execSync(`npm ls -g ${pkg} --depth=0`, { stdio: 'pipe', timeout: 5000 });
+                execSync(`npm ls -g ${pkg} --depth=0`, { stdio: 'pipe', timeout: 5000, env: postinstallExecEnv() });
                 return true;
             case 'bun': {
                 const bunGlobal = path.join(home, '.bun', 'install', 'global', 'node_modules', pkg.split('/').pop()!);
                 return fs.existsSync(bunGlobal);
             }
             case 'brew':
-                execSync(`brew list --formula ${brewFormula || pkg}`, { stdio: 'pipe', timeout: 5000 });
+                execSync(`brew list --formula ${brewFormula || pkg}`, { stdio: 'pipe', timeout: 5000, env: postinstallExecEnv() });
                 return true;
         }
     } catch { return false; }
@@ -403,9 +509,12 @@ function buildUninstallCmd(mgr: PkgMgr, pkg: string, brewFormula?: string): stri
     }
 }
 
-/** Remove duplicate installations — keep the active one (PATH winner), remove the rest. */
-function deduplicateCliTool(bin: string, pkg: string, brew?: string): void {
-    const active = detectInstaller(bin);
+/** Remove duplicate installations — keep the preferred manager when postinstall just installed one. */
+function deduplicateCliTool(bin: string, pkg: string, brew?: string, preferredActive?: PkgMgr): void {
+    const detectedActive = detectInstaller(bin);
+    const active = preferredActive && isInstalledVia(preferredActive, pkg, brew)
+        ? preferredActive
+        : detectedActive;
     if (!active) return; // not installed at all
     const others: PkgMgr[] = (['bun', 'npm', 'brew'] as const).filter(m => m !== active);
     const duplicates = others.filter(mgr => isInstalledVia(mgr, pkg, brew));
@@ -419,7 +528,7 @@ function deduplicateCliTool(bin: string, pkg: string, brew?: string): void {
         const cmd = buildUninstallCmd(mgr, pkg, brew);
         console.log(`[jaw:init] 🧹 ${bin}: removing duplicate from ${mgr} (active: ${active})`);
         try {
-            execSync(cmd, { stdio: 'pipe', timeout: 30000 });
+            execSync(cmd, { stdio: 'pipe', timeout: 30000, env: postinstallExecEnv() });
             console.log(`[jaw:init]    removed ${pkg} from ${mgr}`);
         } catch {
             console.warn(`[jaw:init]    ⚠️  failed to remove ${pkg} from ${mgr} — remove manually: ${cmd}`);
@@ -433,7 +542,20 @@ export async function installCliTools(opts: InstallOpts = {}) {
 
     console.log('[jaw:init] installing CLI tools @latest...');
     for (const { bin, pkg, brew, forceMgr } of CLI_PACKAGES) {
-        if (opts.dryRun) { console.log(`  [dry-run] would install ${pkg}`); continue; }
+        if (bin === 'claude') {
+            if (opts.dryRun) { console.log(`  [dry-run] would run ${buildClaudeNativeInstallCmd()}`); continue; }
+            if (opts.interactive && opts.ask) {
+                const answer = await opts.ask('Install claude (native Claude Code installer)? [y/N]', 'n');
+                if (answer.toLowerCase() !== 'y') { console.log(`  ⏭️  skipped ${bin}`); continue; }
+            }
+            if (!installClaudeCli({ force: shouldForceClaudeDuringPostinstall() })) failed.push('claude (native installer)');
+            continue;
+        }
+        if (opts.dryRun) {
+            const dryRunMgr = forceMgr || 'npm';
+            console.log(`  [dry-run] would run ${buildInstallCmd(dryRunMgr, pkg, brew)}`);
+            continue;
+        }
         if (opts.interactive && opts.ask) {
             const answer = await opts.ask(`Install ${bin} (${pkg})? [y/N]`, 'n');
             if (answer.toLowerCase() !== 'y') { console.log(`  ⏭️  skipped ${bin}`); continue; }
@@ -445,14 +567,14 @@ export async function installCliTools(opts: InstallOpts = {}) {
         const tag = existing ? `update via ${mgr}` : `fresh install via ${mgr}`;
         console.log(`[jaw:init] 📦 ${bin} (${tag}): ${cmd}`);
         try {
-            execSync(cmd, { stdio: 'pipe', timeout: 180000 });
+            execSync(cmd, { stdio: 'pipe', timeout: 180000, env: postinstallExecEnv() });
             console.log(`[jaw:init] ✅ ${bin} installed`);
         } catch {
             // Fallback: if preferred manager failed and it wasn't npm, try npm
             if (mgr !== 'npm') {
                 console.log(`[jaw:init] ⚠️  ${mgr} failed, trying npm i -g ${pkg}@latest ...`);
                 try {
-                    execSync(`npm i -g ${pkg}@latest`, { stdio: 'pipe', timeout: 180000 });
+                    execSync(`npm i -g ${pkg}@latest`, { stdio: 'pipe', timeout: 180000, env: postinstallExecEnv() });
                     console.log(`[jaw:init] ✅ ${bin} installed (via npm fallback)`);
                 } catch {
                     failed.push(`${bin} (${pkg})`);
@@ -464,7 +586,7 @@ export async function installCliTools(opts: InstallOpts = {}) {
             }
         }
         // Clean up duplicate installations from other package managers
-        deduplicateCliTool(bin, pkg, brew);
+        deduplicateCliTool(bin, pkg, brew, forceMgr);
     }
 
     if (failed.length > 0 && shouldRequireCliToolsDuringPostinstall()) {
@@ -473,7 +595,7 @@ export async function installCliTools(opts: InstallOpts = {}) {
 }
 
 const MCP_PACKAGES = [
-    { pkg: '@upstash/context7-mcp', bin: 'context7-mcp' },
+    { name: 'context7', pkg: '@upstash/context7-mcp', bin: 'context7-mcp' },
 ];
 
 export async function installMcpServers(opts: InstallOpts = {}) {
@@ -481,8 +603,16 @@ export async function installMcpServers(opts: InstallOpts = {}) {
     const config = loadUnifiedMcp();
     let updated = false;
 
-    for (const { pkg, bin } of MCP_PACKAGES) {
+    const servers = asRecord(config.servers);
+
+    for (const { name, pkg, bin } of MCP_PACKAGES) {
         try {
+            const server = asRecord(servers[name]);
+            if (typeof server["url"] === 'string' && server["url"]) {
+                console.log(`[jaw:init] ⏭️  ${name} MCP (remote URL, no local install needed)`);
+                continue;
+            }
+
             const installedPath = findBinaryPath(bin);
             if (installedPath) {
                 console.log(`[jaw:init] ⏭️  ${bin} (already installed)`);
@@ -495,12 +625,11 @@ export async function installMcpServers(opts: InstallOpts = {}) {
             }
 
             console.log(`[jaw:init] 📦 npm i -g ${pkg} ...`);
-            execSync(`npm i -g ${pkg}`, { stdio: 'pipe', timeout: 120000 });
+            execSync(`npm i -g ${pkg}`, { stdio: 'pipe', timeout: 120000, env: postinstallExecEnv() });
 
             const binPath = findBinaryPath(bin) || bin;
             console.log(`[jaw:init] ✅ ${bin} → ${binPath}`);
 
-            const servers = asRecord(config.servers);
             for (const srv of Object.values(servers).map(asRecord)) {
                 const args = asArray(srv["args"]);
                 if (srv["command"] === 'npx' && args.includes(pkg)) {
@@ -538,7 +667,7 @@ export async function installSkillDeps(opts: InstallOpts = {}) {
     console.log('[jaw:init] checking skill dependencies...');
     for (const dep of SKILL_DEPS) {
         try {
-            execSync(dep.check, { stdio: 'pipe', timeout: 10000 });
+            execSync(dep.check, { stdio: 'pipe', timeout: 10000, env: postinstallExecEnv() });
             console.log(`[jaw:init] ⏭️  ${dep.name} (already installed)`);
         } catch {
             if (opts.dryRun) { console.log(`  [dry-run] would install ${dep.name} (${dep.why})`); continue; }
@@ -548,7 +677,7 @@ export async function installSkillDeps(opts: InstallOpts = {}) {
             }
             console.log(`[jaw:init] 📦 installing ${dep.name} (${dep.why})...`);
             try {
-                execSync(dep.install, { stdio: 'pipe', timeout: 120000 });
+                execSync(dep.install, { stdio: 'pipe', timeout: 120000, env: postinstallExecEnv() });
                 console.log(`[jaw:init] ✅ ${dep.name} installed`);
             } catch (e) {
                 console.error(`[jaw:init] ⚠️  ${dep.name}: auto-install failed — install manually:`);
@@ -641,12 +770,20 @@ export async function runPostinstall() {
     copyDefaultSkills();
     propagateSkillsToInstances();
 
-    // 7-9. Install MCP servers, skill deps, officecli runtime. CLI tools are opt-in:
-    // postinstall must not update or uninstall user-managed agent CLIs unexpectedly.
+    // 7-9. Install MCP servers, skill deps, officecli runtime. Claude is the default
+    // agent CLI, so keep it spawnable; other agent CLIs remain opt-in.
     if (shouldInstallCliToolsDuringPostinstall()) {
         await installCliTools();
     } else {
-        console.log('[jaw:init] CLI tool install/update skipped by default');
+        if (shouldInstallClaudeDuringPostinstall()) {
+            const ok = installClaudeCli({ force: shouldForceClaudeDuringPostinstall() });
+            if (!ok && shouldRequireCliToolsDuringPostinstall()) {
+                throw new Error('Required CLI tool install failed: claude (native installer)');
+            }
+        } else {
+            console.log('[jaw:init] claude install skipped (CLI_JAW_SKIP_CLAUDE)');
+        }
+        console.log('[jaw:init] additional CLI tool install/update skipped by default');
         console.log('[jaw:init] to opt in: CLI_JAW_INSTALL_CLI_TOOLS=1 npm install -g cli-jaw');
     }
     await installMcpServers();

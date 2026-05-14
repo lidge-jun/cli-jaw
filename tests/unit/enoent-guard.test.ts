@@ -87,6 +87,24 @@ test('EG-004: standard CLI spawn uses shell:true on win32', () => {
     );
 });
 
+test('EG-004b: Windows standard CLI spawn honors detected absolute paths before PATH shims', () => {
+    const stdBranchIdx = spawnSrc.indexOf('// ─── Standard CLI branch');
+    const block = spawnSrc.slice(stdBranchIdx, stdBranchIdx + 1400);
+
+    assert.ok(
+        block.includes('detected.path || cli'),
+        'Windows and Unix spawn command should use detected.path when available',
+    );
+    assert.ok(
+        !block.includes("process.platform === 'win32' ? cli"),
+        'Windows spawn must not ignore detected.path and fall back to raw PATH lookup',
+    );
+    assert.ok(
+        block.includes("!spawnCommand.toLowerCase().endsWith('.exe')"),
+        'Windows native .exe paths should not need shell:true shim resolution',
+    );
+});
+
 // ─── EG-005: stdSettled guard prevents error→close double execution ───
 
 test('EG-005: stdSettled guard exists in both error and close handlers', () => {

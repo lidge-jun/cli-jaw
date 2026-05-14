@@ -61,12 +61,23 @@ test('prioritizeCliCandidates moves bun shims behind managed node bins for claud
     assert.deepEqual(result, [nvmClaude, otherClaude, bunClaude]);
 });
 
-test('prioritizeCliCandidates keeps PATH order for codex/gemini/copilot/opencode (no bun deprio)', () => {
+test('prioritizeCliCandidates moves native Claude before nvm/npm and bun shims', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-cli-detect-home-'));
+    const nvmClaude = path.join(home, '.nvm', 'versions', 'node', 'v22.18.0', 'bin', 'claude');
+    const nativeClaude = path.join(home, '.local', 'bin', 'claude');
+    const bunClaude = path.join(home, '.bun', 'bin', 'claude');
+
+    const result = prioritizeCliCandidates('claude', [nvmClaude, nativeClaude, bunClaude], home);
+
+    assert.deepEqual(result, [nativeClaude, nvmClaude, bunClaude]);
+});
+
+test('prioritizeCliCandidates moves bun shims behind managed node bins for npm-managed agent CLIs', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-cli-detect-home-'));
     for (const cli of ['codex', 'gemini', 'copilot', 'opencode']) {
         const bunPath = path.join(home, '.bun', 'bin', cli);
         const nvmPath = path.join(home, '.nvm', 'versions', 'node', 'v22.18.0', 'bin', cli);
         const result = prioritizeCliCandidates(cli, [bunPath, nvmPath], home);
-        assert.deepEqual(result, [bunPath, nvmPath], `${cli} order should be unchanged`);
+        assert.deepEqual(result, [nvmPath, bunPath], `${cli} should prefer npm-managed binary over bun shim`);
     }
 });

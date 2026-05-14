@@ -14,7 +14,9 @@ export function classifyClaudeInstall(binaryPath: string | null): ClaudeInstallK
 
     const nativeDirs = [
         path.join(os.homedir(), '.local', 'bin', 'claude'),
+        path.join(os.homedir(), '.local', 'bin', 'claude.exe'),
         path.join(os.homedir(), '.claude', 'local', 'bin', 'claude'),
+        path.join(os.homedir(), '.claude', 'local', 'bin', 'claude.exe'),
     ];
     if (nativeDirs.includes(binaryPath)) return 'native';
 
@@ -24,6 +26,7 @@ export function classifyClaudeInstall(binaryPath: string | null): ClaudeInstallK
             return 'node-managed';
         }
         if (real.includes(`${path.sep}.claude${path.sep}local${path.sep}`)) return 'native';
+        if (real.includes(`${path.sep}.local${path.sep}bin${path.sep}claude`)) return 'native';
     } catch {
         // best-effort classification only
     }
