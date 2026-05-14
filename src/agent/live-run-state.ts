@@ -1,10 +1,15 @@
-import { sanitizeToolLogEntry, sanitizeToolLogForDurableStorage } from '../shared/tool-log-sanitize.js';
+import {
+    sanitizeToolLogEntry,
+    sanitizeToolLogForDurableStorage,
+    type SanitizableToolLogEntry,
+    type SanitizedToolLogEntry,
+} from '../shared/tool-log-sanitize.js';
 
 export type LiveRunEntry = {
     running: boolean;
     cli?: string;
     text: string;
-    toolLog: any[];
+    toolLog: SanitizedToolLogEntry[];
     startedAt?: number;
 };
 
@@ -40,7 +45,7 @@ export function appendLiveRunText(scope: string, text: string): void {
     current.text += text;
 }
 
-export function replaceLiveRunTools(scope: string, toolLog: any[]): void {
+export function replaceLiveRunTools(scope: string, toolLog: unknown[]): void {
     const current = liveRuns.get(scope);
     if (!current?.running) return;
     const sanitized = sanitizeToolLogForDurableStorage(toolLog);
@@ -48,7 +53,7 @@ export function replaceLiveRunTools(scope: string, toolLog: any[]): void {
     current.toolLog = sanitized;
 }
 
-export function appendLiveRunTool(scope: string, tool: any): void {
+export function appendLiveRunTool(scope: string, tool: SanitizableToolLogEntry): void {
     const current = liveRuns.get(scope);
     if (!current?.running) return;
     current.toolLog.push(sanitizeToolLogEntry(tool));
