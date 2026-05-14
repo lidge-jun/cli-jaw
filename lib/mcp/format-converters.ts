@@ -8,9 +8,13 @@ import os from 'os';
 import { join, dirname } from 'path';
 
 type McpServerConfig = {
+    type?: string;
+    url?: string;
     command?: string;
     args?: string[];
     env?: Record<string, unknown>;
+    headers?: Record<string, unknown>;
+    oauth?: Record<string, unknown>;
 };
 
 type UnifiedMcpConfig = {
@@ -21,12 +25,26 @@ function getServers(config: UnifiedMcpConfig): Record<string, McpServerConfig> {
     return config.servers ?? {};
 }
 
+function tomlString(value: string): string {
+    return JSON.stringify(value);
+}
+
 // ─── Convert to CLI-specific formats ───────────────
 
 /** → Claude Code / Gemini CLI format (.mcp.json / settings.json mcpServers block) */
 export function toClaudeMcp(config: UnifiedMcpConfig) {
     const mcpServers: Record<string, McpServerConfig> = {};
     for (const [name, srv] of Object.entries(getServers(config))) {
+        if (srv.url) {
+            mcpServers[name] = {
+                type: srv.type || 'http',
+                url: srv.url,
+            };
+            if (srv.headers && Object.keys(srv.headers).length) mcpServers[name]!.headers = srv.headers;
+            if (srv.oauth && Object.keys(srv.oauth).length) mcpServers[name]!.oauth = srv.oauth;
+            continue;
+        }
+
         mcpServers[name] = { args: srv.args || [] };
         if (srv.command !== undefined) mcpServers[name]!.command = srv.command;
         if (srv.env && Object.keys(srv.env).length) mcpServers[name]!.env = srv.env;
@@ -39,12 +57,18 @@ export function toCodexToml(config: UnifiedMcpConfig) {
     let toml = '';
     for (const [name, srv] of Object.entries(getServers(config))) {
         toml += `[mcp_servers.${name}]\n`;
-        toml += `command = "${srv.command || ''}"\n`;
+        if (srv.url) {
+            toml += `url = ${tomlString(srv.url)}\n`;
+            toml += '\n';
+            continue;
+        }
+
+        toml += `command = ${tomlString(srv.command || '')}\n`;
         toml += `args = ${JSON.stringify(srv.args || [])}\n`;
         if (srv.env && Object.keys(srv.env).length) {
             toml += `[mcp_servers.${name}.env]\n`;
             for (const [k, v] of Object.entries(srv.env)) {
-                toml += `${k} = "${String(v)}"\n`;
+                toml += `${k} = ${tomlString(String(v))}\n`;
             }
         }
         toml += '\n';
@@ -54,13 +78,23 @@ export function toCodexToml(config: UnifiedMcpConfig) {
 
 /** → OpenCode opencode.json mcp block */
 export function toOpenCodeMcp(config: UnifiedMcpConfig) {
-    const mcp: Record<string, { type: 'local'; command: string[]; environment?: Record<string, unknown> }> = {};
+    const mcp: Record<string, { type: 'local'; command: string[]; environment?: Record<string, unknown> } | { type: 'remote'; url: string; enabled: boolean }> = {};
     for (const [name, srv] of Object.entries(getServers(config))) {
-        mcp[name] = {
+        if (srv.url) {
+            mcp[name] = {
+                type: 'remote',
+                url: srv.url,
+                enabled: true,
+            };
+            continue;
+        }
+
+        const localServer: { type: 'local'; command: string[]; environment?: Record<string, unknown> } = {
             type: 'local',
             command: [srv.command || '', ...(srv.args || [])],
         };
-        if (srv.env && Object.keys(srv.env).length) mcp[name]!.environment = srv.env;
+        if (srv.env && Object.keys(srv.env).length) localServer.environment = srv.env;
+        mcp[name] = localServer;
     }
     return mcp;
 }

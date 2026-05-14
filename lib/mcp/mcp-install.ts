@@ -9,6 +9,7 @@ const NPX_TO_GLOBAL = {
 } satisfies Record<string, { pkg: string; bin: string }>;
 
 type McpInstallServer = {
+    url?: string;
     command?: string;
     args?: string[];
 };
@@ -49,6 +50,12 @@ export async function installMcpServers(config: McpInstallConfig) {
     };
 
     for (const [name, srv] of Object.entries(config.servers || {})) {
+        // URL-based remote servers do not need a local binary.
+        if (srv.url) {
+            results[name] = { status: 'skip', reason: 'remote url' };
+            continue;
+        }
+
         // Skip already-global servers
         if (srv.command !== 'npx' && srv.command !== 'uv' && srv.command !== 'uvx') {
             results[name] = { status: 'skip', reason: 'already global' };

@@ -10,9 +10,13 @@ import { JAW_HOME } from './skills-utils.js';
 const MCP_PATH = join(JAW_HOME, 'mcp.json');
 
 type McpServerConfig = {
-    command: string;
+    type?: string;
+    url?: string;
+    command?: string;
     args?: string[];
     env?: Record<string, unknown>;
+    headers?: Record<string, unknown>;
+    oauth?: Record<string, unknown>;
 };
 
 type UnifiedMcpConfig = {
@@ -22,8 +26,8 @@ type UnifiedMcpConfig = {
 // ─── Default MCP servers ───────────────────────────
 const DEFAULT_MCP_SERVERS = {
     context7: {
-        command: 'npx',
-        args: ['-y', '@upstash/context7-mcp'],
+        type: 'http',
+        url: 'https://mcp.context7.com/mcp',
     },
 };
 
@@ -52,9 +56,13 @@ export function importFromClaudeMcp(filePath: string) {
         const servers: Record<string, McpServerConfig> = {};
         for (const [name, srv] of Object.entries(input.mcpServers || {})) {
             servers[name] = {
-                command: typeof srv.command === 'string' ? srv.command : '',
+                ...(typeof srv.type === 'string' ? { type: srv.type } : {}),
+                ...(typeof srv.url === 'string' ? { url: srv.url } : {}),
+                ...(typeof srv.command === 'string' ? { command: srv.command } : {}),
                 args: srv.args || [],
                 ...(srv.env && Object.keys(srv.env).length ? { env: srv.env } : {}),
+                ...(srv.headers && Object.keys(srv.headers).length ? { headers: srv.headers } : {}),
+                ...(srv.oauth && Object.keys(srv.oauth).length ? { oauth: srv.oauth } : {}),
             };
         }
         return { servers };
