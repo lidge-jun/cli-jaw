@@ -417,14 +417,14 @@ export function setQueueHold(id: string): void {
     console.log(`[queue:hold] set for ${id}`);
 }
 
-export function clearQueueHold(id?: string): void {
+export function clearQueueHold(id?: string, opts?: { resume?: boolean }): void {
     if (id && queueHoldId !== id) return;
     if (queueHoldTimer) clearTimeout(queueHoldTimer);
     queueHoldTimer = null;
     const hadHold = queueHoldId !== null;
     if (hadHold) console.log(`[queue:hold] cleared (was ${queueHoldId})`);
     queueHoldId = null;
-    if (hadHold) queueMicrotask(() => processQueue());
+    if (hadHold && (opts?.resume ?? true)) queueMicrotask(() => processQueue());
 }
 
 export function getQueueHoldId(): string | null {

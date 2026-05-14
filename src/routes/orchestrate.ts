@@ -143,7 +143,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
             await waitForProcessEnd(3000);
         }
         const result = removeQueuedMessage(id);
-        clearQueueHold(id);
+        clearQueueHold(id, { resume: false });
         if (!result.removed) return fail(res, 404, 'queued item disappeared during steer');
         try {
             insertMessage.run('user', prompt, origin, '', settings["workingDir"] || null);
