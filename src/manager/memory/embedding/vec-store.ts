@@ -20,9 +20,11 @@ export interface VecSearchHit extends VecChunk {
 export class VecStore {
   private db: Database.Database;
   readonly dimensions: number;
+  readonly dbPath: string;
 
   constructor(dbPath: string, dimensions: number) {
     this.dimensions = dimensions;
+    this.dbPath = dbPath;
     this.db = new Database(dbPath);
     sqliteVec.load(this.db);
     this.db.pragma('journal_mode = WAL');
@@ -137,6 +139,55 @@ export class VecStore {
       sourceEndLine: r.source_end_line,
       distance: r.distance,
     }));
+  }
+
+  searchScoped(queryEmbedding: Float32Array, topK: number, instanceIds: string[]): VecSearchHit[] {
+    if (instanceIds.length === 0) return this.search(queryEmbedding, topK);
+    const buf = Buffer.from(queryEmbedding.buffer, queryEmbedding.byteOffset, queryEmbedding.byteLength);
+    const placeholders = instanceIds.map(() => '?').join(',');
+    const rows = this.db.prepare(`
+      SELECT v.rowid, v.distance, m.instance_id, m.chunk_id, m.relpath, m.kind,
+             m.content_hash, m.snippet, m.source_start_line, m.source_end_line
+      FROM vec_chunks v
+      JOIN vec_meta m ON m.rowid = v.rowid
+      WHERE v.embedding MATCH ?
+        AND m.instance_id IN (${placeholders})
+      ORDER BY v.distance
+      LIMIT ?
+    `).all(buf, ...instanceIds, topK) as Array<any>;
+    return rows.map(r => ({
+      chunkId: r.chunk_id,
+      instanceId: r.instance_id,
+      relpath: r.relpath,
+      kind: r.kind,
+      contentHash: r.content_hash,
+      snippet: r.snippet,
+      sourceStartLine: r.source_start_line,
+      sourceEndLine: r.source_end_line,
+      distance: r.distance,
+    }));
+  }
+
+  getExistingHashesByRelpath(instanceId: string, relpath: string): Map<number, { contentHash: string; rowid: number }> {
+    const rows = this.db.prepare(
+      'SELECT rowid, chunk_id, content_hash FROM vec_meta WHERE instance_id = ? AND relpath = ?'
+    ).all(instanceId, relpath) as Array<{ rowid: number; chunk_id: number; content_hash: string }>;
+    const map = new Map<number, { contentHash: string; rowid: number }>();
+    for (const r of rows) {
+      map.set(r.chunk_id, { contentHash: r.content_hash, rowid: r.rowid });
+    }
+    return map;
+  }
+
+  getStats(): { totalChunks: number; instances: number; dbSizeBytes: number } {
+    const countRow = this.db.prepare('SELECT COUNT(*) as cnt FROM vec_meta').get() as { cnt: number };
+    const instRow = this.db.prepare('SELECT COUNT(DISTINCT instance_id) as cnt FROM vec_meta').get() as { cnt: number };
+    let dbSizeBytes = 0;
+    try {
+      const { statSync } = require('fs');
+      dbSizeBytes = statSync(this.dbPath).size;
+    } catch {}
+    return { totalChunks: countRow.cnt, instances: instRow.cnt, dbSizeBytes };
   }
 
   getConfig(key: string): string | undefined {

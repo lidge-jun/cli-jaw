@@ -1,0 +1,92 @@
+.embed-stepper {
+    display: flex;
+    gap: 4px;
+    padding: 10px 0 16px;
+    overflow-x: auto;
+}
+
+.embed-step {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+}
+
+.embed-step.is-done {
+    color: var(--text-primary);
+    border-color: rgba(50, 200, 110, 0.5);
+    background: rgba(50, 200, 110, 0.06);
+}
+
+.embed-step.is-active {
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+    background: var(--surface-raised);
+    font-weight: 600;
+}
+
+.embed-step-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 600;
+    background: var(--surface-raised);
+    color: var(--text-secondary);
+}
+
+.embed-step.is-done .embed-step-badge {
+    background: rgba(50, 200, 110, 0.15);
+    color: #32c86e;
+}
+
+.embed-step.is-active .embed-step-badge {
+    background: var(--text-primary);
+    color: var(--surface-base);
+}
+
+.embed-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.embed-progress-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--surface-raised);
+    overflow: hidden;
+}
+
+.embed-progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--text-primary);
+    transition: width 0.3s ease;
+}
+
+.embed-status-grid {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 4px 12px;
+    font-size: 12px;
+    margin: 0;
+}
+
+.embed-status-grid dt {
+    color: var(--text-secondary);
+}
+
+.embed-status-grid dd {
+    margin: 0;
+    color: var(--text-primary);
+}

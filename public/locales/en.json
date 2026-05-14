@@ -64,6 +64,8 @@
     "cmd.mcp.syncDone": "MCP sync complete ({count} targets)",
     "cmd.mcp.installDone": "MCP install complete ({count} servers)",
     "cmd.memory.empty": "No memory files.",
+    "cmd.memory.embed.status": "Embedding status",
+    "cmd.memory.embed.estimate": "Embedding estimate",
     "cmd.browser.noTabs": "No open tabs.",
     "cmd.fallback.inactive": "Fallback: disabled\nAvailable: {available}",
     "cmd.fallback.off": "Fallback disabled",

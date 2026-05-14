@@ -66,6 +66,42 @@ export async function memoryHandler(args: string[], ctx: CliCommandContext): Pro
             ].join('\n'),
         };
     }
+    if (sub === 'embed') {
+        try {
+            const { DASHBOARD_DEFAULT_PORT } = await import('../manager/constants.js');
+            const port = Number(process.env['DASHBOARD_PORT']) || Number(DASHBOARD_DEFAULT_PORT);
+            const action = String(args[1] || 'status').toLowerCase();
+            const url = `http://127.0.0.1:${port}/api/dashboard/memory`;
+            if (action === 'status' || action === 'state') {
+                const res = await fetch(`${url}/embed-state`, { signal: AbortSignal.timeout(5000) });
+                if (!res.ok) return { ok: false, text: `Embed state request failed: HTTP ${res.status}` };
+                const body = await res.json() as { ok: boolean; status: Record<string, unknown> };
+                const s = body.status || {};
+                return {
+                    ok: true,
+                    text: [
+                        `🔍 Embedding: ${s['state'] || 'OFF'}`,
+                        `Mode: ${s['mode'] || '-'}  Provider: ${s['provider'] || '-'}/${s['model'] || '-'}`,
+                        `Chunks: ${s['indexedChunks'] || 0}  DB: ${Number(s['dbSizeBytes'] || 0) > 0 ? ((Number(s['dbSizeBytes'])) / 1024 / 1024).toFixed(1) + ' MB' : '-'}`,
+                        `Last sync: ${s['lastSyncAt'] || 'never'}`,
+                        s['fallback'] ? `Fallback: ${s['reason']}` : '',
+                    ].filter(Boolean).join('\n'),
+                };
+            }
+            if (action === 'estimate') {
+                const res = await fetch(`${url}/embed-estimate`, { signal: AbortSignal.timeout(5000) });
+                if (!res.ok) return { ok: false, text: `Estimate request failed: HTTP ${res.status}` };
+                const e = await res.json() as Record<string, unknown>;
+                return {
+                    ok: true,
+                    text: `📊 ${e['totalChunks']} chunks · ${e['batches']} batches · ~${Math.ceil(Number(e['estimatedSeconds']))}s · $${Number(e['estimatedCost'] || 0).toFixed(4)}`,
+                };
+            }
+            return { ok: false, text: 'Usage: /memory embed [status|estimate]' };
+        } catch (err) {
+            return { ok: false, text: `❌ Embed: ${(err as Error).message}` };
+        }
+    }
     if (sub === 'flush') {
         try {
             const { triggerMemoryFlush } = await import('../agent/memory-flush-controller.js');

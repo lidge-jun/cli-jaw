@@ -5,5 +5,6 @@ export { setDiscord, setDiscordForwardAll, setDiscordAllowBots, setDiscordMentio
 export { setActiveChannel, loadFallbackOrder, saveFallbackOrder } from './settings-channel.js';
 export { loadMcpServers, syncMcpServers, installMcpGlobal } from './settings-mcp.js';
 export { loadCliStatus, scheduleCliStatusRefresh, setCliStatusInterval } from './settings-cli-status.js';
+export { initCliStatusToggle, isCliStatusExpanded, expandCliStatus } from './settings-cli-status.js';
 export { initSttSettings } from './settings-stt.js';
 export { openPromptModal, closePromptModal, savePromptFromModal, openTemplateModal, saveTemplateFromModal, closeTemplateModal, templateGoBack, toggleDevMode } from './settings-templates.js';

@@ -90,6 +90,12 @@ export function toggleRight(): void {
     } else {
         document.body.classList.toggle('right-collapsed');
     }
+    if (isRightOpen()) {
+        const agentsTab = document.getElementById('tabAgents');
+        if (agentsTab?.classList.contains('active')) {
+            void import('./employees.js').then(m => m.loadEmployees(true));
+        }
+    }
     save();
     syncIcons();
 }
@@ -99,7 +105,7 @@ function isLeftOpen(): boolean {
     return !document.body.classList.contains('left-collapsed');
 }
 
-function isRightOpen(): boolean {
+export function isRightOpen(): boolean {
     if (isNarrow()) return document.body.classList.contains('right-expanded');
     return !document.body.classList.contains('right-collapsed');
 }

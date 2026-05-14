@@ -62,6 +62,10 @@ function printHelp(): void {
     jaw dashboard memory read <instanceId>:<relpath>
     jaw dashboard memory instances
     jaw dashboard memory list
+    jaw dashboard memory state           embedding status
+    jaw dashboard memory estimate        embedding cost estimate
+    jaw dashboard memory config [get|set] embedding config
+    jaw dashboard memory reindex --embedding
 
   Options:
     --instance <ids>   comma-separated instance IDs to restrict the search
@@ -132,6 +136,24 @@ export async function handleMemory(argvFromSwitch: string[]): Promise<void> {
             case 'config':
                 await handleEmbedConfig(positionals);
                 return;
+            case 'state':
+            case 'embed-state': {
+                const body = await callDashboard<{ ok: boolean; status: Record<string, unknown> }>('/embed-state');
+                const data = body.status || {};
+                if (values.json) { console.log(JSON.stringify(data, null, 2)); return; }
+                console.log(`State: ${data['state'] || 'OFF'}  Mode: ${data['mode'] || '-'}`);
+                console.log(`Provider: ${data['provider'] || '-'}/${data['model'] || '-'}`);
+                console.log(`Chunks: ${data['indexedChunks'] || 0}  DB: ${Number(data['dbSizeBytes'] || 0) > 0 ? ((Number(data['dbSizeBytes'])) / 1024 / 1024).toFixed(1) + ' MB' : '-'}`);
+                console.log(`Last sync: ${data['lastSyncAt'] || 'never'}`);
+                return;
+            }
+            case 'estimate':
+            case 'embed-estimate': {
+                const data = await callDashboard<Record<string, unknown>>('/embed-estimate');
+                if (values.json) { console.log(JSON.stringify(data, null, 2)); return; }
+                console.log(`Chunks: ${data['totalChunks']}  Batches: ${data['batches']}  ~${Math.ceil(Number(data['estimatedSeconds']))}s  $${Number(data['estimatedCost'] || 0).toFixed(4)}`);
+                return;
+            }
             case 'reindex':
                 await handleReindex(rest);
                 return;

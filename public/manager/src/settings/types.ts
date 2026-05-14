@@ -16,6 +16,7 @@ export type SettingsCategoryId =
     | 'prompts'
     | 'mcp'
     | 'browser'
+    | 'embedding'
     | 'dashboard-meta'
     | 'advanced-export';
 

@@ -38,8 +38,9 @@ import { RemindersStore } from './reminders/store.js';
 import { startRemindersScheduler } from './reminders/scheduler.js';
 import { createDashboardConnectorRouter } from './connector/routes.js';
 import { createDashboardMemoryRouter } from './routes/dashboard-memory.js';
-import { VecStore, getVecDbPath } from './memory/embedding/index.js';
+import { VecStore, getVecDbPath, createProvider, syncAllInstances } from './memory/embedding/index.js';
 import type { EmbeddingConfig } from './memory/embedding/index.js';
+import { addBroadcastListener } from '../core/bus.js';
 import { resolveDashboardHome } from './dashboard-home.js';
 import { fetchWorkerAssistantTextById } from './worker-messages.js';
 import { openUrlInBrowser } from '../core/browser-open.js';
@@ -171,9 +172,7 @@ function loadEmbeddingConfig(): EmbeddingConfig | null {
     const p = join(dashboardHome, 'embedding.json');
     if (!existsSync(p)) return null;
     try {
-        const raw = JSON.parse(readFileSync(p, 'utf8'));
-        if (!raw.enabled) return null;
-        return raw as EmbeddingConfig;
+        return JSON.parse(readFileSync(p, 'utf8')) as EmbeddingConfig;
     } catch { return null; }
 }
 
@@ -211,6 +210,48 @@ app.use('/api/dashboard/memory', createDashboardMemoryRouter({
     vecStore: () => getVecStore(loadEmbeddingConfig()),
     dashboardHome,
 }));
+
+// Embedding auto-sync: debounced incremental sync on memory saves
+let embeddingSyncTimeout: ReturnType<typeof setTimeout> | null = null;
+addBroadcastListener((type, data) => {
+    if (type !== 'memory_status' || data['reason'] !== 'save') return;
+    const config = loadEmbeddingConfig();
+    if (!config?.enabled) return;
+    const vec = getVecStore(config);
+    if (!vec) return;
+    if (embeddingSyncTimeout) clearTimeout(embeddingSyncTimeout);
+    embeddingSyncTimeout = setTimeout(async () => {
+        embeddingSyncTimeout = null;
+        try {
+            const provider = await createProvider(config);
+            const scan = await memoryScanSupplier();
+            const { listSearchableInstancesFromScan } = await import('./memory/instance-discovery.js');
+            const instances = listSearchableInstancesFromScan(scan);
+            await syncAllInstances({ instances, vecStore: vec, provider });
+            vec.setConfig('lastSyncAt', new Date().toISOString());
+        } catch (err) {
+            console.error('[embedding] auto-sync failed:', err);
+        }
+    }, 2000);
+});
+
+// 30-minute background catchall sync
+setInterval(async () => {
+    const config = loadEmbeddingConfig();
+    if (!config?.enabled) return;
+    const vec = getVecStore(config);
+    if (!vec) return;
+    try {
+        const provider = await createProvider(config);
+        const scan = await memoryScanSupplier();
+        const { listSearchableInstancesFromScan } = await import('./memory/instance-discovery.js');
+        const instances = listSearchableInstancesFromScan(scan);
+        await syncAllInstances({ instances, vecStore: vec, provider });
+        vec.setConfig('lastSyncAt', new Date().toISOString());
+    } catch (err) {
+        console.error('[embedding] background sync failed:', err);
+    }
+}, 30 * 60 * 1000);
 
 let stopRemindersScheduler: (() => void) | null = null;
 

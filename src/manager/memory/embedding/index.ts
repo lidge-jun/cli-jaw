@@ -1,6 +1,10 @@
-export { createProvider, DEFAULT_EMBEDDING_CONFIG } from './provider.js';
+export { createProvider, DEFAULT_EMBEDDING_CONFIG, VALID_PROVIDERS, PROVIDER_PRESETS } from './provider.js';
 export type { EmbeddingProvider, EmbeddingConfig } from './provider.js';
 export { VecStore, getVecDbPath } from './vec-store.js';
 export type { VecChunk, VecSearchHit } from './vec-store.js';
-export { syncAllInstances } from './sync.js';
+export { syncAllInstances, syncSingleFile } from './sync.js';
 export type { SyncResult, SyncOptions } from './sync.js';
+export { hybridMerge } from './hybrid-search.js';
+export type { HybridHit } from './hybrid-search.js';
+export { getEmbeddingState } from './state-machine.js';
+export type { EmbeddingState, EmbeddingStatus } from './state-machine.js';

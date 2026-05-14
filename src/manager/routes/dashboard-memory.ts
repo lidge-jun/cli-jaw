@@ -6,9 +6,11 @@ import { listSearchableInstancesFromScan } from '../memory/instance-discovery.js
 import type { ScanItemForFederation } from '../memory/types.js';
 import { resolveStructuredMemoryDir } from '../../memory/shared.js';
 import { isExpectedHostHeader, isAllowedOriginHeader } from '../security.js';
-import { VecStore, getVecDbPath, createProvider, syncAllInstances } from '../memory/embedding/index.js';
+import { VecStore, getVecDbPath, createProvider, syncAllInstances, VALID_PROVIDERS } from '../memory/embedding/index.js';
 import type { EmbeddingConfig } from '../memory/embedding/index.js';
 import { hybridMerge } from '../memory/embedding/hybrid-search.js';
+import { getEmbeddingState } from '../memory/embedding/state-machine.js';
+import Database from 'better-sqlite3';
 
 const MAX_QUERY_LEN = 256;
 const MAX_RESULT_LIMIT = 200;
@@ -81,7 +83,7 @@ export function createDashboardMemoryRouter(opts: DashboardMemoryRouterOptions):
                 const provider = await createProvider(embConfig);
                 const embedResult = await provider.embed([q]);
                 const queryVec = embedResult[0]!;
-                const vecHits = vec.search(queryVec, limit);
+                const vecHits = vec.searchScoped(queryVec, limit, targets.map(t => t.instanceId));
                 const hits = vecHits.map(v => ({
                     path: '',
                     relpath: v.relpath,
@@ -106,7 +108,7 @@ export function createDashboardMemoryRouter(opts: DashboardMemoryRouterOptions):
                 const provider = await createProvider(embConfig);
                 const embedResult = await provider.embed([q]);
                 const queryVec = embedResult[0]!;
-                const vecHits = vec.search(queryVec, limit * 2);
+                const vecHits = vec.searchScoped(queryVec, limit * 2, targets.map(t => t.instanceId));
                 const ftsWithInstance = ftsResult.hits.map(h => ({ ...h, instanceId: h.instanceId || 'default' }));
                 const merged = hybridMerge({ ftsHits: ftsWithInstance, vecHits, limit });
                 res.json({
@@ -186,13 +188,21 @@ export function createDashboardMemoryRouter(opts: DashboardMemoryRouterOptions):
 
     router.get('/embed-config', (_req, res) => {
         const config = opts.embeddingConfig();
-        res.json({ ok: true, config: config || null });
+        if (!config) { res.json({ ok: true, config: null }); return; }
+        const masked = {
+            ...config,
+            apiKey: undefined,
+            apiKeyPresent: !!config.apiKey,
+            apiKeySource: config.apiKey?.startsWith('$') ? 'env' : config.apiKey ? 'direct' : 'none',
+            apiKeyPreview: config.apiKey?.startsWith('$') ? config.apiKey : config.apiKey ? `${config.apiKey.slice(0, 6)}...` : '',
+        };
+        res.json({ ok: true, config: masked });
     });
 
     router.post('/embed-config', express.json(), async (req, res) => {
         try {
             const config = req.body as Partial<EmbeddingConfig>;
-            if (config.provider && !['openai', 'gemini', 'voyage', 'local'].includes(config.provider)) {
+            if (config.provider && !(VALID_PROVIDERS as readonly string[]).includes(config.provider)) {
                 res.status(400).json({ ok: false, code: 'invalid_provider' });
                 return;
             }
@@ -201,6 +211,18 @@ export function createDashboardMemoryRouter(opts: DashboardMemoryRouterOptions):
 
             const prev = opts.embeddingConfig();
             const providerChanged = prev && (prev.provider !== config.provider || prev.model !== config.model || prev.dimensions !== config.dimensions);
+
+            if (req.body.test) {
+                try {
+                    const fullConfig = { ...prev, ...config } as EmbeddingConfig;
+                    const provider = await createProvider(fullConfig);
+                    await provider.embed(['connection test']);
+                    res.json({ ok: true, saved: true, needsReindex: providerChanged || false, testResult: 'ok' });
+                } catch (testErr) {
+                    res.json({ ok: true, saved: true, needsReindex: providerChanged || false, testResult: 'fail', testError: String(testErr) });
+                }
+                return;
+            }
 
             res.json({ ok: true, saved: true, needsReindex: providerChanged || false });
         } catch (err) {
@@ -223,15 +245,117 @@ export function createDashboardMemoryRouter(opts: DashboardMemoryRouterOptions):
             const scan = await opts.scanSupplier();
             const instances = listSearchableInstancesFromScan(scan);
             const provider = await createProvider(embConfig);
+            vec.setConfig('provider', embConfig.provider);
+            vec.setConfig('model', embConfig.model);
             const results = await syncAllInstances({
                 instances,
                 vecStore: vec,
                 provider,
             });
+            vec.setConfig('lastSyncAt', new Date().toISOString());
             res.json({ ok: true, results });
         } catch (err) {
             res.status(500).json({ ok: false, error: String(err) });
         }
+    });
+
+    router.get('/embed-state', async (_req, res) => {
+        try {
+            const embConfig = opts.embeddingConfig();
+            const vec = opts.vecStore();
+            let totalSourceChunks = 0;
+            try {
+                const scan = await opts.scanSupplier();
+                const instances = listSearchableInstancesFromScan(scan);
+                for (const inst of instances) {
+                    if (!inst.hasDb) continue;
+                    try {
+                        const db = new Database(inst.dbPath, { readonly: true });
+                        const row = db.prepare('SELECT COUNT(*) as cnt FROM chunks').get() as { cnt: number };
+                        totalSourceChunks += row.cnt;
+                        db.close();
+                    } catch {}
+                }
+            } catch {}
+            const status = getEmbeddingState({
+                settings: embConfig,
+                vecStore: vec,
+                dashboardRunning: true,
+                totalSourceChunks,
+                lastTestResult: vec?.getConfig('testResult') as 'ok' | 'fail' | null ?? null,
+            });
+            res.json({ ok: true, status });
+        } catch (err) {
+            res.status(500).json({ ok: false, error: String(err) });
+        }
+    });
+
+    router.get('/embed-estimate', async (_req, res) => {
+        try {
+            const scan = await opts.scanSupplier();
+            const instances = listSearchableInstancesFromScan(scan);
+            let totalChunks = 0;
+            let totalChars = 0;
+            for (const inst of instances) {
+                if (!inst.hasDb) continue;
+                try {
+                    const db = new Database(inst.dbPath, { readonly: true });
+                    const row = db.prepare('SELECT COUNT(*) as cnt, SUM(LENGTH(content)) as chars FROM chunks').get() as { cnt: number; chars: number | null };
+                    totalChunks += row.cnt;
+                    totalChars += row.chars || 0;
+                    db.close();
+                } catch {}
+            }
+            const estimatedTokens = Math.ceil(totalChars / 3);
+            const batches = Math.ceil(totalChunks / 20);
+            const estimatedSeconds = Math.round(batches * 0.8);
+            const priceMap: Record<string, number> = { openai: 0.02, gemini: 0, voyage: 0.02, vertex: 0.000025, local: 0 };
+            const provider = opts.embeddingConfig()?.provider || 'openai';
+            const costPerMToken = priceMap[provider] ?? 0.02;
+            const estimatedCost = Math.round((estimatedTokens / 1_000_000) * costPerMToken * 10000) / 10000;
+
+            res.json({ ok: true, totalChunks, estimatedTokens, estimatedCost, batches, estimatedSeconds, provider });
+        } catch (err) {
+            res.status(500).json({ ok: false, error: String(err) });
+        }
+    });
+
+    router.get('/reindex-stream', async (_req, res) => {
+        const embConfig = opts.embeddingConfig();
+        if (!embConfig?.enabled) {
+            res.status(400).json({ ok: false, code: 'embedding_not_enabled' });
+            return;
+        }
+        const vec = opts.vecStore();
+        if (!vec) {
+            res.status(500).json({ ok: false, code: 'vecstore_not_initialized' });
+            return;
+        }
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
+
+        try {
+            const scan = await opts.scanSupplier();
+            const instances = listSearchableInstancesFromScan(scan);
+            const provider = await createProvider(embConfig);
+            vec.setConfig('provider', embConfig.provider);
+            vec.setConfig('model', embConfig.model);
+            const results = await syncAllInstances({
+                instances,
+                vecStore: vec,
+                provider,
+                onProgress: (instId, done, total) => {
+                    res.write(`data: ${JSON.stringify({ instanceId: instId, done, total })}\n\n`);
+                },
+            });
+            vec.setConfig('lastSyncAt', new Date().toISOString());
+            res.write(`data: ${JSON.stringify({ complete: true, results })}\n\n`);
+        } catch (err) {
+            res.write(`data: ${JSON.stringify({ error: String(err) })}\n\n`);
+        }
+        res.end();
     });
 
     return router;

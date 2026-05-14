@@ -12,6 +12,54 @@ const DEFAULT_CLI_STATUS_INTERVAL_SEC = 0;
 
 let cliStatusTimer: number | null = null;
 
+const CLI_STATUS_COLLAPSED_KEY = 'cliStatusCollapsed';
+
+function readCliStatusCollapsed(): boolean {
+    try { return localStorage.getItem(CLI_STATUS_COLLAPSED_KEY) === 'true'; }
+    catch { return false; }
+}
+
+function saveCliStatusCollapsed(collapsed: boolean): void {
+    try { localStorage.setItem(CLI_STATUS_COLLAPSED_KEY, collapsed ? 'true' : 'false'); }
+    catch { /* ignore */ }
+}
+
+let cliStatusExpanded = !readCliStatusCollapsed();
+
+export function isCliStatusExpanded(): boolean {
+    return cliStatusExpanded;
+}
+
+export function expandCliStatus(): void {
+    cliStatusExpanded = true;
+    const list = document.getElementById('cliStatusList');
+    const header = document.getElementById('cliStatusHeader');
+    if (list) list.style.display = 'block';
+    if (header) header.classList.add('expanded');
+    saveCliStatusCollapsed(false);
+    void loadCliStatus(true);
+}
+
+export function initCliStatusToggle(): void {
+    const header = document.getElementById('cliStatusHeader');
+    const list = document.getElementById('cliStatusList');
+    if (!header || !list) return;
+
+    if (!cliStatusExpanded) {
+        list.style.display = 'none';
+    } else {
+        header.classList.add('expanded');
+    }
+
+    header.addEventListener('click', () => {
+        cliStatusExpanded = !cliStatusExpanded;
+        list.style.display = cliStatusExpanded ? 'block' : 'none';
+        header.classList.toggle('expanded', cliStatusExpanded);
+        saveCliStatusCollapsed(!cliStatusExpanded);
+        if (cliStatusExpanded) void loadCliStatus(true);
+    });
+}
+
 function readCliStatusInterval(): number {
     const raw = Number(localStorage.getItem('cliStatusInterval') || DEFAULT_CLI_STATUS_INTERVAL_SEC);
     return CLI_STATUS_INTERVAL_VALUES.has(raw) ? raw : DEFAULT_CLI_STATUS_INTERVAL_SEC;
@@ -37,7 +85,7 @@ export function scheduleCliStatusRefresh(): void {
     if (interval <= 0) return;
 
     cliStatusTimer = window.setInterval(() => {
-        if (document.hidden || !document.hasFocus()) return;
+        if (document.hidden || !document.hasFocus() || !cliStatusExpanded) return;
         void loadCliStatus(true);
     }, interval * 1000);
 }
@@ -70,6 +118,8 @@ export function normalizeQuotaWindowLabel(cliName: string, label: string): strin
 }
 
 export async function loadCliStatus(force = false): Promise<void> {
+    if (!cliStatusExpanded && !force) return;
+
     const interval = readCliStatusInterval();
     if (!force && state.cliStatusCache && interval > 0 && (Date.now() - state.cliStatusTs) < interval * 1000) {
         renderCliStatus({ cliStatus: (state.cliStatusCache as Record<string, unknown>)?.['cliStatus'] as Record<string, { available: boolean }> | null, quota: (state.cliStatusCache as Record<string, unknown>)?.['quota'] as Record<string, QuotaEntry> | null });

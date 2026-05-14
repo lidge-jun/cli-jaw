@@ -52,6 +52,7 @@ import {
     onFlushCliChange, loadFlushAgentSidebar,
     closePromptModal, savePromptFromModal, syncMcpServers, installMcpGlobal,
     loadCliStatus, scheduleCliStatusRefresh, setCliStatusInterval,
+    initCliStatusToggle, isCliStatusExpanded, expandCliStatus,
     setTelegram, setForwardAll, setTelegramMentionOnly, saveTelegramSettings,
     setDiscord, setDiscordForwardAll, setDiscordAllowBots, setDiscordMentionOnly, saveDiscordSettings, setActiveChannel,
     saveFallbackOrder,
@@ -313,7 +314,10 @@ function bindPerCliControlEvents(): void {
 // MCP
 document.querySelector('[data-action="syncMcp"]')?.addEventListener('click', syncMcpServers);
 document.querySelector('[data-action="installMcp"]')?.addEventListener('click', installMcpGlobal);
-document.querySelector('[data-action="refreshCli"]')?.addEventListener('click', () => loadCliStatus(true));
+document.querySelector('[data-action="refreshCli"]')?.addEventListener('click', () => {
+    if (!isCliStatusExpanded()) expandCliStatus();
+    else loadCliStatus(true);
+});
 document.getElementById('cliStatusInterval')?.addEventListener('change', function (this: HTMLSelectElement) {
     setCliStatusInterval(this.value);
 });
@@ -462,15 +466,16 @@ async function bootstrap(): Promise<void> {
     await loadCommands();
     await loadSettings();
     loadFlushAgentSidebar();
-    loadCliStatus();
     scheduleCliStatusRefresh();
+    initCliStatusToggle();
+    if (isCliStatusExpanded()) loadCliStatus();
     // loadMessages() is handled by ws.js onopen (clear + reload)
+    initSidebar();
     loadEmployees();
     initHeartbeatBadge();
     void refreshMemorySidebar();
     initAppName();
     await initAvatar();
-    initSidebar();
     initMsgCopy();
     initGestures();
     try { sessionStorage.removeItem(STALE_BUNDLE_RELOAD_KEY); } catch {}

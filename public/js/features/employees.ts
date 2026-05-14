@@ -7,6 +7,7 @@ import { getAgentPhase } from '../ws.js';
 import { t } from './i18n.js';
 import { api, apiJson, apiFire } from '../api.js';
 import { ICONS } from '../icons.js';
+import { isRightOpen } from './sidebar.js';
 
 interface Employee {
     id: string;
@@ -57,7 +58,9 @@ function getDefaultEmployeeModel(cli: string, models: string[]): string {
     return models[0] || 'default';
 }
 
-export async function loadEmployees(): Promise<void> {
+export async function loadEmployees(force = false): Promise<void> {
+    if (!force && !isRightOpen()) return;
+
     const data = await api<Employee[]>('/api/employees');
     state.employees = data || [];
     renderEmployees();

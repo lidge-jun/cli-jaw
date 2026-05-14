@@ -64,6 +64,8 @@
     "cmd.mcp.syncDone": "MCP sync 완료 ({count} target)",
     "cmd.mcp.installDone": "MCP install 완료 ({count} server)",
     "cmd.memory.empty": "memory 파일이 없습니다.",
+    "cmd.memory.embed.status": "임베딩 상태",
+    "cmd.memory.embed.estimate": "임베딩 추정",
     "cmd.browser.noTabs": "열린 탭이 없습니다.",
     "cmd.fallback.inactive": "Fallback: 비활성화\n사용 가능: {available}",
     "cmd.fallback.off": "Fallback 비활성화됨",

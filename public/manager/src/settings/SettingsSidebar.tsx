@@ -21,6 +21,7 @@ const CATEGORIES: SidebarEntry[] = [
     { id: 'channels-discord', label: 'Channels — Discord', group: 'channels' },
     { id: 'heartbeat', label: 'Heartbeat & schedules', group: 'automation' },
     { id: 'memory', label: 'Memory', group: 'automation' },
+    { id: 'embedding', label: 'Embedding search', group: 'automation' },
     { id: 'speech', label: 'Speech & keys', group: 'integrations' },
     { id: 'prompts', label: 'Prompts', group: 'integrations' },
     { id: 'mcp', label: 'MCP servers', group: 'integrations' },
