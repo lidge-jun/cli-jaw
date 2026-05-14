@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { JAW_HOME, SETTINGS_PATH, DB_PATH, HEARTBEAT_JOBS_PATH, detectCli } from '../../src/core/config.js';
 import { detectSharedPathContamination } from '../../lib/mcp-sync.js';
+import { isDiscoverableSkillDirName } from '../../lib/mcp/skills-utils.js';
 import { classifyClaudeInstall } from '../../src/core/claude-install.js';
 import { readClaudeCreds } from '../../src/routes/quota.js';
 import { shouldShowHelp, printAndExit } from '../helpers/help.js';
@@ -274,7 +275,7 @@ check('Skills directory', () => {
     const skillsDir = settings?.skillsDir || path.join(JAW_HOME, 'skills');
     if (!fs.existsSync(skillsDir)) throw new Error('WARN: not found');
     const entries = fs.readdirSync(skillsDir, { withFileTypes: true })
-        .filter(d => d.isDirectory() && !d.name.startsWith('.'));
+        .filter(d => d.isDirectory() && isDiscoverableSkillDirName(d.name));
     if (entries.length === 0) {
         const refDir = path.join(JAW_HOME, 'skills_ref').replace(/\\/g, '/');
         throw new Error(
