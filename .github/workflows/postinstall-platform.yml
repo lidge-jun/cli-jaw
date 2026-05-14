@@ -1,0 +1,111 @@
+name: Postinstall Platform Checks
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - '.github/workflows/postinstall-platform.yml'
+      - 'bin/postinstall.ts'
+      - 'src/core/claude-install.ts'
+      - 'src/core/cli-detect.ts'
+      - 'src/core/runtime-path.ts'
+      - 'tests/unit/cli-detect.test.ts'
+      - 'tests/unit/safe-install.test.ts'
+      - 'package.json'
+      - 'package-lock.json'
+  pull_request:
+    paths:
+      - '.github/workflows/postinstall-platform.yml'
+      - 'bin/postinstall.ts'
+      - 'src/core/claude-install.ts'
+      - 'src/core/cli-detect.ts'
+      - 'src/core/runtime-path.ts'
+      - 'tests/unit/cli-detect.test.ts'
+      - 'tests/unit/safe-install.test.ts'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: postinstall-platform-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux postinstall policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Run postinstall policy tests
+        run: npx tsx --import ./tests/setup/test-home.ts --experimental-test-module-mocks --test tests/unit/cli-detect.test.ts tests/unit/safe-install.test.ts
+
+  windows-wsl:
+    name: Windows WSL postinstall policy
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup WSL
+        uses: Vampire/setup-wsl@v7
+        with:
+          distribution: Ubuntu-24.04
+          use-cache: 'false'
+          additional-packages: curl ca-certificates gnupg
+
+      - name: Install Node.js in WSL
+        shell: wsl-bash {0}
+        run: |
+          set -euo pipefail
+          curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+          node --version
+          npm --version
+
+      - name: Install dependencies in WSL
+        shell: wsl-bash {0}
+        env:
+          WIN_WORKSPACE: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          cd "$(wslpath "$WIN_WORKSPACE")"
+          npm ci --ignore-scripts
+
+      - name: Type check in WSL
+        shell: wsl-bash {0}
+        env:
+          WIN_WORKSPACE: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          cd "$(wslpath "$WIN_WORKSPACE")"
+          npx tsc --noEmit
+
+      - name: Run postinstall policy tests in WSL
+        shell: wsl-bash {0}
+        env:
+          WIN_WORKSPACE: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          cd "$(wslpath "$WIN_WORKSPACE")"
+          npx tsx --import ./tests/setup/test-home.ts --experimental-test-module-mocks --test tests/unit/cli-detect.test.ts tests/unit/safe-install.test.ts
