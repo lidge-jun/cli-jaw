@@ -117,6 +117,9 @@ function arm(id: string, action: Action): void {
     const timerId = setTimeout(() => fire(id, action), ARM_DELAY_MS);
     armed.set(key, { id, action, timerId });
     paintArmed(id, action);
+    if (action === 'steer') {
+        apiJson(`/api/orchestrate/queue/${encodeURIComponent(id)}/hold`, 'POST', {}).catch(() => {});
+    }
 }
 
 function cancelArm(id: string, action: Action): void {
@@ -126,6 +129,9 @@ function cancelArm(id: string, action: Action): void {
     clearTimeout(slot.timerId);
     armed.delete(key);
     unpaintArmed(id, action);
+    if (action === 'steer') {
+        apiJson(`/api/orchestrate/queue/${encodeURIComponent(id)}/hold`, 'DELETE', {}).catch(() => {});
+    }
 }
 
 async function fire(id: string, action: Action): Promise<void> {
