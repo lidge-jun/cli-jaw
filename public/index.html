@@ -211,13 +211,14 @@
             <button class="btn-voice" id="btnVoice" data-i18n-title="voice.start" title="음성 녹음"><span data-icon="mic"></span></button>
             <span class="voice-timer" id="voiceTimer" style="display:none">00:00</span>
             <button class="btn-voice-cancel" id="btnVoiceCancel" style="display:none" title="취소">✕</button>
-            <textarea class="chat-input" id="chatInput" rows="1" data-i18n-placeholder="input.placeholder"
-                placeholder="메시지 입력..." aria-label="Chat message input" aria-haspopup="listbox" aria-expanded="false"
-                aria-controls="cmdDropdown" aria-autocomplete="list" aria-activedescendant=""></textarea>
-            <button class="help-trigger" type="button" data-help-topic="chatInput"
-                data-i18n-aria="help.chatInput.aria" aria-label="채팅 입력 도움말">?</button>
-            <button class="help-trigger help-trigger--shortcut" type="button" data-help-topic="keyboardShortcuts"
-                data-i18n-aria="help.keyboardShortcuts.aria" aria-label="키보드 단축키 도움말"><span data-icon="key" aria-hidden="true"></span></button>
+            <div class="chat-input-shell">
+                <textarea class="chat-input" id="chatInput" rows="1" data-i18n-placeholder="input.placeholder"
+                    placeholder="메시지 입력..." aria-label="Chat message input" aria-haspopup="listbox" aria-expanded="false"
+                    aria-controls="cmdDropdown" aria-autocomplete="list" aria-activedescendant=""></textarea>
+                <button class="help-trigger chat-input-help-trigger" type="button" data-help-topic="chatInput"
+                    data-help-topics="chatInput keyboardShortcuts"
+                    data-i18n-aria="help.chatComposer.aria" aria-label="채팅 입력 및 키보드 단축키 도움말">?</button>
+            </div>
             <button class="btn-send" id="btnSend" aria-label="Send message"><span data-icon="send"></span></button>
         </div>
     </div>

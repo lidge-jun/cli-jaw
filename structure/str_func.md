@@ -59,7 +59,7 @@ cli-jaw/
 │   │   └── settings-merge.ts ← perCli/activeOverrides deep merge (52L)
 │   ├── agent/                ← CLI 에이전트 런타임 (15 files)
 │   │   ├── alert-escalation.ts ← alert escalation event helper (80L)
-│   │   ├── spawn.ts          ← CLI spawn + ACP 분기 + 큐 + 메모리 flush + 429 retry timer + isAgentBusy + buildHistoryBlock compact cutoff + working_dir scoping + enqueue→processQueue race fix + QueueItem persistent DB queue + makeCleanEnv PATH augment (1625L)
+│   │   ├── spawn.ts          ← CLI spawn + ACP 분기 + 큐 + 메모리 flush + 429 retry timer + isAgentBusy + buildHistoryBlock compact cutoff + working_dir scoping + enqueue→processQueue race fix + QueueItem persistent DB queue + makeCleanEnv PATH augment (1626L)
 │   │   ├── spawn-env.ts      ← spawn용 child env 빌더 (OpenCode/Gemini permissions config 주입 등, 141L)
 │   │   ├── args.ts           ← CLI별 인자 빌더 (183L)
 │   │   ├── error-classifier.ts ← stderr/result 기반 에러 분류 헬퍼 (38L)
@@ -72,7 +72,7 @@ cli-jaw/
 │   │   ├── smoke-detector.ts ← smoke response 감지 + auto-continue 판단 (141L)
 │   │   ├── tool-timeout.ts   ← tool inactivity timeout helper (33L)
 │   │   ├── watchdog.ts       ← idle/progress watchdog + 4h absolute hard cap with progress deadline extension (104L)
-│   │   └── events.ts         ← NDJSON 파서 + ACP update + logEventSummary + summarizeToolInput(type-safe) + toolType/detail 필드 + Claude thinking_delta/input_json_delta 버퍼 + flushClaudeBuffers + stepRef correlation + compact event parsing + Codex toolLog running→done dedup (1526L)
+│   │   └── events.ts         ← NDJSON 파서 + ACP update + logEventSummary + summarizeToolInput(type-safe) + toolType/detail 필드 + Claude thinking_delta/input_json_delta 버퍼 + flushClaudeBuffers + stepRef correlation + compact event parsing + Codex toolLog running→done dedup (1554L)
 │   ├── messaging/            ← 통합 메시징 런타임 (신규)
 │   │   ├── runtime.ts        ← 채널 lifecycle (init/shutdown/restart) + transport registry (146L)
 │   │   ├── send.ts           ← 통합 아웃바운드 메시지 라우팅 (ChannelSendRequest) (147L)
@@ -308,7 +308,7 @@ cli-jaw/
 │       ├── policy.ts         ← getVisibleCommands, getTelegramMenuCommands (39L)
 │       └── help-renderer.ts  ← renderHelp list/detail mode (44L)
 ├── public/                   ← Web UI (Vite 8 + ES Modules, 481 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 458 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~66612L)
-│   ├── index.html            ← 뼈대 (888L, CLI-JAW 대문자 로고, pill theme switch, data-i18n, 로컬 avatar 입력)
+│   ├── index.html            ← 뼈대 (889L, CLI-JAW 대문자 로고, pill theme switch, data-i18n, 로컬 avatar 입력)
 │   ├── manifest.json         ← PWA 매니페스트 (20L) ✨
 │   ├── sw.js                 ← Service Worker 오프라인 캐시 (104L) ✨
 │   ├── icons/                ← PWA 아이콘 세트 ✨

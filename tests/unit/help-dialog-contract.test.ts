@@ -13,6 +13,7 @@ const dialogPath = join(root, 'public/js/features/help-dialog.ts');
 const mainPath = join(root, 'public/js/main.ts');
 const indexPath = join(root, 'public/index.html');
 const cssPath = join(root, 'public/css/modals.css');
+const chatCssPath = join(root, 'public/css/chat.css');
 const localePaths = ['ko', 'en', 'ja', 'zh'].map(locale => join(root, `public/locales/${locale}.json`));
 const planPath = join(root, 'devlog/_plan/260425_help_dialog/plan.md');
 
@@ -28,6 +29,14 @@ function json(path: string): Record<string, string> {
 
 function uniqueMatches(source: string, pattern: RegExp): string[] {
     return [...new Set([...source.matchAll(pattern)].map(match => match[1]))].sort();
+}
+
+function uniqueHelpTopics(html: string): string[] {
+    const directTopics = uniqueMatches(html, /data-help-topic="([^"]+)"/g);
+    const groupedTopics = [...html.matchAll(/data-help-topics="([^"]+)"/g)]
+        .flatMap(match => (match[1] ?? '').split(/\s+/))
+        .filter(Boolean);
+    return [...new Set([...directTopics, ...groupedTopics])].sort();
 }
 
 function findHelpButton(html: string, topicId: string): { attrs: string; body: string } {
@@ -90,9 +99,11 @@ test('HD-002: app initializes help dialog after i18n and before websocket connec
 
 test('HD-003: HTML help topics and HELP_TOPICS stay in sync', () => {
     const html = read(indexPath);
-    const htmlTopics = uniqueMatches(html, /data-help-topic="([^"]+)"/g);
+    const directTopics = uniqueMatches(html, /data-help-topic="([^"]+)"/g);
+    const reachableTopics = uniqueHelpTopics(html);
 
-    assert.deepEqual(htmlTopics, topicIds, 'index.html data-help-topic values should exactly match HELP_TOPICS');
+    assert.deepEqual(reachableTopics, topicIds, 'index.html reachable help topics should exactly match HELP_TOPICS');
+    assert.ok(!directTopics.includes('keyboardShortcuts'), 'keyboard shortcuts should be reached through the chat composer group');
     for (const topic of ['chatInput', 'orchestration', 'attachments', 'diagrams', 'keyboardShortcuts']) {
         assert.ok(topicIds.includes(topic), `missing classic help topic: ${topic}`);
     }
@@ -127,24 +138,26 @@ test('HD-005: help triggers do not nest inside translatable leaf nodes or button
     }
 });
 
-test('HD-006: adjacent chat input help triggers are visually distinct', () => {
+test('HD-006: chat input uses one overlay help trigger for input and shortcuts', () => {
     const html = read(indexPath);
+    const chatCss = read(chatCssPath);
     const chatInput = findHelpButton(html, 'chatInput');
-    const keyboardShortcuts = findHelpButton(html, 'keyboardShortcuts');
 
-    assert.equal(chatInput.body.trim(), '?', 'chat input help should stay the standard question trigger');
+    assert.equal(chatInput.body.trim(), '?', 'chat composer help should stay a single question trigger');
     assert.ok(
-        keyboardShortcuts.attrs.includes('help-trigger--shortcut'),
-        'keyboard shortcuts trigger should have a distinct visual variant',
+        chatInput.attrs.includes('chat-input-help-trigger'),
+        'chat composer help should use the overlay trigger class',
     );
     assert.ok(
-        keyboardShortcuts.body.includes('data-icon="key"'),
-        'keyboard shortcuts trigger should render a key icon instead of another bare question mark',
+        chatInput.attrs.includes('data-help-topics="chatInput keyboardShortcuts"'),
+        'chat composer help should group chat input and keyboard shortcuts in one dialog',
     );
-    assert.notEqual(
-        chatInput.body.trim(),
-        keyboardShortcuts.body.trim(),
-        'chat input and shortcut help triggers should not render as identical adjacent buttons',
+    assert.ok(!html.includes('data-help-topic="keyboardShortcuts"'), 'keyboard shortcut help should not render as a second input-bar button');
+    assert.ok(!html.includes('help-trigger--shortcut'), 'legacy adjacent shortcut trigger variant should not remain');
+    assert.match(
+        chatCss,
+        /\.chat-input-help-trigger\s*\{[\s\S]*position: absolute;[\s\S]*top: 8px;[\s\S]*right: 10px;/,
+        'chat composer help should be absolutely positioned inside the input shell',
     );
 });
 
@@ -168,10 +181,23 @@ test('HD-007: help dialog uses safe text rendering and focus-aware modal behavio
 
 test('HD-008: help styles provide restrained desktop controls and mobile hit targets', () => {
     const css = read(cssPath);
+    const chatCss = read(chatCssPath);
 
-    for (const selector of ['.label-with-help', '.section-title-row', '.help-trigger', '.help-trigger--shortcut', '.help-dialog-box', '.help-dialog-body']) {
+    for (const selector of [
+        '.label-with-help',
+        '.section-title-row',
+        '.help-trigger',
+        '.help-dialog-box',
+        '.help-dialog-body',
+        '.help-dialog-layout',
+        '.help-dialog-nav',
+        '.help-dialog-content',
+    ]) {
         assert.ok(css.includes(selector), `missing CSS selector: ${selector}`);
     }
+    assert.ok(chatCss.includes('.chat-input-shell'), 'chat input shell should own overlay positioning');
+    assert.ok(chatCss.includes('.chat-input-help-trigger'), 'chat input overlay help selector should exist');
+    assert.ok(!css.includes('.help-trigger--shortcut'), 'legacy shortcut trigger variant should not remain');
 
     assert.ok(css.includes('@media (max-width: 768px)'), 'mobile rules should exist');
     assert.ok(css.includes('--help-trigger-visual-size'), 'visible help trigger size should use a token');

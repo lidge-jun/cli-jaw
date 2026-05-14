@@ -14,7 +14,7 @@ import {
     getSessionBucket, upsertSessionBucket, clearSessionBucket,
 } from '../core/db.js';
 import { getSystemPrompt, regenerateB } from '../prompt/builder.js';
-import { extractSessionId, extractFromEvent, extractFromAcpUpdate, extractOutputChunk, logEventSummary, flushClaudeBuffers } from './events.js';
+import { extractSessionId, extractFromEvent, extractFromAcpUpdate, extractOutputChunk, logEventSummary, flushClaudeBuffers, flushOpenCodeBuffers } from './events.js';
 import { detectSmokeResponse, buildContinuationPrompt } from './smoke-detector.js';
 import { saveUpload as _saveUpload, buildMediaPrompt, buildMediaPromptMany, type SaveUploadOptions } from '../../lib/upload.js';
 import { getMemoryFlushFilePath, getMemoryStatus } from '../memory/runtime.js';
@@ -1567,6 +1567,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             buffer = '';
         }
         flushClaudeBuffers(ctx, agentLabel, empTag);  // flush any pending thinking/input buffers
+        if (cli === 'opencode') flushOpenCodeBuffers(ctx, agentLabel, empTag);
         cleanupEmployeeTmpDir(spawnCwd, settings["workingDir"], agentLabel);
         opts.lifecycle?.onExit?.(code ?? null);
 

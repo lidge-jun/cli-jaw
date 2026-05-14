@@ -89,6 +89,61 @@ export function flushClaudeBuffers(ctx: SpawnContext, agentLabel?: string, empTa
     }
 }
 
+function flushOpenCodeStepText(
+    ctx: SpawnContext,
+    agentLabel: string | undefined,
+    empTag: Record<string, unknown>,
+    reason: string,
+): void {
+    const preToolText = ctx.opencodePreToolText || '';
+    const postToolText = ctx.opencodePostToolText || '';
+    const isToolCallStep = reason === 'tool-calls';
+    const textToCommit = isToolCallStep
+        ? postToolText
+        : `${preToolText}${postToolText}`;
+    const suppressedText = isToolCallStep ? preToolText : '';
+    if (textToCommit) {
+        const segment = appendAssistantTextSegment(ctx, textToCommit);
+        ctx.pendingOutputChunk = (ctx.pendingOutputChunk || '') + segment;
+    }
+    if (suppressedText) {
+        const thinkingTool = {
+            icon: '💭',
+            label: buildPreview(suppressedText, 80) || 'thinking...',
+            toolType: 'thinking' as const,
+            detail: suppressedText,
+        };
+        ctx.toolLog.push(thinkingTool);
+        syncLiveTools(ctx);
+        emitAgentTool(ctx, agentLabel, thinkingTool, empTag);
+        ctx.opencodeStepThinkingToolEmitted = true;
+        pushTrace(ctx, `[${agentLabel || 'agent'}] opencode pre-tool intermediate text (${suppressedText.length} chars)`);
+    }
+}
+
+function resetOpenCodeStepState(ctx: SpawnContext): void {
+    ctx.opencodePreToolText = '';
+    ctx.opencodePostToolText = '';
+    ctx.opencodeSawToolInStep = false;
+    ctx.opencodeHadToolErrorInStep = false;
+    ctx.opencodePendingToolRefs = [];
+    ctx.opencodeStepThinkingToolEmitted = false;
+}
+
+/** Flush OpenCode text/tool buffers when the JSON stream closes without step_finish. */
+export function flushOpenCodeBuffers(ctx: SpawnContext, agentLabel?: string, empTag: Record<string, unknown> = {}): void {
+    const hasBufferedText = Boolean(ctx.opencodePreToolText || ctx.opencodePostToolText);
+    const hasPendingTools = Boolean(ctx.opencodePendingToolRefs?.length);
+    if (!hasBufferedText && !hasPendingTools) return;
+
+    const reason = ctx.opencodeSawToolInStep ? 'tool-calls' : 'stop';
+    if (hasBufferedText) {
+        flushOpenCodeStepText(ctx, agentLabel, empTag, reason);
+    }
+    finalizeOpencodePendingTools(ctx, agentLabel || 'agent', empTag);
+    resetOpenCodeStepState(ctx);
+}
+
 function pushTrace(ctx: SpawnContext | null | undefined, line: string) {
     if (!ctx?.traceLog || !line) return;
     ctx.traceLog.push(line);
@@ -793,29 +848,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                 if (event.part.reason) {
                     ctx.finishReason = event.part.reason;
                 }
-                const preToolText = ctx.opencodePreToolText || '';
-                const postToolText = ctx.opencodePostToolText || '';
-                const textToCommit = event.part.reason === 'tool-calls'
-                    ? postToolText
-                    : `${preToolText}${postToolText}`;
-                const suppressedText = event.part.reason === 'tool-calls' ? preToolText : '';
-                if (textToCommit) {
-                    const segment = appendAssistantTextSegment(ctx, textToCommit);
-                    ctx.pendingOutputChunk = (ctx.pendingOutputChunk || '') + segment;
-                }
-                if (suppressedText) {
-                    const thinkingTool = {
-                        icon: '💭',
-                        label: buildPreview(suppressedText, 80) || 'thinking...',
-                        toolType: 'thinking' as const,
-                        detail: suppressedText,
-                    };
-                    ctx.toolLog.push(thinkingTool);
-                    syncLiveTools(ctx);
-                    emitAgentTool(ctx, agentLabel, thinkingTool, empTag);
-                    ctx.opencodeStepThinkingToolEmitted = true;
-                    pushTrace(ctx, `[${agentLabel}] opencode pre-tool intermediate text (${suppressedText.length} chars)`);
-                }
+                flushOpenCodeStepText(ctx, agentLabel, empTag, String(event.part.reason || 'stop'));
                 const reasoningTokens = Number(event.part.tokens?.reasoning || 0);
                 if (reasoningTokens > 0 && !ctx.opencodeStepThinkingToolEmitted) {
                     const reason = String(event.part.reason || 'unknown');
@@ -836,12 +869,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                     pushTrace(ctx, `[${agentLabel}] opencode reasoning token fallback (${reasoningTokens} tokens)`);
                 }
                 finalizeOpencodePendingTools(ctx, agentLabel, empTag);
-                ctx.opencodePreToolText = '';
-                ctx.opencodePostToolText = '';
-                ctx.opencodeSawToolInStep = false;
-                ctx.opencodeHadToolErrorInStep = false;
-                ctx.opencodePendingToolRefs = [];
-                ctx.opencodeStepThinkingToolEmitted = false;
+                resetOpenCodeStepState(ctx);
                 // [P2-3.12] Store step timing
                 if (event.part["time"]) {
                     if (!ctx.metadata) ctx.metadata = {};

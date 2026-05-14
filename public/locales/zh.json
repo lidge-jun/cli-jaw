@@ -464,6 +464,7 @@
     "help.promptTemplates.related.1": "提示模板弹窗",
     "help.chatInput.title": "聊天输入",
     "help.chatInput.aria": "聊天输入帮助",
+    "help.chatComposer.aria": "聊天输入和键盘快捷键帮助",
     "help.chatInput.intro": "用于发送任务指令、斜杠命令和附件的主要输入框。",
     "help.chatInput.effect": "消息会按当前 CLI 和设置发送，附件也会随请求一起处理。",
     "help.chatInput.use.1": "开始新任务或继续当前工作时",

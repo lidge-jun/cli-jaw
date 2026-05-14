@@ -464,6 +464,7 @@
     "help.promptTemplates.related.1": "プロンプトテンプレートモーダル",
     "help.chatInput.title": "チャット入力",
     "help.chatInput.aria": "チャット入力ヘルプ",
+    "help.chatComposer.aria": "チャット入力とキーボードショートカットのヘルプ",
     "help.chatInput.intro": "作業指示、スラッシュコマンド、添付ファイルを送る基本入力欄です。",
     "help.chatInput.effect": "送信内容は現在の CLI と設定で処理され、添付ファイルも同じリクエストに含まれます。",
     "help.chatInput.use.1": "新しい作業を始める、または現在の作業を続けるとき",

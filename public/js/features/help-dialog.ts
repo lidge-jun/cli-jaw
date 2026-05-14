@@ -16,7 +16,11 @@ export function initHelpDialog(): void {
     document.addEventListener('keydown', handleKeydownCapture, true);
 }
 
-export function openHelpDialog(topicId: HelpTopicId, opener: HTMLElement | null = null): void {
+export function openHelpDialog(
+    topicId: HelpTopicId,
+    opener: HTMLElement | null = null,
+    topicIds: readonly HelpTopicId[] = [topicId],
+): void {
     const topic = HELP_TOPICS[topicId];
     if (!topic) {
         console.warn('[help-dialog] unknown topic:', topicId);
@@ -24,7 +28,7 @@ export function openHelpDialog(topicId: HelpTopicId, opener: HTMLElement | null 
     }
     ensureDialog();
     lastOpener = opener;
-    renderTopic(topic);
+    renderTopic(topicId, normalizeTopicIds(topicIds, topicId));
     overlay?.classList.add('open');
     overlay?.setAttribute('aria-hidden', 'false');
     openState = true;
@@ -54,7 +58,7 @@ function handleDocumentClick(event: MouseEvent): void {
         return;
     }
     event.preventDefault();
-    openHelpDialog(topicId, trigger);
+    openHelpDialog(topicId, trigger, parseTopicList(trigger.getAttribute('data-help-topics'), topicId));
 }
 
 function handleKeydownCapture(event: KeyboardEvent): void {
@@ -115,33 +119,90 @@ function ensureDialog(): void {
     document.body.append(overlay);
 }
 
-function renderTopic(topic: HelpTopic): void {
+function renderTopic(topicId: HelpTopicId, topicIds: readonly HelpTopicId[] = [topicId]): void {
     if (!titleEl || !bodyEl || !closeBtn) return;
+    const topic = HELP_TOPICS[topicId];
     titleEl.textContent = t(topic.titleKey);
     closeBtn.setAttribute('aria-label', t('help.close'));
     bodyEl.replaceChildren();
 
-    appendTextSection(t('help.section.what'), t(topic.introKey));
-    appendTextSection(t('help.section.effect'), t(topic.effectKey), 'help-effect-text');
-    appendListSection(t('help.section.useWhen'), topic.useWhenKeys);
-    appendListSection(t('help.section.howTo'), topic.howToKeys);
-    appendListSection(t('help.section.example'), topic.exampleKeys, false, 'help-example-list');
-    if (topic.avoidWhenKeys?.length) appendListSection(t('help.section.avoidWhen'), topic.avoidWhenKeys);
-    if (topic.relatedKeys?.length) appendListSection(t('help.section.related'), topic.relatedKeys, true);
+    const content = document.createElement('div');
+    content.className = 'help-dialog-content';
+    appendTopicSections(content, topic);
+
+    if (topicIds.length <= 1) {
+        bodyEl.append(content);
+        return;
+    }
+
+    const layout = document.createElement('div');
+    layout.className = 'help-dialog-layout';
+    layout.append(createTopicNav(topicIds, topicId), content);
+    bodyEl.append(layout);
 }
 
-function appendTextSection(heading: string, text: string, className?: string): void {
-    if (!bodyEl) return;
+function appendTopicSections(parent: HTMLElement, topic: HelpTopic): void {
+    appendTextSection(parent, t('help.section.what'), t(topic.introKey));
+    appendTextSection(parent, t('help.section.effect'), t(topic.effectKey), 'help-effect-text');
+    appendListSection(parent, t('help.section.useWhen'), topic.useWhenKeys);
+    appendListSection(parent, t('help.section.howTo'), topic.howToKeys);
+    appendListSection(parent, t('help.section.example'), topic.exampleKeys, false, 'help-example-list');
+    if (topic.avoidWhenKeys?.length) appendListSection(parent, t('help.section.avoidWhen'), topic.avoidWhenKeys);
+    if (topic.relatedKeys?.length) appendListSection(parent, t('help.section.related'), topic.relatedKeys, true);
+}
+
+function createTopicNav(topicIds: readonly HelpTopicId[], activeTopicId: HelpTopicId): HTMLElement {
+    const nav = document.createElement('nav');
+    nav.className = 'help-dialog-nav';
+    nav.setAttribute('aria-label', t('help.section.related'));
+
+    for (const id of topicIds) {
+        const topic = HELP_TOPICS[id];
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'help-dialog-nav-item';
+        item.textContent = t(topic.titleKey);
+        if (id === activeTopicId) {
+            item.classList.add('active');
+            item.setAttribute('aria-current', 'page');
+        }
+        item.addEventListener('click', () => renderTopic(id, topicIds));
+        nav.append(item);
+    }
+
+    return nav;
+}
+
+function parseTopicList(raw: string | null, fallback: HelpTopicId): HelpTopicId[] {
+    const values = raw?.split(/[\s,]+/).filter(Boolean) ?? [];
+    return normalizeTopicIds(values, fallback);
+}
+
+function normalizeTopicIds(values: readonly string[], fallback: HelpTopicId): HelpTopicId[] {
+    const ids: HelpTopicId[] = [];
+    for (const value of values) {
+        if (isHelpTopicId(value) && !ids.includes(value)) ids.push(value);
+    }
+    if (!ids.includes(fallback)) ids.unshift(fallback);
+    return ids;
+}
+
+function appendTextSection(parent: HTMLElement, heading: string, text: string, className?: string): void {
     const section = createSection(heading);
     const p = document.createElement('p');
     if (className) p.className = className;
     p.textContent = text;
     section.append(p);
-    bodyEl.append(section);
+    parent.append(section);
 }
 
-function appendListSection(heading: string, keys: string[], related = false, className?: string): void {
-    if (!bodyEl) return;
+function appendListSection(
+    parent: HTMLElement,
+    heading: string,
+    keys: string[],
+    related = false,
+    className?: string,
+): void {
     const section = createSection(heading);
     const list = document.createElement('ul');
     list.className = className ?? (related ? 'help-related-list' : 'help-dialog-list');
@@ -151,7 +212,7 @@ function appendListSection(heading: string, keys: string[], related = false, cla
         list.append(item);
     }
     section.append(list);
-    bodyEl.append(section);
+    parent.append(section);
 }
 
 function createSection(heading: string): HTMLElement {

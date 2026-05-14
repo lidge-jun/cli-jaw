@@ -464,6 +464,7 @@
     "help.promptTemplates.related.1": "프롬프트 템플릿 모달",
     "help.chatInput.title": "채팅 입력",
     "help.chatInput.aria": "채팅 입력 도움말",
+    "help.chatComposer.aria": "채팅 입력 및 키보드 단축키 도움말",
     "help.chatInput.intro": "현재 작업 지시, 슬래시 커맨드, 파일 첨부를 보내는 기본 입력창입니다.",
     "help.chatInput.effect": "보낸 내용은 선택된 CLI와 현재 설정으로 전달되고, 첨부 파일은 메시지와 함께 처리됩니다.",
     "help.chatInput.use.1": "새 작업을 시작하거나 현재 작업을 이어갈 때",

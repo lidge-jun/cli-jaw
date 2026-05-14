@@ -619,12 +619,20 @@ div.math-placeholder {
     animation: revealUp 0.35s var(--ease-out-expo) 0.3s both;
 }
 
+.chat-input-shell {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    display: flex;
+}
+
 .chat-input {
     flex: 1;
+    width: 100%;
     background: var(--surface);
     border: 1px solid var(--border);
     color: var(--text);
-    padding: 10px 14px;
+    padding: 10px 42px 10px 14px;
     border-radius: var(--radius-md);
     font-size: var(--text-sm);
     font-family: var(--font-mono);
@@ -646,6 +654,13 @@ div.math-placeholder {
 
 .chat-input:disabled {
     opacity: 0.5;
+}
+
+.chat-input-help-trigger {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    z-index: 2;
 }
 
 .btn-send {

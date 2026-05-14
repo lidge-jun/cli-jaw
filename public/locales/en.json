@@ -464,6 +464,7 @@
     "help.promptTemplates.related.1": "Prompt templates modal",
     "help.chatInput.title": "Chat input",
     "help.chatInput.aria": "Chat input help",
+    "help.chatComposer.aria": "Chat input and keyboard shortcuts help",
     "help.chatInput.intro": "The main box for sending task instructions, slash commands, and attachments.",
     "help.chatInput.effect": "Messages go to the selected CLI with current settings, and attached files travel with the request.",
     "help.chatInput.use.1": "Starting a new task or continuing current work",

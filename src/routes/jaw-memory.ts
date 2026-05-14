@@ -13,6 +13,9 @@ import { broadcast } from '../core/bus.js';
 import { submitMessage } from '../orchestrator/gateway.js';
 import { buildSoulBootstrapPrompt } from '../prompt/soul-bootstrap-prompt.js';
 import { join } from 'path';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolveDashboardHome } from '../manager/dashboard-home.js';
+import { DASHBOARD_DEFAULT_PORT } from '../manager/constants.js';
 
 function normalizeAdvancedReadPath(file: string): string {
     const value = String(file || '').replace(/\\/g, '/').replace(/^\/+/, '');
@@ -64,9 +67,16 @@ function saveCanonicalSoul(content: string): string {
 }
 
 export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddleware): void {
-    app.get('/api/jaw-memory/search', (req, res) => {
+    app.get('/api/jaw-memory/search', async (req, res) => {
         try {
             const q = String(req.query["q"] || '');
+
+            const embeddingResult = await tryEmbeddingSearch(q);
+            if (embeddingResult !== null) {
+                res.json({ result: embeddingResult });
+                return;
+            }
+
             const mem = getMemoryStatus();
             res.json({ result: mem.routing.searchRead === 'advanced' ? searchIndexedMemory(q) : memory.search(q) });
         }
@@ -240,4 +250,33 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
             res.status(500).json({ error: (e as Error).message });
         }
     });
+}
+
+async function tryEmbeddingSearch(query: string): Promise<string | null> {
+    try {
+        const home = resolveDashboardHome();
+        const cfgPath = join(home, 'embedding.json');
+        if (!existsSync(cfgPath)) return null;
+        const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
+        if (!cfg.enabled) return null;
+
+        const fromEnv = Number(process.env['DASHBOARD_PORT']);
+        const port = Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : Number(DASHBOARD_DEFAULT_PORT);
+        const url = `http://127.0.0.1:${port}/api/dashboard/memory/search?` +
+            `q=${encodeURIComponent(query)}&mode=${cfg.searchMode || 'hybrid'}`;
+        const resp = await fetch(url, {
+            signal: AbortSignal.timeout(5000),
+            headers: { host: `127.0.0.1:${port}` },
+        });
+        if (!resp.ok) return null;
+
+        const data = await resp.json() as { hits?: Array<{ relpath: string; source_start_line: number; source_end_line: number; snippet: string }> };
+        if (!data.hits?.length) return null;
+
+        return data.hits.map((h: any) =>
+            `${h.relpath}:${h.source_start_line}-${h.source_end_line}\n${h.snippet}`
+        ).join('\n\n---\n\n');
+    } catch {
+        return null;
+    }
 }

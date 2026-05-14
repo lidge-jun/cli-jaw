@@ -1,6 +1,6 @@
 import express from 'express';
 import helmet from 'helmet';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import http from 'node:http';
 import { basename, join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +38,9 @@ import { RemindersStore } from './reminders/store.js';
 import { startRemindersScheduler } from './reminders/scheduler.js';
 import { createDashboardConnectorRouter } from './connector/routes.js';
 import { createDashboardMemoryRouter } from './routes/dashboard-memory.js';
+import { VecStore, getVecDbPath } from './memory/embedding/index.js';
+import type { EmbeddingConfig } from './memory/embedding/index.js';
+import { resolveDashboardHome } from './dashboard-home.js';
 import { fetchWorkerAssistantTextById } from './worker-messages.js';
 import { openUrlInBrowser } from '../core/browser-open.js';
 import { ensureDirs, loadSettings } from '../core/config.js';
@@ -162,6 +165,32 @@ const remindersStore = new RemindersStore();
 app.use('/api/dashboard/reminders', createDashboardRemindersRouter({ store: remindersStore }));
 app.use('/api/dashboard/connector', createDashboardConnectorRouter({ remindersStore }));
 
+const dashboardHome = resolveDashboardHome();
+
+function loadEmbeddingConfig(): EmbeddingConfig | null {
+    const p = join(dashboardHome, 'embedding.json');
+    if (!existsSync(p)) return null;
+    try {
+        const raw = JSON.parse(readFileSync(p, 'utf8'));
+        if (!raw.enabled) return null;
+        return raw as EmbeddingConfig;
+    } catch { return null; }
+}
+
+let vecStoreInstance: VecStore | null = null;
+function getVecStore(config: EmbeddingConfig | null): VecStore | null {
+    if (!config?.enabled) return null;
+    if (!vecStoreInstance) {
+        try {
+            vecStoreInstance = new VecStore(getVecDbPath(dashboardHome), config.dimensions);
+        } catch (err) {
+            console.warn('[embedding] Failed to initialize VecStore:', err);
+            return null;
+        }
+    }
+    return vecStoreInstance;
+}
+
 const memoryScanSupplier = async () => {
     const loaded = loadDashboardRegistry({ from: scanFrom, count: scanCount });
     const scan = await scanDashboardInstances({
@@ -178,6 +207,9 @@ const memoryScanSupplier = async () => {
 app.use('/api/dashboard/memory', createDashboardMemoryRouter({
     managerPort: port,
     scanSupplier: memoryScanSupplier,
+    embeddingConfig: () => loadEmbeddingConfig(),
+    vecStore: () => getVecStore(loadEmbeddingConfig()),
+    dashboardHome,
 }));
 
 let stopRemindersScheduler: (() => void) | null = null;

@@ -1,11 +1,14 @@
 import express, { type RequestHandler } from 'express';
-import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
-import { extname, relative, resolve } from 'node:path';
+import { existsSync, lstatSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { extname, join, relative, resolve } from 'node:path';
 import { searchFederated } from '../memory/federation.js';
 import { listSearchableInstancesFromScan } from '../memory/instance-discovery.js';
 import type { ScanItemForFederation } from '../memory/types.js';
 import { resolveStructuredMemoryDir } from '../../memory/shared.js';
 import { isExpectedHostHeader, isAllowedOriginHeader } from '../security.js';
+import { VecStore, getVecDbPath, createProvider, syncAllInstances } from '../memory/embedding/index.js';
+import type { EmbeddingConfig } from '../memory/embedding/index.js';
+import { hybridMerge } from '../memory/embedding/hybrid-search.js';
 
 const MAX_QUERY_LEN = 256;
 const MAX_RESULT_LIMIT = 200;
@@ -34,6 +37,9 @@ function requireManagerOrigin(managerPort: number): RequestHandler {
 export interface DashboardMemoryRouterOptions {
     managerPort: number;
     scanSupplier: ScanSupplier;
+    embeddingConfig: () => EmbeddingConfig | null;
+    vecStore: () => VecStore | null;
+    dashboardHome: string;
 }
 
 export function createDashboardMemoryRouter(opts: DashboardMemoryRouterOptions): express.Router {
@@ -58,12 +64,60 @@ export function createDashboardMemoryRouter(opts: DashboardMemoryRouterOptions):
         const limit = Number.isFinite(requestedLimit)
             ? Math.min(Math.max(1, requestedLimit), MAX_RESULT_LIMIT)
             : DEFAULT_RESULT_LIMIT;
+        const modeOverride = String(req.query["mode"] || '').trim() as '' | 'fts5' | 'embedding' | 'hybrid';
         try {
             const scan = await opts.scanSupplier();
             const refs = listSearchableInstancesFromScan(scan);
             const targets = filter.length ? refs.filter(r => filter.includes(r.instanceId)) : refs;
-            const result = searchFederated(q, { instances: targets, globalLimit: limit });
-            res.json({ ok: true, ...result });
+
+            const embConfig = opts.embeddingConfig();
+            const searchMode = modeOverride || embConfig?.searchMode || 'fts5';
+            const vec = opts.vecStore();
+
+            if (searchMode === 'fts5' || !embConfig?.enabled || !vec) {
+                const result = searchFederated(q, { instances: targets, globalLimit: limit });
+                res.json({ ok: true, mode: 'fts5', ...result });
+            } else if (searchMode === 'embedding') {
+                const provider = await createProvider(embConfig);
+                const embedResult = await provider.embed([q]);
+                const queryVec = embedResult[0]!;
+                const vecHits = vec.search(queryVec, limit);
+                const hits = vecHits.map(v => ({
+                    path: '',
+                    relpath: v.relpath,
+                    kind: v.kind,
+                    source_start_line: v.sourceStartLine,
+                    source_end_line: v.sourceEndLine,
+                    snippet: v.snippet,
+                    score: 0,
+                    instanceId: v.instanceId,
+                    embeddingDistance: v.distance,
+                }));
+                res.json({
+                    ok: true,
+                    mode: 'embedding',
+                    hits,
+                    warnings: [],
+                    instancesQueried: targets.length,
+                    instancesSucceeded: targets.length,
+                });
+            } else {
+                const ftsResult = searchFederated(q, { instances: targets, globalLimit: limit * 2 });
+                const provider = await createProvider(embConfig);
+                const embedResult = await provider.embed([q]);
+                const queryVec = embedResult[0]!;
+                const vecHits = vec.search(queryVec, limit * 2);
+                const ftsWithInstance = ftsResult.hits.map(h => ({ ...h, instanceId: h.instanceId || 'default' }));
+                const merged = hybridMerge({ ftsHits: ftsWithInstance, vecHits, limit });
+                res.json({
+                    ok: true,
+                    mode: 'hybrid',
+                    hits: merged,
+                    warnings: ftsResult.warnings,
+                    instancesQueried: ftsResult.instancesQueried,
+                    instancesSucceeded: ftsResult.instancesSucceeded,
+                });
+            }
         } catch (err) {
             res.status(500).json({ ok: false, code: 'search_failed', message: (err as Error).message });
         }
@@ -128,6 +182,56 @@ export function createDashboardMemoryRouter(opts: DashboardMemoryRouterOptions):
             return;
         }
         res.json({ ok: true, instanceId, path: rel, content: readFileSync(targetReal, 'utf8') });
+    });
+
+    router.get('/embed-config', (_req, res) => {
+        const config = opts.embeddingConfig();
+        res.json({ ok: true, config: config || null });
+    });
+
+    router.post('/embed-config', express.json(), async (req, res) => {
+        try {
+            const config = req.body as Partial<EmbeddingConfig>;
+            if (config.provider && !['openai', 'gemini', 'voyage', 'local'].includes(config.provider)) {
+                res.status(400).json({ ok: false, code: 'invalid_provider' });
+                return;
+            }
+            const settingsPath = join(opts.dashboardHome, 'embedding.json');
+            writeFileSync(settingsPath, JSON.stringify(config, null, 2), 'utf8');
+
+            const prev = opts.embeddingConfig();
+            const providerChanged = prev && (prev.provider !== config.provider || prev.model !== config.model || prev.dimensions !== config.dimensions);
+
+            res.json({ ok: true, saved: true, needsReindex: providerChanged || false });
+        } catch (err) {
+            res.status(500).json({ ok: false, error: String(err) });
+        }
+    });
+
+    router.post('/reindex', async (_req, res) => {
+        const embConfig = opts.embeddingConfig();
+        if (!embConfig?.enabled) {
+            res.status(400).json({ ok: false, code: 'embedding_not_enabled' });
+            return;
+        }
+        const vec = opts.vecStore();
+        if (!vec) {
+            res.status(500).json({ ok: false, code: 'vecstore_not_initialized' });
+            return;
+        }
+        try {
+            const scan = await opts.scanSupplier();
+            const instances = listSearchableInstancesFromScan(scan);
+            const provider = await createProvider(embConfig);
+            const results = await syncAllInstances({
+                instances,
+                vecStore: vec,
+                provider,
+            });
+            res.json({ ok: true, results });
+        } catch (err) {
+            res.status(500).json({ ok: false, error: String(err) });
+        }
     });
 
     return router;

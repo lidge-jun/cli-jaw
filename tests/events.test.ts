@@ -10,6 +10,7 @@ import {
     extractSessionId,
     extractToolLabel,
     extractToolLabelsForTest,
+    flushOpenCodeBuffers,
     makeClaudeToolKeyForTest,
 } from '../src/agent/events.ts';
 
@@ -949,6 +950,76 @@ test('opencode buffers pre-tool text until step_finish and discards tool-call ch
         extractOutputChunk('opencode', { type: 'step_finish', sessionID: 'oc-1', part: { reason: 'stop' } }, ctx),
         'Final answer.',
     );
+});
+
+test('opencode flushes final text when stream closes without step_finish', () => {
+    const ctx = {
+        toolLog: [],
+        fullText: '',
+        traceLog: [],
+        pendingOutputChunk: '',
+        opencodePreToolText: '',
+        opencodePostToolText: '',
+        opencodeSawToolInStep: false,
+        opencodeHadToolErrorInStep: false,
+        opencodePendingToolRefs: [],
+    };
+
+    extractFromEvent('opencode', { type: 'step_start', part: { model: 'kimi-k2.6' } }, ctx, 'oc');
+    extractFromEvent('opencode', {
+        type: 'reasoning',
+        part: { text: 'The user is greeting casually.' },
+    }, ctx, 'oc');
+    extractFromEvent('opencode', {
+        type: 'text',
+        part: { text: 'ㅎㅇㅎㅇ! 무엇을 도와줄까?' },
+    }, ctx, 'oc');
+
+    assert.equal(ctx.fullText, '');
+    assert.equal(extractOutputChunk('opencode', { type: 'text' }, ctx), '');
+
+    flushOpenCodeBuffers(ctx, 'oc');
+
+    assert.equal(ctx.fullText, 'ㅎㅇㅎㅇ! 무엇을 도와줄까?');
+    assert.equal(extractOutputChunk('opencode', { type: 'close' }, ctx), 'ㅎㅇㅎㅇ! 무엇을 도와줄까?');
+    assert.equal(ctx.opencodePreToolText, '');
+    assert.equal(ctx.opencodePostToolText, '');
+    assert.equal(ctx.toolLog.filter(t => t.toolType === 'thinking').length, 1);
+});
+
+test('opencode close flush preserves tool-call text suppression without step_finish', () => {
+    const ctx = {
+        toolLog: [],
+        fullText: '',
+        traceLog: [],
+        pendingOutputChunk: '',
+        opencodePreToolText: '',
+        opencodePostToolText: '',
+        opencodeSawToolInStep: false,
+        opencodeHadToolErrorInStep: false,
+        opencodePendingToolRefs: [],
+    };
+
+    extractFromEvent('opencode', { type: 'step_start', part: { model: 'kimi-k2.6' } }, ctx, 'oc');
+    extractFromEvent('opencode', { type: 'text', part: { text: 'Let me inspect first.' } }, ctx, 'oc');
+    extractFromEvent('opencode', {
+        type: 'tool_use',
+        part: {
+            tool: 'bash',
+            callID: 'bash:close-0',
+            state: { input: { command: 'pwd' } },
+        },
+    }, ctx, 'oc');
+    extractFromEvent('opencode', { type: 'text', part: { text: 'The command completed.' } }, ctx, 'oc');
+
+    flushOpenCodeBuffers(ctx, 'oc');
+
+    assert.equal(ctx.fullText, 'The command completed.');
+    assert.equal(extractOutputChunk('opencode', { type: 'close' }, ctx), 'The command completed.');
+    assert.equal(ctx.toolLog[0].status, 'done');
+    assert.equal(ctx.toolLog[0].icon, '✅');
+    assert.equal(ctx.toolLog[1].toolType, 'thinking');
+    assert.equal(ctx.toolLog[1].detail, 'Let me inspect first.');
 });
 
 test('opencode reasoning event emits thinking tool even when reasoning tokens are zero', () => {

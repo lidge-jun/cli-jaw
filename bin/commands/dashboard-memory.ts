@@ -129,6 +129,12 @@ export async function handleMemory(argvFromSwitch: string[]): Promise<void> {
                 console.log(values.json ? JSON.stringify(result, null, 2) : result.content);
                 return;
             }
+            case 'config':
+                await handleEmbedConfig(positionals);
+                return;
+            case 'reindex':
+                await handleReindex(rest);
+                return;
             default:
                 console.error(`  ❌ unknown subcommand: ${sub}`);
                 printHelp();
@@ -136,6 +142,80 @@ export async function handleMemory(argvFromSwitch: string[]): Promise<void> {
         }
     } catch (err) {
         console.error(`  ❌ ${(err as Error).message}`);
+        process.exit(1);
+    }
+}
+
+async function postDashboard<T>(path: string, body: unknown): Promise<T> {
+    const port = dashboardPort();
+    const url = `http://127.0.0.1:${port}/api/dashboard/memory${path}`;
+    let res: Response;
+    try {
+        res = await fetch(url, {
+            method: 'POST',
+            headers: { host: `127.0.0.1:${port}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+    } catch (err) {
+        throw new Error(`dashboard memory unreachable at :${port} — run \`jaw dashboard serve\` first. (${(err as Error).message})`);
+    }
+    if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`dashboard memory ${path} → ${res.status}: ${text.slice(0, 200)}`);
+    }
+    return res.json() as Promise<T>;
+}
+
+async function handleEmbedConfig(args: string[]): Promise<void> {
+    const sub = args[0];
+
+    if (!sub || sub === 'get') {
+        const data = await callDashboard<{ ok: boolean; config: unknown }>('/embed-config');
+        console.log(JSON.stringify(data, null, 2));
+        return;
+    }
+
+    if (sub === 'set') {
+        const config: Record<string, unknown> = {};
+        for (let i = 1; i < args.length; i++) {
+            switch (args[i]) {
+                case '--provider': config['provider'] = args[++i]; break;
+                case '--model': config['model'] = args[++i]; break;
+                case '--api-key': config['apiKey'] = args[++i]; break;
+                case '--dimensions': config['dimensions'] = Number(args[++i]); break;
+                case '--mode': config['searchMode'] = args[++i]; break;
+                case '--enabled': config['enabled'] = true; break;
+                case '--disabled': config['enabled'] = false; break;
+            }
+        }
+        const data = await postDashboard<{ ok: boolean; saved: boolean; needsReindex: boolean }>('/embed-config', config);
+        console.log(JSON.stringify(data, null, 2));
+        return;
+    }
+
+    console.error('Usage: cli-jaw dashboard memory config [get|set] [--provider ...] [--api-key ...] [--mode ...]');
+    process.exit(1);
+}
+
+async function handleReindex(args: string[]): Promise<void> {
+    const hasEmbedding = args.includes('--embedding');
+    if (!hasEmbedding) {
+        console.error('Usage: cli-jaw dashboard memory reindex --embedding');
+        process.exit(1);
+    }
+    console.log('Starting embedding sync...');
+    const data = await postDashboard<{
+        ok: boolean;
+        results?: Array<{ instanceId: string; added: number; updated: number; deleted: number; skipped: number; errors: string[] }>;
+        error?: string;
+        code?: string;
+    }>('/reindex', {});
+    if (data.ok && data.results) {
+        for (const r of data.results) {
+            console.log(`  ${r.instanceId}: +${r.added} updated=${r.updated} deleted=${r.deleted} skipped=${r.skipped}${r.errors.length ? ' errors=' + r.errors.length : ''}`);
+        }
+    } else {
+        console.error('Reindex failed:', data.error || data.code);
         process.exit(1);
     }
 }
