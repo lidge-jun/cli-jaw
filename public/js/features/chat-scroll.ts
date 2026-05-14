@@ -18,12 +18,14 @@ export function canFollowAfterRestore(): boolean {
 export function markFollowingBottom(): void {
     userNearBottom = true;
     scrollIntent = 'following';
+    updateScrollFabVisibility();
 }
 
 function updateScrollIntentFromDistance(dist: number): void {
     userNearBottom = dist < SCROLL_BOTTOM_THRESHOLD;
     scrollIntent = userNearBottom ? 'following' : 'pinnedAway';
     if (scrollIntent === 'pinnedAway') cancelPendingChatRestorePasses();
+    updateScrollFabVisibility();
 }
 
 function cancelPendingChatRestorePasses(): void {
@@ -71,6 +73,7 @@ export function ensureScrollTracking(): void {
         const dist = c.scrollHeight - c.scrollTop - c.clientHeight;
         updateScrollIntentFromDistance(dist);
     }, { passive: true });
+    initScrollFab();
 }
 
 export function isChatNearBottom(): boolean {
@@ -223,4 +226,32 @@ export function scrollToBottom(force = false): void {
         const c = document.getElementById('chatMessages');
         if (c) c.scrollTop = c.scrollHeight;
     });
+}
+
+// ── Scroll-to-Bottom FAB ──
+let fabEl: HTMLButtonElement | null = null;
+let fabVisible = false;
+
+function createScrollFab(): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.className = 'scroll-to-bottom-fab';
+    btn.setAttribute('aria-label', 'Scroll to bottom');
+    btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 3v10M4 9l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    btn.addEventListener('click', () => scrollToBottom(true));
+    return btn;
+}
+
+function initScrollFab(): void {
+    const host = document.querySelector('.chat-area') as HTMLElement | null;
+    if (!host || fabEl) return;
+    fabEl = createScrollFab();
+    host.appendChild(fabEl);
+}
+
+function updateScrollFabVisibility(): void {
+    if (!fabEl) return;
+    const shouldShow = scrollIntent === 'pinnedAway';
+    if (shouldShow === fabVisible) return;
+    fabVisible = shouldShow;
+    fabEl.classList.toggle('visible', shouldShow);
 }

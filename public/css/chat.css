@@ -166,6 +166,41 @@
     animation: processDotPulse 1.2s ease-in-out infinite;
 }
 
+/* ── Scroll-to-Bottom FAB ── */
+.scroll-to-bottom-fab {
+    position: absolute;
+    bottom: 80px;
+    right: 20px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(8px);
+    transition: opacity 200ms, transform 200ms;
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+.scroll-to-bottom-fab.visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+}
+.scroll-to-bottom-fab:hover {
+    color: var(--text);
+    border-color: var(--accent);
+}
+.scroll-to-bottom-fab:active {
+    transform: scale(0.92);
+}
+
 /* Inner container provides scrollbar range via its height */
 .chat-messages.vs-active > .vs-inner {
     position: relative;

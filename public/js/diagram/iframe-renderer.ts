@@ -4,6 +4,7 @@
 
 import { ICONS } from '../icons.js';
 import { validateWidgetHtml } from './widget-validator.js';
+import { isChatNearBottom, reconcileChatBottomAfterLayout } from '../features/chat-scroll.js';
 
 // ── Action Button Helpers ──
 function createDiagramCopyBtn(): HTMLButtonElement {
@@ -569,11 +570,17 @@ function throttledResize(source: Window, height: number): void {
   if (resizeTimers.has(source)) return;
   resizeTimers.set(source, window.setTimeout(() => resizeTimers.delete(source), 100));
 
+  const wasNearBottom = isChatNearBottom();
+  let resized = false;
   document.querySelectorAll('iframe').forEach(iframe => {
     if (iframe.contentWindow === source) {
       iframe.style.height = `${Math.min(Math.max(height, 60), 2000)}px`;
+      resized = true;
     }
   });
+  if (resized && wasNearBottom) {
+    requestAnimationFrame(() => reconcileChatBottomAfterLayout(true));
+  }
 }
 
 // ── Theme Broadcast to All Widget iframes ──
