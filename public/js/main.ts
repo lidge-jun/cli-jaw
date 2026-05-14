@@ -79,6 +79,7 @@ import { initAppName } from './features/appname.js';
 import { initAvatar } from './features/avatar.js';
 import { initSidebar, toggleLeft, toggleRight } from './features/sidebar.js';
 import { initTheme } from './features/theme.js';
+import { initPreviewShortcutBridge } from './features/preview-shortcut-bridge.js';
 import { initGestures } from './features/gesture.js';
 import { initI18n, setLang, getLang, t } from './features/i18n.js';
 import { toggleRecording, cancelRecording } from './features/voice-recorder.js';
@@ -453,6 +454,7 @@ async function bootstrap(): Promise<void> {
     hydrateIcons();
     hydrateProviderIcons();
     initTheme();
+    initPreviewShortcutBridge();
     await initI18n();
     const langSel = document.getElementById('langSelect') as HTMLSelectElement | null;
     if (langSel) langSel.value = getLang();

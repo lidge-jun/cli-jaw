@@ -67,6 +67,17 @@ export function normalizeManagerShortcutKeymap(value: unknown): DashboardShortcu
     return keymap;
 }
 
+function resolveEventKey(event: KeyboardEvent): string {
+    const k = normalizeKey(event.key);
+    if (k.length === 1) return k;
+    // macOS Option+letter produces special chars (e.g. ∆ for Alt+J).
+    // Fall back to event.code to recover the original letter.
+    if (event.altKey && event.code?.startsWith('Key')) {
+        return event.code.slice(3).toLowerCase();
+    }
+    return k;
+}
+
 export function shortcutMatches(event: KeyboardEvent, raw: string): boolean {
     const parsed = parseShortcut(raw);
     if (!parsed) return false;
@@ -74,7 +85,7 @@ export function shortcutMatches(event: KeyboardEvent, raw: string): boolean {
         && event.ctrlKey === parsed.ctrlKey
         && event.metaKey === parsed.metaKey
         && event.shiftKey === parsed.shiftKey
-        && normalizeKey(event.key) === parsed.key;
+        && resolveEventKey(event) === parsed.key;
 }
 
 export function actionForShortcutEvent(

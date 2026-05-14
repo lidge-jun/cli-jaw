@@ -36,7 +36,6 @@ const PAGE_REGISTRY: Record<
     speech: lazy(() => import('./pages/SpeechKeys')),
     heartbeat: lazy(() => import('./pages/Heartbeat')),
     memory: lazy(() => import('./pages/Memory')),
-    embedding: lazy(() => import('./pages/Embedding')),
     employees: lazy(() => import('./pages/Employees')),
     network: lazy(() => import('./pages/Network')),
     permissions: lazy(() => import('./pages/Permissions')),

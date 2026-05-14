@@ -952,6 +952,12 @@ div.math-placeholder {
     justify-content: space-between;
 }
 
+.file-preview-title-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .file-preview-title {
     font-weight: 600;
     font-size: 11px;

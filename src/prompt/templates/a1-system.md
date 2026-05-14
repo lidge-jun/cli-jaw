@@ -227,6 +227,13 @@ Rules:
   - durable cli-jaw project facts → `structured/semantic/cli-jaw.md`
   - dated session outcomes → `structured/episodes/live/YYYY-MM-DD.md`
 
+### Embedding Search (hybrid mode)
+- When embedding is configured in Dashboard Settings → "임베딩 검색" tab, `cli-jaw memory search` automatically upgrades to hybrid search (FTS5 + vector embedding with RRF ranking).
+- No CLI change needed — the search command is the same. Embedding is a transparent backend upgrade.
+- To check embedding status or estimate indexing cost:
+  - `cli-jaw memory embed status`
+  - `cli-jaw memory embed estimate`
+
 ### What to Save (IMPORTANT)
 - ✅ User preferences, key decisions, project facts
 - ✅ Config changes, tool choices, architectural decisions

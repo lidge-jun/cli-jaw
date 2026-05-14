@@ -92,7 +92,7 @@ prompt, quit, file, steer, ide, orchestrate
 | `orchestrate` | `bin/commands/orchestrate.ts` | `[P\|A\|B\|C\|D\|status\|reset] [--force] [--json] [--port <port>]` |
 | `dispatch` | `bin/commands/dispatch.ts` | `--agent <name> --task <task> [--port <port>]` |
 | `service` | `bin/commands/service.ts` | `[--port PORT] [--backend launchd\|systemd\|docker] [status\|unset\|logs]` |
-| `dashboard` | `bin/commands/dashboard.ts` | `serve [--port 24576] [--from 3457] [--count 50] [--no-open]`, `memory {search\|instances\|read\|help} [--instance <ids>] [--limit N] [--json] [--port <port>]` |
+| `dashboard` | `bin/commands/dashboard.ts` | `serve [--port 24576] [--from 3457] [--count 50] [--no-open]`, `memory {search\|instances\|read\|config\|state\|estimate\|reindex\|help} [--instance <ids>] [--limit N] [--json] [--port <port>]` |
 
 ---
 
@@ -176,6 +176,8 @@ prompt, quit, file, steer, ide, orchestrate
 | `/memory reindex` | memory reindex |
 | `/memory flush` | memory flush trigger |
 | `/memory adv ...` | integrated memory runtime 상태/초기화/bootstrap/reindex 래퍼 |
+| `/memory embed status` | embedding state (state/mode/provider/chunks/DB size) |
+| `/memory embed estimate` | embedding cost estimate (chunks/batches/seconds/cost) |
 
 ### `/browser [status|tabs]`
 
@@ -212,6 +214,10 @@ L2 cross-instance read-only memory search. Fans out queries to all `~/.cli-jaw-*
 | `search <query...>` | FTS5 BM25 + trigram fan-out search across instances |
 | `instances` / `list` | List discovered instances with DB status |
 | `read <instanceId:path>` | Read a `.md` memory file from a specific instance |
+| `config [--provider X] [--api-key X] [--search-mode X]` | Get/set embedding provider configuration |
+| `state` / `embed-state` | Embedding state (state/mode/provider/chunks/DB size/last sync) |
+| `estimate` / `embed-estimate` | Embedding cost estimate (chunks/batches/seconds/cost) |
+| `reindex [--force]` | Trigger full re-embedding of all memory chunks |
 | `help` | Show subcommand help |
 
 | Option | 동작 |

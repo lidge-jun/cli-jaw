@@ -8,8 +8,9 @@ aliases: [CLI-JAW Memory Architecture, advanced memory runtime, memory architect
 
 # Memory Architecture — 통합 메모리 시스템
 
-> 최종 갱신: 2026-05-05
+> 최종 갱신: 2026-05-14
 > 소스: `src/memory/runtime.ts` 375L (사실상 facade), `src/memory/shared.ts` 256L, `src/memory/bootstrap.ts` 517L, `src/memory/indexing.ts` 474L, `src/memory/keyword-expand.ts` 294L, `src/memory/synonyms.ts` 60L, `src/memory/reflect.ts` 256L, `src/memory/identity.ts` 86L, `src/memory/injection.ts` 69L, `src/memory/memory.ts` 154L, `src/memory/worklog.ts` 200L, `src/memory/heartbeat.ts` 205L, `src/memory/heartbeat-schedule.ts` 410L, `src/memory/advanced.ts` 1L (re-export shim), `src/agent/memory-flush-controller.ts` 157L, `src/agent/spawn.ts` 1451L, `src/prompt/builder.ts` 675L, `src/orchestrator/pipeline.ts` 462L, `src/routes/memory.ts`, `src/routes/jaw-memory.ts`, `src/cli/command-context.ts`, `src/cli/handlers-runtime.ts`
+> 임베딩: `src/manager/memory/embedding/` — `provider.ts`, `vec-store.ts`, `sync.ts`, `state-machine.ts`, `hybrid-search.ts`, `index.ts` + `src/manager/routes/dashboard-memory.ts`
 
 ---
 
@@ -285,3 +286,63 @@ Prefers ES Module only, no CommonJS.
 - 대신 `getSystemPrompt()` 가 heartbeat 템플릿을 합쳐 넣기 때문에, 메모리와 같은 시스템 프롬프트 경로를 공유한다.
 - 최근 heartbeat prompt 조립 경로는 실행 전 memory search를 먼저 수행하라는 지시를 함께 붙인다. 즉 storage mutation은 없지만, prompt 정책상 메모리 조회를 전제로 동작한다.
 - heartbeat 실행은 `orchestrateAndCollect()` 를 타고, 결과는 active channel 로 전송된다.
+
+---
+
+## Embedding Search Layer (Dashboard-level)
+
+> 소스: `src/manager/memory/embedding/` — `provider.ts`, `vec-store.ts`, `sync.ts`, `state-machine.ts`, `index.ts`
+> 라우트: `src/manager/routes/dashboard-memory.ts` (embed-config/state/estimate/reindex-stream)
+> Dashboard UI: `public/manager/src/dashboard-settings/DashboardEmbeddingSection.tsx`
+
+기존 FTS5 검색 위에 벡터 임베딩을 추가하는 **애드온** 레이어. 기본 OFF, dashboard 설정에서 provider/API key 설정 후 인덱싱하면 활성화.
+
+### 아키텍처
+
+```
+인스턴스 A (index.sqlite) ──┐
+인스턴스 B (index.sqlite) ──┼── chunks ──→ sync.ts ──→ provider.ts ──→ vec_memory.sqlite
+인스턴스 C (index.sqlite) ──┘                           (batch embed)     (vec_chunks table)
+                                                                             ↓
+                                                                    hybrid-search.ts
+                                                                    (FTS5 + vec RRF merge)
+```
+
+### 모듈
+
+| File | 역할 |
+|------|------|
+| `provider.ts` | OpenAI/Gemini/Voyage/Vertex/Local(Ollama) 통합 임베딩 클라이언트. batch 20 |
+| `vec-store.ts` | SQLite 벡터 저장소. `vec_chunks` 테이블. `searchScoped`, `getStats`, content hash 중복 방지 |
+| `sync.ts` | 전체 인스턴스 순회 동기화. content hash skip, retry 3회 + 1s delay, batch 간 300ms |
+| `state-machine.ts` | `getEmbeddingState()` — 설정/DB/인덱스 상태 → `EmbeddingState` (OFF/CONFIGURED/INDEXING/ACTIVE_*/NEEDS_REINDEX/ERROR) |
+| `hybrid-search.ts` | FTS5 + 벡터 RRF(Reciprocal Rank Fusion) 결합 검색 |
+
+### State Machine
+
+```
+OFF → CONFIGURED → INDEXING → ACTIVE_HYBRID / ACTIVE_EMBEDDING
+                                    ↓ provider 변경
+                               NEEDS_REINDEX → INDEXING → ...
+                                    ↓ 에러
+                                  ERROR (fallback to FTS5)
+```
+
+### Auto-sync
+
+- `memory_status` broadcast (save) → 2s debounce → incremental sync
+- 30분 주기 background catchall sync
+- Content hash로 변경 없는 chunk는 skip
+
+### 설정 파일
+
+`~/.cli-jaw-dashboard/embedding.json`:
+
+| 키 | 예시 | 설명 |
+|---|---|---|
+| `enabled` | `true` | 임베딩 활성화 여부 |
+| `provider` | `"openai"` | `openai\|gemini\|voyage\|vertex\|local` |
+| `model` | `"text-embedding-3-small"` | provider별 기본 모델 자동 선택 |
+| `apiKey` | `"sk-..."` 또는 `"$ENV_VAR"` | 환경변수 참조 지원 |
+| `searchMode` | `"hybrid"` | `hybrid\|embedding\|fts5` |
+| `dimensions` | `1536` | provider별 자동 설정 |

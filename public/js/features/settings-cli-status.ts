@@ -48,6 +48,7 @@ export function initCliStatusToggle(): void {
     if (!cliStatusExpanded) {
         list.style.display = 'none';
     } else {
+        list.style.display = 'block';
         header.classList.add('expanded');
     }
 

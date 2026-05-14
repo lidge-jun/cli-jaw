@@ -90,3 +90,79 @@
     margin: 0;
     color: var(--text-primary);
 }
+
+.dashboard-embed-section {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.dashboard-embed-fieldset {
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 0;
+}
+
+.dashboard-embed-fieldset legend {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding: 0 4px;
+}
+
+.dashboard-embed-fieldset legend small {
+    font-weight: 400;
+    color: var(--text-secondary);
+    margin-left: 6px;
+}
+
+.dashboard-embed-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 8px 0;
+}
+
+.dashboard-embed-field label {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.dashboard-embed-field select,
+.dashboard-embed-field input {
+    padding: 6px 8px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    background: var(--surface-base);
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.dashboard-embed-btn {
+    margin-top: 8px;
+    padding: 6px 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    background: var(--surface-raised);
+    color: var(--text-primary);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.dashboard-embed-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.dashboard-embed-ok {
+    font-size: 12px;
+    color: #32c86e;
+    margin: 6px 0 0;
+}
+
+.dashboard-embed-err {
+    font-size: 12px;
+    color: var(--text-error, #e55);
+    margin: 6px 0 0;
+}

@@ -1,6 +1,6 @@
 import type { DashboardLocale } from '../types';
 
-type DashboardSettingsSection = 'display' | 'activity';
+type DashboardSettingsSection = 'display' | 'activity' | 'embedding';
 
 type DashboardSettingsSidebarProps = {
     activeSection: DashboardSettingsSection;
@@ -16,6 +16,7 @@ const COPY = {
         sections: {
             display: { label: '사이드바 행', hint: '밀도와 행 안 컨트롤' },
             activity: { label: '미리보기와 활동', hint: '제목 출처와 기본값' },
+            embedding: { label: '임베딩 검색', hint: 'Provider와 벡터 인덱스' },
         },
     },
     en: {
@@ -25,6 +26,7 @@ const COPY = {
         sections: {
             display: { label: 'Sidebar rows', hint: 'Density and inline controls' },
             activity: { label: 'Preview & activity', hint: 'Title source and defaults' },
+            embedding: { label: 'Embedding search', hint: 'Provider and vector index' },
         },
     },
     zh: {
@@ -34,6 +36,7 @@ const COPY = {
         sections: {
             display: { label: '侧边栏列表', hint: '密度与行内控件' },
             activity: { label: '预览与活动', hint: '标题来源与默认值' },
+            embedding: { label: '嵌入搜索', hint: 'Provider 与向量索引' },
         },
     },
     ja: {
@@ -43,11 +46,12 @@ const COPY = {
         sections: {
             display: { label: 'サイドバーの行', hint: '密度と行内コントロール' },
             activity: { label: 'プレビューとアクティビティ', hint: 'タイトルの取得元と既定値' },
+            embedding: { label: 'エンベディング検索', hint: 'Provider とベクトルインデックス' },
         },
     },
 } as const;
 
-const SECTION_IDS: DashboardSettingsSection[] = ['display', 'activity'];
+const SECTION_IDS: DashboardSettingsSection[] = ['display', 'activity', 'embedding'];
 
 export function DashboardSettingsSidebar(props: DashboardSettingsSidebarProps) {
     const copy = COPY[props.locale] || COPY.ko;

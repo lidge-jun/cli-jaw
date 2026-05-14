@@ -284,5 +284,9 @@ ensureDirs()
 | Schedule | `GET/POST/PATCH/DELETE /api/dashboard/schedule` plus schedule runner-backed dispatch |
 | Reminders | `GET /api/dashboard/reminders` `POST /api/dashboard/reminders` `POST /api/dashboard/reminders/from-message` `PATCH /api/dashboard/reminders/:id` |
 | Desktop/Electron | `GET /api/dashboard/desktop-status` `GET/POST /api/dashboard/electron-metrics` |
+| Memory federation | `GET /api/dashboard/memory/search` `GET /api/dashboard/memory/instances` `GET /api/dashboard/memory/read` |
+| Memory embedding | `GET /api/dashboard/memory/embed-config` `POST /api/dashboard/memory/embed-config` `GET /api/dashboard/memory/embed-state` `GET /api/dashboard/memory/embed-estimate` `GET /api/dashboard/memory/reindex-stream` (SSE) `POST /api/dashboard/memory/reindex` |
+
+Memory embedding routes are served by `src/manager/routes/dashboard-memory.ts`. The embed-config POST doubles as connection test when `body.test=true`. The reindex-stream returns SSE events (`{done,total}` progress, `{complete:true}` on finish, `{error}` on failure). Auto-sync triggers on memory save broadcasts with 2s debounce, plus a 30-minute background catchall sync.
 
 Reminders are backed by `src/manager/reminders/store.ts` and normalized through `src/manager/reminders/api.ts`. The scheduler checks due reminders, dispatches channel notifications, and records `notificationStatus`/attempt metadata.

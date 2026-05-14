@@ -1,12 +1,14 @@
-import { useEffect, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, type ReactNode } from 'react';
 import { formatShortcut, MANAGER_SHORTCUT_ACTIONS } from '../manager-shortcuts';
+
+const LazyEmbedding = lazy(() => import('./DashboardEmbeddingSection').then(m => ({ default: m.DashboardEmbeddingSection })));
 import { HelpTopicButton } from '../help/HelpTopicButton';
 import type { HelpTopicId } from '../help/helpContent';
 import type { DashboardLocale, DashboardRegistryUi, DashboardShortcutAction } from '../types';
 import type { DashboardActivityTitleSupport } from './activity-title-support';
 
 type DashboardSettingsWorkspaceProps = {
-    activeSection: 'display' | 'activity';
+    activeSection: 'display' | 'activity' | 'embedding';
     ui: DashboardRegistryUi;
     titleSupport: DashboardActivityTitleSupport;
     onUiPatch: (patch: Partial<DashboardRegistryUi>) => void;
@@ -34,6 +36,8 @@ const COPY = {
         displayDescription: '이 설정은 왼쪽 인스턴스 목록과 저장된 매니저 UI 환경설정에만 적용됩니다.',
         activityTitle: '미리보기와 활동',
         activityDescription: '최근 작업 제목은 각 인스턴스 서버의 endpoint 버전에 따라 달라집니다.',
+        embeddingTitle: '임베딩 검색',
+        embeddingDescription: '벡터 임베딩 provider를 설정하고 메모리 인덱스를 관리합니다.',
         fields: {
             activity: {
                 label: '최근 작업 미리보기',
@@ -108,6 +112,8 @@ const COPY = {
         displayDescription: 'These controls only affect the left instance list and saved manager UI preferences.',
         activityTitle: 'Preview & activity',
         activityDescription: 'Latest activity titles depend on each instance server endpoint version.',
+        embeddingTitle: 'Embedding search',
+        embeddingDescription: 'Configure a vector embedding provider and manage the memory index.',
         fields: {
             activity: {
                 label: 'Recent activity preview',
@@ -182,6 +188,8 @@ const COPY = {
         displayDescription: '这些设置只影响左侧实例列表与已保存的管理器界面偏好。',
         activityTitle: '预览与活动',
         activityDescription: '最近活动标题取决于各实例服务器的 endpoint 版本。',
+        embeddingTitle: '嵌入搜索',
+        embeddingDescription: '向量嵌入 Provider 设置与内存索引管理。',
         fields: {
             activity: {
                 label: '最近活动预览',
@@ -256,6 +264,8 @@ const COPY = {
         displayDescription: 'これらの設定は左側のインスタンス一覧と保存済みのマネージャー UI 設定にのみ反映されます。',
         activityTitle: 'プレビューとアクティビティ',
         activityDescription: '最近のアクティビティタイトルは各インスタンスサーバーの endpoint バージョンによって変わります。',
+        embeddingTitle: 'エンベディング検索',
+        embeddingDescription: 'ベクトルエンベディング Provider の設定とメモリインデックスの管理。',
         fields: {
             activity: {
                 label: '最近のアクティビティのプレビュー',
@@ -552,13 +562,23 @@ export function DashboardSettingsWorkspace(props: DashboardSettingsWorkspaceProp
                         })}
                     </div>
                 </section>
-            ) : (
+            ) : props.activeSection === 'activity' ? (
                 <section className="dashboard-settings-section">
                     <header>
                         <h3>{copy.activityTitle}</h3>
                         <p>{copy.activityDescription}</p>
                     </header>
                     <TitleSupportSummary support={props.titleSupport} locale={locale} />
+                </section>
+            ) : (
+                <section className="dashboard-settings-section">
+                    <header>
+                        <h3>{copy.embeddingTitle}</h3>
+                        <p>{copy.embeddingDescription}</p>
+                    </header>
+                    <Suspense fallback={<p>Loading...</p>}>
+                        <LazyEmbedding />
+                    </Suspense>
                 </section>
             )}
         </main>

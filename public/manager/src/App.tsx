@@ -424,6 +424,27 @@ export function App() {
         settingsDirty,
     ]);
 
+    useEffect(() => {
+        function onPreviewShortcut(event: MessageEvent): void {
+            if (!view.dashboardShortcutsEnabled) return;
+            const data = event.data;
+            if (!data || data.type !== 'jaw-preview-shortcut') return;
+            const synth = { key: data.key, altKey: !!data.altKey, ctrlKey: false, metaKey: false, shiftKey: !!data.shiftKey } as unknown as KeyboardEvent;
+            const action = actionForShortcutEvent(synth, view.dashboardShortcutKeymap);
+            if (action) runManagerShortcut(action);
+        }
+        window.addEventListener('message', onPreviewShortcut);
+        return () => window.removeEventListener('message', onPreviewShortcut);
+    }, [
+        filtered,
+        selectedInstance,
+        view.dashboardShortcutsEnabled,
+        view.dashboardShortcutKeymap,
+        view.sidebarMode,
+        view.activeDetailTab,
+        settingsDirty,
+    ]);
+
     async function handleLifecycle(action: DashboardLifecycleAction, instance: DashboardInstance): Promise<void> {
         const lifecycle = instance.lifecycle;
         if (!lifecycle) return;

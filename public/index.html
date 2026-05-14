@@ -40,6 +40,15 @@
 </head>
 
 <body>
+    <script>
+        (function() {
+            try {
+                var s = JSON.parse(localStorage.getItem('sidebarState') || '{}');
+                if (s.left) document.body.classList.add('left-collapsed');
+                if (s.right) document.body.classList.add('right-collapsed');
+            } catch(e) {}
+        })();
+    </script>
     <!-- Left Sidebar -->
     <nav class="sidebar-left" role="navigation" aria-label="Main navigation">
         <button class="sidebar-toggle" id="toggleLeft" title="Collapse" aria-label="Collapse sidebar">◀</button>
@@ -196,9 +205,11 @@
         <div class="pending-queue" id="pendingQueue" aria-live="polite"></div>
         <div class="file-preview" id="filePreview">
             <div class="file-preview-header">
-                <span class="file-preview-title"><span data-icon="paperclip"></span> Files</span>
-                <button class="help-trigger" type="button" data-help-topic="attachments"
-                    data-i18n-aria="help.attachments.aria" aria-label="첨부 파일 도움말">?</button>
+                <div class="file-preview-title-group">
+                    <span class="file-preview-title"><span data-icon="paperclip"></span> Files</span>
+                    <button class="help-trigger" type="button" data-help-topic="attachments"
+                        data-i18n-aria="help.attachments.aria" aria-label="첨부 파일 도움말">?</button>
+                </div>
                 <button class="file-preview-clear" id="filePreviewClear">✕ Clear all</button>
             </div>
             <div class="file-preview-list" id="filePreviewList"></div>
