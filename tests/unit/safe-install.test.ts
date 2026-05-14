@@ -88,14 +88,15 @@ test('SAF-004c: duplicate CLI uninstall is opt-in', () => {
     assert.ok(dedupeBlock.includes('not removing automatically'), 'dedupe default must avoid uninstalling user tools');
 });
 
-test('SAF-004c2: forced npm installs are preferred during duplicate cleanup', () => {
+test('SAF-004c2: npm duplicate cleanup only runs after cli-jaw installs npm', () => {
     const dedupeBlock = postinstallSrc.slice(postinstallSrc.indexOf('function deduplicateCliTool'));
     assert.ok(dedupeBlock.includes('preferredActive?: PkgMgr'), 'dedupe should accept the manager postinstall intentionally used');
     assert.ok(dedupeBlock.includes('isInstalledVia(preferredActive'), 'dedupe should verify the preferred manager was actually installed');
     assert.ok(
-        postinstallSrc.includes('deduplicateCliTool(bin, pkg, brew, forceMgr)'),
-        'forceMgr must be passed through so bun PATH shims do not win over npm-forced installs',
+        postinstallSrc.includes("deduplicateCliTool(bin, pkg, brew, 'npm')"),
+        'dedupe should prefer npm only when cli-jaw actually installed npm',
     );
+    assert.ok(!postinstallSrc.includes('deduplicateCliTool(bin, pkg, brew, forceMgr)'), 'forceMgr should not force duplicate cleanup');
 });
 
 test('SAF-004d: Homebrew Node npm globals are classified as npm before brew', () => {
@@ -146,7 +147,8 @@ test('SAF-004e: Claude CLI install uses the official native installer', () => {
     assert.ok(cliBlock.includes('findClaudeNativeBinary'), 'postinstall should verify the native Claude binary location');
     assert.ok(cliBlock.includes('findExistingClaudeBinary'), 'postinstall should check existing Claude before installing');
     assert.ok(cliBlock.includes('isSpawnableCliFile'), 'postinstall should avoid accepting broken Unix Claude shims as existing installs');
-    assert.ok(cliBlock.includes("detectCliBinary('claude'"), 'postinstall existing-Claude detection should scan all PATH candidates');
+    assert.ok(cliBlock.includes('findExistingCliBinary'), 'postinstall existing-Claude detection should use the shared PATH scanner');
+    assert.ok(postinstallSrc.includes('detectCliBinary(name'), 'shared existing-CLI detection should scan all PATH candidates');
     assert.ok(cliBlock.includes('claude already present'), 'postinstall should skip reinstalling existing Claude by default');
     assert.ok(cliBlock.includes('shouldForceClaudeDuringPostinstall()'), 'postinstall should expose an explicit force-update path for native Claude');
     assert.ok(cliBlock.includes('claude (native installer)'), 'strict failure reporting should identify the native installer path');
@@ -159,7 +161,7 @@ test('SAF-004e1: Claude postinstall skips runnable existing CLIs, including Bun/
         postinstallSrc.indexOf('/** Check if a package is installed via a specific manager'),
     );
     assert.ok(installBlock.includes('function isRunnableClaudeBinary'), 'existing Claude should be validated by execution');
-    assert.ok(installBlock.includes('runClaudeVersionCheck(binaryPath)'), 'validation should use claude --version');
+    assert.ok(installBlock.includes('isRunnableCliBinary'), 'validation should use the shared --version check');
     assert.ok(installBlock.includes('isRunnableClaudeBinary(existingPath)'), 'runnable existing Claude should skip install');
     assert.ok(installBlock.includes('claude already present'), 'postinstall should still skip working existing Claude');
     assert.ok(!installBlock.includes('non-native claude detected'), 'postinstall must not treat Bun/npm Claude as broken solely by installer kind');
@@ -167,7 +169,7 @@ test('SAF-004e1: Claude postinstall skips runnable existing CLIs, including Bun/
 
 test('SAF-004e1b: Claude runnable check is explicit for Windows and Unix', () => {
     const checkBlock = postinstallSrc.slice(
-        postinstallSrc.indexOf('function runClaudeVersionCheck'),
+        postinstallSrc.indexOf('function runCliVersionCheck'),
         postinstallSrc.indexOf('function isRunnableClaudeBinary'),
     );
     assert.ok(checkBlock.includes("process.platform === 'win32'"), 'Windows must use its own version-check branch');
@@ -181,16 +183,24 @@ test('SAF-004e2: Claude native install classification covers Windows native path
     assert.equal(classifyClaudeInstall(join(os.homedir(), '.local', 'bin', 'claude.exe')), 'native');
 });
 
-test('SAF-004f: bundled non-Claude CLI tools force npm install manager', () => {
+test('SAF-004f: bundled non-Claude CLI tools preserve runnable installs before using npm', () => {
     const packageBlock = postinstallSrc.slice(
         postinstallSrc.indexOf('const CLI_PACKAGES'),
         postinstallSrc.indexOf('type PkgMgr'),
     );
-    assert.ok(packageBlock.includes("{ bin: 'codex', pkg: '@openai/codex', forceMgr: 'npm' }"), 'codex should force npm');
-    assert.ok(packageBlock.includes("{ bin: 'gemini', pkg: '@google/gemini-cli', forceMgr: 'npm' }"), 'gemini should force npm');
-    assert.ok(packageBlock.includes("{ bin: 'copilot', pkg: '@github/copilot', forceMgr: 'npm' }"), 'copilot should force npm');
-    assert.ok(packageBlock.includes("{ bin: 'opencode', pkg: 'opencode-ai', forceMgr: 'npm' }"), 'opencode should force npm');
+    assert.ok(packageBlock.includes("{ bin: 'codex', pkg: '@openai/codex' }"), 'codex should be listed');
+    assert.ok(packageBlock.includes("{ bin: 'gemini', pkg: '@google/gemini-cli' }"), 'gemini should be listed');
+    assert.ok(packageBlock.includes("{ bin: 'copilot', pkg: '@github/copilot' }"), 'copilot should be listed');
+    assert.ok(packageBlock.includes("{ bin: 'opencode', pkg: 'opencode-ai' }"), 'opencode should be listed');
+    assert.ok(!packageBlock.includes('forceMgr'), 'non-Claude CLIs should not force-reinstall over another package manager');
     assert.ok(!packageBlock.includes("brew: 'gemini-cli'"), 'gemini should not route through brew');
+
+    const installBlock = postinstallSrc.slice(postinstallSrc.indexOf('export async function installCliTools'));
+    assert.ok(installBlock.includes('const existingPath = findExistingCliBinary(bin)'), 'install should detect existing CLIs first');
+    assert.ok(installBlock.includes('isRunnableCliBinary(bin, existingPath)'), 'existing CLIs should be validated by --version');
+    assert.ok(installBlock.includes('${bin} already present'), 'runnable existing CLIs should be skipped');
+    assert.ok(installBlock.includes("buildInstallCmd('npm', pkg, brew)"), 'missing or broken CLIs should install via npm');
+    assert.ok(!installBlock.includes('detectDefaultPkgMgr'), 'Bun presence should not redirect fresh installs to Bun');
 });
 
 test('SAF-004g: postinstall child processes use service-safe PATH consistently', () => {

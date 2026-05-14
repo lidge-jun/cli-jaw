@@ -381,11 +381,6 @@ export function detectInstaller(binName: string): PkgMgr | null {
     });
 }
 
-/** Detect the default package manager for fresh installs. */
-function detectDefaultPkgMgr(): Exclude<PkgMgr, 'brew'> {
-    try { execSync('bun --version', { stdio: 'pipe', env: postinstallExecEnv() }); return 'bun'; } catch { return 'npm'; }
-}
-
 function buildInstallCmd(mgr: PkgMgr, pkg: string, brewFormula?: string): string {
     switch (mgr) {
         case 'brew': return `brew upgrade ${brewFormula || pkg} 2>/dev/null || brew install ${brewFormula || pkg}`;
@@ -591,11 +586,10 @@ function deduplicateCliTool(bin: string, pkg: string, brew?: string, preferredAc
 }
 
 export async function installCliTools(opts: InstallOpts = {}) {
-    const defaultMgr = detectDefaultPkgMgr();
     const failed: string[] = [];
 
     console.log('[jaw:init] installing CLI tools @latest...');
-    for (const { bin, pkg, brew, forceMgr } of CLI_PACKAGES) {
+    for (const { bin, pkg, brew } of CLI_PACKAGES) {
         if (bin === 'claude') {
             if (opts.dryRun) { console.log(`  [dry-run] would run ${buildClaudeNativeInstallCmd()}`); continue; }
             if (opts.interactive && opts.ask) {
@@ -605,42 +599,31 @@ export async function installCliTools(opts: InstallOpts = {}) {
             if (!installClaudeCli({ force: shouldForceClaudeDuringPostinstall() })) failed.push('claude (native installer)');
             continue;
         }
+        const existingPath = findExistingCliBinary(bin);
+        if (existingPath && isRunnableCliBinary(bin, existingPath)) {
+            console.log(`[jaw:init] ⏭️  ${bin} already present → ${existingPath}`);
+            continue;
+        }
         if (opts.dryRun) {
-            const dryRunMgr = forceMgr || 'npm';
-            console.log(`  [dry-run] would run ${buildInstallCmd(dryRunMgr, pkg, brew)}`);
+            console.log(`  [dry-run] would run ${buildInstallCmd('npm', pkg, brew)}`);
             continue;
         }
         if (opts.interactive && opts.ask) {
             const answer = await opts.ask(`Install ${bin} (${pkg})? [y/N]`, 'n');
             if (answer.toLowerCase() !== 'y') { console.log(`  ⏭️  skipped ${bin}`); continue; }
         }
-        // forceMgr overrides detection (e.g. copilot → always npm)
-        const existing = forceMgr ? null : detectInstaller(bin);
-        const mgr = forceMgr || existing || defaultMgr;
-        const cmd = buildInstallCmd(mgr, pkg, brew);
-        const tag = existing ? `update via ${mgr}` : `fresh install via ${mgr}`;
+        const cmd = buildInstallCmd('npm', pkg, brew);
+        const tag = existingPath ? 'repair via npm' : 'fresh install via npm';
         console.log(`[jaw:init] 📦 ${bin} (${tag}): ${cmd}`);
         try {
             execSync(cmd, { stdio: 'pipe', timeout: 180000, env: postinstallExecEnv() });
             console.log(`[jaw:init] ✅ ${bin} installed`);
         } catch {
-            // Fallback: if preferred manager failed and it wasn't npm, try npm
-            if (mgr !== 'npm') {
-                console.log(`[jaw:init] ⚠️  ${mgr} failed, trying npm i -g ${pkg}@latest ...`);
-                try {
-                    execSync(`npm i -g ${pkg}@latest`, { stdio: 'pipe', timeout: 180000, env: postinstallExecEnv() });
-                    console.log(`[jaw:init] ✅ ${bin} installed (via npm fallback)`);
-                } catch {
-                    failed.push(`${bin} (${pkg})`);
-                    console.error(`[jaw:init] ⚠️  ${bin}: auto-install failed — install manually: npm i -g ${pkg}`);
-                }
-            } else {
-                failed.push(`${bin} (${pkg})`);
-                console.error(`[jaw:init] ⚠️  ${bin}: auto-install failed — install manually: npm i -g ${pkg}`);
-            }
+            failed.push(`${bin} (${pkg})`);
+            console.error(`[jaw:init] ⚠️  ${bin}: auto-install failed — install manually: npm i -g ${pkg}`);
         }
-        // Clean up duplicate installations from other package managers
-        deduplicateCliTool(bin, pkg, brew, forceMgr);
+        // Clean up duplicate installations from other package managers only after cli-jaw installs npm.
+        deduplicateCliTool(bin, pkg, brew, 'npm');
     }
 
     if (failed.length > 0 && shouldRequireCliToolsDuringPostinstall()) {
