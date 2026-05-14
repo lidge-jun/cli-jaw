@@ -59,7 +59,8 @@ export function softResetSkills() {
     // 1a. Try GitHub clone first (public repo, always latest), unless local
     // bundled skills are explicitly requested for compatibility closeout work.
     if (shouldUseLocalSkillsSource()) {
-        console.log(`[skills:soft-reset] using local bundled source (JAW_SKILLS_SOURCE=local)`);
+        const sourceMode = process.env["JAW_SKILLS_SOURCE"] || 'local';
+        console.log(`[skills:soft-reset] using local bundled source (JAW_SKILLS_SOURCE=${sourceMode})`);
     } else if (shouldSkipClone()) {
         console.log(`[skills:soft-reset] GitHub clone suppressed (cooldown active)`);
     } else {

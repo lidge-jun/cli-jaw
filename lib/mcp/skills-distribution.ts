@@ -95,7 +95,8 @@ export function copyDefaultSkills() {
     // 2a. Try GitHub clone first (public repo, no auth needed), unless local
     // bundled skills are explicitly requested for compatibility closeout work.
     if (shouldUseLocalSkillsSource()) {
-        console.log(`[skills] using local bundled skills_ref (JAW_SKILLS_SOURCE=local)`);
+        const sourceMode = process.env["JAW_SKILLS_SOURCE"] || 'local';
+        console.log(`[skills] using local bundled skills_ref (JAW_SKILLS_SOURCE=${sourceMode})`);
     } else if (shouldSkipClone()) {
         console.log(`[skills] GitHub clone suppressed (cooldown active)`);
     } else {
