@@ -154,7 +154,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         broadcast('new_message', { role: 'user', content: prompt, source: origin, fromQueue: true });
         const task = isResetIntent(prompt)
             ? orchestrateReset({ origin, _skipInsert: true })
-            : orchestrate(prompt, { origin, _skipInsert: true });
+            : orchestrate(prompt, { origin, _skipInsert: true, _skipReplayDrain: true });
         task.catch((err: Error) => console.error('[steer:orchestrate]', err.message));
         res.json({ ok: true, pending: result.pending });
     });
