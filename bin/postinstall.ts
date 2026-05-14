@@ -31,7 +31,11 @@ import { ensureSharedHomeSkillsLinks, initMcpConfig, copyDefaultSkills, propagat
 import { resolveHomePath } from '../src/core/path-expand.js';
 import { buildServicePath } from '../src/core/runtime-path.js';
 import { classifyClaudeInstall } from '../src/core/claude-install.js';
-import { detectCliBinary, isSpawnableCliFile } from '../src/core/cli-detect.js';
+import {
+    isSpawnableCliFile,
+    listCliBinaryCandidates,
+    readProcessPath,
+} from '../src/core/cli-detect.js';
 import { asArray, asRecord, errString, fieldString } from './_http-client.js';
 
 // ─── JAW_HOME inline (config.ts → registry.ts import 체인 제거) ───
@@ -443,13 +447,24 @@ function findClaudeNativeBinary(): string | null {
     return null;
 }
 
+export function findRunnableCliBinary(name: string): string | null {
+    const scan = listCliBinaryCandidates(name, readProcessPath());
+    for (const candidate of scan.candidates) {
+        if (!candidate.spawnable) {
+            console.log(`[jaw:init] ⚠️  ${name} candidate is not spawnable → ${candidate.path}`);
+            continue;
+        }
+        if (isRunnableCliBinary(name, candidate.path)) return candidate.path;
+    }
+    return null;
+}
+
 function findExistingCliBinary(name: string): string | null {
-    const detected = detectCliBinary(name, process.env["PATH"] || '');
-    return detected.available ? detected.path : null;
+    return findRunnableCliBinary(name);
 }
 
 function findExistingClaudeBinary(): string | null {
-    return findExistingCliBinary('claude');
+    return findRunnableCliBinary('claude');
 }
 
 function outputText(value: unknown): string {
@@ -504,8 +519,8 @@ function isRunnableClaudeBinary(binaryPath: string): boolean {
 
 function installClaudeCli(options: { force?: boolean } = {}): boolean {
     const existingPath = findExistingClaudeBinary();
-    if (existingPath && !options.force && isRunnableClaudeBinary(existingPath)) {
-        console.log(`[jaw:init] ⏭️  claude already present → ${existingPath}`);
+    if (existingPath && !options.force) {
+        console.log(`[jaw:init] ⏭️  claude already works → ${existingPath}`);
         return true;
     }
 
@@ -522,13 +537,17 @@ function installClaudeCli(options: { force?: boolean } = {}): boolean {
     }
 
     const nativePath = findClaudeNativeBinary();
-    if (nativePath) {
-        console.log(`[jaw:init] ✅ claude native binary → ${nativePath}`);
+    if (nativePath && isRunnableClaudeBinary(nativePath)) {
+        console.log(`[jaw:init] ✅ claude native binary verified → ${nativePath}`);
         return true;
     }
 
-    console.error('[jaw:init] ⚠️  claude: installer completed but native binary was not found');
-    console.error('[jaw:init]    expected ~/.local/bin/claude, ~/.claude/local/bin/claude, or %USERPROFILE%\\.local\\bin\\claude.exe');
+    if (nativePath) {
+        console.error(`[jaw:init] ⚠️  claude native binary exists but failed --version → ${nativePath}`);
+    }
+
+    console.error('[jaw:init] ⚠️  claude: installer completed but native binary was not found or not runnable');
+    console.error('[jaw:init]    expected a working ~/.local/bin/claude, ~/.claude/local/bin/claude, or %USERPROFILE%\\.local\\bin\\claude.exe');
     return false;
 }
 
@@ -591,6 +610,15 @@ export async function installCliTools(opts: InstallOpts = {}) {
     console.log('[jaw:init] installing CLI tools @latest...');
     for (const { bin, pkg, brew } of CLI_PACKAGES) {
         if (bin === 'claude') {
+            if (!shouldInstallClaudeDuringPostinstall()) {
+                console.log('[jaw:init] claude install skipped (CLI_JAW_SKIP_CLAUDE)');
+                continue;
+            }
+            const existingPath = findRunnableCliBinary('claude');
+            if (existingPath && !shouldForceClaudeDuringPostinstall()) {
+                console.log(`[jaw:init] ⏭️  claude already works → ${existingPath}`);
+                continue;
+            }
             if (opts.dryRun) { console.log(`  [dry-run] would run ${buildClaudeNativeInstallCmd()}`); continue; }
             if (opts.interactive && opts.ask) {
                 const answer = await opts.ask('Install claude (native Claude Code installer)? [y/N]', 'n');
@@ -600,8 +628,8 @@ export async function installCliTools(opts: InstallOpts = {}) {
             continue;
         }
         const existingPath = findExistingCliBinary(bin);
-        if (existingPath && isRunnableCliBinary(bin, existingPath)) {
-            console.log(`[jaw:init] ⏭️  ${bin} already present → ${existingPath}`);
+        if (existingPath) {
+            console.log(`[jaw:init] ⏭️  ${bin} already works → ${existingPath}`);
             continue;
         }
         if (opts.dryRun) {

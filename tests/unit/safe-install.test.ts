@@ -2,11 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
 import { readSource } from './source-normalize.js';
 import {
     classifyInstallerFromPath,
+    findRunnableCliBinary,
+    installCliTools,
     shouldDedupeCliTools,
     shouldForceClaudeDuringPostinstall,
     shouldInstallClaudeDuringPostinstall,
@@ -22,6 +25,40 @@ const initSrc = readSource(join(__dirname, '../../bin/commands/init.ts'), 'utf8'
 const officeCliShellSrc = readSource(join(__dirname, '../../scripts/install-officecli.sh'), 'utf8');
 const officeCliPowerShellSrc = readSource(join(__dirname, '../../scripts/install-officecli.ps1'), 'utf8');
 const readmeSrc = readSource(join(__dirname, '../../README.md'), 'utf8');
+const repoRoot = join(__dirname, '../..');
+
+function writeCli(dir: string, name: string, content: string): string {
+    const filePath = join(dir, name);
+    fs.writeFileSync(filePath, content);
+    fs.chmodSync(filePath, 0o755);
+    return filePath;
+}
+
+function restoreEnv(name: string, value: string | undefined): void {
+    if (value === undefined) {
+        delete process.env[name];
+        return;
+    }
+    process.env[name] = value;
+}
+
+async function captureConsole(fn: () => void | Promise<void>): Promise<string> {
+    const logs: string[] = [];
+    const originalLog = console.log;
+    const originalWarn = console.warn;
+    const originalError = console.error;
+    console.log = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+    console.warn = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+    console.error = (...args: unknown[]) => { logs.push(args.map(String).join(' ')); };
+    try {
+        await fn();
+    } finally {
+        console.log = originalLog;
+        console.warn = originalWarn;
+        console.error = originalError;
+    }
+    return logs.join('\n');
+}
 
 // ── SAF-001: safe guard with JAW_SAFE ──
 
@@ -53,6 +90,23 @@ test('SAF-003: safe mode returns early (no side effects)', () => {
     const guardBlock = postinstallSrc.slice(guardStart, guardStart + 500);
     assert.ok(guardBlock.includes('return'), 'returns early in safe mode');
     assert.ok(guardBlock.includes('safe mode'), 'prints safe mode message');
+});
+
+test('SAF-003b: postinstall guard safe mode exits before build fallback', () => {
+    const result = spawnSync(process.execPath, ['scripts/postinstall-guard.cjs'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        env: {
+            ...process.env,
+            JAW_SAFE: '1',
+        },
+    });
+    const output = `${result.stdout}\n${result.stderr}`;
+
+    assert.equal(result.status, 0);
+    assert.match(output, /safe mode/i);
+    assert.doesNotMatch(output, /dist\/ not found, building/i);
+    assert.doesNotMatch(output, /setup complete/i);
 });
 
 // ── SAF-004: installCliTools exported ──
@@ -148,10 +202,11 @@ test('SAF-004e: Claude CLI install uses the official native installer', () => {
     assert.ok(cliBlock.includes('findExistingClaudeBinary'), 'postinstall should check existing Claude before installing');
     assert.ok(cliBlock.includes('isSpawnableCliFile'), 'postinstall should avoid accepting broken Unix Claude shims as existing installs');
     assert.ok(cliBlock.includes('findExistingCliBinary'), 'postinstall existing-Claude detection should use the shared PATH scanner');
-    assert.ok(postinstallSrc.includes('detectCliBinary(name'), 'shared existing-CLI detection should scan all PATH candidates');
-    assert.ok(cliBlock.includes('claude already present'), 'postinstall should skip reinstalling existing Claude by default');
+    assert.ok(postinstallSrc.includes('findRunnableCliBinary(name'), 'shared existing-CLI detection should scan all PATH candidates');
+    assert.ok(cliBlock.includes('claude already works'), 'postinstall should skip reinstalling existing Claude by default');
     assert.ok(cliBlock.includes('shouldForceClaudeDuringPostinstall()'), 'postinstall should expose an explicit force-update path for native Claude');
     assert.ok(cliBlock.includes('claude (native installer)'), 'strict failure reporting should identify the native installer path');
+    assert.ok(cliBlock.includes('isRunnableClaudeBinary(nativePath)'), 'native Claude install success should require --version verification');
     assert.ok(!cliBlock.includes("process.platform === 'win32' && found"), 'Windows success must require a native Claude binary');
 });
 
@@ -162,8 +217,8 @@ test('SAF-004e1: Claude postinstall skips runnable existing CLIs, including Bun/
     );
     assert.ok(installBlock.includes('function isRunnableClaudeBinary'), 'existing Claude should be validated by execution');
     assert.ok(installBlock.includes('isRunnableCliBinary'), 'validation should use the shared --version check');
-    assert.ok(installBlock.includes('isRunnableClaudeBinary(existingPath)'), 'runnable existing Claude should skip install');
-    assert.ok(installBlock.includes('claude already present'), 'postinstall should still skip working existing Claude');
+    assert.ok(postinstallSrc.includes('export function findRunnableCliBinary'), 'runnable existing Claude should be selected by shared runnable scanner');
+    assert.ok(installBlock.includes('claude already works'), 'postinstall should still skip working existing Claude');
     assert.ok(!installBlock.includes('non-native claude detected'), 'postinstall must not treat Bun/npm Claude as broken solely by installer kind');
 });
 
@@ -197,10 +252,113 @@ test('SAF-004f: bundled non-Claude CLI tools preserve runnable installs before u
 
     const installBlock = postinstallSrc.slice(postinstallSrc.indexOf('export async function installCliTools'));
     assert.ok(installBlock.includes('const existingPath = findExistingCliBinary(bin)'), 'install should detect existing CLIs first');
-    assert.ok(installBlock.includes('isRunnableCliBinary(bin, existingPath)'), 'existing CLIs should be validated by --version');
-    assert.ok(installBlock.includes('${bin} already present'), 'runnable existing CLIs should be skipped');
+    assert.ok(postinstallSrc.includes('export function findRunnableCliBinary(name'), 'existing CLIs should be validated by --version');
+    assert.ok(installBlock.includes('${bin} already works'), 'runnable existing CLIs should be skipped');
     assert.ok(installBlock.includes("buildInstallCmd('npm', pkg, brew)"), 'missing or broken CLIs should install via npm');
     assert.ok(!installBlock.includes('detectDefaultPkgMgr'), 'Bun presence should not redirect fresh installs to Bun');
+});
+
+test('SAF-004f1: runnable lookup skips a broken first PATH candidate', () => {
+    const root = fs.mkdtempSync(join(os.tmpdir(), 'jaw-cli-runnable-'));
+    const brokenDir = join(root, 'broken');
+    const workingDir = join(root, 'working');
+    fs.mkdirSync(brokenDir);
+    fs.mkdirSync(workingDir);
+
+    const commandName = 'jaw-test-cli';
+    const fileName = process.platform === 'win32' ? `${commandName}.cmd` : commandName;
+    const broken = writeCli(
+        brokenDir,
+        fileName,
+        process.platform === 'win32'
+            ? '@echo off\r\nexit /b 1\r\n'
+            : '#!/usr/bin/env sh\nexit 1\n',
+    );
+    const working = writeCli(
+        workingDir,
+        fileName,
+        process.platform === 'win32'
+            ? '@echo off\r\necho 1.0.0\r\n'
+            : '#!/usr/bin/env sh\necho 1.0.0\n',
+    );
+    const previousPath = process.env["PATH"];
+    const previousTitlePath = process.env["Path"];
+    const systemPath = process.platform === 'win32'
+        ? (previousTitlePath || previousPath || '')
+        : ['/usr/bin', '/bin'].join(delimiter);
+    process.env["PATH"] = [brokenDir, workingDir, systemPath].filter(Boolean).join(delimiter);
+    delete process.env["Path"];
+
+    try {
+        assert.equal(findRunnableCliBinary(commandName), working);
+        assert.notEqual(findRunnableCliBinary(commandName), broken);
+    } finally {
+        restoreEnv('PATH', previousPath);
+        restoreEnv('Path', previousTitlePath);
+    }
+});
+
+test('SAF-004f2: non-Claude all-tools dry-run skips repair when later PATH candidate works', async () => {
+    const managedRoot = join(os.homedir(), '.nvm', 'versions', 'node');
+    fs.mkdirSync(managedRoot, { recursive: true });
+    const root = fs.mkdtempSync(join(managedRoot, 'jaw-cli-all-tools-'));
+    const brokenDir = join(root, 'v0-broken', 'bin');
+    const workingDir = join(root, 'v1-working', 'bin');
+    fs.mkdirSync(brokenDir, { recursive: true });
+    fs.mkdirSync(workingDir, { recursive: true });
+
+    const fileName = process.platform === 'win32' ? 'codex.cmd' : 'codex';
+    writeCli(
+        brokenDir,
+        fileName,
+        process.platform === 'win32'
+            ? '@echo off\r\nexit /b 1\r\n'
+            : '#!/usr/bin/env sh\nexit 1\n',
+    );
+    const working = writeCli(
+        workingDir,
+        fileName,
+        process.platform === 'win32'
+            ? '@echo off\r\necho 1.0.0\r\n'
+            : '#!/usr/bin/env sh\necho 1.0.0\n',
+    );
+    const previousPath = process.env["PATH"];
+    const previousTitlePath = process.env["Path"];
+    const previousSkip = process.env["CLI_JAW_SKIP_CLAUDE"];
+    const systemPath = process.platform === 'win32'
+        ? (previousTitlePath || previousPath || '')
+        : ['/usr/bin', '/bin'].join(delimiter);
+    process.env["PATH"] = [brokenDir, workingDir, systemPath].filter(Boolean).join(delimiter);
+    delete process.env["Path"];
+    process.env["CLI_JAW_SKIP_CLAUDE"] = '1';
+
+    try {
+        const logs = await captureConsole(() => installCliTools({ dryRun: true }));
+        assert.match(logs, new RegExp(`codex already works.*${working.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+        assert.doesNotMatch(logs, /would run npm i -g @openai\/codex/);
+        assert.doesNotMatch(logs, /codex \(repair via npm\)/);
+    } finally {
+        restoreEnv('PATH', previousPath);
+        restoreEnv('Path', previousTitlePath);
+        restoreEnv('CLI_JAW_SKIP_CLAUDE', previousSkip);
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('SAF-004f3: CLI_JAW_SKIP_CLAUDE wins over all-tools dry-run', async () => {
+    const previousInstall = process.env["CLI_JAW_INSTALL_CLI_TOOLS"];
+    const previousSkip = process.env["CLI_JAW_SKIP_CLAUDE"];
+    process.env["CLI_JAW_INSTALL_CLI_TOOLS"] = '1';
+    process.env["CLI_JAW_SKIP_CLAUDE"] = '1';
+
+    try {
+        const logs = await captureConsole(() => installCliTools({ dryRun: true }));
+        assert.match(logs, /claude install skipped \(CLI_JAW_SKIP_CLAUDE\)/);
+        assert.doesNotMatch(logs, /claude.*native installer/);
+    } finally {
+        restoreEnv('CLI_JAW_INSTALL_CLI_TOOLS', previousInstall);
+        restoreEnv('CLI_JAW_SKIP_CLAUDE', previousSkip);
+    }
 });
 
 test('SAF-004g: postinstall child processes use service-safe PATH consistently', () => {

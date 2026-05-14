@@ -5,8 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 
 import {
+    buildCliDetectionEnv,
     isSpawnableCliFile,
+    listCliBinaryCandidates,
     prioritizeCliCandidates,
+    readProcessPath,
     selectSpawnableCliPath,
 } from '../../src/core/cli-detect.ts';
 
@@ -48,6 +51,39 @@ test('selectSpawnableCliPath reports rejected candidates when none are spawnable
     assert.equal(result.available, false);
     assert.equal(result.path, null);
     assert.deepEqual(result.rejected, [{ path: broken, reason: 'text file without shebang' }]);
+});
+
+test('readProcessPath accepts PATH, Path, and path keys in priority order', () => {
+    assert.equal(readProcessPath({ PATH: '/tmp/upper', Path: '/tmp/title', path: '/tmp/lower' }), '/tmp/upper');
+    assert.equal(readProcessPath({ Path: '/tmp/title', path: '/tmp/lower' }), '/tmp/title');
+    assert.equal(readProcessPath({ path: '/tmp/lower' }), '/tmp/lower');
+    assert.equal(readProcessPath({}), '');
+});
+
+test('buildCliDetectionEnv normalizes duplicate PATH casing', () => {
+    const env = buildCliDetectionEnv('/tmp/jaw-path', {
+        PATH: '/tmp/upper',
+        Path: '/tmp/title',
+        path: '/tmp/lower',
+    });
+    const key = process.platform === 'win32' ? 'Path' : 'PATH';
+    const otherKeys = process.platform === 'win32' ? ['PATH', 'path'] : ['Path', 'path'];
+
+    assert.ok(env[key]?.includes('/tmp/jaw-path'));
+    for (const otherKey of otherKeys) assert.equal(env[otherKey], undefined);
+});
+
+test('listCliBinaryCandidates returns candidates with spawnability state', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-cli-detect-list-'));
+    const commandName = 'jaw-test-cli';
+    const fileName = process.platform === 'win32' ? `${commandName}.cmd` : commandName;
+    const content = process.platform === 'win32'
+        ? '@echo off\r\necho ok\r\n'
+        : '#!/usr/bin/env sh\necho ok\n';
+    const cliPath = writeExecutable(dir, fileName, content);
+    const result = listCliBinaryCandidates(commandName, `${dir}${path.delimiter}${readProcessPath()}`);
+
+    assert.equal(result.candidates.some((candidate) => candidate.path === cliPath && candidate.spawnable), true);
 });
 
 test('prioritizeCliCandidates moves bun shims behind managed node bins for claude', () => {

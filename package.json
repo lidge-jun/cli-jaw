@@ -38,13 +38,14 @@
     "dist/",
     "public/",
     "scripts/",
+    "skills_ref/",
     "package.json"
   ],
   "scripts": {
     "dev": "tsx --env-file=.env server.ts",
     "ensure:native": "node scripts/ensure-native-modules.cjs",
     "rebuild:native": "npm rebuild better-sqlite3",
-    "postinstall": "node scripts/postinstall-guard.cjs && node dist/bin/postinstall.js",
+    "postinstall": "node scripts/postinstall-guard.cjs",
     "clean:dist": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true});\"",
     "check:copilot-gap": "tsx scripts/check-copilot-gap.ts",
     "check:deps": "tsx scripts/check-deps-offline.ts",

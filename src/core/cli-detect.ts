@@ -16,6 +16,16 @@ export interface CliDetection {
     rejected?: RejectedCliCandidate[];
 }
 
+export interface CliBinaryCandidate {
+    path: string;
+    spawnable: boolean;
+    reason?: string;
+}
+
+export interface CliCandidateScan {
+    candidates: CliBinaryCandidate[];
+}
+
 function uniqueLines(raw: string): string[] {
     const seen = new Set<string>();
     const out: string[] = [];
@@ -173,21 +183,50 @@ export function selectSpawnableCliPath(
     };
 }
 
-export function detectCliBinary(name: string, seedPath = process.env["PATH"] || ''): CliDetection {
-    if (!/^[a-z0-9_-]+$/i.test(name)) return { available: false, path: null };
+export function readProcessPath(env: NodeJS.ProcessEnv = process.env): string {
+    return env["PATH"] || env["Path"] || env["path"] || '';
+}
+
+export function buildCliDetectionEnv(
+    seedPath: string,
+    env: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+    const next: NodeJS.ProcessEnv = { ...env };
+    delete next["PATH"];
+    delete next["Path"];
+    delete next["path"];
+    next[process.platform === 'win32' ? 'Path' : 'PATH'] = buildServicePath(seedPath);
+    return next;
+}
+
+export function listCliBinaryCandidates(name: string, seedPath = readProcessPath()): CliCandidateScan {
+    if (!/^[a-z0-9_-]+$/i.test(name)) return { candidates: [] };
     try {
         const cmd = process.platform === 'win32' ? 'where' : 'which';
         const args = process.platform === 'win32' ? [name] : ['-a', name];
         const raw = execFileSync(cmd, args, {
             encoding: 'utf8',
             timeout: 3000,
-            env: {
-                ...process.env,
-                PATH: buildServicePath(seedPath),
-            },
+            env: buildCliDetectionEnv(seedPath),
         }).trim();
-        return selectSpawnableCliPath(prioritizeCliCandidates(name, uniqueLines(raw)));
+        const paths = prioritizeCliCandidates(name, uniqueLines(raw));
+        return {
+            candidates: paths.map((candidatePath) => {
+                const check = isSpawnableCliFile(candidatePath);
+                const candidate: CliBinaryCandidate = {
+                    path: candidatePath,
+                    spawnable: check.ok,
+                };
+                if (!check.ok && check.reason) candidate.reason = check.reason;
+                return candidate;
+            }),
+        };
     } catch {
-        return { available: false, path: null };
+        return { candidates: [] };
     }
+}
+
+export function detectCliBinary(name: string, seedPath = readProcessPath()): CliDetection {
+    const scan = listCliBinaryCandidates(name, seedPath);
+    return selectSpawnableCliPath(scan.candidates.map((candidate) => candidate.path));
 }
