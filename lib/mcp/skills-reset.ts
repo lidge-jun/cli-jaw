@@ -10,6 +10,7 @@ import {
     shouldSkipClone, writeCloneMeta, CLONE_TIMEOUT_MS,
     CODEX_ACTIVE, OPENCLAW_ACTIVE,
     copyDirRecursive, findPackageRoot,
+    isDiscoverableSkillDirName, isSkillSourceEntryName, shouldUseLocalSkillsSource,
 } from './skills-utils.js';
 
 type SkillRegistry = {
@@ -55,8 +56,11 @@ export function softResetSkills() {
     let sourceDir: string | null = null;
     let tmpCloneDir: string | null = null;
 
-    // 1a. Try GitHub clone first (public repo, always latest)
-    if (shouldSkipClone()) {
+    // 1a. Try GitHub clone first (public repo, always latest), unless local
+    // bundled skills are explicitly requested for compatibility closeout work.
+    if (shouldUseLocalSkillsSource()) {
+        console.log(`[skills:soft-reset] using local bundled source (JAW_SKILLS_SOURCE=local)`);
+    } else if (shouldSkipClone()) {
         console.log(`[skills:soft-reset] GitHub clone suppressed (cooldown active)`);
     } else {
         try {
@@ -95,7 +99,7 @@ export function softResetSkills() {
     // sourceDir === null means existing skills_ref/ is already populated (manual clone) — skip copy
     if (sourceDir) {
         for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
-            if (entry.name === '.git') continue;
+            if (!isSkillSourceEntryName(entry.name)) continue;
             const src = join(sourceDir, entry.name);
             const dst = join(refDir, entry.name);
             if (entry.isDirectory()) {
@@ -116,7 +120,7 @@ export function softResetSkills() {
     let restored = 0;
     if (fs.existsSync(activeDir)) {
         for (const d of fs.readdirSync(activeDir, { withFileTypes: true })) {
-            if (!d.isDirectory() || d.name.startsWith('.')) continue;
+            if (!d.isDirectory() || !isDiscoverableSkillDirName(d.name)) continue;
             const src = join(refDir, d.name);
             const dst = join(activeDir, d.name);
             if (!fs.existsSync(src)) continue;  // ref에 없으면 보존 (순수 커스텀)

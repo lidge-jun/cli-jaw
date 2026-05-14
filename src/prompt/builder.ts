@@ -12,6 +12,7 @@ import { buildTaskSnapshot, getMemoryStatus, loadProfileSummary } from '../memor
 import { buildMemoryInjection } from '../memory/injection.js';
 import { loadAndRender, loadTemplate, renderTemplate, parseWorkerContexts, clearTemplateCache } from './template-loader.js';
 import { findStaticEmployee } from '../core/employees.js';
+import { isDiscoverableSkillDirName } from '../../lib/mcp/skills-utils.js';
 
 const promptCache = new Map();
 
@@ -62,7 +63,7 @@ export function loadActiveSkills() {
     try {
         if (!fs.existsSync(SKILLS_DIR)) return [];
         return fs.readdirSync(SKILLS_DIR, { withFileTypes: true })
-            .filter(d => d.isDirectory() && !d.name.startsWith('.'))
+            .filter(d => d.isDirectory() && isDiscoverableSkillDirName(d.name))
             .map(d => {
                 const mdPath = join(SKILLS_DIR, d.name, 'SKILL.md');
                 if (!fs.existsSync(mdPath)) return null;

@@ -52,6 +52,19 @@ export function shouldSkipClone(): boolean {
     return (Date.now() - meta.lastAttempt) < CLONE_COOLDOWN_MS;
 }
 
+export function shouldUseLocalSkillsSource(): boolean {
+    const value = (process.env["JAW_SKILLS_SOURCE"] || '').trim().toLowerCase();
+    return value === 'local' || value === 'bundled' || value === 'package';
+}
+
+export function isDiscoverableSkillDirName(name: string): boolean {
+    return !name.startsWith('.') && !name.endsWith('.bak');
+}
+
+export function isSkillSourceEntryName(name: string): boolean {
+    return name !== '.git' && !name.endsWith('.bak');
+}
+
 // ─── Skill activation sets (shared by copyDefaultSkills / softResetSkills) ───
 export const CODEX_ACTIVE = new Set([
     'pdf',
@@ -103,6 +116,23 @@ export function loadRegistry(dir: string): SkillRegistry {
 
 export function getSkillVersion(id: string, registry: SkillRegistry): string | null {
     return registry?.skills?.[id]?.version ?? null;
+}
+
+export function shouldUpdateSkillDirectory(
+    id: string,
+    src: string,
+    dst: string,
+    srcRegistry: SkillRegistry,
+    dstRegistry: SkillRegistry,
+): boolean {
+    const sv = getSkillVersion(id, srcRegistry);
+    const dv = getSkillVersion(id, dstRegistry);
+    if (sv && (!dv || semverGt(sv, dv))) return true;
+    try {
+        return fs.statSync(join(src, 'SKILL.md')).mtimeMs > fs.statSync(join(dst, 'SKILL.md')).mtimeMs;
+    } catch {
+        return false;
+    }
 }
 
 /** Recursively copy a directory (symlink-safe, error-resilient) */

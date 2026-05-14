@@ -12,7 +12,8 @@ import {
     shouldSkipClone, writeCloneMeta, CLONE_TIMEOUT_MS,
     CODEX_ACTIVE, OPENCLAW_ACTIVE,
     copyDirRecursive, findPackageRoot,
-    semverGt, loadRegistry, getSkillVersion,
+    loadRegistry, getSkillVersion, shouldUpdateSkillDirectory,
+    isDiscoverableSkillDirName, isSkillSourceEntryName, shouldUseLocalSkillsSource,
 } from './skills-utils.js';
 
 type SkillRegistry = {
@@ -55,7 +56,9 @@ export function copyDefaultSkills() {
     const codexSkills = join(os.homedir(), '.codex', 'skills');
     if (fs.existsSync(codexSkills)) {
         const skills = fs.readdirSync(codexSkills, { withFileTypes: true })
-            .filter(d => d.isDirectory() && !DEDUP_EXCLUDED.has(d.name));
+            .filter(d => d.isDirectory()
+                && isDiscoverableSkillDirName(d.name)
+                && !DEDUP_EXCLUDED.has(d.name));
 
         let activeCount = 0, refCount = 0;
 
@@ -89,8 +92,11 @@ export function copyDefaultSkills() {
 
     let skillsSourceResolved = false;
 
-    // 2a. Try GitHub clone first (public repo, no auth needed)
-    if (shouldSkipClone()) {
+    // 2a. Try GitHub clone first (public repo, no auth needed), unless local
+    // bundled skills are explicitly requested for compatibility closeout work.
+    if (shouldUseLocalSkillsSource()) {
+        console.log(`[skills] using local bundled skills_ref (JAW_SKILLS_SOURCE=local)`);
+    } else if (shouldSkipClone()) {
         console.log(`[skills] GitHub clone suppressed (cooldown active)`);
     } else {
         try {
@@ -106,22 +112,20 @@ export function copyDefaultSkills() {
             const cloned = fs.readdirSync(tmpClone, { withFileTypes: true });
             let cloneNew = 0, cloneUpdated = 0;
             for (const entry of cloned) {
-                if (entry.name === '.git') continue;
+                if (!isSkillSourceEntryName(entry.name)) continue;
                 const src = join(tmpClone, entry.name);
                 const dst = join(refDir, entry.name);
                 if (entry.isDirectory()) {
                     if (!fs.existsSync(dst)) {
                         copyDirRecursive(src, dst);
                         cloneNew++;
-                    } else {
+                    } else if (shouldUpdateSkillDirectory(entry.name, src, dst, srcReg, dstReg)) {
                         const sv = getSkillVersion(entry.name, srcReg);
                         const dv = getSkillVersion(entry.name, dstReg);
-                        if (sv && (!dv || semverGt(sv, dv))) {
-                            fs.rmSync(dst, { recursive: true, force: true });
-                            copyDirRecursive(src, dst);
-                            cloneUpdated++;
-                            console.log(`[skills] updated: ${entry.name} ${dv ?? '(none)'} → ${sv}`);
-                        }
+                        fs.rmSync(dst, { recursive: true, force: true });
+                        copyDirRecursive(src, dst);
+                        cloneUpdated++;
+                        console.log(`[skills] updated: ${entry.name} ${dv ?? '(same)'} → ${sv ?? '(mtime)'}`);
                     }
                 } else if (entry.isFile()) {
                     fs.copyFileSync(src, dst);
@@ -146,21 +150,20 @@ export function copyDefaultSkills() {
             const entries = fs.readdirSync(packageRefDir, { withFileTypes: true });
             let refCopied = 0, refUpdated = 0;
             for (const entry of entries) {
+                if (!isSkillSourceEntryName(entry.name)) continue;
                 const src = join(packageRefDir, entry.name);
                 const dst = join(refDir, entry.name);
                 if (entry.isDirectory()) {
                     if (!fs.existsSync(dst)) {
                         copyDirRecursive(src, dst);
                         refCopied++;
-                    } else {
+                    } else if (shouldUpdateSkillDirectory(entry.name, src, dst, srcReg, dstReg)) {
                         const sv = getSkillVersion(entry.name, srcReg);
                         const dv = getSkillVersion(entry.name, dstReg);
-                        if (sv && (!dv || semverGt(sv, dv))) {
-                            fs.rmSync(dst, { recursive: true, force: true });
-                            copyDirRecursive(src, dst);
-                            refUpdated++;
-                            console.log(`[skills] updated: ${entry.name} ${dv ?? '(none)'} → ${sv}`);
-                        }
+                        fs.rmSync(dst, { recursive: true, force: true });
+                        copyDirRecursive(src, dst);
+                        refUpdated++;
+                        console.log(`[skills] updated: ${entry.name} ${dv ?? '(same)'} → ${sv ?? '(mtime)'}`);
                     }
                 } else if (entry.isFile()) {
                     fs.copyFileSync(src, dst);
@@ -277,20 +280,17 @@ export function propagateSkillsToInstances() {
         const dstRefReg = loadRegistry(instRef);
         let refNew = 0, refUpdated = 0;
         for (const entry of fs.readdirSync(baseRef, { withFileTypes: true })) {
+            if (!isSkillSourceEntryName(entry.name)) continue;
             const src = join(baseRef, entry.name);
             const dst = join(instRef, entry.name);
             if (entry.isDirectory()) {
                 if (!fs.existsSync(dst)) {
                     copyDirRecursive(src, dst);
                     refNew++;
-                } else {
-                    const sv = getSkillVersion(entry.name, srcRefReg);
-                    const dv = getSkillVersion(entry.name, dstRefReg);
-                    if (sv && (!dv || semverGt(sv, dv))) {
-                        fs.rmSync(dst, { recursive: true, force: true });
-                        copyDirRecursive(src, dst);
-                        refUpdated++;
-                    }
+                } else if (shouldUpdateSkillDirectory(entry.name, src, dst, srcRefReg, dstRefReg)) {
+                    fs.rmSync(dst, { recursive: true, force: true });
+                    copyDirRecursive(src, dst);
+                    refUpdated++;
                 }
             } else if (entry.isFile()) {
                 fs.copyFileSync(src, dst);
@@ -301,7 +301,7 @@ export function propagateSkillsToInstances() {
         let activeUpdated = 0, autoActivated = 0;
         if (fs.existsSync(baseActive)) {
             for (const entry of fs.readdirSync(baseActive, { withFileTypes: true })) {
-                if (!entry.isDirectory()) continue;
+                if (!entry.isDirectory() || !isDiscoverableSkillDirName(entry.name)) continue;
                 const src = join(baseActive, entry.name);
                 const dst = join(instActive, entry.name);
                 const srcSkill = join(src, 'SKILL.md');

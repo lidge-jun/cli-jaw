@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
 import { JAW_HOME, SKILLS_DIR } from '../../src/core/config.js';
+import { isDiscoverableSkillDirName } from '../../lib/mcp/skills-utils.js';
 
 const CODEX_SKILLS = join(homedir(), '.codex', 'skills');
 
@@ -27,7 +28,7 @@ const c = {
 function listSkills() {
     mkdirSync(SKILLS_DIR, { recursive: true });
     return readdirSync(SKILLS_DIR, { withFileTypes: true })
-        .filter(d => d.isDirectory() && !d.name.startsWith('.'))
+        .filter(d => d.isDirectory() && isDiscoverableSkillDirName(d.name))
         .map(d => {
             const skillMd = join(SKILLS_DIR, d.name, 'SKILL.md');
             let desc = '';
@@ -226,10 +227,10 @@ switch (sub) {
 
             console.log(`\n  ${c.green}✅ 초기화 완료!${c.reset}`);
             const activeCount = readdirSync(SKILLS_DIR, { withFileTypes: true })
-                .filter(d => d.isDirectory()).length;
+                .filter(d => d.isDirectory() && isDiscoverableSkillDirName(d.name)).length;
             const REF_DIR = join(JAW_HOME, 'skills_ref');
             const refCount = readdirSync(REF_DIR, { withFileTypes: true })
-                .filter(d => d.isDirectory()).length;
+                .filter(d => d.isDirectory() && isDiscoverableSkillDirName(d.name)).length;
             console.log(`  ${c.cyan}⚡ Active: ${activeCount}개${c.reset}`);
             console.log(`  ${c.cyan}📦 Ref: ${refCount}개${c.reset}\n`);
         } catch (e) {
