@@ -17,7 +17,7 @@ export const JAW_HOME = process.env["CLI_JAW_HOME"]
 // ─── Clone cooldown ─────────────────────────────────
 export const CLONE_META_PATH = join(JAW_HOME, '.skills_clone_meta.json');
 export const CLONE_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
-export const CLONE_TIMEOUT_MS = 15_000;           // 15 seconds (down from 120s)
+export const CLONE_TIMEOUT_MS = 80_000;           // 80 seconds
 
 interface CloneMeta {
     lastAttempt: number;   // epoch ms

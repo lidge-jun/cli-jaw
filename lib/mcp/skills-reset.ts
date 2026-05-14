@@ -81,6 +81,10 @@ export function softResetSkills() {
         if (bundledReady) {
             sourceDir = packageRefDir;
             console.log(`[skills:soft-reset] using bundled fallback`);
+        } else if (fs.existsSync(join(refDir, 'registry.json'))) {
+            // 1c. User already cloned into skills_ref/ manually — skip copy-to-ref, go straight to activation
+            sourceDir = null;
+            console.log(`[skills:soft-reset] using existing skills_ref/ (manually cloned)`);
         } else {
             console.warn(`[skills:soft-reset] ⚠️ no source available — keeping current skills unchanged`);
             return { restored: 0, added: 0 };
@@ -88,15 +92,18 @@ export function softResetSkills() {
     }
 
     // 2. skills_ref/ 전체를 소스에서 다시 복사 (덮어쓰기)
-    for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
-        if (entry.name === '.git') continue;
-        const src = join(sourceDir, entry.name);
-        const dst = join(refDir, entry.name);
-        if (entry.isDirectory()) {
-            if (fs.existsSync(dst)) fs.rmSync(dst, { recursive: true, force: true });
-            copyDirRecursive(src, dst);
-        } else if (entry.isFile()) {
-            fs.copyFileSync(src, dst);
+    // sourceDir === null means existing skills_ref/ is already populated (manual clone) — skip copy
+    if (sourceDir) {
+        for (const entry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+            if (entry.name === '.git') continue;
+            const src = join(sourceDir, entry.name);
+            const dst = join(refDir, entry.name);
+            if (entry.isDirectory()) {
+                if (fs.existsSync(dst)) fs.rmSync(dst, { recursive: true, force: true });
+                copyDirRecursive(src, dst);
+            } else if (entry.isFile()) {
+                fs.copyFileSync(src, dst);
+            }
         }
     }
 
