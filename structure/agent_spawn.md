@@ -18,9 +18,9 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 | File | Line count | Role |
 | --- | ---: | --- |
 | `src/agent/alert-escalation.ts` | 80L | alert escalation event helper |
-| `src/agent/args.ts` | 183L | CLI별 신규/재개 인자 생성; Gemini full-access + workspace include-directory flags 포함 |
+| `src/agent/args.ts` | 202L | CLI별 신규/재개 인자 생성; Gemini full-access + workspace include-directory flags, Grok streaming-json args 포함 |
 | `src/agent/error-classifier.ts` | 38L | stderr/result 기반 에러 분류 helper |
-| `src/agent/events.ts` | 1526L | NDJSON 파서 + ACP `session/update` / subagent lifecycle 매핑 |
+| `src/agent/events.ts` | 1636L | NDJSON 파서 + ACP `session/update` / subagent lifecycle 매핑 + Grok streaming-json text/thought/end/error |
 | `src/agent/lifecycle-handler.ts` | 531L | child lifecycle, fallback, retry, queue resume orchestration |
 | `src/agent/live-run-state.ts` | 64L | active run snapshot / hydrate helper |
 | `src/agent/memory-flush-controller.ts` | 159L | memory flush lock + post-response trigger |
@@ -29,7 +29,7 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 | `src/agent/session-persistence.ts` | 72L | main session persistence gate |
 | `src/agent/smoke-detector.ts` | 141L | smoke response 감지 + auto-continue 판단 |
 | `src/agent/spawn-env.ts` | 141L | OpenCode/Gemini 전용 env/permission 보정 |
-| `src/agent/spawn.ts` | 1610L | spawn/ACP/stream/DB/broadcast + queue drain 핵심 |
+| `src/agent/spawn.ts` | 1954L | spawn/ACP/stream/DB/broadcast + queue drain 핵심 |
 | `src/agent/tool-timeout.ts` | 33L | tool inactivity timeout helper |
 | `src/agent/watchdog.ts` | 104L | idle/progress watchdog; progress extends deadline within 4h hard cap |
 
@@ -69,8 +69,9 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 
 - `claude`는 stdin에 `withHistoryPrompt(prompt, historyBlock)`를 직접 쓴다.
 - `codex`는 resume가 아닐 때만 stdin에 `[User Message]` 블록을 쓴다.
-- `gemini`와 `opencode`는 `promptForArgs = withHistoryPrompt(prompt, historyBlock)`를 받아 인자 레벨에서 prompt/history를 합친다.
+- `gemini`, `grok`, `opencode`는 `promptForArgs = withHistoryPrompt(prompt, historyBlock)`를 받아 인자 레벨에서 prompt/history를 합친다.
 - `gemini` fresh/resume 인자는 headless `-p`, model, stream JSON, `--skip-trust`, `--approval-mode yolo`, 그리고 workspace 보정을 함께 다룬다.
+- `grok` fresh/resume 인자는 `-p`, optional `-m`, `--output-format streaming-json`, `--no-alt-screen`, auto permission이면 `--always-approve --permission-mode bypassPermissions`만 넘긴다. `grok-build`는 서버가 `reasoningEffort`를 거부하므로 `--effort`, `--reasoning-effort`, system-prompt override 계열 플래그를 넘기지 않는다.
 - Gemini CLI는 multi-directory workspace에 `--include-directories <dir1,dir2>` 또는 반복 플래그를 지원한다. cli-jaw의 Gemini spawn 경로는 OS home을 include-directory로 넘기고, WSL이면 Linux home에 더해 발견 가능한 Windows user home(`/mnt/c/Users/...`)도 넘긴다. 자동 감지가 부족하면 `perCli.gemini.includeDirectories` 값을 추가 include로 넘긴다.
 - 이 include-directory 보정이 빠지면 Gemini file tools가 cwd 밖의 폴더를 외부 경로로 보고 `Path not in workspace` 계열 오류를 낼 수 있다. 단순 trust env(`GEMINI_CLI_TRUST_WORKSPACE`)나 prompt 지침만으로는 workspace membership을 확장한 것으로 보지 않는다.
 - stdout NDJSON은 `logEventSummary()` → `extractSessionId()` → `extractFromEvent()` → `extractOutputChunk()` 순으로 처리된다.
@@ -87,7 +88,7 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 - `persistMainSession()`는 `forceNew`, `employeeSessionId`, `!sessionId`, `isFallback`, 비정상 exit를 모두 차단한다.
 - 저장할 때는 `cli`, `sessionId`, `model`, `permissions`, `workingDir`, `effort`를 같이 기록한다.
 - `shouldInvalidateResumeSession()`는 `code === 0`이면 무조건 false이고, 실패한 stderr/resultText에서 generic matcher + CLI별 matcher를 함께 검사한다.
-- resume 무효화 조건은 `claude`, `codex`, `gemini`, `opencode`, `copilot` 각각 따로 분기된다. copilot은 `session not found`와 `loadSession failed`를 본다.
+- resume 무효화 조건은 `claude`, `codex`, `gemini`, `grok`, `opencode`, `copilot` 각각 따로 분기된다. Grok는 generic `session not found` 계열을 공유하고, copilot은 `session not found`와 `loadSession failed`를 본다.
 
 ---
 

@@ -159,7 +159,7 @@ graph LR
 | File | Lines | Notes |
 |------|------:|-------|
 | `cli-jaw.ts` | — | 11 subcommand routing |
-| `postinstall.ts` | ~212 | Auto-install 5 CLIs + MCP + skills |
+| `postinstall.ts` | ~212 | Auto-install CLI runtimes + MCP + skills |
 | `commands/chat.ts` | ~844 | Terminal TUI (Phase 20.3 splits planned) |
 | `commands/browser.ts` | ~239 | 17 subcommands + vision-click |
 | Other commands | ~30-70ea | serve, init, doctor, status, mcp, skill, etc. |
@@ -179,7 +179,7 @@ agent.ts → spawn('copilot', ['--acp']) → JSON-RPC stdin/stdout → acp-clien
 
 - **No API keys** — uses vendor authentication (OAuth, keychain)
 - **No ban risk** — same binary the vendor ships
-- **5 CLIs**: claude, codex, gemini, opencode, copilot
+- **Runtime surfaces**: claude, codex, codex-app, gemini, grok, opencode, copilot
 
 ### 2. Event Deduplication
 
@@ -201,7 +201,7 @@ Phase 17 addition: Direct response path detects agent-generated subtask JSON →
 
 ### 4. MCP Sync
 
-One `mcp.json` → auto-converts to 5 CLI formats:
+One `mcp.json` → auto-converts to supported MCP-aware CLI formats:
 - Claude: `~/.claude/mcp.json`
 - Codex: `~/.codex/codex.toml` (TOML)
 - Gemini: `~/.gemini/settings.json`
@@ -264,7 +264,7 @@ main.js (entry)
 | P8 | Audit | Code quality audit (500+ line files, security gaps) |
 | P9 | Hardening | Security guards, HTTP contracts, settings merge, catch policy, deps gate |
 | P10-P11 | Reliability | Activity-based timeout, heartbeat pending queue |
-| P12 | Docs | AGENTS.md unification for 5 CLIs |
+| P12 | Docs | AGENTS.md unification for CLI runtimes |
 | P13-P16 | Polish | Telegram chatId persist, skill dedup, orchestrate UI, prompt fixes |
 | P17 | Triage | AI-driven dispatch — direct response subtask re-entry |
 | P20 | Audit v2 | Project-wide audit: graceful shutdown, fetch wrapper, file splitting, tests, XSS |
@@ -293,11 +293,12 @@ main.js (entry)
 
 | Feature | Description | Complexity |
 |---------|-------------|:----------:|
-| **Multi-CLI Engine** | Claude, Codex, Gemini, OpenCode, Copilot — unified spawn | ⭐⭐⭐⭐ |
+| **Multi-CLI Engine** | Claude, Codex, Codex App, Gemini, Grok, OpenCode, Copilot — unified spawn | ⭐⭐⭐⭐ |
+| **Grok CLI Runtime** | `grok-build` via `grok -p ... --output-format streaming-json`; no `--effort` until a model smoke proves support | ⭐⭐ |
 | **Copilot ACP** | JSON-RPC 2.0 over stdio, real-time streaming, activity timeout | ⭐⭐⭐⭐ |
 | **Orchestration v2** | Triage → role dispatch → 5-phase pipeline → gate reviews | ⭐⭐⭐⭐⭐ |
 | **AI-Driven Triage** | Agent autonomously decides dispatch vs direct response | ⭐⭐⭐ |
-| **MCP Sync** | `mcp.json` → 5 CLI formats auto-conversion + symlink protection | ⭐⭐⭐⭐ |
+| **MCP Sync** | `mcp.json` → supported MCP-aware CLI formats auto-conversion + symlink protection | ⭐⭐⭐⭐ |
 | **Skill System** | 100+ bundled skills, 2-tier classification | ⭐⭐⭐ |
 | **CLI Registry** | Single source of truth — modify one file, auto-propagate everywhere | ⭐⭐⭐ |
 | **Slash Commands** | Unified across CLI / Web / Telegram with autocomplete + dropdowns | ⭐⭐⭐ |
@@ -361,7 +362,7 @@ main.js (entry)
 | Skills | `GET /api/skills`, `POST /api/skills/enable,disable` |
 | Browser | `POST /api/browser/start,stop,act,navigate,screenshot` |
 | Employees | `GET/POST /api/employees`, `PUT/DELETE /api/employees/:id` |
-| Quota | `GET /api/quota` (Claude/Codex/Gemini/Copilot usage) |
+| Quota | `GET /api/quota` (Claude/Codex/Gemini/Copilot usage + Grok auth/status-only metadata; Grok quota remaining is not exposed by the CLI) |
 
 </details>
 

@@ -21,7 +21,7 @@
 
 ## What is CLI-JAW?
 
-CLI-JAW is an open-source platform that unifies every AI coding CLI you already use — Claude, Codex, Gemini CLI, OpenCode, Copilot CLI — into one assistant with one memory and one dashboard. Your main CLI calls the others as "employees" (sub-agents), so you stop copy-pasting between heavy apps and start giving orders from a single place.
+CLI-JAW is an open-source platform that unifies the AI coding CLIs you already use — Claude, Codex, Codex App, Gemini CLI, Grok CLI, OpenCode, Copilot CLI — into one assistant with one memory and one dashboard. Your main CLI calls the others as "employees" (sub-agents), so you stop copy-pasting between heavy apps and start giving orders from a single place.
 
 It routes through the subscriptions you already pay for. No per-token API billing. No rate limits on top of what you already have.
 
@@ -51,6 +51,7 @@ Plus: explicit PABCD orchestration (`/orchestrate`, `/pabcd`, `/continue`), 230+
 |---|---|
 | **PABCD** | Worklog resume is explicit: use `/continue`. Natural language “continue” stays a normal prompt |
 | **Gemini CLI** | Full-access Gemini runs use `--skip-trust --approval-mode yolo` plus `--include-directories` for OS home access; WSL also includes the Windows user home when discoverable |
+| **Grok CLI** | `grok-build` is supported as a standard CLI runtime with streaming-json parsing. `--effort` is deliberately disabled for `grok-build` because the server rejects `reasoningEffort` even though the CLI help lists the flag |
 | **Messaging** | `/api/channel/send` is the canonical Telegram/Discord outbound path; legacy channel-specific endpoints remain |
 | **Heartbeat** | Jobs support `every` and `cron` schedules with optional IANA time zones |
 | **Browser web-AI** | Runtime diagnostics/orphan cleanup, persistent tab lifecycle, session reattach, and ChatGPT/Gemini/Grok vendor paths are documented in `structure/` |
@@ -192,6 +193,7 @@ opencode             # OpenCode — free models available
 claude auth login    # Anthropic Claude Max
 codex login          # OpenAI ChatGPT Pro
 gemini               # Google Gemini Advanced
+grok login --oauth   # xAI Grok / Grok Heavy
 ```
 
 Check everything at once: `claude auth status && jaw doctor`
@@ -291,7 +293,7 @@ Use employees for "Frontend does CSS, Backend does API." Use sub-agents for "rea
 
 ---
 
-## Five AI Engines
+## AI Runtime Surfaces
 
 No per-token API billing. Route through subscriptions you already pay for.
 
@@ -299,7 +301,9 @@ No per-token API billing. Route through subscriptions you already pay for.
 |---|---|---|---|
 | **Claude** | `opus-4-6` | `claude auth login` | Claude Max subscription |
 | **Codex** | `gpt-5.5` | `codex login` | ChatGPT Pro subscription |
+| **Codex App** | `gpt-5.4` | `codex login` | ChatGPT Pro subscription |
 | **Gemini** | `gemini-3.1-pro-preview` | `gemini` | Gemini Advanced subscription |
+| **Grok** | `grok-build` | `grok login --oauth` | Grok subscription; quota is auth/status-only |
 | **OpenCode** | `minimax-m2.7` | `opencode` | Free models available |
 | **Copilot** | `gpt-5-mini` | `copilot login` | Free tier available |
 
@@ -417,14 +421,14 @@ Voice input works on Web (mic button), Telegram (voice messages), and Discord. P
 
 ## MCP
 
-[Model Context Protocol](https://modelcontextprotocol.io) lets AI agents use external tools. CLI-JAW manages MCP config for all five engines from one file.
+[Model Context Protocol](https://modelcontextprotocol.io) lets AI agents use external tools. CLI-JAW manages MCP config for supported MCP-aware engines from one file.
 
 ```bash
 jaw mcp install @anthropic/context7
 # → syncs to Claude, Codex, Gemini, OpenCode, Copilot config files simultaneously
 ```
 
-No more editing five different JSON files. Install once, every engine gets it.
+No more editing several different JSON files. Install once, every MCP-aware engine gets it. Grok CLI is a standard runtime here, but it is not counted as MCP-sync capable until Grok exposes a compatible config surface.
 
 ```bash
 jaw mcp sync       # re-sync after manual edits
@@ -454,7 +458,7 @@ jaw orchestrate                   # enter/control PABCD workflow
 # Skills & MCP
 jaw skill install <name>          # activate a skill
 jaw skill list                    # list available skills
-jaw mcp install <package>         # install MCP → syncs to 5 engines
+jaw mcp install <package>         # install MCP → syncs supported MCP-aware engines
 jaw mcp sync                      # re-sync MCP configs
 
 # Memory
@@ -530,7 +534,7 @@ Architecture details: [ARCHITECTURE.md](docs/ARCHITECTURE.md) · Test coverage: 
 
 | | CLI-JAW 2.0 | Hermes Agent | Claude Code |
 |---|---|---|---|
-| **Model access** | 5 CLIs via OAuth (Claude Max, ChatGPT Pro, Copilot, Gemini) + OpenCode wildcard | API keys (OpenRouter 200+, Nous Portal) | Anthropic only |
+| **Model access** | Claude, Codex, Codex App, Gemini, Grok, OpenCode, and Copilot through vendor auth where supported | API keys (OpenRouter 200+, Nous Portal) | Anthropic only |
 | **Cost model** | Monthly subscriptions you already pay for | Per-token API billing | Anthropic subscription |
 | **Primary UI** | Manager dashboard + Web PWA + Mac app + TUI | TUI only | CLI + IDE plugins |
 | **Dashboard** | Multi-instance manager, Kanban, Notes workspace | None | None |

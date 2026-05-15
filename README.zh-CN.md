@@ -17,14 +17,14 @@
 </div>
 
 <table>
-<tr><td><b>统一使用已有订阅</b></td><td>通过 OAuth 接入 Claude Max、ChatGPT Pro、Copilot、Gemini Advanced。也可以通过 OpenCode 添加任意模型。没有按 token 计费。</td></tr>
+<tr><td><b>统一使用已有订阅</b></td><td>通过 OAuth 接入 Claude Max、ChatGPT Pro、Grok Heavy、Copilot、Gemini Advanced。也可以通过 OpenCode 添加任意模型。没有按 token 计费。</td></tr>
 <tr><td><b>Manager dashboard</b></td><td>在一个浏览器工作区里追踪所有本地 JAW 实例，预览实时 Web UI，切换浅色/深色主题，查看运行时设置，并启动或停止托管会话。</td></tr>
 <tr><td><b>Notes workspace</b></td><td>仪表盘主目录下的 Markdown 仓库。支持文件夹、重命名/移动、未保存状态标记、raw/split/preview 模式、KaTeX、Mermaid 和代码高亮。</td></tr>
 <tr><td><b>你在哪里，它就在哪里</b></td><td>Manager dashboard、Web PWA、Mac WebView app、terminal TUI、带语音的 Telegram、Discord。所有入口共享同一个助手和同一份记忆。</td></tr>
 <tr><td><b>3-layer memory</b></td><td>History Block（近期会话）+ Memory Flush（episodes、daily logs）+ Soul and Task Snapshot（identity、semantic recall）。使用 SQLite FTS5 全文搜索。</td></tr>
 <tr><td><b>Multi-agent orchestration</b></td><td>PABCD 是持久化到 DB 的 5 阶段 FSM。Employee system 带 worker registry。支持并行 subtask 和文件重叠检测。每个 phase 都由你确认。</td></tr>
 <tr><td><b>Browser and desktop automation</b></td><td>Chrome CDP、vision-click、ChatGPT/Grok/Gemini 的 DOM reference、通过 Codex App 接入 Computer Use、用于 SVG 与交互式可视化的 diagram skill。</td></tr>
-<tr><td><b>MCP install once, 5 engines</b></td><td><code>jaw mcp install</code> 会同时同步到 Claude、Codex、Gemini、OpenCode、Copilot。只维护一份配置。</td></tr>
+<tr><td><b>MCP install once</b></td><td><code>jaw mcp install</code> 会同步到支持 MCP 配置的 CLI（Claude、Codex、Gemini、OpenCode、Copilot）。Grok CLI 是标准运行时，但在 Grok 暴露兼容 MCP 配置前不声明 MCP 同步支持。</td></tr>
 <tr><td><b>多语言支持</b></td><td>English、Korean、Chinese、Japanese README。i18n Web UI。通过 OfficeCLI 支持 HWP/HWPX 韩文办公文档。</td></tr>
 </table>
 
@@ -290,14 +290,14 @@ jaw skill install <name>    # activate a reference skill
 
 ## 🔌 MCP
 
-[Model Context Protocol](https://modelcontextprotocol.io) 让 AI agents 使用外部工具。CLI-JAW 用一个文件管理五个引擎的 MCP config。
+[Model Context Protocol](https://modelcontextprotocol.io) 让 AI agents 使用外部工具。CLI-JAW 用一个文件管理支持 MCP 配置的 CLI config。
 
 ```bash
 jaw mcp install @anthropic/context7
 # → syncs to Claude, Codex, Gemini, OpenCode, Copilot config files
 ```
 
-不用再分别编辑五个 JSON 文件。安装一次，所有引擎都会同步。
+不用再分别编辑每个 CLI 的 JSON 文件。安装一次，已支持 MCP 的引擎会同步；Grok CLI 作为标准运行时接入，不声明 MCP 同步。
 
 ```bash
 jaw mcp sync       # re-sync after manual edits
@@ -352,7 +352,7 @@ jaw chat                          # terminal TUI
 jaw doctor                        # 12-point diagnostics
 jaw service install               # auto-start on boot
 jaw skill install <name>          # activate a skill
-jaw mcp install <package>         # install MCP → syncs to 5 engines
+jaw mcp install <package>         # install MCP → syncs supported MCP-aware engines
 jaw memory search <query>         # search memory
 jaw browser start                 # launch Chrome (CDP)
 jaw browser vision-click "Login"  # AI-powered click

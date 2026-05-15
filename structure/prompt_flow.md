@@ -31,6 +31,7 @@ graph TD
     SPAWN --> CLAUDE["Claude"]
     SPAWN --> CODEX["Codex"]
     SPAWN --> GEMINI["Gemini"]
+    SPAWN --> GROK["Grok"]
     SPAWN --> OPENCODE["OpenCode"]
     SPAWN --> COPILOT["Copilot ACP"]
 ```
@@ -233,6 +234,7 @@ delegation rules 블록은 prompt 끝에 항상 붙는다.
 | Claude | `buildArgs(..., sysPrompt)` | stdin에 `withHistoryPrompt(prompt, historyBlock)` |
 | Codex | `{workDir}/AGENTS.md` 자동 로드 | 새 세션일 때만 stdin에 `[User Message]` 블록 |
 | Gemini | `GEMINI_SYSTEM_MD` tmpfile | args 레벨 prompt (`withHistoryPrompt`) |
+| Grok | cwd instruction files auto-discovery (`grok inspect` 기준) | args 레벨 prompt (`withHistoryPrompt`) via `-p`, no effort/system-prompt flags for `grok-build` |
 | OpenCode | args 빌드 시 sysPrompt 포함 | args 레벨 prompt (`withHistoryPrompt`) |
 | Copilot | ACP + cwd 지침 파일 | `session/prompt(acpPrompt)` |
 
@@ -275,4 +277,4 @@ delegation rules 블록은 prompt 끝에 항상 붙는다.
 
 ## 한 줄 요약
 
-현재 prompt 파이프라인은 "A1/A2 파일 기반 캐시 + role-aware memory injection + `cli-jaw dispatch` 중심 orchestration + per-CLI spawn input adapter" 구조다. 가장 큰 최근 변화는 JSON subtask 설명이 사라지고, memory injection이 `src/memory/injection.ts`로 중앙화되었으며, heartbeat 입력이 `heartbeat.json`으로 고정되었다는 점이다.
+현재 prompt 파이프라인은 "A1/A2 파일 기반 캐시 + role-aware memory injection + `cli-jaw dispatch` 중심 orchestration + per-CLI spawn input adapter" 구조다. 가장 큰 최근 변화는 JSON subtask 설명이 사라지고, memory injection이 `src/memory/injection.ts`로 중앙화되었으며, heartbeat 입력이 `heartbeat.json`으로 고정되고, Grok CLI는 `-p` 기반 표준 런타임으로 추가됐지만 `grok-build` effort/system prompt flag는 비활성화된 점이다.

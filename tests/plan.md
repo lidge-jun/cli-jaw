@@ -61,7 +61,7 @@ tests/
 
 | 모듈 | 테스트 파일 | 핵심 케이스 |
 |------|------------|------------|
-| `cli-registry.js` | `cli-registry.test.js` | 5개 CLI 키, 필수 필드, buildDefaultPerCli, buildModelChoicesByCli |
+| `cli-registry.js` | `cli-registry.test.js` | CLI 키, 필수 필드, buildDefaultPerCli, buildModelChoicesByCli |
 | `bus.js` | `bus.test.js` | listener add/remove/broadcast, WS 없어도 안전 |
 
 ### Tier 2 — 가벼운 I/O (tmp dir 격리)

@@ -10,7 +10,7 @@ aliases: [CLI-JAW Frontend, public architecture, frontend.md]
 
 > Web UI 본체는 Vanilla HTML + CSS + TypeScript ES Modules로 구성된다. Manager 대시보드는 `public/manager/`의 React 19 + TSX 앱이다.
 > 빌드는 Vite 8 기준이며, `vite.config.ts`는 `public/index.html`과 `public/manager/index.html`을 multi-entry로 빌드한다.
-> 현재 `public/`에서 `public/dist/*`를 제외한 소스/자산/legacy duplicate는 452개다. `public/public/dist/*`까지 generated로 보면 실제 편집 대상 소스/자산은 325개다. 생성 산출물은 `public/dist/` 456개와 별도 중복 트리 `public/public/dist/` 127개가 남아 있고, `public/dist/dist/`는 전자에 재귀 포함된 nested 복제본이다.
+> 현재 `public/`에서 `public/dist/*`를 제외한 소스/자산/legacy duplicate는 487개다. `public/public/dist/*`까지 generated로 보면 실제 편집 대상 소스/자산은 360개다. 생성 산출물은 `public/dist/` 459개와 별도 중복 트리 `public/public/dist/` 127개가 남아 있고, `public/dist/dist/`는 전자에 재귀 포함된 nested 복제본이다.
 > 메인 UI는 `index.html`에서 Google Fonts `Chakra Petch` + `Outfit`을 불러오고, 로컬 `public/assets/fonts/GeistVF.woff2`와 `JetBrainsMono-Variable.woff2`는 자산으로 보관 중이다.
 > PWA는 `manifest.json` + `sw.js` + `icons/`로 구성된다. 오프라인 메시지 캐시, virtual scroll, markdown/KaTeX/Mermaid 렌더링, sandboxed diagram widget, avatar emoji/image 커스터마이즈, voice recording, PABCD roadmap, subagent-aware ProcessBlock 렌더링, 반응형 사이드바, theme toggle이 현재 런타임의 핵심이다.
 
@@ -26,7 +26,7 @@ public/
 ├── theme-test.html       ← 테마 점검 페이지
 ├── assets/
 │   ├── fonts/            ← 2 fonts (GeistVF, JetBrainsMono variable)
-│   ├── providers/        ← 10 SVG provider assets
+│   ├── providers/        ← 12 SVG provider assets
 │   └── shark.svg
 ├── css/                  ← 10 CSS files
 ├── icons/                ← 3 PWA icons
@@ -46,8 +46,8 @@ public/
 
 | 영역 | 파일 수 | 비고 |
 | --- | ---: | --- |
-| `public/` source/assets | 452 | 문서 관례상 `public/dist/*`만 제외, `public/public/dist/*`는 포함 |
-| `public/` source/assets (generated 제외) | 325 | `public/dist/*`, `public/public/dist/*` 모두 제외 |
+| `public/` source/assets | 487 | 문서 관례상 `public/dist/*`만 제외, `public/public/dist/*`는 포함 |
+| `public/` source/assets (generated 제외) | 360 | `public/dist/*`, `public/public/dist/*` 모두 제외 |
 | `public/js/` root | 17 | 전부 TypeScript ES modules, `mermaid-loader.ts`, `uuid.ts`, `virtual-scroll-bootstrap.ts` 포함 |
 | `public/js/diagram/` | 3 | SVG/iframe diagram pipeline |
 | `public/js/render/` | 11 | markdown/KaTeX/Mermaid/SVG/file-link/post-render 책임 분리 |
@@ -55,7 +55,7 @@ public/
 | `public/manager/` | 218 | React 19 manager dashboard, notes/search, schedule, settings, sync, WYSIWYG source |
 | `public/css/` | 10 | theme/layout/chat/markdown/tool UI/diagram/trace drawer |
 | `public/locales/` | 4 | `ko.json`, `en.json`, `ja.json`, `zh.json` |
-| `public/assets/providers/` | 10 | provider SVG 세트 |
+| `public/assets/providers/` | 12 | provider SVG 세트 |
 | `public/assets/fonts/` | 2 | 로컬 폰트 자산 |
 | `public/icons/` | 3 | PWA icons |
 | `public/dist/` | 456 | generated build output, nested `dist/dist` 포함 |
@@ -149,7 +149,7 @@ public/
 | `js/features/process-block-dom.ts` | ProcessBlock DOM ownership, normalization, and row replacement helpers |
 | `js/features/process-log-adapter.ts` | persisted tool log to ProcessStep adapter |
 | `js/features/settings-channel.ts` | active channel + fallback order |
-| `js/features/settings-cli-status.ts` | CLI availability/quota/status, Copilot keychain refresh |
+| `js/features/settings-cli-status.ts` | CLI availability/quota/status, Copilot keychain refresh, Grok auth/status-only badge |
 | `js/features/settings-core.ts` | settings load/update, per-CLI model/effort, locale sync, Claude 1M / Codex fast/context controls |
 | `js/features/settings-discord.ts` | Discord settings save/load/toggles |
 | `js/features/settings-mcp.ts` | MCP server list/sync/install |
@@ -346,7 +346,7 @@ subagent 렌더링 변경 이후 tool history의 canonical UI는 `features/proce
 | `manifest.json` | `standalone`, `theme_color: #22d3ee`, 192/512/maskable icons |
 | `sw.js` | navigation network-first, `/dist/assets/*` cache-first, 그 외 stale-while-revalidate |
 | `icons/` | `icon-192.png`, `icon-512.png`, `icon-512-maskable.png` |
-| `assets/providers/` | `claude`, `claude-color`, `copilot`, `copilot-color`, `gemini`, `gemini-color`, `openai`, `opencode`, `discord`, `telegram` |
+| `assets/providers/` | `claude`, `claude-color`, `copilot`, `copilot-color`, `gemini`, `gemini-color`, `grok`, `grok-color`, `openai`, `opencode`, `discord`, `telegram` |
 | `assets/fonts/` | `GeistVF.woff2`, `JetBrainsMono-Variable.woff2` |
 | `assets/shark.svg`, `img/shark-sprite.png` | shark brand/sprite assets |
 | `locales/` | `ko.json`, `en.json`, `ja.json`, `zh.json` |

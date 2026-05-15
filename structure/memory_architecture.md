@@ -52,7 +52,7 @@ graph TD
 |-----|----------|------|
 | **claude** | `stdin.write(historyBlock + prompt)` | `spawn.ts` 표준 CLI 분기 |
 | **codex** | `stdin.write(historyBlock + "\n\n[User Message]\n" + prompt)` | `spawn.ts` 표준 CLI 분기 |
-| **gemini / opencode** | `args`에 포함, 히스토리는 `withHistoryPrompt()`로 합쳐 전달 | `spawn.ts` `buildArgs()` 경로 |
+| **gemini / grok / opencode** | `args`에 포함, 히스토리는 `withHistoryPrompt()`로 합쳐 전달 | `spawn.ts` `buildArgs()` 경로. Grok는 `-p` + `--output-format streaming-json`, no effort/system prompt flags |
 | **copilot (ACP)** | `acp.prompt(acpPrompt)` | `spawn.ts` ACP 분기 |
 
 ### 프로젝트 스코핑
@@ -277,7 +277,7 @@ Prefers ES Module only, no CommonJS.
 |---|---|---|
 | `enabled` | `true` | `false`면 flush 카운팅만 건너뛴다 |
 | `flushEvery` | `10` | assistant 응답 기준 flush 기준치 |
-| `cli` | 현재 CLI | flush용 별도 CLI 지정 가능 |
+| `cli` | 현재 CLI | flush용 별도 CLI 지정 가능. `grok` 지정 시 `grok-build`에는 effort flag를 전달하지 않음 |
 | `model` | CLI 기본 모델 | flush용 경량 모델 지정 (예: haiku) |
 
 ### heartbeat와의 관계

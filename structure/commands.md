@@ -8,9 +8,9 @@ aliases: [CLI-JAW Commands, slash commands registry, commands.md]
 
 # src/cli/ — Slash Command Registry & Dispatcher
 
-> `commands.ts`(295L) + `handlers.ts`(363L) + `handlers-runtime.ts`(449L) + `handlers-completions.ts`(92L) + `api-auth.ts`(45L) + `command-context.ts`(138L) + `registry.ts`(90L) + `acp-client.ts`(348L) + `claude-models.ts`(78L) + `compact.ts`(119L)
+> `commands.ts`(295L) + `handlers.ts`(363L) + `handlers-runtime.ts`(449L) + `handlers-completions.ts`(92L) + `api-auth.ts`(45L) + `command-context.ts`(138L) + `registry.ts`(108L) + `acp-client.ts`(348L) + `claude-models.ts`(78L) + `compact.ts`(119L)
 > slash registry는 24개 커맨드, 4개 실행 인터페이스. root CLI는 `bin/cli-jaw.ts` + `bin/commands/*.ts` 기준 18개 top-level 서브커맨드이며, `browser web-ai`가 별도 helper(`browser-web-ai.ts`)로 분리되어 있다. visible 기준 CLI 22 / Web 20 / Telegram 20 / Discord 20. `cmdline` capability는 contract 전용이며 10개가 보인다.
-> 모델/CLI 선택은 `registry.ts` 단일 소스를 따르고, Web/CLI/Telegram/Discord는 모두 `makeCommandCtx()`로 통합된 command context를 사용한다.
+> 모델/CLI 선택은 `registry.ts` 단일 소스를 따른다. 현재 registry 런타임은 `claude`, `codex`, `codex-app`, `gemini`, `grok`, `opencode`, `copilot` 7개이며, Web/CLI/Telegram/Discord는 모두 `makeCommandCtx()`로 통합된 command context를 사용한다.
 > 최근 구조 변화 핵심은 두 가지다: `handlers.ts` 분해(`handlers-runtime.ts`, `handlers-completions.ts`)와 CLI→server 인증 bootstrap 공통화(`api-auth.ts`).
 
 ---
@@ -147,6 +147,7 @@ prompt, quit, file, steer, ide, orchestrate
 - `off`/`reset`이면 `settings.memory.cli`, `settings.memory.model`을 비운다.
 - 모델만 넣으면 registry 기반으로 CLI를 역추론한다.
 - Claude legacy model name은 힌트 맵으로 `claude`에 귀속된다.
+- Grok flush를 지정하면 표준 `grok -p ... --output-format streaming-json` 경로를 쓰지만, `grok-build`에는 `--effort`를 넘기지 않는다.
 
 ### `/skill [list|reset]`
 

@@ -20,7 +20,7 @@ aliases: [CLI-JAW Server API, server.ts reference, server_api]
 | Module | Lines | Routes | 역할 |
 | --- | ---: | ---: | --- |
 | `server.ts` | 741L | 13 | Helmet/CORS/Host/rate-limit/WS/bootstrap + base routes + module registration |
-| `src/routes/settings.ts` | 191L | 18 | settings/prompt/heartbeat-md/MCP/CLI registry/quota/copilot |
+| `src/routes/settings.ts` | 239L | 18 | settings/prompt/heartbeat-md/MCP/CLI registry/quota/copilot |
 | `src/routes/memory.ts` | 185L | 13 | memory runtime + KV memory + memory files |
 | `src/routes/browser.ts` | 475L | 41 | browser primitive/tab/debug/doctor/cleanup routes + adaptive fetch + web-ai render/send/poll/watch/sessions/capabilities/context routes |
 | `src/routes/jaw-memory.ts` | 239L | 11 | jaw memory search/read/save/list/init/reflect/flush/soul/soul-activate/bootstrap |
@@ -32,7 +32,7 @@ aliases: [CLI-JAW Server API, server.ts reference, server_api]
 | `src/routes/traces.ts` | 80L | 3 | public trace summary/event read routes |
 | `src/routes/heartbeat.ts` | 43L | 2 | heartbeat GET + validated PUT |
 | `src/routes/i18n.ts` | 26L | 2 | language list + locale bundle |
-| `src/routes/quota.ts` | 344L | — | `settings.ts`가 호출하는 quota reader helper |
+| `src/routes/quota.ts` | 459L | — | `settings.ts`가 호출하는 quota/auth/status reader helper |
 | `src/routes/types.ts` | 3L | — | shared `AuthMiddleware` type |
 
 ### 등록 순서 (`server.ts`)
@@ -230,8 +230,9 @@ ensureDirs()
 
 ### `/api/quota`
 
-- 응답 키: `claude`, `codex`, `gemini`, `opencode`, `copilot`.
+- 응답 키: `claude`, `codex`, `gemini`, `opencode`, `copilot`, `grok`.
 - `opencode`는 현재 `{ authenticated: true }` 고정 응답이다.
+- `grok`는 `grok models` 기반 auth/status-only 응답이다. Grok CLI는 남은 할당량을 노출하지 않으므로 `quotaCapable:false`, `quotaSource:'not-exposed-by-grok-cli'`, `displayTier:'Grok Heavy'`를 반환하고, 있으면 최신 `~/.grok/sessions/**/signals.json`의 세션 context 사용량만 best-effort로 붙인다.
 
 ### `/api/orchestrate/dispatch`
 
