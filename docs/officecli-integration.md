@@ -92,7 +92,7 @@ officecli capabilities --json
 officecli hwp --json
 ```
 
-`rhwp-field-bridge`가 있으면 `officecli create file.hwp --json`이 blank binary `.hwp` 생성 경로로 동작한다. `rhwp-officecli-bridge`와 `rhwp-field-bridge`가 함께 있으면 기존 `.hwp` read/render/mutation 경로도 준비된다. sidecar가 없으면 명령이 몰래 `.hwpx`로 우회하지 않고 `hwp_create_dependency_missing` 또는 capability blocked reason을 반환해야 한다.
+`rhwp-field-bridge`가 있으면 `officecli create file.hwp --json`이 blank binary `.hwp` 생성 경로로 동작한다. `rhwp-officecli-bridge`와 `rhwp-field-bridge`가 함께 있고 API help에 `insert-text`, `export-pdf`, `dump-controls`, `native-op`가 노출되면 body text insertion, PDF/PNG/markdown/thumbnail/info/diagnostic export, table scan/cell read, editable conversion, and generic native rhwp operations도 capability-gated surface로 동작한다. sidecar가 없거나 너무 오래됐으면 명령이 몰래 `.hwpx`로 우회하지 않고 `hwp_create_dependency_missing`, `rhwp_api_missing_or_too_old`, 또는 capability blocked reason을 반환해야 한다.
 
 ### smoke test 12종
 
@@ -128,6 +128,8 @@ officecli hwp --json
 | HWP readiness | `officecli hwp doctor --json` |
 | HWP recipes | `officecli hwp --json` |
 | 빈 HWP 생성 | `officecli create file.hwp --json` |
+| HWP export/read | `officecli view file.hwp pdf --out out.pdf --json`; `officecli view file.hwp dump --json` |
+| HWP native rhwp op | `officecli view file.hwp native --op get-style-list --json`; `officecli set file.hwp /native-op --prop op=split-paragraph --prop output=out.hwp --json` |
 
 ### upstream / fork 차이
 

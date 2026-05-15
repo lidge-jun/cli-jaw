@@ -100,6 +100,9 @@ officecli add deck.pptx / --type slide --prop title="Title"         # add slide
 officecli create file.hwpx                                          # create blank HWPX
 officecli hwp doctor --json                                         # HWP/rhwp readiness
 officecli create file.hwp --json                                    # create blank HWP when rhwp-field-bridge is ready
+officecli add file.hwp /text --type paragraph --prop value="..." --prop output=out.hwp --json
+officecli view file.hwp pdf --out out.pdf --json                    # export HWP through rhwp sidecars
+officecli set file.hwp /native-op --prop op=split-paragraph --prop output=out.hwp --json
 officecli validate file.docx                                        # validate
 officecli get file.docx / --json                                    # JSON output
 echo '[...]' | officecli batch data.xlsx --json                     # batch ops
