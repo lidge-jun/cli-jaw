@@ -937,6 +937,25 @@ test('grok parser keeps separate thinking spans and handles part/state tool comp
     assert.equal(ctx.toolLog.filter(t => t.stepRef === 'grok:tool:call-1').length, 1);
 });
 
+test('grok parser prefers per-call ids over shared request id for multi-tool streams', () => {
+    const ctx = { toolLog: [], fullText: '', traceLog: [], pendingOutputChunk: '', seenToolKeys: new Set() };
+    extractFromEvent('grok', {
+        type: 'tool_use',
+        requestId: 'req-1',
+        part: { tool: 'read', callID: 'call-1', state: { status: 'running', input: { file: 'a' } } },
+    }, ctx, 'grok');
+    extractFromEvent('grok', {
+        type: 'tool_use',
+        requestId: 'req-1',
+        part: { tool: 'write', callID: 'call-2', state: { status: 'running', input: { file: 'b' } } },
+    }, ctx, 'grok');
+
+    assert.ok(ctx.toolLog.find(t => t.stepRef === 'grok:tool:call-1'));
+    assert.ok(ctx.toolLog.find(t => t.stepRef === 'grok:tool:call-2'));
+    assert.equal(ctx.toolLog.filter(t => t.stepRef === 'grok:tool:req-1').length, 0);
+    assert.equal(ctx.toolLog.filter(t => t.stepRef?.startsWith('grok:tool:')).length, 2);
+});
+
 test('grok streaming-json error emits error tool without assistant text', () => {
     const ctx = { toolLog: [], fullText: '', traceLog: [], pendingOutputChunk: '', seenToolKeys: new Set(), traceRunId: 'trace-1' };
     extractFromEvent('grok', { type: 'error', data: 'reasoningEffort unsupported', requestId: 'req-1' }, ctx, 'grok');

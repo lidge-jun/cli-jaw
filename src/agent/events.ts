@@ -395,11 +395,11 @@ function grokToolRef(event: CliEventRecord, ctx: SpawnContext): string {
         || fieldString(event["call_id"])
         || fieldString(event.callID)
         || fieldString(event["callId"])
-        || fieldString(event.requestId)
         || fieldString(part.callID)
         || fieldString(part.id)
         || fieldString(part["toolCallId"])
-        || fieldString(part["tool_call_id"]);
+        || fieldString(part["tool_call_id"])
+        || fieldString(event.requestId);
     if (rawId) return `grok:tool:${rawId}`;
     ctx.grokSyntheticToolSeq = (ctx.grokSyntheticToolSeq || 0) + 1;
     return `grok:tool:synthetic-${ctx.grokSyntheticToolSeq}`;
