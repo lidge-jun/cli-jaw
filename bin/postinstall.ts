@@ -55,6 +55,10 @@ const OFFICECLI_SKIP = process.env["CLI_JAW_SKIP_OFFICECLI"] === '1'
     || process.env["CLI_JAW_SKIP_OFFICECLI"] === 'true';
 const OFFICECLI_FORCE = process.env["CLI_JAW_FORCE_OFFICECLI"] === '1'
     || process.env["CLI_JAW_FORCE_OFFICECLI"] === 'true';
+const OFFICECLI_SKIP_LOCAL = process.env["CLI_JAW_SKIP_LOCAL_OFFICECLI"] === '1'
+    || process.env["CLI_JAW_SKIP_LOCAL_OFFICECLI"] === 'true';
+const OFFICECLI_FORCE_REMOTE = process.env["CLI_JAW_FORCE_REMOTE_OFFICECLI"] === '1'
+    || process.env["CLI_JAW_FORCE_REMOTE_OFFICECLI"] === 'true';
 const OFFICECLI_REQUIRE = shouldRequireOfficeCliDuringPostinstall();
 const CLAUDE_NATIVE_INSTALL_URL = 'https://claude.ai/install.sh';
 const CLAUDE_NATIVE_INSTALL_PS_URL = 'https://claude.ai/install.ps1';
@@ -123,6 +127,78 @@ function findBinaryPath(name: string): string | null {
     } catch {
         return null;
     }
+}
+
+function pathMtimeMs(target: string): number {
+    try {
+        return fs.statSync(target).mtimeMs;
+    } catch {
+        return 0;
+    }
+}
+
+function latestMtimeMs(target: string): number {
+    if (!fs.existsSync(target)) return 0;
+    const stat = fs.statSync(target);
+    if (!stat.isDirectory()) return stat.mtimeMs;
+
+    let latest = stat.mtimeMs;
+    const ignoredDirs = new Set(['.git', 'bin', 'obj', 'target', 'build-local', '99.9_test']);
+    for (const entry of fs.readdirSync(target, { withFileTypes: true })) {
+        if (entry.isDirectory() && ignoredDirs.has(entry.name)) continue;
+        latest = Math.max(latest, latestMtimeMs(path.join(target, entry.name)));
+    }
+    return latest;
+}
+
+function latestLocalOfficeCliSourceMtime(projectRoot = PROJECT_ROOT): number {
+    const officeRoot = path.join(projectRoot, 'officecli');
+    return Math.max(
+        latestMtimeMs(path.join(officeRoot, 'src')),
+        pathMtimeMs(path.join(officeRoot, 'dev-install.sh')),
+        pathMtimeMs(path.join(officeRoot, 'build.sh')),
+        pathMtimeMs(path.join(officeRoot, 'scripts', 'build-rhwp-sidecars.sh')),
+        pathMtimeMs(path.join(officeRoot, 'officecli.slnx')),
+    );
+}
+
+export function hasLocalOfficeCliCheckout(projectRoot = PROJECT_ROOT): boolean {
+    if (process.platform === 'win32') return false;
+    if (OFFICECLI_SKIP_LOCAL || OFFICECLI_FORCE_REMOTE) return false;
+    return fs.existsSync(path.join(projectRoot, 'officecli', 'dev-install.sh'))
+        && fs.existsSync(path.join(projectRoot, 'officecli', 'src', 'officecli', 'officecli.csproj'));
+}
+
+export function shouldRunLocalOfficeCliInstall(projectRoot = PROJECT_ROOT): boolean {
+    if (!hasLocalOfficeCliCheckout(projectRoot)) return false;
+    if (OFFICECLI_FORCE) return true;
+
+    const officecliPath = findBinaryPath('officecli');
+    const installDir = officecliPath ? path.dirname(officecliPath) : path.join(home, '.local', 'bin');
+    const installedPaths = [
+        officecliPath || path.join(installDir, 'officecli'),
+        path.join(installDir, 'rhwp-field-bridge'),
+        path.join(installDir, 'rhwp-officecli-bridge'),
+    ];
+
+    if (installedPaths.some((candidate) => !fs.existsSync(candidate))) return true;
+    if (!isInstalledLocalOfficeCliUsable(installedPaths)) return true;
+    const installedMtime = Math.min(...installedPaths.map(pathMtimeMs));
+    const sourceMtime = latestLocalOfficeCliSourceMtime(projectRoot);
+    return sourceMtime > installedMtime + 1000;
+}
+
+function isInstalledLocalOfficeCliUsable(installedPaths: string[]): boolean {
+    const [officecliPath, ...sidecarPaths] = installedPaths;
+    if (!officecliPath || !isRunnableCliBinary('officecli', officecliPath)) return false;
+
+    for (const sidecarPath of sidecarPaths) {
+        if (process.platform !== 'win32' && !isSpawnableCliFile(sidecarPath, process.platform).ok) {
+            console.log(`[jaw:init] ⚠️  OfficeCLI sidecar is not executable → ${sidecarPath}`);
+            return false;
+        }
+    }
+    return true;
 }
 
 interface SkillsSymlinkLink {
@@ -219,6 +295,34 @@ export async function installOfficeCli(opts: InstallOpts = {}) {
             console.log('[jaw:init] ⏭️  skipped officecli');
             return;
         }
+    }
+
+    const localOfficeCliScript = path.join(PROJECT_ROOT, 'officecli', 'dev-install.sh');
+    if (hasLocalOfficeCliCheckout() && shouldRunLocalOfficeCliInstall()) {
+        if (opts.dryRun) {
+            console.log(`  [dry-run] would run bash ${localOfficeCliScript}`);
+            return;
+        }
+        console.log('[jaw:init] 📦 local OfficeCLI checkout is newer; installing via officecli/dev-install.sh...');
+        try {
+            execFileSync('bash', [localOfficeCliScript], {
+                stdio: 'inherit',
+                timeout: 600000,
+                env: postinstallExecEnv(),
+            });
+        } catch (e: unknown) {
+            const status = asRecord(e)["status"];
+            if (OFFICECLI_REQUIRE) {
+                throw new Error(`Local OfficeCLI install required but failed (exit ${fieldString(status, '?')})`);
+            }
+            console.warn(`[jaw:init] ⚠️  local OfficeCLI install failed (exit ${fieldString(status, '?')}); run manually: bash officecli/dev-install.sh`);
+        }
+        return;
+    }
+
+    if (hasLocalOfficeCliCheckout()) {
+        console.log('[jaw:init] ⏭️  local OfficeCLI checkout already installed');
+        return;
     }
 
     if (process.platform === 'win32') {
