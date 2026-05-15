@@ -31,6 +31,7 @@ const BROWSER_ACTIVITY_PATHS = [
     '/api/browser/dom',
     '/api/browser/console',
     '/api/browser/network',
+    '/api/browser/fetch',
     '/api/browser/wait-for-selector',
     '/api/browser/wait-for-text',
     '/api/browser/web-ai/status',
@@ -264,6 +265,16 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
         catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
+    app.post('/api/browser/fetch', requireAuth, async (req: Request, res: Response) => {
+        try {
+            res.json(await browser.adaptiveFetch.runAdaptiveFetch(req.body || {}, createAdaptiveFetchDeps(cdpPort(req))));
+        } catch (e: unknown) {
+            const error = e as { message?: string; code?: string; name?: string };
+            const status = error.name === 'AdaptiveFetchInputError' || error.code === 'invalid-url' ? 400 : 500;
+            res.status(status).json({ ok: false, error: error.message || 'adaptive fetch failed', code: error.code || 'adaptive-fetch-error' });
+        }
+    });
+
     app.post('/api/browser/wait-for-selector', requireAuth, async (req: Request, res: Response) => {
         try { res.json(await browser.waitForSelector(cdpPort(req), req.body.selector, req.body)); }
         catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
@@ -410,6 +421,28 @@ export function registerBrowserRoutes(app: Express, requireAuth: (req: Request, 
             }));
         } catch (e: unknown) { res.status(500).json(toWebAiHttpError(e)); }
     });
+}
+
+function createAdaptiveFetchDeps(port: number) {
+    return {
+        fetch,
+        async getPage() {
+            const page = await browser.getActivePage(port);
+            if (!page) throw new Error('no active browser page available');
+            return page;
+        },
+        async createIsolatedPage() {
+            const tab = await browser.createTab(port, 'about:blank', { activate: false, reuseBlank: false });
+            const page = await browser.waitForPageByTargetId(port, tab.targetId);
+            return {
+                page,
+                isolated: true,
+                cleanup: async () => {
+                    await browser.closeTab(port, tab.targetId).catch(() => undefined);
+                },
+            };
+        },
+    };
 }
 
 function toWebAiHttpError(e: unknown): { ok: false; error: string; stage: string; errorCode?: string; retryHint?: string; vendor?: string; mutationAllowed?: boolean; selectorsTried?: string[]; evidence?: unknown } {

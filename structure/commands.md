@@ -84,7 +84,7 @@ prompt, quit, file, steer, ide, orchestrate
 | `mcp` | `bin/commands/mcp.ts` | `install <package> [--pypi\|--npm]`, `sync`, `reset [--force]`, `list` |
 | `skill` | `bin/commands/skill.ts` | `install <name> [--force]`, `remove <name>`, `info <name>`, `list`, `reset [hard\|--hard] [--force]` |
 | `status` | `bin/commands/status.ts` | `--port <port>`, `--json` |
-| `browser` | `bin/commands/browser.ts` | `start [--port <auto>] [--headless] [--agent]`, `stop`, `status`, `reset [--force]`, `snapshot [--interactive]`, `screenshot [--full-page] [--ref <ref>]`, `click <ref> [--double]`, `mouse-click <x> <y> [--double]`, `vision-click <target> [--provider codex] [--double]`, `type <ref> <text> [--submit]`, `press <key>`, `hover <ref>`, `navigate <url>`, `open <url>`, `tabs`, `text [--format text\|html]`, `evaluate <js>` |
+| `browser` | `bin/commands/browser.ts` | `start [--port <auto>] [--headless] [--agent]`, `stop`, `status`, `reset [--force]`, `fetch <url> [--json] [--trace] [--browser auto\|never\|required] [--allow-third-party-reader]`, `snapshot [--interactive]`, `screenshot [--full-page] [--ref <ref>]`, `click <ref> [--double]`, `mouse-click <x> <y> [--double]`, `vision-click <target> [--provider codex] [--double]`, `type <ref> <text> [--submit]`, `press <key>`, `hover <ref>`, `navigate <url>`, `open <url>`, `tabs`, `text [--format text\|html]`, `evaluate <js>` |
 | `browser web-ai` | `bin/commands/browser-web-ai.ts` | `render`, `status`, `send`, `poll`, `query`, `watch`, `watchers`, `sessions`, `sessions-prune`, `resume`, `reattach`, `notifications`, `capabilities`, `stop`, `diagnose`/`doctor`, `context-dry-run`, `context-render`; vendor는 `chatgpt\|gemini\|grok` |
 | `memory` | `bin/commands/memory.ts` | `search <query>`, `read <file> [--lines N-M]`, `save <file> <content>`, `list`, `init`, `reflect [--sinceDays N]`, `flush`, `cleanup [--days N]` |
 | `launchd` | `bin/commands/launchd.ts` | `[--port PORT] [status\|unset\|cleanup]` |
@@ -183,6 +183,8 @@ prompt, quit, file, steer, ide, orchestrate
 
 - 브라우저 상태 또는 열린 탭을 요약한다.
 - 실제 browser automation command surface는 별도 `bin/commands/browser.ts`와 server browser API가 담당한다.
+- `jaw browser fetch <url>`는 slash search가 아니라 root CLI URL-reader다. known public endpoint, direct fetch, metadata/feed/oEmbed discovery, opt-in third-party reader, and optional browser render/network JSON escalation을 순서대로 시도한다.
+- CAPTCHA/login/paywall/stealth 우회가 목적이 아니며, public/non-browser path로 읽을 수 있는 면을 먼저 넓히고 막힌 boundary는 `blocked`, `auth_required`, `challenge`, `paywall`, `browser_required`로 드러낸다.
 
 ### `/prompt`
 

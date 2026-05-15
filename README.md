@@ -463,6 +463,7 @@ jaw memory save <file> <content>  # save to structured memory
 
 # Browser
 jaw browser start                 # launch Chrome (CDP)
+jaw browser fetch "https://example.com" --json --trace  # adaptive URL reader
 jaw browser snapshot              # capture page state
 jaw browser vision-click "Login"  # AI-powered click
 

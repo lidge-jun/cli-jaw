@@ -39,6 +39,16 @@ interface BrowserTraceEntry {
     path?: string;
 }
 
+interface AdaptiveFetchResult extends JsonRecord {
+    ok?: boolean;
+    verdict?: string;
+    source?: string;
+    finalUrl?: string;
+    browserMode?: string;
+    browserSession?: string;
+    summary?: string;
+}
+
 interface BrowserSnapshotNode {
     ref: string;
     depth: number;
@@ -99,11 +109,85 @@ function decorateTab(tab: BrowserTabSummary, now = Date.now()): BrowserTabSummar
     };
 }
 
+function formatAdaptiveFetchHelp(): string {
+    return `
+  Usage:
+    cli-jaw browser fetch <url> [--json] [--trace] [--browser auto|never|required]
+
+  Reads one URL or search-result URL through known public endpoints, direct fetch,
+  optional public reader services, and browser rendering. This is not generic search.
+
+  Options:
+    --json                         Output JSON
+    --trace                        Include attempt trace
+    --browser auto|never|required  Browser escalation mode
+    --no-browser                   Alias for --browser never
+    --browser-session none|isolated|existing
+    --max-bytes N                  Maximum response bytes per read
+    --timeout-ms N                 Per-attempt timeout
+    --selector CSS                 Browser text extraction selector
+    --allow-third-party-reader     Allow opt-in public reader services
+    --no-public-endpoints          Skip known public endpoint resolvers
+    --allow-archive                Accepted but deferred; emits a warning
+`;
+}
+
+function formatAdaptiveFetchHuman(result: AdaptiveFetchResult): string {
+    return [
+        `ok: ${String(result.ok)}`,
+        `verdict: ${fieldString(result.verdict)}`,
+        `source: ${fieldString(result.source)}`,
+        `final_url: ${fieldString(result.finalUrl)}`,
+        `browser: ${fieldString(result.browserMode)}/${fieldString(result.browserSession)}`,
+        `summary: ${fieldString(result.summary)}`,
+    ].join('\n');
+}
+
 try {
     switch (sub) {
         case 'web-ai':
             await runWebAiCommand(process.argv.slice(4), { api, qs });
             break;
+        case 'fetch': {
+            const { values, positionals } = parseArgs({
+                args: process.argv.slice(4),
+                allowPositionals: true,
+                strict: false,
+                options: {
+                    json: { type: 'boolean', default: false },
+                    trace: { type: 'boolean', default: false },
+                    browser: { type: 'string', default: 'auto' },
+                    'browser-session': { type: 'string' },
+                    'no-browser': { type: 'boolean', default: false },
+                    'max-bytes': { type: 'string' },
+                    'timeout-ms': { type: 'string' },
+                    selector: { type: 'string' },
+                    'no-public-endpoints': { type: 'boolean', default: false },
+                    'allow-third-party-reader': { type: 'boolean', default: false },
+                    'allow-archive': { type: 'boolean', default: false },
+                    help: { type: 'boolean', short: 'h', default: false },
+                },
+            });
+            if (values.help || positionals.length === 0) {
+                console.log(formatAdaptiveFetchHelp());
+                break;
+            }
+            const result = await api<AdaptiveFetchResult>('POST', '/fetch', {
+                url: positionals[0],
+                json: values.json,
+                trace: values.trace,
+                browser: values['no-browser'] ? 'never' : values.browser,
+                browserSession: values['browser-session'],
+                maxBytes: values['max-bytes'],
+                timeoutMs: values['timeout-ms'],
+                selector: values.selector,
+                publicEndpoints: !values['no-public-endpoints'],
+                allowThirdPartyReader: values['allow-third-party-reader'],
+                allowArchive: values['allow-archive'],
+            });
+            console.log(values.json ? JSON.stringify(result, null, 2) : formatAdaptiveFetchHuman(result));
+            break;
+        }
         case 'start': {
             const { values } = parseArgs({
                 args: process.argv.slice(4),
@@ -624,6 +708,7 @@ try {
     cli-jaw browser navigate "https://example.com"
     cli-jaw browser snapshot --interactive
     cli-jaw browser click e3
+    cli-jaw browser fetch "https://example.com" --json --trace
 
   Runtime model:
     cli-jaw browser talks to the cli-jaw server browser API.
@@ -645,6 +730,9 @@ try {
       Clear browser profile, screenshots, and CDP cache.
 
   Observe:
+    fetch <url> [--json] [--trace] [--browser auto|never|required]
+      Read one URL/search-result URL via public endpoints, fetch, optional reader,
+      and browser rendering. Not generic search.
     snapshot [--interactive] [--max-nodes <n>]
       Print accessibility refs. Use --interactive before click/type.
     screenshot [--full-page] [--ref <ref>] [--clip x y w h] [--json]

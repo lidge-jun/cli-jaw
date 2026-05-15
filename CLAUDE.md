@@ -15,6 +15,7 @@ This repository is a Node.js ESM orchestration runtime for boss/employee dispatc
 - `/api/channel/send` is the canonical outbound Telegram/Discord delivery endpoint.
 - Heartbeat schedules support `{ kind: "every", minutes }` and `{ kind: "cron", cron, timeZone? }`.
 - Tool logs are capped by `src/shared/tool-log-sanitize.ts` before WebSocket, `agent_done`, and orchestration snapshot delivery.
+- `jaw browser fetch <url>` is the adaptive URL-reader mirror from agbrowse: use it for a known URL/search-result URL, not as generic search.
 
 ## Local Gates
 

@@ -28,6 +28,7 @@ capability.
 | Browser runtime cleanup / `doctor` | ready | `src/browser/runtime/*`, `src/routes/browser.ts` | `tests/unit/browser-runtime-*.test.ts`, `tests/unit/browser-doctor*.test.ts` (where present) | native cli-jaw surface; not via agbrowse |
 | ChatGPT web-AI resolver | beta | `src/browser/web-ai/chatgpt.ts`, `src/browser/web-ai/composer.ts`, `src/browser/web-ai/session.ts` | `tests/unit/browser-web-ai-composer.test.ts`, `tests/unit/browser-web-ai-cli-contract.test.ts` | mirrored from agbrowse `web-ai/chatgpt.mjs` symbols |
 | Gemini / Grok web-AI live adapters | beta | `src/browser/web-ai/gemini-live.ts`, `src/browser/web-ai/gemini-model.ts`, `src/browser/web-ai/grok-live.ts`, `src/browser/web-ai/grok-model.ts`, `bin/commands/browser-web-ai.ts` | live-provider/manual; CLI contract coverage is shared with `browser web-ai` | native `--vendor gemini\|grok` web-ai path; do not label `ready` without deterministic provider tests |
+| Adaptive URL fetch (`browser fetch`) | experimental | `src/browser/adaptive-fetch/*`, `src/routes/browser.ts`, `bin/commands/browser.ts` | `tests/unit/browser-adaptive-fetch-*.test.ts`, `tests/integration/browser-fetch-command.test.ts` | direct mirror of agbrowse adaptive fetch v1 for URL/search-result reading: public endpoints, direct fetch, metadata/feed/oEmbed discovery, opt-in third-party reader, browser render/network JSON escalation |
 | Action-intent / semantic target resolver (incl. `send.click`) | ready | `src/browser/web-ai/action-intent.ts`, `src/browser/web-ai/target-resolver.ts` | `tests/unit/browser-web-ai-target-resolver.test.ts` | direct mirror of agbrowse `web-ai/action-intent.mjs` + `target-resolver.mjs` |
 | `answerArtifact` on completed answers | ready | `src/browser/web-ai/answer-artifact.ts`, `src/browser/web-ai/session.ts`, `src/browser/web-ai/index.ts` | `tests/unit/browser-web-ai-answer-artifact.test.ts` | direct mirror of `web-ai/answer-artifact.mjs` |
 | `sourceAudit` (`--require-source-audit`, ratio/scope/date flags) | ready | `src/browser/web-ai/source-audit.ts`, `src/browser/web-ai/index.ts` (CLI), `src/routes/browser.ts` (HTTP) | `tests/unit/browser-web-ai-source-audit.test.ts`, `tests/unit/browser-web-ai-cli-contract.test.ts` | direct mirror of `web-ai/source-audit.mjs`; CLI + HTTP query flags exposed |
@@ -58,6 +59,7 @@ capability.
 ## Forbidden Claims
 
 - No `ready` claim for hosted/cloud, external/remote CDP, stealth flows, or live-provider Gemini/Grok flows without deterministic tests.
+- No CAPTCHA/login/paywall/stealth bypass claim for adaptive fetch. It may try legitimate non-browser/public paths first and must surface access boundaries instead of crossing them.
 - No leaderboard or competitor benchmark score (cli-jaw does not own the
   trajectory writer).
 - No production MCP claim from cli-jaw — cli-jaw does not register browser MCP

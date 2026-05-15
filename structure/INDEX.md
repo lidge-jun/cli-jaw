@@ -87,6 +87,7 @@ surfaces through server-backed API routes, CLI commands, dashboard UI, and
 | Phase 16 semantic resolver | ready for ChatGPT web-ai path | `action-intent.ts`, `target-resolver.ts`, self-heal tests |
 | Phase 17 answer artifact / source audit | ready for CLI/API output | `answer-artifact.ts`, `source-audit.ts`, `--require-source-audit` flags |
 | Phase 18 broader MCP/AI SDK | partial | only existing cli-jaw browser/web-ai routes and schemas are claimable |
+| Adaptive URL fetch mirror | experimental | `jaw browser fetch <url>` mirrors agbrowse adaptive URL-reader v1 for known URLs/search-result URLs; not generic search |
 | Phase 19 external-CDP / hosted browser | deferred | no hosted/cloud support claim |
 | Phase 20 benchmark comparison | deferred | no leaderboard or competitor score claim |
 | Phase 21 release labels | docs mirrored | `skills_ref/browser`, `skills_ref/web-ai`, this parity table |
@@ -96,6 +97,8 @@ Support labels must stay aligned with agbrowse:
 - `ready`: deterministic local browser primitives, resolver/source-audit
   contracts, runtime doctor/cleanup.
 - `beta`: live ChatGPT/Gemini/Grok web UI flows.
+- `experimental`: adaptive URL fetch and action-memory cache; opt-in/tested,
+  but not a CAPTCHA/login/paywall/stealth bypass or generic web-search claim.
 - `deferred`: hosted/cloud external-CDP, benchmark score, broad production MCP
   claims.
 
@@ -155,4 +158,4 @@ Support labels must stay aligned with agbrowse:
 
 ---
 
-*마지막 갱신: 2026-05-10 (`server.ts` 741L, `src/routes/` 131 route handlers / 130 API endpoints, `src/manager/` 53 TS/TSX files / 8428L, `src/browser/web-ai/` 67 TS files / 12263L, `bin/commands/` 18 top-level ts subcommands + `tui/` 7 helper, `public/js/` 72 .ts (root 17 + features 41 + diagram 3 + render 11), `public/manager/` 218 files, tests 366 .test.ts 기준)*
+*마지막 갱신: 2026-05-15 (`server.ts` 807L, `src/routes/` 134 route handlers / 133 API endpoints, `src/routes/browser.ts` 475L / 41 browser routes, `src/manager/` 53 TS/TSX files / 8428L, `src/browser/web-ai/` 67 TS files / 12263L, `src/browser/adaptive-fetch/` 14 TS mirror files, `bin/commands/` 18 top-level ts subcommands + `tui/` 7 helper, `public/js/` 72 .ts (root 17 + features 41 + diagram 3 + render 11), `public/manager/` 218 files, tests 370 .test.ts 기준)*
