@@ -10,6 +10,17 @@ export interface QuotaEntry {
     authenticated?: boolean;
     error?: boolean;
     reason?: string;
+    quotaCapable?: boolean;
+    quotaSource?: string;
+    sessionUsageCapable?: boolean;
+    displayTier?: string;
+    sessionUsage?: {
+        contextTokensUsed?: number | null;
+        contextWindowTokens?: number | null;
+        contextWindowUsage?: number | null;
+        primaryModelId?: string | null;
+        turnCount?: number | null;
+    };
 }
 export interface SettingsData {
     cli: string; workingDir: string; permissions: string; locale?: string; showReasoning?: boolean;

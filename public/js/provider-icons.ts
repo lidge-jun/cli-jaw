@@ -5,11 +5,13 @@
 import claudeSvg from '../assets/providers/claude-color.svg?raw';
 import openaiSvg from '../assets/providers/openai.svg?raw';
 import geminiSvg from '../assets/providers/gemini-color.svg?raw';
+import grokSvg from '../assets/providers/grok-color.svg?raw';
 import copilotSvg from '../assets/providers/copilot-color.svg?raw';
 
 // Mono variants for dark/light mode flexibility
 import claudeMonoSvg from '../assets/providers/claude.svg?raw';
 import geminiMonoSvg from '../assets/providers/gemini.svg?raw';
+import grokMonoSvg from '../assets/providers/grok.svg?raw';
 import copilotMonoSvg from '../assets/providers/copilot.svg?raw';
 
 // Service icons (Discord, Telegram)
@@ -17,7 +19,7 @@ import discordSvg from '../assets/providers/discord.svg?raw';
 import telegramSvg from '../assets/providers/telegram.svg?raw';
 import opencodeSvg from '../assets/providers/opencode.svg?raw';
 
-export type ProviderSlug = 'claude' | 'openai' | 'gemini' | 'copilot' | 'codex' | 'opencode' | 'discord' | 'telegram';
+export type ProviderSlug = 'claude' | 'openai' | 'gemini' | 'grok' | 'copilot' | 'codex' | 'opencode' | 'discord' | 'telegram';
 
 interface ProviderIcon {
     color: string;
@@ -29,6 +31,7 @@ const PROVIDER_ICONS: Record<ProviderSlug, ProviderIcon> = {
     claude:   { color: claudeSvg,  mono: claudeMonoSvg,  label: 'Claude' },
     openai:   { color: openaiSvg,  mono: openaiSvg,      label: 'OpenAI' },
     gemini:   { color: geminiSvg,  mono: geminiMonoSvg,   label: 'Gemini' },
+    grok:     { color: grokSvg,    mono: grokMonoSvg,     label: 'Grok' },
     copilot:  { color: copilotSvg, mono: copilotMonoSvg,  label: 'GitHub Copilot' },
     codex:    { color: openaiSvg,  mono: openaiSvg,      label: 'Codex (OpenAI)' },
     opencode: { color: opencodeSvg, mono: opencodeSvg,   label: 'OpenCode' },
@@ -43,6 +46,7 @@ export function providerIcon(slug: string, variant: 'color' | 'mono' = 'color'):
     let key: ProviderSlug;
     if (normalized === 'claude' || normalized.startsWith('claude')) key = 'claude';
     else if (normalized === 'gemini' || normalized.startsWith('gemini')) key = 'gemini';
+    else if (normalized === 'grok' || normalized.startsWith('grok')) key = 'grok';
     else if (normalized.startsWith('copilot') || normalized === 'githubcopilot') key = 'copilot';
     else if (normalized === 'codex') key = 'codex';
     else if (normalized === 'opencode') key = 'opencode';
@@ -77,6 +81,7 @@ export function providerLabel(slug: string): string {
     let key: ProviderSlug;
     if (normalized === 'claude' || normalized.startsWith('claude')) key = 'claude';
     else if (normalized === 'gemini' || normalized.startsWith('gemini')) key = 'gemini';
+    else if (normalized === 'grok' || normalized.startsWith('grok')) key = 'grok';
     else if (normalized.startsWith('copilot') || normalized === 'githubcopilot') key = 'copilot';
     else if (normalized === 'codex') key = 'codex';
     else if (normalized === 'opencode') key = 'opencode';

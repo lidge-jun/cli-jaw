@@ -37,10 +37,21 @@ const FALLBACK_CLI_REGISTRY: CliRegistry = {
         efforts: ['low', 'medium', 'high', 'xhigh'],
         models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.1-codex-mini'],
     },
+    'codex-app': {
+        label: 'Codex App',
+        efforts: ['low', 'medium', 'high', 'xhigh'],
+        models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex', 'gpt-5.3-codex-spark'],
+    },
     gemini: {
         label: 'Gemini',
         efforts: [],
         models: ['gemini-3.0-pro-preview', 'gemini-3.1-pro-preview', 'gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-2.5-flash'],
+    },
+    grok: {
+        label: 'Grok',
+        efforts: [],
+        effortNote: 'unsupported by grok-build; do not pass --effort',
+        models: ['grok-build'],
     },
     opencode: {
         label: 'OpenCode',

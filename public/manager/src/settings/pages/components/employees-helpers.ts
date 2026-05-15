@@ -16,6 +16,7 @@ export const DEFAULT_CLI_OPTIONS = [
     'claude',
     'copilot',
     'gemini',
+    'grok',
 ] as const;
 
 let counter = 0;

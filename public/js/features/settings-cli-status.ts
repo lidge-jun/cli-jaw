@@ -148,6 +148,7 @@ function renderCliStatus(data: { cliStatus: Record<string, { available: boolean 
         claude: { install: 'npm i -g @anthropic-ai/claude-code', auth: 'claude auth' },
         codex: { install: 'npm i -g @openai/codex', auth: 'codex login' },
         gemini: { install: 'npm i -g @google/gemini-cli', auth: `gemini  (${t('cli.gemini.auth')})` },
+        grok: { install: 'Install Grok CLI', auth: 'grok login --oauth' },
         opencode: { install: 'npm i -g opencode-ai', auth: 'opencode auth' },
         copilot: { install: 'npm i -g copilot', auth: t('cli.copilot.authHint') },
     };
@@ -200,7 +201,24 @@ function renderCliStatus(data: { cliStatus: Record<string, { available: boolean 
         }
 
         let windowsHtml = '';
-        if (q?.windows?.length) {
+        if (name === 'grok' && q?.quotaCapable === false && q.authenticated !== false && info.available) {
+            const usage = q.sessionUsage;
+            const contextLine = usage?.contextTokensUsed && usage?.contextWindowTokens
+                ? `Session context: ${Math.round(usage.contextTokensUsed).toLocaleString()} / ${Math.round(usage.contextWindowTokens).toLocaleString()} tokens`
+                : usage?.turnCount
+                    ? `Session turns: ${Math.round(usage.turnCount).toLocaleString()}`
+                    : '';
+            const modelLine = usage?.primaryModelId ? `Model: ${usage.primaryModelId}` : '';
+            const detail = [modelLine, contextLine, q.quotaSource ? 'Quota not exposed by Grok CLI' : 'Auth/status only']
+                .filter(Boolean)
+                .join(' · ');
+            windowsHtml = `
+                <div style="font-size:10px;color:var(--text-dim);margin:4px 0 0 16px;padding:5px 7px;background:var(--bg-dim, #1e1e2e);border:1px solid var(--border);border-radius:5px">
+                    <div style="color:var(--text);font-weight:600">${escapeHtml(q.displayTier || 'Grok Heavy')}</div>
+                    <div style="margin-top:2px">${escapeHtml(detail || 'Auth/status only')}</div>
+                </div>
+            `;
+        } else if (q?.windows?.length) {
             windowsHtml = q.windows.map(w => {
                 const pct = Math.round(w.percent);
                 const barColor = pct > 80 ? '#ef4444' : pct > 50 ? '#fbbf24' : '#38bdf8';

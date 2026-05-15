@@ -7,6 +7,7 @@ import { useId } from 'react';
 import { TextField, ToggleField, SelectField } from '../../fields';
 import type { EmployeeRecord } from './employees-helpers';
 import { DEFAULT_CLI_OPTIONS } from './employees-helpers';
+import { metaFor } from './agent/agent-meta';
 
 type Props = {
     employee: EmployeeRecord;
@@ -38,7 +39,7 @@ export function EmployeeRow({
     if (employee.cli) baseSet.add(employee.cli);
     const opts = Array.from(baseSet).map((value) => ({
         value,
-        label: cliOptions.includes(value) ? value : `${value} (legacy)`,
+        label: cliOptions.includes(value) ? (metaFor(value).label || value) : `${value} (legacy)`,
     }));
 
     const dupeError = duplicateName ? 'Another employee already uses this name' : null;

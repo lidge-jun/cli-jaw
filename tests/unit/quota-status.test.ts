@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { readClaudeCreds, getClaudeCredentialsPath } from '../../src/routes/quota.ts';
+import { readClaudeCreds, getClaudeCredentialsPath, readLatestGrokSessionUsage } from '../../src/routes/quota.ts';
 
 // Read source for structural verification
 const quotaSrc = readSource(
@@ -112,6 +112,49 @@ test('QS-004: readGeminiAccount has cross-platform documentation', () => {
     );
 });
 
+test('QS-004b: Grok quota contract is auth/status only with best-effort session usage', () => {
+    assert.ok(
+        quotaSrc.includes("quotaSource: 'not-exposed-by-grok-cli'"),
+        'Grok quota must not claim a real quota source',
+    );
+    assert.ok(
+        quotaSrc.includes("displayTier: 'Grok Heavy'"),
+        'Grok status should display Grok Heavy as tier copy',
+    );
+    assert.ok(
+        quotaSrc.includes('readLatestGrokSessionUsage'),
+        'Grok session usage reader should be best-effort and separate from quota',
+    );
+});
+
+test('QS-004c: readLatestGrokSessionUsage reads newest signals.json without fake quota windows', () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-grok-signals-'));
+    try {
+        const oldDir = path.join(tmp, '.grok', 'sessions', 'project', 'old');
+        const newDir = path.join(tmp, '.grok', 'sessions', 'project', 'new');
+        fs.mkdirSync(oldDir, { recursive: true });
+        fs.mkdirSync(newDir, { recursive: true });
+        fs.writeFileSync(path.join(oldDir, 'signals.json'), JSON.stringify({ contextTokensUsed: 10, primaryModelId: 'old' }));
+        fs.writeFileSync(path.join(newDir, 'signals.json'), JSON.stringify({
+            turnCount: 3,
+            contextTokensUsed: 1234,
+            contextWindowTokens: 512000,
+            contextWindowUsage: 1,
+            primaryModelId: 'grok-build',
+            modelsUsed: ['grok-build'],
+        }));
+        const now = new Date();
+        fs.utimesSync(path.join(oldDir, 'signals.json'), new Date(now.getTime() - 10_000), new Date(now.getTime() - 10_000));
+        fs.utimesSync(path.join(newDir, 'signals.json'), now, now);
+        const usage = readLatestGrokSessionUsage(tmp);
+        assert.equal(usage?.turnCount, 3);
+        assert.equal(usage?.contextTokensUsed, 1234);
+        assert.equal(usage?.primaryModelId, 'grok-build');
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
 // ── Server.ts: classify logic ──
 
 test('QS-005: /api/quota classify separates no-creds from API failure', () => {
@@ -125,6 +168,10 @@ test('QS-005: /api/quota classify separates no-creds from API failure', () => {
     assert.ok(
         settingsRouteSrc.includes("opencode: { authenticated: true }"),
         'opencode should always be authenticated (no quota API)',
+    );
+    assert.ok(
+        settingsRouteSrc.includes('grok: readGrokStatus()'),
+        'Grok should be present in /api/quota as auth/status-only metadata',
     );
 });
 
@@ -173,6 +220,12 @@ test('QS-010: QuotaEntry type includes authenticated and error fields', () => {
         settingsSrc.includes('error?: boolean'),
         'QuotaEntry should have error field',
     );
+});
+
+test('QS-010e: QuotaEntry type includes Grok auth/status-only fields', () => {
+    for (const field of ['quotaCapable?: boolean', 'quotaSource?: string', 'sessionUsageCapable?: boolean', 'displayTier?: string', 'sessionUsage?:']) {
+        assert.ok(settingsSrc.includes(field), `QuotaEntry should include ${field}`);
+    }
 });
 
 test('QS-010b: QuotaWindow type preserves source modelId for compact Gemini labels', () => {

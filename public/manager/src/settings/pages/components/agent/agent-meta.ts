@@ -2,6 +2,7 @@ export type CliMeta = {
     label: string;
     models: ReadonlyArray<string>;
     efforts: ReadonlyArray<string>;
+    effortNote?: string;
 };
 
 export type PerCliEntry = {
@@ -49,10 +50,21 @@ export const CLI_META: Record<string, CliMeta> = {
         models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex'],
         efforts: ['low', 'medium', 'high', 'xhigh'],
     },
+    'codex-app': {
+        label: 'Codex App',
+        models: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex'],
+        efforts: ['low', 'medium', 'high', 'xhigh'],
+    },
     gemini: {
         label: 'Gemini',
         models: ['gemini-3-pro-preview', 'gemini-2.5-pro', 'gemini-3-flash-preview'],
         efforts: [],
+    },
+    grok: {
+        label: 'Grok',
+        models: ['grok-build'],
+        efforts: [],
+        effortNote: 'unsupported by grok-build; do not pass --effort',
     },
     opencode: {
         label: 'OpenCode',

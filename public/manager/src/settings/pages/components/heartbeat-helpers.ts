@@ -13,7 +13,7 @@ export type { HbJob, HbSchedule, HbScheduleEvery, HbScheduleCron };
 
 const INTERVAL_RE = /^\d+[smh]$/;
 const HHMM_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
-export const TARGET_FALLBACK = ['codex', 'claude', 'copilot', 'gemini'] as const;
+export const TARGET_FALLBACK = ['codex', 'claude', 'copilot', 'gemini', 'grok'] as const;
 
 export const SECTION_A_KEYS = [
     'heartbeat.enabled',

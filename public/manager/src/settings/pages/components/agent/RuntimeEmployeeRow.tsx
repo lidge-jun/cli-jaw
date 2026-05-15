@@ -47,7 +47,7 @@ export function RuntimeEmployeeRow({
                     label="CLI"
                     value={employee.cli}
                     disabled={locked}
-                    options={cliChoices.map((value) => ({ value, label: value }))}
+                    options={cliChoices.map((value) => ({ value, label: metaFor(value).label || value }))}
                     onChange={(next) => {
                         const nextModel = metaFor(next).models[0] || 'default';
                         onChange({ cli: next, model: nextModel });

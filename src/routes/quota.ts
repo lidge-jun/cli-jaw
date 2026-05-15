@@ -1,5 +1,5 @@
 // ─── Quota / Usage readers (extracted from server.js) ─────
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import { join } from 'path';
@@ -32,6 +32,20 @@ interface GeminiQuotaAccount {
     refreshToken?: string;
     expiresAt?: number;
     account: { email: string | null };
+}
+
+interface GrokSessionUsage {
+    sourcePath: string;
+    updatedAt: string;
+    turnCount?: number;
+    userMessageCount?: number;
+    assistantMessageCount?: number;
+    contextTokensUsed?: number;
+    contextWindowTokens?: number;
+    contextWindowUsage?: number;
+    toolCallCount?: number;
+    primaryModelId?: string;
+    modelsUsed?: string[];
 }
 
 type ClaudeCredsSource =
@@ -273,6 +287,95 @@ export function readGeminiAccount() {
         }
     } catch { /* expected: gemini creds may not exist */ }
     return null;
+}
+
+function findLatestGrokSignalsFile(homeDir = os.homedir()): string | null {
+    const sessionsDir = join(homeDir, '.grok', 'sessions');
+    let latest: { path: string; mtimeMs: number } | null = null;
+    const stack = [sessionsDir];
+    let visited = 0;
+    while (stack.length) {
+        const dir = stack.pop()!;
+        let entries: fs.Dirent[];
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch {
+            continue;
+        }
+        for (const entry of entries) {
+            if (++visited > 5000) return latest?.path ?? null;
+            const full = join(dir, entry.name);
+            if (entry.isDirectory()) {
+                stack.push(full);
+                continue;
+            }
+            if (!entry.isFile() || entry.name !== 'signals.json') continue;
+            try {
+                const stat = fs.statSync(full);
+                if (!latest || stat.mtimeMs > latest.mtimeMs) {
+                    latest = { path: full, mtimeMs: stat.mtimeMs };
+                }
+            } catch { /* best effort */ }
+        }
+    }
+    return latest?.path ?? null;
+}
+
+export function readLatestGrokSessionUsage(homeDir = os.homedir()): GrokSessionUsage | null {
+    const signalsPath = findLatestGrokSignalsFile(homeDir);
+    if (!signalsPath) return null;
+    try {
+        const stat = fs.statSync(signalsPath);
+        const raw = JSON.parse(fs.readFileSync(signalsPath, 'utf8')) as Record<string, unknown>;
+        const numberField = (key: string): number | undefined =>
+            typeof raw[key] === 'number' && Number.isFinite(raw[key]) ? raw[key] as number : undefined;
+        const stringField = (key: string): string | undefined =>
+            typeof raw[key] === 'string' && raw[key].trim() ? raw[key] as string : undefined;
+        const stringArrayField = (key: string): string[] | undefined =>
+            Array.isArray(raw[key]) ? (raw[key] as unknown[]).filter((v): v is string => typeof v === 'string') : undefined;
+        return stripUndefined({
+            sourcePath: signalsPath,
+            updatedAt: stat.mtime.toISOString(),
+            turnCount: numberField('turnCount'),
+            userMessageCount: numberField('userMessageCount'),
+            assistantMessageCount: numberField('assistantMessageCount'),
+            contextTokensUsed: numberField('contextTokensUsed'),
+            contextWindowTokens: numberField('contextWindowTokens'),
+            contextWindowUsage: numberField('contextWindowUsage'),
+            toolCallCount: numberField('toolCallCount'),
+            primaryModelId: stringField('primaryModelId'),
+            modelsUsed: stringArrayField('modelsUsed'),
+        }) as GrokSessionUsage;
+    } catch {
+        return null;
+    }
+}
+
+export function readGrokStatus(binary = 'grok') {
+    let authenticated = false;
+    let source = 'none';
+    try {
+        const out = execFileSync(binary, ['models'], {
+            encoding: 'utf8',
+            timeout: 5000,
+            stdio: ['ignore', 'pipe', 'ignore'],
+        });
+        authenticated = out.includes('Available models') || out.includes('grok-build');
+        source = authenticated ? 'grok models' : 'none';
+    } catch { /* grok CLI may be missing or logged out */ }
+    return stripUndefined({
+        authenticated,
+        quotaCapable: false,
+        quotaSource: 'not-exposed-by-grok-cli',
+        sessionUsageCapable: true,
+        displayTier: 'Grok Heavy',
+        account: {
+            type: 'grok.com',
+            tier: 'Grok Heavy',
+        },
+        source,
+        sessionUsage: readLatestGrokSessionUsage() ?? undefined,
+    });
 }
 
 async function refreshGeminiAccessToken(account: GeminiQuotaAccount): Promise<string | null> {

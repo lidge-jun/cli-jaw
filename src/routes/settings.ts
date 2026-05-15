@@ -12,7 +12,7 @@ import {
     loadUnifiedMcp, saveUnifiedMcp, syncToAll, initMcpConfig,
 } from '../../lib/mcp-sync.js';
 import { CLI_REGISTRY } from '../cli/registry.js';
-import { readClaudeCreds, readCodexTokens, fetchClaudeUsage, fetchCodexUsage, readGeminiAccount, fetchGeminiUsage } from './quota.js';
+import { readClaudeCreds, readCodexTokens, fetchClaudeUsage, fetchCodexUsage, readGeminiAccount, fetchGeminiUsage, readGrokStatus } from './quota.js';
 import { fetchCopilotQuota, refreshCopilotFromKeychain } from '../../lib/quota-copilot.js';
 import { migrateLegacyClaudeValue } from '../cli/claude-models.js';
 import { extractOpenAiApiKey, hasInvalidOpenAiApiKeyInput } from '../jaw-ceo/openai-key.js';
@@ -222,6 +222,7 @@ export function registerSettingsRoutes(
             claude: classify(claudeResult, !!claudeCreds),
             codex: classify(codexResult, !!codexTokens),
             gemini: classify(geminiResult, !!geminiAccount),
+            grok: readGrokStatus(),
             opencode: { authenticated: true },
             copilot: copilotResult ?? { authenticated: false },
         });

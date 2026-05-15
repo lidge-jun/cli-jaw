@@ -1,5 +1,6 @@
 import { SelectField, TextField } from '../../../fields';
 import { SettingsSection } from '../../page-shell';
+import { metaFor } from './agent-meta';
 
 type RuntimeHeaderProps = {
     cli: string;
@@ -40,7 +41,7 @@ export function RuntimeHeader({
                     id="agent-cli"
                     label="Active CLI"
                     value={cli}
-                    options={cliOptions.map((value) => ({ value, label: value }))}
+                    options={cliOptions.map((value) => ({ value, label: metaFor(value).label || value }))}
                     onChange={onCliChange}
                 />
                 <SelectField
