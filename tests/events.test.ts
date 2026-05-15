@@ -892,6 +892,7 @@ test('grok parser preserves visible thinking and correlates multiple tool events
     assert.equal(ctx.toolLog[0].detail, 'Plan: call two tools. Then summarize.');
 
     extractFromEvent('grok', { type: 'tool_use', id: 'a', name: 'shell', input: { command: 'pwd' } }, ctx, 'grok');
+    extractFromEvent('grok', { type: 'tool_use', id: 'a', name: 'shell', input: { command: 'pwd' } }, ctx, 'grok');
     extractFromEvent('grok', { type: 'tool_use', id: 'b', name: 'shell', input: { command: 'printf ok' } }, ctx, 'grok');
     extractFromEvent('grok', { type: 'tool_result', id: 'a', name: 'shell', output: '/tmp' }, ctx, 'grok');
     extractFromEvent('grok', { type: 'tool_result', id: 'b', name: 'shell', output: 'ok' }, ctx, 'grok');
@@ -903,6 +904,37 @@ test('grok parser preserves visible thinking and correlates multiple tool events
     assert.equal(toolB?.status, 'done');
     assert.equal(toolB?.detail, 'ok');
     assert.equal(ctx.toolLog.filter(t => t.stepRef?.startsWith('grok:tool:')).length, 2);
+});
+
+test('grok parser keeps separate thinking spans and handles part/state tool completion shape', () => {
+    const ctx = { toolLog: [], fullText: '', traceLog: [], pendingOutputChunk: '', seenToolKeys: new Set() };
+    extractFromEvent('grok', { type: 'thought', data: 'First plan.' }, ctx, 'grok');
+    extractFromEvent('grok', { type: 'text', data: 'Visible answer. ' }, ctx, 'grok');
+    extractFromEvent('grok', { type: 'thought', data: 'Second plan.' }, ctx, 'grok');
+    extractFromEvent('grok', { type: 'end', sessionId: 'grok-session' }, ctx, 'grok');
+
+    const thinkingSteps = ctx.toolLog.filter(t => t.stepRef?.startsWith('grok:thinking'));
+    assert.equal(thinkingSteps.length, 2);
+    assert.equal(thinkingSteps[0].stepRef, 'grok:thinking');
+    assert.equal(thinkingSteps[0].status, 'done');
+    assert.equal(thinkingSteps[0].detail, 'First plan.');
+    assert.equal(thinkingSteps[1].stepRef, 'grok:thinking:2');
+    assert.equal(thinkingSteps[1].status, 'done');
+    assert.equal(thinkingSteps[1].detail, 'Second plan.');
+
+    extractFromEvent('grok', {
+        type: 'tool_use',
+        part: { tool: 'shell', callID: 'call-1', state: { status: 'running', input: { command: 'pwd' } } },
+    }, ctx, 'grok');
+    extractFromEvent('grok', {
+        type: 'tool_use',
+        part: { tool: 'shell', callID: 'call-1', state: { status: 'completed', output: '/repo' } },
+    }, ctx, 'grok');
+
+    const tool = ctx.toolLog.find(t => t.stepRef === 'grok:tool:call-1');
+    assert.equal(tool?.status, 'done');
+    assert.equal(tool?.detail, '/repo');
+    assert.equal(ctx.toolLog.filter(t => t.stepRef === 'grok:tool:call-1').length, 1);
 });
 
 test('grok streaming-json error emits error tool without assistant text', () => {

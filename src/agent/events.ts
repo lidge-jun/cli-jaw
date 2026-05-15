@@ -309,9 +309,25 @@ function finalizeOpencodePendingTools(
 const GROK_THINKING_STEP_REF = 'grok:thinking';
 
 function findGrokThinkingTool(ctx: SpawnContext): ToolEntry | undefined {
+    const currentRef = ctx.grokCurrentThoughtRef;
+    if (currentRef) {
+        const current = [...ctx.toolLog].reverse().find(
+            (t: ToolEntry) => t.stepRef === currentRef && (!t.status || t.status === 'running')
+        );
+        if (current) return current;
+    }
     return [...ctx.toolLog].reverse().find(
-        (t: ToolEntry) => t.stepRef === GROK_THINKING_STEP_REF && (!t.status || t.status === 'running')
+        (t: ToolEntry) => t.stepRef?.startsWith(GROK_THINKING_STEP_REF) && (!t.status || t.status === 'running')
     );
+}
+
+function nextGrokThinkingStepRef(ctx: SpawnContext): string {
+    if (ctx.grokCurrentThoughtRef) return ctx.grokCurrentThoughtRef;
+    ctx.grokThoughtSeq = (ctx.grokThoughtSeq || 0) + 1;
+    ctx.grokCurrentThoughtRef = ctx.grokThoughtSeq === 1
+        ? GROK_THINKING_STEP_REF
+        : `${GROK_THINKING_STEP_REF}:${ctx.grokThoughtSeq}`;
+    return ctx.grokCurrentThoughtRef;
 }
 
 function ensureGrokThinkingProgress(
@@ -330,14 +346,14 @@ function ensureGrokThinkingProgress(
         emitAgentTool(ctx, agentLabel, existing, empTag);
         return;
     }
-    if (ctx.grokThoughtProgressEmitted) return;
+    const stepRef = nextGrokThinkingStepRef(ctx);
     const tool = {
         icon: '💭',
         label,
         toolType: 'thinking' as const,
         ...(trimmed ? { detail: trimmed } : {}),
         status: 'running' as const,
-        stepRef: GROK_THINKING_STEP_REF,
+        stepRef,
     };
     ctx.grokThoughtProgressEmitted = true;
     ctx.toolLog.push(tool);
@@ -362,36 +378,66 @@ function finalizeGrokThinkingProgress(
     }
     syncLiveTools(ctx);
     emitAgentTool(ctx, agentLabel, existing, empTag);
+    delete ctx.grokCurrentThoughtRef;
+    ctx.grokThoughtProgressEmitted = false;
     return true;
 }
 
 function grokToolRef(event: CliEventRecord, ctx: SpawnContext): string {
+    const part = asCliEventRecord(event.part);
     const rawId = fieldString(event.id)
         || fieldString(event.toolCallId)
         || fieldString(event["tool_call_id"])
+        || fieldString(event["toolUseId"])
+        || fieldString(event.tool_id)
+        || fieldString(event.tool_use_id)
+        || fieldString(event["toolId"])
+        || fieldString(event["call_id"])
+        || fieldString(event.callID)
         || fieldString(event["callId"])
-        || fieldString(event.requestId);
+        || fieldString(event.requestId)
+        || fieldString(part.callID)
+        || fieldString(part.id)
+        || fieldString(part["toolCallId"])
+        || fieldString(part["tool_call_id"]);
     if (rawId) return `grok:tool:${rawId}`;
     ctx.grokSyntheticToolSeq = (ctx.grokSyntheticToolSeq || 0) + 1;
     return `grok:tool:synthetic-${ctx.grokSyntheticToolSeq}`;
 }
 
 function grokToolName(event: CliEventRecord): string {
+    const part = asCliEventRecord(event.part);
+    const state = asCliEventRecord(event.state);
+    const partState = asCliEventRecord(part.state);
     const toolName = isCliEventRecord(event.tool) ? fieldString(event.tool.name) : fieldString(event.tool);
     return fieldString(event.name)
         || fieldString(event["toolName"])
         || fieldString(event.tool_name)
         || toolName
+        || fieldString(part.tool)
+        || fieldString(part.name)
+        || fieldString(state.title)
+        || fieldString(partState.title)
         || fieldString(event.command)
         || fieldString(event.title)
         || 'tool';
 }
 
 function grokToolDetail(event: CliEventRecord): string {
+    const part = asCliEventRecord(event.part);
+    const state = asCliEventRecord(event.state);
+    const partState = asCliEventRecord(part.state);
     const value = event["arguments"]
         ?? event["args"]
         ?? event.input
+        ?? event.parameters
+        ?? event.rawInput
+        ?? part.input
+        ?? partState.input
         ?? event.output
+        ?? state.output
+        ?? part.output
+        ?? partState.output
         ?? event["result"]
         ?? event.data
         ?? event.error
@@ -412,16 +458,40 @@ function handleGrokToolEvent(
     empTag: Record<string, unknown>,
 ): boolean {
     const type = fieldString(event.type);
+    const part = asCliEventRecord(event.part);
+    const state = asCliEventRecord(event.state);
+    const partState = asCliEventRecord(part.state);
+    const rawStatus = fieldString(event.status) || fieldString(state.status) || fieldString(partState.status);
+    const normalizedStatus = rawStatus.toLowerCase();
+    const completedStatuses = new Set(['completed', 'complete', 'done', 'success', 'succeeded', 'failed', 'error']);
     const startTypes = new Set(['tool_use', 'tool_call', 'tool_start', 'tool.started']);
     const endTypes = new Set(['tool_result', 'tool_output', 'tool_end', 'tool.completed']);
-    if (!startTypes.has(type) && !endTypes.has(type)) return false;
+    const startsTool = startTypes.has(type);
+    const endsTool = endTypes.has(type) || (startsTool && completedStatuses.has(normalizedStatus));
+    if (!startsTool && !endsTool) return false;
 
     const ref = grokToolRef(event, ctx);
     const name = grokToolName(event);
     const detail = grokToolDetail(event);
-    const isError = Boolean(event["is_error"] || event.error || event.status === 'error' || event.status === 'failed');
+    const isError = Boolean(
+        event["is_error"]
+        || event.error
+        || normalizedStatus === 'error'
+        || normalizedStatus === 'failed'
+    );
 
-    if (startTypes.has(type)) {
+    if (startsTool && !endsTool) {
+        const existing = [...ctx.toolLog].reverse().find((t: ToolEntry) => t.stepRef === ref);
+        if (existing) {
+            existing.icon = '🔧';
+            existing.label = buildPreview(name, 80) || existing.label || 'tool';
+            existing.toolType = 'tool';
+            existing.status = 'running';
+            if (detail) existing.detail = detail;
+            syncLiveTools(ctx);
+            emitAgentTool(ctx, agentLabel, existing, empTag);
+            return true;
+        }
         const tool = {
             icon: '🔧',
             label: buildPreview(name, 80) || 'tool',
@@ -445,6 +515,7 @@ function handleGrokToolEvent(
         stepRef: ref,
     };
     doneTool.icon = isError ? '❌' : '✅';
+    doneTool.label = buildPreview(name, 80) || doneTool.label || 'tool';
     doneTool.status = isError ? 'error' : 'done';
     if (detail) doneTool.detail = detail;
     if (!existing) ctx.toolLog.push(doneTool);
@@ -965,7 +1036,8 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
             if (event.type === 'text') {
                 const text = String(event.data || event.text || '');
                 if (text) {
-                    finalizeGrokThinkingProgress(ctx, agentLabel, empTag);
+                    finalizeGrokThinkingProgress(ctx, agentLabel, empTag, ctx.grokThoughtBuf);
+                    ctx.grokThoughtBuf = '';
                     ctx.fullText += text;
                     ctx.outputTextStarted = true;
                     ctx.pendingOutputChunk = (ctx.pendingOutputChunk || '') + text;
