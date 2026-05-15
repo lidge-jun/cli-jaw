@@ -306,11 +306,160 @@ function finalizeOpencodePendingTools(
     }
 }
 
+const GROK_THINKING_STEP_REF = 'grok:thinking';
+
+function findGrokThinkingTool(ctx: SpawnContext): ToolEntry | undefined {
+    return [...ctx.toolLog].reverse().find(
+        (t: ToolEntry) => t.stepRef === GROK_THINKING_STEP_REF && (!t.status || t.status === 'running')
+    );
+}
+
+function ensureGrokThinkingProgress(
+    ctx: SpawnContext,
+    agentLabel: string,
+    empTag: Record<string, unknown>,
+    detail?: string,
+): void {
+    const trimmed = detail?.trim() || '';
+    const label = trimmed ? (buildPreview(trimmed, 80) || 'thinking...') : 'Grok is thinking...';
+    const existing = findGrokThinkingTool(ctx);
+    if (existing) {
+        existing.label = label;
+        if (trimmed) existing.detail = trimmed;
+        syncLiveTools(ctx);
+        emitAgentTool(ctx, agentLabel, existing, empTag);
+        return;
+    }
+    if (ctx.grokThoughtProgressEmitted) return;
+    const tool = {
+        icon: '💭',
+        label,
+        toolType: 'thinking' as const,
+        ...(trimmed ? { detail: trimmed } : {}),
+        status: 'running' as const,
+        stepRef: GROK_THINKING_STEP_REF,
+    };
+    ctx.grokThoughtProgressEmitted = true;
+    ctx.toolLog.push(tool);
+    syncLiveTools(ctx);
+    emitAgentTool(ctx, agentLabel, tool, empTag);
+    pushTrace(ctx, `[${agentLabel}] grok thinking started`);
+}
+
+function finalizeGrokThinkingProgress(
+    ctx: SpawnContext,
+    agentLabel: string,
+    empTag: Record<string, unknown>,
+    detail?: string,
+): boolean {
+    const existing = findGrokThinkingTool(ctx);
+    if (!existing) return false;
+    existing.status = 'done';
+    if (detail?.trim()) {
+        const trimmed = detail.trim();
+        existing.label = buildPreview(trimmed, 80) || 'thinking...';
+        existing.detail = trimmed;
+    }
+    syncLiveTools(ctx);
+    emitAgentTool(ctx, agentLabel, existing, empTag);
+    return true;
+}
+
+function grokToolRef(event: CliEventRecord, ctx: SpawnContext): string {
+    const rawId = fieldString(event.id)
+        || fieldString(event.toolCallId)
+        || fieldString(event["tool_call_id"])
+        || fieldString(event["callId"])
+        || fieldString(event.requestId);
+    if (rawId) return `grok:tool:${rawId}`;
+    ctx.grokSyntheticToolSeq = (ctx.grokSyntheticToolSeq || 0) + 1;
+    return `grok:tool:synthetic-${ctx.grokSyntheticToolSeq}`;
+}
+
+function grokToolName(event: CliEventRecord): string {
+    const toolName = isCliEventRecord(event.tool) ? fieldString(event.tool.name) : fieldString(event.tool);
+    return fieldString(event.name)
+        || fieldString(event["toolName"])
+        || fieldString(event.tool_name)
+        || toolName
+        || fieldString(event.command)
+        || fieldString(event.title)
+        || 'tool';
+}
+
+function grokToolDetail(event: CliEventRecord): string {
+    const value = event["arguments"]
+        ?? event["args"]
+        ?? event.input
+        ?? event.output
+        ?? event["result"]
+        ?? event.data
+        ?? event.error
+        ?? event.message;
+    if (typeof value === 'string') return value;
+    if (value == null) return '';
+    try {
+        return JSON.stringify(value);
+    } catch {
+        return String(value);
+    }
+}
+
+function handleGrokToolEvent(
+    event: CliEventRecord,
+    ctx: SpawnContext,
+    agentLabel: string,
+    empTag: Record<string, unknown>,
+): boolean {
+    const type = fieldString(event.type);
+    const startTypes = new Set(['tool_use', 'tool_call', 'tool_start', 'tool.started']);
+    const endTypes = new Set(['tool_result', 'tool_output', 'tool_end', 'tool.completed']);
+    if (!startTypes.has(type) && !endTypes.has(type)) return false;
+
+    const ref = grokToolRef(event, ctx);
+    const name = grokToolName(event);
+    const detail = grokToolDetail(event);
+    const isError = Boolean(event["is_error"] || event.error || event.status === 'error' || event.status === 'failed');
+
+    if (startTypes.has(type)) {
+        const tool = {
+            icon: '🔧',
+            label: buildPreview(name, 80) || 'tool',
+            toolType: 'tool' as const,
+            ...(detail ? { detail } : {}),
+            status: 'running' as const,
+            stepRef: ref,
+        };
+        ctx.toolLog.push(tool);
+        syncLiveTools(ctx);
+        emitAgentTool(ctx, agentLabel, tool, empTag);
+        pushTrace(ctx, `[${agentLabel}] grok tool start: ${name}`);
+        return true;
+    }
+
+    const existing = [...ctx.toolLog].reverse().find((t: ToolEntry) => t.stepRef === ref);
+    const doneTool = existing || {
+        icon: isError ? '❌' : '✅',
+        label: buildPreview(name, 80) || 'tool',
+        toolType: 'tool' as const,
+        stepRef: ref,
+    };
+    doneTool.icon = isError ? '❌' : '✅';
+    doneTool.status = isError ? 'error' : 'done';
+    if (detail) doneTool.detail = detail;
+    if (!existing) ctx.toolLog.push(doneTool);
+    syncLiveTools(ctx);
+    emitAgentTool(ctx, agentLabel, doneTool, empTag);
+    pushTrace(ctx, `[${agentLabel}] grok tool ${isError ? 'error' : 'done'}: ${name}`);
+    return true;
+}
+
 export function extractSessionId(cli: string, event: CliEventRecord): string | null {
     switch (cli) {
         case 'claude': return event.type === 'system' ? event.session_id ?? null : null;
         case 'codex': return event.type === 'thread.started' ? event.thread_id ?? null : null;
         case 'gemini': return event.type === 'init' ? event.session_id ?? null : null;
+        case 'grok': return event.type === 'end' ? event.sessionId ?? null : null;
         case 'opencode': return event.sessionID ?? null;
         default: return null;
     }
@@ -341,6 +490,15 @@ export function extractOutputChunk(cli: string, event: CliEventRecord, ctx?: Spa
             ctx.pendingOutputChunk = '';
             return chunk;
         }
+        return '';
+    }
+    if (cli === 'grok') {
+        if (ctx?.pendingOutputChunk) {
+            const chunk = ctx.pendingOutputChunk;
+            ctx.pendingOutputChunk = '';
+            return chunk;
+        }
+        if (event.type === 'text') return String(event.data || event.text || '');
         return '';
     }
     // [P0-1.5] Codex: emit agent_message text as live chunk
@@ -772,6 +930,75 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                 }
             }
             break;
+        case 'grok': {
+            if (event.type === 'error') {
+                const detail = String(
+                    event.error?.message
+                    || event.message
+                    || event.data
+                    || event.text
+                    || 'grok error',
+                ).trim();
+                const tool = {
+                    icon: '❌',
+                    label: buildPreview(detail, 80) || 'grok error',
+                    toolType: 'tool' as const,
+                    detail,
+                    status: 'error' as const,
+                    stepRef: `grok:error:${event.requestId || ctx.traceRunId || 'run'}`,
+                };
+                ctx.toolLog.push(tool);
+                syncLiveTools(ctx);
+                emitAgentTool(ctx, agentLabel, tool, empTag);
+                pushTrace(ctx, `[${agentLabel}] grok error: ${detail.slice(0, 200)}`);
+                break;
+            }
+            if (handleGrokToolEvent(event, ctx, agentLabel, empTag)) {
+                break;
+            }
+            if (event.type === 'thought') {
+                const text = String(event.data || event.text || '');
+                ctx.grokThoughtBuf = (ctx.grokThoughtBuf || '') + text;
+                ensureGrokThinkingProgress(ctx, agentLabel, empTag, ctx.grokThoughtBuf);
+                break;
+            }
+            if (event.type === 'text') {
+                const text = String(event.data || event.text || '');
+                if (text) {
+                    finalizeGrokThinkingProgress(ctx, agentLabel, empTag);
+                    ctx.fullText += text;
+                    ctx.outputTextStarted = true;
+                    ctx.pendingOutputChunk = (ctx.pendingOutputChunk || '') + text;
+                }
+                break;
+            }
+            if (event.type === 'end') {
+                if (event.sessionId) ctx.sessionId = event.sessionId;
+                if (!ctx.metadata) ctx.metadata = {};
+                if (event.stopReason) ctx.metadata["stopReason"] = event.stopReason;
+                if (event.requestId) ctx.metadata["requestId"] = event.requestId;
+                if (ctx.grokThoughtBuf?.trim()) {
+                    const detail = ctx.grokThoughtBuf.trim();
+                    const updated = finalizeGrokThinkingProgress(ctx, agentLabel, empTag, detail);
+                    if (!updated) {
+                        const tool = {
+                            icon: '💭',
+                            label: buildPreview(detail, 80) || 'thinking...',
+                            toolType: 'thinking' as const,
+                            detail,
+                            status: 'done' as const,
+                        };
+                        ctx.toolLog.push(tool);
+                        syncLiveTools(ctx);
+                        emitAgentTool(ctx, agentLabel, tool, empTag);
+                    }
+                    ctx.grokThoughtBuf = '';
+                } else {
+                    finalizeGrokThinkingProgress(ctx, agentLabel, empTag);
+                }
+            }
+            break;
+        }
         case 'opencode':
             if (typeof event.type === 'string' && ![
                 'step_start',
@@ -975,6 +1202,17 @@ export function logEventSummary(agentLabel: string, cli: string, event: CliEvent
             const dur = ((event.stats?.duration_ms || 0) / 1000).toFixed(1);
             const calls = event.stats?.tool_calls ?? 0;
             logLine(`[${agentLabel}] result: ${calls} tool calls / ${dur}s`, ctx);
+            return;
+        }
+    }
+
+    if (cli === 'grok') {
+        if (event.type === 'text') {
+            logLine(`[${agentLabel}] grok text: ${toSingleLine(event.data || event.text).slice(0, 120)}`, ctx);
+            return;
+        }
+        if (event.type === 'end') {
+            logLine(`[${agentLabel}] grok end: ${event.stopReason || 'done'}`, ctx);
             return;
         }
     }

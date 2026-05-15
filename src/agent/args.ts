@@ -82,6 +82,8 @@ function geminiIncludeDirectoryArgs(options: BuildArgOptions): string[] {
  * would trigger `thread/resume failed: no rollout found` on the server side.
  */
 export function resolveSessionBucket(cli: string | null | undefined, model: string | null | undefined): string {
+    if (cli === 'codex-app') return 'codex-app';
+    if (cli === 'grok') return 'grok';
     if (cli === 'codex' && isCodexSparkModel(model || '')) return 'codex-spark';
     return cli || '';
 }
@@ -125,6 +127,14 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
                 '--approval-mode', 'yolo',
                 ...geminiIncludeDirectoryArgs(options),
                 '-o', 'stream-json'];
+        case 'grok':
+            return ['-p', prompt || '',
+                ...(model && model !== 'default' ? ['-m', model] : []),
+                '--output-format', 'streaming-json',
+                '--no-alt-screen',
+                ...(autoPerm ? ['--always-approve', '--permission-mode', 'bypassPermissions'] : [])];
+        case 'codex-app':
+            return ['app-server', '--listen', 'stdio://'];
         case 'opencode':
             return ['run',
                 ...(model && model !== 'default' ? ['-m', model] : []),
@@ -170,6 +180,15 @@ export function buildResumeArgs(cli: string, model: string, effort: string, sess
                 '--approval-mode', 'yolo',
                 ...geminiIncludeDirectoryArgs(options),
                 '-o', 'stream-json'];
+        case 'grok':
+            return ['-p', prompt || '',
+                '--resume', sessionId,
+                ...(model && model !== 'default' ? ['-m', model] : []),
+                '--output-format', 'streaming-json',
+                '--no-alt-screen',
+                ...(autoPerm ? ['--always-approve', '--permission-mode', 'bypassPermissions'] : [])];
+        case 'codex-app':
+            return ['app-server', '--listen', 'stdio://'];
         case 'opencode':
             return ['run', '-s', sessionId,
                 ...(model && model !== 'default' ? ['-m', model] : []),

@@ -24,6 +24,10 @@ const CLI_STALE_MATCHERS: MatcherMap = {
         /\bsession\b.*\bnot found\b/i,
         /\bresume\b.*\bnot found\b/i,
     ],
+    grok: [
+        /\bsession\b.*\bnot found\b/i,
+        /\bresume\b.*\bnot found\b/i,
+    ],
     opencode: [
         /\bsession\b.*\bnot found\b/i,
     ],

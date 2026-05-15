@@ -75,7 +75,7 @@ test('SRH-005: spawn path and detectCli logic use service-safe PATH handling', (
     assert.match(spawnSrc, /clearEmployeeSession\.run\(opts\.agentId\)/);
     assert.match(lifecycleSrc, /clearEmployeeSession\.run\(opts\.agentId\)/);
     assert.match(dbSrc, /export const clearEmployeeSession = db\.prepare\('DELETE FROM employee_sessions WHERE employee_id = \?'\)/);
-    assert.match(configSrc, /return detectCliBinary\(name\)/);
+    assert.match(configSrc, /return detectCliBinary\(binary\)/);
     assert.match(cliDetectSrc, /buildCliDetectionEnv\(seedPath\)/);
     assert.match(cliDetectSrc, /buildServicePath\(seedPath\)/);
     assert.match(cliDetectSrc, /\['-a', name\]/);

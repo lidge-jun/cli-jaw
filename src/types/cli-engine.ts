@@ -18,8 +18,10 @@
 export type CliEngine =
     | 'claude'
     | 'codex'
+    | 'codex-app'
     | 'copilot'
     | 'gemini'
+    | 'grok'
     | 'opencode';
 
 /**
@@ -32,8 +34,10 @@ export type CliEngine =
 export const CLI_ENGINES = [
     'claude',
     'codex',
+    'codex-app',
     'copilot',
     'gemini',
+    'grok',
     'opencode',
 ] as const satisfies readonly CliEngine[];
 

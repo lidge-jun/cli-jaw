@@ -10,8 +10,8 @@ import {
 
 // ─── Structure validation ────────────────────────────
 
-test('CLI_KEYS contains exactly 5 known entries', () => {
-    assert.deepEqual(CLI_KEYS.sort(), ['claude', 'codex', 'copilot', 'gemini', 'opencode']);
+test('CLI_KEYS contains exactly 7 known entries', () => {
+    assert.deepEqual(CLI_KEYS.sort(), ['claude', 'codex', 'codex-app', 'copilot', 'gemini', 'grok', 'opencode']);
 });
 
 test('DEFAULT_CLI is claude', () => {
@@ -44,6 +44,14 @@ test('every CLI defaultModel is included in its models list', () => {
 test('registry defaults for gemini and opencode are updated', () => {
     assert.equal(CLI_REGISTRY.gemini.defaultModel, 'gemini-3-flash-preview');
     assert.equal(CLI_REGISTRY.opencode.defaultModel, 'opencode-go/kimi-k2.6');
+});
+
+test('grok registry disables effort for grok-build', () => {
+    assert.equal(CLI_REGISTRY.grok.defaultModel, 'grok-build');
+    assert.deepEqual(CLI_REGISTRY.grok.models, ['grok-build']);
+    assert.equal(CLI_REGISTRY.grok.defaultEffort, '');
+    assert.deepEqual(CLI_REGISTRY.grok.efforts, []);
+    assert.match(CLI_REGISTRY.grok.effortNote || '', /unsupported by grok-build/);
 });
 
 test('opencode registry exposes only the curated OpenCode Go models', () => {

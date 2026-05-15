@@ -42,6 +42,7 @@ export interface CliEventRecord extends Record<string, unknown> {
   title?: string;
   label?: string;
   text?: string;
+  data?: string;
   content?: string | CliEventRecord | CliEventRecord[];
   description?: string;
   summary?: string;
@@ -74,6 +75,9 @@ export interface CliEventRecord extends Record<string, unknown> {
   session_id?: string;
   thread_id?: string;
   sessionID?: string;
+  sessionId?: string;
+  requestId?: string;
+  stopReason?: string;
   task_id?: string;
   task_type?: string;
   compact_boundary?: boolean;
@@ -105,11 +109,11 @@ export interface AcpUpdateParams {
   update?: CliEventRecord;
 }
 
-export interface AcpSubagentEvent extends CliEventRecord {
+export type AcpSubagentEvent = CliEventRecord & {
   data?: CliEventRecord & {
     tools?: string[];
   };
-}
+};
 
 export type ExtractedEventResult =
   | { text?: string; tool?: ToolEntry }
@@ -143,7 +147,7 @@ export function assertNever(value: never): never {
 
 export function discriminate(cli: string, raw: unknown): CliEvent | null {
   if (!isCliEventRecord(raw)) return null;
-  if (cli === 'claude' || cli === 'codex' || cli === 'gemini' || cli === 'opencode') {
+  if (cli === 'claude' || cli === 'codex' || cli === 'gemini' || cli === 'grok' || cli === 'opencode') {
     return { ...raw, cli };
   }
   return null;

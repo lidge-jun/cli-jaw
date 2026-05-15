@@ -422,7 +422,8 @@ export function saveHeartbeatFile(data: HeartbeatFile | Record<string, unknown>)
 // ─── CLI Detection ───────────────────────────────────
 
 export function detectCli(name: string): CliDetection {
-    return detectCliBinary(name);
+    const binary = (CLI_REGISTRY as Record<string, any>)[name]?.binary || name;
+    return detectCliBinary(binary);
 }
 
 export function detectAllCli() {

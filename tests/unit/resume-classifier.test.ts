@@ -22,6 +22,16 @@ test('resume classifier invalidates generic invalid resume errors', () => {
     assert.equal(invalid, true);
 });
 
+test('resume classifier invalidates stale Grok resume errors', () => {
+    const invalid = shouldInvalidateResumeSession(
+        'grok',
+        1,
+        'resume failed: session not found',
+        '',
+    );
+    assert.equal(invalid, true);
+});
+
 test('resume classifier preserves session for recoverable 429 errors', () => {
     const invalid = shouldInvalidateResumeSession(
         'claude',

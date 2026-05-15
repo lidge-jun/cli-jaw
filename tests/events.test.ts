@@ -74,6 +74,7 @@ test('extractSessionId handles all supported CLIs', () => {
     assert.equal(extractSessionId('claude', { type: 'system', session_id: 'claude-1' }), 'claude-1');
     assert.equal(extractSessionId('codex', { type: 'thread.started', thread_id: 'thread-1' }), 'thread-1');
     assert.equal(extractSessionId('gemini', { type: 'init', session_id: 'gemini-1' }), 'gemini-1');
+    assert.equal(extractSessionId('grok', { type: 'end', sessionId: 'grok-1' }), 'grok-1');
     assert.equal(extractSessionId('opencode', { sessionID: 'oc-1' }), 'oc-1');
     assert.equal(extractSessionId('unknown', { type: 'x' }), null);
 });
@@ -856,6 +857,64 @@ test('extractOutputChunk returns live assistant text for gemini, opencode final 
         extractOutputChunk('codex', { type: 'item.completed', item: { type: 'command_execution' } }),
         '',
     );
+});
+
+test('grok streaming-json deltas append text and capture end session id', () => {
+    const ctx = { toolLog: [], fullText: '', traceLog: [], pendingOutputChunk: '', seenToolKeys: new Set() };
+    extractFromEvent('grok', { type: 'thought', data: 'internal' }, ctx, 'grok');
+    assert.equal(extractOutputChunk('grok', { type: 'thought', data: 'internal' }, ctx), '');
+    assert.equal(ctx.toolLog.length, 1);
+    assert.equal(ctx.toolLog[0].stepRef, 'grok:thinking');
+    assert.equal(ctx.toolLog[0].status, 'running');
+    assert.equal(ctx.toolLog[0].detail, 'internal');
+    extractFromEvent('grok', { type: 'text', data: 'GROK' }, ctx, 'grok');
+    assert.equal(extractOutputChunk('grok', { type: 'text', data: 'GROK' }, ctx), 'GROK');
+    assert.equal(ctx.toolLog.length, 1);
+    assert.equal(ctx.toolLog[0].status, 'done');
+    assert.equal(ctx.toolLog[0].detail, 'internal');
+    extractFromEvent('grok', { type: 'text', data: '_OK' }, ctx, 'grok');
+    assert.equal(extractOutputChunk('grok', { type: 'text', data: '_OK' }, ctx), '_OK');
+    extractFromEvent('grok', { type: 'end', sessionId: 'grok-session', stopReason: 'EndTurn' }, ctx, 'grok');
+    assert.equal(ctx.fullText, 'GROK_OK');
+    assert.equal(ctx.sessionId, 'grok-session');
+    assert.equal(ctx.metadata?.stopReason, 'EndTurn');
+});
+
+test('grok parser preserves visible thinking and correlates multiple tool events', () => {
+    const ctx = { toolLog: [], fullText: '', traceLog: [], pendingOutputChunk: '', seenToolKeys: new Set() };
+    extractFromEvent('grok', { type: 'thought', data: 'Plan: call two tools. ' }, ctx, 'grok');
+    extractFromEvent('grok', { type: 'thought', data: 'Then summarize.' }, ctx, 'grok');
+
+    assert.equal(ctx.toolLog.length, 1);
+    assert.equal(ctx.toolLog[0].stepRef, 'grok:thinking');
+    assert.equal(ctx.toolLog[0].toolType, 'thinking');
+    assert.equal(ctx.toolLog[0].status, 'running');
+    assert.equal(ctx.toolLog[0].detail, 'Plan: call two tools. Then summarize.');
+
+    extractFromEvent('grok', { type: 'tool_use', id: 'a', name: 'shell', input: { command: 'pwd' } }, ctx, 'grok');
+    extractFromEvent('grok', { type: 'tool_use', id: 'b', name: 'shell', input: { command: 'printf ok' } }, ctx, 'grok');
+    extractFromEvent('grok', { type: 'tool_result', id: 'a', name: 'shell', output: '/tmp' }, ctx, 'grok');
+    extractFromEvent('grok', { type: 'tool_result', id: 'b', name: 'shell', output: 'ok' }, ctx, 'grok');
+
+    const toolA = ctx.toolLog.find(t => t.stepRef === 'grok:tool:a');
+    const toolB = ctx.toolLog.find(t => t.stepRef === 'grok:tool:b');
+    assert.equal(toolA?.status, 'done');
+    assert.equal(toolA?.detail, '/tmp');
+    assert.equal(toolB?.status, 'done');
+    assert.equal(toolB?.detail, 'ok');
+    assert.equal(ctx.toolLog.filter(t => t.stepRef?.startsWith('grok:tool:')).length, 2);
+});
+
+test('grok streaming-json error emits error tool without assistant text', () => {
+    const ctx = { toolLog: [], fullText: '', traceLog: [], pendingOutputChunk: '', seenToolKeys: new Set(), traceRunId: 'trace-1' };
+    extractFromEvent('grok', { type: 'error', data: 'reasoningEffort unsupported', requestId: 'req-1' }, ctx, 'grok');
+
+    assert.equal(ctx.fullText, '');
+    assert.equal(ctx.pendingOutputChunk, '');
+    assert.equal(ctx.toolLog.length, 1);
+    assert.equal(ctx.toolLog[0].status, 'error');
+    assert.equal(ctx.toolLog[0].stepRef, 'grok:error:req-1');
+    assert.equal(ctx.toolLog[0].detail, 'reasoningEffort unsupported');
 });
 
 test('assistant output segments use a single markdown line break boundary', () => {

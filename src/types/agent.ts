@@ -48,6 +48,9 @@ export interface SpawnContext {
   finishReason?: string;
   pendingOutputChunk?: string;
   geminiDeltaActive?: boolean;
+  grokThoughtBuf?: string;
+  grokThoughtProgressEmitted?: boolean;
+  grokSyntheticToolSeq?: number;
   opencodePreToolText?: string;
   opencodePostToolText?: string;
   opencodeSawToolInStep?: boolean;

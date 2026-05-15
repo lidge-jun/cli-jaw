@@ -123,6 +123,7 @@ test('AG-009k: resolveSessionBucket — non-spark codex stays in codex bucket', 
 test('AG-009l: resolveSessionBucket — non-codex CLI returns cli unchanged', () => {
     assert.equal(resolveSessionBucket('claude', 'sonnet-spark-fake'), 'claude', 'spark check is codex-scoped');
     assert.equal(resolveSessionBucket('gemini', 'gemini-3-flash'), 'gemini');
+    assert.equal(resolveSessionBucket('grok', 'grok-build'), 'grok');
     assert.equal(resolveSessionBucket('opencode', 'anything'), 'opencode');
 });
 
@@ -250,6 +251,38 @@ test('AG-012d: gemini configured include directories are passed as repeated flag
     assert.deepEqual(pairs, ['/home/jun', '/mnt/c/Users/jun/Downloads']);
 });
 
+// ─── buildArgs: grok ─────────────────────────────────
+
+test('AG-012e: grok fresh sessions use headless prompt + streaming-json', () => {
+    const args = buildArgs('grok', 'grok-build', 'high', 'hello grok', 'system ignored', 'auto');
+    const promptIdx = args.indexOf('-p');
+    assert.ok(promptIdx >= 0);
+    assert.equal(args[promptIdx + 1], 'hello grok');
+    assert.ok(args.includes('-m'));
+    assert.ok(args.includes('grok-build'));
+    assert.ok(args.includes('--output-format'));
+    assert.ok(args.includes('streaming-json'));
+    assert.ok(args.includes('--no-alt-screen'));
+    assert.ok(args.includes('--always-approve'));
+    assert.ok(args.includes('--permission-mode'));
+    assert.ok(args.includes('bypassPermissions'));
+});
+
+test('AG-012f: grok never receives effort or system prompt flags', () => {
+    const args = buildArgs('grok', 'grok-build', 'max', 'hi', 'system ignored', 'auto');
+    assert.ok(!args.includes('--effort'));
+    assert.ok(!args.includes('--reasoning-effort'));
+    assert.ok(!args.includes('--rules'));
+    assert.ok(!args.includes('--system-prompt-override'));
+    assert.ok(!args.includes('--append-system-prompt'));
+});
+
+test('AG-012g: grok safe permissions omit bypass flags', () => {
+    const args = buildArgs('grok', 'grok-build', '', 'hi', '', 'safe');
+    assert.ok(!args.includes('--always-approve'));
+    assert.ok(!args.includes('bypassPermissions'));
+});
+
 // ─── buildArgs: unknown ──────────────────────────────
 
 test('AG-013: unknown CLI returns empty args', () => {
@@ -278,6 +311,23 @@ test('AG-016: gemini resume includes --resume', () => {
     const includeIdx = args.indexOf('--include-directories');
     assert.ok(includeIdx >= 0);
     assert.equal(args[includeIdx + 1], 'C:\\Users\\jun');
+});
+
+test('AG-016b: grok resume uses --resume and still omits effort/system prompt flags', () => {
+    const args = buildResumeArgs('grok', 'grok-build', 'max', 'grok-session-1', 'continue', 'auto', {
+        sysPrompt: 'system ignored',
+    });
+    assert.ok(args.includes('-p'));
+    assert.ok(args.includes('continue'));
+    assert.ok(args.includes('--resume'));
+    assert.ok(args.includes('grok-session-1'));
+    assert.ok(args.includes('--output-format'));
+    assert.ok(args.includes('streaming-json'));
+    assert.ok(!args.includes('--effort'));
+    assert.ok(!args.includes('--reasoning-effort'));
+    assert.ok(!args.includes('--rules'));
+    assert.ok(!args.includes('--system-prompt-override'));
+    assert.ok(!args.includes('--append-system-prompt'));
 });
 
 test('AG-017: opencode auto permissions omit unsupported skip-permissions flag', () => {

@@ -696,6 +696,8 @@ export { buildMediaPrompt, buildMediaPromptMany };
 // ─── Spawn Agent ─────────────────────────────────────
 
 import { AcpClient } from '../cli/acp-client.js';
+import { CodexAppClient } from './codex-app-client.js';
+import { extractFromCodexAppEvent } from './codex-app-events.js';
 
 // ─── ACP Heartbeat Helper ────────────────────────────
 // Pure function for conditional heartbeat gating.
@@ -991,7 +993,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             cli === 'gemini' ? GEMINI_HISTORY_MAX_CHARS : 8000,
         )
         : '';
-    const promptForArgs = (cli === 'gemini' || cli === 'opencode')
+    const promptForArgs = (cli === 'gemini' || cli === 'grok' || cli === 'opencode')
         ? withHistoryPrompt(prompt, historyBlock)
         : prompt;
     let args;
@@ -1380,6 +1382,297 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         return { child, promise: resultPromise };
     }
 
+    // ─── Codex AppServer branch ────────────────────
+    if (cli === 'codex-app') {
+        const appClient = new CodexAppClient({
+            binary: detected.path || 'codex',
+            workDir: spawnCwd,
+            env: spawnEnv,
+            model,
+            effort,
+        });
+        appClient.spawn();
+        const child = appClient.proc;
+        if (!child) {
+            throw new Error('Codex AppServer process was not created');
+        }
+        if (mainManaged) activeProcess = child;
+        if (activeProcesses.has(agentLabel)) {
+            console.warn(`[spawn:dup] activeProcesses already has child for ${agentLabel} — orphaning previous reference`);
+        }
+        activeProcesses.set(agentLabel, child);
+        if (!opts.internal) broadcast('agent_status', { running: true, agentId: agentLabel, cli, ...empTag });
+        if (mainManaged && !opts.internal) beginLiveRun(liveScope, cli);
+
+        let codexAppSettled = false;
+        appClient.on('error', (err: Error) => {
+            if (codexAppSettled) return;
+            codexAppSettled = true;
+            appClient.cleanup();
+            cleanupEmployeeTmpDir(spawnCwd, settings["workingDir"], agentLabel);
+            opts.lifecycle?.onExit?.(null);
+            const msg = `Codex AppServer spawn failed: ${err.message}`;
+            console.error(`[codex-app:error] ${msg}`);
+            activeProcesses.delete(agentLabel);
+            if (mainManaged) {
+                activeProcess = null;
+                clearLiveRun(liveScope);
+                broadcast('agent_status', { running: false, agentId: agentLabel });
+            }
+            broadcast('agent_done', { text: `❌ ${msg}`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
+            resolve!({ text: '', code: 1 });
+            if (mainManaged) processQueue();
+        });
+
+        if (mainManaged && !opts.internal && !opts._skipInsert) {
+            insertMessage.run('user', prompt, cli, model, settings["workingDir"] || null);
+        }
+        if (!opts.internal) broadcast('agent_status', { status: 'running', cli, agentId: agentLabel, ...empTag }, traceAudience);
+
+        const traceRunId = startTraceRun({ cli, model, workingDir: settings["workingDir"] || null, agentLabel, audience: traceAudience });
+        const ctx: CopilotSpawnContext = {
+            fullText: '', traceLog: [], toolLog: [], seenToolKeys: new Set<string>(),
+            hasClaudeStreamEvents: false, sessionId: null as string | null, cost: null as number | null,
+            turns: null as number | null, duration: null as number | null, tokens: null, stderrBuf: '',
+            thinkingBuf: '',
+            liveScope: effectiveLiveScope,
+            parentLiveScope: parentLiveScopeForChild,
+            traceRunId,
+            traceAudience,
+        };
+
+        function flushCodexAppThinking() {
+            if (!ctx.thinkingBuf) return;
+            const merged = ctx.thinkingBuf.trim();
+            if (merged) {
+                const singleLine = merged.replace(/\s+/g, ' ').trim();
+                const label = singleLine.length > 120 ? `${singleLine.slice(0, 119)}…` : singleLine;
+                console.log(`  💭 ${label}`);
+                const tool = { icon: '💭', label, toolType: 'thinking' as const, detail: merged };
+                stampTraceTool(tool, ctx, 'thinking');
+                ctx.toolLog.push(tool);
+                if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
+                if (ctx.parentLiveScope) appendLiveRunTool(ctx.parentLiveScope, { ...tool, isEmployee: true });
+                broadcast('agent_tool', { agentId: agentLabel, ...tool, ...empTag }, traceAudience);
+            }
+            ctx.thinkingBuf = '';
+        }
+
+        let lastVisibleBroadcastTs = Date.now();
+        let heartbeatSent = false;
+
+        appClient.on('notification', (method: string, params: Record<string, unknown>) => {
+            if (method === 'turn/completed' || method === 'turn/started' || method === 'error') {
+                console.log(`[codex-app:notify] ${method}`);
+            }
+            appendTraceEvent({ runId: ctx.traceRunId, source: 'codex_app_raw', eventType: method, raw: params });
+            const parsed = extractFromCodexAppEvent(method, params, ctx);
+            if (!parsed) return;
+
+            if (parsed.flushThinking) {
+                flushCodexAppThinking();
+            }
+            if (parsed.tool) {
+                const parsedTool = parsed.tool;
+                if (parsedTool.icon === '💭') {
+                    ctx.thinkingBuf += parsedTool.detail || parsedTool.label;
+                    return;
+                }
+                flushCodexAppThinking();
+                const key = `${parsedTool.icon}:${parsedTool.label}:${parsedTool.stepRef || ''}:${parsedTool.status || ''}`;
+                if (!ctx.seenToolKeys.has(key)) {
+                    ctx.seenToolKeys.add(key);
+                    stampTraceTool(parsedTool, ctx, parsedTool.toolType || 'tool');
+                    ctx.toolLog.push(parsedTool);
+                    if (ctx.liveScope) replaceLiveRunTools(ctx.liveScope, ctx.toolLog);
+                    if (ctx.parentLiveScope) appendLiveRunTool(ctx.parentLiveScope, { ...parsedTool, isEmployee: true });
+                    broadcast('agent_tool', { agentId: agentLabel, ...parsedTool, ...empTag }, traceAudience);
+                    lastVisibleBroadcastTs = Date.now();
+                    heartbeatSent = false;
+                }
+            }
+            if (parsed.text) {
+                flushCodexAppThinking();
+                ctx.fullText += parsed.text;
+                if (ctx.liveScope) appendLiveRunText(ctx.liveScope, parsed.text);
+            }
+            if (parsed.sessionId && !ctx.sessionId) {
+                ctx.sessionId = parsed.sessionId;
+            }
+            if (parsed.tokens) {
+                ctx.tokens = parsed.tokens;
+            }
+            if (parsed.turnStatus && parsed.turnStatus !== 'completed') {
+                console.warn(`[codex-app:turn] final status: ${parsed.turnStatus}`);
+                turnCompleted = false;
+            }
+            opts.lifecycle?.onActivity?.('codex-app');
+        });
+
+        appClient.on('stderr', (text: string) => {
+            appendTraceEvent({ runId: ctx.traceRunId, source: 'stderr', eventType: 'stderr', raw: text });
+            if (ctx.stderrBuf.length < 4000) {
+                ctx.stderrBuf += text + '\n';
+            }
+            opts.lifecycle?.onActivity?.('stderr');
+            if (shouldEmitHeartbeat(lastVisibleBroadcastTs, heartbeatSent)) {
+                heartbeatSent = true;
+                const elapsed = Math.round((Date.now() - lastVisibleBroadcastTs) / 1000);
+                console.log(`  ⏳ agent active (no visible event for ${elapsed}s)`);
+                broadcast('agent_tool', {
+                    agentId: agentLabel,
+                    icon: '⏳',
+                    label: 'working... (no visible progress)',
+                    ...empTag,
+                }, traceAudience);
+            }
+        });
+
+        let turnCompleted = false;
+        (async () => {
+            try {
+                const initResult = await appClient.initialize();
+                if (process.env["DEBUG"]) console.log('[codex-app:init]', JSON.stringify(initResult).slice(0, 200));
+
+                if (isResume && resumeSessionId) {
+                    try {
+                        await appClient.resumeThread(resumeSessionId);
+                        console.log(`[codex-app:session] resumeThread OK: ${resumeSessionId.slice(0, 12)}...`);
+                    } catch (resumeErr: unknown) {
+                        console.warn(`[codex-app:session] resumeThread FAILED: ${(resumeErr as Error).message} — starting new thread`);
+                        if (empSid && opts.agentId) {
+                            clearEmployeeSession.run(opts.agentId);
+                        }
+                        await appClient.startThread({ instructions: sysPrompt, cwd: spawnCwd });
+                    }
+                } else {
+                    await appClient.startThread({ instructions: sysPrompt, cwd: spawnCwd });
+                }
+                ctx.sessionId = appClient.threadId;
+
+                const useNativeResume = isResume && Boolean(resumeSessionId);
+                const codexAppPrompt = (!useNativeResume && historyBlock)
+                    ? `${historyBlock}\n\n[User Message]\n${prompt}`
+                    : prompt;
+
+                const turnDone = new Promise<void>((resolveTurn, rejectTurn) => {
+                    appClient.once('turn/completed', () => {
+                        appClient.removeListener('error', rejectTurn);
+                        resolveTurn();
+                    });
+                    appClient.once('error', rejectTurn);
+                });
+
+                await appClient.startTurn(codexAppPrompt);
+
+                try {
+                    await turnDone;
+                    turnCompleted = true;
+                } catch (turnErr: unknown) {
+                    console.warn(`[codex-app:turn] error during turn: ${(turnErr as Error).message}`);
+                }
+
+                flushCodexAppThinking();
+
+                const persistedThreadId = appClient.threadId;
+                if (persistedThreadId && persistMainSession(stripUndefined({
+                    ownerGeneration,
+                    forceNew,
+                    employeeSessionId: empSid,
+                    sessionId: persistedThreadId,
+                    isFallback: opts._isFallback,
+                    cli,
+                    model,
+                    resumeKey,
+                    effort: cfg.effort || '',
+                    skipSessionPersist: opts._skipSessionPersist === true,
+                }))) {
+                    console.log(`[jaw:session] saved ${cli} session=${persistedThreadId.slice(0, 12)}... (pre-shutdown)`);
+                }
+
+                if (!codexAppSettled) {
+                    codexAppSettled = true;
+                    const smokeResult = detectSmokeResponse(ctx.fullText, ctx.toolLog, 0, cli);
+                    handleAgentExit({
+                        ctx, code: turnCompleted ? 0 : 1, cli, model, agentLabel, mainManaged, origin,
+                        resumeKey,
+                        prompt, opts, cfg, ownerGeneration, forceNew, empSid,
+                        isResume, wasKilled: false, wasSteer: false, smokeResult,
+                        effortDefault: '', costLine: '',
+                        resolve: resolve!,
+                        activeProcesses,
+                        setActiveProcess: (v) => { activeProcess = v; },
+                        retryState: {
+                            timer: retryPendingTimer,
+                            resolve: retryPendingResolve,
+                            origin: retryPendingOrigin,
+                            setTimer: (t) => { retryPendingTimer = t; },
+                            setResolve: (r) => { retryPendingResolve = r; },
+                            setOrigin: (o) => { retryPendingOrigin = o; },
+                            setIsEmployee: (v) => { retryPendingIsEmployee = v; },
+                        },
+                        fallbackState,
+                        fallbackMaxRetries: FALLBACK_MAX_RETRIES,
+                        processQueue,
+                    }).catch((err: Error) => {
+                        console.error(`[codex-app:handleAgentExit] ${err.message}`);
+                    });
+                }
+
+                await appClient.closeGracefully();
+            } catch (err: unknown) {
+                console.error(`[codex-app:error] ${(err as Error).message}`);
+                ctx.stderrBuf += (err as Error).message;
+                appClient.kill();
+            }
+        })();
+
+        appClient.on('exit', (code: number | null, signal: string | null) => {
+            if (codexAppSettled) return;
+            codexAppSettled = true;
+            appClient.cleanup();
+            cleanupEmployeeTmpDir(spawnCwd, settings["workingDir"], agentLabel);
+            opts.lifecycle?.onExit?.(code ?? null);
+            const killReason = consumeKillReason(appClient.proc?.pid);
+            if (code !== 0 && !killReason) {
+                console.warn(`[codex-app:unexpected-exit] code=${code} signal=${signal} threadId=${ctx.sessionId || 'none'}`);
+            }
+            const wasKilled = !!killReason;
+            const wasSteer = killReason === 'steer';
+            flushCodexAppThinking();
+
+            const smokeResult = detectSmokeResponse(ctx.fullText, ctx.toolLog, code, cli);
+            const codexAppCode = turnCompleted ? 0 : (code ?? 1);
+
+            handleAgentExit({
+                ctx, code: codexAppCode, cli, model, agentLabel, mainManaged, origin,
+                resumeKey,
+                prompt, opts, cfg, ownerGeneration, forceNew, empSid,
+                isResume, wasKilled, wasSteer, smokeResult,
+                effortDefault: '', costLine: '',
+                resolve: resolve!,
+                activeProcesses,
+                setActiveProcess: (v) => { activeProcess = v; },
+                retryState: {
+                    timer: retryPendingTimer,
+                    resolve: retryPendingResolve,
+                    origin: retryPendingOrigin,
+                    setTimer: (t) => { retryPendingTimer = t; },
+                    setResolve: (r) => { retryPendingResolve = r; },
+                    setOrigin: (o) => { retryPendingOrigin = o; },
+                    setIsEmployee: (v) => { retryPendingIsEmployee = v; },
+                },
+                fallbackState,
+                fallbackMaxRetries: FALLBACK_MAX_RETRIES,
+                processQueue,
+            }).catch((err: Error) => {
+                console.error('[jaw:lifecycle] handleAgentExit failed (codex-app):', err.message);
+            });
+        });
+
+        return { child, promise: resultPromise };
+    }
+
     // ─── Standard CLI branch (claude/codex/gemini/opencode) ──────
     // DIFF-B: Windows needs shell:true only when falling back to .cmd shims.
     const spawnCommand = cli === 'opencode' && process.platform !== 'win32'
@@ -1630,7 +1923,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             resumeKey,
             prompt, opts, cfg, ownerGeneration, forceNew, empSid,
             isResume, wasKilled, wasSteer, smokeResult,
-            effortDefault: 'medium', costLine,
+            effortDefault: cli === 'grok' ? '' : 'medium', costLine,
             resolve: resolve!,
             activeProcesses,
             setActiveProcess: (v) => { activeProcess = v; },
