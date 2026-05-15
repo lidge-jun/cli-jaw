@@ -49,6 +49,8 @@ export interface SpawnContext {
   pendingOutputChunk?: string;
   geminiDeltaActive?: boolean;
   grokThoughtBuf?: string;
+  grokCurrentThoughtRef?: string;
+  grokThoughtSeq?: number;
   grokThoughtProgressEmitted?: boolean;
   grokSyntheticToolSeq?: number;
   opencodePreToolText?: string;
