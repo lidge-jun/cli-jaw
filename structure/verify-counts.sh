@@ -43,7 +43,7 @@ declare -a CHECKS=(
   "builder.ts.*프롬프트|src/prompt/builder.ts"
   "commands.ts.*레지스트리|src/cli/commands.ts"
   "handlers.ts.*핸들러|src/cli/handlers.ts"
-  "registry.ts.*5개 CLI/모델 단일 소스|src/cli/registry.ts"
+  "registry.ts.*CLI/모델 단일 소스|src/cli/registry.ts"
   "acp-client.ts|src/cli/acp-client.ts"
   "command-context.ts.*공유 커맨드|src/cli/command-context.ts"
   "bot.ts.*Telegram|src/telegram/bot.ts"
