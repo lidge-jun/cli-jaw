@@ -73,7 +73,9 @@ touch "$DIR/hook-$EVENT.done"
                 return Ok(());
             }
             if start.elapsed() > timeout {
-                return Err(format!("timeout waiting for {event} sentinel after {timeout_ms}ms"));
+                return Err(format!(
+                    "timeout waiting for {event} sentinel after {timeout_ms}ms"
+                ));
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
@@ -131,7 +133,10 @@ mod tests {
             "session_id": "abc-123",
             "transcript_path": "/home/user/.claude/projects/x/abc.jsonl"
         });
-        assert_eq!(extract_transcript_path(&payload), Some("/home/user/.claude/projects/x/abc.jsonl".to_string()));
+        assert_eq!(
+            extract_transcript_path(&payload),
+            Some("/home/user/.claude/projects/x/abc.jsonl".to_string())
+        );
         assert_eq!(extract_session_id(&payload), Some("abc-123".to_string()));
     }
 }

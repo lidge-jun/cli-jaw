@@ -219,13 +219,8 @@ mod tests {
         .expect("write new user");
 
         assert!(
-            wait_for_user_after_offset(
-                file.path(),
-                initial_offset,
-                500,
-                &AtomicBool::new(false),
-            )
-            .expect("wait for user")
+            wait_for_user_after_offset(file.path(), initial_offset, 500, &AtomicBool::new(false),)
+                .expect("wait for user")
         );
     }
 
@@ -240,13 +235,8 @@ mod tests {
         let initial_offset = current_file_len(file.path()).expect("old offset");
 
         assert!(
-            !wait_for_user_after_offset(
-                file.path(),
-                initial_offset,
-                150,
-                &AtomicBool::new(false),
-            )
-            .expect("wait for user")
+            !wait_for_user_after_offset(file.path(), initial_offset, 150, &AtomicBool::new(false),)
+                .expect("wait for user")
         );
     }
 

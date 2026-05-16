@@ -1,4 +1,4 @@
-use nix::sys::signal::{kill, Signal};
+use nix::sys::signal::{Signal, kill};
 use nix::unistd::Pid;
 use std::io::Write;
 use std::sync::{Arc, Mutex};

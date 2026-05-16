@@ -2,7 +2,11 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
-#[command(name = "jaw-claude-i", version, about = "PTY wrapper for interactive Claude Code")]
+#[command(
+    name = "jaw-claude-i",
+    version,
+    about = "PTY wrapper for interactive Claude Code"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,

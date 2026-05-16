@@ -47,11 +47,7 @@ pub fn emit_runtime_started(run_id: &str, version: &str) {
 }
 
 pub fn emit_claude_spawned(run_id: &str, pid: u32) {
-    emit_runtime_event(
-        "claude_spawned",
-        run_id,
-        serde_json::json!({ "pid": pid }),
-    );
+    emit_runtime_event("claude_spawned", run_id, serde_json::json!({ "pid": pid }));
 }
 
 pub fn emit_session_started(run_id: &str, session_id: &str, transcript_path: &str) {
@@ -83,11 +79,7 @@ pub fn emit_stop_failure(run_id: &str, error: &str) {
 }
 
 pub fn emit_cleanup(run_id: &str, event: &str, escalated: bool) {
-    emit_runtime_event(
-        event,
-        run_id,
-        serde_json::json!({ "escalated": escalated }),
-    );
+    emit_runtime_event(event, run_id, serde_json::json!({ "escalated": escalated }));
 }
 
 pub fn emit_interrupted(run_id: &str, session_id: &str) {

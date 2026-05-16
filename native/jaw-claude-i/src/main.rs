@@ -13,8 +13,8 @@ use clap::Parser;
 use std::io::Read;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use args::{Cli, Command};
 use config::RunConfig;
@@ -92,10 +92,14 @@ fn run(config: &RunConfig) -> i32 {
     // Set up signal handling
     let stop = Arc::new(AtomicBool::new(false));
     let stop_signal = Arc::clone(&stop);
-    if let Err(e) = signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&stop_signal)) {
+    if let Err(e) =
+        signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&stop_signal))
+    {
         log::warn!("SIGTERM handler registration failed: {e}");
     }
-    if let Err(e) = signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&stop_signal)) {
+    if let Err(e) =
+        signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&stop_signal))
+    {
         log::warn!("SIGINT handler registration failed: {e}");
     }
 
@@ -115,10 +119,7 @@ fn run(config: &RunConfig) -> i32 {
         }
     };
 
-    let child_pid = pty_child
-        .child
-        .process_id()
-        .unwrap_or(0);
+    let child_pid = pty_child.child.process_id().unwrap_or(0);
     protocol::emit_claude_spawned(&config.run_id, child_pid);
 
     // Wait for SessionStart hook (also check for early child exit / resume failure)
@@ -126,9 +127,16 @@ fn run(config: &RunConfig) -> i32 {
         let sentinel = hook_dir.sentinel_path("session-start");
         let start_wait = std::time::Instant::now();
         let timeout = std::time::Duration::from_millis(20_000);
+        let mut trust_accept_attempted = false;
         loop {
             if sentinel.exists() {
                 break;
+            }
+            if config.auto_accept_trust
+                && !trust_accept_attempted
+                && pty_child.try_auto_accept_workspace_trust()
+            {
+                trust_accept_attempted = true;
             }
             if let Ok(Some(status)) = pty_child.child.try_wait() {
                 let code = if status.success() { 0 } else { 1 };
@@ -140,7 +148,13 @@ fn run(config: &RunConfig) -> i32 {
                 return 5;
             }
             if start_wait.elapsed() > timeout {
-                protocol::emit_error(&config.run_id, "SessionStart timeout after 20s", 5);
+                let screen = compact_screen_snapshot(&pty_child.screen_snapshot());
+                let message = if screen.is_empty() {
+                    "SessionStart timeout after 20s".to_string()
+                } else {
+                    format!("SessionStart timeout after 20s; screen: {screen}")
+                };
+                protocol::emit_error(&config.run_id, &message, 5);
                 cleanup::kill_process_group(child_pid, &config.run_id);
                 return 5;
             }
@@ -150,10 +164,9 @@ fn run(config: &RunConfig) -> i32 {
 
     // Extract session info from SessionStart payload
     let session_payload = hook_dir.read_payload("session-start").unwrap_or_default();
-    let transcript_path = hook::extract_transcript_path(&session_payload)
-        .unwrap_or_default();
-    let session_id = hook::extract_session_id(&session_payload)
-        .unwrap_or_else(|| config.session_id.clone());
+    let transcript_path = hook::extract_transcript_path(&session_payload).unwrap_or_default();
+    let session_id =
+        hook::extract_session_id(&session_payload).unwrap_or_else(|| config.session_id.clone());
 
     protocol::emit_session_started(&config.run_id, &session_id, &transcript_path);
     let transcript_path_buf = PathBuf::from(&transcript_path);
@@ -340,7 +353,10 @@ fn wait_for_completion(
             }
             if hook_dir.sentinel_path("stop-failure").exists() {
                 let payload = hook_dir.read_payload("stop-failure").unwrap_or_default();
-                let error = payload.get("error").and_then(|e| e.as_str()).unwrap_or("unknown StopFailure");
+                let error = payload
+                    .get("error")
+                    .and_then(|e| e.as_str())
+                    .unwrap_or("unknown StopFailure");
                 protocol::emit_stop_failure(&config.run_id, error);
                 return 11;
             }
@@ -377,6 +393,16 @@ fn wait_transcript_stable(sentinel_path: &std::path::Path, stable_ms: u64) {
     }
 }
 
+fn compact_screen_snapshot(screen: &str) -> String {
+    let compact = screen
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" | ");
+    compact.chars().take(800).collect()
+}
+
 const MAX_PROMPT_BYTES: usize = 10 * 1024 * 1024; // 10MB
 
 fn read_prompt() -> Result<String, String> {
@@ -387,7 +413,11 @@ fn read_prompt() -> Result<String, String> {
         .map_err(|e| format!("stdin read failed: {e}"))?;
 
     if prompt.len() > MAX_PROMPT_BYTES {
-        return Err(format!("prompt too large ({} bytes, max {})", prompt.len(), MAX_PROMPT_BYTES));
+        return Err(format!(
+            "prompt too large ({} bytes, max {})",
+            prompt.len(),
+            MAX_PROMPT_BYTES
+        ));
     }
 
     let trimmed = prompt.trim();

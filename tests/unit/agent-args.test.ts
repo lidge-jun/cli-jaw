@@ -51,6 +51,18 @@ test('AG-006a: claude-i forwards system prompt through wrapper extra args', () =
     assert.ok(forwarded.includes('system instructions'));
 });
 
+test('AG-006b: claude-i auto permissions auto-accept workspace trust in wrapper', () => {
+    const args = buildArgs('claude-i', 'sonnet', 'medium', 'hi', '', 'auto');
+    assert.ok(args.includes('--auto-accept-workspace-trust'));
+    assert.ok(args.includes('--dangerously-skip-permissions'));
+});
+
+test('AG-006c: claude-i resume auto permissions auto-accept workspace trust in wrapper', () => {
+    const args = buildResumeArgs('claude-i', 'sonnet', 'medium', 'sess-1', 'hi', 'auto');
+    assert.ok(args.includes('--auto-accept-workspace-trust'));
+    assert.ok(args.includes('--dangerously-skip-permissions'));
+});
+
 // ─── buildArgs: codex ────────────────────────────────
 
 test('AG-007: codex auto includes bypass flag', () => {

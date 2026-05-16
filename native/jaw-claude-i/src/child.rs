@@ -1,4 +1,4 @@
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use std::io::{Read, Write};
 use std::panic;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -13,6 +13,7 @@ pub struct PtyChild {
     pub writer: Arc<Mutex<Box<dyn Write + Send>>>,
     pub last_change_us: Arc<AtomicU64>,
     pub stop: Arc<AtomicBool>,
+    screen: Arc<Mutex<String>>,
     drain_handle: Option<thread::JoinHandle<()>>,
 }
 
@@ -60,6 +61,8 @@ impl PtyChild {
         let drain_last_change = Arc::clone(&last_change_us);
         let drain_stop = Arc::clone(&stop);
         let drain_writer = Arc::clone(&writer);
+        let screen = Arc::new(Mutex::new(String::new()));
+        let drain_screen = Arc::clone(&screen);
 
         let panic_stop = Arc::clone(&stop);
         let drain_handle = thread::spawn(move || {
@@ -99,6 +102,9 @@ impl PtyChild {
                             let hash = simple_hash(&content);
                             if hash != prev_hash {
                                 prev_hash = hash;
+                                if let Ok(mut latest) = drain_screen.lock() {
+                                    *latest = content;
+                                }
                                 drain_last_change.store(now_us(), Ordering::Relaxed);
                             }
                         }
@@ -120,6 +126,7 @@ impl PtyChild {
             writer,
             last_change_us,
             stop,
+            screen,
             drain_handle: Some(drain_handle),
         })
     }
@@ -143,6 +150,23 @@ impl PtyChild {
             let _ = handle.join();
         }
     }
+
+    pub fn try_auto_accept_workspace_trust(&self) -> bool {
+        let screen = self.screen_snapshot();
+        if !looks_like_workspace_trust_prompt(&screen) {
+            return false;
+        }
+        if let Ok(mut w) = self.writer.lock() {
+            let _ = w.write_all(b"1\r");
+            let _ = w.flush();
+            return true;
+        }
+        false
+    }
+
+    pub fn screen_snapshot(&self) -> String {
+        self.screen.lock().map(|s| s.clone()).unwrap_or_default()
+    }
 }
 
 fn now_us() -> u64 {
@@ -158,4 +182,33 @@ fn simple_hash(s: &str) -> u64 {
         hash = hash.wrapping_mul(33).wrapping_add(u64::from(b));
     }
     hash
+}
+
+fn looks_like_workspace_trust_prompt(screen: &str) -> bool {
+    let lower = screen.to_lowercase();
+    lower.contains("trust")
+        && (lower.contains("workspace")
+            || lower.contains("folder")
+            || lower.contains("directory")
+            || lower.contains("files"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::looks_like_workspace_trust_prompt;
+
+    #[test]
+    fn detects_workspace_trust_prompt() {
+        assert!(looks_like_workspace_trust_prompt(
+            "Do you trust the files in this folder?"
+        ));
+        assert!(looks_like_workspace_trust_prompt(
+            "Trust this workspace before continuing"
+        ));
+    }
+
+    #[test]
+    fn ignores_regular_prompt() {
+        assert!(!looks_like_workspace_trust_prompt("Welcome to Claude Code"));
+    }
 }

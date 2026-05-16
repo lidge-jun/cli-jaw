@@ -11,7 +11,7 @@ pub struct RunConfig {
     pub timeout_ms: u64,
     pub output_format: String,
     pub resume_session: Option<String>,
-    pub _auto_accept_trust: bool,
+    pub auto_accept_trust: bool,
     pub extra_args: Vec<String>,
 }
 
@@ -37,13 +37,14 @@ impl RunConfig {
             run_id: format!("run_{}", &Uuid::new_v4().to_string()[..8]),
             session_id,
             claude_bin,
-            cwd: cwd.unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
+            cwd: cwd
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
             cols,
             rows,
             timeout_ms,
             output_format,
             resume_session: resume,
-            _auto_accept_trust: auto_accept_trust,
+            auto_accept_trust,
             extra_args,
         }
     }
