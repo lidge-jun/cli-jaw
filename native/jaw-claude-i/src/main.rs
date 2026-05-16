@@ -214,7 +214,7 @@ fn run(config: &RunConfig) -> i32 {
         return 7;
     }
 
-    match transcript::wait_for_user_after_offset(
+    match transcript::wait_for_prompt_activity_after_offset(
         &transcript_path_buf,
         transcript_start_offset,
         PROMPT_ACCEPTANCE_TIMEOUT_MS,

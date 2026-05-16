@@ -96,7 +96,7 @@ pub fn current_file_len(path: &Path) -> Option<u64> {
     std::fs::metadata(path).ok().map(|metadata| metadata.len())
 }
 
-pub fn wait_for_user_after_offset(
+pub fn wait_for_prompt_activity_after_offset(
     transcript_path: &Path,
     initial_offset: u64,
     timeout_ms: u64,
@@ -128,7 +128,7 @@ pub fn wait_for_user_after_offset(
                     };
 
                     offset += line_bytes;
-                    if value.get("type").and_then(|t| t.as_str()) == Some("user") {
+                    if is_prompt_acceptance_activity(&value) {
                         return Ok(true);
                     }
                 }
@@ -149,6 +149,13 @@ pub fn wait_for_user_after_offset(
         std::thread::sleep(std::time::Duration::from_millis(100));
         let _ = file.seek(SeekFrom::Start(offset));
     }
+}
+
+fn is_prompt_acceptance_activity(value: &serde_json::Value) -> bool {
+    matches!(
+        value.get("type").and_then(|t| t.as_str()),
+        Some("user" | "assistant")
+    )
 }
 
 fn clamped_initial_offset(file: &File, requested_offset: u64) -> u64 {
@@ -204,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn wait_for_user_after_offset_detects_user_after_offset() {
+    fn wait_for_prompt_activity_after_offset_detects_user_after_offset() {
         let mut file = tempfile::NamedTempFile::new().expect("temp file");
         writeln!(
             file,
@@ -219,13 +226,18 @@ mod tests {
         .expect("write new user");
 
         assert!(
-            wait_for_user_after_offset(file.path(), initial_offset, 500, &AtomicBool::new(false),)
-                .expect("wait for user")
+            wait_for_prompt_activity_after_offset(
+                file.path(),
+                initial_offset,
+                500,
+                &AtomicBool::new(false),
+            )
+            .expect("wait for prompt activity")
         );
     }
 
     #[test]
-    fn wait_for_user_after_offset_ignores_user_before_offset() {
+    fn wait_for_prompt_activity_after_offset_ignores_user_before_offset() {
         let mut file = tempfile::NamedTempFile::new().expect("temp file");
         writeln!(
             file,
@@ -235,8 +247,39 @@ mod tests {
         let initial_offset = current_file_len(file.path()).expect("old offset");
 
         assert!(
-            !wait_for_user_after_offset(file.path(), initial_offset, 150, &AtomicBool::new(false),)
-                .expect("wait for user")
+            !wait_for_prompt_activity_after_offset(
+                file.path(),
+                initial_offset,
+                150,
+                &AtomicBool::new(false),
+            )
+            .expect("wait for prompt activity")
+        );
+    }
+
+    #[test]
+    fn wait_for_prompt_activity_after_offset_accepts_assistant_after_offset() {
+        let mut file = tempfile::NamedTempFile::new().expect("temp file");
+        writeln!(
+            file,
+            r#"{{"type":"user","message":{{"role":"user","content":"OLD_PROMPT"}}}}"#
+        )
+        .expect("write old user");
+        let initial_offset = current_file_len(file.path()).expect("old offset");
+        writeln!(
+            file,
+            r#"{{"type":"assistant","message":{{"role":"assistant","content":[{{"type":"text","text":"NEW_RESPONSE"}}]}}}}"#
+        )
+        .expect("write new assistant");
+
+        assert!(
+            wait_for_prompt_activity_after_offset(
+                file.path(),
+                initial_offset,
+                500,
+                &AtomicBool::new(false),
+            )
+            .expect("wait for prompt activity")
         );
     }
 
