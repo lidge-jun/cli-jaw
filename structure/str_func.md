@@ -409,31 +409,50 @@ cli-jaw/
 │           ├── ui-status.ts  ← compact UI status helper (47L) ✨
 │           ├── idb-cache.ts  ← IndexedDB 대화 캐시 v3 (scope별, upsert, versionchange, empty-array wipe guard) (169L) ✨
 │           └── gesture.ts    ← 터치/스와이프 제스처 핸들러 (61L) ✨
+├── native/
+│   └── jaw-claude-i/         ← Claude Interactive native helper (Rust, 11 src files / 1378L; `target/` ignored)
+│       ├── Cargo.toml        ← Rust package/dependency/test profile (32L)
+│       └── src/
+│           ├── main.rs       ← PTY wrapper main loop + JSONL runtime event emission + transcript tail orchestration (368L)
+│           ├── args.rs       ← helper CLI args (`run --jsonl`, `--resume`, `--timeout-ms`, `--`) (55L)
+│           ├── child.rs      ← Claude child process spawn/signal/exit handling (161L)
+│           ├── hook.rs       ← hook env/protocol helpers (137L)
+│           ├── protocol.rs   ← JSONL event schema helpers (107L)
+│           ├── transcript.rs ← transcript path/offset tailing + assistant message extraction (141L)
+│           ├── config.rs     ← runtime config + timeout defaults (54L)
+│           ├── terminal.rs   ← PTY terminal state/reset handling (67L)
+│           ├── cleanup.rs    ← child cleanup/signal escalation (66L)
+│           ├── normalize.rs  ← terminal/control-sequence normalization (138L)
+│           └── sanitize.rs   ← output sanitization helpers (84L)
 ├── bin/
-│   ├── cli-jaw.ts            ← 17개 user-facing 서브커맨드 라우팅 + --home flag (`browser-web-ai.ts` helper 포함 시 commands top-level 18 files) (187L)
+│   ├── cli-jaw.ts            ← 19개 user-facing 서브커맨드 라우팅 + --home flag (`browser-web-ai.ts`/`dashboard-memory.ts`/`dispatch-helpers.ts` 포함 시 commands top-level 22 files) (202L)
 │   ├── star-prompt.ts        ← `gh` 기반 GitHub star 1회 프롬프트 (TTY 가드 + state 파일, 129L)
 │   ├── postinstall.ts        ← npm install 후 CLI 런타임 + OfficeCLI 자동설치 + MCP + 스킬 + safe 가드 (970L, Node guard + inline JAW_HOME)
-│   └── commands/             ← 18 top-level ts files (`browser-web-ai.ts` helper 포함) + `tui/` 7 helper 모듈 (총 4130L + tui 1045L)
+│   └── commands/             ← 22 top-level ts files (`browser-web-ai.ts`, `dashboard-memory.ts`, `dispatch-helpers.ts` helper 포함) + `tui/` 7 helper 모듈 (총 5450L + tui 1045L)
 │       ├── serve.ts          ← 서버 시작 (--port/--host/--open) + SIGINT child.kill('SIGINT') orphan fix (119L)
 │       ├── dispatch.ts       ← 직원 호출 (pipe mode 호환) + route contract bridge + worker result polling + ECONNREFUSED retry with escalating delays (197L)
 │       ├── chat.ts           ← 터미널 채팅 TUI (3모드, locale bootstrap, refreshInfo, active model 표시, no-arg `/model`·`/cli` selector intercept, transcript 축적, overlay wiring, 251L)
-│       ├── init.ts           ← 초기화 마법사 + --safe/--dry-run + --help (239L)
-│       ├── doctor.ts         ← 진단 (다중 체크 + headless 감지, --json) (572L)
-│       ├── status.ts         ← 서버 상태 (--json) (85L)
-│       ├── mcp.ts            ← MCP 관리 (install/sync/list/reset) (227L)
-│       ├── skill.ts          ← 스킬 관리 (install/remove/info/list/reset soft·hard) (243L)
-│       ├── employee.ts       ← 직원 관리 (reset, REST API 호출, 72L)
-│       ├── reset.ts          ← 전체 초기화 (MCP/스킬/직원/세션) (103L)
+│       ├── init.ts           ← 초기화 마법사 + --safe/--dry-run + --help (256L)
+│       ├── doctor.ts         ← 진단 (다중 체크 + claude-i helper/underlying claude + headless 감지, --json) (641L)
+│       ├── status.ts         ← 서버 상태 (--json) (86L)
+│       ├── mcp.ts            ← MCP 관리 (install/sync/list/reset) (230L)
+│       ├── skill.ts          ← 스킬 관리 (install/remove/info/list/reset soft·hard) (245L)
+│       ├── employee.ts       ← 직원 관리 (reset, REST API 호출, 82L)
+│       ├── reset.ts          ← 전체 초기화 (MCP/스킬/직원/세션) (104L)
 │       ├── clone.ts          ← 인스턴스 복제 (--from, --with-memory, regenerateB) (180L)
-│       ├── memory.ts         ← 메모리 CLI (search/read/save/list/init) (138L)
-│       ├── launchd.ts        ← macOS LaunchAgent 관리 (instance.ts import, --port, xmlEsc, buildServicePath) (235L)
+│       ├── memory.ts         ← 메모리 CLI (search/read/save/list/init) (146L)
+│       ├── launchd.ts        ← macOS LaunchAgent 관리 (instance.ts import, --port, xmlEsc, buildServicePath) (243L)
 │       ├── service.ts        ← 크로스 플랫폼 서비스 관리 (systemd/launchd/docker, buildServicePath, 289L)
-│       ├── orchestrate.ts    ← PABCD 상태 제어 CLI (jaw orchestrate [P|A|B|C|D|reset]) (143L)
-│       ├── browser.ts        ← 브라우저 CLI (primitive + tab/debug + web-ai delegator, 788L)
-│       ├── browser-web-ai.ts ← `jaw browser web-ai` ChatGPT/Gemini/Grok 자동화 helper (277L)
-│       ├── dashboard.ts      ← `jaw dashboard serve` — `dist/src/manager/server.js` 서브프로세스 기동 (255L)
+│       ├── orchestrate.ts    ← PABCD 상태 제어 CLI (jaw orchestrate [P|A|B|C|D|reset]) (154L)
+│       ├── browser.ts        ← 브라우저 CLI (primitive + tab/debug + web-ai delegator, 876L)
+│       ├── browser-web-ai.ts ← `jaw browser web-ai` ChatGPT/Gemini/Grok 자동화 helper (305L)
+│       ├── dashboard.ts      ← `jaw dashboard serve` — `dist/src/manager/server.js` 서브프로세스 기동 + dashboard memory delegation (264L)
+│       ├── dashboard-memory.ts ← `jaw dashboard memory` L2 federation CLI helper (243L)
+│       ├── connector.ts      ← dashboard connector board/notes/reminders/audit CLI (216L)
+│       ├── reminders.ts      ← local reminders list/add/done CLI (100L)
+│       ├── dispatch-helpers.ts ← dispatch output unwrap helper (21L)
 │       └── tui/              ← chat 터미널 TUI 분리 (api/input-handler/overlays/renderer/simple-mode/types/ws-handler, 7 files)
-├── tests/                    ← 회귀 방지 테스트 (366 .test.ts files: root 5 / unit 347 / integration 9 / browser 5 / fixtures + smoke)
+├── tests/                    ← 회귀 방지 테스트 (391 .test.ts files: root 5 / unit 366 / integration 9 / browser 5 / fixtures + smoke)
 │   ├── acp-client.test.ts     ← ACP client contract
 │   ├── employee-session.test.ts ← main-session ownership
 │   ├── events.test.ts        ← 이벤트 파서 단위 테스트 + stepRef + compact event parsing
@@ -441,7 +460,7 @@ cli-jaw/
 │   ├── telegram-forwarding.test.ts ← Telegram 포워딩 동작 테스트
 │   ├── plan.md               ← 테스트 인벤토리/상태 추적 노트
 │   ├── fixtures/             ← 테스트 페이로드 픽스처 (71 files)
-│   ├── unit/                 ← Tier 1-2 단위 테스트 (347 .test.ts files)
+│   ├── unit/                 ← Tier 1-2 단위 테스트 (366 .test.ts files)
 │   │   ├── employee-prompt.test.ts ← 직원 프롬프트 14건
 │   │   ├── orchestrator-parsing.test.ts ← subtask 파싱 13건
 │   │   ├── orchestrator-triage.test.ts  ← triage 판단 10건
@@ -455,6 +474,7 @@ cli-jaw/
 │   │   ├── tui-keymap.test.ts       ← 키 입력 분류 + ctrl-k 테스트 ✨
 │   │   ├── tui-choice-selector.test.ts ← choice selector + locale path + zero-result guard 20건 ✨
 │   │   ├── claude-models.test.ts      ← Claude canonical/legacy 모델 유효성 13건
+│   │   ├── claude-i-detection.test.ts ← `JAW_CLAUDE_I_BIN` 우선순위 + native helper fallback 감지 2건
 │   │   ├── config-migrate-claude-models.test.ts ← migrateSettings Claude 정규화 7건
 │   │   ├── agent-args-claude-model.test.ts ← agent args Claude 모델 매핑 8건
 │   │   ├── compact-managed.test.ts    ← managed compact summary + cutoff 10건
@@ -465,7 +485,7 @@ cli-jaw/
 │   │   ├── service.test.ts           ← 크로스 플랫폼 서비스 27건
 │   │   ├── streaming-render.test.ts ← rAF 스트리밍 렌더러 15건 ✨
 │   │   ├── tool-ui.test.ts          ← 도구 호출 그룹 렌더링 11건 ✨
-│   │   └── ... (347 .test.ts files total)
+│   │   └── ... (366 .test.ts files total)
 │   ├── integration/          ← Tier 3-4 통합 테스트 (9 files)
 │   │   ├── cli-basic.test.ts         ← CLI 기본 통합
 │   │   ├── api-smoke.test.ts         ← API 스모크 (서버 기동)
@@ -550,6 +570,7 @@ graph LR
     CORE --> |config,db,bus,i18n| AGT
     CORE --> |config,db| ORC
     AGT --> EVT["agent/events.ts"]
+    AGT --> NATIVE["native/jaw-claude-i"]
     AGT --> ACP["cli/acp-client.ts"]
     ORC --> AGT
     TGMOD --> ORC
