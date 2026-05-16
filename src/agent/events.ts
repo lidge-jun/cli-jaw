@@ -17,6 +17,7 @@ import {
 } from '../types/cli-events.js';
 import { appendLiveRunText, replaceLiveRunTools, appendLiveRunTool } from './live-run-state.js';
 import { stampTraceToolEntries } from '../trace/store.js';
+import { isClaudeLikeCli } from './cli-helpers.js';
 
 function liveScopeOf(ctx: SpawnContext): string | null {
     return ctx.liveScope ?? null;
@@ -307,6 +308,8 @@ function finalizeOpencodePendingTools(
 }
 
 const GROK_THINKING_STEP_REF = 'grok:thinking';
+const GROK_THINKING_UPDATE_MIN_MS = 750;
+const GROK_THINKING_UPDATE_MIN_CHARS = 240;
 
 function findGrokThinkingTool(ctx: SpawnContext): ToolEntry | undefined {
     const currentRef = ctx.grokCurrentThoughtRef;
@@ -330,6 +333,20 @@ function nextGrokThinkingStepRef(ctx: SpawnContext): string {
     return ctx.grokCurrentThoughtRef;
 }
 
+function shouldEmitGrokThinkingUpdate(ctx: SpawnContext, detail: string): boolean {
+    const now = Date.now();
+    const lastAt = ctx.grokLastThoughtEmitAt || 0;
+    const lastChars = ctx.grokLastThoughtEmitChars || 0;
+    return !lastAt
+        || now - lastAt >= GROK_THINKING_UPDATE_MIN_MS
+        || Math.max(0, detail.length - lastChars) >= GROK_THINKING_UPDATE_MIN_CHARS;
+}
+
+function markGrokThinkingUpdateEmitted(ctx: SpawnContext, detail: string): void {
+    ctx.grokLastThoughtEmitAt = Date.now();
+    ctx.grokLastThoughtEmitChars = detail.length;
+}
+
 function ensureGrokThinkingProgress(
     ctx: SpawnContext,
     agentLabel: string,
@@ -337,13 +354,15 @@ function ensureGrokThinkingProgress(
     detail?: string,
 ): void {
     const trimmed = detail?.trim() || '';
-    const label = trimmed ? (buildPreview(trimmed, 80) || 'thinking...') : 'Grok is thinking...';
+    const label = 'Grok thinking';
     const existing = findGrokThinkingTool(ctx);
     if (existing) {
         existing.label = label;
         if (trimmed) existing.detail = trimmed;
+        if (!shouldEmitGrokThinkingUpdate(ctx, trimmed)) return;
         syncLiveTools(ctx);
         emitAgentTool(ctx, agentLabel, existing, empTag);
+        markGrokThinkingUpdateEmitted(ctx, trimmed);
         return;
     }
     const stepRef = nextGrokThinkingStepRef(ctx);
@@ -359,6 +378,7 @@ function ensureGrokThinkingProgress(
     ctx.toolLog.push(tool);
     syncLiveTools(ctx);
     emitAgentTool(ctx, agentLabel, tool, empTag);
+    markGrokThinkingUpdateEmitted(ctx, trimmed);
     pushTrace(ctx, `[${agentLabel}] grok thinking started`);
 }
 
@@ -379,6 +399,8 @@ function finalizeGrokThinkingProgress(
     syncLiveTools(ctx);
     emitAgentTool(ctx, agentLabel, existing, empTag);
     delete ctx.grokCurrentThoughtRef;
+    delete ctx.grokLastThoughtEmitAt;
+    delete ctx.grokLastThoughtEmitChars;
     ctx.grokThoughtProgressEmitted = false;
     return true;
 }
@@ -527,7 +549,8 @@ function handleGrokToolEvent(
 
 export function extractSessionId(cli: string, event: CliEventRecord): string | null {
     switch (cli) {
-        case 'claude': return event.type === 'system' ? event.session_id ?? null : null;
+        case 'claude':
+        case 'claude-i': return event.type === 'system' ? event.session_id ?? null : null;
         case 'codex': return event.type === 'thread.started' ? event.thread_id ?? null : null;
         case 'gemini': return event.type === 'init' ? event.session_id ?? null : null;
         case 'grok': return event.type === 'end' ? event.sessionId ?? null : null;
@@ -572,6 +595,19 @@ export function extractOutputChunk(cli: string, event: CliEventRecord, ctx?: Spa
         if (event.type === 'text') return String(event.data || event.text || '');
         return '';
     }
+    // claude-i: transcript delivers complete assistant messages, emit as single chunk
+    if (cli === 'claude-i') {
+        if (event.type === 'assistant' && event.message?.content) {
+            const parts: string[] = [];
+            for (const block of asCliEventArray(event.message.content)) {
+                if (block.type === 'text' && typeof block.text === 'string') {
+                    parts.push(block.text);
+                }
+            }
+            return parts.join('');
+        }
+        return '';
+    }
     // [P0-1.5] Codex: emit agent_message text as live chunk
     if (cli === 'codex') {
         if (ctx?.pendingOutputChunk) {
@@ -589,7 +625,7 @@ export function extractOutputChunk(cli: string, event: CliEventRecord, ctx?: Spa
 
 export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnContext, agentLabel: string, empTag: Record<string, unknown> = {}) {
     // [P2-3.1] Claude system/init metadata: store model, tools, version
-    if (cli === 'claude' && event.type === 'system') {
+    if (isClaudeLikeCli(cli) && event.type === 'system') {
         if (event.model) ctx.model = event.model;
         if (!ctx.metadata) ctx.metadata = {};
         if (event.tools) ctx.metadata["tools"] = event.tools;
@@ -598,7 +634,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
     }
 
     // ── Claude stream buffer: thinking_delta + input_json_delta ──
-    if (cli === 'claude' && event.type === 'stream_event') {
+    if (isClaudeLikeCli(cli) && event.type === 'stream_event') {
         const inner = event.event;
 
         // [P0-1.1] signature_delta: discard silently, do NOT trigger thinking flush.
@@ -773,6 +809,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
 
     switch (cli) {
         case 'claude':
+        case 'claude-i':
             if (event.type === 'assistant' && event.message?.content) {
                 for (const block of event.message.content) {
                     if (block.type === 'text') {
@@ -1222,7 +1259,7 @@ export function logEventSummary(agentLabel: string, cli: string, event: CliEvent
         }
     }
 
-    if (cli === 'claude') {
+    if (isClaudeLikeCli(cli)) {
         // Real-time streaming events (--include-partial-messages)
         if (event.type === 'stream_event' && event.event) {
             const inner = event.event;
@@ -1394,7 +1431,7 @@ function extractToolLabels(cli: string, event: CliEventRecord, ctx: SpawnContext
         }
     }
 
-    if (cli === 'claude') {
+    if (isClaudeLikeCli(cli)) {
         if (event.type === 'system') {
             const status = String(event.status || '');
             const subtype = String(event.subtype || event.event || '');

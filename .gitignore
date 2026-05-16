@@ -8,6 +8,7 @@ settings.json
 .artifacts/
 public/dist/
 dist/
+native/**/target/
 
 out/
 _INBOX/

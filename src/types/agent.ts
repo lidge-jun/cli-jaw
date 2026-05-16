@@ -51,6 +51,8 @@ export interface SpawnContext {
   grokThoughtBuf?: string;
   grokCurrentThoughtRef?: string;
   grokThoughtSeq?: number;
+  grokLastThoughtEmitAt?: number;
+  grokLastThoughtEmitChars?: number;
   grokThoughtProgressEmitted?: boolean;
   grokSyntheticToolSeq?: number;
   opencodePreToolText?: string;

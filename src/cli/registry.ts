@@ -12,6 +12,15 @@ export const CLI_REGISTRY = {
         efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
         models: getDefaultClaudeChoices(),
     },
+    'claude-i': {
+        label: 'Claude Interactive',
+        binary: 'jaw-claude-i',
+        experimental: true,
+        defaultModel: getDefaultClaudeModel(),
+        defaultEffort: 'medium',
+        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+        models: getDefaultClaudeChoices(),
+    },
     codex: {
         label: 'Codex',
         binary: 'codex',

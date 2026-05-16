@@ -73,6 +73,19 @@ export function getCliReadiness(): CliReadiness[] {
                 source = authenticated ? 'auth.json' : 'none';
                 break;
             }
+            case 'claude-i': {
+                const claudeInfo = (detected as Record<string, any>)['claude'];
+                if (!claudeInfo?.available) {
+                    authenticated = false;
+                    source = 'underlying claude missing';
+                    break;
+                }
+                const claudeCreds = readClaudeCreds();
+                authenticated = !!claudeCreds?.token;
+                if (claudeCreds?.source === 'cloud-provider-env') authenticated = true;
+                source = claudeCreds?.source ?? 'none';
+                break;
+            }
             case 'opencode': {
                 authenticated = true; // opencode has no separate auth
                 source = 'installed';

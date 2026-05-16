@@ -145,6 +145,43 @@ function verifyOfficeCli() {
     }
 }
 
+function readBinaryVersion(candidate: string, args: string[] = ['--version']): string {
+    return execFileSync(candidate, args, {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        timeout: 5000,
+    }).trim();
+}
+
+function verifyClaudeInteractive() {
+    const helper = findBinaryPath('claude-i') || findBinaryPath('jaw-claude-i');
+    if (!helper) {
+        throw new Error('WARN: helper missing — build with `npm run build:claude-i` or install `jaw-claude-i` on PATH');
+    }
+
+    let helperVersion = 'unknown';
+    try {
+        helperVersion = readBinaryVersion(helper);
+    } catch (e: unknown) {
+        const message = (e as Error).message || String(e);
+        throw new Error(`WARN: helper found but not runnable (${helper}) — ${message}`);
+    }
+
+    const claude = findBinaryPath('claude');
+    if (!claude) {
+        throw new Error(`WARN: helper=${helper} version=${helperVersion}; underlying claude missing`);
+    }
+
+    let claudeVersion = 'unknown';
+    try {
+        claudeVersion = readBinaryVersion(claude);
+    } catch {
+        claudeVersion = 'version check failed';
+    }
+
+    return `helper=${helper} version=${helperVersion}; claude=${claude} version=${claudeVersion}; experimental`;
+}
+
 /** Detect headless server (no display, no desktop environment). */
 function isHeadless(): boolean {
     if (process.platform !== 'linux') return false;
@@ -224,6 +261,8 @@ for (const cli of ['claude', 'codex', 'gemini', 'opencode', 'copilot']) {
         throw new Error('WARN: not installed');
     });
 }
+
+check('CLI: claude-i', verifyClaudeInteractive);
 
 check('Claude auth', () => {
     const creds = readClaudeCreds();

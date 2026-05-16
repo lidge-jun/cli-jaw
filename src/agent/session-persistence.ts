@@ -44,9 +44,11 @@ export function shouldPersistMainSession(input: SessionPersistenceInput): boolea
     // User-initiated kill (SIGTERM/SIGKILL) yields exit codes like 143/137/1 depending on
     // the CLI's signal handler. Allow persistence when wasKilled=true so resume works for
     // CLIs (claude, copilot) that don't translate SIGTERM to exit 0.
+    // jaw-claude-i uses exit code 2 for graceful SIGINT interrupt — always persist.
+    const isGracefulInterrupt = input.code === 2 && input.cli === 'claude-i';
     if (
         input.code !== undefined && input.code !== null && input.code !== 0
-        && !input.wasKilled
+        && !input.wasKilled && !isGracefulInterrupt
     ) return false;
     return isCurrentSessionOwner(input.ownerGeneration);
 }

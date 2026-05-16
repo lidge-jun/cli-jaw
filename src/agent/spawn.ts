@@ -49,6 +49,7 @@ import {
 } from './opencode-diagnostics.js';
 import type { SpawnContext, ToolEntry } from '../types/agent.js';
 import { asCliEventRecord, discriminate, fieldString, type CliEventRecord } from '../types/cli-events.js';
+import { isJawRuntimeEvent, handleJawRuntimeEvent } from './claude-i-runtime.js';
 import { appendTraceEvent, stampTraceTool, startTraceRun } from '../trace/store.js';
 
 // ─── State ───────────────────────────────────────────
@@ -1739,6 +1740,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
 
     if (cli === 'claude') {
         child.stdin.write(withHistoryPrompt(prompt, historyBlock));
+    } else if (cli === 'claude-i') {
+        child.stdin.write(isResume ? prompt : withHistoryPrompt(prompt, historyBlock));
     } else if (cli === 'codex' && !isResume) {
         const codexStdin = historyBlock
             ? `${historyBlock}\n\n[User Message]\n${prompt}`
@@ -1816,6 +1819,17 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             eventType: fieldString(asCliEventRecord(raw).type, '<no-type>'),
             raw,
         });
+        // claude-i: intercept jaw_runtime events BEFORE discriminator
+        if (cli === 'claude-i' && isJawRuntimeEvent(raw)) {
+            const rtEvt = raw as Record<string, unknown>;
+            handleJawRuntimeEvent(rtEvt, agentLabel);
+            // Extract sessionId from session_started or interrupted
+            const evtName = rtEvt['event'];
+            if ((evtName === 'session_started' || evtName === 'interrupted') && typeof rtEvt['sessionId'] === 'string') {
+                ctx.sessionId = rtEvt['sessionId'] as string;
+            }
+            return;
+        }
         const event = discriminate(cli, raw);
         if (!event) {
             const type = fieldString(asCliEventRecord(raw).type, '<no-type>');

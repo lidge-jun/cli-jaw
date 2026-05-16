@@ -1,0 +1,32 @@
+[package]
+name = "jaw-claude-i"
+version = "0.1.0"
+edition = "2024"
+description = "PTY wrapper for interactive Claude Code — emits Claude-like stream-json JSONL"
+license = "MIT"
+publish = false
+
+[dependencies]
+portable-pty = "0.9"
+vt100 = "0.16"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+clap = { version = "4", features = ["derive"] }
+log = "0.4"
+env_logger = "0.11"
+chrono = { version = "0.4", features = ["serde"] }
+nix = { version = "0.29", features = ["signal", "process", "fs"] }
+signal-hook = "0.3"
+tempfile = "3"
+
+[profile.release]
+strip = true
+lto = true
+opt-level = "z"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+panic = "warn"

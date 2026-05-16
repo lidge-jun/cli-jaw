@@ -15,7 +15,7 @@ test('P100-001: pipeline uses employeeSessionId-based resume and global clear', 
     const dbSrc = readSource(DB, 'utf8');
     assert.match(src, /\.\.\.\(canResume\s*\?\s*\{\s*employeeSessionId:\s*empSessionId\s*\}\s*:\s*\{\}\)/);
     assert.match(src, /clearAllEmployeeSessions\.run\(\)/);
-    assert.match(src, /emp\.cli\s*!==\s*'claude'/);
+    assert.match(src, /isSessionPersistingCli/);
     assert.match(src, /empSession\?\.cli\s*===\s*emp\.cli/);
     assert.match(src, /empSession\?\.model/);
     assert.match(src, /upsertEmployeeSession\.run\((?:emp\.id|empId),\s*r\.sessionId,\s*emp\.cli,\s*employeeModel\)/);

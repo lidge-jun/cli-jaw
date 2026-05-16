@@ -17,6 +17,7 @@
 
 export type CliEngine =
     | 'claude'
+    | 'claude-i'
     | 'codex'
     | 'codex-app'
     | 'copilot'
@@ -33,6 +34,7 @@ export type CliEngine =
  */
 export const CLI_ENGINES = [
     'claude',
+    'claude-i',
     'codex',
     'codex-app',
     'copilot',

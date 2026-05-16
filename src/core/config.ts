@@ -6,7 +6,7 @@ import { join, resolve } from 'path';
 import { CLI_REGISTRY, CLI_KEYS, DEFAULT_CLI, buildDefaultPerCli } from '../cli/registry.js';
 import { pickFirstReadyCli } from '../cli/readiness.js';
 import { migrateLegacyClaudeValue } from '../cli/claude-models.js';
-import { detectCliBinary, type CliDetection } from './cli-detect.js';
+import { detectCliBinary, selectSpawnableCliPath, type CliDetection } from './cli-detect.js';
 import { resolveHomePath } from './path-expand.js';
 
 // ─── Version (single source of truth: package.json) ──
@@ -204,7 +204,7 @@ export const DEFAULT_SETTINGS = createDefaultSettings();
 
 export function normalizeModelForCli(cli: string, model: unknown): unknown {
     if (typeof model !== 'string') return model;
-    if (cli === 'claude') return migrateLegacyClaudeValue(model);
+    if (cli === 'claude' || cli === 'claude-i') return migrateLegacyClaudeValue(model);
     if (cli === 'copilot' && model === 'claude-opus-4.6-fast') return 'claude-opus-4.6';
     return model;
 }
@@ -423,7 +423,35 @@ export function saveHeartbeatFile(data: HeartbeatFile | Record<string, unknown>)
 
 export function detectCli(name: string): CliDetection {
     const binary = (CLI_REGISTRY as Record<string, any>)[name]?.binary || name;
-    return detectCliBinary(binary);
+    if (binary !== 'jaw-claude-i') return detectCliBinary(binary);
+
+    const explicitHelper = process.env["JAW_CLAUDE_I_BIN"];
+    const explicitDetected = explicitHelper
+        ? selectSpawnableCliPath([explicitHelper])
+        : null;
+    if (explicitDetected?.available) return explicitDetected;
+
+    const detected = detectCliBinary(binary);
+    if (detected.available) return detected;
+
+    const fallback = selectSpawnableCliPath(
+        getClaudeIHelperCandidates().filter((candidate) => candidate !== explicitHelper),
+    );
+    const explicitRejected = explicitDetected?.rejected || [];
+    if (fallback.available) {
+        return {
+            ...fallback,
+            ...(explicitRejected.length || detected.rejected?.length || fallback.rejected?.length
+                ? { rejected: [...explicitRejected, ...(detected.rejected || []), ...(fallback.rejected || [])] }
+                : {}),
+        };
+    }
+    return {
+        ...detected,
+        ...(explicitRejected.length || detected.rejected?.length || fallback.rejected?.length
+            ? { rejected: [...explicitRejected, ...(detected.rejected || []), ...(fallback.rejected || [])] }
+            : {}),
+    };
 }
 
 export function detectAllCli() {
@@ -433,4 +461,23 @@ export function detectAllCli() {
         out[key] = detectCli(binary);
     }
     return out;
+}
+
+function nativeExecutableName(base: string): string {
+    return process.platform === 'win32' ? `${base}.exe` : base;
+}
+
+export function getClaudeIHelperCandidates(
+    projectDir = getProjectDir(),
+    env: NodeJS.ProcessEnv = process.env,
+): string[] {
+    const helper = nativeExecutableName('jaw-claude-i');
+    const platformArch = `${process.platform}-${process.arch}`;
+    const candidates = [
+        env["JAW_CLAUDE_I_BIN"],
+        join(projectDir, 'vendor', platformArch, helper),
+        join(projectDir, 'native', 'jaw-claude-i', 'target', 'release', helper),
+        join(projectDir, 'native', 'jaw-claude-i', 'target', 'debug', helper),
+    ];
+    return candidates.filter((candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0);
 }

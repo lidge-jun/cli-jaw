@@ -24,7 +24,7 @@ export function registerEmployeeRoutes(app: Express, requireAuth: AuthMiddleware
     app.post('/api/employees', requireAuth, (req, res) => {
         const id = crypto.randomUUID();
         const { name = 'New Agent', cli = 'claude', model = 'default', role = '' } = req.body || {};
-        const nextModel = cli === 'claude' && (!model || model === 'default')
+        const nextModel = (cli === 'claude' || cli === 'claude-i') && (!model || model === 'default')
             ? getDefaultClaudeModel()
             : model;
         insertEmployee.run(id, name, cli, nextModel, role);

@@ -8,6 +8,7 @@ import { getEmployeePromptV2 } from '../prompt/builder.js';
 import { spawnAgent, killAgentById } from '../agent/spawn.js';
 import { appendToWorklog } from '../memory/worklog.js';
 import { startWorkerMonitor } from './worker-monitor.js';
+import { isSessionPersistingCli } from '../agent/cli-helpers.js';
 import { buildWorkspaceContextBlock } from './workspace-context.js';
 import { updateWorkerPhase } from './worker-registry.js';
 
@@ -443,12 +444,12 @@ ${worklogBlock}`.trim();
     const empSession = getEmployeeSession.get(empId) as AgentRunResult | undefined;
     const empSessionId = text(empSession?.["session_id"]);
     const canResume = !!(
-        emp["cli"] !== 'claude'
+        isSessionPersistingCli(String(emp["cli"] || ''))
         && empSessionId
         && empSession?.["cli"] === emp["cli"]
         && String(empSession?.["model"] || '') === employeeModel
     );
-    if (emp["cli"] === 'claude' && empSession?.["session_id"]) {
+    if (!isSessionPersistingCli(String(emp["cli"] || '')) && empSession?.["session_id"]) {
         clearEmployeeSession.run(empId);
     }
 
@@ -494,9 +495,9 @@ ${worklogBlock}`.trim();
     }
     const resultText = text(r["text"]);
     const isSuccess = r["code"] === 0 || (r["code"] == null && resultText.trim().length > 0);
-    if (isSuccess && r["sessionId"] && emp["cli"] !== 'claude') {
+    if (isSuccess && r["sessionId"] && isSessionPersistingCli(String(emp["cli"] || ''))) {
         upsertEmployeeSession.run(empId, r["sessionId"], emp["cli"], employeeModel);
-    } else if (emp["cli"] === 'claude') {
+    } else if (!isSessionPersistingCli(String(emp["cli"] || ''))) {
         clearEmployeeSession.run(empId);
     }
     const diagnosticText = resultText || (isSuccess ? '' : formatEmployeeFailure(emp, r));
