@@ -997,13 +997,14 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     const promptForArgs = (cli === 'gemini' || cli === 'grok' || cli === 'opencode')
         ? withHistoryPrompt(prompt, historyBlock)
         : prompt;
+    const claudeBin = cli === 'claude-i' ? detectCli('claude').path : null;
     let args;
     if (isResume) {
         const sid = resumeSessionId || '';
         console.log(`[jaw:resume] ${cli} session=${sid.slice(0, 12)}...`);
-        args = buildResumeArgs(cli, model, effort, sid, prompt, permissions, { fastMode: cfg.fastMode, sysPrompt, includeDirectories });
+        args = buildResumeArgs(cli, model, effort, sid, prompt, permissions, { fastMode: cfg.fastMode, sysPrompt, includeDirectories, ...(claudeBin ? { claudeBin } : {}) });
     } else {
-        args = buildArgs(cli, model, effort, promptForArgs, sysPrompt, permissions, { fastMode: cfg.fastMode, includeDirectories });
+        args = buildArgs(cli, model, effort, promptForArgs, sysPrompt, permissions, { fastMode: cfg.fastMode, includeDirectories, ...(claudeBin ? { claudeBin } : {}) });
     }
 
     const agentLabel = agentId || 'main';
@@ -1062,6 +1063,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         console.log(`[jaw:${agentLabel}] Spawning: copilot --acp --model ${model} [${permissions}]`);
     } else {
         console.log(`[jaw:${agentLabel}] Spawning: ${cli} ${args.join(' ').slice(0, 120)}...`);
+        if (cli === 'claude-i') console.log(`[jaw:${agentLabel}:args] ${JSON.stringify(args)}`);
     }
 
     if (cli === 'gemini' && sysPrompt) {

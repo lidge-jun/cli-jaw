@@ -11,6 +11,7 @@ type BuildArgOptions = {
     fastMode?: boolean;
     sysPrompt?: string;
     includeDirectories?: string[];
+    claudeBin?: string;
     homedir?: string;
     platform?: NodeJS.Platform;
     release?: string;
@@ -111,6 +112,7 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
             return ['run', '--jsonl',
                 '--output-format', 'stream-json',
                 '--timeout-ms', '600000',
+                ...(options.claudeBin ? ['--claude-bin', options.claudeBin] : []),
                 ...(claudeExtraArgs.length ? ['--', ...claudeExtraArgs] : [])];
         }
         case 'codex': {
@@ -184,6 +186,7 @@ export function buildResumeArgs(cli: string, model: string, effort: string, sess
             return ['run', '--jsonl',
                 '--output-format', 'stream-json',
                 '--timeout-ms', '600000',
+                ...(options.claudeBin ? ['--claude-bin', options.claudeBin] : []),
                 '--resume', sessionId,
                 ...(claudeExtraArgs.length ? ['--', ...claudeExtraArgs] : [])];
         }
