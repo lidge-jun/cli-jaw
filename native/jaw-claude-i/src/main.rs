@@ -182,7 +182,15 @@ fn run(config: &RunConfig) -> i32 {
     // Inject prompt via bracketed paste, then submit after a short delay
     let (paste_bytes, submit_bytes) = sanitize::bracketed_paste(&prompt);
     {
-        let mut w = pty_child.writer.lock().unwrap();
+        let Ok(mut w) = pty_child.writer.lock() else {
+            protocol::emit_error(
+                &config.run_id,
+                "PTY writer lock poisoned before prompt write",
+                4,
+            );
+            cleanup::kill_process_group(child_pid, &config.run_id);
+            return 4;
+        };
         if let Err(e) = w.write_all(&paste_bytes) {
             protocol::emit_error(&config.run_id, &format!("prompt write failed: {e}"), 4);
             cleanup::kill_process_group(child_pid, &config.run_id);
@@ -193,7 +201,15 @@ fn run(config: &RunConfig) -> i32 {
     // Brief delay so TUI processes the paste before receiving Enter
     std::thread::sleep(std::time::Duration::from_millis(150));
     {
-        let mut w = pty_child.writer.lock().unwrap();
+        let Ok(mut w) = pty_child.writer.lock() else {
+            protocol::emit_error(
+                &config.run_id,
+                "PTY writer lock poisoned before submit write",
+                4,
+            );
+            cleanup::kill_process_group(child_pid, &config.run_id);
+            return 4;
+        };
         if let Err(e) = w.write_all(&submit_bytes) {
             protocol::emit_error(&config.run_id, &format!("submit write failed: {e}"), 4);
             cleanup::kill_process_group(child_pid, &config.run_id);

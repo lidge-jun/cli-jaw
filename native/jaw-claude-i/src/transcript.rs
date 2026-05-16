@@ -69,7 +69,7 @@ pub fn tail_transcript(
                 if let Ok(mut f) = File::open(transcript_path) {
                     let _ = f.seek(SeekFrom::Start(offset));
                     let r = BufReader::new(f);
-                    for line in r.lines().flatten() {
+                    for line in r.lines().map_while(Result::ok) {
                         if let Some(normalized) = normalize::normalize_transcript_line(&line) {
                             emit_line(&normalized, output_format);
                             if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) {

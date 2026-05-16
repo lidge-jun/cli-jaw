@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 pub struct HookDir {
@@ -15,19 +15,30 @@ impl HookDir {
 
         let dir_path = temp_dir.path().to_path_buf();
 
-        // Create the relay script that writes hook payload atomically
+        // Create the relay script that writes hook payload atomically.
         let relay_script = dir_path.join("hook-relay.sh");
         let script_content = format!(
             r#"#!/bin/sh
-# jaw-claude-i hook relay — writes payload atomically, no stdout
-EVENT="$1"
-DIR="{dir}"
-PAYLOAD="$(cat)"
-printf '%s' "$PAYLOAD" > "$DIR/hook-$EVENT.payload.$$.tmp"
-mv "$DIR/hook-$EVENT.payload.$$.tmp" "$DIR/hook-$EVENT.payload"
+# jaw-claude-i hook relay: writes payload atomically, no stdout
+set -eu
+umask 077
+
+EVENT="${{1:-}}"
+case "$EVENT" in
+  session-start|stop|stop-failure) ;;
+  *) exit 64 ;;
+esac
+
+DIR={dir}
+TMP="$DIR/hook-$EVENT.payload.$$.tmp"
+trap 'rm -f "$TMP"' EXIT HUP INT TERM
+
+cat > "$TMP"
+mv -f "$TMP" "$DIR/hook-$EVENT.payload"
 touch "$DIR/hook-$EVENT.done"
+trap - EXIT HUP INT TERM
 "#,
-            dir = dir_path.display()
+            dir = shell_quote_path(&dir_path)
         );
 
         fs::write(&relay_script, script_content)
@@ -48,10 +59,33 @@ touch "$DIR/hook-$EVENT.done"
     }
 
     pub fn build_settings_json(&self) -> String {
-        let relay = self.relay_script.display();
-        format!(
-            r#"{{"hooks":{{"SessionStart":[{{"hooks":[{{"type":"command","command":"{relay} session-start"}}]}}],"Stop":[{{"hooks":[{{"type":"command","command":"{relay} stop"}}]}}],"StopFailure":[{{"hooks":[{{"type":"command","command":"{relay} stop-failure"}}]}}]}}}}"#
-        )
+        let session_start = format!("{} session-start", shell_quote_path(&self.relay_script));
+        let stop = format!("{} stop", shell_quote_path(&self.relay_script));
+        let stop_failure = format!("{} stop-failure", shell_quote_path(&self.relay_script));
+
+        serde_json::json!({
+            "hooks": {
+                "SessionStart": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": session_start,
+                    }],
+                }],
+                "Stop": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": stop,
+                    }],
+                }],
+                "StopFailure": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": stop_failure,
+                    }],
+                }],
+            },
+        })
+        .to_string()
     }
 
     pub fn sentinel_path(&self, event: &str) -> PathBuf {
@@ -87,6 +121,15 @@ touch "$DIR/hook-$EVENT.done"
             .ok()
             .and_then(|s| serde_json::from_str(&s).ok())
     }
+}
+
+fn shell_quote_path(path: &Path) -> String {
+    let raw = path.as_os_str().to_string_lossy();
+    shell_quote(&raw)
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\\''"))
 }
 
 pub fn extract_transcript_path(payload: &serde_json::Value) -> Option<String> {
@@ -125,6 +168,25 @@ mod tests {
         assert!(parsed["hooks"]["SessionStart"].is_array());
         assert!(parsed["hooks"]["Stop"].is_array());
         assert!(parsed["hooks"]["StopFailure"].is_array());
+
+        let command = parsed["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+            .as_str()
+            .expect("command string");
+        assert!(command.starts_with('\''));
+        assert!(command.ends_with(" session-start"));
+    }
+
+    #[test]
+    fn relay_script_restricts_known_events() {
+        let hd = HookDir::create().expect("should create");
+        let content = fs::read_to_string(&hd.relay_script).expect("read");
+        assert!(content.contains("session-start|stop|stop-failure"));
+        assert!(content.contains("exit 64"));
+    }
+
+    #[test]
+    fn shell_quote_handles_single_quotes() {
+        assert_eq!(shell_quote("a'b"), "'a'\\''b'");
     }
 
     #[test]

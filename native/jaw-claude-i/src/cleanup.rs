@@ -41,26 +41,54 @@ pub fn graceful_exit(
 pub fn kill_process_group(pid: u32, run_id: &str) {
     protocol::emit_cleanup(run_id, "cleanup_started", false);
 
-    let pgid = Pid::from_raw(-(pid as i32));
+    let Some(target_group) = process_group_id(pid) else {
+        log::warn!("refusing to signal invalid child process group id: {pid}");
+        protocol::emit_cleanup(run_id, "cleanup_done", true);
+        return;
+    };
 
-    if kill(pgid, Signal::SIGTERM).is_ok() {
+    if kill(target_group, Signal::SIGTERM).is_ok() {
         log::debug!("sent SIGTERM to pgid -{pid}");
     }
 
     let grace = Duration::from_secs(3);
     let start = Instant::now();
     while start.elapsed() < grace {
-        if kill(pgid, None).is_err() {
+        if kill(target_group, None).is_err() {
             protocol::emit_cleanup(run_id, "cleanup_done", false);
             return;
         }
         std::thread::sleep(Duration::from_millis(100));
     }
 
-    if kill(pgid, Signal::SIGKILL).is_ok() {
+    if kill(target_group, Signal::SIGKILL).is_ok() {
         log::debug!("sent SIGKILL to pgid -{pid}");
     }
 
     std::thread::sleep(Duration::from_millis(200));
     protocol::emit_cleanup(run_id, "cleanup_done", true);
+}
+
+fn process_group_id(pid: u32) -> Option<Pid> {
+    let raw_pid = i32::try_from(pid).ok()?;
+    if raw_pid == 0 {
+        return None;
+    }
+    Some(Pid::from_raw(-raw_pid))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::process_group_id;
+
+    #[test]
+    fn rejects_zero_process_group() {
+        assert!(process_group_id(0).is_none());
+    }
+
+    #[test]
+    fn negates_valid_process_group() {
+        let target_group = process_group_id(1234).expect("valid pgid");
+        assert_eq!(target_group.as_raw(), -1234);
+    }
 }
