@@ -50,6 +50,7 @@ test('manager frontend has API entry and Open action', () => {
 
 test('manager server serves built dashboard HTML at /manager while preserving static manager assets', () => {
     const server = read('src/manager/server.ts');
+    const preview = read('public/manager/src/InstancePreview.tsx');
     const pkg = read('package.json');
 
     assert.ok(server.includes("join(distRoot, 'manager', 'index.html')"), 'built manager HTML must remain the first /manager fallback candidate');
@@ -62,6 +63,14 @@ test('manager server serves built dashboard HTML at /manager while preserving st
         'manager UI source marker must reflect the actual selected HTML path');
     assert.ok(server.includes("res.setHeader('x-jaw-manager-ui', managerUiSource(htmlPath))"),
         'manager HTML responses must expose a QA source marker');
+    assert.ok(server.includes('managerPreviewMicPermissionPolicy'),
+        'manager HTML must build a microphone Permissions-Policy for preview origins');
+    assert.ok(server.includes("res.setHeader('Permissions-Policy', managerPermissionsPolicy)"),
+        'manager HTML must delegate microphone permission to preview iframes before Chrome can show a prompt');
+    assert.ok(preview.includes('{ theme: props.theme }'),
+        'embedded manager preview must preserve dedicated preview-origin routing so iframe /api and /ws target the managed instance');
+    assert.equal(preview.includes("transport: 'legacy-path'"), false,
+        'embedded manager preview must not force the legacy /i path because it breaks root-relative instance API and websocket calls');
     assert.ok(pkg.includes('"qa:manager-frontend": "npm run build:frontend && npm run typecheck:frontend"'),
         'manual manager QA must have a build-first helper script');
 });

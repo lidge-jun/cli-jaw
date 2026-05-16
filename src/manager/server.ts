@@ -90,6 +90,18 @@ const previewProxy = createPreviewOriginProxyController({
 });
 const previousStatusByPort = new Map<number, { status: string; version: string | null }>();
 
+function managerPreviewMicPermissionPolicy(): string {
+    const origins: string[] = [];
+    for (let offset = 0; offset < scanCount; offset += 1) {
+        const previewPort = previewFrom + offset;
+        origins.push(`"http://127.0.0.1:${previewPort}"`);
+        origins.push(`"http://localhost:${previewPort}"`);
+    }
+    return `microphone=(self ${origins.join(' ')})`;
+}
+
+const managerPermissionsPolicy = managerPreviewMicPermissionPolicy();
+
 async function serviceDetect(range: { from: number; to: number }): Promise<Map<number, DashboardServiceState>> {
     return detectAllServiceStates(range);
 }
@@ -563,6 +575,7 @@ function managerUiSource(htmlPath: string): 'dist' | 'source' {
 
 function sendManagerHtml(res: express.Response, htmlPath: string): void {
     res.setHeader('x-jaw-manager-ui', managerUiSource(htmlPath));
+    res.setHeader('Permissions-Policy', managerPermissionsPolicy);
     res.sendFile(basename(htmlPath), { root: dirname(htmlPath) }, error => {
         if (!error || res.headersSent) return;
 

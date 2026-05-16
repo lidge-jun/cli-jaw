@@ -10,8 +10,17 @@ export type PreviewState = {
 
 export type PreviewTheme = 'dark' | 'light';
 export type PreviewTransport = 'origin-port' | 'legacy-path' | 'none';
+export type PreviewTransportPreference = 'origin-port' | 'legacy-path';
 
-type PreviewArgument = PreviewTheme | 'proxy' | 'direct' | undefined;
+type PreviewArgument =
+    | PreviewTheme
+    | 'proxy'
+    | 'direct'
+    | {
+        theme?: PreviewTheme | null;
+        transport?: PreviewTransportPreference | null;
+    }
+    | undefined;
 
 function isLoopbackHost(hostname: string): boolean {
     return hostname === '127.0.0.1' || hostname === 'localhost' || hostname === '::1' || hostname === '[::1]';
@@ -19,6 +28,20 @@ function isLoopbackHost(hostname: string): boolean {
 
 function isPreviewTheme(value: PreviewArgument): value is PreviewTheme {
     return value === 'dark' || value === 'light';
+}
+
+function resolvePreviewArgument(value: PreviewArgument): { theme: PreviewTheme | null; transport: PreviewTransportPreference | null } {
+    if (value && typeof value === 'object') {
+        const theme = value.theme === 'dark' || value.theme === 'light' ? value.theme : null;
+        return {
+            theme,
+            transport: value.transport === 'legacy-path' || value.transport === 'origin-port' ? value.transport : null,
+        };
+    }
+    return {
+        theme: isPreviewTheme(value) ? value : null,
+        transport: value === 'proxy' ? 'legacy-path' : null,
+    };
 }
 
 export function normalizePreviewUrlForCurrentHost(src: string, currentHref?: string): string {
@@ -66,8 +89,8 @@ export function buildPreviewState(
         return { canPreview: false, src: null, reason: 'This port is outside the proxy allowlist.', transport: 'none', warning: null };
     }
     const originPreview = proxy.preview?.instances[String(instance.port)];
-    const theme = isPreviewTheme(previewArgument) ? previewArgument : null;
-    if (proxy.preview?.enabled && originPreview?.status === 'ready' && originPreview.url) {
+    const { theme, transport } = resolvePreviewArgument(previewArgument);
+    if (transport !== 'legacy-path' && proxy.preview?.enabled && originPreview?.status === 'ready' && originPreview.url) {
         return {
             canPreview: true,
             src: appendPreviewTheme(normalizePreviewUrlForCurrentHost(originPreview.url), theme),

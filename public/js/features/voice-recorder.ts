@@ -17,6 +17,15 @@ let startPending = false;
 let stopAction: 'stopped' | 'cancelled' | 'failed' = 'stopped';
 const MIC_PERMISSION_TIMEOUT_MS = 15000;
 
+type DocumentPermissionPolicy = {
+    allowsFeature?: (feature: string) => boolean;
+};
+
+type MicPermissionParams = {
+    origin: string;
+    alternateOrigin: string;
+};
+
 /** Pick best supported MIME type for cross-platform */
 function pickMime(): string {
     if (typeof MediaRecorder === 'undefined') return '';
@@ -43,13 +52,59 @@ function classifyMicError(err: unknown): string {
         case 'AbortError':
             return t('voice.micBusy');
         case 'TimeoutError':
-            return t('voice.requestTimeout');
+            return micRequestTimeoutMessage();
         default:
             if (e instanceof TypeError || !navigator.mediaDevices) {
                 return t('voice.httpsRequired');
             }
             return t('voice.micDenied');
     }
+}
+
+function getDocumentPermissionPolicy(): DocumentPermissionPolicy | null {
+    const scoped = document as Document & {
+        featurePolicy?: DocumentPermissionPolicy;
+        permissionsPolicy?: DocumentPermissionPolicy;
+    };
+    return scoped.permissionsPolicy || scoped.featurePolicy || null;
+}
+
+function isMicBlockedByDocumentPolicy(): boolean {
+    try {
+        return getDocumentPermissionPolicy()?.allowsFeature?.('microphone') === false;
+    } catch {
+        return false;
+    }
+}
+
+async function getMicrophonePermissionState(): Promise<PermissionState | null> {
+    try {
+        if (!navigator.permissions?.query) return null;
+        const status = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+        return status.state;
+    } catch {
+        return null;
+    }
+}
+
+function micPermissionParams(): MicPermissionParams {
+    const current = new URL(window.location.href);
+    const alternate = new URL(current.href);
+    if (current.hostname === '127.0.0.1') {
+        alternate.hostname = 'localhost';
+    } else if (current.hostname === 'localhost') {
+        alternate.hostname = '127.0.0.1';
+    }
+    const alternateOrigin = alternate.origin === current.origin ? '' : alternate.origin;
+    return { origin: current.origin, alternateOrigin };
+}
+
+function micRequestTimeoutMessage(): string {
+    const params = micPermissionParams();
+    if (params.alternateOrigin) {
+        return t('voice.requestTimeoutLoopback', params);
+    }
+    return t('voice.requestTimeout', params);
 }
 
 function classifyRecorderStartError(err: unknown): string {
@@ -110,6 +165,14 @@ export async function startRecording(): Promise<void> {
     // Feature detection
     if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
         addSystemMsg(t('voice.unsupported'), '', 'error');
+        return;
+    }
+    if (isMicBlockedByDocumentPolicy()) {
+        addSystemMsg(t('voice.policyBlocked'), '', 'error');
+        return;
+    }
+    if (await getMicrophonePermissionState() === 'denied') {
+        addSystemMsg(t('voice.permissionDeniedBrowser', micPermissionParams()), '', 'error');
         return;
     }
 

@@ -16,6 +16,12 @@ test('classic web STT recorder exposes pending/error states and preview lifecycl
     assert.ok(recorder.includes("postPreviewSttRecording('failed')"), 'recorder must notify Manager when mic acquisition fails');
     assert.ok(recorder.includes('MIC_PERMISSION_TIMEOUT_MS'), 'recorder must not leave mic permission requests pending forever');
     assert.ok(recorder.includes('requestMicStreamWithTimeout'), 'recorder must wrap getUserMedia with a bounded request path');
+    assert.ok(recorder.includes('isMicBlockedByDocumentPolicy'), 'recorder must fail before arming when Permissions Policy blocks microphone');
+    assert.ok(recorder.includes("allowsFeature?.('microphone') === false"), 'recorder must check the browser microphone policy synchronously');
+    assert.ok(recorder.includes('getMicrophonePermissionState'), 'recorder must preflight explicit browser microphone denials');
+    assert.ok(recorder.includes("name: 'microphone' as PermissionName"), 'recorder must query the microphone permission state directly');
+    assert.ok(recorder.includes('voice.permissionDeniedBrowser'), 'recorder must explain explicit browser-level microphone blocks');
+    assert.ok(recorder.includes('voice.requestTimeoutLoopback'), 'recorder must explain localhost and 127.0.0.1 permission split on pending prompts');
     assert.ok(recorder.includes('Promise.race([mediaPromise, timeoutPromise])'), 'recorder must race getUserMedia against the permission timeout');
     assert.ok(recorder.includes("track => track.stop()"), 'late mic streams must be released after a timeout');
     assert.ok(recorder.includes('new MediaRecorder(stream, options)'), 'recorder must keep MediaRecorder creation inside the guarded start path');
@@ -56,6 +62,9 @@ test('STT shortcut copy and locale strings mention the fallback shortcut', () =>
         const values = json(`public/locales/${locale}.json`);
         assert.ok(values['voice.requesting'], `${locale} locale must name the mic-request pending state`);
         assert.ok(values['voice.requestTimeout'], `${locale} locale must explain stalled mic permission prompts`);
+        assert.ok(values['voice.requestTimeoutLoopback'], `${locale} locale must explain loopback-origin mic permission prompts`);
+        assert.ok(values['voice.policyBlocked'], `${locale} locale must explain browser policy-blocked microphone access`);
+        assert.ok(values['voice.permissionDeniedBrowser'], `${locale} locale must explain browser-denied microphone access`);
         assert.ok(values['stt.shortcutHint'].includes('Alt/Option+M'), `${locale} STT hint must mention fallback shortcut`);
         assert.ok(values['help.keyboardShortcuts.howTo.1'].includes('Alt/Option+M'), `${locale} shortcut help must mention fallback shortcut`);
     }

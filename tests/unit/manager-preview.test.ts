@@ -81,7 +81,7 @@ test('preview helper prefers origin-port preview url', () => {
                 },
             },
         },
-    }, 'proxy'), {
+    }), {
         canPreview: true,
         src: 'http://127.0.0.1:24602/',
         reason: null,
@@ -120,6 +120,36 @@ test('preview helper appends theme to origin-port preview url', () => {
     assert.equal(state.transport, 'origin-port');
 });
 
+test('preview helper can force same-origin proxy as an explicit fallback', () => {
+    const state = buildPreviewState(online, {
+        ...data,
+        manager: {
+            ...data.manager,
+            proxy: {
+                ...data.manager.proxy,
+                preview: {
+                    enabled: true,
+                    kind: 'origin-port',
+                    previewFrom: 24602,
+                    previewTo: 24651,
+                    instances: {
+                        '3457': {
+                            targetPort: 3457,
+                            previewPort: 24602,
+                            url: 'http://127.0.0.1:24602/',
+                            status: 'ready',
+                            reason: null,
+                        },
+                    },
+                },
+            },
+        },
+    }, { theme: 'light', transport: 'legacy-path' });
+
+    assert.equal(state.src, '/i/3457/?jawTheme=light');
+    assert.equal(state.transport, 'legacy-path');
+});
+
 test('preview helper rewrites loopback origin preview host to current dashboard host', () => {
     assert.equal(
         normalizePreviewUrlForCurrentHost('http://127.0.0.1:24602/?x=1', 'http://localhost:24576/'),
@@ -155,7 +185,7 @@ test('preview helper falls back when origin-port preview is unavailable', () => 
                 },
             },
         },
-    }, 'proxy');
+    });
 
     assert.equal(state.src, '/i/3457/');
     assert.equal(state.transport, 'legacy-path');
