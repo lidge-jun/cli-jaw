@@ -305,9 +305,9 @@ cli-jaw/
 │   │   ├── response.ts       ← ok(), fail() 표준 응답 (25L)
 │   │   ├── async-handler.ts  ← asyncHandler 래퍼 (14L)
 │   │   └── error-middleware.ts ← notFoundHandler, errorHandler (26L)
-│   ├── types/                ← 공유 타입 정의 (3 files, 288L)
-│   │   ├── agent.ts          ← ToolEntry, SpawnContext, SpawnResult 인터페이스 (88L)
-│   │   ├── cli-engine.ts     ← CliEngine union + registry key tuple (46L)
+│   ├── types/                ← 공유 타입 정의 (3 files, 296L)
+│   │   ├── agent.ts          ← ToolEntry, SpawnContext, SpawnResult 인터페이스 (94L)
+│   │   ├── cli-engine.ts     ← CliEngine union + registry key tuple + `claude-i` discriminator (48L)
 │   │   └── cli-events.ts     ← CLI event record/discriminator helpers (154L)
 │   └── command-contract/     ← 커맨드 인터페이스 통합
 │       ├── catalog.ts        ← COMMANDS → capability map 확장 (43L)
@@ -593,7 +593,7 @@ graph LR
 | `src/command-contract/` | cli/commands                                   | capability map + policy + help                                      |
 | `src/prompt/`           | core                                           | A-1/A-2 + 스킬 + 직원 프롬프트 v2                                   |
 | `src/memory/`           | core                                           | 메모리 + worklog + heartbeat + advanced runtime                     |
-| `src/agent/`            | core, prompt, orchestrator, cli/acp-client     | 핵심 허브 + ACP copilot 분기                                        |
+| `src/agent/`            | core, prompt, orchestrator, cli/acp-client, native helper output | 핵심 허브 + ACP copilot + Codex App + `claude-i` helper 분기         |
 | `src/orchestrator/`     | core, prompt, agent                            | planning ↔ agent 상호 + phase 관리 + research dispatch + worker monitor |
 | `src/telegram/`         | core, orchestrator, agent, cli, prompt, memory, messaging | 외부 인터페이스 + lifecycle                              |
 | `src/discord/`          | core, orchestrator, agent, cli, messaging      | Discord 인터페이스 + slash commands                                 |
@@ -617,7 +617,7 @@ graph LR
 11. **Forwarder lifecycle**: named handler attach/detach로 중복 등록 방지
 11.5. **Messaging runtime**: `src/messaging/` — 채널 추상화 (transport registry + unified send + session key)
 12. **symlink 보호**: 실디렉토리 충돌 시 backup 우선
-13. **CLI registry**: `src/cli/registry.ts`에서 CLI 런타임 정의, `/api/cli-registry`로 동기화
+13. **CLI registry**: `src/cli/registry.ts`에서 CLI 런타임 정의, `/api/cli-registry`로 동기화. `claude-i`는 experimental이며 `jaw-claude-i` helper와 underlying `claude`가 둘 다 필요하다.
 14. **Copilot ACP**: JSON-RPC 2.0 over stdio, `session/update` 실시간 스트리밍
 15. **Copilot effort**: `~/.copilot/config.json` `reasoning_effort` 직접 수정
 16. **Copilot quota**: env → file cache(~/.cli-jaw/auth/) → `gh auth token` → macOS keychain → `copilot_internal/user` API (execFileSync, source 바인딩, legacy 마이그레이션)
