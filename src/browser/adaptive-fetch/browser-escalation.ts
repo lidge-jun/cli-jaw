@@ -1,14 +1,14 @@
 // @ts-nocheck
-// Mirrored from agbrowse adaptive-fetch v1; keep runtime behavior aligned while cli-jaw mirror remains experimental.
+// Mirrored from agbrowse adaptive-fetch v2; keep runtime behavior aligned while cli-jaw mirror remains experimental.
 
 import { closeFetchBrowserPage, getFetchBrowserPage } from './browser-runtime.js';
-import { classifyAccessBoundary, detectChallengeMarkers } from './challenge-detector.js';
+import { classifyAccessBoundary, detectChallengeMarkers, detectWafChallenge } from './challenge-detector.js';
 import { validateFetchUrl } from './safety.js';
 import { classifyBoundarySignals } from './validators.js';
 
 /**
  * @param {string} url
- * @param {{ browserDeps?: any, browserSession?: 'none'|'isolated'|'existing', timeoutMs?: number, selector?: string|null, allowPrivateNetwork?: boolean }} [options]
+ * @param {{ browserDeps?: any, browserSession?: 'none'|'isolated'|'existing', timeoutMs?: number, selector?: string|null, allowPrivateNetwork?: boolean, challengeInfo?: any }} [options]
  */
 export async function collectBrowserCandidate(url, options = {}) {
     const pageRef = await getFetchBrowserPage({
@@ -18,11 +18,13 @@ export async function collectBrowserCandidate(url, options = {}) {
     const page = pageRef.page;
     /** @type {any[]} */
     const networkCandidates = [];
+    /** @param {any} response */
     const onResponse = async (response) => {
         try {
             const finalUrl = validateFetchUrl(response.url?.() || url, {
                 allowPrivateNetwork: options.allowPrivateNetwork,
             }).href;
+            if (isTrackingEndpoint(finalUrl) || isAuthEndpoint(finalUrl)) return;
             const contentType = response.headers?.()['content-type'] || '';
             if (!/\bjson\b/i.test(contentType)) return;
             const text = await response.text();
@@ -39,7 +41,7 @@ export async function collectBrowserCandidate(url, options = {}) {
                 warnings: [],
             });
         } catch {
-            // Network candidate collection is best-effort and must not fail page text extraction.
+            // Network candidate collection is best-effort; failures are silently dropped.
         }
     };
     try {
@@ -55,7 +57,14 @@ export async function collectBrowserCandidate(url, options = {}) {
                 navContentType = navResponse.headers?.()?.['content-type'] || 'text/plain';
             }
         }
-        if (typeof page.waitForTimeout === 'function') await page.waitForTimeout(300).catch(() => undefined);
+
+        const challengeInfo = options.challengeInfo;
+        if (challengeInfo?.primary?.behavior?.jsChallengeSolvable) {
+            await waitForChallengeResolution(page, 10000);
+        } else if (typeof page.waitForTimeout === 'function') {
+            await page.waitForTimeout(300).catch(() => undefined);
+        }
+
         const finalUrl = typeof page.url === 'function' ? page.url() : url;
         try {
             validateFetchUrl(finalUrl, { allowPrivateNetwork: options.allowPrivateNetwork });
@@ -125,4 +134,40 @@ async function readVisibleText(page, selector) {
  */
 export function collectNetworkJsonCandidates(browserResult) {
     return Array.isArray(browserResult?.networkCandidates) ? browserResult.networkCandidates : [];
+}
+
+/**
+ * @param {any} page
+ * @param {number} timeoutMs
+ */
+async function waitForChallengeResolution(page, timeoutMs) {
+    if (typeof page.evaluate !== 'function') return false;
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+        const hasChallenge = await page.evaluate(() => {
+            return !!document.querySelector('[id*="challenge"]') ||
+                (document.title || '').includes('Just a moment');
+        }).catch(() => false);
+        if (!hasChallenge) return true;
+        if (typeof page.waitForTimeout === 'function') {
+            await page.waitForTimeout(500).catch(() => undefined);
+        } else {
+            await new Promise(r => setTimeout(r, 500));
+        }
+    }
+    return false;
+}
+
+/**
+ * @param {string} url
+ */
+function isTrackingEndpoint(url) {
+    return /analytics|tracking|telemetry|beacon|pixel|statsig|feature[-_]?flag|experiment|optimizely|launchdarkly|config|metrics|events?|collect|sentry|datadog|segment|braze|adservice|doubleclick|log\b/i.test(url);
+}
+
+/**
+ * @param {string} url
+ */
+function isAuthEndpoint(url) {
+    return /\/auth[\/\?]|\/login[\/\?]|\/token[\/\?]|\/session[\/\?]|\/oauth[\/\?]|\/signin[\/\?]/i.test(url);
 }

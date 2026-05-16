@@ -1,5 +1,5 @@
 // @ts-nocheck
-// Mirrored from agbrowse adaptive-fetch v1; keep runtime behavior aligned while cli-jaw mirror remains experimental.
+// Mirrored from agbrowse adaptive-fetch v2; keep runtime behavior aligned while cli-jaw mirror remains experimental.
 
 /**
  * @param {string|URL} rawUrl
@@ -109,7 +109,29 @@ function registryCandidates(url) {
             ? `${decodedParts[0]}/${decodedParts[1]}`
             : decodedParts[0];
         if (!packageName) return [];
-        return [{ label: 'npm-registry', url: `https://registry.npmjs.org/${encodeURIComponent(packageName)}`, source: 'public_endpoint' }];
+        const version = packageName.startsWith('@') && decodedParts[2] === 'v'
+            ? decodedParts[3]
+            : (!packageName.startsWith('@') && decodedParts[1] === 'v' ? decodedParts[2] : '');
+        const encodedPackageName = encodeURIComponent(packageName);
+        const candidates = [];
+        if (version) {
+            candidates.push({
+                label: 'npm-registry-version',
+                url: `https://registry.npmjs.org/${encodedPackageName}/${encodeURIComponent(version)}`,
+                source: 'public_endpoint',
+            });
+        }
+        candidates.push({
+            label: 'npm-registry-latest',
+            url: `https://registry.npmjs.org/${encodedPackageName}/latest`,
+            source: 'public_endpoint',
+        });
+        candidates.push({
+            label: 'npm-registry',
+            url: `https://registry.npmjs.org/${encodedPackageName}`,
+            source: 'public_endpoint',
+        });
+        return candidates;
     }
     if (url.hostname === 'pypi.org' && parts[0] === 'project' && parts[1]) {
         return [{ label: 'pypi-json', url: `https://pypi.org/pypi/${encodeURIComponent(decodeURIComponent(parts[1]))}/json`, source: 'public_endpoint' }];

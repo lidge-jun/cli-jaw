@@ -1,5 +1,5 @@
 // @ts-nocheck
-// Mirrored from agbrowse adaptive-fetch v1; keep runtime behavior aligned while cli-jaw mirror remains experimental.
+// Mirrored from agbrowse adaptive-fetch v2; keep runtime behavior aligned while cli-jaw mirror remains experimental.
 
 const CHALLENGE_PATTERNS = [
     /\bcaptcha\b/i,

@@ -40,10 +40,13 @@ test('adaptive fetch preserves Wayback query strings and resolves registry/acade
         resolvePublicEndpointCandidates('https://web.archive.org/web/20200101000000/https://example.com/search?q=a%26b&x=1')[0]?.url ?? '',
         /url=https%3A%2F%2Fexample\.com%2Fsearch%3Fq%3Da%2526b%26x%3D1/,
     );
-    assert.equal(resolvePublicEndpointCandidates('https://www.npmjs.com/package/lodash')[0]?.url, 'https://registry.npmjs.org/lodash');
-    assert.equal(resolvePublicEndpointCandidates('https://www.npmjs.com/package/@npmcli/arborist')[0]?.url, 'https://registry.npmjs.org/%40npmcli%2Farborist');
-    assert.equal(resolvePublicEndpointCandidates('https://www.npmjs.com/package/%40npmcli/arborist')[0]?.url, 'https://registry.npmjs.org/%40npmcli%2Farborist');
-    assert.equal(resolvePublicEndpointCandidates('https://www.npmjs.com/package/%40npmcli%2Farborist')[0]?.url, 'https://registry.npmjs.org/%40npmcli%2Farborist');
+    assert.equal(resolvePublicEndpointCandidates('https://www.npmjs.com/package/lodash')[0]?.label, 'npm-registry-latest');
+    assert.equal(resolvePublicEndpointCandidates('https://www.npmjs.com/package/lodash')[0]?.url, 'https://registry.npmjs.org/lodash/latest');
+    assert.equal(resolvePublicEndpointCandidates('https://www.npmjs.com/package/lodash/v/4.17.21')[0]?.label, 'npm-registry-version');
+    assert.equal(resolvePublicEndpointCandidates('https://www.npmjs.com/package/lodash/v/4.17.21')[0]?.url, 'https://registry.npmjs.org/lodash/4.17.21');
+    assert.equal(resolvePublicEndpointCandidates('https://www.npmjs.com/package/@npmcli/arborist')[0]?.url, 'https://registry.npmjs.org/%40npmcli%2Farborist/latest');
+    assert.equal(resolvePublicEndpointCandidates('https://www.npmjs.com/package/%40npmcli/arborist')[0]?.url, 'https://registry.npmjs.org/%40npmcli%2Farborist/latest');
+    assert.equal(resolvePublicEndpointCandidates('https://www.npmjs.com/package/%40npmcli%2Farborist')[0]?.url, 'https://registry.npmjs.org/%40npmcli%2Farborist/latest');
     assert.equal(resolvePublicEndpointCandidates('https://pypi.org/project/requests/')[0]?.url, 'https://pypi.org/pypi/requests/json');
     assert.equal(resolvePublicEndpointCandidates('https://pypi.org/project/requests%2Dcache/')[0]?.url, 'https://pypi.org/pypi/requests-cache/json');
     assert.equal(resolvePublicEndpointCandidates('https://arxiv.org/abs/2402.03300')[0]?.url, 'https://export.arxiv.org/api/query?id_list=2402.03300');
