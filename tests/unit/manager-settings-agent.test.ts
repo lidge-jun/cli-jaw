@@ -11,6 +11,7 @@ import {
     type RuntimeEmployeeRecord,
 } from '../../public/manager/src/settings/pages/components/agent/runtime-employees-helpers';
 import {
+    metaFor,
     runtimeEffortFor,
     runtimeModelFor,
 } from '../../public/manager/src/settings/pages/components/agent/agent-meta';
@@ -61,6 +62,10 @@ test('runtime model and effort prefer active overrides over per-cli defaults', (
     const overrides = { codex: { model: 'gpt-5.5', effort: 'high' } };
     assert.equal(runtimeModelFor('codex', perCli, overrides), 'gpt-5.5');
     assert.equal(runtimeEffortFor('codex', perCli, overrides), 'high');
+});
+
+test('claude-i compatibility id is displayed as Claude Exec', () => {
+    assert.equal(metaFor('claude-i').label, 'Claude Exec');
 });
 
 test('runtime employee GET wrapper unwraps { ok, data } responses', () => {

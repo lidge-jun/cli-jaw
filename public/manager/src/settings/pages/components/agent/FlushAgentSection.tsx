@@ -1,5 +1,6 @@
 import { SelectField } from '../../../fields';
 import { SettingsSection } from '../../page-shell';
+import { metaFor } from './agent-meta';
 
 type FlushAgentSectionProps = {
     activeCli: string;
@@ -25,6 +26,7 @@ export function FlushAgentSection({
     onFlushModelChange,
 }: FlushAgentSectionProps) {
     const effectiveCli = flushCli || activeCli;
+    const effectiveCliLabel = effectiveCli ? metaFor(effectiveCli).label || effectiveCli : 'active';
     return (
         <SettingsSection
             title="Flush Agent"
@@ -33,7 +35,7 @@ export function FlushAgentSection({
             <details className="settings-agent-flush">
                 <summary>
                     <span>Flush runtime</span>
-                    <code>{effectiveCli || 'active'}{flushModel && flushModel !== 'default' ? ` / ${flushModel}` : ''}</code>
+                    <code>{effectiveCliLabel}{flushModel && flushModel !== 'default' ? ` / ${flushModel}` : ''}</code>
                 </summary>
                 {loading ? <p className="settings-agent-note">Loading flush settings...</p> : null}
                 {error ? <p className="settings-field-error" role="alert">{error}</p> : null}
@@ -44,7 +46,7 @@ export function FlushAgentSection({
                         value={flushCli}
                         options={[
                             { value: '', label: '(active CLI)' },
-                            ...cliOptions.map((value) => ({ value, label: value })),
+                            ...cliOptions.map((value) => ({ value, label: metaFor(value).label || value })),
                         ]}
                         onChange={onFlushCliChange}
                     />

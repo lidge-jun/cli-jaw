@@ -37,10 +37,13 @@ export function EmployeeRow({
         ...DEFAULT_CLI_OPTIONS,
     ]);
     if (employee.cli) baseSet.add(employee.cli);
-    const opts = Array.from(baseSet).map((value) => ({
-        value,
-        label: cliOptions.includes(value) ? (metaFor(value).label || value) : `${value} (legacy)`,
-    }));
+    const opts = Array.from(baseSet).map((value) => {
+        const label = metaFor(value).label || value;
+        return {
+            value,
+            label: cliOptions.includes(value) ? label : `${label} (legacy)`,
+        };
+    });
 
     const dupeError = duplicateName ? 'Another employee already uses this name' : null;
     const renderedNameError = nameError ?? dupeError;

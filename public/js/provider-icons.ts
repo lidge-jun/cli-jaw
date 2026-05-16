@@ -42,6 +42,12 @@ const PROVIDER_ICONS: Record<ProviderSlug, ProviderIcon> = {
     telegram: { color: telegramSvg, mono: telegramSvg,   label: 'Telegram' },
 };
 
+const PROVIDER_LABEL_ALIASES: Record<string, string> = {
+    'claude-i': 'Claude Exec',
+    'claude-exec': 'Claude Exec',
+    'jaw-claude-i': 'Claude Exec',
+};
+
 function resolveProviderSlug(slug: string): ProviderSlug | null {
     const normalized = slug.toLowerCase().replace(/[-_\s]/g, '');
     if (normalized === 'claude' || normalized.startsWith('claude')) return 'claude';
@@ -84,6 +90,8 @@ export function hydrateProviderIcons(root: Element = document.body): void {
 
 /** Get a provider's display label. */
 export function providerLabel(slug: string): string {
+    const alias = PROVIDER_LABEL_ALIASES[slug.toLowerCase()];
+    if (alias) return alias;
     const key = resolveProviderSlug(slug);
     if (!key) return slug;
     return PROVIDER_ICONS[key].label;

@@ -1,6 +1,8 @@
 // ── Active Channel & Fallback Order ──
 import { apiJson } from '../api.js';
 import { escapeHtml } from '../render.js';
+import { getCliMeta } from '../constants.js';
+import { providerLabel } from '../provider-icons.js';
 import { t } from './i18n.js';
 import type { SettingsData } from './settings-types.js';
 
@@ -31,7 +33,7 @@ export function loadFallbackOrder(s: SettingsData): void {
     for (let i = 0; i < slotCount; i++) {
         const current = active[i] || '';
         const opts = allClis.map(cli =>
-            `<option value="${escapeHtml(cli)}" ${cli === current ? 'selected' : ''}>${escapeHtml(cli)}</option>`
+            `<option value="${escapeHtml(cli)}" ${cli === current ? 'selected' : ''}>${escapeHtml(getCliMeta(cli)?.label || providerLabel(cli))}</option>`
         ).join('');
         html += `
             <div class="settings-row sub-row">

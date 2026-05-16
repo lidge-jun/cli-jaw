@@ -35,6 +35,7 @@ import {
     type MemoryBlock,
     type MemoryEntry,
 } from './components/memory-helpers';
+import { metaFor } from './components/agent/agent-meta';
 
 // Re-export pure helpers for unit tests (Heartbeat pattern).
 export {
@@ -211,10 +212,10 @@ export default function Memory({ port, client, dirty, registerSave }: SettingsPa
     const cliKeys = Object.keys(perCli);
     const cliOptions = [
         { value: '', label: '(profile default)' },
-        ...cliKeys.map((c) => ({ value: c, label: c })),
+        ...cliKeys.map((c) => ({ value: c, label: metaFor(c).label || c })),
     ];
     if (cli && !cliOptions.some((opt) => opt.value === cli)) {
-        cliOptions.push({ value: cli, label: `${cli} (legacy)` });
+        cliOptions.push({ value: cli, label: `${metaFor(cli).label || cli} (legacy)` });
     }
 
     const allRows =

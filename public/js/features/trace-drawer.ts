@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { providerLabel } from '../provider-icons.js';
 import { escapeHtml } from '../render.js';
 
 interface TraceSummary {
@@ -61,7 +62,7 @@ function closeTraceDrawer(): void { document.getElementById('traceDrawerOverlay'
 
 function renderSummary(summary: TraceSummary): void {
     const title = document.getElementById('traceDrawerTitle');
-    if (title) title.textContent = `${summary.cli || 'agent'} trace`;
+    if (title) title.textContent = `${summary.cli ? providerLabel(summary.cli) : 'agent'} trace`;
     const meta = document.getElementById('traceDrawerMeta');
     if (!meta) return;
     meta.innerHTML = [

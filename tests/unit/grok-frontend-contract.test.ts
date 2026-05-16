@@ -29,6 +29,19 @@ test('CODEX-FE-001: provider icons keep codex original and color only codex-app'
     assert.match(icons, /Codex App \(OpenAI\)/);
 });
 
+test('CLAUDE-EXEC-FE-001: frontend presents claude-i as Claude Exec', () => {
+    const meta = src('public/manager/src/settings/pages/components/agent/agent-meta.ts');
+    const constants = src('public/js/constants.ts');
+    const icons = src('public/js/provider-icons.ts');
+    const settingsCore = src('public/js/features/settings-core.ts');
+    const cliStatus = src('public/js/features/settings-cli-status.ts');
+    assert.match(meta, /'claude-i':\s*\{[\s\S]*label:\s*'Claude Exec'/);
+    assert.match(constants, /'claude-i':\s*\{[\s\S]*label:\s*'Claude Exec'/);
+    assert.match(icons, /'claude-i':\s*'Claude Exec'/);
+    assert.match(settingsCore, /cliDisplayLabel\(cli\)/);
+    assert.match(cliStatus, /providerLabel\(name\)/);
+});
+
 test('GROK-FE-002: legacy settings fallback registry exposes grok-build without effort', () => {
     const constants = src('public/js/constants.ts');
     assert.match(constants, /grok:\s*\{/);

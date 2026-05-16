@@ -35,6 +35,7 @@ import {
     validateHHMM,
     validateInterval,
 } from './components/heartbeat-helpers';
+import { metaFor } from './components/agent/agent-meta';
 
 // Re-export helpers (and types) that tests import from this module.
 export {
@@ -159,10 +160,10 @@ export default function Heartbeat({ port, client, dirty, registerSave }: Setting
     const targetSource = cliKeys.length > 0 ? cliKeys : [...TARGET_FALLBACK];
     const targetOptions = [
         { value: 'all', label: 'all (broadcast)' },
-        ...targetSource.map((cli) => ({ value: cli, label: cli })),
+        ...targetSource.map((cli) => ({ value: cli, label: metaFor(cli).label || cli })),
     ];
     if (!targetOptions.some((opt) => opt.value === hbTarget)) {
-        targetOptions.push({ value: hbTarget, label: `${hbTarget} (legacy)` });
+        targetOptions.push({ value: hbTarget, label: `${metaFor(hbTarget).label || hbTarget} (legacy)` });
     }
 
     return (

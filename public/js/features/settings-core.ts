@@ -10,7 +10,7 @@ import { loadTelegramSettings } from './settings-telegram.js';
 import { loadDiscordSettings } from './settings-discord.js';
 import { loadActiveChannel, loadFallbackOrder } from './settings-channel.js';
 import { loadMcpServers } from './settings-mcp.js';
-import { providerIcon } from '../provider-icons.js';
+import { providerIcon, providerLabel } from '../provider-icons.js';
 
 let activeSettingsSave: Promise<void> | null = null;
 
@@ -18,7 +18,12 @@ function setHeaderCli(cli: string): void {
     const hdr = document.getElementById('headerCli');
     if (!hdr) return;
     const ico = providerIcon(cli);
-    hdr.innerHTML = ico ? `${ico} ${escapeHtml(cli)}` : escapeHtml(cli);
+    const label = cliDisplayLabel(cli);
+    hdr.innerHTML = ico ? `${ico} ${escapeHtml(label)}` : escapeHtml(label);
+}
+
+function cliDisplayLabel(cli: string): string {
+    return getCliMeta(cli)?.label || providerLabel(cli) || cli;
 }
 
 function trackSettingsSave(promise: Promise<void>): Promise<void> {
@@ -90,7 +95,7 @@ function syncCliOptionSelects(settings: SettingsData | null = null): void {
     if (flushCli) {
         const current = settings?.memory?.cli || flushCli.value || '';
         flushCli.innerHTML = '<option value="">(active CLI)</option>' +
-            cliKeys.map(cli => `<option value="${escapeHtml(cli)}">${escapeHtml(cli)}</option>`).join('');
+            cliKeys.map(cli => `<option value="${escapeHtml(cli)}">${escapeHtml(cliDisplayLabel(cli))}</option>`).join('');
         if (Array.from(flushCli.options).some(o => o.value === current)) flushCli.value = current;
     }
 }
@@ -171,7 +176,8 @@ export async function loadSettings(): Promise<void> {
     const headerEl = document.getElementById('headerCli');
     if (headerEl) {
         const icon = providerIcon(s.cli);
-        headerEl.innerHTML = icon ? `${icon} ${escapeHtml(s.cli)}` : escapeHtml(s.cli);
+        const label = cliDisplayLabel(s.cli);
+        headerEl.innerHTML = icon ? `${icon} ${escapeHtml(label)}` : escapeHtml(label);
     }
     setPerm(s.permissions, false);
 
@@ -429,7 +435,7 @@ function updateFlushBadge(): void {
     const model = (document.getElementById('flushModel') as HTMLSelectElement)?.value || '';
     const effectiveCli = cli || (document.getElementById('selCli') as HTMLSelectElement)?.value || '';
     const parts: string[] = [];
-    if (effectiveCli) parts.push(cli ? effectiveCli : `${effectiveCli}*`);
+    if (effectiveCli) parts.push(cli ? cliDisplayLabel(effectiveCli) : `${cliDisplayLabel(effectiveCli)}*`);
     if (model && model !== 'default') parts.push(model);
     badge.textContent = parts.length ? `(${parts.join(' / ')})` : '';
 }

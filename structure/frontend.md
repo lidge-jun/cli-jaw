@@ -10,7 +10,7 @@ aliases: [CLI-JAW Frontend, public architecture, frontend.md]
 
 > Web UI 본체는 Vanilla HTML + CSS + TypeScript ES Modules로 구성된다. Manager 대시보드는 `public/manager/`의 React 19 + TSX 앱이다.
 > 빌드는 Vite 8 기준이며, `vite.config.ts`는 `public/index.html`과 `public/manager/index.html`을 multi-entry로 빌드한다.
-> 현재 `public/`에서 `public/dist/*`를 제외한 소스/자산/legacy duplicate는 491개다. `public/public/dist/*`까지 generated로 보면 실제 편집 대상 소스/자산은 364개다. 생성 산출물은 `public/dist/` 459개와 별도 중복 트리 `public/public/dist/` 127개가 남아 있고, `public/dist/dist/`는 전자에 재귀 포함된 nested 복제본이다.
+> 현재 `public/`에서 `public/dist/*`를 제외한 소스/자산/legacy duplicate는 491개다. `public/public/dist/*`까지 generated로 보면 실제 편집 대상 소스/자산은 364개다. 생성 산출물은 `public/dist/` 460개와 별도 중복 트리 `public/public/dist/` 127개가 남아 있고, `public/dist/dist/`는 전자에 재귀 포함된 nested 복제본이다.
 > 메인 UI는 `index.html`에서 Google Fonts `Chakra Petch` + `Outfit`을 불러오고, 로컬 `public/assets/fonts/GeistVF.woff2`와 `JetBrainsMono-Variable.woff2`는 자산으로 보관 중이다.
 > PWA는 `manifest.json` + `sw.js` + `icons/`로 구성된다. 오프라인 메시지 캐시, virtual scroll, markdown/KaTeX/Mermaid 렌더링, sandboxed diagram widget, avatar emoji/image 커스터마이즈, voice recording, PABCD roadmap, subagent-aware ProcessBlock 렌더링, 반응형 사이드바, theme toggle이 현재 런타임의 핵심이다.
 
@@ -58,7 +58,7 @@ public/
 | `public/assets/providers/` | 12 | provider SVG 세트. `codex`는 원본 `openai.svg` 색을 유지하고 `codex-app` color variant만 ChatGPT/OpenAI green(`#10A37F`)으로 렌더 |
 | `public/assets/fonts/` | 2 | 로컬 폰트 자산 |
 | `public/icons/` | 3 | PWA icons |
-| `public/dist/` | 459 | generated build output, nested `dist/dist` 포함 |
+| `public/dist/` | 460 | generated build output, nested `dist/dist` 포함 |
 | `public/public/dist/` | 127 | old build duplicate |
 | `public/dist/dist/` | 127 | old build duplicate |
 
