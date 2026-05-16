@@ -1,8 +1,8 @@
 use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::normalize;
 
@@ -35,7 +35,10 @@ pub fn tail_transcript(
 
                     // Only advance offset if JSON parses — partial writes retry next poll
                     if serde_json::from_str::<serde_json::Value>(&line).is_err() {
-                        log::debug!("transcript: incomplete JSON, will retry: {}...", &line[..line.len().min(80)]);
+                        log::debug!(
+                            "transcript: incomplete JSON, will retry: {}...",
+                            &line[..line.len().min(80)]
+                        );
                         break;
                     }
 
@@ -69,10 +72,10 @@ pub fn tail_transcript(
                     for line in r.lines().flatten() {
                         if let Some(normalized) = normalize::normalize_transcript_line(&line) {
                             emit_line(&normalized, output_format);
-                        }
-                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) {
-                            if v.get("type").and_then(|t| t.as_str()) == Some("assistant") {
-                                last_assistant = Some(v);
+                            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&line) {
+                                if v.get("type").and_then(|t| t.as_str()) == Some("assistant") {
+                                    last_assistant = Some(v);
+                                }
                             }
                         }
                     }
@@ -91,6 +94,61 @@ pub fn tail_transcript(
 
 pub fn current_file_len(path: &Path) -> Option<u64> {
     std::fs::metadata(path).ok().map(|metadata| metadata.len())
+}
+
+pub fn wait_for_user_after_offset(
+    transcript_path: &Path,
+    initial_offset: u64,
+    timeout_ms: u64,
+    stop: &AtomicBool,
+) -> Result<bool, String> {
+    let mut file = wait_for_file(transcript_path, stop, timeout_ms)?;
+    let mut offset = clamped_initial_offset(&file, initial_offset);
+    file.seek(SeekFrom::Start(offset))
+        .map_err(|e| format!("failed to seek transcript to {offset}: {e}"))?;
+
+    let start = std::time::Instant::now();
+    let timeout = std::time::Duration::from_millis(timeout_ms);
+
+    loop {
+        let reader = BufReader::new(&file);
+
+        for line in reader.lines() {
+            match line {
+                Ok(line) => {
+                    let line_bytes = line.len() as u64 + 1;
+                    if line.trim().is_empty() {
+                        offset += line_bytes;
+                        continue;
+                    }
+
+                    let value = match serde_json::from_str::<serde_json::Value>(&line) {
+                        Ok(value) => value,
+                        Err(_) => break,
+                    };
+
+                    offset += line_bytes;
+                    if value.get("type").and_then(|t| t.as_str()) == Some("user") {
+                        return Ok(true);
+                    }
+                }
+                Err(e) => {
+                    log::debug!("transcript verification read error: {e}");
+                    break;
+                }
+            }
+        }
+
+        if stop.load(Ordering::Relaxed) {
+            return Ok(false);
+        }
+        if start.elapsed() > timeout {
+            return Ok(false);
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        let _ = file.seek(SeekFrom::Start(offset));
+    }
 }
 
 fn clamped_initial_offset(file: &File, requested_offset: u64) -> u64 {
@@ -125,8 +183,8 @@ fn emit_line(normalized: &str, output_format: &str) {
 mod tests {
     use super::*;
     use std::io::Write as _;
-    use std::sync::atomic::AtomicBool;
     use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
 
     #[test]
     fn current_file_len_reports_existing_file_size() {
@@ -143,6 +201,53 @@ mod tests {
 
         assert_eq!(clamped_initial_offset(file.as_file(), 2), 2);
         assert_eq!(clamped_initial_offset(file.as_file(), 999), 5);
+    }
+
+    #[test]
+    fn wait_for_user_after_offset_detects_user_after_offset() {
+        let mut file = tempfile::NamedTempFile::new().expect("temp file");
+        writeln!(
+            file,
+            r#"{{"type":"assistant","message":{{"role":"assistant","content":[{{"type":"text","text":"OLD_RESPONSE"}}]}}}}"#
+        )
+        .expect("write old assistant");
+        let initial_offset = current_file_len(file.path()).expect("old offset");
+        writeln!(
+            file,
+            r#"{{"type":"user","message":{{"role":"user","content":"NEW_PROMPT"}}}}"#
+        )
+        .expect("write new user");
+
+        assert!(
+            wait_for_user_after_offset(
+                file.path(),
+                initial_offset,
+                500,
+                &AtomicBool::new(false),
+            )
+            .expect("wait for user")
+        );
+    }
+
+    #[test]
+    fn wait_for_user_after_offset_ignores_user_before_offset() {
+        let mut file = tempfile::NamedTempFile::new().expect("temp file");
+        writeln!(
+            file,
+            r#"{{"type":"user","message":{{"role":"user","content":"OLD_PROMPT"}}}}"#
+        )
+        .expect("write old user");
+        let initial_offset = current_file_len(file.path()).expect("old offset");
+
+        assert!(
+            !wait_for_user_after_offset(
+                file.path(),
+                initial_offset,
+                150,
+                &AtomicBool::new(false),
+            )
+            .expect("wait for user")
+        );
     }
 
     #[test]
@@ -180,6 +285,31 @@ mod tests {
         );
         assert_eq!(last_assistant["sessionId"], "sid-new");
     }
+
+    #[test]
+    fn tail_transcript_skips_synthetic_no_response_placeholder() {
+        let mut file = tempfile::NamedTempFile::new().expect("temp file");
+        writeln!(
+            file,
+            r#"{{"type":"assistant","message":{{"role":"assistant","content":[{{"type":"text","text":"No response requested."}}],"model":"<synthetic>"}},"sessionId":"sid-new"}}"#
+        )
+        .expect("write placeholder assistant");
+        writeln!(
+            file,
+            r#"{{"type":"assistant","message":{{"role":"assistant","content":[{{"type":"text","text":"REAL_RESPONSE"}}],"model":"claude-opus-4-7"}},"sessionId":"sid-new"}}"#
+        )
+        .expect("write real assistant");
+
+        let last_assistant =
+            tail_transcript(file.path(), Arc::new(AtomicBool::new(true)), "json", 0)
+                .expect("tail transcript")
+                .expect("real assistant");
+
+        assert_eq!(
+            last_assistant["message"]["content"][0]["text"],
+            "REAL_RESPONSE"
+        );
+    }
 }
 
 fn wait_for_file(path: &Path, stop: &AtomicBool, timeout_ms: u64) -> Result<File, String> {
@@ -191,7 +321,10 @@ fn wait_for_file(path: &Path, stop: &AtomicBool, timeout_ms: u64) -> Result<File
             return Ok(f);
         }
         if start.elapsed() > timeout {
-            return Err(format!("transcript not found after {timeout_ms}ms: {}", path.display()));
+            return Err(format!(
+                "transcript not found after {timeout_ms}ms: {}",
+                path.display()
+            ));
         }
         if stop.load(Ordering::Relaxed) {
             return Err("stopped before transcript appeared".to_string());

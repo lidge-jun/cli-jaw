@@ -19,7 +19,7 @@ import discordSvg from '../assets/providers/discord.svg?raw';
 import telegramSvg from '../assets/providers/telegram.svg?raw';
 import opencodeSvg from '../assets/providers/opencode.svg?raw';
 
-export type ProviderSlug = 'claude' | 'openai' | 'gemini' | 'grok' | 'copilot' | 'codex' | 'opencode' | 'discord' | 'telegram';
+export type ProviderSlug = 'claude' | 'openai' | 'gemini' | 'grok' | 'copilot' | 'codex' | 'codex-app' | 'opencode' | 'discord' | 'telegram';
 
 interface ProviderIcon {
     color: string;
@@ -27,33 +27,40 @@ interface ProviderIcon {
     label: string;
 }
 
+const openaiColorSvg = openaiSvg.replace('fill="currentColor"', 'fill="#10A37F"');
+
 const PROVIDER_ICONS: Record<ProviderSlug, ProviderIcon> = {
     claude:   { color: claudeSvg,  mono: claudeMonoSvg,  label: 'Claude' },
-    openai:   { color: openaiSvg,  mono: openaiSvg,      label: 'OpenAI' },
+    openai:   { color: openaiColorSvg, mono: openaiSvg,  label: 'OpenAI' },
     gemini:   { color: geminiSvg,  mono: geminiMonoSvg,   label: 'Gemini' },
     grok:     { color: grokSvg,    mono: grokMonoSvg,     label: 'Grok' },
     copilot:  { color: copilotSvg, mono: copilotMonoSvg,  label: 'GitHub Copilot' },
-    codex:    { color: openaiSvg,  mono: openaiSvg,      label: 'Codex (OpenAI)' },
+    codex:    { color: openaiSvg, mono: openaiSvg,  label: 'Codex (OpenAI)' },
+    'codex-app': { color: openaiColorSvg, mono: openaiSvg, label: 'Codex App (OpenAI)' },
     opencode: { color: opencodeSvg, mono: opencodeSvg,   label: 'OpenCode' },
     discord:  { color: discordSvg,  mono: discordSvg,    label: 'Discord' },
     telegram: { color: telegramSvg, mono: telegramSvg,   label: 'Telegram' },
 };
 
+function resolveProviderSlug(slug: string): ProviderSlug | null {
+    const normalized = slug.toLowerCase().replace(/[-_\s]/g, '');
+    if (normalized === 'claude' || normalized.startsWith('claude')) return 'claude';
+    if (normalized === 'gemini' || normalized.startsWith('gemini')) return 'gemini';
+    if (normalized === 'grok' || normalized.startsWith('grok')) return 'grok';
+    if (normalized.startsWith('copilot') || normalized === 'githubcopilot') return 'copilot';
+    if (normalized === 'codexapp' || normalized === 'codexappserver') return 'codex-app';
+    if (normalized === 'codex') return 'codex';
+    if (normalized === 'opencode') return 'opencode';
+    if (normalized === 'openai' || normalized.startsWith('gpt') || normalized.startsWith('o1') || normalized.startsWith('o3') || normalized.startsWith('o4')) return 'openai';
+    if (normalized === 'discord') return 'discord';
+    if (normalized === 'telegram') return 'telegram';
+    return null;
+}
+
 /** Get a provider icon SVG string. Returns color variant by default. */
 export function providerIcon(slug: string, variant: 'color' | 'mono' = 'color'): string {
-    const normalized = slug.toLowerCase().replace(/[-_\s]/g, '');
-    // Handle aliases
-    let key: ProviderSlug;
-    if (normalized === 'claude' || normalized.startsWith('claude')) key = 'claude';
-    else if (normalized === 'gemini' || normalized.startsWith('gemini')) key = 'gemini';
-    else if (normalized === 'grok' || normalized.startsWith('grok')) key = 'grok';
-    else if (normalized.startsWith('copilot') || normalized === 'githubcopilot') key = 'copilot';
-    else if (normalized === 'codex') key = 'codex';
-    else if (normalized === 'opencode') key = 'opencode';
-    else if (normalized === 'openai' || normalized.startsWith('gpt') || normalized.startsWith('o1') || normalized.startsWith('o3') || normalized.startsWith('o4')) key = 'openai';
-    else if (normalized === 'discord') key = 'discord';
-    else if (normalized === 'telegram') key = 'telegram';
-    else return '';
+    const key = resolveProviderSlug(slug);
+    if (!key) return '';
 
     const entry = PROVIDER_ICONS[key];
     return variant === 'mono' ? entry.mono : entry.color;
@@ -77,17 +84,7 @@ export function hydrateProviderIcons(root: Element = document.body): void {
 
 /** Get a provider's display label. */
 export function providerLabel(slug: string): string {
-    const normalized = slug.toLowerCase().replace(/[-_\s]/g, '');
-    let key: ProviderSlug;
-    if (normalized === 'claude' || normalized.startsWith('claude')) key = 'claude';
-    else if (normalized === 'gemini' || normalized.startsWith('gemini')) key = 'gemini';
-    else if (normalized === 'grok' || normalized.startsWith('grok')) key = 'grok';
-    else if (normalized.startsWith('copilot') || normalized === 'githubcopilot') key = 'copilot';
-    else if (normalized === 'codex') key = 'codex';
-    else if (normalized === 'opencode') key = 'opencode';
-    else if (normalized === 'openai' || normalized.startsWith('gpt') || normalized.startsWith('o1') || normalized.startsWith('o3') || normalized.startsWith('o4')) key = 'openai';
-    else if (normalized === 'discord') key = 'discord';
-    else if (normalized === 'telegram') key = 'telegram';
-    else return slug;
+    const key = resolveProviderSlug(slug);
+    if (!key) return slug;
     return PROVIDER_ICONS[key].label;
 }

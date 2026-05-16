@@ -1828,6 +1828,11 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             if ((evtName === 'session_started' || evtName === 'interrupted') && typeof rtEvt['sessionId'] === 'string') {
                 ctx.sessionId = rtEvt['sessionId'] as string;
             }
+            if (evtName === 'error' && typeof rtEvt['message'] === 'string') {
+                const message = `[jaw:claude-i:error] ${rtEvt['message']}`;
+                ctx.stderrBuf = ctx.stderrBuf ? `${ctx.stderrBuf}\n${message}` : message;
+                ctx.traceLog.push(message);
+            }
             return;
         }
         const event = discriminate(cli, raw);

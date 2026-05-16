@@ -104,6 +104,7 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
             const claudeExtraArgs: string[] = [];
             if (model && model !== 'default') claudeExtraArgs.push('--model', model);
             if (effort && effort !== 'medium') claudeExtraArgs.push('--effort', effort);
+            if (sysPrompt) claudeExtraArgs.push('--append-system-prompt', sysPrompt);
             // claude-i can't interact with permission dialogs — always bypass
             if (autoPerm) claudeExtraArgs.push('--dangerously-skip-permissions');
             else claudeExtraArgs.push('--permission-mode', 'auto');
@@ -118,6 +119,7 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
                 ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []),
                 '-c', 'model_reasoning_summary="detailed"',
                 '-c', 'hide_agent_reasoning=false',
+                '-c', 'show_raw_agent_reasoning=true',
             ];
             // Spark is text-only at 128k context (per OpenAI launch post).
             // Pin 128k max + 110k auto-compact threshold so long turns auto-compact before overflow.
@@ -176,6 +178,7 @@ export function buildResumeArgs(cli: string, model: string, effort: string, sess
             const claudeExtraArgs: string[] = [];
             if (model && model !== 'default') claudeExtraArgs.push('--model', model);
             if (effort && effort !== 'medium') claudeExtraArgs.push('--effort', effort);
+            if (options.sysPrompt) claudeExtraArgs.push('--append-system-prompt', options.sysPrompt);
             if (autoPerm) claudeExtraArgs.push('--dangerously-skip-permissions');
             else claudeExtraArgs.push('--permission-mode', 'auto');
             return ['run', '--jsonl',
@@ -190,6 +193,7 @@ export function buildResumeArgs(cli: string, model: string, effort: string, sess
                 ...(model && model !== 'default' ? ['--model', model] : []),
                 ...(spark ? [] : ['-c', 'model_reasoning_summary="detailed"']),
                 ...(spark ? [] : ['-c', 'hide_agent_reasoning=false']),
+                ...(spark ? [] : ['-c', 'show_raw_agent_reasoning=true']),
                 ...(spark ? ['-c', 'model_context_window=128000'] : []),
                 ...(spark ? ['-c', 'model_auto_compact_token_limit=110000'] : []),
                 ...(options.fastMode ? ['-c', 'service_tier="fast"'] : []),

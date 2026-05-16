@@ -20,6 +20,7 @@ use args::{Cli, Command};
 use config::RunConfig;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+const PROMPT_ACCEPTANCE_TIMEOUT_MS: u64 = 8_000;
 
 fn main() {
     env_logger::init();
@@ -188,6 +189,48 @@ fn run(config: &RunConfig) -> i32 {
         let _ = w.flush();
     }
     protocol::emit_prompt_injected(&config.run_id);
+
+    if transcript_path.is_empty() {
+        protocol::emit_error(
+            &config.run_id,
+            "prompt injection cannot be verified: SessionStart did not provide a transcript path",
+            7,
+        );
+        cleanup::kill_process_group(child_pid, &config.run_id);
+        pty_child.join_drain();
+        return 7;
+    }
+
+    match transcript::wait_for_user_after_offset(
+        &transcript_path_buf,
+        transcript_start_offset,
+        PROMPT_ACCEPTANCE_TIMEOUT_MS,
+        stop.as_ref(),
+    ) {
+        Ok(true) => {}
+        Ok(false) => {
+            protocol::emit_error(
+                &config.run_id,
+                &format!(
+                    "prompt injection did not reach Claude transcript after {PROMPT_ACCEPTANCE_TIMEOUT_MS}ms"
+                ),
+                7,
+            );
+            cleanup::kill_process_group(child_pid, &config.run_id);
+            pty_child.join_drain();
+            return 7;
+        }
+        Err(e) => {
+            protocol::emit_error(
+                &config.run_id,
+                &format!("prompt injection transcript verification failed: {e}"),
+                7,
+            );
+            cleanup::kill_process_group(child_pid, &config.run_id);
+            pty_child.join_drain();
+            return 7;
+        }
+    }
 
     // Start transcript tailing in a thread
     let transcript_stop = Arc::clone(&stop);

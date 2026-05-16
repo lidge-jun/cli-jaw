@@ -90,6 +90,7 @@ export class CodexAppClient extends EventEmitter {
             approvalPolicy: 'never',
             sandbox: 'danger-full-access',
             cwd: options.cwd || this.workDir,
+            config: this.reasoningConfig(),
             ...(options.instructions ? { baseInstructions: options.instructions } : {}),
         }) as { thread: { id: string } };
         this.threadId = result.thread.id;
@@ -103,6 +104,7 @@ export class CodexAppClient extends EventEmitter {
             approvalPolicy: 'never',
             sandbox: 'danger-full-access',
             cwd: this.workDir,
+            config: this.reasoningConfig(),
             excludeTurns: true,
         }) as { thread: { id: string } };
         this.threadId = result.thread.id;
@@ -119,6 +121,7 @@ export class CodexAppClient extends EventEmitter {
                 text_elements: [],
             }],
             effort: this.effort || undefined,
+            summary: 'detailed',
         });
     }
 
@@ -200,6 +203,15 @@ export class CodexAppClient extends EventEmitter {
         } catch {
             return false;
         }
+    }
+
+    private reasoningConfig(): Record<string, unknown> {
+        return {
+            ...(this.effort ? { model_reasoning_effort: this.effort } : {}),
+            model_reasoning_summary: 'detailed',
+            hide_agent_reasoning: false,
+            show_raw_agent_reasoning: true,
+        };
     }
 
     private handleLine(line: string): void {

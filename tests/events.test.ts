@@ -46,6 +46,25 @@ test('claude assistant fallback works when stream was not seen', () => {
     assert.deepEqual(labels, [{ icon: '🔧', label: 'Read', toolType: 'tool' }]);
 });
 
+test('claude assistant signature-only thinking is surfaced as encrypted thinking', () => {
+    const ctx = createClaudeCtx();
+    const labels = extractToolLabelsForTest('claude-i', {
+        type: 'assistant',
+        message: {
+            content: [
+                { type: 'thinking', thinking: '', signature: 'abc123' },
+            ],
+        },
+    }, ctx);
+
+    assert.deepEqual(labels, [{
+        icon: '🔒',
+        label: 'encrypted thinking',
+        toolType: 'thinking',
+        detail: 'server-side reasoning, plaintext withheld - signature 6B',
+    }]);
+});
+
 test('claude assistant blocks are ignored after stream event', () => {
     const ctx = createClaudeCtx();
     ctx.hasClaudeStreamEvents = true;

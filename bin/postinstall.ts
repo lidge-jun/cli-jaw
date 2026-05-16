@@ -63,6 +63,13 @@ const OFFICECLI_REQUIRE = shouldRequireOfficeCliDuringPostinstall();
 const CLAUDE_NATIVE_INSTALL_URL = 'https://claude.ai/install.sh';
 const CLAUDE_NATIVE_INSTALL_PS_URL = 'https://claude.ai/install.ps1';
 
+export type ClaudeInstructionCleanupResult =
+    | 'missing'
+    | 'removed-symlink'
+    | 'removed-mirror'
+    | 'kept-custom'
+    | 'error';
+
 // ─── Legacy migration ───
 // Moved into runPostinstall() to prevent side effects on dynamic import.
 // (init.ts imports this module for installCliTools/etc — must not trigger fs.renameSync)
@@ -111,6 +118,44 @@ function ensureSymlink(target: string, linkPath: string) {
         }
         console.error(`[jaw:init] ⚠️ symlink failed: ${linkPath} (${errString(e) || 'unknown'})`);
         return false;
+    }
+}
+
+export function removeJawHomeClaudeInstructionFile(baseDir = jawHome): ClaudeInstructionCleanupResult {
+    const agentsMd = path.join(baseDir, 'AGENTS.md');
+    const claudeMd = path.join(baseDir, 'CLAUDE.md');
+    try {
+        if (!fs.existsSync(claudeMd)) return 'missing';
+
+        const stat = fs.lstatSync(claudeMd);
+        if (stat.isSymbolicLink()) {
+            const linkTarget = fs.readlinkSync(claudeMd);
+            const resolvedTarget = path.resolve(path.dirname(claudeMd), linkTarget);
+            const resolvedAgents = path.resolve(agentsMd);
+            if (resolvedTarget === resolvedAgents || path.basename(linkTarget) === 'AGENTS.md') {
+                fs.unlinkSync(claudeMd);
+                console.log(`[jaw:init] removed deprecated CLAUDE.md symlink: ${claudeMd}`);
+                return 'removed-symlink';
+            }
+            console.warn(`[jaw:init] keeping custom CLAUDE.md symlink: ${claudeMd} -> ${linkTarget}`);
+            return 'kept-custom';
+        }
+
+        if (stat.isFile() && fs.existsSync(agentsMd)) {
+            const claudeText = fs.readFileSync(claudeMd, 'utf8');
+            const agentsText = fs.readFileSync(agentsMd, 'utf8');
+            if (claudeText === agentsText) {
+                fs.unlinkSync(claudeMd);
+                console.log(`[jaw:init] removed deprecated CLAUDE.md mirror: ${claudeMd}`);
+                return 'removed-mirror';
+            }
+        }
+
+        console.warn(`[jaw:init] keeping custom CLAUDE.md: ${claudeMd}`);
+        return 'kept-custom';
+    } catch (e: unknown) {
+        console.warn(`[jaw:init] CLAUDE.md cleanup failed: ${claudeMd} (${errString(e) || 'unknown'})`);
+        return 'error';
     }
 }
 
@@ -918,12 +963,9 @@ export async function runPostinstall() {
         console.log('[jaw:init] to opt in: CLI_JAW_MIGRATE_SHARED_PATHS=1 npm install -g cli-jaw');
     }
 
-    // 3. CLAUDE.md → AGENTS.md symlink
-    const agentsMd = path.join(jawHome, 'AGENTS.md');
-    const claudeMd = path.join(jawHome, 'CLAUDE.md');
-    if (fs.existsSync(agentsMd) && !fs.existsSync(claudeMd)) {
-        ensureSymlink(agentsMd, claudeMd);
-    }
+    // 3. Remove deprecated Jaw-home CLAUDE.md mirrors.
+    // Boss prompts are already passed through append/system-prompt paths.
+    removeJawHomeClaudeInstructionFile(jawHome);
 
     // 4. Default heartbeat.json
     const heartbeatPath = path.join(jawHome, 'heartbeat.json');

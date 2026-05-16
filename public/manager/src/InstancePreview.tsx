@@ -39,6 +39,35 @@ function postPreviewTheme(frame: HTMLIFrameElement | null, src: string, theme: P
     }
 }
 
+function postPreviewSttToggle(frame: HTMLIFrameElement | null, src: string): void {
+    const targetWindow = frame?.contentWindow;
+    if (!targetWindow) return;
+    const targetOrigin = previewTargetOrigin(src, frame);
+    if (!targetOrigin || targetOrigin === 'null') return;
+    try {
+        targetWindow.postMessage(
+            { type: 'jaw-preview-stt-toggle' },
+            targetOrigin,
+        );
+    } catch (error) {
+        console.warn('[manager-preview] STT shortcut sync skipped', error);
+    }
+}
+
+function isEditableShortcutTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.isContentEditable) return true;
+    const tag = target.tagName.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+    return Boolean(target.closest('[contenteditable="true"], .cm-editor, .ProseMirror, [data-milkdown-root]'));
+}
+
+function isPreviewSttShortcut(event: KeyboardEvent): boolean {
+    const primarySpace = (event.ctrlKey || event.metaKey) && event.shiftKey && event.code === 'Space';
+    const fallbackMic = event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.code === 'KeyM';
+    return primarySpace || fallbackMic;
+}
+
 export function InstancePreview(props: InstancePreviewProps) {
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
     const loadedSrcRef = useRef<string | null>(null);
@@ -59,6 +88,19 @@ export function InstancePreview(props: InstancePreviewProps) {
     useEffect(() => {
         syncTheme();
     }, [syncTheme]);
+
+    useEffect(() => {
+        if (!props.active || !props.enabled || !state.canPreview || !state.src) return undefined;
+        function onKeyDown(event: KeyboardEvent): void {
+            if (event.defaultPrevented) return;
+            if (isEditableShortcutTarget(event.target)) return;
+            if (!isPreviewSttShortcut(event)) return;
+            event.preventDefault();
+            postPreviewSttToggle(iframeRef.current, state.src || '');
+        }
+        document.addEventListener('keydown', onKeyDown, true);
+        return () => document.removeEventListener('keydown', onKeyDown, true);
+    }, [props.active, props.enabled, state.canPreview, state.src]);
 
     const prevActiveRef = useRef(false);
     useEffect(() => {

@@ -31,11 +31,15 @@ export function extractFromCodexAppEvent(
         case 'item/agentMessage/delta':
             return handleAgentMessageDelta(params);
         case 'item/completed':
-            return handleItemCompleted(params);
+            return handleItemCompleted(params, ctx);
         case 'thread/tokenUsage/updated':
             return handleTokenUsageUpdated(params, ctx);
         case 'item/reasoning/summaryTextDelta':
-            return handleReasoningSummaryDelta(params);
+            return handleReasoningDelta(params);
+        case 'item/reasoning/textDelta':
+            return handleReasoningDelta(params);
+        case 'item/reasoning/summaryPartAdded':
+            return handleReasoningSummaryPartAdded(params);
         case 'turn/completed': {
             const turn = f(params, 'turn') as EvRec | undefined;
             const status = turn ? fs(turn, 'status') : 'completed';
@@ -132,14 +136,14 @@ function handleItemStarted(params: EvRec): CodexAppEventResult | null {
             };
         }
         case 'reasoning': {
-            const summaryArr = f(item, 'summary') as string[] | undefined;
-            const label = (summaryArr && summaryArr.length > 0) ? summaryArr[0]!.slice(0, 80) : 'thinking...';
+            const initialReasoning = extractReasoningText(item);
+            if (!initialReasoning) return null;
             return {
                 tool: {
                     icon: '💭',
-                    label,
+                    label: initialReasoning.length > 80 ? initialReasoning.slice(0, 79) + '…' : initialReasoning,
                     toolType: 'thinking' as const,
-                    detail: summaryArr?.join('\n') || '',
+                    detail: initialReasoning,
                     stepRef: `codex-app:item:${id}`,
                 },
             };
@@ -159,7 +163,7 @@ function handleAgentMessageDelta(params: EvRec): CodexAppEventResult | null {
     return null;
 }
 
-function handleReasoningSummaryDelta(params: EvRec): CodexAppEventResult | null {
+function handleReasoningDelta(params: EvRec): CodexAppEventResult | null {
     const delta = f(params, 'delta');
     if (typeof delta !== 'string') return null;
     return {
@@ -172,7 +176,20 @@ function handleReasoningSummaryDelta(params: EvRec): CodexAppEventResult | null 
     };
 }
 
-function handleItemCompleted(params: EvRec): CodexAppEventResult | null {
+function handleReasoningSummaryPartAdded(params: EvRec): CodexAppEventResult | null {
+    const summaryIndex = f(params, 'summaryIndex');
+    if (typeof summaryIndex !== 'number' || summaryIndex <= 0) return null;
+    return {
+        tool: {
+            icon: '💭',
+            label: '\n',
+            toolType: 'thinking' as const,
+            detail: '\n',
+        },
+    };
+}
+
+function handleItemCompleted(params: EvRec, ctx: SpawnContext): CodexAppEventResult | null {
     const item = f(params, 'item') as EvRec | undefined;
     if (!item) return null;
 
@@ -187,6 +204,20 @@ function handleItemCompleted(params: EvRec): CodexAppEventResult | null {
         return null;
     }
     if (type === 'reasoning') {
+        const completedReasoning = extractReasoningText(item);
+        if (!ctx.thinkingBuf && completedReasoning) {
+            return {
+                tool: {
+                    icon: '💭',
+                    label: completedReasoning.length > 80 ? completedReasoning.slice(0, 79) + '…' : completedReasoning,
+                    toolType: 'thinking' as const,
+                    detail: completedReasoning,
+                    stepRef: `codex-app:item:${id}`,
+                    status: 'done',
+                },
+                flushThinking: true,
+            };
+        }
         return { flushThinking: true };
     }
 
@@ -203,6 +234,30 @@ function handleItemCompleted(params: EvRec): CodexAppEventResult | null {
             status: failed ? 'failed' : 'completed',
         },
     };
+}
+
+function extractReasoningText(item: EvRec): string {
+    const content = f(item, 'content');
+    const summary = f(item, 'summary');
+    const contentText = textParts(content);
+    if (contentText) return contentText;
+    return textParts(summary);
+}
+
+function textParts(value: unknown): string {
+    if (typeof value === 'string') return value.trim();
+    if (!Array.isArray(value)) return '';
+    return value
+        .map((entry) => {
+            if (typeof entry === 'string') return entry;
+            if (entry && typeof entry === 'object' && typeof (entry as EvRec)['text'] === 'string') {
+                return String((entry as EvRec)['text']);
+            }
+            return '';
+        })
+        .filter(Boolean)
+        .join('\n')
+        .trim();
 }
 
 function handleTokenUsageUpdated(params: EvRec, ctx: SpawnContext): CodexAppEventResult {

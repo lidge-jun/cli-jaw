@@ -334,7 +334,9 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         );
         recordError(cli, isStall ? 'stall' : isModelCapacity ? 'model_capacity' : is429 ? '429' : 'error');
 
-        if (isResume && shouldInvalidateResumeSession(cli, code, ctx.stderrBuf, ctx.fullText)) {
+        const invalidatedResume = isResume
+            && shouldInvalidateResumeSession(cli, code, ctx.stderrBuf, diagnosticText);
+        if (invalidatedResume) {
             if (empSid && opts.agentId) {
                 clearEmployeeSession.run(opts.agentId);
                 console.log(`[jaw:session] invalidated stale employee resume — ${cli} agent=${opts.agentId}`);
@@ -344,6 +346,34 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                 if (bucket) clearSessionBucket.run(bucket);
                 console.log(`[jaw:session] invalidated stale resume — ${cli}/${bucket} session cleared`);
             }
+        }
+
+        if (
+            invalidatedResume
+            && mainManaged
+            && !opts.internal
+            && !opts._isFallback
+            && !opts._skipResume
+        ) {
+            console.log(`[jaw:resume] ${cli} stale resume invalidated — retrying current request without resume`);
+            broadcast('agent_retry', {
+                cli,
+                delay: 0,
+                reason: `${errMsg} (retry without stale resume)`,
+                ...empTag,
+            }, isEmployee ? 'internal' : 'public');
+            finalizeTraceRun(ctx.traceRunId, 'error', errMsg);
+            const { promise: retryP } = _spawnAgent(prompt, {
+                ...opts,
+                _skipResume: true,
+                _skipInsert: true,
+            }) as { promise: Promise<{ text: string; code: number }> };
+            retryP.then(resolve).catch(() => {
+                broadcast('agent_done', { text: `❌ ${errMsg} (fresh-session retry failed)`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
+                resolve({ text: '', code: 1 });
+                if (mainManaged && !opts.internal) processQueue();
+            });
+            return;
         }
 
         // ─── Stall kills: do NOT retry — escalate immediately ───

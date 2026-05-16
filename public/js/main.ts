@@ -90,6 +90,25 @@ import { initAttentionBadge } from './features/attention-badge.js';
 import { initHelpDialog } from './features/help-dialog.js';
 import { initChatSearch, toggleChatSearch, closeChatSearch } from './features/chat-search.js';
 
+function isLocalPreviewOrigin(origin: string): boolean {
+    if (origin === window.location.origin) return true;
+    try {
+        const hostname = new URL(origin).hostname;
+        return hostname === 'localhost'
+            || hostname === '127.0.0.1'
+            || hostname === '::1'
+            || hostname === '[::1]';
+    } catch {
+        return false;
+    }
+}
+
+function isVoiceRecordingShortcut(e: KeyboardEvent): boolean {
+    const primarySpace = (e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'Space';
+    const fallbackMic = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === 'KeyM';
+    return primarySpace || fallbackMic;
+}
+
 // ── Chat Actions ──
 document.getElementById('btnSend')?.addEventListener('click', () => { void sendMessage('button'); });
 const chatInput = document.getElementById('chatInput') as HTMLTextAreaElement | null;
@@ -122,6 +141,14 @@ document.querySelector('.btn-attach')?.addEventListener('click', () => {
 });
 document.getElementById('btnVoice')?.addEventListener('click', () => toggleRecording());
 document.getElementById('btnVoiceCancel')?.addEventListener('click', () => cancelRecording());
+window.addEventListener('message', (event) => {
+    if (window.parent === window) return;
+    if (event.source !== window.parent) return;
+    if (!isLocalPreviewOrigin(event.origin)) return;
+    const data = event.data as { type?: unknown } | null;
+    if (!data || data.type !== 'jaw-preview-stt-toggle') return;
+    toggleRecording();
+});
 
 // ── Left Sidebar ──
 document.getElementById('memorySidebarBtn')?.addEventListener('click', openMemoryModal);
@@ -524,8 +551,8 @@ document.addEventListener('keydown', (e) => {
             m.classList.remove('open');
         });
     }
-    // Ctrl+Shift+Space (Win/Linux) or Cmd+Shift+Space (Mac) toggles voice recording
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.code === 'Space') {
+    // Ctrl+Shift+Space (Win/Linux), Cmd+Shift+Space (Mac), or Alt/Option+M toggles voice recording.
+    if (isVoiceRecordingShortcut(e)) {
         e.preventDefault();
         toggleRecording();
     }

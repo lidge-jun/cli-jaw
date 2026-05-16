@@ -69,6 +69,7 @@ export function useJawCeoDashboardBridge(args: {
     ) : null;
 
     return {
+        voice,
         workbenchButton,
         voiceOverlay,
         consoleContent,

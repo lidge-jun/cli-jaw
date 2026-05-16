@@ -10,6 +10,7 @@ import {
     classifyInstallerFromPath,
     findRunnableCliBinary,
     installCliTools,
+    removeJawHomeClaudeInstructionFile,
     shouldDedupeCliTools,
     shouldForceClaudeDuringPostinstall,
     shouldInstallClaudeDuringPostinstall,
@@ -113,6 +114,45 @@ test('SAF-003b: postinstall guard safe mode exits before build fallback', () => 
 
 test('SAF-004: installCliTools is exported', () => {
     assert.ok(postinstallSrc.includes('export async function installCliTools'), 'installCliTools exported');
+});
+
+test('SAF-004a: postinstall removes deprecated Jaw-home CLAUDE.md symlink instead of creating one', () => {
+    assert.ok(!postinstallSrc.includes('CLAUDE.md → AGENTS.md symlink'), 'must not create CLAUDE.md symlink');
+    assert.ok(postinstallSrc.includes('removeJawHomeClaudeInstructionFile(jawHome)'), 'runPostinstall must clean deprecated CLAUDE.md');
+});
+
+test('SAF-004a1: deprecated CLAUDE.md symlink to AGENTS.md is removed', { skip: process.platform === 'win32' }, () => {
+    const dir = fs.mkdtempSync(join(os.tmpdir(), 'jaw-claude-clean-'));
+    try {
+        const agents = join(dir, 'AGENTS.md');
+        const claude = join(dir, 'CLAUDE.md');
+        fs.writeFileSync(agents, 'SYSTEM PROMPT\n');
+        fs.symlinkSync(agents, claude);
+
+        assert.equal(removeJawHomeClaudeInstructionFile(dir), 'removed-symlink');
+        assert.equal(fs.existsSync(claude), false);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('SAF-004a2: generated CLAUDE.md mirror is removed but custom file is kept', () => {
+    const dir = fs.mkdtempSync(join(os.tmpdir(), 'jaw-claude-clean-'));
+    try {
+        const agents = join(dir, 'AGENTS.md');
+        const claude = join(dir, 'CLAUDE.md');
+        fs.writeFileSync(agents, 'SYSTEM PROMPT\n');
+        fs.writeFileSync(claude, 'SYSTEM PROMPT\n');
+
+        assert.equal(removeJawHomeClaudeInstructionFile(dir), 'removed-mirror');
+        assert.equal(fs.existsSync(claude), false);
+
+        fs.writeFileSync(claude, 'custom claude guidance\n');
+        assert.equal(removeJawHomeClaudeInstructionFile(dir), 'kept-custom');
+        assert.equal(fs.readFileSync(claude, 'utf8'), 'custom claude guidance\n');
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
 });
 
 test('SAF-004b: postinstall skips CLI tool install/update by default', () => {

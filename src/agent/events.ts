@@ -168,6 +168,33 @@ function buildPreview(text: unknown, max = 80) {
     return clipText(toSingleLine(text), max);
 }
 
+function buildClaudeThinkingTool(block: CliEventRecord): ToolEntry {
+    const text = String(block.thinking || '').trim();
+    const signature = typeof block.signature === 'string' ? block.signature : '';
+    if (text) {
+        return {
+            icon: '💭',
+            label: buildPreview(text, 80) || 'thinking...',
+            toolType: 'thinking',
+            detail: text,
+        };
+    }
+    if (signature) {
+        return {
+            icon: '🔒',
+            label: 'encrypted thinking',
+            toolType: 'thinking',
+            detail: `server-side reasoning, plaintext withheld - signature ${signature.length}B`,
+        };
+    }
+    return {
+        icon: '💭',
+        label: 'thinking...',
+        toolType: 'thinking',
+        detail: '',
+    };
+}
+
 function appendDetail(...parts: Array<string | null | undefined>): string {
     return parts.map(p => String(p || '').trim()).filter(Boolean).join('\n');
 }
@@ -1282,7 +1309,8 @@ export function logEventSummary(agentLabel: string, cli: string, event: CliEvent
                 if (block.type === 'tool_use') {
                     logLine(`[${agentLabel}] tool: ${block.name}`, ctx);
                 } else if (block.type === 'thinking') {
-                    logLine(`[${agentLabel}] thinking: ${toSingleLine(block.thinking).slice(0, 160)}`, ctx);
+                    const thinkingTool = buildClaudeThinkingTool(block);
+                    logLine(`[${agentLabel}] ${thinkingTool.icon} ${thinkingTool.label}`, ctx);
                 }
             }
             return;
@@ -1516,8 +1544,7 @@ function extractToolLabels(cli: string, event: CliEventRecord, ctx: SpawnContext
                     }), cli, event, ctx);
                 }
                 if (block.type === 'thinking') {
-                    const text = (block.thinking || '').trim();
-                    pushToolLabel(labels, { icon: '💭', label: buildPreview(text, 80) || 'thinking...', toolType: 'thinking', detail: text }, cli, event, ctx);
+                    pushToolLabel(labels, buildClaudeThinkingTool(block), cli, event, ctx);
                 }
             }
         }

@@ -29,12 +29,13 @@ import { useCommandPalette } from './hooks/useCommandPalette';
 import { useInstanceLabelEditor } from './hooks/useInstanceLabelEditor';
 import { useInstanceMessageEvents } from './hooks/useInstanceMessageEvents';
 import { useManagerEvents } from './hooks/useManagerEvents';
+import { usePreviewSttLifecycle } from './usePreviewSttLifecycle';
+import { usePreviewShortcutMessages } from './usePreviewShortcutMessages';
 import { formatUptime, instanceLabel } from './instance-label';
 import { useJawCeoDashboardBridge } from './jaw-ceo/useJawCeoDashboardBridge';
 import { actionForShortcutEvent, isManagerShortcutEditableTarget } from './manager-shortcuts';
 import { reconcileActiveProfileFilter } from './profile-filter';
 import type { DashboardDetailTab, DashboardInstance, DashboardInstanceStatus, DashboardLifecycleAction, DashboardNotesAuthoringMode, DashboardNotesViewMode, DashboardProfile, DashboardScanResult, DashboardShortcutAction, DashboardSidebarMode } from './types';
-
 export function App() {
     const [data, setData] = useState<DashboardScanResult | null>(null);
     const [loading, setLoading] = useState(true);
@@ -120,6 +121,8 @@ export function App() {
     }, [filtered, instances, view.selectedPort]);
     const activeJawCeoPort = selectedInstance?.port ?? view.selectedPort ?? null;
     const jawCeoBridge = useJawCeoDashboardBridge({ selectedPort: activeJawCeoPort, managerEvents: managerEvents.events, messageEvents: messageActivity.events, onOpenWorker: handleOpenJawCeoWorker });
+    usePreviewSttLifecycle(jawCeoBridge.voice);
+    usePreviewShortcutMessages({ enabled: view.dashboardShortcutsEnabled, keymap: view.dashboardShortcutKeymap, onAction: runManagerShortcut });
     const activePreviewPort = view.activeDetailTab === 'preview' && view.sidebarMode === 'instances'
         ? (selectedInstance?.port ?? null)
         : null;
@@ -404,19 +407,6 @@ export function App() {
         }
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [filtered, selectedInstance, view.dashboardShortcutsEnabled, view.dashboardShortcutKeymap, view.sidebarMode, view.activeDetailTab, settingsDirty]);
-
-    useEffect(() => {
-        function onPreviewShortcut(event: MessageEvent): void {
-            if (!view.dashboardShortcutsEnabled) return;
-            const data = event.data;
-            if (!data || data.type !== 'jaw-preview-shortcut') return;
-            const synth = { key: data.key, altKey: !!data.altKey, ctrlKey: false, metaKey: false, shiftKey: !!data.shiftKey } as unknown as KeyboardEvent;
-            const action = actionForShortcutEvent(synth, view.dashboardShortcutKeymap);
-            if (action) runManagerShortcut(action);
-        }
-        window.addEventListener('message', onPreviewShortcut);
-        return () => window.removeEventListener('message', onPreviewShortcut);
     }, [filtered, selectedInstance, view.dashboardShortcutsEnabled, view.dashboardShortcutKeymap, view.sidebarMode, view.activeDetailTab, settingsDirty]);
 
     async function handleLifecycle(action: DashboardLifecycleAction, instance: DashboardInstance): Promise<void> {

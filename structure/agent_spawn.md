@@ -18,13 +18,13 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 | File | Line count | Role |
 | --- | ---: | --- |
 | `src/agent/alert-escalation.ts` | 80L | alert escalation event helper |
-| `src/agent/args.ts` | 227L | CLI별 신규/재개 인자 생성; Gemini full-access + workspace include-directory flags, Grok streaming-json args, Claude Interactive helper args 포함 |
+| `src/agent/args.ts` | 229L | CLI별 신규/재개 인자 생성; Gemini full-access + workspace include-directory flags, Grok streaming-json args, Claude Interactive helper args 포함 |
 | `src/agent/claude-i-runtime.ts` | 44L | `jaw_runtime` helper event를 runtime/status broadcast로 변환 |
 | `src/agent/cli-helpers.ts` | 7L | Claude-like CLI 판별 helper |
 | `src/agent/codex-app-client.ts` | 259L | Codex App stdio server client |
 | `src/agent/codex-app-events.ts` | 236L | Codex App turn/tool/message event adapter |
 | `src/agent/error-classifier.ts` | 38L | stderr/result 기반 에러 분류 helper |
-| `src/agent/events.ts` | 1904L | NDJSON 파서 + ACP `session/update` / subagent lifecycle 매핑 + Grok streaming-json text/thought/end/error 중복 억제 + `claude-i` complete-message parsing |
+| `src/agent/events.ts` | 1931L | NDJSON 파서 + ACP `session/update` / subagent lifecycle 매핑 + Grok streaming-json text/thought/end/error 중복 억제 + `claude-i` complete-message parsing |
 | `src/agent/lifecycle-handler.ts` | 531L | child lifecycle, fallback, retry, queue resume orchestration |
 | `src/agent/live-run-state.ts` | 64L | active run snapshot / hydrate helper |
 | `src/agent/memory-flush-controller.ts` | 159L | memory flush lock + post-response trigger |
@@ -33,7 +33,7 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 | `src/agent/session-persistence.ts` | 74L | main session persistence gate; `claude-i` SIGINT exit 2 is resumable |
 | `src/agent/smoke-detector.ts` | 141L | smoke response 감지 + auto-continue 판단 |
 | `src/agent/spawn-env.ts` | 141L | OpenCode/Gemini 전용 env/permission 보정 |
-| `src/agent/spawn.ts` | 1968L | spawn/ACP/stream/DB/broadcast + queue drain 핵심; `claude-i` prompt/write/runtime event bridge |
+| `src/agent/spawn.ts` | 1973L | spawn/ACP/stream/DB/broadcast + queue drain 핵심; `claude-i` prompt/write/runtime event bridge |
 | `src/agent/tool-timeout.ts` | 33L | tool inactivity timeout helper |
 | `src/agent/watchdog.ts` | 104L | idle/progress watchdog; progress extends deadline within 4h hard cap |
 
@@ -68,6 +68,13 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 - Copilot ACP subagent/task wire shape은 별도 `subagent.*` 이벤트가 아니라 `session/update`의 `tool_call` + `rawInput.agent_type === 'task'`다. 이때 `toolCallId`를 `ctx.acpSubagentToolCallIds`와 `ctx.acpSubagentLabels`에 저장하고, matching `tool_call_update`를 같은 `acp:callid:{toolCallId}` step으로 done/error 갱신한다.
 - `stderr_activity`는 진단용 버퍼를 채우고, 가시적 progress가 오래 없으면 `agent_tool`로 ⏳ heartbeat를 보낸다.
 - `acp.shutdown()` 전에 `persistMainSession()`를 먼저 호출한다. 이 경로는 SIGTERM으로 종료되기 때문에, 사전 저장하지 않으면 세션 연속성이 끊긴다.
+
+### Codex AppServer branch
+
+- `CodexAppClient`는 `codex app-server --listen stdio://`를 띄우고 JSON-RPC `thread/start`, `thread/resume`, `turn/start`를 사용한다.
+- thread config에는 `model_reasoning_summary="detailed"`, `hide_agent_reasoning=false`, `show_raw_agent_reasoning=true`, `model_reasoning_effort=<effort>`를 넣는다. turn 시작에는 `effort`와 `summary="detailed"`를 다시 보낸다.
+- `codex-app-events.ts`는 `item/reasoning/summaryTextDelta`, `item/reasoning/textDelta`, `item/reasoning/summaryPartAdded`, completed reasoning item의 `content/summary` fallback을 모두 `toolType:"thinking"`으로 정규화한다.
+- 빈 `item/started` reasoning은 `thinking...` placeholder를 만들지 않는다. app-server가 raw `textDelta`를 내보내면 raw reasoning을 우선 표시하고, raw가 없으면 detailed summary stream 또는 completed item의 string/object-shaped `content[]`/`summary[]`를 표시한다.
 
 ### Standard CLI branch
 

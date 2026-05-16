@@ -9,7 +9,7 @@ aliases: [CLI-JAW Source Structure, str_func, source structure reference]
 # CLI-JAW — Source Structure & Function Reference
 
 > 마지막 검증: 2026-05-16 (실제 코드베이스 재측정)
-> `server.ts` 826L / `src/routes/` 15 files (12 registrar + `quota.ts` helper + `types.ts` + trace routes) / `src/cli/handlers*.ts` 383L + 497L + 95L / `src/cli/api-auth.ts` 45L / `src/agent/` 19 files (`spawn.ts` 1968L + `events.ts` 1904L + `claude-i-runtime.ts` 44L 포함) / `src/manager/` 69 TS/TSX files (10682L, dashboard manager + board/notes/search/schedule/reminders/connector/routes + notes assets/watcher 서브모듈) / `src/browser/web-ai/` 67 TS files (12390L, ChatGPT/Gemini/Grok 멀티벤더 자동화 + resolver/source-audit/observation helpers + context-pack/tab-pool) / `src/types/` 3 files (296L) / `bin/commands/` 22 top-level ts files + `tui/` 7 helper files / `native/jaw-claude-i/` 11 Rust source files (1378L)
+> `server.ts` 826L / `src/routes/` 15 files (12 registrar + `quota.ts` helper + `types.ts` + trace routes) / `src/cli/handlers*.ts` 383L + 497L + 95L / `src/cli/api-auth.ts` 45L / `src/agent/` 19 files (`spawn.ts` 1973L + `events.ts` 1904L + `claude-i-runtime.ts` 44L 포함) / `src/manager/` 69 TS/TSX files (10682L, dashboard manager + board/notes/search/schedule/reminders/connector/routes + notes assets/watcher 서브모듈) / `src/browser/web-ai/` 67 TS files (12390L, ChatGPT/Gemini/Grok 멀티벤더 자동화 + resolver/source-audit/observation helpers + context-pack/tab-pool) / `src/types/` 3 files (296L) / `bin/commands/` 22 top-level ts files + `tui/` 7 helper files / `native/jaw-claude-i/` 11 Rust source files (1703L)
 > issue #91: OfficeCLI 10-phase integration (dual-audited, 94/94 tests) — closed
 > issue #92: Phase 20 overlay consolidation + GitHub Release v1.0.28-lidge.1 (3 audits passed: A-/A/A) — closed
 > issue #95: Avatar image upload — emoji+image dual support, 4 API endpoints, secure path serving — closed
@@ -63,24 +63,24 @@ cli-jaw/
 │   │   └── settings-merge.ts ← perCli/activeOverrides deep merge (52L)
 │   ├── agent/                ← CLI 에이전트 런타임 (19 files)
 │   │   ├── alert-escalation.ts ← alert escalation event helper (80L)
-│   │   ├── spawn.ts          ← CLI spawn + ACP/Codex App/claude-i 분기 + 큐 + 메모리 flush + 429 retry timer + isAgentBusy + buildHistoryBlock compact cutoff + working_dir scoping + enqueue→processQueue race fix + QueueItem persistent DB queue + makeCleanEnv PATH augment (1968L)
+│   │   ├── spawn.ts          ← CLI spawn + ACP/Codex App/claude-i 분기 + 큐 + 메모리 flush + 429 retry timer + isAgentBusy + buildHistoryBlock compact cutoff + working_dir scoping + enqueue→processQueue race fix + QueueItem persistent DB queue + makeCleanEnv PATH augment + claude-i runtime error capture (1973L)
 │   │   ├── spawn-env.ts      ← spawn용 child env 빌더 (OpenCode/Gemini permissions config 주입 등, 141L)
-│   │   ├── args.ts           ← CLI별 인자 빌더 + `claude-i` helper run/resume args + session bucket 분리 (227L)
+│   │   ├── args.ts           ← CLI별 인자 빌더 + `claude-i` helper run/resume args + session bucket 분리 (231L)
 │   │   ├── claude-i-runtime.ts ← `jaw_runtime` helper event를 `agent:claude-i:*` broadcast로 변환 (44L)
 │   │   ├── cli-helpers.ts    ← Claude-like CLI 판별 helper (7L)
 │   │   ├── codex-app-client.ts ← Codex App stdio server client (259L)
 │   │   ├── codex-app-events.ts ← Codex App turn/tool/message event adapter (236L)
 │   │   ├── error-classifier.ts ← stderr/result 기반 에러 분류 헬퍼 (38L)
-│   │   ├── lifecycle-handler.ts ← child lifecycle + fallback/retry + queue resume orchestration + clearEmployeeSession on resume failure (531L)
+│   │   ├── lifecycle-handler.ts ← child lifecycle + fallback/retry + queue resume orchestration + clearEmployeeSession on resume failure + stale resume fresh retry (561L)
 │   │   ├── live-run-state.ts ← active run snapshot / hydrate helper (64L)
 │   │   ├── memory-flush-controller.ts ← assistant 완료 후 메모리 flush lock + trigger 제어 (159L)
 │   │   ├── opencode-diagnostics.ts ← OpenCode permissions/env audit + raw event 진단 헬퍼 (156L)
 │   │   ├── session-persistence.ts ← main-session persistence policy + ownership generation + `claude-i` SIGINT exit 2 resume 허용 (74L)
-│   │   ├── resume-classifier.ts ← stale resume signature classifier (51L)
+│   │   ├── resume-classifier.ts ← stale resume signature classifier (60L)
 │   │   ├── smoke-detector.ts ← smoke response 감지 + auto-continue 판단 (141L)
 │   │   ├── tool-timeout.ts   ← tool inactivity timeout helper (33L)
 │   │   ├── watchdog.ts       ← idle/progress watchdog + 4h absolute hard cap with progress deadline extension (104L)
-│   │   └── events.ts         ← NDJSON 파서 + ACP update + logEventSummary + summarizeToolInput(type-safe) + toolType/detail 필드 + Claude/claude-i thinking_delta/input_json_delta 버퍼 + flushClaudeBuffers + stepRef correlation + compact event parsing + Codex/Grok toolLog running→done dedup + Grok throttled visible thinking + duplicate error suppression + claude-i complete assistant chunk (1904L)
+│   │   └── events.ts         ← NDJSON 파서 + ACP update + logEventSummary + summarizeToolInput(type-safe) + toolType/detail 필드 + Claude/claude-i thinking_delta/input_json_delta 버퍼 + flushClaudeBuffers + stepRef correlation + compact event parsing + Codex/Grok toolLog running→done dedup + Grok throttled visible thinking + duplicate error suppression + claude-i complete assistant chunk (1931L)
 │   ├── messaging/            ← 통합 메시징 런타임 (신규)
 │   │   ├── runtime.ts        ← 채널 lifecycle (init/shutdown/restart) + transport registry (146L)
 │   │   ├── send.ts           ← 통합 아웃바운드 메시지 라우팅 (ChannelSendRequest) (147L)
@@ -320,7 +320,7 @@ cli-jaw/
 │       ├── catalog.ts        ← COMMANDS → capability map 확장 (43L)
 │       ├── policy.ts         ← getVisibleCommands, getTelegramMenuCommands (39L)
 │       └── help-renderer.ts  ← renderHelp list/detail mode (44L)
-├── public/                   ← Web UI (Vite 8 + ES Modules, 489 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 459 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~68442L)
+├── public/                   ← Web UI (Vite 8 + ES Modules, 491 files [source + assets + public/public/dist mirror, public/dist 제외], public/dist build output 459 files, mirrored copies under `public/public/dist/` and `public/dist/dist/`, ~68650L)
 │   ├── index.html            ← 뼈대 (912L, CLI-JAW 대문자 로고, pill theme switch, data-i18n, 로컬 avatar 입력)
 │   ├── manifest.json         ← PWA 매니페스트 (20L) ✨
 │   ├── sw.js                 ← Service Worker 오프라인 캐시 (104L) ✨
@@ -343,7 +343,7 @@ cli-jaw/
 │   │   ├── ja.json           ← 일본어
 │   │   └── zh.json           ← 중국어
 │   └── js/                   ← 72 .ts files (root 17 + features/ 41 + diagram/ 3 + render/ 11, 전 파일 TypeScript)
-│       ├── main.ts           ← 앱 진입점 + 모듈 wire + heartbeat schedule validation/save guard + initAvatar() + initHelpDialog() 포함 (512L)
+│       ├── main.ts           ← 앱 진입점 + 모듈 wire + heartbeat schedule validation/save guard + initAvatar() + initHelpDialog() + STT preview shortcut bridge 포함 (563L)
 │       ├── render.ts         ← render public API façade. 기존 caller import surface를 유지하고 실제 구현은 `render/` 하위 모듈로 분리 (17L)
 │       ├── constants.ts      ← CLI_REGISTRY 동적 로딩 + ROLE_PRESETS (CliEntry, CliRegistry 타입) (149L)
 │       ├── api.ts            ← fetch 래퍼 + REST 엔드포인트 (generic api<T>(), ApiResponse) (61L)
@@ -404,7 +404,7 @@ cli-jaw/
 │           ├── settings-cli-status.ts ← CLI 상태 표시 (loadCliStatus, 인증/설치 상태 점검) (229L) ✨
 │           ├── settings-stt.ts ← STT 설정 (엔진 선택, Gemini/Whisper 설정) (109L) ✨
 │           ├── settings-templates.ts ← 프롬프트 템플릿 모달 (openPromptModal, savePromptFromModal, toggleDevMode) (132L) ✨
-│           ├── voice-recorder.ts ← MediaRecorder 래퍼 + MIME 자동탐지 + 에러 분류 + 녹음 타이머 (175L)
+│           ├── voice-recorder.ts ← MediaRecorder 래퍼 + MIME 자동탐지 + pending/error UI + preview STT lifecycle + 녹음 타이머 (254L)
 │           ├── skills.ts     ← 스킬 관리 UI (111L)
 │           ├── slash-commands.ts ← 슬래시 커맨드 자동완성 (229L)
 │           ├── sidebar.ts    ← 사이드바 접기 (이중 모드) (119L)
@@ -417,24 +417,24 @@ cli-jaw/
 │           ├── idb-cache.ts  ← IndexedDB 대화 캐시 v3 (scope별, upsert, versionchange, empty-array wipe guard) (169L) ✨
 │           └── gesture.ts    ← 터치/스와이프 제스처 핸들러 (61L) ✨
 ├── native/
-│   └── jaw-claude-i/         ← Claude Interactive native helper (Rust, 11 src files / 1378L; `target/` ignored)
+│   └── jaw-claude-i/         ← Claude Interactive native helper (Rust, 11 src files / 1703L; `target/` ignored)
 │       ├── Cargo.toml        ← Rust package/dependency/test profile (32L)
 │       └── src/
-│           ├── main.rs       ← PTY wrapper main loop + JSONL runtime event emission + transcript tail orchestration (368L)
+│           ├── main.rs       ← PTY wrapper main loop + JSONL runtime event emission + prompt-acceptance guard + transcript tail orchestration (421L)
 │           ├── args.rs       ← helper CLI args (`run --jsonl`, `--resume`, `--timeout-ms`, `--`) (55L)
 │           ├── child.rs      ← Claude child process spawn/signal/exit handling (161L)
 │           ├── hook.rs       ← hook env/protocol helpers (137L)
 │           ├── protocol.rs   ← JSONL event schema helpers (107L)
-│           ├── transcript.rs ← transcript path/offset tailing + assistant message extraction (141L)
+│           ├── transcript.rs ← transcript path/offset tailing + prompt user-record verification + assistant message extraction + synthetic placeholder skip (348L)
 │           ├── config.rs     ← runtime config + timeout defaults (54L)
 │           ├── terminal.rs   ← PTY terminal state/reset handling (67L)
 │           ├── cleanup.rs    ← child cleanup/signal escalation (66L)
-│           ├── normalize.rs  ← terminal/control-sequence normalization (138L)
+│           ├── normalize.rs  ← transcript normalization + synthetic `No response requested.` placeholder and `/exit` local-command user filters (203L)
 │           └── sanitize.rs   ← output sanitization helpers (84L)
 ├── bin/
 │   ├── cli-jaw.ts            ← 19개 user-facing 서브커맨드 라우팅 + --home flag (`browser-web-ai.ts`/`dashboard-memory.ts`/`dispatch-helpers.ts` 포함 시 commands top-level 22 files) (202L)
 │   ├── star-prompt.ts        ← `gh` 기반 GitHub star 1회 프롬프트 (TTY 가드 + state 파일, 129L)
-│   ├── postinstall.ts        ← npm install 후 CLI 런타임 + OfficeCLI 자동설치 + MCP + 스킬 + safe 가드 (970L, Node guard + inline JAW_HOME)
+│   ├── postinstall.ts        ← npm install 후 CLI 런타임 + OfficeCLI 자동설치 + MCP + 스킬 + safe 가드 (1012L, Node guard + inline JAW_HOME)
 │   └── commands/             ← 22 top-level ts files (`browser-web-ai.ts`, `dashboard-memory.ts`, `dispatch-helpers.ts` helper 포함) + `tui/` 7 helper 모듈 (총 5450L + tui 1045L)
 │       ├── serve.ts          ← 서버 시작 (--port/--host/--open) + SIGINT child.kill('SIGINT') orphan fix (119L)
 │       ├── dispatch.ts       ← 직원 호출 (pipe mode 호환) + route contract bridge + worker result polling + ECONNREFUSED retry with escalating delays (197L)
@@ -777,7 +777,7 @@ graph LR
 | [🤖 agent_spawn.md](agent_spawn.md)                 | agent/ (spawn·args·events) + orchestrator/ (pipeline·parser) + cli/acp-client | spawn + ACP + 오케스트레이션           |
 | [📱 telegram.md](telegram.md)                       | telegram/ (bot·forwarder·telegram-file) + memory/heartbeat                    | 외부 인터페이스 + lifecycle + 파일전송 |
 | *(미작성)* discord.md                                | discord/ (bot·commands·forwarder·discord-file) + messaging/                   | Discord 인터페이스 + 메시징 런타임     |
-| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 489개, `public/dist` build 459파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
+| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 491개, `public/dist` build 459파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
 | [🧠 prompt_flow.md](prompt_flow.md)                 | prompt/builder.ts · 직원 프롬프트 · promptCache                               | **핵심** — 정적/동적 + Copilot ACP     |
 | [📄 prompt_basic_A1.md](prompt_basic_A1.md)         | A-1 기본 프롬프트 원문                                                        | EN 기본 프롬프트 레퍼런스              |
 | [📄 prompt_basic_A2.md](prompt_basic_A2.md)         | A-2 프롬프트 템플릿                                                           | 사용자 편집 가능                       |

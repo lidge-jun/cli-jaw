@@ -1094,6 +1094,13 @@ div.math-placeholder {
     animation: pulse-recording 1.5s ease-in-out infinite;
 }
 
+.btn-voice.arming {
+    background: var(--surface);
+    border-color: var(--accent);
+    cursor: progress;
+    opacity: 0.75;
+}
+
 @keyframes pulse-recording {
     0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklch, var(--error) 40%, transparent); }
     50% { box-shadow: 0 0 0 6px color-mix(in oklch, var(--error) 0%, transparent); }

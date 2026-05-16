@@ -95,8 +95,10 @@ CLI spawn / ACP session
 호출 플래그:
 
 ```text
---output-format stream-json --verbose --include-partial-messages
+--print/-p --output-format stream-json --verbose --include-partial-messages
 ```
+
+Plaintext `thinking_delta`는 headless `--print`/`-p` stream에서 partial message streaming이 켜져야 온다. `claude-i`는 interactive PTY wrapper라 이 옵션 조합을 wrapper 뒤 Claude TUI에 강제하지 않고, transcript completed message의 plaintext thinking 또는 signature-only encrypted marker를 처리한다.
 
 ### top-level 타입
 
@@ -168,6 +170,13 @@ run --jsonl --output-format stream-json --timeout-ms 600000 [--resume <sessionId
 
 Session bucket은 `claude-i`로 분리되어 standard `claude` session ID와 섞이지 않는다. Helper는 interactive Claude CLI를 래핑하므로 `jaw doctor`가 helper(`jaw-claude-i`)와 underlying `claude` 설치/버전을 둘 다 확인한다.
 
+Thinking visibility:
+
+- Claude CLI `-p --verbose --output-format stream-json --include-partial-messages`에서는 `thinking_delta`가 plaintext로 나온다.
+- interactive 모드에는 `--include-partial-messages`가 적용되지 않으므로, helper는 transcript의 final assistant message만 볼 수 있다.
+- transcript `assistant.message.content[].type === "thinking"`에 plaintext `thinking`이 있으면 `💭` thinking step으로 표시한다.
+- plaintext가 비어 있고 `signature`만 있으면 빈 `thinking...` placeholder가 아니라 `🔒 encrypted thinking`으로 표시한다.
+
 ---
 
 ## 4. Codex CLI (`--json`)
@@ -191,6 +200,36 @@ Session bucket은 `claude-i`로 분리되어 standard `claude` session ID와 섞
 - command 실행 step은 running과 done/error를 같은 `stepRef`로 연결한다.
 - `ctx.hasActiveSubAgent`가 true이면 `spawn.ts`가 lifecycle activity를 `heartbeat`로 터치해 subagent wait 동안 stall 판정을 피한다.
 - `agent_output` 라이브 chunk는 `extractOutputChunk()`가 `agent_message`에서 뽑는다.
+
+---
+
+## 4b. Codex AppServer (`codex-app`)
+
+`codex-app` 경로는 `codex app-server --listen stdio://`의 JSON-RPC notification을 `agent_tool`/`agent_output` 경로로 맞춘다.
+
+Reasoning config:
+
+| 위치 | 값 |
+| --- | --- |
+| `thread/start.config.model_reasoning_summary` | `detailed` |
+| `thread/start.config.hide_agent_reasoning` | `false` |
+| `thread/start.config.show_raw_agent_reasoning` | `true` |
+| `turn/start.summary` | `detailed` |
+| `turn/start.effort` | 현재 UI/설정 effort |
+
+| method | 조건 | jaw 처리 |
+| --- | --- | --- |
+| `item/started` | `reasoning` + 빈 `summary/content` | placeholder 없이 무시 |
+| `item/started` | `reasoning` + 기존 `summary/content` 있음 | 초기 reasoning을 `💭` thinking buffer에 축적 |
+| `item/reasoning/textDelta` | raw reasoning delta | `💭` thinking buffer에 축적 |
+| `item/reasoning/summaryTextDelta` | summary delta | `💭` thinking buffer에 축적 |
+| `item/reasoning/summaryPartAdded` | summary index 증가 | thinking buffer에 줄바꿈 삽입 |
+| `item/completed` | `reasoning` + 기존 buffer 있음 | thinking buffer flush |
+| `item/completed` | `reasoning` + buffer 없음 | completed item의 string/object-shaped `content[]` 우선, 없으면 `summary[]` fallback 표시 |
+| `item/agentMessage/delta` | final answer delta | live output text에 축적 |
+| `thread/tokenUsage/updated` | token usage | input/output/cached token 저장 |
+
+raw `textDelta`는 app-server/모델 조합이 제공할 때만 온다. 확인된 `gpt-5.4-mini` app-server smoke에서는 raw `textDelta` 대신 `summaryTextDelta` detailed stream이 왔다.
 
 ---
 

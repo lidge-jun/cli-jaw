@@ -13,6 +13,8 @@ let chunks: Blob[] = [];
 let recordingStream: MediaStream | null = null;
 let timerInterval: ReturnType<typeof setInterval> | null = null;
 let startTime = 0;
+let startPending = false;
+let stopAction: 'stopped' | 'cancelled' | 'failed' = 'stopped';
 
 /** Pick best supported MIME type for cross-platform */
 function pickMime(): string {
@@ -47,8 +49,25 @@ function classifyMicError(err: unknown): string {
     }
 }
 
+function classifyRecorderStartError(err: unknown): string {
+    const e = err as DOMException;
+    if (e.name === 'NotSupportedError') return t('voice.unsupported');
+    if (e.name === 'NotReadableError' || e.name === 'AbortError') return t('voice.micBusy');
+    if (e instanceof TypeError) return t('voice.httpsRequired');
+    return t('voice.interrupted');
+}
+
+function postPreviewSttRecording(action: 'request' | 'started' | 'stopped' | 'cancelled' | 'failed'): void {
+    if (window.parent === window) return;
+    try {
+        window.parent.postMessage({ type: 'jaw-preview-stt-recording', action }, '*');
+    } catch {
+        // Preview coordination is best-effort; standalone STT must keep working.
+    }
+}
+
 export async function startRecording(): Promise<void> {
-    if (state.isRecording) return;
+    if (state.isRecording || startPending) return;
 
     // Feature detection
     if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
@@ -56,66 +75,116 @@ export async function startRecording(): Promise<void> {
         return;
     }
 
+    startPending = true;
+    cancelled = false;
+    stopAction = 'stopped';
+    updateRecordingUI(false);
+    postPreviewSttRecording('request');
+
+    let stream: MediaStream | null = null;
     try {
-        recordingStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        recordingStream = stream;
     } catch (err) {
+        startPending = false;
+        updateRecordingUI(false);
+        postPreviewSttRecording('failed');
         addSystemMsg(classifyMicError(err), '', 'error');
         return;
     }
 
-    const mimeType = pickMime();
-    const options: MediaRecorderOptions = mimeType ? { mimeType } : {};
-    mediaRecorder = new MediaRecorder(recordingStream, options);
-    chunks = [];
+    try {
+        const mimeType = pickMime();
+        const options: MediaRecorderOptions = mimeType ? { mimeType } : {};
+        const recorder = new MediaRecorder(stream, options);
+        mediaRecorder = recorder;
+        chunks = [];
 
-    mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-    };
+        recorder.ondataavailable = (e) => {
+            if (e.data.size > 0) chunks.push(e.data);
+        };
 
-    mediaRecorder.onerror = () => {
-        stopRecording();
-        addSystemMsg(t('voice.interrupted'), '', 'error');
-    };
+        recorder.onerror = () => {
+            cancelled = true;
+            stopAction = 'failed';
+            state.isRecording = false;
+            stopTimer();
+            updateRecordingUI(false);
+            if (recorder.state === 'recording') {
+                recorder.stop();
+            } else {
+                chunks = [];
+                releaseStream();
+                mediaRecorder = null;
+                postPreviewSttRecording('failed');
+            }
+            addSystemMsg(t('voice.interrupted'), '', 'error');
+        };
 
-    mediaRecorder.onstop = async () => {
-        if (cancelled) {
+        recorder.onstop = async () => {
+            const finalAction = stopAction;
+            const wasCancelled = cancelled || finalAction !== 'stopped';
+            stopAction = 'stopped';
+            if (wasCancelled) {
+                chunks = [];
+                releaseStream();
+                mediaRecorder = null;
+                cancelled = false;
+                postPreviewSttRecording(finalAction);
+                return;
+            }
+            const actualMime = recorder.mimeType || mimeType || 'audio/webm';
+            const ext = actualMime.includes('mp4') ? '.m4a'
+                      : actualMime.includes('ogg') ? '.ogg'
+                      : '.webm';
+            const blob = new Blob(chunks, { type: actualMime });
             chunks = [];
             releaseStream();
+            mediaRecorder = null;
             cancelled = false;
-            return;
-        }
-        const actualMime = mediaRecorder?.mimeType || mimeType || 'audio/webm';
-        const ext = actualMime.includes('mp4') ? '.m4a'
-                  : actualMime.includes('ogg') ? '.ogg'
-                  : '.webm';
-        const blob = new Blob(chunks, { type: actualMime });
+            postPreviewSttRecording('stopped');
+
+            if (blob.size > 20 * 1024 * 1024) {
+                addSystemMsg(t('voice.tooLarge'), '', 'error');
+                return;
+            }
+            if (blob.size < 1000) {
+                addSystemMsg(t('voice.tooShort'), '', 'error');
+                return;
+            }
+
+            await sendVoiceToServer(blob, ext, actualMime);
+        };
+
+        // iOS Safari: no timeslice support -> call start() without args
+        recorder.start();
+        state.isRecording = true;
+        startPending = false;
+        startTime = Date.now();
+        updateRecordingUI(true);
+        startTimer();
+        postPreviewSttRecording('started');
+    } catch (err) {
+        startPending = false;
+        state.isRecording = false;
         chunks = [];
+        mediaRecorder = null;
         releaseStream();
-
-        if (blob.size > 20 * 1024 * 1024) {
-            addSystemMsg(t('voice.tooLarge'), '', 'error');
-            return;
-        }
-        if (blob.size < 1000) {
-            addSystemMsg(t('voice.tooShort'), '', 'error');
-            return;
-        }
-
-        await sendVoiceToServer(blob, ext, actualMime);
-    };
-
-    // iOS Safari: no timeslice support → call start() without args
-    mediaRecorder.start();
-    state.isRecording = true;
-    startTime = Date.now();
-    updateRecordingUI(true);
-    startTimer();
+        updateRecordingUI(false);
+        postPreviewSttRecording('failed');
+        addSystemMsg(classifyRecorderStartError(err), '', 'error');
+    }
 }
 
 export function stopRecording(): void {
     if (!state.isRecording || !mediaRecorder) return;
+    stopAction = 'stopped';
     if (mediaRecorder.state === 'recording') {
         mediaRecorder.stop();
+    } else {
+        releaseStream();
+        mediaRecorder = null;
+        postPreviewSttRecording('stopped');
     }
     state.isRecording = false;
     stopTimer();
@@ -125,8 +194,14 @@ export function stopRecording(): void {
 export function cancelRecording(): void {
     if (!state.isRecording || !mediaRecorder) return;
     cancelled = true;
+    stopAction = 'cancelled';
     if (mediaRecorder.state === 'recording') {
         mediaRecorder.stop();
+    } else {
+        chunks = [];
+        releaseStream();
+        mediaRecorder = null;
+        postPreviewSttRecording('cancelled');
     }
     state.isRecording = false;
     stopTimer();
@@ -135,7 +210,7 @@ export function cancelRecording(): void {
 
 export function toggleRecording(): void {
     if (state.isRecording) stopRecording();
-    else startRecording();
+    else void startRecording();
 }
 
 function releaseStream(): void {
@@ -164,10 +239,14 @@ function stopTimer(): void {
 function updateRecordingUI(recording: boolean): void {
     const btn = document.getElementById('btnVoice');
     const cancelBtn = document.getElementById('btnVoiceCancel');
+    const pending = startPending && !recording;
     if (btn) {
         btn.classList.toggle('recording', recording);
+        btn.classList.toggle('arming', pending);
         btn.innerHTML = recording ? ICONS.stop : ICONS.mic;
-        btn.title = recording ? t('voice.stop') : t('voice.start');
+        btn.title = pending ? t('voice.requesting') : recording ? t('voice.stop') : t('voice.start');
+        btn.toggleAttribute('aria-busy', pending);
+        if (btn instanceof HTMLButtonElement) btn.disabled = pending;
     }
     if (cancelBtn) {
         cancelBtn.style.display = recording ? 'inline-block' : 'none';

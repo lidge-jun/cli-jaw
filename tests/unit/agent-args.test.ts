@@ -42,6 +42,15 @@ test('AG-006: claude with effort includes --effort', () => {
     assert.ok(args.includes('high'));
 });
 
+test('AG-006a: claude-i forwards system prompt through wrapper extra args', () => {
+    const args = buildArgs('claude-i', 'sonnet', 'high', 'hi', 'system instructions', 'auto');
+    const separatorIdx = args.indexOf('--');
+    assert.ok(separatorIdx >= 0, 'claude-i must use -- before forwarded Claude args');
+    const forwarded = args.slice(separatorIdx + 1);
+    assert.ok(forwarded.includes('--append-system-prompt'));
+    assert.ok(forwarded.includes('system instructions'));
+});
+
 // ─── buildArgs: codex ────────────────────────────────
 
 test('AG-007: codex auto includes bypass flag', () => {
@@ -66,6 +75,7 @@ test('AG-009b: codex forces model_reasoning_summary="detailed" so UI receives re
     const cVals = cIdxs.map(i => args[i + 1]);
     assert.ok(cVals.includes('model_reasoning_summary="detailed"'), 'must inject reasoning summary override');
     assert.ok(cVals.includes('hide_agent_reasoning=false'), 'must keep reasoning visible');
+    assert.ok(cVals.includes('show_raw_agent_reasoning=true'), 'must request raw reasoning when available');
 });
 
 test('AG-009c: codex resume also injects reasoning summary override', () => {
@@ -73,6 +83,7 @@ test('AG-009c: codex resume also injects reasoning summary override', () => {
     const cIdxs = args.reduce<number[]>((acc, v, i) => (v === '-c' ? [...acc, i] : acc), []);
     const cVals = cIdxs.map(i => args[i + 1]);
     assert.ok(cVals.includes('model_reasoning_summary="detailed"'), 'resume must also force detailed');
+    assert.ok(cVals.includes('show_raw_agent_reasoning=true'), 'resume must also request raw reasoning');
 });
 
 test('AG-009d: codex Spark model strips ALL reasoning config (effort + summary + hide)', () => {
@@ -81,6 +92,7 @@ test('AG-009d: codex Spark model strips ALL reasoning config (effort + summary +
     assert.ok(!cVals.some(v => v.includes('model_reasoning_effort')), 'spark must drop model_reasoning_effort');
     assert.ok(!cVals.some(v => v.includes('model_reasoning_summary')), 'spark must drop model_reasoning_summary');
     assert.ok(!cVals.some(v => v.includes('hide_agent_reasoning')), 'spark must drop hide_agent_reasoning');
+    assert.ok(!cVals.some(v => v.includes('show_raw_agent_reasoning')), 'spark must drop raw reasoning flag');
     assert.ok(args.includes('gpt-5.3-spark'), 'model arg still present');
 });
 
@@ -178,6 +190,7 @@ test('AG-009e: codex Spark resume also strips reasoning config', () => {
     const cVals = args.reduce<string[]>((acc, v, i) => (v === '-c' ? [...acc, args[i + 1]] : acc), []);
     assert.ok(!cVals.some(v => v.includes('model_reasoning_summary')), 'spark resume must drop summary');
     assert.ok(!cVals.some(v => v.includes('hide_agent_reasoning')), 'spark resume must drop hide flag');
+    assert.ok(!cVals.some(v => v.includes('show_raw_agent_reasoning')), 'spark resume must drop raw reasoning flag');
 });
 
 test('AG-009f: spark detection is case-insensitive and matches substring', () => {
@@ -296,6 +309,19 @@ test('AG-014: claude resume includes --resume + session id', () => {
     const args = buildResumeArgs('claude', 'default', '', 'sess-abc-123', 'next task', 'auto');
     assert.ok(args.includes('--resume'));
     assert.ok(args.includes('sess-abc-123'));
+});
+
+test('AG-014a: claude-i resume forwards system prompt through wrapper extra args', () => {
+    const args = buildResumeArgs('claude-i', 'sonnet', 'high', 'sess-abc-123', 'next task', 'auto', {
+        sysPrompt: 'resume system instructions',
+    });
+    assert.ok(args.includes('--resume'));
+    assert.ok(args.includes('sess-abc-123'));
+    const separatorIdx = args.indexOf('--');
+    assert.ok(separatorIdx >= 0, 'claude-i must use -- before forwarded Claude args');
+    const forwarded = args.slice(separatorIdx + 1);
+    assert.ok(forwarded.includes('--append-system-prompt'));
+    assert.ok(forwarded.includes('resume system instructions'));
 });
 
 test('AG-015: codex resume includes session id', () => {

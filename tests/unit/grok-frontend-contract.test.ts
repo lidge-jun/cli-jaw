@@ -20,6 +20,15 @@ test('GROK-FE-001: provider icons include local Grok SVG assets and aliases', ()
     }
 });
 
+test('CODEX-FE-001: provider icons keep codex original and color only codex-app', () => {
+    const icons = src('public/js/provider-icons.ts');
+    assert.match(icons, /'codex-app'/);
+    assert.match(icons, /normalized === 'codexapp'/);
+    assert.match(icons, /codex:\s*\{\s*color:\s*openaiSvg,\s*mono:\s*openaiSvg/);
+    assert.match(icons, /'codex-app':\s*\{\s*color:\s*openaiColorSvg,\s*mono:\s*openaiSvg/);
+    assert.match(icons, /Codex App \(OpenAI\)/);
+});
+
 test('GROK-FE-002: legacy settings fallback registry exposes grok-build without effort', () => {
     const constants = src('public/js/constants.ts');
     assert.match(constants, /grok:\s*\{/);
