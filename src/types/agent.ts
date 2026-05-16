@@ -74,6 +74,8 @@ export interface SpawnContext {
   claudeThinkingBuf?: string;
   claudeInputJsonBuf?: string;
   claudeCurrentToolName?: string;
+  claudeILastAssistantId?: string;
+  claudeILastAssistantText?: string;
   // Encrypted-thinking detection (opus-4-7: signature_delta only, no thinking_delta)
   claudeThinkingBlockOpen?: boolean;
   claudeThinkingHadDelta?: boolean;

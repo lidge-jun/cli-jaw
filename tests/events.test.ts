@@ -878,6 +878,50 @@ test('extractOutputChunk returns live assistant text for gemini, opencode final 
     );
 });
 
+test('claude-i assistant snapshots are emitted as deltas without duplicate frontend chunks', () => {
+    const ctx = {
+        toolLog: [],
+        fullText: '',
+        traceLog: [],
+        pendingOutputChunk: '',
+        seenToolKeys: new Set(),
+        hasClaudeStreamEvents: false,
+    };
+    const first = {
+        type: 'assistant',
+        message: {
+            id: 'msg-1',
+            content: [{ type: 'text', text: 'OK, first.' }],
+        },
+    };
+    const duplicate = {
+        type: 'assistant',
+        message: {
+            id: 'msg-1',
+            content: [{ type: 'text', text: 'OK, first.' }],
+        },
+    };
+    const snapshotUpdate = {
+        type: 'assistant',
+        message: {
+            id: 'msg-1',
+            content: [{ type: 'text', text: 'OK, first. More.' }],
+        },
+    };
+
+    extractFromEvent('claude-i', first, ctx, 'claude-i');
+    assert.equal(extractOutputChunk('claude-i', first, ctx), 'OK, first.');
+    assert.equal(ctx.fullText, 'OK, first.');
+
+    extractFromEvent('claude-i', duplicate, ctx, 'claude-i');
+    assert.equal(extractOutputChunk('claude-i', duplicate, ctx), '');
+    assert.equal(ctx.fullText, 'OK, first.');
+
+    extractFromEvent('claude-i', snapshotUpdate, ctx, 'claude-i');
+    assert.equal(extractOutputChunk('claude-i', snapshotUpdate, ctx), ' More.');
+    assert.equal(ctx.fullText, 'OK, first. More.');
+});
+
 test('grok streaming-json deltas append text and capture end session id', () => {
     const ctx = { toolLog: [], fullText: '', traceLog: [], pendingOutputChunk: '', seenToolKeys: new Set() };
     extractFromEvent('grok', { type: 'thought', data: 'internal' }, ctx, 'grok');

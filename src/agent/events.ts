@@ -228,6 +228,43 @@ function appendAssistantTextSegment(ctx: SpawnContext, text: unknown): string {
     return segment;
 }
 
+function extractAssistantText(event: CliEventRecord): string {
+    if (!event.message?.content) return '';
+    const parts: string[] = [];
+    for (const block of asCliEventArray(event.message.content)) {
+        if (block.type === 'text' && typeof block.text === 'string') {
+            parts.push(block.text);
+        }
+    }
+    return parts.join('');
+}
+
+function appendClaudeISnapshotText(ctx: SpawnContext, event: CliEventRecord): string {
+    const text = extractAssistantText(event);
+    if (!text) return '';
+
+    const messageId = fieldString(event.message?.id || event.id);
+    if (messageId && messageId === ctx.claudeILastAssistantId) {
+        const previous = ctx.claudeILastAssistantText || '';
+        ctx.claudeILastAssistantText = text;
+        if (text === previous || previous.startsWith(text)) return '';
+        if (text.startsWith(previous)) {
+            const delta = text.slice(previous.length);
+            ctx.fullText += delta;
+            return delta;
+        }
+        if (ctx.fullText.endsWith(previous)) {
+            ctx.fullText = ctx.fullText.slice(0, -previous.length) + text;
+        }
+        return '';
+    }
+
+    if (messageId) ctx.claudeILastAssistantId = messageId;
+    else delete ctx.claudeILastAssistantId;
+    ctx.claudeILastAssistantText = text;
+    return appendAssistantTextSegment(ctx, text);
+}
+
 function appendGeminiAssistantTextSegment(ctx: SpawnContext, text: unknown, isDelta: boolean): string {
     const raw = String(text || '');
     if (!raw) return '';
@@ -622,16 +659,13 @@ export function extractOutputChunk(cli: string, event: CliEventRecord, ctx?: Spa
         if (event.type === 'text') return String(event.data || event.text || '');
         return '';
     }
-    // claude-i: transcript delivers complete assistant messages, emit as single chunk
+    // claude-i transcript assistant records are snapshots; extractFromEvent
+    // converts them to deltas so the append-only frontend does not duplicate text.
     if (cli === 'claude-i') {
-        if (event.type === 'assistant' && event.message?.content) {
-            const parts: string[] = [];
-            for (const block of asCliEventArray(event.message.content)) {
-                if (block.type === 'text' && typeof block.text === 'string') {
-                    parts.push(block.text);
-                }
-            }
-            return parts.join('');
+        if (ctx?.pendingOutputChunk) {
+            const chunk = ctx.pendingOutputChunk;
+            ctx.pendingOutputChunk = '';
+            return chunk;
         }
         return '';
     }
@@ -838,11 +872,18 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
         case 'claude':
         case 'claude-i':
             if (event.type === 'assistant' && event.message?.content) {
-                for (const block of event.message.content) {
-                    if (block.type === 'text') {
-                        const segment = appendAssistantTextSegment(ctx, block.text);
-                        const scope = liveScopeOf(ctx);
-                        if (scope) appendLiveRunText(scope, segment);
+                if (cli === 'claude-i') {
+                    const segment = appendClaudeISnapshotText(ctx, event);
+                    ctx.pendingOutputChunk = (ctx.pendingOutputChunk || '') + segment;
+                    const scope = liveScopeOf(ctx);
+                    if (scope && segment) appendLiveRunText(scope, segment);
+                } else {
+                    for (const block of event.message.content) {
+                        if (block.type === 'text') {
+                            const segment = appendAssistantTextSegment(ctx, block.text);
+                            const scope = liveScopeOf(ctx);
+                            if (scope) appendLiveRunText(scope, segment);
+                        }
                     }
                 }
             } else if (event.type === 'result') {
