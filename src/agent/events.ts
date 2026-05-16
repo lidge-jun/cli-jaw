@@ -1055,6 +1055,9 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                     status: 'error' as const,
                     stepRef: `grok:error:${event.requestId || ctx.traceRunId || 'run'}`,
                 };
+                const key = `${tool.stepRef}:${detail}`;
+                if (ctx.seenToolKeys.has(key)) break;
+                ctx.seenToolKeys.add(key);
                 ctx.toolLog.push(tool);
                 syncLiveTools(ctx);
                 emitAgentTool(ctx, agentLabel, tool, empTag);

@@ -968,6 +968,18 @@ test('grok streaming-json error emits error tool without assistant text', () => 
     assert.equal(ctx.toolLog[0].detail, 'reasoningEffort unsupported');
 });
 
+test('grok streaming-json duplicate errors with same request id are ignored', () => {
+    const ctx = { toolLog: [], fullText: '', traceLog: [], pendingOutputChunk: '', seenToolKeys: new Set(), traceRunId: 'trace-1' };
+    extractFromEvent('grok', { type: 'error', data: 'Rate limited', requestId: 'req-dup' }, ctx, 'grok');
+    extractFromEvent('grok', { type: 'error', data: 'Rate limited', requestId: 'req-dup' }, ctx, 'grok');
+
+    assert.equal(ctx.fullText, '');
+    assert.equal(ctx.pendingOutputChunk, '');
+    assert.equal(ctx.toolLog.length, 1);
+    assert.equal(ctx.toolLog[0].stepRef, 'grok:error:req-dup');
+    assert.equal(ctx.toolLog[0].detail, 'Rate limited');
+});
+
 test('assistant output segments use a single markdown line break boundary', () => {
     const geminiCtx = { toolLog: [], fullText: '', traceLog: [] };
     const firstGemini = { type: 'message', role: 'assistant', content: 'a답변', delta: true };
