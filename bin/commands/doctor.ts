@@ -154,9 +154,9 @@ function readBinaryVersion(candidate: string, args: string[] = ['--version']): s
 }
 
 function verifyClaudeInteractive() {
-    const helper = findBinaryPath('claude-i') || findBinaryPath('claude-exec') || findBinaryPath('jaw-claude-i');
+    const helper = findBinaryPath('claude-e') || findBinaryPath('claude-exec') || findBinaryPath('claude-i') || findBinaryPath('jaw-claude-i');
     if (!helper) {
-        throw new Error('WARN: runtime missing — build with `npm run build:claude-exec` or install `claude-exec` on PATH');
+        throw new Error('WARN: runtime missing — install `claude-e` on PATH or build with `npm run build:claude-exec`');
     }
 
     let helperVersion = 'unknown';

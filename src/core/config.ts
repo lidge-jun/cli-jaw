@@ -423,38 +423,49 @@ export function saveHeartbeatFile(data: HeartbeatFile | Record<string, unknown>)
 
 export function detectCli(name: string): CliDetection {
     const binary = (CLI_REGISTRY as Record<string, any>)[name]?.binary || name;
-    if (name !== 'claude-i' && binary !== 'claude-exec') return detectCliBinary(binary);
+    if (name !== 'claude-i' && binary !== 'claude-e' && binary !== 'claude-exec') return detectCliBinary(binary);
 
-    const explicitHelper = process.env["CLAUDE_EXEC_BIN"] || process.env["JAW_CLAUDE_I_BIN"];
-    const embeddedCandidates = getClaudeExecEmbeddedCandidates();
+    const explicitHelper = process.env["CLAUDE_E_BIN"] || process.env["CLAUDE_EXEC_BIN"] || process.env["JAW_CLAUDE_I_BIN"];
+    const packageCandidates = getClaudeExecPackageCandidates();
+    const packageDetected = selectSpawnableCliPath(packageCandidates);
+    if (packageDetected.available) return packageDetected;
+
+    const claudeEDetected = detectCliBinary('claude-e');
+    if (claudeEDetected.available) {
+        return mergeRejectedDetections(claudeEDetected, packageDetected);
+    }
+
+    const embeddedCandidates = getClaudeExecEmbeddedFallbackCandidates();
     const embeddedDetected = selectSpawnableCliPath(embeddedCandidates);
     if (embeddedDetected.available) return embeddedDetected;
 
     const claudeExecDetected = detectCliBinary('claude-exec');
     if (claudeExecDetected.available) {
-        return mergeRejectedDetections(claudeExecDetected, embeddedDetected);
+        return mergeRejectedDetections(claudeExecDetected, packageDetected, claudeEDetected, embeddedDetected);
     }
 
     const legacyJawDetected = detectCliBinary('jaw-claude-i');
     if (legacyJawDetected.available) {
-        return mergeRejectedDetections(legacyJawDetected, embeddedDetected, claudeExecDetected);
+        return mergeRejectedDetections(legacyJawDetected, packageDetected, claudeEDetected, embeddedDetected, claudeExecDetected);
     }
 
     const legacyAliasDetected = detectCliBinary('claude-i');
     if (legacyAliasDetected.available) {
-        return mergeRejectedDetections(legacyAliasDetected, embeddedDetected, claudeExecDetected, legacyJawDetected);
+        return mergeRejectedDetections(legacyAliasDetected, packageDetected, claudeEDetected, embeddedDetected, claudeExecDetected, legacyJawDetected);
     }
 
     const nativeDetected = selectSpawnableCliPath(getClaudeExecNativeFallbackCandidates());
     if (nativeDetected.available) {
-        return mergeRejectedDetections(nativeDetected, embeddedDetected, claudeExecDetected, legacyJawDetected, legacyAliasDetected);
+        return mergeRejectedDetections(nativeDetected, packageDetected, claudeEDetected, embeddedDetected, claudeExecDetected, legacyJawDetected, legacyAliasDetected);
     }
 
-    const explicitDetected = explicitHelper && !embeddedCandidates.includes(explicitHelper)
+    const explicitDetected = explicitHelper && !packageCandidates.includes(explicitHelper) && !embeddedCandidates.includes(explicitHelper)
         ? selectSpawnableCliPath([explicitHelper])
         : null;
     return mergeRejectedDetections(
         { available: false, path: null },
+        packageDetected,
+        claudeEDetected,
         embeddedDetected,
         claudeExecDetected,
         legacyJawDetected,
@@ -509,16 +520,44 @@ function getClaudeExecEmbeddedCandidates(
     projectDir = getProjectDir(),
     env: NodeJS.ProcessEnv = process.env,
 ): string[] {
+    return [
+        ...getClaudeExecPackageCandidates(projectDir, env),
+        ...getClaudeExecEmbeddedFallbackCandidates(projectDir),
+    ];
+}
+
+function getClaudeExecPackageCandidates(
+    projectDir = getProjectDir(),
+    env: NodeJS.ProcessEnv = process.env,
+): string[] {
+    const shortHelper = nativeExecutableName('claude-e');
+    const execHelper = nativeExecutableName('claude-exec');
+    const shortNpmBin = process.platform === 'win32' ? 'claude-e.cmd' : 'claude-e';
+    const execNpmBin = process.platform === 'win32' ? 'claude-exec.cmd' : 'claude-exec';
+    const candidates = [
+        env["CLAUDE_E_BIN"],
+        env["CLAUDE_EXEC_BIN"],
+        env["JAW_CLAUDE_I_BIN"],
+        join(projectDir, 'node_modules', '.bin', shortNpmBin),
+        join(projectDir, 'node_modules', '.bin', execNpmBin),
+        join(projectDir, 'node_modules', 'claude-e', 'bin', 'claude-e'),
+        join(projectDir, 'node_modules', 'claude-e', 'bin', 'claude-exec'),
+        join(projectDir, 'node_modules', 'claude-e', 'target', 'release', shortHelper),
+        join(projectDir, 'node_modules', 'claude-e', 'target', 'release', execHelper),
+    ];
+    return candidates.filter((candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0);
+}
+
+function getClaudeExecEmbeddedFallbackCandidates(
+    projectDir = getProjectDir(),
+): string[] {
+    const shortHelper = nativeExecutableName('claude-e');
     const execHelper = nativeExecutableName('claude-exec');
     const legacyHelper = nativeExecutableName('jaw-claude-i');
     const legacyAlias = nativeExecutableName('claude-i');
-    const npmBin = process.platform === 'win32' ? 'claude-exec.cmd' : 'claude-exec';
     const platformArch = `${process.platform}-${process.arch}`;
     const candidates = [
-        env["CLAUDE_EXEC_BIN"],
-        env["JAW_CLAUDE_I_BIN"],
-        join(projectDir, 'node_modules', '.bin', npmBin),
-        join(projectDir, 'node_modules', 'claude-exec', 'bin', 'claude-exec'),
+        join(projectDir, 'vendor', platformArch, shortHelper),
         join(projectDir, 'vendor', platformArch, execHelper),
         join(projectDir, 'vendor', platformArch, legacyHelper),
         join(projectDir, 'vendor', platformArch, legacyAlias),
