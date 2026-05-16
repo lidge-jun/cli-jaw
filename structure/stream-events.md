@@ -151,7 +151,7 @@ stream close →
 
 ### Claude Interactive (`claude-i`)
 
-`claude-i`는 `claude-exec` helper surface가 Claude CLI를 PTY로 띄우고, transcript tail과 hook output을 JSONL로 다시 내보내는 experimental runtime이다. Legacy `jaw-claude-i` / `claude-i` helper names remain fallback binaries. `src/agent/spawn.ts`는 helper의 `jaw_runtime` 이벤트를 discriminator 전에 처리하고, 일반 Claude `system`/`assistant`/`result` event는 Claude-like parser 경로를 공유한다.
+`claude-i`는 `claude-e` helper surface가 Claude CLI를 PTY로 띄우고, transcript tail과 hook output을 JSONL로 다시 내보내는 experimental runtime이다. Compatibility `claude-exec` and legacy `jaw-claude-i` / `claude-i` helper names remain fallback binaries. `src/agent/spawn.ts`는 helper의 `jaw_runtime` 이벤트를 discriminator 전에 처리하고, 일반 Claude `system`/`assistant`/`result` event는 Claude-like parser 경로를 공유한다.
 
 호출 플래그:
 
@@ -168,7 +168,7 @@ run --jsonl --output-format stream-json --timeout-ms 600000 [--resume <sessionId
 | `assistant` | transcript에서 온 완성 assistant message를 text block 단위로 `fullText`에 누적하고 `agent_output` single chunk로 preview |
 | `result` | cost/turns/duration/session/usage를 Claude path와 동일하게 저장 |
 
-Session bucket은 `claude-i`로 분리되어 standard `claude` session ID와 섞이지 않는다. Helper는 interactive Claude CLI를 래핑하므로 `jaw doctor`가 selected runtime(`claude-exec` preferred)과 underlying `claude` 설치/버전을 둘 다 확인한다.
+Session bucket은 `claude-i`로 분리되어 standard `claude` session ID와 섞이지 않는다. Helper는 interactive Claude CLI를 래핑하므로 `jaw doctor`가 selected runtime(`claude-e` preferred)과 underlying `claude` 설치/버전을 둘 다 확인한다.
 
 Thinking visibility:
 

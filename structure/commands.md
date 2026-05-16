@@ -125,7 +125,7 @@ prompt, quit, file, steer, ide, orchestrate
 - 값이 없으면 현재 상태 조회.
 - 값이 있으면 `settings.perCli[activeCli].model` 또는 `settings.cli`를 갱신한다.
 - remote interface에서도 허용된다.
-- `/cli claude-i`는 `claude-exec` runtime surface를 선택한다. helper는 `CLAUDE_EXEC_BIN`, embedded npm `claude-exec`, PATH `claude-exec`, legacy `jaw-claude-i` / `claude-i`, `native/jaw-claude-i/target/{release,debug}/jaw-claude-i` fallback 순으로 탐지되며, `jaw doctor`는 runtime과 underlying `claude`를 별도로 점검한다.
+- `/cli claude-i`는 `claude-e` runtime surface를 선택한다. helper는 `CLAUDE_E_BIN`, bundled npm `claude-e`, PATH `claude-e`, compatibility `claude-exec`, legacy `jaw-claude-i` / `claude-i`, `native/jaw-claude-i/target/{release,debug}/jaw-claude-i` fallback 순으로 탐지되며, `jaw doctor`는 runtime과 underlying `claude`를 별도로 점검한다.
 
 ### `/fallback [cli1 cli2...|off]`
 
@@ -248,7 +248,7 @@ gate:mcp-scope-frozen, gate:no-experimental-in-readme-ready-section, gate:all
 
 Use `npm run gate:all` as the broad docs/release sanity command when available.
 
-Claude Exec helper는 release gate와 별도로 `npm run build:claude-exec`(Rust release build)와 `npm run test:claude-exec`(Rust test)를 제공한다. 기존 `build:claude-i` / `test:claude-i`는 호환 alias다.
+Claude E의 vendored native fallback helper는 release gate와 별도로 `npm run build:claude-exec`(Rust release build)와 `npm run test:claude-exec`(Rust test)를 제공한다. 기존 `build:claude-i` / `test:claude-i`는 호환 alias다.
 
 ---
 

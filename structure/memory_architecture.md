@@ -51,7 +51,7 @@ graph TD
 | CLI | 주입 방식 | 코드 |
 |-----|----------|------|
 | **claude** | `stdin.write(historyBlock + prompt)` | `spawn.ts` 표준 CLI 분기 |
-| **claude-i** | fresh run은 `stdin.write(historyBlock + prompt)`, resume은 helper `--resume` + 현재 prompt만 전달 | `claude-exec` helper surface 우선, legacy `jaw-claude-i` fallback. 세션 bucket은 `claude-i`라 standard Claude 세션과 분리 |
+| **claude-i** | fresh run은 `stdin.write(historyBlock + prompt)`, resume은 helper `--resume` + 현재 prompt만 전달 | `claude-e` helper surface 우선, compatibility `claude-exec`와 legacy `jaw-claude-i` fallback. 세션 bucket은 `claude-i`라 standard Claude 세션과 분리 |
 | **codex** | `stdin.write(historyBlock + "\n\n[User Message]\n" + prompt)` | `spawn.ts` 표준 CLI 분기 |
 | **gemini / grok / opencode** | `args`에 포함, 히스토리는 `withHistoryPrompt()`로 합쳐 전달 | `spawn.ts` `buildArgs()` 경로. Grok는 `-p` + `--output-format streaming-json`, no effort/system prompt flags |
 | **copilot (ACP)** | `acp.prompt(acpPrompt)` | `spawn.ts` ACP 분기 |

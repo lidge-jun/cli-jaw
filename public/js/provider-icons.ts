@@ -43,9 +43,10 @@ const PROVIDER_ICONS: Record<ProviderSlug, ProviderIcon> = {
 };
 
 const PROVIDER_LABEL_ALIASES: Record<string, string> = {
-    'claude-i': 'Claude Exec',
-    'claude-exec': 'Claude Exec',
-    'jaw-claude-i': 'Claude Exec',
+    'claude-i': 'Claude E',
+    'claude-e': 'Claude E',
+    'claude-exec': 'Claude E',
+    'jaw-claude-i': 'Claude E',
 };
 
 function resolveProviderSlug(slug: string): ProviderSlug | null {

@@ -52,7 +52,7 @@ Plus: explicit PABCD orchestration (`/orchestrate`, `/pabcd`, `/continue`), 230+
 | **PABCD** | Worklog resume is explicit: use `/continue`. Natural language “continue” stays a normal prompt |
 | **Gemini CLI** | Full-access Gemini runs use `--skip-trust --approval-mode yolo` plus `--include-directories` for OS home access; WSL also includes the Windows user home when discoverable |
 | **Grok CLI** | `grok-build` is supported as a standard CLI runtime with streaming-json parsing. `--effort` is deliberately disabled for `grok-build` because the server rejects `reasoningEffort` even though the CLI help lists the flag |
-| **Claude Exec** | The experimental `claude-i` provider now prefers the `claude-exec` runtime name. Detection honors `CLAUDE_EXEC_BIN`, embedded npm `claude-exec`, PATH `claude-exec`, and then legacy `jaw-claude-i` / `claude-i` fallbacks |
+| **Claude E** | The experimental `claude-i` provider now runs through the `claude-e` package/runtime. Detection honors `CLAUDE_E_BIN`, bundled npm `claude-e`, PATH `claude-e`, then compatibility `claude-exec` / `jaw-claude-i` / `claude-i` fallbacks |
 | **Messaging** | `/api/channel/send` is the canonical Telegram/Discord outbound path; legacy channel-specific endpoints remain |
 | **Heartbeat** | Jobs support `every` and `cron` schedules with optional IANA time zones |
 | **Browser web-AI** | Runtime diagnostics/orphan cleanup, persistent tab lifecycle, session reattach, and ChatGPT/Gemini/Grok vendor paths are documented in `structure/` |

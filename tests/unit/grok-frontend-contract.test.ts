@@ -31,17 +31,19 @@ test('CODEX-FE-001: provider icons keep codex original and color only codex-app'
     assert.doesNotMatch(icons, /Codex \(OpenAI\)|Codex App \(OpenAI\)/);
     assert.match(icons, /copilot:\s*\{[\s\S]*label:\s*'Copilot'/);
     assert.doesNotMatch(icons, /GitHub Copilot/);
+    assert.doesNotMatch(src('public/assets/providers/copilot.svg'), /GitHub Copilot/);
+    assert.doesNotMatch(src('public/assets/providers/copilot-color.svg'), /GitHub Copilot/);
 });
 
-test('CLAUDE-EXEC-FE-001: frontend presents claude-i as Claude Exec', () => {
+test('CLAUDE-E-FE-001: frontend presents claude-i as Claude E', () => {
     const meta = src('public/manager/src/settings/pages/components/agent/agent-meta.ts');
     const constants = src('public/js/constants.ts');
     const icons = src('public/js/provider-icons.ts');
     const settingsCore = src('public/js/features/settings-core.ts');
     const cliStatus = src('public/js/features/settings-cli-status.ts');
-    assert.match(meta, /'claude-i':\s*\{[\s\S]*label:\s*'Claude Exec'/);
-    assert.match(constants, /'claude-i':\s*\{[\s\S]*label:\s*'Claude Exec'/);
-    assert.match(icons, /'claude-i':\s*'Claude Exec'/);
+    assert.match(meta, /'claude-i':\s*\{[\s\S]*label:\s*'Claude E'/);
+    assert.match(constants, /'claude-i':\s*\{[\s\S]*label:\s*'Claude E'/);
+    assert.match(icons, /'claude-i':\s*'Claude E'/);
     assert.match(settingsCore, /cliDisplayLabel\(cli\)/);
     assert.match(cliStatus, /providerLabel\(name\)/);
 });
