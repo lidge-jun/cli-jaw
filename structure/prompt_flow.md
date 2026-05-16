@@ -8,7 +8,7 @@ aliases: [Prompt Injection Flow, CLI-JAW prompt flow, prompt pipeline]
 
 # 프롬프트 삽입 흐름 — Prompt Injection Flow
 
-> cli-jaw의 프롬프트 조립 + 주입 전체 흐름. 현재 기준 소스는 `src/prompt/builder.ts` 674L, `src/memory/injection.ts`, `src/agent/spawn.ts` 1439L, `src/prompt/templates/*` (a1-system 283L, a2-default 25L, orchestration 95L, employee 86L, control-system 56L, worker-context 11L, skills 18L, heartbeat-jobs 4L, heartbeat-default 4L, vision-click 3L).
+> cli-jaw의 프롬프트 조립 + 주입 전체 흐름. 현재 기준 소스는 `src/prompt/builder.ts` 715L, `src/memory/injection.ts`, `src/agent/spawn.ts` 1968L, `src/prompt/templates/*` (a1-system 305L, a2-default 25L, orchestration 95L, employee 86L, control-system 56L, worker-context 11L, skills 18L, heartbeat-jobs 4L, heartbeat-default 4L, vision-click 3L).
 
 ---
 
@@ -29,6 +29,7 @@ graph TD
     USER["user prompt"] --> SPAWN
     HIST["historyBlock<br/>spawn.ts"] --> SPAWN
     SPAWN --> CLAUDE["Claude"]
+    SPAWN --> CLAUDEI["Claude Interactive<br/>jaw-claude-i"]
     SPAWN --> CODEX["Codex"]
     SPAWN --> GEMINI["Gemini"]
     SPAWN --> GROK["Grok"]
@@ -232,6 +233,7 @@ delegation rules 블록은 prompt 끝에 항상 붙는다.
 | CLI | 시스템 프롬프트 | 현재 턴 입력 |
 | --- | --- | --- |
 | Claude | `buildArgs(..., sysPrompt)` | stdin에 `withHistoryPrompt(prompt, historyBlock)` |
+| Claude Interactive (`claude-i`) | helper 뒤의 Claude CLI에 args로 `--model`/`--effort`/permission 전달 | fresh run은 stdin에 `withHistoryPrompt(prompt, historyBlock)`, resume run은 `jaw-claude-i --resume <sessionId>` + 현재 prompt |
 | Codex | `{workDir}/AGENTS.md` 자동 로드 | 새 세션일 때만 stdin에 `[User Message]` 블록 |
 | Gemini | `GEMINI_SYSTEM_MD` tmpfile | args 레벨 prompt (`withHistoryPrompt`) |
 | Grok | cwd instruction files auto-discovery (`grok inspect` 기준) | args 레벨 prompt (`withHistoryPrompt`) via `-p`, no effort/system-prompt flags for `grok-build` |

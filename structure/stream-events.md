@@ -7,7 +7,7 @@ aliases: [CLI Stream Event Reference, stream events, NDJSON parser]
 # CLI Stream Event Reference (NDJSON + WS)
 
 > 각 CLI의 NDJSON/ACP 이벤트를 `src/agent/events.ts`가 파싱하고, `broadcast()`가 public WebSocket 또는 internal-only path와 내부 listener로 fan-out 한다.
-> 마지막 코드 대조: 2026-04-27 (`broadcast(...)`, `spawn.ts`, `events.ts`, `lifecycle-handler.ts`, `public/js/ws.ts`)
+> 마지막 코드 대조: 2026-05-16 (`broadcast(...)`, `spawn.ts`, `events.ts`, `claude-i-runtime.ts`, `lifecycle-handler.ts`, `public/js/ws.ts`)
 
 ---
 
@@ -36,7 +36,7 @@ CLI spawn / ACP session
 
 `src/core/bus.ts`의 `broadcast(type, data, audience = 'public')`가 단일 fan-out 지점이다. WebSocket payload는 항상 `{ type, ...data, ts: Date.now() }` 형태이며, `audience === 'public'`일 때만 WS로 전송된다. 내부 listener(`addBroadcastListener`)는 public/internal 여부와 무관하게 호출된다.
 
-### 현재 코드에서 실제 emit되는 이벤트 (22종)
+### 현재 코드에서 실제 emit되는 이벤트 (31종)
 
 | Type | 대표 payload | 발행 위치 / 용도 |
 | --- | --- | --- |
@@ -44,6 +44,15 @@ CLI spawn / ACP session
 | `agent_tool` | `{ agentId, icon, label, toolType?, detail?, stepRef?, status?, isEmployee? }` | `agent/events.ts`, `spawn.ts`; CLI/ACP tool, thinking, search, subagent step |
 | `agent_output` | `{ agentId, cli, text, isEmployee? }` | `spawn.ts`; live preview chunk |
 | `agent_done` | `{ text, toolLog?, error?, origin?, isEmployee? }` | `lifecycle-handler.ts`, `spawn.ts`, `server.ts`; authoritative final/error |
+| `agent:claude-i:runtime_started` | `{ runId, seq, version? }` | `claude-i-runtime.ts`; native helper run started |
+| `agent:claude-i:spawned` | `{ runId, pid }` | `claude-i-runtime.ts`; underlying Claude process spawned |
+| `agent:claude-i:session` | `{ runId, sessionId, transcriptPath? }` | `claude-i-runtime.ts`; helper discovered Claude session/transcript |
+| `agent:claude-i:prompt_injected` | `{ runId }` | `claude-i-runtime.ts`; prompt was written into the PTY session |
+| `agent:claude-i:stop` | `{ runId, transcriptPath? }` | `claude-i-runtime.ts`; stop signal observed |
+| `agent:claude-i:stop_failure` | `{ runId, error? }` | `claude-i-runtime.ts`; stop/cleanup failed |
+| `agent:claude-i:interrupted` | `{ runId, sessionId?, resumable? }` | `claude-i-runtime.ts`; graceful SIGINT interrupt and resume metadata |
+| `agent:claude-i:cleanup` | `{ runId, event, escalated? }` | `claude-i-runtime.ts`; cleanup start/done lifecycle |
+| `agent:claude-i:error` | `{ runId, message?, exitCode? }` | `claude-i-runtime.ts`; helper/runtime error |
 | `agent_retry` | `{ cli, delay, reason, isEmployee? }` | 429 retry 안내 |
 | `agent_fallback` | `{ from, to, reason, isEmployee? }` | fallback CLI 전환 안내 |
 | `agent_smoke` | `{ cli, confidence, reason, agentId, isEmployee? }` | smoke response auto-continue 안내 |
@@ -73,6 +82,7 @@ CLI spawn / ACP session
 | --- | --- |
 | `worker_stalled` / `worker_disconnected` / `worker_timeout` | bus/internal listener에는 전달되지만 `public/js/ws.ts` 직접 분기는 없다 |
 | `system_notice` | WS public emit은 되지만 `public/js/ws.ts` 직접 분기는 없다 |
+| `agent:claude-i:*` | native helper lifecycle/status telemetry. 현재 Web UI 직접 분기는 없고, trace/internal listener와 외부 observer용이다 |
 
 ### Web UI에 legacy 분기만 남은 타입
 
@@ -136,6 +146,27 @@ stream close →
   `🤖 subagent: {description}` + `toolType=subagent` + `status=running` + `stepRef=claude:task:{task_id}`.
 - `system.subtype === 'task_notification'`:
   같은 `claude:task:{task_id}` step을 `✅ done` 또는 `❌ error`로 갱신하고 summary/output_file/usage detail을 붙인다.
+
+### Claude Interactive (`claude-i`)
+
+`claude-i`는 `jaw-claude-i` native helper가 Claude CLI를 PTY로 띄우고, transcript tail과 hook output을 JSONL로 다시 내보내는 experimental runtime이다. `src/agent/spawn.ts`는 helper의 `jaw_runtime` 이벤트를 discriminator 전에 처리하고, 일반 Claude `system`/`assistant`/`result` event는 Claude-like parser 경로를 공유한다.
+
+호출 플래그:
+
+```text
+run --jsonl --output-format stream-json --timeout-ms 600000 [--resume <sessionId>] -- <claude args...>
+```
+
+| helper/event | jaw 처리 |
+| --- | --- |
+| `jaw_runtime.runtime_started` | `agent:claude-i:runtime_started` broadcast |
+| `jaw_runtime.claude_spawned` | underlying Claude pid telemetry |
+| `jaw_runtime.session_started` | `ctx.sessionId` 저장 + `agent:claude-i:session` broadcast |
+| `jaw_runtime.interrupted` | graceful SIGINT resume metadata 저장 |
+| `assistant` | transcript에서 온 완성 assistant message를 text block 단위로 `fullText`에 누적하고 `agent_output` single chunk로 preview |
+| `result` | cost/turns/duration/session/usage를 Claude path와 동일하게 저장 |
+
+Session bucket은 `claude-i`로 분리되어 standard `claude` session ID와 섞이지 않는다. Helper는 interactive Claude CLI를 래핑하므로 `jaw doctor`가 helper(`jaw-claude-i`)와 underlying `claude` 설치/버전을 둘 다 확인한다.
 
 ---
 

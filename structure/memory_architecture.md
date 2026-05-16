@@ -8,8 +8,8 @@ aliases: [CLI-JAW Memory Architecture, advanced memory runtime, memory architect
 
 # Memory Architecture — 통합 메모리 시스템
 
-> 최종 갱신: 2026-05-14
-> 소스: `src/memory/runtime.ts` 375L (사실상 facade), `src/memory/shared.ts` 256L, `src/memory/bootstrap.ts` 517L, `src/memory/indexing.ts` 474L, `src/memory/keyword-expand.ts` 294L, `src/memory/synonyms.ts` 60L, `src/memory/reflect.ts` 256L, `src/memory/identity.ts` 86L, `src/memory/injection.ts` 69L, `src/memory/memory.ts` 154L, `src/memory/worklog.ts` 200L, `src/memory/heartbeat.ts` 205L, `src/memory/heartbeat-schedule.ts` 410L, `src/memory/advanced.ts` 1L (re-export shim), `src/agent/memory-flush-controller.ts` 157L, `src/agent/spawn.ts` 1451L, `src/prompt/builder.ts` 675L, `src/orchestrator/pipeline.ts` 462L, `src/routes/memory.ts`, `src/routes/jaw-memory.ts`, `src/cli/command-context.ts`, `src/cli/handlers-runtime.ts`
+> 최종 갱신: 2026-05-16
+> 소스: `src/memory/runtime.ts` 374L (사실상 facade), `src/memory/shared.ts` 256L, `src/memory/bootstrap.ts` 517L, `src/memory/indexing.ts` 417L, `src/memory/keyword-expand.ts` 268L, `src/memory/synonyms.ts` 60L, `src/memory/reflect.ts` 256L, `src/memory/identity.ts` 86L, `src/memory/injection.ts` 69L, `src/memory/memory.ts` 154L, `src/memory/worklog.ts` 200L, `src/memory/heartbeat.ts` 206L, `src/memory/heartbeat-schedule.ts` 410L, `src/memory/advanced.ts` 1L (re-export shim), `src/agent/memory-flush-controller.ts` 159L, `src/agent/spawn.ts` 1968L, `src/prompt/builder.ts` 715L, `src/orchestrator/pipeline.ts` 455L, `src/routes/memory.ts`, `src/routes/jaw-memory.ts`, `src/cli/command-context.ts`, `src/cli/handlers-runtime.ts`
 > 임베딩: `src/manager/memory/embedding/` — `provider.ts`, `vec-store.ts`, `sync.ts`, `state-machine.ts`, `hybrid-search.ts`, `index.ts` + `src/manager/routes/dashboard-memory.ts`
 
 ---
@@ -51,6 +51,7 @@ graph TD
 | CLI | 주입 방식 | 코드 |
 |-----|----------|------|
 | **claude** | `stdin.write(historyBlock + prompt)` | `spawn.ts` 표준 CLI 분기 |
+| **claude-i** | fresh run은 `stdin.write(historyBlock + prompt)`, resume은 helper `--resume` + 현재 prompt만 전달 | `jaw-claude-i` helper 분기. 세션 bucket은 `claude-i`라 standard Claude 세션과 분리 |
 | **codex** | `stdin.write(historyBlock + "\n\n[User Message]\n" + prompt)` | `spawn.ts` 표준 CLI 분기 |
 | **gemini / grok / opencode** | `args`에 포함, 히스토리는 `withHistoryPrompt()`로 합쳐 전달 | `spawn.ts` `buildArgs()` 경로. Grok는 `-p` + `--output-format streaming-json`, no effort/system prompt flags |
 | **copilot (ACP)** | `acp.prompt(acpPrompt)` | `spawn.ts` ACP 분기 |

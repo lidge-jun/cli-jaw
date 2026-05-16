@@ -53,7 +53,9 @@ aliases: [CLI-JAW Infra, infrastructure modules, core runtime]
 | `test:smoke` | `TEST_PORT=3457 tsx --test tests/integration/api-smoke.test.ts` |
 | `smoke:opencode` | `tsx scripts/smoke/opencode-external-dir-smoke.ts` |
 | `test:fresh-install` | `tsx scripts/fresh-install-smoke.ts` |
+| `test:claude-i` | `cargo test --manifest-path native/jaw-claude-i/Cargo.toml` |
 | `build` | `tsc && mkdir -p dist/src/prompt && rsync -a --delete src/prompt/templates/ dist/src/prompt/templates/ && rsync -a --delete prompts/ dist/prompts/` |
+| `build:claude-i` | `cargo build --release --manifest-path native/jaw-claude-i/Cargo.toml` |
 | `postbuild` | `node scripts/link-current-nvm-bin.cjs` |
 | `build:frontend` | `vite build --config vite.config.ts` |
 | `dev:frontend` | `vite --config vite.config.ts` |

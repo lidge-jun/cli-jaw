@@ -7,6 +7,8 @@ aliases: [CLI-JAW Architecture Reference, cli-jaw 구조 허브, structure index
 # CLI-JAW Architecture Reference
 
 > cli-jaw 프로젝트의 내부 구조를 기술한 아키텍처 문서 허브. 시스템 전체 흐름부터 개별 모듈까지, 이 파일에서 시작하세요.
+>
+> Planning state lives separately under `devlog/_plan/README.md`. The latest GitHub-issue triage snapshot (2026-05-16) is in that file's "Triage Snapshot" section.
 
 ---
 
@@ -31,6 +33,7 @@ graph LR
     ROUTES --> BR["src/browser/"]
     ROUTES --> CMD["src/cli/"]
     ORC --> AGT
+    AGT --> NATIVE["native/jaw-claude-i"]
 ```
 
 4개 인터페이스(CLI, Web, Telegram, Discord)는 `server.ts`를 경유하고, `server.ts`는 인증/보안/WS/bootstrap을 맡은 뒤 `src/routes/`의 12개 route registrar와 2개 shared helper(`types.ts`, `quota.ts`)로 API를 위임합니다. Browser route registrar는 일반 CDP primitive, runtime doctor/cleanup, `web-ai` ChatGPT/Gemini/Grok 자동화 API를 함께 제공하므로 route 수가 가장 큽니다. 별도 `jaw dashboard serve` manager 서버는 notes/search/schedule/reminders/board surface를 `src/manager/`에서 제공한다. Process/tool logs는 `src/shared/tool-log-sanitize.ts`에서 WS와 snapshot 저장 전에 cap/truncate되어 Manager 대시보드 메모리 폭주를 막습니다.
@@ -57,10 +60,10 @@ graph LR
 | [AGENTS.md](AGENTS.md) | Command/API/README/CLAUDE 변경 시 동기화 체크리스트 | 동기화, 체크리스트, 변경관리 |
 | [str_func.md](str_func.md) | 전체 파일 트리 + 함수 시그니처 레퍼런스 | 파일트리, 함수, 마스터맵 |
 | [prompt_flow.md](prompt_flow.md) | 프롬프트가 조립되는 9단계 파이프라인 | 프롬프트, 파이프라인, 주입 |
-| [agent_spawn.md](agent_spawn.md) | CLI spawn + ACP 분기 + Gemini full-access flags + Grok streaming-json runtime + 오케스트레이션 | spawn, ACP, Gemini, Grok, 멀티에이전트 |
+| [agent_spawn.md](agent_spawn.md) | CLI spawn + ACP 분기 + Claude Interactive helper + Gemini full-access flags + Grok streaming-json runtime + 오케스트레이션 | spawn, ACP, claude-i, Gemini, Grok, 멀티에이전트 |
 | [memory_architecture.md](memory_architecture.md) | History Block + Flush + Advanced Runtime + Task Snapshot | 메모리, flush, runtime, snapshot |
 | [infra.md](infra.md) | config, db, bus, security 등 코어 모듈 | 인프라, SQLite, EventBus |
-| [commands.md](commands.md) | 24개 슬래시 커맨드 + root CLI 18개 서브커맨드 + 7개 CLI registry runtime + `browser web-ai` + explicit `/continue` note | 커맨드, 디스패처, 레지스트리 |
+| [commands.md](commands.md) | 24개 슬래시 커맨드 + root CLI 19개 user-facing command + 8개 CLI registry runtime + `browser web-ai` + explicit `/continue` note | 커맨드, 디스패처, 레지스트리 |
 | [server_api.md](server_api.md) | `server.ts` 글루 + `src/routes/` API 131 handlers / 130 endpoints | REST, WebSocket, 라우트 |
 | [stream-events.md](stream-events.md) | CLI NDJSON 이벤트 트레이스 + Grok streaming-json + ProcessBlock 매핑 | NDJSON, stepRef, ProcessBlock, Grok |
 | [🎨 frontend.md](frontend.md) | `public/` 소스/자산 452개(`dist` 제외) / 325개(generated 제외) + `public/dist/` 생성물 456개, Manager notes/search/settings/reminders/WYSIWYG, ProcessBlock 렌더링, bounded tool-log hydration | 프론트엔드, Vite 8, PWA, ProcessBlock |
@@ -125,6 +128,7 @@ Support labels must stay aligned with agbrowse:
 | PABCD Project root guard + Jawdev skill guidance | `src/orchestrator/pipeline.ts`, `src/orchestrator/state-machine.ts`, `skills_ref/dev*/SKILL.md`, `structure/prompt_basic_B.md` | PABCD docs should require `Project root: <absolute path>` in injected/dispatch examples and skill docs should prefer strict TypeScript plus existing `structure/`/`devlog`/SOT discovery. |
 | Dashboard Memory Federation (L1/L2) | `src/manager/memory/`, `src/manager/routes/dashboard-memory.ts`, `bin/commands/dashboard-memory.ts` | Dual-memory: L1 = instance-local `jaw memory` (read/write), L2 = dashboard `jaw dashboard memory` (read-only cross-instance FTS5 federation with RRF reranking). Schema-aware probing degrades gracefully for older instances. Dashboard-less users are unaffected. |
 | Grok CLI runtime | `src/cli/registry.ts`, `src/agent/args.ts`, `src/agent/events.ts`, `src/routes/quota.ts`, `public/assets/providers/grok*.svg` | `grok-build` is a standard CLI runtime using `grok -p ... --output-format streaming-json`; effort/system-prompt flags are disabled for `grok-build`; `/api/quota.grok` is auth/status-only because Grok CLI does not expose remaining quota. Browser `vendor=grok` remains a separate web-AI surface. |
+| Claude Interactive native wrapper | `native/jaw-claude-i/`, `src/agent/claude-i-runtime.ts`, `src/agent/args.ts`, `src/agent/events.ts`, `src/core/config.ts`, `src/cli/readiness.ts`, `bin/commands/doctor.ts` | `claude-i` is an experimental registry runtime backed by `jaw-claude-i`; helper discovery honors `JAW_CLAUDE_I_BIN` before PATH/native build fallbacks, runtime events are `agent:claude-i:*`, and `npm run build:claude-i` / `npm run test:claude-i` own the Rust helper build/test loop. |
 
 ---
 
@@ -159,4 +163,4 @@ Support labels must stay aligned with agbrowse:
 
 ---
 
-*마지막 갱신: 2026-05-15 (`server.ts` 807L, `src/routes/` 134 route handlers / 133 API endpoints, `src/routes/browser.ts` 475L / 41 browser routes, `src/manager/` 53 TS/TSX files / 8428L, `src/browser/web-ai/` 67 TS files / 12263L, `src/browser/adaptive-fetch/` 14 TS mirror files, `bin/commands/` 18 top-level ts subcommands + `tui/` 7 helper, `public/js/` 72 .ts (root 17 + features 41 + diagram 3 + render 11), `public/manager/` 218 files, tests 370 .test.ts 기준)*
+*마지막 갱신: 2026-05-16 (`server.ts` 826L, `src/routes/` 15 files, `src/routes/browser.ts` 475L, `src/manager/` 69 TS/TSX files, `src/browser/web-ai/` 67 TS files / 12263L, `src/browser/adaptive-fetch/` 18 TS mirror files, `src/agent/` 19 TS files, `native/jaw-claude-i/` 11 Rust source files / 1378L, `bin/commands/` 22 top-level ts files + `tui/` 7 helper, `public/js/` 75 .ts, tests 391 .test.ts / unit 366 .test.ts 기준)*

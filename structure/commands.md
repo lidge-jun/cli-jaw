@@ -8,10 +8,10 @@ aliases: [CLI-JAW Commands, slash commands registry, commands.md]
 
 # src/cli/ — Slash Command Registry & Dispatcher
 
-> `commands.ts`(295L) + `handlers.ts`(363L) + `handlers-runtime.ts`(449L) + `handlers-completions.ts`(92L) + `api-auth.ts`(45L) + `command-context.ts`(138L) + `registry.ts`(108L) + `acp-client.ts`(348L) + `claude-models.ts`(78L) + `compact.ts`(119L)
-> slash registry는 24개 커맨드, 4개 실행 인터페이스. root CLI는 `bin/cli-jaw.ts` + `bin/commands/*.ts` 기준 18개 top-level 서브커맨드이며, `browser web-ai`가 별도 helper(`browser-web-ai.ts`)로 분리되어 있다. visible 기준 CLI 22 / Web 20 / Telegram 20 / Discord 20. `cmdline` capability는 contract 전용이며 10개가 보인다.
-> 모델/CLI 선택은 `registry.ts` 단일 소스를 따른다. 현재 registry 런타임은 `claude`, `codex`, `codex-app`, `gemini`, `grok`, `opencode`, `copilot` 7개이며, Web/CLI/Telegram/Discord는 모두 `makeCommandCtx()`로 통합된 command context를 사용한다.
-> 최근 구조 변화 핵심은 두 가지다: `handlers.ts` 분해(`handlers-runtime.ts`, `handlers-completions.ts`)와 CLI→server 인증 bootstrap 공통화(`api-auth.ts`).
+> `commands.ts`(332L) + `handlers.ts`(383L) + `handlers-runtime.ts`(497L) + `handlers-completions.ts`(95L) + `api-auth.ts`(45L) + `command-context.ts`(140L) + `registry.ts`(117L) + `acp-client.ts`(382L) + `claude-models.ts`(78L) + `compact.ts`(139L)
+> slash registry는 24개 커맨드, 4개 실행 인터페이스. root CLI는 `bin/cli-jaw.ts` + `bin/commands/*.ts` 기준 19개 user-facing command이며, helper까지 포함한 `bin/commands/*.ts` top-level 파일은 22개다. `browser web-ai`는 `browser-web-ai.ts`, `dashboard memory`는 `dashboard-memory.ts`, dispatch unwrap 보조는 `dispatch-helpers.ts`로 분리되어 있다. visible 기준 CLI 22 / Web 20 / Telegram 20 / Discord 20. `cmdline` capability는 contract 전용이며 10개가 보인다.
+> 모델/CLI 선택은 `registry.ts` 단일 소스를 따른다. 현재 registry 런타임은 `claude`, `claude-i`, `codex`, `codex-app`, `gemini`, `grok`, `opencode`, `copilot` 8개이며, `claude-i`는 experimental native interactive wrapper(`jaw-claude-i`)를 통해 Claude CLI를 PTY로 구동한다. Web/CLI/Telegram/Discord는 모두 `makeCommandCtx()`로 통합된 command context를 사용한다.
+> 최근 구조 변화 핵심은 세 가지다: `handlers.ts` 분해(`handlers-runtime.ts`, `handlers-completions.ts`), CLI→server 인증 bootstrap 공통화(`api-auth.ts`), 그리고 Claude Interactive native helper build/test/doctor surface 추가다.
 
 ---
 
@@ -61,7 +61,7 @@ prompt, quit, file, steer, ide, orchestrate
 
 ## Root CLI Surface (`bin/cli-jaw.ts` + `bin/commands/*.ts`)
 
-소스 기준 entrypoint는 `bin/cli-jaw.ts`(187L)다. `package.json`의 published bin은 build 산출물 `dist/bin/cli-jaw.js` / `jaw`를 가리킨다. 현재 소스 트리에는 `bin/cli-jaw.js`가 없고, root command router는 아래 17개 user-facing command를 동적 import 한다. 파일 수 기준으로는 `browser-web-ai.ts` helper가 추가되어 `bin/commands/*.ts` top-level은 18개다.
+소스 기준 entrypoint는 `bin/cli-jaw.ts`(202L)다. `package.json`의 published bin은 build 산출물 `dist/bin/cli-jaw.js` / `jaw`를 가리킨다. 현재 소스 트리에는 `bin/cli-jaw.js`가 없고, root command router는 아래 19개 user-facing command를 동적 import 한다. 파일 수 기준으로는 `browser-web-ai.ts`, `dashboard-memory.ts`, `dispatch-helpers.ts` helper가 추가되어 `bin/commands/*.ts` top-level은 22개다.
 
 ### Global options
 
@@ -93,6 +93,8 @@ prompt, quit, file, steer, ide, orchestrate
 | `dispatch` | `bin/commands/dispatch.ts` | `--agent <name> --task <task> [--port <port>]` |
 | `service` | `bin/commands/service.ts` | `[--port PORT] [--backend launchd\|systemd\|docker] [status\|unset\|logs]` |
 | `dashboard` | `bin/commands/dashboard.ts` | `serve [--port 24576] [--from 3457] [--count 50] [--no-open]`, `memory {search\|instances\|read\|config\|state\|estimate\|reindex\|help} [--instance <ids>] [--limit N] [--json] [--port <port>]` |
+| `connector` | `bin/commands/connector.ts` | `board add/update/list`, `notes write/list`, `reminders add/list/done`, `audit [--limit N] [--json]` |
+| `reminders` | `bin/commands/reminders.ts` | `list`, `add`, `done`; `--json`, `--priority`, `--due`, `--remind`, message/thread link flags |
 
 ---
 
@@ -123,6 +125,7 @@ prompt, quit, file, steer, ide, orchestrate
 - 값이 없으면 현재 상태 조회.
 - 값이 있으면 `settings.perCli[activeCli].model` 또는 `settings.cli`를 갱신한다.
 - remote interface에서도 허용된다.
+- `/cli claude-i`는 `jaw-claude-i` native helper를 선택한다. helper는 `JAW_CLAUDE_I_BIN`, PATH, `vendor/{platform-arch}/jaw-claude-i`, `native/jaw-claude-i/target/{release,debug}/jaw-claude-i` 순으로 탐지되며, `jaw doctor`는 helper와 underlying `claude`를 별도로 점검한다.
 
 ### `/fallback [cli1 cli2...|off]`
 
@@ -244,6 +247,8 @@ gate:mcp-scope-frozen, gate:no-experimental-in-readme-ready-section, gate:all
 ```
 
 Use `npm run gate:all` as the broad docs/release sanity command when available.
+
+Claude Interactive helper는 release gate와 별도로 `npm run build:claude-i`(Rust release build)와 `npm run test:claude-i`(Rust test)를 제공한다.
 
 ---
 
