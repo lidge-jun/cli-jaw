@@ -26,7 +26,11 @@ test('CODEX-FE-001: provider icons keep codex original and color only codex-app'
     assert.match(icons, /normalized === 'codexapp'/);
     assert.match(icons, /codex:\s*\{\s*color:\s*openaiSvg,\s*mono:\s*openaiSvg/);
     assert.match(icons, /'codex-app':\s*\{\s*color:\s*openaiColorSvg,\s*mono:\s*openaiSvg/);
-    assert.match(icons, /Codex App \(OpenAI\)/);
+    assert.match(icons, /codex:\s*\{[\s\S]*label:\s*'Codex'/);
+    assert.match(icons, /'codex-app':\s*\{[\s\S]*label:\s*'Codex App'/);
+    assert.doesNotMatch(icons, /Codex \(OpenAI\)|Codex App \(OpenAI\)/);
+    assert.match(icons, /copilot:\s*\{[\s\S]*label:\s*'Copilot'/);
+    assert.doesNotMatch(icons, /GitHub Copilot/);
 });
 
 test('CLAUDE-EXEC-FE-001: frontend presents claude-i as Claude Exec', () => {
