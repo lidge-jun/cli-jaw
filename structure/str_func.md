@@ -9,7 +9,7 @@ aliases: [CLI-JAW Source Structure, str_func, source structure reference]
 # CLI-JAW — Source Structure & Function Reference
 
 > 마지막 검증: 2026-05-16 (실제 코드베이스 재측정)
-> `server.ts` 826L / `src/routes/` 15 files (12 registrar + `quota.ts` helper + `types.ts` + trace routes) / `src/cli/handlers*.ts` 383L + 497L + 95L / `src/cli/api-auth.ts` 45L / `src/agent/` 19 files (`spawn.ts` 1968L + `events.ts` 1901L + `claude-i-runtime.ts` 44L 포함) / `src/manager/` 69 TS/TSX files (10682L, dashboard manager + board/notes/search/schedule/reminders/connector/routes + notes assets/watcher 서브모듈) / `src/browser/web-ai/` 67 TS files (12390L, ChatGPT/Gemini/Grok 멀티벤더 자동화 + resolver/source-audit/observation helpers + context-pack/tab-pool) / `src/types/` 3 files (296L) / `bin/commands/` 22 top-level ts files + `tui/` 7 helper files / `native/jaw-claude-i/` 11 Rust source files (1378L)
+> `server.ts` 826L / `src/routes/` 15 files (12 registrar + `quota.ts` helper + `types.ts` + trace routes) / `src/cli/handlers*.ts` 383L + 497L + 95L / `src/cli/api-auth.ts` 45L / `src/agent/` 19 files (`spawn.ts` 1968L + `events.ts` 1904L + `claude-i-runtime.ts` 44L 포함) / `src/manager/` 69 TS/TSX files (10682L, dashboard manager + board/notes/search/schedule/reminders/connector/routes + notes assets/watcher 서브모듈) / `src/browser/web-ai/` 67 TS files (12390L, ChatGPT/Gemini/Grok 멀티벤더 자동화 + resolver/source-audit/observation helpers + context-pack/tab-pool) / `src/types/` 3 files (296L) / `bin/commands/` 22 top-level ts files + `tui/` 7 helper files / `native/jaw-claude-i/` 11 Rust source files (1378L)
 > issue #91: OfficeCLI 10-phase integration (dual-audited, 94/94 tests) — closed
 > issue #92: Phase 20 overlay consolidation + GitHub Release v1.0.28-lidge.1 (3 audits passed: A-/A/A) — closed
 > issue #95: Avatar image upload — emoji+image dual support, 4 API endpoints, secure path serving — closed
@@ -80,7 +80,7 @@ cli-jaw/
 │   │   ├── smoke-detector.ts ← smoke response 감지 + auto-continue 판단 (141L)
 │   │   ├── tool-timeout.ts   ← tool inactivity timeout helper (33L)
 │   │   ├── watchdog.ts       ← idle/progress watchdog + 4h absolute hard cap with progress deadline extension (104L)
-│   │   └── events.ts         ← NDJSON 파서 + ACP update + logEventSummary + summarizeToolInput(type-safe) + toolType/detail 필드 + Claude/claude-i thinking_delta/input_json_delta 버퍼 + flushClaudeBuffers + stepRef correlation + compact event parsing + Codex/Grok toolLog running→done dedup + Grok throttled visible thinking + claude-i complete assistant chunk (1901L)
+│   │   └── events.ts         ← NDJSON 파서 + ACP update + logEventSummary + summarizeToolInput(type-safe) + toolType/detail 필드 + Claude/claude-i thinking_delta/input_json_delta 버퍼 + flushClaudeBuffers + stepRef correlation + compact event parsing + Codex/Grok toolLog running→done dedup + Grok throttled visible thinking + duplicate error suppression + claude-i complete assistant chunk (1904L)
 │   ├── messaging/            ← 통합 메시징 런타임 (신규)
 │   │   ├── runtime.ts        ← 채널 lifecycle (init/shutdown/restart) + transport registry (146L)
 │   │   ├── send.ts           ← 통합 아웃바운드 메시지 라우팅 (ChannelSendRequest) (147L)

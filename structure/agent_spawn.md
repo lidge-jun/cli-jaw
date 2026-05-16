@@ -24,7 +24,7 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 | `src/agent/codex-app-client.ts` | 259L | Codex App stdio server client |
 | `src/agent/codex-app-events.ts` | 236L | Codex App turn/tool/message event adapter |
 | `src/agent/error-classifier.ts` | 38L | stderr/result 기반 에러 분류 helper |
-| `src/agent/events.ts` | 1901L | NDJSON 파서 + ACP `session/update` / subagent lifecycle 매핑 + Grok streaming-json text/thought/end/error + `claude-i` complete-message parsing |
+| `src/agent/events.ts` | 1904L | NDJSON 파서 + ACP `session/update` / subagent lifecycle 매핑 + Grok streaming-json text/thought/end/error 중복 억제 + `claude-i` complete-message parsing |
 | `src/agent/lifecycle-handler.ts` | 531L | child lifecycle, fallback, retry, queue resume orchestration |
 | `src/agent/live-run-state.ts` | 64L | active run snapshot / hydrate helper |
 | `src/agent/memory-flush-controller.ts` | 159L | memory flush lock + post-response trigger |
