@@ -52,7 +52,7 @@ import {
     APP_VERSION,
 } from './src/core/config.js';
 import {
-    db, getSession, getMessages, getMessagesWithTrace, getLatestAssistantMessage, getLatestDashboardActivityMessage, closeDb,
+    db, getSession, getMessages, getMessagesWithTrace, searchMessages, getLatestAssistantMessage, getLatestDashboardActivityMessage, closeDb,
     clearAllEmployeeSessions,
 } from './src/core/db.js';
 import { dashboardActivityTitleFromExcerpt } from './src/core/message-summary.js';
@@ -306,7 +306,10 @@ app.use(express.json({ limit: '1mb' }));
 // Serve Vite production build (public/dist/index.html) at root when available
 const distIndex = join(projectRoot, 'public', 'dist', 'index.html');
 app.get('/', (_req, res, next) => {
-    if (fs.existsSync(distIndex)) return res.sendFile('dist/index.html', { root: join(projectRoot, 'public') });
+    if (fs.existsSync(distIndex)) {
+        res.setHeader('Cache-Control', 'no-store');
+        return res.sendFile('dist/index.html', { root: join(projectRoot, 'public') });
+    }
     next();
 });
 
@@ -428,6 +431,22 @@ app.get('/api/messages', (req, res) => {
         tool_log: sanitizeSerializedToolLog(row["tool_log"] as string | null | undefined),
     }));
     ok(res, safeRows);
+});
+app.get('/api/messages/search', (req, res) => {
+    const q = String(req.query['q'] || '').trim();
+    if (!q) return ok(res, []);
+    const limit = Math.min(Math.max(Number(req.query['limit']) || 20, 1), 50);
+    const rows = searchMessages.all({ q, limit }) as Record<string, unknown>[];
+    const results = rows.map(row => ({
+        id: row['id'],
+        role: row['role'],
+        content: row['content'],
+        cli: row['cli'],
+        match_field: row['match_field'],
+        tool_log: sanitizeSerializedToolLog(row['tool_log'] as string | null | undefined),
+        created_at: row['created_at'],
+    }));
+    ok(res, results);
 });
 app.get('/api/messages/latest', (_req, res) => {
     const includeContent = ['1', 'true', 'yes'].includes(String(_req.query["includeContent"] || '').toLowerCase());

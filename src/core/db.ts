@@ -210,6 +210,14 @@ export const insertMessage = db.prepare('INSERT INTO messages (role, content, cl
 export const insertMessageWithTrace = db.prepare('INSERT INTO messages (role, content, cli, model, trace, tool_log, working_dir) VALUES (?, ?, ?, ?, ?, ?, ?)');
 export const insertMessageWithTraceRun = db.prepare('INSERT INTO messages (role, content, cli, model, trace, tool_log, working_dir, trace_run_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
 export const getMessages = db.prepare('SELECT id, role, content, cli, model, tool_log, trace_run_id, cost_usd, duration_ms, working_dir, created_at FROM messages ORDER BY id ASC');
+export const searchMessages = db.prepare(`
+    SELECT id, role, content, cli, tool_log, created_at,
+           CASE WHEN content LIKE '%' || $q || '%' THEN 'content' ELSE 'tool_log' END AS match_field
+    FROM messages
+    WHERE content LIKE '%' || $q || '%' OR tool_log LIKE '%' || $q || '%'
+    ORDER BY id DESC
+    LIMIT $limit
+`);
 export const getMessagesWithTrace = db.prepare('SELECT * FROM messages ORDER BY id ASC');
 export const getLatestAssistantMessage = db.prepare("SELECT id, role, content, created_at FROM messages WHERE role = 'assistant' ORDER BY id DESC LIMIT 1");
 export const getLatestDashboardActivityMessage = db.prepare("SELECT id, role, substr(content, 1, 240) AS excerpt, created_at FROM messages WHERE role IN ('user', 'assistant') ORDER BY id DESC LIMIT 1");

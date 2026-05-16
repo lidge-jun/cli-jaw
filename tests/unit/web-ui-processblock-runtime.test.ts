@@ -185,6 +185,36 @@ test('employee detail rebroadcast does not replace non-employee ghost row', asyn
     assert.equal(document.querySelectorAll('.process-step-label')[1]?.textContent, 'read_file');
 });
 
+test('running ProcessBlock updates with same stepRef replace one row instead of counting duplicates', async () => {
+    setupWebUiDom();
+    const ui = await import('../../public/js/ui.ts');
+
+    ui.showProcessStep({
+        id: 'thinking-start',
+        type: 'thinking',
+        icon: '💭',
+        label: 'Grok thinking',
+        detail: 'First chunk',
+        stepRef: 'grok:thinking',
+        status: 'running',
+        startTime: Date.now(),
+    });
+    ui.showProcessStep({
+        id: 'thinking-update',
+        type: 'thinking',
+        icon: '💭',
+        label: 'Grok thinking',
+        detail: 'First chunk plus more detail',
+        stepRef: 'grok:thinking',
+        status: 'running',
+        startTime: Date.now(),
+    });
+
+    assert.equal(document.querySelectorAll('.process-step').length, 1);
+    assert.equal(document.querySelector('.process-summary-text')?.textContent?.includes('Thinking×2'), false);
+    assert.match(document.querySelector('.process-step')?.textContent || '', /First chunk plus more detail/);
+});
+
 test('ProcessBlock toggles pass row anchor through layout mutation hook', () => {
     setupWebUiDom();
     const host = document.createElement('div');

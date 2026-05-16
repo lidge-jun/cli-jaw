@@ -40,6 +40,7 @@ import {
     buildProcessBlockHtml,
     getStoredProcessStepDetail,
     mergeStoredProcessStepDetail,
+    setStoredProcessStepDetail,
     processStepMetaFromStore,
     releaseProcessBlockDetails,
     type ProcessStep,
@@ -105,22 +106,22 @@ export function showProcessStep(step: ProcessStep): void {
     if (state.currentProcessBlock) {
         const rawIcon = step.rawIcon || step.icon;
         // Completion detection: prefer semantic status field, fall back to emoji check
-        const resolvedStatus = (step.status && step.status !== 'running')
-            ? step.status
-            : emojiToStatus(step.icon);
+        const resolvedStatus = step.status || emojiToStatus(step.icon) || 'running';
         if (resolvedStatus === 'done' || resolvedStatus === 'error') {
             // Prefer matching by stepRef (stable correlation), fall back to label
             const match = findRunningProcessStepMatch(state.currentProcessBlock.steps, step);
             if (match) {
                 step.icon = emojiToIcon(step.icon);
-                const mergedPreview = mergeStoredProcessStepDetail(match.id, step.detail);
+                const detailPreview = step.type === 'thinking'
+                    ? setStoredProcessStepDetail(match.id, step.detail)
+                    : mergeStoredProcessStepDetail(match.id, step.detail);
                 replaceStep(state.currentProcessBlock, match.id, {
                     ...match,
                     ...step,
                     id: match.id,
                     rawIcon,
-                    detail: mergedPreview,
-                    detailPreview: mergedPreview,
+                    detail: detailPreview,
+                    detailPreview,
                     label: step.label || match.label,
                     status: resolvedStatus,
                 });
@@ -132,17 +133,42 @@ export function showProcessStep(step: ProcessStep): void {
                     .find(s => s.stepRef === step.stepRef && (s.status === 'done' || s.status === 'error'));
                 if (existingDone) {
                     step.icon = emojiToIcon(step.icon);
+                    const detailPreview = step.type === 'thinking'
+                        ? setStoredProcessStepDetail(existingDone.id, step.detail)
+                        : mergeStoredProcessStepDetail(existingDone.id, step.detail);
                     replaceStep(state.currentProcessBlock, existingDone.id, {
                         ...existingDone,
                         ...step,
                         id: existingDone.id,
                         rawIcon,
                         status: resolvedStatus,
-                        detail: mergeStoredProcessStepDetail(existingDone.id, step.detail),
+                        detail: detailPreview,
+                        detailPreview,
                     });
                     scrollToBottom();
                     return;
                 }
+            }
+        }
+        if (step.stepRef && resolvedStatus === 'running') {
+            const existingRunning = [...state.currentProcessBlock.steps].reverse()
+                .find(s => s.stepRef === step.stepRef && s.status === 'running');
+            if (existingRunning) {
+                step.rawIcon = rawIcon;
+                step.icon = emojiToIcon(step.icon);
+                const detailPreview = setStoredProcessStepDetail(existingRunning.id, step.detail);
+                replaceStep(state.currentProcessBlock, existingRunning.id, {
+                    ...existingRunning,
+                    ...step,
+                    id: existingRunning.id,
+                    rawIcon,
+                    status: 'running',
+                    detail: detailPreview,
+                    detailPreview,
+                    label: step.label || existingRunning.label,
+                });
+                scrollToBottom();
+                return;
             }
         }
         // Dedupe: detail이 있는 재broadcast → 같은 label+type의 detail 없는 유령 교체

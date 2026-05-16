@@ -88,6 +88,7 @@ import { hydrateProviderIcons } from './provider-icons.js';
 import { initPendingQueue } from './features/pending-queue.js';
 import { initAttentionBadge } from './features/attention-badge.js';
 import { initHelpDialog } from './features/help-dialog.js';
+import { initChatSearch, toggleChatSearch, closeChatSearch } from './features/chat-search.js';
 
 // ── Chat Actions ──
 document.getElementById('btnSend')?.addEventListener('click', () => { void sendMessage('button'); });
@@ -461,6 +462,8 @@ async function bootstrap(): Promise<void> {
     await loadCliRegistry();
     bindPerCliControlEvents();
     initHelpDialog();
+    initChatSearch();
+    document.getElementById('chatSearchTrigger')?.addEventListener('click', toggleChatSearch);
     initAttentionBadge();
     connect();
     initDragDrop();
@@ -495,9 +498,23 @@ void bootstrap().catch((err: unknown) => {
     console.error('[bootstrap]', err);
 });
 
+// ── Keyboard: Ctrl+F chat search (capture phase beats Chrome's native find) ──
+document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleChatSearch();
+    }
+}, true);
+
 // ── Keyboard: Escape closes modals ──────────────────
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+        if (document.getElementById('chatSearch')?.classList.contains('open')) {
+            e.preventDefault();
+            closeChatSearch();
+            return;
+        }
         if (state.isRecording) {
             e.preventDefault();
             cancelRecording();

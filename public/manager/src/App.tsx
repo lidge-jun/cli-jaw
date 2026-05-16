@@ -387,6 +387,14 @@ export function App() {
 
     useEffect(() => {
         function onKeyDown(event: KeyboardEvent): void {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'f') {
+                const frame = document.querySelector<HTMLIFrameElement>('.preview-frame');
+                if (frame?.contentWindow) {
+                    event.preventDefault();
+                    frame.contentWindow.postMessage({ type: 'jaw-preview-search' }, '*');
+                    return;
+                }
+            }
             if (!view.dashboardShortcutsEnabled) return;
             if (isManagerShortcutEditableTarget(event.target)) return;
             const action = actionForShortcutEvent(event, view.dashboardShortcutKeymap);

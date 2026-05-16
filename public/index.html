@@ -29,6 +29,7 @@
     <link rel="stylesheet" href="/css/variables.css">
     <link rel="stylesheet" href="/css/layout.css">
     <link rel="stylesheet" href="/css/chat.css">
+    <link rel="stylesheet" href="/css/chat-search.css">
     <link rel="stylesheet" href="/css/orc-state.css">
     <link rel="stylesheet" href="/css/sidebar.css">
     <link rel="stylesheet" href="/css/modals.css">
@@ -162,6 +163,17 @@
         <div class="chat-header">
             <span>CLI-JAW ● <span id="headerCli">claude</span></span>
             <div class="chat-header-actions">
+                <div class="chat-search" id="chatSearch" role="search" aria-label="Search messages">
+                    <div class="chat-search-input-wrap">
+                        <span class="chat-search-icon" aria-hidden="true"></span>
+                        <input type="text" id="chatSearchInput" class="chat-search-input"
+                               placeholder="Search messages..." autocomplete="off" aria-label="Search messages" />
+                        <span class="chat-search-count" id="chatSearchCount" aria-live="polite"></span>
+                        <button class="chat-search-close" id="chatSearchClose" type="button" aria-label="Close search">&times;</button>
+                    </div>
+                    <div class="chat-search-results" id="chatSearchResults" role="listbox"></div>
+                </div>
+                <button class="chat-search-trigger" id="chatSearchTrigger" type="button" aria-label="Search messages" title="Search (⌘F)">&#x1F50D;</button>
                 <button class="help-trigger" type="button" data-help-topic="diagrams"
                     data-i18n-aria="help.diagrams.aria" aria-label="다이어그램 도움말">?</button>
                 <button class="theme-switch" id="toggleTheme" title="Toggle Theme" aria-label="Toggle dark/light mode">

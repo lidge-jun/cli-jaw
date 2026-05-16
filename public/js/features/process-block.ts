@@ -165,6 +165,26 @@ export function mergeStoredProcessStepDetail(stepId: string, incomingDetail?: st
     return meta?.preview || previewText(merged, PROCESS_DETAIL_PREVIEW_CHARS);
 }
 
+export function setStoredProcessStepDetail(stepId: string, incomingDetail?: string): string {
+    const incoming = incomingDetail || getStoredProcessStepDetail(stepId);
+    const retained = retainedDetail(incoming);
+    if (incoming) {
+        processDetailStore.set(stepId, {
+            detail: retained.detail,
+            originalLength: incoming.length,
+            truncated: retained.truncated,
+        });
+    }
+    const preview = previewText(incoming, PROCESS_DETAIL_PREVIEW_CHARS);
+    const meta = processStepMetaStore.get(stepId);
+    if (meta) {
+        meta.preview = preview;
+        meta.detailLength = incoming.length;
+        meta.detailTruncated = retained.truncated;
+    }
+    return preview;
+}
+
 function updateStoredStepMeta(step: ProcessStep): void {
     const compact = compactProcessStepForStorage(step);
     processStepMetaStore.set(step.id, {
