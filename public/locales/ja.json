@@ -102,6 +102,7 @@
     "tg.voiceEmpty": "音声を認識できませんでした。もう一度お試しください。",
     "voice.start": "録音",
     "voice.requesting": "マイク権限を確認中",
+    "voice.requestTimeout": "マイク権限のダイアログが開きませんでした。ブラウザと macOS のマイク権限を確認してから、もう一度試してください。",
     "voice.stop": "録音を停止",
     "voice.micDenied": "マイクへのアクセスが拒否されました。ブラウザ設定でマイクを許可してください。",
     "voice.micNotFound": "マイクが見つかりません。マイクを接続してください。",

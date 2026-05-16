@@ -15,6 +15,7 @@ let timerInterval: ReturnType<typeof setInterval> | null = null;
 let startTime = 0;
 let startPending = false;
 let stopAction: 'stopped' | 'cancelled' | 'failed' = 'stopped';
+const MIC_PERMISSION_TIMEOUT_MS = 15000;
 
 /** Pick best supported MIME type for cross-platform */
 function pickMime(): string {
@@ -41,6 +42,8 @@ function classifyMicError(err: unknown): string {
         case 'NotReadableError':
         case 'AbortError':
             return t('voice.micBusy');
+        case 'TimeoutError':
+            return t('voice.requestTimeout');
         default:
             if (e instanceof TypeError || !navigator.mediaDevices) {
                 return t('voice.httpsRequired');
@@ -66,6 +69,41 @@ function postPreviewSttRecording(action: 'request' | 'started' | 'stopped' | 'ca
     }
 }
 
+function micPermissionTimeoutError(): DOMException {
+    return new DOMException('Timed out waiting for microphone permission prompt', 'TimeoutError');
+}
+
+async function requestMicStreamWithTimeout(): Promise<MediaStream> {
+    let didTimeout = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const mediaPromise = navigator.mediaDevices.getUserMedia({ audio: true }).then(
+        (candidate) => {
+            if (didTimeout) {
+                candidate.getTracks().forEach(track => track.stop());
+                return null;
+            }
+            return candidate;
+        },
+        (err: unknown) => {
+            if (didTimeout) return null;
+            throw err;
+        },
+    );
+    const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+            didTimeout = true;
+            reject(micPermissionTimeoutError());
+        }, MIC_PERMISSION_TIMEOUT_MS);
+    });
+    try {
+        const stream = await Promise.race([mediaPromise, timeoutPromise]);
+        if (!stream) throw micPermissionTimeoutError();
+        return stream;
+    } finally {
+        if (timeoutId !== null) clearTimeout(timeoutId);
+    }
+}
+
 export async function startRecording(): Promise<void> {
     if (state.isRecording || startPending) return;
 
@@ -83,7 +121,7 @@ export async function startRecording(): Promise<void> {
 
     let stream: MediaStream | null = null;
     try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream = await requestMicStreamWithTimeout();
         recordingStream = stream;
     } catch (err) {
         startPending = false;

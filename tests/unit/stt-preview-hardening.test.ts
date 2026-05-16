@@ -14,6 +14,10 @@ test('classic web STT recorder exposes pending/error states and preview lifecycl
     assert.ok(recorder.includes('let startPending = false'), 'recorder must guard duplicate getUserMedia requests');
     assert.ok(recorder.includes("postPreviewSttRecording('request')"), 'recorder must notify Manager before requesting the mic');
     assert.ok(recorder.includes("postPreviewSttRecording('failed')"), 'recorder must notify Manager when mic acquisition fails');
+    assert.ok(recorder.includes('MIC_PERMISSION_TIMEOUT_MS'), 'recorder must not leave mic permission requests pending forever');
+    assert.ok(recorder.includes('requestMicStreamWithTimeout'), 'recorder must wrap getUserMedia with a bounded request path');
+    assert.ok(recorder.includes('Promise.race([mediaPromise, timeoutPromise])'), 'recorder must race getUserMedia against the permission timeout');
+    assert.ok(recorder.includes("track => track.stop()"), 'late mic streams must be released after a timeout');
     assert.ok(recorder.includes('new MediaRecorder(stream, options)'), 'recorder must keep MediaRecorder creation inside the guarded start path');
     assert.ok(recorder.includes('catch (err)'), 'recorder start path must catch getUserMedia and MediaRecorder failures');
     assert.ok(recorder.includes("btn.classList.toggle('arming', pending)"), 'mic button must expose a pending visual state');
@@ -51,6 +55,7 @@ test('STT shortcut copy and locale strings mention the fallback shortcut', () =>
     for (const locale of ['ko', 'en', 'zh', 'ja']) {
         const values = json(`public/locales/${locale}.json`);
         assert.ok(values['voice.requesting'], `${locale} locale must name the mic-request pending state`);
+        assert.ok(values['voice.requestTimeout'], `${locale} locale must explain stalled mic permission prompts`);
         assert.ok(values['stt.shortcutHint'].includes('Alt/Option+M'), `${locale} STT hint must mention fallback shortcut`);
         assert.ok(values['help.keyboardShortcuts.howTo.1'].includes('Alt/Option+M'), `${locale} shortcut help must mention fallback shortcut`);
     }

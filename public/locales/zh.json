@@ -102,6 +102,7 @@
     "tg.voiceEmpty": "没有听清语音内容。请再试一次。",
     "voice.start": "录音",
     "voice.requesting": "正在请求麦克风",
+    "voice.requestTimeout": "麦克风权限提示未打开。请检查浏览器和 macOS 麦克风权限后重试。",
     "voice.stop": "停止录音",
     "voice.micDenied": "麦克风访问被拒绝。请在浏览器设置中允许麦克风权限。",
     "voice.micNotFound": "没有找到麦克风。请连接麦克风。",

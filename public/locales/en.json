@@ -104,6 +104,7 @@
     "tg.voiceEmpty": "Couldn't understand the voice message. Please try again.",
     "voice.start": "Record voice",
     "voice.requesting": "Requesting microphone",
+    "voice.requestTimeout": "The microphone permission prompt did not open. Check browser and macOS microphone permissions, then try again.",
     "voice.stop": "Stop recording",
     "voice.micDenied": "Microphone access denied. Please allow microphone in browser settings.",
     "voice.micNotFound": "No microphone found. Please connect a microphone.",
