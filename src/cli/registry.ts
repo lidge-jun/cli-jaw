@@ -99,7 +99,7 @@ export const CLI_KEYS = Object.keys(CLI_REGISTRY) as CliEngine[];
 export const DEFAULT_CLI: CliEngine = CLI_KEYS.includes('claude') ? 'claude' : (CLI_KEYS[0] ?? 'claude');
 
 export function buildDefaultPerCli() {
-    const out: Record<string, any> = {};
+    const out: Record<string, { model: string; effort: string }> = {};
     for (const key of CLI_KEYS) {
         const entry = CLI_REGISTRY[key as keyof typeof CLI_REGISTRY];
         out[key] = {
@@ -111,7 +111,7 @@ export function buildDefaultPerCli() {
 }
 
 export function buildModelChoicesByCli() {
-    const out: Record<string, any> = {};
+    const out: Record<string, string[]> = {};
     for (const key of CLI_KEYS) out[key] = [...(CLI_REGISTRY[key as keyof typeof CLI_REGISTRY].models || [])];
     return out;
 }
