@@ -423,44 +423,65 @@ export function saveHeartbeatFile(data: HeartbeatFile | Record<string, unknown>)
 
 export function detectCli(name: string): CliDetection {
     const binary = (CLI_REGISTRY as Record<string, any>)[name]?.binary || name;
-    if (binary !== 'jaw-claude-i') return detectCliBinary(binary);
+    if (name !== 'claude-i' && binary !== 'claude-exec') return detectCliBinary(binary);
 
-    const explicitHelper = process.env["JAW_CLAUDE_I_BIN"];
-    const explicitDetected = explicitHelper
+    const explicitHelper = process.env["CLAUDE_EXEC_BIN"] || process.env["JAW_CLAUDE_I_BIN"];
+    const embeddedCandidates = getClaudeExecEmbeddedCandidates();
+    const embeddedDetected = selectSpawnableCliPath(embeddedCandidates);
+    if (embeddedDetected.available) return embeddedDetected;
+
+    const claudeExecDetected = detectCliBinary('claude-exec');
+    if (claudeExecDetected.available) {
+        return mergeRejectedDetections(claudeExecDetected, embeddedDetected);
+    }
+
+    const legacyJawDetected = detectCliBinary('jaw-claude-i');
+    if (legacyJawDetected.available) {
+        return mergeRejectedDetections(legacyJawDetected, embeddedDetected, claudeExecDetected);
+    }
+
+    const legacyAliasDetected = detectCliBinary('claude-i');
+    if (legacyAliasDetected.available) {
+        return mergeRejectedDetections(legacyAliasDetected, embeddedDetected, claudeExecDetected, legacyJawDetected);
+    }
+
+    const nativeDetected = selectSpawnableCliPath(getClaudeExecNativeFallbackCandidates());
+    if (nativeDetected.available) {
+        return mergeRejectedDetections(nativeDetected, embeddedDetected, claudeExecDetected, legacyJawDetected, legacyAliasDetected);
+    }
+
+    const explicitDetected = explicitHelper && !embeddedCandidates.includes(explicitHelper)
         ? selectSpawnableCliPath([explicitHelper])
         : null;
-    if (explicitDetected?.available) return explicitDetected;
-
-    const detected = detectCliBinary(binary);
-    if (detected.available) return detected;
-
-    const fallback = selectSpawnableCliPath(
-        getClaudeIHelperCandidates().filter((candidate) => candidate !== explicitHelper),
+    return mergeRejectedDetections(
+        { available: false, path: null },
+        embeddedDetected,
+        claudeExecDetected,
+        legacyJawDetected,
+        legacyAliasDetected,
+        nativeDetected,
+        explicitDetected,
     );
-    const explicitRejected = explicitDetected?.rejected || [];
-    if (fallback.available) {
-        return {
-            ...fallback,
-            ...(explicitRejected.length || detected.rejected?.length || fallback.rejected?.length
-                ? { rejected: [...explicitRejected, ...(detected.rejected || []), ...(fallback.rejected || [])] }
-                : {}),
-        };
-    }
-    return {
-        ...detected,
-        ...(explicitRejected.length || detected.rejected?.length || fallback.rejected?.length
-            ? { rejected: [...explicitRejected, ...(detected.rejected || []), ...(fallback.rejected || [])] }
-            : {}),
-    };
 }
 
 export function detectAllCli() {
     const out: Record<string, any> = {};
     for (const key of CLI_KEYS) {
-        const binary = (CLI_REGISTRY as Record<string, any>)[key]?.binary || key;
-        out[key] = detectCli(binary);
+        out[key] = detectCli(key);
     }
     return out;
+}
+
+function mergeRejectedDetections(result: CliDetection, ...sources: Array<CliDetection | null>): CliDetection {
+    const rejected = sources
+        .flatMap((source) => source?.rejected || [])
+        .filter((entry) => entry.reason !== 'ENOENT');
+    return {
+        ...result,
+        ...(rejected.length || result.rejected?.length
+            ? { rejected: [...(result.rejected || []), ...rejected] }
+            : {}),
+    };
 }
 
 function nativeExecutableName(base: string): string {
@@ -471,13 +492,50 @@ export function getClaudeIHelperCandidates(
     projectDir = getProjectDir(),
     env: NodeJS.ProcessEnv = process.env,
 ): string[] {
-    const helper = nativeExecutableName('jaw-claude-i');
+    return getClaudeExecHelperCandidates(projectDir, env);
+}
+
+export function getClaudeExecHelperCandidates(
+    projectDir = getProjectDir(),
+    env: NodeJS.ProcessEnv = process.env,
+): string[] {
+    return [
+        ...getClaudeExecEmbeddedCandidates(projectDir, env),
+        ...getClaudeExecNativeFallbackCandidates(projectDir),
+    ];
+}
+
+function getClaudeExecEmbeddedCandidates(
+    projectDir = getProjectDir(),
+    env: NodeJS.ProcessEnv = process.env,
+): string[] {
+    const execHelper = nativeExecutableName('claude-exec');
+    const legacyHelper = nativeExecutableName('jaw-claude-i');
+    const legacyAlias = nativeExecutableName('claude-i');
+    const npmBin = process.platform === 'win32' ? 'claude-exec.cmd' : 'claude-exec';
     const platformArch = `${process.platform}-${process.arch}`;
     const candidates = [
+        env["CLAUDE_EXEC_BIN"],
         env["JAW_CLAUDE_I_BIN"],
-        join(projectDir, 'vendor', platformArch, helper),
-        join(projectDir, 'native', 'jaw-claude-i', 'target', 'release', helper),
-        join(projectDir, 'native', 'jaw-claude-i', 'target', 'debug', helper),
+        join(projectDir, 'node_modules', '.bin', npmBin),
+        join(projectDir, 'node_modules', 'claude-exec', 'bin', 'claude-exec'),
+        join(projectDir, 'vendor', platformArch, execHelper),
+        join(projectDir, 'vendor', platformArch, legacyHelper),
+        join(projectDir, 'vendor', platformArch, legacyAlias),
+    ];
+    return candidates.filter((candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0);
+}
+
+function getClaudeExecNativeFallbackCandidates(
+    projectDir = getProjectDir(),
+): string[] {
+    const legacyHelper = nativeExecutableName('jaw-claude-i');
+    const legacyAlias = nativeExecutableName('claude-i');
+    const candidates = [
+        join(projectDir, 'native', 'jaw-claude-i', 'target', 'release', legacyHelper),
+        join(projectDir, 'native', 'jaw-claude-i', 'target', 'release', legacyAlias),
+        join(projectDir, 'native', 'jaw-claude-i', 'target', 'debug', legacyHelper),
+        join(projectDir, 'native', 'jaw-claude-i', 'target', 'debug', legacyAlias),
     ];
     return candidates.filter((candidate): candidate is string => typeof candidate === 'string' && candidate.trim().length > 0);
 }

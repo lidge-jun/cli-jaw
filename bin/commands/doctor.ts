@@ -154,9 +154,9 @@ function readBinaryVersion(candidate: string, args: string[] = ['--version']): s
 }
 
 function verifyClaudeInteractive() {
-    const helper = findBinaryPath('claude-i') || findBinaryPath('jaw-claude-i');
+    const helper = findBinaryPath('claude-i') || findBinaryPath('claude-exec') || findBinaryPath('jaw-claude-i');
     if (!helper) {
-        throw new Error('WARN: helper missing — build with `npm run build:claude-i` or install `jaw-claude-i` on PATH');
+        throw new Error('WARN: runtime missing — build with `npm run build:claude-exec` or install `claude-exec` on PATH');
     }
 
     let helperVersion = 'unknown';
@@ -164,12 +164,12 @@ function verifyClaudeInteractive() {
         helperVersion = readBinaryVersion(helper);
     } catch (e: unknown) {
         const message = (e as Error).message || String(e);
-        throw new Error(`WARN: helper found but not runnable (${helper}) — ${message}`);
+        throw new Error(`WARN: runtime found but not runnable (${helper}) — ${message}`);
     }
 
     const claude = findBinaryPath('claude');
     if (!claude) {
-        throw new Error(`WARN: helper=${helper} version=${helperVersion}; underlying claude missing`);
+        throw new Error(`WARN: runtime=${helper} version=${helperVersion}; underlying claude missing`);
     }
 
     let claudeVersion = 'unknown';
@@ -179,7 +179,7 @@ function verifyClaudeInteractive() {
         claudeVersion = 'version check failed';
     }
 
-    return `helper=${helper} version=${helperVersion}; claude=${claude} version=${claudeVersion}; experimental`;
+    return `runtime=${helper} version=${helperVersion}; claude=${claude} version=${claudeVersion}; provider=claude-i`;
 }
 
 /** Detect headless server (no display, no desktop environment). */

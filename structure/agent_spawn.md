@@ -79,8 +79,8 @@ aliases: [CLI-JAW Agent Spawn, agent runtime, ACP orchestration]
 ### Standard CLI branch
 
 - `claude`는 stdin에 `withHistoryPrompt(prompt, historyBlock)`를 직접 쓴다.
-- `claude-i`는 `jaw-claude-i run --jsonl --output-format stream-json --timeout-ms 600000`를 실행한다. fresh run은 stdin에 `withHistoryPrompt(prompt, historyBlock)`를 쓰고, resume run은 helper의 `--resume <sessionId>`와 현재 prompt만 넘긴다.
-- `claude-i` helper가 내보내는 `jaw_runtime` 이벤트는 discriminator 전에 가로채 `agent:claude-i:*` runtime broadcast로 변환하고, `session_started`/`interrupted`의 `sessionId`를 main session persistence에 반영한다.
+- `claude-i` provider는 `claude-exec run --jsonl --output-format stream-json --timeout-ms 600000` 표면을 우선 실행한다. 탐지는 `CLAUDE_EXEC_BIN`, embedded npm `claude-exec`, PATH `claude-exec`, legacy `jaw-claude-i` / `claude-i`, native target fallback 순서다. fresh run은 stdin에 `withHistoryPrompt(prompt, historyBlock)`를 쓰고, resume run은 helper의 `--resume <sessionId>`와 현재 prompt만 넘긴다.
+- `claude-exec` helper가 내보내는 `jaw_runtime` 이벤트는 discriminator 전에 가로채 기존 `agent:claude-i:*` runtime broadcast로 변환하고, `session_started`/`interrupted`의 `sessionId`를 main session persistence에 반영한다.
 - `codex`는 resume가 아닐 때만 stdin에 `[User Message]` 블록을 쓴다.
 - `gemini`, `grok`, `opencode`는 `promptForArgs = withHistoryPrompt(prompt, historyBlock)`를 받아 인자 레벨에서 prompt/history를 합친다.
 - `gemini` fresh/resume 인자는 headless `-p`, model, stream JSON, `--skip-trust`, `--approval-mode yolo`, 그리고 workspace 보정을 함께 다룬다.

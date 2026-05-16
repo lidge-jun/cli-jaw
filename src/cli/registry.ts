@@ -13,8 +13,8 @@ export const CLI_REGISTRY = {
         models: getDefaultClaudeChoices(),
     },
     'claude-i': {
-        label: 'Claude Interactive',
-        binary: 'jaw-claude-i',
+        label: 'Claude Exec',
+        binary: 'claude-exec',
         experimental: true,
         defaultModel: getDefaultClaudeModel(),
         defaultEffort: 'medium',
