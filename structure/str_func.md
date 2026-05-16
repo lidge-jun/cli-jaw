@@ -35,7 +35,7 @@ cli-jaw/
 │   ├── stt.ts                ← 음성인식 엔진 (Gemini REST → Whisper fallback, settings.json 연동, mimeType 파라미터) (231L)
 │   └── quota-copilot.ts      ← Copilot 할당량 조회 (env → file cache → gh auth token → keychain, execFileSync 보안, source 계정 바인딩) + refreshCopilotFromKeychain (307L)
 ├── src/
-│   ├── core/                 ← 의존 0 인프라 계층 (21 files)
+│   ├── core/                 ← 의존 0 인프라 계층 (25 files)
 │   │   ├── config.ts         ← JAW_HOME, settings, CLI 탐지 + `JAW_CLAUDE_I_BIN`/native helper fallback, APP_VERSION + migrateSettings legacy Claude model normalization + avatar settings deep merge + corrupt settings backup (483L)
 │   │   ├── compact.ts        ← compact 헬퍼 (COMPACT_MARKER_CONTENT, managed summary builder, cutoff logic) (403L)
 │   │   ├── instance.ts       ← 인스턴스 ID, node/jaw 경로, 유닛명 sanitize (58L)
@@ -51,6 +51,10 @@ cli-jaw/
 │   │   ├── runtime-settings-gate.ts ← settings mutation in-flight gate (41L)
 │   │   ├── codex-config.ts   ← Codex config.toml context window sync (78L)
 │   │   ├── runtime-path.ts   ← buildServicePath() PATH 보강 (nvm/fnm/homebrew/volta/asdf/cargo/bun/yarn/pnpm 14+ dirs) (78L)
+│   │   ├── cli-detect.ts     ← PATH 후보 spawnability 검사 + rejected candidate reason 수집 (232L)
+│   │   ├── browser-open.ts   ← 브라우저 open 정책/명령 실행 helper (47L)
+│   │   ├── browser-open-default.ts ← OS/headless 기본 open 여부 판별 (10L)
+│   │   ├── strip-undefined.ts ← 설정/응답 객체 undefined 제거 helper (16L)
 │   │   ├── boss-auth.ts      ← boss/employee scope 분리용 auth helper (42L)
 │   │   ├── claude-install.ts ← Claude CLI 설치 상태 점검 helper (33L)
 │   │   ├── launchd-cleanup.ts ← launchd stale plist / runtime cleanup (16L)
@@ -172,6 +176,9 @@ cli-jaw/
 │   │   ├── readiness.ts      ← CLI별 인증/설치 상태 점검 + `claude-i` underlying Claude auth/readiness bridge (CliReadiness[]) (118L)
 │   │   ├── acp-client.ts     ← Copilot ACP JSON-RPC 클라이언트 (382L)
 │   │   ├── command-context.ts ← 공유 커맨드 컨텍스트 팩토리 + runSkillReset 위임 + regenerateB 유지 (140L)
+│   │   ├── connector.ts      ← dashboard connector CLI API bridge (board/notes/reminders/audit) (73L)
+│   │   ├── reminders.ts      ← local reminders CLI action helpers (35L)
+│   │   ├── types.ts          ← CLI helper shared result/shape 타입 (79L)
 │   │   └── tui/
 │   │       ├── store.ts      ← TuiStore (transcript + overlay 상태 통합), OverlayState + SelectorState (68L) ✨
 │   │       ├── transcript.ts ← TranscriptItem union (user/assistant/status) + TranscriptState + 6 mutation 함수 (57L) ✨
@@ -770,7 +777,7 @@ graph LR
 | [🤖 agent_spawn.md](agent_spawn.md)                 | agent/ (spawn·args·events) + orchestrator/ (pipeline·parser) + cli/acp-client | spawn + ACP + 오케스트레이션           |
 | [📱 telegram.md](telegram.md)                       | telegram/ (bot·forwarder·telegram-file) + memory/heartbeat                    | 외부 인터페이스 + lifecycle + 파일전송 |
 | *(미작성)* discord.md                                | discord/ (bot·commands·forwarder·discord-file) + messaging/                   | Discord 인터페이스 + 메시징 런타임     |
-| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 487개, `public/dist` build 459파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
+| [🎨 frontend.md](frontend.md)                       | public/ 전체 (소스/자산 489개, `public/dist` build 459파일 + mirrored copies) | ES Modules + CSS + Vite + PWA           |
 | [🧠 prompt_flow.md](prompt_flow.md)                 | prompt/builder.ts · 직원 프롬프트 · promptCache                               | **핵심** — 정적/동적 + Copilot ACP     |
 | [📄 prompt_basic_A1.md](prompt_basic_A1.md)         | A-1 기본 프롬프트 원문                                                        | EN 기본 프롬프트 레퍼런스              |
 | [📄 prompt_basic_A2.md](prompt_basic_A2.md)         | A-2 프롬프트 템플릿                                                           | 사용자 편집 가능                       |
