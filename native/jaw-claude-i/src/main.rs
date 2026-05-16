@@ -155,6 +155,12 @@ fn run(config: &RunConfig) -> i32 {
         .unwrap_or_else(|| config.session_id.clone());
 
     protocol::emit_session_started(&config.run_id, &session_id, &transcript_path);
+    let transcript_path_buf = PathBuf::from(&transcript_path);
+    let transcript_start_offset = if transcript_path.is_empty() {
+        0
+    } else {
+        transcript::current_file_len(&transcript_path_buf).unwrap_or(0)
+    };
 
     // Wait for PTY quiescence before injecting prompt
     pty_child.wait_quiescence(500);
@@ -185,10 +191,14 @@ fn run(config: &RunConfig) -> i32 {
 
     // Start transcript tailing in a thread
     let transcript_stop = Arc::clone(&stop);
-    let transcript_path_buf = PathBuf::from(&transcript_path);
     let output_format = config.output_format.clone();
     let transcript_handle = std::thread::spawn(move || {
-        transcript::tail_transcript(&transcript_path_buf, transcript_stop, &output_format)
+        transcript::tail_transcript(
+            &transcript_path_buf,
+            transcript_stop,
+            &output_format,
+            transcript_start_offset,
+        )
     });
 
     // Wait for Stop/StopFailure or child exit

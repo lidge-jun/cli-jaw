@@ -10,9 +10,12 @@ pub fn tail_transcript(
     transcript_path: &Path,
     stop: Arc<AtomicBool>,
     output_format: &str,
+    initial_offset: u64,
 ) -> Result<Option<serde_json::Value>, String> {
     let mut file = wait_for_file(transcript_path, &stop, 20_000)?;
-    let mut offset: u64 = 0;
+    let mut offset = clamped_initial_offset(&file, initial_offset);
+    file.seek(SeekFrom::Start(offset))
+        .map_err(|e| format!("failed to seek transcript to {offset}: {e}"))?;
     let mut last_assistant: Option<serde_json::Value> = None;
 
     loop {
@@ -86,6 +89,16 @@ pub fn tail_transcript(
     Ok(last_assistant)
 }
 
+pub fn current_file_len(path: &Path) -> Option<u64> {
+    std::fs::metadata(path).ok().map(|metadata| metadata.len())
+}
+
+fn clamped_initial_offset(file: &File, requested_offset: u64) -> u64 {
+    file.metadata()
+        .map(|metadata| requested_offset.min(metadata.len()))
+        .unwrap_or(0)
+}
+
 fn emit_line(normalized: &str, output_format: &str) {
     match output_format {
         "stream-json" => println!("{normalized}"),
@@ -105,6 +118,67 @@ fn emit_line(normalized: &str, output_format: &str) {
             }
         }
         _ => println!("{normalized}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write as _;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+
+    #[test]
+    fn current_file_len_reports_existing_file_size() {
+        let mut file = tempfile::NamedTempFile::new().expect("temp file");
+        write!(file, "first\nsecond\n").expect("write fixture");
+
+        assert_eq!(current_file_len(file.path()), Some(13));
+    }
+
+    #[test]
+    fn clamped_initial_offset_caps_at_file_size() {
+        let mut file = tempfile::NamedTempFile::new().expect("temp file");
+        write!(file, "line\n").expect("write fixture");
+
+        assert_eq!(clamped_initial_offset(file.as_file(), 2), 2);
+        assert_eq!(clamped_initial_offset(file.as_file(), 999), 5);
+    }
+
+    #[test]
+    fn tail_transcript_skips_assistant_before_initial_offset() {
+        let mut file = tempfile::NamedTempFile::new().expect("temp file");
+        writeln!(
+            file,
+            r#"{{"type":"assistant","message":{{"role":"assistant","content":[{{"type":"text","text":"OLD_RESPONSE"}}],"model":"old-model"}},"sessionId":"sid-old"}}"#
+        )
+        .expect("write old assistant");
+        let initial_offset = current_file_len(file.path()).expect("old offset");
+        writeln!(
+            file,
+            r#"{{"type":"user","message":{{"role":"user","content":"NEW_PROMPT"}},"sessionId":"sid-new"}}"#
+        )
+        .expect("write new user");
+        writeln!(
+            file,
+            r#"{{"type":"assistant","message":{{"role":"assistant","content":[{{"type":"text","text":"NEW_RESPONSE"}}],"model":"new-model"}},"sessionId":"sid-new"}}"#
+        )
+        .expect("write new assistant");
+
+        let last_assistant = tail_transcript(
+            file.path(),
+            Arc::new(AtomicBool::new(true)),
+            "json",
+            initial_offset,
+        )
+        .expect("tail transcript")
+        .expect("new assistant");
+
+        assert_eq!(
+            last_assistant["message"]["content"][0]["text"],
+            "NEW_RESPONSE"
+        );
+        assert_eq!(last_assistant["sessionId"], "sid-new");
     }
 }
 
