@@ -363,8 +363,10 @@ function harvestToolContext(workingDir: string | null): string {
                     summary = `✎ ${path}${detail ? ` (${detail.slice(0, 40)})` : ''}`;
                 } else if (toolType === 'bash' || label.toLowerCase().includes('bash') || label.startsWith('$')) {
                     const cmd = label.slice(0, 80);
-                    const exitStatus = status === 'done' || status === 'completed' ? 'OK' : (status || 'OK');
-                    summary = `$ ${cmd}: ${exitStatus}`;
+                    const isFail = status && status !== 'done' && status !== 'completed';
+                    const exitStatus = isFail ? 'FAIL' : 'OK';
+                    const stderrSnippet = isFail && detail ? ` — ${detail.slice(0, 60)}` : '';
+                    summary = `$ ${cmd}: ${exitStatus}${stderrSnippet}`;
                 } else if (toolType === 'search' || label.toLowerCase().includes('search') || label.toLowerCase().includes('grep')) {
                     summary = `🔍 ${label.slice(0, 80)}`;
                 } else if (toolType === 'read' || label.toLowerCase().includes('read')) {
@@ -453,6 +455,7 @@ function harvestTaskSnapshot(goal: string): string {
 // ─── Main Harvest ─────────────────────────────────────
 
 export function harvestBootstrapSlots(input: HarvestInput): BootstrapSlots {
+    const t0 = performance.now();
     const wd = normalizeWorkingDir(input.workingDir);
     const rows = (getRecentMessages.all(wd, 50) as MessageRow[]) || [];
     const goal = harvestGoal(rows, input.instructions);
@@ -461,6 +464,10 @@ export function harvestBootstrapSlots(input: HarvestInput): BootstrapSlots {
     const memory_hits = harvestMemoryHits(goal, recent_turns);
     const grep_hits = harvestGrepHits(goal, wd);
     const task_snapshot = harvestTaskSnapshot(goal);
+    const elapsed = Math.round(performance.now() - t0);
+    if (elapsed > 100) {
+        console.warn(`[jaw:compact] harvestBootstrapSlots took ${elapsed}ms (target <150ms)`);
+    }
     return { goal, recent_turns, tool_context, memory_hits, grep_hits, task_snapshot };
 }
 
@@ -630,7 +637,7 @@ export function renderBootstrapPrompt(slots: BootstrapSlots): string {
                 const addedPart = shrunk.recent_turns.slice(0, sepIdx).split('\n');
                 const protectedPart = shrunk.recent_turns.slice(sepIdx + 5);
                 while (out.length > BOOTSTRAP_BUDGET.total_max && addedPart.length > 0) {
-                    addedPart.shift();
+                    addedPart.pop();
                     shrunk.recent_turns = addedPart.length > 0
                         ? addedPart.join('\n') + '\n---\n' + protectedPart
                         : protectedPart;
