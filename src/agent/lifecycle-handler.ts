@@ -325,14 +325,16 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
     } else if (mainManaged && code !== 0 && !wasKilled) {
         // ─── Error handling ───
         const diagnosticText = `${ctx.fullText}\n${ctx.traceLog.join('\n')}`;
-        const { is429, isStall, isModelCapacity, message: errMsg } = classifyExitError(
+        const { is429, isStall, isModelCapacity, isClaudeRateLimit, message: errMsg } = classifyExitError(
             cli,
             code,
             ctx.stderrBuf,
             ctx.stallReason,
             diagnosticText,
         );
-        recordError(cli, isStall ? 'stall' : isModelCapacity ? 'model_capacity' : is429 ? '429' : 'error');
+        const suppressClaudeRateLimitRecovery = isClaudeRateLimit;
+        const effectiveIs429 = is429;
+        recordError(cli, isStall ? 'stall' : isModelCapacity ? 'model_capacity' : effectiveIs429 ? '429' : 'error');
 
         const invalidatedResume = isResume
             && shouldInvalidateResumeSession(cli, code, ctx.stderrBuf, diagnosticText);
@@ -457,7 +459,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         }
 
         // ─── 429 delay retry (same engine, 1회만) ───
-        if (!opts.internal && !opts._isFallback && is429 && !opts._isRetry) {
+        if (!opts.internal && !opts._isFallback && effectiveIs429 && !opts._isRetry) {
             console.log(`[jaw:retry] ${cli} 429 detected — waiting 10s before retry`);
             broadcast('agent_retry', { cli, delay: 10, reason: errMsg, ...empTag }, isEmployee ? 'internal' : 'public');
             finalizeTraceRun(ctx.traceRunId, 'error', errMsg);
@@ -481,7 +483,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         }
 
         // ─── Fallback with retry tracking ───
-        if (!opts.internal && !opts._isFallback) {
+        if (!opts.internal && !opts._isFallback && !suppressClaudeRateLimitRecovery) {
             const fallbackCli = (settings["fallbackOrder"] || [])
                 .find((fc: string) => fc !== cli && detectCli(fc).available);
             if (fallbackCli) {

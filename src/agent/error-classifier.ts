@@ -1,10 +1,13 @@
 // ─── Error Classification for Agent Exit ─────────────
 
+import { isClaudeLikeCli } from './cli-helpers.js';
+
 export interface ErrorClassification {
     is429: boolean;
     isAuth: boolean;
     isStall: boolean;
     isModelCapacity: boolean;
+    isClaudeRateLimit: boolean;
     message: string;
 }
 
@@ -21,9 +24,14 @@ export function classifyExitError(
             combined.includes('MODEL_CAPACITY_EXHAUSTED')
             || combined.includes('No capacity available for model')
         );
-    const is429 = /\b429\b/.test(combined)
+    const rawIs429 = /\b429\b/.test(combined)
         || combined.includes('RESOURCE_EXHAUSTED')
         || combined.includes('Too Many Requests');
+    // Claude Code owns its own rate-limit wait/retry behavior. Treating these
+    // progress messages as Jaw-level 429 failures causes unnecessary retries or
+    // fallback away from a request that Claude may still complete.
+    const isClaudeRateLimit = rawIs429 && isClaudeLikeCli(cli);
+    const is429 = rawIs429 && !isClaudeRateLimit;
     const isAuth = combined.includes('auth') || combined.includes('credentials');
     const isStall = !!stallReason;
 
@@ -34,5 +42,5 @@ export function classifyExitError(
     else if (isAuth) message = '🔐 인증 오류 — CLI 로그인 상태를 확인해주세요';
     else if (combined.trim()) message = combined.trim().slice(0, 200);
 
-    return { is429, isAuth, isStall, isModelCapacity, message };
+    return { is429, isAuth, isStall, isModelCapacity, isClaudeRateLimit, message };
 }

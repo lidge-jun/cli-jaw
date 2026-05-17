@@ -5,9 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import { classifyExitError } from '../../src/agent/error-classifier.ts';
+import { handleAgentExit } from '../../src/agent/lifecycle-handler.ts';
 import { shouldPersistMainSession } from '../../src/agent/session-persistence.ts';
 import { addBroadcastListener, clearAllBroadcastListeners } from '../../src/core/bus.ts';
-import { recordError } from '../../src/agent/alert-escalation.ts';
+import { settings } from '../../src/core/config.ts';
+import { clearErrors, recordError } from '../../src/agent/alert-escalation.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -29,6 +31,97 @@ test('Gemini capacity classifier separates MODEL_CAPACITY_EXHAUSTED from auth/qu
     assert.equal(result.isModelCapacity, true);
     assert.equal(result.isAuth, false);
     assert.match(result.message, /capacity/);
+});
+
+test('Claude rate-limit text is not classified as Jaw-level 429 retry', () => {
+    for (const cli of ['claude', 'claude-e', 'claude-i']) {
+        const result = classifyExitError(
+            cli,
+            1,
+            '429 Too Many Requests: Claude is rate limited and retrying',
+        );
+
+        assert.equal(result.is429, false, `${cli} should let Claude own rate-limit pacing`);
+        assert.equal(result.isClaudeRateLimit, true);
+        assert.match(result.message, /429 Too Many Requests/);
+    }
+});
+
+test('Claude rate-limit recovery is suppressed from Jaw retry and fallback', () => {
+    const lifecycle = readSrc('../../src/agent/lifecycle-handler.ts');
+    assert.match(lifecycle, /const\s+suppressClaudeRateLimitRecovery\s*=\s*isClaudeRateLimit/);
+    assert.match(lifecycle, /const\s+effectiveIs429\s*=\s*is429/);
+    assert.doesNotMatch(lifecycle, /isClaudeRateLimit\s*&&\s*!suppressClaudeRateLimitRecovery/);
+    assert.match(lifecycle, /effectiveIs429\s*&&\s*!opts\._isRetry/);
+    assert.match(lifecycle, /!\s*suppressClaudeRateLimitRecovery\)\s*\{/);
+});
+
+test('Claude rate-limit process exit does not broadcast Jaw retry or fallback', async () => {
+    const events: Array<{ type: string; data: Record<string, unknown> }> = [];
+    const originalFallbackOrder = settings["fallbackOrder"];
+    let queued = false;
+    let resolved: any = null;
+    clearErrors('claude');
+    clearAllBroadcastListeners();
+    addBroadcastListener((type, data) => events.push({ type, data }));
+    settings["fallbackOrder"] = ['node'];
+
+    try {
+        await handleAgentExit({
+            ctx: {
+                fullText: '',
+                sessionId: null,
+                toolLog: [],
+                traceLog: [],
+                stderrBuf: '429 Too Many Requests: Claude is rate limited and retrying',
+            },
+            code: 1,
+            cli: 'claude',
+            model: 'claude-sonnet',
+            resumeKey: null,
+            agentLabel: 'main',
+            mainManaged: true,
+            origin: 'test',
+            prompt: 'test',
+            opts: {},
+            cfg: { effort: '' },
+            ownerGeneration: 0,
+            forceNew: false,
+            empSid: null,
+            isResume: false,
+            wasKilled: false,
+            wasSteer: false,
+            smokeResult: { isSmoke: false, confidence: 'low' },
+            effortDefault: 'medium',
+            costLine: '',
+            resolve: (value: any) => { resolved = value; },
+            activeProcesses: new Map(),
+            setActiveProcess: () => {},
+            retryState: {
+                timer: null,
+                resolve: null,
+                origin: null,
+                setTimer: () => {},
+                setResolve: () => {},
+                setOrigin: () => {},
+                setIsEmployee: () => {},
+            },
+            fallbackState: new Map(),
+            fallbackMaxRetries: 3,
+            processQueue: () => { queued = true; },
+        });
+
+        assert.ok(resolved);
+        assert.equal(resolved.code, 1);
+        assert.equal(queued, true);
+        assert.equal(events.some(event => event.type === 'agent_retry'), false);
+        assert.equal(events.some(event => event.type === 'agent_fallback'), false);
+        assert.ok(events.some(event => event.type === 'agent_done'));
+    } finally {
+        settings["fallbackOrder"] = originalFallbackOrder;
+        clearErrors('claude');
+        clearAllBroadcastListeners();
+    }
 });
 
 test('session persistence can be skipped for transient Gemini Auto fallback', () => {
