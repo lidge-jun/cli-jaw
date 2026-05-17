@@ -1028,8 +1028,6 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                 if (cli === 'claude-e') {
                     const segment = appendClaudeISnapshotText(ctx, event);
                     ctx.pendingOutputChunk = (ctx.pendingOutputChunk || '') + segment;
-                    const scope = liveScopeOf(ctx);
-                    if (scope && segment) appendLiveRunText(scope, segment);
                 } else {
                     for (const block of event.message.content) {
                         if (block.type === 'text') {

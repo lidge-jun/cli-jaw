@@ -1736,3 +1736,36 @@ test('#107: extractOutputChunk handles null elements in content array', () => {
     });
     assert.equal(chunk, 'safe');
 });
+
+test('claude-e streaming does not duplicate output in liveRun', async () => {
+    const { beginLiveRun, getLiveRun, appendLiveRunText, clearLiveRun } = await import('../src/agent/live-run-state.ts');
+    const scope = 'unit-test-dedup-' + Date.now();
+    beginLiveRun(scope, 'claude-e');
+
+    const ctx = {
+        toolLog: [],
+        fullText: '',
+        traceLog: [],
+        pendingOutputChunk: '',
+        seenToolKeys: new Set(),
+        hasClaudeStreamEvents: false,
+        liveScope: scope,
+    };
+
+    const snapshot1 = {
+        type: 'assistant',
+        message: { id: 'msg-1', content: [{ type: 'text', text: '안녕하세요' }] },
+    };
+
+    extractFromEvent('claude-e', snapshot1, ctx, 'claude-e');
+    const chunk = extractOutputChunk('claude-e', snapshot1, ctx);
+    assert.equal(chunk, '안녕하세요');
+    if (chunk) appendLiveRunText(scope, chunk);
+
+    const liveRun = getLiveRun(scope);
+    const occurrences = liveRun.text.split('안녕하세요').length - 1;
+    assert.equal(occurrences, 1, `Expected 1 occurrence in liveRun.text but got ${occurrences}: "${liveRun.text}"`);
+    assert.equal(ctx.fullText, '안녕하세요');
+
+    clearLiveRun(scope);
+});
