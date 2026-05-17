@@ -333,7 +333,12 @@ function recencyBoost(kind: string, relpath: string): number {
     if (!dateMatch) return 0;
     const ageHours = (Date.now() - new Date(dateMatch[1]!).getTime()) / 3600000;
     if (ageHours < 0) return -1.5;
-    return -1.5 * Math.exp(-Math.LN2 * ageHours / halfLife);
+    const boost = -1.5 * Math.exp(-Math.LN2 * ageHours / halfLife);
+    // Penalize stale episodes: beyond 2x half-life, push them down
+    if (kind === 'episode' && ageHours > halfLife * 2) {
+        return boost + Math.min(2.0, (ageHours - halfLife * 2) / (halfLife * 2));
+    }
+    return boost;
 }
 
 function computeFinalScore(hit: SearchHit, query: string): number {

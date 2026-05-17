@@ -20,7 +20,7 @@ function normalizeSummaryText(text: string): string {
     return text
         .replace(/<\/?tool_call>/g, '')
         .replace(/<\/?tool_result>[\s\S]*?(?:<\/tool_result>|$)/g, '')
-        .replace(/\n\n✅[\s\S]*$/g, '')
+        .replace(/\n\n✅\s*\$[\d.,]+[\s\S]*$/g, '')
         .replace(/\s+/g, ' ')
         .trim();
 }
@@ -155,6 +155,10 @@ const DECISION_PATTERNS = [
     /\b(decided|because|tradeoff|plan|fix|TODO|blocked|resolved|implement)\b/i,
     /(?:결정|하기로|방향|계획|수정|해결|막힘|구현|방안|트레이드오프)/,
 ];
+const CONCLUSION_PATTERNS = [
+    /\b(completed|done|pushed|committed|merged|shipped|finished|created|deployed)\b/i,
+    /(?:완료|끝|성공|푸시|커밋|머지|생성|배포|했다|됐다|만들었다|올렸다)/,
+];
 const STATE_TRANSITION_PATTERNS = [
     /\b(decided|changed|blocked|fixed|reverted|verified|rejected|resolved)\b/i,
     /(?:결정|변경|막힘|수정완료|되돌림|검증|거절|해결)/,
@@ -224,7 +228,7 @@ function smartClip(text: string, max: number): string {
     const parts: string[] = [];
     parts.push(...sentences.slice(0, 2));
     for (const s of sentences) {
-        if (DECISION_PATTERNS.some(p => p.test(s)) && !parts.includes(s)) {
+        if ((DECISION_PATTERNS.some(p => p.test(s)) || CONCLUSION_PATTERNS.some(p => p.test(s))) && !parts.includes(s)) {
             parts.push(s);
         }
     }
