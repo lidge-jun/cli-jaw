@@ -67,6 +67,8 @@ export interface MainSessionMeta {
     chatId?: string | number;
     requestId?: string;
     scopeId?: string;
+    cli?: string;
+    model?: string;
 }
 let currentMainMeta: MainSessionMeta | null = null;
 export function getCurrentMainMeta(): MainSessionMeta | null {
@@ -259,6 +261,26 @@ export function getFallbackState() {
 
 // [I2] Per-process kill reason map (replaces global variable to avoid cross-process confusion)
 const killReasons = new Map<number, string>();
+const DEFAULT_STEER_WAIT_MS = 3_000;
+const DEFAULT_KILL_ESCALATION_MS = 2_000;
+const CLAUDE_E_STEER_WAIT_MS = 30_000;
+const CLAUDE_E_STEER_KILL_ESCALATION_MS = 8_000;
+
+function getActiveMainCli(): string | null {
+    return typeof currentMainMeta?.cli === 'string' ? currentMainMeta.cli : null;
+}
+
+function getKillPolicy(reason: string): { signal: NodeJS.Signals; escalationMs: number } {
+    const activeCli = getActiveMainCli();
+    if (reason === 'steer' && activeCli === 'claude-e') {
+        return { signal: 'SIGINT', escalationMs: CLAUDE_E_STEER_KILL_ESCALATION_MS };
+    }
+    return { signal: 'SIGTERM', escalationMs: DEFAULT_KILL_ESCALATION_MS };
+}
+
+export function getSteerWaitMsForActiveAgent(): number {
+    return getActiveMainCli() === 'claude-e' ? CLAUDE_E_STEER_WAIT_MS : DEFAULT_STEER_WAIT_MS;
+}
 
 /** Get kill reason for a process (by PID), consuming it */
 function consumeKillReason(pid: number | undefined): string | null {
@@ -307,13 +329,14 @@ export function killActiveAgent(reason = 'user') {
         clearWorkerSlotsOnStop(reason);
     }
     if (!activeProcess) return hadTimer || cancelledPendingMain;  // timer/gated spawn 취소도 "killed" 취급
-    console.log(`[jaw:kill] reason=${reason}`);
+    const policy = getKillPolicy(reason);
+    console.log(`[jaw:kill] reason=${reason} cli=${getActiveMainCli() || 'unknown'} signal=${policy.signal} escalationMs=${policy.escalationMs}`);
     if (activeProcess.pid) killReasons.set(activeProcess.pid, reason);
-    try { activeProcess.kill('SIGTERM'); } catch (e: unknown) { console.warn('[agent:kill] SIGTERM failed', { pid: activeProcess?.pid, error: (e as Error).message }); }
+    try { activeProcess.kill(policy.signal); } catch (e: unknown) { console.warn(`[agent:kill] ${policy.signal} failed`, { pid: activeProcess?.pid, error: (e as Error).message }); }
     const proc = activeProcess;
     setTimeout(() => {
         try { if (proc && !proc.killed) proc.kill('SIGKILL'); } catch (e: unknown) { console.warn('[agent:kill] SIGKILL failed', { pid: proc?.pid, error: (e as Error).message }); }
-    }, 2000);
+    }, policy.escalationMs);
     // Fix C1: 사용자 stop 시 isAgentBusy()가 즉시 false가 되도록 참조를 동기 해제.
     // 실제 child 종료는 위 setTimeout SIGKILL이 백그라운드에서 마무리.
     // exit handler의 setActiveProcess(null) / activeProcesses.delete 는 idempotent.
@@ -383,8 +406,9 @@ export function waitForProcessEnd(timeoutMs = 3000) {
 }
 
 export async function steerAgent(newPrompt: string, source: string) {
+    const steerWaitMs = getSteerWaitMsForActiveAgent();
     const wasRunning = killActiveAgent('steer');
-    if (wasRunning) await waitForProcessEnd(3000);
+    if (wasRunning) await waitForProcessEnd(steerWaitMs);
     insertMessage.run('user', newPrompt, source, '', settings["workingDir"] || null);
     broadcast('new_message', { role: 'user', content: newPrompt, source });
     const { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } = await import('../orchestrator/pipeline.js');
@@ -405,16 +429,16 @@ let queueHoldId: string | null = null;
 let queueHoldTimer: ReturnType<typeof setTimeout> | null = null;
 const QUEUE_HOLD_TIMEOUT_MS = 10_000;
 
-export function setQueueHold(id: string): void {
+export function setQueueHold(id: string, timeoutMs = QUEUE_HOLD_TIMEOUT_MS): void {
     if (queueHoldId && queueHoldId !== id) clearQueueHold();
     queueHoldId = id;
     if (queueHoldTimer) clearTimeout(queueHoldTimer);
     const holdId = id;
     queueHoldTimer = setTimeout(() => {
         if (queueHoldId !== holdId) return;
-        console.warn(`[queue:hold] hold for ${holdId} expired after ${QUEUE_HOLD_TIMEOUT_MS}ms`);
+        console.warn(`[queue:hold] hold for ${holdId} expired after ${timeoutMs}ms`);
         clearQueueHold();
-    }, QUEUE_HOLD_TIMEOUT_MS);
+    }, timeoutMs);
     console.log(`[queue:hold] set for ${id}`);
 }
 
@@ -915,6 +939,17 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     const ao = settings["activeOverrides"]?.[cli] || {};
     const model = opts.model || ao.model || cfg.model || 'default';
     const effort = opts.effort || ao.effort || cfg.effort || '';
+    if (mainManaged) {
+        setCurrentMainMeta(stripUndefined({
+            origin,
+            target: opts.target,
+            chatId: opts.chatId,
+            requestId: opts.requestId,
+            scopeId: liveScope,
+            cli,
+            model,
+        }));
+    }
     const includeDirectories = Array.isArray(cfg.includeDirectories)
         ? cfg.includeDirectories.filter((dir: unknown): dir is string => typeof dir === 'string' && dir.trim().length > 0)
         : [];

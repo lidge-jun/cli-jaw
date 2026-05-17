@@ -231,14 +231,15 @@ export async function steerHandler(args: string[], ctx: CliCommandContext): Prom
     if (!prompt) {
         return { ok: false, type: 'error', text: t('cmd.steer.noPrompt', {}, L) };
     }
-    const { isAgentBusy, killActiveAgent, waitForProcessEnd } = await import('../agent/spawn.js');
+    const { isAgentBusy, killActiveAgent, waitForProcessEnd, getSteerWaitMsForActiveAgent } = await import('../agent/spawn.js');
     if (!isAgentBusy()) {
         return { ok: false, type: 'error', text: t('cmd.steer.noAgent', {}, L) };
     }
 
     // Kill running agent (or cancel retry timer) and wait for clean exit
+    const steerWaitMs = getSteerWaitMsForActiveAgent();
     killActiveAgent('steer');
-    await waitForProcessEnd(3000);
+    await waitForProcessEnd(steerWaitMs);
 
     // Remote interfaces: clear stale session before re-orchestrate
     const iface = ctx.interface || 'cli';

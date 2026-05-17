@@ -1,7 +1,7 @@
 import type { Express } from 'express';
 import type { AuthMiddleware } from './types.js';
 import { ok, fail } from '../http/response.js';
-import { isAgentBusy, messageQueue, getQueuedMessageSnapshotForScope, removeQueuedMessage, killActiveAgent, waitForProcessEnd, getCurrentMainMeta, setQueueHold, clearQueueHold } from '../agent/spawn.js';
+import { isAgentBusy, messageQueue, getQueuedMessageSnapshotForScope, removeQueuedMessage, killActiveAgent, waitForProcessEnd, getCurrentMainMeta, getSteerWaitMsForActiveAgent, setQueueHold, clearQueueHold } from '../agent/spawn.js';
 import { getLiveRun } from '../agent/live-run-state.js';
 import { orchestrate, orchestrateReset, isResetIntent, drainPendingReplays } from '../orchestrator/pipeline.js';
 import { insertMessage } from '../core/db.js';
@@ -138,9 +138,11 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         }
         const prompt = peek.prompt;
         const origin = peek.source || 'web';
+        const steerWaitMs = getSteerWaitMsForActiveAgent();
+        setQueueHold(id, Math.max(10_000, steerWaitMs + 5_000));
         if (isAgentBusy()) {
             killActiveAgent('steer');
-            await waitForProcessEnd(3000);
+            await waitForProcessEnd(steerWaitMs);
         }
         const result = removeQueuedMessage(id);
         clearQueueHold(id, { resume: false });
