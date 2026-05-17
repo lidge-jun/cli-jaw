@@ -16,6 +16,7 @@ describe('Phase 53 — Context Continuity', () => {
         const longTurn = 'A'.repeat(700);
         const slots: BootstrapSlots = {
             goal: 'Test context continuity',
+            tool_context: '',
             recent_turns: `- [user] ${longTurn}\n- [assistant] ${longTurn}`,
             memory_hits: '',
             grep_hits: '',
@@ -30,6 +31,7 @@ describe('Phase 53 — Context Continuity', () => {
     test('renderBootstrapPrompt includes all non-empty slots', () => {
         const slots: BootstrapSlots = {
             goal: 'Deploy the feature',
+            tool_context: '',
             recent_turns: '- [user] approved the plan',
             memory_hits: 'User prefers ES Module',
             grep_hits: '- src/index.ts:1 import something',
@@ -47,6 +49,7 @@ describe('Phase 53 — Context Continuity', () => {
     test('renderBootstrapPrompt omits empty slots as sections', () => {
         const slots: BootstrapSlots = {
             goal: 'Quick fix',
+            tool_context: '',
             recent_turns: '',
             memory_hits: '',
             grep_hits: '',
@@ -67,6 +70,7 @@ describe('Phase 53 — Context Continuity', () => {
         ).join('\n');
         const slots: BootstrapSlots = {
             goal: 'Budget test',
+            tool_context: '',
             recent_turns: hugeTurns,
             memory_hits: 'M'.repeat(1500),
             grep_hits: 'G'.repeat(1000),
@@ -97,6 +101,7 @@ describe('Phase 53 — Context Continuity', () => {
     test('renderBootstrapPrompt includes continuation instructions', () => {
         const slots: BootstrapSlots = {
             goal: 'Continue task',
+            tool_context: '',
             recent_turns: '- [user] keep going',
             memory_hits: '',
             grep_hits: '',

@@ -84,6 +84,7 @@ describe('Phase 50/54 — Frontend Autoload & Codex/Gemini Parity', () => {
         const slots: BootstrapSlots = {
             goal: 'ok',
             recent_turns: '',
+            tool_context: '',
             memory_hits: '',
             grep_hits: '',
             task_snapshot: '',

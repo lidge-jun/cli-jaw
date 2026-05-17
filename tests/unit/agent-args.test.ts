@@ -42,23 +42,23 @@ test('AG-006: claude with effort includes --effort', () => {
     assert.ok(args.includes('high'));
 });
 
-test('AG-006a: claude-i forwards system prompt through wrapper extra args', () => {
-    const args = buildArgs('claude-i', 'sonnet', 'high', 'hi', 'system instructions', 'auto');
+test('AG-006a: claude-e forwards system prompt through wrapper extra args', () => {
+    const args = buildArgs('claude-e', 'sonnet', 'high', 'hi', 'system instructions', 'auto');
     const separatorIdx = args.indexOf('--');
-    assert.ok(separatorIdx >= 0, 'claude-i must use -- before forwarded Claude args');
+    assert.ok(separatorIdx >= 0, 'claude-e must use -- before forwarded Claude args');
     const forwarded = args.slice(separatorIdx + 1);
     assert.ok(forwarded.includes('--append-system-prompt'));
     assert.ok(forwarded.includes('system instructions'));
 });
 
-test('AG-006b: claude-i auto permissions auto-accept workspace trust in wrapper', () => {
-    const args = buildArgs('claude-i', 'sonnet', 'medium', 'hi', '', 'auto');
+test('AG-006b: claude-e auto permissions auto-accept workspace trust in wrapper', () => {
+    const args = buildArgs('claude-e', 'sonnet', 'medium', 'hi', '', 'auto');
     assert.ok(args.includes('--auto-accept-workspace-trust'));
     assert.ok(args.includes('--dangerously-skip-permissions'));
 });
 
-test('AG-006c: claude-i resume auto permissions auto-accept workspace trust in wrapper', () => {
-    const args = buildResumeArgs('claude-i', 'sonnet', 'medium', 'sess-1', 'hi', 'auto');
+test('AG-006c: claude-e resume auto permissions auto-accept workspace trust in wrapper', () => {
+    const args = buildResumeArgs('claude-e', 'sonnet', 'medium', 'sess-1', 'hi', 'auto');
     assert.ok(args.includes('--auto-accept-workspace-trust'));
     assert.ok(args.includes('--dangerously-skip-permissions'));
 });
@@ -323,14 +323,14 @@ test('AG-014: claude resume includes --resume + session id', () => {
     assert.ok(args.includes('sess-abc-123'));
 });
 
-test('AG-014a: claude-i resume forwards system prompt through wrapper extra args', () => {
-    const args = buildResumeArgs('claude-i', 'sonnet', 'high', 'sess-abc-123', 'next task', 'auto', {
+test('AG-014a: claude-e resume forwards system prompt through wrapper extra args', () => {
+    const args = buildResumeArgs('claude-e', 'sonnet', 'high', 'sess-abc-123', 'next task', 'auto', {
         sysPrompt: 'resume system instructions',
     });
     assert.ok(args.includes('--resume'));
     assert.ok(args.includes('sess-abc-123'));
     const separatorIdx = args.indexOf('--');
-    assert.ok(separatorIdx >= 0, 'claude-i must use -- before forwarded Claude args');
+    assert.ok(separatorIdx >= 0, 'claude-e must use -- before forwarded Claude args');
     const forwarded = args.slice(separatorIdx + 1);
     assert.ok(forwarded.includes('--append-system-prompt'));
     assert.ok(forwarded.includes('resume system instructions'));

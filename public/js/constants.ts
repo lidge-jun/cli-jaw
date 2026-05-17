@@ -32,7 +32,7 @@ const FALLBACK_CLI_REGISTRY: CliRegistry = {
             'claude-haiku-4-5',
         ],
     },
-    'claude-i': {
+    'claude-e': {
         label: 'Claude E',
         efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
         models: [

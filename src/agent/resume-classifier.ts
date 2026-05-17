@@ -14,7 +14,7 @@ const CLI_STALE_MATCHERS: MatcherMap = {
     claude: [
         /no conversation found with session id/i,
     ],
-    'claude-i': [
+    'claude-e': [
         /prompt injection did not reach Claude transcript/i,
         /prompt injection transcript verification failed/i,
         /prompt injection cannot be verified/i,

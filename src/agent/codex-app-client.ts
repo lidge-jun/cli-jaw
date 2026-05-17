@@ -91,7 +91,6 @@ export class CodexAppClient extends EventEmitter {
             sandbox: 'danger-full-access',
             cwd: options.cwd || this.workDir,
             config: this.reasoningConfig(),
-            ...(options.instructions ? { baseInstructions: options.instructions } : {}),
         }) as { thread: { id: string } };
         this.threadId = result.thread.id;
         return this.threadId;

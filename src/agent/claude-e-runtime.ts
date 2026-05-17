@@ -11,32 +11,32 @@ export function handleJawRuntimeEvent(event: Record<string, unknown>, agentLabel
 
     switch (eventName) {
         case 'runtime_started':
-            broadcast('agent:claude-i:runtime_started', { runId, seq, version: event['helperVersion'] });
+            broadcast('agent:claude-e:runtime_started', { runId, seq, version: event['helperVersion'] });
             break;
         case 'claude_spawned':
-            broadcast('agent:claude-i:spawned', { runId, pid: event['pid'] });
+            broadcast('agent:claude-e:spawned', { runId, pid: event['pid'] });
             break;
         case 'session_started':
-            broadcast('agent:claude-i:session', { runId, sessionId: event['sessionId'], transcriptPath: event['transcriptPath'] });
+            broadcast('agent:claude-e:session', { runId, sessionId: event['sessionId'], transcriptPath: event['transcriptPath'] });
             break;
         case 'prompt_injected':
-            broadcast('agent:claude-i:prompt_injected', { runId });
+            broadcast('agent:claude-e:prompt_injected', { runId });
             break;
         case 'stop_received':
-            broadcast('agent:claude-i:stop', { runId, transcriptPath: event['transcriptPath'] });
+            broadcast('agent:claude-e:stop', { runId, transcriptPath: event['transcriptPath'] });
             break;
         case 'stop_failure':
-            broadcast('agent:claude-i:stop_failure', { runId, error: event['error'] });
+            broadcast('agent:claude-e:stop_failure', { runId, error: event['error'] });
             break;
         case 'interrupted':
-            broadcast('agent:claude-i:interrupted', { runId, sessionId: event['sessionId'], resumable: event['resumable'] });
+            broadcast('agent:claude-e:interrupted', { runId, sessionId: event['sessionId'], resumable: event['resumable'] });
             break;
         case 'cleanup_started':
         case 'cleanup_done':
-            broadcast('agent:claude-i:cleanup', { runId, event: eventName, escalated: event['escalated'] });
+            broadcast('agent:claude-e:cleanup', { runId, event: eventName, escalated: event['escalated'] });
             break;
         case 'error':
-            broadcast('agent:claude-i:error', { runId, message: event['message'], exitCode: event['exitCode'] });
+            broadcast('agent:claude-e:error', { runId, message: event['message'], exitCode: event['exitCode'] });
             break;
         default:
             break;

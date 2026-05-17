@@ -83,7 +83,7 @@ function geminiIncludeDirectoryArgs(options: BuildArgOptions): string[] {
  * would trigger `thread/resume failed: no rollout found` on the server side.
  */
 export function resolveSessionBucket(cli: string | null | undefined, model: string | null | undefined): string {
-    if (cli === 'claude-i') return 'claude-i';
+    if (cli === 'claude-e') return 'claude-e';
     if (cli === 'codex-app') return 'codex-app';
     if (cli === 'grok') return 'grok';
     if (cli === 'codex' && isCodexSparkModel(model || '')) return 'codex-spark';
@@ -101,12 +101,12 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
                 ...(model && model !== 'default' ? ['--model', model] : []),
                 ...(effort && effort !== 'medium' ? ['--effort', effort] : []),
                 ...(sysPrompt ? ['--append-system-prompt', sysPrompt] : [])];
-        case 'claude-i': {
+        case 'claude-e': {
             const claudeExtraArgs: string[] = [];
             if (model && model !== 'default') claudeExtraArgs.push('--model', model);
             if (effort && effort !== 'medium') claudeExtraArgs.push('--effort', effort);
             if (sysPrompt) claudeExtraArgs.push('--append-system-prompt', sysPrompt);
-            // claude-i can't interact with permission dialogs — always bypass
+            // claude-e can't interact with permission dialogs — always bypass
             if (autoPerm) claudeExtraArgs.push('--dangerously-skip-permissions');
             else claudeExtraArgs.push('--permission-mode', 'auto');
             return ['run', '--jsonl',
@@ -177,7 +177,7 @@ export function buildResumeArgs(cli: string, model: string, effort: string, sess
                 ...(model && model !== 'default' ? ['--model', model] : []),
                 ...(effort && effort !== 'medium' ? ['--effort', effort] : []),
                 ...(options.sysPrompt ? ['--append-system-prompt', options.sysPrompt] : [])];
-        case 'claude-i': {
+        case 'claude-e': {
             const claudeExtraArgs: string[] = [];
             if (model && model !== 'default') claudeExtraArgs.push('--model', model);
             if (effort && effort !== 'medium') claudeExtraArgs.push('--effort', effort);

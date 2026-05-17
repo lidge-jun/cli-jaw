@@ -48,7 +48,7 @@ test('claude assistant fallback works when stream was not seen', () => {
 
 test('claude assistant signature-only thinking is surfaced as encrypted thinking', () => {
     const ctx = createClaudeCtx();
-    const labels = extractToolLabelsForTest('claude-i', {
+    const labels = extractToolLabelsForTest('claude-e', {
         type: 'assistant',
         message: {
             content: [
@@ -598,15 +598,159 @@ test('encrypted thinking: plaintext thinking does NOT also emit 🔒 badge (regr
     assert.ok(ctx.toolLog[0].detail.includes('Reasoning about'), 'plaintext content preserved');
 });
 
-test('P1-2.2: Claude rate_limit_event emits warning tool entry', () => {
+test('P1-2.2: Claude allowed rate_limit_event does not emit warning tool entry', () => {
     const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set() };
     extractFromEvent('claude', {
         type: 'rate_limit_event',
-        message: 'Rate limit exceeded',
+        rate_limit_info: {
+            status: 'allowed',
+            rateLimitType: 'five_hour',
+            overageStatus: 'rejected',
+        },
+    }, ctx, 'claude');
+    assert.equal(ctx.toolLog.length, 0);
+});
+
+test('P1-2.2b: Claude non-allowed rate_limit_event emits running wait entry', () => {
+    const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set() };
+    extractFromEvent('claude', {
+        type: 'rate_limit_event',
+        rate_limit_info: {
+            status: 'rejected',
+            rateLimitType: 'five_hour',
+            resetsAt: Math.floor(Date.now() / 1000) + 1200,
+        },
     }, ctx, 'claude');
     assert.equal(ctx.toolLog.length, 1);
+    assert.equal(ctx.toolLog[0].icon, '⏳');
+    assert.equal(ctx.toolLog[0].status, 'running');
+    assert.match(ctx.toolLog[0].label, /Claude quota wait/);
+    assert.equal(ctx.claudeRateLimitEventSeen, true);
+});
+
+test('P1-2.2c: Claude repeated rate_limit_event updates one wait entry', () => {
+    const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set() };
+    extractFromEvent('claude', {
+        type: 'rate_limit_event',
+        rate_limit_info: {
+            status: 'rejected',
+            rateLimitType: 'five_hour',
+            resetsAt: Math.floor(Date.now() / 1000) + 600,
+        },
+    }, ctx, 'claude');
+    extractFromEvent('claude', {
+        type: 'rate_limit_event',
+        rate_limit_info: {
+            status: 'rejected',
+            rateLimitType: 'one_hour',
+            resetsAt: Math.floor(Date.now() / 1000) + 1200,
+        },
+    }, ctx, 'claude');
+    assert.equal(ctx.toolLog.length, 1);
+    assert.equal(ctx.toolLog[0].status, 'running');
+    assert.match(ctx.toolLog[0].label, /one_hour/);
+});
+
+test('P1-2.2d: Claude allowed rate_limit_event resolves prior wait entry', () => {
+    const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set() };
+    extractFromEvent('claude', {
+        type: 'rate_limit_event',
+        rate_limit_info: {
+            status: 'rejected',
+            rateLimitType: 'five_hour',
+            resetsAt: Math.floor(Date.now() / 1000) + 1200,
+        },
+    }, ctx, 'claude');
+    extractFromEvent('claude', {
+        type: 'rate_limit_event',
+        rate_limit_info: {
+            status: 'allowed',
+            rateLimitType: 'five_hour',
+        },
+    }, ctx, 'claude');
+    assert.equal(ctx.toolLog.length, 1);
+    assert.equal(ctx.toolLog[0].icon, '✅');
+    assert.equal(ctx.toolLog[0].status, 'done');
+    assert.match(ctx.toolLog[0].label, /resolved/);
+});
+
+test('P1-2.2e: Claude allowed_warning rate_limit_event emits done warning, not wait', () => {
+    const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set() };
+    extractFromEvent('claude-e', {
+        type: 'rate_limit_event',
+        rate_limit_info: {
+            status: 'allowed_warning',
+            rateLimitType: 'five_hour',
+            resetsAt: Math.floor(Date.now() / 1000) + 1200,
+        },
+    }, ctx, 'claude-e');
+    assert.equal(ctx.toolLog.length, 1);
     assert.equal(ctx.toolLog[0].icon, '⚠️');
-    assert.equal(ctx.toolLog[0].status, 'warning');
+    assert.equal(ctx.toolLog[0].status, 'done');
+    assert.match(ctx.toolLog[0].label, /near limit/);
+});
+
+test('P1-2.2f: Claude assistant/result resolves stale quota wait when allowed event is absent', () => {
+    const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set() };
+    extractFromEvent('claude', {
+        type: 'rate_limit_event',
+        rate_limit_info: {
+            status: 'rejected',
+            rateLimitType: 'five_hour',
+            resetsAt: Math.floor(Date.now() / 1000) + 1200,
+        },
+    }, ctx, 'claude');
+    extractFromEvent('claude', {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'ok' }] },
+    }, ctx, 'claude');
+    assert.equal(ctx.toolLog.length, 1);
+    assert.equal(ctx.toolLog[0].icon, '✅');
+    assert.equal(ctx.toolLog[0].status, 'done');
+
+    const resultCtx = { toolLog: [], fullText: '', seenToolKeys: new Set() };
+    extractFromEvent('claude', {
+        type: 'rate_limit_event',
+        rate_limit_info: {
+            status: 'rejected',
+            rateLimitType: 'five_hour',
+            resetsAt: Math.floor(Date.now() / 1000) + 1200,
+        },
+    }, resultCtx, 'claude');
+    extractFromEvent('claude', { type: 'result', total_cost_usd: 0.01 }, resultCtx, 'claude');
+    assert.equal(resultCtx.toolLog.length, 1);
+    assert.equal(resultCtx.toolLog[0].icon, '✅');
+    assert.equal(resultCtx.toolLog[0].status, 'done');
+});
+
+test('P1-2.2g: Claude hard rate limit marks watchdog progress and extends deadline', () => {
+    const calls = [];
+    const ctx = {
+        toolLog: [],
+        fullText: '',
+        traceLog: [],
+        seenToolKeys: new Set(),
+        stallWatchdog: {
+            markProgress() { calls.push(['markProgress']); },
+            extendDeadline(extraMs, reason) { calls.push(['extendDeadline', extraMs, reason]); },
+            stop() {},
+        },
+    };
+    extractFromEvent('claude-i', {
+        type: 'rate_limit_event',
+        rate_limit_info: {
+            status: 'rejected',
+            rateLimitType: 'five_hour',
+            resetsAt: Math.floor(Date.now() / 1000) + 1200,
+        },
+    }, ctx, 'claude-i');
+
+    const extension = calls.find(call => call[0] === 'extendDeadline');
+    assert.ok(calls.some(call => call[0] === 'markProgress'));
+    assert.ok(extension, 'hard rate-limit should extend watchdog deadline');
+    assert.ok(extension[1] > 1_000_000, `expected long extension, got ${extension[1]}`);
+    assert.equal(extension[2], 'Claude quota wait');
+    assert.ok(ctx.traceLog.some(line => line.includes('[watchdog] extended for Claude quota wait')));
 });
 
 test('P1-2.3: Claude result stores cache token breakdown', () => {
@@ -878,7 +1022,7 @@ test('extractOutputChunk returns live assistant text for gemini, opencode final 
     );
 });
 
-test('claude-i assistant snapshots are emitted as deltas without duplicate frontend chunks', () => {
+test('claude-e assistant snapshots are emitted as deltas without duplicate frontend chunks', () => {
     const ctx = {
         toolLog: [],
         fullText: '',
@@ -909,16 +1053,16 @@ test('claude-i assistant snapshots are emitted as deltas without duplicate front
         },
     };
 
-    extractFromEvent('claude-i', first, ctx, 'claude-i');
-    assert.equal(extractOutputChunk('claude-i', first, ctx), 'OK, first.');
+    extractFromEvent('claude-e', first, ctx, 'claude-e');
+    assert.equal(extractOutputChunk('claude-e', first, ctx), 'OK, first.');
     assert.equal(ctx.fullText, 'OK, first.');
 
-    extractFromEvent('claude-i', duplicate, ctx, 'claude-i');
-    assert.equal(extractOutputChunk('claude-i', duplicate, ctx), '');
+    extractFromEvent('claude-e', duplicate, ctx, 'claude-e');
+    assert.equal(extractOutputChunk('claude-e', duplicate, ctx), '');
     assert.equal(ctx.fullText, 'OK, first.');
 
-    extractFromEvent('claude-i', snapshotUpdate, ctx, 'claude-i');
-    assert.equal(extractOutputChunk('claude-i', snapshotUpdate, ctx), ' More.');
+    extractFromEvent('claude-e', snapshotUpdate, ctx, 'claude-e');
+    assert.equal(extractOutputChunk('claude-e', snapshotUpdate, ctx), ' More.');
     assert.equal(ctx.fullText, 'OK, first. More.');
 });
 

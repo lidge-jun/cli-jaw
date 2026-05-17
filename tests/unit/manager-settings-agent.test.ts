@@ -64,8 +64,8 @@ test('runtime model and effort prefer active overrides over per-cli defaults', (
     assert.equal(runtimeEffortFor('codex', perCli, overrides), 'high');
 });
 
-test('claude-i compatibility id is displayed as Claude E', () => {
-    assert.equal(metaFor('claude-i').label, 'Claude E');
+test('claude-e id is displayed as Claude E', () => {
+    assert.equal(metaFor('claude-e').label, 'Claude E');
 });
 
 test('runtime employee GET wrapper unwraps { ok, data } responses', () => {

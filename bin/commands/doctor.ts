@@ -154,7 +154,7 @@ function readBinaryVersion(candidate: string, args: string[] = ['--version']): s
 }
 
 function verifyClaudeInteractive() {
-    const helper = findBinaryPath('claude-e') || findBinaryPath('claude-exec') || findBinaryPath('claude-i') || findBinaryPath('jaw-claude-i');
+    const helper = findBinaryPath('claude-e') || findBinaryPath('claude-exec') || findBinaryPath('jaw-claude-i');
     if (!helper) {
         throw new Error('WARN: runtime missing — install `claude-e` on PATH or build with `npm run build:claude-exec`');
     }
@@ -179,7 +179,7 @@ function verifyClaudeInteractive() {
         claudeVersion = 'version check failed';
     }
 
-    return `runtime=${helper} version=${helperVersion}; claude=${claude} version=${claudeVersion}; provider=claude-i`;
+    return `runtime=${helper} version=${helperVersion}; claude=${claude} version=${claudeVersion}; provider=claude-e`;
 }
 
 /** Detect headless server (no display, no desktop environment). */
@@ -262,7 +262,7 @@ for (const cli of ['claude', 'codex', 'gemini', 'opencode', 'copilot']) {
     });
 }
 
-check('CLI: claude-i', verifyClaudeInteractive);
+check('CLI: claude-e', verifyClaudeInteractive);
 
 check('Claude auth', () => {
     const creds = readClaudeCreds();

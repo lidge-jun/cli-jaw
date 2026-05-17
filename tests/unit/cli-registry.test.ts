@@ -11,7 +11,7 @@ import {
 // ─── Structure validation ────────────────────────────
 
 test('CLI_KEYS contains exactly 8 known entries', () => {
-    assert.deepEqual(CLI_KEYS.sort(), ['claude', 'claude-i', 'codex', 'codex-app', 'copilot', 'gemini', 'grok', 'opencode']);
+    assert.deepEqual(CLI_KEYS.sort(), ['claude', 'claude-e', 'codex', 'codex-app', 'copilot', 'gemini', 'grok', 'opencode']);
 });
 
 test('DEFAULT_CLI is claude', () => {

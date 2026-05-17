@@ -12,7 +12,7 @@ export const CLI_REGISTRY = {
         efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
         models: getDefaultClaudeChoices(),
     },
-    'claude-i': {
+    'claude-e': {
         label: 'Claude E',
         binary: 'claude-e',
         experimental: true,

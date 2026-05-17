@@ -204,7 +204,7 @@ export const DEFAULT_SETTINGS = createDefaultSettings();
 
 export function normalizeModelForCli(cli: string, model: unknown): unknown {
     if (typeof model !== 'string') return model;
-    if (cli === 'claude' || cli === 'claude-i') return migrateLegacyClaudeValue(model);
+    if (cli === 'claude' || cli === 'claude-e') return migrateLegacyClaudeValue(model);
     if (cli === 'copilot' && model === 'claude-opus-4.6-fast') return 'claude-opus-4.6';
     return model;
 }
@@ -423,7 +423,7 @@ export function saveHeartbeatFile(data: HeartbeatFile | Record<string, unknown>)
 
 export function detectCli(name: string): CliDetection {
     const binary = (CLI_REGISTRY as Record<string, any>)[name]?.binary || name;
-    if (name !== 'claude-i' && binary !== 'claude-e' && binary !== 'claude-exec') return detectCliBinary(binary);
+    if (name !== 'claude-e' && binary !== 'claude-e' && binary !== 'claude-exec') return detectCliBinary(binary);
 
     const explicitHelper = process.env["CLAUDE_E_BIN"] || process.env["CLAUDE_EXEC_BIN"] || process.env["JAW_CLAUDE_I_BIN"];
     const packageCandidates = getClaudeExecPackageCandidates();

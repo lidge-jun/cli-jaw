@@ -78,6 +78,7 @@ export async function compactHandler(args: string[], ctx: CliCommandContext): Pr
     const slots = harvestBootstrapSlots({ workingDir, instructions });
     const hasAnyContent = Boolean(
         slots.recent_turns
+        || slots.tool_context
         || slots.memory_hits
         || slots.grep_hits
         || slots.task_snapshot,
@@ -129,6 +130,7 @@ export async function compactHandler(args: string[], ctx: CliCommandContext): Pr
             slots: {
                 goal_len: slots.goal.length,
                 recent_turns_len: slots.recent_turns.length,
+                tool_context_len: slots.tool_context.length,
                 memory_hits_len: slots.memory_hits.length,
                 grep_hits_len: slots.grep_hits.length,
                 task_snapshot_len: slots.task_snapshot.length,

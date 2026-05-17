@@ -73,7 +73,7 @@ export function getCliReadiness(): CliReadiness[] {
                 source = authenticated ? 'auth.json' : 'none';
                 break;
             }
-            case 'claude-i': {
+            case 'claude-e': {
                 const claudeInfo = (detected as Record<string, any>)['claude'];
                 if (!claudeInfo?.available) {
                     authenticated = false;

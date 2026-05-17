@@ -43,8 +43,8 @@ test('claude-e helper candidates expose package bins and compatibility aliases',
     assert.ok(candidates.some((candidate) => candidate.endsWith(path.join('bin', 'claude-exec'))));
 });
 
-test('detectCli resolves claude-i through CLAUDE_E_BIN fallback', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-claude-i-bin-'));
+test('detectCli resolves claude-e through CLAUDE_E_BIN fallback', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-claude-e-bin-'));
     const helperName = process.platform === 'win32' ? 'claude-e.exe' : 'claude-e';
     const helper = writeExecutable(dir, helperName);
     const oldPath = process.env.PATH;
@@ -57,7 +57,7 @@ test('detectCli resolves claude-i through CLAUDE_E_BIN fallback', () => {
         process.env.CLAUDE_E_BIN = helper;
         delete process.env.CLAUDE_EXEC_BIN;
         delete process.env.JAW_CLAUDE_I_BIN;
-        const detected = detectCli('claude-i');
+        const detected = detectCli('claude-e');
         assert.equal(detected.available, true);
         assert.equal(detected.path, helper);
     } finally {

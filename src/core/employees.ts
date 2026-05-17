@@ -255,7 +255,7 @@ export function seedDefaultEmployees({ reset = false, notify = false } = {}) {
     }
 
     const cli = settings["cli"];
-    const defaultModel = (cli === 'claude' || cli === 'claude-i') ? getDefaultClaudeModel() : 'default';
+    const defaultModel = (cli === 'claude' || cli === 'claude-e') ? getDefaultClaudeModel() : 'default';
     for (const emp of DEFAULT_EMPLOYEES) {
         insertEmployee.run(crypto.randomUUID(), emp.name, cli, defaultModel, emp.role);
     }

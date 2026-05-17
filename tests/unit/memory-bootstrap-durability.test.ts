@@ -64,6 +64,7 @@ describe('Phase 52 — Bootstrap Durability', () => {
         const slots: BootstrapSlots = {
             goal: 'Fix the auth bug',
             recent_turns: '- [user] Please fix login\n- [assistant] Found the issue in auth.ts',
+            tool_context: '',
             memory_hits: 'User prefers minimal logging',
             grep_hits: '- src/auth.ts:42 validateToken',
             task_snapshot: '## Task Snapshot\n### episodes/live/2026-04-23.md:1-4\nAuth fix in progress',
@@ -88,6 +89,7 @@ describe('Phase 52 — Bootstrap Durability', () => {
         const slots: BootstrapSlots = {
             goal: 'test',
             recent_turns: '',
+            tool_context: '',
             memory_hits: '',
             grep_hits: '',
             task_snapshot: '',
@@ -102,6 +104,7 @@ describe('Phase 52 — Bootstrap Durability', () => {
         const slots: BootstrapSlots = {
             goal: 'durability test',
             recent_turns: '- [user] hello',
+            tool_context: '',
             memory_hits: '',
             grep_hits: '',
             task_snapshot: '',

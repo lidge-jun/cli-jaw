@@ -182,7 +182,7 @@ export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware):
         const targetCli = typeof patch.cli === 'string' && patch.cli
             ? patch.cli
             : settings["memory"]?.cli || settings["cli"] || '';
-        if ((targetCli === 'claude' || targetCli === 'claude-i') && typeof patch.model === 'string') {
+        if ((targetCli === 'claude' || targetCli === 'claude-e') && typeof patch.model === 'string') {
             patch.model = migrateLegacyClaudeValue(patch.model);
         }
         settings["memory"] = { ...settings["memory"], ...patch };

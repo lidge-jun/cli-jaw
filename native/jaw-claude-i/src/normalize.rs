@@ -28,7 +28,7 @@ pub fn normalize_transcript_line(line: &str) -> Option<String> {
         "user" => normalize_user(&value),
 
         // Pass through any other recognized stream-json event types
-        "system" | "result" | "stream_event" => Some(line.to_string()),
+        "system" | "result" | "stream_event" | "rate_limit_event" => Some(line.to_string()),
 
         // Unknown: discard with debug log
         other => {
@@ -184,6 +184,13 @@ mod tests {
     #[test]
     fn passthrough_system() {
         let line = r#"{"type":"system","subtype":"init","session_id":"abc"}"#;
+        let result = normalize_transcript_line(line).expect("should emit");
+        assert_eq!(result, line);
+    }
+
+    #[test]
+    fn passthrough_rate_limit_event() {
+        let line = r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","rateLimitType":"five_hour"}}"#;
         let result = normalize_transcript_line(line).expect("should emit");
         assert_eq!(result, line);
     }

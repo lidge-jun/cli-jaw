@@ -161,6 +161,25 @@ test('markProgress clamps to hard cap instead of skipping extension', async () =
     handle?.stop();
 });
 
+test('Claude rate_limit_event JSON counts as progress even when it contains 429 text', async () => {
+    const child = fakeChild();
+    let stalled = false;
+    const handle = attachWatchdog(child, 'test', () => {
+        stalled = true;
+    }, {
+        firstProgressMs: 20,
+        idleMs: 20,
+        absoluteMs: 120,
+        absoluteHardCapMs: 200,
+        checkIntervalMs: 5,
+    });
+
+    child.stdout?.emit('data', Buffer.from('{"type":"rate_limit_event","message":"429 Too Many Requests"}\n'));
+    await sleep(35);
+    assert.equal(stalled, false, 'rate_limit_event should mark progress before matching retry text');
+    handle.stop();
+});
+
 test('stop prevents future stall callbacks', async () => {
     const child = fakeChild();
     let called = false;

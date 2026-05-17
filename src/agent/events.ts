@@ -168,6 +168,150 @@ function buildPreview(text: unknown, max = 80) {
     return clipText(toSingleLine(text), max);
 }
 
+const CLAUDE_RATE_LIMIT_STEP_REF = 'claude:rate-limit';
+const CLAUDE_RATE_LIMIT_ALLOWED_STATUSES = new Set(['allowed']);
+const CLAUDE_RATE_LIMIT_WARNING_STATUSES = new Set(['allowed_warning', 'warning', 'near_limit']);
+
+function claudeRateLimitInfo(event: CliEventRecord): CliEventRecord {
+    return asCliEventRecord(event["rate_limit_info"] || event["rateLimitInfo"]);
+}
+
+function claudeRateLimitStatus(event: CliEventRecord): string {
+    return fieldString(claudeRateLimitInfo(event).status || event.status).toLowerCase();
+}
+
+function isClaudeRateLimitAllowed(status: string): boolean {
+    return CLAUDE_RATE_LIMIT_ALLOWED_STATUSES.has(status);
+}
+
+function isClaudeRateLimitWarning(status: string): boolean {
+    return CLAUDE_RATE_LIMIT_WARNING_STATUSES.has(status);
+}
+
+function claudeRateLimitResetMs(event: CliEventRecord): number {
+    const info = claudeRateLimitInfo(event);
+    const resetsAt = fieldNumber(info["resetsAt"] || event["resetsAt"]);
+    if (!resetsAt) return 0;
+    return resetsAt > 1_000_000_000_000 ? resetsAt : resetsAt * 1000;
+}
+
+function formatClaudeRateLimitReset(event: CliEventRecord): string {
+    const resetMs = claudeRateLimitResetMs(event);
+    if (!resetMs) return '';
+    const date = new Date(resetMs);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toISOString();
+}
+
+function claudeRateLimitWaitMs(event: CliEventRecord): number {
+    const resetMs = claudeRateLimitResetMs(event);
+    if (!resetMs) return 0;
+    return Math.max(0, resetMs - Date.now() + 60_000);
+}
+
+function buildClaudeRateLimitTool(event: CliEventRecord): ToolEntry | null {
+    const info = claudeRateLimitInfo(event);
+    const status = claudeRateLimitStatus(event);
+    if (isClaudeRateLimitAllowed(status)) return null;
+
+    const rateLimitType = fieldString(info["rateLimitType"] || info["rate_limit_type"]);
+    const reset = formatClaudeRateLimitReset(event);
+    const warning = isClaudeRateLimitWarning(status);
+    const labelPrefix = warning ? 'Claude quota near limit' : 'Claude quota wait';
+    const label = rateLimitType ? `${labelPrefix}: ${rateLimitType}` : labelPrefix;
+    const detail = appendDetail(
+        status ? `status: ${status}` : '',
+        reset ? `resets_at: ${reset}` : '',
+        fieldString(info["overageStatus"]) ? `overage: ${fieldString(info["overageStatus"])}` : '',
+        fieldString(event.message || event.reason),
+    );
+
+    return {
+        icon: warning ? '⚠️' : '⏳',
+        label: buildPreview(label, 60),
+        toolType: 'tool',
+        status: warning ? 'done' : 'running',
+        stepRef: CLAUDE_RATE_LIMIT_STEP_REF,
+        ...(detail ? { detail } : {}),
+    };
+}
+
+function finalizeClaudeRateLimitTool(
+    ctx: SpawnContext,
+    agentLabel: string | undefined,
+    empTag: Record<string, unknown>,
+    event?: CliEventRecord,
+    reason = 'Claude quota wait resolved',
+): boolean {
+    const existing = [...ctx.toolLog].reverse().find(
+        (t: ToolEntry) => t.stepRef === CLAUDE_RATE_LIMIT_STEP_REF && t.status === 'running'
+    );
+    if (!existing) return false;
+
+    const status = event ? claudeRateLimitStatus(event) : '';
+    existing.icon = '✅';
+    existing.label = buildPreview(reason, 60);
+    existing.status = 'done';
+    const detail = appendDetail(existing.detail, status ? `status: ${status}` : '');
+    if (detail) existing.detail = detail;
+    syncLiveTools(ctx);
+    emitAgentTool(ctx, agentLabel, existing, empTag);
+    return true;
+}
+
+function upsertClaudeRateLimitTool(
+    ctx: SpawnContext,
+    agentLabel: string | undefined,
+    empTag: Record<string, unknown>,
+    tool: ToolEntry,
+): void {
+    const idx = ctx.toolLog.findIndex((t: ToolEntry) => t.stepRef === CLAUDE_RATE_LIMIT_STEP_REF);
+    if (idx === -1) {
+        ctx.toolLog.push(tool);
+    } else {
+        ctx.toolLog[idx] = { ...ctx.toolLog[idx], ...tool };
+    }
+    syncLiveTools(ctx);
+    emitAgentTool(ctx, agentLabel, tool, empTag);
+}
+
+function handleClaudeRateLimitEvent(
+    ctx: SpawnContext,
+    agentLabel: string | undefined,
+    empTag: Record<string, unknown>,
+    event: CliEventRecord,
+): void {
+    ctx.claudeRateLimitEventSeen = true;
+    ctx.stallWatchdog?.markProgress();
+
+    const status = claudeRateLimitStatus(event);
+    if (isClaudeRateLimitAllowed(status)) {
+        finalizeClaudeRateLimitTool(ctx, agentLabel, empTag, event);
+        return;
+    }
+
+    const tool = buildClaudeRateLimitTool(event);
+    if (!tool) return;
+    upsertClaudeRateLimitTool(ctx, agentLabel, empTag, tool);
+
+    if (tool.status !== 'running') return;
+    const waitMs = claudeRateLimitWaitMs(event);
+    if (waitMs <= 0 || !ctx.stallWatchdog) return;
+    ctx.stallWatchdog.extendDeadline(waitMs, 'Claude quota wait');
+    pushTrace(ctx, `[${agentLabel || 'agent'}] [watchdog] extended for Claude quota wait by ${Math.ceil(waitMs / 1000)}s`);
+}
+
+function summarizeClaudeRateLimitEvent(event: CliEventRecord): string {
+    const status = claudeRateLimitStatus(event);
+    if (isClaudeRateLimitAllowed(status)) return '';
+    const info = claudeRateLimitInfo(event);
+    const rateLimitType = fieldString(info["rateLimitType"] || info["rate_limit_type"]);
+    const kind = isClaudeRateLimitWarning(status) ? 'warning' : 'wait';
+    return rateLimitType
+        ? `claude quota ${kind}: ${status || 'rate_limited'} (${rateLimitType})`
+        : `claude quota ${kind}: ${status || 'rate_limited'}`;
+}
+
 function buildClaudeThinkingTool(block: CliEventRecord): ToolEntry {
     const text = String(block.thinking || '').trim();
     const signature = typeof block.signature === 'string' ? block.signature : '';
@@ -614,7 +758,7 @@ function handleGrokToolEvent(
 export function extractSessionId(cli: string, event: CliEventRecord): string | null {
     switch (cli) {
         case 'claude':
-        case 'claude-i': return event.type === 'system' ? event.session_id ?? null : null;
+        case 'claude-e': return event.type === 'system' ? event.session_id ?? null : null;
         case 'codex': return event.type === 'thread.started' ? event.thread_id ?? null : null;
         case 'gemini': return event.type === 'init' ? event.session_id ?? null : null;
         case 'grok': return event.type === 'end' ? event.sessionId ?? null : null;
@@ -659,9 +803,9 @@ export function extractOutputChunk(cli: string, event: CliEventRecord, ctx?: Spa
         if (event.type === 'text') return String(event.data || event.text || '');
         return '';
     }
-    // claude-i transcript assistant records are snapshots; extractFromEvent
+    // claude-e transcript assistant records are snapshots; extractFromEvent
     // converts them to deltas so the append-only frontend does not duplicate text.
-    if (cli === 'claude-i') {
+    if (cli === 'claude-e') {
         if (ctx?.pendingOutputChunk) {
             const chunk = ctx.pendingOutputChunk;
             ctx.pendingOutputChunk = '';
@@ -868,11 +1012,20 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
         emitAgentTool(ctx, agentLabel, toolLabel, empTag);
     }
 
+    if (isClaudeLikeCli(cli) && (event.type === 'assistant' || event.type === 'result')) {
+        finalizeClaudeRateLimitTool(ctx, agentLabel, empTag, event);
+    }
+
+    if (isClaudeLikeCli(cli) && event.type === 'rate_limit_event') {
+        handleClaudeRateLimitEvent(ctx, agentLabel, empTag, event);
+        return;
+    }
+
     switch (cli) {
         case 'claude':
-        case 'claude-i':
+        case 'claude-e':
             if (event.type === 'assistant' && event.message?.content) {
-                if (cli === 'claude-i') {
+                if (cli === 'claude-e') {
                     const segment = appendClaudeISnapshotText(ctx, event);
                     ctx.pendingOutputChunk = (ctx.pendingOutputChunk || '') + segment;
                     const scope = liveScopeOf(ctx);
@@ -900,13 +1053,6 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
                         cache_creation: event.usage.cache_creation_input_tokens ?? 0,
                     };
                 }
-            // [P1-2.2] rate_limit_event: emit quota warning
-            } else if (event.type === 'rate_limit_event') {
-                const msg = event.message || event.reason || 'rate limited';
-                const tool = { icon: '⚠️', label: buildPreview(msg, 60), toolType: 'tool' as const, status: 'warning' };
-                ctx.toolLog.push(tool);
-                syncLiveTools(ctx);
-                emitAgentTool(ctx, agentLabel, tool, empTag);
             // [P0-1.2] Parse user/tool_result feedback (stdout/stderr/is_error)
             } else if (event.type === 'user' && event.message?.content) {
                 for (const block of event.message.content) {
@@ -1361,6 +1507,11 @@ export function logEventSummary(agentLabel: string, cli: string, event: CliEvent
             const turns = event.num_turns ?? 0;
             const dur = ((event.duration_ms || 0) / 1000).toFixed(1);
             logLine(`[${agentLabel}] result: $${cost} / ${turns} turns / ${dur}s`, ctx);
+            return;
+        }
+        if (event.type === 'rate_limit_event') {
+            const summary = summarizeClaudeRateLimitEvent(event);
+            if (summary) logLine(`[${agentLabel}] ${summary}`, ctx);
             return;
         }
     }

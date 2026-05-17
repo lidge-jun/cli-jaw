@@ -1,6 +1,7 @@
 import type { ChildProcess } from 'child_process';
 
 const RETRY_LOOP_PATTERN = /(RESOURCE_EXHAUSTED|Too Many Requests|\bstatus[=: ]*429\b|MODEL_CAPACITY_EXHAUSTED|\bstatus[=: ]*503\b|UNAVAILABLE|OAuth2Client\.requestAsync|retryWithBackoff|GeminiChat\.streamWithRetries|Attempt \d+(?:\/\d+)? failed)/i;
+const RATE_LIMIT_EVENT_PATTERN = /"type"\s*:\s*"rate_limit_event"/i;
 
 interface WatchdogConfig {
     firstProgressMs: number;
@@ -51,7 +52,9 @@ export function attachWatchdog(
 
     function observe(chunk: Buffer): void {
         const text = chunk.toString('utf8');
-        if (RETRY_LOOP_PATTERN.test(text)) {
+        if (RATE_LIMIT_EVENT_PATTERN.test(text)) {
+            markProgress();
+        } else if (RETRY_LOOP_PATTERN.test(text)) {
             retryHits++;
         } else if (text.trim().length > 10) {
             markProgress();

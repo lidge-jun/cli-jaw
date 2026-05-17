@@ -45,7 +45,7 @@ export const CLI_META: Record<string, CliMeta> = {
         ],
         efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
-    'claude-i': {
+    'claude-e': {
         label: 'Claude E',
         models: [
             'opus', 'sonnet', 'haiku',

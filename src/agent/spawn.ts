@@ -49,7 +49,7 @@ import {
 } from './opencode-diagnostics.js';
 import type { SpawnContext, ToolEntry } from '../types/agent.js';
 import { asCliEventRecord, discriminate, fieldString, type CliEventRecord } from '../types/cli-events.js';
-import { isJawRuntimeEvent, handleJawRuntimeEvent } from './claude-i-runtime.js';
+import { isJawRuntimeEvent, handleJawRuntimeEvent } from './claude-e-runtime.js';
 import { appendTraceEvent, stampTraceTool, startTraceRun } from '../trace/store.js';
 
 // ─── State ───────────────────────────────────────────
@@ -997,7 +997,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     const promptForArgs = (cli === 'gemini' || cli === 'grok' || cli === 'opencode')
         ? withHistoryPrompt(prompt, historyBlock)
         : prompt;
-    const claudeBin = cli === 'claude-i' ? detectCli('claude').path : null;
+    const claudeBin = cli === 'claude-e' ? detectCli('claude').path : null;
     let args;
     if (isResume) {
         const sid = resumeSessionId || '';
@@ -1063,7 +1063,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         console.log(`[jaw:${agentLabel}] Spawning: copilot --acp --model ${model} [${permissions}]`);
     } else {
         console.log(`[jaw:${agentLabel}] Spawning: ${cli} ${args.join(' ').slice(0, 120)}...`);
-        if (cli === 'claude-i') console.log(`[jaw:${agentLabel}:args] ${JSON.stringify(args)}`);
+        if (cli === 'claude-e') console.log(`[jaw:${agentLabel}:args] ${JSON.stringify(args)}`);
     }
 
     if (cli === 'gemini' && sysPrompt) {
@@ -1742,7 +1742,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
 
     if (cli === 'claude') {
         child.stdin.write(withHistoryPrompt(prompt, historyBlock));
-    } else if (cli === 'claude-i') {
+    } else if (cli === 'claude-e') {
         child.stdin.write(isResume ? prompt : withHistoryPrompt(prompt, historyBlock));
     } else if (cli === 'codex' && !isResume) {
         const codexStdin = historyBlock
@@ -1821,8 +1821,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             eventType: fieldString(asCliEventRecord(raw).type, '<no-type>'),
             raw,
         });
-        // claude-i: intercept jaw_runtime events BEFORE discriminator
-        if (cli === 'claude-i' && isJawRuntimeEvent(raw)) {
+        // claude-e: intercept jaw_runtime events BEFORE discriminator
+        if (cli === 'claude-e' && isJawRuntimeEvent(raw)) {
             const rtEvt = raw as Record<string, unknown>;
             handleJawRuntimeEvent(rtEvt, agentLabel);
             // Extract sessionId from session_started or interrupted
@@ -1831,7 +1831,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 ctx.sessionId = rtEvt['sessionId'] as string;
             }
             if (evtName === 'error' && typeof rtEvt['message'] === 'string') {
-                const message = `[jaw:claude-i:error] ${rtEvt['message']}`;
+                const message = `[jaw:claude-e:error] ${rtEvt['message']}`;
                 ctx.stderrBuf = ctx.stderrBuf ? `${ctx.stderrBuf}\n${message}` : message;
                 ctx.traceLog.push(message);
             }

@@ -41,7 +41,7 @@ export const CLAUDE_LEGACY_VALUE_MAP: Record<string, string> = {
 };
 
 export function isClaudeCli(cli: string): boolean {
-  return cli === 'claude' || cli === 'claude-i';
+  return cli === 'claude' || cli === 'claude-e';
 }
 
 export function isClaudeCanonicalModel(model: string): model is ClaudeCanonicalModel {
