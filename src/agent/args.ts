@@ -111,7 +111,8 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
             else claudeExtraArgs.push('--permission-mode', 'auto');
             return ['run', '--jsonl',
                 '--output-format', 'stream-json',
-                '--timeout-ms', '600000',
+                '--idle-timeout-ms', '600000',
+                '--hard-timeout-ms', '3600000',
                 ...(autoPerm ? ['--auto-accept-workspace-trust'] : []),
                 ...(options.claudeBin ? ['--claude-bin', options.claudeBin] : []),
                 ...(claudeExtraArgs.length ? ['--', ...claudeExtraArgs] : [])];
@@ -186,7 +187,8 @@ export function buildResumeArgs(cli: string, model: string, effort: string, sess
             else claudeExtraArgs.push('--permission-mode', 'auto');
             return ['run', '--jsonl',
                 '--output-format', 'stream-json',
-                '--timeout-ms', '600000',
+                '--idle-timeout-ms', '600000',
+                '--hard-timeout-ms', '3600000',
                 ...(autoPerm ? ['--auto-accept-workspace-trust'] : []),
                 ...(options.claudeBin ? ['--claude-bin', options.claudeBin] : []),
                 '--resume', sessionId,
