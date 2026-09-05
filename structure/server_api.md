@@ -8,6 +8,30 @@ aliases: [CLI-JAW Server API, server.ts reference, server_api]
 
 # server.ts — Glue + Route Registration (757L)
 
+Activity identity: `GET /api/orchestrate/snapshot?session=<chatId>` adds
+`activityIdentity: {sessionId,scope}` to the existing bare snapshot. Its runtime and
+orchestrator data use the same captured scope. Optional selectors must be nonblank
+scalar strings of at most240 characters; malformed400, enabled unknown-session404.
+Disabled multi-session preserves the existing active-chat/default-scope policy.
+Responses are no-store. `presentation.mode` is `activity` by default or explicit
+`legacy`, independent of transport; PUT `/api/settings` validates and merges it.
+
+Activity discovery returns `{ok:true,data:{runs,pageSize:40}}` from
+`GET /api/traces/activity-runs?session=<chatId>&after=<runId>`. Each run is
+`{id,messageId,status,startedAt}`; IDs are opaque ascending cursors, not time order.
+Reconnect discovery starts again from the beginning. Replay is
+`GET /api/traces/:runId/activity?session=<chatId>&after=<seq>&through=<fixedHigh>&limit=40`
+with `{ok:true,data:{runId,sessionId,scope,status,events,nextAfter,through,hasMore,incomplete,loss}}`.
+The initial page chooses through; later pages hold it fixed. Limits are40 rows/256KiB;
+corrupt rows advance the cursor and mark incomplete. Unknown query keys, non-scalar
+selectors or invalid cursors return400; future cursors409; unavailable storage503.
+Wrong/internal/deleted/fork ownership returns404. Discovery for an unknown chat is empty.
+
+All trace responses are no-store. Raw summary/list/detail also require `session` when
+either owner column exists, including historical session-only backfills. Truly ownerless
+legacy raw traces retain instance-level access. Clients capture the owner at drawer open
+and reuse it for every request. Scope and copied message pointers do not grant access.
+
 > Express/SSE bootstrap + localhost/LAN opt-in 보안 가드 + `src/routes/*` registrar + mounted sub-router 등록.
 > Route-module inventory and the endpoint contracts below describe the surface; aggregate handler counts are not maintained by hand.
 > mutation route(`POST`/`PUT`/`DELETE`)는 모두 `requireAuth`를 거친다. 단, `requireAuth()`는 loopback 요청을 토큰 없이 통과시키고, `lanAllowed()`가 true일 때 private IP도 LAN bypass로 통과시킨다.
@@ -41,7 +65,7 @@ aliases: [CLI-JAW Server API, server.ts reference, server_api]
 | `src/routes/employees.ts` | 123L | 5 | employee CRUD + reset |
 | `src/routes/skills.ts` | 89L | 5 | skills list/read/enable/disable/reset |
 | `src/routes/avatar.ts` | 146L | 4 | avatar summary + agent/user image upload/delete/read |
-| `src/routes/traces.ts` | 80L | 3 | public trace summary/event read routes |
+| `src/routes/traces.ts` | 167L | 5 | owner-bound raw traces and bounded Activity discovery/replay |
 | `src/routes/runtime-requests.ts` | 33L | 2 | exact-bound ephemeral native decisions; existing instance auth |
 | `src/routes/link-preview.ts` | 319L | 2 | Rich link preview metadata fetch + guarded image proxy |
 | `src/routes/heartbeat.ts` | 289L | 4 | heartbeat GET + validated PUT + mention-watch hold read/fresh-start |
@@ -158,14 +182,14 @@ Cursor/Grok activation and Activity controls are separate from this API foundati
 | Messaging | `POST /api/upload` `POST /api/file/open` `POST /api/voice` `POST /api/telegram/send` `POST /api/channels/validate` `POST /api/channel/send` `POST /api/discord/send` `POST /api/slack/send` `GET /api/slack/history` `GET /api/slack/members` `GET /api/slack/users` |
 | Wiki | `GET /api/wiki/status` `GET /api/wiki/entities` `POST /api/wiki/enable` `POST /api/wiki/configure` |
 | Avatar | `GET /api/avatar` `POST /api/avatar/:target/upload` `DELETE /api/avatar/:target/image` `GET /api/avatar/:target/image` |
-| Traces | `GET /api/traces/:runId` `GET /api/traces/:runId/events` `GET /api/traces/:runId/events/:seq` |
+| Traces | `GET /api/traces/activity-runs?session=...&after=...` `GET /api/traces/:runId/activity?session=...&after=...&through=...&limit=40` `GET /api/traces/:runId` `GET /api/traces/:runId/events` `GET /api/traces/:runId/events/:seq` |
 | Debug | `GET /api/debug/mem` |
 | Link Preview | `GET /api/link-preview?url=` `GET /api/link-preview/image?url=` |
 | Dashboard Board | `GET /api/dashboard/board/tasks` `POST /api/dashboard/board/tasks` `PATCH /api/dashboard/board/tasks/:id` `DELETE /api/dashboard/board/tasks/:id` `POST /api/dashboard/board/tasks/from-message` |
 | Dashboard Schedule | `GET /api/dashboard/schedule/work` `POST /api/dashboard/schedule/work` `PATCH /api/dashboard/schedule/work/:id` `DELETE /api/dashboard/schedule/work/:id` `POST /api/dashboard/schedule/work/:id/dispatch` |
 | i18n | `GET /api/i18n/languages` `GET /api/i18n/:lang` |
 
-> 실제 코드(`server.ts` + `src/routes/*.ts` + mounted runtime/security/Jaw CEO/dashboard sub-router)에서 추출한 총 258개 route handler 기준이다. 이 중 API 엔드포인트는 257개이고, 나머지 1개는 `/` 엔트리이다. Browser API 43개는 `src/routes/browser.ts`에서 등록된다. Jaw CEO 20개는 `src/routes/jaw-ceo.ts`에서 sub-router로 등록된다.
+> 실제 코드(`server.ts` + `src/routes/*.ts` + mounted runtime/security/Jaw CEO/dashboard sub-router)에서 추출한 총 260개 route handler 기준이다. 이 중 API 엔드포인트는 259개이고, 나머지 1개는 `/` 엔트리이다. Browser API 43개는 `src/routes/browser.ts`에서 등록된다. Jaw CEO 20개는 `src/routes/jaw-ceo.ts`에서 sub-router로 등록된다.
 
 `PUT /api/heartbeat`의 job은 `mentionWatch: { channel: "slack", userId: "U...", channelIds: ["C..."], maxHits?, since? }`를 선택적으로 받는다. `channelIds`는 비어 있지 않아야 하고 저장 시 `slack.channelIds` allowlist의 부분집합이어야 하며, 실행 tick 직전 현재 allowlist와 다시 교집합한다. job id가 같은 기존 값에 대해 필드가 없으면 상속하고, `null`이면 삭제하며, 잘못된 값은 `400 invalid heartbeat mention watch`다. 파일 로드 정규화에서 잘못된 `mentionWatch`는 해당 job을 `enabled: false`로 내린다. 기본 운영값은 비활성이고, 설정된 watch는 별도 daemon이 아니라 기존 `runHeartbeatJob`에서 실행된다.
 

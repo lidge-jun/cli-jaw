@@ -3,10 +3,12 @@ import type { AuthMiddleware } from './types.js';
 import { fail } from '../http/response.js';
 import { isAgentBusy, messageQueue, getQueuedMessageSnapshotForScope, removeQueuedMessage, killActiveAgent, waitForProcessEnd, waitForExitSettled, getCurrentMainMeta, getSteerWaitMsForActiveAgent, setQueueHold, clearQueueHold, setSteerInProgress, isSteerInProgress } from '../agent/spawn.js';
 import { getLiveRun } from '../agent/live-run-state.js';
-import { countToolTraceRows, listToolEntriesForRun } from '../trace/store.js';
+import { listToolEntriesForRun } from '../trace/store.js';
+import { mergeLatestTools } from '../agent/merge-tool-log.js';
 import { orchestrate, orchestrateContinue, orchestrateReset, isResetIntent, isContinueIntent, drainPendingReplays } from '../orchestrator/pipeline.js';
 import { getSession, insertMessage } from '../core/db.js';
 import { getActiveChatSession } from '../core/chat-sessions.js';
+import { resolveRequestSessionStrict } from './session-request.js';
 import { getState, getCtx, setState, resetState, canTransition, resetEveryState, parseWorkerVerdict, aggregateBatchVerdicts } from '../orchestrator/state-machine.js';
 import type { WorkerVerdict } from '../orchestrator/state-machine.js';
 import { normalizeTaskTags } from '../prompt/builder.js';
@@ -75,17 +77,15 @@ function getSafeLiveRun(scope: string) {
     const liveRun = getLiveRun(scope);
     let toolLog = sanitizeToolLogForDurableStorage(liveRun.toolLog);
     if (liveRun.running && liveRun.traceRunId) {
-        const bossCount = toolLog.filter(t => t.isEmployee !== true && !isToolLogOverflowMarker(t)).length;
-        const ramBehind = toolLog.length === 0
-            || toolLog.some(isToolLogOverflowMarker)
-            || countToolTraceRows(liveRun.traceRunId) > bossCount;
-        if (ramBehind) {
-            const boss = listToolEntriesForRun(liveRun.traceRunId);
-            if (boss.length > bossCount) {
-                const mirrors = toolLog.filter(t => t.isEmployee === true);
-                toolLog = sanitizeToolLogForDurableStorage([...boss, ...mirrors]);
-            }
-        }
+        // Updates replace rows in place, so equal counts still need a durable read.
+        // All RAM entries remain fallback when storage missed a tool, including boss tools.
+        const boss = listToolEntriesForRun(liveRun.traceRunId, 400);
+        // Durable reconstruction recalculates omissions; an old RAM marker is not a tool.
+        // Without durable rows, retain the marker documenting RAM-only history loss.
+        const mirrors = boss.length
+            ? liveRun.toolLog.filter(tool => !isToolLogOverflowMarker(tool))
+            : liveRun.toolLog;
+        toolLog = sanitizeToolLogForDurableStorage(mergeLatestTools(boss, mirrors, liveRun.traceRunId));
     }
     return { ...liveRun, toolLog };
 }
@@ -273,8 +273,17 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
         res.json({ ok: true, progress });
     });
 
-    app.get('/api/orchestrate/snapshot', requireAuth, (_req, res) => {
-        const scope = resolveOrcScope({ origin: 'web', workingDir: settings["workingDir"] || null });
+    app.get('/api/orchestrate/snapshot', requireAuth, (req, res) => {
+        res.setHeader('Cache-Control', 'no-store');
+        const requested = req.query['session'];
+        if (requested !== undefined && (typeof requested !== 'string' || !requested.trim() || requested.length > 240)) {
+            fail(res, 400, 'invalid_session');
+            return;
+        }
+        const resolved = resolveRequestSessionStrict(requested);
+        if (!resolved.ok) { fail(res, 404, 'unknown_session'); return; }
+        const scope = resolved.scope;
+        const activityIdentity = { sessionId: resolved.chatSessionId, scope };
         const runtime = getRuntimeSnapshot(scope);
         const ctx = getCtx(scope);
         const scopedWorkers = getActiveWorkers(scope);
@@ -306,6 +315,7 @@ export function registerOrchestrateRoutes(app: Express, requireAuth: AuthMiddlew
             researchReport: ctx.researchReport,
         } : null;
         res.json({
+            activityIdentity,
             orc: {
                 scope,
                 state: getState(scope),
