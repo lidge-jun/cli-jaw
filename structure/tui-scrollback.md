@@ -93,9 +93,85 @@ Logical frontier survives width reflow (unlike physical row counts).
 ## Known Limitations
 
 - **5 fewer transcript rows**: MIN_HISTORY_LANE=5 reserves space for the history lane
-- **No streaming commits**: commits only fire when all items are stable (after full response); the growing answer stays in the live zone until the turn ends
+- **Whole-item commits**: the running Activity group stays live; earlier stable items can commit after the complete prelude fits the commit range
 - **Terminal compatibility**: designed for Ghostty 1.3+; unsupported terminals silently skip commits
 - **No commit during overlays**: help/palette/settings screens block commits
+
+## Native Activity presentation
+
+Print compatibility terminals intentionally have no native finality/status markers.
+An untagged terminal can settle an already admitted run with matching trace/session/scope
+as presentation-only `Finished`; its original final bytes stay on the same answer receipt.
+The later canonical terminal supplies status without duplicating the body. Waiting for
+that record does not activate legacy tool-log backfill; an actual recording/display gap does.
+Unadmitted terminals keep their legacy path. Null canonical errors retain legacy diagnostics.
+If reordered recovery delivers a different original final after a canonical body, an
+uncommitted answer changes in place. Already printed/committed bytes receive one explicit
+`Updated answer` correction; identical bytes produce no additional output. A bounded digest
+survives preview release, and corrections never restart or stop another run. Diagnostics
+use a separate label. Canonical-only completion is never delayed waiting for compatibility.
+Gap fallback previews are scoped to one run and capped at16 rows/32KiB, with4KiB per
+row. Overflow freezes further preview input so a discarded VT opener cannot expose
+later bytes. Live and committed REST completion clear only those previews in place;
+retirement clears them too. Fullscreen and line fallback text/tool mirrors use the
+same terminal-safe text boundary. Late status/tool mirrors cannot mutate a newer run.
+
+Interactive chat binds semantic events to the server's `activityIdentity` from
+`GET /api/orchestrate/snapshot`. `presentation.mode` selects grouped Activity (default)
+or linear legacy rows independently of provider native/print transport. Ctrl+O toggles
+the latest uncommitted Activity; explicit disclosure survives completion. Raw NDJSON
+does not pass through the display projection.
+
+The shared reducer holds bounded previews; the existing assistant transcript owns
+the full authoritative answer. Empty and absent answers leave distinct invisible
+receipts. Compatibility completion may precede the semantic end, so provisional record
+status clears when that end arrives. An actual recording gap remains visible. Exact
+retained-run settlement continues during identity refresh without admitting new runs.
+Late completions cannot close a newer run's composer or clock.
+
+Commit selection refreshes viewport cells before calculating the frontier. A prelude
+that cannot yet fit in the commit range blocks item commitment too: printing welcome
+rows must never mark unseen answers committed. Classic linear updates append safe
+suffixes; footer repaint saves/restores an open text cursor, while notices close the
+line before clearing it. Activity provider text cannot emit VT actions.
+
+At most16 Activity preview models retain text; completed previews release in-place,
+preserving transcript indices and uncommitted full answers. Confirmed native flush also
+releases committed answer text while retaining its duplicate receipt. Refused/deferred
+flushes release nothing; native scrollback pixels stay immutable.
+
+F6 in fullscreen chat opens retained canonical records for one run. Up/Down selects
+records, Left/Right selects runs, Enter expands detail, PgUp/PgDn and Home/End scroll,
+R reloads and N loads another descriptor batch. One selected run is bounded to4096
+records/4MiB; discovery retains256 descriptors per batch. Advancing a batch does not
+download every run's payload or move the selected record. Classic chat keeps native
+scrollback and directs retained-record inspection to fullscreen mode.
+
+The inspector freezes native commits and preserves the composer draft. Its paste drain
+belongs to stdin, survives panel/session reset, and discards the entire remaining paste
+before normal key dispatch. F6 cannot take over an active/completing composer paste.
+Historical requests are read-only; Enter never submits an approval or model prompt.
+
+Reconnect installs the shared replay buffer before identity refresh and both seed/tail
+reads. The256-event/1MiB buffer is independent of the bounded preview. A failed restore
+does not publish seeded answers. Full successful replay can clear a local display gap;
+known durable gaps remain. Line-mode stdout delivery has its own receipt on the existing
+answer row, so buffer failure or a late canonical end cannot hide an already captured
+answer. Retired runs cannot regain ownership or republish answers after reset.
+
+## Cell geometry
+
+`cell-width.ts` owns the modern terminal cell policy shared by Activity, generic row
+clipping/wrapping, the input box and cursor placement. Measurement uses NFC for Hangul
+without changing output text; emoji/ZWJ/flags remain whole clusters and combining marks
+do not advance cells. A cluster wider than its entire display area uses a visible `?`
+fallback while submitted input remains unchanged.
+
+Styled rows segment visible text once and reinsert CSI at original offsets, including
+CSI inside a cluster. Carried SGR is bounded. The classic composer emits the same row
+plan used for cursor/row counting, so terminal scalar autowrap cannot erase preceding
+output. The supported policy is tested separately from emulator/font variations; raw
+NDJSON never enters display sanitization or geometry.
 
 ## Research
 
