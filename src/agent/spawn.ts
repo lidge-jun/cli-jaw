@@ -130,6 +130,7 @@ import {
 } from './kiro-runtime.js';
 import { resolveCursorModelVariant } from './cursor-runtime.js';
 import { normalizePiSettings, spawnPiRpc } from './pi-runtime.js';
+import { piFailureOutcome } from './runtime/pi-turn.js';
 import { getEmployeeMcpServers } from './mcp-passthrough.js';
 
 // ─── State ───────────────────────────────────────────
@@ -2418,7 +2419,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             }
             if (event.kind === 'session') ctx.sessionId = event.sessionId;
         };
-        type PiTurnResult = { text: string; stderr: string; code: number; sessionId?: string | null };
+        type PiTurnResult = { text: string; stderr: string; code: number; sessionId?: string | null; runtimeOutcome?: RuntimeTurnOutcome };
         const runPiTurn = (child: ChildProcess, done: Promise<PiTurnResult>, lease: PiLease | null): void => {
             let leaseCancel: Promise<void> | null = null;
             const requestCancel = (): Promise<void> => {
@@ -2463,13 +2464,15 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 else cleanupEmployeeTmpDir(spawnCwd, settings["workingDir"], agentLabel);
             };
             done.then(async (result) => {
+                if (result.runtimeOutcome !== undefined) handoffRuntimeOutcome(ctx, result.runtimeOutcome);
                 piWatchdog.stop();
                 await releaseLease();
                 flushPiThinking();
                 if (ctx.stderrBuf.length < 4000) ctx.stderrBuf += result.stderr || '';
                 if (result.sessionId) ctx.sessionId = result.sessionId;
                 if (!ctx.fullText && result.text) ctx.fullText = result.text;
-                opts.lifecycle?.onExit?.(result.code);
+                try { opts.lifecycle?.onExit?.(result.code); }
+                catch { console.warn('[jaw:pi] exit observer failed'); }
                 const killReason = consumeKillReason(child.pid);
                 const wasKilled = !!killReason;
                 // 'dup-registration' behaves like a steer for cleanup purposes: a
@@ -2496,18 +2499,23 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                     fallbackState: queueCtrl.fallbackStateForScope(scopeKey),
                     fallbackMaxRetries: FALLBACK_MAX_RETRIES,
                     processQueue,
-                }).finally(() => settleExit(scopeKey));
-            }).catch(async (err: Error) => {
+                });
+            }, async (err: Error) => {
+                const failedOutcome = piFailureOutcome(err);
+                if (failedOutcome !== undefined) handoffRuntimeOutcome(ctx, failedOutcome);
+                const killReason = consumeKillReason(child.pid);
+                const wasKilled = !!killReason;
+                const wasSteer = killReason === 'steer' || killReason === DUP_REGISTRATION_KILL_REASON;
                 piWatchdog.stop();
                 await releaseLease().catch(() => {});
                 if (ctx.stderrBuf.length < 4000) ctx.stderrBuf += err.message;
                 console.error('[jaw:pi] runtime failed:', err.message);
-                handleAgentExit({
+                return handleAgentExit({
                     onRuntimeEnd: (end) => { activity.close(end); },
                     ctx, code: 1, cli, model: runtimeModel, effectiveProvider: profile.id, agentLabel, mainManaged, origin,
                     resumeKey,
                     prompt, opts, cfg, ownerGeneration, persistenceOwner, forceNew, empSid,
-                    isResume: false, wasKilled: false, wasSteer: false, smokeResult: detectSmokeResponse('', [], 1, cli),
+                    isResume: false, wasKilled, wasSteer, smokeResult: detectSmokeResponse('', [], 1, cli),
                     effortDefault: 'medium', costLine: '',
                     resolve: resolve!,
                     activeProcesses,
@@ -2521,11 +2529,15 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                     fallbackState: queueCtrl.fallbackStateForScope(scopeKey),
                     fallbackMaxRetries: FALLBACK_MAX_RETRIES,
                     processQueue,
-                }).catch((handleErr: Error) => {
-                    activity.close({ kind: 'turn-end', status: 'error', finalText: null, error: 'Lifecycle failed' });
-                    console.error('[jaw:lifecycle] handleAgentExit failed (Pi):', handleErr.message);
-                }).finally(() => settleExit(scopeKey));
-            });
+                });
+            }).catch((handleErr: Error) => {
+                // A lifecycle failure cannot re-enter delivery or become a new
+                // provider failure. Promise resolution is idempotent if delivered.
+                activity.close({ kind: 'turn-end', status: 'error', finalText: null, error: 'Lifecycle failed' });
+                console.error('[jaw:lifecycle] handleAgentExit failed (Pi):', handleErr.message);
+                resolve!({ text: ctx.runtimeOutcome?.finalText ?? '', code: 1,
+                    ...(ctx.runtimeOutcome === undefined ? {} : { runtimeOutcome: { ...ctx.runtimeOutcome } }) });
+            }).finally(() => settleExit(scopeKey));
         };
 
         if (opts.agentId) {
