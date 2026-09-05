@@ -8,6 +8,11 @@ import type { RuntimeEventContext } from '../../src/agent/runtime/events.ts';
 import type { RuntimeEnd } from '../../src/agent/runtime/projection.ts';
 
 const runtimeEvents: RuntimeEvent[] = [];
+// Keep the unrelated provider adapter outside this Codex-only seam fixture.
+// The real cross-provider imports are exercised by native-claude-spawn tests.
+test.mock.module('../../src/agent/claude-runtime-run.js', {
+    namedExports: { startClaudeNativeRun: () => { throw new Error('Claude is outside this fixture'); } },
+});
 test.mock.module('../../src/agent/runtime/events.js', {
     namedExports: {
         recordRuntimeEvent: (context: RuntimeEventContext, body: RuntimeEventBody): RuntimeEvent => {

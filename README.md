@@ -411,6 +411,8 @@ Cursor main turns support the native ACP path with explicit `transport: "native"
 
 Native Cursor redirects use **cancel-reprompt**, not in-band input: the original prompt's cancelled response and pending updates finish before the replacement is sent in the same native session. cli-jaw restores the original request, accepted redirects and bounded incomplete output as context while keeping current instructions active. `/steer` uses this path; another pending redirect may queue, but a failed or indeterminate dispatch is not automatically retried. `/queue steer <n>` retains its separate interrupt-and-run-now behavior.
 
+Claude main and worker turns support `perCli.claude.transport: "native"` through the optional pinned SDK, with `safe` approvals and `auto` permissions. Main turns reuse a query; workers close their isolated session before temporary-directory cleanup. Agent/Task calls must explicitly set `run_in_background:false`; background tasks are unsupported. Native steer uses the existing kill-and-salvage flow. Cancellation controls remain tracked through settlement and physical cleanup, including bounded shutdown waits. Claude's default remains `print`.
+
 Native decision APIs are available at `GET /api/runtime/requests?sessionId=...` and `POST /api/runtime/requests/:id`. They use the existing instance authentication policy, exact run/session/scope/turn matching and opaque choice handles. Decisions expire after two minutes; accepting a response records a choice, not tool completion. Provider activation and Activity approval controls remain separate follow-on layers; messaging behavior is unchanged.
 
 ### Instance Manager
