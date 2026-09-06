@@ -14,6 +14,8 @@ This repository is a Node.js ESM orchestration runtime for boss/employee dispatc
 
 ## Current Runtime Notes
 
+- Cursor setup failures admit their captured run before compatibility completion, then attempt canonical termination and close only the still-running trace header. Diagnostics do not create an assistant final; journal failures retain compatibility delivery and explicit incomplete history.
+
 - Native decision APIs are `GET /api/runtime/requests?sessionId=...` and `POST /api/runtime/requests/:id`. Existing instance auth, exact run/session/scope/turn and current-owner checks apply; this is not a tenant ACL or a new loopback credential policy. The registry sanitizes and preflights the32KiB event before insertion, keeps native option IDs in private mappings, and caps128 requests/120s; ACP callbacks cap32 and retain cancellation latches through reply completion. An unflushed selected reply forces connection retirement on cancellation. Provider activation and Activity controls remain separate; no messaging contract changes.
 
 - New installations prefer Codex App when capability and auth are ready; existing saved runtimes change only through the one-time accept/keep Settings action. CLI status is served from a nullable stale-while-revalidate cache whose probes run in a bounded child. OpenCodex diagnostics compare the read-only Codex root URL with the live runtime fingerprint and never modify Codex config.

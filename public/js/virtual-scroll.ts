@@ -28,6 +28,7 @@ export type RestoreReason =
 
 export interface VirtualItem {
     id: string;
+    messageId?: string;
     html: string;
     height: number; // used as estimateSize hint; tanstack measures real heights
     rehydratesProcessDetails?: boolean;
@@ -82,6 +83,7 @@ export class VirtualScroll {
 
     onLazyRender: LazyRenderCallback | null = null;
     onPostRender: ((viewport: HTMLElement) => void) | null = null;
+    onRecycle: ((element: HTMLElement) => void) | null = null;
 
     constructor(containerId: string) {
         this.container = document.getElementById(containerId)!;
@@ -212,12 +214,16 @@ export class VirtualScroll {
         releaseMermaidNodes(div);
         const html = div.outerHTML;
         const id = generateId();
-        this.items.push({ id, html, height: EST_HEIGHT });
+        const messageId = div.dataset['messageId'];
+        this.items.push({ id, ...(messageId ? { messageId } : {}), html, height: EST_HEIGHT });
         if (this.virtualizer) {
             this.virtualizer.setOptions({
                 ...this.virtualizer.options,
                 count: this.items.length,
             });
+            // setOptions alone need not notify when the viewport has not moved.
+            // Mount the promoted row while its live Activity owner can rebind.
+            this.renderItems();
         }
     }
 
@@ -225,6 +231,25 @@ export class VirtualScroll {
         if (this.items[idx]) {
             this.items[idx].html = html;
         }
+    }
+
+    /** Update one stable message without replacing its row or using a stale index. */
+    reconcileMessage(messageId: string, update: (message: HTMLElement) => void): boolean {
+        const index = this.items.findIndex(item => item.messageId === messageId);
+        if (index < 0 || this.items.some((item, i) => i !== index && item.messageId === messageId)) return false;
+        const item = this.items[index]!;
+        const mounted = this.mounted.get(index);
+        const wrapper = this.container.ownerDocument.createElement('div');
+        if (!mounted) wrapper.innerHTML = item.html;
+        const message = mounted ?? wrapper.firstElementChild as HTMLElement | null;
+        if (!message || message.dataset['messageId'] !== messageId) return false;
+        update(message);
+        item.html = message.outerHTML;
+        if (mounted && this.virtualizer) {
+            syncMeasuredItemHeight(this.items, index, mounted);
+            this.virtualizer.measureElement(mounted);
+        }
+        return true;
     }
 
     scrollToBottom(): void {
@@ -376,6 +401,7 @@ export class VirtualScroll {
         if (!this._active) return;
         this.deactivate();
         this.container.innerHTML = this.items.map(it => it.html).join('');
+        this.onPostRender?.(this.container);
         this.items = [];
     }
 
@@ -385,6 +411,7 @@ export class VirtualScroll {
         this.itemGap = 0;
         this.onLazyRender = null;
         this.onPostRender = null;
+        this.onRecycle = null;
     }
 
     // ── Activation / Deactivation ──
@@ -557,6 +584,7 @@ export class VirtualScroll {
         this.virtualizer = null;
         this._active = false;
         for (const el of this.mounted.values()) {
+            this.onRecycle?.(el);
             releaseMermaidNodes(el);
             releaseProcessBlockDetails(el);
         }
@@ -584,6 +612,7 @@ export class VirtualScroll {
 
         for (const [idx, el] of this.mounted) {
             if (!wantedSet.has(idx)) {
+                this.onRecycle?.(el);
                 releaseMermaidNodes(el);
                 const item = this.items[idx];
                 if (item?.rehydratesProcessDetails) releaseProcessBlockDetails(el);
@@ -611,6 +640,21 @@ export class VirtualScroll {
 
             // CSS owns left/right/width, including .msg-user alignment.
             el.style.transform = `translateY(${vItem.start}px)`;
+        }
+
+        // Geometry determines visual order; keep assistive reading/Tab order aligned
+        // when earlier rows are mounted after rows that were already visible.
+        const focused = this.innerEl.ownerDocument.activeElement;
+        const retainedFocus = focused instanceof HTMLElement && this.innerEl.contains(focused) ? focused : null;
+        let cursor = this.innerEl.firstElementChild;
+        for (const item of virtualItems) {
+            const element = this.mounted.get(item.index);
+            if (!element) continue;
+            if (element !== cursor) this.innerEl.insertBefore(element, cursor);
+            cursor = element.nextElementSibling;
+        }
+        if (retainedFocus?.isConnected && this.innerEl.ownerDocument.activeElement !== retainedFocus) {
+            retainedFocus.focus({preventScroll:true});
         }
 
         // Lazy render before measuring; markdown/code/math change heights.

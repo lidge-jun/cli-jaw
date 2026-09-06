@@ -12,7 +12,7 @@ import type { RuntimeEventContext } from '../../src/agent/runtime/events.ts';
 
 type Callbacks = { onEvent?: (event: PiRuntimeEvent) => void; onRawRecord?: (record: unknown) => void; cwd?: string };
 const fixture = {
-    mode: 'ok' as 'ok' | 'acquire-failure' | 'direct-failure' | 'turn-failure' | 'raw-limit',
+    mode: 'ok' as 'ok' | 'acquire-failure' | 'direct-failure' | 'turn-failure' | 'raw-limit' | 'lifecycle-failure' | 'turn-lifecycle-failure',
     calls: [] as Callbacks[], acquisitions: [] as Array<Record<string, unknown>>,
     direct: 0, releases: 0, watchdogStops: 0,
     acquireGate: null as Promise<void> | null,
@@ -46,7 +46,7 @@ function child(): ChildProcess {
 }
 async function protocol(callbacks: Callbacks) {
     fixture.calls.push(callbacks);
-    if (fixture.mode === 'turn-failure') throw new Error('fixture Pi turn failed');
+    if (fixture.mode === 'turn-failure' || fixture.mode === 'turn-lifecycle-failure') throw new Error('fixture Pi turn failed');
     const raw = (record: unknown) => callbacks.onRawRecord?.(record);
     const semantic = (event: PiRuntimeEvent) => callbacks.onEvent?.(event);
     if (fixture.mode === 'raw-limit') raw({ type: 'fixture_oversize', payload: 'x'.repeat(70_000) });
@@ -97,6 +97,8 @@ test.mock.module('../../src/agent/watchdog.js', { namedExports: {
     ...watchdog, attachWatchdog: () => ({ markProgress() {}, extendDeadline() {}, stop() { fixture.watchdogStops++; } }),
 } });
 const traces = await import('../../src/trace/store.ts');
+const { db } = await import('../../src/core/db.ts');
+const { readActivityPage } = await import('../../src/trace/activity-journal.ts');
 const live = await import('../../src/agent/live-run-state.ts');
 const lifecycle = await import('../../src/agent/lifecycle-handler.ts');
 test.mock.module('../../src/agent/lifecycle-handler.js', { namedExports: {
@@ -109,7 +111,9 @@ test.mock.module('../../src/agent/lifecycle-handler.js', { namedExports: {
         params.releaseMainRun(params.scopeKey, params.childProcess, params.ownerGeneration);
         live.clearLiveRun(params.ctx.liveScope || 'default');
         traces.finalizeTraceRun(params.ctx.traceRunId, params.code === 0 ? 'done' : 'error');
+        if (fixture.mode === 'turn-lifecycle-failure') throw new Error('fixture failed lifecycle before caller resolution');
         params.resolve({ text: finalText ?? '', code: params.code ?? 0, tools: params.ctx.toolLog });
+        if (fixture.mode === 'lifecycle-failure') throw new Error('fixture failure after finalization');
     },
 } });
 const { spawnAgent, activeProcesses, activeMainProcesses, armExitSettle, waitForExitSettled, settleExit } = await import('../../src/agent/spawn.ts');
@@ -120,6 +124,7 @@ const publicEvents: string[] = [];
 let unsubscribe = () => {};
 
 test.beforeEach(() => {
+    db.prepare("INSERT OR IGNORE INTO chat_sessions(id,seq,label) VALUES('jaw-chat-id',9001,'Pi owned fixture')").run();
     fixture.mode = 'ok'; fixture.calls.length = 0; fixture.acquisitions.length = 0;
     fixture.contexts.length = 0; fixture.events.length = 0; fixture.lifecycle.length = 0; fixture.legacy.length = 0;
     fixture.direct = 0; fixture.releases = 0; fixture.watchdogStops = 0; publicEvents.length = 0;
@@ -144,6 +149,13 @@ function opts(employee = false) {
 }
 function assertCanonicalContext(employee: boolean) {
     assert.ok(fixture.events.length > 0, 'real spawn must feed the shared runtime emitter');
+    const runId = fixture.events[0]!.runId;
+    const owner = traces.getTraceRun(runId);
+    assert.equal(owner?.session_id, 'jaw-chat-id');
+    assert.equal(owner?.scope_key, 'pi-test-scope');
+    const replay = readActivityPage({ runId, sessionId: 'jaw-chat-id', after: 0, limit: 40 });
+    if (employee) assert.equal(replay, null, 'internal trace stays private despite captured owner');
+    else assert.deepEqual(replay?.events, fixture.events, 'actual spawn, emitter, stored codec and replay agree');
     for (const context of fixture.contexts) {
         assert.equal(context.sessionId, 'jaw-chat-id'); assert.equal(context.scope, 'pi-test-scope');
         assert.equal(context.parentItemId, 'jaw-parent-item');
@@ -210,6 +222,30 @@ test('rejected Pi turn uses error lifecycle observer once and releases pooled le
     assertCanonicalContext(false);
     assert.ok(fixture.events.some(e => e.kind === 'turn-end' && e.status === 'error' && e.finalText === null));
     assert.equal(activeMainProcesses.has('pi-test-scope'), false);
+});
+
+test('Pi lifecycle rejection after finalization cannot execute lifecycle or release twice', async () => {
+    fixture.mode = 'lifecycle-failure';
+    const result = await spawnAgent('lifecycle fixture', opts()).promise;
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(result.text, 'lifecycle-selected final');
+    assert.equal(fixture.lifecycle.length, 1);
+    assert.equal(fixture.releases, 1);
+    assert.equal(fixture.events.filter(event => event.kind === 'turn-end').length, 1);
+});
+test('Pi execution failure followed by lifecycle rejection resolves caller once and settles barrier', async () => {
+    fixture.mode = 'turn-lifecycle-failure';
+    const scope = 'pi-test-scope';
+    armExitSettle(scope);
+    let barrierDone = false;
+    const barrier = waitForExitSettled(scope).then(() => { barrierDone = true; });
+    const result = await spawnAgent('double failure fixture', opts()).promise;
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(result.code, 1); assert.equal(result.text, '');
+    assert.equal(fixture.lifecycle.length, 1); assert.equal(fixture.releases, 1);
+    assert.equal(barrierDone, true);
+    assert.equal(fixture.events.filter(event => event.kind === 'turn-end').length, 1);
+    await barrier;
 });
 
 test('Pi acquire failure closes trace/live state and settles the armed exit barrier without timeout', async context => {

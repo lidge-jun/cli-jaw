@@ -130,6 +130,7 @@ import {
 } from './kiro-runtime.js';
 import { resolveCursorModelVariant } from './cursor-runtime.js';
 import { normalizePiSettings, spawnPiRpc } from './pi-runtime.js';
+import { piFailureOutcome } from './runtime/pi-turn.js';
 import { getEmployeeMcpServers } from './mcp-passthrough.js';
 
 // ─── State ───────────────────────────────────────────
@@ -1744,7 +1745,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         const capturedRun = mainRun!;
         const nativeCwd = spawnCwd || process.cwd();
         let traceRunId: string;
-        try { traceRunId = startTraceRun({ cli, model: runtimeModel, workingDir: nativeCwd, agentLabel, audience: traceAudience }); }
+        try { traceRunId = startTraceRun({ cli, model: runtimeModel, workingDir: nativeCwd, agentLabel, audience: traceAudience, sessionId: chatSessionId, scopeKey }); }
         catch { traceRunId = createTraceId(); console.warn('[runtime:cursor] trace creation unavailable'); }
         const identity = Object.freeze({ runId: traceRunId, sessionId: chatSessionId, scope: scopeKey,
             turnId: traceRunId, audience: traceAudience,
@@ -1757,6 +1758,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         const toolMirror = new Map<string, ToolEntry>();
         const mirrorLimit = 160;
         let facade: AcpRuntimeSession | null = null, ownedLease: NativeRunLease | null = null;
+        let failedStart: RuntimeProjection | null = null;
         let nativeStarted = false, runtimeEnded = false, finalizeFailed = false, finalized = false;
         let stopReason: string | null = null, queueRequested = false;
         let capturedExit: (typeof exitSettlers extends Map<string, infer T> ? T : never) | undefined;
@@ -1791,14 +1793,18 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         const diagnostic = () => facade?.lastError?.includes('config')
             ? 'Cursor native model or effort is unsupported. Choose an advertised model/effort; Composer models may require an unset effort.'
             : 'Cursor native runtime failed. Check the native model, effort and existing CLI login.';
+        const startFailedRuntime = () => {
+            failedStart ??= new RuntimeProjection(identity);
+            failedStart.start(cli);
+            return failedStart;
+        };
         const endRuntime = (end: RuntimeEnd) => {
             if (runtimeEnded) return;
             runtimeEnded = true;
             if (facade?.claimTurnOutcome(traceRunId)) {
                 if (!facade.finalizeTurn(traceRunId, end)) finalizeFailed = true;
             } else if (!nativeStarted) {
-                const failedStart = new RuntimeProjection(identity);
-                failedStart.start(cli); failedStart.close(end);
+                startFailedRuntime().close(end);
             } else {
                 finalizeFailed = true;
                 console.warn('[runtime:cursor] missing owned finalizer');
@@ -1812,6 +1818,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             };
             handoffRuntimeOutcome(ctx, selected);
             try {
+                // Admit the run before compatibility consumers retire its identity.
+                if (!nativeStarted && !runtimeEnded) startFailedRuntime();
                 if (!ctx.runtimeTerminalAttempted) {
                     ctx.runtimeTerminalAttempted = true;
                     broadcast('agent_done', { traceRunId, scope: scopeKey, sessionId: chatSessionId, origin, cli,
@@ -1821,8 +1829,18 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                     }, traceAudience);
                 }
             } finally {
-                endRuntime({ kind: 'turn-end', status: selected.status, finalText: selected.finalText,
-                    ...(selected.status === 'error' ? { error: diagnostic() } : {}) });
+                try {
+                    endRuntime({ kind: 'turn-end', status: selected.status, finalText: selected.finalText,
+                        ...(selected.status === 'error' ? { error: diagnostic() } : {}) });
+                } finally {
+                    // Acquire/ready/settle exceptions can bypass lifecycle's trace
+                    // finalizer. Close only this still-running row, even if canonical
+                    // recording failed, without rewriting an already settled result.
+                    try {
+                        finalizeTraceRun(traceRunId, selected.status === 'stopped' ? 'interrupted' : selected.status,
+                            selected.status === 'error' ? diagnostic() : null, { onlyIfRunning: true });
+                    } catch { console.warn('[runtime:cursor] failure trace finalization unavailable'); }
+                }
             }
             return selectedResult ?? resultFor(selected);
         };
@@ -2032,7 +2050,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         if (!opts.internal) broadcast('agent_status', { status: 'running', cli, agentId: agentLabel, ...empTag }, traceAudience);
 
         if (mainManaged && !opts.internal) beginLiveRun(liveScope, cli);
-        const traceRunId = startTraceRun({ cli, model, workingDir: settings["workingDir"] || null, agentLabel, audience: traceAudience });
+        const traceRunId = startTraceRun({ cli, model, workingDir: settings["workingDir"] || null, agentLabel, audience: traceAudience, sessionId: chatSessionId, scopeKey });
         if (mainManaged && !opts.internal) setLiveRunTraceId(liveScope, traceRunId);
         const ctx: CopilotSpawnContext = {
             fullText: '', traceLog: [], toolLog: [], seenToolKeys: new Set<string>(),
@@ -2317,7 +2335,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         const piSessionId = isResume && bucketSessionId ? bucketSessionId : '';
         console.log(`[jaw:pi] isResume=${isResume}, bucketSessionId=${bucketSessionId || 'none'}, piSessionId=${piSessionId || 'new'}`);
         const piPrompt = withSteerContext(piSessionId ? prompt : withHistoryPrompt(prompt, historyBlock), opts.steerContext);
-        const traceRunId = startTraceRun({ cli, model: runtimeModel, workingDir: settings["workingDir"] || null, agentLabel, audience: traceAudience });
+        const traceRunId = startTraceRun({ cli, model: runtimeModel, workingDir: settings["workingDir"] || null, agentLabel, audience: traceAudience, sessionId: chatSessionId, scopeKey });
         const ctx: SpawnContext = {
             fullText: '',
             traceLog: [],
@@ -2418,7 +2436,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             }
             if (event.kind === 'session') ctx.sessionId = event.sessionId;
         };
-        type PiTurnResult = { text: string; stderr: string; code: number; sessionId?: string | null };
+        type PiTurnResult = { text: string; stderr: string; code: number; sessionId?: string | null; runtimeOutcome?: RuntimeTurnOutcome };
         const runPiTurn = (child: ChildProcess, done: Promise<PiTurnResult>, lease: PiLease | null): void => {
             let leaseCancel: Promise<void> | null = null;
             const requestCancel = (): Promise<void> => {
@@ -2463,13 +2481,15 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 else cleanupEmployeeTmpDir(spawnCwd, settings["workingDir"], agentLabel);
             };
             done.then(async (result) => {
+                if (result.runtimeOutcome !== undefined) handoffRuntimeOutcome(ctx, result.runtimeOutcome);
                 piWatchdog.stop();
                 await releaseLease();
                 flushPiThinking();
                 if (ctx.stderrBuf.length < 4000) ctx.stderrBuf += result.stderr || '';
                 if (result.sessionId) ctx.sessionId = result.sessionId;
                 if (!ctx.fullText && result.text) ctx.fullText = result.text;
-                opts.lifecycle?.onExit?.(result.code);
+                try { opts.lifecycle?.onExit?.(result.code); }
+                catch { console.warn('[jaw:pi] exit observer failed'); }
                 const killReason = consumeKillReason(child.pid);
                 const wasKilled = !!killReason;
                 // 'dup-registration' behaves like a steer for cleanup purposes: a
@@ -2496,18 +2516,23 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                     fallbackState: queueCtrl.fallbackStateForScope(scopeKey),
                     fallbackMaxRetries: FALLBACK_MAX_RETRIES,
                     processQueue,
-                }).finally(() => settleExit(scopeKey));
-            }).catch(async (err: Error) => {
+                });
+            }, async (err: Error) => {
+                const failedOutcome = piFailureOutcome(err);
+                if (failedOutcome !== undefined) handoffRuntimeOutcome(ctx, failedOutcome);
+                const killReason = consumeKillReason(child.pid);
+                const wasKilled = !!killReason;
+                const wasSteer = killReason === 'steer' || killReason === DUP_REGISTRATION_KILL_REASON;
                 piWatchdog.stop();
                 await releaseLease().catch(() => {});
                 if (ctx.stderrBuf.length < 4000) ctx.stderrBuf += err.message;
                 console.error('[jaw:pi] runtime failed:', err.message);
-                handleAgentExit({
+                return handleAgentExit({
                     onRuntimeEnd: (end) => { activity.close(end); },
                     ctx, code: 1, cli, model: runtimeModel, effectiveProvider: profile.id, agentLabel, mainManaged, origin,
                     resumeKey,
                     prompt, opts, cfg, ownerGeneration, persistenceOwner, forceNew, empSid,
-                    isResume: false, wasKilled: false, wasSteer: false, smokeResult: detectSmokeResponse('', [], 1, cli),
+                    isResume: false, wasKilled, wasSteer, smokeResult: detectSmokeResponse('', [], 1, cli),
                     effortDefault: 'medium', costLine: '',
                     resolve: resolve!,
                     activeProcesses,
@@ -2521,11 +2546,15 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                     fallbackState: queueCtrl.fallbackStateForScope(scopeKey),
                     fallbackMaxRetries: FALLBACK_MAX_RETRIES,
                     processQueue,
-                }).catch((handleErr: Error) => {
-                    activity.close({ kind: 'turn-end', status: 'error', finalText: null, error: 'Lifecycle failed' });
-                    console.error('[jaw:lifecycle] handleAgentExit failed (Pi):', handleErr.message);
-                }).finally(() => settleExit(scopeKey));
-            });
+                });
+            }).catch((handleErr: Error) => {
+                // A lifecycle failure cannot re-enter delivery or become a new
+                // provider failure. Promise resolution is idempotent if delivered.
+                activity.close({ kind: 'turn-end', status: 'error', finalText: null, error: 'Lifecycle failed' });
+                console.error('[jaw:lifecycle] handleAgentExit failed (Pi):', handleErr.message);
+                resolve!({ text: ctx.runtimeOutcome?.finalText ?? '', code: 1,
+                    ...(ctx.runtimeOutcome === undefined ? {} : { runtimeOutcome: { ...ctx.runtimeOutcome } }) });
+            }).finally(() => settleExit(scopeKey));
         };
 
         if (opts.agentId) {
@@ -2611,7 +2640,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         }
         if (!opts.internal) broadcast('agent_status', { status: 'running', cli, agentId: agentLabel, ...empTag }, traceAudience);
 
-        const traceRunId = startTraceRun({ cli, model, workingDir: settings["workingDir"] || null, agentLabel, audience: traceAudience });
+        const traceRunId = startTraceRun({ cli, model, workingDir: settings["workingDir"] || null, agentLabel, audience: traceAudience, sessionId: chatSessionId, scopeKey });
         if (mainManaged && !opts.internal) setLiveRunTraceId(liveScope, traceRunId);
         const ctx: CopilotSpawnContext = {
             fullText: '', traceLog: [], toolLog: [], seenToolKeys: new Set<string>(),
@@ -3312,7 +3341,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
 
     if (!opts.internal) broadcast('agent_status', { status: 'running', cli, agentId: agentLabel, ...runtimeStatusMeta, ...empTag }, traceAudience);
 
-    const traceRunId = startTraceRun({ cli, model: runtimeModel, workingDir: settings["workingDir"] || null, agentLabel, audience: traceAudience });
+    const traceRunId = startTraceRun({ cli, model: runtimeModel, workingDir: settings["workingDir"] || null, agentLabel, audience: traceAudience, sessionId: chatSessionId, scopeKey });
     if (mainManaged && !opts.internal) setLiveRunTraceId(liveScope, traceRunId);
     // Native `agy --conversation ... -p` may emit only the current answer.
     // Length-based replay trimming can therefore swallow the whole new answer.

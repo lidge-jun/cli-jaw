@@ -1,6 +1,12 @@
 // ── Server Event Connection (SSE via event-channel) ──
 import { state } from './state.js';
-import { API_BASE } from './api.js';
+import { API_BASE, api } from './api.js';
+import { parseActivityIdentity } from '../../src/shared/presentation.js';
+import { parseRuntimeEvent } from '../../src/shared/runtime-event-parse.js';
+import type { RuntimeEvent } from '../../src/shared/runtime-contract.js';
+import { clearLiveActivity, degradeLiveActivity, findLiveActivity, ingestLiveActivity, rebindLiveActivity, reconcileLiveActivityAnswer, setLiveActivityIdentity, settleLiveActivity } from './features/activity-live.js';
+import { discoverActivityHistory, observeActivityHistory, setActivityHistoryIdentity } from './features/activity-history.js';
+import { mountNativeRequests } from './features/native-requests.js';
 import { connectEventChannel, subscribe, onChannelOpen, onChannelDisconnect, onChannelUnavailable } from './event-channel.js';
 import { setStatus, updateQueueBadge, addSystemMsg, appendAgentText, finalizeAgent, addMessage, showProcessStep, cleanupToolActivity, applyQueuedOverlay, hydrateActiveRun, reconcileChatBottomAfterRestore, showChatRestoreIndicator, markSteered, clearSteer, isRecentSteer } from './ui.js';
 import { renderPendingQueue } from './features/pending-queue.js';
@@ -12,7 +18,7 @@ import type { HeartbeatRuntimeState, OrcStateName, ResolvedSelectionState } from
 import { notifyUnreadResponse } from './features/attention-badge.js';
 import { shouldApplyOrcStateEvent } from './features/orchestrate-scope.js';
 import { providerLabel } from './provider-icons.js';
-import { handleSessionListBroadcast } from './features/session-hub.js';
+import { handleSessionListBroadcast, withCurrentSessionQuery } from './features/session-hub.js';
 
 const ROADMAP_PHASES = ['I', 'P', 'A', 'B', 'C'] as const;
 
@@ -73,6 +79,7 @@ interface WsMessage {
     startedAt?: number;
     text?: string | null;
     runtimeFinality?: 'present' | 'absent';
+    runtimeStatus?: 'done' | 'error' | 'stopped';
     toolLog?: { icon: string; label: string; detail?: string; toolType?: string; stepRef?: string; isEmployee?: boolean; traceRunId?: string; traceSeq?: number; detailAvailable?: boolean; detailBytes?: number; rawRetentionStatus?: string }[];
     from?: string;
     to?: string;
@@ -109,10 +116,12 @@ interface WsMessage {
     code?: string;
     employeeName?: string;
     exitCode?: number;
-    error?: string;
+    error?: string | boolean;
     message?: string;
     steered?: boolean;
     steerWaitMs?: number;
+    mode?: string;
+    localDispatch?: boolean;
     textLen?: number;
     sseReplay?: boolean;
     deleted?: { id?: string; seq?: number };
@@ -141,7 +150,7 @@ const finalizedTraceRuns: string[] = [];
 const liveAppliedToolSeqByRun = new Map<string, number>();
 
 function isFinalizedRun(runId: string | null): boolean {
-    return runId !== null && finalizedTraceRuns.includes(runId);
+    return runId !== null && (finalizedTraceRuns.includes(runId) || !!findLiveActivity(runId)?.answerSource);
 }
 
 function positiveSeq(value: unknown): number | null {
@@ -169,7 +178,7 @@ function rememberAppliedToolSeq(runId: string | null, seq: number | null): void 
  *  toolLog interleaves boss tools AND employee-mirror tools (each employee
  *  run has its own traceRunId) — seeding only the boss run left replayed
  *  employee tools unguarded after reconnect (adversarial review #7). */
-function appliedToolSeqByRun(activeRun?: { toolLog?: Array<{ traceRunId?: string; traceSeq?: number }> } | null): Map<string, number> {
+function appliedToolSeqByRun(activeRun?: { toolLog?: Array<{ traceRunId?: string | undefined; traceSeq?: number | undefined }> } | null): Map<string, number> {
     const maxByRun = new Map<string, number>();
     for (const tool of activeRun?.toolLog || []) {
         const runId = typeof tool?.traceRunId === 'string' && tool.traceRunId ? tool.traceRunId : null;
@@ -210,7 +219,7 @@ function adoptLiveRun(runId: string | null): void {
  *  reconnect/restore hydration: the hydrated block already renders the full
  *  cumulative `snapshot.text`, so replayed chunks at or below that length
  *  must be dropped, not re-appended. */
-function syncLiveRunCursor(activeRun?: { running?: boolean; traceRunId?: string; text?: string; textLen?: number; toolLog?: Array<{ traceRunId?: string; traceSeq?: number }> } | null): void {
+function syncLiveRunCursor(activeRun?: { running?: boolean; traceRunId?: string; text?: string; textLen?: number; toolLog?: Array<{ traceRunId?: string | undefined; traceSeq?: number | undefined }> } | null): void {
     if (!activeRun?.running) return;
     if (typeof activeRun.traceRunId === 'string' && activeRun.traceRunId) {
         liveTraceRunId = activeRun.traceRunId;
@@ -227,6 +236,112 @@ function syncLiveRunCursor(activeRun?: { running?: boolean; traceRunId?: string;
 }
 
 let currentOrcScope = '';
+let activitySnapshotGeneration = 0;
+let pendingRuntimeBytes = 0;
+let pendingRuntime: Array<{ event: RuntimeEvent; replay: boolean }> = [];
+let runtimeBufferLost = false;
+let nativePanel: ReturnType<typeof mountNativeRequests> | null = null;
+let nativePanelKey = '';
+
+function disposeNativePanel(): void {
+    nativePanel?.dispose(); nativePanel=null; nativePanelKey='';
+}
+
+function refreshNativePanel(): void {
+    const identity=state.activityIdentity;
+    const host=document.querySelector<HTMLElement>('.chat-area');
+    if (!identity || !host) {disposeNativePanel();return;}
+    const key=JSON.stringify([identity.sessionId,identity.scope]);
+    if (!nativePanel || key!==nativePanelKey) {
+        disposeNativePanel();nativePanelKey=key;nativePanel=mountNativeRequests(host,identity);
+    } else void nativePanel.refresh();
+}
+
+function suspendRuntimeAdmission(): void {
+    ++activitySnapshotGeneration;
+    state.activityIdentity = null;
+}
+
+function handleRuntimeEvent(event: RuntimeEvent, replay = false): void {
+    const identity = state.activityIdentity;
+    if (!identity) {
+        const bytes = new TextEncoder().encode(JSON.stringify(event)).length;
+        if (pendingRuntime.length >= 256 || pendingRuntimeBytes + bytes > 1024 * 1024) {
+            pendingRuntime = []; pendingRuntimeBytes = 0; runtimeBufferLost = true;
+            return;
+        }
+        pendingRuntime.push({ event, replay }); pendingRuntimeBytes += bytes;
+        return;
+    }
+    if (event.sessionId !== identity.sessionId || event.scope !== identity.scope) return;
+    const known = findLiveActivity(event.runId);
+    const finalized = isFinalizedRun(event.runId);
+    if (finalized && !known) return;
+    if (!known && liveTraceRunId && liveTraceRunId !== event.runId && (event.kind !== 'turn-start' || replay)) return;
+    const turn = ingestLiveActivity(event, !liveTraceRunId || liveTraceRunId === event.runId)
+        ?? (event.kind === 'turn-end' && known?.model.end?.seq === event.seq
+            && known.model.identity.turnId === event.turnId ? known : null);
+    if (!turn) return;
+    if (runtimeBufferLost) degradeLiveActivity(event.runId);
+    if (event.kind !== 'turn-end') {
+        if (!finalized && !replay) adoptLiveRun(event.runId);
+        return;
+    }
+    // A late A terminal may settle A's ledger while B owns the singleton answer.
+    if (finalized || (liveTraceRunId && liveTraceRunId !== event.runId)
+        || state.currentAgentDiv !== turn.message) return;
+    if (!replay) void nativePanel?.refresh();
+    turn.answerSource = 'canonical';
+    markRunFinalized(event.runId);
+    // Capture the full authoritative answer BEFORE using the reducer's preview.
+    finalizeAgent(event.finalText, undefined, event.finalText === null ? 'absent' : 'present', event.runId, turn.cacheScope);
+    notifyUnreadResponse();
+}
+
+function settleCompatibilityMessage(msg: WsMessage): void {
+    if (msg.isEmployee === true) return;
+    const doneRunId = typeof msg.traceRunId === 'string' && msg.traceRunId ? msg.traceRunId : null;
+    const nativeFinality = msg.runtimeFinality === 'present' || msg.runtimeFinality === 'absent'
+        ? msg.runtimeFinality : undefined;
+    // An untagged diagnostic cannot prove ownership, even with one foreground
+    // run. Keep it visible independently instead of completing a guessed run.
+    if (!doneRunId && !nativeFinality
+        && (msg.error === true || (liveTraceRunId && findLiveActivity(liveTraceRunId)))) {
+        if (typeof msg.text === 'string' && msg.text) addSystemMsg(escapeHtml(msg.text), 'tool-activity');
+        return;
+    }
+    const known = doneRunId ? findLiveActivity(doneRunId) : undefined;
+    const ownedText = !nativeFinality && known && typeof msg.text === 'string';
+    if (isFinalizedRun(doneRunId)) {
+        if (ownedText && doneRunId) reconcileLiveActivityAnswer(doneRunId, msg.text!);
+        return;
+    }
+    if (doneRunId && liveTraceRunId && doneRunId !== liveTraceRunId) return;
+    settleLiveActivity(doneRunId, msg.runtimeStatus ?? (msg.error === true ? 'error' : undefined));
+    if (ownedText) known.answerSource = 'compatibility';
+    void nativePanel?.refresh();
+    markRunFinalized(doneRunId);
+    finalizeAgent(msg.text || '', msg.type === 'agent_done' ? msg.toolLog : undefined,
+        nativeFinality ?? (ownedText ? 'present' : undefined), doneRunId ?? undefined, known?.cacheScope);
+    notifyUnreadResponse();
+}
+
+function drainRuntimeBuffer(): void {
+    const buffered = pendingRuntime;
+    pendingRuntime = []; pendingRuntimeBytes = 0;
+    for (const { event, replay } of buffered) handleRuntimeEvent(event, replay);
+    runtimeBufferLost = false;
+}
+
+type ActivitySnapshot = {
+    activityIdentity?: unknown;
+    orc: { scope: string; state: OrcStateName; ctx: Parameters<typeof applyOrcContext>[0] };
+    heartbeat: Parameters<typeof applyHeartbeatRuntime>[0];
+    workers: Parameters<typeof hydrateAgentPhases>[0];
+    runtime: { queuePending: number; busy: boolean };
+    queued: Parameters<typeof applyQueuedOverlay>[0];
+    activeRun: Parameters<typeof hydrateActiveRun>[0];
+};
 let lastLoadTs = 0;
 let snapshotSyncInFlight: Promise<void> | null = null;
 let lastSnapshotSyncAt = 0;
@@ -236,8 +351,15 @@ const SNAPSHOT_SYNC_THROTTLE_MS = 750;
 const RESTORE_TRIGGER_DEBOUNCE_MS = 750;
 
 async function refreshRuntimeSnapshot(options: { hydrateRun?: boolean } = {}): Promise<void> {
-    const response = await fetch(`${API_BASE}/api/orchestrate/snapshot`);
-    const snap = await response.json();
+    const generation = ++activitySnapshotGeneration;
+    const path = withCurrentSessionQuery('/api/orchestrate/snapshot');
+    const snap = await api<ActivitySnapshot>(path);
+    if (generation !== activitySnapshotGeneration || path !== withCurrentSessionQuery('/api/orchestrate/snapshot')) return;
+    if (!snap) { state.activityIdentity = null; throw new Error('activity_snapshot_unavailable'); }
+    state.activityIdentity = parseActivityIdentity(snap.activityIdentity);
+    setLiveActivityIdentity(state.activityIdentity);
+    setActivityHistoryIdentity(state.activityIdentity, event => handleRuntimeEvent(event,true));
+    refreshNativePanel();
     currentOrcScope = String(snap.orc.scope || '');
     applyOrcState(snap.orc.state);
     applyOrcContext(snap.orc.ctx || null);
@@ -252,7 +374,15 @@ async function refreshRuntimeSnapshot(options: { hydrateRun?: boolean } = {}): P
         // move the replay cursors there so replayed chunks older than the
         // snapshot are dropped instead of re-appended.
         syncLiveRunCursor(snap.activeRun);
+        if (snap.activeRun?.running && snap.activeRun.traceRunId && state.currentAgentDiv) {
+            state.currentAgentDiv.dataset['traceRunId'] = snap.activeRun.traceRunId;
+            rebindLiveActivity(snap.activeRun.traceRunId, state.currentAgentDiv);
+        }
     }
+    if (state.activityIdentity) drainRuntimeBuffer();
+    const chat = document.getElementById('chatMessages');
+    if (chat) observeActivityHistory(chat);
+    if (options.hydrateRun && state.activityIdentity) void discoverActivityHistory();
     hydrateGoalState();
     if (snap.runtime.busy) {
         setStatus('running');
@@ -324,6 +454,7 @@ function requestBrowserRestoreSync(reason: string): void {
     // loadMessages single-flight instead.
     if (!shouldReloadMessagesForRestore(reason)
         && now - lastRestoreTriggerAt < RESTORE_TRIGGER_DEBOUNCE_MS) return;
+    suspendRuntimeAdmission();
     lastRestoreTriggerAt = now;
     syncAfterBrowserRestore(reason);
 }
@@ -334,6 +465,11 @@ function requestBrowserRestoreSync(reason: string): void {
 // same path for forward-compat and resolves to a signature-skip no-op today.
 function handleSettingsChange(msg: { cli?: string; projectDirs?: string[] | null; changedKeys?: string[] }): void {
     const changedKeys = Array.isArray(msg.changedKeys) ? msg.changedKeys : [];
+    if (changedKeys.includes('presentation')) {
+        void import('./features/presentation-preference.js')
+            .then(m => m.refreshPresentationSettings())
+            .catch(error => console.warn('[ws] presentation refresh failed', error));
+    }
     // Turning multi-session on or off changes what the SERVER puts on every event and
     // what this tab is subscribed to, and the two are decided at different times: the
     // session view is built once at boot and the channel carries the scope it produced.
@@ -780,6 +916,7 @@ export function connect(): void {
 export const reopenChannel = connect;
 
 function handleChannelUp(transport: 'sse' | 'ws'): void {
+    suspendRuntimeAdmission();
     console.log(`[${transport}] connected`);
     fallbackRetryDelayMs = 2000;
     clearChannelDownToastTimer(); // reconnected within grace — stay silent
@@ -814,6 +951,7 @@ function handleChannelUp(transport: 'sse' | 'ws'): void {
 }
 
 function handleReplayGap(): void {
+    suspendRuntimeAdmission();
     showChatRestoreIndicator('replay_gap');
     snapshotReady = import('./ui.js').then(async m => {
         try {
@@ -844,6 +982,8 @@ function clearChannelDownToastTimer(): void {
 
 function handleChannelDown(): void {
     console.log('[channel] disconnected');
+    suspendRuntimeAdmission();
+    nativePanel?.suspend();
     import('./ui.js').then(m => m.cleanupToolActivity());
     if (channelDownToastTimer !== null) return; // earliest outage owns the deadline
     channelDownToastTimer = window.setTimeout(() => {
@@ -937,6 +1077,23 @@ function wireEventChannel(): void {
 }
 
 function handleServerEvent(msg: WsMessage): void {
+    if (msg.type === 'agent_runtime') {
+        const event = parseRuntimeEvent(msg);
+        if (event) {
+            const identity=state.activityIdentity;
+            if (msg.sseReplay!==true && (event.kind==='request' || event.kind==='request-settled')
+                && identity?.sessionId===event.sessionId && identity.scope===event.scope) void nativePanel?.refresh();
+            handleRuntimeEvent(event, msg.sseReplay === true);
+        }
+        return;
+    }
+    if (msg.type === 'agent_runtime_gap') {
+        const gap = msg as unknown as Record<string, unknown>;
+        const identity = state.activityIdentity;
+        if (identity && gap['sessionId'] === identity.sessionId && gap['scope'] === identity.scope
+            && typeof gap['runId'] === 'string') degradeLiveActivity(gap['runId']);
+        return;
+    }
     // Hot-path first (devlog 260705_frontend_perf M5): agent_tool/agent_output
     // arrive many times per second during streaming — they head the chain so
     // each event pays 1-2 string compares instead of walking cold branches.
@@ -1056,27 +1213,18 @@ function handleServerEvent(msg: WsMessage): void {
             // Suppress agent_done from steered (killed) process.
             // Server sets steered:true; isRecentSteer is fallback for edge cases.
         } else {
-            const doneRunId = typeof msg.traceRunId === 'string' && msg.traceRunId ? msg.traceRunId : null;
-            // Replayed done of an already-finalized turn — drop, the history
-            // item exists. A done carrying a DIFFERENT run id than the live
-            // stream is a stale replay from a previous turn: finalizing here
-            // froze the in-flight block mid-turn (260612 duplicate-block RCA).
-            if (isFinalizedRun(doneRunId)) return;
-            if (doneRunId && liveTraceRunId && doneRunId !== liveTraceRunId) return;
-            markRunFinalized(doneRunId);
-            finalizeAgent(msg.text || '', msg.toolLog,
-                msg.runtimeFinality === 'present' || msg.runtimeFinality === 'absent' ? msg.runtimeFinality : undefined);
-            notifyUnreadResponse();
+            settleCompatibilityMessage(msg);
         }
     } else if (msg.type === 'orchestrate_done') {
-        const doneRunId = typeof msg.traceRunId === 'string' && msg.traceRunId ? msg.traceRunId : null;
-        if (isFinalizedRun(doneRunId)) return;
-        if (doneRunId && liveTraceRunId && doneRunId !== liveTraceRunId) return;
-        markRunFinalized(doneRunId);
-        finalizeAgent(msg.text || '', undefined,
-            msg.runtimeFinality === 'present' || msg.runtimeFinality === 'absent' ? msg.runtimeFinality : undefined);
-        notifyUnreadResponse();
+        settleCompatibilityMessage(msg);
     } else if (msg.type === 'clear') {
+        disposeNativePanel();
+        const retainedIdentity = state.activityIdentity;
+        clearLiveActivity(); setLiveActivityIdentity(retainedIdentity);
+        setActivityHistoryIdentity(null,event=>handleRuntimeEvent(event,true));
+        setActivityHistoryIdentity(retainedIdentity,event=>handleRuntimeEvent(event,true));
+        refreshNativePanel();
+        pendingRuntime = []; pendingRuntimeBytes = 0; runtimeBufferLost = false;
         cancelPostRender();
         cleanupToolActivity();
         getVirtualScroll().clear();
@@ -1108,6 +1256,9 @@ function handleServerEvent(msg: WsMessage): void {
     } else if (msg.type === 'memory_status') {
         import('./features/memory.js').then(m => m.refreshMemorySidebar());
     } else if (msg.type === 'steer_started') {
+        // This is an input receipt inside the existing logical run, not its
+        // terminal. It grants no ownership, including when replayed or foreign.
+        if (msg.mode === 'cancel-reprompt') return;
         markSteered();
         markRunFinalized(null); // killed run — drop its replayed stream too
         finalizeAgent('');
@@ -1146,9 +1297,9 @@ function handleServerEvent(msg: WsMessage): void {
     } else if (msg.type === 'alert_escalation') {
         addSystemMsg(escapeHtml(msg.message || ''), 'tool-activity');
     } else if (msg.type === 'schedule_wakeup_failed') {
-        addSystemMsg(`⚠️ Wakeup failed — ${escapeHtml(String(msg.reason || ''))}: ${escapeHtml(msg.error || '')}`, 'tool-activity');
+        addSystemMsg(`⚠️ Wakeup failed — ${escapeHtml(String(msg.reason || ''))}: ${escapeHtml(String(msg.error || ''))}`, 'tool-activity');
     } else if (msg.type === 'goal_continuation_failed') {
-        addSystemMsg(`⚠️ Goal continuation failed: ${escapeHtml(msg.error || '')}`, 'tool-activity');
+        addSystemMsg(`⚠️ Goal continuation failed: ${escapeHtml(String(msg.error || ''))}`, 'tool-activity');
     } else if (msg.type === 'settings_change') {
         handleSettingsChange(msg as { cli?: string; projectDirs?: string[] | null; changedKeys?: string[] });
     } else if (msg.type === 'session_list') {

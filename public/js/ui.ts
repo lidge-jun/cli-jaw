@@ -1,6 +1,6 @@
 import { state } from './state.js';
 import { renderMarkdown, escapeHtml, stripOrchestration, linkifyFilePaths } from './render.js';
-import { renderMermaidBlocks } from './render.js';
+import { renderMermaidBlocks, releaseMermaidNodes } from './render.js';
 import { generateId } from './uuid.js';
 import { getAppName } from './features/appname.js';
 import { getAgentAvatarMarkup, getUserAvatarMarkup } from './features/avatar.js';
@@ -429,8 +429,24 @@ function clearMermaidTransientState(root: HTMLElement): void {
     });
 }
 
-export function finalizeAgent(text: string | null, toolLog?: ToolLogEntry[], runtimeFinality?: 'present' | 'absent'): void {
-    const nativeFinal = runtimeFinality === 'present' || runtimeFinality === 'absent';
+/** Replace an already-owned answer without another lifecycle finalization. */
+export function replaceAgentAnswer(message: HTMLElement, text: string): void {
+    const content = message.querySelector<HTMLElement>('.msg-content');
+    if (!content) return;
+    const raw = stripOrchestration(text);
+    if (content.getAttribute('data-raw') === raw && (raw || content.childNodes.length === 0)) return;
+    releaseMermaidNodes(content);
+    content.innerHTML = raw ? renderMarkdown(text) : '';
+    content.setAttribute('data-raw', raw);
+    content.classList.remove('lazy-pending');
+    activateWidgets(content);
+    void renderMermaidBlocks(content, { immediate: true });
+}
+
+export function finalizeAgent(text: string | null, toolLog?: ToolLogEntry[], answerFinality?: 'present' | 'absent', traceRunId?: string, cacheScope?: string): void {
+    // Native metadata or an admitted compatibility text field can establish
+    // authoritative presence. This does not invent native transport metadata.
+    const nativeFinal = answerFinality === 'present' || answerFinality === 'absent';
     // Guard: prevent double-render when both agent_done + orchestrate_done fire
     const now = Date.now();
     if (!state.currentAgentDiv && now - lastFinalizeTs < 500) return;
@@ -460,6 +476,7 @@ export function finalizeAgent(text: string | null, toolLog?: ToolLogEntry[], run
         if (!state.currentAgentDiv || !state.currentAgentDiv.isConnected) {
             state.currentAgentDiv = addMessage('agent', '');
         }
+        if (traceRunId) state.currentAgentDiv.dataset['traceRunId'] = traceRunId;
         state.currentAgentDiv.removeAttribute(ACTIVE_RUN_HYDRATED_ATTR);
         const content = (state.currentAgentDiv as HTMLElement)?.querySelector('.msg-content');
         // Live stream is preview-only; agent_done text is always authoritative.
@@ -507,12 +524,13 @@ export function finalizeAgent(text: string | null, toolLog?: ToolLogEntry[], run
                 else if (encoded) pending.dataset['diagramHtml'] = encoded;
                 widget.replaceWith(pending);
             });
-            if (durableToolLogJson) {
+            if (durableToolLogJson && !div.dataset['activityKey']) {
                 vs.appendItem(buildLazyVirtualMessageItem({
                     role: 'assistant',
                     content: finalText,
                     cli: null,
                     tool_log: durableToolLogJson,
+                    trace_run_id: div.dataset['traceRunId'] ?? null,
                 }, vs.count));
                 releaseProcessBlockDetails(div);
                 vs.scrollToBottom();
@@ -524,12 +542,15 @@ export function finalizeAgent(text: string | null, toolLog?: ToolLogEntry[], run
             div.remove();
         }
 
-        // Cache agent response for offline (use finalText to capture stream-only responses)
-        if (finalText) upsertMessage({
+        // Retain the existing Activity host even with an absent/empty answer so
+        // later run-bound compatibility text can correct that same cached row.
+        if (finalText || (traceRunId && state.currentAgentDiv?.dataset['activityKey'])) upsertMessage({
             role: 'assistant',
             content: finalText,
             tool_log: durableToolLogJson,
+            trace_run_id: state.currentAgentDiv?.dataset['traceRunId'] ?? null,
             timestamp: Date.now(),
+            ...(cacheScope === undefined ? {} : { scope: cacheScope }),
         }).catch(() => {});
     }
     currentStream = null;
