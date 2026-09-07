@@ -14,8 +14,11 @@ type Callbacks = { onEvent?: (event: PiRuntimeEvent) => void; onRawRecord?: (rec
 const fixture = {
     mode: 'ok' as 'ok' | 'acquire-failure' | 'direct-failure' | 'turn-failure' | 'raw-limit',
     calls: [] as Callbacks[], acquisitions: [] as Array<Record<string, unknown>>,
-    direct: 0, releases: 0, watchdogStops: 0,
+    direct: 0, releases: 0, watchdogStops: 0, cancels: 0,
     acquireGate: null as Promise<void> | null,
+    lifecycleGate: null as Promise<void> | null, lifecycleFailure: false,
+    turnGate: null as Promise<void> | null, cancelGate: null as Promise<void> | null,
+    deferredResult: false,
     contexts: [] as RuntimeEventContext[], events: [] as RuntimeEvent[],
     lifecycle: [] as ExitHandlerParams[], legacy: [] as Array<{ type: string; data: Record<string, unknown> }>,
 };
@@ -46,6 +49,7 @@ function child(): ChildProcess {
 }
 async function protocol(callbacks: Callbacks) {
     fixture.calls.push(callbacks);
+    if (fixture.turnGate) await fixture.turnGate;
     if (fixture.mode === 'turn-failure') throw new Error('fixture Pi turn failed');
     const raw = (record: unknown) => callbacks.onRawRecord?.(record);
     const semantic = (event: PiRuntimeEvent) => callbacks.onEvent?.(event);
@@ -88,7 +92,7 @@ test.mock.module('../../src/agent/runtime-pool.js', { namedExports: {
             reused: false, sessionId: 'provider-session-private',
             session: { child: child(), sessionId: 'provider-session-private', alive: true,
                 sendPrompt: (_prompt: string, callbacks: Callbacks) => Promise.resolve().then(() => protocol(callbacks)) },
-            release: () => { fixture.releases++; }, cancel: async () => {},
+            release: () => { fixture.releases++; }, cancel: async () => { fixture.cancels++; if(fixture.cancelGate) await fixture.cancelGate; },
         };
     },
 } });
@@ -103,6 +107,9 @@ test.mock.module('../../src/agent/lifecycle-handler.js', { namedExports: {
     ...lifecycle,
     handleAgentExit: async (params: ExitHandlerParams) => {
         fixture.lifecycle.push(params);
+        if (fixture.lifecycleGate) await fixture.lifecycleGate;
+        if (fixture.lifecycleFailure) throw new Error('fixture lifecycle failure');
+        if (fixture.deferredResult) return;
         const finalText = params.code === 0 ? 'lifecycle-selected final' : null;
         params.onRuntimeEnd?.({ kind: 'turn-end', status: params.code === 0 ? 'done' : 'error', finalText });
         params.activeProcesses.delete(params.agentLabel);
@@ -112,18 +119,24 @@ test.mock.module('../../src/agent/lifecycle-handler.js', { namedExports: {
         params.resolve({ text: finalText ?? '', code: params.code ?? 0, tools: params.ctx.toolLog });
     },
 } });
-const { spawnAgent, activeProcesses, activeMainProcesses, armExitSettle, waitForExitSettled, settleExit } = await import('../../src/agent/spawn.ts');
+const { spawnAgent, activeProcesses, activeMainProcesses, armExitSettle, waitForExitSettled, settleExit, killActiveAgent } = await import('../../src/agent/spawn.ts');
 const { addBroadcastListener, removeBroadcastListener } = await import('../../src/core/bus.ts');
 const { subscribe } = await import('../../src/core/event-bus.ts');
+const { createChatSession, setActiveChatSession } = await import('../../src/core/chat-sessions.ts');
+const { readActivityPage } = await import('../../src/trace/activity-journal.ts');
+let chatId = '';
 const legacyListener = (type: string, data: Record<string, unknown>) => { fixture.legacy.push({ type, data }); };
 const publicEvents: string[] = [];
 let unsubscribe = () => {};
 
 test.beforeEach(() => {
+    chatId = createChatSession('Pi journal fixture').id; setActiveChatSession('default');
     fixture.mode = 'ok'; fixture.calls.length = 0; fixture.acquisitions.length = 0;
     fixture.contexts.length = 0; fixture.events.length = 0; fixture.lifecycle.length = 0; fixture.legacy.length = 0;
-    fixture.direct = 0; fixture.releases = 0; fixture.watchdogStops = 0; publicEvents.length = 0;
+    fixture.direct = 0; fixture.releases = 0; fixture.watchdogStops = 0; fixture.cancels = 0; publicEvents.length = 0;
     fixture.acquireGate = null;
+    fixture.lifecycleGate = null; fixture.lifecycleFailure = false; fixture.deferredResult = false;
+    fixture.turnGate = null; fixture.cancelGate = null;
     activeMainProcesses.clear(); activeProcesses.clear();
     config.settings['workingDir'] = process.env['CLI_JAW_HOME']!;
     mkdirSync(join(config.settings['workingDir'], 'prompts'), { recursive: true });
@@ -137,7 +150,7 @@ test.beforeEach(() => {
 });
 test.afterEach(() => { removeBroadcastListener(legacyListener); unsubscribe(); });
 function opts(employee = false) {
-    return { cli: 'pi', model: 'fixture-pi', effort: 'high', scopeKey: 'pi-test-scope', chatSessionId: 'jaw-chat-id',
+    return { cli: 'pi', model: 'fixture-pi', effort: 'high', scopeKey: 'pi-test-scope', chatSessionId: chatId,
         requestId: 'pi-test-request', runtimeParentItemId: 'jaw-parent-item', origin: 'web',
         sysPrompt: employee ? 'employee fixture instructions' : '', _skipInsert: true, _skipHistory: true,
         _skipResume: true, _isSmokeContinuation: true, ...(employee ? { agentId: 'pi-fixture-worker' } : {}) };
@@ -145,7 +158,7 @@ function opts(employee = false) {
 function assertCanonicalContext(employee: boolean) {
     assert.ok(fixture.events.length > 0, 'real spawn must feed the shared runtime emitter');
     for (const context of fixture.contexts) {
-        assert.equal(context.sessionId, 'jaw-chat-id'); assert.equal(context.scope, 'pi-test-scope');
+        assert.equal(context.sessionId, chatId); assert.equal(context.scope, 'pi-test-scope');
         assert.equal(context.parentItemId, 'jaw-parent-item');
         assert.equal(context.audience, employee ? 'internal' : 'public');
         assert.equal(context.turnId, context.runId);
@@ -170,6 +183,12 @@ for (const employee of [false, true]) {
         assert.equal(fixture.lifecycle[0]?.ctx.runtimeOutcome, undefined, 'Pi preserves its existing legacy outcome contract');
         assert.equal(fixture.lifecycle[0]?.ctx.toolLog.filter(tool => tool.label === 'bash').length, 1);
         assertCanonicalContext(employee);
+        const traceId = fixture.events[0]!.runId;
+        assert.equal(traces.getTraceRun(traceId)?.session_id, chatId);
+        assert.equal(traces.getTraceRun(traceId)?.scope_key, 'pi-test-scope');
+        const page = readActivityPage({ runId: traceId, sessionId: chatId, after: 0, limit: 40 });
+        if (employee) assert.equal(page, null);
+        else { assert.deepEqual(page!.events, fixture.events); assert.equal(page!.incomplete, false); }
         assert.equal(fixture.events.at(-1)?.kind, 'turn-end');
         assert.equal((fixture.events.at(-1) as Extract<RuntimeEvent, { kind: 'turn-end' }>).finalText, 'lifecycle-selected final');
         const tools = fixture.events.filter((e): e is Extract<RuntimeEvent, { kind: 'tool' }> => e.kind === 'tool');
@@ -210,6 +229,149 @@ test('rejected Pi turn uses error lifecycle observer once and releases pooled le
     assertCanonicalContext(false);
     assert.ok(fixture.events.some(e => e.kind === 'turn-end' && e.status === 'error' && e.finalText === null));
     assert.equal(activeMainProcesses.has('pi-test-scope'), false);
+});
+
+for (const invalidation of ['stop', 'replacement', 'generation'] as const) {
+    test(`late successful Pi acquire after ${invalidation} cannot dispatch or insert a user message`, { timeout: 10_000 }, async () => {
+        const gate = Promise.withResolvers<void>(); fixture.acquireGate = gate.promise;
+        const { db } = await import('../../src/core/db.ts');
+        const { bumpScopeSessionGeneration } = await import('../../src/agent/session-persistence.ts');
+        const run = spawnAgent('cancelled pending acquisition', { ...opts(), _skipInsert: false });
+        const owner = activeMainProcesses.get('pi-test-scope')!;
+        let replacement: typeof owner | undefined;
+        if (invalidation === 'stop') killActiveAgent('pi-test-scope', 'user');
+        else if (invalidation === 'generation') bumpScopeSessionGeneration('pi-test-scope');
+        else {
+            replacement = { ...owner, meta: { ...owner.meta, requestId: 'replacement' } };
+            activeMainProcesses.set('pi-test-scope', replacement);
+            live.beginLiveRun('pi-test-scope', 'pi');
+            live.setLiveRunTraceId('pi-test-scope', 'replacement-trace');
+            live.appendLiveRunText('pi-test-scope', 'kept replacement');
+        }
+        gate.resolve(); const result = await run.promise;
+        assert.notEqual(result.code, 0);
+        assert.equal(fixture.calls.length, 0);
+        assert.equal(fixture.releases, 1);
+        assert.equal(fixture.watchdogStops, 0);
+        assert.equal(fixture.lifecycle.length, 0);
+        assert.deepEqual(db.prepare('SELECT content FROM messages WHERE session_id=? AND role=?').all(chatId, 'user'), []);
+        assert.equal(traces.getTraceRun(fixture.events[0]!.runId)?.status, 'interrupted');
+        if (replacement) {
+            assert.equal(activeMainProcesses.get('pi-test-scope') === replacement, true);
+            assert.equal(live.getLiveRun('pi-test-scope').traceRunId, 'replacement-trace');
+        } else assert.equal(activeMainProcesses.has('pi-test-scope'), false);
+    });
+}
+
+test('Pi keeps its lease and caller pending through application settlement', { timeout: 10_000 }, async () => {
+    const gate = Promise.withResolvers<void>(); fixture.lifecycleGate = gate.promise;
+    const run = spawnAgent('held lifecycle', opts());
+    let completed = false; void run.promise.then(() => { completed = true; });
+    try {
+        for (let i = 0; i < 50 && fixture.lifecycle.length === 0; i++) await new Promise<void>(r => setImmediate(r));
+        assert.equal(fixture.lifecycle.length, 1);
+        assert.equal(fixture.releases, 0, 'lease must remain exclusive during lifecycle');
+        assert.equal(completed, false);
+    } finally { gate.resolve(); await run.promise; }
+    assert.equal(fixture.releases, 1);
+});
+
+for (const mode of ['ok', 'turn-failure'] as const) test(`Pi ${mode} lifecycle rejection cannot re-enter finalization or strand caller`, { timeout: 10_000 }, async () => {
+    fixture.mode = mode; fixture.lifecycleFailure = true;
+    const result = await spawnAgent('lifecycle failure', opts()).promise;
+    assert.equal(result.code, 1); assert.equal(fixture.lifecycle.length, 1); assert.equal(fixture.releases, 1);
+    assert.equal(fixture.events.filter(e => e.kind === 'turn-end').length, 1);
+    assert.equal(activeMainProcesses.has('pi-test-scope'), false);
+    assert.equal(traces.getTraceRun(fixture.events[0]!.runId)?.status, 'error');
+});
+
+test('Pi late legacy continuation result remains pending until its actual callback after cleanup', { timeout: 10_000 }, async () => {
+    fixture.deferredResult = true;
+    const run = spawnAgent('late callback', opts()); let completed = false;
+    void run.promise.then(() => { completed = true; });
+    for (let i = 0; i < 50 && fixture.releases === 0; i++) await new Promise<void>(r => setImmediate(r));
+    assert.equal(fixture.releases, 1); assert.equal(fixture.lifecycle.length, 1); assert.equal(completed, false);
+    fixture.lifecycle[0]!.resolve({ text: 'late continuation', code: 0 });
+    assert.equal((await run.promise).text, 'late continuation');
+});
+
+test('old Pi application finalization cannot settle a newer scope barrier', { timeout: 10_000 }, async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const gate = Promise.withResolvers<void>(); fixture.lifecycleGate = gate.promise;
+    const scope = 'pi-test-scope'; armExitSettle(scope);
+    const oldBarrier = waitForExitSettled(scope, 10);
+    const run = spawnAgent('old barrier owner', opts());
+    for (let i = 0; i < 50 && fixture.lifecycle.length === 0; i++) await new Promise<void>(r => setImmediate(r));
+    t.mock.timers.tick(10); await oldBarrier;
+    armExitSettle(scope); let successorSettled = false;
+    const successor = waitForExitSettled(scope, 1000).then(() => { successorSettled = true; });
+    try {
+        gate.resolve(); await run.promise; await new Promise<void>(r => setImmediate(r));
+        assert.equal(successorSettled, false, 'old cleanup must not resolve a new barrier identity');
+    } finally { settleExit(scope); await successor; t.mock.timers.reset(); }
+});
+
+test('Pi actual steer replaces an expired prearm with its own new barrier', {timeout:10_000}, async t => {
+    t.mock.timers.enable({apis:['setTimeout']});
+    const gate=Promise.withResolvers<void>();fixture.lifecycleGate=gate.promise;
+    const scope='pi-test-scope';armExitSettle(scope);const old=waitForExitSettled(scope,10);
+    const run=spawnAgent('real cancel after timeout',opts());
+    for(let i=0;i<50&&fixture.lifecycle.length===0;i++)await new Promise<void>(r=>setImmediate(r));
+    t.mock.timers.tick(10);await old;
+    killActiveAgent(scope,'steer');let settled=false;const barrier=waitForExitSettled(scope,1000).then(()=>{settled=true;});
+    try {gate.resolve();await run.promise;await new Promise<void>(r=>setImmediate(r));assert.equal(settled,true);}
+    finally{settleExit(scope);await barrier;t.mock.timers.reset();}
+});
+
+test('Pi running status observer failure still cancels and releases the dispatched turn', {timeout:10_000}, async t => {
+    let hit=0;
+    const throwing=(type:string,data:Record<string,unknown>)=>{
+        if(type==='agent_status'&&data.cli==='pi'&&data.running===true&&hit++===0)throw Error('fixture setup observer');
+    };
+    addBroadcastListener(throwing);t.after(()=>removeBroadcastListener(throwing));
+    const run=spawnAgent('setup failure',opts());const result=await run.promise;
+    assert.ok(hit>0);assert.equal(result.code,1);assert.equal(fixture.cancels,1);assert.equal(fixture.releases,1);
+    assert.equal(fixture.watchdogStops,1);assert.equal(activeMainProcesses.has('pi-test-scope'),false);
+    assert.equal(traces.getTraceRun(fixture.events[0]!.runId)?.status,'error');
+});
+
+test('Pi acquisition diagnostic failure cannot strand caller or prearmed barrier', {timeout:10_000}, async t => {
+    fixture.mode='acquire-failure';let hit=0;
+    const throwing=(type:string)=>{if(type==='agent_done'){hit++;throw Error('fixture diagnostic observer');}};
+    addBroadcastListener(throwing);t.after(()=>removeBroadcastListener(throwing));
+    armExitSettle('pi-test-scope');let settled=false;const barrier=waitForExitSettled('pi-test-scope').then(()=>{settled=true;});
+    const result=await spawnAgent('acquire failure diagnostic',opts()).promise;await barrier;
+    assert.equal(result.code,1);assert.equal(hit,1);assert.equal(settled,true);assert.equal(activeMainProcesses.has('pi-test-scope'),false);
+});
+
+for(const first of ['done','cancel']) test(`Pi setup cleanup waits for both completion and cancellation: ${first} first`, {timeout:10_000}, async t => {
+    const done=Promise.withResolvers<void>(),cancel=Promise.withResolvers<void>();
+    fixture.turnGate=done.promise;fixture.cancelGate=cancel.promise;
+    let hit=false;
+    const throwing=(type:string,data:Record<string,unknown>)=>{if(!hit&&type==='agent_status'&&data.cli==='pi'&&data.running===true){hit=true;throw Error('setup gated');}};
+    addBroadcastListener(throwing);t.after(()=>removeBroadcastListener(throwing));
+    const run=spawnAgent('gated cleanup',opts());let completed=false;void run.promise.then(()=>{completed=true;});
+    try {
+        for(let i=0;i<50&&!hit;i++)await new Promise<void>(r=>setImmediate(r));
+        assert.equal(hit,true);assert.equal(fixture.cancels,1);
+        (first==='done'?done:cancel).resolve();await new Promise<void>(r=>setImmediate(r));
+        assert.equal(fixture.releases,0);assert.equal(completed,false);
+    } finally {done.resolve();cancel.resolve();await run.promise;}
+    assert.equal(fixture.releases,1);assert.equal(fixture.watchdogStops,1);
+});
+
+test('Pi exceptional cleanup preserves a replacement main and its live trace', {timeout:10_000}, async () => {
+    const gate=Promise.withResolvers<void>();fixture.lifecycleGate=gate.promise;fixture.lifecycleFailure=true;
+    const run=spawnAgent('old failure',opts());
+    for(let i=0;i<50&&fixture.lifecycle.length===0;i++)await new Promise<void>(r=>setImmediate(r));
+    const old=activeMainProcesses.get('pi-test-scope')!;
+    const replacement={...old,meta:{...old.meta,requestId:'new-owner'}};
+    activeMainProcesses.set('pi-test-scope',replacement);
+    live.beginLiveRun('pi-test-scope','pi');live.setLiveRunTraceId('pi-test-scope','replacement-trace');
+    live.appendLiveRunText('pi-test-scope','replacement content');
+    gate.resolve();const result=await run.promise;
+    assert.equal(result.code,1);assert.equal(activeMainProcesses.get('pi-test-scope')===replacement,true);
+    assert.equal(live.getLiveRun('pi-test-scope').traceRunId,'replacement-trace');assert.equal(fixture.releases,1);
 });
 
 test('Pi acquire failure closes trace/live state and settles the armed exit barrier without timeout', async context => {
