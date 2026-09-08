@@ -195,7 +195,8 @@ test('manager frontend exposes one-instance preview controls', () => {
     assert.ok(childTheme.includes('isLocalThemeOrigin'), 'child Web UI must validate local/same origins');
     assert.ok(childTheme.includes('applyTheme(data.theme)'), 'child Web UI must apply preview theme without using the persistent toggle path');
     assert.equal(childTheme.includes("localStorage.setItem(STORAGE_KEY, data.theme"), false, 'preview message theme changes must not persist to localStorage');
-    assert.ok(detail.includes('onSettingsSaved'), 'settings save must notify the detail host');
+    // The detail host no longer mounts settings; the rail workspace owns that surface and its
+    // own save callback. What must survive is the Shell emitting one at all.
     assert.ok(settingsShell.includes('onSaved?.()'), 'SettingsShell must emit a save-complete callback');
     assert.ok(components.includes('.workbench-panel'), 'workbench panels must have stable sizing');
     assert.ok(components.includes('.workbench-panel[hidden]'), 'inactive persistent preview panel must not reserve space');
@@ -608,7 +609,8 @@ test('manager frontend routes layout through responsive shell components', () =>
     assert.ok(workbench.includes("'logs'"), 'workbench must expose Logs tab');
     assert.ok(detail.includes("props.activeTab === 'overview'"), 'detail panel must render Overview content');
     assert.ok(detail.includes("props.activeTab === 'logs'"), 'detail panel must render Logs content');
-    assert.ok(detail.includes("props.activeTab === 'settings'"), 'detail panel must render Settings content');
+    assert.equal(detail.includes("props.activeTab === 'settings'"), false,
+        'the detail panel settings branch was unreachable after the rail took over and must stay gone');
 });
 
 test('manager frontend exposes 10.6 persistence controls', () => {
@@ -622,9 +624,10 @@ test('manager frontend exposes 10.6 persistence controls', () => {
 
     assert.ok(hook.includes('patchDashboardRegistry'), 'registry hook must save dashboard registry patches');
     assert.ok(app.includes('useDashboardRegistry'), 'App must hydrate and save registry state');
-    assert.ok(detail.includes('SettingsShell'), 'Settings tab must mount the settings shell');
-    assert.ok(dashboardMeta.includes('Pin favorite'), 'Settings tab must expose favorite pinning');
-    assert.ok(dashboardMeta.includes('Hide by default'), 'Settings tab must expose hidden state');
+    assert.equal(detail.includes('SettingsShell'), false,
+        'the detail panel must not mount a second settings surface');
+    assert.ok(dashboardMeta.includes('Pin favorite'), 'Dashboard meta must expose favorite pinning');
+    assert.ok(dashboardMeta.includes('Hide by default'), 'Dashboard meta must expose hidden state');
     assert.ok(groups.includes("id: 'active'"), 'InstanceGroups must keep active row in a top group');
     assert.ok(groups.includes("id: 'favorites'"), 'InstanceGroups must keep pinned favorites near the top');
     assert.equal(command.includes('onScanRangeCommit'), false, 'CommandBar must not carry scan controls in the top row');

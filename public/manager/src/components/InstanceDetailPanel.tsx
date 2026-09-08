@@ -4,7 +4,6 @@ import type {
     DashboardRegistryInstance,
     DashboardScanResult,
 } from '../types';
-import { SettingsShell } from '../settings/SettingsShell';
 import { ProcessControlPanel } from './ProcessControlPanel';
 import { InstanceLogsPanel } from './InstanceLogsPanel';
 
@@ -13,8 +12,6 @@ type InstanceDetailPanelProps = {
     data: DashboardScanResult | null;
     activeTab: DashboardDetailTab;
     onRegistryPatch: (port: number, patch: Partial<DashboardRegistryInstance>) => void;
-    onSettingsDirtyChange?: (dirty: boolean) => void;
-    onSettingsSaved?: () => void;
 };
 
 export function InstanceDetailPanel(props: InstanceDetailPanelProps) {
@@ -47,21 +44,6 @@ export function InstanceDetailPanel(props: InstanceDetailPanelProps) {
                     </div>
                 )}
 
-                {props.activeTab === 'settings' && instance && (
-                    <SettingsShell
-                        key={instance.port}
-                        port={instance.port}
-                        instanceUrl={instance.url}
-                        {...(props.onSettingsDirtyChange !== undefined ? { onDirtyChange: props.onSettingsDirtyChange } : {})}
-                        {...(props.onSettingsSaved !== undefined ? { onSaved: props.onSettingsSaved } : {})}
-                    />
-                )}
-
-                {props.activeTab === 'settings' && !instance && (
-                    <div className="detail-empty">
-                        Select an instance to configure it.
-                    </div>
-                )}
         </section>
     );
 }
