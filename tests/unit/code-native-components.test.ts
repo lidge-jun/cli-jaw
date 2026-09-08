@@ -501,6 +501,29 @@ test('turn bookkeeping stays out of the transcript while actionable endings rema
     assert.ok(h.container.querySelector('[data-code-item-id="failed"]'), 'failure is not bookkeeping');
 });
 
+test('a reader can close a failed call and it stays closed', bounded, async t => {
+    const h = await surface(t); virtualGeometry(t);
+    const failed = item({ itemId: 'boom', kind: 'tool_call', status: 'error', firstSequence: 1,
+        tool: { name: 'bash', input: '{"command":"npm test"}', output: 'stack trace body' } });
+    const render = () => h.render(createElement(CodeTranscript, {
+        items: [failed], provider: 'codex-app', sessionKey: 'fail-session', workingDir: '/tmp/work', loading: false,
+        hasOlderHistory: false, async loadOlderHistory() {}, permissionCount: 0,
+    }));
+    await render();
+    const card = h.container.querySelector('details.code-tool-card') as HTMLDetailsElement | null;
+    assert.ok(card?.open, 'a failure opens itself, because the reader has to see why');
+    assert.match(h.container.textContent ?? '', /stack trace body/);
+    // Closing is a choice about this row, and a choice outlives the default.
+    await act(async () => {
+        card!.open = false;
+        card!.dispatchEvent(new dom.window.Event('toggle', { bubbles: false }));
+    });
+    await render();
+    const after = h.container.querySelector('details.code-tool-card') as HTMLDetailsElement | null;
+    assert.equal(after?.open, false, 'the reader closed it; the failure default must not reopen it');
+    assert.doesNotMatch(h.container.textContent ?? '', /stack trace body/);
+});
+
 test('CodeCanvas uses the sidebar portal and forwards workspace and explicit file-open callbacks', bounded, async t => {
     const h = await surface(t); virtualGeometry(t);
     await import('../../public/manager/src/notes/rendering/MarkdownRenderer');

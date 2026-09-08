@@ -27,6 +27,17 @@ const EXPANDED_ROW_PX = 260;
 /** Same bound the scroll anchors use, for the same reason. */
 const MAX_OPEN_ROWS = 64;
 
+/**
+ * A failed call opens itself, because the reader has to see why it failed. That
+ * is a default, not a lock: once the reader has said what they want for this
+ * row, their choice wins, including closing a failure they have already read.
+ */
+function isRowOpen(chosen: ReadonlyMap<string, boolean>, sessionKey: string, item: CodeItem): boolean {
+    const choice = chosen.get(`${sessionKey}:${item.itemId}`);
+    if (choice !== undefined) return choice;
+    return item.status === 'error' && item.kind !== 'reasoning';
+}
+
 function ItemMarkdown({ item, identity, onOpenLocalFile }: { item: CodeItem; identity: string; onOpenLocalFile?: ((path: string) => void) | undefined }) {
     const text = useThrottledMarkdown(item.text ?? '', item.status !== 'running' && item.status !== 'pending', identity);
     if (!text.trim()) return <span className="code-plain-text">{text}</span>;
@@ -50,10 +61,10 @@ export function CodeTranscriptItem({ item, provider, sessionKey, workingDir = ''
     // states the reader can act on are worth a visible badge.
     const note = noteworthyStatus(item);
     const unsent = item.itemId === PENDING_USER_ITEM_ID;
-    // A failed call opens itself, because the reader has to see why. Otherwise
-    // the disclosure is owned by the transcript, which remembers it across the
-    // virtualizer unmounting the row.
-    const open = expanded ?? item.status === 'error';
+    // The transcript owns the disclosure, because the virtualizer unmounts rows
+    // and per-row state would be lost on scroll. Rendered standalone (tests, a
+    // future embed) it falls back to the same failure default.
+    const open = expanded ?? (item.status === 'error' && item.kind !== 'reasoning');
     const running = item.status === 'running' || item.status === 'pending';
     // The verb already says the call is in flight; a second badge saying
     // "Running" next to "Reading src/app.ts" is the same fact twice. Failure
@@ -77,10 +88,10 @@ export function CodeTranscriptItem({ item, provider, sessionKey, workingDir = ''
                 {item.tool?.output !== undefined && <section className="code-tool-section"><span className="code-tool-section-label">Output</span><pre className="code-tool-output">{item.tool.output}</pre></section>}
                 {item.text !== undefined && <pre className="code-tool-text">{item.text}</pre>}
             </>}
-        </details> : reasoning ? <details className="code-thinking" open={expanded ?? false}
+        </details> : reasoning ? <details className="code-thinking" open={open}
             onToggle={event => onExpandedChange?.(item.itemId, event.currentTarget.open)}>
             <summary className={`code-thinking-summary${item.status === 'running' ? ' code-tool-name-running' : ''}`}>{item.status === 'running' ? 'Thinking…' : 'Reasoning'}</summary>
-            {(expanded ?? false) && <div className="code-thinking-text">{item.text}</div>}
+            {open && <div className="code-thinking-text">{item.text}</div>}
         </details> : <>
             <span className="code-message-role">{label}{assistant && item.phase === 'commentary' ? ' · Commentary' : ''}
                 {note && ` · ${unsent ? 'Sending' : note}`}</span>
@@ -101,10 +112,13 @@ export function CodeTranscript({ items, provider, sessionKey, workingDir, loadin
     const transcriptRef = useRef<HTMLDivElement>(null);
     const visible = useMemo(() => items.filter(item => !HIDDEN_KINDS.has(item.kind)), [items]);
     const itemsRef = useRef(visible); itemsRef.current = visible;
+    // What the reader chose, which is not the same as what is open: a failed
+    // call opens itself, so "not in the map" and "the reader closed it" have to
+    // be different states or the auto-open reopens it on the next render.
     // Scoped by session so the reserved pending-user id cannot carry one
     // session's disclosure into another, and bounded so a long-lived tab does
     // not accumulate ids for sessions it will never show again.
-    const [openRows, setOpenRows] = useState<ReadonlySet<string>>(() => new Set());
+    const [openRows, setOpenRows] = useState<ReadonlyMap<string, boolean>>(() => new Map());
     const [historyPending, setHistoryPending] = useState(false);
     const [historyError, setHistoryError] = useState<{ sessionKey: string; message: string } | null>(null);
     const historyGuard = useRef(false);
@@ -117,20 +131,21 @@ export function CodeTranscript({ items, provider, sessionKey, workingDir, loadin
         // open row at one line is what makes the scrollbar disagree with the
         // content, so the estimate has to follow the disclosure.
         if (!collapsible) return 64 + Math.min(420, (item?.text?.length ?? 0) / 6);
-        return item && openRows.has(`${sessionKey}:${item.itemId}`) ? EXPANDED_ROW_PX : COLLAPSED_ROW_PX;
+        return item && isRowOpen(openRows, sessionKey, item) ? EXPANDED_ROW_PX : COLLAPSED_ROW_PX;
     }, [openRows, sessionKey]);
     const virtual = useCodeTranscriptVirtualRows({ count: visible.length, resetKey: sessionKey, scrollElementRef: transcriptRef, getItemKey, estimateSize });
     const { showJump, jumpToLatest } = useCodeTranscriptScroll({ items: visible, sessionKey, transcriptRef, virtual });
     const setExpanded = useCallback((itemId: string, open: boolean) => {
         const key = `${sessionKey}:${itemId}`;
         setOpenRows(current => {
-            if (current.has(key) === open) return current;
-            const next = new Set(current);
-            if (open) next.add(key); else next.delete(key);
+            if (current.get(key) === open) return current;
+            const next = new Map(current);
+            next.delete(key); next.set(key, open);
             // Same bound as the scroll anchors: remembering every row a reader
-            // ever opened is not worth an unbounded set.
+            // ever touched is not worth an unbounded map. Re-inserting above
+            // keeps the row just acted on newest, so it is never the one evicted.
             if (next.size > MAX_OPEN_ROWS) {
-                const oldest = next.values().next().value;
+                const oldest = next.keys().next().value;
                 if (oldest !== undefined) next.delete(oldest);
             }
             return next;
@@ -176,7 +191,7 @@ export function CodeTranscript({ items, provider, sessionKey, workingDir, loadin
                             data-code-transcript-idx={row.index} style={{ transform: `translateY(${row.start}px)` }}>
                             <CodeTranscriptItem item={item} provider={provider} sessionKey={sessionKey}
                                 workingDir={workingDir} onOpenLocalFile={onOpenLocalFile}
-                                expanded={openRows.has(`${sessionKey}:${item.itemId}`) || (item.status === 'error' && item.kind !== 'reasoning')}
+                                expanded={isRowOpen(openRows, sessionKey, item)}
                                 onExpandedChange={setExpanded} />
                         </div> : null;
                     })}
