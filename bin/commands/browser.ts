@@ -405,11 +405,16 @@ try {
                     region: { type: 'string' },
                     clip: { type: 'string', multiple: true },
                     'verify-before-click': { type: 'boolean' },
+                    'no-reconcile': { type: 'boolean' },
+                    'no-occlusion-check': { type: 'boolean' },
+                    'bypass-sandbox': { type: 'boolean' },
                 }, strict: false,
             });
             const target = positionals.join(' ');
             if (!target) {
-                console.error('Usage: cli-jaw browser vision-click "<target>" [--provider codex] [--double]');
+                console.error('Usage: cli-jaw browser vision-click "<target>" [--provider codex] [--double]\n'
+                    + '       [--prepare-stable] [--region <name>] [--clip x y w h] [--verify-before-click]\n'
+                    + '       [--no-reconcile] [--no-occlusion-check] [--bypass-sandbox]');
                 process.exit(1);
             }
             const opts: Record<string, unknown> = {
@@ -419,6 +424,12 @@ try {
                 region: values.region,
                 clip: parseClip(values),
                 verifyBeforeClick: values['verify-before-click'],
+                // Reconciliation and the occlusion check are on by default;
+                // these opt OUT, so only an explicit flag turns them off.
+                ...(values['no-reconcile'] === true ? { reconcile: false } : {}),
+                ...(values['no-occlusion-check'] === true ? { checkOcclusion: false } : {}),
+                // The sandbox bypass is the reverse: off unless asked for.
+                ...(values['bypass-sandbox'] === true ? { bypassSandbox: true } : {}),
             };
 
             console.log(`${c.dim}👁️ vision-click: "${target}"...${c.reset}`);
@@ -427,10 +438,28 @@ try {
             const raw = asRecord(r["raw"]);
 
             if (r["success"]) {
-                console.log(`${c.green}🖱️ vision-clicked "${target}" at (${clicked["x"]}, ${clicked["y"]}) via ${r["provider"]}${c.reset}`);
-                if (r["dpr"] !== 1) console.log(`${c.dim}   DPR=${r["dpr"]}, raw=(${raw["x"]}, ${raw["y"]})${c.reset}`);
+                // A ref click and a coordinate click are different outcomes:
+                // one resolved to an element, the other landed on a position.
+                // Reporting both as "clicked at (x, y)" hides which happened.
+                if (r["via"] === 'ref') {
+                    const from = asRecord(r["resolvedFrom"]);
+                    console.log(`${c.green}🖱️ vision-clicked "${target}" on ref ${r["ref"]} via ${r["provider"]}${c.reset}`);
+                    console.log(`${c.dim}   resolved from (${from["x"]}, ${from["y"]}) — ${r["reason"]}${c.reset}`);
+                } else {
+                    console.log(`${c.green}🖱️ vision-clicked "${target}" at (${clicked["x"]}, ${clicked["y"]}) via ${r["provider"]}${c.reset}`);
+                    if (r["dpr"] !== 1) console.log(`${c.dim}   DPR=${r["dpr"]}, raw=(${raw["x"]}, ${raw["y"]})${c.reset}`);
+                }
             } else {
-                console.log(`${c.red}❌ "${target}" not found: ${r["reason"]}${c.reset}`);
+                // A refusal is not a failure to find the target. Saying "not
+                // found" for a covered or ambiguous element sends the reader
+                // looking for the wrong problem.
+                const code = typeof r["code"] === 'string' ? r["code"] : null;
+                if (code) {
+                    console.log(`${c.yellow}⚠️ declined to click "${target}": ${r["reason"]}${c.reset}`);
+                    console.log(`${c.dim}   ${code}${r["blocker"] ? ` — blocked by ${r["blocker"]}` : ''}${c.reset}`);
+                } else {
+                    console.log(`${c.red}❌ "${target}" not found: ${r["reason"]}${c.reset}`);
+                }
             }
             break;
         }

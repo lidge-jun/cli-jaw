@@ -80,6 +80,39 @@ export function isObservationStale(
 }
 
 /**
+ * Fit a requested capture rectangle inside the viewport.
+ *
+ * Playwright trims a clip to the viewport before capturing, so a rectangle
+ * extending past the edge yields a smaller image than asked for — and one
+ * lying entirely outside fails with an opaque assertion about the clipped area
+ * being empty. Neither says which rectangle was wrong or what the viewport was.
+ *
+ * Clamping here means the caller learns the capture was truncated, and a
+ * genuinely impossible rectangle gets a named error instead.
+ */
+export function clampClipToViewport(
+    clip: Rect,
+    viewport: Size,
+): { clip: Rect; truncated: boolean } {
+    if (clip.x >= viewport.width || clip.y >= viewport.height) {
+        throw new Error(
+            `clip (${clip.x}, ${clip.y}) starts outside the ${viewport.width}x${viewport.height} viewport`,
+        );
+    }
+    const width = Math.min(clip.width, viewport.width - clip.x);
+    const height = Math.min(clip.height, viewport.height - clip.y);
+    if (width <= 0 || height <= 0) {
+        throw new Error(
+            `clip ${clip.width}x${clip.height} at (${clip.x}, ${clip.y}) has no area inside the ${viewport.width}x${viewport.height} viewport`,
+        );
+    }
+    return {
+        clip: { x: clip.x, y: clip.y, width, height },
+        truncated: width !== clip.width || height !== clip.height,
+    };
+}
+
+/**
  * Judge a second answer taken inside `crop`.
  *
  * `localPoint` is where the re-run landed within the crop, in CSS pixels
