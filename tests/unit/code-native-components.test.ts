@@ -330,7 +330,10 @@ test('unknown-send retry previews original text and never submits the edited dra
 function item(patch: Partial<CodeItem>): CodeItem { return { itemId: 'item-a', turnId: 't-a', kind: 'user_message', status: 'done', createdAt: 1, updatedAt: 1, ...patch }; }
 test('timeline retains stable item ID, escaped tool output, truncation and distinct stopped/failed states', bounded, async t => {
     const h = await surface(t);
-    const render = (value: CodeItem) => h.render(createElement(CodeTranscriptItem, { item: value, provider: 'cursor', sessionKey: '43225:s-a' }));
+    // Tool detail is built only while the disclosure is open, so this asserts
+    // the escaping contract on an expanded row -- the state where the output is
+    // actually shown to a reader.
+    const render = (value: CodeItem) => h.render(createElement(CodeTranscriptItem, { item: value, provider: 'cursor', sessionKey: '43225:s-a', expanded: true }));
     await render(item({ kind: 'tool_call', status: 'cancelled', tool: { name: 'read', output: '<script>bad()</script>partial' },
         truncation: { storedChars: 12, sourceChars: 500, reason: 'field_limit' } }));
     assert.equal(h.container.querySelector('article')?.getAttribute('data-code-item-id'), 'item-a');
@@ -339,6 +342,29 @@ test('timeline retains stable item ID, escaped tool output, truncation and disti
     assert.equal(h.container.querySelector('pre')?.textContent, '<script>bad()</script>partial');
     await render(item({ kind: 'turn_failed', status: 'error', text: 'Runtime closed unexpectedly' }));
     assert.match(h.container.textContent ?? '', /Failed/); assert.doesNotMatch(h.container.textContent ?? '', /Stopped/);
+});
+
+test('a collapsed tool call keeps its output out of the document', bounded, async t => {
+    const h = await surface(t);
+    const call = item({ kind: 'tool_call', status: 'done', tool: { name: 'read', input: '{"path":"/a.ts"}', output: 'secret-output-body' } });
+    await h.render(createElement(CodeTranscriptItem, { item: call, provider: 'cursor', sessionKey: '43225:s-a' }));
+    assert.match(h.container.textContent ?? '', /Read/, 'the summary line still says what ran');
+    assert.doesNotMatch(h.container.textContent ?? '', /secret-output-body/);
+    assert.equal(h.container.querySelector('pre'), null);
+    await h.render(createElement(CodeTranscriptItem, { item: call, provider: 'cursor', sessionKey: '43225:s-a', expanded: true }));
+    assert.match(h.container.textContent ?? '', /secret-output-body/);
+});
+
+test('a running tool call reads in the present tense without a duplicate status badge', bounded, async t => {
+    const h = await surface(t);
+    const running = item({ kind: 'tool_call', status: 'running', tool: { name: 'bash', input: '{"command":"npm test"}' } });
+    await h.render(createElement(CodeTranscriptItem, { item: running, provider: 'cursor', sessionKey: '43225:s-a' }));
+    assert.match(h.container.textContent ?? '', /Running npm test/);
+    // The verb already carries the state; the badge would repeat it.
+    assert.equal(h.container.querySelector('.code-tool-status'), null);
+    assert.ok(h.container.querySelector('.code-tool-name-running'), 'the row is marked as streaming');
+    await h.render(createElement(CodeTranscriptItem, { item: item({ kind: 'tool_call', status: 'error', tool: { name: 'bash', input: '{"command":"npm test"}' } }), provider: 'cursor', sessionKey: '43225:s-a' }));
+    assert.match(h.container.textContent ?? '', /Failed/, 'failure still gets a word');
 });
 
 test('throttled text flushes empty, whitespace and final replacements immediately across identities', bounded, async t => {
@@ -449,6 +475,30 @@ test('real virtualizer keeps item DOM identity through equal text, updates and p
     await render(many);
     const rows = h.container.querySelectorAll('[data-code-item-id]');
     assert.ok(rows.length > 0 && rows.length < 40, `virtualized DOM must stay bounded, got ${rows.length}`);
+});
+
+test('turn bookkeeping stays out of the transcript while actionable endings remain', bounded, async t => {
+    const h = await surface(t); virtualGeometry(t);
+    const render = (items: CodeItem[]) => h.render(createElement(CodeTranscript, {
+        items, provider: 'codex-app', sessionKey: 'turn-session', workingDir: '/tmp/work', loading: false,
+        hasOlderHistory: false, async loadOlderHistory() {}, permissionCount: 0,
+    }));
+    await render([
+        item({ itemId: 'started', kind: 'turn_started', firstSequence: 1 }),
+        item({ itemId: 'answer', kind: 'assistant_message', firstSequence: 2, text: 'hello' }),
+        item({ itemId: 'done', kind: 'turn_completed', firstSequence: 3 }),
+    ]);
+    assert.equal(h.container.querySelector('[data-code-item-id="started"]'), null);
+    assert.equal(h.container.querySelector('[data-code-item-id="done"]'), null);
+    assert.ok(h.container.querySelector('[data-code-item-id="answer"]'), 'the answer itself still renders');
+    assert.doesNotMatch(h.container.textContent ?? '', /Turn started/);
+    assert.doesNotMatch(h.container.textContent ?? '', /Completed/);
+    // A turn that failed or was stopped is something the reader can act on.
+    await render([
+        item({ itemId: 'answer', kind: 'assistant_message', firstSequence: 1, text: 'hello' }),
+        item({ itemId: 'failed', kind: 'turn_failed', status: 'error', firstSequence: 2, text: 'Runtime closed' }),
+    ]);
+    assert.ok(h.container.querySelector('[data-code-item-id="failed"]'), 'failure is not bookkeeping');
 });
 
 test('CodeCanvas uses the sidebar portal and forwards workspace and explicit file-open callbacks', bounded, async t => {

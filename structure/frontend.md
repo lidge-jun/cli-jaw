@@ -613,6 +613,20 @@ line (`Read src/app.ts`, `Bash npm test`) and open only on failure, `Done` is
 not printed, and user messages use a right-aligned bubble while the assistant
 keeps the full column as plain prose.
 
+Turn boundaries are bookkeeping and never become transcript rows: `turn_started`
+and `turn_completed` stay in the store and on the wire, where history replay and
+the failed-input recovery lookup still read them, but the transcript filters them
+out. `turn_failed` and `turn_cancelled` remain visible because a reader can act
+on them. A call that has not settled reads in the present tense (`Reading`,
+`Running`, `Searching`) with a streaming marker on the summary line, and settling
+changes only the tense, so no badge repeats what the verb already says; the
+settled vocabulary and an unrecognised tool's own name are unchanged. Tool and
+reasoning detail is built only while its disclosure is open, and the transcript
+owns that open state, scoped per session and bounded, because the virtualizer
+unmounts rows. Toggling hands the virtualizer a new size for that row directly:
+a toggle changes neither item count nor identity, so no option update would
+otherwise reach it and the measured height would stay stale.
+
 `useCodeController` owns requests and selection fencing. A single Code SSE
 subscription reconciles a full snapshot at watermark H and contiguous events
 after H. Opening transport does not mean synchronization has completed. Compact

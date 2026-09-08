@@ -135,8 +135,43 @@
 }
 .code-tool-summary::-webkit-details-marker { display: none; }
 .code-tool-summary:hover { background: var(--accent-soft); }
-.code-tool-chevron { flex-shrink: 0; font-weight: 800; line-height: 1; color: var(--text-dim); }
+.code-tool-chevron {
+    flex-shrink: 0; font-weight: 800; line-height: 1; color: var(--text-dim);
+    /* Dimmed rather than hidden: a chevron that only appears on hover is
+       undiscoverable by touch and gives a keyboard user nothing to aim at. */
+    opacity: 0.35;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.code-tool-summary:hover .code-tool-chevron,
+.code-tool-summary:focus-visible .code-tool-chevron { opacity: 1; }
+.code-tool-card[open] > .code-tool-summary .code-tool-chevron { transform: rotate(90deg); opacity: 1; }
 .code-tool-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; line-height: 1.15; }
+/* A call in flight reads as in-flight. The verb already says so; this keeps the
+   row alive while it streams, and stopping is what marks completion -- no chip
+   that says "Done" on every successful row. */
+.code-tool-name-running {
+    background: linear-gradient(90deg,
+        var(--text-dim) 0%, var(--text-dim) 34%,
+        var(--text-primary) 50%,
+        var(--text-dim) 66%, var(--text-dim) 100%);
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: code-tool-shimmer 4s linear infinite;
+}
+@keyframes code-tool-shimmer {
+    from { background-position: 150% 0; }
+    to { background-position: -150% 0; }
+}
+/* Transparent text has no fallback under a forced palette, and a reader who
+   asked for less motion should not get a looping gradient either. */
+@media (prefers-reduced-motion: reduce) {
+    .code-tool-name-running { animation: none; background: none; color: var(--text-primary); }
+}
+@media (forced-colors: active) {
+    .code-tool-name-running { animation: none; background: none; color: CanvasText; forced-color-adjust: none; }
+}
 .code-tool-status {
     margin-left: auto;
     flex-shrink: 0;
