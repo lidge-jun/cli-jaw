@@ -13,7 +13,6 @@ import './settings-embedding.css';
 
 const proxyMatch = location.pathname.match(/^\/i\/(\d+)\//);
 const apiBase = proxyMatch ? `/i/${proxyMatch[1]}` : '';
-const bootstrapPort = (window as Window & { __JAW_PORT?: unknown }).__JAW_PORT;
 const host = document.getElementById('settings-root');
 if (!host) throw new Error('Invalid settings host');
 
@@ -53,13 +52,14 @@ const client = createDirectClient(0, { base: apiBase, getHeaders: async () => {
     return token ? { Authorization: `Bearer ${token}` } : {};
 } });
 let snapshot: { port?: unknown } | null = null;
-if (validPort(bootstrapPort) === null) {
-    try {
-        const result = await client.get<{ port?: unknown; data?: { port?: unknown } }>('/api/settings');
-        snapshot = result.data ?? result;
-    } catch { /* Location is the final fallback; pages report their own API failures. */ }
-}
-const port = validPort(bootstrapPort) ?? validPort(snapshot?.port) ?? validPort(location.port);
+// There used to be a `window.__JAW_PORT` bootstrap fast path here. Nothing in the tree ever
+// assigned it, so it always resolved to null and this fetch ran regardless; keeping it implied
+// a handshake that did not exist.
+try {
+    const result = await client.get<{ port?: unknown; data?: { port?: unknown } }>('/api/settings');
+    snapshot = result.data ?? result;
+} catch { /* Location is the final fallback; pages report their own API failures. */ }
+const port = validPort(snapshot?.port) ?? validPort(location.port);
 if (port === null) {
     host.setAttribute('role', 'alert');
     host.textContent = 'Cannot resolve instance settings port';
