@@ -12,7 +12,23 @@ export const CODEX_MODEL_CHOICES = ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5
  * running, registry-live.ts replaces this with the live per-model sets, which
  * can include `max` and `ultra`.
  */
-export const CODEX_EFFORT_CHOICES = ['low', 'medium', 'high', 'xhigh'];
+/**
+ * Static effort fallback for Codex when opencodex is not running. When ocx IS
+ * running, registry-live.ts replaces this with the live per-model sets, which
+ * narrow it per model — `gpt-5.6-sol` reaches `ultra` while `gpt-5.6-luna` stops
+ * at `max`.
+ *
+ * The fallback is deliberately the union rather than a per-model table. Its job is
+ * to keep the picker from emptying, not to be an accurate catalog, and a hand-kept
+ * table here would recreate exactly the manual sync debt live discovery removed.
+ * The rung that is wrong for a given model is also unreachable in practice: this
+ * list is only used when opencodex is absent, and Codex runs through that proxy.
+ *
+ * `minimal` is left out. It appears in the live union because some routed models
+ * advertise it, but none of the GPT ids in `CODEX_MODEL_CHOICES` were observed to
+ * take it, so offering it here would be a rung with nothing behind it.
+ */
+export const CODEX_EFFORT_CHOICES = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
 
 export const CLI_REGISTRY = {
     agy: {
@@ -109,7 +125,11 @@ export const CLI_REGISTRY = {
         },
         effortsByProvider: {
             claude: ['low', 'medium', 'high', 'xhigh', 'max'],
-            codex: ['low', 'medium', 'high', 'xhigh'],
+            // Kept in step with CODEX_EFFORT_CHOICES by hand because this map is
+            // provider-scoped: ai-e forwards --effort directly (args.ts), so a
+            // narrower list here would hide max/ultra from the codex provider even
+            // when the top-level codex runtime offers them.
+            codex: [...CODEX_EFFORT_CHOICES],
             grok: [],
             copilot: ['low', 'medium', 'high'],
             kiro: ['low', 'medium', 'high', 'xhigh'],
