@@ -218,3 +218,15 @@ test('the dashboard rail settings surface can never expose instance-scoped pages
     assert.equal(router.includes('WorkbenchSettingsToggle'), false,
         'the workbench gear is the removed second entry point');
 });
+
+test('no settings entry renders the placeholder question-mark glyph', async () => {
+    // 'unknown' maps to CircleHelp and resolves through SETTINGS_ICONS itself, not the
+    // ?? 'settings' fallback, so a page mapped to it silently ships a question mark in the
+    // sidebar. dashboard-meta did exactly that until it became permanently visible.
+    const { SETTINGS_REGISTRY } = await import('../../public/manager/src/settings/settings-registry');
+    const { settingsIcon } = await import('../../public/manager/src/settings/settings-icons');
+    for (const entry of SETTINGS_REGISTRY) {
+        assert.notEqual(settingsIcon(entry.id), 'unknown',
+            `settings entry "${entry.id}" renders the placeholder question-mark icon`);
+    }
+});

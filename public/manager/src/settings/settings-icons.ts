@@ -10,6 +10,8 @@ const SETTINGS_ICONS: Readonly<Record<string, IconName>> = {
     'advanced-export': 'download', employees: 'people',
     'manager-display': 'monitor', 'manager-activity': 'heartPulse',
     'manager-developer': 'tool', 'manager-embedding': 'search',
-    'telegram-hub': 'radio', 'dashboard-meta': 'unknown',
+    // 'unknown' resolves through this table rather than the 'settings' fallback, so it rendered
+    // a literal question mark. The page edits an instance's label, group, favorite and notes.
+    'telegram-hub': 'radio', 'dashboard-meta': 'pencil',
 };
 export function settingsIcon(id: string): IconName { return SETTINGS_ICONS[id] ?? 'settings'; }

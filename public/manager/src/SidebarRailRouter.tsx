@@ -140,7 +140,7 @@ type Props = {
     titlesByPort: Record<number, string>;
     busyPorts: Set<number>;
     activeDetailTab: DashboardDetailTab;
-    onSettingsDirtyChange: (entry: 'panel' | 'dashboard', dirty: boolean) => void;
+    onSettingsDirtyChange: (entry: 'dashboard', dirty: boolean) => void;
     onSettingsSaved?: () => void;
     onDetailTabChange: (tab: DashboardDetailTab) => void;
     workbenchHeader: ReactNode;

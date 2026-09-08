@@ -152,3 +152,73 @@ test('Manager rehydrates only a 409 migration conflict snapshot', () => {
     assert.equal(conflictSettingsFromError(new Error(JSON.stringify({ settings: terminal }))), null);
     assert.equal(pending.runtimeDefaultMigration.state, 'pending', 'ordinary failures leave local pending unchanged');
 });
+
+test('an Agent save diffs employees against the server, not a stale page snapshot', async () => {
+    // The Classic sidebar writes employees immediately and independently of this page's dirty
+    // store. If a row is added or removed there while the Agent page is open, the page's
+    // snapshot is stale — and the diff is what issues DELETE calls.
+    const { saveAgentRuntime } = await import('../../public/manager/src/settings/pages/components/agent/agent-save');
+    const emp = (id: string, name: string) => ({ id, name, cli: 'codex', model: 'default', role: '', source: 'db' as const });
+
+    const calls: string[] = [];
+    const serverNow = [emp('a', 'Alice'), emp('c', 'Carol')]; // 'c' was added from the sidebar
+    const client = {
+        async get<T>(path: string) { calls.push('GET ' + path); return { ok: true, data: serverNow } as T; },
+        async put<T>(path: string) { calls.push('PUT ' + path); return {} as T; },
+        async post<T>(path: string) { calls.push('POST ' + path); return {} as T; },
+        async delete<T>(path: string) { calls.push('DELETE ' + path); return {} as T; },
+    };
+
+    await saveAgentRuntime({
+        client,
+        bundle: { runtimeEmployees: [emp('a', 'Alice renamed')] },
+        employeeDraft: [emp('a', 'Alice renamed')],
+        // What the page loaded before the sidebar added 'c'.
+        employeeOriginal: [emp('a', 'Alice')],
+    });
+
+    assert.ok(calls.includes('GET /api/employees'),
+        'the save must re-read employees before computing the destructive diff');
+    assert.equal(calls.some(call => call.startsWith('DELETE')), false,
+        'a row the sidebar added while this page was open must not be deleted by its save');
+    assert.ok(calls.some(call => call.startsWith('PUT /api/employees/a')),
+        'the intended rename must still be applied');
+});
+
+test('a failed employee re-read falls back to the page snapshot rather than blocking the save', async () => {
+    const { saveAgentRuntime } = await import('../../public/manager/src/settings/pages/components/agent/agent-save');
+    const emp = (id: string, name: string) => ({ id, name, cli: 'codex', model: 'default', role: '', source: 'db' as const });
+    const calls: string[] = [];
+    const client = {
+        async get<T>(): Promise<T> { calls.push('GET'); throw new Error('offline'); },
+        async put<T>(path: string) { calls.push('PUT ' + path); return {} as T; },
+        async post<T>(path: string) { calls.push('POST ' + path); return {} as T; },
+        async delete<T>(path: string) { calls.push('DELETE ' + path); return {} as T; },
+    };
+    await saveAgentRuntime({
+        client,
+        bundle: { runtimeEmployees: [emp('a', 'Alice renamed')] },
+        employeeDraft: [emp('a', 'Alice renamed')],
+        employeeOriginal: [emp('a', 'Alice')],
+    });
+    assert.ok(calls.some(call => call.startsWith('PUT /api/employees/a')),
+        'an unreachable re-read must not silently drop the user\u2019s explicit edit');
+});
+
+test('an intentional employee deletion still deletes', async () => {
+    // The stale-snapshot guard must not become a blanket refusal to delete: a row the page
+    // loaded and the user removed is a real deletion.
+    const { saveAgentRuntime } = await import('../../public/manager/src/settings/pages/components/agent/agent-save');
+    const emp = (id: string, name: string) => ({ id, name, cli: 'codex', model: 'default', role: '', source: 'db' as const });
+    const calls: string[] = [];
+    const client = {
+        async get<T>() { return { ok: true, data: [emp('a', 'Alice'), emp('b', 'Bob')] } as T; },
+        async put<T>(path: string) { calls.push('PUT ' + path); return {} as T; },
+        async post<T>(path: string) { calls.push('POST ' + path); return {} as T; },
+        async delete<T>(path: string) { calls.push('DELETE ' + path); return {} as T; },
+    };
+    const draft = [emp('a', 'Alice')];
+    await saveAgentRuntime({ client, bundle: { runtimeEmployees: draft }, employeeDraft: draft,
+        employeeOriginal: [emp('a', 'Alice'), emp('b', 'Bob')] });
+    assert.deepEqual(calls, ['DELETE /api/employees/b']);
+});

@@ -54,7 +54,7 @@ type AppChromeProps = {
     onPickProject: (port: number) => void;
     projectPickBusy: boolean;
     onRefreshPreview: () => void;
-    onSettingsDirtyChange: (entry: 'panel' | 'dashboard', dirty: boolean) => void;
+    onSettingsDirtyChange: (entry: 'dashboard', dirty: boolean) => void;
     detailContent: (tab: DashboardDetailTab) => ReactNode;
     instanceListContent: ReactNode;
     drawerProfileFilters: ReactNode;

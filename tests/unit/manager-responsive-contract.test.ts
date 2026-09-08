@@ -192,8 +192,9 @@ test('manager UI state is persisted through 10.6 registry without localStorage',
     assert.ok(drawer.includes('previousFocusRef'), 'drawer must restore focus');
     assert.ok(drawer.includes('role="dialog"'), 'drawer must expose dialog semantics');
     assert.ok(detail.includes('InstanceLogsPanel'), 'Logs tab must mount the logs panel when an instance is selected');
-    assert.ok(detail.includes('SettingsShell'), 'Settings tab must mount the settings shell');
-    assert.ok(dashboardMeta.includes('settings-form'), 'Settings tab must expose 10.6 persistence controls');
+    assert.equal(detail.includes('SettingsShell'), false,
+        'the detail panel settings branch is unreachable and must not mount a second settings surface');
+    assert.ok(dashboardMeta.includes('settings-form'), 'Dashboard meta must expose 10.6 persistence controls');
     assert.equal(app.includes('localStorage'), false, '10.5.x UI must not introduce localStorage persistence');
     assert.equal(hook.includes('localStorage'), false, 'view hook must not persist UI state yet');
     assert.equal(registryHook.includes('localStorage'), false, 'registry hook must not use localStorage');

@@ -3,7 +3,9 @@ import { expandPatch } from '../../path-utils';
 import {
     applyRuntimeEmployeesDiff,
     runtimeEmployeesHaveErrors,
+    unwrapRuntimeEmployees,
     type RuntimeEmployeeRecord,
+    type RuntimeEmployeesResponse,
 } from './runtime-employees-helpers';
 
 export type AgentSettingsSnapshot = {
@@ -62,7 +64,28 @@ export async function saveAgentRuntime(options: {
     }
     try {
         if (runtimeEmployeesNext) {
-            await applyRuntimeEmployeesDiff(client, employeeOriginal, runtimeEmployeesNext);
+            // The Classic sidebar writes employees immediately and independently, so by save
+            // time the server can hold rows this page never saw. Two things follow, and only
+            // doing the first is worse than doing neither.
+            //
+            // Re-read so the diff is computed against reality rather than a stale snapshot.
+            // Then restrict deletion to rows this page actually knew about: a row that appeared
+            // on the server while the page was open is absent from the draft, which the plain
+            // diff reads as "the user removed it" and deletes. It was never the user's to
+            // remove. Additions and updates still come from the draft as the user expressed
+            // them.
+            //
+            // A failed re-read falls back to the snapshot rather than blocking the save: the
+            // stale diff is still the caller's explicit intent, and refusing to save would
+            // discard it.
+            let baseline = employeeOriginal;
+            try {
+                const server = unwrapRuntimeEmployees(await client.get<RuntimeEmployeesResponse>('/api/employees'));
+                const knownToThisPage = new Set(employeeOriginal.map(row => row.id));
+                const draftIds = new Set(runtimeEmployeesNext.map(row => row.id));
+                baseline = server.filter(row => knownToThisPage.has(row.id) || draftIds.has(row.id));
+            } catch { /* keep the snapshot baseline */ }
+            await applyRuntimeEmployeesDiff(client, baseline, runtimeEmployeesNext);
         }
     } catch (err: unknown) {
         throw new Error(`runtime employees save failed: ${err instanceof Error ? err.message : String(err)}`);

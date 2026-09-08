@@ -16,7 +16,7 @@ import {
 } from './page-shell';
 import { InlineWarn } from './components/InlineWarn';
 
-export type PermissionMode = 'auto' | 'custom';
+export type PermissionMode = 'auto' | 'safe' | 'custom';
 
 type PermissionsSnapshot = {
     permissions?: 'auto' | string[] | unknown;
@@ -58,9 +58,13 @@ export function parsePermissionsValue(
     value: unknown,
 ):
     | { mode: 'auto' }
+    | { mode: 'safe' }
     | { mode: 'custom'; tokens: string[] }
     | { mode: 'unknown' } {
     if (isPermissionsAuto(value)) return { mode: 'auto' };
+    // 'safe' is a real stored policy — the Classic sidebar is its only writer today. Reporting
+    // it as 'unknown' is what let callers collapse it to 'auto', silently widening permissions.
+    if (value === 'safe') return { mode: 'safe' };
     if (Array.isArray(value)) {
         const tokens = value
             .filter((t): t is string => typeof t === 'string')
@@ -102,6 +106,7 @@ export function isAllowlistValid(tokens: ReadonlyArray<string>): boolean {
 
 const MODE_OPTIONS = [
     { value: 'auto', label: 'Auto (YOLO)' },
+    { value: 'safe', label: 'Safe' },
     { value: 'custom', label: 'Custom — explicit allowlist below' },
 ];
 
@@ -125,7 +130,10 @@ export default function Permissions({ port, client, dirty, registerSave }: Setti
             setMode('custom');
             setTokens(parsed.tokens);
         } else {
-            setMode('auto');
+            // A Safe instance must read as Safe. Showing it as Auto (YOLO) hides the policy the
+            // user is about to change and reports 'auto' as the original, so a round trip
+            // through Custom and back writes a widened policy the user never chose.
+            setMode(parsed.mode === 'safe' ? 'safe' : 'auto');
             setTokens([]);
         }
     }, [state]);
@@ -141,9 +149,10 @@ export default function Permissions({ port, client, dirty, registerSave }: Setti
         [dirty],
     );
 
-    const originalSerialized = useMemo<'auto' | string[]>(() => {
+    const originalSerialized = useMemo<'auto' | 'safe' | string[]>(() => {
         if (!original) return 'auto';
         if (original.mode === 'custom') return original.tokens;
+        if (original.mode === 'safe') return 'safe';
         return 'auto';
     }, [original]);
 
@@ -154,6 +163,16 @@ export default function Permissions({ port, client, dirty, registerSave }: Setti
                 setTokens([]);
                 writeEntry({
                     value: 'auto',
+                    original: originalSerialized,
+                    valid: true,
+                });
+                return;
+            }
+            if (next === 'safe') {
+                setMode('safe');
+                setTokens([]);
+                writeEntry({
+                    value: 'safe',
                     original: originalSerialized,
                     valid: true,
                 });
@@ -204,7 +223,7 @@ export default function Permissions({ port, client, dirty, registerSave }: Setti
             setMode('custom');
             setTokens(parsed.tokens);
         } else {
-            setMode('auto');
+            setMode(parsed.mode === 'safe' ? 'safe' : 'auto');
             setTokens([]);
         }
         setData(fresh);

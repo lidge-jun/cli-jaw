@@ -57,7 +57,7 @@ export function App() { if (readTrayRemindersMode(window.location.search) && REM
     const [transitioningPort, setTransitioningPort] = useState<number | null>(null);
     const [transitionAction, setTransitionAction] = useState<DashboardLifecycleAction | null>(null);
     const [activeProfileIds, setActiveProfileIds] = useState<string[]>([]);
-    const { settingsDirty, panelSettingsDirty, dashboardSettingsDirty, setSettingsDirty, onSettingsDirtyChange, onPanelSettingsDirtyChange } = useSettingsDirtyState();
+    const { settingsDirty, dashboardSettingsDirty, setSettingsDirty, onSettingsDirtyChange } = useSettingsDirtyState();
     const [notesDirtyPath, setNotesDirtyPath] = useState<string | null>(null);
     const [notesSidebarMode, setNotesSidebarMode] = useState<NotesSidebarMode>('files');
     const [notesSearchFocusToken, setNotesSearchFocusToken] = useState(0);
@@ -244,7 +244,7 @@ export function App() { if (readTrayRemindersMode(window.location.search) && REM
         void registry.save({ activeProfileFilter: next });
     }
     const { canLeaveDirtySettings, guardSettingsTransition, setDashboardSettingsOpen } = createInstanceSettingsNavigation({
-        view, settingsDirty, panelSettingsDirty, dashboardSettingsDirty, clearDirty: entry => onSettingsDirtyChange(entry, false), saveUi, selectedPort: selectedInstance?.port ?? null,
+        view, settingsDirty, dashboardSettingsDirty, clearDirty: entry => onSettingsDirtyChange(entry, false), saveUi, selectedPort: selectedInstance?.port ?? null,
     });
 
     function handlePreview(instance: DashboardInstance, openDefaultSession = false): void {
@@ -395,7 +395,7 @@ export function App() { if (readTrayRemindersMode(window.location.search) && REM
             runManagerShortcut(action);
         });
         return unsubscribe;
-    }, [filtered, selectedInstance, view.dashboardShortcutsEnabled, view.sidebarMode, view.activeDetailTab, settingsDirty, panelSettingsDirty, dashboardSettingsDirty]);
+    }, [filtered, selectedInstance, view.dashboardShortcutsEnabled, view.sidebarMode, view.activeDetailTab, settingsDirty, dashboardSettingsDirty]);
 
     useEffect(() => {
         function onKeyDown(event: KeyboardEvent): void {
@@ -416,7 +416,7 @@ export function App() { if (readTrayRemindersMode(window.location.search) && REM
         }
         document.addEventListener('keydown', onKeyDown);
         return () => document.removeEventListener('keydown', onKeyDown);
-    }, [filtered, selectedInstance, view.dashboardShortcutsEnabled, view.dashboardShortcutKeymap, view.sidebarMode, view.activeDetailTab, settingsDirty, panelSettingsDirty, dashboardSettingsDirty]);
+    }, [filtered, selectedInstance, view.dashboardShortcutsEnabled, view.dashboardShortcutKeymap, view.sidebarMode, view.activeDetailTab, settingsDirty, dashboardSettingsDirty]);
 
     async function handleLifecycle(action: DashboardLifecycleAction, instance: DashboardInstance): Promise<void> {
         const lifecycle = instance.lifecycle;
@@ -489,8 +489,6 @@ export function App() { if (readTrayRemindersMode(window.location.search) && REM
             instance={selectedInstance}
             data={data}
             activeTab={tab}
-            onSettingsDirtyChange={onPanelSettingsDirtyChange}
-            onSettingsSaved={() => { if (selectedInstance) void refreshInstance(selectedInstance.port); publishInvalidation({ topics: ['instances'], reason: 'instance:settings-saved', source: 'ui', sourceId: 'app' }); }}
             onRegistryPatch={(port, patch) => { void registry.save({ instances: { [String(port)]: patch } }).then(() => { load(); publishInvalidation({ topics: ['instances'], reason: 'instance:registry-patched', source: 'ui', sourceId: 'app' }); }); }}
         />
     );

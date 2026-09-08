@@ -118,9 +118,8 @@ type SettingsNavigation = {
         'setSelectedPort' | 'setSidebarMode' | 'setViewMode' | 'setDrawerOpen'>;
     selectedPort: number | null;
     settingsDirty: boolean;
-    panelSettingsDirty: boolean;
     dashboardSettingsDirty: boolean;
-    clearDirty: (entry: 'panel' | 'dashboard') => void;
+    clearDirty: (entry: 'dashboard') => void;
     saveUi: (patch: Partial<DashboardRegistryUi>) => Promise<void>;
     confirmDiscard?: () => boolean;
 };
@@ -135,15 +134,12 @@ export function createInstanceSettingsNavigation(args: SettingsNavigation) {
     }>): boolean {
         const portChanged = target.selectedPort !== undefined && target.selectedPort !== selectedPort;
         const leavingDashboard = view.sidebarMode === 'settings' && (target.sidebarMode ?? view.sidebarMode) !== 'settings';
-        // 'panel' is retained, not live. Its only producer is InstanceDetailPanel's 'settings'
-        // branch, which is now unreachable: handleTabChange intercepts that tab and hydration
-        // maps it to 'overview'. The slot stays because DashboardDetailTab still admits the
-        // retired value; it guards nothing today and can be dropped with that type.
-        const departing = (['panel', 'dashboard'] as const).filter(entry =>
-            portChanged || (entry === 'dashboard' && leavingDashboard));
-        const dirty = departing.some(entry => entry === 'panel' ? args.panelSettingsDirty : args.dashboardSettingsDirty);
-        if (dirty && !(args.confirmDiscard ?? (() => window.confirm('Discard unsaved Settings changes?')))()) return false;
-        for (const entry of departing) args.clearDirty(entry);
+        // The rail workspace is the only settings surface, so there is one draft to guard.
+        const departing = portChanged || leavingDashboard;
+        if (!departing) return true;
+        if (args.dashboardSettingsDirty
+            && !(args.confirmDiscard ?? (() => window.confirm('Discard unsaved Settings changes?')))()) return false;
+        args.clearDirty('dashboard');
         return true;
     }
     /** Opens or closes the rail's manager settings workspace, honouring the dirty guard. */
@@ -159,22 +155,19 @@ export function createInstanceSettingsNavigation(args: SettingsNavigation) {
     return { canLeaveDirtySettings, guardSettingsTransition, setDashboardSettingsOpen };
 }
 
-// Both entry points may remain mounted: a clean hidden Shell cannot clear its peer.
-export function settingsDirtyAfter(current: { panel: boolean; dashboard: boolean },
-    entry: 'panel' | 'dashboard', dirty: boolean) {
+// One settings surface remains, so there is one draft. The entry name is kept so the
+// dirty-store call sites read the same as before.
+export function settingsDirtyAfter(current: { dashboard: boolean },
+    entry: 'dashboard', dirty: boolean) {
     return { ...current, [entry]: dirty };
 }
 export function useSettingsDirtyState() {
-    const [entries, setEntries] = useState({ panel: false, dashboard: false });
-    const onSettingsDirtyChange = useCallback((entry: 'panel' | 'dashboard', dirty: boolean) => {
+    const [entries, setEntries] = useState({ dashboard: false });
+    const onSettingsDirtyChange = useCallback((entry: 'dashboard', dirty: boolean) => {
         setEntries(current => settingsDirtyAfter(current, entry, dirty));
     }, []);
-    // SettingsShell keys its dirty notification and unmount cleanup to this callback.
-    const onPanelSettingsDirtyChange = useCallback((dirty: boolean) => {
-        onSettingsDirtyChange('panel', dirty);
-    }, [onSettingsDirtyChange]);
     const setSettingsDirty = useCallback((dirty: boolean) => {
-        setEntries({ panel: dirty, dashboard: dirty });
+        setEntries({ dashboard: dirty });
     }, []);
-    return { settingsDirty: entries.panel || entries.dashboard, panelSettingsDirty: entries.panel, dashboardSettingsDirty: entries.dashboard, setSettingsDirty, onSettingsDirtyChange, onPanelSettingsDirtyChange };
+    return { settingsDirty: entries.dashboard, dashboardSettingsDirty: entries.dashboard, setSettingsDirty, onSettingsDirtyChange };
 }

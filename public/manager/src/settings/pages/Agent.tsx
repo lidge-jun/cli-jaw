@@ -124,7 +124,7 @@ type RuntimeDraft = {
     model: string;
     effort: string;
     workingDir: string;
-    permissions: 'auto' | string[];
+    permissions: 'auto' | 'safe' | string[];
 };
 
 export default function Agent({ port, client, dirty, registerSave }: SettingsPageProps) {
@@ -284,7 +284,10 @@ export default function Agent({ port, client, dirty, registerSave }: SettingsPag
             model: runtimeModelFor(cli, state.data.perCli, state.data.activeOverrides),
             effort: runtimeEffortFor(cli, state.data.perCli, state.data.activeOverrides),
             workingDir: state.data.workingDir || '',
-            permissions: permissions.mode === 'custom' ? permissions.tokens : 'auto',
+            // Preserve 'safe' rather than collapsing it: an untouched Safe instance must not
+            // become Auto (YOLO) as a side effect of saving something unrelated on this page.
+            permissions: permissions.mode === 'custom' ? permissions.tokens
+                : permissions.mode === 'safe' ? 'safe' : 'auto',
         });
     }, [cliMeta, state]);
 

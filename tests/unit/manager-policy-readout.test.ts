@@ -76,19 +76,64 @@ async function choose(container: HTMLElement, id: string, prefix: string) {
     const trigger = container.querySelector<HTMLButtonElement>('#' + id); assert.ok(trigger);
     await act(async () => trigger.click());
     const options = [...container.querySelectorAll<HTMLButtonElement>('#' + id + '-listbox [role="option"]')];
-    assert.equal(options.length, 2, 'Auto/Custom remain the only editor options');
+    // Safe joined Auto/Custom: it is a real stored policy and hiding it from the editor is what
+    // let a Safe instance be silently widened to Auto.
+    assert.equal(options.length, 3, 'Auto/Safe/Custom are the editor options');
     const option = options.find(el => el.querySelector('span')?.textContent?.startsWith(prefix)); assert.ok(option);
     await act(async () => option.click());
 }
 
-test('mounted Agent shows raw configured Safe despite Auto editor coercion, with no writes on load or rerender', bounded, async t => {
+test('mounted Agent shows configured Safe as Safe in the editor, with no writes on load or rerender', bounded, async t => {
     const h = await page(t, 'agent', 'safe');
     assert.equal(h.label(), 'Configured policy: Safe');
-    assert.equal(h.container.querySelector('#agent-permissions-mode .settings-select-value')?.textContent, 'Auto (YOLO)');
+    // The editor used to render Safe as "Auto (YOLO)". A user who then touched this control
+    // could not see the permission they were about to widen, and any save carried 'auto'.
+    assert.equal(h.container.querySelector('#agent-permissions-mode .settings-select-value')?.textContent, 'Safe');
     assert.match(h.container.querySelector('#agent-permissions-mode')?.getAttribute('aria-label') ?? '', /^Change policy to:/);
     await h.render(); await h.save();
     assert.deepEqual(h.api.writes, []); assert.equal(h.dirty.pending.has('permissions'), false);
     assert.equal(h.api.snapshot().permissions, 'safe');
+});
+
+test('a Safe instance is never widened to Auto by an unrelated Agent save', bounded, async t => {
+    // Two distinct paths, both verified here. An UNTOUCHED control contributes nothing to the
+    // bundle, so an unrelated save cannot carry permissions — that half held even before the
+    // fix. The real downgrade needed the user to TOUCH the selector while it displayed
+    // "Auto (YOLO)" for a Safe instance: they could not see what they were widening, and
+    // re-selecting the value shown wrote 'auto'. That is the half the fix closes, and it is
+    // asserted below rather than implied.
+    const h = await page(t, 'agent', 'safe');
+    const input = [...h.container.querySelectorAll<HTMLInputElement>('input')].find(el => el.value === '/fixture'); assert.ok(input);
+    await act(async () => {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(input, '/elsewhere');
+        input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    });
+    assert.equal(h.dirty.pending.has('permissions'), false,
+        'an untouched permissions control must contribute nothing to the save bundle');
+    await h.save();
+    for (const write of h.api.writes) {
+        const body = (write as { body?: Record<string, unknown> }).body ?? {};
+        assert.equal('permissions' in body, false, 'an unrelated save must not carry permissions');
+    }
+    assert.equal(h.api.snapshot().permissions, 'safe');
+
+    // Now the path that actually lost the policy: re-select whatever the editor is showing.
+    // With the editor telling the truth, that is Safe, so it stays Safe.
+    const shown = h.container.querySelector('#agent-permissions-mode .settings-select-value')?.textContent;
+    assert.equal(shown, 'Safe', 'the editor must not display a Safe instance as Auto (YOLO)');
+    await choose(h.container, h.modeId, shown!.startsWith('Auto') ? 'Auto' : 'Safe');
+    await h.save();
+    assert.equal(h.api.snapshot().permissions, 'safe',
+        're-selecting the displayed policy must never widen it');
+});
+
+test('Safe is reachable from the Agent editor, not only readable', bounded, async t => {
+    const h = await page(t, 'agent', 'auto');
+    await choose(h.container, h.modeId, 'Safe');
+    assert.deepEqual(h.dirty.saveBundle(), { permissions: 'safe' });
+    await h.save();
+    assert.deepEqual(h.api.writes, [{ path: '/api/settings', body: { permissions: 'safe' } }]);
+    assert.equal(h.label(), 'Configured policy: Safe');
 });
 
 test('mounted Agent unrelated workingDir save retains configured Safe and excludes permissions', bounded, async t => {
@@ -113,13 +158,30 @@ for (const mode of ['Auto', 'Custom']) test(`mounted Agent explicit ${mode} pres
     assert.equal(h.label(), mode === 'Auto' ? 'Configured policy: Auto (YOLO)' : 'Configured policy: Custom (5 entries)');
 });
 
-test('mounted detailed Permissions preserves Safe-to-Auto NOOP and explains the Agent path', bounded, async t => {
+test('detailed Permissions shows Safe as Safe and treats widening it as a real write', bounded, async t => {
+    // This used to be a NOOP: Safe parsed as 'unknown', the editor rendered it as Auto, and
+    // originalSerialized reported 'auto' — so picking Auto matched the "original" and wrote
+    // nothing, while the readout kept claiming Safe. Both halves of that were wrong. Safe is a
+    // real policy, so widening it is a real change the user must be able to see and save.
     const h = await page(t, 'detail', 'safe');
     assert.equal(h.label(), 'Configured policy: Safe');
-    assert.match(h.container.textContent ?? '', /Use Agent to change this configured policy\./);
+    assert.equal(h.container.querySelector('#permissions-mode .settings-select-value')?.textContent, 'Safe');
     assert.match(h.container.querySelector('#permissions-mode')?.getAttribute('aria-label') ?? '', /^Change policy to:/);
-    await choose(h.container, h.modeId, 'Auto'); await h.save();
-    assert.deepEqual(h.dirty.saveBundle(), {}); assert.deepEqual(h.api.writes, []);
+    assert.equal((h.container.textContent ?? '').includes('Use Agent to change this configured policy.'), false,
+        'Safe is editable here now, so the redirect to Agent no longer applies');
+    await choose(h.container, h.modeId, 'Auto');
+    assert.deepEqual(h.dirty.saveBundle(), { permissions: 'auto' });
+    await h.save();
+    assert.deepEqual(h.api.writes, [{ path: '/api/settings', body: { permissions: 'auto' } }]);
+    assert.equal(h.label(), 'Configured policy: Auto (YOLO)');
+});
+
+test('detailed Permissions can set Safe from Auto', bounded, async t => {
+    const h = await page(t, 'detail', 'auto');
+    await choose(h.container, h.modeId, 'Safe');
+    assert.deepEqual(h.dirty.saveBundle(), { permissions: 'safe' });
+    await h.save();
+    assert.deepEqual(h.api.writes, [{ path: '/api/settings', body: { permissions: 'safe' } }]);
     assert.equal(h.label(), 'Configured policy: Safe');
 });
 

@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { createInstanceSettingsNavigation, hydrateInstanceSettings, settingsDirtyAfter, useSettingsDirtyState, useDashboardView } from '../../public/manager/src/hooks/useDashboardView';
 import { createManagerCaptureKeydownHandler, runManagerShortcut, type ManagerShortcutRunnerDeps } from '../../public/manager/src/manager-shortcut-runner';
-import { DEFAULT_MANAGER_SHORTCUT_KEYMAP } from '../../public/manager/src/manager-shortcuts';
+import { DEFAULT_MANAGER_SHORTCUT_KEYMAP, MANAGER_SHORTCUT_ACTIONS } from '../../public/manager/src/manager-shortcuts';
 import type { DashboardRegistryPatch, DashboardRegistryUi, DashboardShortcutAction } from '../../public/manager/src/types';
 import type { SettingsClient } from '../../public/manager/src/settings/types';
 
@@ -66,30 +66,29 @@ test('the rail settings workspace honours the dirty guard on open and close', ()
     assert.deepEqual(cleared, ['dashboard']);
     assert.equal(writes.at(-1)?.sidebarMode, 'instances');
 });
-test('a port change still confirms the panel draft owned by InstanceDetailPanel', () => {
-    // The Workbench panel is gone, but 'panel' has a second producer, so a port change must
-    // keep confirming it.
+test('a port change still confirms the settings draft', () => {
+    // The second dirty slot is gone with the panel that produced it, but a port change still
+    // departs the one remaining draft and must confirm before discarding it.
     type Args = Parameters<typeof createInstanceSettingsNavigation>[0];
     const cleared: string[] = [];
     let allow = false;
     const view: Args['view'] = { sidebarMode: 'instances', activeDetailTab: 'preview',
         setSelectedPort() {}, setSidebarMode() {}, setViewMode() {}, setDrawerOpen() {} };
     const nav = createInstanceSettingsNavigation({ view, selectedPort: 3457, settingsDirty: true,
-        panelSettingsDirty: true, dashboardSettingsDirty: false,
+        dashboardSettingsDirty: true,
         clearDirty: entry => cleared.push(entry), confirmDiscard: () => allow, saveUi: async () => {} });
     assert.equal(nav.canLeaveDirtySettings(), false); // row / Preview / CEO guard uses this
     assert.equal(nav.guardSettingsTransition({ selectedPort: 3458 }), false);
     assert.deepEqual(cleared, []);
     allow = true;
     assert.equal(nav.guardSettingsTransition({ selectedPort: 3458 }), true);
-    assert.deepEqual(cleared, ['panel', 'dashboard']);
+    assert.deepEqual(cleared, ['dashboard']);
 });
-test('clean or closed panel cannot mask Dashboard dirty', () => {
-    let entries = settingsDirtyAfter({ panel: false, dashboard: false }, 'dashboard', true);
-    entries = settingsDirtyAfter(entries, 'panel', false);
-    assert.equal(entries.panel || entries.dashboard, true);
+test('the dirty reducer tracks the single remaining settings draft', () => {
+    let entries = settingsDirtyAfter({ dashboard: false }, 'dashboard', true);
+    assert.equal(entries.dashboard, true);
     entries = settingsDirtyAfter(entries, 'dashboard', false);
-    assert.equal(entries.panel || entries.dashboard, false);
+    assert.equal(entries.dashboard, false);
 });
 test('shortcut toggle and tab cycling have separate owners', () => {
     let toggles = 0;
@@ -100,11 +99,17 @@ test('shortcut toggle and tab cycling have separate owners', () => {
         setPreviewRefreshKey() {}, handleSidebarToggle() {} };
     runManagerShortcut('toggleInstanceSettings', deps); assert.equal(toggles, 1);
     runManagerShortcut('nextTab', deps); assert.deepEqual(tabs, ['overview']);
-    runManagerShortcut('switchTab4', deps); assert.deepEqual(tabs, ['overview', 'settings']);
+    // Meta+4 used to select a fourth Workbench tab that no longer exists. Leaving it bound
+    // meant the key silently swapped the whole workspace for the rail settings page, which is
+    // not what a tab shortcut should do — switchTab1..3 still name real tabs.
+    assert.equal(MANAGER_SHORTCUT_ACTIONS.includes('switchTab4' as never), false,
+        'switchTab4 must not survive the Workbench settings tab it selected');
+    assert.equal('switchTab4' in DEFAULT_MANAGER_SHORTCUT_KEYMAP, false,
+        'a retired action must not keep a default binding');
     assert.equal(toggles, 1);
 });
 
-test('panel dirty callback stays stable through renders and cleanup preserves Dashboard dirty', async () => {
+test('the dirty callback stays stable through renders and clears on unmount', async () => {
     const React = await import('react');
     const { JSDOM } = await import('jsdom');
     const dom = new JSDOM('<!doctype html><div id="root"></div>');
@@ -125,21 +130,23 @@ test('panel dirty callback stays stable through renders and cleanup preserves Da
         React.useEffect(() => () => { cleanups++; props.onDirtyChange(false); }, [props.onDirtyChange]);
         return null;
     }
+    // SettingsShell keys its dirty notification and unmount cleanup to callback identity, so an
+    // unstable callback would re-notify on every render or leak a stale dirty flag.
     function Harness(props: { open: boolean }) {
         state = useSettingsDirtyState();
-        return props.open ? React.createElement(Panel, { onDirtyChange: state.onPanelSettingsDirtyChange }) : null;
+        const notify = React.useCallback((dirty: boolean) => state!.onSettingsDirtyChange('dashboard', dirty), [state!.onSettingsDirtyChange]);
+        return props.open ? React.createElement(Panel, { onDirtyChange: notify }) : null;
     }
     try {
         await React.act(async () => { root.render(React.createElement(Harness, { open: true })); });
-        assert.equal(state?.panelSettingsDirty, true);
-        const callback = state?.onPanelSettingsDirtyChange;
-        await React.act(async () => { state?.onSettingsDirtyChange('dashboard', true); });
+        assert.equal(state?.dashboardSettingsDirty, true);
+        const callback = state?.onSettingsDirtyChange;
         await React.act(async () => { root.render(React.createElement(Harness, { open: true })); });
-        assert.equal(state?.onPanelSettingsDirtyChange, callback);
+        assert.equal(state?.onSettingsDirtyChange, callback);
         assert.equal(notifications, 1); assert.equal(cleanups, 0);
         await React.act(async () => { root.render(React.createElement(Harness, { open: false })); });
-        assert.equal(cleanups, 1); assert.equal(state?.panelSettingsDirty, false);
-        assert.equal(state?.settingsDirty, true);
+        assert.equal(cleanups, 1); assert.equal(state?.dashboardSettingsDirty, false);
+        assert.equal(state?.settingsDirty, false);
     } finally {
         await React.act(async () => { root.unmount(); });
         dom.window.close();
@@ -178,21 +185,21 @@ test('settings shortcut captures ordinary inputs once and yields to keybinding e
     }
 });
 
-test('compound settings transition confirms once and clears only departing owners', () => {
+test('a compound transition confirms once and clears the departing draft', () => {
     type Args = Parameters<typeof createInstanceSettingsNavigation>[0];
     let accepted = false, prompts = 0;
     const cleared: string[] = [], writes: unknown[] = [];
     const view: Args['view'] = { sidebarMode: 'settings', activeDetailTab: 'preview',
         setSelectedPort() {}, setSidebarMode() {}, setViewMode() {}, setDrawerOpen() {} };
     const nav = createInstanceSettingsNavigation({ view, selectedPort: 3457, settingsDirty: true,
-        panelSettingsDirty: true, dashboardSettingsDirty: true, clearDirty: entry => cleared.push(entry),
+        dashboardSettingsDirty: true, clearDirty: entry => cleared.push(entry),
         saveUi: async patch => { writes.push(patch); }, confirmDiscard: () => { prompts++; return accepted; } });
-    // A port change departs both owners at once and must confirm exactly once.
+    // A port change and a mode change both depart the same draft; each confirms exactly once.
     assert.equal(nav.guardSettingsTransition({ selectedPort: 3458 }), false);
     assert.equal(prompts, 1); assert.deepEqual(cleared, []);
     accepted = true;
     assert.equal(nav.guardSettingsTransition({ selectedPort: 3458 }), true);
-    assert.equal(prompts, 2); assert.deepEqual(cleared, ['panel', 'dashboard']);
+    assert.equal(prompts, 2); assert.deepEqual(cleared, ['dashboard']);
     cleared.length = 0;
     assert.equal(nav.guardSettingsTransition({ sidebarMode: 'notes' }), true);
     assert.equal(prompts, 3); assert.deepEqual(cleared, ['dashboard']);
