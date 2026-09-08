@@ -1,0 +1,43 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>grounding fixture</title>
+<style>
+  body { font: 14px system-ui; margin: 0; padding: 24px; }
+  .bar { display: flex; gap: 8px; align-items: center; padding: 8px; background: #eee; }
+  .bar button { padding: 6px 10px; }
+  .icon { width: 20px; height: 20px; padding: 0; }
+  .banner { position: fixed; inset: auto 0 0 0; background: #222; color: #fff; padding: 20px; }
+  .stack { position: relative; margin-top: 40px; height: 120px; }
+  .under { position: absolute; inset: 0; }
+  .over { position: absolute; inset: 0; background: rgba(0,0,0,.03); }
+  canvas { border: 1px solid #999; margin-top: 24px; }
+  .twin { margin-top: 24px; display: flex; gap: 12px; }
+</style>
+
+<!-- A crowded toolbar: small icons beside a wide control. -->
+<div class="bar">
+  <button id="save">Save</button>
+  <button id="save-as">Save as…</button>
+  <button id="icon-bold" class="icon" aria-label="Bold">B</button>
+  <button id="icon-italic" class="icon" aria-label="Italic">I</button>
+  <button id="wide" style="flex:1">Publish this document now</button>
+</div>
+
+<!-- An element genuinely covered by an overlay. -->
+<div class="stack">
+  <button id="covered" class="under">Covered button</button>
+  <div id="overlay" class="over"></div>
+</div>
+
+<!-- Duplicate accessible names: ambiguous by construction. -->
+<div class="twin">
+  <button id="twin-a">Open</button>
+  <button id="twin-b">Open</button>
+</div>
+
+<!-- No DOM target at all. -->
+<canvas id="board" width="240" height="120"></canvas>
+
+<!-- A fixed banner over the bottom of the page. -->
+<div id="consent-banner" class="banner">We use cookies. <button id="accept">Accept</button></div>
+

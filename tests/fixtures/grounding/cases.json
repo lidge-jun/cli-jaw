@@ -1,0 +1,57 @@
+{
+  "fixture": "grounding-basic.html",
+  "note": "Each case names the element a correct pipeline should click, or declares that abstaining is the right answer. Expectations are element ids, resolved by the runner from what was actually clicked.",
+  "cases": [
+    {
+      "id": "plain-button",
+      "target": "the Save button",
+      "expected": "save"
+    },
+    {
+      "id": "similar-name",
+      "target": "the Save as button",
+      "expected": "save-as",
+      "why": "substring name matching can confuse this with Save"
+    },
+    {
+      "id": "small-icon",
+      "target": "the Bold icon button",
+      "expected": "icon-bold",
+      "why": "a 20px target beside a wide one"
+    },
+    {
+      "id": "wide-control",
+      "target": "the Publish this document now button",
+      "expected": "wide"
+    },
+    {
+      "id": "covered",
+      "target": "the Covered button",
+      "expectAbstention": true,
+      "why": "an overlay would receive the click"
+    },
+    {
+      "id": "ambiguous",
+      "target": "the Open button",
+      "expectAbstention": true,
+      "why": "two elements share the name"
+    },
+    {
+      "id": "canvas",
+      "target": "the middle of the drawing board",
+      "expected": null,
+      "why": "no DOM ref exists; a coordinate click is correct here"
+    },
+    {
+      "id": "banner-accept",
+      "target": "the Accept button in the cookie banner",
+      "expected": "accept"
+    },
+    {
+      "id": "absent",
+      "target": "the Delete account button",
+      "expectAbstention": true,
+      "why": "the target is not on the page"
+    }
+  ]
+}
