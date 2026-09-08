@@ -268,6 +268,26 @@ Wire limits are explicit: terminal-plus-late-content in one chunk and content in
   싣고 평평한 키는 싣지 않는다. codex/codex-app은 provider 개념이 없어 평평한 맵을 유지한다.
   해석 우선순위: provider 스코프 모델 → 평평한 모델 → provider 목록 → registry 목록.
   스코프 맵이 있어도 **모델 키가 없으면 provider 목록으로 폴백**한다(근거 없는 축소 금지).
+- **Code 카탈로그도 같은 배선을 읽는다** (`src/code-mode/providers/live-models.ts`).
+  `registry-live.ts`의 소비자는 설정 라우트뿐이라 Code 모드는 오랫동안 `CLI_REGISTRY`의
+  정적 목록에 갇혀 있었다. `CodeProvider.describe()`는 동기 함수라 ocx를 await 할 수 없으므로,
+  마지막으로 확보한 `/v1/models` 응답을 메모리에 두고 백그라운드로 갱신하는 스냅샷을 읽는다.
+  (첫 probe가 저하되면 스냅샷은 static fallback이고, 이후 live 응답이 이를 대체한다.)
+  read는 절대 블로킹하지 않고 이미 아는 값을 돌려준다. 규칙:
+  - 저하된 probe(`source:'static'`)는 기존 live 스냅샷을 덮지 않는다. 한 번의 실패로 routed 모델이 사라지면 안 된다.
+  - 빈 목록은 저장하지 않는다. 카탈로그가 비면 `validate()`가 모든 모델을 거절한다.
+  - 실패/저하 시도도 자체 타임스탬프를 남기고 30초 재시도 하한을 지킨다. 성공만 시계를 돌리면
+    stale 스냅샷 + 죽은 proxy 조합에서 카탈로그를 읽을 때마다 probe가 재시작된다.
+  - 스냅샷 read는 proxy를 타는 `codex-app`에서만 일어난다. 필터를 나중에 하면 Claude/Cursor
+    카탈로그 조회가 Codex probe를 예약한다.
+  카탈로그는 `modelSource:'live'`와 `effortsByModel`/`defaultEffortByModel`을 실어 보낸다.
+- **라이브 카탈로그는 이미 도는 세션을 무효화하지 않는다.** `validate()`는 prompt/attach/patch에서
+  세션의 저장된 값으로 다시 호출된다. 목록이 세션 아래에서 바뀔 수 있으므로, 생성 시점에 합법이었던
+  모델이 갑자기 `unsupported_model`이 되면 사용자가 보거나 고칠 수 없는 이유로 세션이 죽는다.
+  그래서 `validate(input, fixed, accepted)`의 `accepted`가 세션이 이미 쓰는 model/effort를 지목하고,
+  **유지되는 값은 오늘의 카탈로그로 재검사하지 않는다** — 모델은 현재 목록을, effort는 현재 union과
+  모델별 집합을 건너뛴다. 다만 세션이 생성 시점에 저장한 capabilities는 계속 적용된다.
+  그것이 네이티브 런타임을 연 계약이기 때문이다. 새로 고르는 값은 여전히 현재 카탈로그로 검사한다.
 - `/effort` 슬래시 명령과 TUI 셀렉터도 같은 소스를 쓴다. 과거에는
   `['off','low','medium','high','max']`를 하드코딩해 `xhigh`가 아예 없고 `ultra`를
   거부했다. 지금은 `resolveEffortLevelsForCli(cli, model)`이 codex 계열이면 ocx

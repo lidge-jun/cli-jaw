@@ -562,6 +562,29 @@ request uncertainty; it stores no transcript, native cursor or permission answer
 Uncertain creation/send recovery requires explicit action and never auto-submits. Auto (YOLO) is an explicit
 provider capability, and opening the catalog never launches a process.
 
+The composer dock groups its controls by how often each is touched:
+`[runtime glyph] [permission] ····· [model] [effort]` on one row, with dictation
+and send trailing the input. Runtime is icon-only and carries its name on the
+button (`aria-label="Runtime: Codex"` plus a title) while the brand SVG stays
+`aria-hidden`; the marks come from `public/assets/providers`, inlined in
+`ProviderGlyph.tsx` because the Manager bundle has no `?raw` convention.
+Model is a filterable dropdown rather than free text — a newly chosen model
+outside the catalog is rejected, so typing could only produce a 400 — and a live Codex
+catalog carries 28+ routed ids. Effort offers the intersection of the selected
+model's advertised set and, for an open session, the capabilities it stored at
+creation; the server checks both. Dictation records through `MediaRecorder` and
+posts to `/api/voice` with `x-stt-only`, appending the transcript to the draft
+instead of sending it, and stays disabled with a stated reason when the browser
+has no `mediaDevices`.
+
+A submitted prompt is visible before the server echoes it. The pending item is
+derived from the draft at read time, not inserted into the session reducer,
+which applies strictly sequence-ordered server events; `clientTurnKey` joins the
+two so the real item replaces the local one. Tool calls collapse to one action
+line (`Read src/app.ts`, `Bash npm test`) and open only on failure, `Done` is
+not printed, and user messages use a right-aligned bubble while the assistant
+keeps the full column as plain prose.
+
 `useCodeController` owns requests and selection fencing. A single Code SSE
 subscription reconciles a full snapshot at watermark H and contiguous events
 after H. Opening transport does not mean synchronization has completed. Compact
