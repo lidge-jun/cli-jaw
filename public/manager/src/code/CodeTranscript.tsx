@@ -21,9 +21,15 @@ const MarkdownRenderer = lazy(() => import('../notes/rendering/MarkdownRenderer'
  */
 const HIDDEN_KINDS: ReadonlySet<CodeItemKind> = new Set<CodeItemKind>(['turn_started', 'turn_completed']);
 
-/** A collapsed tool row against the same row expanded, for the virtualizer. */
+/**
+ * What a collapsible row measures before it has been measured. Collapsed is one
+ * line and exact. Expanded is a guess and deliberately only that: the panes are
+ * capped at 200px each by `.code-tool-output` / `.code-tool-args`, so a call
+ * with both is far taller, and the real number arrives from the ResizeObserver
+ * a frame later. This only has to be closer than one line.
+ */
 const COLLAPSED_ROW_PX = 44;
-const EXPANDED_ROW_PX = 260;
+const EXPANDED_ROW_PX = 320;
 /** Same bound the scroll anchors use, for the same reason. */
 const MAX_OPEN_ROWS = 64;
 
@@ -66,10 +72,12 @@ export function CodeTranscriptItem({ item, provider, sessionKey, workingDir = ''
     // future embed) it falls back to the same failure default.
     const open = expanded ?? (item.status === 'error' && item.kind !== 'reasoning');
     const running = item.status === 'running' || item.status === 'pending';
-    // The verb already says the call is in flight; a second badge saying
-    // "Running" next to "Reading src/app.ts" is the same fact twice. Failure
-    // and cancellation still get a word, because those change what to do next.
-    const toolNote = note === 'Running' || note === 'Pending' ? null : note;
+    // The verb already says the call is in flight; a second badge next to
+    // "Reading src/app.ts" is the same fact twice. Keyed off the status rather
+    // than the badge text, so renaming either vocabulary cannot quietly bring
+    // the duplicate back. Failure and cancellation still get a word, because
+    // those change what to do next.
+    const toolNote = running ? null : note;
     const label = user ? 'You' : assistant ? CODE_RUNTIME_LABELS[provider] : reasoning ? 'Reasoning'
         : item.kind === 'turn_started' ? 'Turn started' : item.kind === 'session_runtime' ? 'Runtime'
             : item.kind === 'permission_request' ? 'Permission record' : item.kind === 'notice' ? 'Notice' : status;
@@ -119,11 +127,26 @@ export function CodeTranscript({ items, provider, sessionKey, workingDir, loadin
     // session's disclosure into another, and bounded so a long-lived tab does
     // not accumulate ids for sessions it will never show again.
     const [openRows, setOpenRows] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+    // `getItemKey` is called by the virtualizer outside render, so it reads the
+    // choice through a ref; the callback identity is refreshed below so the
+    // virtualizer actually re-keys after a toggle.
+    const openRef = useRef(openRows); openRef.current = openRows;
     const [historyPending, setHistoryPending] = useState(false);
     const [historyError, setHistoryError] = useState<{ sessionKey: string; message: string } | null>(null);
     const historyGuard = useRef(false);
     const firstId = visible[0]?.itemId;
-    const getItemKey = useCallback((index: number) => `${sessionKey}:${itemsRef.current[index]?.itemId ?? index}`, [sessionKey, firstId]);
+    // The disclosure is part of the key, because a measured size always beats an
+    // estimate: without it a row measured while collapsed would keep that height
+    // after it expands, and no better estimate could correct it. Opening a row
+    // gives it a key that has never been measured, so it falls back to the
+    // estimate until the ResizeObserver reports the real height. The identity
+    // that has to stay stable is the DOM node's, which comes from the React
+    // `key` on the row, and that is unchanged.
+    const getItemKey = useCallback((index: number) => {
+        const item = itemsRef.current[index];
+        if (!item) return `${sessionKey}:${index}`;
+        return `${sessionKey}:${item.itemId}${isRowOpen(openRef.current, sessionKey, item) ? ':open' : ''}`;
+    }, [sessionKey, firstId, openRows]);
     const estimateSize = useCallback((index: number) => {
         const item = itemsRef.current[index];
         const collapsible = item?.kind === 'tool_call' || item?.kind === 'file_change' || item?.kind === 'reasoning';
@@ -150,13 +173,7 @@ export function CodeTranscript({ items, provider, sessionKey, workingDir, loadin
             }
             return next;
         });
-        // The virtualizer measured this row at its old height, and nothing about
-        // a toggle changes item count or identity, so no option update reaches
-        // it. Hand it the new estimate directly; it corrects the scroll offset
-        // when the row sits above the viewport.
-        const index = itemsRef.current.findIndex(entry => entry.itemId === itemId);
-        if (index >= 0) virtual.resizeItem(index, open ? EXPANDED_ROW_PX : COLLAPSED_ROW_PX);
-    }, [sessionKey, virtual]);
+    }, [sessionKey]);
     async function older() {
         if (historyGuard.current) return;
         historyGuard.current = true; setHistoryPending(true); setHistoryError(null);

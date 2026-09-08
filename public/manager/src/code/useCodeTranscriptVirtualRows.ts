@@ -21,14 +21,6 @@ export type CodeTranscriptVirtualRows = {
     virtualItems: VirtualItem[];
     totalSize: number;
     restoreAnchor: (index: number, offset: number) => void;
-    /**
-     * Discard one row's measured height. A collapsed tool row and the same row
-     * expanded differ by hundreds of pixels, and `estimateSize` alone cannot
-     * correct a size the virtualizer already measured: nothing about a toggle
-     * changes `count` or item identity, so no option update fires. Without
-     * this the stale height survives until the whole session is switched.
-     */
-    resizeItem: (index: number, size: number) => void;
 };
 
 export function useCodeTranscriptVirtualRows(args: {
@@ -103,10 +95,6 @@ export function useCodeTranscriptVirtualRows(args: {
             const position = virtualizer.getOffsetForIndex(index, 'start');
             if (position) virtualizer.scrollToOffset(position[0] + offset, { behavior: 'auto' });
         },
-        // `resizeItem` also adjusts the scroll offset when the row sits above the
-        // viewport, so expanding an off-screen row does not shift what the reader
-        // is looking at.
-        resizeItem: (index, size) => { virtualizer.resizeItem(index, size); },
         measureElement: element => {
             if (element) virtualizer.measureElement(element);
         },

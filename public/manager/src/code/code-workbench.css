@@ -149,16 +149,22 @@
 /* A call in flight reads as in-flight. The verb already says so; this keeps the
    row alive while it streams, and stopping is what marks completion -- no chip
    that says "Done" on every successful row. */
-.code-tool-name-running {
-    background: linear-gradient(90deg,
-        var(--text-dim) 0%, var(--text-dim) 34%,
-        var(--text-primary) 50%,
-        var(--text-dim) 66%, var(--text-dim) 100%);
-    background-size: 300% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: code-tool-shimmer 4s linear infinite;
+/* The label is clipped with an ellipsis, and transparent text over a clipped
+   background is invisible rather than dim wherever the clip does not apply, so
+   the gradient is opted into only where it is supported. */
+.code-tool-name-running { color: var(--text-dim); }
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+    .code-tool-name-running {
+        background: linear-gradient(90deg,
+            var(--text-dim) 0%, var(--text-dim) 34%,
+            var(--text-primary) 50%,
+            var(--text-dim) 66%, var(--text-dim) 100%);
+        background-size: 300% 100%;
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: code-tool-shimmer 4s linear infinite;
+    }
 }
 @keyframes code-tool-shimmer {
     from { background-position: 150% 0; }
@@ -167,10 +173,10 @@
 /* Transparent text has no fallback under a forced palette, and a reader who
    asked for less motion should not get a looping gradient either. */
 @media (prefers-reduced-motion: reduce) {
-    .code-tool-name-running { animation: none; background: none; color: var(--text-primary); }
+    .code-tool-name-running { animation: none; background: none; color: var(--text-primary); -webkit-text-fill-color: currentColor; }
 }
 @media (forced-colors: active) {
-    .code-tool-name-running { animation: none; background: none; color: CanvasText; forced-color-adjust: none; }
+    .code-tool-name-running { animation: none; background: none; color: CanvasText; -webkit-text-fill-color: currentColor; forced-color-adjust: none; }
 }
 .code-tool-status {
     margin-left: auto;
