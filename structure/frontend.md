@@ -384,6 +384,21 @@ Rows use an inline-size container: below 240px of row content width, quick actio
 
 Workbench has Overview/Preview/Logs modes. The Settings tab and the command-bar gear are both removed: the sidebar rail is the only settings entry point, it renders manager scope only, and Meta+, opens it through the same dirty guard. The Workbench keeps Overview/Preview/Logs with its Preview iframe mounted across tab changes. `ui.instanceSettingsOpen` is accepted by the registry for one version but no longer written; page saves still target the selected instance API.
 
+The manager never renders instance settings. It asks the instance to open its own page, and the
+request travels three hops: `InstancePreview` posts `jaw-preview-settings-open` to the Classic
+document, whose relay in `js/features/settings.ts` calls `toggleSettingsPage(true)`, which owns the
+settings iframe. That iframe accepts messages only from its immediate parent under strict
+same-origin, and its parent is Classic, not the manager, so a direct post cannot reach it.
+
+The two guards in `settings.ts` differ on purpose and must not be collapsed. The iframe guard is
+strict same-origin because that frame is same-origin by construction. The manager guard uses
+`isLocalPreviewRelayOrigin`, because under the default origin-port preview transport the manager
+runs on a different loopback port and a strict equality check drops every request silently. The
+trigger is a workbench mode-bar button scoped to the selected instance; failures surface in the
+existing `.lifecycle-state` notice. Opening settings fills the instance viewport: `#settingsPage`
+spans the whole grid and hides both sidebars plus the chat area, and the mobile drawer scrim is
+suppressed because it is a pseudo-element of `body` rather than of the sidebar.
+
 `settings/settings-registry.ts` supplies Instance/Manager scopes to `SettingsShell` and its button-based sidebar (`aria-current="page"`). Each page retains its save owner. `public/settings/index.html` and `settings-standalone.tsx` build to `public/dist/settings/index.html`; Classic's header gear opens `#settingsPage`, spanning the center and right sidebar, with this entry in a titled iframe and Instance scope only. The same header moves into the page while chat is hidden/inert; the right sidebar retains only Agents and Skills. Back/Escape request the iframe's dirty guard before `settings:back` returns to chat and restores composer focus. Theme messages are source/origin checked and the relative iframe URL preserves legacy proxy prefixes.
 
 `SettingsPage` wraps the existing Shell save owner for both Workbench and Dashboard settings mode. Navigation uses Back, group eyebrows and 16px registry icons; the 264px nav collapses to 40px icon buttons below 1024px viewport width. The rounded content area caps its inner width at 896px with 32px horizontal padding, a 24px title (30px in wide settings hosts), 12px section cards and divided 16px/12px rows. Controls use 192px (280px for wide hosts), with the existing below-720px host rule stacking fields. Instance selection and Manager registry saves retain their distinct clients and dirty owners.
