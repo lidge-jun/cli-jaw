@@ -153,6 +153,42 @@ export const ABSTENTION_CODES = new Set([
     'COMPUTER_OBSERVATION_STALE',
 ]);
 
+/**
+ * The pipeline looked and did not find it.
+ *
+ * Separate from the abstention codes above because it is a different claim:
+ * those say "I found something and declined to act", this says "there was
+ * nothing to act on". A reader chasing a missing button needs to know which.
+ */
+export const NOT_FOUND_CODE = 'COMPUTER_TARGET_NOT_FOUND';
+
+/**
+ * The call could not be completed for reasons that have nothing to do with
+ * the page: a capture that could not be measured, a viewport that could not be
+ * read, a scale factor that was absent.
+ *
+ * These used to arrive with no code at all, which made them indistinguishable
+ * from a refusal — an infrastructure failure scored as commendable restraint,
+ * and printed to a human as a missing element.
+ */
+export const INFRASTRUCTURE_CODES = new Set([
+    'COMPUTER_CAPTURE_UNMEASURABLE',
+    'COMPUTER_CANDIDATE_OUT_OF_BOUNDS',
+    'COMPUTER_VIEWPORT_UNAVAILABLE',
+    'COMPUTER_CAPTURE_NO_DPR',
+]);
+
+/** What a failed vision-click actually was, for callers that must say so. */
+export type FailureKind = 'abstention' | 'not-found' | 'infrastructure' | 'unknown';
+
+export function classifyFailure(code: string | null | undefined): FailureKind {
+    if (!code) return 'unknown';
+    if (ABSTENTION_CODES.has(code)) return 'abstention';
+    if (code === NOT_FOUND_CODE) return 'not-found';
+    if (INFRASTRUCTURE_CODES.has(code)) return 'infrastructure';
+    return 'unknown';
+}
+
 export function classify(
     response: { success?: boolean; code?: string; reason?: string; ref?: string },
     expected: string,

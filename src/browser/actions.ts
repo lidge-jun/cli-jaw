@@ -275,6 +275,31 @@ export async function hitTestPoint(
  * element is detached, hidden, or zero-area are omitted rather than reported
  * with a meaningless rectangle — an absent box is a truthful answer.
  */
+/**
+ * Which page is in front, and nothing else.
+ *
+ * Freshness is a safety question and it must not be answered as a side effect
+ * of an expensive, failure-prone, opt-out-able geometry capture. `elementBoxes`
+ * happens to return the same identity, but measuring two hundred elements to
+ * learn a URL means a caller who declines reconciliation also declines the
+ * navigation guard. This costs one CDP round-trip and cannot be turned off.
+ *
+ * Returns null when identity cannot be read. That is "unknown", not "changed":
+ * a failed probe says nothing about the page, and refusing every click because
+ * a diagnostic call failed would be a denial of service of our own making.
+ */
+export async function observePageIdentity(
+    port: number,
+): Promise<{ url: string; targetId: string | null } | null> {
+    try {
+        const page = await requireActivePage(port);
+        const activeTab = await getActiveTab(port).catch(() => ({ ok: false as const }));
+        return { url: page.url(), targetId: normalizeActiveTargetId(activeTab) };
+    } catch {
+        return null;
+    }
+}
+
 export async function elementBoxes(
     port: number,
     opts: { interactive?: boolean; limit?: number; budgetMs?: number } = {},

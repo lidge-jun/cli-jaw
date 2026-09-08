@@ -4,9 +4,9 @@
  */
 import { spawn } from 'child_process';
 import { StringDecoder } from 'string_decoder';
-import { screenshot, mouseClick, snapshot, elementBoxes, click as clickRef, hitTestPoint } from './actions.js';
+import { screenshot, mouseClick, snapshot, elementBoxes, click as clickRef, hitTestPoint, observePageIdentity } from './actions.js';
 import { judgeHit } from './occlusion.js';
-import { cropAroundPoint, judgeVerification, isObservationStale } from './verify-candidate.js';
+import { cropAroundPoint, judgeVerification, isObservationStale, remainingObservationBudget } from './verify-candidate.js';
 import { buildVisionInvocation, explainExit } from './vision-provider.js';
 import { reconcileVisionCandidate, assertFreshObservationBundle, type ReconcileResult } from './web-ai/candidate-reconcile.js';
 import { sanitizeTarget, appendBounded } from './vision-input.js';
@@ -36,6 +36,15 @@ export interface VisionClickOptions {
      */
     bypassSandbox?: boolean;
 }
+
+/** The flat ceiling a provider child has always had, now an upper bound rather than the whole story. */
+export const VISION_PROVIDER_TIMEOUT_MS = 60_000;
+
+/**
+ * Options the pipeline passes down to a provider, as distinct from the
+ * caller-facing click options above.
+ */
+type ProviderRunOptions = VisionClickOptions & { timeoutMs?: number };
 
 type JsonRecord = Record<string, unknown>;
 type VisionCoordinates = {
@@ -81,10 +90,10 @@ function collectEventTexts(value: unknown): string[] {
  * @param {object} opts - { provider: 'codex' }
  * @returns {Promise<{ found: boolean, x: number, y: number, description?: string, provider: string }>}
  */
-export async function extractCoordinates(screenshotPath: string, target: string, opts: VisionClickOptions = {}): Promise<VisionCoordinates> {
+export async function extractCoordinates(screenshotPath: string, target: string, opts: ProviderRunOptions = {}): Promise<VisionCoordinates> {
     const provider = opts.provider || 'codex';
     switch (provider) {
-        case 'codex': return codexVision(screenshotPath, target, opts.bypassSandbox === true);
+        case 'codex': return codexVision(screenshotPath, target, opts.bypassSandbox === true, opts.timeoutMs);
         default: throw new Error(`Unknown vision provider: ${provider}. Phase 2 supports 'codex' only.`);
     }
 }
@@ -93,7 +102,12 @@ export async function extractCoordinates(screenshotPath: string, target: string,
  * Codex CLI vision provider.
  * Spawns `codex exec -i <image> --json` and parses NDJSON response.
  */
-function codexVision(screenshotPath: string, target: string, bypassSandbox = false): Promise<VisionCoordinates> {
+function codexVision(
+    screenshotPath: string,
+    target: string,
+    bypassSandbox = false,
+    timeoutMs = VISION_PROVIDER_TIMEOUT_MS,
+): Promise<VisionCoordinates> {
     const safeTarget = sanitizeTarget(target);
     const prompt = [
         `Look at this screenshot image carefully.`,
@@ -117,7 +131,10 @@ function codexVision(screenshotPath: string, target: string, bypassSandbox = fal
             // when the timeout killed it — burning the full budget on a turn
             // that had already answered.
             stdio: ['ignore', 'pipe', 'pipe'],
-            timeout: 60000,
+            // Bounded by whatever freshness budget is left, not by a constant
+            // unrelated to it. A child whose answer would arrive after the
+            // observation expires has nothing useful left to compute.
+            timeout: Math.max(1, Math.min(timeoutMs, VISION_PROVIDER_TIMEOUT_MS)),
         });
 
         let stdout = '';
@@ -195,6 +212,12 @@ export async function visionClick(port: number, target: string, opts: VisionClic
     // 1. Screenshot (includes DPR)
     const viewportProbe = await screenshot(port, { json: true });
     const observedAt = Date.now();
+    // Page identity at the moment of observation. Everything below compares
+    // against THIS, so it is captured before any model round-trip.
+    const observedIdentity = {
+        ...(viewportProbe.url ? { url: viewportProbe.url } : {}),
+        ...(viewportProbe.targetId ? { targetId: viewportProbe.targetId } : {}),
+    };
     const clip = opts.clip || resolveRegionClip(opts.region, viewportProbe.viewport);
     const ss = clip ? await screenshot(port, { clip, json: true }) : viewportProbe;
     const dpr = typeof ss.dpr === 'number' && Number.isFinite(ss.dpr) ? ss.dpr : 1;
@@ -202,11 +225,16 @@ export async function visionClick(port: number, target: string, opts: VisionClic
     // 2. Vision → coordinates (image pixel space)
     const result = await extractCoordinates(ss.path, target, {
         provider: opts.provider || 'codex',
+        timeoutMs: remainingObservationBudget(observedAt, Date.now(), VISION_PROVIDER_TIMEOUT_MS),
         ...(opts.bypassSandbox === true ? { bypassSandbox: true } : {}),
     });
 
     if (!result.found) {
-        return { success: false, reason: 'target not found', provider: result.provider };
+        // The one case where "not found" is literally what happened: the model
+        // looked at the image and did not see it. Every other failure below
+        // says something different and now carries its own name, because the
+        // CLI and the evaluation harness both key on the code.
+        return { success: false, reason: 'target not found', code: 'COMPUTER_TARGET_NOT_FOUND', provider: result.provider };
     }
 
     // 2b. Bound the answer in the frame it was actually given: the pixel size
@@ -222,6 +250,7 @@ export async function visionClick(port: number, target: string, opts: VisionClic
         return {
             success: false,
             reason: 'capture size unavailable, so the coordinate could not be bounds-checked',
+            code: 'COMPUTER_CAPTURE_UNMEASURABLE',
             provider: result.provider,
         };
     }
@@ -231,7 +260,7 @@ export async function visionClick(port: number, target: string, opts: VisionClic
         frame,
     );
     if (!checked.found) {
-        return { success: false, reason: checked.reason ?? 'out of bounds', provider: result.provider };
+        return { success: false, reason: checked.reason ?? 'out of bounds', code: 'COMPUTER_CANDIDATE_OUT_OF_BOUNDS', provider: result.provider };
     }
 
     // 3. DPR correction: image pixels → CSS pixels
@@ -263,8 +292,20 @@ export async function visionClick(port: number, target: string, opts: VisionClic
     // first one was wrong.
     let verifiedPoint: { x: number; y: number } | null = null;
     if (opts.verifyBeforeClick) {
+        // Refuse BEFORE paying, not after. The expiry check further down used
+        // to be the only one, and it sat past both provider round-trips — so
+        // an observation that had already expired still bought a crop capture
+        // and a second child whose answer was guaranteed to be discarded.
+        if (isObservationStale(observedAt, Date.now())) {
+            return {
+                success: false,
+                reason: 'the observation expired before verification could start; re-run the lookup',
+                code: 'COMPUTER_OBSERVATION_EXPIRED',
+                provider: result.provider,
+            };
+        }
         if (!viewportProbe.viewport) {
-            return { success: false, reason: 'verification needs a viewport and none was available', provider: result.provider };
+            return { success: false, reason: 'verification needs a viewport and none was available', code: 'COMPUTER_VIEWPORT_UNAVAILABLE', provider: result.provider };
         }
         const crop = cropAroundPoint(css, viewportProbe.viewport);
         const cropShot = await screenshot(port, { clip: crop });
@@ -272,15 +313,31 @@ export async function visionClick(port: number, target: string, opts: VisionClic
         // possibly-defaulted 1, which would double every local coordinate on a
         // retina display. The main path already refuses to guess here.
         if (typeof cropShot.dpr !== 'number' || !Number.isFinite(cropShot.dpr)) {
-            return { success: false, reason: 'verification capture reported no device pixel ratio', provider: result.provider };
+            return { success: false, reason: 'verification capture reported no device pixel ratio', code: 'COMPUTER_CAPTURE_NO_DPR', provider: result.provider };
+        }
+        // Same posture as the main path at the top: an unmeasurable capture
+        // cannot bound a coordinate. That path fails closed and this one used
+        // to proceed, which is an asymmetry with no reason behind it.
+        if (!cropShot.image) {
+            return {
+                success: false,
+                reason: 'verification capture size unavailable, so the second answer could not be bounded',
+                code: 'COMPUTER_CAPTURE_UNMEASURABLE',
+                provider: result.provider,
+            };
         }
         const cropDpr = cropShot.dpr;
         const second = await extractCoordinates(cropShot.path, target, {
             provider: opts.provider || 'codex',
+            timeoutMs: remainingObservationBudget(observedAt, Date.now(), VISION_PROVIDER_TIMEOUT_MS),
             ...(opts.bypassSandbox === true ? { bypassSandbox: true } : {}),
         });
         const local = second.found ? { x: second.x / cropDpr, y: second.y / cropDpr } : null;
-        const outcome = judgeVerification(local, crop, css);
+        // Judge against the rectangle actually CAPTURED. The requested crop is
+        // clamped to the viewport before capture, and using the request would
+        // bound the second answer against a region larger than the image it
+        // came from — a looser check than the evidence warrants.
+        const outcome = judgeVerification(local, cropShot.clip ?? crop, css);
         if (!outcome.agreed) {
             return { success: false, reason: outcome.reason, code: 'COMPUTER_VERIFY_DISAGREED', provider: result.provider };
         }
@@ -307,6 +364,40 @@ export async function visionClick(port: number, target: string, opts: VisionClic
         };
     }
 
+    // 3b-bis. Did the page change under us?
+    //
+    // This is a safety question and it is asked on its own terms. It used to
+    // live inside the reconciliation block, which meant two things: a caller
+    // passing `reconcile: false` — a QUALITY preference — silently lost the
+    // navigation guard as well, and the assertion's throw was caught by the
+    // same `catch` that exists to tolerate a failed geometry capture. Observed
+    // navigation, the one condition that must stop a click, produced a raw
+    // coordinate click on a page that no longer existed.
+    //
+    // Identity is one cheap round-trip and does not depend on measuring
+    // anything. Unreadable identity is UNKNOWN, not changed: a failed probe
+    // says nothing about the page, so the click proceeds and the response says
+    // the freshness could not be confirmed rather than pretending it was.
+    const liveIdentity = await observePageIdentity(port);
+    let freshness: 'verified' | 'unknown' = 'unknown';
+    if (liveIdentity) {
+        try {
+            assertFreshObservationBundle(observedIdentity, {
+                ...(liveIdentity.url ? { url: liveIdentity.url } : {}),
+                ...(liveIdentity.targetId ? { targetId: liveIdentity.targetId } : {}),
+            });
+            freshness = 'verified';
+        } catch (e: unknown) {
+            return {
+                success: false,
+                reason: (e as Error).message,
+                code: 'COMPUTER_OBSERVATION_STALE',
+                candidate: clickPoint,
+                provider: result.provider,
+            };
+        }
+    }
+
     // 3c. Reconcile against element geometry before falling back to a raw
     // coordinate. The browser already knows where its elements are, so a point
     // landing inside exactly one of them is really a click on that element —
@@ -325,28 +416,16 @@ export async function visionClick(port: number, target: string, opts: VisionClic
     if (opts.reconcile !== false) {
         try {
             const boxes = await elementBoxes(port, { interactive: true });
-            // The screenshot was taken before a model round-trip that takes
-            // seconds. If the page moved on since, the point is stale and
-            // reconciling it against fresh geometry resolves confidently to
-            // whatever now occupies those pixels.
-            assertFreshObservationBundle(
-                {
-                    ...(boxes.url ? { url: boxes.url } : {}),
-                    ...(boxes.targetId ? { targetId: boxes.targetId } : {}),
-                },
-                {
-                    ...(viewportProbe.url ? { url: viewportProbe.url } : {}),
-                    ...(viewportProbe.targetId ? { targetId: viewportProbe.targetId } : {}),
-                },
-            );
             decision = reconcileVisionCandidate({
                 candidate: { point: clickPoint, confidence: 1 },
                 bundle: { refs: boxes.refs },
             });
             boxRefs = boxes.refs;
         } catch {
-            // Capture or freshness failed. Reconciliation is an improvement,
-            // not a precondition, so the coordinate path below still runs.
+            // Only the capture is guarded here now. Reconciliation is an
+            // improvement, not a precondition, so the coordinate path below
+            // still runs — but freshness is decided above, on its own, and no
+            // longer disappears into this catch.
             decision = null;
         }
     }
@@ -407,6 +486,7 @@ export async function visionClick(port: number, target: string, opts: VisionClic
             raw: { x: result.x, y: result.y },
             clip: ss.clip ?? clip,
             dpr,
+            freshness,
             provider: result.provider,
             description: result.description,
             snap: refSnap,
@@ -427,6 +507,7 @@ export async function visionClick(port: number, target: string, opts: VisionClic
         raw: { x: result.x, y: result.y },
         clip: ss.clip ?? clip,
         dpr,
+        freshness,
         provider: result.provider,
         description: result.description,
         snap,
