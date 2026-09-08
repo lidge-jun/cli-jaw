@@ -16,7 +16,14 @@ test('BOP-001: snapshot supports maxNodes/json and occurrence-safe refs', () => 
     assert.match(actionsSrc, /occurrence/);
     assert.match(actionsSrc, /latestSnapshot/);
     assert.match(actionsSrc, /targetId: normalizeActiveTargetId\(activeTab\)/);
-    assert.match(actionsSrc, /activeTargetId === latestSnapshot\.targetId/);
+    // This used to assert the ref lookup's cache guard, which compared the
+    // active target against the stored snapshot's. That branch is gone: none
+    // of its conditions could see a DOM mutation, while `.nth(occurrence)`
+    // indexes the live DOM at click time, so it was the one remaining route to
+    // a locator with no freshness check. Refs are now always resolved against
+    // a fresh parse, with the previous one held as the comparison basis.
+    assert.match(actionsSrc, /const previousState = latestSnapshot;/);
+    assert.doesNotMatch(actionsSrc, /cacheUsable/);
 });
 
 test('BOP-002: screenshot supports json and validated clip metadata', () => {

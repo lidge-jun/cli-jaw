@@ -2,6 +2,7 @@ import { getActivePage, getCdpSession, getBrowserStateVersion, markBrowserStateC
 import { JAW_HOME } from '../core/config.js';
 import { join } from 'path';
 import fs from 'fs';
+import { createHash } from 'crypto';
 import { imageSize } from './image-size.js';
 import { hitTestInPage } from './occlusion.js';
 import { clampClipToViewport } from './verify-candidate.js';
@@ -27,10 +28,29 @@ type SnapshotNode = {
 
 type SnapshotState = {
     snapshotId: string;
+    /**
+     * Bumped by navigation-ish actions, never by the page changing itself.
+     *
+     * Read by nothing since the ref cache was removed — its four conditions
+     * could not see a DOM mutation, which is why that branch is gone. Kept
+     * because the snapshotId round-trip will need to say which browser epoch a
+     * caller's snapshot belongs to, and recomputing it later is not free.
+     */
     stateVersion: number;
     targetId: string | null;
     url: string;
     nodes: SnapshotNode[];
+    /**
+     * A digest of the node list, so a shift can be detected at all.
+     *
+     * A ref is a position in a parse, not a handle on an element. Comparing
+     * one node's role, name and occurrence therefore asks whether the LOCATOR
+     * would be spelled the same, which is a different question from whether
+     * the ELEMENT is the same: delete one row from ten identical ones and
+     * every surviving index still carries a byte-identical tuple while naming
+     * its neighbour. Only the whole list can say the positions moved.
+     */
+    digest: string;
 };
 
 type ClipRect = { x: number; y: number; width: number; height: number };
@@ -187,6 +207,11 @@ export async function snapshot(port: number, opts: BrowserActionOptions = {}) {
         }
     }
 
+    // The whole parse, held before any filtering. It is what the refs were
+    // numbered against and the only view of the page that does not depend on
+    // how this particular call was asked.
+    const unfiltered = nodes;
+
     if (opts["interactive"]) {
         nodes = nodes.filter(n => INTERACTIVE_ROLES.includes(n.role));
     }
@@ -201,8 +226,28 @@ export async function snapshot(port: number, opts: BrowserActionOptions = {}) {
         targetId: normalizeActiveTargetId(activeTab),
         url: page.url(),
         nodes,
+        // Digest the UNFILTERED parse, not the list being returned.
+        //
+        // `interactive` and `maxNodes` shape what a caller is shown; they say
+        // nothing about the page. Fingerprinting the shown list would make the
+        // digest depend on the request, so a later lookup that re-snapshots
+        // with different options would compare 40 interactive nodes against
+        // 400 unfiltered ones and conclude the page moved every single time —
+        // on a page that had not changed by one byte.
+        digest: snapshotDigest(unfiltered),
     };
-    if (opts["json"]) return { nodes, meta: { total, shown: nodes.length, snapshotId: latestSnapshot.snapshotId } };
+    // `digest` is DIAGNOSTIC. A caller can hold it to see whether the page
+    // changed between two snapshots it took itself, but it is not a token: ref
+    // lookups compare against the most recent internal parse, which rotates
+    // whenever anything re-snapshots, so a held digest does not mean "my refs
+    // were validated against what I saw". Binding the check to the caller's
+    // own observation needs the snapshotId round-trip, which is its own unit.
+    if (opts["json"]) {
+        return {
+            nodes,
+            meta: { total, shown: nodes.length, snapshotId: latestSnapshot.snapshotId, digest: latestSnapshot.digest, digestIsDiagnostic: true },
+        };
+    }
     return nodes;
 }
 
@@ -214,6 +259,32 @@ function annotateOccurrences(nodes: Omit<SnapshotNode, 'occurrence'>[]): Snapsho
         counts.set(key, occurrence + 1);
         return { ...node, occurrence };
     });
+}
+
+/**
+ * A fingerprint of the parse a set of refs came from.
+ *
+ * Includes `depth` because a node moving between parents changes what a ref
+ * means without changing its role or name, and the node count because an
+ * insertion and a deletion elsewhere can otherwise cancel out.
+ *
+ * This is deliberately coarse. It answers "is this the same list of nodes in
+ * the same order", which is the only question positional refs can be honest
+ * about — not "is this the same page", which is a claim the accessibility
+ * tree cannot make.
+ */
+export function snapshotDigest(nodes: Array<Pick<SnapshotNode, 'role' | 'name' | 'depth'>>): string {
+    const h = createHash('sha1');
+    h.update(String(nodes.length));
+    for (const n of nodes) {
+        h.update('\u0000');
+        h.update(n.role);
+        h.update('\u0000');
+        h.update(n.name);
+        h.update('\u0000');
+        h.update(String(n.depth));
+    }
+    return h.digest('hex').slice(0, 16);
 }
 
 /**
@@ -265,25 +336,126 @@ export function locatorForNode(page: Page, node: Pick<SnapshotNode, 'role' | 'na
 
 // ─── ref → locator ─────────────────────────────
 
+/**
+ * Re-find a node the caller saw, after the list it came from moved.
+ *
+ * A shifted list makes the REF meaningless without making the INTENT
+ * meaningless: if what the caller pointed at is still there and still
+ * unambiguous, that is the element they meant.
+ *
+ * Uniqueness in the fresh list is not enough to say so, which is the trap this
+ * function exists inside. Two rows each carrying `button "Delete"`, the caller
+ * points at the first, the page removes that row — now exactly one Delete
+ * remains, and resolving to it deletes the OTHER row. Removal is what
+ * manufactured the uniqueness, so the rule is at its weakest precisely when
+ * the caller's element is the thing that went away. That is the original
+ * defect reproduced inside its own fix, on an operation nobody can undo.
+ *
+ * So uniqueness must hold on BOTH sides. A name that was unique before and is
+ * unique now is the same element by any reading available here. A set that
+ * shrank to one is ambiguous, not recovered.
+ *
+ * `depth` participates because the digest uses it: the key that decides which
+ * element to click should not be weaker than the key that decides whether to
+ * be suspicious. An empty name is not identifying at all — `parseAriaYaml`
+ * folds a name its regex failed to capture into the same bucket as a genuinely
+ * unnamed node, so recovering `button ""` to some other `button ""` would be a
+ * wrong click justified by a parser artifact.
+ */
+export function recoverNode(
+    previous: SnapshotNode,
+    previousAll: SnapshotNode[],
+    fresh: SnapshotNode[],
+): SnapshotNode | 'ambiguous' | 'absent' | 'moved' {
+    if (!previous.name) return 'ambiguous';
+    const same = (n: SnapshotNode) =>
+        n.role === previous.role && n.name === previous.name && n.depth === previous.depth;
+    if (previousAll.filter(same).length !== 1) return 'ambiguous';
+    const matches = fresh.filter(same);
+    if (matches.length === 1) return matches[0] as SnapshotNode;
+    if (matches.length > 1) return 'ambiguous';
+    // Nothing at that role, name AND depth. The element may still be on the
+    // page one level in or out — a modal wrapped it, a section above it
+    // expanded — so "absent" would be a claim this cannot support. Only when
+    // the role and name are gone entirely is it really gone.
+    return fresh.some(n => n.role === previous.role && n.name === previous.name)
+        ? 'moved'
+        : 'absent';
+}
+
 async function refToLocator(page: Page, port: number, ref: string): Promise<Locator> {
-    let nodes: SnapshotNode[];
-    const activeTab = await getActiveTab(port).catch(() => ({ ok: false as const }));
-    const activeTargetId = normalizeActiveTargetId(activeTab);
-    if (
-        latestSnapshot
-        && latestSnapshot.targetId
-        && activeTargetId === latestSnapshot.targetId
-        && latestSnapshot.stateVersion === getBrowserStateVersion()
-        && latestSnapshot.url === page.url()
-    ) {
-        nodes = latestSnapshot.nodes;
-    } else {
-        const fresh = await snapshot(port) as SnapshotNode[];
-        nodes = fresh;
+    // Capture the basis BEFORE anything can replace it. `snapshot()` assigns
+    // `latestSnapshot` before it returns, so reading the module state after
+    // the call would compare the fresh parse against itself — a check that
+    // passes unconditionally and looks like it is working.
+    const previousState = latestSnapshot;
+    // There is no cache branch any more, and its absence is the point.
+    //
+    // It used to resolve a ref straight out of the stored parse when the tab,
+    // URL and state version all matched. None of those can see a DOM
+    // mutation — `click` and `type` do not bump the state version — and
+    // `occurrence` is not a handle: it becomes `.nth(occurrence)` against the
+    // LIVE DOM at click time, so a feed prepending one same-named element
+    // silently shifted every index. That was the one remaining route to a
+    // locator with no freshness check at all.
+    //
+    // It also almost never ran. `resolveActiveTargetId` returns null unless
+    // `verifiedActiveTargetId` was set, which only `switchTab` and one branch
+    // of `createTab` do, so `previousState.targetId` was falsy and the guard
+    // failed on every ordinary navigate-snapshot-click flow. Keeping it would
+    // have preserved an unguarded path for the benefit of two callers, and a
+    // cache that cannot be validated without re-snapshotting is not a cache.
+    const fresh = await snapshot(port) as SnapshotNode[];
+    const node = fresh.find(n => n.ref === ref);
+
+    // No previous parse at all: there is no claim to contradict, so the lookup
+    // proceeds. That is the fail-open posture `assertFreshObservationBundle`
+    // takes for a MISSING value.
+    if (!previousState) {
+        if (!node) throw new Error(`ref ${ref} not found — re-run snapshot`);
+        return locatorForNode(page, node);
     }
-    const node = nodes.find(n => n.ref === ref);
-    if (!node) throw new Error(`ref ${ref} not found — re-run snapshot`);
-    return locatorForNode(page, node);
+
+    // A basis taken of a DIFFERENT page is the opposite case, and folding the
+    // two together was a mistake: an absent basis says nothing, while a basis
+    // from another URL is affirmative evidence that every positional ref is
+    // meaningless. The precedent says so too —
+    // `assertFreshObservationBundle` throws on a known URL mismatch and fails
+    // open only when a side is absent.
+    if (previousState.url !== page.url()) {
+        throw new Error(
+            `ref ${ref} was taken on ${previousState.url} and the page is now ${page.url()} — re-run snapshot`,
+        );
+    }
+
+    const moved = previousState.digest !== snapshotDigest(fresh);
+    if (!moved) {
+        if (!node) throw new Error(`ref ${ref} not found — re-run snapshot`);
+        return locatorForNode(page, node);
+    }
+
+    // The list moved, so this ref is a position that no longer means what it
+    // meant. Recover by intent rather than by index.
+    const was = previousState.nodes.find(n => n.ref === ref);
+    if (!was) throw new Error(`ref ${ref} not found — re-run snapshot`);
+
+    const recovered = recoverNode(was, previousState.nodes, fresh);
+    if (recovered === 'absent') {
+        throw new Error(
+            `ref ${ref} named ${was.role} "${was.name}", which is no longer on the page — re-run snapshot`,
+        );
+    }
+    if (recovered === 'moved') {
+        throw new Error(
+            `ref ${ref} named ${was.role} "${was.name}", which is still on the page but somewhere else in the tree — re-run snapshot`,
+        );
+    }
+    if (recovered === 'ambiguous') {
+        throw new Error(
+            `the page changed and ref ${ref} (${was.role} "${was.name}") is now one of several — re-run snapshot`,
+        );
+    }
+    return locatorForNode(page, recovered);
 }
 
 /**
