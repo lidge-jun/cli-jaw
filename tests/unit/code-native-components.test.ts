@@ -202,6 +202,31 @@ test('effort offers only what the selected model accepts', bounded, async t => {
         ['Native default', 'low', 'ultra']);
 });
 
+test('an open session is bound by the capabilities it stored, not by a newer catalog', bounded, async t => {
+    const h = await surface(t);
+    const c = model();
+    // The catalog grew after this session was created. The server still checks
+    // the stored capabilities, so offering the new value would produce a 400.
+    const catalog = { ...c.catalog!, providers: c.catalog!.providers.map(entry => entry.id === 'codex-app'
+        ? { ...entry, models: ['native-model'], effortsByModel: { 'native-model': ['low', 'high', 'ultra'] } } : entry) };
+    await h.render(createElement(ComposerFooter, { controller: { ...c, catalog } }));
+    await click(button(h.container, 'Effort: Native default'));
+    assert.deepEqual([...document.querySelectorAll('[role="option"]')].map(o => o.textContent?.trim()),
+        ['Native default', 'low', 'high'], 'ultra is not in the session capabilities');
+});
+
+test('Tab leaves an open menu instead of returning focus to its trigger', bounded, async t => {
+    const h = await surface(t);
+    await h.render(createElement(ComposerFooter, { controller: model() }));
+    const trigger = button(h.container, 'Permission: Ask first');
+    await click(trigger);
+    assert.ok(document.querySelector('[role="listbox"]'), 'the menu is open');
+    await key(document.activeElement!, 'Tab');
+    assert.equal(document.querySelector('[role="listbox"]'), null, 'Tab closes the menu');
+    // Restoring focus here would swallow the Tab and strand the user for one press.
+    assert.notEqual(document.activeElement, trigger);
+});
+
 function permission(id: string): CodePermissionRequest {
     return { permissionId: id, sessionId: 's-a', turnId: 't-a', epoch: 2, title: `Request ${id}`, detail: 'Read a selected file', requestedAt: 1,
         options: [{ optionId: `opaque/${id}:37`, label: 'Read this file', kind: 'allow_once' }, { optionId: `opaque/${id}:94`, label: 'Do not read', kind: 'reject_once' }] };

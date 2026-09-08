@@ -68,7 +68,9 @@ export function CodeFooterMenu<T extends string>({ label, value, options, disabl
     useEffect(() => { if (disabled) { setPosition(null); setQuery(''); } }, [disabled]);
     function navigate(event: KeyboardEvent<HTMLDivElement>) {
         if (event.key === 'Escape') { event.preventDefault(); close(); return; }
-        if (event.key === 'Tab') { event.preventDefault(); close(); return; }
+        // Tab closes the menu but keeps its own meaning: restoring focus to the
+        // trigger here would swallow the move and strand the user for one press.
+        if (event.key === 'Tab') { close(false); return; }
         const buttons = [...(menu.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
         if (buttons.length === 0) return;
         const current = buttons.findIndex(button => button === document.activeElement);
@@ -127,10 +129,15 @@ export function ComposerFooter({ controller: c }: { controller: CodeControllerMo
         finally { guard.current = false; setSaving(false); }
     }
     const controlsDisabled = disabled || saving;
-    // A model the runtime advertises may accept a narrower effort set than the
-    // provider union; offering the union here would let the user pick a value
-    // the session then rejects.
-    const modelEfforts = provider?.effortsByModel?.[selection.model] ?? capabilities?.efforts ?? [];
+    // A model may accept a narrower effort set than the provider union, so the
+    // per-model set is preferred. An open session is additionally bound by the
+    // capabilities it stored at creation -- the server checks both -- so offer
+    // the intersection rather than a value the session would reject.
+    const catalogEfforts = provider?.effortsByModel?.[selection.model] ?? capabilities?.efforts ?? [];
+    const sessionEfforts = c.session?.capabilities.efforts;
+    const modelEfforts = sessionEfforts
+        ? catalogEfforts.filter(value => sessionEfforts.includes(value))
+        : catalogEfforts;
     const models = provider?.models ?? [];
     return <>
         <div className="code-composer-footer">

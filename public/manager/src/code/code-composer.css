@@ -81,6 +81,11 @@
     background: var(--bg-raised);
     color: var(--text-primary);
 }
+/* Recording is a live state, so it is visible without hovering. */
+.code-composer-icon-button.is-recording {
+    border-color: var(--status-error);
+    color: var(--status-error);
+}
 .code-composer-send {
     border-color: var(--accent);
     background: var(--accent);

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useRef, useState, type KeyboardEvent } from 'react';
 import { MicGlyph, SendGlyph, StopGlyph } from './ProviderGlyph';
+import { useDictation } from './use-dictation';
 
 type CodeComposerProps = {
     inputText: string;
@@ -14,30 +15,17 @@ type CodeComposerProps = {
     onStop: () => Promise<void>;
 };
 
-/**
- * Dictation availability is a real capability check, not an assumption.
- * A browser without `mediaDevices.getUserMedia` (any plain-HTTP origin other
- * than localhost, for one) gets a disabled control that says why, rather than a
- * button that silently does nothing.
- */
-function useDictationSupport(): { supported: boolean; reason: string } {
-    const [state, setState] = useState({ supported: false, reason: 'Checking microphone availability…' });
-    useEffect(() => {
-        if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-            setState({ supported: false, reason: 'Dictation needs microphone access, which this browser context does not provide.' });
-            return;
-        }
-        setState({ supported: true, reason: 'Dictation' });
-    }, []);
-    return state;
-}
-
 export function CodeComposer(props: CodeComposerProps) {
     const composing = useRef(false);
     const sending = useRef(false);
     const cancelling = useRef(false);
     const [error, setError] = useState<string | null>(null);
-    const dictation = useDictationSupport();
+    // Dictated text is appended to the draft, never sent on its own.
+    const appendDictation = useCallback((text: string) => {
+        const current = props.inputText;
+        props.onInputChange(current ? `${current.replace(/\s+$/, '')} ${text}` : text);
+    }, [props.inputText, props.onInputChange]);
+    const dictation = useDictation(appendDictation, props.readOnly);
     async function submit() {
         if (!props.canSend || !props.inputText.trim() || sending.current) return;
         sending.current = true;
@@ -71,9 +59,12 @@ export function CodeComposer(props: CodeComposerProps) {
             <span className="code-composer-hint">Enter to send · Shift+Enter for a new line</span>
         </div>
         <div className="code-composer-actions">
-            <button type="button" className="code-composer-icon-button" aria-label="Dictation"
-                disabled={!dictation.supported || props.readOnly} title={dictation.reason}>
-                <MicGlyph muted={!dictation.supported} />
+            <button type="button" className={`code-composer-icon-button${dictation.status === 'recording' ? ' is-recording' : ''}`}
+                aria-label={dictation.status === 'recording' ? 'Stop dictation' : 'Dictation'}
+                aria-pressed={dictation.status === 'recording'}
+                disabled={dictation.status === 'unsupported' || dictation.status === 'transcribing' || props.readOnly}
+                title={dictation.reason} onClick={dictation.toggle}>
+                <MicGlyph muted={dictation.status === 'unsupported'} />
             </button>
             {props.busy
                 ? <button type="button" className="code-composer-send code-composer-stop" aria-label="Stop current turn"
@@ -84,8 +75,10 @@ export function CodeComposer(props: CodeComposerProps) {
                     disabled={!props.canSend || !props.inputText.trim()} onClick={() => void submit()}><SendGlyph /></button>}
         </div>
         {/* An icon button cannot announce progress on its own. */}
-        {(props.stopping || props.pending) && <span className="code-composer-status" role="status">
-            {props.stopping ? 'Stopping…' : 'Sending…'}</span>}
-        {error && <div className="code-action-error" role="alert">{error}</div>}
+        {(props.stopping || props.pending || dictation.status === 'recording' || dictation.status === 'transcribing') &&
+            <span className="code-composer-status" role="status">
+                {props.stopping ? 'Stopping…' : props.pending ? 'Sending…'
+                    : dictation.status === 'recording' ? 'Recording…' : 'Transcribing…'}</span>}
+        {(error || dictation.error) && <div className="code-action-error" role="alert">{error ?? dictation.error}</div>}
     </div>;
 }
