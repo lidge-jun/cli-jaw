@@ -22,7 +22,28 @@ function rejectPaths(paths, label) {
 
 export function checkIndex(cwd) {
     rejectPaths(git(cwd, ['ls-files', '-z']).split('\0').filter(Boolean), 'index');
+    rejectWorkingTree(cwd);
     reportSubmodules(cwd, { enforce: submoduleEnforcement() });
+}
+
+/**
+ * An ignored private directory is still a private directory.
+ *
+ * `ls-files` sees the index, so a `devlog/` that `.gitignore` covers reports
+ * OK here while sitting in the checkout — which is exactly how one survived in
+ * a working tree until a human noticed. The rule is about where records live,
+ * not about whether Git happens to be tracking them: an ignored path is one
+ * `git add -f` or one archive away from shipping, and it is already visible to
+ * every tool and agent working in the directory.
+ *
+ * `--directory` reports the containing directory rather than each file inside
+ * it, so a large private tree produces one actionable line.
+ */
+function rejectWorkingTree(cwd) {
+    const untracked = git(cwd, ['ls-files', '-z', '--others', '--directory', '--no-empty-directory'])
+        .split('\0').filter(Boolean)
+        .map(entry => entry.replace(/\/$/, ''));
+    rejectPaths(untracked, 'working tree');
 }
 
 /**
@@ -50,8 +71,13 @@ export function reportSubmodules(cwd, { enforce = false } = {}) {
             findings.push({ path, absent: true, files: [] });
             continue;
         }
-        const files = git(subCwd, ['ls-files', '-z']).split('\0').filter(Boolean)
-            .map(f => path + '/' + f).filter(isPrivatePath);
+        // Same reasoning as rejectWorkingTree: a submodule's own .gitignore can
+        // hide a private tree from its index while it sits in the checkout and
+        // ships with any archive of that submodule.
+        const tracked = git(subCwd, ['ls-files', '-z']).split('\0').filter(Boolean);
+        const untracked = git(subCwd, ['ls-files', '-z', '--others', '--directory', '--no-empty-directory'])
+            .split('\0').filter(Boolean).map(entry => entry.replace(/\/$/, ''));
+        const files = [...tracked, ...untracked].map(f => path + '/' + f).filter(isPrivatePath);
         if (files.length) findings.push({ path, absent: false, files });
     }
     for (const finding of findings) {

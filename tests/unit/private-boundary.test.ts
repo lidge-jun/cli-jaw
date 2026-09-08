@@ -32,6 +32,33 @@ test('private paths at any depth and case are rejected without hiding public pro
     }
 });
 
+test('an ignored private directory is reported once, by directory, and public untracked work is not', t => {
+    const root = fixture(t);
+    copyFileSync(join(project, '.gitignore'), join(root, '.gitignore'));
+    put(root, 'README.md');
+    git(root, 'add', '.'); git(root, 'commit', '-qm', 'base');
+    // Ordinary untracked work must stay silent, or the check becomes noise and
+    // gets ignored for the case it exists to catch.
+    put(root, 'src/scratch.ts');
+    put(root, 'notes.md');
+    assert.doesNotThrow(() => checkIndex(root));
+    // This is the shape that survived in a real checkout: gitignore hid a whole
+    // private plan tree from the index scan while it sat in the working tree.
+    put(root, 'devlog/_plan/260908_slug/000_plan.md');
+    put(root, 'devlog/_plan/260908_slug/010_phase1.md');
+    try {
+        checkIndex(root);
+        assert.fail('an ignored private tree must fail the boundary check');
+    } catch (error) {
+        const message = (error as Error).message;
+        assert.match(message, /working tree: private paths/);
+        // --directory collapses the tree to one actionable line rather than
+        // one line per file.
+        const listed = message.split('\n').filter(line => line.includes('devlog'));
+        assert.deepEqual(listed, ['devlog']);
+    }
+});
+
 test('Git ignore blocks accidental staging; forced additions and private gitlinks fail the index guard', t => {
     const root = fixture(t);
     copyFileSync(join(project, '.gitignore'), join(root, '.gitignore'));
@@ -41,7 +68,12 @@ test('Git ignore blocks accidental staging; forced additions and private gitlink
         assert.equal(git(root, 'check-ignore', '--', name), name);
     }
     git(root, 'add', '.');
+    // An ignored private directory is still a private directory: the rule is
+    // about where records live, not about whether Git tracks them.
+    assert.throws(() => checkIndex(root), /working tree: private paths/);
+    for (const name of names) rmSync(join(root, name.split('/')[0]), { recursive: true, force: true });
     assert.doesNotThrow(() => checkIndex(root));
+    put(root, 'devlog/note.md');
     git(root, 'add', '-f', 'devlog/note.md');
     assert.throws(() => checkIndex(root), /private paths/);
     git(root, 'rm', '--cached', 'devlog/note.md');

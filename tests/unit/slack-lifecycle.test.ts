@@ -487,6 +487,13 @@ test('l real lifecycle: late hello loses a replaced presence claim', async t => 
         child.stderr.setEncoding('utf8');
         child.stderr.on('data', chunk => { stderrTail = (stderrTail + chunk).slice(-2000); });
         const waiters: Array<(value: Record<string, unknown>) => void> = [];
+        // A line that arrives before its next() call must be kept, not dropped.
+        // The child emits FIXTURE lines on its own schedule: when a claim is
+        // replaced, the losing home prints its status while the test is still
+        // awaiting the winner. Without this queue that line met an empty
+        // waiters array, was discarded, and the following next() then waited
+        // out the full 60s CI bound for a message that had already been sent.
+        const pending: Array<Record<string, unknown>> = [];
         child.stdout.setEncoding('utf8');
         child.stdout.on('data', chunk => {
             buffered += chunk;
@@ -494,10 +501,14 @@ test('l real lifecycle: late hello loses a replaced presence claim', async t => 
             buffered = lines.pop()!;
             for (const line of lines) {
                 if (!line.startsWith('FIXTURE ')) continue;
-                waiters.shift()?.(JSON.parse(line.slice(8)));
+                const value = JSON.parse(line.slice(8)) as Record<string, unknown>;
+                const waiter = waiters.shift();
+                if (waiter) waiter(value); else pending.push(value);
             }
         });
         const next = () => new Promise<Record<string, unknown>>((resolve, reject) => {
+            const queued = pending.shift();
+            if (queued) { resolve(queued); return; }
             // A cold tsx boot of the whole server graph under module mocks takes
             // several seconds on a loaded CI runner (preview run 34196670148 hit
             // the 10s bound with nothing printed yet). The bound is a hang guard,
