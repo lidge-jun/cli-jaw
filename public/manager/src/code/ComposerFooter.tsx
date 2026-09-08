@@ -1,48 +1,78 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { CodeControllerModel } from './code-controller-types';
 import type { CodeCreateSessionRequest } from '../../../../src/code-mode/wire';
 import { CODE_POLICY_DETAILS, CODE_POLICY_LABELS, CODE_RUNTIME_LABELS } from './code-types';
+import { CheckGlyph, ProviderGlyph } from './ProviderGlyph';
 
-type MenuOption<T extends string> = { value: T; label: string; detail?: string | undefined; disabled?: boolean };
-export function CodeFooterMenu<T extends string>({ label, value, options, disabled, onChange, displayValue }: {
-    label: string; value: T; options: MenuOption<T>[]; disabled: boolean; onChange(value: T): void; displayValue?: string;
+type MenuOption<T extends string> = {
+    value: T; label: string; detail?: string | undefined; disabled?: boolean; icon?: ReactNode;
+};
+
+/**
+ * One dropup for every composer control.
+ *
+ * `triggerContent` replaces the label+value pair for icon-only controls; the
+ * accessible name still comes from `label`, so an icon trigger is never
+ * anonymous. `filterable` adds a search field, which the model menu needs
+ * because a live Codex catalog can carry 28+ routed ids.
+ */
+export function CodeFooterMenu<T extends string>({ label, value, options, disabled, onChange, displayValue,
+    triggerContent, filterable, filterPlaceholder, className, title }: {
+    label: string; value: T; options: MenuOption<T>[]; disabled: boolean; onChange(value: T): void;
+    displayValue?: string; triggerContent?: ReactNode; filterable?: boolean; filterPlaceholder?: string;
+    className?: string; title?: string;
 }) {
     const id = useId();
-    const trigger = useRef<HTMLButtonElement>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
     const menu = useRef<HTMLDivElement>(null);
+    const search = useRef<HTMLInputElement>(null);
     const [position, setPosition] = useState<{ left: number; bottom: number | 'auto'; top?: number; width: number; maxHeight: number } | null>(null);
+    const [query, setQuery] = useState('');
     const selected = options.find(option => option.value === value);
-    function close(restore = true) { setPosition(null); if (restore) trigger.current?.focus(); }
+    const visible = useMemo(() => {
+        const needle = query.trim().toLowerCase();
+        if (!filterable || !needle) return options;
+        return options.filter(option => option.value.toLowerCase().includes(needle) || option.label.toLowerCase().includes(needle));
+    }, [filterable, options, query]);
+    function close(restore = true) { setPosition(null); setQuery(''); if (restore) triggerRef.current?.focus(); }
     function open() {
-        const rect = trigger.current?.getBoundingClientRect();
+        const rect = triggerRef.current?.getBoundingClientRect();
         if (!rect || disabled) return;
-        const width = Math.min(340, window.innerWidth - 28);
+        const width = Math.max(192, Math.min(filterable ? 340 : 260, window.innerWidth - 28));
         const above = Math.max(0, rect.top - 16);
         const below = Math.max(0, window.innerHeight - rect.bottom - 16);
         const common = { left: Math.max(14, Math.min(rect.left, window.innerWidth - width - 14)), width };
         setPosition(above >= below
-            ? { ...common, bottom: window.innerHeight - rect.top + 8, maxHeight: Math.min(280, above) }
-            : { ...common, bottom: 'auto', top: rect.bottom + 8, maxHeight: Math.min(280, below) });
+            ? { ...common, bottom: window.innerHeight - rect.top + 8, maxHeight: Math.min(288, above) }
+            : { ...common, bottom: 'auto', top: rect.bottom + 8, maxHeight: Math.min(288, below) });
     }
     useEffect(() => {
         if (!position) return;
-        const buttons = menu.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');
-        const selectedButton = [...(buttons ?? [])].find(button => button.getAttribute('aria-selected') === 'true');
-        (selectedButton ?? buttons?.[0])?.focus();
+        // A filterable menu types first; otherwise land on the current choice so
+        // arrow keys move relative to what is already selected.
+        if (filterable) search.current?.focus();
+        else {
+            const buttons = menu.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');
+            const current = [...(buttons ?? [])].find(button => button.getAttribute('aria-selected') === 'true');
+            (current ?? buttons?.[0])?.focus();
+        }
         const outside = (event: PointerEvent) => {
-            if (!menu.current?.contains(event.target as Node) && !trigger.current?.contains(event.target as Node)) close(false);
+            if (!menu.current?.contains(event.target as Node) && !triggerRef.current?.contains(event.target as Node)) close(false);
         };
         const resize = () => close(false);
         document.addEventListener('pointerdown', outside);
         window.addEventListener('resize', resize);
         return () => { document.removeEventListener('pointerdown', outside); window.removeEventListener('resize', resize); };
-    }, [position]);
-    useEffect(() => { if (disabled) setPosition(null); }, [disabled]);
+    }, [position, filterable]);
+    useEffect(() => { if (disabled) { setPosition(null); setQuery(''); } }, [disabled]);
     function navigate(event: KeyboardEvent<HTMLDivElement>) {
         if (event.key === 'Escape') { event.preventDefault(); close(); return; }
-        if (event.key === 'Tab') { event.preventDefault(); close(); return; }
+        // Tab closes the menu but keeps its own meaning: restoring focus to the
+        // trigger here would swallow the move and strand the user for one press.
+        if (event.key === 'Tab') { close(false); return; }
         const buttons = [...(menu.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])];
+        if (buttons.length === 0) return;
         const current = buttons.findIndex(button => button === document.activeElement);
         let index: number;
         if (event.key === 'ArrowDown') index = (current + 1) % buttons.length;
@@ -52,20 +82,32 @@ export function CodeFooterMenu<T extends string>({ label, value, options, disabl
         else return;
         event.preventDefault(); buttons[index]?.focus();
     }
-    return <div className="code-footer-menu">
-        <button ref={trigger} type="button" className="code-footer-menu-trigger" aria-label={label}
-            aria-haspopup="listbox" aria-expanded={Boolean(position)} aria-controls={position ? id : undefined}
-            disabled={disabled} title={selected?.detail} onClick={() => position ? close() : open()}
+    const shown = selected?.label ?? displayValue ?? (value || 'not selected');
+    const name = `${label}: ${shown}`;
+    return <div className={`code-footer-menu${className ? ` ${className}` : ''}`}>
+        <button ref={triggerRef} type="button" className={`code-footer-menu-trigger${triggerContent ? ' is-icon' : ''}`}
+            aria-label={name} aria-haspopup="listbox" aria-expanded={Boolean(position)} aria-controls={position ? id : undefined}
+            disabled={disabled} title={title ?? selected?.detail ?? name} onClick={() => position ? close() : open()}
             onKeyDown={event => { if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); open(); } }}>
-            <span className="code-footer-label">{label}</span><strong>{selected?.label ?? displayValue ?? (value || 'Not selected')}</strong>
+            {triggerContent ?? <><span className="code-footer-label">{label}</span>
+                <strong>{selected?.label ?? displayValue ?? (value || 'Not selected')}</strong></>}
         </button>
         {position && createPortal(<div ref={menu} id={id} role="listbox" aria-label={label} className="code-footer-dropup code-footer-floating"
             style={position} onKeyDown={navigate}>
-            {options.map(option => <button type="button" role="option" aria-selected={option.value === value}
-                key={option.value} disabled={option.disabled} className="code-footer-dropup-option"
-                onClick={() => { onChange(option.value); close(); }}>
-                <span><strong>{option.label}</strong>{option.detail && <small>{option.detail}</small>}</span>
-            </button>)}
+            {filterable && <input ref={search} type="text" className="code-footer-filter" value={query}
+                aria-label={`Filter ${label.toLowerCase()}`} placeholder={filterPlaceholder ?? 'Filter…'}
+                onChange={event => setQuery(event.target.value)} />}
+            <div className="code-footer-dropup-list">
+                {visible.map(option => <button type="button" role="option" aria-selected={option.value === value}
+                    key={option.value} disabled={option.disabled} className="code-footer-dropup-option"
+                    title={option.detail ?? option.label}
+                    onClick={() => { onChange(option.value); close(); }}>
+                    {option.icon && <span className="code-footer-option-icon">{option.icon}</span>}
+                    <span className="code-footer-option-text"><strong>{option.label}</strong>{option.detail && <small>{option.detail}</small>}</span>
+                    {option.value === value && <CheckGlyph />}
+                </button>)}
+                {visible.length === 0 && <p className="code-footer-dropup-empty" role="note">No match for “{query.trim()}”.</p>}
+            </div>
         </div>, document.body)}
     </div>;
 }
@@ -76,12 +118,9 @@ export function ComposerFooter({ controller: c }: { controller: CodeControllerMo
     const capabilities = c.session?.capabilities ?? provider?.capabilities;
     const locked = c.selectedId !== null;
     const disabled = c.pending || c.busy || c.creationUnknown || c.operation.kind !== 'idle' || (locked && (!c.synced || c.session?.status !== 'idle' || c.session?.archivedAt !== null));
-    const [modelText, setModelText] = useState(selection.model);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const guard = useRef(false);
-    const modelSuggestions = useId();
-    useEffect(() => { setModelText(selection.model); }, [selection.model]);
     async function change(patch: Partial<CodeCreateSessionRequest>) {
         if (disabled || guard.current) return;
         guard.current = true; setSaving(true); setError(null);
@@ -90,35 +129,51 @@ export function ComposerFooter({ controller: c }: { controller: CodeControllerMo
         finally { guard.current = false; setSaving(false); }
     }
     const controlsDisabled = disabled || saving;
-    const modelDisabled = controlsDisabled;
+    // A model may accept a narrower effort set than the provider union, so the
+    // per-model set is preferred. An open session is additionally bound by the
+    // capabilities it stored at creation -- the server checks both -- so offer
+    // the intersection rather than a value the session would reject.
+    const catalogEfforts = provider?.effortsByModel?.[selection.model] ?? capabilities?.efforts ?? [];
+    const sessionEfforts = c.session?.capabilities.efforts;
+    const modelEfforts = sessionEfforts
+        ? catalogEfforts.filter(value => sessionEfforts.includes(value))
+        : catalogEfforts;
+    const models = provider?.models ?? [];
     return <>
         <div className="code-composer-footer">
-            <CodeFooterMenu label="Runtime" value={selection.provider} disabled={locked ? !c.catalog : controlsDisabled || !c.catalog}
+            <CodeFooterMenu label="Runtime" value={selection.provider} className="code-footer-runtime"
+                disabled={locked ? !c.catalog : controlsDisabled || !c.catalog}
+                triggerContent={<ProviderGlyph provider={selection.provider} />}
+                title={CODE_RUNTIME_LABELS[selection.provider]}
                 options={(Object.keys(CODE_RUNTIME_LABELS) as Array<keyof typeof CODE_RUNTIME_LABELS>).map(id => {
                     const entry = c.catalog?.providers.find(p => p.id === id);
                     return { value: id, label: locked && id !== selection.provider ? `New ${CODE_RUNTIME_LABELS[id]} session` : CODE_RUNTIME_LABELS[id],
                         disabled: !entry?.available || (locked && id === selection.provider),
+                        icon: <ProviderGlyph provider={id} />,
                         detail: entry?.reason ?? (entry?.available ? undefined : 'Availability unknown') };
                 })} onChange={value => {
                     if (locked) void c.setSelection({ provider: value }).catch(err => setError(err instanceof Error ? err.message : String(err)));
                     else void change({ provider: value });
                 }} />
-            <form className="code-footer-model-form" onSubmit={event => { event.preventDefault(); if (modelText.trim() && !modelDisabled) void change({ model: modelText.trim() }); }}>
-                <label className="code-footer-label" htmlFor={`${modelSuggestions}-input`}>Model</label>
-                <input id={`${modelSuggestions}-input`} aria-label="Native model ID" list={modelSuggestions} value={modelText}
-                    disabled={modelDisabled} onChange={event => setModelText(event.target.value)}
-                    onKeyDown={event => { if (event.key === 'Escape') { setModelText(selection.model); event.currentTarget.blur(); } }} />
-                <datalist id={modelSuggestions}>{provider?.models.map(model => <option key={model} value={model} />)}</datalist>
-                {modelText !== selection.model && <button type="submit" disabled={modelDisabled || !modelText.trim()}>Apply</button>}
-            </form>
-            {!!capabilities?.efforts.length && <CodeFooterMenu label="Effort" value={selection.effort ?? ''}
-                options={[{ value: '', label: 'Native default' }, ...capabilities.efforts.map(value => ({ value, label: value }))]}
-                disabled={controlsDisabled} onChange={value => void change({ effort: value || null })} />}
-            <CodeFooterMenu label="Permission" value={selection.permissionMode} displayValue={CODE_POLICY_LABELS[selection.permissionMode]} disabled={controlsDisabled || !capabilities?.permissions}
+            <CodeFooterMenu label="Permission" value={selection.permissionMode} displayValue={CODE_POLICY_LABELS[selection.permissionMode]}
+                disabled={controlsDisabled || !capabilities?.permissions}
                 options={(capabilities?.permissionModes ?? []).map(value => ({ value, label: CODE_POLICY_LABELS[value], detail: CODE_POLICY_DETAILS[value] }))}
                 onChange={value => void change({ permissionMode: value })} />
+            <span className="code-composer-footer-spacer" aria-hidden="true" />
+            <CodeFooterMenu label="Model" value={selection.model} className="code-footer-model"
+                disabled={controlsDisabled || models.length === 0} filterable filterPlaceholder="Filter models…"
+                displayValue={selection.model || 'Select model'}
+                options={models.map(value => ({ value, label: value }))}
+                onChange={value => void change({ model: value })} />
+            {modelEfforts.length > 0 && <CodeFooterMenu label="Effort" value={selection.effort ?? ''}
+                className="code-footer-effort" displayValue={selection.effort ?? 'Default'}
+                options={[{ value: '', label: 'Native default' }, ...modelEfforts.map(value => ({ value, label: value }))]}
+                disabled={controlsDisabled} onChange={value => void change({ effort: value || null })} />}
             {locked && <button type="button" className="code-inline-action" onClick={c.newSession}>New session</button>}
         </div>
+        {models.length === 0 && provider?.available && <div className="code-selection-notice">This runtime published no models.
+            <button type="button" className="code-inline-action" onClick={() => { void c.refresh().catch(err => setError(err instanceof Error ? err.message : String(err))); }}>Refresh catalog</button>
+        </div>}
         {!provider?.available && <div className="code-selection-notice">{provider?.reason ?? 'Runtime availability has not been confirmed.'}
             <button type="button" className="code-inline-action" onClick={() => { void c.refresh().catch(err => setError(err instanceof Error ? err.message : String(err))); }}>Refresh availability</button>
         </div>}
