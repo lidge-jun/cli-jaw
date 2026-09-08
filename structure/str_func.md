@@ -73,7 +73,7 @@ cli-jaw/
 │   ├── code-mode/            ← native Code sessions, independent of Jaw orchestration
 │   │   ├── host.ts ← per-backend lazy composition and storage (70L)
 │   │   ├── manager.ts ← session index, admission and resource capacity (329L)
-│   │   ├── session.ts ← captured turn ownership, cancellation and accepted-buffer drain (641L)
+│   │   ├── session.ts ← captured turn ownership, cancellation and accepted-buffer drain (648L)
 │   │   ├── normalize.ts ← redacted materialized transcript and coalescing (534L)
 │   │   ├── store.ts ← SQLite ownership, replay, snapshots and byte budgets (794L)
 │   │   ├── provider.ts ← native handle and turn-context contracts (59L)

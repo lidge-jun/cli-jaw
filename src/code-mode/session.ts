@@ -229,6 +229,10 @@ export class CodeSession {
         };
         if (previous && !reuse) previous.retiring = true;
         this.binding = binding;
+        // A usage figure belongs to the runtime that reported it. Replacing the
+        // runtime without reusing it means the numbers describe a process that
+        // is being retired, so they stop being an answer about this session.
+        if (previous && !reuse) this.usage = null;
         this.bindings.add(binding);
         const owner = { sessionId: record.sessionId, turnId: record.turnId, epoch: record.epoch };
         let wake!: () => void;
@@ -314,6 +318,9 @@ export class CodeSession {
 
     private onExit(binding: HandleBinding): void {
         if (binding.retiring || binding.exited || this.binding !== binding || this.disposed) return;
+        // The process that measured this is gone; its last figure is history,
+        // not the current size of anything.
+        this.usage = null;
         const op = this.operation;
         if (!op || op.binding !== binding) return;
         if (!op.settled) {

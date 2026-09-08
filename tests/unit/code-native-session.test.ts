@@ -1591,3 +1591,27 @@ test('RT01: session dispose caches its promise before a drain subscriber dispose
     assert.equal(f.store.readTurn(row.sessionId, prompt.clientTurnKey)?.status, 'cancelled');
     assert.equal(handle.closes, 1);
 });
+
+test('context usage answers for the live runtime only, and never outlives it', async t => {
+    const f = fixture(t);
+    const row = f.create('codex-app');
+    f.manager.prompt(row.sessionId, prompt);
+    const options = await f.providers['codex-app'].opened();
+    const handle = f.providers['codex-app'].handles[0]!;
+    await handle.sent.promise;
+    assert.equal(f.manager.list().find(entry => entry.sessionId === row.sessionId)?.contextUsage, undefined,
+        'nothing reported means nothing to say, not zero');
+    options.onContextUsage({ totalTokens: 345, inputTokens: 300, cachedInputTokens: 100,
+        outputTokens: 40, reasoningOutputTokens: 5, modelContextWindow: 272000, updatedAt: 7 });
+    const listed = f.manager.list().find(entry => entry.sessionId === row.sessionId)?.contextUsage;
+    assert.equal(listed?.totalTokens, 345);
+    assert.equal(listed?.modelContextWindow, 272000);
+    assert.equal(f.manager.snapshot(row.sessionId).session.contextUsage?.totalTokens, 345);
+    handle.outcome.resolve(done);
+    await f.terminal(row.sessionId, 1);
+    // The process that measured this is gone. Its last figure is history, not
+    // the current size of anything, so it is not reported as if it still held.
+    options.onExit(null);
+    assert.equal(f.manager.list().find(entry => entry.sessionId === row.sessionId)?.contextUsage, undefined);
+});
+

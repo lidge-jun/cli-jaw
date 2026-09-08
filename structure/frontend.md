@@ -683,6 +683,9 @@ is not a proportion, and a count with a window shows a percentage clamped at
 arithmetic. Every part of the breakdown is nullable and an unreported field
 shows as absent, never as zero. Thresholds change the ring colour at 75 and 90
 percent, and the accessible name carries the numbers the ring cannot.
+Usage is bound to the runtime that reported it: replacing a runtime without
+reusing it, or that runtime exiting, drops the figure rather than leaving a
+measurement of a process that is gone.
 
 The transcript renders sanitized Markdown, math and linear tables with stable
 virtual rows. Tool output stays escaped; local files open only after an explicit
