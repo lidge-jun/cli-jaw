@@ -136,15 +136,19 @@ test('EV-014: the fixture cases are well formed and name their expectations', ()
         assert.ok(c.id && !ids.has(c.id), `duplicate or missing id: ${c.id}`);
         ids.add(c.id);
         assert.ok(c.target, `${c.id} must describe a target`);
-        const declares = c.expectAbstention === true || 'expected' in c;
-        assert.ok(declares, `${c.id} must declare an expected element or expect an abstention`);
+        const declares = c.expectAbstention === true || typeof c.expectRegion === 'string' || 'expected' in c;
+        assert.ok(declares, `${c.id} must declare an expected element, a region, or an abstention`);
     }
 
     // The suite must include cases where refusing is the correct answer, or it
     // would only reward clicking.
     assert.ok(spec.cases.some((c: { expectAbstention?: boolean }) => c.expectAbstention === true));
-    // And at least one with no DOM target at all.
-    assert.ok(spec.cases.some((c: { expected?: unknown }) => c.expected === null));
+    // And at least one with no DOM target at all, scored by region rather than
+    // by ref identity — comparing a witness id against a stand-in string could
+    // only ever produce a misclick, so the case was unscoreable by design.
+    assert.ok(spec.cases.some((c: { expectRegion?: string }) => typeof c.expectRegion === 'string'));
+    // Nothing may claim an expectation of null: that was the unscoreable shape.
+    assert.ok(!spec.cases.some((c: { expected?: unknown }) => c.expected === null));
 });
 
 test('EV-015: the runner declares where it runs', () => {
@@ -219,4 +223,41 @@ test('EV-019: the witness attributes a click to the element that owns it', () =>
     assert.match(runner, /if \(node\.id\)/);
     // And the walk is bounded.
     assert.match(runner, /i < 24/);
+});
+
+test('EV-020: a broken abstention case is not scored as correct behaviour', () => {
+    // The most dangerous scoring bug available: an HTTP error and a genuine
+    // refusal both mean "did not click", so an inverted case scored both as
+    // verified. That converts harness breakage into a good result, which is
+    // the one direction an evaluation must never fail.
+    const root4 = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+    const runner = fs.readFileSync(join(root4, 'scripts/grounding-eval.mjs'), 'utf8');
+
+    // An HTTP failure on an abstention case must error, not verify.
+    assert.match(runner, /res\.status >= 400[\s\S]{0,220}kind: 'errored'/);
+    // And a refusal must carry a reason to count as one.
+    assert.match(runner, /declined without a reason/);
+});
+
+test('EV-021: navigation and witness installation are checked before scoring', () => {
+    // A failed navigate would score the case against whatever page happened to
+    // be loaded, which is worse than not scoring it at all.
+    const root5 = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+    const runner = fs.readFileSync(join(root5, 'scripts/grounding-eval.mjs'), 'utf8');
+    assert.match(runner, /navigate failed/);
+    assert.match(runner, /witness install failed/);
+});
+
+test('EV-022: --port reaches the server instead of being parsed and dropped', () => {
+    // It was advertised in the usage text and then never referenced, so an
+    // operator targeting a specific Chrome silently ran against another.
+    const root6 = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+    const runner = fs.readFileSync(join(root6, 'scripts/grounding-eval.mjs'), 'utf8');
+    assert.match(runner, /\?port=/, 'the port must be forwarded on the query string');
+    // Every call site passes it, so one forgotten argument cannot half-apply it.
+    const calls = runner.match(/await api\(opts\.base[^;]*/g) ?? [];
+    assert.ok(calls.length >= 4);
+    for (const call of calls) {
+        assert.match(call, /opts\.port/, `call site does not forward the port: ${call.slice(0, 70)}`);
+    }
 });

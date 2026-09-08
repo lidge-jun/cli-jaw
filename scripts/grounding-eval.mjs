@@ -29,7 +29,7 @@ const root = path.resolve(here, '..');
 const fixtureDir = path.join(root, 'tests/fixtures/grounding');
 
 function parseArgs(argv) {
-    const opts = { port: 9222, json: false, only: null, base: 'http://127.0.0.1:3457' };
+    const opts = { port: null, json: false, only: null, base: 'http://127.0.0.1:3457' };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         if (a === '--json') opts.json = true;
@@ -49,8 +49,12 @@ const usage = `grounding-eval — measure grounding on fixed local fixtures
 Requires a running cli-jaw server and a browser session. This is an
 operator-run tool; its output is recorded evidence, not a gate.`;
 
-async function api(base, method, route, body) {
-    const res = await fetch(base + route, {
+async function api(base, method, route, body, port) {
+    // The route resolves the CDP port from the query string, so an operator
+    // targeting a specific Chrome needs it forwarded. It used to be parsed and
+    // then ignored, which silently ran against whatever port was active.
+    const url = base + route + (port ? `?port=${port}` : '');
+    const res = await fetch(url, {
         method,
         headers: { 'content-type': 'application/json' },
         ...(body ? { body: JSON.stringify(body) } : {}),
@@ -99,23 +103,54 @@ async function main() {
     for (const c of cases) {
         const started = Date.now();
         try {
-            await api(opts.base, 'POST', '/api/browser/navigate', { url: fixtureUrl });
+            const nav = await api(opts.base, 'POST', '/api/browser/navigate', { url: fixtureUrl }, opts.port);
+            // A failed navigation would score the whole case against whatever
+            // page happened to be loaded, which is worse than not scoring it.
+            if (nav.status >= 400) throw new Error(`navigate failed (${nav.status}): ${nav.body?.error ?? ''}`);
+
             // Record what actually receives the click, since "success" alone
             // cannot distinguish a correct click from a wrong one.
-            await api(opts.base, 'POST', '/api/browser/evaluate', { expression: INSTALL_WITNESS });
+            const install = await api(opts.base, 'POST', '/api/browser/evaluate', { expression: INSTALL_WITNESS }, opts.port);
+            if (install.status >= 400) throw new Error(`witness install failed (${install.status})`);
 
-            const res = await api(opts.base, 'POST', '/api/browser/vision-click', { target: c.target });
-            const witness = await api(opts.base, 'POST', '/api/browser/evaluate', { expression: CLICK_WITNESS });
+            const res = await api(opts.base, 'POST', '/api/browser/vision-click', { target: c.target }, opts.port);
+            const witness = await api(opts.base, 'POST', '/api/browser/evaluate', { expression: CLICK_WITNESS }, opts.port);
             const clicked = witness.body?.result ?? null;
             const ms = Date.now() - started;
 
             // A case that declares abstention correct is scored inverted: an
             // abstention is the right answer, and a confident click is not.
+            //
+            // But a REFUSAL and a FAILURE are not the same thing. Scoring an
+            // HTTP error or a crashed call as "correctly declined" would turn
+            // harness breakage into a good result — the one direction an
+            // evaluation must never fail. Only a real refusal counts.
             if (c.expectAbstention) {
+                if (res.status >= 400) {
+                    results.push({ id: c.id, expected: 'abstain', outcome: { kind: 'errored', ms, error: `HTTP ${res.status}` } });
+                    continue;
+                }
+                const refused = res.body?.success === false && Boolean(res.body?.code || res.body?.reason);
                 const outcome = res.body?.success === true
                     ? { kind: 'misclick', ms, got: clicked ?? 'unknown' }
-                    : { kind: 'verified', ms };
+                    : refused
+                        ? { kind: 'verified', ms }
+                        : { kind: 'errored', ms, error: 'declined without a reason' };
                 results.push({ id: c.id, expected: 'abstain', outcome });
+                continue;
+            }
+
+            // A case with no DOM target expects a coordinate click. It cannot
+            // be scored by element identity — the witness reports whatever the
+            // coordinate landed on — so it is scored by landing INSIDE the
+            // named region instead.
+            if (c.expectRegion) {
+                const outcome = res.body?.success !== true
+                    ? { kind: 'abstained', ms, reason: res.body?.code ?? res.body?.reason ?? 'declined' }
+                    : clicked === c.expectRegion
+                        ? { kind: 'verified', ms }
+                        : { kind: 'misclick', ms, got: clicked ?? 'unknown' };
+                results.push({ id: c.id, expected: c.expectRegion, outcome });
                 continue;
             }
 
@@ -155,4 +190,3 @@ main().then(code => process.exit(code)).catch(err => {
     console.error('grounding-eval failed:', err?.message ?? err);
     process.exit(1);
 });
-

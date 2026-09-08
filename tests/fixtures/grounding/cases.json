@@ -39,8 +39,8 @@
     {
       "id": "canvas",
       "target": "the middle of the drawing board",
-      "expected": null,
-      "why": "no DOM ref exists; a coordinate click is correct here"
+      "expectRegion": "board",
+      "why": "no DOM ref exists; a coordinate click landing inside the canvas is correct. Scored by region rather than by ref identity, because expected:null compared the witness id against the literal string 'coordinate' and could only ever score a misclick."
     },
     {
       "id": "banner-accept",
