@@ -93,11 +93,17 @@ export class CodeSessionManager {
         if (!keptModel && !catalog.models.includes(input.model)) {
             throw new CodeStoreError('unsupported_model', 'Code model is unsupported', 400);
         }
+        const keptEffort = keptModel && accepted !== undefined && accepted.effort === input.effort;
         for (const capabilities of fixed ? [fixed, catalog.capabilities] : [catalog.capabilities]) {
             if (!capabilities.permissionModes.includes(input.permissionMode)) {
                 throw new CodeStoreError('unsupported_policy', 'Code permission mode is unsupported', 400);
             }
-            if (input.effort !== null && !capabilities.efforts.includes(input.effort)) {
+            // A kept effort skips the live union for the same reason a kept model
+            // skips the live model list: the catalog moves under a running session.
+            // The session's own stored capabilities still apply, since those are
+            // the contract the native runtime was opened with.
+            const live = capabilities === catalog.capabilities;
+            if (input.effort !== null && !(keptEffort && live) && !capabilities.efforts.includes(input.effort)) {
                 throw new CodeStoreError('unsupported_effort', 'Code effort is unsupported', 400);
             }
         }
@@ -105,7 +111,6 @@ export class CodeSessionManager {
         // per-model set, narrow to it: routed models often accept no effort at
         // all while a sibling model reaches `ultra`, and the chosen value is
         // forwarded to the native wire.
-        const keptEffort = keptModel && accepted !== undefined && accepted.effort === input.effort;
         const perModel = keptEffort ? undefined : catalog.effortsByModel?.[input.model];
         if (input.effort !== null && perModel && !perModel.includes(input.effort)) {
             throw new CodeStoreError('unsupported_effort', 'Code effort is unsupported', 400);

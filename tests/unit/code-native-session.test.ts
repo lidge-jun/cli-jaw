@@ -818,6 +818,18 @@ test('a catalog that drops a model keeps the running session usable but blocks n
     await assert.doesNotReject(f.manager.patch(idle.sessionId, { expectedRevision: idle.revision, model: 'model-a' }));
 });
 
+test('a catalog that drops an effort keeps the running session usable', async t => {
+    const f = fixture(t);
+    const row = f.create('cursor', { effort: 'high' });
+    // Same drift, one level down: the live union can lose an effort the session
+    // was opened with. Its own stored capabilities still bound it, so the value
+    // stays legal; a newly chosen one is checked against the current catalog.
+    f.providers.cursor.catalog = { ...f.providers.cursor.catalog,
+        capabilities: { ...f.providers.cursor.catalog.capabilities, efforts: ['low'] } };
+    assert.doesNotThrow(() => f.manager.prompt(row.sessionId, { text: 'still works', clientTurnKey: 'k-effort' }));
+    assert.throws(() => f.create('cursor', { effort: 'high' }), errorCode('unsupported_effort', 400));
+});
+
 test('dispose is idempotent during pending open and later closes orphaned startup without replay', async t => {
     const f = fixture(t);
     const gate = deferred<void>();
