@@ -237,7 +237,12 @@ export async function visionClick(port: number, target: string, opts: VisionClic
     // 3. DPR correction: image pixels → CSS pixels
     // Playwright screenshots are captured at device pixel resolution
     // page.mouse.click() expects CSS pixels
-    const css = toCssPoint({ x: result.x, y: result.y }, dpr, clip);
+    //
+    // Offset against the clip that was CAPTURED, not the one requested. A clip
+    // extending past the viewport is trimmed before capture, so using the
+    // requested rectangle would offset a coordinate against a region that was
+    // never in the image the model saw.
+    const css = toCssPoint({ x: result.x, y: result.y }, dpr, ss.clip ?? clip);
 
     // 3b. Reconcile against element geometry before falling back to a raw
     // coordinate. The browser already knows where its elements are, so a point
@@ -400,7 +405,7 @@ export async function visionClick(port: number, target: string, opts: VisionClic
             // The coordinate that resolved to this ref, not a place we clicked.
             resolvedFrom: clickPoint,
             raw: { x: result.x, y: result.y },
-            clip,
+            clip: ss.clip ?? clip,
             dpr,
             provider: result.provider,
             description: result.description,
@@ -420,7 +425,7 @@ export async function visionClick(port: number, target: string, opts: VisionClic
         via: 'coordinate' as const,
         clicked: clickPoint,
         raw: { x: result.x, y: result.y },
-        clip,
+        clip: ss.clip ?? clip,
         dpr,
         provider: result.provider,
         description: result.description,

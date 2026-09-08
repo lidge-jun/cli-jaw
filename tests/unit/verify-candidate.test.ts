@@ -8,6 +8,9 @@
 // cases assert what the geometry actually does.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
     cropAroundPoint,
     judgeVerification,
@@ -253,4 +256,27 @@ test('VER-016: a clip outside the viewport gets a named error', () => {
 test('VER-017: the exact edge is inside, one past it is not', () => {
     assert.equal(clampClipToViewport({ x: 1279, y: 799, width: 10, height: 10 }, { width: 1280, height: 800 }).clip.width, 1);
     assert.throws(() => clampClipToViewport({ x: 1280, y: 0, width: 10, height: 10 }, { width: 1280, height: 800 }));
+});
+
+test('VER-018: the captured clip is what a coordinate must be offset against', () => {
+    // Clamping introduced a way to be wrong: capture with the trimmed
+    // rectangle, then offset against the requested one. The two differ exactly
+    // when the clip ran past an edge, so the bug would only appear near the
+    // viewport border - the same place the earlier drift bug lived.
+    const requested = { x: 1000, y: 700, width: 600, height: 400 };
+    const { clip: captured } = clampClipToViewport(requested, { width: 1280, height: 800 });
+
+    // The origin survives trimming, which is why the offset arithmetic was
+    // already correct and the earlier "silent misclick" claim was wrong.
+    assert.equal(captured.x, requested.x);
+    assert.equal(captured.y, requested.y);
+    // But the extent does not, so a caller reporting the requested rectangle
+    // describes an image that was never taken.
+    assert.notEqual(captured.width, requested.width);
+
+    const src = fs.readFileSync(
+        join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src/browser/vision.ts'),
+        'utf8',
+    );
+    assert.match(src, /toCssPoint\([^)]*ss\.clip \?\? clip\)/, 'the conversion must use the captured clip');
 });
