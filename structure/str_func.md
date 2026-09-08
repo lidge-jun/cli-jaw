@@ -71,7 +71,7 @@ cli-jaw/
 │   │   ├── settings-merge.ts ← perCli/activeOverrides/pi deep merge (258L)
 │   │   └── skill-cache.ts    ← 활성 스킬 슬래시 커맨드 캐시 (registerSkillLoader, getSkillCommandsCache, invalidateSkillCommandsCache) (44L)
 │   ├── code-mode/            ← native Code sessions, independent of Jaw orchestration
-│   │   ├── host.ts ← per-backend lazy composition and storage (64L)
+│   │   ├── host.ts ← per-backend lazy composition and storage (70L)
 │   │   ├── manager.ts ← session index, admission and resource capacity (322L)
 │   │   ├── session.ts ← captured turn ownership, cancellation and accepted-buffer drain (623L)
 │   │   ├── normalize.ts ← redacted materialized transcript and coalescing (534L)
@@ -80,7 +80,7 @@ cli-jaw/
 │   │   ├── types.ts ← internal session and store contracts (12L)
 │   │   ├── wire.ts ← public request/event DTOs (186L)
 │   │   └── providers/        ← direct native adapters and capabilities
-│   │       ├── catalog.ts ← model/capability descriptions (100L)
+│   │       ├── catalog.ts ← model/capability descriptions (129L)
 │   │       ├── live-models.ts ← last-known opencodex catalog, refreshed in background (93L)
 │   │       ├── codex-app.ts ← Codex app-server adapter (320L)
 │   │       ├── claude.ts ← Claude native adapter (93L)

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { publish } from '../core/event-bus.js';
 import { CodeSessionManager } from './manager.js';
 import { createCodeProviders } from './providers/catalog.js';
+import { primeProviderLiveModels } from './providers/provider-live-models.js';
 import { CodeStore } from './store.js';
 import type { CodeProviders } from './provider.js';
 
@@ -44,6 +45,11 @@ export function createCodeHost(options: CodeHostOptions): { get(): CodeSessionMa
                 service.recover();
                 database = candidate;
                 manager = service;
+                // Fill the Cursor and Grok snapshots once, here rather than on a
+                // catalog read: they are the two providers whose discovery spawns a
+                // CLI, and a catalog read must never do that. Failure is silent by
+                // design — the static registry list stands.
+                void primeProviderLiveModels().catch(() => { /* static lists stand */ });
                 return service;
             } catch (error) {
                 candidate.close();

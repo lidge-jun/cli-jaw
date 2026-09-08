@@ -119,6 +119,28 @@ cli-jaw는 그보다 단순한 규칙을 쓴다. 성공한 프로브의 결과�
 바꾸면 안 된다. 예외는 하나다: 라이브 카탈로그가 더 이상 제공하지 않는 기본값은 첫
 세션에서 `validate()`에 걸리므로, 그때는 라이브 목록의 첫 모델로 물러선다.
 
+## Code 카탈로그
+
+`/api/code`의 카탈로그는 같은 라이브 결과를 쓰지만 경로가 다르다.
+`CodeProvider.describe()`가 **동기**이고 카탈로그 읽기마다 호출되므로 프로브를
+await할 수 없다. 그래서 메모리 스냅샷을 읽는다:
+`src/code-mode/providers/live-models.ts`(Codex)와
+`provider-live-models.ts`(claude/cursor/grok).
+
+스냅샷을 채우는 비용이 프로바이더마다 다르고, 그 차이가 규칙을 만든다.
+
+| 프로바이더 | 채우는 비용 | 읽기가 갱신을 예약하는가 |
+|---|---|---|
+| codex-app | HTTP | 예 |
+| claude | 번들 파일 읽기 | 예 |
+| cursor | `cursor-agent` 실행 | **아니오** |
+| grok | `grok` 실행 | **아니오** |
+
+`catalog.ts`가 규칙을 명시한다: "catalogs must never execute a CLI or a login
+probe." 카탈로그 렌더 한 번이 프로세스를 띄우면 로그인 프롬프트나 느린 바이너리가
+읽기 경로에 들어온다. 그래서 cursor/grok 스냅샷은 **명시적 프라임만** 채운다.
+`createCodeHost()`가 서비스 초기화 때 한 번 호출하고, 실패는 조용히 무시한다 —
+정적 목록이 그대로 남는다.
 ## 관련 문서
 
 - [runtime integration](runtime-integration.md) — transport 선택과 native adapter
