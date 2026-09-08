@@ -12,6 +12,11 @@
  * workaround for the Windows sandbox killing `codex exec` children with exit
  * `-1073741502` and an empty stderr. So it becomes an explicit opt-in that is
  * off by default, and the Windows consequence is stated rather than implied.
+ *
+ * Note the contrast with `agent/args.ts`, which does add the flag when the
+ * user selected the Auto (YOLO) permission policy. That is not the same case:
+ * an agent turn exists to run commands, so choosing Auto is the user saying
+ * they accept that. A vision lookup runs none, so it starts from off.
  */
 
 /** Disables the codexclaw plugin for the duration of the lookup. */

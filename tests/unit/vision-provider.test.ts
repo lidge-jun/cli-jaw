@@ -146,6 +146,26 @@ test('VP-015: a truthy non-true value cannot reach the flag', () => {
         assert.ok(!inv.args.includes('--dangerously-bypass-approvals-and-sandbox'));
     }
 });
+
+test('VP-016: the agent path and the vision path are deliberately different', () => {
+    // agent/args.ts adds the flag when the user selected Auto (YOLO). That is
+    // not the contradiction it looks like: an agent turn exists to run
+    // commands, so choosing Auto is the user accepting that. A vision lookup
+    // runs none, so it starts from off. Pinning the distinction because the
+    // two are easy to "unify" into whichever default someone read last.
+    const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+    const agentSrc = fs.readFileSync(join(root, 'src/agent/args.ts'), 'utf8');
+
+    const agentUse = agentSrc.match(/\.\.\.\(\s*autoPerm[^\n]*dangerously-bypass[^\n]*/);
+    assert.ok(agentUse, 'the agent path must still gate the flag on the permission policy');
+
+    // And it must remain gated - never unconditional.
+    const unconditional = agentSrc.match(/^\s*'--dangerously-bypass-approvals-and-sandbox',/m);
+    assert.equal(unconditional, null, 'the agent path must not add the flag unconditionally');
+
+    // The vision path defaults off regardless of any agent-side policy.
+    assert.equal(buildVisionInvocation({ screenshotPath: '/x.png', prompt: 'p' }).bypassedSandbox, false);
+});
 import fs from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';

@@ -285,6 +285,13 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
                 ...reasoningArgs,
                 ...sparkContextArgs,
                 '-c', `service_tier="${options.fastMode ? 'fast' : 'default'}"`,
+                // Gated on the user's own permission policy, which is what the
+                // docs mean by an attended choice. This is a different case
+                // from a tool reaching for the flag on its own: an agent turn
+                // exists to run commands, so Auto (YOLO) is the user saying
+                // they accept that. The vision path builds its invocation in
+                // browser/vision-provider.ts and defaults the flag OFF,
+                // because classifying an image needs no such authority.
                 ...(autoPerm ? ['--dangerously-bypass-approvals-and-sandbox'] : []),
                 '--skip-git-repo-check', '--json'];
         }
