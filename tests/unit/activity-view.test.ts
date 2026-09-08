@@ -576,3 +576,66 @@ test('reasoning/message split groups, use icons and retain literal bounded previ
     assert.equal(pre.textContent, 'x'.repeat(3000) + '\n[Preview limited; some text is omitted]');
     assert.equal(pre.tabIndex, 0); assert.equal(view.element.querySelector<HTMLElement>('.activity-omitted')!.hidden, false);
 });
+
+// The turn carries no leading margin so its summary row lines up with the 24px avatar.
+// jsdom does not lay out, so this pins the declaration and the DOM position that make the
+// alignment hold; the measured pixel proof lives in the browser suite.
+test('the activity turn carries no leading margin and leads the visible body content', () => {
+    const css = readFileSync(new URL('../../public/css/activity.css', import.meta.url), 'utf8');
+    const { host, model, view, message } = mount();
+    message.dataset.activityKey = 'key';
+    tool(model, 'a');
+    view.render(model);
+
+    const turn = view.element;
+    // jsdom does not parse the margin-block logical shorthand, so computed style cannot tell
+    // the two forms apart. Assert the declaration itself; the pixel proof is in the browser suite.
+    const rule = /^\.activity-turn \{([^}]*)\}/m.exec(css.slice(css.indexOf('\n.activity-turn {') + 1));
+    assert.ok(rule, 'the .activity-turn rule must exist');
+    const declared = /margin-block:\s*([^;]+);/.exec(rule[1]!);
+    assert.ok(declared, '.activity-turn must declare margin-block');
+    const [blockStart, blockEnd] = declared[1]!.trim().split(/\s+/);
+    assert.equal(blockStart, '0',
+        'a leading margin offsets the summary row from the agent avatar');
+    assert.ok(blockEnd && blockEnd !== '0',
+        'the trailing margin still separates the turn from the answer');
+
+    // Removing the leading margin is only safe if everything that CAN precede the turn either
+    // generates no box or owns its bottom margin. Walking this fixture's children is not
+    // enough: ws.ts prepends .activity-unavailable into .agent-body, it never appears in this
+    // mount(), and it originally had no CSS rule at all — so a fixture-scoped walk passed
+    // while a real 8px gap closed. Probe the classes the product can actually put above the
+    // turn.
+    // jsdom does not parse margin-block, so read the declarations rather than computed style.
+    // Read every stylesheet that can style these classes: .process-block lives in tool-ui.css,
+    // not activity.css, so scanning one file would report a false failure.
+    const allCss = ['activity.css', 'tool-ui.css'].map(name =>
+        readFileSync(new URL(`../../public/css/${name}`, import.meta.url), 'utf8')).join('\n');
+    const declaresBottomMargin = (selector: string) => {
+        const rules = [...allCss.matchAll(/([^{}]+)\{([^}]*)\}/g)];
+        return rules.some(([, selectors, body]) => {
+            if (!selectors!.split(',').some(part => part.trim().split(/\s+/).pop() === selector)) return false;
+            const shorthand = /margin-block:\s*([^;]+);/.exec(body!);
+            if (shorthand) {
+                const parts = shorthand[1]!.trim().split(/\s+/);
+                return (parts[1] ?? parts[0]) !== '0';
+            }
+            const margin = /(?:^|;)\s*margin:\s*([^;]+);/.exec(body!);
+            if (margin) {
+                const parts = margin[1]!.trim().split(/\s+/);
+                const bottom = parts.length >= 3 ? parts[2]! : parts[0]!;
+                return bottom !== '0' && bottom !== '0px';
+            }
+            return /margin-block-end:\s*(?!0\s*;)/.test(body!)
+                || /margin-bottom:\s*(?!0\s*;)/.test(body!);
+        });
+    };
+    const hidesItself = (selector: string) =>
+        new RegExp(String.raw`\${selector}\b[^{}]*\{[^}]*display:\s*none`).test(allCss);
+    for (const className of ['activity-read-control', 'activity-unavailable', 'process-block']) {
+        assert.ok(declaresBottomMargin('.' + className) || hidesItself('.' + className),
+            `.${className} can render above the turn with neither a box nor a bottom margin, `
+            + "so the turn's removed leading margin would close a real gap");
+    }
+    view.dispose();
+});
