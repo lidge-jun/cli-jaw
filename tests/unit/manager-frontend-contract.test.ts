@@ -682,6 +682,18 @@ test('unified registry filters scopes, localizes navigation, and preserves Manag
     assert.ok(classic.some(e => e.id === 'channels-slack'));
     assert.ok(classic.every(e => e.scope === 'instance' && !e.hidden));
     assert.ok(!classic.some(e => e.id === 'telegram-hub' || e.id === 'dashboard-meta'));
+    // Scope is the only visibility axis: the retired requiresInstance flag added a third,
+    // undocumented state (manager-scoped but instance-gated) that hid a real bug.
+    for (const entry of SETTINGS_REGISTRY) {
+        assert.equal(Object.prototype.hasOwnProperty.call(entry, 'requiresInstance'), false,
+            `registry entry ${entry.id} must not carry the removed requiresInstance flag`);
+    }
+    assert.equal(read('public/manager/src/settings/settings-registry.ts').includes('requiresInstance'), false,
+        'settings-registry must not mention requiresInstance in type, entries, or filter');
+    const managerOnly = entriesForScopes(['manager'], false, 'en');
+    assert.ok(managerOnly.some(e => e.id === 'dashboard-meta'),
+        'dashboard-meta is manager-scoped: the manager server owns /api/dashboard/registry');
+    assert.ok(managerOnly.every(e => e.scope === 'manager' && !e.hidden));
     assert.ok(SETTINGS_REGISTRY.every(e => typeof e.load === 'function'));
     const saved = defaultDashboardRegistry().ui;
     let ui = { ...saved, locale: 'en' as const as import('../../public/manager/src/types').DashboardLocale,

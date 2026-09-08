@@ -3,7 +3,7 @@ import type { ComponentType } from 'react';
 import type { DashboardLocale } from '../types';
 import { DASHBOARD_SETTINGS_COPY } from '../dashboard-settings/DashboardSettingsSidebar';
 type Entry = { id: SettingsCategoryId; scope: SettingsScope; group: SettingsCategoryGroup;
-    label: string | ((locale: DashboardLocale) => string); requiresInstance?: boolean; hidden?: boolean; load: () => Promise<{ default: ComponentType<SettingsPageProps> }> };
+    label: string | ((locale: DashboardLocale) => string); hidden?: boolean; load: () => Promise<{ default: ComponentType<SettingsPageProps> }> };
 export const SETTINGS_REGISTRY: readonly Entry[] = [
     { id:'agent', scope:'instance', group:'runtime', label:'Agent', load:()=>import('./pages/Agent') },
     { id:'model', scope:'instance', group:'runtime', label:'Model defaults', load:()=>import('./pages/ModelProvider') },
@@ -27,9 +27,9 @@ export const SETTINGS_REGISTRY: readonly Entry[] = [
     { id:'manager-developer', scope:'manager', group:'advanced', label:locale=>DASHBOARD_SETTINGS_COPY[locale].sections.developer.label, load:()=>import('./pages/manager/Developer') },
     { id:'manager-embedding', scope:'manager', group:'automation', label:locale=>DASHBOARD_SETTINGS_COPY[locale].sections.embedding.label, load:()=>import('./pages/manager/Embedding') },
     { id:'telegram-hub', scope:'manager', group:'channels', label:locale=>DASHBOARD_SETTINGS_COPY[locale].sections.telegramHub.label, load:()=>import('./pages/manager/TelegramHub') },
-    { id:'dashboard-meta', scope:'manager', requiresInstance:true, group:'advanced', label:'Dashboard meta', load:()=>import('./pages/DashboardMeta') },
+    { id:'dashboard-meta', scope:'manager', group:'advanced', label:'Dashboard meta', load:()=>import('./pages/DashboardMeta') },
 ];
 export const entriesForScopes = (scopes: readonly SettingsScope[], hasInstance: boolean, locale: DashboardLocale) =>
     SETTINGS_REGISTRY.filter(entry => !entry.hidden && scopes.includes(entry.scope)
-        && (hasInstance || (entry.scope !== 'instance' && !entry.requiresInstance)))
+        && (hasInstance || entry.scope !== 'instance'))
         .map(entry => ({...entry, label:typeof entry.label==='function' ? entry.label(locale) : entry.label}));

@@ -95,7 +95,26 @@ export type DashboardMetaProps = SettingsPageProps & {
     managerClient?: ManagerClient;
 };
 
-export default function DashboardMeta({
+/**
+ * No selected instance. SettingsShell passes `port={port ?? 0}`, and this page writes to the
+ * MANAGER registry keyed by port, so rendering the form here would let a save PATCH
+ * /api/dashboard/registry under instance key "0". This is a separate component rather than an
+ * early return because the form below calls hooks before its first return: an early return
+ * above them breaks the rules of hooks, and one below them has already issued the fetch.
+ */
+function DashboardMetaEmpty() {
+    return (
+        <p className="settings-empty" role="status">
+            Select an instance to edit its dashboard metadata.
+        </p>
+    );
+}
+
+export default function DashboardMeta(props: DashboardMetaProps) {
+    return props.port ? <DashboardMetaForm {...props} /> : <DashboardMetaEmpty />;
+}
+
+function DashboardMetaForm({
     port,
     client,
     dirty,
