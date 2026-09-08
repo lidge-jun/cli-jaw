@@ -20,6 +20,9 @@ type InstancePreviewProps = {
     docPanelCapable?: boolean;
     previewInsertTextRequest?: PreviewInsertTextRequest | null;
     onPreviewInsertTextResult?: (id: string, result: PreviewInsertTextResult) => void;
+    /** One-shot id; a new value asks the mounted preview to open its own settings page. */
+    previewSettingsOpenRequest?: string | null;
+    onPreviewSettingsOpenResult?: (id: string, result: PreviewInsertTextResult) => void;
 };
 
 const PREVIEW_IFRAME_SANDBOX = 'allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-downloads';
@@ -149,6 +152,23 @@ function postPreviewSttToggle(frame: HTMLIFrameElement | null, src: string): voi
     }
 }
 
+/**
+ * Ask the instance to open ITS OWN settings page. The manager never renders instance settings;
+ * it only sends this request, and the instance decides. Fire-and-forget like the STT toggle:
+ * there is nothing to await, and the instance owns the outcome.
+ */
+function postPreviewSettingsOpen(frame: HTMLIFrameElement | null, src: string): void {
+    const targetWindow = frame?.contentWindow;
+    if (!targetWindow) return;
+    const targetOrigin = previewTargetOrigin(src, frame);
+    if (!targetOrigin || targetOrigin === 'null') return;
+    try {
+        targetWindow.postMessage({ type: 'jaw-preview-settings-open' }, targetOrigin);
+    } catch (error) {
+        console.warn('[manager-preview] settings open request skipped', error);
+    }
+}
+
 function postPreviewVisible(frame: HTMLIFrameElement | null, src: string): void {
     const targetWindow = frame?.contentWindow;
     if (!targetWindow) return;
@@ -252,6 +272,7 @@ export function InstancePreview(props: InstancePreviewProps) {
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
     const loadedSrcRef = useRef<string | null>(null);
     const handledInsertRequestRef = useRef<string | null>(null);
+    const handledSettingsRequestRef = useRef<string | null>(null);
     const [pathDropStatus, setPathDropStatus] = useState<string | null>(null);
     const [folderDragActive, setFolderDragActive] = useState(false);
     const state = buildPreviewState(
@@ -294,6 +315,32 @@ export function InstancePreview(props: InstancePreviewProps) {
             .then(finish)
             .catch(error => finish({ ok: false, error: (error as Error).message }));
     }, [disabledReason, props.enabled, props.instance, props.onPreviewInsertTextResult, props.previewInsertTextRequest, state.canPreview, state.src]);
+
+    useEffect(() => {
+        const id = props.previewSettingsOpenRequest;
+        if (!id || handledSettingsRequestRef.current === id) return;
+        handledSettingsRequestRef.current = id;
+        const finish = (result: PreviewInsertTextResult): void => {
+            props.onPreviewSettingsOpenResult?.(id, result);
+        };
+        // Deliberately independent of props.active: the preview iframe stays mounted when the
+        // Preview tab is not showing, so the request still lands. What it cannot survive is an
+        // unmounted or still-loading frame, which is what these guards report.
+        if (!props.instance?.ok) {
+            finish({ ok: false, error: 'selected instance is not online' });
+            return;
+        }
+        if (!props.enabled || !state.canPreview || !state.src) {
+            finish({ ok: false, error: disabledReason || 'turn Preview on to open this instance\u2019s settings' });
+            return;
+        }
+        if (loadedSrcRef.current !== state.src) {
+            finish({ ok: false, error: 'selected instance preview is still loading' });
+            return;
+        }
+        postPreviewSettingsOpen(iframeRef.current, state.src);
+        finish({ ok: true });
+    }, [disabledReason, props.enabled, props.instance, props.onPreviewSettingsOpenResult, props.previewSettingsOpenRequest, state.canPreview, state.src]);
 
     const handleFolderPathDrop = useCallback(async (event: React.DragEvent): Promise<void> => {
         if (!hasFolderPanelDragPayload(event.dataTransfer)) return;
