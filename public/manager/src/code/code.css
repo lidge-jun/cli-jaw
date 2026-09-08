@@ -298,28 +298,37 @@
     min-height: 0;
     height: 100%;
     overflow: hidden;
-    /* Anchors the toast stack to this pane rather than the window, so a notice
-       sits over the transcript it belongs to and not over another panel. */
+    /* Contains the toast stack: a stacking context, not just a positioning
+       origin, so the notice cannot paint over the mobile drawer or its scrim,
+       which sit at z-index 21 and 20 on the window. */
     position: relative;
+    z-index: 0;
 }
 
-/* Notices float above the transcript instead of pushing the composer down. The
-   host itself ignores pointer events so it never blocks the text underneath;
-   the cards take them back. */
+/* Notices sit over the transcript, not over the workspace header. The host is a
+   zero-height flow element placed directly above the transcript, so "top" means
+   the top of the conversation rather than the top of the pane; absolute
+   positioning from the pane would land the card inside the header band and
+   swallow clicks meant for the workspace picker. The host ignores pointer
+   events so it never blocks the text underneath; the cards take them back. */
 .code-toast-host {
-    position: absolute;
-    top: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 30;
+    position: relative;
+    z-index: 3;
+    height: 0;
+    overflow: visible;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 8px;
+    margin: 0 auto;
     max-width: min(560px, calc(100% - 32px));
     pointer-events: none;
 }
 .code-toast-region { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+/* An empty live region has to stay in the DOM to be observed when content
+   arrives, but it should not reserve layout while it holds nothing. */
+.code-toast-region:empty { display: none; }
+.code-toast-region:not(:empty) { margin-top: 12px; }
 .code-toast {
     pointer-events: auto;
     display: flex;

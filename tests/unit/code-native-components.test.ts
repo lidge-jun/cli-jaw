@@ -624,9 +624,18 @@ test('switching to Auto (YOLO) announces the change over the transcript, not und
     const toast = h.container.querySelector('.code-toast');
     assert.ok(toast, 'the switch is announced');
     assert.match(toast?.textContent ?? '', /Auto \(YOLO\)/);
-    // Warning, not alert: it is news, and it must not interrupt a screen reader
-    // mid-sentence the way an error should.
     assert.ok(h.container.querySelector('.code-toast-warning'));
+    // Derived from the policy, not from a transition: a new session that is
+    // already Auto still says so, because the footer remounts and re-raises it.
+    // A transition detector would read that remount as "nothing changed" and
+    // stay silent exactly when the session starts acting on the policy.
+    await h.render(createElement(CodeWorkbench, { controller: model({ selection: { ...c.selection, permissionMode: 'auto' } }), endpointKey: '43225', ...{} }));
+    assert.match(h.container.querySelector('.code-toast')?.textContent ?? '', /Auto \(YOLO\)/);
+    // Leaving the policy retires it rather than letting it assert something
+    // about the session that is no longer true.
+    await h.render(createElement(CodeWorkbench, { controller: model({ selection: { ...c.selection, permissionMode: 'read-only' } }), endpointKey: '43225' }));
+    assert.equal(h.container.querySelector('.code-toast'), null, 'the warning leaves with the policy');
+    await h.render(createElement(CodeWorkbench, { controller: auto, endpointKey: '43225' }));
     await click(h.container.querySelector('.code-toast-dismiss') as HTMLButtonElement);
     assert.equal(h.container.querySelector('.code-toast'), null, 'a notice can be dismissed from the keyboard');
 });

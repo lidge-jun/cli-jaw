@@ -8,7 +8,13 @@
  * unconfirmed send or an archived session has to stay on screen until it is
  * resolved, and a notice that dismisses itself would strand them.
  */
-export type CodeToastVariant = 'info' | 'warning' | 'error';
+/**
+ * Only `warning` exists today, because the one notice this surface raises is a
+ * permission warning; an error the reader must act on stays inline instead. The
+ * union is kept because the shape of a second variant is already decided, but
+ * nothing in the app produces one, so there is no assertive region to route to.
+ */
+export type CodeToastVariant = 'warning';
 
 export type CodeToast = {
     /** Stable per source, so a repeated notice replaces rather than stacks. */
@@ -49,7 +55,19 @@ export function dismissCodeToast(list: readonly CodeToast[], id: string): CodeTo
     return next.length === list.length ? list as CodeToast[] : next;
 }
 
-/** An error is announced assertively; everything else waits its turn. */
-export function codeToastIsAssertive(toast: CodeToast): boolean {
-    return toast.variant === 'error';
+/**
+ * What a producer says: either raise this notice, or retire it.
+ *
+ * Retiring matters for anything derived from current state. A warning about a
+ * permission policy has to leave when the policy does, or it goes on asserting
+ * something about the session that is no longer true.
+ */
+export type CodeNotice =
+    | { id: string; message: string; variant: CodeToastVariant; durationMs?: number }
+    | { id: string; clear: true };
+
+export function applyCodeNotice(list: readonly CodeToast[], notice: CodeNotice): CodeToast[] {
+    if ('clear' in notice) return dismissCodeToast(list, notice.id);
+    return pushCodeToast(list, { id: notice.id, message: notice.message, variant: notice.variant,
+        durationMs: notice.durationMs ?? CODE_TOAST_DEFAULT_MS });
 }

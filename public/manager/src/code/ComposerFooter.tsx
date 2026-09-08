@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { CodeControllerModel } from './code-controller-types';
 import type { CodeCreateSessionRequest } from '../../../../src/code-mode/wire';
 import { CODE_POLICY_DETAILS, CODE_POLICY_LABELS, CODE_RUNTIME_LABELS } from './code-types';
+import type { CodeNotice } from './code-toasts';
 import { CheckGlyph, ProviderGlyph } from './ProviderGlyph';
 
 type MenuOption<T extends string> = {
@@ -114,7 +115,7 @@ export function CodeFooterMenu<T extends string>({ label, value, options, disabl
 
 export function ComposerFooter({ controller: c, onNotice }: {
     controller: CodeControllerModel;
-    onNotice?: ((notice: { id: string; message: string; variant: 'info' | 'warning' | 'error' }) => void) | undefined;
+    onNotice?: ((notice: CodeNotice) => void) | undefined;
 }) {
     const selection = c.selection;
     const provider = c.catalog?.providers.find(entry => entry.id === selection.provider);
@@ -129,13 +130,21 @@ export function ComposerFooter({ controller: c, onNotice }: {
     // stops being read after the first time; the moment it is switched on is
     // the moment worth interrupting for. What the policy currently is stays
     // legible on the Permission control itself.
-    const previousMode = useRef(selection.permissionMode);
     useEffect(() => {
-        const previous = previousMode.current;
-        previousMode.current = selection.permissionMode;
-        if (previous === selection.permissionMode || selection.permissionMode !== 'auto') return;
+        if (selection.permissionMode !== 'auto') {
+            // Leaving auto retires the warning immediately. A notice that
+            // outlived the policy would be stating something false about what
+            // the session is allowed to do.
+            noticeRef.current?.({ id: 'code:permission-mode', clear: true });
+            return;
+        }
+        // Derived from the current policy, not from a transition. The footer
+        // remounts when the draft becomes a real session, and a transition
+        // detector reads that remount as "no change" -- which deleted the
+        // warning at the exact moment the session started acting on it.
         noticeRef.current?.({ id: 'code:permission-mode', variant: 'warning',
-            message: 'Auto (YOLO): actions may run without approval.' });
+            message: 'Auto (YOLO): actions may run without approval.',
+            durationMs: Number.POSITIVE_INFINITY });
     }, [selection.permissionMode]);
     async function change(patch: Partial<CodeCreateSessionRequest>) {
         if (disabled || guard.current) return;

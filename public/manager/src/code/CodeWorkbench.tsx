@@ -5,7 +5,7 @@ import { ComposerFooter } from './ComposerFooter';
 import { CodePermissionQueue } from './CodePermissionQueue';
 import { CodeTranscript } from './CodeTranscript';
 import { CodeToastHost } from './CodeToastHost';
-import { CODE_TOAST_DEFAULT_MS, dismissCodeToast, pushCodeToast, type CodeToast } from './code-toasts';
+import { applyCodeNotice, dismissCodeToast, type CodeNotice, type CodeToast } from './code-toasts';
 import { CodeWorkspaceHeader } from './CodeWorkspaceHeader';
 import { codeCanResume } from './code-types';
 
@@ -16,16 +16,12 @@ export function CodeWorkbench({ controller: c, endpointKey, onOpenLocalFile }: P
     const [retrying, setRetrying] = useState<string | null>(null);
     const retryGuard = useRef(new Set<string>());
     const [toasts, setToasts] = useState<readonly CodeToast[]>([]);
-    // A notice is about the session that raised it. Carrying a permission
-    // warning into another session would state something about that session
-    // which may not be true, so the stack is dropped when the session changes.
-    const toastSession = useRef(sessionKey);
-    if (toastSession.current !== sessionKey) {
-        toastSession.current = sessionKey;
-        if (toasts.length) setToasts([]);
-    }
-    const notify = useCallback((notice: { id: string; message: string; variant: 'info' | 'warning' | 'error' }) => {
-        setToasts(current => pushCodeToast(current, { ...notice, durationMs: CODE_TOAST_DEFAULT_MS }));
+    // Notices are not cleared on a session change. The one notice that exists
+    // is derived from the current policy and re-raised by the footer on every
+    // mount, so wiping the stack here would delete it at the moment a draft
+    // becomes a running session -- exactly when it matters most.
+    const notify = useCallback((notice: CodeNotice) => {
+        setToasts(current => applyCodeNotice(current, notice));
     }, []);
     const dismiss = useCallback((id: string) => setToasts(current => dismissCodeToast(current, id)), []);
     const archived = c.session?.archivedAt != null;
@@ -55,7 +51,6 @@ export function CodeWorkbench({ controller: c, endpointKey, onOpenLocalFile }: P
     }
     return <div className="code-canvas-main">
         <CodeWorkspaceHeader key={sessionKey} controller={c} />
-        <CodeToastHost toasts={toasts} onDismiss={dismiss} />
         {(c.transport !== 'connected' || (c.selectedId !== null && !c.synced)) && <section className={`code-transport-status is-${c.transport}`} role="status">
             {c.transport === 'reconnecting' ? 'Live updates reconnecting. History may be out of date.'
                 : c.transport === 'disconnected' ? 'Live updates disconnected. History may be out of date.' : 'Updating conversation…'}
@@ -85,6 +80,9 @@ export function CodeWorkbench({ controller: c, endpointKey, onOpenLocalFile }: P
             {canResume ? <button type="button" onClick={() => perform(c.resume)}>Resume session</button>
                 : <><span>{c.session.resume.reason ?? 'Resume is not currently available.'}</span><button type="button" onClick={c.newSession}>New session</button></>}
         </section>}
+        {/* Directly above the transcript, so a notice sits over the conversation
+            rather than over the workspace header and its picker. */}
+        <CodeToastHost toasts={toasts} onDismiss={dismiss} />
         <CodeTranscript items={c.items} provider={c.session?.provider ?? c.selection.provider} sessionKey={sessionKey}
             workingDir={c.session?.cwd ?? c.selection.cwd} loading={c.loading} hasOlderHistory={c.hasOlderHistory}
             loadOlderHistory={c.loadOlderHistory} permissionCount={c.permissions.length} onOpenLocalFile={onOpenLocalFile} />
