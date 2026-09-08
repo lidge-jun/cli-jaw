@@ -61,7 +61,13 @@ function apply(state: CodeSessionState, event: CodeWireEvent): CodeSessionState 
     let { items, session, permissions } = state;
     if (event.event === 'code_session') {
         if (!event.session || event.session.sessionId !== state.sessionId) return { ...state, needsSnapshot: true, synced: false };
-        session = event.session;
+        // Usage is attached at read time, so a stored session event does not
+        // carry it. Replacing the record wholesale would blank the meter on
+        // every unrelated session change; the last figure stands until a
+        // snapshot or a listing supplies a newer one.
+        session = event.session.contextUsage === undefined && session?.contextUsage !== undefined
+            ? { ...event.session, contextUsage: session.contextUsage }
+            : event.session;
         permissions = permissions.filter(p => p.epoch === session!.epoch && p.turnId === session!.turnId);
     } else {
         const id = event.item?.itemId ?? event.update?.itemId;

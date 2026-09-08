@@ -687,6 +687,15 @@ Usage is bound to the runtime that reported it: replacing a runtime without
 reusing it, or that runtime exiting, drops the figure rather than leaving a
 measurement of a process that is gone.
 
+Because it is attached at read time, usage travels on snapshots and listings
+and not on stored session events, which are built from the persisted record.
+A session event therefore carries no usage, and the client keeps the figure it
+already has rather than blanking the meter on every unrelated status change.
+The number is refreshed by a snapshot, a session switch or an explicit refresh,
+so between those it can lag the runtime; it is old rather than invented, and
+the alternative would be a session frame per token notification against the
+turn's byte budget.
+
 The transcript renders sanitized Markdown, math and linear tables with stable
 virtual rows. Tool output stays escaped; local files open only after an explicit
 click. Endpoint/session changes reset measured heights and scroll ownership.
