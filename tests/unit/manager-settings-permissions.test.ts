@@ -29,7 +29,11 @@ test('configuredPolicyLabel reports stored shape without changing parser or edit
         assert.equal(configuredPolicyLabel(value), expected);
         assert.deepEqual(value, before);
     }
-    assert.deepEqual(parsePermissionsValue('safe'), { mode: 'unknown' });
+    // 'safe' is a real stored policy, not an unrecognized shape. Reporting it as unknown is
+    // what let the editors collapse it to 'auto' and widen permissions without the user
+    // seeing it.
+    assert.deepEqual(parsePermissionsValue('safe'), { mode: 'safe' });
+    assert.deepEqual(parsePermissionsValue('bogus'), { mode: 'unknown' });
     assert.deepEqual(parsePermissionsValue([' read ', '']), { mode: 'custom', tokens: ['read'] });
 });
 
