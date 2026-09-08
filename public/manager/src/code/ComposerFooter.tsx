@@ -137,9 +137,6 @@ export function ComposerFooter({ controller: c, onNotice }: {
         noticeRef.current?.({ id: 'code:permission-mode', variant: 'warning',
             message: 'Auto (YOLO): actions may run without approval.' });
     }, [selection.permissionMode]);
-    useEffect(() => {
-        if (error) noticeRef.current?.({ id: 'code:footer-error', variant: 'error', message: error });
-    }, [error]);
     async function change(patch: Partial<CodeCreateSessionRequest>) {
         if (disabled || guard.current) return;
         guard.current = true; setSaving(true); setError(null);
@@ -197,5 +194,9 @@ export function ComposerFooter({ controller: c, onNotice }: {
             <button type="button" className="code-inline-action" onClick={() => { void c.refresh().catch(err => setError(err instanceof Error ? err.message : String(err))); }}>Refresh availability</button>
         </div>}
         {(saving || c.operation.kind === 'patching') && <span role="status">Saving settings…</span>}
+        {/* Stays inline. A failed setting change is something the reader has to
+            act on -- the control reverted and this is the only account of why --
+            and it must not leave on a timer before they have read it. */}
+        {error && <div className="code-action-error" role="alert">{error}</div>}
     </>;
 }

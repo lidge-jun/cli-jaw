@@ -16,6 +16,14 @@ export function CodeWorkbench({ controller: c, endpointKey, onOpenLocalFile }: P
     const [retrying, setRetrying] = useState<string | null>(null);
     const retryGuard = useRef(new Set<string>());
     const [toasts, setToasts] = useState<readonly CodeToast[]>([]);
+    // A notice is about the session that raised it. Carrying a permission
+    // warning into another session would state something about that session
+    // which may not be true, so the stack is dropped when the session changes.
+    const toastSession = useRef(sessionKey);
+    if (toastSession.current !== sessionKey) {
+        toastSession.current = sessionKey;
+        if (toasts.length) setToasts([]);
+    }
     const notify = useCallback((notice: { id: string; message: string; variant: 'info' | 'warning' | 'error' }) => {
         setToasts(current => pushCodeToast(current, { ...notice, durationMs: CODE_TOAST_DEFAULT_MS }));
     }, []);

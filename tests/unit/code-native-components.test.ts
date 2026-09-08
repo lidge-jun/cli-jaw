@@ -613,8 +613,11 @@ test('switching to Auto (YOLO) announces the change over the transcript, not und
     const c = model();
     await h.render(createElement(CodeWorkbench, { controller: c, endpointKey: '43225' }));
     // The policy is legible on its own control; a permanent line under the
-    // composer is not what tells the reader it just changed.
-    assert.equal(h.container.querySelector('.code-toast-host'), null);
+    // composer is not what tells the reader it just changed. The live regions
+    // are mounted from the start -- one that appears together with its first
+    // message is not announced -- but they hold nothing yet.
+    assert.ok(h.container.querySelector('.code-toast-host'), 'the live regions exist before there is anything to say');
+    assert.equal(h.container.querySelector('.code-toast'), null);
     assert.doesNotMatch(h.container.textContent ?? '', /actions may run without approval/);
     const auto = model({ selection: { ...c.selection, permissionMode: 'auto' } });
     await h.render(createElement(CodeWorkbench, { controller: auto, endpointKey: '43225' }));
@@ -638,4 +641,3 @@ test('states the reader must act on stay on screen instead of becoming a toast',
     await h.render(createElement(CodeWorkbench, { controller: model({ transport: 'disconnected' }), endpointKey: '43225' }));
     assert.match(h.container.textContent ?? '', /Live updates disconnected/);
 });
-

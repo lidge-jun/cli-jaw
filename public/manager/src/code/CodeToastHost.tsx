@@ -26,7 +26,11 @@ function ToastCard({ toast, onDismiss }: { toast: CodeToast; onDismiss(id: strin
 export function CodeToastHost({ toasts, onDismiss }: { toasts: readonly CodeToast[]; onDismiss(id: string): void }) {
     const polite = toasts.filter(toast => !codeToastIsAssertive(toast));
     const assertive = toasts.filter(codeToastIsAssertive);
-    if (!toasts.length) return null;
+    // The regions are always mounted, even empty. A live region that arrives in
+    // the DOM together with its first content is not announced -- assistive tech
+    // has to already be observing the region when the insertion happens, which
+    // is also why they are not hidden while empty. An empty host renders nothing
+    // visible and does not take pointer events.
     return <div className="code-toast-host">
         <div className="code-toast-region" role="status" aria-live="polite">
             {polite.map(toast => <ToastCard key={toast.id} toast={toast} onDismiss={onDismiss} />)}
@@ -36,4 +40,3 @@ export function CodeToastHost({ toasts, onDismiss }: { toasts: readonly CodeToas
         </div>
     </div>;
 }
-
