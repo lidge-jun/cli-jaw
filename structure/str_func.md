@@ -72,15 +72,16 @@ cli-jaw/
 │   │   └── skill-cache.ts    ← 활성 스킬 슬래시 커맨드 캐시 (registerSkillLoader, getSkillCommandsCache, invalidateSkillCommandsCache) (44L)
 │   ├── code-mode/            ← native Code sessions, independent of Jaw orchestration
 │   │   ├── host.ts ← per-backend lazy composition and storage (64L)
-│   │   ├── manager.ts ← session index, admission and resource capacity (296L)
+│   │   ├── manager.ts ← session index, admission and resource capacity (322L)
 │   │   ├── session.ts ← captured turn ownership, cancellation and accepted-buffer drain (623L)
 │   │   ├── normalize.ts ← redacted materialized transcript and coalescing (534L)
 │   │   ├── store.ts ← SQLite ownership, replay, snapshots and byte budgets (794L)
 │   │   ├── provider.ts ← native handle and turn-context contracts (53L)
 │   │   ├── types.ts ← internal session and store contracts (12L)
-│   │   ├── wire.ts ← public request/event DTOs (178L)
+│   │   ├── wire.ts ← public request/event DTOs (186L)
 │   │   └── providers/        ← direct native adapters and capabilities
-│   │       ├── catalog.ts ← model/capability descriptions (71L)
+│   │       ├── catalog.ts ← model/capability descriptions (100L)
+│   │       ├── live-models.ts ← last-known opencodex catalog, refreshed in background (93L)
 │   │       ├── codex-app.ts ← Codex app-server adapter (320L)
 │   │       ├── claude.ts ← Claude native adapter (93L)
 │   │       ├── acp.ts ← shared ACP resource ownership (134L)
@@ -532,7 +533,7 @@ cli-jaw/
 │       ├── checkpoint/       ← checkpoint store + types (2 files, 59L) ✨
 │       ├── permissions/      ← permission policy + types (2 files, 80L) ✨
 │       └── context-map/      ← context map builder (1 file, 71L) ✨
-├── public/                   ← Web UI (Vite 8 + ES Modules, 598 files source/assets, ~101821L; generated `public/dist` and `public/public/dist` excluded)
+├── public/                   ← Web UI (Vite 8 + ES Modules, 602 files source/assets, ~102302L; generated `public/dist` and `public/public/dist` excluded)
 │   ├── settings/ ← standalone instance settings entry
 │   │   └── index.html ← Classic settings iframe HTML (13L)
 │   ├── index.html            ← 뼈대 + header project/git status anchor (695L)
