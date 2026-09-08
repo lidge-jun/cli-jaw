@@ -261,3 +261,31 @@ test('EV-022: --port reaches the server instead of being parsed and dropped', ()
         assert.match(call, /opts\.port/, `call site does not forward the port: ${call.slice(0, 70)}`);
     }
 });
+
+test('EV-023: abstentionRate counts declining when it should have clicked', () => {
+    // On a refusal-expected case a decline is the RIGHT answer and is counted
+    // as verified. Blending it into one abstention rate would mix "declined
+    // when it should have acted" with "declined when it should have declined"
+    // - opposite signals wearing the same name.
+    const results: CaseResult[] = [
+        { id: 'clicked', expected: 'e1', outcome: { kind: 'verified', ms: 10 } },
+        { id: 'gave-up', expected: 'e1', outcome: { kind: 'abstained', ms: 10, reason: 'COMPUTER_TARGET_AMBIGUOUS' } },
+        // Correctly declined: recorded as verified, not as an abstention.
+        { id: 'refused-a', expected: 'abstain', outcome: { kind: 'verified', ms: 10 } },
+        { id: 'refused-b', expected: 'abstain', outcome: { kind: 'verified', ms: 10 } },
+    ];
+    const report = scoreRun(results);
+
+    // One of the two click cases gave up.
+    assert.equal(report.abstentionRate, 0.5);
+    // Not 1/4, which is what a blended denominator would have reported.
+    assert.notEqual(report.abstentionRate, 0.25);
+    assert.equal(report.refusal.verified, 2, 'the correct declines are elsewhere');
+});
+
+test('EV-024: the report says which denominator the abstention rate uses', () => {
+    const text = formatReport(scoreRun([
+        { id: 'a', expected: 'e1', outcome: { kind: 'abstained', ms: 10, reason: 'x' } },
+    ]));
+    assert.match(text, /of cases that should have clicked/);
+});

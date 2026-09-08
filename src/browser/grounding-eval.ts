@@ -60,6 +60,15 @@ export type EvalReport = {
     verifiedRate: number;
     /** The number to watch: a wrong click is worse than no click. */
     misclickRate: number;
+    /**
+     * Refusals on cases where CLICKING was the correct answer.
+     *
+     * Deliberately not "all abstentions": on a refusal-expected case a decline
+     * is the right answer and is counted as verified, so blending the two
+     * would mix "the pipeline declined when it should have acted" with "the
+     * pipeline declined when it should have declined". Those are opposite
+     * signals wearing the same name.
+     */
     abstentionRate: number;
     latency: { p50: number; p95: number; max: number } | null;
     /** Cases where clicking the named element is correct. */
@@ -120,7 +129,8 @@ export function scoreRun(results: CaseResult[]): EvalReport {
         ...counts,
         verifiedRate: rate(counts.verified),
         misclickRate: rate(counts.misclicked),
-        abstentionRate: rate(counts.abstained),
+        // Scoped to click cases, per the field's own contract above.
+        abstentionRate: click.scored === 0 ? 0 : click.abstained / click.scored,
         latency: durations.length
             ? { p50: percentile(durations, 50), p95: percentile(durations, 95), max: durations[durations.length - 1] as number }
             : null,
@@ -173,7 +183,7 @@ export function formatReport(report: EvalReport): string {
         `cases           ${report.total} (${report.scored} scored, ${report.errored} errored)`,
         `verified        ${report.verified} (${pct(report.verifiedRate)})`,
         `misclicked      ${report.misclicked} (${pct(report.misclickRate)})`,
-        `abstained       ${report.abstained} (${pct(report.abstentionRate)})`,
+        `abstained       ${report.abstained} (${pct(report.abstentionRate)} of cases that should have clicked)`,
     ];
     if (report.latency) {
         lines.push(`latency         p50 ${report.latency.p50}ms  p95 ${report.latency.p95}ms  max ${report.latency.max}ms`);
