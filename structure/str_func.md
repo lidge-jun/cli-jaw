@@ -384,7 +384,7 @@ cli-jaw/
 │   │   ├── occlusion.ts      ← 클릭 지점 페이지 hit-test 함수 + 가림 판정(자손/label/presentational은 통과, 미확인은 fail-open) (179L)
 │   │   ├── verify-candidate.ts ← 후보 주변 확대 크롭 기하 + 2차 응답 드리프트 판정(합의 시 좌표 교체) + remainingObservationBudget (200L)
 │   │   ├── vision-provider.ts ← codex 호출 인자 구성(샌드박스 우회는 명시적 opt-in, 기본 off) + Windows 종료코드 해석 (101L)
-│   │   ├── grounding-eval.ts ← 평가 하니스 채점(오클릭/기권/오류 분리, nearest-rank 백분위) + classifyFailure(기권/미발견/인프라 3분류) (234L)
+│   │   ├── grounding-eval.ts ← 평가 하니스 채점(오클릭/기권/그라운딩실패/오류 분리, click 버킷 기준 rate, nearest-rank 백분위) + classifyFailure 5분류 (335L)
 │   │   ├── runtime-diagnostics.ts ← runtime diagnostics helper (121L)
 │   │   ├── runtime-owner.ts  ← browser runtime owner management (135L)
 │   │   ├── runtime-owner-store.ts ← runtime owner store (55L)
