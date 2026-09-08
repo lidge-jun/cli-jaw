@@ -68,6 +68,21 @@ Claude Code 자신이 세 가지 조건을 요구한다. dynamic workflows가 �
 모델이 xhigh를 지원해야 하며, 조직 정책이 xhigh를 막지 않아야 한다. 따라서
 ultracode는 xhigh 가능한 모델에만 노출한다.
 
+`claude --effort`의 도움말이 받는 값을 그대로 적어둔다: `low, medium, high,
+xhigh, max`. ultracode는 없다. 번들 스키마도 이 티어를 boolean 설정으로 정의하며
+"typically provided via `--settings` or the `apply_flag_settings` control
+request"라고 스스로 밝힌다.
+
+구현은 `src/agent/args.ts`가 소유한다. `normalizeClaudeEffort()`가 플래그에 실을
+값을 정하고, `claudeSettingsArgs()`가 스위치를 settings 객체에 넣는다. 이 둘은
+같은 `--settings`를 fastMode와 공유하므로 **하나의 객체로 병합한다** — 플래그를
+두 번 넘기면 뒤가 앞을 덮어 한쪽이 조용히 사라진다.
+
+노출 범위는 `src/cli/claude-models.ts`의 `buildClaudeEffortsByModel()`이 정한다.
+Haiku와 구세대 계열은 xhigh를 지원하지 않으므로 다섯 rung만 받는다. 나머지 두
+조건(dynamic workflows, 조직 정책)은 cli-jaw가 알 수 없고 Claude Code가 런타임에
+직접 거절 메시지를 낸다.
+
 ## 새 모델이 도착할 때
 
 opencodex는 새 모델 도착을 명시적으로 다룬다

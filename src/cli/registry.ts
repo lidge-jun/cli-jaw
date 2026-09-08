@@ -1,6 +1,6 @@
 // ─── CLI Registry (single source of truth) ──────────
 
-import { getDefaultClaudeChoices, getDefaultClaudeModel } from './claude-models.js';
+import { CLAUDE_EFFORT_CHOICES, getDefaultClaudeChoices, getDefaultClaudeModel } from './claude-models.js';
 import { CURSOR_EFFORT_CHOICES, CURSOR_REGISTRY_MODELS } from '../agent/cursor-runtime.js';
 import type { CliEngine } from '../types/cli-engine.js';
 import type { RuntimeTransport } from '../shared/runtime-contract.js';
@@ -120,7 +120,10 @@ export const CLI_REGISTRY = {
         binary: 'claude',
         defaultModel: getDefaultClaudeModel(),
         defaultEffort: 'medium',
-        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+        // `ultracode` is a Claude Code session setting, not a wire effort; it is
+        // normalized to xhigh plus a settings flag in src/agent/args.ts. Live
+        // registry narrows it per model, since it needs xhigh support.
+        efforts: [...CLAUDE_EFFORT_CHOICES],
         models: getDefaultClaudeChoices(),
     },
     'claude-e': {
@@ -129,7 +132,7 @@ export const CLI_REGISTRY = {
         experimental: true,
         defaultModel: getDefaultClaudeModel(),
         defaultEffort: 'medium',
-        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+        efforts: [...CLAUDE_EFFORT_CHOICES],
         models: getDefaultClaudeChoices(),
     },
     codex: {
