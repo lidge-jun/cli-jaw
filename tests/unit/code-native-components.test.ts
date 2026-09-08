@@ -227,6 +227,27 @@ test('Tab leaves an open menu instead of returning focus to its trigger', bounde
     assert.notEqual(document.activeElement, trigger);
 });
 
+test('narrow widths keep every composer control reachable on one surface', bounded, async t => {
+    const h = await surface(t);
+    await h.render(createElement(CodeWorkbench, { controller: model(), endpointKey: '43225' }));
+    // Rendering at 390px showed the footer already reflows: the model pill takes
+    // its own row while the runtime, permission, mic and send controls stay put.
+    // JSDOM has no layout, so this pins the structural contract that makes the
+    // reflow possible instead of re-asserting pixel positions.
+    const footer = h.container.querySelector('.code-composer-footer');
+    assert.ok(footer, 'the footer is a single flex row that is allowed to wrap');
+    assert.ok(footer.querySelector('.code-composer-footer-spacer'), 'the spacer is what splits left and right groups');
+    for (const name of ['Runtime: Codex', 'Permission: Ask first', 'Model: native-model']) {
+        assert.ok(button(footer, name), `${name} stays in the footer at every width`);
+    }
+    // Send and dictation live with the input, not the footer, so a wrapping
+    // footer can never push them off the surface.
+    const actions = h.container.querySelector('.code-composer-actions');
+    assert.ok(actions);
+    assert.ok(button(actions, 'Send prompt') && button(actions, 'Dictation'));
+    assert.equal(footer.contains(actions), false);
+});
+
 function permission(id: string): CodePermissionRequest {
     return { permissionId: id, sessionId: 's-a', turnId: 't-a', epoch: 2, title: `Request ${id}`, detail: 'Read a selected file', requestedAt: 1,
         options: [{ optionId: `opaque/${id}:37`, label: 'Read this file', kind: 'allow_once' }, { optionId: `opaque/${id}:94`, label: 'Do not read', kind: 'reject_once' }] };
