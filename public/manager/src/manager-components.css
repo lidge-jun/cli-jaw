@@ -1297,15 +1297,7 @@ button.instance-group-header[aria-expanded="false"] .instance-group-chevron {
 .drawer-body { min-height: 0; overflow: auto; }
 
 /* Settings replaces the workspace while retaining the preview host. */
-.workbench[data-instance-settings-open="true"] { grid-template-rows: minmax(0, 1fr); }
 .workbench .workbench-header[hidden], #manager-sidebar-list[hidden] { display: none; }
-.workbench[data-instance-settings-open="true"] .workbench-body { display: grid; min-height: 0; padding: 0; }
-.workbench-settings-page { min-width: 0; min-height: 0; height: 100%; }
-.workbench-settings-toggle { min-width: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center; }
-.workbench-settings-toggle svg { width: 16px; height: 16px; stroke-width: 1.8; }
-.workbench-settings-toggle[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
-.workbench-settings-toggle:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-@media (pointer: coarse) { .workbench-settings-toggle { min-width: 44px; min-height: 44px; } }
 
 @media (max-width: 639px) {
     .command-center .command-title { display: none; }

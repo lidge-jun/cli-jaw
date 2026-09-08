@@ -11,7 +11,9 @@ export function dashboardSettingsUiFromView(
     return {
         selectedPort: view.selectedPort,
         selectedTab: view.activeDetailTab,
-        instanceSettingsOpen: view.instanceSettingsOpen,
+        // Retained in the schema for one version so older clients and PATCH callers do not
+        // 400, but the rail owns settings now and nothing opens a Workbench panel.
+        instanceSettingsOpen: false,
         sidebarCollapsed: view.sidebarCollapsed,
         activityDockCollapsed: view.activityDockCollapsed,
         activityDockHeight: view.activityDockHeight,

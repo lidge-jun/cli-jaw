@@ -224,7 +224,6 @@
 .settings-shell .settings-field-error { grid-column:1 / -1; }
 .settings-shell .settings-select-menu { left:auto; right:0; width:min(100%,560px); }
 .settings-shell .settings-field :is(input:not([type=checkbox]),textarea), .settings-shell .settings-select-trigger { background:var(--surface-raised); box-shadow:none; }
-.workbench-settings-toggle:focus-visible,
 .settings-shell :focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 @container (max-width:719px) {
     .settings-shell .settings-field, .settings-shell .dashboard-settings-row { grid-template-columns:minmax(0,1fr); row-gap:12px; }
