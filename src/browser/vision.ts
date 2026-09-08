@@ -7,6 +7,7 @@ import { StringDecoder } from 'string_decoder';
 import { screenshot, mouseClick, snapshot, elementBoxes, click as clickRef, hitTestPoint } from './actions.js';
 import { judgeHit } from './occlusion.js';
 import { cropAroundPoint, judgeVerification, isObservationStale } from './verify-candidate.js';
+import { buildVisionInvocation, explainExit } from './vision-provider.js';
 import { reconcileVisionCandidate, assertFreshObservationBundle, type ReconcileResult } from './web-ai/candidate-reconcile.js';
 import { sanitizeTarget, appendBounded } from './vision-input.js';
 import { parseCandidate, validateCandidate, type GroundingCandidate } from './grounding-candidate.js';
@@ -25,6 +26,15 @@ export interface VisionClickOptions {
     reconcile?: boolean;
     /** Refuse a click when something else would receive it. Default on. */
     checkOcclusion?: boolean;
+    /**
+     * Allow the provider to run with `--dangerously-bypass-approvals-and-sandbox`.
+     *
+     * Off by default. It disables **both** approvals and the sandbox, which is
+     * far more authority than an image-classification call needs. It exists
+     * because the Windows sandbox has been observed to kill `codex exec`
+     * children with exit `-1073741502` and an empty stderr.
+     */
+    bypassSandbox?: boolean;
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -35,8 +45,6 @@ type VisionCoordinates = {
     description?: string;
     provider: 'codex';
 };
-
-const CODEXCLAW_PLUGIN_DISABLE_CONFIG = 'plugins."codexclaw@personal".enabled=false';
 
 function isRecord(value: unknown): value is JsonRecord {
     return Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -76,7 +84,7 @@ function collectEventTexts(value: unknown): string[] {
 export async function extractCoordinates(screenshotPath: string, target: string, opts: VisionClickOptions = {}): Promise<VisionCoordinates> {
     const provider = opts.provider || 'codex';
     switch (provider) {
-        case 'codex': return codexVision(screenshotPath, target);
+        case 'codex': return codexVision(screenshotPath, target, opts.bypassSandbox === true);
         default: throw new Error(`Unknown vision provider: ${provider}. Phase 2 supports 'codex' only.`);
     }
 }
@@ -85,7 +93,7 @@ export async function extractCoordinates(screenshotPath: string, target: string,
  * Codex CLI vision provider.
  * Spawns `codex exec -i <image> --json` and parses NDJSON response.
  */
-function codexVision(screenshotPath: string, target: string): Promise<VisionCoordinates> {
+function codexVision(screenshotPath: string, target: string, bypassSandbox = false): Promise<VisionCoordinates> {
     const safeTarget = sanitizeTarget(target);
     const prompt = [
         `Look at this screenshot image carefully.`,
@@ -98,16 +106,12 @@ function codexVision(screenshotPath: string, target: string): Promise<VisionCoor
     ].join(' ');
 
     return new Promise((resolve, reject) => {
-        const args = [
-            'exec', '-i', screenshotPath, '--json',
-            '--ephemeral',
-            '-c', CODEXCLAW_PLUGIN_DISABLE_CONFIG,
-            '--dangerously-bypass-approvals-and-sandbox',
-            '--skip-git-repo-check',
-            prompt,
-        ];
+        // The sandbox bypass is off unless a caller asks for it. It disables
+        // both approvals and the sandbox, which is far more authority than an
+        // image-classification call needs.
+        const invocation = buildVisionInvocation({ screenshotPath, prompt, ...(bypassSandbox ? { bypassSandbox } : {}) });
 
-        const child = spawn('codex', args, {
+        const child = spawn(invocation.command, invocation.args, {
             // stdin is ignored, not piped: an open pipe makes codex wait on
             // "Reading additional input from stdin", so the process only ended
             // when the timeout killed it — burning the full budget on a turn
@@ -132,7 +136,7 @@ function codexVision(screenshotPath: string, target: string): Promise<VisionCoor
             stdout = appendBounded(stdout, outDecoder.end());
             stderr = appendBounded(stderr, errDecoder.end(), 64 * 1024);
             if (code !== 0) {
-                return reject(new Error(`codex exec failed (code ${code}): ${stderr.slice(0, 200)}`));
+                return reject(new Error(explainExit(code, stderr, invocation.bypassedSandbox)));
             }
 
             try {
@@ -198,6 +202,7 @@ export async function visionClick(port: number, target: string, opts: VisionClic
     // 2. Vision → coordinates (image pixel space)
     const result = await extractCoordinates(ss.path, target, {
         provider: opts.provider || 'codex',
+        ...(opts.bypassSandbox ? { bypassSandbox: true } : {}),
     });
 
     if (!result.found) {
@@ -265,7 +270,10 @@ export async function visionClick(port: number, target: string, opts: VisionClic
             return { success: false, reason: 'verification capture reported no device pixel ratio', provider: result.provider };
         }
         const cropDpr = cropShot.dpr;
-        const second = await extractCoordinates(cropShot.path, target, { provider: opts.provider || 'codex' });
+        const second = await extractCoordinates(cropShot.path, target, {
+            provider: opts.provider || 'codex',
+            ...(opts.bypassSandbox ? { bypassSandbox: true } : {}),
+        });
         const local = second.found ? { x: second.x / cropDpr, y: second.y / cropDpr } : null;
         const outcome = judgeVerification(local, crop, css);
         if (!outcome.agreed) {
