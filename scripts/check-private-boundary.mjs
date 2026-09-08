@@ -71,8 +71,13 @@ export function reportSubmodules(cwd, { enforce = false } = {}) {
             findings.push({ path, absent: true, files: [] });
             continue;
         }
-        const files = git(subCwd, ['ls-files', '-z']).split('\0').filter(Boolean)
-            .map(f => path + '/' + f).filter(isPrivatePath);
+        // Same reasoning as rejectWorkingTree: a submodule's own .gitignore can
+        // hide a private tree from its index while it sits in the checkout and
+        // ships with any archive of that submodule.
+        const tracked = git(subCwd, ['ls-files', '-z']).split('\0').filter(Boolean);
+        const untracked = git(subCwd, ['ls-files', '-z', '--others', '--directory', '--no-empty-directory'])
+            .split('\0').filter(Boolean).map(entry => entry.replace(/\/$/, ''));
+        const files = [...tracked, ...untracked].map(f => path + '/' + f).filter(isPrivatePath);
         if (files.length) findings.push({ path, absent: false, files });
     }
     for (const finding of findings) {

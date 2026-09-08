@@ -102,3 +102,32 @@ test('PBS-004: the private-path predicate is unchanged by submodule prefixing', 
     // A path merely containing the word is not a private record.
     assert.equal(isPrivatePath('src/devlogger/index.ts'), false);
 });
+
+test('PBS-005: a submodule .gitignore cannot hide a private tree from the scan', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pbs-'));
+    try {
+        const sub = repo(path.join(root, 'sub'));
+        commitFile(sub, 'skills/example/SKILL.md', 'public skill\n');
+        // The submodule ignores its own devlog/, so its index is clean while
+        // the directory sits in the checkout and ships with any archive of it.
+        commitFile(sub, '.gitignore', 'devlog\n');
+        fs.mkdirSync(path.join(sub, 'devlog/_plan/260908_x'), { recursive: true });
+        fs.writeFileSync(path.join(sub, 'devlog/_plan/260908_x/000_index.md'), 'private record\n');
+        assert.equal(git(sub, ['status', '--porcelain']).trim(), '', 'the submodule index is clean');
+
+        const parent = repo(path.join(root, 'parent'));
+        commitFile(parent, 'README.md', 'public\n');
+        git(parent, ['-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', sub, 'skills_ref']);
+        git(parent, ['commit', '-q', '-m', 'add submodule']);
+        // The superproject's copy needs the same ignored tree to reproduce it.
+        fs.mkdirSync(path.join(parent, 'skills_ref/devlog/_plan/260908_x'), { recursive: true });
+        fs.writeFileSync(path.join(parent, 'skills_ref/devlog/_plan/260908_x/000_index.md'), 'private record\n');
+
+        const findings = reportSubmodules(parent);
+        assert.equal(findings.length, 1, 'an ignored private tree must still be reported');
+        assert.deepEqual(findings[0].files, ['skills_ref/devlog']);
+        assert.throws(() => checkIndex(parent), /skills_ref\/devlog/);
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
