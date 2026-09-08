@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { createInstanceSettingsNavigation, hydrateInstanceSettings, settingsDirtyAfter, useSettingsDirtyState, useDashboardView } from '../../public/manager/src/hooks/useDashboardView';
 import { createManagerCaptureKeydownHandler, runManagerShortcut, type ManagerShortcutRunnerDeps } from '../../public/manager/src/manager-shortcut-runner';
-import { DEFAULT_MANAGER_SHORTCUT_KEYMAP } from '../../public/manager/src/manager-shortcuts';
+import { DEFAULT_MANAGER_SHORTCUT_KEYMAP, MANAGER_SHORTCUT_ACTIONS } from '../../public/manager/src/manager-shortcuts';
 import type { DashboardRegistryPatch, DashboardRegistryUi, DashboardShortcutAction } from '../../public/manager/src/types';
 import type { SettingsClient } from '../../public/manager/src/settings/types';
 
@@ -100,7 +100,13 @@ test('shortcut toggle and tab cycling have separate owners', () => {
         setPreviewRefreshKey() {}, handleSidebarToggle() {} };
     runManagerShortcut('toggleInstanceSettings', deps); assert.equal(toggles, 1);
     runManagerShortcut('nextTab', deps); assert.deepEqual(tabs, ['overview']);
-    runManagerShortcut('switchTab4', deps); assert.deepEqual(tabs, ['overview', 'settings']);
+    // Meta+4 used to select a fourth Workbench tab that no longer exists. Leaving it bound
+    // meant the key silently swapped the whole workspace for the rail settings page, which is
+    // not what a tab shortcut should do — switchTab1..3 still name real tabs.
+    assert.equal(MANAGER_SHORTCUT_ACTIONS.includes('switchTab4' as never), false,
+        'switchTab4 must not survive the Workbench settings tab it selected');
+    assert.equal('switchTab4' in DEFAULT_MANAGER_SHORTCUT_KEYMAP, false,
+        'a retired action must not keep a default binding');
     assert.equal(toggles, 1);
 });
 
