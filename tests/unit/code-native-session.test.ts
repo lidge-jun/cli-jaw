@@ -830,6 +830,25 @@ test('a catalog that drops an effort keeps the running session usable', async t 
     assert.throws(() => f.create('cursor', { effort: 'high' }), errorCode('unsupported_effort', 400));
 });
 
+test('drift exemption covers only the values a session actually kept', async t => {
+    const f = fixture(t);
+    const row = f.create('cursor', { model: 'model-b', effort: 'high' });
+    // The whole catalog moves: this session's model and effort both disappear.
+    f.providers.cursor.catalog = { ...f.providers.cursor.catalog, models: ['model-a'],
+        capabilities: { ...f.providers.cursor.catalog.capabilities, efforts: ['low'] } };
+    // Keeping both is the only combination the session is allowed to carry
+    // forward; the exemption must not leak into a partial change.
+    assert.doesNotThrow(() => f.manager.prompt(row.sessionId, { text: 'both kept', clientTurnKey: 'k-both' }));
+    const live = f.manager.snapshot(row.sessionId).session;
+    // Changing the model forfeits the effort exemption too, because the pair is
+    // what the runtime was opened with.
+    await assert.rejects(f.manager.patch(row.sessionId, { expectedRevision: live.revision, model: 'model-a' }),
+        errorCode('unsupported_effort', 400));
+    // And a value that was never accepted is refused even while the rest is kept.
+    await assert.rejects(f.manager.patch(row.sessionId, { expectedRevision: live.revision, effort: 'medium' }),
+        errorCode('unsupported_effort', 400));
+});
+
 test('dispose is idempotent during pending open and later closes orphaned startup without replay', async t => {
     const f = fixture(t);
     const gate = deferred<void>();
