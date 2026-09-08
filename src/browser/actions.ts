@@ -216,6 +216,53 @@ function annotateOccurrences(nodes: Omit<SnapshotNode, 'occurrence'>[]): Snapsho
     });
 }
 
+/**
+ * The locator for a snapshot node — one form, used everywhere.
+ *
+ * Two call sites used to build this independently and they diverged by exactly
+ * one option. Measuring used `exact: true`; clicking did not, and Playwright
+ * turns a missing `exact` into substring AND case-insensitive matching
+ * (`nameOp` becomes `*=`, `caseSensitive` becomes false). Meanwhile
+ * `annotateOccurrences` counts `occurrence` over the EXACT `role\0name` key,
+ * so `.nth(occurrence)` is only meaningful against the exact match set. On the
+ * substring path it indexed into a different, larger one.
+ *
+ * What that produced: a page with "Save all" before "Save" gives both nodes
+ * occurrence 0 under different keys. The box recorded for the Save ref is
+ * Save's. The click for the same ref resolves the substring set
+ * ["Save all", "Save"] and `.nth(0)` is SAVE ALL. Reconciliation confirmed the
+ * point was inside Save, the occlusion check cleared Save's box, and the click
+ * landed on Save all — reported as `via: 'ref'`, which reads as more
+ * trustworthy than a coordinate.
+ *
+ * An empty name is NOT the same as no name. Dropping the option matches every
+ * element of the role while `occurrence` was counted only among the unnamed
+ * ones — the same misalignment, one key over. `{ name: '', exact: true }`
+ * matches exactly the elements whose normalized accessible name is empty.
+ *
+ * That is not quite the set the counting used, and the difference is worth
+ * naming: `parseAriaYaml` assigns `name = m[2] || ''`, so a name its regex
+ * failed to capture is folded into the same empty bucket as a genuinely
+ * unnamed node. The DOM set can therefore be strictly smaller than the counted
+ * one. This is still the right locator — it is the closest honest expression
+ * of "the node had no name" — but the residual risk lives in the parser, not
+ * here.
+ *
+ * A name the parser truncated (its regex loses everything after an embedded
+ * quote) matches nothing under either form — the mangled string is not a
+ * substring of the real accessible name either — so exact matching costs no
+ * reach here. What it costs is time: a locator matching nothing waits out its
+ * timeout, which is why the measurement loop below asks `count()` first.
+ */
+export function locatorForNode(page: Page, node: Pick<SnapshotNode, 'role' | 'name' | 'occurrence'>): Locator {
+    return page
+        // `name` is a non-optional string and both parsers emit '' for an
+        // absent one, so the empty string is the normal input here, not a
+        // defensive fallback.
+        .getByRole(node.role as AriaRole, { name: node.name, exact: true })
+        .nth(node.occurrence || 0);
+}
+
 // ─── ref → locator ─────────────────────────────
 
 async function refToLocator(page: Page, port: number, ref: string): Promise<Locator> {
@@ -236,7 +283,7 @@ async function refToLocator(page: Page, port: number, ref: string): Promise<Loca
     }
     const node = nodes.find(n => n.ref === ref);
     if (!node) throw new Error(`ref ${ref} not found — re-run snapshot`);
-    return page.getByRole(node.role as AriaRole, { name: node.name }).nth(node.occurrence || 0);
+    return locatorForNode(page, node);
 }
 
 /**
@@ -318,23 +365,56 @@ export async function elementBoxes(
         latestSnapshot = preserved;
     }
 
-    const limit = Math.max(1, Math.min(opts.limit ?? 200, 500));
-    // A serial loop of per-element timeouts can otherwise run for minutes on a
-    // heavy page. Reconciliation is worth a moment, not a minute.
-    const budgetMs = Math.max(500, Math.min(opts.budgetMs ?? 5000, 30000));
+    // The cap is not what keeps this fast — the deadline is. A cap of 200 made
+    // `truncated` true on most real pages (Hacker News has ~227 interactive
+    // nodes, a Wikipedia article ~497), which turns a rare signal into a
+    // constant one and would make any refusal keyed on it fire everywhere.
+    const limit = Math.max(1, Math.min(opts.limit ?? 500, 1000));
+    // A serial loop of per-element measurements can otherwise run for minutes
+    // on a heavy page. Reconciliation is worth a moment, not a minute.
+    //
+    // Sized against the cap rather than guessed. Real elements have real
+    // layout: measured p50 is ~11ms on a Wikipedia article, not the ~2ms a
+    // page of trivial buttons suggests, so a full 500-node capture costs a
+    // little over five seconds. A 5s budget left the cap it was paired with
+    // unreachable — the capture would truncate by deadline on exactly the
+    // pages the larger cap was meant to cover, which is the same signal
+    // constantly true, arriving one step later.
+    const budgetMs = Math.max(500, Math.min(opts.budgetMs ?? 8000, 30000));
     const deadline = Date.now() + budgetMs;
     const refs: Array<{ ref: string; role: string; name: string; box: { x: number; y: number; width: number; height: number } }> = [];
-    let truncated = false;
+    // The node cap drops elements just as silently as the deadline does. Only
+    // the deadline used to set this, so a page with 500 interactive nodes
+    // reported `truncated: false` while 300 were never looked at — and the
+    // cap drops LATE nodes, which is where modals and cookie banners live.
+    let truncated = nodes.length > limit;
 
     for (const node of nodes.slice(0, limit)) {
         if (Date.now() >= deadline) { truncated = true; break; }
         try {
-            // An empty name would make getByRole match every element of the
-            // role by substring, while `occurrence` was counted over the exact
-            // role+name key — a mismatch that hands boxes to the wrong refs.
-            const locator = node.name
-                ? page.getByRole(node.role as AriaRole, { name: node.name, exact: true }).nth(node.occurrence || 0)
-                : page.getByRole(node.role as AriaRole).nth(node.occurrence || 0);
+            // Same construction as the click path, because a box that
+            // describes a different element than the one that will be clicked
+            // is worse than no box at all.
+            const locator = locatorForNode(page, node);
+            // Ask whether the element is there before spending a wait on it.
+            //
+            // A locator that matches nothing burns its entire timeout, and
+            // exact matching makes that more likely than substring did — a
+            // name the parser mangled now matches nothing rather than matching
+            // something wrong. Measured, a miss costs 8ms here against the
+            // 250ms it used to, and an occurrence index past the end of the
+            // match set is caught just as cheaply.
+            //
+            // This is a speed guarantee, not a correctness one. `count()`
+            // answers about the DOM as it is right now, so an element that the
+            // snapshot saw but that is absent at measurement time — lazy
+            // hydration mid-capture, a React remount — is skipped here where
+            // `boundingBox` alone would have auto-waited and found it. That
+            // trade is deliberate: the snapshot is the observation, and a node
+            // that is not in the document when we look for it has no box to
+            // report. Shortening the timeout instead would have dropped the
+            // same elements AND the slow-but-present ones.
+            if (await locator.count() === 0) continue;
             const box = await locator.boundingBox({ timeout: 250 });
             // A zero-area box cannot contain a point, so it would only add noise.
             if (!box || box.width <= 0 || box.height <= 0) continue;

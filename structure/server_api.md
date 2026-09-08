@@ -490,3 +490,46 @@ Code Mode inventory: `GET /api/code/sessions/stored`,
 `/api/code/sessions/:id/fork`, `/api/code/sessions/:id/config` and
 `/api/code/sessions/:id/model`. Unsupported paths such as session DELETE or
 permission-list GET are not functional native APIs.
+
+## POST /api/browser/vision-click — failure codes and observation fields
+
+A failed vision-click carries a `code`, and consumers must read what it MEANS
+rather than whether it is present. Five returns used to carry only prose, which
+the CLI printed as "not found" and the evaluation harness scored as deliberate
+restraint — an infrastructure failure reading as good judgement.
+
+Refusals (the pipeline declined, and declining was reasonable):
+`COMPUTER_TARGET_AMBIGUOUS`, `COMPUTER_TARGET_COVERED`,
+`COMPUTER_VERIFY_DISAGREED`, `COMPUTER_OBSERVATION_EXPIRED`,
+`COMPUTER_OBSERVATION_STALE`, `COMPUTER_GEOMETRY_TRUNCATED`.
+
+`EXPIRED` is a wall-clock budget on the observation; `STALE` is observed
+navigation — the page identity no longer matches what the screenshot showed.
+`GEOMETRY_TRUNCATED` refuses only the claim that exactly ONE element contains
+the point, because a partial capture can dissolve an ambiguity it could never
+have created. It deliberately does not refuse a coordinate fallback: "no ref box
+here" is the correct answer for canvas, WebGL and cross-origin iframes.
+
+Not found (the model looked and did not see it): `COMPUTER_TARGET_NOT_FOUND`.
+Scored as an abstention when declining was the right answer and as a grounding
+failure when the element was present and described.
+
+Infrastructure (the call could not be completed, and this says nothing about
+grounding): `COMPUTER_CAPTURE_UNMEASURABLE`, `COMPUTER_VIEWPORT_UNAVAILABLE`,
+`COMPUTER_CAPTURE_NO_DPR`. `COMPUTER_CANDIDATE_OUT_OF_BOUNDS` is NOT one of
+these — a model returning a point outside the frame it was shown is a grounding
+defect, and grouping it here would take a real failure out of the denominator.
+
+A successful response additionally reports what the pipeline knew about its own
+evidence. `freshness` is `'verified'` when page identity was read and matched,
+`'unknown'` when the identity probe itself failed — which is not the same as
+changed, so the click proceeds and says so. `truncated` is true when element
+geometry was captured only in part, whether because the node cap sliced it or
+the measurement deadline expired.
+
+The occlusion check applies to the ref path only. It decides whether a point
+relates to a KNOWN target, which needs a resolved element to compare against,
+so `--no-occlusion-check` has no meaning for a coordinate click. Running it
+there would always return "unknown" and refuse nothing, which is worse than not
+running it: a guard that cannot fire still looks like a guard.
+

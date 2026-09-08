@@ -187,6 +187,10 @@ export const ABSTENTION_CODES = new Set([
     'COMPUTER_VERIFY_DISAGREED',
     'COMPUTER_OBSERVATION_EXPIRED',
     'COMPUTER_OBSERVATION_STALE',
+    // Declining because the geometry was only partly captured, so a single
+    // containing element could not be concluded safely. A refusal, not a
+    // failure: the pipeline knew what it did not know.
+    'COMPUTER_GEOMETRY_TRUNCATED',
 ]);
 
 /**
