@@ -11,6 +11,7 @@ import {
     buildVisionInvocation,
     explainExit,
     WINDOWS_SANDBOX_KILL_CODE,
+    WINDOWS_SANDBOX_KILL_CODE_UNSIGNED,
     CODEXCLAW_PLUGIN_DISABLE_CONFIG,
 } from '../../src/browser/vision-provider.ts';
 
@@ -100,3 +101,21 @@ test('VP-011: stderr is bounded in the message', () => {
     assert.ok(msg.length < 400, 'an error message must not carry five kilobytes of output');
 });
 
+test('VP-012: the unsigned form of the Windows status is recognised too', () => {
+    // Node normally reports a signed integer, but the value travels through
+    // shells, wrappers and JSON round-trips where the unsigned form turns up.
+    // Matching only one representation would mean the explanation silently
+    // never fires on exactly the platform it exists for.
+    assert.equal(WINDOWS_SANDBOX_KILL_CODE_UNSIGNED, 3221225794);
+    assert.equal(WINDOWS_SANDBOX_KILL_CODE_UNSIGNED, WINDOWS_SANDBOX_KILL_CODE >>> 0);
+
+    const msg = explainExit(WINDOWS_SANDBOX_KILL_CODE_UNSIGNED, '', false);
+    assert.match(msg, /Windows sandbox/);
+});
+
+test('VP-013: a neighbouring status code is not claimed as the sandbox', () => {
+    // 0xC0000142 is one specific status. Treating anything nearby as the same
+    // cause would be a guess dressed as a diagnosis.
+    assert.doesNotMatch(explainExit(-1073741501, '', false), /Windows sandbox/);
+    assert.doesNotMatch(explainExit(-1073741506, '', false), /Windows sandbox/);
+});

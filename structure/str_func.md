@@ -383,7 +383,7 @@ cli-jaw/
 │   │   ├── image-size.ts     ← PNG/JPEG 헤더에서 캡처 픽셀 크기 판독(실패 시 null → fail-closed) (55L)
 │   │   ├── occlusion.ts      ← 클릭 지점 페이지 hit-test 함수 + 가림 판정(자손/label/presentational은 통과, 미확인은 fail-open) (179L)
 │   │   ├── verify-candidate.ts ← 후보 주변 확대 크롭 기하 + 2차 응답 드리프트 판정(합의 시 좌표 교체) (143L)
-│   │   ├── vision-provider.ts ← codex 호출 인자 구성(샌드박스 우회는 명시적 opt-in, 기본 off) + Windows 종료코드 해석 (82L)
+│   │   ├── vision-provider.ts ← codex 호출 인자 구성(샌드박스 우회는 명시적 opt-in, 기본 off) + Windows 종료코드 해석 (96L)
 │   │   ├── runtime-diagnostics.ts ← runtime diagnostics helper (121L)
 │   │   ├── runtime-owner.ts  ← browser runtime owner management (135L)
 │   │   ├── runtime-owner-store.ts ← runtime owner store (55L)

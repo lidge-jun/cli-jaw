@@ -69,9 +69,24 @@ export function buildVisionInvocation(opts: VisionInvocationOptions): VisionInvo
  */
 export const WINDOWS_SANDBOX_KILL_CODE = -1073741502;
 
+/**
+ * The same status as an unsigned 32-bit value (`0xC0000142`).
+ *
+ * Node normally surfaces a Windows exit status as a signed integer, but the
+ * value travels through enough layers — shells, wrappers, JSON round-trips —
+ * that the unsigned form does turn up. Matching only one representation would
+ * mean the explanation silently never fires on exactly the platform it exists
+ * for, which is the failure mode this whole phase is about.
+ */
+export const WINDOWS_SANDBOX_KILL_CODE_UNSIGNED = WINDOWS_SANDBOX_KILL_CODE >>> 0;
+
+function isWindowsSandboxKill(code: number | null): boolean {
+    return code === WINDOWS_SANDBOX_KILL_CODE || code === WINDOWS_SANDBOX_KILL_CODE_UNSIGNED;
+}
+
 export function explainExit(code: number | null, stderr: string, bypassedSandbox: boolean): string {
     const detail = stderr.trim().slice(0, 200);
-    if (code === WINDOWS_SANDBOX_KILL_CODE && !detail) {
+    if (isWindowsSandboxKill(code) && !detail) {
         return bypassedSandbox
             ? `codex exec was terminated (exit ${code}) even with the sandbox bypass enabled`
             : `codex exec was terminated by the Windows sandbox (exit ${code}, no stderr). `
@@ -79,4 +94,3 @@ export function explainExit(code: number | null, stderr: string, bypassedSandbox
     }
     return `codex exec failed (code ${code})${detail ? ': ' + detail : ''}`;
 }
-
