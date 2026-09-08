@@ -158,3 +158,65 @@ test('EV-015: the runner declares where it runs', () => {
     assert.match(src, /no pass\/fail bar/);
 });
 
+test('EV-016: click cases and refusal cases are reported separately', () => {
+    // A single blended rate is ambiguous: 80% could mean the pipeline clicks
+    // accurately, or that it refuses reliably, or any mixture. Those are
+    // different claims about different behaviour.
+    const results: CaseResult[] = [
+        { id: 'a', expected: 'e1', outcome: { kind: 'verified', ms: 10 } },
+        { id: 'b', expected: 'e1', outcome: { kind: 'misclick', ms: 10, got: 'e9' } },
+        { id: 'c', expected: 'abstain', outcome: { kind: 'verified', ms: 10 } },
+        { id: 'd', expected: 'abstain', outcome: { kind: 'misclick', ms: 10, got: 'e9' } },
+    ];
+    const report = scoreRun(results);
+
+    assert.equal(report.click.scored, 2);
+    assert.equal(report.click.verified, 1);
+    assert.equal(report.click.misclicked, 1);
+    assert.equal(report.refusal.scored, 2);
+    assert.equal(report.refusal.verified, 1, 'a correct decline');
+    assert.equal(report.refusal.misclicked, 1, 'a confident click where refusing was right');
+
+    // The blended figure still exists, but it cannot be read as either claim.
+    assert.equal(report.verifiedRate, 0.5);
+});
+
+test('EV-017: the report states both behaviours', () => {
+    const text = formatReport(scoreRun([
+        { id: 'a', expected: 'e1', outcome: { kind: 'verified', ms: 10 } },
+        { id: 'b', expected: 'abstain', outcome: { kind: 'verified', ms: 10 } },
+    ]));
+    assert.match(text, /when clicking\s+1\/1 right/);
+    assert.match(text, /when refusing\s+1\/1 correctly declined/);
+});
+
+test('EV-018: the runner calls the routes that actually exist', () => {
+    // The first version sent {script} to /api/browser/evaluate, which takes
+    // {expression}. A harness that cannot run is worse than none, and nothing
+    // in a unit test would have caught it.
+    const root2 = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+    const runner = fs.readFileSync(join(root2, 'scripts/grounding-eval.mjs'), 'utf8');
+    const routes = fs.readFileSync(join(root2, 'src/routes/browser.ts'), 'utf8');
+
+    for (const route of ['/api/browser/navigate', '/api/browser/evaluate', '/api/browser/vision-click']) {
+        assert.ok(runner.includes(route), `runner must call ${route}`);
+        assert.ok(routes.includes(`'${route}'`), `${route} must exist`);
+    }
+
+    // evaluate takes req.body.expression, not req.body.script.
+    assert.match(routes, /browser\.evaluate\(cdpPort\(req\), req\.body\.expression\)/);
+    assert.match(runner, /'\/api\/browser\/evaluate', \{ expression:/);
+    assert.doesNotMatch(runner, /'\/api\/browser\/evaluate', \{ script:/);
+});
+
+test('EV-019: the witness attributes a click to the element that owns it', () => {
+    // A click on a button's inner span reports the span as e.target. Without
+    // walking up to the nearest id, the harness would score a correct click as
+    // a misclick - measuring its own instrumentation rather than the pipeline.
+    const root3 = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+    const runner = fs.readFileSync(join(root3, 'scripts/grounding-eval.mjs'), 'utf8');
+    assert.match(runner, /node\.parentElement/);
+    assert.match(runner, /if \(node\.id\)/);
+    // And the walk is bounded.
+    assert.match(runner, /i < 24/);
+});

@@ -60,17 +60,31 @@ async function api(base, method, route, body) {
     catch { return { status: res.status, body: { raw: text } }; }
 }
 
-/** Which element ended up focused or activated, so a click can be scored. */
-const CLICK_WITNESS = `(() => {
-    const el = window.__lastClickTarget;
-    return el && el.id ? el.id : null;
-})()`;
-
+/**
+ * Record what the page actually received, so a click can be scored against
+ * reality rather than against the response's own claim.
+ *
+ * The listener walks UP from the event target to the nearest element with an
+ * id. A click on a button's inner span reports the span otherwise, and the
+ * harness would score a correct click as a misclick - measuring its own
+ * instrumentation rather than the pipeline.
+ *
+ * Reinstalled per case, since navigation discards it.
+ */
 const INSTALL_WITNESS = `(() => {
-    window.__lastClickTarget = null;
-    document.addEventListener('click', (e) => { window.__lastClickTarget = e.target; }, true);
+    window.__jawClickedId = null;
+    document.addEventListener('click', (e) => {
+        let node = e.target;
+        for (let i = 0; node && i < 24; i++) {
+            if (node.id) { window.__jawClickedId = node.id; return; }
+            node = node.parentElement;
+        }
+        window.__jawClickedId = null;
+    }, true);
     return true;
 })()`;
+
+const CLICK_WITNESS = 'window.__jawClickedId';
 
 async function main() {
     const opts = parseArgs(process.argv.slice(2));
@@ -88,10 +102,10 @@ async function main() {
             await api(opts.base, 'POST', '/api/browser/navigate', { url: fixtureUrl });
             // Record what actually receives the click, since "success" alone
             // cannot distinguish a correct click from a wrong one.
-            await api(opts.base, 'POST', '/api/browser/evaluate', { script: INSTALL_WITNESS });
+            await api(opts.base, 'POST', '/api/browser/evaluate', { expression: INSTALL_WITNESS });
 
             const res = await api(opts.base, 'POST', '/api/browser/vision-click', { target: c.target });
-            const witness = await api(opts.base, 'POST', '/api/browser/evaluate', { script: CLICK_WITNESS });
+            const witness = await api(opts.base, 'POST', '/api/browser/evaluate', { expression: CLICK_WITNESS });
             const clicked = witness.body?.result ?? null;
             const ms = Date.now() - started;
 

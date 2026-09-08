@@ -30,6 +30,24 @@ export type CaseOutcome =
 
 export type CaseResult = { id: string; expected: string; outcome: CaseOutcome };
 
+/**
+ * Some cases expect the pipeline to DECLINE — an occluded target, an ambiguous
+ * one, a target that is not on the page. Those are scored inverted: an
+ * abstention is correct and a confident click is the misclick.
+ *
+ * They are counted separately as well as together, because a single blended
+ * rate is ambiguous: 80% could mean the pipeline clicks accurately, or that it
+ * refuses reliably, or any mixture. Those are different claims.
+ */
+export type ScoredGroup = {
+    scored: number;
+    verified: number;
+    misclicked: number;
+    abstained: number;
+    verifiedRate: number;
+    misclickRate: number;
+};
+
 export type EvalReport = {
     total: number;
     /** Cases the harness could actually score. */
@@ -44,6 +62,10 @@ export type EvalReport = {
     misclickRate: number;
     abstentionRate: number;
     latency: { p50: number; p95: number; max: number } | null;
+    /** Cases where clicking the named element is correct. */
+    click: ScoredGroup;
+    /** Cases where declining is correct. */
+    refusal: ScoredGroup;
 };
 
 /**
@@ -63,12 +85,17 @@ export function percentile(sortedMs: number[], p: number): number {
 export function scoreRun(results: CaseResult[]): EvalReport {
     const counts = { verified: 0, misclicked: 0, abstained: 0, errored: 0 };
     const durations: number[] = [];
+    const group = (): ScoredGroup => ({ scored: 0, verified: 0, misclicked: 0, abstained: 0, verifiedRate: 0, misclickRate: 0 });
+    const click = group();
+    const refusal = group();
 
     for (const r of results) {
+        // `expected: 'abstain'` marks a case whose correct answer is a refusal.
+        const bucket = r.expected === 'abstain' ? refusal : click;
         switch (r.outcome.kind) {
-            case 'verified': counts.verified += 1; break;
-            case 'misclick': counts.misclicked += 1; break;
-            case 'abstained': counts.abstained += 1; break;
+            case 'verified': counts.verified += 1; bucket.verified += 1; bucket.scored += 1; break;
+            case 'misclick': counts.misclicked += 1; bucket.misclicked += 1; bucket.scored += 1; break;
+            case 'abstained': counts.abstained += 1; bucket.abstained += 1; bucket.scored += 1; break;
             case 'errored': counts.errored += 1; break;
         }
         // An errored case measures the harness, not the pipeline, so its
@@ -82,6 +109,10 @@ export function scoreRun(results: CaseResult[]): EvalReport {
     const scored = counts.verified + counts.misclicked + counts.abstained;
     const rate = (n: number) => (scored === 0 ? 0 : n / scored);
     durations.sort((a, b) => a - b);
+    for (const g of [click, refusal]) {
+        g.verifiedRate = g.scored === 0 ? 0 : g.verified / g.scored;
+        g.misclickRate = g.scored === 0 ? 0 : g.misclicked / g.scored;
+    }
 
     return {
         total: results.length,
@@ -93,6 +124,8 @@ export function scoreRun(results: CaseResult[]): EvalReport {
         latency: durations.length
             ? { p50: percentile(durations, 50), p95: percentile(durations, 95), max: durations[durations.length - 1] as number }
             : null,
+        click,
+        refusal,
     };
 }
 
@@ -145,7 +178,11 @@ export function formatReport(report: EvalReport): string {
     if (report.latency) {
         lines.push(`latency         p50 ${report.latency.p50}ms  p95 ${report.latency.p95}ms  max ${report.latency.max}ms`);
     }
+    lines.push(
+        '',
+        `when clicking   ${report.click.verified}/${report.click.scored} right, ${report.click.misclicked} wrong`,
+        `when refusing   ${report.refusal.verified}/${report.refusal.scored} correctly declined`,
+    );
     lines.push('', 'An abstention is the pipeline declining, not failing. Read the misclick', 'rate first: a wrong click is worse than no click.');
     return lines.join('\n');
 }
-
