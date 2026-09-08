@@ -1,4 +1,5 @@
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { MicGlyph, SendGlyph, StopGlyph } from './ProviderGlyph';
 
 type CodeComposerProps = {
     inputText: string;
@@ -13,11 +14,30 @@ type CodeComposerProps = {
     onStop: () => Promise<void>;
 };
 
+/**
+ * Dictation availability is a real capability check, not an assumption.
+ * A browser without `mediaDevices.getUserMedia` (any plain-HTTP origin other
+ * than localhost, for one) gets a disabled control that says why, rather than a
+ * button that silently does nothing.
+ */
+function useDictationSupport(): { supported: boolean; reason: string } {
+    const [state, setState] = useState({ supported: false, reason: 'Checking microphone availability…' });
+    useEffect(() => {
+        if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+            setState({ supported: false, reason: 'Dictation needs microphone access, which this browser context does not provide.' });
+            return;
+        }
+        setState({ supported: true, reason: 'Dictation' });
+    }, []);
+    return state;
+}
+
 export function CodeComposer(props: CodeComposerProps) {
     const composing = useRef(false);
     const sending = useRef(false);
     const cancelling = useRef(false);
     const [error, setError] = useState<string | null>(null);
+    const dictation = useDictationSupport();
     async function submit() {
         if (!props.canSend || !props.inputText.trim() || sending.current) return;
         sending.current = true;
@@ -50,10 +70,22 @@ export function CodeComposer(props: CodeComposerProps) {
                 rows={2} readOnly={props.readOnly} />
             <span className="code-composer-hint">Enter to send · Shift+Enter for a new line</span>
         </div>
-        {props.busy ? <button type="button" className="code-composer-send code-composer-stop" aria-label="Stop current turn"
-            disabled={!props.canStop || props.stopping} onClick={() => void stop()}>{props.stopping ? 'Stopping…' : 'Stop'}</button>
-            : <button type="button" className="code-composer-send" aria-label="Send prompt"
-                disabled={!props.canSend || !props.inputText.trim()} onClick={() => void submit()}>{props.pending ? 'Sending…' : 'Send'}</button>}
+        <div className="code-composer-actions">
+            <button type="button" className="code-composer-icon-button" aria-label="Dictation"
+                disabled={!dictation.supported || props.readOnly} title={dictation.reason}>
+                <MicGlyph muted={!dictation.supported} />
+            </button>
+            {props.busy
+                ? <button type="button" className="code-composer-send code-composer-stop" aria-label="Stop current turn"
+                    title={props.stopping ? 'Stopping' : 'Stop current turn'}
+                    disabled={!props.canStop || props.stopping} onClick={() => void stop()}><StopGlyph /></button>
+                : <button type="button" className="code-composer-send" aria-label="Send prompt"
+                    title={props.pending ? 'Sending' : 'Send prompt'}
+                    disabled={!props.canSend || !props.inputText.trim()} onClick={() => void submit()}><SendGlyph /></button>}
+        </div>
+        {/* An icon button cannot announce progress on its own. */}
+        {(props.stopping || props.pending) && <span className="code-composer-status" role="status">
+            {props.stopping ? 'Stopping…' : 'Sending…'}</span>}
         {error && <div className="code-action-error" role="alert">{error}</div>}
     </div>;
 }

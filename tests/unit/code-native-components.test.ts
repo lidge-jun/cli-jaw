@@ -43,7 +43,7 @@ function session(patch: Partial<CodeSessionInfo> = {}): CodeSessionInfo {
 function model(patch: Partial<CodeControllerModel> = {}): CodeControllerModel {
     const s = session();
     return { catalog: { defaultProvider: 'codex-app', providers: ['codex-app', 'claude', 'cursor', 'grok'].map(id => ({
-        id: id as CodeSessionInfo['provider'], label: id, available: true, reason: null, models: ['native-model'], defaultModel: 'native-model',
+        id: id as CodeSessionInfo['provider'], label: id, available: true, reason: null, models: ['native-model', 'another-native-model'], defaultModel: 'native-model',
         defaultEffort: null, capabilities: s.capabilities, modelSource: 'native' as const,
     })) }, sessions: [s], session: s, selectedId: s.sessionId, items: [], permissions: [], input: 'draft text',
     selection: { provider: s.provider, cwd: s.cwd, model: s.model, effort: null, permissionMode: s.permissionMode },
@@ -94,12 +94,12 @@ test('footer arrows explore without committing, native default is null, and runt
     const h = await surface(t); const patches: unknown[] = [];
     const c = model({ async setSelection(patch) { patches.push(patch); } });
     await h.render(createElement(ComposerFooter, { controller: c }));
-    await key(button(h.container, 'Effort'), 'ArrowDown');
+    await key(button(h.container, 'Effort: Native default'), 'ArrowDown');
     assert.deepEqual(patches, []); assert.equal(document.activeElement?.textContent, 'Native default');
     await key(document.activeElement!, 'ArrowDown'); assert.deepEqual(patches, []); assert.equal(document.activeElement?.textContent, 'low');
     await click(document.activeElement as HTMLButtonElement); assert.deepEqual(patches, [{ effort: 'low' }]);
-    assert.equal(document.activeElement, button(h.container, 'Effort'));
-    await click(button(h.container, 'Runtime')); await click(button(document, 'New Claude session'));
+    assert.equal(document.activeElement, button(h.container, 'Effort: Native default'), 'choosing returns focus to the trigger');
+    await click(button(h.container, 'Runtime: Codex')); await click(button(document, 'New Claude session'));
     assert.deepEqual(patches[1], { provider: 'claude' });
 });
 
@@ -108,15 +108,11 @@ test('idle model and effort updates work without hot-switch capability and stay 
     const c = model({ async setSelection(patch) { patches.push(patch); } });
     assert.equal(c.session?.capabilities.setModelMidSession, false);
     await h.render(createElement(ComposerFooter, { controller: c }));
-    const input = h.container.querySelector<HTMLInputElement>('[aria-label="Native model ID"]'); assert.ok(input);
-    assert.equal(input.disabled, false); assert.equal(button(h.container, 'Effort').disabled, false);
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(input, 'another-native-model');
-        input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-    });
-    await click(button(h.container, 'Apply'));
-    await click(button(h.container, 'Effort')); await click(button(document, 'high'));
-    await click(button(h.container, 'Effort')); await click(button(document, 'Native default'));
+    assert.equal(button(h.container, 'Model: native-model').disabled, false);
+    assert.equal(button(h.container, 'Effort: Native default').disabled, false);
+    await click(button(h.container, 'Model: native-model')); await click(button(document, 'another-native-model'));
+    await click(button(h.container, 'Effort: Native default')); await click(button(document, 'high'));
+    await click(button(h.container, 'Effort: Native default')); await click(button(document, 'Native default'));
     assert.deepEqual(patches, [{ model: 'another-native-model' }, { effort: 'high' }, { effort: null }]);
     const unavailable: Partial<CodeControllerModel>[] = [
         { session: session({ status: 'starting', turnId: 't-a' }), busy: true },
@@ -130,8 +126,8 @@ test('idle model and effort updates work without hot-switch capability and stay 
     ];
     for (const state of unavailable) {
         await h.render(createElement(ComposerFooter, { controller: { ...c, ...state } }));
-        assert.equal(h.container.querySelector<HTMLInputElement>('[aria-label="Native model ID"]')?.disabled, true);
-        assert.equal(button(h.container, 'Effort').disabled, true);
+        assert.equal(button(h.container, 'Model: native-model').disabled, true);
+        assert.equal(button(h.container, 'Effort: Native default').disabled, true);
     }
     assert.equal(patches.length, 3, 'disabled states must not dispatch settings mutations');
 });
@@ -141,9 +137,69 @@ test('creation freezes runtime/model/policy and Auto YOLO remains explicit', bou
     const c = model({ selectedId: null, session: null, pending: true, operation: { kind: 'creating', error: null },
         selection: { provider: 'grok', cwd: '/work/beta', model: 'native-model', effort: null, permissionMode: 'auto' } });
     await h.render(createElement(ComposerFooter, { controller: c }));
-    assert.equal(button(h.container, 'Runtime').disabled, true); assert.equal(button(h.container, 'Permission').disabled, true);
-    assert.equal(h.container.querySelector<HTMLInputElement>('input')?.disabled, true);
+    assert.equal(button(h.container, 'Runtime: Grok').disabled, true); assert.equal(button(h.container, 'Permission: Auto (YOLO)').disabled, true);
+    assert.equal(button(h.container, 'Model: native-model').disabled, true);
     assert.match(h.container.textContent ?? '', /Auto \(YOLO\)/);
+});
+
+test('icon-only controls keep an accessible name that names the current value', bounded, async t => {
+    const h = await surface(t);
+    await h.render(createElement(ComposerFooter, { controller: model() }));
+    // The runtime trigger shows a glyph, so the name is the only thing a screen
+    // reader or a keyboard user has to identify it by.
+    const runtime = button(h.container, 'Runtime: Codex');
+    assert.equal(runtime.textContent?.trim(), '', 'the runtime trigger is icon-only');
+    assert.equal(runtime.querySelector('svg')?.getAttribute('aria-hidden'), 'true', 'the glyph is decorative');
+    assert.equal(runtime.getAttribute('title'), 'Codex');
+    await h.render(createElement(CodeComposer, { inputText: 'ready', canSend: true, busy: false, canStop: false,
+        stopping: false, pending: false, readOnly: false, onInputChange() {}, async onSubmit() {}, async onStop() {} }));
+    for (const name of ['Send prompt', 'Dictation']) {
+        const control = button(h.container, name);
+        assert.equal(control.textContent?.trim(), '', `${name} is icon-only`);
+        assert.equal(control.querySelector('svg')?.getAttribute('aria-hidden'), 'true');
+        assert.ok(control.getAttribute('title'), `${name} needs a hover title too`);
+    }
+});
+
+test('the model menu filters a large catalog and marks the current choice', bounded, async t => {
+    const h = await surface(t); const patches: unknown[] = [];
+    const wide = ['gpt-6-astra', 'gpt-5.6-sol', 'anthropic/claude-opus-5', 'xai/grok-4.6'];
+    const c = model({ async setSelection(patch) { patches.push(patch); } });
+    const catalog = { ...c.catalog!, providers: c.catalog!.providers.map(entry => entry.id === 'codex-app'
+        ? { ...entry, models: wide, effortsByModel: { 'gpt-6-astra': ['low', 'ultra'], 'xai/grok-4.6': [] } } : entry) };
+    await h.render(createElement(ComposerFooter, { controller: { ...c, catalog,
+        selection: { ...c.selection, model: 'gpt-6-astra' } } }));
+    await click(button(h.container, 'Model: gpt-6-astra'));
+    const options = () => [...document.querySelectorAll<HTMLButtonElement>('[role="option"]')];
+    assert.equal(options().length, wide.length);
+    assert.deepEqual(options().filter(option => option.getAttribute('aria-selected') === 'true').map(o => o.textContent?.trim()),
+        ['gpt-6-astra'], 'exactly the current model is marked selected');
+    const filter = document.querySelector<HTMLInputElement>('[aria-label="Filter model"]');
+    assert.ok(filter, 'a catalog this size needs a filter');
+    await act(async () => {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(filter, 'anthropic');
+        filter.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    });
+    assert.deepEqual(options().map(option => option.textContent?.trim()), ['anthropic/claude-opus-5']);
+    await click(options()[0]!);
+    assert.deepEqual(patches, [{ model: 'anthropic/claude-opus-5' }]);
+});
+
+test('effort offers only what the selected model accepts', bounded, async t => {
+    const h = await surface(t);
+    const c = model();
+    const withPerModel = (id: string) => ({ ...c.catalog!, providers: c.catalog!.providers.map(entry => entry.id === 'codex-app'
+        ? { ...entry, models: ['narrow', 'wide'], effortsByModel: { narrow: [], wide: ['low', 'ultra'] } } : entry) });
+    // A routed model that takes no effort must not show a control at all,
+    // because the union would otherwise offer a value the session rejects.
+    await h.render(createElement(ComposerFooter, { controller: { ...c, catalog: withPerModel('narrow'),
+        session: null, selectedId: null, selection: { ...c.selection, model: 'narrow' } } }));
+    assert.equal([...h.container.querySelectorAll('button')].some(node => node.getAttribute('aria-label')?.startsWith('Effort')), false);
+    await h.render(createElement(ComposerFooter, { controller: { ...c, catalog: withPerModel('wide'),
+        session: null, selectedId: null, selection: { ...c.selection, model: 'wide' } } }));
+    await click(button(h.container, 'Effort: Native default'));
+    assert.deepEqual([...document.querySelectorAll('[role="option"]')].map(o => o.textContent?.trim()),
+        ['Native default', 'low', 'ultra']);
 });
 
 function permission(id: string): CodePermissionRequest {
@@ -195,26 +251,21 @@ test('workbench sibling identities stay unique through rerenders and selected-se
             controller: model({ selectedId: id, session: selected, input }), endpointKey: '43225',
         }));
         assert.equal(h.container.querySelectorAll('textarea[aria-label="Code prompt"]').length, 1);
-        assert.equal(h.container.querySelectorAll('input[aria-label="Native model ID"]').length, 1);
+        assert.equal(h.container.querySelectorAll('.code-footer-model button').length, 1);
         assert.equal(h.container.querySelectorAll('.code-composer-footer').length, 1);
         assert.equal(h.container.querySelector('textarea')?.value, input);
     };
     await render('s-a', 'draft A');
     const firstInput = h.container.querySelector('textarea');
-    const firstModel = h.container.querySelector<HTMLInputElement>('[aria-label="Native model ID"]');
+    const firstModel = h.container.querySelector<HTMLButtonElement>('.code-footer-model button');
     assert.ok(firstModel);
-    await act(async () => {
-        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value')!.set!.call(firstModel, 'unsaved model edit');
-        firstModel.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
-    });
     await render('s-a', 'draft A extended');
     assert.equal(h.container.querySelector('textarea'), firstInput, 'same-session input retains DOM identity');
-    assert.equal(h.container.querySelector('[aria-label="Native model ID"]'), firstModel);
-    assert.equal(firstModel.value, 'unsaved model edit', 'same-session rerender preserves local model edit');
+    assert.equal(h.container.querySelector('.code-footer-model button'), firstModel, 'same-session rerender keeps the model control mounted');
     for (const id of ['s-b', null, 's-a', null]) {
         await render(id, id === null ? 'preserved new draft' : `draft ${id}`);
-        assert.equal(h.container.querySelector<HTMLInputElement>('[aria-label="Native model ID"]')?.value, 'native-model',
-            'different-session controls reset to the accepted model');
+        assert.match(h.container.querySelector('.code-footer-model button')?.textContent ?? '', /native-model/,
+            'different-session controls show the accepted model');
     }
     assert.deepEqual(diagnostics.filter(message => /same key|unique.*key/i.test(message)), [],
         'React must report no sibling-key collisions');
@@ -422,7 +473,7 @@ test('unknown creation recovery warns, preserves the draft and choices, and requ
     assert.match(recovery.textContent ?? '', /The original session may still exist/);
     assert.match(recovery.textContent ?? '', /Press Send/);
     assert.equal(button(h.container, 'Send prompt').disabled, true);
-    assert.equal(button(h.container, 'Runtime').disabled, true);
+    assert.equal(button(h.container, 'Runtime: Claude').disabled, true);
     assert.equal(h.container.querySelector('textarea')?.readOnly, false, 'uncertain creation does not discard or lock the text');
     await click(button(h.container, 'Start another session'));
     assert.equal(recoveries, 1); assert.equal(normalNew, 0); assert.equal(sends, 0);
@@ -431,9 +482,9 @@ test('unknown creation recovery warns, preserves the draft and choices, and requ
     assert.equal(h.container.querySelector('textarea')?.value, 'unsent text after lost create response');
     assert.deepEqual(c.selection, selection);
     assert.equal(button(h.container, 'Send prompt').disabled, false);
-    assert.equal(button(h.container, 'Runtime').disabled, false);
-    assert.equal(h.container.querySelector<HTMLInputElement>('[aria-label="Native model ID"]')?.value, 'native-model');
-    assert.match(button(h.container, 'Effort').textContent ?? '', /low/);
+    assert.equal(button(h.container, 'Runtime: Claude').disabled, false);
+    assert.match(button(h.container, 'Model: native-model').textContent ?? '', /native-model/);
+    assert.match(button(h.container, 'Effort: low').textContent ?? '', /low/);
     assert.equal(sends, 0, 'recovery and rerender must not send automatically');
     await click(button(h.container, 'Send prompt')); assert.equal(sends, 1);
 });
