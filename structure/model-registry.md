@@ -75,6 +75,18 @@ opencodex는 모델마다 **다른** effort 집합을 광고한다. `gpt-5.6-sol
 빈 union으로 넓히지 않는 규칙도 여기에 속한다. 모든 모델이 라우팅된 카탈로그에서는
 union이 비는데, 그것을 그대로 반영하면 effort 컨트롤이 통째로 사라진다.
 
+### 정적 폴백은 union이다
+
+`CODEX_EFFORT_CHOICES`는 `low..ultra` 전체를 담는다. 모델별 표가 아니다.
+폴백의 목적은 정확한 카탈로그가 아니라 **picker가 비지 않게 하는 것**이고, 손으로
+유지하는 모델별 표는 라이브 디스커버리가 없앤 수동 동기화 부채를 되살린다.
+
+어떤 모델에 맞지 않는 rung이 섞일 수 있지만 실제로 wire에 도달하기 어렵다. 이
+목록이 쓰이는 상황은 opencodex가 없는 상황이고, Codex는 그 프록시를 통해 실행되기
+때문이다. 프록시가 살아나면 `effortsByModel`이 즉시 모델별로 좁힌다.
+
+`minimal`은 제외한다. 일부 라우팅 모델이 광고해서 라이브 union에는 나타나지만,
+`CODEX_MODEL_CHOICES`의 GPT id 중 이를 받는 것은 관측되지 않았다.
 ## Claude ultracode
 
 `ultracode`는 Anthropic API의 effort 값이 아니라 Claude Code의 세션 설정이다.
