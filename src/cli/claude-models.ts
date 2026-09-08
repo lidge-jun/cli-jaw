@@ -98,3 +98,54 @@ export function getClaudeModelKind(model: string): 'canonical' | 'legacy' | 'exp
   if (isKnownClaudeLegacyValue(value)) return 'legacy';
   return 'explicit';
 }
+
+// ─── Effort ladder ────────────────────────────────────────────────
+
+/**
+ * The efforts Claude Code's `--effort` flag accepts, verbatim from its help text:
+ * "Effort level for the current session (low, medium, high, xhigh, max)".
+ */
+export const CLAUDE_WIRE_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+
+/**
+ * `ultracode` is offered as a sixth rung even though the flag does not accept it.
+ * The bundle resolves the tier from `settings.ultracode === true` and reports
+ * `xhigh`, so cli-jaw presents one choice and splits it at the wire (see
+ * `normalizeClaudeEffort` and `claudeSettingsArgs` in `src/agent/args.ts`).
+ *
+ * Claude Code refuses ultracode unless the model supports xhigh, dynamic workflows
+ * are enabled, and the organization permits xhigh. Only the model condition is
+ * knowable here, so that is the one this list encodes; the other two surface as a
+ * runtime message from Claude Code itself.
+ */
+export const CLAUDE_EFFORT_CHOICES = [...CLAUDE_WIRE_EFFORTS, 'ultracode'] as const;
+
+/**
+ * Families that predate extended reasoning. Claude Code reports "ultracode runs at
+ * xhigh effort, which <model> doesn't support" for these, so offering the rung
+ * would advertise a control that always fails.
+ *
+ * Matching is anchored on the family segment rather than the whole id so it covers
+ * both the full id and the short alias: `haiku` and `claude-haiku-4-5` are the same
+ * model, and only one of them carries the `claude-` prefix.
+ */
+const NO_XHIGH_PATTERN = /^(?:claude-)?(?:3-|haiku)/;
+
+export function claudeModelSupportsXhigh(model: string): boolean {
+  const value = (model || '').trim();
+  if (!value) return false;
+  // The remaining short aliases (opus/sonnet/fable) resolve to current flagships,
+  // which all reach xhigh.
+  return !NO_XHIGH_PATTERN.test(value);
+}
+
+/** Per-model effort sets, narrowed so ultracode never appears where it cannot run. */
+export function buildClaudeEffortsByModel(models: readonly string[]): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const model of models) {
+    out[model] = claudeModelSupportsXhigh(model)
+      ? [...CLAUDE_EFFORT_CHOICES]
+      : [...CLAUDE_WIRE_EFFORTS];
+  }
+  return out;
+}

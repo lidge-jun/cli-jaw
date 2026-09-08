@@ -1,6 +1,7 @@
 import { fetchKiroModelInventory } from '../agent/kiro-models.js';
 import { CLI_REGISTRY } from './registry.js';
 import { claudeCatalogToChoices, resolveClaudeBundleCatalog } from './claude-model-discovery.js';
+import { buildClaudeEffortsByModel } from './claude-models.js';
 import { resolveOpenCodexCodexModelsDetailed } from './opencodex-models.js';
 import { diagnoseOpenCodexExecution, resolveOpenCodexRuntime } from './opencodex-runtime.js';
 import { readCodexRootOpenAiBaseUrl } from '../core/codex-config.js';
@@ -109,10 +110,15 @@ export async function buildLiveCliRegistry() {
         // buildDefaultPerCli() seeds user settings from it, so a bundle update must
         // not silently repoint a user's default. The one exception is a default the
         // live catalog no longer offers, which would be unselectable.
+        //
+        // Efforts are narrowed per model because `ultracode` needs xhigh support;
+        // the flat `efforts` union stays for legacy consumers.
+        const claudeEffortsByModel = buildClaudeEffortsByModel(claudeCatalog.models);
         const claudePatch: Record<string, unknown> = {
             models: claudeCatalog.models,
             modelSource: 'claude-bundle',
             modelAliases: claudeCatalog.aliases,
+            effortsByModel: claudeEffortsByModel,
         };
         for (const cli of ['claude', 'claude-e'] as const) {
             const entry = registry[cli];
@@ -135,9 +141,17 @@ export async function buildLiveCliRegistry() {
             const providers = Array.isArray(aiE['providers'])
                 ? aiE['providers'] as string[]
                 : Object.keys(modelsByProvider);
+            // Provider-scoped, never flat: `ai-e` shares model ids across providers
+            // and a flat map would offer Kiro an ultracode it cannot run.
+            const existingEffortsByModelByProvider =
+                (aiE['effortsByModelByProvider'] as Record<string, Record<string, string[]>> | undefined) || {};
             registry['ai-e'] = {
                 ...aiE,
                 modelsByProvider,
+                effortsByModelByProvider: {
+                    ...existingEffortsByModelByProvider,
+                    claude: claudeEffortsByModel,
+                },
                 models: providers.flatMap(provider => modelsByProvider[provider] || []),
             };
         }

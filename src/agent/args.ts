@@ -17,7 +17,6 @@ export function formatAgyPrintTimeout(ms: number): string {
 // Claude Code fast mode is enabled by merging { fastMode: true } into the spawned
 // CLI's settings via --settings (the claude analogue of codex's service_tier="fast").
 // Gated on options.fastMode, which is sourced from perCli.<cli>.fastMode in spawn.ts.
-const CLAUDE_FAST_MODE_SETTINGS = '{"fastMode":true}';
 const AI_E_PROVIDERS = ['claude', 'codex', 'grok', 'copilot', 'kiro'] as const;
 const CODEXCLAW_PLUGIN_DISABLE_CONFIG = 'plugins."codexclaw@personal".enabled=false';
 export type AiEProvider = typeof AI_E_PROVIDERS[number];
@@ -83,6 +82,41 @@ export function aiEProviderForBucket(
 
 const KIRO_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh']);
 
+/**
+ * Claude's `ultracode` tier.
+ *
+ * It is NOT an effort level on the wire. `claude --effort` accepts only
+ * low/medium/high/xhigh/max, and the bundle resolves the tier by reading
+ * `settings.ultracode === true` and returning `"xhigh"`. Claude Code's own
+ * `/effort ultracode` does exactly that: it normalizes the value to `xhigh` and
+ * sends `{effortLevel, ultracode:true}` as a separate settings payload.
+ *
+ * So cli-jaw offers one tier to the user and splits it at the boundary: the flag
+ * carries `xhigh`, the settings object carries the switch.
+ */
+export const CLAUDE_ULTRACODE_EFFORT = 'ultracode';
+const CLAUDE_ULTRACODE_WIRE_EFFORT = 'xhigh';
+
+export function isClaudeUltracodeEffort(effort: string | null | undefined): boolean {
+    return (effort || '').trim() === CLAUDE_ULTRACODE_EFFORT;
+}
+
+/**
+ * The effort value to put on Claude's `--effort` flag.
+ *
+ * Everything except `ultracode` passes through untouched, so an unknown value
+ * still reaches the CLI and is rejected there rather than silently rewritten here.
+ */
+export function normalizeClaudeEffort(effort: string | null | undefined): string {
+    return isClaudeUltracodeEffort(effort) ? CLAUDE_ULTRACODE_WIRE_EFFORT : (effort || '');
+}
+
+/** `--effort` arguments for a Claude invocation, or none when the default applies. */
+function claudeEffortArgs(effort: string): string[] {
+    const wire = normalizeClaudeEffort(effort);
+    return wire && wire !== 'medium' ? ['--effort', wire] : [];
+}
+
 function kiroEffortArgs(effort: string): string[] {
     if (!effort || !KIRO_EFFORTS.has(effort)) return [];
     return ['--effort', effort === 'xhigh' ? 'max' : effort];
@@ -141,8 +175,23 @@ function agyOptionalArgs(options: BuildArgOptions, key: keyof AgyCapabilities, a
     return caps[key] ? args : [];
 }
 
-function claudeFastModeArgs(options: BuildArgOptions): string[] {
-    return options.fastMode ? ['--settings', CLAUDE_FAST_MODE_SETTINGS] : [];
+/**
+ * Claude Code's session-scoped settings, passed as one `--settings` object.
+ *
+ * Both knobs live in the same place. `fastMode` is the claude analogue of codex's
+ * `service_tier="fast"`; `ultracode` is what the bundle's own schema calls
+ * "xhigh effort plus standing dynamic-workflow orchestration ... typically
+ * provided via --settings or the apply_flag_settings control request".
+ *
+ * They merge into a single object because a second `--settings` would replace the
+ * first rather than extend it, so emitting the flag twice would silently drop one
+ * of the two.
+ */
+function claudeSettingsArgs(options: BuildArgOptions, effort?: string): string[] {
+    const settings: Record<string, boolean> = {};
+    if (options.fastMode) settings['fastMode'] = true;
+    if (isClaudeUltracodeEffort(effort)) settings['ultracode'] = true;
+    return Object.keys(settings).length > 0 ? ['--settings', JSON.stringify(settings)] : [];
 }
 
 /**
@@ -210,15 +259,15 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
                 ...(autoPerm ? ['--dangerously-skip-permissions'] : []),
                 '--max-turns', '500',
                 ...(model && model !== 'default' ? ['--model', model] : []),
-                ...(effort && effort !== 'medium' ? ['--effort', effort] : []),
-                ...claudeFastModeArgs(options),
+                ...claudeEffortArgs(effort),
+                ...claudeSettingsArgs(options, effort),
                 ...(sysPrompt ? ['--append-system-prompt', sysPrompt] : [])];
         case 'claude-e': {
             const claudeExtraArgs: string[] = [];
             if (model && model !== 'default') claudeExtraArgs.push('--model', model);
-            if (effort && effort !== 'medium') claudeExtraArgs.push('--effort', effort);
+            claudeExtraArgs.push(...claudeEffortArgs(effort));
             if (sysPrompt) claudeExtraArgs.push('--append-system-prompt', sysPrompt);
-            claudeExtraArgs.push(...claudeFastModeArgs(options));
+            claudeExtraArgs.push(...claudeSettingsArgs(options, effort));
             // claude-e can't interact with permission dialogs — always bypass
             if (autoPerm) claudeExtraArgs.push('--dangerously-skip-permissions');
             else claudeExtraArgs.push('--permission-mode', 'auto');
@@ -236,9 +285,9 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
             if (isClaude) {
                 const claudeExtraArgs: string[] = [];
                 if (model && model !== 'default') claudeExtraArgs.push('--model', model);
-                if (effort && effort !== 'medium') claudeExtraArgs.push('--effort', effort);
+                claudeExtraArgs.push(...claudeEffortArgs(effort));
                 if (sysPrompt) claudeExtraArgs.push('--append-system-prompt', sysPrompt);
-                claudeExtraArgs.push(...claudeFastModeArgs(options));
+                claudeExtraArgs.push(...claudeSettingsArgs(options, effort));
                 if (autoPerm) claudeExtraArgs.push('--dangerously-skip-permissions');
                 else claudeExtraArgs.push('--permission-mode', 'auto');
                 return ['claude', 'run', '--jsonl',
@@ -352,15 +401,15 @@ export function buildResumeArgs(cli: string, model: string, effort: string, sess
                 '--resume', sessionId,
                 '--max-turns', '500',
                 ...(model && model !== 'default' ? ['--model', model] : []),
-                ...(effort && effort !== 'medium' ? ['--effort', effort] : []),
-                ...claudeFastModeArgs(options),
+                ...claudeEffortArgs(effort),
+                ...claudeSettingsArgs(options, effort),
                 ...(options.sysPrompt ? ['--append-system-prompt', options.sysPrompt] : [])];
         case 'claude-e': {
             const claudeExtraArgs: string[] = [];
             if (model && model !== 'default') claudeExtraArgs.push('--model', model);
-            if (effort && effort !== 'medium') claudeExtraArgs.push('--effort', effort);
+            claudeExtraArgs.push(...claudeEffortArgs(effort));
             if (options.sysPrompt) claudeExtraArgs.push('--append-system-prompt', options.sysPrompt);
-            claudeExtraArgs.push(...claudeFastModeArgs(options));
+            claudeExtraArgs.push(...claudeSettingsArgs(options, effort));
             if (autoPerm) claudeExtraArgs.push('--dangerously-skip-permissions');
             else claudeExtraArgs.push('--permission-mode', 'auto');
             return ['run', '--jsonl',
@@ -394,9 +443,9 @@ export function buildResumeArgs(cli: string, model: string, effort: string, sess
             }
             const claudeExtraArgs: string[] = [];
             if (model && model !== 'default') claudeExtraArgs.push('--model', model);
-            if (effort && effort !== 'medium') claudeExtraArgs.push('--effort', effort);
+            claudeExtraArgs.push(...claudeEffortArgs(effort));
             if (options.sysPrompt) claudeExtraArgs.push('--append-system-prompt', options.sysPrompt);
-            claudeExtraArgs.push(...claudeFastModeArgs(options));
+            claudeExtraArgs.push(...claudeSettingsArgs(options, effort));
             if (autoPerm) claudeExtraArgs.push('--dangerously-skip-permissions');
             else claudeExtraArgs.push('--permission-mode', 'auto');
             return ['claude', 'run', '--jsonl',
