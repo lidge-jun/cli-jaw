@@ -22,12 +22,13 @@
     min-width: 0;
     max-width: 100%;
     /* No leading margin. The turn is inserted before .msg-content, and the siblings that
-       precede it (.activity-read-control, a superseded .process-block) are display:none in
-       Activity mode, so they generate no box: an 8px top margin here offsets the summary row
-       from .agent-icon, whose 2px offset centers a 24px avatar against the 28px first row.
-       Removing it costs no spacing when a sibling IS visible, because adjacent sibling
-       margins collapse to the larger of the two and the preceding element keeps its own
-       bottom margin. */
+       usually precede it (.activity-read-control while hidden, a superseded .process-block)
+       generate no box, so an 8px top margin here offsets the summary row from .agent-icon,
+       whose 2px offset centers a 24px avatar against the 28px first row.
+       Spacing below a VISIBLE preceding sibling is that sibling's responsibility now: block
+       siblings collapse to the larger of the two margins, so a preceding element with its own
+       margin-block-end still separates itself. .activity-unavailable had none, so it is given
+       one below rather than relying on the turn to supply the gap. */
     margin-block: 0 var(--space-2);
     color: var(--text);
     font-family: var(--font-ui);
@@ -232,6 +233,17 @@
     max-width: 100%;
     margin-block: var(--space-2);
     color: var(--text);
+    font: var(--text-sm)/1.5 var(--font-ui);
+    overflow-wrap: anywhere;
+}
+
+/* ws.ts prepends this notice into .agent-body, so it can precede the turn. The global reset
+   leaves it at margin 0, and the turn no longer carries a leading margin, so without this the
+   two would touch. Own the separation here rather than in the turn, whose leading margin is
+   what misaligns the summary row against the avatar. */
+.activity-unavailable {
+    margin-block: 0 var(--space-2);
+    color: var(--activity-muted);
     font: var(--text-sm)/1.5 var(--font-ui);
     overflow-wrap: anywhere;
 }

@@ -600,17 +600,42 @@ test('the activity turn carries no leading margin and leads the visible body con
     assert.ok(blockEnd && blockEnd !== '0',
         'the trailing margin still separates the turn from the answer');
 
-    // Every sibling rendered before the turn must be out of flow, otherwise removing the
-    // leading margin would close a real gap instead of an artificial one.
-    const children = [...host.children];
-    const before = children.slice(0, children.indexOf(turn));
-    const style = document.createElement('style');
-    style.textContent = css;
-    document.head.append(style);
-    for (const node of before) {
-        assert.equal(getComputedStyle(node).display, 'none',
-            `${node.className} renders above the turn and would lose its separation`);
+    // Removing the leading margin is only safe if everything that CAN precede the turn either
+    // generates no box or owns its bottom margin. Walking this fixture's children is not
+    // enough: ws.ts prepends .activity-unavailable into .agent-body, it never appears in this
+    // mount(), and it originally had no CSS rule at all — so a fixture-scoped walk passed
+    // while a real 8px gap closed. Probe the classes the product can actually put above the
+    // turn.
+    // jsdom does not parse margin-block, so read the declarations rather than computed style.
+    // Read every stylesheet that can style these classes: .process-block lives in tool-ui.css,
+    // not activity.css, so scanning one file would report a false failure.
+    const allCss = ['activity.css', 'tool-ui.css'].map(name =>
+        readFileSync(new URL(`../../public/css/${name}`, import.meta.url), 'utf8')).join('\n');
+    const declaresBottomMargin = (selector: string) => {
+        const rules = [...allCss.matchAll(/([^{}]+)\{([^}]*)\}/g)];
+        return rules.some(([, selectors, body]) => {
+            if (!selectors!.split(',').some(part => part.trim().split(/\s+/).pop() === selector)) return false;
+            const shorthand = /margin-block:\s*([^;]+);/.exec(body!);
+            if (shorthand) {
+                const parts = shorthand[1]!.trim().split(/\s+/);
+                return (parts[1] ?? parts[0]) !== '0';
+            }
+            const margin = /(?:^|;)\s*margin:\s*([^;]+);/.exec(body!);
+            if (margin) {
+                const parts = margin[1]!.trim().split(/\s+/);
+                const bottom = parts.length >= 3 ? parts[2]! : parts[0]!;
+                return bottom !== '0' && bottom !== '0px';
+            }
+            return /margin-block-end:\s*(?!0\s*;)/.test(body!)
+                || /margin-bottom:\s*(?!0\s*;)/.test(body!);
+        });
+    };
+    const hidesItself = (selector: string) =>
+        new RegExp(String.raw`\${selector}\b[^{}]*\{[^}]*display:\s*none`).test(allCss);
+    for (const className of ['activity-read-control', 'activity-unavailable', 'process-block']) {
+        assert.ok(declaresBottomMargin('.' + className) || hidesItself('.' + className),
+            `.${className} can render above the turn with neither a box nor a bottom margin, `
+            + "so the turn's removed leading margin would close a real gap");
     }
-    style.remove();
     view.dispose();
 });

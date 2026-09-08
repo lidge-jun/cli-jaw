@@ -542,7 +542,7 @@ cli-jaw/
 │   ├── css/                  ← 12 files (variables/layout/markdown/chat/diagram/orc-state/sidebar/modals/tool-ui/trace-drawer/workflow-cockpit/chat-search)
 │   │   ├── chat.css          ← chat/message/virtual-scroll + inline image min-height/object-fit/error fallback (2533L)
 │   │   ├── native-requests.css ← live decision form, focus and bounded responsive scrolling (55L)
-│   │   └── activity.css      ← scoped live Activity disclosure and reversible Legacy visibility (265L)
+│   │   └── activity.css      ← scoped live Activity disclosure and reversible Legacy visibility (284L)
 │   ├── manager/src/settings-standalone.tsx ← shared instance settings root (92L)
 │   ├── manager/src/settings/ ← unified instance and Manager settings
 │   │   ├── SettingsPage.tsx ← full workspace Back/navigation layout (21L)
