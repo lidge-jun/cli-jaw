@@ -382,8 +382,25 @@
     color: var(--text-secondary);
     margin-bottom: 4px; display: block;
 }
-.code-message-user .code-message-role { color: var(--text-primary); }
 .code-message-assistant .code-message-role { color: var(--status-success); }
+
+/*
+ * The user's own text is the one thing on this surface they wrote themselves,
+ * so it gets a right-aligned bubble and the assistant keeps the full column as
+ * plain prose. Asymmetry does the role separation that a repeated label
+ * otherwise has to do in words.
+ */
+.code-message-user { display: flex; flex-direction: column; align-items: flex-end; }
+.code-message-user .code-message-role { color: var(--text-dim); }
+.code-message-user .code-message-text {
+    max-width: min(78%, 36rem);
+    padding: 10px 14px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px 12px 4px 12px;
+    background: var(--bg-raised);
+}
+/* A prompt the server has not echoed yet is dimmed, never hidden. */
+.code-message-user.is-unsent .code-message-text { opacity: 0.72; border-style: dashed; }
 .code-message-text {
     font-size: 13px; line-height: 1.6; color: var(--text-primary);
 }
