@@ -77,10 +77,22 @@ export class CodeSessionManager {
         return provider.describe();
     }
 
-    private validate(input: CodeCreateSessionRequest, fixed?: CodeCapabilities): CodeProviderCatalog {
+    /**
+     * `fixed` carries an existing session's stored capabilities. `accepted`
+     * names the values that session already runs with: a Codex catalog is live
+     * now, so its model list can shift under a running session, and rejecting a
+     * value that was legal at creation would break prompt, attach and patch for
+     * a reason the user can neither see nor act on. A value the caller is
+     * newly choosing is always checked against what the runtime serves today.
+     */
+    private validate(input: CodeCreateSessionRequest, fixed?: CodeCapabilities,
+        accepted?: Pick<CodeCreateSessionRequest, 'model' | 'effort'>): CodeProviderCatalog {
         const catalog = this.catalog(input.provider);
         if (!catalog.available) throw new CodeServiceError('provider_unavailable', 'Code provider is unavailable');
-        if (!catalog.models.includes(input.model)) throw new CodeStoreError('unsupported_model', 'Code model is unsupported', 400);
+        const keptModel = accepted !== undefined && accepted.model === input.model;
+        if (!keptModel && !catalog.models.includes(input.model)) {
+            throw new CodeStoreError('unsupported_model', 'Code model is unsupported', 400);
+        }
         for (const capabilities of fixed ? [fixed, catalog.capabilities] : [catalog.capabilities]) {
             if (!capabilities.permissionModes.includes(input.permissionMode)) {
                 throw new CodeStoreError('unsupported_policy', 'Code permission mode is unsupported', 400);
@@ -93,7 +105,8 @@ export class CodeSessionManager {
         // per-model set, narrow to it: routed models often accept no effort at
         // all while a sibling model reaches `ultra`, and the chosen value is
         // forwarded to the native wire.
-        const perModel = catalog.effortsByModel?.[input.model];
+        const keptEffort = keptModel && accepted !== undefined && accepted.effort === input.effort;
+        const perModel = keptEffort ? undefined : catalog.effortsByModel?.[input.model];
         if (input.effort !== null && perModel && !perModel.includes(input.effort)) {
             throw new CodeStoreError('unsupported_effort', 'Code effort is unsupported', 400);
         }
@@ -205,7 +218,7 @@ export class CodeSessionManager {
             const duplicate = this.storage(() => this.options.store.admitTurn({ ...input, sessionId: id }));
             return { receipt: duplicate.receipt, duplicate: true };
         }
-        this.validate(record, record.capabilities);
+        this.validate(record, record.capabilities, record);
         const session = this.reserve(record);
         try {
             const result = this.storage(() => this.options.store.admitTurn({ ...input, sessionId: id,
@@ -237,7 +250,7 @@ export class CodeSessionManager {
     async attach(id: string): Promise<CodeSessionInfo> {
         this.ready();
         const record = this.record(id);
-        this.validate(record, record.capabilities);
+        this.validate(record, record.capabilities, record);
         const session = this.reserve(record);
         try {
             const result = this.storage(() => this.options.store.beginAttach(id, record.revision));
@@ -259,7 +272,7 @@ export class CodeSessionManager {
             || (input.effort !== undefined && input.effort !== record.effort)
             || (input.permissionMode !== undefined && input.permissionMode !== record.permissionMode);
         if (policy) {
-            this.validate({ ...record, ...input }, record.capabilities);
+            this.validate({ ...record, ...input }, record.capabilities, record);
             if (policyChanged && record.nativeStarted && (!record.nativeCursor || !record.capabilities.resume)) {
                 throw new CodeStoreError('resume_unavailable', 'Code policy change requires resumable native history', 409);
             }

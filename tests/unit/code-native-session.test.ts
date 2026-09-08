@@ -802,6 +802,22 @@ test('unsupported model, effort and permission mode fail before provider open', 
     assert.equal(f.providers.cursor.calls.length, 0);
 });
 
+test('a catalog that drops a model keeps the running session usable but blocks new choices', async t => {
+    const f = fixture(t);
+    const row = f.create('cursor', { model: 'model-b' });
+    // A live catalog can change under a running session. Its own model must stay
+    // legal, or prompt and attach would fail for a reason the user cannot act on.
+    f.providers.cursor.catalog = { ...f.providers.cursor.catalog, models: ['model-a'] };
+    assert.doesNotThrow(() => f.manager.prompt(row.sessionId, { text: 'still works', clientTurnKey: 'k-drift' }));
+    // Choosing something the runtime no longer serves is still refused.
+    assert.throws(() => f.create('cursor', { model: 'model-b' }), errorCode('unsupported_model', 400));
+    const idle = f.create('cursor', { model: 'model-a' });
+    await assert.rejects(f.manager.patch(idle.sessionId, { expectedRevision: idle.revision, model: 'model-b' }),
+        errorCode('unsupported_model', 400));
+    // Re-selecting the value the session already runs with is not a new choice.
+    await assert.doesNotReject(f.manager.patch(idle.sessionId, { expectedRevision: idle.revision, model: 'model-a' }));
+});
+
 test('dispose is idempotent during pending open and later closes orphaned startup without replay', async t => {
     const f = fixture(t);
     const gate = deferred<void>();
