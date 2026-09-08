@@ -629,6 +629,19 @@ item key: a measured size always wins over an estimate, so a row measured while
 collapsed would keep that height once expanded, and re-keying hands it back to
 the estimate until its real height is observed.
 
+Transient notices float over the top of the transcript rather than sitting under
+the composer, so reading one never moves the input. They are keyed per source, so
+repeating a notice replaces it and restarts its timer instead of stacking, and the
+stack is capped at three with the oldest dropped; re-raising an existing notice
+moves it newest so the cap cannot evict what the reader just triggered. A notice
+with no finite duration waits for an explicit dismiss. Errors go in an assertive
+live region and everything else in a polite one, because a container's politeness
+is what applies to an insertion. The permission notice announces the switch to
+Auto (YOLO), not the standing state, which the Permission control already shows.
+Anything the reader has to act on stays on screen instead: transport status, the
+recovery strips for unconfirmed creation and unconfirmed send, archived sessions
+and the approval queue would all be lost if they dismissed themselves.
+
 `useCodeController` owns requests and selection fencing. A single Code SSE
 subscription reconciles a full snapshot at watermark H and contiguous events
 after H. Opening transport does not mean synchronization has completed. Compact

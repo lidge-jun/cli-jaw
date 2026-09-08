@@ -1,9 +1,11 @@
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { CodeControllerModel } from './code-controller-types';
 import { CodeComposer } from './CodeComposer';
 import { ComposerFooter } from './ComposerFooter';
 import { CodePermissionQueue } from './CodePermissionQueue';
 import { CodeTranscript } from './CodeTranscript';
+import { CodeToastHost } from './CodeToastHost';
+import { CODE_TOAST_DEFAULT_MS, dismissCodeToast, pushCodeToast, type CodeToast } from './code-toasts';
 import { CodeWorkspaceHeader } from './CodeWorkspaceHeader';
 import { codeCanResume } from './code-types';
 
@@ -13,6 +15,11 @@ export function CodeWorkbench({ controller: c, endpointKey, onOpenLocalFile }: P
     const [actionError, setActionError] = useState<{ key: string; message: string } | null>(null);
     const [retrying, setRetrying] = useState<string | null>(null);
     const retryGuard = useRef(new Set<string>());
+    const [toasts, setToasts] = useState<readonly CodeToast[]>([]);
+    const notify = useCallback((notice: { id: string; message: string; variant: 'info' | 'warning' | 'error' }) => {
+        setToasts(current => pushCodeToast(current, { ...notice, durationMs: CODE_TOAST_DEFAULT_MS }));
+    }, []);
+    const dismiss = useCallback((id: string) => setToasts(current => dismissCodeToast(current, id)), []);
     const archived = c.session?.archivedAt != null;
     const stopping = c.session?.status === 'stopping' || c.operation.kind === 'stopping';
     const busy = c.busy || stopping || c.session?.status === 'starting' || c.session?.status === 'streaming';
@@ -40,6 +47,7 @@ export function CodeWorkbench({ controller: c, endpointKey, onOpenLocalFile }: P
     }
     return <div className="code-canvas-main">
         <CodeWorkspaceHeader key={sessionKey} controller={c} />
+        <CodeToastHost toasts={toasts} onDismiss={dismiss} />
         {(c.transport !== 'connected' || (c.selectedId !== null && !c.synced)) && <section className={`code-transport-status is-${c.transport}`} role="status">
             {c.transport === 'reconnecting' ? 'Live updates reconnecting. History may be out of date.'
                 : c.transport === 'disconnected' ? 'Live updates disconnected. History may be out of date.' : 'Updating conversation…'}
@@ -82,7 +90,7 @@ export function CodeWorkbench({ controller: c, endpointKey, onOpenLocalFile }: P
             <div className="code-composer-surface" aria-label="Code composer controls">
                 <CodeComposer key={`composer:${sessionKey}`} inputText={c.input} canSend={canSend} busy={busy} canStop={canStop} stopping={stopping}
                     pending={c.pending} readOnly={archived} onInputChange={c.setInput} onSubmit={c.send} onStop={c.stop} />
-                <ComposerFooter key={`footer:${sessionKey}`} controller={c} />
+                <ComposerFooter key={`footer:${sessionKey}`} controller={c} onNotice={notify} />
             </div>
         </div>
     </div>;

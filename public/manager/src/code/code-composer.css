@@ -260,7 +260,7 @@
 .code-footer-floating { position: fixed; z-index: 1000; box-sizing: border-box; }
 .code-footer-floating .code-footer-option-text small { white-space: normal; overflow-wrap: anywhere; }
 
-.code-policy-note, .code-selection-notice { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.code-selection-notice { margin: 0; color: var(--text-secondary); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
 .code-composer-status { grid-column: 1 / -1; color: var(--text-dim); font-size: 11px; }
 .code-input-recovery { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 980px; margin: 0 auto 6px; color: var(--text-secondary); font-size: 11px; }
 .code-action-error { color: var(--status-error); font-size: 12px; overflow-wrap: anywhere; grid-column: 1 / -1; }

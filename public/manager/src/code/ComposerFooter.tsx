@@ -112,7 +112,10 @@ export function CodeFooterMenu<T extends string>({ label, value, options, disabl
     </div>;
 }
 
-export function ComposerFooter({ controller: c }: { controller: CodeControllerModel }) {
+export function ComposerFooter({ controller: c, onNotice }: {
+    controller: CodeControllerModel;
+    onNotice?: ((notice: { id: string; message: string; variant: 'info' | 'warning' | 'error' }) => void) | undefined;
+}) {
     const selection = c.selection;
     const provider = c.catalog?.providers.find(entry => entry.id === selection.provider);
     const capabilities = c.session?.capabilities ?? provider?.capabilities;
@@ -121,6 +124,22 @@ export function ComposerFooter({ controller: c }: { controller: CodeControllerMo
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const guard = useRef(false);
+    const noticeRef = useRef(onNotice); noticeRef.current = onNotice;
+    // Announce the change, not the state. "Auto (YOLO)" as a permanent line
+    // stops being read after the first time; the moment it is switched on is
+    // the moment worth interrupting for. What the policy currently is stays
+    // legible on the Permission control itself.
+    const previousMode = useRef(selection.permissionMode);
+    useEffect(() => {
+        const previous = previousMode.current;
+        previousMode.current = selection.permissionMode;
+        if (previous === selection.permissionMode || selection.permissionMode !== 'auto') return;
+        noticeRef.current?.({ id: 'code:permission-mode', variant: 'warning',
+            message: 'Auto (YOLO): actions may run without approval.' });
+    }, [selection.permissionMode]);
+    useEffect(() => {
+        if (error) noticeRef.current?.({ id: 'code:footer-error', variant: 'error', message: error });
+    }, [error]);
     async function change(patch: Partial<CodeCreateSessionRequest>) {
         if (disabled || guard.current) return;
         guard.current = true; setSaving(true); setError(null);
@@ -177,8 +196,6 @@ export function ComposerFooter({ controller: c }: { controller: CodeControllerMo
         {!provider?.available && <div className="code-selection-notice">{provider?.reason ?? 'Runtime availability has not been confirmed.'}
             <button type="button" className="code-inline-action" onClick={() => { void c.refresh().catch(err => setError(err instanceof Error ? err.message : String(err))); }}>Refresh availability</button>
         </div>}
-        {selection.permissionMode === 'auto' && <p className="code-policy-note">Auto (YOLO): actions may run without approval.</p>}
         {(saving || c.operation.kind === 'patching') && <span role="status">Saving settings…</span>}
-        {error && <div className="code-action-error" role="alert">{error}</div>}
     </>;
 }
