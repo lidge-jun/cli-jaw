@@ -80,6 +80,30 @@ export function isObservationStale(
 }
 
 /**
+ * How much of the freshness budget is left, in milliseconds.
+ *
+ * A provider child was given a flat 60s while the observation it works from
+ * expired at 30s, so two round-trips could spend two minutes producing an
+ * answer the very next line was guaranteed to refuse. Deriving the child's
+ * timeout from what remains kills it at the moment its answer stops being
+ * usable instead of at an unrelated constant.
+ *
+ * Never negative, and never above `cap`: the existing 60s ceiling still
+ * applies when the budget is larger than it.
+ */
+export function remainingObservationBudget(
+    observedAt: number,
+    now: number,
+    cap: number,
+    maxAgeMs = OBSERVATION_MAX_AGE_MS,
+): number {
+    if (!Number.isFinite(observedAt) || !Number.isFinite(now) || !Number.isFinite(cap)) return 0;
+    const spent = now - observedAt;
+    if (spent < 0) return 0;
+    return Math.max(0, Math.min(cap, maxAgeMs - spent));
+}
+
+/**
  * Fit a requested capture rectangle inside the viewport.
  *
  * Playwright trims a clip to the viewport before capturing, so a rectangle

@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { getServerUrl, JAW_HOME, deriveCdpPort, loadSettings } from '../../src/core/config.js';
 import { getCliAuthToken, authHeaders } from '../../src/cli/api-auth.js';
 import { runWebAiCommand } from './browser-web-ai.js';
+import { classifyFailure } from '../../src/browser/grounding-eval.js';
 import { asArray, asRecord, fieldString, type JsonRecord } from '../_http-client.js';
 
 loadSettings();
@@ -453,10 +454,20 @@ try {
                 // A refusal is not a failure to find the target. Saying "not
                 // found" for a covered or ambiguous element sends the reader
                 // looking for the wrong problem.
+                //
+                // Nor is an infrastructure failure a refusal. Branching on the
+                // mere PRESENCE of a code would put a capture that could not be
+                // measured in the same yellow line as a deliberate decline, and
+                // it would take the genuine not-found away from the one wording
+                // that was already correct for it.
                 const code = typeof r["code"] === 'string' ? r["code"] : null;
-                if (code) {
+                const kind = classifyFailure(code);
+                if (kind === 'abstention') {
                     console.log(`${c.yellow}⚠️ declined to click "${target}": ${r["reason"]}${c.reset}`);
                     console.log(`${c.dim}   ${code}${r["blocker"] ? ` — blocked by ${r["blocker"]}` : ''}${c.reset}`);
+                } else if (kind === 'infrastructure') {
+                    console.log(`${c.red}❌ could not complete the lookup for "${target}": ${r["reason"]}${c.reset}`);
+                    console.log(`${c.dim}   ${code} — this is a capture or environment failure, not a missing element${c.reset}`);
                 } else {
                     console.log(`${c.red}❌ "${target}" not found: ${r["reason"]}${c.reset}`);
                 }
