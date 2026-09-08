@@ -32,13 +32,31 @@ aliases: [model registry, 모델 레지스트리, live model discovery]
 |---|---|---|
 | `codex` / `codex-app` | opencodex `GET /v1/models` | `src/cli/opencodex-models.ts` |
 | `kiro-code` | `kiro-cli chat --list-models --format json` | `src/agent/kiro-models.ts` |
-| `claude` / `claude-e` | 정적 (`src/cli/claude-models.ts`) | — |
-| `cursor` | 정적 (`CURSOR_REGISTRY_MODELS`) | — |
-| `grok` | 정적 | — |
+| `claude` / `claude-e` | 설치된 Claude Code 번들 | `src/cli/claude-model-discovery.ts` |
+| `cursor` | `cursor-agent --list-models` | `src/agent/cursor-model-inventory.ts` |
+| `grok` | `grok models` | `src/agent/grok-models.ts` |
 | `agy` / `pi` / `opencode` | 정적 | — |
 
-정적으로 남은 런타임도 발견 가능한 소스를 갖고 있다: `cursor-agent --list-models`와
-`grok models`가 그것이다. 이들을 라이브 층으로 옮기는 것이 현재 진행 중인 작업이다.
+정적으로 남은 것은 AGY, Pi, OpenCode 세 런타임이다.
+
+## Cursor: 하나의 관측에서 두 목록을 파생한다
+
+Cursor CLI에는 `--effort`가 없다. effort가 모델 id 안에 들어 있어
+(`claude-opus-5-xhigh-fast`), `cursor-runtime.ts`가 두 목록을 갖는다: 계정이 받는
+wire id 전체와 picker가 보여주는 base 모델. **두 목록의 일치가 곧 정확성이다.**
+#394가 그 일치가 깨진 사고였다 — 계정은 Grok을 `cursor-` 접두사로 부르는데 picker
+어휘는 접두사가 없어서, `grok-4.6` + `high`가 계정에 없는 id를 만들고 resolver가
+조용히 base로 물러났다.
+
+`--list-models`가 출력하는 것이 정확히 첫 번째 목록이다. 그래서 그것을 관측으로
+받고 base와 effort 사다리는 거기서 역산한다. 접미사 어휘는
+`CURSOR_EFFORT_SUFFIX`의 역이며, 항등이 아닌 항목은 Cursor가 xhigh를
+`extra-high`로 적는 것 하나뿐이다. 역산할 때 `cursor-` 접두사를 벗기는 것이
+중요하다 — 남겨두면 resolver가 접두사를 다시 붙여 #394가 반대 방향으로 재현된다.
+
+한계가 하나 있다. `resolveCursorModelVariant()`는 여전히 정적 wire id 집합으로
+해석한다. 이 함수는 spawn 경로의 동기 함수라, 라이브 목록을 주입하면 프로세스를
+띄우는 일이 CLI 프로브에 의존하게 된다. 라이브가 된 것은 레지스트리 표면이다.
 
 ## effort는 모델별로 좁힌다
 

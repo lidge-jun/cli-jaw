@@ -1,4 +1,6 @@
 import { fetchKiroModelInventory } from '../agent/kiro-models.js';
+import { fetchCursorModelInventory } from '../agent/cursor-model-inventory.js';
+import { fetchGrokModelInventory } from '../agent/grok-models.js';
 import { CLI_REGISTRY } from './registry.js';
 import { claudeCatalogToChoices, resolveClaudeBundleCatalog } from './claude-model-discovery.js';
 import { buildClaudeEffortsByModel } from './claude-models.js';
@@ -24,10 +26,12 @@ function unionEfforts(effortsByModel: Record<string, string[]>): string[] {
 export async function buildLiveCliRegistry() {
     const registry = structuredClone(CLI_REGISTRY) as Record<string, Record<string, unknown>>;
 
-    const [kiroInventory, openCodexRuntime, claudeCatalog] = await Promise.all([
+    const [kiroInventory, openCodexRuntime, claudeCatalog, cursorInventory, grokInventory] = await Promise.all([
         fetchKiroModelInventory(),
         resolveOpenCodexRuntime(),
         resolveClaudeCatalogForRegistry(),
+        fetchCursorModelInventory(),
+        fetchGrokModelInventory(),
     ]);
     const codexResult = await resolveOpenCodexCodexModelsDetailed(openCodexRuntime);
 
@@ -102,6 +106,35 @@ export async function buildLiveCliRegistry() {
             defaultModel: kiroInventory.defaultModel,
             modelSource: kiroInventory.source,
             modelDetails: kiroInventory.entries,
+        };
+    }
+
+    if (cursorInventory?.baseModels.length) {
+        // The picker gets the derived base models, not the ~220 wire ids: effort is
+        // a separate control, and listing every suffixed id would ask the user to
+        // pick the same model a dozen times.
+        //
+        // `resolveCursorModelVariant` still resolves wire ids from its static set.
+        // It runs synchronously on the spawn path, so feeding it a discovered list
+        // would make spawning depend on a CLI probe.
+        registry['cursor'] = {
+            ...registry['cursor'],
+            models: cursorInventory.baseModels,
+            modelSource: cursorInventory.source,
+            effortsByModel: cursorInventory.effortsByModel,
+            modelIds: cursorInventory.modelIds,
+        };
+    }
+
+    if (grokInventory?.models.length) {
+        // `defaultModel` stays static even though the CLI names one, for the same
+        // buildDefaultPerCli() seeding reason as everywhere else; the observed
+        // default is reported separately for diagnostics.
+        registry['grok'] = {
+            ...registry['grok'],
+            models: grokInventory.models,
+            modelSource: grokInventory.source,
+            ...(grokInventory.defaultModel ? { observedDefaultModel: grokInventory.defaultModel } : {}),
         };
     }
 
