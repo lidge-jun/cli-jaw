@@ -116,3 +116,35 @@ test('settings CSS specifies the measured card, row and responsive navigation ge
     sheet.walkAtRules('media', at => { if (at.params === '(max-width: 1023px)') at.walkRules('.settings-shell', rule => { rule.walkDecls('grid-template-columns', decl => { mobileGrid = decl.value; }); }); });
     assert.equal(mobileGrid, '40px minmax(0, 1fr)');
 });
+
+test('Dashboard meta refuses to load or write without a selected instance', async () => {
+    // SettingsShell passes port ?? 0, and this page PATCHes the MANAGER registry keyed by
+    // port. A port-0 render would write under instance key "0", so the guard must run
+    // before any hook fires — not as an early return inside the form.
+    const { default: DashboardMeta } = await import('../../public/manager/src/settings/pages/DashboardMeta');
+    const { createDirtyStore } = await import('../../public/manager/src/settings/dirty-store');
+    const managerCalls: string[] = [];
+    const managerClient = {
+        async get<T>(path: string) { managerCalls.push('GET ' + path); return { registry: { instances: {} } } as T; },
+        async patch<T>(path: string) { managerCalls.push('PATCH ' + path); return {} as T; },
+    };
+    const instanceCalls: string[] = [];
+    const spyClient: SettingsClient = {
+        async get<T>(path: string) { instanceCalls.push(path); return {} as T; },
+        async put<T>() { return {} as T; }, async post<T>() { return {} as T; }, async delete<T>() { return {} as T; },
+    };
+    const container = document.createElement('div'); document.body.append(container);
+    const root = createRoot(container);
+    try {
+        await act(async () => root.render(createElement(DashboardMeta, {
+            port: 0, instanceUrl: '', client: spyClient, dirty: createDirtyStore(), managerClient,
+        })));
+        assert.deepEqual(managerCalls, [], 'no instance selected must mean no registry read or write');
+        assert.deepEqual(instanceCalls, []);
+        assert.equal(container.querySelector('form, input, .settings-form'), null,
+            'the form must not mount, otherwise a save could target instance key "0"');
+        const empty = container.querySelector('.settings-empty');
+        assert.ok(empty && /select an instance/i.test(empty.textContent || ''),
+            'the guard must say why the page is empty');
+    } finally { await act(async () => root.unmount()); container.remove(); }
+});
