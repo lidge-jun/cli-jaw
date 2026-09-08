@@ -562,10 +562,15 @@ body.right-collapsed .sidebar-right {
     .chat-header { height: auto; min-height: 44px; }
 }
 
-/* Full settings workspace keeps the existing header and spans the right rail. */
+/* Full settings workspace keeps the existing header and fills the whole viewport. */
 body[data-settings-open="true"] .chat-area,
+body[data-settings-open="true"] .sidebar-left,
 body[data-settings-open="true"] .sidebar-right { display: none; }
-#settingsPage { grid-column: 2 / 4; grid-row: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+/* The mobile drawer scrim is a pseudo-element of body, not of the sidebar, so hiding
+   .sidebar-left above does not remove it: a drawer left open would scrim the settings page. */
+body[data-settings-open="true"].left-expanded::after,
+body[data-settings-open="true"].right-expanded::after { content: none; }
+#settingsPage { grid-column: 1 / -1; grid-row: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
 #settingsPage[hidden] { display: none; }
 #settingsPage > iframe { flex: 1; display: block; width: 100%; height: 100%; min-height: 0; border: 0; }
 #settingsPage > .chat-header { width: 100%; }
@@ -574,6 +579,5 @@ body[data-settings-open="true"] .sidebar-right { display: none; }
 .header-icon-btn:hover { background: var(--surface-3); color: var(--text); }
 .header-icon-btn[aria-pressed="true"] { color: var(--accent); background: var(--surface-2); }
 .header-icon-btn:focus-visible { outline: none; box-shadow: var(--focus-ring-shadow); }
-@media (max-width: 900px) { #settingsPage { grid-column: 1 / -1; } }
 @media (prefers-reduced-motion: no-preference) { #settingsPage:not([hidden]) { animation: settingsPageEnter 120ms ease; } }
 @keyframes settingsPageEnter { from { opacity: 0; } to { opacity: 1; } }

@@ -1,4 +1,5 @@
 // settings.ts — barrel re-export (preserves all import paths)
+import { isLocalPreviewRelayOrigin } from '../preview-parent-origin.js';
 export { loadSettings, updateSettings, setPerm, onCliChange, saveActiveCliSettings, onFlushCliChange, loadFlushAgentSidebar } from './settings-core.js';
 export { setTelegram, setForwardAll, setTelegramMentionOnly, saveTelegramSettings } from './settings-telegram.js';
 export { setDiscord, setDiscordForwardAll, setDiscordAllowBots, setDiscordMentionOnly, saveDiscordSettings } from './settings-discord.js';
@@ -66,12 +67,27 @@ export function initSettingsFrame(): () => void {
         if (event.data?.type === 'jaw-settings-ready') sendTheme();
         if (event.data?.type === 'settings:back') closeSettingsPage();
     };
+    // The manager asks this instance to open its own settings page. Two guards live fifteen
+    // lines apart on purpose and must NOT be collapsed into one:
+    //   receive() above talks to our OWN iframe, which is same-origin by construction.
+    //   relay() below talks to the manager, which under the default origin-port preview
+    //   transport runs on a different loopback PORT — so a strict origin equality check
+    //   would silently drop every message. isLocalPreviewRelayOrigin accepts any loopback
+    //   origin, which is the same predicate the STT and capability relays already use.
+    const relay = (event: MessageEvent): void => {
+        if (event.source !== window.parent) return;
+        if (!isLocalPreviewRelayOrigin(event.origin)) return;
+        if (event.data?.type !== 'jaw-preview-settings-open') return;
+        toggleSettingsPage(true);
+    };
     frame.addEventListener('load', sendTheme);
     window.addEventListener('message', receive);
+    window.addEventListener('message', relay);
     sendTheme();
     return () => {
         observer.disconnect();
         frame.removeEventListener('load', sendTheme);
         window.removeEventListener('message', receive);
+        window.removeEventListener('message', relay);
     };
 }

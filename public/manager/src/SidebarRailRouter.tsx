@@ -299,6 +299,11 @@ export function SidebarRailRouter(props: Props) {
     const [previewInsertTextRequest, setPreviewInsertTextRequest] = useState<PreviewInsertTextRequest | null>(null);
     const previewInsertSeqRef = useRef(0);
     const previewInsertResolversRef = useRef(new Map<string, (result: PreviewInsertTextResult) => void>());
+    // Instance settings live in the instance. The manager only asks the mounted preview to
+    // open its own page; a one-shot id keeps repeat clicks addressable.
+    const [previewSettingsOpenRequest, setPreviewSettingsOpenRequest] = useState<string | null>(null);
+    const previewSettingsSeqRef = useRef(0);
+    const [instanceSettingsNotice, setInstanceSettingsNotice] = useState<string | null>(null);
     // 030 v2/v3: keep the server registry in sync, deliver shares to the
     // selected instance's runtime-context, and relay screenshot commands.
     useEmbeddedBrowserTargetSync(isElectron, props.selectedInstance?.port ?? null);
@@ -336,6 +341,16 @@ export function SidebarRailRouter(props: Props) {
         previewInsertResolversRef.current.delete(id);
         setPreviewInsertTextRequest(current => current?.id === id ? null : current);
         resolve(result);
+    }, []);
+
+    const requestInstanceSettings = useCallback((): void => {
+        setInstanceSettingsNotice(null);
+        previewSettingsSeqRef.current += 1;
+        setPreviewSettingsOpenRequest(`settings-open-${previewSettingsSeqRef.current}`);
+    }, []);
+    const handlePreviewSettingsOpenResult = useCallback((id: string, result: PreviewInsertTextResult): void => {
+        setPreviewSettingsOpenRequest(current => current === id ? null : current);
+        setInstanceSettingsNotice(result.ok ? null : result.error);
     }, []);
 
     // CEO: handled through right sidebar tab system now. CEO is hidden in v1,
@@ -577,10 +592,16 @@ export function SidebarRailRouter(props: Props) {
                             <button type="button" className="state-dismiss" aria-label="Dismiss dropped file message" onClick={() => setDropNotice(null)}>X</button>
                         </section>
                     )}
+                    {instanceSettingsNotice && (
+                        <section className="state lifecycle-state" role="status">
+                            <span>{instanceSettingsNotice}</span>
+                            <button type="button" className="state-dismiss" aria-label="Dismiss instance settings message" onClick={() => setInstanceSettingsNotice(null)}>X</button>
+                        </section>
+                    )}
                     <div className="workspace-surface-layer">
                         <WorkspaceSurface active={props.sidebarMode === 'instances' && props.viewMode === 'jaw'}>
-                            <Workbench mode={props.activeDetailTab} onModeChange={props.onDetailTabChange} header={props.workbenchHeader} modeActions={props.jawCeoWorkbenchButton} active={props.sidebarMode === 'instances' && props.viewMode === 'jaw'} overview={props.detailContent('overview')} preview={(
-                                <InstancePreview instance={props.selectedInstance} data={props.data} enabled={props.previewEnabled} active={props.sidebarMode === 'instances' && props.activeDetailTab === 'preview'} refreshKey={props.previewRefreshKey} theme={props.previewTheme} {...(props.onOpenNotesFromPreview ? { onOpenNotesFromPreview: props.onOpenNotesFromPreview } : {})} onOpenDocFromPreview={handleRightPreviewFile} onPreviewDroppedFiles={handlePreviewDroppedFiles} docPanelCapable={desktopPanelsAvailable} previewInsertTextRequest={previewInsertTextRequest} onPreviewInsertTextResult={handlePreviewInsertTextResult} />
+                            <Workbench mode={props.activeDetailTab} onModeChange={props.onDetailTabChange} header={props.workbenchHeader} modeActions={(<>{props.jawCeoWorkbenchButton}<button type="button" className="workbench-instance-settings-request" aria-label="Instance settings" title="Open this instance's own settings page" disabled={!props.selectedInstance?.ok} onClick={requestInstanceSettings}>Settings</button></>)} active={props.sidebarMode === 'instances' && props.viewMode === 'jaw'} overview={props.detailContent('overview')} preview={(
+                                <InstancePreview instance={props.selectedInstance} data={props.data} enabled={props.previewEnabled} active={props.sidebarMode === 'instances' && props.activeDetailTab === 'preview'} refreshKey={props.previewRefreshKey} theme={props.previewTheme} {...(props.onOpenNotesFromPreview ? { onOpenNotesFromPreview: props.onOpenNotesFromPreview } : {})} onOpenDocFromPreview={handleRightPreviewFile} onPreviewDroppedFiles={handlePreviewDroppedFiles} docPanelCapable={desktopPanelsAvailable} previewInsertTextRequest={previewInsertTextRequest} onPreviewInsertTextResult={handlePreviewInsertTextResult} previewSettingsOpenRequest={previewSettingsOpenRequest} onPreviewSettingsOpenResult={handlePreviewSettingsOpenResult} />
                             )} logs={props.detailContent('logs')} />
                         </WorkspaceSurface>
                         {props.viewMode === 'code' && props.sidebarMode === 'instances' ? (

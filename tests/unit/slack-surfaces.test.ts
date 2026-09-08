@@ -239,3 +239,45 @@ test('no two-channel enumeration remains in src or the frontend', () => {
         );
     }
 });
+
+test('the manager settings-open relay accepts a cross-port loopback parent and rejects the rest', async t => {
+    // Under the default origin-port preview transport the manager runs on a DIFFERENT loopback
+    // port than the instance, so a strict same-origin check would silently drop every request.
+    // This is the guard that must stay loose, while the iframe guard above stays strict.
+    const { setupWebUiDom, resetWebUiDom } = await import('./web-ui-test-dom.ts');
+    setupWebUiDom();
+    t.after(resetWebUiDom);
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response('{}', { headers: { 'content-type': 'application/json' } });
+    t.after(() => { globalThis.fetch = originalFetch; });
+    document.head.innerHTML = '<base href="http://127.0.0.1/i/3465/">';
+    document.body.innerHTML = '<div class="chat-area"><div class="chat-header"><button id="btnSettings" aria-pressed="false">Settings</button></div><textarea id="chatInput"></textarea></div><section id="settingsPage" hidden><iframe></iframe></section>';
+    t.mock.module('../../public/js/provider-icons.js', { namedExports: { providerIcon: () => '', providerLabel: (value: string) => value } });
+    const { initSettingsFrame } = await import('../../public/js/features/settings.ts');
+    const dispose = initSettingsFrame();
+    const page = document.getElementById('settingsPage')!;
+    const frame = document.querySelector<HTMLIFrameElement>('iframe')!;
+    frame.contentWindow!.postMessage = () => {};
+    const ask = (source: Window | null, origin: string) => window.dispatchEvent(
+        new window.MessageEvent('message', { source, origin, data: { type: 'jaw-preview-settings-open' } }),
+    );
+
+    // A non-loopback origin must never open the page, whatever it claims to be.
+    ask(window.parent, 'https://evil.invalid');
+    assert.equal(page.hidden, true, 'a remote origin must not open instance settings');
+
+    // Our own iframe is not the manager; the relay only listens to the parent.
+    ask(frame.contentWindow, 'http://127.0.0.1');
+    assert.equal(page.hidden, true, 'the settings iframe is not the request source');
+
+    // The manager on another loopback port is the real case.
+    ask(window.parent, 'http://localhost:24576');
+    assert.equal(page.hidden, false, 'a loopback manager on another port must be accepted');
+    assert.equal(document.body.dataset['settingsOpen'], 'true');
+
+    dispose();
+    document.body.removeAttribute('data-settings-open');
+    page.hidden = true;
+    ask(window.parent, 'http://localhost:24576');
+    assert.equal(page.hidden, true, 'the disposer must detach the relay listener');
+});
