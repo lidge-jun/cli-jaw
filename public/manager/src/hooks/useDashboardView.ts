@@ -6,7 +6,6 @@ import type { DashboardDetailTab, DashboardDiffMode, DashboardDiffRootPolicy, Da
 export function useDashboardView() {
     const [selectedPort, setSelectedPort] = useState<number | null>(null);
     const [activeDetailTab, setActiveDetailTab] = useState<DashboardDetailTab>('overview');
-    const [instanceSettingsOpen, setInstanceSettingsOpen] = useState(false);
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [activityDockCollapsed, setActivityDockCollapsed] = useState(false);
@@ -42,7 +41,6 @@ export function useDashboardView() {
     return {
         selectedPort,
         setSelectedPort,
-        instanceSettingsOpen, setInstanceSettingsOpen,
         activeDetailTab,
         setActiveDetailTab,
         drawerOpen,
@@ -102,14 +100,22 @@ export function useDashboardView() {
     };
 }
 
-export function hydrateInstanceSettings(ui: Pick<DashboardRegistryUi, 'selectedTab'> & { instanceSettingsOpen?: unknown }) {
+/**
+ * The in-Workbench instance settings panel is gone; the rail owns settings now. A registry
+ * written by an older client can still carry `instanceSettingsOpen: true` or the retired
+ * `selectedTab: 'settings'`, so map either onto the rail's sidebar mode rather than dropping
+ * the user on a workspace whose settings tab no longer exists. The field stays accepted by
+ * the server normalizer for one version; nothing writes it any more.
+ */
+export function hydrateInstanceSettings(ui: Pick<DashboardRegistryUi, 'selectedTab' | 'sidebarMode'> & { instanceSettingsOpen?: unknown }) {
+    const legacySettingsRequest = ui.selectedTab === 'settings' || ui.instanceSettingsOpen === true;
     return { selectedTab: ui.selectedTab === 'settings' ? 'overview' as const : ui.selectedTab,
-        instanceSettingsOpen: ui.selectedTab === 'settings' || ui.instanceSettingsOpen === true };
+        sidebarMode: legacySettingsRequest ? 'settings' as const : ui.sidebarMode };
 }
 
 type SettingsNavigation = {
-    view: Pick<ReturnType<typeof useDashboardView>, 'instanceSettingsOpen' | 'activeDetailTab' | 'sidebarMode' |
-        'setSelectedPort' | 'setInstanceSettingsOpen' | 'setSidebarMode' | 'setViewMode' | 'setDrawerOpen'>;
+    view: Pick<ReturnType<typeof useDashboardView>, 'activeDetailTab' | 'sidebarMode' |
+        'setSelectedPort' | 'setSidebarMode' | 'setViewMode' | 'setDrawerOpen'>;
     selectedPort: number | null;
     settingsDirty: boolean;
     panelSettingsDirty: boolean;
@@ -125,31 +131,32 @@ export function createInstanceSettingsNavigation(args: SettingsNavigation) {
             (args.confirmDiscard ?? (() => window.confirm('Discard unsaved Settings changes?')))();
     }
     function guardSettingsTransition(target: Partial<{
-        sidebarMode: DashboardSidebarMode; selectedPort: number | null; instanceSettingsOpen: boolean;
+        sidebarMode: DashboardSidebarMode; selectedPort: number | null;
     }>): boolean {
         const portChanged = target.selectedPort !== undefined && target.selectedPort !== selectedPort;
         const leavingDashboard = view.sidebarMode === 'settings' && (target.sidebarMode ?? view.sidebarMode) !== 'settings';
-        const closingPanel = view.instanceSettingsOpen && !(target.instanceSettingsOpen ?? view.instanceSettingsOpen);
+        // 'panel' is retained, not live. Its only producer is InstanceDetailPanel's 'settings'
+        // branch, which is now unreachable: handleTabChange intercepts that tab and hydration
+        // maps it to 'overview'. The slot stays because DashboardDetailTab still admits the
+        // retired value; it guards nothing today and can be dropped with that type.
         const departing = (['panel', 'dashboard'] as const).filter(entry =>
-            portChanged || (entry === 'panel' ? closingPanel : leavingDashboard));
+            portChanged || (entry === 'dashboard' && leavingDashboard));
         const dirty = departing.some(entry => entry === 'panel' ? args.panelSettingsDirty : args.dashboardSettingsDirty);
         if (dirty && !(args.confirmDiscard ?? (() => window.confirm('Discard unsaved Settings changes?')))()) return false;
         for (const entry of departing) args.clearDirty(entry);
         return true;
     }
-    function setInstanceSettingsOpen(open: boolean, port = selectedPort): void {
-        if (!guardSettingsTransition({ selectedPort: port, instanceSettingsOpen: open,
-            sidebarMode: open ? 'instances' : view.sidebarMode })) return;
-        if (open) {
-            view.setSelectedPort(port); view.setSidebarMode('instances');
-            view.setViewMode('jaw'); view.setDrawerOpen(false);
-        }
-        view.setInstanceSettingsOpen(open);
-        void args.saveUi({ instanceSettingsOpen: open,
-            selectedTab: view.activeDetailTab === 'settings' ? 'overview' : view.activeDetailTab,
-            ...(open ? { selectedPort: port, sidebarMode: 'instances' as const } : {}) });
+    /** Opens or closes the rail's manager settings workspace, honouring the dirty guard. */
+    function setDashboardSettingsOpen(open: boolean): void {
+        const sidebarMode = open ? 'settings' as const : 'instances' as const;
+        if (view.sidebarMode === sidebarMode) return;
+        if (!guardSettingsTransition({ sidebarMode })) return;
+        if (open) { view.setViewMode('jaw'); view.setDrawerOpen(false); }
+        view.setSidebarMode(sidebarMode);
+        void args.saveUi({ sidebarMode,
+            selectedTab: view.activeDetailTab === 'settings' ? 'overview' : view.activeDetailTab });
     }
-    return { canLeaveDirtySettings, guardSettingsTransition, setInstanceSettingsOpen };
+    return { canLeaveDirtySettings, guardSettingsTransition, setDashboardSettingsOpen };
 }
 
 // Both entry points may remain mounted: a clean hidden Shell cannot clear its peer.

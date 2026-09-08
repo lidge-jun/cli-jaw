@@ -424,7 +424,7 @@ All trace routes set `Cache-Control: no-store` before auth/parsing. Activity dis
 | Runtime monitors | `GET /api/manager/runtime-status` `GET/POST /api/bgtask` `GET/DELETE /api/bgtask/:id` `GET /api/orchestrate/worker-progress` `GET /api/orchestrate/worker-progress/:agentId` |
 | Registry | `GET /api/dashboard/registry` `PATCH /api/dashboard/registry` |
 
-`PATCH /api/dashboard/registry` `ui` is whitelisted by `normalizeUi` (`src/manager/registry.ts`); `ui.instanceSettingsOpen` (boolean, default `false`, 260908 wp3) persists whether the Workbench full instance-settings page is open, and `ui.selectedTab` still accepts the legacy `'settings'` value, which hydrates as `overview` with the settings page open.
+`PATCH /api/dashboard/registry` `ui` is whitelisted by `normalizeUi` (`src/manager/registry.ts`). `ui.instanceSettingsOpen` (boolean, default `false`) is retained for one version so older clients are not rejected, but nothing writes it: the Workbench instance-settings page was removed and the rail owns settings. A stored `true`, and the legacy `ui.selectedTab: 'settings'`, both hydrate as `selectedTab: 'overview'` plus `sidebarMode: 'settings'`, so an older registry opens the rail workspace rather than a page that no longer exists.
 | Lifecycle | `POST /api/dashboard/lifecycle/:action` (start/stop/restart/perm/unperm) |
 | Process control | `GET /api/dashboard/process-control` `POST /api/dashboard/process-control/adopt` `POST /api/dashboard/process-control/stop-managed` `POST /api/dashboard/process-control/force-release` |
 | Desktop/Electron | `GET /api/dashboard/desktop-status` `GET/POST /api/dashboard/electron-metrics` |
@@ -532,4 +532,3 @@ relates to a KNOWN target, which needs a resolved element to compare against,
 so `--no-occlusion-check` has no meaning for a coordinate click. Running it
 there would always return "unknown" and refuse nothing, which is worse than not
 running it: a guard that cannot fire still looks like a guard.
-

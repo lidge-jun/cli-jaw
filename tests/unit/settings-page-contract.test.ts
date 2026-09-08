@@ -16,7 +16,6 @@ const { createRoot } = await import('react-dom/client');
 const { SettingsPage } = await import('../../public/manager/src/settings/SettingsPage');
 const { Workbench } = await import('../../public/manager/src/components/Workbench');
 const { CommandCenter } = await import('../../public/manager/src/components/CommandCenter');
-const { WorkbenchSettingsToggle } = await import('../../public/manager/src/components/WorkbenchHeader');
 const { ThemeSwitch } = await import('../../public/manager/src/components/ThemeSwitch');
 const { settingsIcon } = await import('../../public/manager/src/settings/settings-icons');
 await import('../../public/manager/src/settings/pages/Display');
@@ -59,38 +58,38 @@ test('full settings page exposes Back, grouped icon nav, scope title and keyboar
     } finally { await act(async () => root.unmount()); container.remove(); }
 });
 
-test('settings replaces the workspace without replacing its preview iframe', async () => {
+test('the Workbench keeps its preview iframe and hosts no settings panel', async () => {
+    // Settings moved to the rail workspace, so the Workbench must not gain a second
+    // instance-settings surface — and its preview must still survive tab changes.
     const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
-    const render = async (open: boolean) => act(async () => root.render(createElement(Workbench, {
-        mode: 'preview', onModeChange() {}, header: 'Instance', preview: createElement('iframe', { title: 'Preview' }),
-        overview: 'Overview', logs: 'Logs', settings: createElement('div', {}, 'Settings content'),
-        settingsOpen: open, onSettingsClose() {}, active: true,
+    const render = async (mode: 'preview' | 'overview') => act(async () => root.render(createElement(Workbench, {
+        mode, onModeChange() {}, header: 'Instance', preview: createElement('iframe', { title: 'Preview' }),
+        overview: 'Overview', logs: 'Logs', active: true,
     })));
     try {
-        await render(false); const frame = container.querySelector('iframe');
-        await render(true);
-        assert.equal(container.querySelector('iframe'), frame);
+        await render('preview'); const frame = container.querySelector('iframe');
+        await render('overview');
+        assert.equal(container.querySelector('iframe'), frame, 'the preview iframe must not remount');
         assert.equal(container.querySelector<HTMLElement>('[data-preview-host]')?.hidden, true);
-        assert.equal(container.querySelector<HTMLElement>('.workbench-header')?.hidden, true);
-        assert.equal(container.querySelector('.workbench-body > .workbench-settings-page')?.textContent, 'Settings content');
-        assert.equal(container.querySelector('aside'), null);
-        await render(false);
+        assert.equal(container.querySelector('.workbench-settings-page'), null);
+        assert.equal(container.querySelector<HTMLElement>('.workbench-header')?.hidden, false,
+            'nothing hides the Workbench header now that the settings panel is gone');
+        await render('preview');
         assert.equal(container.querySelector('iframe'), frame);
         assert.equal(container.querySelector<HTMLElement>('[data-preview-host]')?.hidden, false);
     } finally { await act(async () => root.unmount()); container.remove(); }
 });
 
-test('command gear mounts immediately before theme controls and retains its toggle callback', async () => {
-    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container); let toggles = 0;
+test('the command centre carries no settings gear', async () => {
+    // The workbench gear was the second settings entry point; the rail is the only one.
+    const container = document.createElement('div'); document.body.append(container); const root = createRoot(container);
     try {
-        await act(async () => root.render(createElement('div', {},
-            createElement(CommandCenter, { title: 'Dashboard', search: null, mobileMenuButton: null,
-                actions: createElement('div', { className: 'command-actions-group' }, createElement(ThemeSwitch, { theme: 'dark', onChange() {} })) }),
-            createElement(WorkbenchSettingsToggle, { open: true, onToggle: () => { toggles++; } }))));
-        const gear = container.querySelector<HTMLButtonElement>('.workbench-settings-toggle')!;
-        assert.equal(gear.getAttribute('aria-pressed'), 'true');
-        assert.equal(gear.parentElement?.nextElementSibling?.getAttribute('aria-label'), 'Theme');
-        gear.click(); assert.equal(toggles, 1);
+        await act(async () => root.render(createElement(CommandCenter, { title: 'Dashboard', search: null, mobileMenuButton: null,
+            actions: createElement('div', { className: 'command-actions-group' }, createElement(ThemeSwitch, { theme: 'dark', onChange() {} })) })));
+        assert.equal(container.querySelector('.workbench-settings-toggle'), null);
+        assert.equal(container.querySelector('#command-settings-slot'), null,
+            'the portal slot must go with the gear it existed for');
+        assert.ok(container.querySelector('[aria-label="Theme"]'), 'the theme control stays');
     } finally { await act(async () => root.unmount()); container.remove(); }
 });
 
@@ -147,4 +146,75 @@ test('Dashboard meta refuses to load or write without a selected instance', asyn
         assert.ok(empty && /select an instance/i.test(empty.textContent || ''),
             'the guard must say why the page is empty');
     } finally { await act(async () => root.unmount()); container.remove(); }
+});
+
+test('the dashboard rail settings surface can never expose instance-scoped pages', async () => {
+    // The user requirement is literal: the rail gear shows whole-dashboard settings and
+    // instance-specific settings must never appear there. Two independent guarantees.
+    const { entriesForScopes } = await import('../../public/manager/src/settings/settings-registry');
+
+    // 1. Render the rail's own surface and read the sidebar it actually produces. Asserting
+    //    over entriesForScopes(['manager'], ...) alone would be a tautology: the filter tests
+    //    scopes.includes(entry.scope) first, so it can never return an instance page.
+    const { SettingsSidebar } = await import('../../public/manager/src/settings/SettingsSidebar');
+    // The oracle is hardcoded and keyed on id, on purpose. Deriving it from
+    // entriesForScopes(['instance'], ...) is a tautology: flipping a page's scope removes it
+    // from the instance set at the same moment it enters the manager set, so a mis-scoped page
+    // renders in the rail and the comparison still passes. Keying on label instead of id has a
+    // narrower version of the same hole — a hidden entry can be unhidden and re-scoped without
+    // ever appearing in a label list. These ids are the instance-owned surfaces the user said
+    // must never reach the dashboard gear, hidden ones included.
+    const instanceOwnedIds = new Set([
+        'agent', 'model', 'profile', 'display',
+        'channels-telegram', 'channels-discord', 'channels-slack',
+        'heartbeat', 'memory', 'employees', 'mcp', 'speech',
+        'prompts', 'browser', 'network', 'permissions', 'advanced-export',
+    ]);
+    const { SETTINGS_REGISTRY } = await import('../../public/manager/src/settings/settings-registry');
+    // Scope first: no instance-owned id may claim manager scope, hidden or not.
+    for (const entry of SETTINGS_REGISTRY) {
+        if (!instanceOwnedIds.has(entry.id)) continue;
+        assert.equal(entry.scope, 'instance',
+            `"${entry.id}" is instance-owned and must never carry manager scope`);
+    }
+    // Keep the list honest in the other direction: every id must still exist, so the guard
+    // cannot quietly protect pages that were deleted or renamed.
+    const registeredIds = new Set(SETTINGS_REGISTRY.map(e => e.id));
+    for (const id of instanceOwnedIds) {
+        assert.ok(registeredIds.has(id as never),
+            `"${id}" is no longer registered; update this list deliberately`);
+    }
+    const instanceLabels = new Set(SETTINGS_REGISTRY
+        .filter(e => instanceOwnedIds.has(e.id))
+        .map(e => typeof e.label === 'function' ? e.label('en') : e.label));
+    const container = document.createElement('div'); document.body.append(container);
+    const root = createRoot(container);
+    try {
+        // Render the sidebar the rail actually builds, with a port present. The rail supplies
+        // one because Dashboard meta edits that instance's manager-registry row; scope, not a
+        // missing port, is what fences the surface.
+        await act(async () => root.render(createElement(SettingsSidebar, {
+            activeId: 'manager-display', scopes: ['manager'], hasInstance: true, locale: 'en',
+            onSelect() {},
+        })));
+        const rendered = [...container.querySelectorAll('.settings-sidebar-item')]
+            .map(el => el.textContent?.trim() ?? '');
+        assert.ok(rendered.length > 0, 'the rail settings sidebar must render entries');
+        for (const label of rendered) {
+            assert.equal(instanceLabels.has(label), false,
+                `the rail gear exposed the instance page "${label}"`);
+        }
+        const scopes = [...container.querySelectorAll('.settings-scope-label')].map(el => el.textContent);
+        assert.deepEqual(scopes, ['Manager'], 'the rail must render exactly one scope section');
+    } finally { await act(async () => root.unmount()); container.remove(); }
+
+    // 2. Call-site: the router must pass a literal manager-only scope and must not hand the
+    //    page a port, so hasInstance is false even if an entry were mis-filed.
+    const router = readFileSync(new URL('../../public/manager/src/SidebarRailRouter.tsx', import.meta.url), 'utf8');
+    assert.ok(router.includes("scopes={['manager']}"),
+        'the rail settings page must request manager scope literally');
+    assert.equal(router.includes("scopes={selected ? ['instance', 'manager']"), false,
+        'the rail must not widen its scope when an instance is selected');
+    assert.equal(router.includes('WorkbenchSettingsToggle'), false,
+        'the workbench gear is the removed second entry point');
 });

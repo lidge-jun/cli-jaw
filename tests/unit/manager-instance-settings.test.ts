@@ -1,54 +1,88 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { createInstanceSettingsNavigation, hydrateInstanceSettings, settingsDirtyAfter, useSettingsDirtyState, useDashboardView } from '../../public/manager/src/hooks/useDashboardView';
 import { createManagerCaptureKeydownHandler, runManagerShortcut, type ManagerShortcutRunnerDeps } from '../../public/manager/src/manager-shortcut-runner';
 import { DEFAULT_MANAGER_SHORTCUT_KEYMAP } from '../../public/manager/src/manager-shortcuts';
 import type { DashboardRegistryPatch, DashboardRegistryUi, DashboardShortcutAction } from '../../public/manager/src/types';
 import type { SettingsClient } from '../../public/manager/src/settings/types';
 
-test('saved Settings becomes Overview plus panel, including missing and invalid flags', () => {
+test('a legacy settings request restores the rail workspace, not a Workbench panel', () => {
+    // The in-Workbench panel is gone. A registry written by an older client can still ask for
+    // it two ways; both must land on the rail rather than on a tab that no longer exists.
     for (const flag of [undefined, false, true, 'true', 1, null]) {
-        assert.deepEqual(hydrateInstanceSettings({ selectedTab: 'settings', instanceSettingsOpen: flag }),
-            { selectedTab: 'overview', instanceSettingsOpen: true });
-        assert.deepEqual(hydrateInstanceSettings({ selectedTab: 'logs', instanceSettingsOpen: flag }),
-            { selectedTab: 'logs', instanceSettingsOpen: flag === true });
+        assert.deepEqual(hydrateInstanceSettings({ selectedTab: 'settings', sidebarMode: 'instances', instanceSettingsOpen: flag }),
+            { selectedTab: 'overview', sidebarMode: 'settings' });
+        assert.deepEqual(hydrateInstanceSettings({ selectedTab: 'logs', sidebarMode: 'instances', instanceSettingsOpen: flag }),
+            { selectedTab: 'logs', sidebarMode: flag === true ? 'settings' : 'instances' });
     }
+    // A saved rail mode survives untouched when no legacy request is present.
+    assert.deepEqual(hydrateInstanceSettings({ selectedTab: 'logs', sidebarMode: 'notes' }),
+        { selectedTab: 'logs', sidebarMode: 'notes' });
+
+    // The pure function is only half of it: App must actually consume restored.sidebarMode.
+    // An earlier revision computed it and then discarded it for ui.sidebarMode, so a legacy
+    // registry silently landed on 'instances' while this assertion still passed.
+    const app = readFileSync(new URL('../../public/manager/src/App.tsx', import.meta.url), 'utf8');
+    assert.ok(app.includes('?? restored.sidebarMode'),
+        'App must restore the migrated sidebar mode, not recompute it from the raw registry');
+    assert.equal(app.includes('?? ui.sidebarMode'), false,
+        'reading ui.sidebarMode directly discards the legacy settings migration');
 });
-test('dirty cancellation has no writes; same-port open preserves draft; accepted close persists the mode', () => {
+test('the rail settings workspace honours the dirty guard on open and close', () => {
     type Args = Parameters<typeof createInstanceSettingsNavigation>[0];
-    const writes: Parameters<Args['saveUi']>[0][] = [], dirtyChanges: boolean[] = [], ports: (number | null)[] = [];
+    const writes: Parameters<Args['saveUi']>[0][] = [], cleared: string[] = [], modes: string[] = [];
     let allowed = false, prompts = 0;
-    const view: Args['view'] = { sidebarMode: 'instances', activeDetailTab: 'preview', instanceSettingsOpen: true,
-        setInstanceSettingsOpen(next) { assert.equal(typeof next, 'boolean'); },
-        setSelectedPort(next) { if (typeof next !== 'function') ports.push(next); },
-        setSidebarMode() {}, setViewMode() {}, setDrawerOpen() {} };
-    const nav = createInstanceSettingsNavigation({ view, selectedPort: 3457, settingsDirty: true, panelSettingsDirty: true, dashboardSettingsDirty: false,
-        clearDirty: () => dirtyChanges.push(false), saveUi: async patch => { writes.push(patch); },
+    let sidebarMode: 'instances' | 'settings' = 'instances';
+    const view: Args['view'] = { get sidebarMode() { return sidebarMode; }, activeDetailTab: 'preview',
+        setSelectedPort() {}, setSidebarMode(next) { modes.push(next as string); sidebarMode = next as typeof sidebarMode; },
+        setViewMode() {}, setDrawerOpen() {} };
+    const nav = createInstanceSettingsNavigation({ view, selectedPort: 3457, settingsDirty: true,
+        panelSettingsDirty: false, dashboardSettingsDirty: true,
+        clearDirty: entry => cleared.push(entry), saveUi: async patch => { writes.push(patch); },
         confirmDiscard: () => { prompts++; return allowed; } });
-    nav.setInstanceSettingsOpen(false); nav.setInstanceSettingsOpen(true, 3458);
-    assert.equal(prompts, 2); assert.deepEqual(writes, []); assert.deepEqual(ports, []); assert.deepEqual(dirtyChanges, []);
-    nav.setInstanceSettingsOpen(true, 3457);
-    assert.equal(prompts, 2); assert.deepEqual(dirtyChanges, []); assert.equal(writes.at(-1)?.selectedTab, 'preview');
-    allowed = true; nav.setInstanceSettingsOpen(true, 3458);
-    assert.deepEqual(ports, [3457, 3458]); assert.deepEqual(dirtyChanges, [false, false]);
-    nav.setInstanceSettingsOpen(false);
-    assert.equal(writes.at(-1)?.instanceSettingsOpen, false); assert.equal(writes.at(-1)?.selectedTab, 'preview');
+
+    // Opening from 'instances' is not a departure from the dashboard, so nothing is prompted.
+    nav.setDashboardSettingsOpen(true);
+    assert.deepEqual(modes, ['settings']);
+    assert.equal(writes.at(-1)?.sidebarMode, 'settings');
+    assert.equal(writes.at(-1)?.selectedTab, 'preview');
+    assert.equal(prompts, 0);
+
+    // Re-opening an already-open workspace is a no-op, not a second write.
+    const writeCount = writes.length;
+    nav.setDashboardSettingsOpen(true);
+    assert.equal(writes.length, writeCount);
+
+    // Leaving with a dirty dashboard draft prompts, and a denial changes nothing.
+    nav.setDashboardSettingsOpen(false);
+    assert.equal(prompts, 1);
+    assert.deepEqual(modes, ['settings']);
+    assert.equal(writes.length, writeCount);
+
+    allowed = true;
+    nav.setDashboardSettingsOpen(false);
+    assert.deepEqual(modes, ['settings', 'instances']);
+    assert.deepEqual(cleared, ['dashboard']);
+    assert.equal(writes.at(-1)?.sidebarMode, 'instances');
 });
-test('closed panel still guards Dashboard dirty on port changes', () => {
+test('a port change still confirms the panel draft owned by InstanceDetailPanel', () => {
+    // The Workbench panel is gone, but 'panel' has a second producer, so a port change must
+    // keep confirming it.
     type Args = Parameters<typeof createInstanceSettingsNavigation>[0];
-    const writes: unknown[] = [], ports: unknown[] = [];
+    const cleared: string[] = [];
     let allow = false;
-    const view: Args['view'] = { sidebarMode: 'instances', activeDetailTab: 'preview', instanceSettingsOpen: false,
-        setInstanceSettingsOpen() {}, setSelectedPort: next => { ports.push(next); },
-        setSidebarMode() {}, setViewMode() {}, setDrawerOpen() {} };
-    const nav = createInstanceSettingsNavigation({ view, selectedPort: 3457, settingsDirty: true, panelSettingsDirty: false, dashboardSettingsDirty: true,
-        clearDirty() {}, confirmDiscard: () => allow,
-        saveUi: async patch => { writes.push(patch); } });
-    assert.equal(nav.canLeaveDirtySettings(), false); // row / Preview / CEO guard uses this even when closed
-    nav.setInstanceSettingsOpen(true, 3458);
-    assert.deepEqual(ports, []); assert.deepEqual(writes, []);
-    allow = true; nav.setInstanceSettingsOpen(true, 3458);
-    assert.deepEqual(ports, [3458]); assert.equal(writes.length, 1);
+    const view: Args['view'] = { sidebarMode: 'instances', activeDetailTab: 'preview',
+        setSelectedPort() {}, setSidebarMode() {}, setViewMode() {}, setDrawerOpen() {} };
+    const nav = createInstanceSettingsNavigation({ view, selectedPort: 3457, settingsDirty: true,
+        panelSettingsDirty: true, dashboardSettingsDirty: false,
+        clearDirty: entry => cleared.push(entry), confirmDiscard: () => allow, saveUi: async () => {} });
+    assert.equal(nav.canLeaveDirtySettings(), false); // row / Preview / CEO guard uses this
+    assert.equal(nav.guardSettingsTransition({ selectedPort: 3458 }), false);
+    assert.deepEqual(cleared, []);
+    allow = true;
+    assert.equal(nav.guardSettingsTransition({ selectedPort: 3458 }), true);
+    assert.deepEqual(cleared, ['panel', 'dashboard']);
 });
 test('clean or closed panel cannot mask Dashboard dirty', () => {
     let entries = settingsDirtyAfter({ panel: false, dashboard: false }, 'dashboard', true);
@@ -148,16 +182,17 @@ test('compound settings transition confirms once and clears only departing owner
     type Args = Parameters<typeof createInstanceSettingsNavigation>[0];
     let accepted = false, prompts = 0;
     const cleared: string[] = [], writes: unknown[] = [];
-    const view: Args['view'] = { sidebarMode: 'settings', activeDetailTab: 'preview', instanceSettingsOpen: true,
-        setSelectedPort() {}, setInstanceSettingsOpen() {}, setSidebarMode() {}, setViewMode() {}, setDrawerOpen() {} };
+    const view: Args['view'] = { sidebarMode: 'settings', activeDetailTab: 'preview',
+        setSelectedPort() {}, setSidebarMode() {}, setViewMode() {}, setDrawerOpen() {} };
     const nav = createInstanceSettingsNavigation({ view, selectedPort: 3457, settingsDirty: true,
         panelSettingsDirty: true, dashboardSettingsDirty: true, clearDirty: entry => cleared.push(entry),
         saveUi: async patch => { writes.push(patch); }, confirmDiscard: () => { prompts++; return accepted; } });
-    nav.setInstanceSettingsOpen(true, 3458);
-    assert.equal(prompts, 1); assert.deepEqual(cleared, []); assert.deepEqual(writes, []);
+    // A port change departs both owners at once and must confirm exactly once.
+    assert.equal(nav.guardSettingsTransition({ selectedPort: 3458 }), false);
+    assert.equal(prompts, 1); assert.deepEqual(cleared, []);
     accepted = true;
-    nav.setInstanceSettingsOpen(true, 3458);
-    assert.equal(prompts, 2); assert.deepEqual(cleared, ['panel', 'dashboard']); assert.equal(writes.length, 1);
+    assert.equal(nav.guardSettingsTransition({ selectedPort: 3458 }), true);
+    assert.equal(prompts, 2); assert.deepEqual(cleared, ['panel', 'dashboard']);
     cleared.length = 0;
     assert.equal(nav.guardSettingsTransition({ sidebarMode: 'notes' }), true);
     assert.equal(prompts, 3); assert.deepEqual(cleared, ['dashboard']);
@@ -223,16 +258,12 @@ test('App host guards real settings drafts through document and desktop subscrip
         // Only the heavy chrome is replaced: real App callbacks decide every transition.
         // Mount lifetimes match Router/Workbench; the retained panel survives mode changes.
         return React.createElement('div', {},
-            button('open-panel', () => props.onInstanceSettingsOpenChange(true)),
-            button('close-panel', () => props.onInstanceSettingsOpenChange(false)),
             button('dashboard', () => props.handleSidebarModeChange('settings')),
             button('instances', () => props.handleSidebarModeChange('instances')),
             button('rail-notes', () => props.handleSidebarModeChange('notes')),
-            button('gear', () => props.view.sidebarMode === 'settings'
-                ? props.handleSidebarModeChange('instances') : props.onInstanceSettingsOpenChange(!props.view.instanceSettingsOpen)),
+            button('gear', () => props.handleSidebarModeChange(
+                props.view.sidebarMode === 'settings' ? 'instances' : 'settings')),
             button('keyboard-target', noop),
-            React.createElement('div', { 'data-entry': 'panel', hidden: props.view.sidebarMode !== 'instances' },
-                props.view.instanceSettingsOpen ? page('panel', () => props.onInstanceSettingsOpenChange(false)) : null),
             React.createElement('div', { 'data-entry': 'dashboard' }, props.view.sidebarMode === 'settings'
                 ? page('dashboard', () => props.handleSidebarModeChange('instances')) : null));
     }
@@ -269,9 +300,11 @@ test('App host guards real settings drafts through document and desktop subscrip
     try {
         for (const [path, namedExports] of mocks) t.mock.module(path, { namedExports });
         const { App } = await import('../../public/manager/src/App');
-        const sources = ['back', 'escape', 'gear', 'rail-notes', 'meta', 'keyboard', 'desktop', 'close-panel'] as const;
+        // One settings entry point remains: the rail. 'gear' is now the rail toggle, and the
+        // Workbench panel and its 'close-panel' source are gone with it.
+        const sources = ['back', 'escape', 'gear', 'rail-notes', 'meta', 'keyboard', 'desktop'] as const;
         for (const source of sources) for (const outcome of ['deny', 'accept', ...(['keyboard', 'desktop'].includes(source) ? ['clear'] : [])]) {
-            await t.test(`${source}: ${source === 'meta' ? 'closed panel' : 'stable dirty peer'}, ${outcome}`, async () => {
+            await t.test(`${source}: rail settings draft, ${outcome}`, async () => {
                 const host = document.createElement('div'); document.body.append(host);
                 const root = createRoot(host);
                 let confirmations = 0;
@@ -288,19 +321,14 @@ test('App host guards real settings drafts through document and desktop subscrip
                 try {
                     await React.act(async () => { root.render(React.createElement(App)); });
                     assert.equal(latest?.selectedInstance?.port, 3457);
-                    let panel: HTMLInputElement | null = null;
-                    if (source !== 'meta') {
-                        await click('open-panel'); panel = input('panel'); await edit(panel, '12');
-                        assert.equal(dirty.panel, true);
-                    }
                     await click('dashboard');
                     const dashboard = input('dashboard');
-                    assert.equal(dirty.dashboard, false); assert.equal(dirty.panel, panel !== null);
+                    assert.equal(dirty.dashboard, false); assert.equal(dirty.panel, false);
                     const stable = { instance: latest!.selectedInstance, instances: latest!.instances,
                         keymap: latest!.view.dashboardShortcutKeymap, reads, unsubscribed,
                         desktop: [...subscribers][0] };
                     await edit(dashboard, '9');
-                    assert.deepEqual(dirty, { panel: panel !== null, dashboard: true });
+                    assert.deepEqual(dirty, { panel: false, dashboard: true });
                     assert.equal(latest!.selectedInstance, stable.instance);
                     assert.equal(latest!.instances, stable.instances);
                     assert.equal(latest!.view.dashboardShortcutKeymap, stable.keymap);
@@ -311,7 +339,7 @@ test('App host guards real settings drafts through document and desktop subscrip
                     if (outcome === 'clear') {
                         const beforeClear = [...subscribers][0];
                         await edit(dashboard, '6');
-                        assert.deepEqual(dirty, { panel: true, dashboard: false });
+                        assert.deepEqual(dirty, { panel: false, dashboard: false });
                         assert.equal(subscribers.size, 1); assert.notEqual([...subscribers][0], beforeClear);
                     }
                     assert.equal(latest!.view.sidebarMode, 'settings');
@@ -330,30 +358,21 @@ test('App host guards real settings drafts through document and desktop subscrip
                         else host.querySelector<HTMLButtonElement>(`#${source}`)!.click();
                     });
                     assert.equal(confirmations, outcome === 'clear' ? 0 : 1);
-                    if (panel && !(source === 'close-panel' && outcome === 'accept')) {
-                        assert.equal(input('panel'), panel); assert.equal(panel.value, '12'); assert.equal(dirty.panel, true);
-                    }
                     assert.equal(latest!.selectedInstance, stable.instance); assert.equal(reads, stable.reads);
                     assert.deepEqual(settingsWrites, []);
                     if (outcome === 'deny') {
                         assert.equal(latest!.view.sidebarMode, 'settings'); assert.equal(input('dashboard'), dashboard);
                         assert.equal(dashboard.value, '9'); assert.equal(dirty.dashboard, true); assert.deepEqual(writes, []);
-                    } else if (source === 'close-panel') {
-                        assert.equal(latest!.view.sidebarMode, 'settings'); assert.equal(panel!.isConnected, false);
-                        assert.equal(input('dashboard'), dashboard); assert.equal(dashboard.value, '9');
-                        assert.deepEqual(dirty, { panel: false, dashboard: true }); assert.equal(writes.length, 1);
                     } else {
                         assert.equal(latest!.view.sidebarMode, ['rail-notes', 'keyboard', 'desktop'].includes(source) ? 'notes' : 'instances');
                         assert.equal(dashboard.isConnected, false); assert.equal(dirty.dashboard, false);
                         assert.equal(writes.length, 1, 'One accepted transition persists once');
-                        // A second same-port panel open cannot consume another confirmation or draft.
-                        await click('open-panel');
+                        // Re-entering the rail workspace starts a fresh draft, and re-entry
+                        // itself must not consume another confirmation.
+                        await click('dashboard');
                         assert.equal(confirmations, outcome === 'clear' ? 0 : 1);
-                        if (panel) {
-                            assert.equal(input('panel'), panel); assert.equal(panel.value, '12'); assert.equal(dirty.panel, true);
-                        } else {
-                            assert.equal(input('panel').value, '6'); assert.equal(dirty.panel, false);
-                        }
+                        assert.equal(input('dashboard').value, '6');
+                        assert.equal(dirty.dashboard, false);
                     }
                 } finally {
                     await React.act(async () => { root.unmount(); }); host.remove();

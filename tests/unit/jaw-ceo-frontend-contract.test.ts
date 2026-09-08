@@ -41,17 +41,15 @@ test('jaw-ceo frontend installs workbench launcher outside instance groups', asy
     const React = await import('react'), { renderToStaticMarkup } = await import('react-dom/server');
     const { JSDOM } = await import('jsdom');
     const { Workbench } = await import('../../public/manager/src/components/Workbench');
-    const { WorkbenchSettingsToggle } = await import('../../public/manager/src/components/WorkbenchHeader');
     const globals = globalThis as unknown as Record<string, unknown>, previous = globals['React']; globals['React'] = React;
     try {
-        const actions = React.createElement(React.Fragment, null, React.createElement('button', { id: 'ceo-test' }, 'CEO'),
-            React.createElement(WorkbenchSettingsToggle, { open: false, onToggle() {} }));
+        const actions = React.createElement(React.Fragment, null, React.createElement('button', { id: 'ceo-test' }, 'CEO'));
         const dom = new JSDOM(renderToStaticMarkup(React.createElement(Workbench, { mode: 'overview', active: true,
-            onModeChange() {}, header: null, modeActions: actions, overview: null, preview: null, logs: null,
-            settings: null, settingsOpen: false, onSettingsClose() {} })));
+            onModeChange() {}, header: null, modeActions: actions, overview: null, preview: null, logs: null })));
         const tabs = dom.window.document.querySelector('.workbench-mode-tabs');
         assert.equal(tabs?.nextElementSibling?.id, 'ceo-test');
-        assert.equal(tabs?.nextElementSibling?.nextElementSibling, null, 'settings gear belongs to the command bar');
+        assert.equal(tabs?.nextElementSibling?.nextElementSibling, null,
+            'the mode bar carries the CEO button alone; the settings gear is retired');
         dom.window.close();
     } finally { globals['React'] = previous; }
     assert.equal(router.includes('jawCeoNavigatorContent'), false, 'CEO must not be injected into Navigator');

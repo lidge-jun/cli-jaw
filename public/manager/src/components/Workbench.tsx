@@ -9,9 +9,6 @@ type WorkbenchProps = {
     overview: ReactNode;
     preview: ReactNode;
     logs: ReactNode;
-    settings: ReactNode;
-    settingsOpen: boolean;
-    onSettingsClose: () => void;
     active: boolean;
 };
 
@@ -23,8 +20,8 @@ function modeLabel(mode: DashboardDetailTab): string {
 
 export function Workbench(props: WorkbenchProps) {
     return (
-        <section className={`workbench workbench-${props.mode}`} data-instance-settings-open={props.settingsOpen} aria-label="Selected instance workbench">
-            <div className="workbench-header" hidden={props.settingsOpen}>
+        <section className={`workbench workbench-${props.mode}`} aria-label="Selected instance workbench">
+            <div className="workbench-header">
                 {props.header}
                 <div className="workbench-mode-bar">
                     <div className="workbench-mode-tabs" role="tablist" aria-label="Workbench modes"
@@ -56,7 +53,7 @@ export function Workbench(props: WorkbenchProps) {
                 </div>
             </div>
             <div className="workbench-body">
-                {!props.settingsOpen && props.mode === 'overview' && (
+                {props.mode === 'overview' && (
                     <div key="overview" id="workbench-panel-overview" role="tabpanel" aria-labelledby="workbench-tab-overview" className="workbench-panel workbench-panel-overview">{props.overview}</div>
                 )}
                 <div
@@ -65,16 +62,15 @@ export function Workbench(props: WorkbenchProps) {
                     role="tabpanel"
                     aria-labelledby="workbench-tab-preview"
                     className="workbench-panel workbench-panel-preview"
-                    hidden={props.settingsOpen || props.mode !== 'preview'}
-                    aria-hidden={props.settingsOpen || props.mode !== 'preview'}
+                    hidden={props.mode !== 'preview'}
+                    aria-hidden={props.mode !== 'preview'}
                     data-preview-host="persistent"
                 >
                     {props.preview}
                 </div>
-                {!props.settingsOpen && props.mode === 'logs' && (
+                {props.mode === 'logs' && (
                     <div key="logs" id="workbench-panel-logs" role="tabpanel" aria-labelledby="workbench-tab-logs" className="workbench-panel workbench-panel-logs">{props.logs}</div>
                 )}
-                {props.settingsOpen && <div id="workbench-instance-settings" className="workbench-settings-page">{props.settings}</div>}
             </div>
         </section>
     );
