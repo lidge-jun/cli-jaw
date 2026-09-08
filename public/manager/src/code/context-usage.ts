@@ -28,16 +28,27 @@ export function contextUsageView(usage: CodeContextUsage | undefined): ContextUs
         percent: Math.min(100, raw), over: raw > 100 };
 }
 
-/** Rounded to keep the control narrow; exact counts belong in the detail. */
+/**
+ * Rounded to keep the control narrow. Each unit is chosen after its own
+ * rounding: 999,999 in thousands rounds to 1000, which is a four-digit "k"
+ * that should have been "1.0M", and 999.5 rounds to 1000, which is not the
+ * bare small number that branch is for.
+ */
+function scaled(value: number, divisor: number): string {
+    const n = value / divisor;
+    return n < 10 ? n.toFixed(1) : String(Math.round(n));
+}
 export function formatTokens(value: number): string {
     if (!Number.isFinite(value) || value < 0) return '—';
-    if (value < 1000) return String(Math.round(value));
-    if (value < 1_000_000) {
-        const thousands = value / 1000;
-        return `${thousands < 10 ? thousands.toFixed(1) : Math.round(thousands)}k`;
-    }
-    const millions = value / 1_000_000;
-    return `${millions < 10 ? millions.toFixed(1) : Math.round(millions)}M`;
+    const rounded = Math.round(value);
+    if (rounded < 1000) return String(rounded);
+    const thousands = scaled(rounded, 1000);
+    return Number(thousands) < 1000 ? `${thousands}k` : `${scaled(rounded, 1_000_000)}M`;
+}
+
+/** The count itself, grouped. The rounded form cannot be reconstructed into it. */
+export function formatExactTokens(value: number | null): string {
+    return value === null || !Number.isFinite(value) || value < 0 ? '—' : value.toLocaleString('en-US');
 }
 
 /** An unreported part of the breakdown reads as absent, never as zero. */

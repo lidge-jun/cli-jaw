@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { CodeContextUsage } from '../../src/code-mode/wire.ts';
-import { contextUsageLabel, contextUsageLevel, contextUsageView, formatOptionalTokens,
-    formatTokens } from '../../public/manager/src/code/context-usage.ts';
+import { contextUsageLabel, contextUsageLevel, contextUsageView, formatExactTokens,
+    formatOptionalTokens, formatTokens } from '../../public/manager/src/code/context-usage.ts';
 
 function usage(patch: Partial<CodeContextUsage> = {}): CodeContextUsage {
     return { totalTokens: 1000, inputTokens: 800, cachedInputTokens: 200, outputTokens: 200,
@@ -52,6 +52,27 @@ test('counts stay short, and an unreported part stays absent', () => {
     assert.equal(formatTokens(1_250_000), '1.3M');
     assert.equal(formatOptionalTokens(null), '—', 'a field the runtime did not report is not zero');
     assert.equal(formatOptionalTokens(0), '0');
+});
+
+test('each unit is chosen after its own rounding, so no boundary produces a wrong one', () => {
+    // 999.5 rounds to 1000, which is not the bare small number that branch is
+    // for; 999,999 in thousands rounds to 1000, which would be a four-digit
+    // "k" where the answer is "1.0M".
+    assert.equal(formatTokens(999.5), '1.0k');
+    assert.equal(formatTokens(999_999), '1.0M');
+    assert.equal(formatTokens(999_499), '999k');
+    assert.equal(formatTokens(9_949), '9.9k');
+    assert.equal(formatTokens(10_000), '10k');
+    assert.equal(formatTokens(2_258_818), '2.3M');
+});
+
+test('the detail carries the count the trigger had to round away', () => {
+    // A reader cannot get from "12k" back to the number the percentage was
+    // computed from, and near a threshold that difference is the whole point.
+    assert.equal(formatExactTokens(12_400), '12,400');
+    assert.equal(formatExactTokens(134_904), '134,904');
+    assert.equal(formatExactTokens(null), '—');
+    assert.equal(formatExactTokens(Number.NaN), '—');
 });
 
 test('the accessible name says what the ring cannot', () => {
