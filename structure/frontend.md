@@ -674,18 +674,24 @@ the one row that is actually waiting its visibility; an unhydrated approval
 count remains unknown rather than being shown as zero.
 
 Context usage is reported by the runtime and shown in the composer footer as a
-ring beside the model. It is derived at read time and never persisted, like the
-pending approval count, because it describes a live native process. There are
-three states and they are distinct: nothing reported renders nothing, a count
-without a window shows the count alone since a proportion of an unknown total
-is not a proportion, and a count with a window shows a percentage clamped at
-100 so a conversation past its window reports the situation rather than the
-arithmetic. Every part of the breakdown is nullable and an unreported field
-shows as absent, never as zero. Thresholds change the ring colour at 75 and 90
-percent, and the accessible name carries the numbers the ring cannot.
-Usage is bound to the runtime that reported it: replacing a runtime without
-reusing it, or that runtime exiting, drops the figure rather than leaving a
-measurement of a process that is gone.
+ring beside the model. Occupancy is read from the runtime's last turn, which is
+what is resident in the context; the conversation-wide total is a spend
+accumulator that adds every turn including the prompt resent each time, so it
+passes the window many times over in ordinary use and is carried separately as
+processed tokens rather than driving the gauge. Usage is derived at read time
+and never persisted, like the pending approval count, because it describes a
+live native process. There are three states and they are distinct: nothing
+reported renders nothing, a count without a window shows the count alone since
+a proportion of an unknown total is not a proportion, and a count with a window
+shows a percentage. A count past the window caps the ring, which cannot draw
+past full, but says so rather than reading as a genuinely full context. Every
+part of the breakdown is nullable and an unreported field shows as absent,
+never as zero. Thresholds change the ring colour at 75 and 90 percent, and the
+accessible name carries the numbers the ring cannot.
+Usage is bound to the runtime that reported it and is dropped whenever that
+runtime is retired or exits, including disposal, an idle reap and a model
+change, rather than leaving a measurement of a process that is gone or a
+proportion of a window that no longer applies.
 
 Because it is attached at read time, usage travels on snapshots and listings
 and not on stored session events, which are built from the persisted record.

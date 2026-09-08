@@ -16,7 +16,7 @@ export function ContextUsageMeter({ usage }: { usage: CodeContextUsage | undefin
     const detailId = useId();
     if (view.state === 'hidden') return null;
     const label = contextUsageLabel(view);
-    const level = view.state === 'measured' ? contextUsageLevel(view.percent) : 'normal';
+    const level = view.state === 'measured' ? (view.over ? 'critical' : contextUsageLevel(view.percent)) : 'normal';
     const circumference = 2 * Math.PI * 7;
     const filled = view.state === 'measured' ? (view.percent / 100) * circumference : 0;
     return <div className="code-context-usage"
@@ -33,7 +33,7 @@ export function ContextUsageMeter({ usage }: { usage: CodeContextUsage | undefin
                 </svg>
                 : null}
             <span className="code-context-value">
-                {view.state === 'measured' ? `${view.percent}%` : formatTokens(view.usedTokens)}
+                {view.state !== 'measured' ? formatTokens(view.usedTokens) : view.over ? 'over' : `${view.percent}%`}
             </span>
         </button>
         {open && <div id={detailId} className="code-context-detail" role="note">
@@ -42,6 +42,8 @@ export function ContextUsageMeter({ usage }: { usage: CodeContextUsage | undefin
                     ? `${formatTokens(view.usedTokens)} of ${formatTokens(view.maxTokens)} tokens`
                     : `${formatTokens(view.usedTokens)} tokens used`}
             </p>
+            {view.state === 'measured' && view.over
+                && <p className="code-context-detail-note">Past the window the runtime last reported.</p>}
             {view.state === 'counted' && <p className="code-context-detail-note">This runtime did not report a context window.</p>}
             <dl className="code-context-breakdown">
                 <div><dt>Input</dt><dd>{formatOptionalTokens(usage?.inputTokens ?? null)}</dd></div>
@@ -49,7 +51,10 @@ export function ContextUsageMeter({ usage }: { usage: CodeContextUsage | undefin
                 <div><dt>Output</dt><dd>{formatOptionalTokens(usage?.outputTokens ?? null)}</dd></div>
                 <div><dt>Reasoning</dt><dd>{formatOptionalTokens(usage?.reasoningOutputTokens ?? null)}</dd></div>
             </dl>
+            {/* Spend, not occupancy: it counts every turn's tokens including the
+                prompt resent each time, so it passes the window in ordinary use. */}
+            {usage?.processedTokens != null && <p className="code-context-detail-note">
+                Processed across the conversation: {formatTokens(usage.processedTokens)}</p>}
         </div>}
     </div>;
 }
-

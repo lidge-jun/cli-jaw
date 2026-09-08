@@ -1615,3 +1615,24 @@ test('context usage answers for the live runtime only, and never outlives it', a
     assert.equal(f.manager.list().find(entry => entry.sessionId === row.sessionId)?.contextUsage, undefined);
 });
 
+test('retiring a runtime retires its context figure, not just an explicit exit', async t => {
+    const f = fixture(t);
+    const row = f.create('codex-app');
+    f.manager.prompt(row.sessionId, prompt);
+    const options = await f.providers['codex-app'].opened();
+    const handle = f.providers['codex-app'].handles[0]!;
+    await handle.sent.promise;
+    options.onContextUsage({ totalTokens: 400_000, inputTokens: null, cachedInputTokens: null,
+        outputTokens: null, reasoningOutputTokens: null, processedTokens: null,
+        modelContextWindow: 1_000_000, updatedAt: 7 });
+    assert.equal(f.manager.list().find(entry => entry.sessionId === row.sessionId)?.contextUsage?.totalTokens, 400_000);
+    handle.outcome.resolve(done);
+    await f.terminal(row.sessionId, 1);
+    // Disposal never reaches onExit's clear, because it retires the binding
+    // first. Leaving the figure would report 400k against a window belonging to
+    // a model that is no longer selected, for a runtime that is gone.
+    await f.manager.deleteSession?.(row.sessionId).catch(() => {});
+    const service = (f.manager as unknown as { sessions: Map<string, { dispose(): Promise<void> }> }).sessions.get(row.sessionId);
+    await service?.dispose();
+    assert.equal(f.manager.list().find(entry => entry.sessionId === row.sessionId)?.contextUsage, undefined);
+});

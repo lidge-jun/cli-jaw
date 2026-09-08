@@ -122,6 +122,7 @@ export class CodeSession {
             // Physical proof retires residency without changing the cached close result.
             binding.closed = true;
             binding.retiring = true;
+            if (this.binding === binding) this.usage = null;
             this.bindings.delete(binding);
         }
     }
@@ -304,6 +305,10 @@ export class CodeSession {
 
     private async cleanup(binding: HandleBinding, cancel: boolean): Promise<boolean> {
         binding.retiring = true;
+        // Retiring the runtime that produced the figure retires the figure.
+        // Disposal, an idle reap and a model change all arrive here, and none
+        // of them reach onExit's clear because they set `retiring` first.
+        if (this.binding === binding) this.usage = null;
         binding.controller.abort();
         const handle = binding.handle;
         if (cancel && handle && !handle.closed && !binding.cancelPromise && !binding.resourceCloses.has(handle)) {
@@ -317,10 +322,12 @@ export class CodeSession {
     }
 
     private onExit(binding: HandleBinding): void {
+        // Before the guards, not after: a runtime that is retiring, already
+        // exited, superseded or disposed is exactly the case where its last
+        // measurement stops describing anything, and every one of those
+        // returns early below.
+        if (this.binding === binding) this.usage = null;
         if (binding.retiring || binding.exited || this.binding !== binding || this.disposed) return;
-        // The process that measured this is gone; its last figure is history,
-        // not the current size of anything.
-        this.usage = null;
         const op = this.operation;
         if (!op || op.binding !== binding) return;
         if (!op.settled) {
@@ -407,10 +414,11 @@ export class CodeSession {
                 } catch (error) { this.failPersistence(op, error); }
             },
             onContextUsage: usage => {
-                // Only the handle that currently owns this session may speak
-                // for it; a late report from a replaced runtime is not news
-                // about the session that is running now.
-                if (this.binding !== binding) return;
+                // Only the handle that currently owns this session, and is not
+                // on its way out, may speak for it. A binding can still be
+                // `this.binding` while retiring, and a report from a runtime
+                // being torn down is not news about the session.
+                if (this.binding !== binding || binding.retiring || binding.exited || this.disposed) return;
                 this.usage = usage;
             },
             onExit: () => this.onExit(binding),

@@ -34,12 +34,22 @@ export interface CodexAppEventResult {
 }
 
 export interface CodexAppContextUsage {
-    /** Whole-conversation total, the number a context window is measured against. */
+    /**
+     * What is resident in the context right now, taken from the last turn.
+     *
+     * Not `total`: that is a lifetime accumulator that adds each turn's usage
+     * to the running sum, so it re-counts the whole resent prompt every turn
+     * and passes the window many times over in an ordinary conversation. In a
+     * real 258,400-token session it reached 2,258,818 while the live context
+     * sat at 134,904. Only the second of those is a context measurement.
+     */
     totalTokens: number;
     inputTokens: number | null;
     cachedInputTokens: number | null;
     outputTokens: number | null;
     reasoningOutputTokens: number | null;
+    /** Tokens billed across the whole conversation. Cost, not occupancy. */
+    processedTokens: number | null;
     /** The model's window, when the runtime reports one. */
     modelContextWindow: number | null;
 }
@@ -531,17 +541,21 @@ function handleTokenUsageUpdated(params: EvRec, ctx: SpawnContext): CodexAppEven
             ...(last['cachedInputTokens'] ? { cached_input_tokens: last['cachedInputTokens'] as number } : {}),
         };
     }
-    // `total` is the running conversation, which is what a context window is
-    // measured against; `last` is one turn and belongs to cost accounting.
-    // They are read separately because they answer different questions.
+    // `last` is what currently occupies the context: it grows with the
+    // conversation and settles below the window. `total` adds every turn to a
+    // running sum, so it measures spend rather than occupancy and passes the
+    // window many times over in an ordinary session. The gauge reads `last`;
+    // `total` is carried separately as what it actually is.
+    const resident = usage ? f(usage, 'last') as EvRec | undefined : undefined;
     const total = usage ? f(usage, 'total') as EvRec | undefined : undefined;
-    const totalTokens = count(total?.['totalTokens']);
+    const totalTokens = count(resident?.['totalTokens']);
     const contextUsage: CodexAppContextUsage | undefined = totalTokens === null ? undefined : {
         totalTokens,
-        inputTokens: count(total?.['inputTokens']),
-        cachedInputTokens: count(total?.['cachedInputTokens']),
-        outputTokens: count(total?.['outputTokens']),
-        reasoningOutputTokens: count(total?.['reasoningOutputTokens']),
+        inputTokens: count(resident?.['inputTokens']),
+        cachedInputTokens: count(resident?.['cachedInputTokens']),
+        outputTokens: count(resident?.['outputTokens']),
+        reasoningOutputTokens: count(resident?.['reasoningOutputTokens']),
+        processedTokens: count(total?.['totalTokens']),
         modelContextWindow: count(usage?.['modelContextWindow']),
     };
     return {
@@ -550,9 +564,15 @@ function handleTokenUsageUpdated(params: EvRec, ctx: SpawnContext): CodexAppEven
     };
 }
 
-/** A measurement, or nothing. Absent must not read as zero. */
+/**
+ * A measurement, or nothing. Absent must not read as zero.
+ *
+ * The wire declares these int64, which outruns what a JS number can hold
+ * exactly; past that point the value has already lost digits in the JSON
+ * parse, so reporting it would be reporting noise.
+ */
 function count(value: unknown): number | null {
-    return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
 function handleError(params: EvRec): CodexAppEventResult {

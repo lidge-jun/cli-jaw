@@ -57,11 +57,14 @@ export interface CodeSessionInfo {
  * measurement must not be shown as zero.
  */
 export interface CodeContextUsage {
+    /** Tokens resident in the context, from the runtime's last turn. */
     totalTokens: number;
     inputTokens: number | null;
     cachedInputTokens: number | null;
     outputTokens: number | null;
     reasoningOutputTokens: number | null;
+    /** Tokens billed across the conversation. Cost, not occupancy. */
+    processedTokens: number | null;
     modelContextWindow: number | null;
     updatedAt: number;
 }

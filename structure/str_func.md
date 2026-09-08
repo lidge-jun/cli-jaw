@@ -73,12 +73,12 @@ cli-jaw/
 │   ├── code-mode/            ← native Code sessions, independent of Jaw orchestration
 │   │   ├── host.ts ← per-backend lazy composition and storage (70L)
 │   │   ├── manager.ts ← session index, admission and resource capacity (329L)
-│   │   ├── session.ts ← captured turn ownership, cancellation and accepted-buffer drain (648L)
+│   │   ├── session.ts ← captured turn ownership, cancellation and accepted-buffer drain (656L)
 │   │   ├── normalize.ts ← redacted materialized transcript and coalescing (534L)
 │   │   ├── store.ts ← SQLite ownership, replay, snapshots and byte budgets (794L)
 │   │   ├── provider.ts ← native handle and turn-context contracts (59L)
 │   │   ├── types.ts ← internal session and store contracts (12L)
-│   │   ├── wire.ts ← public request/event DTOs (210L)
+│   │   ├── wire.ts ← public request/event DTOs (213L)
 │   │   └── providers/        ← direct native adapters and capabilities
 │   │       ├── catalog.ts ← model/capability descriptions (129L)
 │   │       ├── live-models.ts ← last-known opencodex catalog, refreshed in background (93L)
@@ -178,7 +178,7 @@ cli-jaw/
 │   │   ├── cli-helpers.ts    ← Claude-like CLI 판별 helper (9L)
 │   │   ├── codex-app-client.ts ← Codex App stdio server client (1563L)
 │   │   ├── codex-host-pool.ts ← Codex App shared host generation + lane lease/FIFO/reaper/shutdown owner (494L)
-│   │   ├── codex-app-events.ts ← Codex App turn/tool/message event adapter + phase 판정 + applyCodexAppTextEvent (573L)
+│   │   ├── codex-app-events.ts ← Codex App turn/tool/message event adapter + phase 판정 + applyCodexAppTextEvent (593L)
 │   │   ├── error-classifier.ts ← stderr/result 기반 에러 분류 헬퍼 + shouldAnnounceStallTruncation (부분 출력 워치독 종료를 독자에게 알릴지 판정) (160L)
 │   │   ├── stall-notice.ts   ← 워치독 중단 통지 문구 + 접미사 전용 제거 (사람에겐 보이고 모델 컨텍스트엔 안 들어가도록 db 조회 경계가 사용) (21L) ✨
 │   │   ├── grok-trace-backfill.ts ← Grok trace backfill helper (167L) ✨

@@ -411,25 +411,31 @@ test('codex-app lane normalizer rejects stale turn deltas without context mutati
     }
 });
 
-test('token usage reports the conversation total and the window, and keeps unreported fields absent', () => {
+test('the context gauge reads what is resident, not what has been billed', () => {
     const ctx = createCtx();
     ctx.sessionId = 'thread-a';
     const result = extractFromCodexAppLaneEvent('thread/tokenUsage/updated', {
         threadId: 'thread-a', turnId: 'turn-a',
         tokenUsage: {
-            last: { inputTokens: 3, outputTokens: 4, cachedInputTokens: 1 },
-            total: { inputTokens: 300, outputTokens: 40, cachedInputTokens: 100, reasoningOutputTokens: 5, totalTokens: 345 },
-            modelContextWindow: 272000,
+            // Shape and magnitudes taken from a real 258,400-token session:
+            // `total` had reached 2,258,818 -- 8.7x the window -- while the
+            // live context sat at 134,904, because `total` adds every turn's
+            // usage including the prompt resent each time.
+            last: { inputTokens: 130372, outputTokens: 4532, cachedInputTokens: 128384, reasoningOutputTokens: 1551, totalTokens: 134904 },
+            total: { inputTokens: 2244365, outputTokens: 14453, cachedInputTokens: 2114176, reasoningOutputTokens: 6388, totalTokens: 2258818 },
+            modelContextWindow: 258400,
         },
     }, ctx, 'thread-a', 'turn-a');
     // The last turn still feeds cost accounting, unchanged.
-    assert.deepEqual(result?.tokens, { input_tokens: 3, output_tokens: 4, cached_input_tokens: 1 });
-    // The conversation total is what a context window is measured against, and
-    // it is a different number from the last turn.
+    assert.deepEqual(result?.tokens, { input_tokens: 130372, output_tokens: 4532, cached_input_tokens: 128384 });
+    // Occupancy comes from `last`; `total` is carried as spend, so a long
+    // conversation cannot pin the gauge to a permanent full.
     assert.deepEqual(result?.contextUsage, {
-        totalTokens: 345, inputTokens: 300, cachedInputTokens: 100,
-        outputTokens: 40, reasoningOutputTokens: 5, modelContextWindow: 272000,
+        totalTokens: 134904, inputTokens: 130372, cachedInputTokens: 128384,
+        outputTokens: 4532, reasoningOutputTokens: 1551,
+        processedTokens: 2258818, modelContextWindow: 258400,
     });
+    assert.ok((result?.contextUsage?.totalTokens ?? 0) < 258400, 'a real session stays inside its window');
 });
 
 test('a runtime that reports no window, or no total at all, does not get a fabricated one', () => {
@@ -437,19 +443,19 @@ test('a runtime that reports no window, or no total at all, does not get a fabri
     ctx.sessionId = 'thread-a';
     const noWindow = extractFromCodexAppLaneEvent('thread/tokenUsage/updated', {
         threadId: 'thread-a', turnId: 'turn-a',
-        tokenUsage: { last: { inputTokens: 1, outputTokens: 1 }, total: { totalTokens: 10 } },
+        tokenUsage: { last: { totalTokens: 10 }, total: { totalTokens: 99 } },
     }, ctx, 'thread-a', 'turn-a');
     // Every unreported part stays null: absent is not zero.
     assert.deepEqual(noWindow?.contextUsage, {
         totalTokens: 10, inputTokens: null, cachedInputTokens: null,
-        outputTokens: null, reasoningOutputTokens: null, modelContextWindow: null,
+        outputTokens: null, reasoningOutputTokens: null,
+        processedTokens: 99, modelContextWindow: null,
     });
     const noTotal = extractFromCodexAppLaneEvent('thread/tokenUsage/updated', {
         threadId: 'thread-a', turnId: 'turn-a',
-        tokenUsage: { last: { inputTokens: 1, outputTokens: 1 } },
+        tokenUsage: { total: { totalTokens: 500 } },
     }, createCtx2(), 'thread-a', 'turn-a');
-    assert.equal(noTotal?.contextUsage, undefined, 'no total means nothing to say about the context');
+    assert.equal(noTotal?.contextUsage, undefined, 'spend alone says nothing about occupancy');
 });
 
 function createCtx2() { const c = createCtx(); c.sessionId = 'thread-a'; return c; }
-

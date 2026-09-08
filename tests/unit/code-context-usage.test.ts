@@ -6,11 +6,11 @@ import { contextUsageLabel, contextUsageLevel, contextUsageView, formatOptionalT
 
 function usage(patch: Partial<CodeContextUsage> = {}): CodeContextUsage {
     return { totalTokens: 1000, inputTokens: 800, cachedInputTokens: 200, outputTokens: 200,
-        reasoningOutputTokens: 0, modelContextWindow: 10000, updatedAt: 1, ...patch };
+        reasoningOutputTokens: 0, processedTokens: 4000, modelContextWindow: 10000, updatedAt: 1, ...patch };
 }
 
 test('a reported window gives a proportion, and no window gives only a count', () => {
-    assert.deepEqual(contextUsageView(usage()), { state: 'measured', usedTokens: 1000, maxTokens: 10000, percent: 10 });
+    assert.deepEqual(contextUsageView(usage()), { state: 'measured', usedTokens: 1000, maxTokens: 10000, percent: 10, over: false });
     // A proportion of an unknown total is not a proportion, so the count stands
     // alone rather than being turned into a percentage of something guessed.
     assert.deepEqual(contextUsageView(usage({ modelContextWindow: null })), { state: 'counted', usedTokens: 1000 });
@@ -22,14 +22,18 @@ test('nothing reported renders nothing, rather than a zero that reads as measure
     assert.deepEqual(contextUsageView(usage({ totalTokens: Number.NaN })), { state: 'hidden' });
     assert.deepEqual(contextUsageView(usage({ totalTokens: -1 })), { state: 'hidden' });
     // Zero used tokens IS a measurement, and differs from no measurement.
-    assert.deepEqual(contextUsageView(usage({ totalTokens: 0 })), { state: 'measured', usedTokens: 0, maxTokens: 10000, percent: 0 });
+    assert.deepEqual(contextUsageView(usage({ totalTokens: 0 })), { state: 'measured', usedTokens: 0, maxTokens: 10000, percent: 0, over: false });
 });
 
-test('a conversation past the reported window clamps instead of reporting arithmetic', () => {
-    // Reachable after a model change or a compaction that has not landed:
-    // "118%" would describe the division, not the situation.
+test('past the window the ring caps but the label does not pretend it is full', () => {
+    // Reachable when a model change moves the window under a conversation that
+    // is already large. The ring cannot draw past full, but silently capping
+    // would make a wrong number look exactly like a genuinely full context --
+    // which is how a lifetime-spend figure would have hidden here.
     const over = contextUsageView(usage({ totalTokens: 11800 }));
-    assert.deepEqual(over, { state: 'measured', usedTokens: 11800, maxTokens: 10000, percent: 100 });
+    assert.deepEqual(over, { state: 'measured', usedTokens: 11800, maxTokens: 10000, percent: 100, over: true });
+    assert.match(contextUsageLabel(over), /over the window, 12k of 10k tokens/);
+    assert.doesNotMatch(contextUsageLabel(over), /100% used/, 'a self-contradictory label is worse than none');
 });
 
 test('thresholds are named where attention starts', () => {
@@ -55,4 +59,3 @@ test('the accessible name says what the ring cannot', () => {
     assert.match(contextUsageLabel(contextUsageView(usage({ modelContextWindow: null }))), /window unknown/);
     assert.equal(contextUsageLabel(contextUsageView(undefined)), '');
 });
-
