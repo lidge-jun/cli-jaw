@@ -129,12 +129,15 @@ test('OF-012: every failure return carries a code', () => {
     }
 });
 
-test('OF-013: the three failure meanings are distinguishable', () => {
+test('OF-013: the failure meanings are distinguishable', () => {
     assert.equal(classifyFailure('COMPUTER_TARGET_COVERED'), 'abstention');
     assert.equal(classifyFailure('COMPUTER_OBSERVATION_STALE'), 'abstention');
     assert.equal(classifyFailure(NOT_FOUND_CODE), 'not-found');
     assert.equal(classifyFailure('COMPUTER_CAPTURE_NO_DPR'), 'infrastructure');
-    assert.equal(classifyFailure(null), 'unknown');
+    // An absent code and an unrecognised one were the same answer when this
+    // test was written; the scoring phase separated them, because one means
+    // the responder predates the naming and the other means it postdates it.
+    assert.equal(classifyFailure(null), 'uncoded');
     assert.equal(classifyFailure('COMPUTER_SOMETHING_NEW'), 'unknown');
 });
 
@@ -166,4 +169,3 @@ test('OF-016: the verification capture fails closed on an unmeasurable image, li
 test('OF-017: verification judges against the captured crop, not the requested one', () => {
     assert.match(visionSrc, /judgeVerification\(local, cropShot\.clip \?\? crop, css\)/);
 });
-

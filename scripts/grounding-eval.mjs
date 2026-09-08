@@ -94,7 +94,7 @@ async function main() {
     const opts = parseArgs(process.argv.slice(2));
     if (opts.help) { console.log(usage); return 0; }
 
-    const { scoreRun, classify, formatReport } = await import('../src/browser/grounding-eval.ts');
+    const { scoreRun, classify, classifyFailure, formatReport } = await import('../src/browser/grounding-eval.ts');
     const spec = JSON.parse(fs.readFileSync(path.join(fixtureDir, 'cases.json'), 'utf8'));
     const fixtureUrl = 'file://' + path.join(fixtureDir, spec.fixture);
     const cases = opts.only ? spec.cases.filter(c => c.id === opts.only) : spec.cases;
@@ -125,17 +125,34 @@ async function main() {
             // HTTP error or a crashed call as "correctly declined" would turn
             // harness breakage into a good result — the one direction an
             // evaluation must never fail. Only a real refusal counts.
+            //
+            // That was the intent; the predicate below did not honour it. It
+            // asked whether a code or a reason was PRESENT, so a capture that
+            // could not be measured scored as the occlusion guard firing
+            // correctly — on the very cases that exist as evidence for those
+            // guards. It now asks what the code MEANS, through the same
+            // classifier the CLI and the scorer use.
+            //
+            // `classifyFailure`, not `classify`: this site needs a predicate.
+            // `classify` would return `abstained` for a correct refusal, which
+            // `scoreRun` files as `refusal.abstained` with `refusal.verified`
+            // at zero — reporting "0/3 correctly declined" for perfect work.
             if (c.expectAbstention) {
                 if (res.status >= 400) {
                     results.push({ id: c.id, expected: 'abstain', outcome: { kind: 'errored', ms, error: `HTTP ${res.status}` } });
                     continue;
                 }
-                const refused = res.body?.success === false && Boolean(res.body?.code || res.body?.reason);
+                const kind = res.body?.success === false ? classifyFailure(res.body?.code) : null;
                 const outcome = res.body?.success === true
                     ? { kind: 'misclick', ms, got: clicked ?? 'unknown' }
-                    : refused
+                    : kind === 'abstention' || kind === 'not-found'
+                        // Declining because the target was ambiguous, covered,
+                        // stale, or simply absent are all correct answers on a
+                        // case whose right answer is to decline.
                         ? { kind: 'verified', ms }
-                        : { kind: 'errored', ms, error: 'declined without a reason' };
+                        : kind === 'grounding-failure'
+                            ? { kind: 'grounding-failure', ms, reason: res.body?.code }
+                            : { kind: 'errored', ms, error: res.body?.code ?? res.body?.reason ?? 'declined without a reason' };
                 results.push({ id: c.id, expected: 'abstain', outcome });
                 continue;
             }
@@ -145,8 +162,18 @@ async function main() {
             // coordinate landed on — so it is scored by landing INSIDE the
             // named region instead.
             if (c.expectRegion) {
+                // This branch had no status check at all, so a 500 from the
+                // route's catch — `{error}`, no `success` field — scored as a
+                // decline and exited 0. And its `?? 'declined'` fallback
+                // manufactured a reason where `classify` would have said none
+                // was given, making it strictly more permissive than the
+                // function it stood beside.
+                if (res.status >= 400) {
+                    results.push({ id: c.id, expected: c.expectRegion, outcome: { kind: 'errored', ms, error: `HTTP ${res.status}` } });
+                    continue;
+                }
                 const outcome = res.body?.success !== true
-                    ? { kind: 'abstained', ms, reason: res.body?.code ?? res.body?.reason ?? 'declined' }
+                    ? classify(res.body ?? {}, c.expectRegion, ms)
                     : clicked === c.expectRegion
                         ? { kind: 'verified', ms }
                         : { kind: 'misclick', ms, got: clicked ?? 'unknown' };
@@ -162,7 +189,11 @@ async function main() {
         } catch (err) {
             results.push({
                 id: c.id,
-                expected: c.expected ?? 'coordinate',
+                // A thrown refusal-expected case belongs in the refusal
+                // bucket. It files as an error either way today, but the
+                // bucket is read from `expected`, so getting it wrong here
+                // would put it in the wrong group the moment that changes.
+                expected: c.expectAbstention ? 'abstain' : (c.expectRegion ?? c.expected ?? 'coordinate'),
                 outcome: { kind: 'errored', ms: Date.now() - started, error: String(err?.message ?? err) },
             });
         }

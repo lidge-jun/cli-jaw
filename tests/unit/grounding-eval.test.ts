@@ -53,10 +53,22 @@ test('EV-004: every refusal code counts as an abstention', () => {
     }
 });
 
-test('EV-005: a refusal with only prose is still an abstention', () => {
-    // "Target not found" is the pipeline declining rather than clicking, which
-    // is the behaviour being measured.
+test('EV-005: a refusal with prose and no code cannot be scored', () => {
+    // This used to assert 'abstained', which is what let an unmeasurable
+    // capture score as restraint. Every current source path names its
+    // failures, so prose without a code means the responder predates the
+    // naming — and the prose could be describing anything, including the
+    // infrastructure failures this now separates. Unscoreable is the honest
+    // answer; crediting it was the defect.
     const o = classify({ success: false, reason: 'target not found' }, 'e1', 50);
+    assert.equal(o.kind, 'errored');
+    assert.match(o.kind === 'errored' ? o.error : '', /uncoded failure/);
+});
+
+test('EV-005b: the pipeline declining by name is still an abstention', () => {
+    // The behaviour EV-005 meant to protect, expressed through the code the
+    // pipeline now actually sends, on a case where declining is correct.
+    const o = classify({ success: false, code: 'COMPUTER_TARGET_NOT_FOUND' }, 'abstain', 50);
     assert.equal(o.kind, 'abstained');
 });
 

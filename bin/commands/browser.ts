@@ -468,6 +468,9 @@ try {
                 } else if (kind === 'infrastructure') {
                     console.log(`${c.red}❌ could not complete the lookup for "${target}": ${r["reason"]}${c.reset}`);
                     console.log(`${c.dim}   ${code} — this is a capture or environment failure, not a missing element${c.reset}`);
+                } else if (kind === 'grounding-failure') {
+                    console.log(`${c.red}❌ could not ground "${target}": ${r["reason"]}${c.reset}`);
+                    console.log(`${c.dim}   ${code} — the answer was outside the image it came from${c.reset}`);
                 } else {
                     console.log(`${c.red}❌ "${target}" not found: ${r["reason"]}${c.reset}`);
                 }
