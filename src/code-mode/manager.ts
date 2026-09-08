@@ -89,6 +89,14 @@ export class CodeSessionManager {
                 throw new CodeStoreError('unsupported_effort', 'Code effort is unsupported', 400);
             }
         }
+        // The union above is the widest legal set. When the runtime publishes a
+        // per-model set, narrow to it: routed models often accept no effort at
+        // all while a sibling model reaches `ultra`, and the chosen value is
+        // forwarded to the native wire.
+        const perModel = catalog.effortsByModel?.[input.model];
+        if (input.effort !== null && perModel && !perModel.includes(input.effort)) {
+            throw new CodeStoreError('unsupported_effort', 'Code effort is unsupported', 400);
+        }
         return catalog;
     }
 
