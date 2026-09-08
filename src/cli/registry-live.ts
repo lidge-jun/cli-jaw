@@ -1,8 +1,10 @@
 import { fetchKiroModelInventory } from '../agent/kiro-models.js';
 import { CLI_REGISTRY } from './registry.js';
+import { claudeCatalogToChoices, resolveClaudeBundleCatalog } from './claude-model-discovery.js';
 import { resolveOpenCodexCodexModelsDetailed } from './opencodex-models.js';
 import { diagnoseOpenCodexExecution, resolveOpenCodexRuntime } from './opencodex-runtime.js';
 import { readCodexRootOpenAiBaseUrl } from '../core/codex-config.js';
+import { detectCli } from '../core/cli-detection.js';
 
 /** Union of every per-model effort set, first-seen order preserved. */
 function unionEfforts(effortsByModel: Record<string, string[]>): string[] {
@@ -21,9 +23,10 @@ function unionEfforts(effortsByModel: Record<string, string[]>): string[] {
 export async function buildLiveCliRegistry() {
     const registry = structuredClone(CLI_REGISTRY) as Record<string, Record<string, unknown>>;
 
-    const [kiroInventory, openCodexRuntime] = await Promise.all([
+    const [kiroInventory, openCodexRuntime, claudeCatalog] = await Promise.all([
         fetchKiroModelInventory(),
         resolveOpenCodexRuntime(),
+        resolveClaudeCatalogForRegistry(),
     ]);
     const codexResult = await resolveOpenCodexCodexModelsDetailed(openCodexRuntime);
 
@@ -101,5 +104,60 @@ export async function buildLiveCliRegistry() {
         };
     }
 
+    if (claudeCatalog) {
+        // `defaultModel` stays static for the same reason it does for Codex:
+        // buildDefaultPerCli() seeds user settings from it, so a bundle update must
+        // not silently repoint a user's default. The one exception is a default the
+        // live catalog no longer offers, which would be unselectable.
+        const claudePatch: Record<string, unknown> = {
+            models: claudeCatalog.models,
+            modelSource: 'claude-bundle',
+            modelAliases: claudeCatalog.aliases,
+        };
+        for (const cli of ['claude', 'claude-e'] as const) {
+            const entry = registry[cli];
+            if (!entry) continue;
+            const staticDefault = entry['defaultModel'];
+            registry[cli] = {
+                ...entry,
+                ...claudePatch,
+                ...(typeof staticDefault === 'string' && !claudeCatalog.models.includes(staticDefault)
+                    ? { defaultModel: claudeCatalog.models[0] }
+                    : {}),
+            };
+        }
+        const aiE = registry['ai-e'];
+        if (aiE) {
+            const modelsByProvider: Record<string, string[]> = {
+                ...((aiE['modelsByProvider'] as Record<string, string[]> | undefined) || {}),
+                claude: claudeCatalog.models,
+            };
+            const providers = Array.isArray(aiE['providers'])
+                ? aiE['providers'] as string[]
+                : Object.keys(modelsByProvider);
+            registry['ai-e'] = {
+                ...aiE,
+                modelsByProvider,
+                models: providers.flatMap(provider => modelsByProvider[provider] || []),
+            };
+        }
+    }
+
     return registry;
+}
+
+/**
+ * Read the installed Claude Code bundle's catalog, if one is installed.
+ *
+ * A missing binary, an unreadable file or an unrecognized bundle shape all answer
+ * null, which leaves the static seed in `claude-models.ts` in place. Discovery
+ * never empties the picker.
+ */
+async function resolveClaudeCatalogForRegistry(): Promise<{ models: string[]; aliases: Record<string, string> } | null> {
+    const detection = detectCli('claude');
+    if (!detection.available || !detection.path) return null;
+    const catalog = await resolveClaudeBundleCatalog(detection.path);
+    if (!catalog) return null;
+    const models = claudeCatalogToChoices(catalog);
+    return models.length > 0 ? { models, aliases: catalog.aliases } : null;
 }
