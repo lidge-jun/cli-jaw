@@ -21,7 +21,14 @@
 .activity-turn {
     min-width: 0;
     max-width: 100%;
-    margin-block: var(--space-2);
+    /* No leading margin. The turn is inserted before .msg-content, and the siblings that
+       precede it (.activity-read-control, a superseded .process-block) are display:none in
+       Activity mode, so they generate no box: an 8px top margin here offsets the summary row
+       from .agent-icon, whose 2px offset centers a 24px avatar against the 28px first row.
+       Removing it costs no spacing when a sibling IS visible, because adjacent sibling
+       margins collapse to the larger of the two and the preceding element keeps its own
+       bottom margin. */
+    margin-block: 0 var(--space-2);
     color: var(--text);
     font-family: var(--font-ui);
     font-size: var(--text-sm);

@@ -576,3 +576,41 @@ test('reasoning/message split groups, use icons and retain literal bounded previ
     assert.equal(pre.textContent, 'x'.repeat(3000) + '\n[Preview limited; some text is omitted]');
     assert.equal(pre.tabIndex, 0); assert.equal(view.element.querySelector<HTMLElement>('.activity-omitted')!.hidden, false);
 });
+
+// The turn carries no leading margin so its summary row lines up with the 24px avatar.
+// jsdom does not lay out, so this pins the declaration and the DOM position that make the
+// alignment hold; the measured pixel proof lives in the browser suite.
+test('the activity turn carries no leading margin and leads the visible body content', () => {
+    const css = readFileSync(new URL('../../public/css/activity.css', import.meta.url), 'utf8');
+    const { host, model, view, message } = mount();
+    message.dataset.activityKey = 'key';
+    tool(model, 'a');
+    view.render(model);
+
+    const turn = view.element;
+    // jsdom does not parse the margin-block logical shorthand, so computed style cannot tell
+    // the two forms apart. Assert the declaration itself; the pixel proof is in the browser suite.
+    const rule = /^\.activity-turn \{([^}]*)\}/m.exec(css.slice(css.indexOf('\n.activity-turn {') + 1));
+    assert.ok(rule, 'the .activity-turn rule must exist');
+    const declared = /margin-block:\s*([^;]+);/.exec(rule[1]!);
+    assert.ok(declared, '.activity-turn must declare margin-block');
+    const [blockStart, blockEnd] = declared[1]!.trim().split(/\s+/);
+    assert.equal(blockStart, '0',
+        'a leading margin offsets the summary row from the agent avatar');
+    assert.ok(blockEnd && blockEnd !== '0',
+        'the trailing margin still separates the turn from the answer');
+
+    // Every sibling rendered before the turn must be out of flow, otherwise removing the
+    // leading margin would close a real gap instead of an artificial one.
+    const children = [...host.children];
+    const before = children.slice(0, children.indexOf(turn));
+    const style = document.createElement('style');
+    style.textContent = css;
+    document.head.append(style);
+    for (const node of before) {
+        assert.equal(getComputedStyle(node).display, 'none',
+            `${node.className} renders above the turn and would lose its separation`);
+    }
+    style.remove();
+    view.dispose();
+});
