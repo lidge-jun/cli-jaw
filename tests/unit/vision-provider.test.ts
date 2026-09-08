@@ -119,3 +119,33 @@ test('VP-013: a neighbouring status code is not claimed as the sandbox', () => {
     assert.doesNotMatch(explainExit(-1073741501, '', false), /Windows sandbox/);
     assert.doesNotMatch(explainExit(-1073741506, '', false), /Windows sandbox/);
 });
+
+test('VP-014: the call sites that feed the builder are strict too', () => {
+    // VP-003 tests buildVisionInvocation directly, which passed while the
+    // production path did not: visionClick forwarded with a TRUTHY test, so
+    // {"bypassSandbox":"false"} arriving over HTTP was coerced to a literal
+    // true before the strict check ever saw it. Testing the pure function
+    // while leaving the impure call sites permissive is exactly the failure
+    // this phase was opened to fix, so the call sites are asserted here.
+    const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+    const src = fs.readFileSync(join(root, 'src/browser/vision.ts'), 'utf8');
+
+    const forwards = src.match(/opts\.bypassSandbox[^,;)\n]*/g) ?? [];
+    assert.ok(forwards.length >= 3, 'every forwarding site must be present');
+    for (const site of forwards) {
+        assert.match(site, /opts\.bypassSandbox === true/, `permissive forward: ${site}`);
+    }
+});
+
+test('VP-015: a truthy non-true value cannot reach the flag', () => {
+    // The values that actually arrive from a JSON body.
+    for (const value of ['false', 'yes', 1, {}, []] as unknown[]) {
+        const forwarded = { screenshotPath: '/x.png', prompt: 'p', ...(value === true ? { bypassSandbox: true } : {}) };
+        const inv = buildVisionInvocation(forwarded);
+        assert.equal(inv.bypassedSandbox, false, `${JSON.stringify(value)} must not enable the bypass`);
+        assert.ok(!inv.args.includes('--dangerously-bypass-approvals-and-sandbox'));
+    }
+});
+import fs from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';

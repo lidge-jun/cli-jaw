@@ -202,7 +202,7 @@ export async function visionClick(port: number, target: string, opts: VisionClic
     // 2. Vision → coordinates (image pixel space)
     const result = await extractCoordinates(ss.path, target, {
         provider: opts.provider || 'codex',
-        ...(opts.bypassSandbox ? { bypassSandbox: true } : {}),
+        ...(opts.bypassSandbox === true ? { bypassSandbox: true } : {}),
     });
 
     if (!result.found) {
@@ -272,7 +272,7 @@ export async function visionClick(port: number, target: string, opts: VisionClic
         const cropDpr = cropShot.dpr;
         const second = await extractCoordinates(cropShot.path, target, {
             provider: opts.provider || 'codex',
-            ...(opts.bypassSandbox ? { bypassSandbox: true } : {}),
+            ...(opts.bypassSandbox === true ? { bypassSandbox: true } : {}),
         });
         const local = second.found ? { x: second.x / cropDpr, y: second.y / cropDpr } : null;
         const outcome = judgeVerification(local, crop, css);
