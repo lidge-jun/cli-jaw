@@ -45,8 +45,12 @@ export interface CodeProviderFactories {
  * DIFFERENT effort set per model. Only `codex-app` is proxied this way; the ACP
  * and SDK runtimes keep their registry lists.
  */
-function liveCatalogPatch(id: CodeProviderId, live: CodexLiveModels | null): CodexLiveModels | null {
-    return id === 'codex-app' && live && live.models.length > 0 ? live : null;
+function liveCatalogPatch(id: CodeProviderId, read: () => CodexLiveModels | null): CodexLiveModels | null {
+    // Read only for the proxied runtime. Calling first and filtering after would
+    // make a Claude or Cursor catalog read schedule a Codex probe.
+    if (id !== 'codex-app') return null;
+    const live = read();
+    return live && live.models.length > 0 ? live : null;
 }
 
 export function createCodeProviders(factories: CodeProviderFactories = {}): CodeProviders {
@@ -57,7 +61,7 @@ export function createCodeProviders(factories: CodeProviderFactories = {}): Code
         return {
             describe(): CodeProviderCatalog {
                 const found = detection();
-                const live = liveCatalogPatch(id, (factories.liveModels ?? readCodexLiveModels)());
+                const live = liveCatalogPatch(id, factories.liveModels ?? readCodexLiveModels);
                 const base: CodeProviderCatalog = { id, label: entry.label, available: found.available && !!found.path,
                     reason: found.available && found.path ? null : 'Native CLI executable unavailable',
                     models: [...entry.models], defaultModel: entry.defaultModel,

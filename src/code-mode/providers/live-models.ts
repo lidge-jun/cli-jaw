@@ -21,9 +21,16 @@ export interface CodexLiveModels {
 
 /** How long a successful snapshot is served before a background refresh starts. */
 const REFRESH_AFTER_MS = 10_000;
+/**
+ * Floor between attempts after a failed or degraded probe. Without it a stale
+ * snapshot plus a persistently unreachable proxy would start a fresh probe on
+ * every catalog read, because only a success advances the freshness clock.
+ */
+const RETRY_AFTER_MS = 30_000;
 
 let snapshot: CodexLiveModels | null = null;
 let fetchedAt = 0;
+let attemptedAt = 0;
 let inFlight: Promise<void> | null = null;
 
 function toSnapshot(entries: OpenCodexModelEntry[], source: CodexLiveModels['source']): CodexLiveModels {
@@ -43,8 +50,10 @@ function toSnapshot(entries: OpenCodexModelEntry[], source: CodexLiveModels['sou
     return { models: entries.map(entry => entry.id), effortsByModel, defaultEffortByModel, efforts, source };
 }
 
-function refresh(): void {
+function refresh(force = false): void {
     if (inFlight) return;
+    if (!force && attemptedAt && Date.now() - attemptedAt < RETRY_AFTER_MS) return;
+    attemptedAt = Date.now();
     inFlight = resolveOpenCodexCodexModelsDetailed()
         .then(result => {
             // A degraded probe answers with the same static list the registry already
@@ -70,7 +79,7 @@ export function readCodexLiveModels(): CodexLiveModels | null {
 
 /** Warm the snapshot so the first catalog read after startup is already live. */
 export async function primeCodexLiveModels(): Promise<CodexLiveModels | null> {
-    refresh();
+    refresh(true);
     await inFlight;
     return snapshot;
 }
@@ -79,5 +88,6 @@ export async function primeCodexLiveModels(): Promise<CodexLiveModels | null> {
 export function resetCodexLiveModelsForTest(next?: CodexLiveModels): void {
     snapshot = next ?? null;
     fetchedAt = next ? Date.now() : 0;
+    attemptedAt = 0;
     inFlight = null;
 }

@@ -183,6 +183,17 @@ test('an empty or degraded live snapshot leaves the registry catalog intact', ()
     assert.ok(routed.capabilities.efforts.length > 0);
 });
 
+test('only the proxied runtime reads the live snapshot', () => {
+    let reads = 0;
+    const providers = createCodeProviders({ detect: detection, codex: forbidden, claude: forbidden,
+        cursor: forbidden, grok: forbidden, liveModels: () => { reads += 1; return null; } });
+    // Reading a Claude or Cursor catalog must not schedule a Codex probe.
+    for (const id of ['claude', 'cursor', 'grok'] as const) providers[id].describe();
+    assert.equal(reads, 0);
+    providers['codex-app'].describe();
+    assert.equal(reads, 1);
+});
+
 test('missing binaries remain unavailable without native factory calls', async () => {
     const providers = createCodeProviders({ detect: () => ({ available: false, path: null }),
         codex: forbidden, claude: forbidden, cursor: forbidden, grok: forbidden });
