@@ -130,7 +130,7 @@ async function codexFixture(patch: Partial<CodeOpenOptions> = {}, configure?: (c
 test('catalog is exhaustive, detached from native factories, and honest about registry and policies', () => {
     const lookedUp: string[] = [];
     const providers = createCodeProviders({ detect: binary => { lookedUp.push(binary); return detection(binary); },
-        codex: forbidden, claude: forbidden, cursor: forbidden, grok: forbidden });
+        codex: forbidden, claude: forbidden, cursor: forbidden, grok: forbidden, liveModels: () => null });
     assert.deepEqual(Object.keys(providers), ['codex-app', 'claude', 'cursor', 'grok']);
     const catalogs = Object.values(providers).map(provider => provider.describe());
     assert.deepEqual(lookedUp, ['codex', 'claude', 'cursor-agent', 'grok']);
@@ -142,6 +142,56 @@ test('catalog is exhaustive, detached from native factories, and honest about re
     catalogs[0]!.models.length = 0;
     assert.ok(providers['codex-app'].describe().models.length > 0);
     assert.equal(jawEffects, 0);
+});
+
+test('a live Codex catalog replaces the static model list for codex-app only', () => {
+    const live = { models: ['gpt-6-astra', 'anthropic/claude-opus-5'], source: 'opencodex' as const,
+        effortsByModel: { 'gpt-6-astra': ['low', 'ultra'], 'anthropic/claude-opus-5': [] },
+        defaultEffortByModel: { 'gpt-6-astra': 'low' }, efforts: ['low', 'ultra'] };
+    const providers = createCodeProviders({ detect: detection, codex: forbidden, claude: forbidden,
+        cursor: forbidden, grok: forbidden, liveModels: () => live });
+    const codex = providers['codex-app'].describe();
+    assert.equal(codex.modelSource, 'live');
+    assert.deepEqual(codex.models, ['gpt-6-astra', 'anthropic/claude-opus-5']);
+    assert.deepEqual(codex.capabilities.efforts, ['low', 'ultra']);
+    assert.deepEqual(codex.effortsByModel?.['anthropic/claude-opus-5'], []);
+    // The static default (gpt-5.5) is not in the live catalog, so it must not survive.
+    assert.equal(codex.defaultModel, 'gpt-6-astra');
+    // A shared snapshot must not leak into the ACP/SDK runtimes.
+    for (const id of ['claude', 'cursor', 'grok'] as const) {
+        assert.equal(providers[id].describe().modelSource, 'registry');
+    }
+    // Callers must not be able to mutate the shared snapshot through the catalog.
+    codex.models.length = 0;
+    assert.equal(providers['codex-app'].describe().models.length, 2);
+});
+
+test('an empty or degraded live snapshot leaves the registry catalog intact', () => {
+    const empty = { models: [], effortsByModel: {}, defaultEffortByModel: {}, efforts: [], source: 'static' as const };
+    const noEfforts = { models: ['routed/only'], effortsByModel: { 'routed/only': [] },
+        defaultEffortByModel: {}, efforts: [], source: 'opencodex' as const };
+    const build = (liveModels: () => typeof empty | typeof noEfforts | null) => createCodeProviders({
+        detect: detection, codex: forbidden, claude: forbidden, cursor: forbidden, grok: forbidden, liveModels,
+    })['codex-app'].describe();
+    const fallback = build(() => empty);
+    assert.equal(fallback.modelSource, 'registry');
+    assert.ok(fallback.models.length > 0);
+    // An all-routed catalog offers no effort at all; the union must not go empty
+    // or every model loses its effort control at once.
+    const routed = build(() => noEfforts);
+    assert.deepEqual(routed.models, ['routed/only']);
+    assert.ok(routed.capabilities.efforts.length > 0);
+});
+
+test('only the proxied runtime reads the live snapshot', () => {
+    let reads = 0;
+    const providers = createCodeProviders({ detect: detection, codex: forbidden, claude: forbidden,
+        cursor: forbidden, grok: forbidden, liveModels: () => { reads += 1; return null; } });
+    // Reading a Claude or Cursor catalog must not schedule a Codex probe.
+    for (const id of ['claude', 'cursor', 'grok'] as const) providers[id].describe();
+    assert.equal(reads, 0);
+    providers['codex-app'].describe();
+    assert.equal(reads, 1);
 });
 
 test('missing binaries remain unavailable without native factory calls', async () => {

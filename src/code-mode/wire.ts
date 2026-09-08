@@ -169,7 +169,15 @@ export interface CodeProviderCatalog {
     defaultModel: string;
     defaultEffort: string | null;
     capabilities: CodeCapabilities;
-    modelSource: 'registry' | 'cache' | 'native';
+    modelSource: 'registry' | 'cache' | 'native' | 'live';
+    /**
+     * Per-model reasoning-effort sets, when the runtime advertises them.
+     * An entry may be an EMPTY array, which means the model takes no effort at
+     * all — that is different from an absent entry, which means "unknown, fall
+     * back to `capabilities.efforts`".
+     */
+    effortsByModel?: Record<string, string[]>;
+    defaultEffortByModel?: Record<string, string>;
 }
 
 export interface CodeModelCatalog {

@@ -12,6 +12,7 @@ import { createCodexCodeProvider } from './codex-app.js';
 import { createClaudeCodeProvider } from './claude.js';
 import { createCursorCodeProvider } from './cursor.js';
 import { createGrokCodeProvider } from './grok.js';
+import { readCodexLiveModels, type CodexLiveModels } from './live-models.js';
 
 const MODES: Record<CodeProviderId, CodePermissionMode[]> = {
     'codex-app': ['ask', 'auto', 'read-only'], claude: ['ask', 'auto'], cursor: ['ask', 'auto'], grok: ['auto'],
@@ -34,6 +35,22 @@ export interface CodeProviderFactories {
     cursor?: Parameters<typeof createCursorCodeProvider>[1];
     grok?: Parameters<typeof createGrokCodeProvider>[1];
     detect?: (binary: string) => CliDetection;
+    /** Live Codex catalog reader; defaults to the opencodex snapshot. */
+    liveModels?: () => CodexLiveModels | null;
+}
+
+/**
+ * Codex runs behind opencodex, which advertises a routed catalog far wider than
+ * the static registry list (routed `anthropic/*`, `xai/*`, newer GPT ids) and a
+ * DIFFERENT effort set per model. Only `codex-app` is proxied this way; the ACP
+ * and SDK runtimes keep their registry lists.
+ */
+function liveCatalogPatch(id: CodeProviderId, read: () => CodexLiveModels | null): CodexLiveModels | null {
+    // Read only for the proxied runtime. Calling first and filtering after would
+    // make a Claude or Cursor catalog read schedule a Codex probe.
+    if (id !== 'codex-app') return null;
+    const live = read();
+    return live && live.models.length > 0 ? live : null;
 }
 
 export function createCodeProviders(factories: CodeProviderFactories = {}): CodeProviders {
@@ -44,12 +61,24 @@ export function createCodeProviders(factories: CodeProviderFactories = {}): Code
         return {
             describe(): CodeProviderCatalog {
                 const found = detection();
-                return { id, label: entry.label, available: found.available && !!found.path,
+                const live = liveCatalogPatch(id, factories.liveModels ?? readCodexLiveModels);
+                const base: CodeProviderCatalog = { id, label: entry.label, available: found.available && !!found.path,
                     reason: found.available && found.path ? null : 'Native CLI executable unavailable',
                     models: [...entry.models], defaultModel: entry.defaultModel,
                     defaultEffort: entry.defaultEffort || null, modelSource: 'registry',
                     capabilities: { resume: true, interrupt: true, permissions: true,
                         setModelMidSession: false, efforts: [...entry.efforts], permissionModes: [...MODES[id]] } };
+                if (!live) return base;
+                // Never widen the effort union to empty: an all-routed catalog would
+                // otherwise strip the effort control for every model at once.
+                const efforts = live.efforts.length > 0 ? [...live.efforts] : base.capabilities.efforts;
+                return { ...base, models: [...live.models], modelSource: 'live',
+                    effortsByModel: structuredClone(live.effortsByModel),
+                    defaultEffortByModel: { ...live.defaultEffortByModel },
+                    capabilities: { ...base.capabilities, efforts },
+                    // A default the live catalog no longer serves would fail validate()
+                    // on the very first session, so fall back to its first model.
+                    defaultModel: live.models.includes(base.defaultModel) ? base.defaultModel : live.models[0] ?? base.defaultModel };
             },
             binary() {
                 const found = detection();
