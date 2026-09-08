@@ -9,6 +9,7 @@ import {
     acknowledgeCodeSend, catalogSelection, codeDraftBook, createCodeDraft, persistCodeDraftBook, sessionSelection,
     type CodeDraft, type CodeDraftBook,
 } from './code-controller-drafts';
+import { withPendingUserItem } from './pending-user-item';
 
 const MAX_DETAILS = 6;
 const MAX_INDEX = 1000;
@@ -198,7 +199,8 @@ export class CodeController {
                 const row = this.info(id), detail = this.details.get(id);
                 return row && detail?.synced ? { ...row, pendingPermissionCount: detail.permissions.length } : row;
             }).filter((row): row is CodeSessionInfo => !!row),
-            selectedId: id, session, items: detail?.items ?? [], permissions: detail?.permissions ?? [],
+            selectedId: id, session, items: withPendingUserItem(draft, detail?.items ?? []),
+            permissions: detail?.permissions ?? [],
             input: draft.input, selection: session ? sessionSelection(session) : draft.selection,
             gitInfo: this.gitInfo, loading: this.indexLoading || !!detail?.hydrating || (!!id && !detail?.hydrated && !detail?.error),
             pending, busy: codeSessionBusy(session), synced, transport: this.transport,

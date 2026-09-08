@@ -4,6 +4,8 @@ import { useCodeTranscriptVirtualRows } from './useCodeTranscriptVirtualRows';
 import { useCodeTranscriptScroll } from './use-code-transcript-scroll';
 import { useThrottledMarkdown } from './use-throttled-markdown';
 import { CODE_RUNTIME_LABELS, codeItemStatus } from './code-types';
+import { noteworthyStatus, toolSummary } from './tool-summary';
+import { PENDING_USER_ITEM_ID } from './pending-user-item';
 
 const MarkdownRenderer = lazy(() => import('../notes/rendering/MarkdownRenderer').then(m => ({ default: m.MarkdownRenderer })));
 function ItemMarkdown({ item, identity, onOpenLocalFile }: { item: CodeItem; identity: string; onOpenLocalFile?: ((path: string) => void) | undefined }) {
@@ -14,32 +16,38 @@ function ItemMarkdown({ item, identity, onOpenLocalFile }: { item: CodeItem; ide
     </Suspense>;
 }
 
-export function CodeTranscriptItem({ item, provider, sessionKey, onOpenLocalFile }: {
-    item: CodeItem; provider: CodeProviderId; sessionKey: string; onOpenLocalFile?: ((path: string) => void) | undefined;
+export function CodeTranscriptItem({ item, provider, sessionKey, workingDir = '', onOpenLocalFile }: {
+    item: CodeItem; provider: CodeProviderId; sessionKey: string; workingDir?: string;
+    onOpenLocalFile?: ((path: string) => void) | undefined;
 }) {
     const tool = item.kind === 'tool_call' || item.kind === 'file_change';
     const reasoning = item.kind === 'reasoning';
     const assistant = item.kind === 'assistant_message';
     const user = item.kind === 'user_message';
     const status = codeItemStatus(item);
+    // A completed turn should read as prose, not as a status board: only
+    // states the reader can act on are worth a visible badge.
+    const note = noteworthyStatus(item);
+    const unsent = item.itemId === PENDING_USER_ITEM_ID;
     const label = user ? 'You' : assistant ? CODE_RUNTIME_LABELS[provider] : reasoning ? 'Reasoning'
         : item.kind === 'turn_started' ? 'Turn started' : item.kind === 'session_runtime' ? 'Runtime'
             : item.kind === 'permission_request' ? 'Permission record' : item.kind === 'notice' ? 'Notice' : status;
-    return <article className={`code-message code-message-${tool ? 'tool' : assistant ? 'assistant' : user ? 'user' : 'system'} is-${item.status}`}
+    return <article className={`code-message code-message-${tool ? 'tool' : assistant ? 'assistant' : user ? 'user' : 'system'} is-${item.status}${unsent ? ' is-unsent' : ''}`}
         data-code-item-id={item.itemId} aria-label={`${label} · ${status}`}>
-        {tool ? <details className={`code-tool-card code-tool-${item.status}`}>
+        {tool ? <details className={`code-tool-card code-tool-${item.status}`} open={item.status === 'error'}>
             <summary className="code-tool-summary"><span className="code-tool-chevron" aria-hidden="true">›</span>
-                <span className="code-tool-name">{item.tool?.name ?? (item.kind === 'file_change' ? 'File change' : 'Tool')}</span>
-                <span className="code-tool-status">{status}</span></summary>
+                <span className="code-tool-name">{toolSummary(item, workingDir)}</span>
+                {note && <span className="code-tool-status">{note}</span>}</summary>
             {item.tool?.detail !== undefined && <p className="code-tool-text">{item.tool.detail}</p>}
             {item.tool?.input !== undefined && <section className="code-tool-section"><span className="code-tool-section-label">Input</span><pre className="code-tool-args">{item.tool.input}</pre></section>}
             {item.tool?.output !== undefined && <section className="code-tool-section"><span className="code-tool-section-label">Output</span><pre className="code-tool-output">{item.tool.output}</pre></section>}
             {item.text !== undefined && <pre className="code-tool-text">{item.text}</pre>}
         </details> : reasoning ? <details className="code-thinking">
-            <summary className="code-thinking-summary">Reasoning · {status}</summary><div className="code-thinking-text">{item.text}</div>
+            <summary className="code-thinking-summary">{item.status === 'running' ? 'Thinking…' : 'Reasoning'}</summary>
+            <div className="code-thinking-text">{item.text}</div>
         </details> : <>
-            <span className="code-message-role">{label}{assistant && item.phase && item.phase !== 'unknown' ? ` · ${item.phase === 'final' ? 'Final' : 'Commentary'}` : ''}
-                {(assistant || user || item.kind === 'permission_request') && ` · ${status}`}</span>
+            <span className="code-message-role">{label}{assistant && item.phase === 'commentary' ? ' · Commentary' : ''}
+                {note && ` · ${unsent ? 'Sending' : note}`}</span>
             <div className="code-message-text">{assistant ? <ItemMarkdown item={item} identity={`${sessionKey}:${item.itemId}`} onOpenLocalFile={onOpenLocalFile} />
                 : <span className="code-plain-text">{item.text ?? item.permission?.title ?? ''}</span>}</div>
             {item.permission?.detail && <p className="code-plain-text">{item.permission.detail}</p>}
@@ -63,7 +71,10 @@ export function CodeTranscript({ items, provider, sessionKey, workingDir, loadin
     const getItemKey = useCallback((index: number) => `${sessionKey}:${itemsRef.current[index]?.itemId ?? index}`, [sessionKey, firstId]);
     const estimateSize = useCallback((index: number) => {
         const item = itemsRef.current[index];
-        return item?.kind === 'tool_call' || item?.kind === 'reasoning' ? 64 : 64 + Math.min(420, (item?.text?.length ?? 0) / 6);
+        // Tool and reasoning rows are collapsed to one line, so they measure
+        // far shorter than a message of the same text length.
+        return item?.kind === 'tool_call' || item?.kind === 'file_change' || item?.kind === 'reasoning'
+            ? 44 : 64 + Math.min(420, (item?.text?.length ?? 0) / 6);
     }, []);
     const virtual = useCodeTranscriptVirtualRows({ count: items.length, resetKey: sessionKey, scrollElementRef: transcriptRef, getItemKey, estimateSize });
     const { showJump, jumpToLatest } = useCodeTranscriptScroll({ items, sessionKey, transcriptRef, virtual });
@@ -99,7 +110,8 @@ export function CodeTranscript({ items, provider, sessionKey, workingDir, loadin
                         const item = items[row.index];
                         return item ? <div key={row.key} ref={virtual.measureElement} className="code-transcript-virtual-row"
                             data-code-transcript-idx={row.index} style={{ transform: `translateY(${row.start}px)` }}>
-                            <CodeTranscriptItem item={item} provider={provider} sessionKey={sessionKey} onOpenLocalFile={onOpenLocalFile} />
+                            <CodeTranscriptItem item={item} provider={provider} sessionKey={sessionKey}
+                                workingDir={workingDir} onOpenLocalFile={onOpenLocalFile} />
                         </div> : null;
                     })}
                 </div>}
