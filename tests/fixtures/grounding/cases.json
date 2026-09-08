@@ -14,6 +14,12 @@
       "why": "substring name matching can confuse this with Save"
     },
     {
+      "id": "contained-name",
+      "target": "the Export button",
+      "expected": "export",
+      "why": "Export all comes first in the DOM, so a substring locator for Export resolves to it; similar-name only passes because Save happens to precede Save as"
+    },
+    {
       "id": "small-icon",
       "target": "the Bold icon button",
       "expected": "icon-bold",

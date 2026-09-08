@@ -23,6 +23,21 @@
   <button id="wide" style="flex:1">Publish this document now</button>
 </div>
 
+<!--
+  A name that CONTAINS another name, placed FIRST.
+
+  Order is the whole point. With "Save" before "Save as…" above, a substring
+  locator for "Save" matches both and .nth(0) is Save — correct by accident.
+  Reverse it and the accident stops helping: a substring locator for "Export"
+  matches ["Export all", "Export"] in document order, .nth(0) is Export all,
+  and the box that was measured belonged to Export. Every guard would confirm
+  one element and the click would land on the other.
+-->
+<div class="bar">
+  <button id="export-all">Export all</button>
+  <button id="export">Export</button>
+</div>
+
 <!-- An element genuinely covered by an overlay. -->
 <div class="stack">
   <button id="covered" class="under">Covered button</button>
@@ -40,4 +55,3 @@
 
 <!-- A fixed banner over the bottom of the page. -->
 <div id="consent-banner" class="banner">We use cookies. <button id="accept">Accept</button></div>
-

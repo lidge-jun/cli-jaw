@@ -24,7 +24,19 @@ export interface VisionClickOptions {
     verifyBeforeClick?: boolean;
     /** Reconcile against element boxes before falling back to a coordinate. Default on. */
     reconcile?: boolean;
-    /** Refuse a click when something else would receive it. Default on. */
+    /**
+     * Refuse a ref click when something else would receive it. Default on.
+     *
+     * Narrower than it reads next to `reconcile`, and deliberately so. The hit
+     * test decides whether the point relates to a KNOWN target, which requires
+     * a resolved element to compare against — so it applies to the ref path,
+     * and only where reconciliation put the point inside a box rather than
+     * snapping to a nearby one.
+     *
+     * A coordinate click has no such target. Running the test there would
+     * always return "unknown" and refuse nothing, which is worse than not
+     * running it: a guard that cannot fire still looks like a guard.
+     */
     checkOcclusion?: boolean;
     /**
      * Allow the provider to run with `--dangerously-bypass-approvals-and-sandbox`.
@@ -413,6 +425,9 @@ export async function visionClick(port: number, target: string, opts: VisionClic
     // actuates and then throws would fire twice.
     let decision: ReconcileResult | null = null;
     let boxRefs: Array<{ ref: string; role: string; name: string; box: { x: number; y: number; width: number; height: number } }> = [];
+    // Whether the geometry we reasoned over was all of it. `elementBoxes`
+    // computes this and nothing has ever read it.
+    let boxesTruncated = false;
     if (opts.reconcile !== false) {
         try {
             const boxes = await elementBoxes(port, { interactive: true });
@@ -421,6 +436,7 @@ export async function visionClick(port: number, target: string, opts: VisionClic
                 bundle: { refs: boxes.refs },
             });
             boxRefs = boxes.refs;
+            boxesTruncated = boxes.truncated === true;
         } catch {
             // Only the capture is guarded here now. Reconciliation is an
             // improvement, not a precondition, so the coordinate path below
@@ -428,6 +444,39 @@ export async function visionClick(port: number, target: string, opts: VisionClic
             // longer disappears into this catch.
             decision = null;
         }
+    }
+
+    // A partial capture cannot support a claim of UNIQUENESS.
+    //
+    // The asymmetry is what makes this a defect rather than a tuning question:
+    // a box that was never measured cannot CREATE ambiguity, but its absence
+    // can DISSOLVE it. Two boxes containing the point is a refusal; drop one
+    // and the same page yields a confident ref click reported as `via: 'ref'`,
+    // the outcome shape that reads as more trustworthy than a coordinate.
+    //
+    // The dropped set is not random. The node cap slices document order and
+    // the deadline breaks out of the same loop, so both drop LATE nodes —
+    // where modals, cookie banners, toasts and dropdown portals live.
+    //
+    // Scoped deliberately to that one conclusion. Refusing on
+    // `no_matching_ref_box` as well was tried and withdrawn: "no ref box
+    // here" is the CORRECT and expected answer for canvas, WebGL and
+    // cross-origin iframes, and a capture truncated at some unrelated node
+    // says nothing about whether a box exists at this particular point. That
+    // version refused every coordinate click on any page large enough to
+    // truncate — the same over-refusal the coordinate-path hit test was
+    // withdrawn for, arriving by a different road. A near-miss snap is left
+    // alone too: it resolved to something rather than concluding from nothing.
+    if (boxesTruncated && decision?.action === 'ref' && decision.reason === 'candidate_center_inside_ref_box') {
+        return {
+            success: false,
+            reason: 'element geometry was captured only in part, so a single containing element is not a safe conclusion',
+            code: 'COMPUTER_GEOMETRY_TRUNCATED',
+            candidate: clickPoint,
+            ref: decision.ref,
+            truncated: true,
+            provider: result.provider,
+        };
     }
 
     if (decision?.action === 'fail') {
@@ -487,6 +536,7 @@ export async function visionClick(port: number, target: string, opts: VisionClic
             clip: ss.clip ?? clip,
             dpr,
             freshness,
+            truncated: boxesTruncated,
             provider: result.provider,
             description: result.description,
             snap: refSnap,
@@ -508,6 +558,7 @@ export async function visionClick(port: number, target: string, opts: VisionClic
         clip: ss.clip ?? clip,
         dpr,
         freshness,
+        truncated: boxesTruncated,
         provider: result.provider,
         description: result.description,
         snap,
