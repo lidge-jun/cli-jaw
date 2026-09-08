@@ -40,6 +40,30 @@ export interface CodeSessionInfo {
     lastUsedAt: number;
     /** Current index/snapshot attention, absent when not hydrated. */
     pendingPermissionCount?: number;
+    /**
+     * Latest reported context usage, absent when the runtime has not reported
+     * any. Like `pendingPermissionCount` this is attached at read time and
+     * never persisted: a number that was true for a process that has since
+     * exited is not a fact about the session now.
+     */
+    contextUsage?: CodeContextUsage;
+}
+
+/**
+ * What the native runtime said about the conversation's size.
+ *
+ * Every field except the total is nullable, because the runtime may report a
+ * breakdown without a window or a window without a breakdown, and an absent
+ * measurement must not be shown as zero.
+ */
+export interface CodeContextUsage {
+    totalTokens: number;
+    inputTokens: number | null;
+    cachedInputTokens: number | null;
+    outputTokens: number | null;
+    reasoningOutputTokens: number | null;
+    modelContextWindow: number | null;
+    updatedAt: number;
 }
 
 export interface CodePermissionRequest {

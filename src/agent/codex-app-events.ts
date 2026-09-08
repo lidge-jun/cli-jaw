@@ -22,8 +22,26 @@ export interface CodexAppEventResult {
     messageStarted?: boolean | undefined;
     sessionId?: string | undefined;
     tokens?: Record<string, number> | undefined;
+    /**
+     * Conversation-wide usage, as distinct from `tokens`, which carries the
+     * last turn only and is consumed by cost accounting. Absent fields stay
+     * absent: an unreported context window is not an unlimited one, and zero
+     * used tokens is a different claim from "the runtime did not say".
+     */
+    contextUsage?: CodexAppContextUsage | undefined;
     flushThinking?: boolean | undefined;
     turnStatus?: string | undefined;
+}
+
+export interface CodexAppContextUsage {
+    /** Whole-conversation total, the number a context window is measured against. */
+    totalTokens: number;
+    inputTokens: number | null;
+    cachedInputTokens: number | null;
+    outputTokens: number | null;
+    reasoningOutputTokens: number | null;
+    /** The model's window, when the runtime reports one. */
+    modelContextWindow: number | null;
 }
 
 export interface CodexAppTurnLeaseIdentity {
@@ -513,7 +531,28 @@ function handleTokenUsageUpdated(params: EvRec, ctx: SpawnContext): CodexAppEven
             ...(last['cachedInputTokens'] ? { cached_input_tokens: last['cachedInputTokens'] as number } : {}),
         };
     }
-    return ctx.tokens ? { tokens: ctx.tokens } : {};
+    // `total` is the running conversation, which is what a context window is
+    // measured against; `last` is one turn and belongs to cost accounting.
+    // They are read separately because they answer different questions.
+    const total = usage ? f(usage, 'total') as EvRec | undefined : undefined;
+    const totalTokens = count(total?.['totalTokens']);
+    const contextUsage: CodexAppContextUsage | undefined = totalTokens === null ? undefined : {
+        totalTokens,
+        inputTokens: count(total?.['inputTokens']),
+        cachedInputTokens: count(total?.['cachedInputTokens']),
+        outputTokens: count(total?.['outputTokens']),
+        reasoningOutputTokens: count(total?.['reasoningOutputTokens']),
+        modelContextWindow: count(usage?.['modelContextWindow']),
+    };
+    return {
+        ...(ctx.tokens ? { tokens: ctx.tokens } : {}),
+        ...(contextUsage ? { contextUsage } : {}),
+    };
+}
+
+/** A measurement, or nothing. Absent must not read as zero. */
+function count(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 function handleError(params: EvRec): CodexAppEventResult {

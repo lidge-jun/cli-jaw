@@ -2,7 +2,7 @@ import type { RuntimeEvent, RuntimeEventBody, RuntimeTurnOutcome } from '../shar
 import type { RuntimeEventContext } from '../agent/runtime/events.js';
 import type { RuntimeRequests } from '../agent/runtime/requests.js';
 import type { RuntimeTranscriptObserver } from '../agent/runtime/projection.js';
-import type { CodePermissionMode, CodeProviderCatalog, CodeProviderId } from './wire.js';
+import type { CodeContextUsage, CodePermissionMode, CodeProviderCatalog, CodeProviderId } from './wire.js';
 
 export interface CodeTurnContext extends RuntimeEventContext {
     epoch: number;
@@ -31,6 +31,12 @@ export interface CodeOpenOptions {
     transcript(context: RuntimeEventContext): RuntimeTranscriptObserver;
     resolveTranscriptParent(context: RuntimeEventContext, nativeToolRef: string): string | null;
     onNativeCursor(cursor: string | null, context?: RuntimeEventContext): void;
+    /**
+     * Latest conversation-wide usage the runtime reported. Held in memory only:
+     * it describes a live native process, so a value that outlived that process
+     * would be a claim about a session that no longer holds.
+     */
+    onContextUsage(usage: CodeContextUsage): void;
     onExit(error: Error | null): void;
 }
 

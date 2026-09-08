@@ -5,6 +5,7 @@ import type { CodeCreateSessionRequest } from '../../../../src/code-mode/wire';
 import { CODE_POLICY_DETAILS, CODE_POLICY_LABELS, CODE_RUNTIME_LABELS } from './code-types';
 import type { CodeNotice } from './code-toasts';
 import { CheckGlyph, ProviderGlyph } from './ProviderGlyph';
+import { ContextUsageMeter } from './ContextUsageMeter';
 
 type MenuOption<T extends string> = {
     value: T; label: string; detail?: string | undefined; disabled?: boolean; icon?: ReactNode;
@@ -185,6 +186,7 @@ export function ComposerFooter({ controller: c, onNotice }: {
                 options={(capabilities?.permissionModes ?? []).map(value => ({ value, label: CODE_POLICY_LABELS[value], detail: CODE_POLICY_DETAILS[value] }))}
                 onChange={value => void change({ permissionMode: value })} />
             <span className="code-composer-footer-spacer" aria-hidden="true" />
+            <ContextUsageMeter usage={c.session?.contextUsage} />
             <CodeFooterMenu label="Model" value={selection.model} className="code-footer-model"
                 disabled={controlsDisabled || models.length === 0} filterable filterPlaceholder="Filter models…"
                 displayValue={selection.model || 'Select model'}

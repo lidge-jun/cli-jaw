@@ -410,3 +410,46 @@ test('codex-app lane normalizer rejects stale turn deltas without context mutati
         assert.equal(ctx.tokens, null, method);
     }
 });
+
+test('token usage reports the conversation total and the window, and keeps unreported fields absent', () => {
+    const ctx = createCtx();
+    ctx.sessionId = 'thread-a';
+    const result = extractFromCodexAppLaneEvent('thread/tokenUsage/updated', {
+        threadId: 'thread-a', turnId: 'turn-a',
+        tokenUsage: {
+            last: { inputTokens: 3, outputTokens: 4, cachedInputTokens: 1 },
+            total: { inputTokens: 300, outputTokens: 40, cachedInputTokens: 100, reasoningOutputTokens: 5, totalTokens: 345 },
+            modelContextWindow: 272000,
+        },
+    }, ctx, 'thread-a', 'turn-a');
+    // The last turn still feeds cost accounting, unchanged.
+    assert.deepEqual(result?.tokens, { input_tokens: 3, output_tokens: 4, cached_input_tokens: 1 });
+    // The conversation total is what a context window is measured against, and
+    // it is a different number from the last turn.
+    assert.deepEqual(result?.contextUsage, {
+        totalTokens: 345, inputTokens: 300, cachedInputTokens: 100,
+        outputTokens: 40, reasoningOutputTokens: 5, modelContextWindow: 272000,
+    });
+});
+
+test('a runtime that reports no window, or no total at all, does not get a fabricated one', () => {
+    const ctx = createCtx();
+    ctx.sessionId = 'thread-a';
+    const noWindow = extractFromCodexAppLaneEvent('thread/tokenUsage/updated', {
+        threadId: 'thread-a', turnId: 'turn-a',
+        tokenUsage: { last: { inputTokens: 1, outputTokens: 1 }, total: { totalTokens: 10 } },
+    }, ctx, 'thread-a', 'turn-a');
+    // Every unreported part stays null: absent is not zero.
+    assert.deepEqual(noWindow?.contextUsage, {
+        totalTokens: 10, inputTokens: null, cachedInputTokens: null,
+        outputTokens: null, reasoningOutputTokens: null, modelContextWindow: null,
+    });
+    const noTotal = extractFromCodexAppLaneEvent('thread/tokenUsage/updated', {
+        threadId: 'thread-a', turnId: 'turn-a',
+        tokenUsage: { last: { inputTokens: 1, outputTokens: 1 } },
+    }, createCtx2(), 'thread-a', 'turn-a');
+    assert.equal(noTotal?.contextUsage, undefined, 'no total means nothing to say about the context');
+});
+
+function createCtx2() { const c = createCtx(); c.sessionId = 'thread-a'; return c; }
+

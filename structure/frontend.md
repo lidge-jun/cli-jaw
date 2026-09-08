@@ -673,6 +673,17 @@ accessibility tree but are visually hidden, because a label on every row costs
 the one row that is actually waiting its visibility; an unhydrated approval
 count remains unknown rather than being shown as zero.
 
+Context usage is reported by the runtime and shown in the composer footer as a
+ring beside the model. It is derived at read time and never persisted, like the
+pending approval count, because it describes a live native process. There are
+three states and they are distinct: nothing reported renders nothing, a count
+without a window shows the count alone since a proportion of an unknown total
+is not a proportion, and a count with a window shows a percentage clamped at
+100 so a conversation past its window reports the situation rather than the
+arithmetic. Every part of the breakdown is nullable and an unreported field
+shows as absent, never as zero. Thresholds change the ring colour at 75 and 90
+percent, and the accessible name carries the numbers the ring cannot.
+
 The transcript renders sanitized Markdown, math and linear tables with stable
 virtual rows. Tool output stays escaped; local files open only after an explicit
 click. Endpoint/session changes reset measured heights and scroll ownership.

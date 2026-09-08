@@ -146,6 +146,12 @@ class CodeCodexSession implements CodeProviderSession {
                     if (parsed.text !== undefined && state.codexAppActiveChannel !== 'commentary') sawAnswer = true;
                 }
                 mapper.observe(method, params, parsed, state.codexAppActiveChannel ?? '');
+                // Conversation size, reported alongside the turn but not part of
+                // it: it is a property of the session, so it is handed to the
+                // session rather than folded into this turn's transcript.
+                if (parsed?.contextUsage) {
+                    this.options.onContextUsage({ ...parsed.contextUsage, updatedAt: Date.now() });
+                }
                 if (method === 'item/completed' && item['type'] === 'agentMessage'
                     && typeof item['id'] === 'string' && item['id'].length > 0 && item['id'].length <= 1024
                     && typeof item['text'] === 'string') {

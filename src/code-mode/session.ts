@@ -6,7 +6,7 @@ import { CodeTurnNormalizer, redactCodeText } from './normalize.js';
 import type { CodeOpenOptions, CodeProvider, CodeProviderSession, CodeRuntimeResource, CodeTurnContext } from './provider.js';
 import { CodeStore, CodeStoreError, type CodeSessionRecord, type CodeStoreOwner } from './store.js';
 import type {
-    CodeCancelRequest, CodeItem, CodePermissionAnswer, CodePermissionRequest,
+    CodeCancelRequest, CodeContextUsage, CodeItem, CodePermissionAnswer, CodePermissionRequest,
     CodeSessionError, CodeWireEvent,
 } from './wire.js';
 
@@ -77,6 +77,13 @@ export interface CodeSessionOptions {
 export class CodeSession {
     private operation: Operation | null = null;
     private binding: HandleBinding | null = null;
+    /**
+     * Latest usage the live runtime reported, held only for as long as this
+     * service is up. It is not persisted: it describes a native process, and a
+     * number that outlived that process would be a claim about a session that
+     * no longer holds.
+     */
+    private usage: CodeContextUsage | null = null;
     private readonly bindings = new Set<HandleBinding>();
     private readonly registry = new RuntimeRequests(() => {
         if (this.operation) this.syncPermissions(this.operation);
@@ -392,8 +399,19 @@ export class CodeSession {
                     this.publish(result.events);
                 } catch (error) { this.failPersistence(op, error); }
             },
+            onContextUsage: usage => {
+                // Only the handle that currently owns this session may speak
+                // for it; a late report from a replaced runtime is not news
+                // about the session that is running now.
+                if (this.binding !== binding) return;
+                this.usage = usage;
+            },
             onExit: () => this.onExit(binding),
         };
+    }
+
+    contextUsage(): CodeContextUsage | null {
+        return this.usage;
     }
 
     private record(op: Operation, context: RuntimeEventContext, body: RuntimeEventBody) {
