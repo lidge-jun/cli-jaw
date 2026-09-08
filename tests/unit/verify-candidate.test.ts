@@ -15,6 +15,7 @@ import {
     VERIFY_DRIFT_LIMIT,
     isObservationStale,
     OBSERVATION_MAX_AGE_MS,
+    clampClipToViewport,
 } from '../../src/browser/verify-candidate.ts';
 
 const viewport = { width: 1280, height: 800 };
@@ -212,4 +213,44 @@ test('VER-013: the age bound is a stated assumption, not a movement detector', (
     assert.equal(isObservationStale(t0, t0 + 5_000, 1_000), true, 'a caller can demand more freshness');
     assert.equal(isObservationStale(t0, t0 + 5_000, 60_000), false, 'or accept less');
     assert.equal(OBSERVATION_MAX_AGE_MS, 30_000);
+});
+
+test('VER-014: a clip past the viewport edge is truncated, and says so', () => {
+    // Playwright trims the clip before capturing, so the image is smaller than
+    // requested. Returning the requested rectangle would let a caller offset a
+    // coordinate against a region that was never in the picture.
+    const { clip, truncated } = clampClipToViewport(
+        { x: 1000, y: 700, width: 600, height: 400 },
+        { width: 1280, height: 800 },
+    );
+    assert.deepEqual(clip, { x: 1000, y: 700, width: 280, height: 100 });
+    assert.equal(truncated, true);
+});
+
+test('VER-015: a clip that fits is returned unchanged and unflagged', () => {
+    const { clip, truncated } = clampClipToViewport(
+        { x: 10, y: 20, width: 100, height: 50 },
+        { width: 1280, height: 800 },
+    );
+    assert.deepEqual(clip, { x: 10, y: 20, width: 100, height: 50 });
+    assert.equal(truncated, false);
+});
+
+test('VER-016: a clip outside the viewport gets a named error', () => {
+    // Playwright's own failure here is "Clipped area is either empty or
+    // outside the resulting image", which names neither the rectangle nor the
+    // viewport. The reader cannot tell which of the two was wrong.
+    assert.throws(
+        () => clampClipToViewport({ x: 1400, y: 100, width: 100, height: 100 }, { width: 1280, height: 800 }),
+        /clip \(1400, 100\) starts outside the 1280x800 viewport/,
+    );
+    assert.throws(
+        () => clampClipToViewport({ x: 100, y: 900, width: 100, height: 100 }, { width: 1280, height: 800 }),
+        /starts outside the 1280x800 viewport/,
+    );
+});
+
+test('VER-017: the exact edge is inside, one past it is not', () => {
+    assert.equal(clampClipToViewport({ x: 1279, y: 799, width: 10, height: 10 }, { width: 1280, height: 800 }).clip.width, 1);
+    assert.throws(() => clampClipToViewport({ x: 1280, y: 0, width: 10, height: 10 }, { width: 1280, height: 800 }));
 });

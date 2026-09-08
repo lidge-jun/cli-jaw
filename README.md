@@ -648,7 +648,7 @@ jaw memory search "how did we set up the API auth?"
 | Category | Skills | What they cover |
 |---|---|---|
 | **Office** | `jaw-pdf`, `jaw-docx`, `jaw-xlsx`, `jaw-pptx`, `jaw-hwp` | Read, create, edit documents. HWP/HWPX (Korean word-processor formats) supported natively |
-| **Automation** | `jaw-browser`, `vision-click`, `jaw-screen-capture`, `jaw-desktop-control` | Chrome DevTools Protocol (CDP) browser control, AI-powered coordinate click, macOS screenshots, Computer Use |
+| **Automation** | `jaw-browser`, `vision-click`, `jaw-screen-capture`, `jaw-desktop-control` | Chrome DevTools Protocol (CDP) browser control, structure-first grounding with a coordinate fallback, macOS screenshots, Computer Use |
 | **Media** | `jaw-video`, `imagegen`, `lecture-stt`, `tts` | Remotion video, OpenAI image generation, lecture transcription, text-to-speech |
 | **Integration** | `jaw-github`, `notion`, `jaw-telegram-send`, `jaw-memory` | Issues/PRs/CI, Notion pages, Telegram media delivery, persistent memory |
 | **Visualization** | `jaw-diagram` | SVG diagrams, charts, interactive visualizations rendered in chat |
@@ -669,7 +669,7 @@ jaw skill list              # see what's available
 | Capability | How it works |
 |---|---|
 | **Chrome DevTools Protocol** | Navigate, click, type, screenshot, evaluate JS, scroll, press keys — remote control for Chrome |
-| **Vision-click** | Screenshot the screen → AI extracts target coordinates → clicks. `jaw browser vision-click "Login button"` |
+| **Vision-click** | Describe a target, get it clicked. Asks the browser where its elements are first and clicks a ref when the answer lands on one; falls back to a coordinate for canvas and custom-rendered UI. Declines rather than guessing when the target is ambiguous, covered, or the page moved. `jaw browser vision-click "Login button"` |
 | **Computer Use** | Desktop app automation via Codex Computer Use. Use Safari for localhost and it feels like the Codex app |
 | **Web-AI vendors** | `jaw browser web-ai --vendor chatgpt\|gemini\|grok` with session lifecycle, diagnostics, source-audit/answer-artifact support, and ChatGPT code-mode zip recovery |
 | **Diagram Skill** | Generate SVG diagrams and interactive visualizations, rendered inline in chat |
@@ -794,7 +794,7 @@ jaw memory save <file> <content>  # save to structured memory
 jaw browser start                 # launch Chrome automation
 jaw browser fetch "https://example.com" --json --trace  # adaptive URL reader
 jaw browser snapshot              # capture page state
-jaw browser vision-click "Login"  # AI-powered click
+jaw browser vision-click "Login"  # describe a target; refuses rather than guessing
 jaw browser web-ai status         # ChatGPT/Gemini/Grok web-AI session tooling
 jaw browser web-ai code --vendor chatgpt --model thinking --effort heavy --prompt "Build an MVP" --output-zip ./result.zip
 

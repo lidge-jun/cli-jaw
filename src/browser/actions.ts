@@ -4,6 +4,7 @@ import { join } from 'path';
 import fs from 'fs';
 import { imageSize } from './image-size.js';
 import { hitTestInPage } from './occlusion.js';
+import { clampClipToViewport } from './verify-candidate.js';
 import type { ConsoleMessage, Locator, Page, Request } from 'playwright-core';
 
 const SCREENSHOTS_DIR = join(JAW_HOME, 'screenshots');
@@ -333,11 +334,29 @@ export async function screenshot(port: number, opts: BrowserActionOptions = {}) 
 
     const clip = normalizeClip(opts["clip"]);
     if (opts["ref"] && clip) throw new Error('screenshot cannot combine ref and clip');
+    // The rectangle actually captured, which is what a caller must offset
+    // against. Returning the REQUESTED clip after Playwright trimmed it is how
+    // a coordinate ends up describing a region that was never in the image.
+    let clipUsed = clip;
     if (opts["ref"]) {
         const locator = await refToLocator(page, port, String(opts["ref"]));
         await locator.screenshot({ path: filepath, type });
     } else {
-        await page.screenshot({ path: filepath, fullPage: optionBoolean(opts, 'fullPage'), type, ...(clip ? { clip } : {}) });
+        // A clip past the viewport edge is trimmed by Playwright before
+        // capture, and one entirely outside fails with an opaque assertion.
+        // Clamp here so the caller gets the rectangle that was actually used
+        // and a named error when there is no usable area at all.
+        const measured = clip
+            ? await page.evaluate('({ width: window.innerWidth, height: window.innerHeight })') as { width: number; height: number }
+            : null;
+        const fitted = clip && measured ? clampClipToViewport(clip, measured) : null;
+        if (fitted) clipUsed = fitted.clip;
+        await page.screenshot({
+            path: filepath,
+            fullPage: optionBoolean(opts, 'fullPage'),
+            type,
+            ...(fitted ? { clip: fitted.clip } : {}),
+        });
     }
     const dpr = await page.evaluate('window.devicePixelRatio');
     // `viewportSize()` is null under connectOverCDP, which Playwright attaches
@@ -361,7 +380,8 @@ export async function screenshot(port: number, opts: BrowserActionOptions = {}) 
         url: page.url(),
         targetId: normalizeActiveTargetId(shotTab),
         ...(image ? { image } : {}),
-        ...(clip ? { clip } : {}),
+        // The clip that was captured, not the one requested.
+        ...(clipUsed ? { clip: clipUsed } : {}),
     };
 }
 
