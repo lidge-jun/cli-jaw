@@ -187,6 +187,8 @@ Never create private records inside this checkout, including `devlog`, `_plan`, 
 
 Before any public push, run `npm run check:private-boundary` for the index and `node scripts/check-private-boundary.mjs --range <remote-base> HEAD` for every outgoing commit tree. Follow [contributor hook setup](CONTRIBUTING.md#local-private-path-check) to enable `.githooks/pre-push` for this checkout; it invokes `--pre-push` using Git's stdin. Review content as well as paths and do not bypass the hook. CI is a backstop after upload, not a pre-disclosure guard.
 
+The check enumerates submodule contents and fails on what it finds there, because `ls-files` stops at a gitlink and a record committed inside a submodule ships when that submodule is published. `JAW_PRIVATE_BOUNDARY_SUBMODULES=warn` downgrades that to reporting; it exists for a finding that must be fixed in the other repository first, and is not a setting to leave on. A submodule that is cloned and used on its own needs a check of its own — `skills_ref` has one in `validate_public_surface.py` — because a gate here can refuse to publish a submodule but cannot stop a commit landing inside it.
+
 ### Kanban
 
 프로젝트 보드: https://github.com/users/lidge-jun/projects/2/views/1

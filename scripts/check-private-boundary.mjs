@@ -26,16 +26,21 @@ export function checkIndex(cwd) {
 }
 
 /**
- * Submodule contents are OUT of the enforced gate for now, because the current
- * `skills_ref` tip carries private records that predate this check and removing
- * them is a separate change in a separate repository. Enforcing here first
- * would only break the build without deleting anything.
+ * Submodule contents are enforced.
  *
- * Set `JAW_PRIVATE_BOUNDARY_SUBMODULES=enforce` to fail on them; the default
- * warns so the finding is visible on every run and cannot be forgotten.
+ * They were warn-only for one reason: the `skills_ref` tip carried 29 private
+ * records that predated this check, and failing on them would have broken the
+ * build without deleting anything. Those records now live in cli-jaw-internal
+ * and are gone from the submodule, so the reason has expired and the default
+ * is a failure.
+ *
+ * Set `JAW_PRIVATE_BOUNDARY_SUBMODULES=warn` to go back to reporting, which
+ * exists for the same situation recurring in another submodule — a finding
+ * that has to be fixed elsewhere before this repository can demand it. It is
+ * a bridge, not a setting to leave on.
  */
 function submoduleEnforcement() {
-    return String(process.env['JAW_PRIVATE_BOUNDARY_SUBMODULES'] || '').toLowerCase() === 'enforce';
+    return String(process.env['JAW_PRIVATE_BOUNDARY_SUBMODULES'] || '').toLowerCase() !== 'warn';
 }
 
 export function reportSubmodules(cwd, { enforce = false } = {}) {

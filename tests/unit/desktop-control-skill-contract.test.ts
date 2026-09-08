@@ -34,29 +34,57 @@ test('DCS-002: the registry entry does not require macOS', maybe, () => {
     assert.ok(entry.requires.system.includes('Google Chrome'), 'the Chrome requirement stays');
 });
 
-test('DCS-003: the reference documents the Windows window-scoped API', maybe, () => {
+// DCS-003 and DCS-004 used to require the literal tool names `list_windows()`,
+// `get_window_state`, `get_app_state(app)`, `select_text` and `node_repl`.
+//
+// Those names came from an older Codex build. On a current host the
+// `computer-use@openai-bundled` plugin can be enabled, its `.mcp.json` can
+// still declare the server, and NO `mcp__computer_use__*` tool is exposed to
+// the session — the host provides a CUA JavaScript session instead. So the
+// assertions were pinning an inventory that no longer resolves, and passing
+// them meant the reference had to keep instructing calls that do not exist.
+//
+// What survives a host change is the platform SHAPE, which is what these check
+// now: app-scoped on macOS, window-scoped on Windows, no host on Linux. The
+// tests must not name tools for the same reason the reference stopped naming
+// them.
+
+test('DCS-003: the reference keeps the platform shapes distinct', maybe, () => {
     const ref = fs.readFileSync(CU_REF, 'utf8');
-    assert.match(ref, /list_windows\(\)/);
-    assert.match(ref, /get_window_state/);
-    assert.match(ref, /node_repl/);
-    assert.match(ref, /get_app_state`?,? and `?select_text|no.*get_app_state/i,
-        'the reference must say which macOS tools are absent on Windows');
+    assert.match(ref, /macOS[^\n]*\bapp-scoped\b/i);
+    assert.match(ref, /Windows is[^\n]*\bwindow-scoped\b/i);
+    assert.match(ref, /Linux[^\n]*no Computer Use host/i,
+        'a platform without a host must be named, or an agent will hunt for one');
 });
 
-test('DCS-004: the reference keeps the macOS app-scoped API', maybe, () => {
+test('DCS-004: the reference tells the agent to establish the surface rather than assume it', maybe, () => {
     const ref = fs.readFileSync(CU_REF, 'utf8');
-    assert.match(ref, /get_app_state\(app\)/);
-    assert.match(ref, /select_text/);
+    assert.match(ref, /Do not assume tool names/i);
+    assert.match(ref, /enabled plugin is not proof/i,
+        'the exact trap that made the old inventory wrong must stay documented');
+    assert.match(ref, /no Computer Use surface/,
+        'and the agent must know what to report when nothing is exposed');
 });
 
 test('DCS-005: the two Windows false-success traps are documented', maybe, () => {
     const ref = fs.readFileSync(CU_REF, 'utf8');
-    assert.match(ref, /list_apps\(\)[^\n]*without a working pipe|not a health signal/i);
-    assert.match(ref, /not on the pipe/i);
+    // Stated as behaviour rather than by tool name: an enumeration that answers
+    // proves nothing about the connection, and an empty list means the
+    // transport is down rather than that the desktop is empty.
+    assert.match(ref, /enumeration that answers is not a health check/i);
+    assert.match(ref, /empty window list[^\n]*transport is not connected/i);
 });
 
 test('DCS-006: the sandbox bypass is stated as an attended user choice, not a default', maybe, () => {
     const ref = fs.readFileSync(CU_REF, 'utf8');
     assert.match(ref, /dangerously-bypass-approvals-and-sandbox/);
-    assert.match(ref, /never adds it automatically/i);
+    // The wording moved from "never adds it automatically" to naming what
+    // cli-jaw does not do — add OR persist it — and the claim got stronger,
+    // so match the claim rather than the old sentence.
+    assert.match(ref, /does not add or persist it/i);
+    assert.match(ref, /attended, explicit user choice/i);
+    // The sentence wraps across a line, so match without spanning the break.
+    assert.match(ref, /permissions=auto/);
+    assert.match(ref, /is not an equivalent substitute/i,
+        'the quieter route to the same authority must be closed off by name');
 });
