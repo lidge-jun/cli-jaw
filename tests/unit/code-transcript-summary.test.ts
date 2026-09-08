@@ -87,3 +87,28 @@ test('with no pending send the item list is returned untouched', () => {
     const items = [item()];
     assert.equal(withPendingUserItem(d, items), items);
 });
+
+test('the reserved pending id cannot collide with a server item id', () => {
+    // The pending item is keyed by a fixed string, and the transcript keys its
+    // virtual rows on itemId. Nothing in the wire type stops a server id from
+    // being any string, so the two id shapes the store actually produces are
+    // asserted here rather than assumed.
+    //   normalize.ts id():  'code-' + sha256(...)      -> /^code-[0-9a-f]{64}$/
+    //   store.ts admitTurn: `${turnId}:user`, `${turnId}:started`
+    const shapes = [
+        `code-${'a'.repeat(64)}`,
+        'turn-0199:user',
+        'turn-0199:started',
+    ];
+    for (const id of shapes) {
+        assert.notEqual(id, PENDING_USER_ITEM_ID);
+    }
+    // A turn id would have to be literally 'pending' to produce the reserved
+    // string, and turn ids are generated, never client-supplied.
+    assert.equal(PENDING_USER_ITEM_ID, 'pending:user');
+    const d = draft('hello');
+    // Even given a hostile server item carrying the reserved id, the join is on
+    // clientTurnKey, so a mismatched key never suppresses the local copy.
+    const hostile = item({ itemId: PENDING_USER_ITEM_ID, kind: 'user_message', text: 'not mine', clientTurnKey: 'other' });
+    assert.equal(pendingUserItem(d, [hostile])?.text, 'hello');
+});
