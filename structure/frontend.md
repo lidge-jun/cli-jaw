@@ -661,6 +661,18 @@ original key and text; reconnect never resends automatically. Each approval has
 its own pending/error state and forwards the native opaque choice. Session rows
 support rename, archive/restore, current-workspace filtering and paging.
 
+The session list is ordered by creation, newest first, with the id as a
+tiebreak. The server returns sessions by last activity, which would move a
+session to the top of the list while the reader is looking at it merely because
+it answered a prompt; which session is running is carried by the row's own
+status instead. Rows are partitioned into active and archived, and the archived
+tail orders by when each session was put away rather than when it was created.
+A section with nothing in it is not rendered. Grouping by workspace remains a
+separate explicit mode. Idle status and "no pending approvals" stay in the
+accessibility tree but are visually hidden, because a label on every row costs
+the one row that is actually waiting its visibility; an unhydrated approval
+count remains unknown rather than being shown as zero.
+
 The transcript renders sanitized Markdown, math and linear tables with stable
 virtual rows. Tool output stays escaped; local files open only after an explicit
 click. Endpoint/session changes reset measured heights and scroll ownership.

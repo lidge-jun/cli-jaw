@@ -2,6 +2,7 @@ import { useId, useRef, useState } from 'react';
 import type { CodeSessionInfo } from '../../../../src/code-mode/wire';
 import type { CodeControllerModel } from './code-controller-types';
 import { CODE_RUNTIME_LABELS, CODE_SESSION_LABELS, codeCanResume, codeSessionBusy } from './code-types';
+import { codeSessionAttention, codeSessionAttentionLabel, groupCodeSessions } from './session-order';
 
 function SessionRow({ session: s, controller: c }: { session: CodeSessionInfo; controller: CodeControllerModel }) {
     const [renaming, setRenaming] = useState(false);
@@ -14,6 +15,7 @@ function SessionRow({ session: s, controller: c }: { session: CodeSessionInfo; c
     const active = c.selectedId === s.sessionId;
     const busy = codeSessionBusy(s);
     const count = active && c.synced ? c.permissions.length : s.pendingPermissionCount;
+    const attention = codeSessionAttention(count);
     async function action(run: () => Promise<void>, after?: () => void) {
         if (guard.current) return;
         guard.current = true; setPending(true); setError(null);
@@ -27,8 +29,13 @@ function SessionRow({ session: s, controller: c }: { session: CodeSessionInfo; c
             aria-current={active ? 'true' : undefined} onClick={() => void action(() => c.selectSession(s.sessionId))}>
             <span className="code-session-cwd">{s.title || 'Untitled session'}</span>
             <span className="code-session-meta" title={s.cwd}>{CODE_RUNTIME_LABELS[s.provider]} · {s.cwd}</span>
-            <span className={`code-session-status code-session-status-${s.status}`}>{CODE_SESSION_LABELS[s.status]}</span>
-            <span className="code-session-attention">{count === undefined ? 'Approval status unknown' : count > 0 ? `${count} pending approval${count === 1 ? '' : 's'}` : 'No pending approvals'}</span>
+            {/* Ready is the common case and stays silent. A status on every row
+                is a status on no row, and it costs the one session that is
+                actually doing something its visibility. */}
+            <span className={`code-session-status code-session-status-${s.status}`}
+                data-quiet={s.status === 'idle' ? 'true' : undefined}>{CODE_SESSION_LABELS[s.status]}</span>
+            <span className={`code-session-attention code-session-attention-${attention.kind}`}
+                data-quiet={attention.kind === 'none' ? 'true' : undefined}>{codeSessionAttentionLabel(attention)}</span>
         </button>
         {renaming ? <form className="code-session-rename" onSubmit={event => {
             event.preventDefault(); if (title.trim()) void action(() => c.rename(s.sessionId, title.trim()), finishRename);
@@ -63,8 +70,19 @@ export function CodeSessionList({ controller: c }: { controller: CodeControllerM
     const [paging, setPaging] = useState(false);
     const pagingRef = useRef(false);
     const visible = c.sessions.filter(s => `${s.title ?? ''} ${s.cwd} ${CODE_RUNTIME_LABELS[s.provider]}`.toLowerCase().includes(search.toLowerCase()));
-    const groups = new Map<string, CodeSessionInfo[]>();
-    for (const s of visible) { const key = grouped ? s.cwd : ''; const rows = groups.get(key) ?? []; rows.push(s); groups.set(key, rows); }
+    // Two orderings, deliberately: by workspace when the reader asks for it,
+    // otherwise by lifecycle. Neither uses last activity, so answering a prompt
+    // in one session does not move it under the reader's cursor -- which is
+    // what the server's own last-used ordering would do.
+    const groups = grouped
+        ? [...visible.reduce((map, s) => {
+            const rows = map.get(s.cwd) ?? []; rows.push(s); map.set(s.cwd, rows); return map;
+        }, new Map<string, CodeSessionInfo[]>())].map(([cwd, sessions]) => ({ title: cwd, key: cwd, sessions }))
+        : groupCodeSessions(visible).map(group => ({
+            key: group.section,
+            title: group.section === 'archived' ? 'Archived' : '',
+            sessions: group.sessions,
+        }));
     async function loadMore() {
         if (pagingRef.current) return;
         pagingRef.current = true; setPaging(true); setError(null);
@@ -90,9 +108,9 @@ export function CodeSessionList({ controller: c }: { controller: CodeControllerM
         <button type="button" className={`code-session-item${c.selectedId === null ? ' active' : ''}`} aria-current={c.selectedId === null ? 'true' : undefined}
             onClick={c.newSession}><span className="code-session-cwd">New session draft</span><span className="code-session-meta">Preserved unsent draft</span></button>
         {c.loading && <div className="code-session-list-loading" role="status">Loading sessions…</div>}
-        {[...groups].map(([cwd, sessions]) => <section className="code-session-group" key={cwd}>
-            {grouped && <h3 className="code-session-group-title" title={cwd}>{cwd}</h3>}
-            <ul className="code-session-list-items">{sessions.map(s => <SessionRow key={s.sessionId} session={s} controller={c} />)}</ul>
+        {groups.map(group => <section className="code-session-group" key={group.key}>
+            {group.title && <h3 className="code-session-group-title" title={group.title}>{group.title}</h3>}
+            <ul className="code-session-list-items">{group.sessions.map(s => <SessionRow key={s.sessionId} session={s} controller={c} />)}</ul>
         </section>)}
         {!c.loading && !visible.length && <p className="code-session-list-empty">{search ? 'No loaded sessions match. Clear search or load more.' : 'No sessions here. Start with the new session draft.'}</p>}
         {c.hasMoreSessions && <button type="button" className="code-inline-action" disabled={paging} onClick={() => void loadMore()}>{paging ? 'Loading…' : 'Load more sessions'}</button>}

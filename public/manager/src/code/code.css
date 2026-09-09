@@ -579,6 +579,18 @@
 }
 
 .code-session-attention { grid-column: 1 / -1; color: var(--text-secondary); font-size: 10px; }
+.code-session-attention-approvals { color: var(--status-warn); font-weight: 650; }
+/* The uneventful cases stay readable to assistive technology and out of the
+   way visually. A label on every row is a label on no row, and it costs the
+   one session that is actually waiting its visibility. */
+.code-session-attention[data-quiet], .code-session-status[data-quiet] {
+    position: absolute;
+    width: 1px; height: 1px;
+    margin: -1px; padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
 .code-session-row { margin-bottom: 6px; }
 .code-session-actions { font-size: 11px; color: var(--text-secondary); margin: 0 8px; }
 .code-session-actions summary { cursor: pointer; min-height: 24px; }
