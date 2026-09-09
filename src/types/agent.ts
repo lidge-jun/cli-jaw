@@ -13,6 +13,8 @@ export interface ToolEntry {
   label: string;
   toolType: string;
   detail?: string;
+  /** Bounded purpose explicitly supplied with a tool call; not model reasoning. */
+  description?: string;
   stepRef?: string;
   status?: string;
   exitCode?: number;

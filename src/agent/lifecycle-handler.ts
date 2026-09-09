@@ -169,6 +169,8 @@ type LifecycleSpawnOptions = {
 type LifecycleResolveResult = {
     text: string;
     code: number;
+    executionInterrupted?: boolean;
+    executionFailed?: boolean;
     runtimeOutcome?: RuntimeTurnOutcome;
     traceRunId?: string;
     sessionId?: string | null;
@@ -1208,8 +1210,13 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
     const resolvedOutcome: RuntimeTurnOutcome | undefined = nativeOutcome === undefined
         ? undefined : { ...nativeOutcome, finalText: runtimeFinalText };
     const answerText = resolvedOutcome === undefined ? ctx.fullText : runtimeCompatibilityText(resolvedOutcome.finalText);
+    const executionInterrupted = resolvedOutcome === undefined && (wasKilled || wasSteer) && !ctx.stallReason;
+    const executionFailed = resolvedOutcome === undefined && !executionInterrupted
+        && (traceStatus === 'error' || Boolean(ctx.stallReason));
     resolve({
         text: answerText, code: resolvedCode ?? 0,
+        ...(executionInterrupted ? { executionInterrupted: true } : {}),
+        ...(executionFailed ? { executionFailed: true } : {}),
         ...(resolvedOutcome === undefined ? {} : { runtimeOutcome: resolvedOutcome }),
         ...(resolvedOutcome !== undefined && nativeTraceRunId ? { traceRunId: nativeTraceRunId } : {}),
         sessionId: ctx.sessionId, cost: ctx.cost,

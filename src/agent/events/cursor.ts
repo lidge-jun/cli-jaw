@@ -1,6 +1,7 @@
 // Cursor CLI stream-json adapter.
 
 import { stripUndefined } from '../../core/strip-undefined.js';
+import { redactOutboundText } from '../../messaging/redact.js';
 import { getTraceToolEntry, updateTraceToolRow } from '../../trace/store.js';
 import { asCliEventRecord, fieldNumber, fieldString } from '../../types/cli-events.js';
 import type { CliEventRecord, SpawnContext, ToolEntry } from './types.js';
@@ -168,15 +169,25 @@ function cursorToolStatus(event: CliEventRecord): 'running' | 'done' | 'error' {
     return 'running';
 }
 
+function cursorToolDescription(value: unknown): string | undefined {
+    return typeof value === 'string' && value.length <= 512 ? redactOutboundText(value) : undefined;
+}
+
 function cursorToolLabel(event: CliEventRecord): ToolEntry {
     const { name, input } = parseCursorToolPayload(event);
     const status = cursorToolStatus(event);
+    // Only the shell schema defines description as a tool-call purpose. Other
+    // schemas (for example image generation) use it for raw input content.
+    const purpose = ['bash', 'shell', 'exec_command'].includes(name.toLowerCase())
+        ? asCliEventRecord(input)?.['description'] ?? event['description'] : undefined;
+    const description = cursorToolDescription(purpose);
     return stripUndefined({
         icon: status === 'error' ? '❌' : (status === 'done' ? '✅' : '🔧'),
         label: buildPreview(name, 60) || 'tool',
         toolType: 'tool' as const,
         stepRef: `cursor:tool:${cursorToolRef(event)}`,
         detail: summarizeToolInput(name, input, 0),
+        description,
         status,
     });
 }
@@ -193,13 +204,24 @@ function emitCursorTool(
         : -1;
     let prior = ctx.toolLog[existingIdx];
     const pointer = tool.stepRef ? ctx.toolTraceIndex?.get(tool.stepRef) : undefined;
-    if (!prior && pointer) {
-        prior = getTraceToolEntry(pointer.traceRunId, pointer.traceSeq) ?? undefined;
+    if ((!prior || prior.description === undefined) && pointer) {
+        const retained = getTraceToolEntry(pointer.traceRunId, pointer.traceSeq);
+        if (!prior) prior = retained ?? undefined;
+        else if (retained && retained.stepRef === tool.stepRef) {
+            const description = cursorToolDescription(retained.description);
+            if (description !== undefined) prior = { ...prior, description };
+        }
     }
     // Late start snapshots must not reopen a completed tool, even with changed detail.
     if (['done', 'error', 'stopped'].includes(prior?.status || '')
         && !['done', 'error', 'stopped'].includes(tool.status || '')) return;
-    if (ctx.seenToolKeys?.has(key) && (!prior || prior.detail === tool.detail)) return;
+    if (tool.description === undefined && prior?.description !== undefined) {
+        const description = cursorToolDescription(prior.description);
+        if (description !== undefined) tool.description = description;
+    }
+    const seen = ctx.seenToolKeys?.has(key);
+    const metadataOnly = Boolean(seen && prior && prior.detail === tool.detail && prior.description !== tool.description);
+    if (seen && (!prior || (prior.detail === tool.detail && prior.description === tool.description))) return;
     ctx.seenToolKeys?.add(key);
     // Admission precedes all text/message-boundary effects as well as tool writes.
     // LAST-WINS across tool boundaries: assistant text that arrived BEFORE
@@ -214,7 +236,7 @@ function emitCursorTool(
     // re-ingesting the discarded narration. Live UI keeps the narration via
     // pendingOutputChunk/agent_output; only fullText (=agent_done → external
     // channels) is affected.
-    if (tool.status === 'running' && (ctx.fullText || ctx.outputTextStarted)) {
+    if (tool.status === 'running' && !metadataOnly && (ctx.fullText || ctx.outputTextStarted)) {
         ctx.printActivity?.nextMessage();
         ctx.fullText = '';
         ctx.outputTextStarted = false;

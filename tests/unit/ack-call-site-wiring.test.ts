@@ -40,12 +40,14 @@ test('the ACK outcome is settled before the uncancellable image relay', () => {
     // Relay calls now carry the outbound cancellation signal (#417), so the
     // anchors match the call prefix rather than the exact argument list.
     const cases = [
-        { channel: 'slack', file: 'src/slack/bot.ts', relay: 'await relaySlackImages(token, target, text' },
-        { channel: 'discord', file: 'src/discord/bot.ts', relay: 'await relayDiscordImages(msg.client, target, text' },
+        // Slack settles through the once-only settleAck helper (#654 reply ownership);
+        // the pin tracks that call site instead.
+        { channel: 'slack', file: 'src/slack/bot.ts', settle: 'await settleAck(', relay: 'await relaySlackImages(token, target, text' },
+        { channel: 'discord', file: 'src/discord/bot.ts', settle: 'await ack?.settle(ackOutcome);', relay: 'await relayDiscordImages(msg.client, target, text' },
     ];
-    for (const { channel, file, relay } of cases) {
+    for (const { channel, file, settle, relay } of cases) {
         const src = read(file);
-        const settleIdx = src.indexOf('await ack?.settle(ackOutcome);');
+        const settleIdx = src.indexOf(settle);
         assert.ok(settleIdx > 0, `${channel}: settle call not found`);
         // Searched FROM the settle: both files contain an earlier relay call in
         // the standing forwarder, which has no ACK at all.
@@ -68,10 +70,10 @@ test('Telegram records its outcome before the fire-and-forget relay', () => {
 test('Slack and Discord settle exactly once per turn', () => {
     // Settling in both the happy path and the finally would double-settle; the
     // guard flag is what keeps it to one.
-    for (const file of ['src/slack/bot.ts', 'src/discord/bot.ts']) {
-        const src = read(file);
-        assert.match(src, /ackSettled = true/, `${file}: needs a settled guard`);
-        assert.match(src, /if \(!ackSettled\) await ack\?\.settle/,
-            `${file}: the finally must respect the guard`);
-    }
+    // Slack latches the first outcome through ackPromise; Discord keeps the flag shape.
+    const slack = read('src/slack/bot.ts');
+    assert.match(slack, /ackPromise \?\?=/, 'src/slack/bot.ts: settleAck must latch the first outcome');
+    const discord = read('src/discord/bot.ts');
+    assert.match(discord, /ackSettled = true/, 'src/discord/bot.ts: needs a settled guard');
+    assert.match(discord, /if \(!ackSettled\) await ack\?\.settle/, 'src/discord/bot.ts: the finally must respect the guard');
 });

@@ -159,7 +159,7 @@ export function createQueueController(
                 prompt: parsed.prompt,
                 source: parsed.source,
                 scope,
-                ...(multiSessionEnabled ? {
+                ...((multiSessionEnabled || parsed.source === 'slack') ? {
                     chatSessionId,
                     ...(remoteKey ? { remoteKey } : {}),
                 } : {}),
@@ -426,7 +426,7 @@ export function createQueueController(
             prompt,
             source,
             scope: multiSessionEnabled ? (meta?.scope || 'default') : 'default',
-            ...(multiSessionEnabled ? {
+            ...((multiSessionEnabled || source === 'slack') ? {
                 chatSessionId: meta?.chatSessionId || deps.getActiveChatSession(),
                 ...(meta?.remoteKey ? { remoteKey: meta.remoteKey } : {}),
             } : {}),
@@ -443,7 +443,10 @@ export function createQueueController(
         if (multiSessionEnabled && meta?.front === true) insertAheadOfScope(item);
         else messageQueue.push(item);
         console.log(`[queue] +1 (${messageQueue.length} pending)`);
-        deps.broadcast('queue_update', queueUpdatePayload(item.scope));
+        deps.broadcast('queue_update', {
+            ...queueUpdatePayload(item.scope),
+            ...(item.requestId ? { requestId: item.requestId, origin: item.source || 'web' } : {}),
+        });
         void processQueue(item.scope);
         return item.id;
     }
@@ -542,8 +545,8 @@ export function createQueueController(
         const remoteSessionId = item.remoteKey
             ? deps.resolveRemoteSession?.(item.remoteKey) ?? null
             : null;
-        const effectiveSessionId = multiSessionEnabled
-            ? (item.chatSessionId || remoteSessionId || deps.getActiveChatSession())
+        const effectiveSessionId = multiSessionEnabled || source === 'slack'
+            ? (item.chatSessionId || remoteSessionId || (source === 'slack' ? 'default' : deps.getActiveChatSession()))
             : deps.getActiveChatSession();
         let inserted = false;
         try {
@@ -573,7 +576,9 @@ export function createQueueController(
             // Outside the multi-session branch above: the queue drains the same
             // way either way, and a single-session install has the same queued
             // turns with the same duplicate to prevent.
-            if (requestId) deps.broadcast('queued_run_started', { requestId, origin, scope: item.scope });
+            if (requestId) deps.broadcast('queued_run_started', stripUndefined({
+                requestId, origin, scope: item.scope, target, sessionId: effectiveSessionId,
+            }));
             deps.broadcast('queue_update', queueUpdatePayload(item.scope));
 
             await withSessionScope(sessionScope, async () => {

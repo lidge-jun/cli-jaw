@@ -404,7 +404,7 @@ to Legacy without changing runtime or permission settings. History selection doe
 not change the server-active chat targeted by message/Stop. `--simple` and piped
 `--raw` retain their existing behavior. See [TUI controls](structure/commands.md).
 
-Codex app-server and Pi RPC also record versioned, redacted runtime events independently of channel delivery. Native terminal handling keeps empty final answers distinct from live previews; Slack/Telegram/Discord retain their existing final-response, acknowledgement and queue-notice flow. Classic uses this event stream for its bounded live Activity display.
+Codex app-server and Pi RPC also record versioned, redacted runtime events independently of channel delivery. Native terminal handling keeps empty final answers distinct from live previews; final response selection remains independent of presentation. Slack adds a request-owned safe progress observer and explicit failure/delivery distinction; Telegram and Discord retain their existing flow. Classic uses this event stream for its bounded live Activity display.
 
 Pi prepares capabilities asynchronously before dispatching a prompt and keeps that decision for the RPC instance. Failed or incomplete preparation cannot dispatch with guessed support. Worker cleanup tracks both RPC and version processes and retains temporary data when closure or directory ownership is uncertain; the older command-discovery step may still block briefly. See [runtime ownership](structure/runtime-integration.md#capability-preparation-and-execution-ownership).
 
@@ -707,7 +707,11 @@ You can enable multiple inbound channels at once. The manager and Web UI setting
 
 Slack text sends preserve Markdown and explicit Block Kit `blocks`, splitting multiple tables into separate messages. `ok:true` means every chunk was posted, independently of rendering verification. Inspect `delivery.verification` (`verified`, `failed`, or `unavailable`) and `delivery.messages` for each posted chunk's timestamp, verification error, table-content status, and feature evidence. A persisted mismatch is `failed`; missing permission, unavailable/malformed readback, or a missing timestamp is `unavailable`. Neither stops remaining posts or triggers reposting. Actual validation/POST failures retain `ok:false`; partial receipts include `postedChunks`, `totalChunks`, and `sent:true, retryable:false`. Never blindly resend posted chunks. `tableContent` compares ordered text, numeric value/display, links and supported styles; ordinary Markdown character references decode once while code and escaped ampersands stay literal. `richContent` and `sourceAccuracy` remain `not_checked`, and readback stays bounded to 1 MiB.
 
+
 Group DMs are supported when the app has joined the conversation and has the `message.mpim` event subscription plus `mpim:history`. Existing apps need these added in Slack and a reinstall to grant the scope; updating cli-jaw alone does not change installed permissions. Group DMs retain the conversation allowlist and mention/thread rules. Missing this scope leaves existing IM/channel messaging available and reports the group-DM capability gap.
+
+Slack replies show a bounded native progress plan with recent safe tool activity, queue/wait status and a separate delivery result. Elapsed time refreshes every second in native mode, subject to Slack/network backpressure. Explicit shell tool-call purposes and English action/target summaries distinguish file reads, searches, tests and scripts, including supported shell forms. Known file tools show sanitized project-relative filenames or an outside-project basename; raw commands, host paths, file contents and reasoning stay private. Failure and cancellation do not become successful reactions merely because a message was sent.
+
 
 Socket Mode bot with the same shared command catalog — mentions, DMs, slash commands, file/image relay, thread replies. Each Slack-triggered agent turn receives the current conversation ID and parent thread timestamp explicitly, so history/member lookups and targeted replies do not depend on parsing an internal session label or enabling multi-session.
 

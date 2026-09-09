@@ -153,7 +153,7 @@ for (const scenario of foreign) {
             assert.doesNotThrow(() => io.notify(scenario.patch, scenario.source));
             context.mock.timers.tick(MINUTE);
             const result = await collecting;
-            assert.deepEqual(result, { text: t('tg.timeout', {}, 'en'), data: {} });
+            assert.deepEqual(result, { text: t('tg.timeout', {}, 'en'), data: { collectionFailure: 'timeout' } });
             const timerSpy = context.mock.method(globalThis, 'setTimeout');
             io.notify();
             assert.equal(timerSpy.mock.callCount(), 0, 'timed-out collector cannot revive');
@@ -177,7 +177,7 @@ test('native agent terminal disposes I/O activity before later pipeline completi
         context.mock.timers.tick(19 * MINUTE);
         io.pulse();
         context.mock.timers.tick(MINUTE);
-        assert.deepEqual(await collecting, { text: t('tg.timeout', {}, 'en'), data: {} });
+        assert.deepEqual(await collecting, { text: t('tg.timeout', {}, 'en'), data: { collectionFailure: 'timeout' } });
     } finally {
         io.finish();
         await collecting;
@@ -223,7 +223,7 @@ test('default origin and absent request are normalized; unrelated first activity
         await Promise.resolve();
         assert.equal(settled, false, 'the unrelated first signal must not latch the foreign run');
         context.mock.timers.tick(18 * MINUTE);
-        assert.deepEqual(await collecting, { text: t('tg.timeout', {}, 'en'), data: {} },
+        assert.deepEqual(await collecting, { text: t('tg.timeout', {}, 'en'), data: { collectionFailure: 'timeout' } },
             'native I/O marks nativeSeen without any native terminal or canonical event');
     } finally { io.finish(); await collecting; context.mock.timers.reset(); }
 });

@@ -330,6 +330,8 @@ interface SessionBucketRow {
 type SpawnPromiseResult = {
     text: string;
     code: number;
+    executionInterrupted?: boolean;
+    executionFailed?: boolean;
     runtimeOutcome?: RuntimeTurnOutcome;
     traceRunId?: string;
     agyCheckpointSeen?: boolean;
@@ -905,6 +907,12 @@ export async function steerAgent(
         settleOnce(meta?.requestId, 'steered');
         return 'steered';
     }
+    // Capture the admitted Slack address before kill/wait can yield ownership.
+    const slackRestart = source === 'slack' && isRemoteTarget(meta?.target) && meta.target.channel === 'slack'
+        ? stripUndefined({ mode: 'restart' as const, scope: scopeKey, sessionId: chatSessionId,
+            target: { ...meta.target }, chatId: meta.chatId, requestId: meta.requestId,
+            remoteKey: meta.remoteKey, replyViaTarget: true })
+        : undefined;
     const steerWaitMs = getSteerWaitMsForActiveAgent(scopeKey);
     // Snapshot BEFORE the kill: the interrupted partial-output row is identified
     // as the first ⏹️-tagged assistant message with id above this mark. A
@@ -938,7 +946,8 @@ export async function steerAgent(
     broadcast('new_message', { role: 'user', content: newPrompt, source, scope: scopeKey, sessionId: chatSessionId });
     broadcast('steer_started', stripUndefined({ prompt: newPrompt, origin: source || 'web', scope: scopeKey,
         sessionId: chatSessionId, target: meta?.target, chatId: meta?.chatId, requestId: meta?.requestId,
-        remoteKey: meta?.remoteKey, replyViaTarget: meta?.replyViaTarget, mode: 'kill-steer' }));
+        remoteKey: meta?.remoteKey, replyViaTarget: meta?.replyViaTarget, mode: 'kill-steer', ...slackRestart }));
+
     const { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
     // The follow-up run answers the SAME conversation the killed turn came from,
@@ -947,10 +956,14 @@ export async function steerAgent(
     // dispatch waiter is already gone (ingress returns early for a steered
     // submission), so an unaddressed terminal is silently discarded and the
     // channel just goes quiet after a steer.
+    // Union of both contracts: the #655 steer identity (target/chatId/remoteKey/
+    // replyViaTarget/_fromSteer) plus the #654 pre-kill capture (slackRestart),
+    // whose mode restart is what the reply-control observer treats as a start.
     const steerMeta = stripUndefined({ origin, scope: scopeKey, chatSessionId, requestId: meta?.requestId,
         target: meta?.target, chatId: meta?.chatId, remoteKey: meta?.remoteKey,
         replyViaTarget: meta?.replyViaTarget, _fromSteer: true,
-        _skipInsert: true, _steerContext: steerContext || undefined });
+        ...slackRestart, _skipInsert: true, _steerContext: steerContext || undefined });
+
     const task = isResetIntent(newPrompt)
         ? orchestrateReset(steerMeta)
         : isContinueIntent(newPrompt)
@@ -960,8 +973,9 @@ export async function steerAgent(
         console.error('[steer:orchestrate]', err.message);
         broadcast('orchestrate_done', stripUndefined({ text: `[error] ${err.message}`, error: true, origin,
             target: meta?.target, chatId: meta?.chatId, replyViaTarget: meta?.replyViaTarget,
-            fromSteer: true, requestId: meta?.requestId }));
-        settleOnce(meta?.requestId, 'failed', { error: err.message });
+            fromSteer: true, requestId: meta?.requestId, ...slackRestart }));
+        settleOnce(slackRestart ? slackRestart.requestId : meta?.requestId, 'failed', { error: err.message });
+
     });
     // The follow-up was started as a new run (kill-path or idle race). The caller
     // must NOT also queue the message.

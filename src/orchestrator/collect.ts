@@ -23,6 +23,10 @@ export interface CollectedOrchestrateResult {
         agyCheckpointSeen?: boolean;
         runtimeFinality?: 'present' | 'absent';
         runtimeStatus?: RuntimeTurnOutcome['status'];
+        /** Collector provenance, not provider finality or model output. */
+        collectionFailure?: 'error' | 'timeout';
+        executionFailed?: boolean;
+        executionInterrupted?: boolean;
     };
 }
 
@@ -67,11 +71,11 @@ export function orchestrateAndCollectData(
                 runtimeActive = false;
                 removeBroadcastListener(handler);
                 // This is a collector/application timeout, not a runtime
-                // completion. Keep data empty: an observed agent_done does not
+                // completion. Only collection provenance is added: agent_done does not
                 // authorize synthesizing model-final/status tags here. Once a
                 // native run is known, only its correlated classified diagnostic
                 // may replace the existing timeout copy, never global collected.
-                resolve({ text: (nativeSeen ? ownTerminalDiagnostic : collected) || t('tg.timeout', {}, locale), data: {} });
+                resolve({ text: (nativeSeen ? ownTerminalDiagnostic : collected) || t('tg.timeout', {}, locale), data: { collectionFailure: 'timeout' } });
             }, IDLE_TIMEOUT);
         }
 
@@ -157,7 +161,7 @@ export function orchestrateAndCollectData(
             runtimeActive = false;
             clearTimeout(timeout);
             removeBroadcastListener(handler);
-            resolve({ text: `❌ ${err.message}`, data: {} });
+            resolve({ text: `❌ ${err.message}`, data: { collectionFailure: 'error' } });
         });
     });
 }

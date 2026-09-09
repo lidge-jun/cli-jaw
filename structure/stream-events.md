@@ -96,7 +96,7 @@ An undispatched redirect invalidated by Stop is not a queueable no-start. It set
 
 Pi RPC also feeds this channel: prompt-owned raw callbacks provide tool start/update/end snapshots, while accepted legacy text/reasoning callbacks preserve echo suppression. Its raw trace retention is delta-only for repeated message snapshots and bounded separately from canonical delivery. Budget omission is explicitly recorded in a small trace control row; it does not send a canonical gap or interfere with the existing final/abort lifecycle. Native steer behavior is not added by this observer.
 
-Codex app-server's accepted owner-scoped notifications also feed `src/agent/runtime/codex-projection.ts`. Bounded/redacted snapshots are stored as immutable `source=runtime` trace rows before `agent_runtime` is published directly on the SSE agent topic. This side channel deliberately bypasses `addBroadcastListener`, so it does not send Slack/Telegram/Discord progress messages. `agent_runtime_gap` marks the first projection failure and stops further canonical writes in that run; legacy lifecycle delivery remains independent. TUI already uses SSE through its channel adapter; no new WebSocket server path is required.
+Codex app-server's accepted owner-scoped notifications also feed `src/agent/runtime/codex-projection.ts`. Bounded/redacted snapshots are stored as immutable `source=runtime` trace rows before `agent_runtime` is published directly on the SSE agent topic. This side channel deliberately bypasses `addBroadcastListener`. Slack has a separate bounded display-only tool observer, enabled only after private request/run identity binding; it does not forward raw events or choose final answers. Telegram/Discord delivery remains independent. `agent_runtime_gap` marks the first projection failure and stops further canonical writes in that run; legacy lifecycle delivery remains independent. TUI already uses SSE through its channel adapter; no new WebSocket server path is required.
 
 The version1 envelope carries jaw `sessionId`, routing `scope`, `runId`, logical `turnId`, committed noncontiguous `seq`, and an allowlisted body. Provider IDs are private. Finality comes from lifecycle, not the last tool/text event. Optional native compatibility fields `runtimeFinality: present|absent` and `runtimeStatus: done|error|stopped` retain model-final meaning without broadcasting `runtimeOutcome` or `partialText`. Empty native terminals still perform web/TUI cleanup, but cannot fall back to streamed previews.
 
@@ -131,7 +131,7 @@ approval never answers it. Raw pipe retains existing NDJSON/agent_done terminati
 | `agent_smoke` | `{ cli, confidence, reason, agentId, isEmployee? }` | smoke response auto-continue 안내 |
 | `queue_update` | `{ pending }` | `spawn.ts`; message queue 길이 |
 | `new_message` | `{ role, content, source, cli?, fromQueue?, external? }` | `spawn.ts`, `orchestrator/gateway.ts`, `routes/orchestrate.ts`, `lifecycle-handler.ts` (goal boundary, `source:'goal'`); remote/queued/externally-relayed user bubble — web UI live-renders `telegram|discord|bgtask|cli|goal`, `external:true`, `fromQueue:true` |
-| `orchestrate_done` | `{ text, error?, origin?, chatId?, target?, requestId? }` | `orchestrator/pipeline.ts`, `gateway.ts`, `spawn.ts`; orchestration/queued result |
+| `orchestrate_done` | `{ text, error?, executionFailed?, executionInterrupted?, origin?, chatId?, target?, requestId? }` | `orchestrator/pipeline.ts`, `gateway.ts`, `spawn.ts`; orchestration/queued result; `executionFailed:true` comes only from the final selected result, not an intermediate retry failure |
 | `orc_state` | `{ state, title?, scope?, taskAnchor?, resolvedSelection? }` | `orchestrator/state-machine.ts`; PABCD 상태 |
 | `clear` | `{}` | `server.ts`, `core/main-session.ts`; UI clear |
 | `session_reset` | `{ cli, model }` | `core/main-session.ts`; history-preserving session reset |
@@ -708,3 +708,14 @@ running step과 done/error step이 같은 `stepRef`를 쓰면, parser/runtime이
 | 기타 | JSON stringify preview |
 
 Claude의 `input_json_delta` flush, Gemini tool detail, ACP tool detail 생성이 이 함수를 공유한다.
+
+### Cursor tool-call purpose metadata
+
+Accepted Cursor shell `agent_tool` entries may include `description`, copied from the actual
+tool-call args/event, bounded and redacted before trace/bus publication. This is tool
+purpose metadata, not reasoning or final output. Same-ID description-only running
+updates may refresh trace/UI metadata without clearing accepted assistant text. An
+owned trace pointer can recover a description omitted by the live tool-log sanitizer;
+missing evidence is not synthesized. Slack applies its own stricter projection before
+rendering. Existing trace hydration remains additive, while durable tool-log sanitization
+and canonical print Activity keep their existing field selection.

@@ -342,3 +342,33 @@ test('legacy smoke and successful native wakeup admission remain reachable', asy
     assert.equal(events.filter(event => event.type === 'schedule_wakeup').length, 1);
     assert.equal(spawnCalls, 1, 'the scheduled fixture is cleared without firing');
 });
+
+for (const scenario of [
+    { name: 'owned kill with null exit', code: null, killed: true, steer: false, stall: undefined, native: false, interrupted: true, failed: false },
+    { name: 'owned steer with code one', code: 1, killed: true, steer: true, stall: undefined, native: false, interrupted: true, failed: false },
+    { name: 'stall beats owned kill', code: 0, killed: true, steer: false, stall: 'watchdog timeout', native: false, interrupted: false, failed: true },
+    { name: 'classified legacy error', code: 2, killed: false, steer: false, stall: undefined, native: false, interrupted: false, failed: true },
+    { name: 'legacy code zero', code: 0, killed: false, steer: false, stall: undefined, native: false, interrupted: false, failed: false },
+    { name: 'native physical failure', code: 2, killed: false, steer: false, stall: undefined, native: true, interrupted: false, failed: false },
+    { name: 'native owned interruption', code: null, killed: true, steer: true, stall: undefined, native: true, interrupted: false, failed: false },
+]) {
+    test(`real lifecycle legacy provenance: ${scenario.name}`, async () => {
+        const f = fixture(scenario.native ? { status: 'done', finalText: 'FINAL', partialText: 'PARTIAL' } : undefined);
+        f.params.code = scenario.code;
+        f.params.wasKilled = scenario.killed;
+        f.params.wasSteer = scenario.steer;
+        f.params.mainManaged = false;
+        f.params.opts.internal = true;
+        f.params.opts._isFallback = true;
+        f.ctx.stallReason = scenario.stall;
+        await handleAgentExit(f.params);
+        const result = f.result();
+        assert.ok(result);
+        assert.equal(result.executionInterrupted, scenario.interrupted ? true : undefined);
+        assert.equal(result.executionFailed, scenario.failed ? true : undefined);
+        assert.equal(result.text, scenario.native ? 'FINAL' : 'PROVISIONAL-FULL');
+        if (!scenario.native) assert.equal(result.code, scenario.code ?? 0);
+        else assert.equal(result.runtimeOutcome?.status, scenario.killed ? 'stopped' : 'done');
+        assert.equal(spawnCalls, 0);
+    });
+}

@@ -77,11 +77,15 @@ test('OFF preserves legacy queue grouping bytes and does not rewrite persisted v
         front: true,
     });
     const newPayload = JSON.parse(persisted.get(newId)!) as Record<string, unknown>;
-    assert.deepEqual(Object.keys(newPayload), ['id', 'prompt', 'source', 'scope', 'target', 'ts']);
+    // Since #654 a Slack queue item keeps its conversation identity even with
+    // multiSession OFF: reply ownership needs chatSessionId/remoteKey to deliver
+    // the answer to the thread that asked. Legacy rows are still not rewritten
+    // (asserted above) and non-Slack sources still drop these fields.
+    assert.deepEqual(Object.keys(newPayload), ['id', 'prompt', 'source', 'scope', 'chatSessionId', 'remoteKey', 'target', 'ts']);
     assert.equal(newPayload.scope, 'default');
     assert.equal(newPayload.schemaVersion, undefined);
-    assert.equal(newPayload.chatSessionId, undefined);
-    assert.equal(newPayload.remoteKey, undefined);
+    assert.equal(newPayload.chatSessionId, 'remote-session');
+    assert.equal(newPayload.remoteKey, 'jaw:slack:direct:D1');
     assert.equal(newPayload.collect, undefined);
     assert.equal(newPayload.priority, undefined);
     assert.equal(activeSessionReads, 0);

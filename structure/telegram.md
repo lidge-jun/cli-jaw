@@ -20,6 +20,7 @@ Slack Socket Mode의 app-level token은 사용자 공용 `~/.cli-jaw-shared/slac
 
 ## 공통 메시징 레이어
 
+
 ### Slack group DMs and scope observations
 
 The manifest subscribes to [`message.mpim`](https://docs.slack.dev/reference/events/message.mpim/)
@@ -44,6 +45,95 @@ result. Missing required scopes still fail validation. No observed OAuth header
 means unknown; a present empty header means a known empty grant. Updating the
 manifest does not update an installed app: add the event and scope in Slack and
 reinstall when group-DM access is wanted. No automatic scope grant is attempted.
+
+### Slack progress and reply ownership
+
+`src/slack/bot.ts` owns direct and live queued reply delivery. Its standing
+queued-reply forwarder covers requests without a live waiter and uses the
+captured token, target and lifecycle generation. The existing table/rich-message
+verification, native empty-body guard and self-delivery claim remain authoritative.
+
+`progress-lifecycle.ts` installs request-correlated observers before orchestration.
+Print tool events require the admitted request; native tool events additionally
+require an exact private run/session/scope binding from `runtime/liveness.ts`.
+A bounded prebinding buffer holds only projected categories/statuses and validated
+activity metadata. Raw commands, file contents, reasoning, absolute host paths and approval contents never become
+Slack progress text. Explicit shell tool-call descriptions are a separate bounded purpose field,
+rendered with English actions and validated targets by `progress-detail.ts`. Supported
+shell reads/searches/tests/scripts and literal `cd` prefixes are summarized without
+executing or exposing command bodies, environment values, headers or arbitrary args.
+Unknown syntax retains only a safe supplied purpose and tool/executable name.
+`progress-files.ts` owns shared path projection. Sparse same-ID completion preserves
+observed purpose/targets; the text fallback also includes the bounded recent rows.
+Known read/write/edit events may carry a bounded filename: relative
+to the captured request working directory, or basename-only outside it. Structured
+native file fields and print-parser single-path detail are validated before projection;
+native detail/output never substitutes for missing structured input. Unknown tools
+and unsafe metadata remain category-only. Same-tool terminal updates retain the
+observed filename without inventing a running state. Presentation events never select final answers.
+
+`progress.ts` streams a native plan containing a summary, at most six recent
+observation slots and an optional delivery card. Only replaceable task titles
+and statuses are updated: Slack task details append, so they are not a snapshot
+channel. Explicit unsupported-capability errors permit one updated-message
+fallback; ambiguous startup never causes a replacement post. Operations have
+bounded timeouts and shared credential/method Retry-After restrictions. Native
+heartbeat and per-stream refresh run every second, with a process-local shared
+667ms append spacing (at most 90/minute per credential). Concurrent streams or
+Slack/network backpressure may slow visual updates. Fallback edits remain 3.2s.
+Snapshots are serialized at actual dispatch, unchanged cards are omitted, and
+finish cancels undispatched update waits while joining already-started HTTP.
+The plan title also contains elapsed time; clock ticks never count as work activity.
+
+Queued requests start the same stream in queued state. The observed start resets
+activity age and replaces the five-minute queue-wait deadline with a twenty-minute
+owned-liveness window. Foreign activity cannot extend it. Cancelled, removed and
+merged requests close their own tracking; started cancellation preserves a later
+salvaged body. Tracking expiry does not claim that execution was killed.
+Slack queue items retain their admitted chat session across enqueue, persistence
+and execution even when multi-session is disabled. Switching the active chat
+cannot redirect the queued run or invalidate its native reply identity.
+
+Final status follows body delivery. Known execution failure/cancellation cannot
+produce a success ACK merely because a diagnostic or salvage body was sent; the
+delivery card independently requires a posted message ID or self-delivery claim.
+A failed/ambiguous receipt is labelled unconfirmed. Legacy process exits carry
+failure/interruption provenance independently of body text; native outcomes retain
+their own authority. Optional image relay cannot
+hold or overwrite the already selected body/ACK outcome.
+
+`reply-delivery.ts` retains observed start anchors and delivery claims independently
+of display expiry. Same-request completions join one pending workflow; a completed
+or ambiguous attempt is not an implicit retry. Metadata is bounded to 1,024 records
+for four hours plus the self-delivery retention window. Pending sends remain owned
+until settlement. Missing start proof preserves fail-open posting, never a guessed
+self-delivery suppression. These are process-local bounds, not distributed
+exactly-once guarantees.
+
+Confirmed status IDs use the existing durable notice store. `progress-restore.ts`
+captures token/store/generation, skips live requests, and stops then neutrally
+rewrites old status messages. Unknown failures retain recovery ownership. Disposal
+seals observers and aborts restore/body IO before waiting for ingress, and starts
+bounded progress cleanup immediately.
+
+Close rule change from the legacy queue notice: a successful answer no longer deletes
+the Slack status message — the card stays as the terminal status and only the durable
+notice record closes (onTerminalConfirmed). Shutdown drain is bounded at 1.5s and a
+drain timeout is never treated as confirmed cleanup; leftover cards are neutrally
+rewritten by progress-restore on the next boot. Superseded callbacks cannot rearm the
+transport; current outbound-only initialization remains supported.
+
+The [native task stream API](https://docs.slack.dev/reference/methods/chat.startStream/)
+is independent of the final structured sender. In-band steered input remains owned
+by its original run. A physical Slack restart carries its captured target and
+request identity into the replacement orchestration. Provider execution and
+kill/wait scheduling remain independent of progress presentation.
+The admission bridge retains at most 256 pending contexts for five minutes and
+accepts only matching control identities. Actual start receipts set the delivery
+anchor before model activity. Queued/restarted body workflows reserve a detached
+session lane synchronously; display expiry releases presentation ownership while
+the reply ledger still protects a later orphan completion.
+
 
 ### `src/messaging/runtime.ts`
 
