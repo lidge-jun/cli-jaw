@@ -98,14 +98,27 @@ if (!ptyRoot) {
 
     // 2. spawn-helper must be present AND executable, or every pty dies at
     //    runtime with a permission error that no import check would catch.
-    const helper = join(ptyRoot, 'build', 'Release', 'spawn-helper');
+    //
+    //    Resolved the same way the binary above is, and for the same reason.
+    //    node-pty's install is `prebuild.js || node-gyp rebuild`: when the
+    //    prebuilds match, prebuild.js exits 0, the source build never runs and
+    //    build/Release is never created, so post-install.js has nothing to move
+    //    there. Looking only in build/Release therefore failed the gate on a
+    //    prebuild-only install even though node-pty itself would have loaded
+    //    the prebuilt helper. Both locations are real; the executable bit is
+    //    what actually has to hold.
     if (process.platform !== 'win32') {
-      if (!existsSync(helper)) {
-        fail(`missing spawn-helper: ${helper}`);
+      const helperCandidates = [
+        join(ptyRoot, 'build', 'Release', 'spawn-helper'),
+        join(ptyRoot, 'prebuilds', `${process.platform}-${process.arch}`, 'spawn-helper'),
+      ];
+      const helper = helperCandidates.find((candidate) => existsSync(candidate));
+      if (!helper) {
+        fail(`missing spawn-helper: none of\n   ${helperCandidates.join('\n   ')}`);
       } else {
         try {
           accessSync(helper, constants.X_OK);
-          note(`spawn-helper executable: mode ${(statSync(helper).mode & 0o777).toString(8)}`);
+          note(`spawn-helper executable: ${helper} (mode ${(statSync(helper).mode & 0o777).toString(8)})`);
         } catch {
           fail(`spawn-helper is not executable: ${helper} (mode ${(statSync(helper).mode & 0o777).toString(8)})`);
         }
