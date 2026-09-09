@@ -1,5 +1,3 @@
-import { readSlackAllowlist, MALFORMED_SLACK_ALLOWLIST } from './events.js';
-
 // ─── Slack OAuth scope drift ────────────────────────
 // A Slack app created from an older cli-jaw manifest keeps its original grant
 // forever. Adding a scope to `manifest.ts` changes what NEW apps get; it does
@@ -14,6 +12,7 @@ import { readSlackAllowlist, MALFORMED_SLACK_ALLOWLIST } from './events.js';
 // of computing three.
 //
 // Reported as #340.
+import { readSlackAllowlist, MALFORMED_SLACK_ALLOWLIST } from './events.js';
 import {
     missingSlackScopes,
     missingSlackCapabilityScopes,

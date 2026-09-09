@@ -2,6 +2,8 @@
 
 # structure/ — Sync Guide
 
+- Slack group DMs use `message.mpim` and optional `mpim:history`; exact `channel_type: mpim` mentions retain channel allowlist and thread policy, never the one-to-one DM bypass. Missing `mpim:history` degrades group-DM reception/history only; an absent scope header is unknown and a present empty header is a known empty grant. Keep `telegram.md` and the validation API docs synchronized.
+
 - Native Code: synchronize `runtime-integration.md`, `server_api.md`, `INDEX.md` and root guides for `src/code-mode/` and `/api/code`. Code uses separate per-backend storage and direct native adapters; preserve append/status replay, complete active snapshots, byte budgets, early resource registration and physical-exit proof. Interruption must seal callbacks before owner-checked accepted-buffer persistence; both hosts use `src/routes/code-body-parser.ts` for Code envelope/decoded limits.
 
 - Linux `/api/file/open` acknowledges asynchronous `xdg-open` launch, not desktop application success. Keep detached/ignored-stdio dispatch and launch-error handling; never wait synchronously for the opener. See `server_api.md`.

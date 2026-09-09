@@ -138,7 +138,7 @@ Cursor/Grok activation and Activity controls are separate from this API foundati
 `channels.slack.reason: "token_shared_other_home"`은 다른 cli-jaw home이 같은 app-level token의 fresh connected lease를 소유해 이 instance의 Slack inbound가 꺼졌음을 뜻한다. 이때 `activeInbound:false`지만 bot-token outbound의 `sendCapable` 판정은 그대로 유지한다. claim 파일, canonical home, freshness, live PID 중 하나라도 확정할 수 없으면 reason을 만들지 않고 fail-open하며, `CLI_JAW_SLACK_ALLOW_SHARED_TOKEN=1`은 inspection과 acquisition을 모두 생략한다. API에는 owner token, token hash, claim path를 노출하지 않는다.
 | `GET` | `/api/ready` | **readiness.** 설정된 CLI가 spawn 가능한지 답한다. `state:"unavailable"`일 때만 **503**, 그 외 200. `unknown`(CLI 미설정 또는 probe 예외)은 503이 아니다 — 신규 설치와 probe 버그가 무의미한 재시작을 유발하면 안 된다. 워치독은 본문 파싱 없이 상태 코드만 소비할 수 있다 (#471) |
 | `GET` | `/api/slack/manifest` | 설정 페이지 "매니페스트 복사"용 canonical Slack 앱 매니페스트. 선택 `?name=`은 1~35자 앱 표시명을 받고 봇 표시명은 자동 파생한다. `{ ok, data: { yaml, json, botDisplayName } }` (비밀값 없음, unauthenticated) |
-| `POST` | `/api/channels/validate` | 온보딩 마법사 라이브 크리덴셜 검증 `{ channel, botToken, appToken?, guildId? }` → `{ ok, identity?, teamId? }` 또는 `{ ok:false, error }`. 저장하지 않고 검증만 수행 |
+| `POST` | `/api/channels/validate` | 온보딩 마법사 라이브 크리덴셜 검증 `{ channel, botToken, appToken?, guildId? }` → `{ ok, identity?, teamId?, missingCapabilities? }` 또는 `{ ok:false, error, missing? }`. `mpim:history` 누락은 group-DM 수신/기록의 선택 기능 gap이며 기존 IM/channel 검증을 실패시키지 않는다. 저장하지 않고 검증만 수행 |
 | `GET` | `/api/session` | 현재 main session row 반환 |
 | `GET` | `/api/messages` | `includeTrace=1|true|yes`면 trace 포함 메시지 조회. `?limit=N`(1–5000)이면 최근 N개만 ascending 반환; 생략 시 전체 history |
 | `GET` | `/api/messages/search` | 메시지 본문 검색 결과 반환. `?q=`, `?days=N`(1-365), `?recent=N`(1-5000), `?context=N`(0-5), `?limit=N`(1-50) |

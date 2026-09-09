@@ -1,4 +1,3 @@
-import { isSlackMention } from './events.js';
 // ─── Slack Bot ───────────────────────────────────────
 // Slack transport implementation for the cli-jaw messaging runtime.
 // Mirrors src/discord/bot.ts structurally: init/shutdown lifecycle, an inbound
@@ -63,7 +62,7 @@ import { restoreQueueNotices } from '../messaging/queue-notice-restore.js';
 import { createSlackNoticeTransport } from './notice-transport.js';
 import { currentGenerationForEnvelope } from '../messaging/ingress-generation.js';
 import { slackInboundEnvelope } from '../messaging/inbound-envelope.js';
-import { readSlackAllowlist, resolveEventText, shouldAttachSlack, shouldProcessSlackEvent, type SlackMessageEvent } from './events.js';
+import { isSlackMention, readSlackAllowlist, resolveEventText, shouldAttachSlack, shouldProcessSlackEvent, type SlackMessageEvent } from './events.js';
 import {
     markThreadParticipated, threadParticipationKind,
     claimThreadPrefetch, commitThreadPrefetch,
