@@ -49,6 +49,10 @@ export function orchestrateAndCollectData(
         let collected = '';
         let ownTerminalDiagnostic = '';
         let nativeSeen = false;
+        // Set when a LATER request steers this scope. The steer kills this run
+        // mid-flight, so its terminal carries no text — but that is a handover,
+        // not a failure, and must not surface as the "no response" placeholder.
+        let superseded = false;
         let settled = false;
         let runtimeActive = true;
         let nativeRunId: string | undefined;
@@ -113,6 +117,16 @@ export function orchestrateAndCollectData(
                     ownTerminalDiagnostic = ownTerminalDiagnostic || data['text'];
                 }
             }
+            // A steer aimed at THIS conversation retires this turn: the process is
+            // killed and the follow-up run owns the answer. Identity is checked so
+            // an unrelated scope's steer cannot retire this one, and the requestId
+            // must differ — a steer carrying our own id is not a supersession.
+            if (type === 'steer_started'
+                && data['scope'] === binding.scope
+                && (data['sessionId'] === undefined || data['sessionId'] === binding.chatSessionId)
+                && (!requestId || data['requestId'] !== requestId)) {
+                superseded = true;
+            }
             if (type === 'orchestrate_done') {
                 // Filter by requestId (strongest), then origin, then chatId
                 if (meta?.["requestId"] && data?.["requestId"] && data["requestId"] !== meta["requestId"]) return;
@@ -123,9 +137,11 @@ export function orchestrateAndCollectData(
                 runtimeActive = false;
                 removeBroadcastListener(handler);
                 const terminalText = typeof data['text'] === 'string' && data['text'].trim() ? data['text'] : '';
+                const fallback = superseded ? '' : t('tg.noResponse', {}, locale);
                 resolve({ text: native
-                    ? terminalText || ownTerminalDiagnostic || t('tg.noResponse', {}, locale)
-                    : data["text"] || collected || t('tg.noResponse', {}, locale), data });
+                    ? terminalText || ownTerminalDiagnostic || fallback
+                    : data["text"] || collected || fallback,
+                    data: superseded ? { ...data, superseded: true } : data });
             }
         };
         addBroadcastListener(handler);

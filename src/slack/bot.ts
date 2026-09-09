@@ -445,14 +445,19 @@ function installSlackTargetReplyForwarder(): void {
     targetReplyForwarderInstalled = true;
     addBroadcastListener((type, data) => {
         if (type !== 'orchestrate_done' || data["origin"] !== 'slack' || !data["text"]) return;
-        // Queued turns only. An ordinary turn is posted by the dispatch path
-        // that is still standing there awaiting it; answering that here too
-        // would post every reply twice.
+        // Queued and steered turns only. An ordinary turn is posted by the
+        // dispatch path that is still standing there awaiting it; answering that
+        // here too would post every reply twice.
         //
         // Errors included: after a restart there is no waiter to show them, so
         // dropping them here means the user's message vanishes without even a
         // failure notice.
-        if (data["fromQueue"] !== true) return;
+        //
+        // A steered turn is the same shape of orphan as a queued one: ingress
+        // returns early unless the disposition is 'new_run', so a mid-run steer
+        // leaves NO waiter for the follow-up answer. Without this the thread went
+        // silent after every steer while the answer completed server-side.
+        if (data["fromQueue"] !== true && data["fromSteer"] !== true) return;
         const target = data["target"] as RemoteTarget | undefined;
         if (!target || target.channel !== 'slack' || !target.targetId) return;
         // A live requester is already listening for this exact result; posting
@@ -584,6 +589,15 @@ async function slackOrchestrate(
                     }),
                 );
                 const text = collected.text;
+                // A turn retired by a steer has no answer of its own: the
+                // follow-up run owns it and the standing forwarder delivers it.
+                // Posting anything here — placeholder or empty body — is the
+                // "응답 없음" the user saw immediately after steering.
+                if (collected.data?.['superseded'] === true && !text.trim()) {
+                    log.info(`[slack:out:superseded] ${target.targetId}: retired by steer`);
+                    ackOutcome = 'success';
+                    return;
+                }
                 // Scoped for shutdown cancellation (#417): the body send and the
                 // image relay below share one abortable scope, released when the
                 // turn settles either way.
