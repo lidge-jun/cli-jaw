@@ -1,6 +1,8 @@
 import { marked, type Token, type Tokens } from 'marked';
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
 
-export type TableContentStatus = 'verified' | 'failed' | 'not_checked';
+export type TableContentStatus = 'verified' | 'failed' | 'unavailable' | 'not_checked';
 type Span = { kind: 'text' | 'link'; text: string; url?: string; style: number };
 type Cell = { kind: 'text'; spans: Span[] } | { kind: 'number'; value: number; text: string };
 export type CanonicalTable = { rows: Cell[][] };
@@ -94,6 +96,16 @@ function nativeCell(value: unknown, budget: Budget): Cell {
     }
     return { kind: 'text', spans };
 }
+// Let the existing CommonMark parser resolve only character references. Parsing
+// whole marked text again would reinterpret escaped punctuation as formatting.
+const characterReferenceParser = unified().use(remarkParse);
+function decodeCharacterReferences(text: string): string {
+    return text.replace(/&(?:#[0-9]{1,7}|#x[0-9a-f]{1,6}|[a-z][a-z0-9]{1,31});/gi, reference => {
+        const paragraph = characterReferenceParser.parse(reference).children[0];
+        const child = paragraph?.type === 'paragraph' ? paragraph.children[0] : undefined;
+        return child?.type === 'text' ? child.value : reference;
+    });
+}
 function markdownCell(cell: Tokens.TableCell, budget: Budget): Cell {
     const spans: Span[] = [];
     const walk = (tokens: Token[], style: number, depth: number, url?: string): void => {
@@ -105,7 +117,7 @@ function markdownCell(cell: Tokens.TableCell, budget: Budget): Cell {
                 walk(nested.tokens, next, depth + 1, token.type === 'link' ? budget.text((token as Tokens.Link).href, true) : url);
             } else if (['text', 'escape', 'codespan'].includes(token.type)) {
                 if ('tokens' in token && token.tokens?.length) { walk(token.tokens, style, depth + 1, url); continue; }
-                append(spans, { kind: url === undefined ? 'text' : 'link', text: budget.text((token as Tokens.Text).text), style: token.type === 'codespan' ? style | 8 : style, ...(url !== undefined ? { url } : {}) });
+                append(spans, { kind: url === undefined ? 'text' : 'link', text: budget.text(token.type === 'text' ? decodeCharacterReferences((token as Tokens.Text).text) : (token as Tokens.Text).text), style: token.type === 'codespan' ? style | 8 : style, ...(url !== undefined ? { url } : {}) });
             } else invalid('unsupported_markdown');
         }
     };

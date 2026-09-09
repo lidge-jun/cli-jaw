@@ -351,7 +351,8 @@ cli-jaw/
 │   │   ├── api.ts            ← Slack Web API fetch wrapper (HTTP 200 + ok:false를 실패로 처리, credential/URL redaction, Retry-After) (442L)
 │   │   ├── format.ts         ← CommonMark → mrkdwn 변환 + code-fence 보존 chunking (222L)
 │   │   ├── blocks.ts         ← Block Kit validation and per-table message splitting (143L)
-│   │   ├── table-verification.ts ← Persisted table count and dimensions verification (55L)
+│   │   ├── table-content.ts ← Bounded ordered-cell comparison and CommonMark character references (185L)
+│   │   ├── table-verification.ts ← Persisted table verification, mismatch/unavailable status (58L)
 │   │   ├── render-features.ts ← Expected and persisted rich-format feature verification (71L)
 │   │   ├── events.ts         ← fail-closed attachPort 판정 + inbound gating (self-echo/bot/subtype/allowlist/mention) + Block Kit 텍스트 추출 (282L)
 │   │   ├── thread-tracker.ts ← 참여 스레드 영속 추적 + thread/channel owner-generation singleflight (mention/봇응답 마킹, 캡드 셋, 무멘션 스레드 연속 대화 게이트 지원) (249L)
@@ -366,7 +367,7 @@ cli-jaw/
 │   │   ├── ingress.ts        ← 세션별 ingress lane + synthetic top-level followup override + admitSlackRun 동기 실행 예약(sessionLanes) + 전역 다운로드 세마포어 + shutdown abort/drain (291L) ✨
 │   │   ├── inbound-file.ts   ← 인바운드 첨부 단일 IO owner (files.info → 인증 스트리밍 다운로드 → saveUpload, 파일/메시지 바이트 예산, 고정 error code) (280L) ✨
 │   │   ├── inbound-url.ts    ← 인바운드 다운로드 URL 검증 (Slack host allowlist + https-only hop + 사설망 거부) (44L) ✨
-│   │   ├── send-only-client.ts ← bot-token 전용 outbound + conversations.open DM 해석 (173L)
+│   │   ├── send-only-client.ts ← bot-token outbound with separate transport/verification receipts (204L)
 │   │   ├── forwarder.ts      ← agent_done 포워딩 + guarded local-image relay (filename caption) (87L)
 │   │   ├── send-handler.ts   ← ChannelSendRequest → Slack Web API 어댑터 + 413 텍스트 다운그레이드 (89L)
 │   │   ├── manifest.ts       ← Slack 앱 표시명 검증 + bot 표시명 결정적 파생을 포함한 매니페스트 single source (`jaw slack manifest`/`setup`이 사용) (159L)
