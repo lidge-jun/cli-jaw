@@ -1591,3 +1591,48 @@ test('RT01: session dispose caches its promise before a drain subscriber dispose
     assert.equal(f.store.readTurn(row.sessionId, prompt.clientTurnKey)?.status, 'cancelled');
     assert.equal(handle.closes, 1);
 });
+
+test('context usage answers for the live runtime only, and never outlives it', async t => {
+    const f = fixture(t);
+    const row = f.create('codex-app');
+    f.manager.prompt(row.sessionId, prompt);
+    const options = await f.providers['codex-app'].opened();
+    const handle = f.providers['codex-app'].handles[0]!;
+    await handle.sent.promise;
+    assert.equal(f.manager.list().find(entry => entry.sessionId === row.sessionId)?.contextUsage, undefined,
+        'nothing reported means nothing to say, not zero');
+    options.onContextUsage({ totalTokens: 345, inputTokens: 300, cachedInputTokens: 100,
+        outputTokens: 40, reasoningOutputTokens: 5, modelContextWindow: 272000, updatedAt: 7 });
+    const listed = f.manager.list().find(entry => entry.sessionId === row.sessionId)?.contextUsage;
+    assert.equal(listed?.totalTokens, 345);
+    assert.equal(listed?.modelContextWindow, 272000);
+    assert.equal(f.manager.snapshot(row.sessionId).session.contextUsage?.totalTokens, 345);
+    handle.outcome.resolve(done);
+    await f.terminal(row.sessionId, 1);
+    // The process that measured this is gone. Its last figure is history, not
+    // the current size of anything, so it is not reported as if it still held.
+    options.onExit(null);
+    assert.equal(f.manager.list().find(entry => entry.sessionId === row.sessionId)?.contextUsage, undefined);
+});
+
+test('retiring a runtime retires its context figure, not just an explicit exit', async t => {
+    const f = fixture(t);
+    const row = f.create('codex-app');
+    f.manager.prompt(row.sessionId, prompt);
+    const options = await f.providers['codex-app'].opened();
+    const handle = f.providers['codex-app'].handles[0]!;
+    await handle.sent.promise;
+    options.onContextUsage({ totalTokens: 400_000, inputTokens: null, cachedInputTokens: null,
+        outputTokens: null, reasoningOutputTokens: null, processedTokens: null,
+        modelContextWindow: 1_000_000, updatedAt: 7 });
+    assert.equal(f.manager.list().find(entry => entry.sessionId === row.sessionId)?.contextUsage?.totalTokens, 400_000);
+    handle.outcome.resolve(done);
+    await f.terminal(row.sessionId, 1);
+    // Disposal never reaches onExit's clear, because it retires the binding
+    // first. Leaving the figure would report 400k against a window belonging to
+    // a model that is no longer selected, for a runtime that is gone.
+    await f.manager.deleteSession?.(row.sessionId).catch(() => {});
+    const service = (f.manager as unknown as { sessions: Map<string, { dispose(): Promise<void> }> }).sessions.get(row.sessionId);
+    await service?.dispose();
+    assert.equal(f.manager.list().find(entry => entry.sessionId === row.sessionId)?.contextUsage, undefined);
+});

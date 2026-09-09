@@ -368,7 +368,7 @@
     .code-toast { animation: none; }
 }
 
-/* Session header (title + context meter + plan) */
+/* Session header (title + plan) */
 .code-session-header {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     padding: 6px 16px;
@@ -377,19 +377,37 @@
     font-size: 11px;
 }
 .code-session-title { font-weight: 600; color: var(--text-primary); }
-.code-context-meter {
-    width: 80px; height: 6px;
-    background: var(--bg-raised);
-    border-radius: 3px;
-    overflow: hidden;
-    display: inline-block;
+/* Context usage sits in the composer footer, next to the model it belongs to.
+   The ring appears only when the runtime reported a window: a proportion of an
+   unknown total is not a proportion. */
+.code-context-usage { position: relative; display: inline-flex; align-items: center; }
+.code-context-trigger {
+    display: inline-flex; align-items: center; gap: 4px;
+    height: 28px; padding: 0 8px;
+    border: 1px solid transparent; border-radius: 8px;
+    background: transparent; color: var(--text-secondary);
+    font-size: 11px; font-variant-numeric: tabular-nums; cursor: pointer;
 }
-.code-context-bar {
-    display: block; height: 100%;
-    background: var(--accent);
-    border-radius: 3px;
-    transition: width 0.3s ease;
+.code-context-trigger:hover, .code-context-trigger:focus-visible { background: var(--bg-raised); color: var(--text-primary); }
+.code-context-ring { width: 16px; height: 16px; transform: rotate(-90deg); flex-shrink: 0; }
+.code-context-ring-track { fill: none; stroke: var(--border-subtle); stroke-width: 2.5; }
+.code-context-ring-fill { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; }
+.code-context-trigger.is-high .code-context-ring-fill { stroke: var(--status-warn); }
+.code-context-trigger.is-critical .code-context-ring-fill { stroke: var(--status-error); }
+.code-context-trigger.is-critical .code-context-value { color: var(--status-error); }
+.code-context-detail {
+    position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    z-index: 4; min-width: 180px; padding: 8px 10px;
+    border: 1px solid var(--border-subtle); border-radius: 10px;
+    background: var(--bg-panel); box-shadow: 0 6px 20px rgb(0 0 0 / 28%);
+    font-size: 11px; color: var(--text-secondary);
 }
+.code-context-detail-total { margin: 0 0 4px; color: var(--text-primary); font-weight: 650; }
+.code-context-detail-note { margin: 0 0 6px; }
+.code-context-breakdown { display: grid; gap: 2px; margin: 0; }
+.code-context-breakdown > div { display: flex; justify-content: space-between; gap: 12px; }
+.code-context-breakdown dt, .code-context-breakdown dd { margin: 0; }
+.code-context-breakdown dd { font-variant-numeric: tabular-nums; color: var(--text-primary); }
 .code-plan-entries { display: flex; gap: 8px; flex-wrap: wrap; }
 .code-plan-entry { font-size: 10px; color: var(--text-secondary); }
 .code-plan-completed { color: var(--status-success); }

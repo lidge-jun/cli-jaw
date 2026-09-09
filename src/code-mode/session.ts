@@ -6,7 +6,7 @@ import { CodeTurnNormalizer, redactCodeText } from './normalize.js';
 import type { CodeOpenOptions, CodeProvider, CodeProviderSession, CodeRuntimeResource, CodeTurnContext } from './provider.js';
 import { CodeStore, CodeStoreError, type CodeSessionRecord, type CodeStoreOwner } from './store.js';
 import type {
-    CodeCancelRequest, CodeItem, CodePermissionAnswer, CodePermissionRequest,
+    CodeCancelRequest, CodeContextUsage, CodeItem, CodePermissionAnswer, CodePermissionRequest,
     CodeSessionError, CodeWireEvent,
 } from './wire.js';
 
@@ -77,6 +77,13 @@ export interface CodeSessionOptions {
 export class CodeSession {
     private operation: Operation | null = null;
     private binding: HandleBinding | null = null;
+    /**
+     * Latest usage the live runtime reported, held only for as long as this
+     * service is up. It is not persisted: it describes a native process, and a
+     * number that outlived that process would be a claim about a session that
+     * no longer holds.
+     */
+    private usage: CodeContextUsage | null = null;
     private readonly bindings = new Set<HandleBinding>();
     private readonly registry = new RuntimeRequests(() => {
         if (this.operation) this.syncPermissions(this.operation);
@@ -115,6 +122,7 @@ export class CodeSession {
             // Physical proof retires residency without changing the cached close result.
             binding.closed = true;
             binding.retiring = true;
+            if (this.binding === binding) this.usage = null;
             this.bindings.delete(binding);
         }
     }
@@ -222,6 +230,10 @@ export class CodeSession {
         };
         if (previous && !reuse) previous.retiring = true;
         this.binding = binding;
+        // A usage figure belongs to the runtime that reported it. Replacing the
+        // runtime without reusing it means the numbers describe a process that
+        // is being retired, so they stop being an answer about this session.
+        if (previous && !reuse) this.usage = null;
         this.bindings.add(binding);
         const owner = { sessionId: record.sessionId, turnId: record.turnId, epoch: record.epoch };
         let wake!: () => void;
@@ -293,6 +305,10 @@ export class CodeSession {
 
     private async cleanup(binding: HandleBinding, cancel: boolean): Promise<boolean> {
         binding.retiring = true;
+        // Retiring the runtime that produced the figure retires the figure.
+        // Disposal, an idle reap and a model change all arrive here, and none
+        // of them reach onExit's clear because they set `retiring` first.
+        if (this.binding === binding) this.usage = null;
         binding.controller.abort();
         const handle = binding.handle;
         if (cancel && handle && !handle.closed && !binding.cancelPromise && !binding.resourceCloses.has(handle)) {
@@ -306,6 +322,11 @@ export class CodeSession {
     }
 
     private onExit(binding: HandleBinding): void {
+        // Before the guards, not after: a runtime that is retiring, already
+        // exited, superseded or disposed is exactly the case where its last
+        // measurement stops describing anything, and every one of those
+        // returns early below.
+        if (this.binding === binding) this.usage = null;
         if (binding.retiring || binding.exited || this.binding !== binding || this.disposed) return;
         const op = this.operation;
         if (!op || op.binding !== binding) return;
@@ -392,8 +413,20 @@ export class CodeSession {
                     this.publish(result.events);
                 } catch (error) { this.failPersistence(op, error); }
             },
+            onContextUsage: usage => {
+                // Only the handle that currently owns this session, and is not
+                // on its way out, may speak for it. A binding can still be
+                // `this.binding` while retiring, and a report from a runtime
+                // being torn down is not news about the session.
+                if (this.binding !== binding || binding.retiring || binding.exited || this.disposed) return;
+                this.usage = usage;
+            },
             onExit: () => this.onExit(binding),
         };
+    }
+
+    contextUsage(): CodeContextUsage | null {
+        return this.usage;
     }
 
     private record(op: Operation, context: RuntimeEventContext, body: RuntimeEventBody) {

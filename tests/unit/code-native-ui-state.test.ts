@@ -111,3 +111,22 @@ test('overflow bounds buffered data and requires authoritative recovery', () => 
     assert.equal(state.cursor, 0);
     assert.ok(state.error);
 });
+
+test('a session event does not blank context usage it was never able to carry', () => {
+    // Usage is attached at read time, so it travels on snapshots and listings
+    // and never on a stored session event. Replacing the record wholesale would
+    // clear the meter on every unrelated status change.
+    const usage = { totalTokens: 345, inputTokens: 300, cachedInputTokens: 100,
+        outputTokens: 40, reasoningOutputTokens: 5, modelContextWindow: 272000, updatedAt: 7 };
+    let state = reduceCodeSession(emptyCodeSession('s'), { type: 'snapshot',
+        snapshot: { ...snapshot(), session: { ...session, contextUsage: usage } } });
+    assert.equal(state.session?.contextUsage?.totalTokens, 345);
+    state = reduceCodeSession(state, { type: 'event', event: { topic: 'code', event: 'code_session',
+        sessionId: 's', sequence: 4, epoch: 1, session: { ...session, sequence: 4, status: 'idle' } } });
+    assert.equal(state.session?.status, 'idle', 'the event still applies');
+    assert.equal(state.session?.contextUsage?.totalTokens, 345, 'the last known figure stands');
+    // A newer read replaces it outright, including a read that reports none --
+    // a runtime that has exited has nothing to say about its context.
+    state = reduceCodeSession(state, { type: 'snapshot', snapshot: snapshot([item()], 5) });
+    assert.equal(state.session?.contextUsage, undefined);
+});

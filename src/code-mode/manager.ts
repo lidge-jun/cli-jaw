@@ -129,7 +129,12 @@ export class CodeSessionManager {
     list(options?: CodeSessionListOptions): CodeSessionInfo[] {
         this.ready();
         return this.storage(() => this.options.store.list(options)).map(row => {
-            try { return { ...row, pendingPermissionCount: this.sessions.get(row.sessionId)?.pendingPermissions().length ?? 0 }; }
+            try {
+                const service = this.sessions.get(row.sessionId);
+                const usage = service?.contextUsage() ?? null;
+                return { ...row, pendingPermissionCount: service?.pendingPermissions().length ?? 0,
+                    ...(usage ? { contextUsage: usage } : {}) };
+            }
             catch { return row; } // An unavailable attention read stays unknown, never inferred zero.
         });
     }
@@ -143,7 +148,9 @@ export class CodeSessionManager {
         const snapshot = this.storage(() => this.options.store.snapshot(id));
         const current = pendingPermissions.filter(permission =>
             permission.turnId === snapshot.session.turnId && permission.epoch === snapshot.session.epoch);
-        return { ...snapshot, session: { ...snapshot.session, pendingPermissionCount: current.length }, pendingPermissions: current };
+        const usage = session?.contextUsage() ?? null;
+        return { ...snapshot, session: { ...snapshot.session, pendingPermissionCount: current.length,
+            ...(usage ? { contextUsage: usage } : {}) }, pendingPermissions: current };
     }
 
     history(id: string, beforeSequence?: number, limit?: number): CodeHistoryPage {

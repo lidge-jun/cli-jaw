@@ -22,8 +22,36 @@ export interface CodexAppEventResult {
     messageStarted?: boolean | undefined;
     sessionId?: string | undefined;
     tokens?: Record<string, number> | undefined;
+    /**
+     * Conversation-wide usage, as distinct from `tokens`, which carries the
+     * last turn only and is consumed by cost accounting. Absent fields stay
+     * absent: an unreported context window is not an unlimited one, and zero
+     * used tokens is a different claim from "the runtime did not say".
+     */
+    contextUsage?: CodexAppContextUsage | undefined;
     flushThinking?: boolean | undefined;
     turnStatus?: string | undefined;
+}
+
+export interface CodexAppContextUsage {
+    /**
+     * What is resident in the context right now, taken from the last turn.
+     *
+     * Not `total`: that is a lifetime accumulator that adds each turn's usage
+     * to the running sum, so it re-counts the whole resent prompt every turn
+     * and passes the window many times over in an ordinary conversation. In a
+     * real 258,400-token session it reached 2,258,818 while the live context
+     * sat at 134,904. Only the second of those is a context measurement.
+     */
+    totalTokens: number;
+    inputTokens: number | null;
+    cachedInputTokens: number | null;
+    outputTokens: number | null;
+    reasoningOutputTokens: number | null;
+    /** Tokens billed across the whole conversation. Cost, not occupancy. */
+    processedTokens: number | null;
+    /** The model's window, when the runtime reports one. */
+    modelContextWindow: number | null;
 }
 
 export interface CodexAppTurnLeaseIdentity {
@@ -513,7 +541,38 @@ function handleTokenUsageUpdated(params: EvRec, ctx: SpawnContext): CodexAppEven
             ...(last['cachedInputTokens'] ? { cached_input_tokens: last['cachedInputTokens'] as number } : {}),
         };
     }
-    return ctx.tokens ? { tokens: ctx.tokens } : {};
+    // `last` is what currently occupies the context: it grows with the
+    // conversation and settles below the window. `total` adds every turn to a
+    // running sum, so it measures spend rather than occupancy and passes the
+    // window many times over in an ordinary session. The gauge reads `last`;
+    // `total` is carried separately as what it actually is.
+    const resident = usage ? f(usage, 'last') as EvRec | undefined : undefined;
+    const total = usage ? f(usage, 'total') as EvRec | undefined : undefined;
+    const totalTokens = count(resident?.['totalTokens']);
+    const contextUsage: CodexAppContextUsage | undefined = totalTokens === null ? undefined : {
+        totalTokens,
+        inputTokens: count(resident?.['inputTokens']),
+        cachedInputTokens: count(resident?.['cachedInputTokens']),
+        outputTokens: count(resident?.['outputTokens']),
+        reasoningOutputTokens: count(resident?.['reasoningOutputTokens']),
+        processedTokens: count(total?.['totalTokens']),
+        modelContextWindow: count(usage?.['modelContextWindow']),
+    };
+    return {
+        ...(ctx.tokens ? { tokens: ctx.tokens } : {}),
+        ...(contextUsage ? { contextUsage } : {}),
+    };
+}
+
+/**
+ * A measurement, or nothing. Absent must not read as zero.
+ *
+ * The wire declares these int64, which outruns what a JS number can hold
+ * exactly; past that point the value has already lost digits in the JSON
+ * parse, so reporting it would be reporting noise.
+ */
+function count(value: unknown): number | null {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
 function handleError(params: EvRec): CodexAppEventResult {
