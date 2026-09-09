@@ -59,7 +59,7 @@ export function recordSlackScopeObservation(
     granted: string | undefined,
     appId?: string | null,
 ): void {
-    if (!granted) {
+    if (granted === undefined) {
         current = {
             ...UNOBSERVED,
             reinstallUrl: slackReinstallUrl(appId),
@@ -133,13 +133,17 @@ export function describeSlackScopeGaps(status: SlackScopeStatus): SlackScopeGapL
         });
     }
     if (status.missingCapabilities.length > 0) {
-        // info, not warn: messaging works without these. The operator who read
+        // info, not warn: existing IM/channel messaging can work without these. The operator who read
         // the old WARN had no way to tell that from a broken transport, and
         // reinstalled the app to find out.
         lines.push({
             level: 'info',
             text: `${status.missingCapabilities.length} optional scope(s) not granted: `
-                + `${status.missingCapabilities.join(', ')} — messaging is unaffected; ${where}`,
+                + `${status.missingCapabilities.join(', ')} — `
+                + (status.missingCapabilities.includes('mpim:history')
+                    ? 'group DM reception/history is unavailable; existing IM/channel messaging can continue; '
+                    : 'some optional features are unavailable; ')
+                + where,
         });
     }
     return lines;

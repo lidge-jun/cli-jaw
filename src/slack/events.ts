@@ -77,6 +77,10 @@ export function isDirectMessage(event: SlackMessageEvent): boolean {
     return event.channel_type === 'im' || (event.channel || '').toUpperCase().startsWith('D');
 }
 
+export function isSlackMention(event: SlackMessageEvent, selfUserId: string | null): boolean {
+    return event.type === 'app_mention' || (event.channel_type === 'mpim' && !!selfUserId && mentionsUser(event.text || '', selfUserId));
+}
+
 export function mentionsUser(text: string, userId: string): boolean {
     return new RegExp(`<@${userId}(?:\\|[^>]*)?>`).test(text);
 }
@@ -203,7 +207,8 @@ export function shouldProcessSlackEvent(
     // milliseconds and the gateway dedup slams the second with a public
     // "❌ duplicate". The app_mention copy is the canonical path; DMs never
     // produce app_mention envelopes, so they are unaffected.
-    if (!dm && event.type !== 'app_mention' && config.selfUserId
+    // MPIM message events must stand alone; do not wait for an app_mention twin.
+    if (!dm && event.channel_type !== 'mpim' && event.type !== 'app_mention' && config.selfUserId
         && mentionsUser(event.text || '', config.selfUserId)) {
         return { process: false, reason: 'mention_via_app_mention' };
     }

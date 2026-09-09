@@ -40,12 +40,14 @@ export const REQUIRED_SLACK_BOT_SCOPES = [
 ] as const;
 
 /**
- * Optional scopes. Absence disables a feature but never blocks text messaging,
+ * Optional scopes. Absence disables a feature without invalidating existing messaging,
  * which is why the identity/roster scopes live here rather than in the required
  * list: promoting them would mark every existing install as broken, when in fact
  * sender names simply fall back to raw ids until the app is reinstalled.
  */
 export const SLACK_CAPABILITY_SCOPES = [
+    // Required for group-DM reception/history, optional for existing IM/channel installs.
+    'mpim:history',
     // reactions:write is optional on purpose: promoting it to required would mark
     // every existing install broken over an opt-in acknowledgement feature.
     'reactions:write',
@@ -67,13 +69,13 @@ export const SLACK_CAPABILITY_SCOPES = [
 export function missingSlackScopes(grantedHeader: string | null | undefined): string[] {
     // An absent header means Slack did not tell us; treat it as "cannot check"
     // rather than "everything is missing".
-    if (!grantedHeader) return [];
+    if (grantedHeader === null || grantedHeader === undefined) return [];
     const granted = new Set(grantedHeader.split(',').map(s => s.trim()).filter(Boolean));
     return REQUIRED_SLACK_BOT_SCOPES.filter(scope => !granted.has(scope));
 }
 
 export function missingSlackCapabilityScopes(grantedHeader: string | null | undefined): string[] {
-    if (!grantedHeader) return [];
+    if (grantedHeader === null || grantedHeader === undefined) return [];
     const granted = new Set(grantedHeader.split(',').map(s => s.trim()).filter(Boolean));
     return SLACK_CAPABILITY_SCOPES.filter(scope => !granted.has(scope));
 }
