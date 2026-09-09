@@ -1,3 +1,4 @@
+import { reserveSlackToolGrant, activateSlackToolGrant, resolveSlackToolGrant, revokeSlackToolScope, slackCredentialKey } from '../../src/slack/tool-context.ts';
 import '../setup/isolated-home.ts';
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
@@ -372,3 +373,29 @@ for (const scenario of [
         assert.equal(spawnCalls, 0);
     });
 }
+
+
+for (const mode of ['print-active', 'native-reserved', 'worker'] as const) test(`Slack grant lifecycle cleanup: ${mode}`, async t => {
+    t.after(() => revokeSlackToolScope());
+    const f = fixture(mode === 'native-reserved' ? { status: 'done', finalText: 'FINAL', partialText: '' } : undefined);
+    const requestId = f.ctx.requestId!;
+    const source = { teamId: 'T1', actorId: 'U1', credentialKey: slackCredentialKey('fixture-lifecycle-token'),
+        destination: { channel: 'slack' as const, targetKind: 'channel' as const, peerKind: 'channel' as const, targetId: 'C1' } };
+    assert.equal(reserveSlackToolGrant(source, { requestId, scope: f.scopeKey, chatSessionId: f.sessionId }), true);
+    const secret = mode === 'native-reserved' ? undefined : activateSlackToolGrant(requestId, f.scopeKey, f.sessionId);
+    const grant = secret ? resolveSlackToolGrant(secret) : null;
+    if (mode !== 'native-reserved') assert.ok(grant);
+    if (mode === 'worker') f.params.mainManaged = false;
+    // The unrelated queued request must retain its reservation.
+    assert.equal(reserveSlackToolGrant(source, { requestId: requestId + '-next', scope: f.scopeKey, chatSessionId: f.sessionId }), true);
+    const resolve = f.params.resolve;
+    f.params.resolve = value => {
+        if (mode === 'print-active') assert.equal(grant!.signal.aborted, true, 'process authority ends before outer request settlement');
+        resolve(value);
+    };
+    await handleAgentExit(f.params);
+    if (mode === 'worker') { assert.equal(grant!.signal.aborted, false); assert.ok(resolveSlackToolGrant(secret!)); }
+    else if (secret) assert.equal(resolveSlackToolGrant(secret), null);
+    else assert.equal(typeof activateSlackToolGrant(requestId, f.scopeKey, f.sessionId), 'undefined');
+    assert.ok(activateSlackToolGrant(requestId + '-next', f.scopeKey, f.sessionId));
+});
