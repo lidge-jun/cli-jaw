@@ -10,7 +10,9 @@ test('same-size wrong cell fails without reposting', async () => {
         return new Response(JSON.stringify({ ok: true, messages: [{ ts: '1.1', blocks: [{ type: 'table', rows: [[{ type: 'raw_text', text: 'H' }], [{ type: 'raw_text', text: 'Y' }]] }] }] }));
     }) as typeof fetch;
     const result = await sendSlackText('fixture', { channel: 'slack', targetId: 'D1', targetKind: 'user', peerKind: 'direct' }, '| H |\n| --- |\n| X |', { fetchImpl });
-    assert.equal(result.ok, false);
+    assert.equal(result.ok, true);
+    assert.equal(result.delivery?.verification, 'failed');
+    assert.match(result.delivery!.messages[0]!.error!, /table_content_mismatch:0:1:0/);
     assert.equal(result.sent, true);
     assert.equal(result.retryable, false);
     assert.equal(posts, 1);
@@ -70,18 +72,21 @@ test('unsupported expectation rejects all chunks before posting', async () => {
     });
     assert.equal(result.ok, false); assert.equal(result.status, 400); assert.equal(calls, 0);
 });
-test('second chunk mismatch retains first proof and never posts third chunk', async () => {
+test('second chunk mismatch retains first proof and still posts and verifies third chunk', async () => {
     let posts = 0;
     const result = await sendSlackText('fixture', { channel: 'slack', targetId: 'D1', targetKind: 'user', peerKind: 'direct' }, 'fallback', {
         blocks: ['A', 'B', 'C'].map(value => ({ type: 'table', rows: [[textCell(value)]] })),
         fetchImpl: (async (url: string | URL | Request) => {
             if (String(url).endsWith('chat.postMessage')) { posts++; return new Response(JSON.stringify({ ok: true, ts: `1.${posts}` })); }
-            return new Response(JSON.stringify({ ok: true, messages: [{ ts: `1.${posts}`, ...native([[textCell(posts === 1 ? 'A' : 'X')]]) }] }));
+            return new Response(JSON.stringify({ ok: true, messages: [{ ts: `1.${posts}`, ...native([[textCell(posts === 1 ? 'A' : posts === 2 ? 'X' : 'C')]]) }] }));
         }) as typeof fetch,
     });
-    assert.equal(result.ok, false); assert.equal(posts, 2); assert.equal(result.delivery?.verifiedTables, 1);
+    assert.equal(result.ok, true); assert.equal(posts, 3); assert.equal(result.delivery?.verifiedTables, 2);
+    assert.equal(result.delivery?.verification, 'failed');
+    assert.deepEqual(result.delivery?.messages.map(m => m.verification), ['verified', 'failed', 'verified']);
+    assert.match(result.delivery!.messages[1]!.error!, /table_content_mismatch/);
     assert.equal(result.delivery?.tableContent, 'failed'); assert.equal(result.retryable, false);
-    assert.deepEqual(result.delivery?.messageTs, ['1.1', '1.2']);
+    assert.deepEqual(result.delivery?.messageTs, ['1.1', '1.2', '1.3']);
 });
 
 import { verifySlackTables } from '../../src/slack/table-verification.ts';
@@ -98,7 +103,7 @@ test('malformed readback and wrong timestamp fail with bounded reasons', async (
     const expected = expectedTableContent(native([[textCell('H')]]).blocks);
     for (const message of [{ ts: '1.1', attachments: {} }, { ts: '1.2', ...native([[textCell('H')]]) }]) {
         const checked = await verifySlackTables('fixture', target, '1.1', [{ rows: 1, columns: 1 }], { fetchImpl: responseFor(message) }, [], expected);
-        assert.equal(checked.ok, false); assert.equal(checked.verifiedTables, 0); assert.equal(checked.tableContent, 'failed');
+        assert.equal(checked.ok, false); assert.equal(checked.verifiedTables, 0); assert.equal(checked.tableContent, 'unavailable'); assert.equal(checked.verification, 'unavailable');
     }
 });
 test('table node and URL budgets reject even short rendered text', () => {
@@ -119,7 +124,90 @@ test('ordinary table readback stops oversized response streaming before full con
         return new Response(stream);
     };
     const result = await sendSlackText('fixture', { channel: 'slack', targetKind: 'channel', peerKind: 'direct', targetId: 'D1' }, '| a |\n|---|\n| b |', { fetchImpl });
-    assert.equal(result.ok, false); assert.equal(result.sent, true); assert.equal(result.retryable, false);
+    assert.equal(result.ok, true); assert.equal(result.sent, true); assert.equal(result.retryable, false);
+    assert.equal(result.delivery?.verification, 'unavailable');
+    assert.equal(result.delivery?.tableContent, 'unavailable');
     assert.equal(posts, 1); assert.equal(cancelled, true); assert.ok(pulls < 40);
-    assert.match(result.error ?? '', /slack_response_too_large/);
+    assert.equal(result.delivery?.messages[0]?.error, 'slack_sensitive_request_failed');
+});
+
+test('CommonMark character references decode once in text and labels, never code or escaped ampersands', () => {
+    const cases = [
+        ['A &amp; B &#38; C &#x26; D &copy; &NotEqualTilde;', 'A & B & C & D © ≂̸'],
+        ['&amp;amp; &notAnEntity; &#0;', '&amp; &notAnEntity; �'],
+        ['\\&amp; \\&#38; \\&#x26;', '&amp; &#38; &#x26;'],
+    ];
+    for (const [source, rendered] of cases) {
+        assert.equal(compare(`| H |\n|---|\n| ${source} |`, [[textCell('H')], [textCell(rendered!)]]).ok, true);
+        assert.equal(compare(`| H |\n|---|\n| ${source} |`, [[textCell('H')], [textCell(rendered! + '!')]]).ok, false);
+    }
+    assert.equal(compare('| H |\n|---|\n| [A &amp; B](https://example.com) `&amp; &#38;` |', [
+        [textCell('H')], [richCell([{ type: 'link', text: 'A & B', url: 'https://example.com' },
+            { type: 'text', text: ' ' }, { type: 'text', text: '&amp; &#38;', style: { code: true } }])],
+    ]).ok, true);
+    assert.equal(compare('| H |\n|---|\n| [A \\&amp; B](https://example.com) |', [
+        [textCell('H')], [richCell([{ type: 'link', text: 'A &amp; B', url: 'https://example.com' }])],
+    ]).ok, true);
+});
+
+for (const reason of ['missing_scope', 'ratelimited', 'network', 'missing_message_ts']) {
+    test(`${reason} leaves verification unavailable and posts every chunk exactly once`, async () => {
+        let posts = 0; let reads = 0;
+        const result = await sendSlackText('fixture', target, 'fallback', {
+            blocks: ['A', 'B', 'C'].map(value => ({ type: 'table', rows: [[textCell(value)]] })),
+            fetchImpl: async url => {
+                if (String(url).endsWith('chat.postMessage')) {
+                    posts++;
+                    return new Response(JSON.stringify({ ok: true, ...(reason === 'missing_message_ts' ? {} : { ts: `2.${posts}` }) }));
+                }
+                reads++;
+                if (reason === 'network') throw new Error('fixture_network_error');
+                return new Response(JSON.stringify({ ok: false, error: reason }));
+            },
+        });
+        assert.equal(result.ok, true); assert.equal(result.sent, true); assert.equal(result.retryable, false);
+        assert.equal(posts, 3); assert.equal(reads, reason === 'missing_message_ts' ? 0 : 3);
+        assert.equal(result.delivery?.verification, 'unavailable');
+        assert.equal(result.delivery?.tableContent, 'unavailable');
+        assert.equal(result.delivery?.verifiedTables, 0);
+        assert.equal(result.delivery?.postedChunks, 3); assert.equal(result.delivery?.totalChunks, 3);
+        for (const message of result.delivery!.messages) {
+            assert.equal(message.verification, 'unavailable'); assert.equal(message.tableContent, 'unavailable');
+            assert.equal(message.error, reason === 'network' ? 'slack_sensitive_request_failed' : reason);
+        }
+    });
+}
+
+test('actual POST failure keeps partial receipt and does not retry or post remaining chunks', async () => {
+    let posts = 0;
+    const result = await sendSlackText('fixture', target, 'fallback', {
+        blocks: ['A', 'B', 'C'].map(value => ({ type: 'table', rows: [[textCell(value)]] })),
+        fetchImpl: async url => {
+            if (String(url).endsWith('chat.postMessage')) {
+                posts++;
+                return new Response(JSON.stringify(posts === 1 ? { ok: true, ts: '3.1' } : { ok: false, error: 'internal_error' }));
+            }
+            return new Response(JSON.stringify({ ok: true, messages: [{ ts: '3.1', ...native([[textCell('A')]]) }] }));
+        },
+    });
+    assert.equal(result.ok, false); assert.equal(result.sent, true); assert.equal(result.retryable, false);
+    assert.match(result.error!, /internal_error/); assert.equal(posts, 2);
+    assert.equal(result.delivery?.verification, 'unavailable');
+    assert.equal(result.delivery?.tableContent, 'unavailable');
+    assert.equal(result.delivery?.verifiedTables, 1);
+    assert.equal(result.delivery?.postedChunks, 1); assert.equal(result.delivery?.totalChunks, 3);
+    assert.deepEqual(result.delivery?.messageTs, ['3.1']);
+    assert.equal(result.delivery?.messages[0]?.verification, 'verified');
+});
+
+test('untrusted readback error text never enters successful transport receipts', async () => {
+    const privateText = 'private document text /Users/private/report.txt';
+    const result = await sendSlackText('fixture', target, '| H |\n|---|\n| X |', {
+        fetchImpl: async url => new Response(JSON.stringify(String(url).endsWith('chat.postMessage')
+            ? { ok: true, ts: '5.1' } : { ok: false, error: privateText })),
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.delivery?.verification, 'unavailable');
+    assert.equal(result.delivery?.messages[0]?.error, 'slack_request_failed');
+    assert.ok(!JSON.stringify(result).includes(privateText));
 });

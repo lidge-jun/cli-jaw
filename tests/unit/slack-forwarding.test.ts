@@ -89,7 +89,9 @@ test('ordinary agent_done prose with a self-chosen table renders richly without 
         assert.equal(success.length, 1);
         omitStoredTable = true;
         await forward('agent_done', { text: table });
-        assert.equal(success.length, 1, 'a missing stored table must not produce a successful forwarding receipt');
+        assert.equal(success.length, 2, 'forwarding reports transport success independently of rendering verification');
+        assert.equal(posts.length, 2, 'a verification mismatch never reposts the message');
+        assert.equal(reads.length, 2, 'both posted messages still undergo verification');
     } finally {
         globalThis.fetch = priorFetch;
     }

@@ -523,6 +523,8 @@ test('Slack tables split at 99 data rows and repeat headers without losing data'
     const result = await sendSlackText('xoxb-t', slackTargetFromId('D1'), [header, ...rows].join('\n'), { fetchImpl: impl });
     assert.equal(result.ok, true);
     assert.equal(result.delivery?.verifiedTables, 2);
+    assert.equal(result.delivery?.verification, 'verified');
+    assert.equal(result.delivery?.tableContent, 'verified');
     assert.equal(calls.length, 2);
     assert.deepEqual(calls.map(call => String(bodyOf(call)['text']).split('\n').slice(2)).flat(), rows);
     assert.ok(calls.every(call => String(bodyOf(call)['text']).startsWith(header)));
@@ -536,6 +538,8 @@ test('Slack table character splitting keeps whole rows', async () => {
     const result = await sendSlackText('xoxb-t', slackTargetFromId('D1'), [header, ...rows].join('\n'), { fetchImpl: impl });
     assert.equal(result.ok, true);
     assert.equal(result.delivery?.verifiedTables, 2);
+    assert.equal(result.delivery?.verification, 'verified');
+    assert.equal(result.delivery?.tableContent, 'verified');
     assert.equal(calls.length, 2);
     assert.ok(calls.every(call => String(bodyOf(call)['text']).length <= 9000));
     assert.deepEqual(calls.map(call => String(bodyOf(call)['text']).split('\n').slice(2)).flat(), rows);
