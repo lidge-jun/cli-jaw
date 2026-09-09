@@ -226,6 +226,13 @@ test(`native ${cli} ${scenario} failure closes its trace once and retains real S
         assert.equal(compat[0]!.runtimeStatus, terminalStatus);
         if (scenario === 'cancelled') assert.equal(compat[0]!.text, '');
         else assert.match(String(compat[0]!.text), diagnostic);
+        // A runtime that never acquired a lease names the code it failed with, so
+        // the channel says which startup problem it was rather than only that one
+        // happened (#658). The sentinel assertion below proves the private cause
+        // still does not travel with it.
+        if (scenario === 'setup' || scenario === 'duplicate') {
+            assert.match(String(compat[0]!.text), /\(acp_rpc_error\)/);
+        }
         assert.equal(compat[0]!.cli, cli);
         assert.equal(acquisitions, 1);
         assert.equal(releases, scenario === 'ready' || scenario === 'settle' ? 1 : 0);
