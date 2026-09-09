@@ -156,8 +156,10 @@ jobs:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-latest
     # A quarter of a suite that took 345s serially. A shard that needs longer
-    # than this is wedged, not slow.
-    timeout-minutes: 8
+    # than this is wedged, not slow. The step below is roomy enough for the
+    # driver's own stall watchdog to fire first and name the wedged file (#661);
+    # this cap only catches a wedge the driver itself cannot see.
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:
@@ -204,9 +206,11 @@ jobs:
           started=$(date +%s)
           npx tsx --experimental-test-module-mocks tests/run.mts --scope root,unit --shard "$TEST_SHARD"
           status=$?
-          echo "shard $TEST_SHARD wall time: $(( $(date +%s) - started ))s (step limit: 300s)"
+          echo "shard $TEST_SHARD wall time: $(( $(date +%s) - started ))s (step limit: 480s)"
           exit $status
-        timeout-minutes: 5
+        # A shard takes ~160s. 480s leaves room for the driver's 180s stall watchdog to
+        # fire and name the file before Actions kills the step with nothing to show.
+        timeout-minutes: 8
 
   # Everything that needs a built package or a live server: the integration,
   # manager and bin suites (never run in CI before this job existed), the CLI
