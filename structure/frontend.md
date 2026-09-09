@@ -629,6 +629,26 @@ item key: a measured size always wins over an estimate, so a row measured while
 collapsed would keep that height once expanded, and re-keying hands it back to
 the estimate until its real height is observed.
 
+Notices sit over the transcript, directly above it rather than absolutely
+positioned from the pane, which would place them inside the workspace header and
+swallow clicks meant for its picker. They are keyed per source, so repeating one
+replaces it and restarts its timer instead of stacking; the stack is capped at
+three, and re-raising a notice moves it newest so the cap cannot evict what was
+just triggered. A notice with no finite duration waits for an explicit dismiss,
+and the timer is held while the pointer is over the card or focus is inside it,
+because unmounting a card that owns focus drops it to the document body.
+
+The permission warning is derived from the current policy rather than from a
+transition, and it does not expire: it is re-raised on every mount, so it
+survives a draft becoming a real session, and it is retired when the policy
+leaves Auto rather than outliving what it describes. One polite live region,
+mounted before there is anything to say, since a region that arrives together
+with its first message is not announced. Anything the reader must act on stays
+inline instead, including footer errors, transport status, the recovery strips
+for unconfirmed creation and unconfirmed send, archived sessions and the
+approval queue; each carries a recovery path a self-dismissing notice would take
+with it.
+
 `useCodeController` owns requests and selection fencing. A single Code SSE
 subscription reconciles a full snapshot at watermark H and contiguous events
 after H. Opening transport does not mean synchronization has completed. Compact

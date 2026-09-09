@@ -1,9 +1,11 @@
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { CodeControllerModel } from './code-controller-types';
 import { CodeComposer } from './CodeComposer';
 import { ComposerFooter } from './ComposerFooter';
 import { CodePermissionQueue } from './CodePermissionQueue';
 import { CodeTranscript } from './CodeTranscript';
+import { CodeToastHost } from './CodeToastHost';
+import { applyCodeNotice, dismissCodeToast, type CodeNotice, type CodeToast } from './code-toasts';
 import { CodeWorkspaceHeader } from './CodeWorkspaceHeader';
 import { codeCanResume } from './code-types';
 
@@ -13,6 +15,15 @@ export function CodeWorkbench({ controller: c, endpointKey, onOpenLocalFile }: P
     const [actionError, setActionError] = useState<{ key: string; message: string } | null>(null);
     const [retrying, setRetrying] = useState<string | null>(null);
     const retryGuard = useRef(new Set<string>());
+    const [toasts, setToasts] = useState<readonly CodeToast[]>([]);
+    // Notices are not cleared on a session change. The one notice that exists
+    // is derived from the current policy and re-raised by the footer on every
+    // mount, so wiping the stack here would delete it at the moment a draft
+    // becomes a running session -- exactly when it matters most.
+    const notify = useCallback((notice: CodeNotice) => {
+        setToasts(current => applyCodeNotice(current, notice));
+    }, []);
+    const dismiss = useCallback((id: string) => setToasts(current => dismissCodeToast(current, id)), []);
     const archived = c.session?.archivedAt != null;
     const stopping = c.session?.status === 'stopping' || c.operation.kind === 'stopping';
     const busy = c.busy || stopping || c.session?.status === 'starting' || c.session?.status === 'streaming';
@@ -69,6 +80,9 @@ export function CodeWorkbench({ controller: c, endpointKey, onOpenLocalFile }: P
             {canResume ? <button type="button" onClick={() => perform(c.resume)}>Resume session</button>
                 : <><span>{c.session.resume.reason ?? 'Resume is not currently available.'}</span><button type="button" onClick={c.newSession}>New session</button></>}
         </section>}
+        {/* Directly above the transcript, so a notice sits over the conversation
+            rather than over the workspace header and its picker. */}
+        <CodeToastHost toasts={toasts} onDismiss={dismiss} />
         <CodeTranscript items={c.items} provider={c.session?.provider ?? c.selection.provider} sessionKey={sessionKey}
             workingDir={c.session?.cwd ?? c.selection.cwd} loading={c.loading} hasOlderHistory={c.hasOlderHistory}
             loadOlderHistory={c.loadOlderHistory} permissionCount={c.permissions.length} onOpenLocalFile={onOpenLocalFile} />
@@ -82,7 +96,7 @@ export function CodeWorkbench({ controller: c, endpointKey, onOpenLocalFile }: P
             <div className="code-composer-surface" aria-label="Code composer controls">
                 <CodeComposer key={`composer:${sessionKey}`} inputText={c.input} canSend={canSend} busy={busy} canStop={canStop} stopping={stopping}
                     pending={c.pending} readOnly={archived} onInputChange={c.setInput} onSubmit={c.send} onStop={c.stop} />
-                <ComposerFooter key={`footer:${sessionKey}`} controller={c} />
+                <ComposerFooter key={`footer:${sessionKey}`} controller={c} onNotice={notify} />
             </div>
         </div>
     </div>;

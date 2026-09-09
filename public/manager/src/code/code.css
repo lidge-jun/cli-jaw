@@ -298,6 +298,74 @@
     min-height: 0;
     height: 100%;
     overflow: hidden;
+    /* Contains the toast stack: a stacking context, not just a positioning
+       origin, so the notice cannot paint over the mobile drawer or its scrim,
+       which sit at z-index 21 and 20 on the window. */
+    position: relative;
+    z-index: 0;
+}
+
+/* Notices sit over the transcript, not over the workspace header. The host is a
+   zero-height flow element placed directly above the transcript, so "top" means
+   the top of the conversation rather than the top of the pane; absolute
+   positioning from the pane would land the card inside the header band and
+   swallow clicks meant for the workspace picker. The host ignores pointer
+   events so it never blocks the text underneath; the cards take them back. */
+.code-toast-host {
+    position: relative;
+    z-index: 3;
+    height: 0;
+    overflow: visible;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin: 0 auto;
+    max-width: min(560px, calc(100% - 32px));
+    pointer-events: none;
+}
+.code-toast-region { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+/* An empty live region has to stay in the DOM to be observed when content
+   arrives, but it should not reserve layout while it holds nothing. */
+.code-toast-region:empty { display: none; }
+.code-toast-region:not(:empty) { margin-top: 12px; }
+.code-toast {
+    pointer-events: auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-panel);
+    box-shadow: 0 6px 20px rgb(0 0 0 / 28%);
+    font-size: 12px;
+    line-height: 1.35;
+    color: var(--text-primary);
+    animation: code-toast-enter 0.2s cubic-bezier(0.77, 0, 0.175, 1);
+}
+.code-toast-message { min-width: 0; overflow-wrap: anywhere; }
+.code-toast-dismiss {
+    flex-shrink: 0;
+    min-width: 20px;
+    min-height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    line-height: 1;
+}
+.code-toast-dismiss:hover { background: var(--bg-raised); color: var(--text-primary); }
+.code-toast-warning { border-color: color-mix(in srgb, var(--status-warn) 48%, var(--border-subtle)); }
+.code-toast-error { border-color: color-mix(in srgb, var(--status-error) 52%, var(--border-subtle)); }
+@keyframes code-toast-enter {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .code-toast { animation: none; }
 }
 
 /* Session header (title + context meter + plan) */

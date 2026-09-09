@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { CodeControllerModel } from './code-controller-types';
 import type { CodeCreateSessionRequest } from '../../../../src/code-mode/wire';
 import { CODE_POLICY_DETAILS, CODE_POLICY_LABELS, CODE_RUNTIME_LABELS } from './code-types';
+import type { CodeNotice } from './code-toasts';
 import { CheckGlyph, ProviderGlyph } from './ProviderGlyph';
 
 type MenuOption<T extends string> = {
@@ -112,7 +113,10 @@ export function CodeFooterMenu<T extends string>({ label, value, options, disabl
     </div>;
 }
 
-export function ComposerFooter({ controller: c }: { controller: CodeControllerModel }) {
+export function ComposerFooter({ controller: c, onNotice }: {
+    controller: CodeControllerModel;
+    onNotice?: ((notice: CodeNotice) => void) | undefined;
+}) {
     const selection = c.selection;
     const provider = c.catalog?.providers.find(entry => entry.id === selection.provider);
     const capabilities = c.session?.capabilities ?? provider?.capabilities;
@@ -121,6 +125,27 @@ export function ComposerFooter({ controller: c }: { controller: CodeControllerMo
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const guard = useRef(false);
+    const noticeRef = useRef(onNotice); noticeRef.current = onNotice;
+    // Announce the change, not the state. "Auto (YOLO)" as a permanent line
+    // stops being read after the first time; the moment it is switched on is
+    // the moment worth interrupting for. What the policy currently is stays
+    // legible on the Permission control itself.
+    useEffect(() => {
+        if (selection.permissionMode !== 'auto') {
+            // Leaving auto retires the warning immediately. A notice that
+            // outlived the policy would be stating something false about what
+            // the session is allowed to do.
+            noticeRef.current?.({ id: 'code:permission-mode', clear: true });
+            return;
+        }
+        // Derived from the current policy, not from a transition. The footer
+        // remounts when the draft becomes a real session, and a transition
+        // detector reads that remount as "no change" -- which deleted the
+        // warning at the exact moment the session started acting on it.
+        noticeRef.current?.({ id: 'code:permission-mode', variant: 'warning',
+            message: 'Auto (YOLO): actions may run without approval.',
+            durationMs: Number.POSITIVE_INFINITY });
+    }, [selection.permissionMode]);
     async function change(patch: Partial<CodeCreateSessionRequest>) {
         if (disabled || guard.current) return;
         guard.current = true; setSaving(true); setError(null);
@@ -177,8 +202,10 @@ export function ComposerFooter({ controller: c }: { controller: CodeControllerMo
         {!provider?.available && <div className="code-selection-notice">{provider?.reason ?? 'Runtime availability has not been confirmed.'}
             <button type="button" className="code-inline-action" onClick={() => { void c.refresh().catch(err => setError(err instanceof Error ? err.message : String(err))); }}>Refresh availability</button>
         </div>}
-        {selection.permissionMode === 'auto' && <p className="code-policy-note">Auto (YOLO): actions may run without approval.</p>}
         {(saving || c.operation.kind === 'patching') && <span role="status">Saving settings…</span>}
+        {/* Stays inline. A failed setting change is something the reader has to
+            act on -- the control reverted and this is the only account of why --
+            and it must not leave on a timer before they have read it. */}
         {error && <div className="code-action-error" role="alert">{error}</div>}
     </>;
 }

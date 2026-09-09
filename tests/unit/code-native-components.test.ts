@@ -607,3 +607,46 @@ test('unknown creation recovery warns, preserves the draft and choices, and requ
     assert.equal(sends, 0, 'recovery and rerender must not send automatically');
     await click(button(h.container, 'Send prompt')); assert.equal(sends, 1);
 });
+
+test('switching to Auto (YOLO) announces the change over the transcript, not under the composer', bounded, async t => {
+    const h = await surface(t); virtualGeometry(t);
+    const c = model();
+    await h.render(createElement(CodeWorkbench, { controller: c, endpointKey: '43225' }));
+    // The policy is legible on its own control; a permanent line under the
+    // composer is not what tells the reader it just changed. The live regions
+    // are mounted from the start -- one that appears together with its first
+    // message is not announced -- but they hold nothing yet.
+    assert.ok(h.container.querySelector('.code-toast-host'), 'the live regions exist before there is anything to say');
+    assert.equal(h.container.querySelector('.code-toast'), null);
+    assert.doesNotMatch(h.container.textContent ?? '', /actions may run without approval/);
+    const auto = model({ selection: { ...c.selection, permissionMode: 'auto' } });
+    await h.render(createElement(CodeWorkbench, { controller: auto, endpointKey: '43225' }));
+    const toast = h.container.querySelector('.code-toast');
+    assert.ok(toast, 'the switch is announced');
+    assert.match(toast?.textContent ?? '', /Auto \(YOLO\)/);
+    assert.ok(h.container.querySelector('.code-toast-warning'));
+    // Derived from the policy, not from a transition: a new session that is
+    // already Auto still says so, because the footer remounts and re-raises it.
+    // A transition detector would read that remount as "nothing changed" and
+    // stay silent exactly when the session starts acting on the policy.
+    await h.render(createElement(CodeWorkbench, { controller: model({ selection: { ...c.selection, permissionMode: 'auto' } }), endpointKey: '43225', ...{} }));
+    assert.match(h.container.querySelector('.code-toast')?.textContent ?? '', /Auto \(YOLO\)/);
+    // Leaving the policy retires it rather than letting it assert something
+    // about the session that is no longer true.
+    await h.render(createElement(CodeWorkbench, { controller: model({ selection: { ...c.selection, permissionMode: 'read-only' } }), endpointKey: '43225' }));
+    assert.equal(h.container.querySelector('.code-toast'), null, 'the warning leaves with the policy');
+    await h.render(createElement(CodeWorkbench, { controller: auto, endpointKey: '43225' }));
+    await click(h.container.querySelector('.code-toast-dismiss') as HTMLButtonElement);
+    assert.equal(h.container.querySelector('.code-toast'), null, 'a notice can be dismissed from the keyboard');
+});
+
+test('states the reader must act on stay on screen instead of becoming a toast', bounded, async t => {
+    const h = await surface(t); virtualGeometry(t);
+    // An unconfirmed send has a recovery path attached to it. A notice that
+    // dismisses itself after a few seconds would take that path with it.
+    await h.render(createElement(CodeWorkbench, { controller: model({ operation: { kind: 'unknown-send', error: null }, retryText: 'original request', canRetrySameSend: true }), endpointKey: '43225' }));
+    assert.match(h.container.textContent ?? '', /Send outcome not confirmed/);
+    assert.ok(h.container.querySelector('[aria-label="Original prompt"]'));
+    await h.render(createElement(CodeWorkbench, { controller: model({ transport: 'disconnected' }), endpointKey: '43225' }));
+    assert.match(h.container.textContent ?? '', /Live updates disconnected/);
+});
