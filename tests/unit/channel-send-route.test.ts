@@ -55,7 +55,7 @@ test('HTTP Slack blocks reach the real adapter and require persisted table proof
             reads.push(params);
             if (mode === 'unavailable') return new Response(JSON.stringify({ ok: false, error: 'missing_scope' }));
             const stored = mode === 'missing' ? [{ type: 'rich_text', elements: [] }]
-                : [{ ...table, rows: mode === 'wrong_shape' ? table.rows.slice(0, 1) : table.rows }];
+                : [{ ...table, rows: mode === 'wrong_shape' ? table.rows.slice(0, 1) : [table.rows[0], [table.rows[1]![0], posts.length === 2 ? { type: 'raw_number', value: 10, text: '10' } : { type: 'raw_text', text: '10' }]] }];
             return new Response(JSON.stringify({ ok: true, messages: [{ ts: params.get('oldest'), blocks: [{ type: 'header', text: { type: 'plain_text', text: '방법' } }, { type: 'divider' }, ...stored] }] }));
         }
         throw new Error(`Unexpected external request: ${url}`);
@@ -79,6 +79,7 @@ test('HTTP Slack blocks reach the real adapter and require persisted table proof
             assert.deepEqual(posts.map(p => p['blocks']), [blocks.slice(0, 2), [...blocks.slice(2, 4), normalizedTable]]);
             assert.deepEqual(good.body.delivery, {
                 verification: 'verified', expectedTables: 2, verifiedTables: 2,
+                tableContent: 'verified', richContent: 'not_checked', sourceAccuracy: 'not_checked', comparisonVersion: 1,
                 channelId: 'D_ROUTE', messageTs: ['100.1', '100.2'],
                 expectedFeatures: ['divider', 'heading'], verifiedFeatures: ['divider', 'heading'],
             });
