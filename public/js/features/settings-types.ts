@@ -73,6 +73,13 @@ export interface CliStatusInfo {
     probeError?: string;
     probeFailures?: number;
     nextRetryAt?: number;
+    /**
+     * Last native runtime that failed before acquiring a lease, present only
+     * while the row's transport is still native. Deliberately separate from
+     * `probeError`: that is cached binary/auth/probe evidence with its own
+     * backoff, this is a live per-turn start failure.
+     */
+    lastStartFailure?: { code: string; at: number };
 }
 export function describeCliProbe(info: CliStatusInfo): 'checking' | 'unknown' | 'probe-failing' | 'capability-failed' | 'stale' | 'ready' | 'unavailable' {
     if (info.probeState === 'checking') return 'checking';
@@ -117,6 +124,20 @@ export function describeCliProbeAvailability(
 }
 export function shouldHydrateRuntimeMigrationResponse(status: number): boolean {
     return status >= 200 && status < 300 || status === 409;
+}
+
+/**
+ * A selected transport that cannot start looks identical to one that works, so
+ * the code the runtime raised is shown as-is (#658). It is one
+ * provider-independent identifier by construction, never provider text, and it
+ * says nothing about probe readiness, so it never sets `allowRemediation`.
+ */
+export function describeNativeStartFailure(
+    info: Pick<CliStatusInfo, 'lastStartFailure'>,
+): { code: string; message: string } | null {
+    const code = info.lastStartFailure?.code;
+    if (!code) return null;
+    return { code, message: `Native runtime failed to start: ${code}` };
 }
 export interface MessagingConfig {
     enabledChannels?: ('telegram' | 'discord' | 'slack')[];

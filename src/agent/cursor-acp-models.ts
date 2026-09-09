@@ -30,6 +30,16 @@ const PRINT_AUTO = 'auto';
 const ACP_AUTO = 'default';
 
 /**
+ * Thinking is not translated, on purpose. Cursor's print namespace folds it into
+ * the id — `claude-opus-4-7-thinking`, `claude-fable-5-thinking` — while ACP
+ * exposes it as its own `thinking` select alongside the model. This resolver
+ * returns a model and nothing else, so peeling the word would bind the base and
+ * drop the axis without saying so, which is the failure mode every rule here
+ * exists to avoid. Those ids fail closed instead, and the advertised-id log
+ * shows the operator what the account does offer.
+ */
+
+/**
  * Effort spellings a print wire id can carry, mapped to the effort vocabulary
  * the settings field uses. This mirrors the suffix table in
  * cursor-model-inventory.ts, but every match matters here rather than only the

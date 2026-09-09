@@ -174,7 +174,7 @@ cli-jaw/
 │   │   ├── kiro-models.ts    ← Kiro live model inventory (KiroModelEntry, KiroModelInventory, parseKiroModelListJson, fetchKiroModelInventory) (98L)
 │   │   ├── kiro-runtime.ts   ← Kiro plain-text stdout parser + session capture (isKiroPlainTextCli, processKiroStdoutChunk, flushKiroStdoutContext, appendKiroStdoutChunk, captureKiroSessionIdAfterExit, stripKiroAnsi, parseKiroAssistantText, isKiroStaleSessionOutput, isKiroResumeDegradedOutput, KiroStreamEvent, KiroStdoutContext) (460L)
 │   │   ├── cursor-runtime.ts ← Cursor CLI event adapter + session management (395L) ✨
-│   │   ├── cursor-acp-models.ts ← Cursor print → ACP model id rewrites verified against the advertised set (130L)
+│   │   ├── cursor-acp-models.ts ← Cursor print → ACP model id rewrites verified against the advertised set (140L)
 │   │   ├── agy-runtime.ts    ← AGY timeout stdout/close-text 판별 + 최종 planner 기준 timeout suffix 정규화 + stdout/log conversation id 추출 + quiet completion/replay/prompt-echo stripping helper (321L)
 │   │   ├── claude-e-runtime.ts ← `jaw_runtime` helper event를 internal `agent:claude-e:*` broadcast로 변환 (46L)
 │   │   ├── alert-escalation.ts ← alert escalation event helper (94L)
