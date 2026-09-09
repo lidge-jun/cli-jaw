@@ -118,12 +118,24 @@ function effortSelector(config: AcpSelectConfig): boolean {
     return EFFORT_SELECTOR_NAMES.has(token(config.id)) || EFFORT_SELECTOR_NAMES.has(token(config.name));
 }
 
+/**
+ * An exact effort id is a stronger signal than a shared category, so it wins outright.
+ * Cursor advertises both `thinking` and `effort` under `thought_level`; treating
+ * the category as equal evidence made every effort-configured session ambiguous
+ * and killed it before its first turn (#656). Category matching still covers
+ * providers that expose effort under a differently named id.
+ */
 function selector(configs: ReadonlyArray<AcpSelectConfig>, kind: SelectionKind): AcpSelectConfig {
+
     const matches = configs.filter(config => kind === 'model'
         ? token(config.category ?? '') === 'model' || config.id === 'model'
         : effortSelector(config));
-    if (matches.length > 1) throw new Error(`acp_config_ambiguous_${kind}`);
-    const match = matches[0];
+    // Effort only: a model selector stays strictly unambiguous, because two
+    // advertised model configs mean the session genuinely cannot choose.
+    const exact = kind === 'effort' ? matches.filter(config => token(config.id) === 'effort') : [];
+    const candidates = exact.length ? exact : matches;
+    if (candidates.length > 1) throw new Error(`acp_config_ambiguous_${kind}`);
+    const match = candidates[0];
     if (!match) throw new Error(`acp_config_unsupported_${kind}`);
     return match;
 }
@@ -156,6 +168,35 @@ function assertApplied(configs: ReadonlyArray<AcpSelectConfig>, kind: SelectionK
     if (selector(configs, kind).currentValue !== value) throw new Error(`acp_config_${kind}_not_applied`);
 }
 
+/**
+ * Print and ACP spell the same model differently — `cursor-agent models` shows
+ * `claude-4.6-opus-high` where ACP advertises `claude-opus-4-6` — so switching
+ * transport leaves a value nothing accepts and the session dies before its first
+ * turn with no clue which setting is wrong (#657).
+ *
+ * Translating between the two automatically is not safe: an order-independent
+ * segment match collapses `gpt-5.4-mini-high` and `gpt-5.4-mini-low` onto the
+ * same bag, and `max` is a product name in `gpt-5.1-codex-max` rather than an
+ * effort rung, so a unique survivor can be the wrong model. The error therefore
+ * stays exact and code-only; what changes is that the advertised ids reach the
+ * operator through this log instead of requiring a scratch script.
+ *
+ * Option values are provider-supplied, so only clean identifier-shaped ones are
+ * printed and the list is capped. Anything carrying whitespace, quotes or a path
+ * shape is counted, never echoed.
+ */
+const CLEAN_MODEL_ID = /^[A-Za-z0-9._:@-]{1,64}$/;
+const ADVERTISED_LOG_CAP = 12;
+
+function reportUnsupportedModel(config: AcpSelectConfig): void {
+    try {
+        const clean = config.options.map(option => option.value).filter(value => CLEAN_MODEL_ID.test(value));
+        const shown = clean.slice(0, ADVERTISED_LOG_CAP).join(', ');
+        const omitted = config.options.length - Math.min(clean.length, ADVERTISED_LOG_CAP);
+        console.warn('[acp:config] configured model is not advertised; advertised ids:',
+            shown || '(none printable)', omitted > 0 ? `(+${omitted} not shown)` : '');
+    } catch { /* diagnostics never mask the configuration failure */ }
+}
 /** Serialized setup helper. Caller owns admission, deadlines, retirement and error reporting.
  * A later failure does not undo an already acknowledged model write.
  */
@@ -167,7 +208,10 @@ export async function configureAcpModel(port: AcpConfigPort, input: {
     let configs = parseAcpSelectConfigs(port.getConfigOptions());
     if (model !== undefined) {
         const config = selector(configs, 'model');
-        if (!config.options.some(option => option.value === model)) throw new Error('acp_config_unsupported_model');
+        if (!config.options.some(option => option.value === model)) {
+            reportUnsupportedModel(config);
+            throw new Error('acp_config_unsupported_model');
+        }
         if (config.currentValue !== model) {
             await port.setConfigOption(config.id, model);
             configs = parseAcpSelectConfigs(port.getConfigOptions());

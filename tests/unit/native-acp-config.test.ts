@@ -250,7 +250,9 @@ test('refuses missing/unsupported/boolean effort and ambiguous selectors or norm
         await assert.rejects(configureAcpModel(f.port, { effort: 'medium' }), /acp_config_unsupported_effort/);
         assert.deepEqual(f.writes, []);
     }
-    const ambiguous = fixture([effort('legacy', 'model_option'), effort('effort', 'model_config')]);
+    // Two candidates with no exact id stay ambiguous. A sibling next to an exact
+    // `effort` id no longer does: that is the #656 fix, covered separately below.
+    const ambiguous = fixture([effort('legacy', 'model_option'), effort('reasoning', 'model_config')]);
     await assert.rejects(configureAcpModel(ambiguous.port, { effort: 'high' }), /acp_config_ambiguous_effort/);
     const values = fixture([select('effort', 'low', [choice('low'), choice('xhigh'), choice('extra-high')], 'thought_level')]);
     await assert.rejects(configureAcpModel(values.port, { effort: 'xhigh' }), /acp_config_ambiguous_effort_value/);
@@ -298,4 +300,60 @@ test('invalid explicit requests fail before writes; errors never interpolate pro
     assert.deepEqual(f.writes, []);
     assert.throws(() => parseAcpSelectConfigs([{ ...select(), id: 'SECRET'.repeat(200) }]),
         { message: 'acp_config_invalid_id' });
+});
+
+test('two exact effort ids stay ambiguous rather than picking one', async () => {
+    // The preference ranks within the existing candidates; it never makes an
+    // ambiguous snapshot decidable.
+    const f = fixture([effort('effort', 'thought_level'), effort('Effort', 'model_config')]);
+    await assert.rejects(configureAcpModel(f.port, { effort: 'medium' }), /acp_config_ambiguous_effort/);
+    assert.deepEqual(f.writes, []);
+});
+
+test('an effort id under the model category is never a candidate', async () => {
+    // effortSelector rejects category model outright, so the exact-id preference
+    // cannot reach it and write a reasoning level into the model picker.
+    const f = fixture([select('effort', 'old', [choice('old'), choice('medium')], 'model')]);
+    await assert.rejects(configureAcpModel(f.port, { effort: 'medium' }), /acp_config_unsupported_effort/);
+    assert.deepEqual(f.writes, []);
+});
+test('an exact effort id wins over a sibling sharing its category (#656)', async () => {
+    // Cursor advertises thinking and effort under the same thought_level category.
+    const f = fixture([
+        select('model', 'claude-opus-4-6', [choice('claude-opus-4-6')], 'model'),
+        select('thinking', 'false', [choice('false'), choice('true')], 'thought_level', 'Thinking'),
+        effort(),
+    ]);
+    await configureAcpModel(f.port, { model: 'claude-opus-4-6', effort: 'medium' });
+    assert.deepEqual(f.writes, [['effort', 'medium']]);
+});
+
+test('a category-only effort still resolves when no exact id exists', async () => {
+    const f = fixture([effort('reasoning', 'thought_level', 'Reasoning')]);
+    await configureAcpModel(f.port, { effort: 'medium' });
+    assert.deepEqual(f.writes, [['reasoning', 'medium']]);
+});
+
+test('two category-only effort candidates remain ambiguous', async () => {
+    const f = fixture([effort('reasoning', 'thought_level', 'Reasoning'), effort('depth', 'thought_level', 'Depth')]);
+    await assert.rejects(configureAcpModel(f.port, { effort: 'medium' }), /acp_config_ambiguous_effort/);
+});
+
+test('an unadvertised model fails with a code-only error and logs the advertised ids (#657)', async () => {
+    const warnings: unknown[][] = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => { warnings.push(args); };
+    try {
+        const f = fixture([select('model', 'claude-opus-4-6', [choice('claude-opus-4-6'), choice('a b c')], 'model')]);
+        // The print spelling is deliberately NOT translated: gpt-5.4-mini-high and
+        // gpt-5.4-mini-low share every segment, so guessing can bind another model.
+        await assert.rejects(configureAcpModel(f.port, { model: 'claude-4.6-opus-high' }),
+            { message: 'acp_config_unsupported_model' });
+        assert.deepEqual(f.writes, []);
+        const logged = warnings.flat().join(' ');
+        assert.match(logged, /claude-opus-4-6/);
+        // A provider value that is not identifier-shaped is counted, never echoed.
+        assert.doesNotMatch(logged, /a b c/);
+        assert.match(logged, /\(\+1 not shown\)/);
+    } finally { console.warn = original; }
 });
