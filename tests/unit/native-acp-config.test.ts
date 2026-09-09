@@ -302,6 +302,46 @@ test('invalid explicit requests fail before writes; errors never interpolate pro
         { message: 'acp_config_invalid_id' });
 });
 
+test('an unadvertised model consults the optional resolver, and only after an exact match fails', async () => {
+    const seen: string[] = [];
+    const resolveModel = (requested: string, advertised: ReadonlyArray<{ value: string }>) => {
+        seen.push(`${requested}|${advertised.map(option => option.value).join(',')}`);
+        return requested === 'print-spelling' ? 'new' : undefined;
+    };
+    const f = fixture([select()]);
+    await configureAcpModel(f.port, { model: 'print-spelling', resolveModel });
+    assert.deepEqual(f.writes, [['model', 'new']]);
+    assert.deepEqual(seen, ['print-spelling|old,new']);
+
+    // An advertised value is applied as itself; the hook never sees it.
+    const exact = fixture([select()]);
+    await configureAcpModel(exact.port, { model: 'new', resolveModel });
+    assert.deepEqual(exact.writes, [['model', 'new']]);
+    assert.deepEqual(seen.length, 1);
+});
+
+test('a resolver cannot widen the accepted set, mask a failure, or bypass applied verification', async () => {
+    // Returning something the provider does not advertise is ignored, and the
+    // original failure stands with its own code.
+    for (const resolveModel of [() => 'not-advertised', () => undefined, () => '',
+        () => { throw new Error('resolver_failed'); }]) {
+        const f = fixture([select()]);
+        await assert.rejects(configureAcpModel(f.port, { model: 'unknown', resolveModel }),
+            /acp_config_unsupported_model|resolver_failed/);
+        assert.deepEqual(f.writes, []);
+    }
+    // A translated value is verified against the refreshed snapshot like any other.
+    const ignored = fixture([select(), effort()], () => [select(), effort()]);
+    await assert.rejects(configureAcpModel(ignored.port, { model: 'print', resolveModel: () => 'new' }),
+        /acp_config_model_not_applied/);
+    assert.deepEqual(ignored.writes, [['model', 'new']]);
+    // Effort-induced drift is measured against the translated value too.
+    const drift = fixture([select(), effort()],
+        () => [select('model', 'old'), { ...effort(), currentValue: 'medium' }]);
+    await assert.rejects(configureAcpModel(drift.port, { model: 'print', effort: 'medium', resolveModel: () => 'new' }),
+        /acp_config_model_not_applied/);
+});
+
 test('two exact effort ids stay ambiguous rather than picking one', async () => {
     // The preference ranks within the existing candidates; it never makes an
     // ambiguous snapshot decidable.

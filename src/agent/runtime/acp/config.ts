@@ -203,19 +203,36 @@ function reportUnsupportedModel(config: AcpSelectConfig): void {
 export async function configureAcpModel(port: AcpConfigPort, input: {
     readonly model?: string | null | undefined;
     readonly effort?: string | null | undefined;
+    /**
+     * Optional provider-scoped translation, consulted only after an exact match
+     * fails. Cursor spells the same model differently on its print and ACP
+     * transports, so a value that worked before a transport switch is rejected
+     * here with nothing to act on (#657). The policy stays with the provider:
+     * this helper only requires that whatever comes back is itself advertised,
+     * so a hook can never widen the set of values the session will accept.
+     */
+    readonly resolveModel?: (requested: string, advertised: ReadonlyArray<AcpSelectOption>) => string | undefined;
 }): Promise<void> {
     const model = requested(input.model, 'model'), effort = requested(input.effort, 'effort');
     let configs = parseAcpSelectConfigs(port.getConfigOptions());
-    if (model !== undefined) {
+    let selected = model;
+    if (selected !== undefined) {
         const config = selector(configs, 'model');
-        if (!config.options.some(option => option.value === model)) {
-            reportUnsupportedModel(config);
-            throw new Error('acp_config_unsupported_model');
+        if (!config.options.some(option => option.value === selected)) {
+            const translated = input.resolveModel?.(selected, config.options);
+            // A hook that returns an unadvertised value is ignored rather than
+            // trusted; the failure below is the same one it failed to resolve.
+            if (translated !== undefined && config.options.some(option => option.value === translated)) {
+                selected = translated;
+            } else {
+                reportUnsupportedModel(config);
+                throw new Error('acp_config_unsupported_model');
+            }
         }
-        if (config.currentValue !== model) {
-            await port.setConfigOption(config.id, model);
+        if (config.currentValue !== selected) {
+            await port.setConfigOption(config.id, selected);
             configs = parseAcpSelectConfigs(port.getConfigOptions());
-            assertApplied(configs, 'model', model);
+            assertApplied(configs, 'model', selected);
         }
     }
     if (effort === undefined) return;
@@ -225,5 +242,5 @@ export async function configureAcpModel(port: AcpConfigPort, input: {
     await port.setConfigOption(config.id, value);
     configs = parseAcpSelectConfigs(port.getConfigOptions());
     assertApplied(configs, 'effort', value);
-    if (model !== undefined) assertApplied(configs, 'model', model);
+    if (selected !== undefined) assertApplied(configs, 'model', selected);
 }
