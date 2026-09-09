@@ -298,6 +298,10 @@ export async function orchestrate(
     // forwarder must fire for THESE turns only, or an ordinary reply, which the
     // dispatch path already posts, would go out twice.
     const fromQueue = meta["_fromQueue"] === true;
+    // Set by the kill-steer path. Like a queued turn, a steered follow-up has no
+    // live dispatch waiter (ingress returns early for a steered submission), so
+    // its terminal needs the standing forwarder to deliver it.
+    const fromSteer = meta["_fromSteer"] === true;
     const scope: string = meta['scope'];
     const chatSessionId: string = meta['chatSessionId'];
 
@@ -704,6 +708,7 @@ export async function orchestrate(
         requestId,
         replyViaTarget,
         ...(fromQueue ? { fromQueue: true } : {}),
+        ...(fromSteer ? { fromSteer: true } : {}),
         ...(nativeOutcome ? { scope, sessionId: chatSessionId }
             : settings["multiSession"]?.enabled === true ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
         ...(typeof result['agyPlannerOnly'] === 'boolean' ? { agyPlannerOnly: result['agyPlannerOnly'] } : {}),

@@ -935,10 +935,21 @@ export async function steerAgent(
     }
     insertMessage.run('user', newPrompt, source, '', settings["workingDir"] || null, chatSessionId);
     broadcast('new_message', { role: 'user', content: newPrompt, source, scope: scopeKey, sessionId: chatSessionId });
-    broadcast('steer_started', stripUndefined({ prompt: newPrompt, origin: source || 'web', scope: scopeKey, requestId: meta?.requestId }));
+    broadcast('steer_started', stripUndefined({ prompt: newPrompt, origin: source || 'web', scope: scopeKey,
+        sessionId: chatSessionId, target: meta?.target, chatId: meta?.chatId, requestId: meta?.requestId,
+        remoteKey: meta?.remoteKey, replyViaTarget: meta?.replyViaTarget, mode: 'kill-steer' }));
     const { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
-    const steerMeta = stripUndefined({ origin, scope: scopeKey, chatSessionId, requestId: meta?.requestId, _skipInsert: true, _steerContext: steerContext || undefined });
+    // The follow-up run answers the SAME conversation the killed turn came from,
+    // but nothing downstream can infer that: a remote caller's reply is addressed
+    // by `target`, and dropping it here left the answer with nowhere to go. The
+    // dispatch waiter is already gone (ingress returns early for a steered
+    // submission), so an unaddressed terminal is silently discarded and the
+    // channel just goes quiet after a steer.
+    const steerMeta = stripUndefined({ origin, scope: scopeKey, chatSessionId, requestId: meta?.requestId,
+        target: meta?.target, chatId: meta?.chatId, remoteKey: meta?.remoteKey,
+        replyViaTarget: meta?.replyViaTarget, _fromSteer: true,
+        _skipInsert: true, _steerContext: steerContext || undefined });
     const task = isResetIntent(newPrompt)
         ? orchestrateReset(steerMeta)
         : isContinueIntent(newPrompt)
@@ -946,7 +957,9 @@ export async function steerAgent(
             : orchestrate(newPrompt, steerMeta);
     task.catch(async (err: Error) => {
         console.error('[steer:orchestrate]', err.message);
-        broadcast('orchestrate_done', stripUndefined({ text: `[error] ${err.message}`, error: true, origin, requestId: meta?.requestId }));
+        broadcast('orchestrate_done', stripUndefined({ text: `[error] ${err.message}`, error: true, origin,
+            target: meta?.target, chatId: meta?.chatId, replyViaTarget: meta?.replyViaTarget,
+            fromSteer: true, requestId: meta?.requestId }));
         settleOnce(meta?.requestId, 'failed', { error: err.message });
     });
     // The follow-up was started as a new run (kill-path or idle race). The caller
