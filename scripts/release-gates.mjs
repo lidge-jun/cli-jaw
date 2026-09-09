@@ -68,6 +68,37 @@ function readFile(rel) {
     return fs.readFileSync(path.join(repoRoot, rel), 'utf8');
 }
 
+/**
+ * Lines only a git merge conflict produces. A bare `=======` is deliberately
+ * absent: it is also a Markdown setext H1 underline, so matching it would fail
+ * this gate on ordinary prose. Every real conflict carries the anchored
+ * `<<<<<<<`/`>>>>>>>` pair, so the pair is enough to see one.
+ */
+const CONFLICT_MARKER_RE = '^(<<<<<<< |\\|\\|\\|\\|\\|\\|\\| |>>>>>>> )';
+
+/**
+ * tests/fixtures/manager-notes-wysiwyg holds canned conflict text on purpose —
+ * it is the INPUT to the notes conflict-rendering tests, not a merge leftover.
+ */
+const CONFLICT_SCAN_EXCLUDE = ':(exclude)tests/fixtures/manager-notes-wysiwyg/';
+
+/**
+ * Tracked files still carrying merge markers. `git grep` reads only tracked
+ * paths, so an untracked scratch file cannot fail the build, and `-I` skips
+ * binaries. A status other than 0 (found) or 1 (clean) means the scan did not
+ * actually run, which is reported rather than silently passed.
+ */
+function trackedConflictMarkers() {
+    const r = run('git', ['grep', '-n', '-I', '-E', CONFLICT_MARKER_RE, '--', '.', CONFLICT_SCAN_EXCLUDE],
+        { timeout: 60_000 });
+    if (r.status === 1) return { hits: [] };
+    if (r.status !== 0) {
+        const why = [r.stderr, r.stdout].filter(Boolean).join(' ').trim() || `status ${r.status}`;
+        return { error: `conflict-marker scan could not run: ${why}` };
+    }
+    return { hits: String(r.stdout || '').split('\n').filter(Boolean) };
+}
+
 const FORBIDDEN_IN_READY = [
     /external[-\s]?cdp/i,
     /remote[-\s]?cdp/i,
@@ -417,13 +448,27 @@ const GATES = {
         },
     },
     'doc-drift': {
-        description: 'structure docs match live inventory (docs:check TS extractors + legacy bash checks)',
+        description: 'no tracked file carries merge conflict markers (every run) + structure docs match live inventory (local only)',
         check() {
+            // A merge that commits its own conflict markers is the one docs
+            // failure CI has to catch, and nothing did: the #660 merge landed 14
+            // unresolved blocks on dev (README.md, AGENTS.md, CLAUDE.md,
+            // structure/str_func.md) and gate:all still went green, because the
+            // inventory steps below are skipped on CI and nothing else reads
+            // those files' contents. This scan is a string match on tracked
+            // paths — platform-neutral — so it runs before that skip.
+            const markers = trackedConflictMarkers();
+            if (markers.error) return { ok: false, detail: markers.error };
+            if (markers.hits.length) {
+                const sample = markers.hits.slice(0, 5).join('; ');
+                const more = markers.hits.length > 5 ? ` (+${markers.hits.length - 5} more)` : '';
+                return { ok: false, detail: `${markers.hits.length} unresolved conflict marker line(s): ${sample}${more}` };
+            }
             // CI runners produce platform-dependent file/line inventories
             // (no public/dist, different tracked-file set) that this gate
             // cannot reconcile; it stays a local/pre-release discipline gate.
             if (process.env.CI) {
-                return { ok: true, detail: 'skipped on CI (local/pre-release gate only)' };
+                return { ok: true, detail: 'conflict-marker scan clean; inventory steps skipped on CI (local/pre-release only)' };
             }
             const steps = [
                 { name: 'docs:check', cmd: 'npm', args: ['run', 'docs:check', '--silent'], timeout: 120_000 },
@@ -435,7 +480,7 @@ const GATES = {
                     return { ok: false, detail: `${s.name} failed:\n${[r.stdout, r.stderr].filter(Boolean).join('\n').slice(-1500)}` };
                 }
             }
-            return { ok: true, detail: 'docs:check + check-doc-drift.sh clean' };
+            return { ok: true, detail: 'conflict-marker scan clean; docs:check + check-doc-drift.sh clean' };
         },
     },
     'path-length': {
