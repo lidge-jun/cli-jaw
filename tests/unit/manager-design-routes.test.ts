@@ -7,11 +7,14 @@
  * - 409 conflict surfaces for stale baseRevision
  * - preview responds with HTML + locked CSP (script-src 'none')
  */
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { stopDesignWatcher } from '../../src/manager/design/watcher.js';
 
 process.env['CLI_JAW_DASHBOARD_HOME'] = mkdtempSync(join(tmpdir(), 'jaw-design-routes-'));
 
@@ -132,3 +135,31 @@ test('snapshots list after export-before gate and restore requires header', asyn
     const restoreNoHeader = await request('POST', `/pages/${page.id}/snapshots/123-before/restore`);
     assert.equal(restoreNoHeader.code, 403);
 });
+test('the design watcher never holds a short-lived process open', () => {
+    // #661 follow-up: with forceExit gone, this file hung its child on CI for the full
+    // 180s stall bound. Linux has no native recursive fs.watch, and the JS stand-in's
+    // unref() never touches the per-directory handles it adds as directories appear —
+    // one is added for every page this suite creates. Only { persistent: false } stops
+    // that, so prove a child that starts the watcher and then creates a directory under
+    // it still exits on its own. On macOS this passes either way; CI is Linux.
+    const home = mkdtempSync(join(tmpdir(), 'jaw-design-watch-exit-'));
+    const watcherModule = pathToFileURL(join(import.meta.dirname, '..', '..', 'src', 'manager', 'design', 'watcher.ts')).href;
+    const script = [
+        `const { mkdirSync } = await import('node:fs');`,
+        `const { join } = await import('node:path');`,
+        `const root = join(process.env.CLI_JAW_DASHBOARD_HOME, 'design');`,
+        `mkdirSync(root, { recursive: true });`,
+        `const { startDesignWatcher } = await import(${JSON.stringify(watcherModule)});`,
+        `if (!startDesignWatcher()) { console.error('watcher did not start'); process.exit(2); }`,
+        `mkdirSync(join(root, 'page-created-after-start'), { recursive: true });`,
+        `await new Promise(resolve => setTimeout(resolve, 500));`,
+    ].join('\n');
+    const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script], {
+        cwd: join(import.meta.dirname, '..', '..'), encoding: 'utf8', timeout: 30_000,
+        env: { ...process.env, CLI_JAW_DASHBOARD_HOME: home },
+    });
+    assert.equal(result.signal, null, `the child had to be killed, so the watcher held it open:\n${result.stderr ?? ''}`);
+    assert.equal(result.status, 0, result.stderr ?? '');
+});
+
+after(() => { stopDesignWatcher(); });
