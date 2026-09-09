@@ -54,8 +54,13 @@ test('HTTP Slack blocks reach the real adapter and require persisted table proof
             const params = new URLSearchParams(String(init?.body));
             reads.push(params);
             if (mode === 'unavailable') return new Response(JSON.stringify({ ok: false, error: 'missing_scope' }));
+            // Every chunk posts before any readback, so the stored message is
+            // keyed by the requested ts: 100.1 carried the markdown table (text
+            // cell), 100.2 the native table (number cell).
+            const cell = params.get('oldest') === '100.1'
+                ? { type: 'raw_text', text: '10' } : { type: 'raw_number', value: 10, text: '10' };
             const stored = mode === 'missing' ? [{ type: 'rich_text', elements: [] }]
-                : [{ ...table, rows: mode === 'wrong_shape' ? table.rows.slice(0, 1) : [table.rows[0], [table.rows[1]![0], posts.length === 2 ? { type: 'raw_number', value: 10, text: '10' } : { type: 'raw_text', text: '10' }]] }];
+                : [{ ...table, rows: mode === 'wrong_shape' ? table.rows.slice(0, 1) : [table.rows[0], [table.rows[1]![0], cell]] }];
             return new Response(JSON.stringify({ ok: true, messages: [{ ts: params.get('oldest'), blocks: [{ type: 'header', text: { type: 'plain_text', text: '방법' } }, { type: 'divider' }, ...stored] }] }));
         }
         throw new Error(`Unexpected external request: ${url}`);

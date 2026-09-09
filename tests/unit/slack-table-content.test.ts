@@ -76,9 +76,13 @@ test('second chunk mismatch retains first proof and still posts and verifies thi
     let posts = 0;
     const result = await sendSlackText('fixture', { channel: 'slack', targetId: 'D1', targetKind: 'user', peerKind: 'direct' }, 'fallback', {
         blocks: ['A', 'B', 'C'].map(value => ({ type: 'table', rows: [[textCell(value)]] })),
-        fetchImpl: (async (url: string | URL | Request) => {
+        fetchImpl: (async (url: string | URL | Request, init?: { body?: unknown }) => {
             if (String(url).endsWith('chat.postMessage')) { posts++; return new Response(JSON.stringify({ ok: true, ts: `1.${posts}` })); }
-            return new Response(JSON.stringify({ ok: true, messages: [{ ts: `1.${posts}`, ...native([[textCell(posts === 1 ? 'A' : posts === 2 ? 'X' : 'C')]]) }] }));
+            // Readback is keyed by the requested ts, not the post counter: every
+            // chunk posts before any verification runs, so `posts` is always 3 here.
+            const requestedTs = new URLSearchParams(String(init?.body ?? '')).get('latest') ?? '';
+            const cell = requestedTs === '1.1' ? 'A' : requestedTs === '1.2' ? 'X' : 'C';
+            return new Response(JSON.stringify({ ok: true, messages: [{ ts: requestedTs, ...native([[textCell(cell)]]) }] }));
         }) as typeof fetch,
     });
     assert.equal(result.ok, true); assert.equal(posts, 3); assert.equal(result.delivery?.verifiedTables, 2);
@@ -194,10 +198,12 @@ test('actual POST failure keeps partial receipt and does not retry or post remai
     assert.match(result.error!, /internal_error/); assert.equal(posts, 2);
     assert.equal(result.delivery?.verification, 'unavailable');
     assert.equal(result.delivery?.tableContent, 'unavailable');
-    assert.equal(result.delivery?.verifiedTables, 1);
+    // Verification runs only after every chunk posts, so a mid-answer POST failure
+    // leaves the posted chunk checked as delivered but not content-verified.
+    assert.equal(result.delivery?.verifiedTables, 0);
     assert.equal(result.delivery?.postedChunks, 1); assert.equal(result.delivery?.totalChunks, 3);
     assert.deepEqual(result.delivery?.messageTs, ['3.1']);
-    assert.equal(result.delivery?.messages[0]?.verification, 'verified');
+    assert.equal(result.delivery?.messages[0]?.verification, 'not_checked');
 });
 
 test('untrusted readback error text never enters successful transport receipts', async () => {
@@ -210,4 +216,40 @@ test('untrusted readback error text never enters successful transport receipts',
     assert.equal(result.delivery?.verification, 'unavailable');
     assert.equal(result.delivery?.messages[0]?.error, 'slack_request_failed');
     assert.ok(!JSON.stringify(result).includes(privateText));
+});
+
+test('onPosted fires after the last post and before any readback', async () => {
+    const order: string[] = [];
+    const result = await sendSlackText('fixture', target, 'fallback', {
+        blocks: ['A', 'B'].map(value => ({ type: 'table', rows: [[textCell(value)]] })),
+        onPosted: info => { order.push('posted'); assert.equal(info.postedChunks, 2); },
+        fetchImpl: (async (url: string | URL | Request, init?: { body?: unknown }) => {
+            if (String(url).endsWith('chat.postMessage')) { order.push('post'); return new Response(JSON.stringify({ ok: true, ts: '7.' + order.length })); }
+            order.push('read');
+            const ts = new URLSearchParams(String(init?.body ?? '')).get('latest') ?? '';
+            return new Response(JSON.stringify({ ok: true, messages: [{ ts, ...native([[textCell(ts === '7.1' ? 'A' : 'B')]]) }] }));
+        }) as typeof fetch,
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.delivery?.verification, 'verified');
+    assert.deepEqual(order, ['post', 'post', 'posted', 'read', 'read']);
+});
+
+test('stored markdown blocks and data_table still verify as delivered', async () => {
+    // Slack can persist a posted markdown block verbatim, and tables as data_table.
+    const markdownMessage = { ts: '8.1', blocks: [{ type: 'markdown', text: '# Title\n\n![alt](https://example.com/a.png)' }] };
+    const markdownChecked = await verifySlackTables('fixture', target, '8.1', [], { fetchImpl: responseFor(markdownMessage) }, ['heading', 'image']);
+    assert.equal(markdownChecked.verification, 'verified');
+    assert.deepEqual(markdownChecked.verifiedFeatures, ['heading', 'image']);
+    const dataTable = { ts: '8.2', blocks: [{ type: 'data_table', rows: [[textCell('H')], [textCell('V')]] }] };
+    const tableChecked = await verifySlackTables('fixture', target, '8.2', [{ rows: 2, columns: 1 }], { fetchImpl: responseFor(dataTable) });
+    assert.equal(tableChecked.verification, 'verified');
+    assert.equal(tableChecked.verifiedTables, 1);
+});
+
+test('readback timeout is named, not reported as a send abort', async () => {
+    const fetchImpl = (async () => { throw new DOMException('aborted', 'AbortError'); }) as typeof fetch;
+    const checked = await verifySlackTables('fixture', target, '9.1', [{ rows: 1, columns: 1 }], { fetchImpl });
+    assert.equal(checked.verification, 'unavailable');
+    assert.equal(checked.reason, 'slack_readback_timeout');
 });

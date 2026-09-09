@@ -339,13 +339,19 @@ async function runMentionWatchJob(job: Record<string, any>, watch: HeartbeatMent
             // Answer IN THE THREAD that carried the mention. `threadTs` is the
             // parent when the message was already a reply, so this never starts a
             // second thread off a reply.
-            const sent = await sendChannelOutput({
-                channel: 'slack', type: 'text', text, target,
-                allowActiveFallback: false,
-                // Deliberately NOT `fromAgentSurface`: a heartbeat is not an agent
-                // surface, and recording a delivery claim here would let this
-                // background post suppress the turn's real answer.
-            });
+           const sent = await sendChannelOutput({
+               channel: 'slack', type: 'text', text, target,
+               allowActiveFallback: false,
+               // Deliberately NOT `fromAgentSurface`: a heartbeat is not an agent
+               // surface, and recording a delivery claim here would let this
+               // background post suppress the turn's real answer.
+           });
+            if (!sent.ok && sent['retryable'] === false) {
+                // Earlier chunks are already on screen; a whole-answer retry would
+                // duplicate them. Partial delivery is terminal, not retried.
+                log.error(`[heartbeat:${job["name"]}] slack send partially delivered, not retrying: ${sent.error}`);
+                return true;
+            }
             if (!sent.ok) log.error(`[heartbeat:${job["name"]}] slack send failed: ${sent.error}`);
             return sent.ok;
         },

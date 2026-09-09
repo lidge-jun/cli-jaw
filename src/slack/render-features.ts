@@ -2,6 +2,33 @@ import { marked, type Tokens } from 'marked';
 
 const LANGUAGES: Record<string, string> = { python: 'python', py: 'python', javascript: 'javascript', js: 'javascript', typescript: 'typescript', ts: 'typescript', json: 'json' };
 
+// Markdown token -> semantic feature. An image is stored by Slack as an image
+// block, not a link, so both sides of the comparison must call it image.
+const MARKDOWN_FEATURES: Record<string, string> = { heading: 'heading', hr: 'divider', strong: 'bold', em: 'italic', del: 'strike', codespan: 'inline_code', link: 'link', image: 'image', blockquote: 'quote', code: 'code' };
+
+function collectMarkdownFeatures(text: string, found: Set<string>): void {
+    const tokens = marked.lexer(text, { gfm: true });
+    for (const root of tokens) {
+        if (root.type === 'table') continue;
+        marked.walkTokens([root], token => {
+            const feature = MARKDOWN_FEATURES[token.type];
+            if (feature) found.add(feature);
+            if (token.type === 'code') {
+                const language = LANGUAGES[((token as Tokens.Code).lang ?? '').split(/\s+/)[0]!.toLowerCase()];
+                if (language) found.add('language:' + language);
+            }
+            if (token.type === 'list') {
+                const list = token as Tokens.List;
+                found.add(list.ordered ? 'ordered_list' : 'bullet_list');
+                for (const item of list.items) {
+                    if (item.task) { found.add('checklist'); found.add(item.checked ? 'checked' : 'unchecked'); }
+                    if (item.tokens.some(t => t.type === 'list')) found.add('nested_list');
+                }
+            }
+        });
+    }
+}
+
 /** Semantic features that can be checked in persisted Slack blocks. Table
  * cells retain their separate table contract; do not let their styles satisfy
  * an unrelated prose feature elsewhere in the message. */
@@ -14,6 +41,9 @@ export function storedRichFeatures(blocks: unknown): string[] {
         const node = value as Record<string, unknown>;
         if (node['type'] === 'table') continue;
         const type = node['type'];
+        // Slack can persist a posted markdown block verbatim; its features still
+        // count as delivered, so lex it instead of skipping it.
+        if (type === 'markdown' && typeof node['text'] === 'string') { collectMarkdownFeatures(node['text'], found); continue; }
         if (type === 'header') found.add('heading');
         if (type === 'divider') found.add('divider');
         if (type === 'image') found.add('image');
@@ -45,27 +75,7 @@ export function expectedRichFeatures(blocks: unknown): string[] {
     if (!Array.isArray(blocks)) return [...found];
     for (const block of blocks) {
         if (block?.type !== 'markdown' || typeof block.text !== 'string') continue;
-        const tokens = marked.lexer(block.text, { gfm: true });
-        for (const root of tokens) {
-            if (root.type === 'table') continue;
-            marked.walkTokens([root], token => {
-                const map: Record<string, string> = { heading: 'heading', hr: 'divider', strong: 'bold', em: 'italic', del: 'strike', codespan: 'inline_code', link: 'link', image: 'link', blockquote: 'quote', code: 'code' };
-                const feature = map[token.type];
-                if (feature) found.add(feature);
-                if (token.type === 'code') {
-                    const language = LANGUAGES[((token as Tokens.Code).lang ?? '').split(/\s+/)[0]!.toLowerCase()];
-                    if (language) found.add(`language:${language}`);
-                }
-                if (token.type === 'list') {
-                    const list = token as Tokens.List;
-                    found.add(list.ordered ? 'ordered_list' : 'bullet_list');
-                    for (const item of list.items) {
-                        if (item.task) { found.add('checklist'); found.add(item.checked ? 'checked' : 'unchecked'); }
-                        if (item.tokens.some(t => t.type === 'list')) found.add('nested_list');
-                    }
-                }
-            });
-        }
+        collectMarkdownFeatures(block.text, found);
     }
     return [...found].sort();
 }

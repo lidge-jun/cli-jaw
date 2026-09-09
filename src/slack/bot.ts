@@ -614,8 +614,15 @@ async function slackOrchestrate(
                     const alreadyDelivered = wasSelfDelivered({ target, text, since: turnStartedAt });
                     sendResult = alreadyDelivered
                         ? { ok: true }
-                        : await sendSlackText(token, target, text, { signal: outbound.signal,
-                            ...(requiresNativeBodyDelivery(collected.data) ? { requireBodyDelivery: true } : {}) });
+                       : await sendSlackText(token, target, text, { signal: outbound.signal,
+                            ...(requiresNativeBodyDelivery(collected.data) ? { requireBodyDelivery: true } : {}),
+                            onPosted: async () => {
+                                // Every chunk is posted, so the answer is visible.
+                                // Settle before readback verification can hold the
+                                // reaction on running for an answer the user has.
+                                await ack?.settle('success');
+                                ackSettled = true;
+                            } });
                     // Recorded here, settled once in the finally below. The image
                     // relay can still throw after the text is out, and the user did
                     // get their answer in that case — so the outcome is success and
@@ -631,8 +638,10 @@ async function slackOrchestrate(
                     // Settled BEFORE the relay: the upload is now abortable but
                     // still slow, and the reaction must not sit on `running`
                     // while the answer is already visible (#417).
-                    await ack?.settle(ackOutcome);
-                    ackSettled = true;
+                    if (!ackSettled) {
+                        await ack?.settle(ackOutcome);
+                        ackSettled = true;
+                    }
                     // Relayed even when the text above was suppressed. Whether
                     // the agent already uploaded these bytes cannot be proven
                     // from a path (see turn-delivery.ts), and a skip that cannot
@@ -755,6 +764,7 @@ async function slackOrchestrate(
                     const text = requireBodyDelivery && !rawText.trim() ? '' : rawText;
                     const outbound = slackOutboundRegistry.start();
                     let queuedSendResult: { ok: boolean };
+                    let queuedSettled = false;
                     try {
                         // Same rule as the normal dispatch: if the queued agent
                         // already posted this answer itself, posting it again is
@@ -766,21 +776,29 @@ async function slackOrchestrate(
                             ? (alreadyDelivered
                                 ? { ok: true }
                                 : await sendSlackText(token, target, text, { signal: outbound.signal,
-                                    ...(requireBodyDelivery ? { requireBodyDelivery: true } : {}) }))
+                                    ...(requireBodyDelivery ? { requireBodyDelivery: true } : {}),
+                                    onPosted: async () => {
+                                        // Transport success is known here; close the
+                                        // notice and settle the ACK before readback
+                                        // verification adds its latency.
+                                        await notice.close('answered');
+                                        await ack?.settle('success');
+                                        queuedSettled = true;
+                                    } }))
                             : { ok: false as const };
                     } finally {
                         // Released after the body; the relay below opens its own
                         // scope so a slow upload does not hold this one.
                         outbound.done();
                     }
-                    await notice.close(queuedSendResult.ok ? 'answered' : 'expired');
+                    if (!queuedSettled) await notice.close(queuedSendResult.ok ? 'answered' : 'expired');
                     if (queuedSendResult.ok && target.threadId) {
                         markThreadParticipated(target.targetId, target.threadId);
                     }
                     // Settled before the relay for the same reason as the normal
                     // path: the text is what the user was waiting for, and an
                     // uncancellable upload must not hold the reaction on running.
-                    await ack?.settle(queuedSendResult.ok ? 'success' : 'failure');
+                    if (!queuedSettled) await ack?.settle(queuedSendResult.ok ? 'success' : 'failure');
                     if (text) {
                         const relayScope = slackOutboundRegistry.start();
                         await relaySlackImages(token, target, text, {

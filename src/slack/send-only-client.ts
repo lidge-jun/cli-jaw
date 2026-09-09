@@ -94,7 +94,8 @@ export async function sendSlackText(
     token: string,
     target: RemoteTarget,
     text: string,
-    options: { fetchImpl?: SlackFetch; blocks?: unknown; signal?: AbortSignal; requireBodyDelivery?: boolean; sensitiveResponse?: boolean } = {},
+    options: { fetchImpl?: SlackFetch; blocks?: unknown; signal?: AbortSignal; requireBodyDelivery?: boolean; sensitiveResponse?: boolean;
+        onPosted?: (info: { ts?: string; messageTs: string[]; postedChunks: number; totalChunks: number }) => void | Promise<void> } = {},
 ): Promise<{ ok: boolean; error?: string; status?: number; ts?: string; sent?: boolean;
     retryable?: boolean; delivery?: SlackDeliveryReceipt }> {
     let chunks: SlackTextPayload[];
@@ -184,20 +185,30 @@ export async function sendSlackText(
             expectedFeatures, verifiedFeatures: [], richContent: 'not_checked', sourceAccuracy: 'not_checked',
         };
         messages.push(message);
-        if (expected.length || expectedFeatures.length) {
-            const checked = ts
-                ? await verifySlackTables(token, target, ts, expected, callOpts, expectedFeatures, content[index])
-                : { verification: 'unavailable' as const, verifiedTables: 0,
-                    tableContent: expected.length ? 'unavailable' as const : 'not_checked' as const,
-                    reason: 'missing_message_ts', verifiedFeatures: [] };
-            message.verification = checked.verification;
-            message.tableContent = checked.tableContent;
-            message.verifiedTables = checked.verifiedTables;
-            message.verifiedFeatures = checked.verifiedFeatures ?? [];
-            if (checked.reason) message.error = checked.reason;
-            verifiedTables += checked.verifiedTables;
-            for (const feature of checked.verifiedFeatures ?? []) verifiedFeatures.add(feature);
-        }
+    }
+    // Every chunk is posted before any readback starts. The answer is already
+    // visible at this point, so the caller's settle hook (ACK reaction, notice
+    // close) runs NOW — verification below can take up to 10s per message and
+    // must not hold the reaction on 'running' for an answer the user can read.
+    if (options.onPosted) {
+        await options.onPosted({ ...(firstTs ? { ts: firstTs } : {}), messageTs, postedChunks, totalChunks: chunks.length });
+    }
+    for (const message of messages) {
+        const expected = shapes[message.index] ?? [];
+        const expectedFeatures = features[message.index] ?? [];
+        if (!expected.length && !expectedFeatures.length) continue;
+        const checked = message.ts
+            ? await verifySlackTables(token, target, message.ts, expected, callOpts, expectedFeatures, content[message.index])
+            : { verification: 'unavailable' as const, verifiedTables: 0,
+                tableContent: expected.length ? 'unavailable' as const : 'not_checked' as const,
+                reason: 'missing_message_ts', verifiedFeatures: [] };
+        message.verification = checked.verification;
+        message.tableContent = checked.tableContent;
+        message.verifiedTables = checked.verifiedTables;
+        message.verifiedFeatures = checked.verifiedFeatures ?? [];
+        if (checked.reason) message.error = checked.reason;
+        verifiedTables += checked.verifiedTables;
+        for (const feature of checked.verifiedFeatures ?? []) verifiedFeatures.add(feature);
     }
     return { ok: true, ...(firstTs ? { ts: firstTs } : {}),
         ...(needsVerification ? { sent: true, retryable: false, delivery: receipt() } : {}) };

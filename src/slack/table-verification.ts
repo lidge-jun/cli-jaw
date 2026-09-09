@@ -13,7 +13,9 @@ type StoredMessage = { ts?: string; blocks?: unknown; attachments?: Array<{ bloc
 function storedShapes(message: StoredMessage): TableShape[] {
     const all: unknown[] = [message.blocks, ...(message.attachments ?? []).map(a => a.blocks)];
     return all.flatMap(blocks => !Array.isArray(blocks) ? [] : blocks.flatMap(block => {
-        if (block?.type !== 'table' || !Array.isArray(block.rows)) return [];
+        // Slack persists tables either as the native table block or, on some
+        // surfaces, data_table; both carry the same rows-of-cells contract.
+        if ((block?.type !== 'table' && block?.type !== 'data_table') || !Array.isArray(block.rows)) return [];
         const widths = block.rows.map((r: unknown) => Array.isArray(r) ? r.length : -1);
         return [{ rows: widths.length, columns: widths.every((n: number) => n === widths[0]) ? widths[0] : -1 }];
     }));
@@ -30,7 +32,14 @@ export async function verifySlackTables(
         oldest: ts, latest: ts, inclusive: true, limit: 2,
     }, { ...options, sensitiveResponse: true, form: true, timeoutMs: 10000, maxResponseBytes: 1048576 });
     const unchecked: TableContentStatus = content?.length ? 'unavailable' : 'not_checked';
-    if (!result.ok) return { ok: false, verification: 'unavailable', verifiedTables: 0, tableContent: unchecked, reason: result.error ?? 'readback_failed' };
+    if (!result.ok) {
+        // The readback has its own 10s timeout; when the caller signal is not
+        // the thing that fired, name the timeout instead of reporting a send
+        // abort for a message that was already posted.
+        const reason = result.error === 'slack_send_aborted' && !options.signal?.aborted
+            ? 'slack_readback_timeout' : result.error ?? 'readback_failed';
+        return { ok: false, verification: 'unavailable', verifiedTables: 0, tableContent: unchecked, reason };
+    }
     try {
         boundSlackContent(result.data);
         const messages = result.data?.messages;
