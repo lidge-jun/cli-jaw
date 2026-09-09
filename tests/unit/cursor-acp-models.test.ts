@@ -90,3 +90,18 @@ test('no print id in either vocabulary resolves onto a different product', () =>
     }
 });
 
+
+test('thinking ids fail closed rather than dropping the axis they encode', () => {
+    // Cursor folds thinking into the print id; ACP exposes it as its own select.
+    // A resolver that returns only a model cannot carry that axis, so binding the
+    // base would silently turn thinking off.
+    for (const id of ['claude-opus-4-7-thinking', 'claude-opus-4-7-thinking-high',
+        'claude-opus-4-8-thinking', 'claude-fable-5-thinking']) {
+        for (const effort of ['', 'high', 'max']) {
+            assert.equal(cursorAcpModel(id, ADVERTISED, effort), undefined, `${id} @ ${effort || 'unset'}`);
+        }
+    }
+    // The same model without the thinking axis still translates.
+    assert.equal(cursorAcpModel('claude-opus-4-7', ADVERTISED), undefined, 'already advertised, so untouched');
+    assert.ok(ADVERTISED.includes('claude-opus-4-7'));
+});
