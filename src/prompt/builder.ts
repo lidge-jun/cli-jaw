@@ -589,6 +589,13 @@ export function initPromptFiles() {
         }
     }
 
+    // This versioned supplement is append-only, including customized A1 files whose
+    // template hash was already advanced. Startup owns migration; regeneration only renders.
+    const persistedA1 = fs.readFileSync(A1_PATH, 'utf8');
+    const slackAppend = appendAnchorIfMissing(persistedA1, a1Content,
+        '<!-- anchor:slack-typed-tools-v1 -->', '<!-- /anchor:slack-typed-tools-v1 -->');
+    if (slackAppend) fs.writeFileSync(A1_PATH, slackAppend);
+
     if (!fs.existsSync(A2_PATH)) fs.writeFileSync(A2_PATH, getA2Default());
     if (!fs.existsSync(HEARTBEAT_PATH)) fs.writeFileSync(HEARTBEAT_PATH, getHeartbeatDefault());
 }
@@ -1234,6 +1241,58 @@ export function clearPromptCache() { promptCache.clear(); }
 
 let _lastPromptHash = '';
 
+function generatedPromptPaths() {
+    // Match the established writer semantics; private apply policy belongs to its caller.
+    const workingDir = settings["workingDir"] || os.homedir();
+    return { bPath: join(PROMPTS_DIR, 'B.md'), agentsPath: join(workingDir, 'AGENTS.md'), workingDir };
+}
+
+type GeneratedFileState = 'matched' | 'mismatched' | 'missing' | 'unreadable';
+export type GeneratedPromptProof = {
+    version: 1; expectedSha256: string | null; expectedBytes: number | null;
+    bMatches: boolean | null; agentsMatches: boolean | null;
+    bState: GeneratedFileState; agentsState: GeneratedFileState;
+    error?: 'generation_failed';
+};
+function compareGeneratedFile(path: string, expected: Buffer): { matches: boolean | null; state: GeneratedFileState } {
+    let fd: number | undefined;
+    try {
+        const stat = fs.statSync(path);
+        if (!stat.isFile()) return { matches: null, state: 'unreadable' };
+        if (stat.size !== expected.length) return { matches: false, state: 'mismatched' };
+        fd = fs.openSync(path, 'r');
+        const opened = fs.fstatSync(fd);
+        if (!opened.isFile()) return { matches: null, state: 'unreadable' };
+        if (opened.size !== expected.length) return { matches: false, state: 'mismatched' };
+        // Bounded even if the file grows between stat and read.
+        const actual = Buffer.alloc(expected.length + 1);
+        let offset = 0;
+        while (offset < actual.length) {
+            const count = fs.readSync(fd, actual, offset, actual.length - offset, offset);
+            if (!count) break;
+            offset += count;
+        }
+        const matches = offset === expected.length && actual.subarray(0, offset).equals(expected);
+        return { matches, state: matches ? 'matched' : 'mismatched' };
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { matches: false, state: 'missing' };
+        return { matches: null, state: 'unreadable' };
+    } finally { if (fd !== undefined) { try { fs.closeSync(fd); } catch { /* No raw path/error leaves this proof. */ } } }
+}
+export function getGeneratedPromptProof(): GeneratedPromptProof {
+    try {
+        const expected = Buffer.from(getSystemPrompt({ forDisk: true }), 'utf8');
+        const paths = generatedPromptPaths();
+        const b = compareGeneratedFile(paths.bPath, expected);
+        const agents = compareGeneratedFile(paths.agentsPath, expected);
+        return { version: 1, expectedSha256: createHash('sha256').update(expected).digest('hex'), expectedBytes: expected.length,
+            bMatches: b.matches, agentsMatches: agents.matches, bState: b.state, agentsState: agents.state };
+    } catch {
+        return { version: 1, expectedSha256: null, expectedBytes: null, bMatches: null, agentsMatches: null,
+            bState: 'unreadable', agentsState: 'unreadable', error: 'generation_failed' };
+    }
+}
+
 export function regenerateB() {
     clearTemplateCache();
     clearPromptCache();
@@ -1243,15 +1302,18 @@ export function regenerateB() {
     // Skip file write if content unchanged — preserves mtime so CLI prompt
     // caching (Claude --append, Codex resume) is not invalidated each turn.
     const hash = createHash('sha256').update(fullPrompt).digest('hex');
-    if (hash === _lastPromptHash) return;
-    _lastPromptHash = hash;
+    const { bPath, agentsPath, workingDir: wd } = generatedPromptPaths();
+    if (hash === _lastPromptHash) {
+        const expected = Buffer.from(fullPrompt, 'utf8');
+        if (compareGeneratedFile(bPath, expected).matches === true && compareGeneratedFile(agentsPath, expected).matches === true) return;
+    }
 
-    fs.writeFileSync(join(PROMPTS_DIR, 'B.md'), fullPrompt);
+    fs.writeFileSync(bPath, fullPrompt);
 
     // Generate {workDir}/AGENTS.md — read by Codex, Copilot, and OpenCode
     try {
-        const wd = settings["workingDir"] || os.homedir();
-        fs.writeFileSync(join(wd, 'AGENTS.md'), fullPrompt);
+        fs.writeFileSync(agentsPath, fullPrompt);
+        _lastPromptHash = hash;
         log.info(`[prompt] AGENTS.md generated at ${wd}`);
     } catch (e: unknown) {
         log.error(`[prompt] AGENTS.md generation failed:`, (e as Error).message);

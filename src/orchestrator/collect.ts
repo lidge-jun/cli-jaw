@@ -90,6 +90,7 @@ export function orchestrateAndCollectData(
         };
         const handler = (type: string, data: Record<string, any>) => {
             if (settled) return;
+            if (meta['_strictRequestOwnership'] === true && !matchesNativeIdentity(data)) return;
             const native = (data['runtimeFinality'] === 'present' || data['runtimeFinality'] === 'absent')
                 && (data['runtimeStatus'] === 'done' || data['runtimeStatus'] === 'error' || data['runtimeStatus'] === 'stopped');
             // A mismatched native terminal must not remove this request's

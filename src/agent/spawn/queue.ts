@@ -159,7 +159,7 @@ export function createQueueController(
                 prompt: parsed.prompt,
                 source: parsed.source,
                 scope,
-                ...(multiSessionEnabled ? {
+                ...((multiSessionEnabled || parsed.source === 'slack') ? {
                     chatSessionId,
                     ...(remoteKey ? { remoteKey } : {}),
                 } : {}),
@@ -426,7 +426,7 @@ export function createQueueController(
             prompt,
             source,
             scope: multiSessionEnabled ? (meta?.scope || 'default') : 'default',
-            ...(multiSessionEnabled ? {
+            ...((multiSessionEnabled || source === 'slack') ? {
                 chatSessionId: meta?.chatSessionId || deps.getActiveChatSession(),
                 ...(meta?.remoteKey ? { remoteKey: meta.remoteKey } : {}),
             } : {}),
@@ -542,8 +542,8 @@ export function createQueueController(
         const remoteSessionId = item.remoteKey
             ? deps.resolveRemoteSession?.(item.remoteKey) ?? null
             : null;
-        const effectiveSessionId = multiSessionEnabled
-            ? (item.chatSessionId || remoteSessionId || deps.getActiveChatSession())
+        const effectiveSessionId = multiSessionEnabled || source === 'slack'
+            ? (item.chatSessionId || remoteSessionId || (source === 'slack' ? 'default' : deps.getActiveChatSession()))
             : deps.getActiveChatSession();
         let inserted = false;
         try {

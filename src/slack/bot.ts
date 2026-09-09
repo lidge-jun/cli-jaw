@@ -1,3 +1,5 @@
+import { verifiedSlackWorkspace } from './verified-workspace.js';
+import { slackCredentialKey, type SlackToolSource } from './tool-context.js';
 import { isSlackMention } from './events.js';
 // ─── Slack Bot ───────────────────────────────────────
 // Slack transport implementation for the cli-jaw messaging runtime.
@@ -500,6 +502,7 @@ async function slackOrchestrate(
     displayMsg: string,
     signal: AbortSignal,
     dedupe: {
+        toolSource?: SlackToolSource;
         eventKey?: string;
         reservationGeneration?: number;
         preResolvedScope?: string | null;
@@ -536,6 +539,7 @@ async function slackOrchestrate(
         : null;
     const result = admitSlackRun({
         target, prompt, displayText: displayMsg, chatId,
+        ...(dedupe.toolSource ? { toolSource: dedupe.toolSource } : {}),
         ...(dedupe.preResolvedScope !== undefined
             ? { preResolvedScope: dedupe.preResolvedScope } : {}),
         runReply: async (ctx: SlackRunContext) => {
@@ -576,6 +580,7 @@ async function slackOrchestrate(
                     { scope: ctx.scope, chatSessionId: ctx.chatSessionId },
                     () => orchestrateAndCollectData(prompt, {
                         origin: 'slack', target, chatId, requestId: ctx.requestId,
+                        ...(dedupe.toolSource ? { _strictRequestOwnership: true } : {}),
                         ...(ctx.remoteKey ? { remoteKey: ctx.remoteKey } : {}),
                         chatSessionId: ctx.chatSessionId, scope: ctx.scope, _skipInsert: true,
                     }).finally(async () => {
@@ -848,6 +853,7 @@ export async function processSlackMessageEvent(
     text: string,
     signal: AbortSignal,
     opts: {
+        socketTeamId?: string;
         prefetchToken?: number;
         prefetchOwner?: SessionOwnerToken;
         preResolvedScope?: string | null;
@@ -883,6 +889,7 @@ async function runSlackMessageEvent(
     text: string,
     signal: AbortSignal,
     opts: {
+        socketTeamId?: string;
         prefetchToken?: number;
         prefetchOwner?: SessionOwnerToken;
         preResolvedScope?: string | null;
@@ -936,7 +943,14 @@ async function runSlackMessageEvent(
         // the message, and the conversation is already obvious in Slack's own UI.
         displayText = buildSenderDisplay(identity, displayText);
     }
+    const sourceToken = getSlackSendClient().token;
+    const workspace = sourceToken && opts.socketTeamId ? await verifiedSlackWorkspace(sourceToken).catch(() => null) : null;
+    if (signal.aborted) return;
+    const toolSource: SlackToolSource | undefined = workspace && workspace.teamId === opts.socketTeamId && event.user && sourceToken
+        ? { teamId: workspace.teamId, actorId: event.user, destination: target, credentialKey: slackCredentialKey(sourceToken),
+            ...(typeof event.action_token === 'string' ? { actionToken: event.action_token } : {}) } : undefined;
     await slackOrchestrate(target, prompt, displayText, signal, {
+        ...(toolSource ? { toolSource } : {}),
         ...(opts.eventKey ? { eventKey: opts.eventKey } : {}),
         ...(opts.reservationGeneration !== undefined
             ? { reservationGeneration: opts.reservationGeneration } : {}),
@@ -1021,6 +1035,7 @@ async function buildInboundContextBlock(
         const preamble = buildThreadPreamble(
             formatHistoryForAgent(prior, selfUserId, cachedNameMap(teamId, authorIds)),
             thread?.replyCount ?? prior.length,
+            thread,
         );
         if (!preamble) return block;
         // History is actually going into the prompt: the claim is spent.
@@ -1145,6 +1160,11 @@ export async function handleSlackEnvelope(envelope: SlackEnvelope, approvalTrans
             : '';
         const parsed = parseApprovalCallbackData(actionId);
         if (!parsed) {
+            const token = getSlackSendClient().token;
+            if (token) {
+                const { consumeSlackInteractionCallback } = await import('./actions-interactions.js');
+                await consumeSlackInteractionCallback(payload, token);
+            }
             log.info('[slack:interactive] received (not an approval action)');
             return;
         }
@@ -1281,6 +1301,7 @@ export async function handleSlackEnvelope(envelope: SlackEnvelope, approvalTrans
 
         prefetchHandedOff = enqueueSlackIngress(slackIngressLaneKey(target), signal =>
             processSlackMessageEvent(event, target, text, signal, {
+                ...(typeof envelope.payload?.['team_id'] === 'string' ? { socketTeamId: envelope.payload['team_id'] } : {}),
                 prefetchToken,
                 ...(prefetchOwner ? { prefetchOwner } : {}),
                 preResolvedScope,

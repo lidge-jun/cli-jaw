@@ -719,7 +719,7 @@ test('handleSlackEnvelope dispatches a DM into submitMessage with a slack target
     } });
     const progress = await import('../../src/slack/progress.ts');
     mock.module('../../src/slack/progress.js', { namedExports: {
-        ...progress, startSlackProgress: async () => null,
+        ...progress, startSlackProgress: async () => ({ update() {}, tool() {}, projectedTool() {}, phase() {}, finish: async () => {}, ready: async () => ({ mode: 'none', ts: null }), abort() {}, terminalConfirmed: () => false, ts: () => null }),
     } });
     const ingress = await import('../../src/slack/ingress.ts');
     const completed: Promise<void>[] = [];

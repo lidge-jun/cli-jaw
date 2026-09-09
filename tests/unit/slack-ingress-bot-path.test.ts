@@ -29,8 +29,10 @@ mock.module('../../src/slack/progress.ts', {
     namedExports: {
         startSlackProgress: async () => {
             events.push('progress:start');
-            if (progressGate) await progressGate.promise;
-            return { update: () => { }, finish: async () => { } };
+            return { update() {}, tool() {}, projectedTool() {}, phase() {},
+                finish: async () => { if (progressGate) await progressGate.promise; },
+                ready: async () => { if (progressGate) await progressGate.promise; return { mode: 'none', ts: null }; },
+                abort() { progressGate?.resolve(); }, terminalConfirmed: () => false, ts: () => null };
         },
         statusFromToolEvent: () => null,
     },
@@ -110,21 +112,22 @@ test.beforeEach(async () => {
 // Each test uses its own channel ids so a lane parked by an earlier test can
 // never serialize against the current one.
 
-test('SL-FILE-06: a stalled progress post blocks the next same-channel run from collecting', async () => {
+test('SL-FILE-06: progress startup does not block collection and the reply lane still serializes the next run', async () => {
     progressGate = deferred();
     const controller = new AbortController();
 
     const first = processSlackMessageEvent(event('C1'), target('C1'), 'one', controller.signal);
     await waitFor(() => events.includes('progress:start'), 'the first progress post');
-    // The first run owns the lane and is parked on the progress post.
-    assert.deepEqual(events, ['progress:start']);
+    await waitFor(() => events.includes('collect'), 'collection despite delayed progress startup');
+    assert.equal(events.filter(value => value === 'collect').length, 1);
 
     const second = processSlackMessageEvent(event('C1'), target('C1'), 'two', controller.signal);
     await settle();
     // If the progress await lived outside the lane, the second run would have
     // reached its own progress post (or collect) by now.
-    assert.deepEqual(events, ['progress:start'],
-        'second same-scope run must not start while the first holds the lane');
+    assert.equal(events.filter(value => value === 'progress:start').length, 1,
+        'second same-scope reply must not start while the first holds the lane');
+    assert.equal(events.filter(value => value === 'collect').length, 1);
 
     progressGate.resolve();
     await Promise.all([first, second]);

@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { SLACK_OPERATOR_TOKEN_FILE } from '../../src/slack/operator-auth.js';
 /**
  * cli-jaw slack — Slack app manifest + guided setup.
  *
@@ -13,6 +16,7 @@ import { createInterface } from 'node:readline';
 import { execFile } from 'node:child_process';
 import {
     settings,
+    JAW_HOME,
     saveSettings,
     loadSettings,
     getServerUrl,
@@ -54,7 +58,13 @@ if (shouldShowHelp(process.argv)) printAndExit(`
                           tokens live, writes settings, hot-reloads the server.
     history <channel>     Read recent channel messages (or one thread) through
                           the running server. Flags: --thread <ts>, --limit N,
-                          --json. The token never leaves the server process.
+                          --cursor C, --oldest TS, --latest TS, --inclusive, --json.
+                          CLI attaches this turn's grant; bot credentials stay server-side.
+    capabilities         Show implemented, granted, available and verified tools.
+    tool --input-json J   Typed source, reaction, message, schedule, pin, bookmark,
+                          Canvas, List and interaction operations; see capabilities for availability.
+                          Publications require invocationId; search.quote returns
+                          only delivery receipts, with quotes delivered in Slack.
     members <channel>     List who is in a conversation, with resolved names.
                           Flags: --limit N, --json
     users                 List workspace users. Flags: --limit N, --json,
@@ -116,6 +126,12 @@ const { values, positionals } = parseArgs({
         // admits the <channel> argument (audit finding 1 — the strict
         // default would throw before the subcommand dispatch below).
         'thread': { type: 'string' },
+        'cursor': { type: 'string' },
+        'oldest': { type: 'string' },
+        'latest': { type: 'string' },
+        'inclusive': { type: 'boolean', default: false },
+        'operator': { type: 'boolean', default: false },
+        'input-json': { type: 'string' },
         'limit': { type: 'string' },
         'json': { type: 'boolean', default: false },
         'include-bots': { type: 'boolean', default: false },
@@ -132,6 +148,16 @@ if (sub === 'manifest') {
     process.stdout.write(values['url'] ? `${slackManifestCreateUrl()}\n` : slackManifestYaml());
 } else if (sub === 'setup') {
     await runSetup();
+} else if (sub === 'tool') {
+    await runSlackTool();
+} else if (sub === 'capabilities') {
+    loadSettings();
+    try {
+        const response = await cliFetch(`${getServerUrl()}/api/slack/tools/capabilities`, slackLookupHeaders());
+        const body = await response.json() as { ok?: boolean };
+        console.log(JSON.stringify(body, null, 2));
+        if (!response.ok || body.ok !== true) process.exitCode = 1;
+    } catch { console.error('Slack capabilities unavailable; check server and turn or operator access.'); process.exitCode = 1; }
 } else if (sub === 'history') {
     await runHistory();
 } else if (sub === 'members') {
@@ -139,7 +165,7 @@ if (sub === 'manifest') {
 } else if (sub === 'users') {
     await runRoster('users');
 } else {
-    console.error(`  ❌ Unknown slack subcommand "${sub}". Expected: manifest | setup | history | members | users`);
+    console.error(`  ❌ Unknown slack subcommand "${sub}". Expected: manifest | setup | history | members | users | tool | capabilities`);
     process.exitCode = 1;
 }
 
@@ -384,7 +410,7 @@ async function runRoster(kind: 'members' | 'users'): Promise<void> {
     const base = getServerUrl();
     await getCliAuthToken();
     try {
-        const res = await cliFetch(`${base}/api/slack/${kind}?${params}`);
+        const res = await cliFetch(`${base}/api/slack/${kind}?${params}`, slackLookupHeaders());
         const body = await res.json() as Record<string, unknown>;
         if (!res.ok || body['ok'] !== true) {
             console.error(String(body['error'] || `Failed: ${res.status}`));
@@ -410,7 +436,7 @@ async function runHistory(): Promise<void> {
     loadSettings();
     const channel = (positionals[0] || '').trim();
     if (!channel) {
-        console.error('Usage: jaw slack history <channel> [--thread <ts>] [--limit N] [--json]');
+        console.error('Usage: jaw slack history <channel> [--thread <ts>] [--limit N] [--cursor C] [--oldest TS] [--latest TS] [--inclusive] [--json]');
         process.exitCode = 1;
         return;
     }
@@ -419,9 +445,11 @@ async function runHistory(): Promise<void> {
     const params = new URLSearchParams({ channel });
     if (values['thread']) params.set('thread_ts', String(values['thread']));
     if (values['limit']) params.set('limit', String(values['limit']));
+    for (const key of ['cursor', 'oldest', 'latest'] as const) if (values[key]) params.set(key, String(values[key]));
+    if (values['inclusive']) params.set('inclusive', 'true');
     if (!values['json']) params.set('format', 'text');
     try {
-        const res = await cliFetch(`${base}/api/slack/history?${params}`);
+        const res = await cliFetch(`${base}/api/slack/history?${params}`, slackLookupHeaders());
         const body = await res.json() as Record<string, unknown>;
         if (!res.ok || body['ok'] !== true) {
             console.error(String(body['error'] || `Failed: ${res.status}`));
@@ -429,12 +457,33 @@ async function runHistory(): Promise<void> {
             return;
         }
         if (values['json']) {
-            console.log(JSON.stringify({ messages: body['messages'], hasMore: body['hasMore'] }, null, 2));
+            console.log(JSON.stringify(body, null, 2));
         } else {
             console.log(String(body['text'] || '(no messages)'));
+            console.log(JSON.stringify({ hasMore: body['hasMore'], nextCursor: body['nextCursor'], partial: body['partial'], fetchedCount: body['fetchedCount'], contentTruncated: body['contentTruncated'] }));
         }
     } catch {
         console.error('Server not running. Start with: jaw serve');
         process.exitCode = 1;
     }
+}
+
+function slackLookupHeaders(): RequestInit {
+    if (!values['operator']) return {};
+    const secret = readFileSync(join(JAW_HOME, SLACK_OPERATOR_TOKEN_FILE), 'utf8').trim();
+    return { headers: { 'x-jaw-slack-operator': secret } };
+}
+
+async function runSlackTool(): Promise<void> {
+    loadSettings();
+    if (!values['input-json']) { console.error('Usage: jaw slack tool --input-json <JSON> [--operator]'); process.exitCode = 1; return; }
+    try {
+        const payload: unknown = JSON.parse(values['input-json']);
+        const options = slackLookupHeaders();
+        const response = await cliFetch(`${getServerUrl()}/api/slack/tools`, { method: 'POST',
+            headers: { ...options.headers, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const body = await response.json() as { ok?: boolean };
+        console.log(JSON.stringify(body, null, 2));
+        if (!response.ok || body.ok !== true) process.exitCode = 1;
+    } catch { console.error('Slack tool request failed; check JSON, server availability and explicit operator credentials.'); process.exitCode = 1; }
 }

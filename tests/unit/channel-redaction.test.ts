@@ -129,6 +129,57 @@ test('a lookalike host stays visible but its credential does not', () => {
 
 // ─── Slack: unchanged contract ───────────────────────
 
+test('validated Slack permalinks survive Markdown and angle-link boundaries', () => {
+    for (const channel of ['C123ABC', 'G123ABC', 'D123ABC']) {
+        const url = `https://team-name.slack.com/archives/${channel}/p1725800000123456`;
+        for (const link of [url, `${url}?thread_ts=1725800000.123456&cid=${channel}`,
+            `${url}?cid=${channel}`, url.replace('.com/', '.com:443/')]) {
+            for (const input of [link, `[source](${link}).`, `<${link}|source label>`,
+                `**${link}**, next`, `(${link}); next`, `\`${link}\``]) {
+                assert.equal(redactChannelSecrets(input), input);
+            }
+        }
+    }
+});
+
+test('Slack permalink exceptions reject credentials and malformed shapes', () => {
+    const base = 'https://team.slack.com/archives/C123ABC/p1725800000123456';
+    const rejected = [
+        base.replace('https:', 'http:'), base.replace('team.', 'user:pass@team.'),
+        base.replace('.com/', '.com:444/'), base.replace('/C123ABC/', '/X123ABC/'),
+        base.replace('/p1725800000123456', '/pnotdigits'), `${base}/extra`,
+        `${base}#fragment-secret`, `${base}?token=QUERYSECRET`, `${base}?thread_ts=SECRET`,
+        `${base}?cid=SECRET`, `${base}?cid=C123ABC&cid=C123ABC`,
+        `${base}?thread_ts=1725800000.123456&signature=QUERYSECRET`,
+        base.replace('/archives/', '/upload/../archives/'),
+        base.replace('/archives/', '/%61rchives/'),
+        base.replace('team.slack.com', 'downloads.slack-edge.com'),
+    ];
+    for (const input of rejected) {
+        assert.match(redactChannelSecrets(input), /\/\.\.\.redacted$/);
+        assert.equal(redactChannelSecrets(input).includes('QUERYSECRET'), false);
+    }
+    // A lookalike is not a Slack host, but its query value must still disappear.
+    assert.equal(redactChannelSecrets(`${base.replace('.com/', '.com.attacker.dev/')}?token=SECRET`),
+        `${base.replace('.com/', '.com.attacker.dev/')}?token=...redacted`);
+    assert.doesNotThrow(() => redactChannelSecrets('https://[broken/bot123456789:FAKESECRET'));
+    assert.equal(redactChannelSecrets('https://[broken/bot123456789:FAKESECRET'),
+        'https://[broken/bot123456789:...redacted');
+});
+
+test('capability URL masking preserves surrounding markup and separately redacts labels', () => {
+    for (const url of ['https://hooks.slack.com/services/T1/B1/WEBHOOKSECRET',
+        'https://files.slack.com/upload/v1/UPLOADSECRET?token=QUERYSECRET']) {
+        assert.equal(redactChannelSecrets(`[source](${url}).`),
+            `[source](https://${new URL(url).host}/...redacted).`);
+        assert.equal(redactChannelSecrets(`<${url}|source label>`),
+            `<https://${new URL(url).host}/...redacted|source label>`);
+    }
+    const url = 'https://team.slack.com/archives/C123ABC/p1725800000123456';
+    assert.equal(redactChannelSecrets(`<${url}|bot123456789:${TG_SECRET}>`),
+        `<${url}|bot123456789:...redacted>`);
+});
+
 test('Slack token families are still masked', () => {
     const out = redactChannelSecrets('bot=xoxb-123-abc app=xapp-1-A-2-b');
     assert.equal(out.includes('xoxb-123-abc'), false);
@@ -883,4 +934,11 @@ test('a transport failure is masked before it can become an HTTP body', async ()
     } finally {
         telegram['allowedChatIds'] = savedAllowlist;
     }
+});
+
+test('repeated Slack masking is stable without allowing a forged marker to hide a full token', () => {
+    const secret = ['xoxb', '1234567890123', '4567890123456', 'AbCdEfGhIjKlMnOpQrStUvWx'].join('-');
+    const once = redactChannelSecrets(secret);
+    assert.equal(redactChannelSecrets(once), once);
+    assert.ok(!redactChannelSecrets(`${secret}...redacted`).includes(secret));
 });

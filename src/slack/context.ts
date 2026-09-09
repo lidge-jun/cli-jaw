@@ -152,6 +152,7 @@ export function buildSlackContextBlock(input: SlackContextInput): string {
         const fixed = [`(${conversation.id})`];
         if (threadTs) fixed.push(`스레드 ${threadTs}`);
         if (threadTs && replyCount > 0) fixed.push(`답장 ${replyCount}개`);
+        if (input.thread) fixed.push(threadCoverage(input.thread));
         const fixedText = fixed.join(' · ');
 
         const label = conversation.kind === 'dm' ? 'DM'
@@ -242,17 +243,30 @@ export const PREAMBLE_TOTAL_CAP = 8000;
  * said before it was pulled in — the same position as a person handed a phone
  * halfway through a call.
  */
-export function buildThreadPreamble(rendered: string, replyCount: number): string {
+function threadCoverage(metadata?: Pick<SlackThreadInfo, 'partial' | 'fetchedCount' | 'retainedCount' | 'replyCount'>): string {
+    return `${metadata?.partial === false ? '조회 완료' : '일부 대화'} · 조회 ${metadata?.fetchedCount ?? '?'}개 메시지 · 보존 ${metadata?.retainedCount ?? '?'}개 · 전체 답장 ${metadata?.replyCount ?? '?'}개`;
+}
+
+export function buildThreadPreamble(
+    rendered: string, replyCount: number,
+    metadata?: Pick<SlackThreadInfo, 'partial' | 'fetchedCount' | 'retainedCount' | 'replyCount' | 'nextCursor'>,
+): string {
     const body = rendered.trim();
     if (!body) return '';
-    const label = replyCount > 0 ? `앞선 대화 ${replyCount}개` : '앞선 대화';
+    const encodedCursor = metadata?.nextCursor ? JSON.stringify(metadata.nextCursor) : '';
+    const cursorLine = encodedCursor && encodedCursor.length <= 2048 ? `다음 조회 cursor: ${encodedCursor}\n`
+        : encodedCursor ? '다음 cursor는 출력 상한을 넘었습니다. history API에서 페이지 정보를 확인하세요.\n' : '';
+    let label = `앞선 대화 · ${threadCoverage(metadata ?? { replyCount })}`;
+    if ([...body].length + [...`[${label}]\n${cursorLine}\n[/앞선 대화]`].length > PREAMBLE_TOTAL_CAP) {
+        label = `앞선 대화 · ${threadCoverage({ ...(metadata ?? { replyCount }), partial: true })}`;
+    }
     // Budget the delimiters first so the TOTAL is bounded, not just the body.
-    const framing = `[${label}]\n\n[/앞선 대화]`;
+    const framing = `[${label}]\n${cursorLine}\n[/앞선 대화]`;
     const room = Math.max(PREAMBLE_TOTAL_CAP - [...framing].length, 0);
     // Tail, not head: the rendered history is oldest-first (history.ts sorts
     // ascending), so cutting from the front kept the oldest messages and threw
     // away the newest — the ones "방금" refers to (#518).
-    return `[${label}]\n${capPointsTail(body, room)}\n[/앞선 대화]`;
+    return `[${label}]\n${cursorLine}${capPointsTail(body, room)}\n[/앞선 대화]`;
 }
 
 /** Exported for tests that assert the note survives every input size. */

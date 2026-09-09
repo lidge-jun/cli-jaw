@@ -96,6 +96,10 @@ function slackAllowlist(): { ids: string[]; malformed: boolean } {
 // ─── Request Model ──────────────────────────────────
 
 export type ChannelSendRequest = {
+    /** Server-owned cancellation; never accepted from HTTP JSON. */
+    signal?: AbortSignal;
+    /** Captured server credential identity, never read from HTTP JSON. */
+    slackCredentialKey?: string;
     channel?: MessengerChannel | 'active';
     type: OutboundType;
     text?: string;
@@ -388,6 +392,7 @@ function authorizeExplicitTarget(target: RemoteTarget, channel: MessengerChannel
 
 export async function sendChannelOutput(req: ChannelSendRequest): Promise<{ ok: boolean; error?: string; [k: string]: unknown }> {
     const channel = resolveChannel(req);
+    if (req.signal?.aborted) return { ok: false, error: 'send_aborted', status: 499, retryable: false };
     if (req.blocks && (channel !== 'slack' || req.type !== 'text')) {
         return { ok: false, status: 400, error: 'blocks_supported_only_for_slack_text' };
     }

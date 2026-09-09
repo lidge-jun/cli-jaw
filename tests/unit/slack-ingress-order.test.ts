@@ -166,7 +166,7 @@ mock.module('../../src/slack/send-only-client.ts', {
 });
 mock.module('../../src/slack/progress.ts', {
     namedExports: {
-        startSlackProgress: async () => null,
+        startSlackProgress: async () => ({ update() {}, tool() {}, projectedTool() {}, phase() {}, finish: async () => {}, ready: async () => ({ mode: 'none', ts: null }), abort() {}, terminalConfirmed: () => false, ts: () => null }),
         statusFromToolEvent: () => '',
     },
 });

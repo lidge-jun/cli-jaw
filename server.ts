@@ -1,3 +1,11 @@
+import { registerSlackToolRoutes } from './src/routes/slack-tools.js';
+import { SlackActionStore } from './src/slack/action-store.js';
+import { SlackActionRuntime } from './src/slack/action-runtime.js';
+import { getSlackSendClient } from './src/slack/send-only-client.js';
+import { getSlackConnectionState } from './src/slack/bot.js';
+import { SlackInteractionStore, configureSlackInteractionStore, isSlackInteractionReady } from './src/slack/interaction-store.js';
+import { configureRtsOutputStore, RtsOutputStore } from './src/slack/rts-output-store.js';
+import { initializeSlackOperatorAuth } from './src/slack/operator-auth.js';
 // ─── cli-jaw Server (glue + routes) ─────────────────
 // All business logic lives in src/ modules.
 
@@ -405,7 +413,26 @@ registerCommandRoutes(app, requireAuth);
 registerGoalRunRoutes(app, requireAuth);
 registerMemoryRoutes(app, requireAuth);
 registerSettingsRoutes(app, requireAuth, applySettingsPatch, projectRoot);
-registerMessagingRoutes(app, requireAuth);
+try { configureRtsOutputStore(new RtsOutputStore(db)); }
+catch { configureRtsOutputStore(null); log.error('[slack:privacy] output store unavailable; protected history and RTS publication disabled'); }
+let validateSlackOperator: (candidate: string) => boolean = () => false;
+try { validateSlackOperator = initializeSlackOperatorAuth(JAW_HOME); }
+catch { log.error('[slack:operator] operator credential unavailable; operator access disabled'); }
+registerMessagingRoutes(app, requireAuth, { validateSlackOperator });
+let slackActionStore: SlackActionStore | undefined;
+try { slackActionStore = new SlackActionStore(db); }
+catch { log.error('[slack:actions] action store unavailable; typed actions disabled'); }
+try { configureSlackInteractionStore(new SlackInteractionStore(db), {
+    getToken: () => getSlackSendClient().token ?? '',
+    onVerified: (workspace, key, operation) => slackActionStore?.recordVerified(workspace, key, `${operation}.callback`),
+}); }
+catch { configureSlackInteractionStore(null); log.error('[slack:interactions] interaction store unavailable; choice tools disabled'); }
+const slackInteractionInboundReady = () => isSlackInteractionReady() && getSlackConnectionState() === 'connected';
+registerSlackToolRoutes(app, requireAuth, validateSlackOperator, slackActionStore ? {
+    store: slackActionStore,
+    runtime: new SlackActionRuntime({ getToken: () => getSlackSendClient().token, store: slackActionStore, evidenceSource: 'slack_api', inboundReady: slackInteractionInboundReady }),
+    inboundReady: slackInteractionInboundReady,
+} : undefined);
 registerAvatarRoutes(app, requireAuth);
 registerTraceRoutes(app, requireAuth);
 registerLinkPreviewRoutes(app, requireAuth);

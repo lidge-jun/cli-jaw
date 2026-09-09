@@ -181,3 +181,106 @@ test('GET /api/slack/history rejects a missing channel and reports slack-off', a
     assert.equal(status, 503);
     assert.equal(payload['error'], 'slack_disabled');
 });
+
+test('history rich payload and cursor-only continuation survive normalization', async () => {
+    const blocks = [{ type: 'table', rows: [[{ type: 'raw_text', text: 'Item' }], [{ type: 'raw_text', text: 'Value' }]] }];
+    const { impl } = makeFetch([{ ok: true, messages: [{ ts: '2.0', blocks, reactions: [{ name: 'eyes', count: 2 }], edited: { ts: '3.0' } }], response_metadata: { next_cursor: 'next' } }]);
+    const result = await fetchSlackHistory(TOKEN, 'C1', { fetchImpl: impl });
+    assert.ok(result.ok);
+    assert.equal(result.hasMore, true);
+    assert.deepEqual(result.messages[0]?.blocks, blocks);
+    assert.match(result.messages[0]?.text ?? '', /Item[\s\S]*Value/);
+    assert.equal(result.messages[0]?.edited?.ts, '3.0');
+});
+
+test('replies forwards time bounds and inclusive', async () => {
+    const { impl, calls } = makeFetch([{ ok: true, messages: [] }]);
+    await fetchSlackReplies(TOKEN, 'C1', '1.0', { oldest: '2.0', latest: '3.0', inclusive: true, fetchImpl: impl });
+    assert.equal(calls[0]?.body.oldest, '2.0');
+    assert.equal(calls[0]?.body.latest, '3.0');
+    assert.equal(calls[0]?.body.inclusive, 'true');
+});
+
+test('oversized newest message retains a bounded excerpt and exact timestamp', () => {
+    const output = formatHistoryForAgent([{ ts: '1700000000.123456', text: 'x'.repeat(13000) }]);
+    assert.ok(output.length > 0 && output.length <= 12000);
+    assert.match(output, /truncated/);
+    assert.match(output, /1700000000\.123456/);
+});
+
+test('agent JSON redacts rich strings without damaging internal file downloads', async () => {
+    const { slackHistoryForAgent } = await import('../../src/slack/history.ts');
+    const secret = ['xoxb', '1234567890123', '4567890123456', 'AbCdEfGhIjKlMnOpQrStUvWx'].join('-');
+    const download = 'https://files.slack.com/files-pri/T1-F1/download';
+    const internal: SlackHistoryMessage[] = [{ ts: '1.0', text: secret, blocks: [{ type: 'section', text: { type: 'mrkdwn', text: secret } }], files: [{ id: 'F1', url_private_download: download }] }];
+    const projected = slackHistoryForAgent(internal);
+    assert.ok(!JSON.stringify(projected).includes(secret));
+    assert.ok(!JSON.stringify(projected).includes(download));
+    assert.equal(internal[0]?.files?.[0]?.url_private_download, download);
+    assert.equal(internal[0]?.text, secret);
+});
+
+test('rich projection bounds hostile graphs and ignores prototype keys', async () => {
+    const { slackHistoryForAgent } = await import('../../src/slack/history.ts');
+    const block: Record<string, unknown> = JSON.parse('{"__proto__":{"polluted":true},"type":"section"}');
+    block['elements'] = [block, { text: 'x'.repeat(100000) }];
+    const result = slackHistoryForAgent([{ ts: '1.0', text: 'safe', blocks: [block] }]);
+    assert.equal(result[0]?.contentTruncated, true);
+    assert.ok(JSON.stringify(result).length < 65000);
+    assert.equal(Object.getPrototypeOf(result[0]?.blocks?.[0]), Object.prototype);
+    assert.ok(!JSON.stringify(result).includes('__proto__'));
+});
+
+test('HTTP history forwards pagination and rejects malformed options before Slack', async t => {
+    const { settings } = await import('../../src/core/config.ts');
+    const original = settings.slack;
+    settings.slack = { ...original, enabled: true, botToken: TOKEN };
+    t.after(() => { settings.slack = original; });
+    const originalFetch = globalThis.fetch;
+    t.after(() => { globalThis.fetch = originalFetch; });
+    const calls: URLSearchParams[] = [];
+    const secret = ['xoxb', '1234567890123', '4567890123456', 'AbCdEfGhIjKlMnOpQrStUvWx'].join('-');
+    globalThis.fetch = async (_url, init) => {
+        const body = new URLSearchParams(String(init?.body)); calls.push(body);
+        return new Response(JSON.stringify({ ok: true, messages: [{ ts: body.get('cursor') ? '3.0' : '2.0', text: secret }], response_metadata: { next_cursor: body.get('cursor') ? '' : 'next' } }));
+    };
+    const { registerMessagingRoutes } = await import('../../src/routes/messaging.ts');
+    const handlers = new Map<string, (req: unknown, res: unknown) => Promise<void>>();
+    const app = { get: (path: string, ...fns: Array<(req: unknown, res: unknown) => Promise<void>>) => handlers.set(path, fns.at(-1)!), post() {}, use() {} };
+    registerMessagingRoutes(app as never, ((_req: unknown, _res: unknown, next: () => void) => next()) as never, { validateSlackOperator: candidate => candidate === 'fixture-operator' });
+    const handler = handlers.get('/api/slack/history')!;
+    let status = 200; let payload: Record<string, unknown> = {};
+    const res = { status(code: number) { status = code; return res; }, json(body: Record<string, unknown>) { payload = body; } };
+    await handler({ headers: { 'x-jaw-slack-operator': 'fixture-operator' }, query: { channel: 'C1', oldest: '1.0', latest: '4.0', inclusive: 'true' } }, res);
+    assert.equal(payload.nextCursor, 'next'); assert.equal(payload.partial, true);
+    assert.ok(!JSON.stringify(payload).includes(secret));
+    await handler({ headers: { 'x-jaw-slack-operator': 'fixture-operator' }, query: { channel: 'C1', thread_ts: '1.0', cursor: 'next', oldest: '1.0', latest: '4.0', inclusive: 'true', format: 'text' } }, res);
+    assert.equal(payload.hasMore, false); assert.equal(payload.fetchedCount, 1);
+    assert.equal(calls[1]?.get('cursor'), 'next'); assert.equal(calls[1]?.get('oldest'), '1.0'); assert.equal(calls[1]?.get('inclusive'), 'true');
+    for (const query of [{ limit: '-1' }, { inclusive: 'maybe' }, { cursor: ['a', 'b'] }, { oldest: 'later' }, { unexpected: 'value' }]) {
+        await handler({ query: { channel: 'C1', ...query } }, res);
+        assert.equal(status, 400);
+    }
+    assert.equal(calls.length, 2);
+});
+
+test('normalized oversized blocks cannot evict ts/text from agent output', async () => {
+    const { slackHistoryForAgent, formatHistoryForAgentDetailed } = await import('../../src/slack/history.ts');
+    const { impl } = makeFetch([{ ok: true, messages: [{ ts: '1.0', text: 'required body', blocks: [{ text: 'x'.repeat(64000) }] }] }]);
+    const fetched = await fetchSlackHistory(TOKEN, 'C1', { fetchImpl: impl });
+    assert.ok(fetched.ok);
+    const messages = slackHistoryForAgent(fetched.messages);
+    assert.equal(messages[0]?.ts, '1.0'); assert.equal(messages[0]?.text, 'required body');
+    assert.doesNotThrow(() => formatHistoryForAgentDetailed(messages));
+    assert.equal(messages[0]?.contentTruncated, true);
+});
+
+test('agent rich budget includes long keys and multibyte JSON strings', async () => {
+    const { slackHistoryForAgent } = await import('../../src/slack/history.ts');
+    for (const block of [{ ['k'.repeat(100000)]: 'v' }, { text: '한글'.repeat(40000) }]) {
+        const messages = slackHistoryForAgent([{ ts: '1.0', text: 'body', blocks: [block] }]);
+        assert.ok(Buffer.byteLength(JSON.stringify(messages)) < 65000);
+        assert.equal(messages[0]?.contentTruncated, true);
+        assert.equal(messages[0]?.text, 'body');
+    }
+});

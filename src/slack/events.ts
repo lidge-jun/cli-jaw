@@ -25,6 +25,7 @@ export type SlackBotProfile = {
 };
 
 export type SlackMessageEvent = {
+    action_token?: string;
     type?: string;
     subtype?: string;
     channel?: string;
@@ -249,33 +250,50 @@ export function shouldProcessSlackEvent(
  * Traversal is ITERATIVE: a deeply nested payload would blow the call stack
  * in a recursive walk, and inbound block structures are attacker-influenced.
  */
-export function extractTextFromBlocks(blocks: unknown[], maxChars = 6000): string {
+export function extractTextFromBlocksDetailed(blocks: unknown[], maxChars = 6000): { text: string; truncated: boolean } {
     const out: string[] = [];
     const seen = new Set<unknown>();
-    const stack: unknown[] = [...blocks];
-    let budget = maxChars;
-    while (stack.length > 0 && budget > 0) {
+    const stack: unknown[] = blocks.slice(0, 10000).reverse();
+    let budget = Math.max(0, maxChars);
+    let visited = 0;
+    let truncated = blocks.length > 10000;
+    while (stack.length > 0 && budget > 0 && visited < 10000) {
         const node = stack.pop();
-        if (!node || typeof node !== 'object') continue;
-        if (seen.has(node)) continue; // guard against cyclic payloads
+        visited += 1;
+        if (!node || typeof node !== 'object' || seen.has(node)) continue;
         seen.add(node);
+        if (Array.isArray(node)) {
+            const remaining = Math.max(0, 10000 - stack.length);
+            for (let i = Math.min(node.length, remaining) - 1; i >= 0; i--) stack.push(node[i]);
+            if (node.length > remaining) truncated = true;
+            continue;
+        }
         const obj = node as Record<string, unknown>;
         const text = obj['text'];
-        if (typeof text === 'string') {
-            out.push(text);
-            budget -= text.length;
-        } else if (text) {
-            stack.push(text);
-        }
-        for (const key of ['elements', 'fields', 'blocks']) {
+        const leaf = typeof text === 'string' ? text
+            : obj['type'] === 'link' && typeof obj['url'] === 'string' ? obj['url']
+            : obj['type'] === 'user' && typeof obj['user_id'] === 'string' ? `<@${obj['user_id']}>`
+            : obj['type'] === 'channel' && typeof obj['channel_id'] === 'string' ? `<#${obj['channel_id']}>`
+            : obj['type'] === 'emoji' && typeof obj['name'] === 'string' ? `:${obj['name']}:` : '';
+        if (leaf) {
+            if (leaf.length > budget) truncated = true;
+            out.push(leaf.slice(0, budget));
+            budget -= Math.min(leaf.length, budget) + 1;
+        } else if (text && typeof text === 'object') stack.push(text);
+        for (const key of ['rows', 'elements', 'fields', 'blocks']) {
             const value = obj[key];
-            // Push in reverse so popping preserves document order.
             if (Array.isArray(value)) {
-                for (let i = value.length - 1; i >= 0; i--) stack.push(value[i]);
+                const remaining = Math.max(0, 10000 - stack.length);
+                for (let i = Math.min(value.length, remaining) - 1; i >= 0; i--) stack.push(value[i]);
+                if (value.length > remaining) truncated = true;
             }
         }
     }
-    return out.join('\n').slice(0, maxChars).trim();
+    return { text: out.join('\n').slice(0, maxChars).trim(), truncated: truncated || stack.length > 0 };
+}
+
+export function extractTextFromBlocks(blocks: unknown[], maxChars = 6000): string {
+    return extractTextFromBlocksDetailed(blocks, maxChars).text;
 }
 
 /** The prompt text an agent should receive for this event. */

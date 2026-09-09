@@ -48,9 +48,11 @@ export function publicSubmitResult(result: SubmitResult): SubmitResult {
 }
 
 type SubmitMeta = {
+    onAdmitted?: (binding: { requestId: string; scope: string; chatSessionId: string }) => void;
     origin: RuntimeOrigin;
     displayText?: string;
     skipOrchestrate?: boolean;
+    ownedExecution?: true;
     target?: RemoteTarget;
     chatId?: string | number;
     scope?: string;
@@ -226,6 +228,8 @@ export function submitMessage(
     // through settleOnce(), so a caller holding this id always hears exactly one
     // terminal event — including on paths that never emit orchestrate_done.
     admitRequest(requestId, scope);
+    try { meta.onAdmitted?.({ requestId, scope, chatSessionId }); }
+    catch { settleOnce(requestId, 'failed', { error: 'slack_tool_context_unavailable' }); return { action: 'rejected', reason: 'slack_tool_context_unavailable', requestId }; }
     // OFF-mode byte-compat: only expose resolved identity when multi-session is on —
     // /api/message spreads SubmitResult into the HTTP response (routes/command.ts).
     const sessionContext = multiSessionEnabled
@@ -276,7 +280,7 @@ export function submitMessage(
                 { ...meta, requestId, ...(eventScope ? { eventScope } : {}) },
             );
         }
-        else settleOnce(requestId, 'skipped', { reason: 'skipOrchestrate' });
+        else if (!meta.ownedExecution) settleOnce(requestId, 'skipped', { reason: 'skipOrchestrate' });
         return { action: 'started', disposition: 'new_run', noPendingContinue: true, requestId, ...(sessionContext ? { sessionContext } : {}) };
     }
 
@@ -295,7 +299,7 @@ export function submitMessage(
                 { ...meta, requestId, ...(eventScope ? { eventScope } : {}) },
             );
         }
-        else settleOnce(requestId, 'skipped', { reason: 'skipOrchestrate' });
+        else if (!meta.ownedExecution) settleOnce(requestId, 'skipped', { reason: 'skipOrchestrate' });
         return { action: 'started', disposition: 'new_run', requestId, ...(sessionContext ? { sessionContext } : {}) };
     }
 
@@ -335,6 +339,6 @@ export function submitMessage(
             { ...meta, requestId, ...(eventScope ? { eventScope } : {}) },
         );
     }
-    else settleOnce(requestId, 'skipped', { reason: 'skipOrchestrate' });
+    else if (!meta.ownedExecution) settleOnce(requestId, 'skipped', { reason: 'skipOrchestrate' });
     return { action: 'started', disposition: 'new_run', requestId, ...(sessionContext ? { sessionContext } : {}) };
 }

@@ -12,7 +12,7 @@ async function withMessagingServer(run: (baseUrl: string) => Promise<void>): Pro
     const app = express();
     app.use(express.json());
     const passAuth = (_req: Request, _res: Response, next: NextFunction) => next();
-    registerMessagingRoutes(app, passAuth);
+    registerMessagingRoutes(app, passAuth, { validateSlackOperator: candidate => candidate === 'fixture-operator' });
     const server: Server = createServer(app);
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
@@ -68,7 +68,7 @@ test('HTTP Slack blocks reach the real adapter and require persisted table proof
             };
             const send = async (body: unknown) => {
                 const response = await fetch(`${baseUrl}/api/channel/send`, {
-                    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+                    method: 'POST', headers: { 'content-type': 'application/json', 'x-jaw-slack-operator': 'fixture-operator' }, body: JSON.stringify(body),
                 });
                 return { status: response.status, body: await response.json() };
             };
@@ -124,7 +124,7 @@ test('POST /api/channel/send returns the stable invalid_channel envelope with an
     await withMessagingServer(async baseUrl => {
         const response = await fetch(`${baseUrl}/api/channel/send`, {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: { 'content-type': 'application/json', 'x-jaw-slack-operator': 'fixture-operator' },
             body: JSON.stringify({ channel: 'C123ABC', type: 'text', text: 'hello' }),
         });
         const body = await response.json() as { error?: string; code?: string };
@@ -159,7 +159,7 @@ test('POST /api/channel/send refuses a path outside the roots with a 403 that sa
         await withMessagingServer(async baseUrl => {
             const response = await fetch(`${baseUrl}/api/channel/send`, {
                 method: 'POST',
-                headers: { 'content-type': 'application/json' },
+                headers: { 'content-type': 'application/json', 'x-jaw-slack-operator': 'fixture-operator' },
                 body: JSON.stringify({
                     channel: 'slack', type: 'photo', filePath,
                     target: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C_ROUTE' },
@@ -203,7 +203,7 @@ test('a path inside the allowed roots still reaches the transport', async () => 
         // it. Configure the channel so a pass here means the FILE was accepted,
         // not that some later check happened to let it through.
         const previousSlack = settings.slack;
-        settings.slack = { ...(settings.slack || {}), channelIds: ['C_OK'] };
+        settings.slack = { ...(settings.slack || {}), enabled: true, botToken: 'xoxb-fixture', channelIds: ['C_OK'] };
         const seen: Array<Record<string, unknown>> = [];
         registerSendTransport('slack', async req => {
             seen.push(req as unknown as Record<string, unknown>);
@@ -214,7 +214,7 @@ test('a path inside the allowed roots still reaches the transport', async () => 
             await withMessagingServer(async baseUrl => {
             const response = await fetch(`${baseUrl}/api/channel/send`, {
                 method: 'POST',
-                headers: { 'content-type': 'application/json' },
+                headers: { 'content-type': 'application/json', 'x-jaw-slack-operator': 'fixture-operator' },
                 body: JSON.stringify({
                     channel: 'slack', type: 'photo', filePath,
                     target: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C_OK' },
@@ -262,7 +262,7 @@ test('every send route surfaces a refused path the same way', async () => {
             ] as const) {
                 const response = await fetch(`${baseUrl}${route}`, {
                     method: 'POST',
-                    headers: { 'content-type': 'application/json' },
+                    headers: { 'content-type': 'application/json', 'x-jaw-slack-operator': 'fixture-operator' },
                     body: JSON.stringify(body),
                 });
                 const json = await response.json() as { code?: string; detail?: { allowedRoots?: string[] } };

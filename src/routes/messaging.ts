@@ -1,10 +1,13 @@
-import type { Express } from 'express';
+import { slackCredentialKey } from '../slack/tool-context.js';
+import type { Express, Request, Response } from 'express';
+import { resolveSlackToolPrincipal, withSlackToolAccess, slackToolDenied, type SlackOperatorValidator } from '../slack/tool-access.js';
+import { getHomeChannel } from '../messaging/runtime.js';
 import type { AuthMiddleware } from './types.js';
 import { httpStatus, httpCode, httpDetail } from './_http-error.js';
 import fs from 'fs';
 import os from 'os';
 import { execFileSync, spawn } from 'node:child_process';
-import { basename, dirname, extname, normalize, resolve } from 'path';
+import { basename, dirname, extname, normalize, resolve, relative, isAbsolute } from 'path';
 import express from 'express';
 import { ok, fail } from '../http/response.js';
 import { saveUpload } from '../agent/spawn.js';
@@ -44,7 +47,7 @@ import { validateChannelCredentials } from '../messaging/channel-validate.js';
 import { sendResultHttpStatus } from '../messaging/send-result.js';
 import { getSlackSendClient } from '../slack/send-only-client.js';
 import { getSlackSelfUserId } from '../slack/bot.js';
-import { fetchSlackHistory, fetchSlackReplies, formatHistoryForAgent } from '../slack/history.js';
+import { fetchSlackHistory, fetchSlackReplies, formatHistoryForAgentDetailed, slackHistoryForAgent } from '../slack/history.js';
 import { getCachedSlackIdentities } from '../slack/identity.js';
 import { fetchSlackChannelMembers, fetchSlackWorkspaceUsers, formatRosterForAgent } from '../slack/roster.js';
 import type { SlackHistoryMessage } from '../slack/history.js';
@@ -78,7 +81,7 @@ async function resolveHistoryNames(
     }
     return names;
 }
-import { settings } from '../core/config.js';
+import { settings, JAW_HOME, UPLOADS_DIR } from '../core/config.js';
 import { expandHomePath } from '../core/path-expand.js';
 import { stripUndefined } from '../core/strip-undefined.js';
 import { log } from '../core/logger.js';
@@ -144,7 +147,47 @@ function resolveOpenTarget(rawPath: string): OpenTarget {
     throw new Error('file_not_found');
 }
 
-export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddleware): void {
+export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddleware,
+    options: { validateSlackOperator?: SlackOperatorValidator } = {}): void {
+    const principalFor = (req: Request) => {
+        for (const input of [req.body, req.query]) if (input && typeof input === 'object'
+            && ['requesterId', 'actorId', 'actionToken', 'botToken'].some(key => Object.hasOwn(input, key))) throw slackToolDenied('slack_caller_identity_forbidden', 400);
+        return resolveSlackToolPrincipal(req.headers, options.validateSlackOperator ?? (() => false));
+    };
+    const lookup = async <T>(req: Request, res: Response, token: string, channel: string | undefined,
+        operation: (signal?: AbortSignal) => Promise<T>): Promise<T | undefined> => {
+        try { return await withSlackToolAccess(token, principalFor(req), channel, async signal => {
+            if (getSlackSendClient().token !== token) throw slackToolDenied('slack_credential_changed', 409);
+            const result = await operation(signal);
+            if (getSlackSendClient().token !== token) throw slackToolDenied('slack_credential_changed', 409);
+            return result;
+        }); }
+        catch (error) { res.status(httpStatus(error, 403)).json({ ok: false, error: userErrorText(error), code: httpCode(error) }); return undefined; }
+    };
+    const sendSlackAware = async (req: Request, request: ReturnType<typeof normalizeChannelSendRequest>) => {
+        const channel = request.target?.channel ?? (request.channel && request.channel !== 'active' ? request.channel : getHomeChannel());
+        if (channel !== 'slack') return sendChannelOutput({ ...request, fromAgentSurface: true });
+        const principal = principalFor(req);
+        const client = getSlackSendClient();
+        if (!client.token) throw slackToolDenied('slack_unavailable', 503);
+        if (principal.kind === 'turn') {
+            if (request.filePath) {
+                const inside = (root: string) => {
+                    const rel = relative(fs.realpathSync(root), request.filePath!);
+                    return !isAbsolute(rel) && rel !== '..' && !rel.startsWith('../') && !rel.startsWith('..\\');
+                };
+                if (inside(JAW_HOME) && (!fs.existsSync(UPLOADS_DIR) || !inside(UPLOADS_DIR))) throw slackToolDenied('slack_private_home_file_denied');
+            }
+            const destination = principal.grant.destination;
+            const candidate = request.target ?? request.turnTarget;
+            if ((candidate && (candidate.targetId !== destination.targetId || (candidate.threadId ?? '') !== (destination.threadId ?? '')))
+                || (request.chatId !== undefined && String(request.chatId) !== destination.targetId)) throw slackToolDenied('slack_destination_mismatch');
+            request = { ...request, target: destination, channel: 'slack' };
+        }
+        return withSlackToolAccess(client.token, principal, principal.kind === 'turn' ? principal.grant.destination.targetId : undefined,
+            signal => sendChannelOutput({ ...request, slackCredentialKey: slackCredentialKey(client.token!), ...(signal ? { signal } : {}), fromAgentSurface: true }), undefined,
+            result => ({ ...result, ok: false, error: 'slack_grant_cancelled_after_dispatch', sent: result.ok || result['sent'] === true, retryable: false, status: 409 }));
+    };
     app.post('/api/upload', requireAuth, express.raw({ type: '*/*', limit: '20mb' }), (req, res) => {
         try {
             const filename = decodeFilenameSafe(req.headers['x-filename'] as string | undefined);
@@ -362,10 +405,7 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
             // `fromAgentSurface` is set HERE rather than inside the normalizer:
             // it is a fact about how the send arrived, not about its body, and
             // an agent must not be able to claim it by putting a field in JSON.
-            const result = await sendChannelOutput({
-                ...normalizeChannelSendRequest(req.body),
-                fromAgentSurface: true,
-            });
+            const result = await sendSlackAware(req, normalizeChannelSendRequest(req.body));
             if (!result.ok) {
                 res.status(sendResultHttpStatus(result)).json(result);
                 return;
@@ -405,11 +445,7 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
 
     app.post('/api/slack/send', requireAuth, async (req, res) => {
         try {
-            const result = await sendChannelOutput({
-                ...normalizeChannelSendRequest(req.body),
-                channel: 'slack',
-                fromAgentSurface: true,
-            });
+            const result = await sendSlackAware(req, { ...normalizeChannelSendRequest(req.body), channel: 'slack' });
             if (!result.ok) {
                 res.status(sendResultHttpStatus(result)).json(result);
                 return;
@@ -441,25 +477,48 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
             res.status(400).json({ ok: false, error: 'channel_required' });
             return;
         }
-        const threadTs = String(req.query['thread_ts'] || '').trim();
-        const limit = Number(req.query['limit']) || undefined;
-        const result = threadTs
-            ? await fetchSlackReplies(client.token, channel, threadTs, { ...(limit ? { limit } : {}) })
-            : await fetchSlackHistory(client.token, channel, { ...(limit ? { limit } : {}) });
+        const allowed = new Set(['channel', 'thread_ts', 'limit', 'cursor', 'oldest', 'latest', 'inclusive', 'format']);
+        const query = req.query;
+        const invalid = Object.entries(query).some(([key, value]) => !allowed.has(key)
+            || typeof value !== 'string' || value.length > 2048)
+            || ['thread_ts', 'oldest', 'latest'].some(key => query[key] !== undefined && !/^\d+(?:\.\d+)?$/.test(String(query[key])))
+            || (query['limit'] !== undefined && (!/^\d+$/.test(String(query['limit'])) || Number(query['limit']) < 1 || !Number.isSafeInteger(Number(query['limit']))))
+            || (query['inclusive'] !== undefined && !['true', 'false', '1', '0'].includes(String(query['inclusive'])))
+            || (query['format'] !== undefined && !['text', 'json'].includes(String(query['format'])))
+            || (query['oldest'] !== undefined && query['latest'] !== undefined && Number(query['oldest']) > Number(query['latest']));
+        if (invalid) { res.status(400).json({ ok: false, error: 'invalid_history_query' }); return; }
+        const threadTs = String(query['thread_ts'] || '');
+        const opts = {
+            ...(query['limit'] ? { limit: Number(query['limit']) } : {}),
+            ...(query['cursor'] ? { cursor: String(query['cursor']) } : {}),
+            ...(query['oldest'] ? { oldest: String(query['oldest']) } : {}),
+            ...(query['latest'] ? { latest: String(query['latest']) } : {}),
+            inclusive: ['true', '1'].includes(String(query['inclusive'])),
+        };
+        const result = await lookup(req, res, client.token, channel, signal => threadTs
+            ? fetchSlackReplies(client.token!, channel, threadTs, { ...opts, ...(signal ? { signal } : {}) })
+            : fetchSlackHistory(client.token!, channel, { ...opts, ...(signal ? { signal } : {}) }));
+        if (!result) return;
         if (!result.ok) {
             // describeSlackError prose only (missing_scope names the scope);
             // never the raw upstream payload.
             res.status(502).json({ ok: false, error: result.error });
             return;
         }
+        const messages = slackHistoryForAgent(result.messages);
+        const contentTruncated = messages.some(message => message.contentTruncated);
+        const metadata = { hasMore: result.hasMore, ...(result.nextCursor ? { nextCursor: result.nextCursor } : {}),
+            partial: result.hasMore || contentTruncated, fetchedCount: messages.length, contentTruncated,
+            ...(opts.oldest ? { oldest: opts.oldest } : {}), ...(opts.latest ? { latest: opts.latest } : {}), inclusive: opts.inclusive };
         if (String(req.query['format'] || '') === 'text') {
-            // Names are a best-effort garnish: if resolution is unavailable the map
-            // is empty and the rendering falls back to raw mention syntax.
-            const names = await resolveHistoryNames(client.token, result.messages);
-            res.json({ ok: true, text: formatHistoryForAgent(result.messages, getSlackSelfUserId(), names) });
+            const names = await resolveHistoryNames(client.token, messages);
+            const formatted = formatHistoryForAgentDetailed(messages, getSlackSelfUserId(), names);
+            const text = formatted.text;
+            const truncated = contentTruncated || formatted.truncated;
+            res.json({ ok: true, ...metadata, partial: metadata.partial || truncated, contentTruncated: truncated, text });
             return;
         }
-        res.json({ ok: true, messages: result.messages, hasMore: result.hasMore });
+        res.json({ ok: true, ...metadata, messages });
     });
 
     // Who is in this conversation? Same contract shape as /api/slack/history:
@@ -477,10 +536,12 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
             return;
         }
         const limit = Number(req.query['limit']) || undefined;
-        const result = await fetchSlackChannelMembers(client.token, channel, {
+        const result = await lookup(req, res, client.token, channel, signal => fetchSlackChannelMembers(client.token!, channel, {
+            ...(signal ? { signal } : {}),
             teamId: String(settings["slack"]?.teamId || 'unknown'),
             ...(limit ? { limit } : {}),
-        });
+        }));
+        if (!result) return;
         if (!result.ok) {
             res.status(502).json({ ok: false, error: result.error });
             return;
@@ -500,12 +561,14 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
             return;
         }
         const limit = Number(req.query['limit']) || undefined;
-        const result = await fetchSlackWorkspaceUsers(client.token, {
+        const result = await lookup(req, res, client.token, undefined, signal => fetchSlackWorkspaceUsers(client.token!, {
+            ...(signal ? { signal } : {}),
             teamId: String(settings["slack"]?.teamId || 'unknown'),
             ...(limit ? { limit } : {}),
             ...(req.query['include_bots'] ? { includeBots: true } : {}),
             ...(req.query['include_deleted'] ? { includeDeleted: true } : {}),
-        });
+        }));
+        if (!result) return;
         if (!result.ok) {
             res.status(502).json({ ok: false, error: result.error });
             return;
