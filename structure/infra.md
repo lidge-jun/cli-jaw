@@ -54,7 +54,7 @@ Activity persistence uses the existing SQLite trace tables: nullable `trace_runs
 | `i18n:registry` | `tsx scripts/i18n-registry.ts` |
 | `check:deps:online` | `bash scripts/check-deps-online.sh` |
 | `prebuild`, `pretest`, `pretest:all`, `pretest:integration`, `pretest:smoke` | `npm run ensure:native` |
-| `test` | `tsx --experimental-test-module-mocks tests/run.mts` — programmatic driver, `isolation:'process'` + `concurrency:true`, fresh `CLI_JAW_HOME` per child, `forceExit` unless `--watch`. Options: `--scope root,unit,integration,manager,browser,bin` (default `root,unit`), `--shard i/N` (byte-ordered round-robin, `tests/setup/shard.ts`), `--list` (print selection, exit 0) |
+| `test` | `tsx --experimental-test-module-mocks tests/run.mts` — programmatic driver, `isolation:'process'` + `concurrency:true`, fresh `CLI_JAW_HOME` per child, never `forceExit` (#661), per-file stall watchdog armed at a file's first result and bounded by `JAW_TEST_FILE_STALL_MS` (default 180000) unless `--watch`. Options: `--scope root,unit,integration,manager,browser,bin` (default `root,unit`), `--shard i/N` (byte-ordered round-robin, `tests/setup/shard.ts`), `--list` (print selection, exit 0) |
 | `test:shard` | `tsx --experimental-test-module-mocks tests/run.mts --scope root,unit --shard` — `npm run test:shard -- 1/4` runs exactly what CI's `test 1/4` job runs |
 | `test:integration:all` | `tsx --experimental-test-module-mocks tests/run.mts --scope integration,manager,bin` — CI's `integration` job set; `api-smoke` needs a server on `TEST_PORT` and fails closed when `CI` is set |
 | `test:all` | `tsx --experimental-test-module-mocks tests/run.mts --all` |
@@ -200,8 +200,16 @@ integration 잡의 skip 목록이 이 표와 달라지면 새 격리가 아니�
 샤드 분할은 `tests/setup/shard.ts`: 선택 파일을 `Buffer.compare`(LC_ALL=C 바이트 순)로 정렬하고
 `index % N === i-1` 을 취한다 — `node --test-shard` 및 opencodex helper 와 같은 규칙이라 러너마다 같은
 분할이 나온다. 파일 수 균형 ≠ 시간 균형: 34139039203 기준 72/83/104/89s. 한 샤드가 240s 를 넘거나
-최대/최소가 2배를 넘으면 N 을 올린다. `forceExit` 는 마지막 테스트 뒤 열린 핸들이 샤드를 5분 한도까지
-붙잡던 문제(34138235928 shard 3/4)를 막는다; 실제로 멈춘 테스트는 여전히 그 한도까지 간다.
+최대/최소가 2배를 넘으면 N 을 올린다. 멈춘 파일은 `forceExit` 가 아니라 드라이버의 진행 감시가 막는다:
+`forceExit` 는 자식마다 `--test-force-exit` 를 붙여 루트가 "이미 아는" 테스트만 끝나면 즉시 프로세스를
+끝냈고, 그래서 top-level await 뒤에 등록된 테스트가 실행만 되고 보고되지 않았다(#661, 회차마다 4~62개).
+지금은 결과를 내기 시작한 뒤 `JAW_TEST_FILE_STALL_MS`(기본 180000ms) 동안 조용한 파일을 이름과 함께
+실패로 보고하고 나머지를 abort 한다 — 34138235928 shard 3/4 가 4분 반 침묵하다 스텝 타임아웃으로
+죽었을 때 없던 귀속 정보다. dequeue 부터 재지 않는 이유는 500개 자식이 코어를 다투는 동안 정상 파일도
+첫 이벤트까지 60s 를 기다릴 수 있기 때문이고(측정), 첫 결과 이후 관측된 최대 간격은 9.5s 다.
+회귀 가드는 `tests/unit/test-runner-driver.test.ts` 와 `tests/fixtures/test-runner/*.fixture.ts`.
+`test.yml` 의 shard 스텝 한도는 480s 다 — 감시(180s)가 Actions 보다 먼저 울려서 파일 이름을 남길
+여유를 주기 위해서다. 정지 메시지는 파일마다 마지막 이벤트 종류·개수·경과를 함께 찍는다.
 
 `test.yml`의 `windows-unit`은 기존 Windows 서비스·설치·실행 검사에 더해
 `claude-sdk-windows-launch`, `claude-sdk-session`, `claude-sdk-control`,
