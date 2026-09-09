@@ -229,7 +229,7 @@ export function admitSlackRun(params: {
     chatId: string;
     preResolvedScope?: string | null;
     runReply: (ctx: SlackRunContext) => Promise<void>;
-}): SubmitResult & { laneTail?: Promise<void> } {
+}): SubmitResult & { laneTail?: Promise<void>; sessionContext: NonNullable<SubmitResult['sessionContext']> } {
     const multiSessionEnabled = settings["multiSession"]?.enabled === true;
     const gateEnabled = multiSessionEnabled && channelGateOn('slack');
     const remoteKey = gateEnabled ? buildRemoteBindingKey(params.target) : undefined;
@@ -245,15 +245,15 @@ export function admitSlackRun(params: {
         ...(params.target.threadIsSynthetic === true ? { midRunPolicy: 'followup' as const } : {}),
         ...(remoteKey ? { remoteKey } : {}), chatSessionId, scope,
     });
-    if (result.disposition !== 'new_run') return result;
     const session = result.sessionContext || { scope, chatSessionId, ...(remoteKey ? { remoteKey } : {}) };
+    if (result.disposition !== 'new_run') return { ...result, sessionContext: session };
     const laneTail = sessionLanes.run(session.scope, () => params.runReply({
         scope: session.scope,
         chatSessionId: session.chatSessionId,
         requestId: result.requestId || '',
         ...(session.remoteKey ? { remoteKey: session.remoteKey } : {}),
     }));
-    return { ...result, laneTail };
+    return { ...result, sessionContext: session, laneTail };
 }
 
 export async function resetSlackIngress(): Promise<void> {

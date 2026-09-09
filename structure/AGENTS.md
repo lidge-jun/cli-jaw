@@ -100,3 +100,7 @@ and local TUI/package absence contracts in `infra.md`. Preserve stored user data
 ### Quota reader contract
 
 Native quota readers follow the OpenCodex source contract: Codex window duration/plan policy, Spark and reset-credit metadata; Claude model-scoped windows and credential-scoped cache. Missing measurements remain unknown, 429 alone never means 100%, and upstream bodies are bounded. See `docs/migration/quota-reader-parity.md`.
+
+- Slack progress uses a one-second native heartbeat under a shared append budget, delta-only cards and dispatch-time snapshots. Known file tools expose only validated project-relative filenames or outside basenames under captured workingDir; preserve request identity, final/ACK ownership and raw-content exclusion. See `telegram.md`.
+
+- Slack semantic activity uses `progress-detail.ts` and `progress-files.ts`: explicit Cursor shell tool purposes, finite literal command summaries and validated targets, never raw script bodies or credential arguments. Description-only same-ID updates do not reset accepted Cursor answer text; sparse terminal details retain the same observed purpose. See `telegram.md` and `stream-events.md`.

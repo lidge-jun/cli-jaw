@@ -329,6 +329,8 @@ interface SessionBucketRow {
 type SpawnPromiseResult = {
     text: string;
     code: number;
+    executionInterrupted?: boolean;
+    executionFailed?: boolean;
     runtimeOutcome?: RuntimeTurnOutcome;
     traceRunId?: string;
     agyCheckpointSeen?: boolean;
@@ -904,6 +906,12 @@ export async function steerAgent(
         settleOnce(meta?.requestId, 'steered');
         return 'steered';
     }
+    // Capture the admitted Slack address before kill/wait can yield ownership.
+    const slackRestart = source === 'slack' && isRemoteTarget(meta?.target) && meta.target.channel === 'slack'
+        ? stripUndefined({ mode: 'restart' as const, scope: scopeKey, sessionId: chatSessionId,
+            target: { ...meta.target }, chatId: meta.chatId, requestId: meta.requestId,
+            remoteKey: meta.remoteKey, replyViaTarget: true })
+        : undefined;
     const steerWaitMs = getSteerWaitMsForActiveAgent(scopeKey);
     // Snapshot BEFORE the kill: the interrupted partial-output row is identified
     // as the first ⏹️-tagged assistant message with id above this mark. A
@@ -935,10 +943,10 @@ export async function steerAgent(
     }
     insertMessage.run('user', newPrompt, source, '', settings["workingDir"] || null, chatSessionId);
     broadcast('new_message', { role: 'user', content: newPrompt, source, scope: scopeKey, sessionId: chatSessionId });
-    broadcast('steer_started', stripUndefined({ prompt: newPrompt, origin: source || 'web', scope: scopeKey, requestId: meta?.requestId }));
+    broadcast('steer_started', stripUndefined({ prompt: newPrompt, origin: source || 'web', scope: scopeKey, requestId: meta?.requestId, ...slackRestart }));
     const { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
-    const steerMeta = stripUndefined({ origin, scope: scopeKey, chatSessionId, requestId: meta?.requestId, _skipInsert: true, _steerContext: steerContext || undefined });
+    const steerMeta = stripUndefined({ origin, scope: scopeKey, chatSessionId, requestId: meta?.requestId, ...slackRestart, _skipInsert: true, _steerContext: steerContext || undefined });
     const task = isResetIntent(newPrompt)
         ? orchestrateReset(steerMeta)
         : isContinueIntent(newPrompt)
@@ -946,8 +954,8 @@ export async function steerAgent(
             : orchestrate(newPrompt, steerMeta);
     task.catch(async (err: Error) => {
         console.error('[steer:orchestrate]', err.message);
-        broadcast('orchestrate_done', stripUndefined({ text: `[error] ${err.message}`, error: true, origin, requestId: meta?.requestId }));
-        settleOnce(meta?.requestId, 'failed', { error: err.message });
+        broadcast('orchestrate_done', stripUndefined({ text: `[error] ${err.message}`, error: true, origin, requestId: meta?.requestId, ...slackRestart }));
+        settleOnce(slackRestart ? slackRestart.requestId : meta?.requestId, 'failed', { error: err.message });
     });
     // The follow-up was started as a new run (kill-path or idle race). The caller
     // must NOT also queue the message.

@@ -49,6 +49,7 @@ import { resolveExecutionBinding } from './scope.js';
 import { sessionLanes } from './session-lanes.js';
 import { settleOnce } from './request-registry.js';
 import type { RuntimeLivenessIdentity, RuntimeTurnOutcome } from '../shared/runtime-contract.js';
+import { notifyRuntimeLiveness } from '../agent/runtime/liveness.js';
 
 // ─── Parser re-exports ─────────────────────────────
 import {
@@ -75,7 +76,7 @@ function captureExecutionMeta(meta: Record<string, unknown> & { remoteKey?: stri
 
 function runtimeActivityLifecycle(meta: Record<string, unknown>) {
     const callback = meta['_onRuntimeActivity'];
-    if (meta['_workerResult'] || typeof callback !== 'function') return undefined;
+    if (meta['_workerResult']) return undefined;
     return { onActivity(source: string, identity?: RuntimeLivenessIdentity) {
         if (source !== 'native-runtime' || !identity
             || ![identity.runId, identity.sessionId, identity.scope, identity.origin]
@@ -83,7 +84,10 @@ function runtimeActivityLifecycle(meta: Record<string, unknown>) {
             || (identity.requestId !== undefined
                 && (typeof identity.requestId !== 'string' || !identity.requestId.trim()))) return;
         // This private observer must not turn model I/O into a provider failure.
-        try { callback(identity); } catch { /* liveness observer is best-effort */ }
+        notifyRuntimeLiveness(identity);
+        if (typeof callback === 'function') {
+            try { callback(identity); } catch { /* liveness observer is best-effort */ }
+        }
     } };
 }
 
@@ -696,6 +700,11 @@ export async function orchestrate(
         ? { traceRunId: result['traceRunId'] } : {};
     broadcast('orchestrate_done', {
         text: compatibilityText,
+        ...(!nativeOutcome && result['executionInterrupted'] === true
+            ? { executionInterrupted: true }
+            : !nativeOutcome && (result['executionFailed'] === true || result['error'] === true
+                || (Number.isFinite(result['code']) && Number.isInteger(result['code']) && result['code'] !== 0))
+                ? { executionFailed: true } : {}),
         ...nativeTags,
         ...nativeRunTag,
         origin,
