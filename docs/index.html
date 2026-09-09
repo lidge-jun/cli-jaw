@@ -1977,11 +1977,9 @@
                     </div>
                 </div>
 
-                <ul class="provider-constellation" aria-label="Thirteen supported AI runtime providers" aria-hidden="true">
+                <ul class="provider-constellation" aria-label="Ten supported AI runtime providers" aria-hidden="true">
                     <li class="provider-star"><span class="brand-mark brand-mono pi">π</span>Pi</li>
                     <li class="provider-star"><span class="brand-mark claude"><svg aria-hidden="true"><use href="#logo-claude"/></svg></span>Claude</li>
-                    <li class="provider-star"><span class="brand-mark claude brand-with-sup"><svg aria-hidden="true"><use href="#logo-claude"/></svg></span>Claude E</li>
-                    <li class="provider-star"><span class="brand-mark brand-mono">AI·E</span>AI-E</li>
                     <li class="provider-star"><span class="brand-mark brand-mono">AGY</span>Antigravity</li>
                     <li class="provider-star"><span class="brand-mark"><svg aria-hidden="true"><use href="#logo-openai"/></svg></span>Codex</li>
                     <li class="provider-star"><span class="brand-mark"><svg aria-hidden="true"><use href="#logo-openai"/></svg></span>Codex App</li>
@@ -2002,14 +2000,14 @@
                         <div class="terminal-body">
                             <p class="terminal-command"><span class="terminal-prompt">$</span> jaw dashboard --status</p>
                             <dl class="provider-status">
-                                <div class="provider-status-row"><dt>Claude E</dt><dd>claude-opus-4-8</dd><dd class="terminal-ready">Ready</dd></div>
+                                <div class="provider-status-row"><dt>Claude</dt><dd>claude-opus-4-8</dd><dd class="terminal-ready">Ready</dd></div>
                                 <div class="provider-status-row"><dt>Codex App</dt><dd>gpt-5.5</dd><dd class="terminal-ready">Ready</dd></div>
                                 <div class="provider-status-row"><dt>Pi</dt><dd>grok-composer-2.5-fast</dd><dd class="terminal-ready">Ready</dd></div>
                                 <div class="provider-status-row"><dt>Cursor</dt><dd>composer-2.5</dd><dd class="terminal-ready">Ready</dd></div>
                                 <div class="provider-status-row"><dt>OpenCode</dt><dd>opencode-go/kimi-k2.6</dd><dd class="terminal-ready">Ready</dd></div>
                                 <div class="provider-status-row"><dt>Copilot</dt><dd>claude-sonnet-4.6</dd><dd class="terminal-ready">Ready</dd></div>
                             </dl>
-                            <p class="terminal-log"><span class="terminal-time">09:41:07</span> task-42 routed to Claude E; Codex App and Pi armed as fallback</p>
+                            <p class="terminal-log"><span class="terminal-time">09:41:07</span> task-42 routed to Claude; Codex App and Pi armed as fallback</p>
                         </div>
                     </div>
                     <div class="hero-badges" aria-label="Project badges">
@@ -2065,12 +2063,12 @@
 
         <section class="section band band-alt" id="engines" aria-labelledby="engines-title">
             <div class="container reveal">
-                <p class="kicker">12 runtime surfaces</p>
+                <p class="kicker">10 runtime surfaces</p>
                 <h2 class="section-title" id="engines-title">Your subscriptions, composed as one system.</h2>
-                <p class="section-desc">Use one runtime or all twelve. CLI-JAW keeps each provider's native authentication, model defaults, and fallback role visible.</p>
+                <p class="section-desc">Use one runtime or all ten. CLI-JAW keeps each provider's native authentication, model defaults, and fallback role visible.</p>
                 <div class="engines-grid" role="list" aria-label="Supported AI runtimes">
                     <article class="engine-card dominant" role="listitem">
-                        <div class="engine-head"><span class="brand-mark brand-mono pi">π</span><span class="engine-index">01 / 12</span></div>
+                        <div class="engine-head"><span class="brand-mark brand-mono pi">π</span><span class="engine-index">01 / 10</span></div>
                         <div><h3 class="engine-name">Pi</h3><div class="engine-model">grok-composer-2.5-fast</div><div class="engine-auth">Settings profile API key, local proxy, or PI_CODING_AGENT_BIN</div></div>
                     </article>
                     <article class="engine-card" role="listitem">
@@ -2078,43 +2076,35 @@
                         <div><h3 class="engine-name">Claude</h3><div class="engine-model">claude-opus-4-8</div><div class="engine-auth">claude auth login</div></div>
                     </article>
                     <article class="engine-card" role="listitem">
-                        <div class="engine-head"><span class="brand-mark claude brand-with-sup"><svg aria-hidden="true"><use href="#logo-claude"/></svg></span><span class="engine-index">03</span></div>
-                        <div><h3 class="engine-name">Claude E</h3><div class="engine-model">claude-opus-4-8</div><div class="engine-auth">underlying claude auth login</div></div>
-                    </article>
-                    <article class="engine-card" role="listitem">
-                        <div class="engine-head"><span class="brand-mark brand-mono">AI·E</span><span class="engine-index">04</span></div>
-                        <div><h3 class="engine-name">AI-E</h3><div class="engine-model">provider-selected</div><div class="engine-auth">selected provider auth</div></div>
-                    </article>
-                    <article class="engine-card" role="listitem">
-                        <div class="engine-head"><span class="brand-mark brand-mono">AGY</span><span class="engine-index">05</span></div>
+                        <div class="engine-head"><span class="brand-mark brand-mono">AGY</span><span class="engine-index">03</span></div>
                         <div><h3 class="engine-name">Antigravity</h3><div class="engine-model">AGY-selected</div><div class="engine-auth">checked by agy at runtime</div></div>
                     </article>
                     <article class="engine-card" role="listitem">
-                        <div class="engine-head"><span class="brand-mark"><svg aria-hidden="true"><use href="#logo-openai"/></svg></span><span class="engine-index">06</span></div>
+                        <div class="engine-head"><span class="brand-mark"><svg aria-hidden="true"><use href="#logo-openai"/></svg></span><span class="engine-index">04</span></div>
                         <div><h3 class="engine-name">Codex</h3><div class="engine-model">gpt-5.5</div><div class="engine-auth">codex login</div></div>
                     </article>
                     <article class="engine-card" role="listitem">
-                        <div class="engine-head"><span class="brand-mark"><svg aria-hidden="true"><use href="#logo-openai"/></svg></span><span class="engine-index">07</span></div>
+                        <div class="engine-head"><span class="brand-mark"><svg aria-hidden="true"><use href="#logo-openai"/></svg></span><span class="engine-index">05</span></div>
                         <div><h3 class="engine-name">Codex App</h3><div class="engine-model">gpt-5.5</div><div class="engine-auth">codex login</div></div>
                     </article>
                     <article class="engine-card" role="listitem">
-                        <div class="engine-head"><span class="brand-mark"><svg aria-hidden="true"><use href="#logo-cursor"/></svg></span><span class="engine-index">08</span></div>
+                        <div class="engine-head"><span class="brand-mark"><svg aria-hidden="true"><use href="#logo-cursor"/></svg></span><span class="engine-index">06</span></div>
                         <div><h3 class="engine-name">Cursor</h3><div class="engine-model">composer-2.5</div><div class="engine-auth">cursor-agent login or CURSOR_API_KEY</div></div>
                     </article>
                     <article class="engine-card" role="listitem">
-                        <div class="engine-head"><span class="brand-mark brand-mono">GROK</span><span class="engine-index">09</span></div>
+                        <div class="engine-head"><span class="brand-mark brand-mono">GROK</span><span class="engine-index">07</span></div>
                         <div><h3 class="engine-name">Grok</h3><div class="engine-model">grok-build</div><div class="engine-auth">grok login --oauth</div></div>
                     </article>
                     <article class="engine-card" role="listitem">
-                        <div class="engine-head"><span class="brand-mark brand-mono">KIRO</span><span class="engine-index">10</span></div>
+                        <div class="engine-head"><span class="brand-mark brand-mono">KIRO</span><span class="engine-index">08</span></div>
                         <div><h3 class="engine-name">Kiro</h3><div class="engine-model">registry-selected</div><div class="engine-auth">kiro</div></div>
                     </article>
                     <article class="engine-card" role="listitem">
-                        <div class="engine-head"><span class="brand-mark"><svg aria-hidden="true"><use href="#logo-opencode"/></svg></span><span class="engine-index">11</span></div>
+                        <div class="engine-head"><span class="brand-mark"><svg aria-hidden="true"><use href="#logo-opencode"/></svg></span><span class="engine-index">09</span></div>
                         <div><h3 class="engine-name">OpenCode</h3><div class="engine-model">opencode-go/kimi-k2.6</div><div class="engine-auth">opencode</div></div>
                     </article>
                     <article class="engine-card" role="listitem">
-                        <div class="engine-head"><span class="brand-mark"><svg aria-hidden="true"><use href="#logo-copilot"/></svg></span><span class="engine-index">12</span></div>
+                        <div class="engine-head"><span class="brand-mark"><svg aria-hidden="true"><use href="#logo-copilot"/></svg></span><span class="engine-index">10</span></div>
                         <div><h3 class="engine-name">Copilot</h3><div class="engine-model">claude-sonnet-4.6</div><div class="engine-auth">copilot login</div></div>
                     </article>
                 </div>
@@ -2274,7 +2264,7 @@
     <footer class="footer">
         <div class="container">
             <div class="footer-top">
-                <div class="footer-intro"><div class="footer-brand">CLI-JAW</div><p class="footer-statement">Thirteen AI runtimes, one local assistant, and one place to see the work.</p></div>
+                <div class="footer-intro"><div class="footer-brand">CLI-JAW</div><p class="footer-statement">Ten AI runtimes, one local assistant, and one place to see the work.</p></div>
                 <div class="footer-col"><h3>START</h3><a href="#quickstart">Quickstart</a><a href="clijaw-intro.html">Guided intro</a><a href="windows.html">Windows setup</a></div>
                 <div class="footer-col"><h3>BUILD</h3><a href="dev/">Documentation</a><a href="#engines">Runtimes</a><a href="#pabcd">PABCD</a></div>
                 <div class="footer-col"><h3>PROJECT</h3><a href="https://github.com/lidge-jun/cli-jaw" target="_blank" rel="noreferrer">GitHub</a><a href="https://npmjs.com/package/cli-jaw" target="_blank" rel="noreferrer">npm</a><a href="https://github.com/lidge-jun/cli-jaw/issues" target="_blank" rel="noreferrer">Issues</a></div>

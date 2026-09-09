@@ -79,9 +79,7 @@ model choices. Current top-level runtimes are:
 | --- | --- |
 | `pi` | Pi RPC runtime with isolated `PI_CODING_AGENT_DIR` profiles |
 | `agy` | Antigravity print-mode runtime (`agy -p`, optional `--model` when not `default`) |
-| `ai-e` | AI-E wrapper runtime |
 | `claude` | Anthropic Claude CLI |
-| `claude-e` | Claude E helper-backed runtime |
 | `codex` | OpenAI Codex CLI |
 | `codex-app` | Codex App stdio bridge |
 | `cursor` | Cursor Agent CLI runtime |
@@ -91,9 +89,9 @@ model choices. Current top-level runtimes are:
 | `opencode` | OpenCode runtime |
 | `copilot` | GitHub Copilot ACP runtime |
 
-Wrapper runtimes such as `ai-e`, `claude-e`, and `codex-app` delegate to their
+Wrapper runtimes such as `codex-app` delegate to their
 underlying tools but remain first-class registry keys. `agy`, `cursor`, `grok`,
-and `kiro-code` are not AI-E providers; they are top-level runtime surfaces.
+and `kiro-code` are top-level runtime surfaces.
 
 ---
 

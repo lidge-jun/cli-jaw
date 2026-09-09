@@ -90,21 +90,19 @@
 <main class="docs-main">
 
 <h1>Employee System</h1>
-<p class="lead">The boss agent dispatches tasks to CLI employees -- other AI runtimes that execute work in parallel. CLI-JAW supports 12 runtimes and manages employee sessions, isolation, and result collection.</p>
+<p class="lead">The boss agent dispatches tasks to CLI employees -- other AI runtimes that execute work in parallel. CLI-JAW supports 10 runtimes and manages employee sessions, isolation, and result collection.</p>
 
 <h2>How It Works</h2>
 <p>Your main agent (the "boss") can delegate specific tasks to employee agents using the <code>jaw dispatch</code> command. Each employee runs in an isolated temporary working directory with injected context files.</p>
 <pre><code>jaw dispatch --agent "Frontend" --task "Implement the login page"</code></pre>
 <p>The boss prompt includes delegation rules that guide the agent to use <code>cli-jaw dispatch</code> for employee work, while CLI-native sub-agents (Task/Agent tools) are allowed for internal parallelization.</p>
 
-<h2>12 CLI Runtimes</h2>
-<p>CLI-JAW's registry (<code>src/cli/registry.ts</code>) defines 11 top-level runtimes. Each employee can be assigned any runtime.</p>
+<h2>10 CLI Runtimes</h2>
+<p>CLI-JAW's registry (<code>src/cli/registry.ts</code>) defines 10 top-level runtimes. Each employee can be assigned any runtime.</p>
 <table>
 <tr><th>Runtime</th><th>Binary</th><th>Default Model</th><th>Default Effort</th></tr>
 <tr><td>agy</td><td><code>agy</code></td><td>gemini-3.5-flash</td><td>-</td></tr>
-<tr><td>ai-e</td><td><code>ai-e</code></td><td>claude-opus-4-8</td><td>medium</td></tr>
 <tr><td>claude</td><td><code>claude</code></td><td>claude-opus-4-8</td><td>medium</td></tr>
-<tr><td>claude-e</td><td><code>claude-e</code></td><td>claude-opus-4-8</td><td>medium</td></tr>
 <tr><td>codex</td><td><code>codex</code></td><td>gpt-5.5</td><td>medium</td></tr>
 <tr><td>codex-app</td><td><code>codex</code></td><td>gpt-5.5</td><td>medium</td></tr>
 <tr><td>cursor</td><td><code>cursor-agent</code></td><td>composer-2.5</td><td>medium-fast</td></tr>

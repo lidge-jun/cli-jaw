@@ -66,21 +66,19 @@
 <main class="docs-main">
 
 <h1>직원 시스템</h1>
-<p class="lead">보스 에이전트는 CLI 직원들(병렬로 작업을 수행하는 다른 AI 런타임)에게 태스크를 배정합니다. CLI-JAW는 12개의 런타임을 지원하며, 직원 세션, 격리, 결과 수집을 관리합니다.</p>
+<p class="lead">보스 에이전트는 CLI 직원들(병렬로 작업을 수행하는 다른 AI 런타임)에게 태스크를 배정합니다. CLI-JAW는 10개의 런타임을 지원하며, 직원 세션, 격리, 결과 수집을 관리합니다.</p>
 
 <h2>작동 방식</h2>
 <p>메인 에이전트("보스")는 <code>jaw dispatch</code> 명령을 사용하여 특정 태스크를 직원 에이전트에게 위임할 수 있습니다. 각 직원은 컨텍스트 파일이 주입된 격리된 임시 작업 디렉토리에서 실행됩니다.</p>
 <pre><code>jaw dispatch --agent "Frontend" --task "Implement the login page"</code></pre>
 <p>보스 프롬프트에는 에이전트가 직원 작업에 <code>cli-jaw dispatch</code>를 사용하도록 안내하는 위임 규칙이 포함되어 있으며, CLI 내장 서브 에이전트(Task/Agent 도구)는 내부 병렬화를 위해 허용됩니다.</p>
 
-<h2>12개의 CLI 런타임</h2>
-<p>CLI-JAW의 레지스트리(<code>src/cli/registry.ts</code>)는 12개의 최상위 런타임을 정의합니다. 각 직원에게 어떤 런타임이든 할당할 수 있습니다.</p>
+<h2>10개의 CLI 런타임</h2>
+<p>CLI-JAW의 레지스트리(<code>src/cli/registry.ts</code>)는 10개의 최상위 런타임을 정의합니다. 각 직원에게 어떤 런타임이든 할당할 수 있습니다.</p>
 <table>
 <tr><th>런타임</th><th>바이너리</th><th>기본 모델</th><th>기본 노력 수준</th></tr>
 <tr><td>agy</td><td><code>agy</code></td><td>gemini-3.5-flash</td><td>-</td></tr>
-<tr><td>ai-e</td><td><code>ai-e</code></td><td>claude-opus-4-8</td><td>medium</td></tr>
 <tr><td>claude</td><td><code>claude</code></td><td>claude-opus-4-8</td><td>medium</td></tr>
-<tr><td>claude-e</td><td><code>claude-e</code></td><td>claude-opus-4-8</td><td>medium</td></tr>
 <tr><td>codex</td><td><code>codex</code></td><td>gpt-5.5</td><td>medium</td></tr>
 <tr><td>codex-app</td><td><code>codex</code></td><td>gpt-5.5</td><td>medium</td></tr>
 <tr><td>cursor</td><td><code>cursor-agent</code></td><td>composer-2.5</td><td>medium-fast</td></tr>

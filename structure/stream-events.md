@@ -175,22 +175,6 @@ approval never answers it. Raw pipe retains existing NDJSON/agent_done terminati
 | `code` | `code_item` / `code_item_update` / `code_session` | `{ sessionId, sequence, ... }` | `src/code-mode/host.ts`; persisted native session events; compact updates apply once in contiguous sequence |
 | `worker` | `instance-status-changed` / `worker_settings_change` | worker diff/settings metadata | manager-side worker cache invalidation and settings change bridge |
 
-### Internal-only `trace` events
-
-`agent:claude-e:*` events are emitted through `broadcast(..., 'internal')`; `inferTopic()` maps them to `trace`, and `GET /api/events` drops non-public topics at the route boundary.
-
-| Type | 대표 payload | 발행 위치 / 용도 |
-| --- | --- | --- |
-| `agent:claude-e:runtime_started` | `{ runId, seq, version? }` | `claude-e-runtime.ts`; native helper run started |
-| `agent:claude-e:spawned` | `{ runId, pid }` | `claude-e-runtime.ts`; underlying Claude process spawned |
-| `agent:claude-e:session` | `{ runId, sessionId, transcriptPath? }` | `claude-e-runtime.ts`; helper discovered Claude session/transcript |
-| `agent:claude-e:prompt_injected` | `{ runId }` | `claude-e-runtime.ts`; prompt was written into the PTY session |
-| `agent:claude-e:stop` | `{ runId, transcriptPath? }` | `claude-e-runtime.ts`; stop signal observed |
-| `agent:claude-e:stop_failure` | `{ runId, error? }` | `claude-e-runtime.ts`; stop/cleanup failed |
-| `agent:claude-e:interrupted` | `{ runId, sessionId?, resumable? }` | `claude-e-runtime.ts`; graceful SIGINT interrupt and resume metadata |
-| `agent:claude-e:cleanup` | `{ runId, event, escalated? }` | `claude-e-runtime.ts`; cleanup start/done lifecycle |
-| `agent:claude-e:error` | `{ runId, message?, exitCode? }` | `claude-e-runtime.ts`; helper/runtime error |
-
 Worker run events, delayed replay notices, and batch dispatch summaries are safe metadata surfaces. They may carry bounded previews and recovery commands, but they do not embed raw employee stdout; raw worker output remains an explicit `/api/orchestrate/worker-runs/:runId/output` / `cli-jaw worker read <runId>` read path.
 
 `bgtask_update` frames stay on topic `bgtask` and expose `running[]` plus `changed`; both entries keep native bgtask `status` and add shared `statusCategory`. Worker runs and bgtasks do not share storage, but Manager can compare their status buckets without reimplementing per-surface mappings.
@@ -212,7 +196,6 @@ hydration remains owned by `snapshotReady`, and the disconnect-toast grace is un
 | `worker_stalled` / `worker_disconnected` / `worker_timeout` | `public/js/ws.ts`에서 disconnected/timeout/stalled handler로 처리하고, manager server는 worker-SSE bridge/cache로 별도 추적한다. 현재/이전 worker progress API는 UI hydration용 safe `attention` metadata도 제공한다 |
 | `worker_run_*` | safe SSE/replay와 `/api/orchestrate/worker-runs*` read API용 backend contract다. Manager Worker Runs 패널은 기존 frontend worker progress EventSource bridge로 이 이벤트를 refresh invalidation으로 소비하고, raw output은 명시 클릭 시 `/output` route로만 읽는다 |
 | `system_notice` | SSE public emit은 되지만 `public/js/ws.ts` 직접 분기는 없다 |
-| `agent:claude-e:*` | native helper lifecycle/status telemetry. `trace` topic internal-only라 public SSE/Web UI에는 serialize되지 않고 internal listeners/trace observers만 본다 |
 | `goal_pause_detected` / `goal_pause_gate_pending` | lifecycle/goal heartbeat가 pause 2-tap gate 상태를 broadcast. `goal_pause_gate_pending`은 armed gate가 남은 채 goal-continuation audit turn이 끝났고 **추가 automatic continuation이 스케줄되지 않음**을 뜻함(P0 2026-06-27). Main Web UI `ws.ts`에는 전용 handler 없음 — Manager / `GET /api/goal` / CLI 관측 |
 
 ### Web UI에 legacy 분기만 남은 타입
@@ -235,7 +218,7 @@ Native SDK objects are normalized once by `runtime/claude-sdk-events.ts`; they d
 --print/-p --output-format stream-json --verbose --include-partial-messages
 ```
 
-Plaintext `thinking_delta`는 headless `--print`/`-p` stream에서 partial message streaming이 켜져야 온다. `claude-e` helper는 interactive PTY wrapper라 이 옵션 조합을 wrapper 뒤 Claude TUI에 강제하지 않고, transcript completed message의 plaintext thinking 또는 signature-only encrypted marker를 처리한다.
+Plaintext `thinking_delta`는 headless `--print`/`-p` stream에서 partial message streaming이 켜져야 온다.
 
 ### top-level 타입
 
@@ -286,34 +269,6 @@ stream close →
   `🤖 subagent: {description}` + `toolType=subagent` + `status=running` + `stepRef=claude:task:{task_id}`.
 - `system.subtype === 'task_notification'`:
   같은 `claude:task:{task_id}` step을 `✅ done` 또는 `❌ error`로 갱신하고 summary/output_file/usage detail을 붙인다.
-
-### Claude E / Claude Interactive (`claude-e`)
-
-`claude-e`는 Claude CLI를 PTY로 띄우고, transcript tail과 hook output을 JSONL로 다시 내보내는 experimental runtime이다. Embedded native source lives at `native/claude-e/` and still builds the compatibility binary `jaw-claude-i`; compatibility `claude-exec` and legacy `jaw-claude-i` / `claude-i` helper names remain fallback binaries outside the embedded crate. Public registry key is `claude-e`; runtime telemetry namespace is `agent:claude-e:*`. Some persisted helper/session internals still use the historical `claude-i` bucket name. `src/agent/spawn.ts`는 helper의 `jaw_runtime` 이벤트를 discriminator 전에 처리하고, 일반 Claude `system`/`assistant`/`result` event는 Claude-like parser 경로를 공유한다.
-
-호출 플래그:
-
-```text
-run --jsonl --output-format stream-json --timeout-ms 600000 [--resume <sessionId>] -- <claude args...>
-```
-
-| helper/event | jaw 처리 |
-| --- | --- |
-| `jaw_runtime.runtime_started` | `agent:claude-e:runtime_started` broadcast |
-| `jaw_runtime.claude_spawned` | underlying Claude pid telemetry |
-| `jaw_runtime.session_started` | `ctx.sessionId` 저장 + `agent:claude-e:session` broadcast |
-| `jaw_runtime.interrupted` | graceful SIGINT resume metadata 저장 |
-| `assistant` | transcript에서 온 완성 assistant message를 text block 단위로 `fullText`에 누적하고 `agent_output` single chunk로 preview |
-| `result` | cost/turns/duration/session/usage를 Claude path와 동일하게 저장 |
-
-Session bucket은 `claude-i`로 분리되어 standard `claude` session ID와 섞이지 않는다. Helper는 interactive Claude CLI를 래핑하므로 `jaw doctor`가 selected runtime(`claude-e` preferred)과 underlying `claude` 설치/버전을 둘 다 확인한다.
-
-Thinking visibility:
-
-- Claude CLI `-p --verbose --output-format stream-json --include-partial-messages`에서는 `thinking_delta`가 plaintext로 나온다.
-- interactive 모드에는 `--include-partial-messages`가 적용되지 않으므로, helper는 transcript의 final assistant message만 볼 수 있다.
-- transcript `assistant.message.content[].type === "thinking"`에 plaintext `thinking`이 있으면 `💭` thinking step으로 표시한다.
-- plaintext가 비어 있고 `signature`만 있으면 빈 `thinking...` placeholder가 아니라 `🔒 encrypted thinking`으로 표시한다.
 
 ---
 
@@ -372,7 +327,7 @@ Thinking visibility:
 | codex (NDJSON) | 태그 없는 `agent_message` 아이템 | `channel` 태그 | 적용 |
 | codex-app | `item/started`(agentMessage) 또는 델타 `itemId` 변화 | `phase: final_answer` | 적용 |
 | cursor | 툴 시작 + 비-델타 메시지 경계 | 없음 | 적용 |
-| claude / claude-e | `message_start`(스트리밍), 이어지지 않는 스냅샷(스냅샷/fallback) | 없음 | 적용 |
+| claude | `message_start`(스트리밍), 이어지지 않는 스냅샷(스냅샷/fallback) | 없음 | 적용 |
 | opencode | `step_start` (last-step-wins) | 없음 | 적용 |
 | acp | `agent_message_chunk.messageId` 변화 | 없음 | 적용(id 있을 때) |
 | grok | **없음** — 프로토콜에 메시지 정체성 부재 | — | 미적용(한계) |
@@ -530,7 +485,7 @@ cursor stream-json 에는 채널 태그가 없어서 구조적 경계 두 개를
 | `end` | `sessionId`, `stopReason`, `requestId`를 세션/metadata에 저장 |
 | `error` | final text에 섞지 않고 `❌` tool step으로 기록, `stepRef=grok:error:{requestId or run}` |
 
-Grok `streaming-json`은 실제 tool을 실행해도 일부 버전에서 live stdout에 `tool_use`/`tool_result`를 내보내지 않는다. cli-jaw는 `end.sessionId`가 있는 정상 종료 후 `grok trace --local --json <sessionId>`를 실행하고 trace archive의 `chat_history.jsonl`에서 `tool_calls`/`tool_result`를 backfill해 최종 `agent_done.toolLog`에 반영한다. 이 보강은 direct `grok`와 `ai-e`의 Grok provider 모두에 적용된다. Valid Grok NDJSON activity refreshes the stall watchdog before event discriminator filtering on both direct `grok` and `ai-e` Grok-provider paths, so schema-unknown but active Grok output does not trip an absolute timeout.
+Grok `streaming-json`은 실제 tool을 실행해도 일부 버전에서 live stdout에 `tool_use`/`tool_result`를 내보내지 않는다. cli-jaw는 `end.sessionId`가 있는 정상 종료 후 `grok trace --local --json <sessionId>`를 실행하고 trace archive의 `chat_history.jsonl`에서 `tool_calls`/`tool_result`를 backfill해 최종 `agent_done.toolLog`에 반영한다. 이 보강은 direct `grok`에 적용된다. Valid Grok NDJSON activity refreshes the stall watchdog before event discriminator filtering on the direct `grok` path, so schema-unknown but active Grok output does not trip an absolute timeout.
 
 Grok CLI 런타임과 `browser web-ai --vendor grok`는 별도 표면이다. 전자는 local CLI process/streaming-json, 후자는 `grok.com` 브라우저 자동화다.
 

@@ -333,7 +333,7 @@ Slack text sends preserve Markdown and explicit Block Kit `blocks`, splitting mu
 
 - Native Claude/Codex readers normalize upstream windows with `quota-native-window.ts` and bounded JSON from `quota-wire.ts`. Codex honors `CODEX_HOME`, declared short/monthly durations, Spark weekly limits and additive read-only `resetCredits`; missing readings do not create a zero bar. Claude supports Fable and weekly-scoped model limits; its 30-second fresh and 5-minute 429 fallback caches are credential-scoped. A 429 without a measured same-credential snapshot returns an error with no fabricated quota bar.
 
-- 응답 키: `pi`, `agy`, `ai-e`, `claude`, `claude-e`, `codex`, `codex-app`, `cursor`, `gemini`, `grok`, `opencode`, `copilot`, `kiro-code` (`CLI_KEYS` 순서).
+- 응답 키: `pi`, `agy`, `claude`, `codex`, `codex-app`, `cursor`, `gemini`, `grok`, `opencode`, `copilot`, `kiro-code` (`CLI_KEYS` 순서).
 - `pi`는 Settings의 Pi profile registration을 통해 endpoint/model/key를 검증하고, quota 자체는 auth/status-only로 표시한다.
 - `agy` reads native IDE-local status plus the selected antigravity-usage account through read-only helpers. Matching account/project quota uses Google summary, then models on transient/unavailable responses; auth rejection and redirects stop. No automatic npm acquisition, OAuth refresh, token write or account switching occurs. Native local availability remains supported, and local/Google account mismatches never trigger remote credential use.
 - AGY native local snapshot이 `remainingPercentage`를 정밀 소수점 대신 `0`/`1`로만 반환하면 window는 `precision: "binary"`와 `status: "available" | "exhausted"`를 포함한다. backend의 `percent`는 호환 필드일 뿐이며, UI는 exact percent bar 대신 `Available` / `Exhausted` 상태 텍스트를 표시해야 한다. upstream이 다시 정밀 퍼센트를 주면 기존 fractional path가 그대로 사용된다.

@@ -439,7 +439,7 @@ browser, dev Electron or packaged-sidecar QA.
 
 | 파일 | 역할 |
 | --- | --- |
-| `manager/src/settings/pages/ModelProvider.tsx` | Pi를 Model defaults에서 AI-E보다 먼저 렌더하고 `settings.pi` draft를 `PerCliRow`로 전달 |
+| `manager/src/settings/pages/ModelProvider.tsx` | Pi를 Model defaults에서 다른 CLI보다 앞에 렌더하고 `settings.pi` draft를 `PerCliRow`로 전달 |
 | `manager/src/settings/pages/components/PerCliRow.tsx` | `cli === "pi"` branch: Provider dropdown, discovered-model SelectField, Effort, Settings button |
 | `manager/src/settings/pages/components/PiProfileDialog.tsx` | mode(`basic`/`openai`/`anthropic`/`vertex`) + endpoint/model/API key 등록 popup; `/api/pi/profiles/register` 호출 |
 | `manager/src/settings/pages/components/pi-profile.ts` | Pi profile/model option pure helper |

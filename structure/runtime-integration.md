@@ -163,7 +163,7 @@ but excludes surviving workers during all three steer entrypoints. The existing
 `waitForProcessEnd` and global shutdown wait remain inclusive. Their bounded
 deadline returning is not evidence that physical cleanup succeeded.
 
-Native Claude main and workers support tools, live approvals/questions, bounded image input and foreground child activity. Auto (YOLO) / Safe profiles preserve their existing meanings; deny/unknown profiles fail before prompt/directory/query work, so the output-only memory extractor still requires print. Workers use a dedicated query, real process handle and unique owned instruction directory; cancellation/completion registration outlives process-map removal until cleanup settles. Claude print and claude-e remain unchanged. Foreground-only hooks do not promise an OS sandbox. SDK authentication follows the official API/cloud setup; no claude.ai login flow, credential copying or subscription entitlement is added. Qualification distinguishes actual pinned SDK/owned simulated CLI from real-provider and rendered UI evidence; these are not interchangeable.
+Native Claude main and workers support tools, live approvals/questions, bounded image input and foreground child activity. Auto (YOLO) / Safe profiles preserve their existing meanings; deny/unknown profiles fail before prompt/directory/query work, so the output-only memory extractor still requires print. Workers use a dedicated query, real process handle and unique owned instruction directory; cancellation/completion registration outlives process-map removal until cleanup settles. Claude print remains unchanged. Foreground-only hooks do not promise an OS sandbox. SDK authentication follows the official API/cloud setup; no claude.ai login flow, credential copying or subscription entitlement is added. Qualification distinguishes actual pinned SDK/owned simulated CLI from real-provider and rendered UI evidence; these are not interchangeable.
 
 `claude-sdk-permissions.ts` snapshots original input and binds callbacks to declared tool IDs. Questions return original full-question keys and comma-separated selected labels; neither auto mode nor a display item can bypass explicit ask rules. Missing/unreviewable operations deny, no future permission grant is created, and Stop/expiry cancels exactly the captured request. Images are in-memory validated PNG/JPEG/GIF/WebP, at most4,5MiB each/10MiB aggregate; the adapter never fetches arbitrary URLs/paths. Existing staged-file references remain prompt/tool access, not automatic image conversion.
 
@@ -275,13 +275,8 @@ Print and ACP spell Cursor models differently, so `config.ts` accepts an opaque 
 - effort 값은 표시용이 아니라 wire 값이다(`src/agent/args.ts` codex 분기 →
   `-c model_reasoning_effort="<effort>"`). 그래서 UI 선택기는 합집합이 아니라
   **선택된 모델의 집합**을 써야 하고, 빈 배열은 "이 모델은 effort 없음"을 뜻하므로 fallback 금지다.
-- **`ai-e`는 provider 스코프를 쓴다.** `ai-e`는 provider별로 모델 목록이 갈리므로
-  평평한 `effortsByModel`은 id 충돌을 일으킨다: `gpt-5.6-sol`이 codex와 kiro 양쪽에
-  존재하는데 Kiro는 `low/medium/high/xhigh`만 받는다(`args.ts` `KIRO_EFFORTS`).
-  따라서 `ai-e`에는 `effortsByModelByProvider`/`defaultEffortByModelByProvider`를
-  싣고 평평한 키는 싣지 않는다. codex/codex-app은 provider 개념이 없어 평평한 맵을 유지한다.
-  해석 우선순위: provider 스코프 모델 → 평평한 모델 → provider 목록 → registry 목록.
-  스코프 맵이 있어도 **모델 키가 없으면 provider 목록으로 폴백**한다(근거 없는 축소 금지).
+은퇴한 `ai-e`만 provider 스코프 맵(`effortsByModelByProvider`)을 썼다.
+남은 런타임은 평평한 `effortsByModel`이다. 해석 우선순위: 평평한 모델 → registry 목록.
 - **Code 카탈로그도 같은 배선을 읽는다** (`src/code-mode/providers/live-models.ts`).
   `registry-live.ts`의 소비자는 설정 라우트뿐이라 Code 모드는 오랫동안 `CLI_REGISTRY`의
   정적 목록에 갇혀 있었다. `CodeProvider.describe()`는 동기 함수라 ocx를 await 할 수 없으므로,
@@ -398,13 +393,19 @@ real storage failures prevent success and preserve the last committed history.
 
 ## Retired runtime selections
 
-Executable CLI keys exclude JWC. Stored `jwc` values remain readable as a retired
-selection across boot, schema migration and settings reload; they never resolve
-to a different provider through a default or fallback. Execution reports
-`retired_runtime:jwc` before provider admission. Explicit selection of an available
-runtime restores execution; unrelated settings changes retain the retired value
-and existing per-CLI data. Manager and Classic show the saved retired value
-without offering it as a new selection.
+Executable CLI keys exclude JWC, Claude E and AI-E. Stored `jwc`, `claude-e`
+and `ai-e` values remain readable as retired selections across boot, schema
+migration and settings reload; they never resolve to a different provider
+through a default or fallback. Execution reports `retired_runtime:jwc`,
+`retired_runtime:claude-e` or `retired_runtime:ai-e` before provider admission.
+Explicit selection of an available runtime restores execution; unrelated
+settings changes retain the retired value and existing per-CLI data.
+Manager and Classic show the saved retired value without offering it as a
+new selection.
+
+Claude E helper discovery, `agent:claude-e:*` telemetry, the `native/claude-e`
+crate and the AI-E multiplexer are removed. Session buckets that still use
+historical `claude-i` / `ai-e:*` names are orphans; messages are not deleted.
 
 The JWC SDK loader, engine event mapper and configuration/model-cache integration
 are removed. Code uses its independent native adapters. Local TUI presentation

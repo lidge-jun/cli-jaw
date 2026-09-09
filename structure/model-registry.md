@@ -32,7 +32,7 @@ aliases: [model registry, 모델 레지스트리, live model discovery]
 |---|---|---|
 | `codex` / `codex-app` | opencodex `GET /v1/models` | `src/cli/opencodex-models.ts` |
 | `kiro-code` | `kiro-cli chat --list-models --format json` | `src/agent/kiro-models.ts` |
-| `claude` / `claude-e` | 설치된 Claude Code 번들 | `src/cli/claude-model-discovery.ts` |
+| `claude` | 설치된 Claude Code 번들 | `src/cli/claude-model-discovery.ts` |
 | `cursor` | `cursor-agent --list-models` | `src/agent/cursor-model-inventory.ts` |
 | `grok` | `grok models` | `src/agent/grok-models.ts` |
 | `agy` / `pi` / `opencode` | 정적 | — |
@@ -69,8 +69,7 @@ opencodex는 모델마다 **다른** effort 집합을 광고한다. `gpt-5.6-sol
 `registry-live.ts`가 이를 `effortsByModel`과 `defaultEffortByModel`로 노출한다.
 `efforts`는 legacy 소비자를 위한 union으로 남지만, 그것을 그대로 쓰면 실제 사고가
 난다: `gpt-5.6-sol`은 codex와 kiro 양쪽에 존재하는데 Kiro는
-`low/medium/high/xhigh`만 받는다. 그래서 `ai-e`는 provider별로 다시 나눈
-`effortsByModelByProvider`를 쓴다.
+`low/medium/high/xhigh`만 받는다. 은퇴한 `ai-e`만 provider별로 `effortsByModelByProvider`를 썼다. 남은 런타임은 평평한 맵이다.
 
 빈 union으로 넓히지 않는 규칙도 여기에 속한다. 모든 모델이 라우팅된 카탈로그에서는
 union이 비는데, 그것을 그대로 반영하면 effort 컨트롤이 통째로 사라진다.

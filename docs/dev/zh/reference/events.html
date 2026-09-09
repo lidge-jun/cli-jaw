@@ -28,8 +28,7 @@ Last-Event-ID: &lt;last-seen-id&gt;</code></pre>
 <tr><td><code>goal_done_rejected</code></td><td><code>{reason}</code></td><td>目标完成请求被拒绝</td></tr>
 <tr><td><code>goal_pause_detected</code></td><td><code>{reason}</code></td><td>检测到目标暂停</td></tr>
 <tr><td><code>goal_pause_gate_pending</code></td><td><code>{reason}</code></td><td>首次审计 pause armed；抑制自动 goal continuation</td></tr>
-<tr><td><code>session_switched</code></td><td><code>{sessionId}</code></td><td>活动会话切换</td></tr>
-<tr><td><code>agent:claude-e:*</code></td><td><code>{event}</code></td><td>Claude employee 运行时事件命名空间</td></tr></table>
+<tr><td><code>session_switched</code></td><td><code>{sessionId}</code></td><td>活动会话切换</td></tr></table>
 <h2>Provider NDJSON 流</h2>
 <p>消息发送和命令执行由 REST 请求启动，provider 输出以换行分隔的 JSON 事件流返回。规范化后的事件经过 <code>src/core/bus.ts</code>：public 事件发布到 SSE event bus，同时 fan-out 给 collector/forwarder 使用的 internal listener。</p>
 <pre><code>POST /api/message

@@ -2,7 +2,7 @@
 
 # CLI-JAW
 
-### Your personal AI agent. 2 lines to install. 13 AI runtime surfaces in one dashboard.
+### Your personal AI agent. 2 lines to install. 10 AI runtime surfaces in one dashboard.
 
 [![npm](https://img.shields.io/npm/v/cli-jaw)](https://npmjs.com/package/cli-jaw)
 [![Release](https://img.shields.io/github/v/release/lidge-jun/cli-jaw)](https://github.com/lidge-jun/cli-jaw/releases)
@@ -114,6 +114,16 @@ Use Code for native Codex, Claude, Cursor or Grok sessions. A saved `jwc` runtim
 selection remains visible as retired and cannot execute; choose an available
 runtime explicitly. Existing external installations and saved user files are
 left intact. `jaw jwc` reports retirement and performs no installation or cleanup.
+
+### Retired Claude E and AI-E runtimes
+
+The Claude E helper (`claude-e`, including `native/claude-e`, compatibility
+`claude-exec`, and legacy `jaw-claude-i`) and the AI-E multiplexer (`ai-e`,
+`@bitkyc08/ai-e`) have been removed. Use `claude` for Claude Code. A saved
+`claude-e` or `ai-e` runtime selection remains visible as retired and cannot
+execute; choose an available runtime explicitly. Existing settings, session
+buckets and user files are left intact. Execution reports
+`retired_runtime:claude-e` or `retired_runtime:ai-e` before fallback.
 
 <details>
 <summary><b>macOS one-click</b> — don't have Node.js? This installs everything</summary>
@@ -333,7 +343,7 @@ docker compose up -d       # → http://localhost:3457
 
 ## What is CLI-JAW?
 
-CLI-JAW is an open-source platform that unifies the AI coding CLIs you already use — Pi, Claude, Claude E, AI-E, Antigravity, Codex, Codex App, Cursor, Grok, Kiro, OpenCode, and Copilot — into **one assistant with one memory and one dashboard**.
+CLI-JAW is an open-source platform that unifies the AI coding CLIs you already use — Pi, Claude, Antigravity, Codex, Codex App, Cursor, Grok, Kiro, OpenCode, and Copilot — into **one assistant with one memory and one dashboard**.
 
 Your main CLI (the “Boss”) calls the others as “employees.” You stop copy-pasting between apps and start giving orders from a single place.
 
@@ -570,8 +580,6 @@ No per-token API billing. Route through subscriptions you already pay for.
 |---|---|---|---|
 | **Pi** | `grok-composer-2.5-fast` | Settings profile API key, local proxy, or `PI_CODING_AGENT_BIN` | First-class `pi --mode rpc` runtime for local/API endpoints through an isolated `PI_CODING_AGENT_DIR` |
 | **Claude** | `claude-opus-4-8` | `claude auth login` | Claude Pro subscription or higher |
-| **Claude E** | `claude-opus-4-8` | underlying `claude auth login` | Claude Pro subscription or higher; preferred for June subscription allowance |
-| **AI-E** | provider-selected | selected provider auth | Multi-provider runtime wrapper |
 | **Antigravity** | AGY-selected | checked by `agy` at run time | Experimental AGY print-mode runtime (`agy -p`); optional `--model` is capability-probed (observed in AGY 1.0.12); resume via `--conversation`; no separate effort flag |
 | **Codex** | `gpt-5.5` | `codex login` | ChatGPT Pro subscription or higher |
 | **Codex App** | `gpt-5.5` | `codex login` | ChatGPT Pro subscription or higher |
@@ -581,13 +589,13 @@ No per-token API billing. Route through subscriptions you already pay for.
 | **OpenCode** | `opencode-go/kimi-k2.6` | `opencode` | Free models available |
 | **Copilot** | `claude-sonnet-4.6` | `copilot login` | Free tier available |
 
-GPT 5.5 and Claude Opus 4.8 are enabled from Pro-tier subscriptions and higher. Starting in June, select `claude-e` when you want CLI-JAW to use the Claude allowance bundled with the subscription plan.
+GPT 5.5 and Claude Opus 4.8 are enabled from Pro-tier subscriptions and higher. Starting in June, select `claude` when you want CLI-JAW to use the Claude allowance bundled with the subscription plan.
 
 On a new install, CLI-JAW prefers **Codex App** when the local `app-server` entrypoint and Codex authentication are ready. Existing installations keep their saved runtime until the one-time Settings notice is explicitly accepted; choosing “keep” preserves the current runtime. Set `CLI_JAW_DEFAULT_CLI=claude` to override the clean-install policy.
 
 OpenCodex routing remains owned by Codex's root `openai_base_url` setting. CLI-JAW only compares that read-only URL with the live OpenCodex runtime-port and `/healthz` fingerprint for diagnostics; it does not rewrite Codex config or inject an execution endpoint.
 
-The quota/status panel keeps the same runtime keyset as the registry. Cold status requests return a neutral “checking” snapshot immediately while binary, authentication, and capability probes run in a bounded child process. Wrapper runtimes (`ai-e`, `claude-e`, `codex-app`) delegate to their underlying provider, while providers without a measured quota remain status-only. AGY uses native IDE/selected-account quota, Cursor uses its selected native account with explicit cookie compatibility, and OpenCode Go reads usage directly. Grok uses the current CLI auth store for JSON weekly credits, with gRPC weekly and legacy monthly fallbacks. Each provider failure is isolated in the quota response.
+The quota/status panel keeps the same runtime keyset as the registry. Cold status requests return a neutral “checking” snapshot immediately while binary, authentication, and capability probes run in a bounded child process. Wrapper runtimes (`codex-app`) delegate to their underlying provider, while providers without a measured quota remain status-only. AGY uses native IDE/selected-account quota, Cursor uses its selected native account with explicit cookie compatibility, and OpenCode Go reads usage directly. Grok uses the current CLI auth store for JSON weekly credits, with gRPC weekly and legacy monthly fallbacks. Each provider failure is isolated in the quota response.
 
 Native quota readers follow the OpenCodex source contract: Codex window duration/plan policy, Spark and reset-credit metadata; Claude model-scoped windows and credential-scoped cache. Missing measurements remain unknown, 429 alone never means 100%, and upstream bodies are bounded. See `docs/migration/quota-reader-parity.md`.
 
@@ -885,7 +893,7 @@ Sidecar builds use [owned staging and target-runtime smoke checks](structure/inf
 
 | | CLI-JAW 2.x | Hermes Agent | Claude Code |
 |---|---|---|---|
-| **Model access** | Pi, Antigravity, AI-E, Claude, Claude E, Codex, Codex App, Cursor, Gemini, Grok, Kiro, OpenCode, and Copilot through vendor/native auth where supported | API keys (OpenRouter 200+, Nous Portal) | Anthropic only |
+| **Model access** | Pi, Antigravity, Claude, Codex, Codex App, Cursor, Gemini, Grok, Kiro, OpenCode, and Copilot through vendor/native auth where supported | API keys (OpenRouter 200+, Nous Portal) | Anthropic only |
 | **Cost model** | Monthly subscriptions you already pay for | Per-token API billing | Anthropic subscription |
 | **Primary UI** | Manager dashboard + Web app + Electron desktop + terminal UI | Terminal only | CLI + IDE plugins |
 | **Dashboard** | Multi-instance manager, Kanban, Notes workspace | None | None |
