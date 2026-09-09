@@ -33,6 +33,7 @@ test.mock.module('../../src/agent/agy-bootstrap.js', { namedExports: { ...bootst
     },
 } });
 const args = await import('../../src/agent/args.ts');
+const { calendarContext } = await import('../../src/agent/calendar-context.ts');
 test.mock.module('../../src/agent/args.js', { namedExports: { ...args,
     buildArgs: (...input: Parameters<typeof args.buildArgs>) => {
         calls.push('argv:fresh');
@@ -201,7 +202,7 @@ for (const resume of [false, true]) for (const order of ['task-first', 'context-
         assert.deepEqual(calls, ['detect:agy', 'capabilities', 'bootstrap',
             resume ? 'argv:resume' : 'argv:fresh', 'detect:agy']);
         assert.equal(argvCalls.length, 1); assert.equal(bootstrapInputs.length, 1);
-        const task = `260906-01:02PM.\nProject root: ${home}\n`
+        const task = `260906-01:02PM.\n${calendarContext(new Date())}\nProject root: ${home}\n`
             + (resume ? '' : 'COMPACT_HANDOFF_ONLY\n\n---\n\n') + 'CURRENT_AGY_REQUEST';
         const history = resume ? '' : '[Recent Context]\n[user] HISTORY_ONLY';
         assert.deepEqual(bootstrapInputs[0], { taskPrompt: task, historyBlock: history,
