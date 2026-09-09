@@ -170,3 +170,17 @@ test('no recorded failure means the key is absent rather than null', async () =>
     const payload = await readStatus();
     for (const row of Object.values(payload)) assert.equal(Object.hasOwn(row, 'lastStartFailure'), false);
 });
+
+test('a row that is no longer native drops the stale native record', async () => {
+    startFailure = { code: 'acp_config_unsupported_model', at: 1_700_000_000_000 };
+    settings.perCli.cursor.transport = 'print';
+    try {
+        const payload = await readStatus();
+        assert.equal(payload['cursor']?.runtimeSelection?.transport, 'print');
+        assert.equal(Object.hasOwn(payload['cursor']!, 'lastStartFailure'), false,
+            'only a native run records this, so a print row can only show a stale fault');
+    } finally {
+        settings.perCli.cursor.transport = 'native';
+        startFailure = undefined;
+    }
+});
