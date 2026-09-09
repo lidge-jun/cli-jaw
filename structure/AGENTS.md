@@ -2,7 +2,7 @@
 
 # structure/ — Sync Guide
 
-- Slack group DMs use `message.mpim` and optional `mpim:history`; exact `channel_type: mpim` mentions retain channel allowlist and thread policy, never the one-to-one DM bypass. Missing `mpim:history` degrades group-DM reception/history only; an absent scope header is unknown and a present empty header is a known empty grant. Keep `telegram.md` and the validation API docs synchronized.
+- Slack group DMs use `message.mpim`, which requires `mpim:history` — without it group DMs do not arrive at all; existing IM/channel installs keep working and merely report the optional capability gap. Exact `channel_type: mpim` mentions retain channel allowlist and thread policy, never the one-to-one DM bypass. an absent scope header is unknown and a present empty header is a known empty grant. Keep `telegram.md` and the validation API docs synchronized.
 
 - Native Code: synchronize `runtime-integration.md`, `server_api.md`, `INDEX.md` and root guides for `src/code-mode/` and `/api/code`. Code uses separate per-backend storage and direct native adapters; preserve append/status replay, complete active snapshots, byte budgets, early resource registration and physical-exit proof. Interruption must seal callbacks before owner-checked accepted-buffer persistence; both hosts use `src/routes/code-body-parser.ts` for Code envelope/decoded limits.
 

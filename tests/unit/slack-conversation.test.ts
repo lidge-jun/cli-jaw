@@ -392,3 +392,18 @@ test('an empty channel or token degrades without calling', async () => {
     assert.equal(noChannel.resolved, false);
     assert.equal(noToken.resolved, false);
 });
+
+test('an MPIM missing_scope never locks plain channel lookups', async () => {
+    // needed: mpim:read proves only the MPIM grant is absent; the method-wide
+    // capability lock would blind every channel/DM name lookup for 30 minutes.
+    const mpim = makeFetch([{ ok: false, error: 'missing_scope', needed: 'mpim:read' }]);
+    const info = await resolveConversationInfo(TOKEN, 'G1MPIM', { teamId: TEAM, fetchImpl: mpim.impl });
+    assert.equal(info.resolved, false);
+    assert.equal(info.kind, 'group_dm');
+
+    resetConversationRateLimitForTest();
+    const other = makeFetch([{ ok: true, channel: { id: 'COPEN', name: 'general', is_channel: true } }]);
+    const after = await resolveConversationInfo(TOKEN, 'COPEN', { teamId: TEAM, fetchImpl: other.impl });
+    assert.equal(after.resolved, true);
+    assert.equal(after.name, 'general');
+});

@@ -35,9 +35,11 @@ uses the existing bounded history budget (up to 50 messages before the current
 message), while threaded context keeps the parent timestamp. Missing history scope
 or budget leaves the current message usable without invented history.
 
-`mpim:history` is an optional capability for existing IM/channel installs, so its
-absence is returned in `missingCapabilities` and logged at info with a group-DM
-reception/history limitation. It does not change the core credential-validation
+`mpim:history` is the scope Slack documents as required for the `message.mpim`
+event, so an install without it receives no group-DM traffic at all — the gap is
+not merely missing history. It remains an optional capability for the install as
+a whole: its absence is returned in `missingCapabilities` and logged at info as
+a group-DM reception limitation, and it does not change the core credential-validation
 result. Missing required scopes still fail validation. No observed OAuth header
 means unknown; a present empty header means a known empty grant. Updating the
 manifest does not update an installed app: add the event and scope in Slack and

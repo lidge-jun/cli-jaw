@@ -17,6 +17,7 @@ import {
     getCachedSlackIdentities,
 } from './identity.js';
 import { EnrichmentCache, type Suppression } from './enrichment-cache.js';
+import { getSlackScopeStatus } from './scope-status.js';
 
 export type SlackConversationKind = 'channel' | 'private' | 'dm' | 'group_dm' | 'unknown';
 
@@ -156,6 +157,23 @@ function capabilityKeyFor(method: string): string {
     return `conversation:capability:${method}`;
 }
 
+/**
+ * A missing_scope from an MPIM proves only that an mpim:* scope is absent —
+ * it says nothing about channels:read/groups:read. Treating it as a
+ * workspace-wide capability failure would blind every channel and DM name
+ * lookup for 30 minutes on installs that receive message.mpim without ever
+ * being reinstalled for the new scopes. Scope it down: when Slack names an
+ * mpim:* scope in needed, or the install is already known to lack the MPIM
+ * scope, degrade per resource instead of locking the method.
+ */
+function mpimScopeError(methodScope: string, channel: string, error: string | undefined, needed: unknown): string | undefined {
+    if (error !== 'missing_scope') return error;
+    if (kindFromPrefix(channel) !== 'group_dm') return error;
+    if (typeof needed === 'string' && needed.startsWith('mpim:')) return 'mpim_scope_missing';
+    if (getSlackScopeStatus().missingCapabilities.includes(methodScope)) return 'mpim_scope_missing';
+    return error;
+}
+
 type RawConversation = {
     id?: string; name?: string;
     is_channel?: boolean; is_group?: boolean; is_im?: boolean;
@@ -203,6 +221,12 @@ export async function resolveConversationInfo(
     token: string, channel: string, opts: ConversationOpts,
 ): Promise<SlackConversationInfo> {
     if (!token || !channel) return degradedConversation(channel);
+    // An install known to lack mpim:read cannot resolve an MPIM; skip the call
+    // entirely so the failure can never escalate into a method-wide lock.
+    if (kindFromPrefix(channel) === 'group_dm'
+        && getSlackScopeStatus().missingCapabilities.includes('mpim:read')) {
+        return degradedConversation(channel);
+    }
     const key = `${opts.teamId || 'unknown'}:${channel}`;
     const value = await conversationCache.resolve({
         partition: 'conversation',
@@ -223,7 +247,7 @@ export async function resolveConversationInfo(
             );
             const raw = result.data?.channel;
             if (!result.ok || !raw) {
-                return { ok: false as const, error: result.error || 'unknown_error' };
+                return { ok: false as const, error: mpimScopeError('mpim:read', channel, result.error, (result.data as Record<string, unknown> | undefined)?.['needed']) || 'unknown_error' };
             }
             const info: SlackConversationInfo = {
                 id: raw.id || channel,
@@ -258,6 +282,12 @@ export async function resolveThreadInfo(
     token: string, channel: string, threadTs: string, opts: ConversationOpts,
 ): Promise<SlackThreadInfo> {
     if (!token || !channel || !threadTs) return degradedThread(threadTs);
+    // Symmetric with resolveConversationInfo: an install known to lack
+    // mpim:history cannot page an MPIM thread; degrade without calling.
+    if (kindFromPrefix(channel) === 'group_dm'
+        && getSlackScopeStatus().missingCapabilities.includes('mpim:history')) {
+        return degradedThread(threadTs);
+    }
     const key = `${opts.teamId || 'unknown'}:${channel}:${threadTs}`;
     const value = await conversationCache.resolve({
         partition: 'thread',
