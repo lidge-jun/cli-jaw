@@ -88,6 +88,7 @@ import { PiProjection } from './runtime/pi-projection.js';
 import { PiRawTrace } from './runtime/pi-raw-trace.js';
 import { createPrintActivity, finishPrintActivity } from './runtime/print-activity.js';
 import { isNativeAdapterImplemented, isNativeWorkerImplemented, isSwitchableNativeCli, resolveRuntimeTransport, runtimeSessionBucket } from './runtime/selection.js';
+import { clearNativeStartFailure, recordNativeStartFailure } from './runtime/start-failure.js';
 import { asCliEventRecord, discriminate, fieldString, type CliEventRecord } from '../types/cli-events.js';
 import { isRemoteTarget, type RemoteTarget } from '../messaging/types.js';
 import { buildRemoteBindingKey } from '../messaging/session-key.js';
@@ -1994,6 +1995,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             ready: lease => {
                 if (!ownsRun()) throw new Error('native_run_owner_lost');
                 capturedRun.process = lease.child;
+                // This start reached its lease, so the previous start failure is spent.
+                clearNativeStartFailure(cli);
                 if (!opts._skipInsert) insertMessage.run('user', prompt, cli, runtimeModel, nativeCwd, chatSessionId);
                 capturedRun.starting = false;
                 ctx.sessionId = lease.session.nativeSessionId || null;
@@ -2068,7 +2071,13 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 if (finalizeFailed && lease) await lease.retire(new Error('native_runtime_finalization_failed'));
                 return selectedResult ?? resultFor(ctx.runtimeOutcome ?? outcome);
             },
-            failed: (_error, _lease, outcome) => failRuntime(outcome),
+            failed: (error, lease, outcome) => {
+                // A null lease means acquire never returned: the runtime failed to
+                // start, which is the only class this diagnostic answers (#658).
+                // Teardown faults after a claimed answer are a different failure.
+                if (!lease) recordNativeStartFailure(cli, error);
+                return failRuntime(outcome);
+            },
             finalized: () => {
                 finalized = true;
                 try {

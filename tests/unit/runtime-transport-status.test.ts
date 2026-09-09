@@ -50,6 +50,13 @@ test.mock.module('../../src/cli/cli-status.js', { namedExports: {
 test.mock.module('../../src/cli/cli-status-worker.js', { namedExports: {
     runCliStatusWorker: forbidden, collectCliStatus: forbidden, runCommand: forbidden,
 } });
+// The last native start failure is a live per-turn record, so the route reads it
+// through this seam rather than from the cached probe snapshot (#658).
+let startFailure: { code: string; at: number } | undefined;
+const startFailures = await import('../../src/agent/runtime/start-failure.ts');
+test.mock.module('../../src/agent/runtime/start-failure.js', { namedExports: { ...startFailures,
+    nativeStartFailure: (cli: string) => (cli === 'cursor' ? startFailure : undefined),
+} });
 const { registerSettingsRoutes } = await import('../../src/routes/settings.ts');
 const app = express();
 registerSettingsRoutes(app, (_req, _res, next) => next(), async () => {
@@ -69,6 +76,7 @@ test.beforeEach(() => {
 
 type StatusPayload = Record<string, CliStatusRow & {
     runtimeSelection?: { transport: string; nativeAdapterImplemented: boolean; nativeWorkerImplemented: boolean };
+    lastStartFailure?: { code: string; at: number };
 }>;
 async function readStatus(query = ''): Promise<StatusPayload> {
     const response = await fetch(`${base}/api/cli-status${query}`);
@@ -132,4 +140,33 @@ test('transport diagnostics follow settings changes without refreshing or mutati
     } finally {
         settings.perCli.cursor.transport = 'native';
     }
+});
+
+test('a recorded native start failure travels beside the cached row, never inside it', async () => {
+    startFailure = { code: 'acp_config_unsupported_model', at: 1_700_000_000_000 };
+    try {
+        const payload = await readStatus();
+        assert.deepEqual(payload['cursor']?.lastStartFailure, startFailure);
+        // The compiled transport flags stay a closed shape: a live attempt is not
+        // transport support, and readiness evidence is not a per-turn fault.
+        assert.deepEqual(payload['cursor']?.runtimeSelection, {
+            transport: 'native', nativeAdapterImplemented: true, nativeWorkerImplemented: false,
+        });
+        for (const [cli, row] of Object.entries(payload)) {
+            const { runtimeSelection: _selection, lastStartFailure: _failure, ...preserved } = row;
+            assert.deepEqual(preserved, originalCache[cli], `${cli} cached fields are preserved exactly`);
+        }
+        assert.deepEqual(cached, originalCache, 'shared cache has no added fields');
+        // Only the runtime that failed carries the record.
+        for (const cli of ['grok', 'claude', 'codex-app', 'pi']) {
+            assert.equal(Object.hasOwn(payload[cli]!, 'lastStartFailure'), false, cli);
+        }
+    } finally {
+        startFailure = undefined;
+    }
+});
+
+test('no recorded failure means the key is absent rather than null', async () => {
+    const payload = await readStatus();
+    for (const row of Object.values(payload)) assert.equal(Object.hasOwn(row, 'lastStartFailure'), false);
 });

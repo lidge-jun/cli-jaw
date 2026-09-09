@@ -29,6 +29,7 @@ import { fetchOpenCodeUsage } from './quota-opencode-go-api.js';
 import { buildLiveCliRegistry } from '../cli/registry-live.js';
 import { getCachedCliStatus, getCachedCliStatusForced } from '../cli/cli-status.js';
 import { isSwitchableNativeCli, runtimeSelectionStatus } from '../agent/runtime/selection.js';
+import { nativeStartFailure } from '../agent/runtime/start-failure.js';
 import { fetchCopilotQuota, refreshCopilotFromKeychain } from '../../lib/quota-copilot.js';
 import { extractOpenAiApiKey, hasInvalidOpenAiApiKeyInput } from '../jaw-ceo/openai-key.js';
 import { getSecurityAuditLog } from '../security/security-audit-log.js';
@@ -622,11 +623,18 @@ export function registerSettingsRoutes(
     app.get('/api/cli-status', (req, res) => {
         const force = req.query['force'] === '1' || req.query['force'] === 'true';
         const cached = force ? getCachedCliStatusForced() : getCachedCliStatus();
-        res.json(Object.fromEntries(Object.entries(cached).map(([cli, row]) => [cli,
-            isSwitchableNativeCli(cli) || cli === 'codex-app' || cli === 'pi'
-                ? { ...row, runtimeSelection: runtimeSelectionStatus(cli, settings['perCli']?.[cli]?.transport) }
-                : row,
-        ])));
+        // `lastStartFailure` is a sibling of the cached row, never a member of it:
+        // a runtime that failed to start is per-turn evidence, while the row is
+        // cached binary/auth/probe readiness with its own backoff semantics (#277).
+        // It is also kept out of `runtimeSelection`, which reports compiled
+        // transport support and nothing about a live attempt. Absent means no
+        // recorded start failure, so the key is omitted rather than sent as null.
+        res.json(Object.fromEntries(Object.entries(cached).map(([cli, row]) => {
+            if (!(isSwitchableNativeCli(cli) || cli === 'codex-app' || cli === 'pi')) return [cli, row];
+            const failure = nativeStartFailure(cli);
+            return [cli, { ...row, runtimeSelection: runtimeSelectionStatus(cli, settings['perCli']?.[cli]?.transport),
+                ...(failure ? { lastStartFailure: failure } : {}) }];
+        })));
     });
 
     app.post('/api/pi/profiles/register', requireAuth, asyncHandler(async (req, res) => {

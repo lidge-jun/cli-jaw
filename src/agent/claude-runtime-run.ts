@@ -20,6 +20,7 @@ import { syncLiveTools } from './events/helpers.js';
 import { getWorkerSlot, updateWorkerTools } from '../orchestrator/worker-registry.js';
 import { attachWatchdog } from './watchdog.js';
 import { detectSmokeResponse } from './smoke-detector.js';
+import { clearNativeStartFailure, recordNativeStartFailure } from './runtime/start-failure.js';
 
 type Result = Parameters<ExitHandlerParams['resolve']>[0];
 export type ClaudeExitBase = Omit<ExitHandlerParams, 'ctx' | 'code' | 'wasKilled' | 'wasSteer' | 'smokeResult'
@@ -214,6 +215,8 @@ export function startClaudeNativeRun(input: ClaudeNativeRunOptions): { child: nu
         },
         ready: lease => {
             if (!current()) throw new Error('claude_owner_lost');
+            // This start reached its lease, so the previous start failure is spent.
+            clearNativeStartFailure('claude');
             let detach: (() => void) | undefined;
             const liveness: RuntimeLivenessIdentity = { runId: traceRunId, sessionId: base.chatSessionId, scope: base.scopeKey,
                 origin: base.origin, ...(base.opts.requestId ? { requestId: base.opts.requestId } : {}) };
@@ -254,7 +257,12 @@ export function startClaudeNativeRun(input: ClaudeNativeRunOptions): { child: nu
             if (finalizeFailed && lease) await lease.retire(new Error('claude_finalizer_failed'));
             return selected ?? resultFor(ctx.runtimeOutcome ?? outcome);
         },
-        failed: (_error, _lease, outcome) => failed(outcome),
+        // A null lease means acquire never returned: the runtime failed to start,
+        // which is the class this diagnostic answers (#658).
+        failed: (error, lease, outcome) => {
+            if (!lease) recordNativeStartFailure('claude', error);
+            return failed(outcome);
+        },
         finalized: () => {
             finalized = true;
             if (!acquisitionStarted) cleanupSafe = true;

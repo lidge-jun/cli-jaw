@@ -6,6 +6,7 @@ import { mergeEnvWindowsSafe } from '../../spawn-env.js';
 import { ownProcess } from '../../spawn/process-kill.js';
 import { normalizeNativePermissions } from './permissions.js';
 import { configureAcpModel } from './config.js';
+import { cursorAcpModel } from '../../cursor-acp-models.js';
 import { AcpSession, validateAcpSessionOptions, type AcpSessionOptions } from './session.js';
 
 export interface CursorSessionOptions extends Omit<AcpSessionOptions, 'clientMetadata'> {
@@ -64,7 +65,12 @@ export async function createCursorSession(options: CursorSessionOptions): Promis
         if (options.signal?.aborted) { abort(); throw new Error('cursor_acp_acquire_aborted'); }
         await session.start({ cwd, authMethodId: 'cursor_login',
             ...(options.resumeSessionId ? { resumeSessionId: options.resumeSessionId } : {}) });
-        await configureAcpModel(session, { model: options.model, effort: options.effort });
+        // Print and ACP spell Cursor models differently, so a configuration that
+        // predates the transport switch needs translating before it is compared
+        // against the advertised set (#657). Exact matches never reach the hook.
+        await configureAcpModel(session, { model: options.model, effort: options.effort,
+            resolveModel: (value, advertised) =>
+                cursorAcpModel(value, advertised.map(option => option.value), options.effort) });
         if (options.signal?.aborted || !session.idle) throw new Error('cursor_acp_acquire_aborted');
         return session;
     } catch (error) {
