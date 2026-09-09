@@ -2,6 +2,7 @@
 // app never got files:write. That happened live: a DOCX upload died on
 // missing_scope and the operator had to be told which scope by hand. These
 // tests pin the preflight that catches it at setup time instead.
+import '../setup/isolated-home.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -36,7 +37,8 @@ test('a granted superset passes, a gap is reported in order', () => {
 
 test('an absent header means "cannot check", not "everything missing"', () => {
     assert.deepEqual(missingSlackScopes(null), []);
-    assert.deepEqual(missingSlackScopes(''), []);
+    assert.deepEqual(missingSlackScopes(undefined), []);
+    assert.deepEqual(missingSlackScopes(''), REQUIRED_SLACK_BOT_SCOPES, 'present but empty is a known empty grant');
 });
 
 test('files:read is a non-blocking capability while core gaps still fail', async () => {
@@ -133,4 +135,12 @@ test('a runtime missing_scope names the scope Slack asked for', () => {
     assert.match(named, /reinstall/i);
     // Without a hint the message still tells the operator where to go.
     assert.match(describeSlackError('missing_scope'), /OAuth & Permissions/);
+});
+
+test('missing only MPIM history preserves existing install credential validation', async () => {
+    const granted = [...REQUIRED_SLACK_BOT_SCOPES, ...SLACK_CAPABILITY_SCOPES].filter(s => s !== 'mpim:history').join(',');
+    assert.deepEqual(missingSlackScopes(granted), []);
+    const fetchImpl = (async () => new Response(JSON.stringify({ ok: true, user: 'cli-jaw', team_id: 'T1' }), { headers: { 'x-oauth-scopes': granted } })) as typeof fetch;
+    assert.deepEqual(await validateChannelCredentials({ channel: 'slack', botToken: 'xoxb-fixture' }, fetchImpl),
+        { ok: true, identity: 'cli-jaw', teamId: 'T1', missingCapabilities: ['mpim:history'] });
 });

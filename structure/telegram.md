@@ -20,6 +20,29 @@ Slack Socket Mode의 app-level token은 사용자 공용 `~/.cli-jaw-shared/slac
 
 ## 공통 메시징 레이어
 
+### Slack group DMs and scope observations
+
+The manifest subscribes to [`message.mpim`](https://docs.slack.dev/reference/events/message.mpim/)
+and requests [`mpim:history`](https://docs.slack.dev/reference/scopes/mpim.history/)
+for group DMs the app has joined. Slack delivers these as `type: message` with
+`channel_type: mpim`; an exact bot mention follows this event directly instead of
+being discarded while waiting for a channel `app_mention` twin.
+
+Group DMs retain the conversation allowlist, bot/self/subtype filters, mention-only
+policy and owned-versus-joined thread rules. They do not receive the one-to-one DM
+allowlist bypass. Mention ACKs use the same classification. Top-level MPIM context
+uses the existing bounded history budget (up to 50 messages before the current
+message), while threaded context keeps the parent timestamp. Missing history scope
+or budget leaves the current message usable without invented history.
+
+`mpim:history` is an optional capability for existing IM/channel installs, so its
+absence is returned in `missingCapabilities` and logged at info with a group-DM
+reception/history limitation. It does not change the core credential-validation
+result. Missing required scopes still fail validation. No observed OAuth header
+means unknown; a present empty header means a known empty grant. Updating the
+manifest does not update an installed app: add the event and scope in Slack and
+reinstall when group-DM access is wanted. No automatic scope grant is attempted.
+
 ### `src/messaging/runtime.ts`
 
 - `registerTransport('telegram' | 'discord', ...)`로 각 transport의 init/shutdown을 등록한다

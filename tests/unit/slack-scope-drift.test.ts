@@ -19,6 +19,16 @@ import { slackApi } from '../../src/slack/api.ts';
 
 const ALL = [...REQUIRED_SLACK_BOT_SCOPES, ...SLACK_CAPABILITY_SCOPES];
 
+test('an observed empty scope set is known and missing every declared permission', () => {
+    resetSlackScopeStatus();
+    recordSlackScopeObservation('');
+    const status = getSlackScopeStatus();
+    assert.equal(status.unknown, false);
+    assert.equal(status.ok, false);
+    assert.deepEqual(status.missingRequired, REQUIRED_SLACK_BOT_SCOPES);
+    assert.deepEqual(status.missingCapabilities, SLACK_CAPABILITY_SCOPES);
+});
+
 const IDENTITY_SCOPES = ['users:read', 'team:read', 'channels:read', 'groups:read', 'im:read', 'mpim:read'];
 
 /** The exact shape #340 reported: core scopes granted, identity/roster not. */
@@ -157,7 +167,7 @@ test('#478: an optional-only gap reports at info, never warn', () => {
     assert.equal(lines.length, 1);
     assert.equal(lines[0]!.level, 'info', 'messaging works — this must not read as a break');
     // The operator's actual question was "is the bot broken?". Answer it.
-    assert.match(lines[0]!.text, /messaging is unaffected/);
+    assert.match(lines[0]!.text, /some optional features are unavailable/);
 });
 
 test('#478: a required gap does not drag optional scopes into its severity', () => {
@@ -182,4 +192,17 @@ test('#478: a required gap does not drag optional scopes into its severity', () 
     // a degradation, which no operator can act on.
     assert.match(warn.text, /needs 1 scope\(s\)/);
     assert.match(info.text, /4 optional scope\(s\)/);
+});
+
+test('missing MPIM history describes group DM degradation without a core outage', () => {
+    resetSlackScopeStatus();
+    recordSlackScopeObservation(ALL.filter(s => s !== 'mpim:history').join(','));
+    const status = getSlackScopeStatus();
+    assert.equal(status.unknown, false);
+    assert.deepEqual(status.missingRequired, []);
+    assert.deepEqual(status.missingCapabilities, ['mpim:history']);
+    const lines = describeSlackScopeGaps(status);
+    assert.equal(lines.length, 1); assert.equal(lines[0]!.level, 'info');
+    assert.match(lines[0]!.text, /group DM reception\/history is unavailable/);
+    assert.doesNotMatch(lines[0]!.text, /messaging is unaffected/);
 });

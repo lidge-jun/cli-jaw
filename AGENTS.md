@@ -195,6 +195,8 @@ The check enumerates submodule contents and fails on what it finds there, becaus
 
 ### Architecture Docs Sync
 
+- Slack group DMs use `message.mpim` and optional `mpim:history`; exact `channel_type: mpim` mentions retain channel allowlist and thread policy, never the one-to-one DM bypass. Missing `mpim:history` degrades group-DM reception/history only; an absent scope header is unknown and a present empty header is a known empty grant. Keep `structure/telegram.md` and the validation API docs synchronized.
+
 - Slack Socket Mode app-token ownership is coordinated across homes by a connected, fresh, live-PID claim; uncertainty fails open, conflicts disable inbound only, and the runtime notice/activation epoch must remain generation-bound. See `structure/telegram.md` and `structure/server_api.md`.
 
 - Manager sidebar selection and Sessions/Stop/Open use separate interactive targets. Keep list navigation scoped to the focused row selector, stable session-disclosure links, and preferred width separate from viewport clamping. Pointer and keyboard resize completion persist the latest value; see `structure/frontend.md`.

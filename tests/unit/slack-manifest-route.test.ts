@@ -1,3 +1,4 @@
+import '../setup/isolated-home.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parse } from 'yaml';
@@ -29,6 +30,10 @@ test('GET /api/slack/manifest preserves the app name and derives the bot name', 
     assert.equal(jsonManifest.features.bot_user.display_name, 'demo-app');
     assert.equal(manifest.settings.socket_mode_enabled, true);
     assert.ok(manifest.oauth_config.scopes.bot.includes('chat:write'));
+    for (const output of [manifest, jsonManifest]) {
+        assert.equal(output.oauth_config.scopes.bot.filter((scope: string) => scope === 'mpim:history').length, 1);
+        assert.equal(output.settings.event_subscriptions.bot_events.filter((event: string) => event === 'message.mpim').length, 1);
+    }
     assert.equal(payload?.data?.botDisplayName, 'demo-app');
 });
 

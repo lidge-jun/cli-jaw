@@ -22,17 +22,23 @@ function runSlack(
     args: string[],
     seedSettings?: Record<string, unknown>,
     extraEnv: Record<string, string> = {},
+    authFixture?: Record<string, unknown>,
 ): RunResult {
-    const home = mkdtempSync(join(homedir(), '.cljaw-test-'));
+    const home = mkdtempSync(join(process.env['CLI_JAW_TEST_HOME_ROOT'] || homedir(), '.cljaw-test-'));
     if (seedSettings) {
         writeFileSync(join(home, 'settings.json'), JSON.stringify(seedSettings, null, 2));
     }
     const env = { ...process.env };
     for (const key of ['SLACK_BOT_TOKEN', 'SLACK_APP_TOKEN', 'SLACK_TEAM_ID', 'SLACK_CHANNEL_IDS']) delete env[key];
     Object.assign(env, extraEnv, { CLI_JAW_HOME: home });
+    const preload = join(home, 'auth-fixture.mjs');
+    if (authFixture) writeFileSync(preload, `globalThis.fetch = async url => {
+        if (String(url) !== 'https://slack.com/api/auth.test') throw new Error('unexpected fixture request');
+        return new Response(JSON.stringify(${JSON.stringify(authFixture)}));
+    };`);
     const result = spawnSync(
         process.execPath,
-        ['--import', 'tsx', cliEntry, 'slack', ...args],
+        ['--import', 'tsx', ...(authFixture ? ['--import', preload] : []), cliEntry, 'slack', ...args],
         {
             env,
             encoding: 'utf8',
@@ -208,17 +214,11 @@ test('setup refuses to mix file credentials with an environment-managed connecti
 });
 
 test('failed validation aborts before writing settings', (t) => {
-    // The xoxb- prefix passes the local guard, so this reaches live auth.test,
-    // which fails for a token Slack has never seen — and nothing is written.
-    // This one case DOES hit the network; skip gracefully when offline.
+    // Run the real validation path with a deterministic Slack invalid_auth response.
     const { status, output, home } = runSlack([
         'setup', '--non-interactive', '--no-notify', '--bot-token', 'xoxb-1-0000000000000-deadbeefdeadbeefdeadbeef',
-    ]);
+    ], undefined, {}, { ok: false, error: 'invalid_auth' });
     t.after(() => rmSync(home, { recursive: true, force: true }));
-    if (/fetch failed|ENOTFOUND|ETIMEDOUT|ECONNREFUSED|network/i.test(output)) {
-        t.skip('offline: live validation path untestable');
-        return;
-    }
     assert.equal(status, 1);
     assert.match(output, /auth\.test failed/);
     // Note: loadSettings() itself persists defaults on ENOENT, so "nothing
@@ -313,7 +313,7 @@ test('setup skips the Press-Enter wait and browser launch without a TTY (#475)',
     // no terminal attached, that is pure noise nobody asked for. PATH is
     // shadowed with recording stubs so the assertion is about the syscall, not
     // about a log line that might merely have been silenced.
-    const stubs = mkdtempSync(join(homedir(), '.cljaw-stub-'));
+    const stubs = mkdtempSync(join(process.env['CLI_JAW_TEST_HOME_ROOT'] || homedir(), '.cljaw-stub-'));
     t.after(() => rmSync(stubs, { recursive: true, force: true }));
     const stubLog = join(stubs, 'calls.log');
     writeLauncherStubs(stubs, stubLog);
@@ -362,9 +362,9 @@ test('setup still prompts when stdin is a TTY (#475)', async (t) => {
     // must never actually open a browser. The `open` stub must not read stdin
     // either — execFile leaves that pipe open, and a stub that blocks on it
     // keeps the child alive after the wizard is done.
-    const home = mkdtempSync(join(homedir(), '.cljaw-test-'));
+    const home = mkdtempSync(join(process.env['CLI_JAW_TEST_HOME_ROOT'] || homedir(), '.cljaw-test-'));
     t.after(() => rmSync(home, { recursive: true, force: true }));
-    const stubs = mkdtempSync(join(homedir(), '.cljaw-stub-'));
+    const stubs = mkdtempSync(join(process.env['CLI_JAW_TEST_HOME_ROOT'] || homedir(), '.cljaw-stub-'));
     t.after(() => rmSync(stubs, { recursive: true, force: true }));
     const stubLog = join(stubs, 'calls.log');
     writeLauncherStubs(stubs, stubLog);

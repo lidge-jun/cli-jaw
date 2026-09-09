@@ -84,6 +84,8 @@ export function createSlackAppManifest(appName: string = DEFAULT_SLACK_APP_NAME)
                     'channels:history',
                     'groups:history',
                     'im:history',
+                    // Joined group DMs: message.mpim plus history/replies.
+                    'mpim:history',
                     'im:write',
                     'chat:write',
                     // chat.postMessage into a PUBLIC channel this bot has not
@@ -121,6 +123,7 @@ export function createSlackAppManifest(appName: string = DEFAULT_SLACK_APP_NAME)
                     'message.channels',
                     'message.groups',
                     'message.im',
+                    'message.mpim',
                 ],
             },
             socket_mode_enabled: true,
