@@ -113,6 +113,15 @@ function token(value: string): string {
 function effortSelector(config: AcpSelectConfig): boolean {
     const category = token(config.category ?? '');
     if (category === 'model') return false;
+    // A two-state toggle is not a reasoning ladder. Cursor advertises `thinking`
+    // as false/true in the same category as `effort`, and an exact id only
+    // outranks it when one exists; a provider offering the toggle beside a
+    // differently named effort select would otherwise be ambiguous, and one
+    // offering only the toggle would have a reasoning level written into it.
+    if (config.options.length === 2 && config.options.every(option => {
+        const value = token(option.value);
+        return value === 'true' || value === 'false';
+    })) return false;
     if (token(config.id) === 'effort' || category === 'thoughtlevel') return true;
     if (category !== 'modeloption' && category !== 'modelconfig') return false;
     return EFFORT_SELECTOR_NAMES.has(token(config.id)) || EFFORT_SELECTOR_NAMES.has(token(config.name));
