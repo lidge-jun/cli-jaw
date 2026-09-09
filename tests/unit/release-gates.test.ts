@@ -122,6 +122,29 @@ describe('phase22 named release gates (cli-jaw)', () => {
         assert.equal(r.status, 0, 'fixtures must not fail the gate: ' + r.stdout);
     });
 
+    // git grep stops at a gitlink, and a marker committed inside a submodule
+    // ships when that submodule is published. Whether this checkout has them
+    // initialised differs between a dev machine and CI, so the expectation is
+    // derived from the actual state rather than hardcoded.
+    it('doc-drift scans checked-out submodules and names the ones it could not', () => {
+        const listed = spawnSync('git', ['submodule', 'status'], { cwd: repoRoot, encoding: 'utf8' });
+        assert.equal(listed.status, 0, 'git submodule status must run');
+        const uninitialised = (listed.stdout ?? '').split('\n').filter(Boolean)
+            .map(line => line.match(/^(.)[0-9a-f]+\s+(\S+)/))
+            .filter((m): m is RegExpMatchArray => Boolean(m) && m![1] === '-')
+            .map(m => m[2]);
+        const r = runGateOnCi(repoRoot, gateScript);
+        assert.equal(r.status, 0, 'expected pass, got: ' + r.stdout + '\n' + r.stderr);
+        for (const rel of uninitialised) {
+            assert.ok((r.stdout ?? '').includes(rel),
+                'an unscanned submodule must be named, not silently counted clean: ' + rel);
+        }
+        if (uninitialised.length === 0) {
+            assert.doesNotMatch(r.stdout ?? '', /uninitialised submodule/,
+                'nothing should be reported unscanned when every submodule is checked out');
+        }
+    });
+
     it('truth table mentions the four mirrored agbrowse symbols', () => {
         const text = fs.readFileSync(path.join(repoRoot, 'structure/CAPABILITY_TRUTH_TABLE.md'), 'utf8');
         for (const term of ['action-intent', 'target-resolver', 'answer-artifact', 'source-audit']) {
