@@ -5,7 +5,7 @@ import { t } from './i18n.js';
 import { state } from '../state.js';
 import { ICONS } from '../icons.js';
 import { providerIcon, providerLabel } from '../provider-icons.js';
-import { describeCliProbe, resolveQuotaWindowDisplay, type CliStatusInfo, type QuotaEntry } from './settings-types.js';
+import { describeCliProbe, describeNativeStartFailure, resolveQuotaWindowDisplay, type CliStatusInfo, type QuotaEntry } from './settings-types.js';
 import {
     buildAccountParts,
     normalizeQuotaWindowLabel,
@@ -424,6 +424,15 @@ function renderCliStatus(data: { cliStatus: Record<string, CliStatusInfo> | null
                     ? '<div role="status" style="font-size:10px;color:var(--text-dim);margin:2px 0 0 16px">이전 상태 표시 중 · 새로 확인 중</div>'
                     : '';
 
+        // Independent of the probe line above: a runtime can be installed,
+        // authenticated and probing fresh while every native turn dies before it
+        // starts. Showing the code here is what makes that visible without the
+        // server log (#658).
+        const startFailure = describeNativeStartFailure(info);
+        const startFailureLine = startFailure
+            ? `<div role="alert" style="font-size:10px;color:var(--warning);margin:2px 0 0 16px">${escapeHtml(startFailure.message)}</div>`
+            : '';
+
         html += `
             <div class="settings-group" style="margin-bottom:6px;padding:8px 10px">
                 <div class="cli-status-row" style="display:flex;align-items:center">
@@ -433,6 +442,7 @@ function renderCliStatus(data: { cliStatus: Record<string, CliStatusInfo> | null
                 </div>
                 ${accountLine}
                 ${probeLine}
+                ${startFailureLine}
                 ${authHint}
                 ${windowsHtml}
             </div>
