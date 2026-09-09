@@ -139,9 +139,17 @@ export function describeSlackScopeGaps(status: SlackScopeStatus): SlackScopeGapL
             level: 'info',
             text: `${status.missingCapabilities.length} optional scope(s) not granted: `
                 + `${status.missingCapabilities.join(', ')} — `
-                + (status.missingCapabilities.includes('mpim:history')
-                    ? 'group DM reception/history is unavailable; existing IM/channel messaging can continue; '
-                    : 'some optional features are unavailable; ')
+                + (() => {
+                    const parts: string[] = [];
+                    if (status.missingCapabilities.includes('mpim:history')) {
+                        parts.push('group DM reception is unavailable (message.mpim requires mpim:history); existing IM/channel messaging can continue');
+                    } else {
+                        parts.push('some optional features are unavailable');
+                    }
+                    const others = status.missingCapabilities.filter(s => s !== 'mpim:history');
+                    if (others.length) parts.push(`also missing: ${others.join(', ')}`);
+                    return parts.join('; ') + '; ';
+                })()
                 + where,
         });
     }

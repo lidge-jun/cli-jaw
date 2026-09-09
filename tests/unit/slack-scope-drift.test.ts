@@ -203,6 +203,6 @@ test('missing MPIM history describes group DM degradation without a core outage'
     assert.deepEqual(status.missingCapabilities, ['mpim:history']);
     const lines = describeSlackScopeGaps(status);
     assert.equal(lines.length, 1); assert.equal(lines[0]!.level, 'info');
-    assert.match(lines[0]!.text, /group DM reception\/history is unavailable/);
+    assert.match(lines[0]!.text, /group DM reception is unavailable/);
     assert.doesNotMatch(lines[0]!.text, /messaging is unaffected/);
 });

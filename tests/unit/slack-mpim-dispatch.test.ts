@@ -97,3 +97,10 @@ test('mpim history budget denial and missing scope preserve current message with
     historyAllowed = true; historyOk = false; await deliver({ ...event, ts: '1702.1' });
     assert.equal(historyCalls.length, 1); assert.equal(submissions.length, 2); assert.ok(!submissions[1]!.prompt.includes('PRIOR-MPIM-CONTEXT'));
 });
+
+test('a same-ts app_mention and message.mpim twin pair is claimed once', async () => {
+    const { slackEventKey, claimSlackEvent } = await import('../../src/slack/ingress.ts');
+    const key = slackEventKey('T0TEST', 'GMPIM', '1700.99');
+    assert.equal(claimSlackEvent(key), false, 'the first envelope runs');
+    assert.equal(claimSlackEvent(key), true, 'the same channel+ts twin is dropped');
+});

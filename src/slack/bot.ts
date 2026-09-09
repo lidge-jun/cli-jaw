@@ -1282,7 +1282,10 @@ export async function handleSlackEnvelope(envelope: SlackEnvelope, approvalTrans
         // app_mention 봉투에는 files 가 없고, 첨부를 가진 message 사본은 위
         // shouldProcessSlackEvent 에서 mention_via_app_mention 으로 드롭된다.
         // 그래서 멘션과 함께 올린 파일은 여기서 되찾지 않으면 영영 사라진다.
-        if (!hasFiles && isSlackMention(event, selfUserId) && event.channel && event.ts) {
+        // app_mention envelopes drop files, so they need the history recovery.
+        // A message.mpim mention already carries its files inline; when it has
+        // none there is no twin envelope to recover from, only a wasted call.
+        if (!hasFiles && event.type === 'app_mention' && isSlackMention(event, selfUserId) && event.channel && event.ts) {
             const recoverToken = getSlackSendClient().token;
             if (recoverToken) {
                 const recovered = await recoverSlackAttachments(
