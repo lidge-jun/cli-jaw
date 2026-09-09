@@ -67,16 +67,15 @@ export function shouldBuildHistoryBlock(input: {
         && (input.codexMultiplexMain || !input.isResume || input.cli === 'pi');
 }
 
-function isArgvPromptRuntime(cli: string, effectiveProvider?: string | null): boolean {
+function isArgvPromptRuntime(cli: string, _effectiveProvider?: string | null): boolean {
     return cli === 'cursor'
         || cli === 'kiro-code'
         || cli === 'grok'
-        || cli === 'opencode'
-        || (cli === 'ai-e' && effectiveProvider !== 'claude');
+        || cli === 'opencode';
 }
 
-function isKiroRuntime(cli: string, effectiveProvider?: string | null): boolean {
-    return cli === 'kiro-code' || (cli === 'ai-e' && effectiveProvider === 'kiro');
+function isKiroRuntime(cli: string, _effectiveProvider?: string | null): boolean {
+    return cli === 'kiro-code';
 }
 
 function withOperationalContext(prompt: string, sysPrompt: string): string {

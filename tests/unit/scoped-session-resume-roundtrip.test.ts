@@ -11,7 +11,7 @@ import '../setup/isolated-home.ts';
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { db, getSessionBucket, upsertSessionBucket } from '../../src/core/db.ts';
-import { aiEProviderForBucket, resolveScopedSessionBucket } from '../../src/agent/args.ts';
+import { resolveScopedSessionBucket } from '../../src/agent/args.ts';
 import {
     getSessionOwnershipGeneration,
     persistMainSession,

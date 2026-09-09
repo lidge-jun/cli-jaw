@@ -25,7 +25,7 @@ import {
     sanitizeSettingsInput,
     type SettingsPersistenceShape,
 } from './settings-merge.js';
-export { detectAllCli, detectCli, getClaudeExecHelperCandidates, getClaudeIHelperCandidates } from './cli-detection.js';
+export { detectAllCli, detectCli } from './cli-detection.js';
 
 // ─── Version (single source of truth: package.json) ──
 import { dirname } from 'path';

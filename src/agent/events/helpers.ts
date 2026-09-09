@@ -197,8 +197,7 @@ export function appendAssistantTextSegment(ctx: SpawnContext, text: unknown): st
 /** Append raw assistant text with NO segment/bullet formatting — for token-granular
  *  streams (plain `claude` text_delta). formatAssistantTextSegment() injects "\n- "
  *  bullets between unjoined segments, which would corrupt mid-token deltas
- *  ("Hel"+"lo" → "Hel\n- lo"), so those bypass it and accumulate raw. Mirrors how the
- *  claude-e snapshot path raw-appends fullText (claude.ts) rather than re-formatting. */
+ *  ("Hel"+"lo" → "Hel\n- lo"), so those bypass it and accumulate raw. */
 export function appendAssistantRawText(ctx: SpawnContext, text: string): string {
     if (!text) return '';
     if (!ctx.outputTextStarted) ctx.outputTextStarted = true;
@@ -405,8 +404,7 @@ export function extractText(content: unknown) {
  * tell". The 933s turn was genuinely idle for its last 600s; the remedy for
  * that is the deadline itself, which `jaw doctor` now shows how to raise.
  */
-export function streamJsonMarksProgress(cli: string, effectiveProvider?: string): boolean {
+export function streamJsonMarksProgress(cli: string, _effectiveProvider?: string): boolean {
     return cli === 'cursor'
-        || cli === 'grok'
-        || (cli === 'ai-e' && effectiveProvider === 'grok');
+        || cli === 'grok';
 }

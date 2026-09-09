@@ -6,9 +6,7 @@
 // registry lets the fallback search skip a runtime that is still parked.
 //
 // Keyed by the RUNTIME name (`lifecycleRuntimeCli`'s output), not the registry
-// name, and read with the same key: an `ai-e` turn records under `claude-e`,
-// so a search keyed on `ai-e` would never see its own cooldown and the feature
-// would silently do nothing for exactly the aliased runtime.
+// name, and read with the same key so a search finds the cooldown it recorded.
 
 const cooldowns = new Map<string, number>();
 

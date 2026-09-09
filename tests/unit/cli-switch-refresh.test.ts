@@ -71,7 +71,7 @@ test('CSR-004: cli_switch_refresh notice broadcast includes both fromCli and toC
 
 test('CSR-005: applyRuntimeSettingsPatch invokes cliSwitchRefresh on cli change', () => {
     assert.match(runtimeSrc, /const\s+cliChanged\s*=\s*!!\(\s*prevCli\s*&&\s*settings\.cli\s*&&\s*prevCli\s*!==\s*settings\.cli\s*\)/);
-    assert.match(runtimeSrc, /if\s*\(\s*cliChanged\s*\|\|\s*aiEProviderChanged\s*\)\s*\{[\s\S]*?cliSwitchRefresh[\s\S]*?\}/);
+    assert.match(runtimeSrc, /if\s*\(\s*cliChanged\s*\)\s*\{[\s\S]*?cliSwitchRefresh[\s\S]*?\}/);
     assert.match(runtimeSrc, /await\s+cliSwitchRefresh\(\{[\s\S]*?sourceWorkDir:\s*prevWorkingDir[\s\S]*?targetWorkDir:\s*settings\.workingDir[\s\S]*?fromCli:[\s\S]*?toCli,[\s\S]*?toModel,[\s\S]*?\}\)/);
 });
 test('CSR-006: execution edits synchronize while presentation and transport preserve distinct session sentinels', async t => {

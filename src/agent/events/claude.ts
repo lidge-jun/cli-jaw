@@ -1,6 +1,5 @@
-// Claude CLI event adapter (claude, claude-e, ai-e)
+// Claude CLI event adapter (plain claude)
 
-import { appendBoundedFullText } from './fulltext-bound.js';
 import { fieldString } from '../../types/cli-events.js';
 import { updateTraceToolRow, getTraceToolEntry } from '../../trace/store.js';
 import type { CliEventRecord } from './types.js';
@@ -136,51 +135,6 @@ export function finalizeClaudeRateLimitOnResult(
     finalizeClaudeRateLimitTool(ctx, agentLabel, empTag, event);
 }
 
-// ─── Claude snapshot text (claude-e / interactive) ───
-
-function appendClaudeISnapshotText(ctx: SpawnContext, event: CliEventRecord): string {
-    const text = extractAssistantText(event);
-    if (!text) return '';
-
-    const messageId = fieldString(event.message?.id || event.id);
-    if (messageId && messageId === ctx.claudeILastAssistantId) {
-        const previous = ctx.claudeILastAssistantText || '';
-        ctx.claudeILastAssistantText = text;
-        if (text === previous || previous.startsWith(text)) return '';
-        ctx.printActivity?.message(text, 'replace', 'unknown');
-        if (text.startsWith(previous)) {
-            const delta = text.slice(previous.length);
-            {
-                const bounded = appendBoundedFullText(ctx.fullText, delta);
-                ctx.fullText = bounded.text;
-                if (bounded.truncated) ctx.fullTextTruncated = true;
-            }
-            return delta;
-        }
-        if (ctx.fullText.endsWith(previous)) {
-            ctx.fullText = ctx.fullText.slice(0, -previous.length) + text;
-        }
-        return '';
-    }
-
-    // Reaching here means this snapshot is NOT a continuation of the message
-    // already accumulating: either the id changed, or there is no id to match.
-    // Either way a new assistant message started, so what came before was progress
-    // narration rather than part of this answer (NARRATION-BOUNDARY-01).
-    //
-    // The guard is claudeILastAssistantText, not the id: an id-LESS snapshot used
-    // to clear the id and thereby blind the NEXT identified event to its own
-    // boundary, letting narration survive. Tracking "a message was accumulating"
-    // covers identified and anonymous streams alike, and still leaves the first
-    // message of a run untouched.
-    if (ctx.claudeILastAssistantText !== undefined) resetClaudeDurableMessage(ctx);
-    if (messageId) ctx.claudeILastAssistantId = messageId;
-    else delete ctx.claudeILastAssistantId;
-    ctx.claudeILastAssistantText = text;
-    ctx.printActivity?.message(text, 'replace', 'unknown');
-    return appendAssistantTextSegment(ctx, text);
-}
-
 /** Drop the durable accumulation at a claude MESSAGE boundary
  *  (NARRATION-BOUNDARY-01: external channels read ctx.fullText, so narration that
  *  survives here reaches Slack).
@@ -250,18 +204,14 @@ export function flushClaudeBuffers(ctx: SpawnContext, agentLabel?: string, empTa
 export function handleClaudeEvent(
     evt: CliEventRecord,
     ctx: SpawnContext,
-    cli: string,
     agentLabel: string,
     empTag: Record<string, unknown>,
 ): void {
     if (evt.type === 'assistant' && evt.message?.content) {
-        if (cli === 'claude-e') {
-            const segment = appendClaudeISnapshotText(ctx, evt);
-            ctx.pendingOutputChunk = (ctx.pendingOutputChunk || '') + segment;
-        } else if (ctx.claudeStreamedText) {
+        if (ctx.claudeStreamedText) {
             // Reconcile the raw-streamed region with the canonical complete block via
             // the segment formatter: restores the '\n- ' boundary between
-            // tool-separated messages (codex/claude-e parity) without re-appending
+            // tool-separated messages (codex parity) without re-appending
             // (260612 audit 07 F-T4 no-doubling — replace, never append) and without
             // mid-token corruption (the canonical block is complete text, not a token).
             const hasCanonicalText = evt.message.content.some(

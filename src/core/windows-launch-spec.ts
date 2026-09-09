@@ -83,7 +83,7 @@ export function extractCmdShimTarget(shimText: string): string | null {
 /**
  * Parse a shebang line into interpreter, arguments, and env assignments.
  *
- * The target is NOT always Node. Observed in a real install: `claude-e` resolves to
+ * The target is NOT always Node. Observed in a real install: a helper binary resolves to
  * `#!/usr/bin/env sh` and `cursor-agent` to `#!/usr/bin/env bash`. Assuming node here
  * would launch a shell script with the wrong interpreter.
  *

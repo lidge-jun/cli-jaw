@@ -945,7 +945,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         // ─── Stall kills: do NOT retry — escalate immediately ───
         if (isStall) {
             if (mainManaged && !opts.internal) {
-                const canNativeResume = cli === 'claude' || cli === 'claude-e';
+                const canNativeResume = cli === 'claude';
                 if (!canNativeResume) {
                     try {
                         const { autoCompactRefresh } = await import('../core/compact.js');

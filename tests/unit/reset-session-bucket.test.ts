@@ -29,7 +29,6 @@ test.mock.module('../../src/agent/codex-host-pool.ts', {
 test.mock.module('../../src/agent/args.ts', {
     namedExports: {
         resolveSessionBucket: (cli: string | null | undefined) => cli || '',
-        aiEProviderForBucket: () => null,
     },
 });
 test.mock.module('../../src/agent/session-persistence.ts', {

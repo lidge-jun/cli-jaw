@@ -87,7 +87,7 @@ async function runSteerViaServer(ctx: TuiContext, parsed: ParsedSlashCommand & {
     }
     const prompt = parsed.rawText || `/steer ${parsed.args.join(' ')}`;
     try {
-        // claude-e steers wait up to 30s for the old turn to die — keep the
+        // Steer wait can exceed the default 10s bound — keep the
         // HTTP timeout above getSteerWaitMsForActiveAgent's worst case.
         const resp = await apiJson<{ ok?: boolean; text?: string; error?: string }>(
             ctx, '/api/message', { method: 'POST', body: { prompt } }, 45_000,

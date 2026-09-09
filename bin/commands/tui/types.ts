@@ -18,9 +18,7 @@ export const c = {
 
 export const cliLabel: Record<string, string> = {
     agy: 'Antigravity',
-    'ai-e': 'AI-E',
     claude: 'Claude Code',
-    'claude-e': 'Claude E',
     codex: 'Codex',
     'codex-app': 'Codex App',
     cursor: 'Cursor',
@@ -33,9 +31,7 @@ export const cliLabel: Record<string, string> = {
 };
 export const cliColor: Record<string, string> = {
     agy: c.green,
-    'ai-e': c.green,
     claude: c.magenta,
-    'claude-e': c.magenta,
     codex: c.red,
     'codex-app': c.red,
     cursor: c.cyan,

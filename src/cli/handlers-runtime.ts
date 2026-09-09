@@ -459,7 +459,6 @@ export async function flushHandler(args: string[], ctx: CliCommandContext): Prom
             const matchedClis: string[] = [];
             const modelChoicesByCli = applyCodexModelsToChoices(buildModelChoicesByCli(), await resolveOpenCodexCodexModels());
             for (const [cli, models] of Object.entries(modelChoicesByCli)) {
-                if (cli === 'ai-e') continue;
                 if ((models as string[]).some(m => m.toLowerCase() === modelKey)) {
                     matchedClis.push(cli);
                 }

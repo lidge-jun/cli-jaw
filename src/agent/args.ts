@@ -17,68 +17,22 @@ export function formatAgyPrintTimeout(ms: number): string {
 // Claude Code fast mode is enabled by merging { fastMode: true } into the spawned
 // CLI's settings via --settings (the claude analogue of codex's service_tier="fast").
 // Gated on options.fastMode, which is sourced from perCli.<cli>.fastMode in spawn.ts.
-const AI_E_PROVIDERS = ['claude', 'codex', 'grok', 'copilot', 'kiro'] as const;
 const CODEXCLAW_PLUGIN_DISABLE_CONFIG = 'plugins."codexclaw@personal".enabled=false';
-export type AiEProvider = typeof AI_E_PROVIDERS[number];
 
 type BuildArgOptions = {
     fastMode?: boolean;
     sysPrompt?: string;
     includeDirectories?: string[];
-    claudeBin?: string;
     homedir?: string;
     workingDir?: string;
     platform?: NodeJS.Platform;
     release?: string;
     env?: NodeJS.ProcessEnv;
     pathExists?: (path: string) => boolean;
-    aiEProvider?: string;
     agyLogFile?: string;
     agyPrintTimeout?: string;
     agyCapabilities?: AgyCapabilities;
 };
-
-export function resolveAiEProvider(explicitProvider: string | null | undefined, model: string | null | undefined): AiEProvider {
-    if (explicitProvider && (AI_E_PROVIDERS as readonly string[]).includes(explicitProvider)) {
-        return explicitProvider as AiEProvider;
-    }
-    const value = model || '';
-    if (!value || value === 'default') return 'claude';
-    if (value.startsWith('grok-')) return 'grok';
-    if (value.startsWith('copilot-') || value.includes('github')) return 'copilot';
-    if (value.startsWith('gpt-') || value.includes('codex')) return 'codex';
-    if (
-        value === 'auto'
-        || value.startsWith('deepseek-')
-        || value.startsWith('minimax-')
-        || value.startsWith('glm-')
-        || value.startsWith('qwen3-')
-    ) return 'kiro';
-    return 'claude';
-}
-
-/**
- * The provider a bucket key must be built from, read from settings the same way the spawn
- * path reads it: `perCli` first, then `activeOverrides`, then inference from the model.
- *
- * This exists because compact and reset each resolved it separately and one of them passed
- * null, so a configured provider that disagreed with the model name sent those commands to
- * a bucket the conversation had never used. Three copies of a precedence rule is two too
- * many; callers that name a bucket ask here.
- */
-export function aiEProviderForBucket(
-    cli: string | null | undefined,
-    model: string | null | undefined,
-    currentSettings: {
-        perCli?: Record<string, { provider?: string } | undefined> | undefined;
-        activeOverrides?: Record<string, { provider?: string } | undefined> | undefined;
-    } | null | undefined,
-): string | null {
-    if (cli !== 'ai-e') return null;
-    const perCli = currentSettings?.perCli?.['ai-e']?.provider;
-    const override = currentSettings?.activeOverrides?.['ai-e']?.provider;
-    return resolveAiEProvider(perCli ?? override, model);
-}
 
 const KIRO_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh']);
 
@@ -120,15 +74,6 @@ function claudeEffortArgs(effort: string): string[] {
 function kiroEffortArgs(effort: string): string[] {
     if (!effort || !KIRO_EFFORTS.has(effort)) return [];
     return ['--effort', effort === 'xhigh' ? 'max' : effort];
-}
-
-function buildAiEKiroArgs(model: string, effort: string, prompt: string, sessionId?: string): string[] {
-    const args = ['kiro', 'p', '--output-format', 'text', '--timeout-ms', '600000'];
-    if (model && model !== 'default') args.push('--model', model);
-    args.push(...kiroEffortArgs(effort));
-    if (sessionId) args.push('--resume', sessionId);
-    args.push(prompt || '');
-    return args;
 }
 
 function normalizePathForDedupe(dir: string): string {
@@ -199,9 +144,7 @@ function claudeSettingsArgs(options: BuildArgOptions, effort?: string): string[]
  * resumes don't send a spark session_id to a gpt-5.4 run (or vice versa), which
  * would trigger `thread/resume failed: no rollout found` on the server side.
  */
-export function resolveSessionBucket(cli: string | null | undefined, model: string | null | undefined, aiEProvider?: string | null): string {
-    if (cli === 'ai-e') return `ai-e:${resolveAiEProvider(aiEProvider, model)}`;
-    if (cli === 'claude-e') return 'claude-e';
+export function resolveSessionBucket(cli: string | null | undefined, model: string | null | undefined, _aiEProvider?: string | null): string {
     if (cli === 'codex-app') return 'codex-app';
     if (cli === 'grok') return 'grok';
     if (cli === 'pi') return 'pi';
@@ -262,58 +205,6 @@ export function buildArgs(cli: string, model: string, effort: string, prompt: st
                 ...claudeEffortArgs(effort),
                 ...claudeSettingsArgs(options, effort),
                 ...(sysPrompt ? ['--append-system-prompt', sysPrompt] : [])];
-        case 'claude-e': {
-            const claudeExtraArgs: string[] = [];
-            if (model && model !== 'default') claudeExtraArgs.push('--model', model);
-            claudeExtraArgs.push(...claudeEffortArgs(effort));
-            if (sysPrompt) claudeExtraArgs.push('--append-system-prompt', sysPrompt);
-            claudeExtraArgs.push(...claudeSettingsArgs(options, effort));
-            // claude-e can't interact with permission dialogs — always bypass
-            if (autoPerm) claudeExtraArgs.push('--dangerously-skip-permissions');
-            else claudeExtraArgs.push('--permission-mode', 'auto');
-            return ['run', '--jsonl',
-                '--output-format', 'stream-json',
-                '--idle-timeout-ms', '600000',
-                '--hard-timeout-ms', '3600000',
-                ...(autoPerm ? ['--auto-accept-workspace-trust'] : []),
-                ...(options.claudeBin ? ['--claude-bin', options.claudeBin] : []),
-                ...(claudeExtraArgs.length ? ['--', ...claudeExtraArgs] : [])];
-        }
-        case 'ai-e': {
-            const provider = resolveAiEProvider(options.aiEProvider, model);
-            const isClaude = provider === 'claude';
-            if (isClaude) {
-                const claudeExtraArgs: string[] = [];
-                if (model && model !== 'default') claudeExtraArgs.push('--model', model);
-                claudeExtraArgs.push(...claudeEffortArgs(effort));
-                if (sysPrompt) claudeExtraArgs.push('--append-system-prompt', sysPrompt);
-                claudeExtraArgs.push(...claudeSettingsArgs(options, effort));
-                if (autoPerm) claudeExtraArgs.push('--dangerously-skip-permissions');
-                else claudeExtraArgs.push('--permission-mode', 'auto');
-                return ['claude', 'run', '--jsonl',
-                    '--output-format', 'stream-json',
-                    '--idle-timeout-ms', '600000',
-                    '--hard-timeout-ms', '3600000',
-                    ...(autoPerm ? ['--auto-accept-workspace-trust'] : []),
-                    ...(options.claudeBin ? ['--claude-bin', options.claudeBin] : []),
-                    ...(claudeExtraArgs.length ? ['--', ...claudeExtraArgs] : [])];
-            }
-            if (provider === 'kiro') {
-                return buildAiEKiroArgs(model, effort, prompt || '');
-            }
-
-            const promptModeArgs = [
-                provider,
-                '--output-format', 'stream-json',
-                '--timeout-ms', '600000',
-            ];
-            if (model && model !== 'default') promptModeArgs.push('--model', model);
-            if (effort && effort !== 'medium' && provider !== 'grok') {
-                promptModeArgs.push('--effort', effort);
-            }
-            promptModeArgs.push(prompt || '');
-            return promptModeArgs;
-        }
         case 'codex': {
             const spark = isCodexSparkModel(model);
             const reasoningArgs = spark ? [] : [
@@ -404,59 +295,6 @@ export function buildResumeArgs(cli: string, model: string, effort: string, sess
                 ...claudeEffortArgs(effort),
                 ...claudeSettingsArgs(options, effort),
                 ...(options.sysPrompt ? ['--append-system-prompt', options.sysPrompt] : [])];
-        case 'claude-e': {
-            const claudeExtraArgs: string[] = [];
-            if (model && model !== 'default') claudeExtraArgs.push('--model', model);
-            claudeExtraArgs.push(...claudeEffortArgs(effort));
-            if (options.sysPrompt) claudeExtraArgs.push('--append-system-prompt', options.sysPrompt);
-            claudeExtraArgs.push(...claudeSettingsArgs(options, effort));
-            if (autoPerm) claudeExtraArgs.push('--dangerously-skip-permissions');
-            else claudeExtraArgs.push('--permission-mode', 'auto');
-            return ['run', '--jsonl',
-                '--output-format', 'stream-json',
-                '--idle-timeout-ms', '600000',
-                '--hard-timeout-ms', '3600000',
-                ...(autoPerm ? ['--auto-accept-workspace-trust'] : []),
-                ...(options.claudeBin ? ['--claude-bin', options.claudeBin] : []),
-                '--resume', sessionId,
-                ...(claudeExtraArgs.length ? ['--', ...claudeExtraArgs] : [])];
-        }
-        case 'ai-e': {
-            const provider = resolveAiEProvider(options.aiEProvider, model);
-            if (provider === 'kiro') {
-                return buildAiEKiroArgs(model, effort, prompt || '', sessionId);
-            }
-            if (provider !== 'claude') {
-                // codex/grok/copilot: interactive mode with --resume
-                const resumeArgs = [
-                    provider,
-                    '--output-format', 'stream-json',
-                    '--timeout-ms', '600000',
-                ];
-                if (model && model !== 'default') resumeArgs.push('--model', model);
-                if (effort && effort !== 'medium' && provider !== 'grok') {
-                    resumeArgs.push('--effort', effort);
-                }
-                if (sessionId) resumeArgs.push('--resume', sessionId);
-                resumeArgs.push(prompt || '');
-                return resumeArgs;
-            }
-            const claudeExtraArgs: string[] = [];
-            if (model && model !== 'default') claudeExtraArgs.push('--model', model);
-            claudeExtraArgs.push(...claudeEffortArgs(effort));
-            if (options.sysPrompt) claudeExtraArgs.push('--append-system-prompt', options.sysPrompt);
-            claudeExtraArgs.push(...claudeSettingsArgs(options, effort));
-            if (autoPerm) claudeExtraArgs.push('--dangerously-skip-permissions');
-            else claudeExtraArgs.push('--permission-mode', 'auto');
-            return ['claude', 'run', '--jsonl',
-                '--output-format', 'stream-json',
-                '--idle-timeout-ms', '600000',
-                '--hard-timeout-ms', '3600000',
-                ...(autoPerm ? ['--auto-accept-workspace-trust'] : []),
-                ...(options.claudeBin ? ['--claude-bin', options.claudeBin] : []),
-                '--resume', sessionId,
-                ...(claudeExtraArgs.length ? ['--', ...claudeExtraArgs] : [])];
-        }
         case 'codex': {
             const spark = isCodexSparkModel(model);
             return ['exec', 'resume',
