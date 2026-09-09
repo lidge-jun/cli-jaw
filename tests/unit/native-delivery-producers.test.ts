@@ -13,14 +13,15 @@ import { log } from '../../src/core/logger.ts';
 // are faked. No polling sockets, SDK clients or real message requests are started.
 const operations: string[] = [];
 // Independent producer contract: parity alone could preserve the same bad order.
-function assertSlackBodyOrder(events: string[], text: string, queued = false) {
-    const labels = [`post:slack:${text}`, 'ack:success', 'images:slack'];
-    if (queued) labels.push('notice:delete');
+function assertSlackBodyOrder(events: string[], text: string, _queued = false, outcome = 'success') {
+    const ackLabel = `ack:${outcome}`;
+    const labels = [`post:slack:${text}`, ackLabel, 'progress:finish', 'images:slack'];
     for (const label of labels) assert.equal(events.filter(value => value === label).length, 1, label);
-    assert.ok(events.indexOf(labels[0]!) < events.indexOf('ack:success'), 'body precedes reaction ACK');
-    assert.ok(events.indexOf('ack:success') < events.indexOf('images:slack'), 'image relay cannot hold reaction ACK');
-    if (queued) assert.ok(events.indexOf(labels[0]!) < events.indexOf('notice:delete'), 'answer precedes notice deletion');
+    assert.ok(events.indexOf(labels[0]!) < events.indexOf(ackLabel), 'body precedes reaction ACK');
+    assert.ok(events.indexOf(ackLabel) < events.indexOf('progress:finish'), 'ACK precedes bounded status cleanup');
+    assert.ok(events.indexOf('progress:finish') < events.indexOf('images:slack'), 'status settles before optional image relay');
 }
+const progressResults: Array<{ outcome: string; bodyDelivered?: boolean }> = [];
 const optionsSeen: boolean[] = [];
 let completion: Record<string, unknown> = {};
 let body = 'answer';
@@ -120,7 +121,13 @@ mock.module('../../src/slack/identity.ts', { namedExports: { ...identity,
     buildSenderDisplay: (_identity: unknown, text: string) => text,
 } });
 mock.module('../../src/slack/progress.ts', { namedExports: {
-    startSlackProgress: async () => ({ update() {}, finish: async () => { operations.push('progress:finish'); } }),
+    startSlackProgress: async () => {
+        let finished = false;
+        return { update() {}, tool() {}, projectedTool() {}, phase() {},
+            finish: async (outcome = 'complete', options: { bodyDelivered?: boolean } = {}) => {
+                if (!finished) { finished = true; operations.push('progress:finish'); progressResults.push({ outcome, ...options }); }
+            }, ready: async () => ({ mode: 'none', ts: null }), abort() {}, terminalConfirmed: () => false, ts: () => null };
+    },
     statusFromToolEvent: () => null,
 } });
 const slackApi = await import('../../src/slack/api.ts');
@@ -211,7 +218,7 @@ test.before(async () => {
 });
 test.after(async () => { await telegram.shutdownTelegram(); });
 test.beforeEach(() => {
-    operations.length = 0; optionsSeen.length = 0; completion = {}; body = 'answer';
+    operations.length = 0; progressResults.length = 0; optionsSeen.length = 0; completion = {}; body = 'answer';
     eraseBody = false; selfDelivered = false; queued = false;
     senderGate = null; routed.length = 0;
     hubResponse = null; hubRequests.length = 0; outboundResults.length = 0; reportedErrors.length = 0;
@@ -301,8 +308,13 @@ for (const channel of ['slack', 'discord', 'telegram']) {
                 operations.length = 0; optionsSeen.length = 0;
                 completion = { runtimeFinality, runtimeStatus };
                 await run(channel); await drain();
-                assert.deepEqual(operations, baseline);
-                if (channel === 'slack') assertSlackBodyOrder(operations, body);
+                const failedSlack = channel === 'slack' && runtimeStatus !== 'done';
+                assert.deepEqual(operations, failedSlack ? baseline.map(item => item === 'ack:success' ? 'ack:failure' : item) : baseline);
+                if (channel === 'slack') {
+                    assertSlackBodyOrder(operations, body, false, failedSlack ? 'failure' : 'success');
+                    assert.equal(progressResults.at(-1)?.outcome, runtimeStatus === 'stopped' ? 'cancelled' : runtimeStatus === 'error' ? 'error' : 'complete');
+                    assert.equal(progressResults.at(-1)?.bodyDelivered, true);
+                }
                 assert.deepEqual(optionsSeen, [true]);
             }
         }
@@ -357,7 +369,7 @@ for (const channel of ['slack', 'discord', 'telegram']) {
         const baseline = await deliver({});
         assert.ok(baseline.includes(`post:${channel}:queued answer`));
         assert.equal(baseline.filter(x => x === 'ack:success').length, 1);
-        assert.ok(baseline.indexOf(`post:${channel}:queued answer`) < baseline.indexOf('notice:delete'));
+        assert.ok(baseline.indexOf(`post:${channel}:queued answer`) < baseline.indexOf(channel === 'slack' ? 'progress:finish' : 'notice:delete'));
         if (channel === 'slack') assertSlackBodyOrder(baseline, 'queued answer', true);
         const native = await deliver({ runtimeFinality: 'present', runtimeStatus: 'done' });
         assert.deepEqual(native, baseline);
@@ -376,7 +388,8 @@ for (const channel of ['slack', 'discord', 'telegram']) {
         await drain();
         assert.deepEqual(optionsSeen, [true]);
         assert.equal(operations.includes('notice:delete'), false);
-        assert.ok(operations.includes('notice:edit'), JSON.stringify(operations));
+        assert.ok(operations.includes(channel === 'slack' ? 'progress:finish' : 'notice:edit'), JSON.stringify(operations));
+        if (channel === 'slack') assert.equal(progressResults.at(-1)?.outcome, 'error');
         assert.equal(operations.filter(x => x === 'ack:failure').length, 1);
         assert.equal(operations.includes('ack:success'), false);
     });

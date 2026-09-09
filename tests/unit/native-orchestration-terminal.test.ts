@@ -296,7 +296,7 @@ for (const scenario of [
             const result = await collecting;
             assert.deepEqual(result, {
                 text: scenario.native ? scenario.diagnostic || t('tg.timeout', {}, 'en') : 'FOREIGN_COLLECTED_ERROR',
-                data: {},
+                data: { collectionFailure: 'timeout' },
             }, 'application timeout must not fabricate runtimeFinality/runtimeStatus or a model final');
             assert.equal(capture.filter(entry => entry.type === 'orchestrate_done').length, 0,
                 'timeout does not broadcast an invented orchestration completion');

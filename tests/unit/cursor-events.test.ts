@@ -338,3 +338,52 @@ test('Cursor nested stream-json tool_call labels Read/Shell with args', () => {
     assert.equal(ctx.toolLog.length, 2);
     assert.equal(ctx.toolLog[1]?.status, 'error');
 });
+
+test('Cursor preserves explicit tool purpose without treating a metadata-only update as a new text boundary', () => {
+    const ctx = makeContext();
+    const shell = (id: string, description: string | undefined, subtype = 'started') => ({ type: 'tool_call', subtype,
+        call_id: id, tool_call: { shellToolCall: { args: { command: 'cat src/example.ts', ...(description ? { description } : {}) } } } });
+    extractFromEvent('cursor', shell('purpose-one', 'Inspect the source file'), ctx, 'cursor');
+    assert.equal(ctx.toolLog[0]?.description, 'Inspect the source file');
+    extractFromEvent('cursor', { type: 'assistant', subtype: 'delta', text: 'Keep this accepted answer' }, ctx, 'cursor');
+    extractFromEvent('cursor', shell('purpose-one', 'Inspect the event handler'), ctx, 'cursor');
+    assert.equal(ctx.fullText, 'Keep this accepted answer');
+    assert.equal(ctx.toolLog[0]?.description, 'Inspect the event handler');
+    extractFromEvent('cursor', shell('purpose-one', undefined, 'completed'), ctx, 'cursor');
+    assert.equal(ctx.fullText, 'Keep this accepted answer');
+    assert.equal(ctx.toolLog[0]?.description, 'Inspect the event handler');
+    extractFromEvent('cursor', shell('purpose-two', 'Read another source'), ctx, 'cursor');
+    assert.equal(ctx.fullText, '', 'a real new tool still owns the narration boundary');
+});
+
+test('Cursor recovers purpose from its trace when the live sanitizer kept the row but omitted description', async () => {
+    const { startTraceRun, getTraceToolEntry, finalizeTraceRun } = await import('../../src/trace/store.ts');
+    const { beginLiveRun, clearLiveRun } = await import('../../src/agent/live-run-state.ts');
+    const { addBroadcastListener, removeBroadcastListener } = await import('../../src/core/bus.ts');
+    const ctx = makeContext(); ctx.liveScope = 'cursor-purpose-test'; ctx.requestId = 'cursor-purpose-request';
+    ctx.traceRunId = startTraceRun({ cli: 'cursor', audience: 'public', scopeKey: ctx.liveScope });
+    beginLiveRun(ctx.liveScope, 'cursor');
+    const observed: Array<Record<string, unknown>> = [];
+    const listener = (type: string, data: Record<string, unknown>) => { if (type === 'agent_tool' && data.requestId === ctx.requestId) observed.push(data); };
+    addBroadcastListener(listener);
+    try {
+        extractFromEvent('cursor', { type: 'tool_call', subtype: 'started', call_id: 'saved-purpose',
+            tool_call: { shellToolCall: { args: { command: 'pwd', description: 'Inspect current project directory' } } } }, ctx, 'cursor');
+        const pointer = ctx.toolTraceIndex!.get('cursor:tool:saved-purpose')!;
+        assert.equal(ctx.toolLog[0]?.description, undefined, 'existing sanitizer behavior is unchanged');
+        assert.equal(getTraceToolEntry(pointer.traceRunId, pointer.traceSeq)?.description, 'Inspect current project directory');
+        extractFromEvent('cursor', { type: 'tool_call', subtype: 'completed', call_id: 'saved-purpose',
+            tool_call: { shellToolCall: { args: { command: 'pwd' } } } }, ctx, 'cursor');
+        assert.equal(observed.at(-1)?.description, 'Inspect current project directory');
+        assert.equal(observed.at(-1)?.status, 'done');
+    } finally {
+        removeBroadcastListener(listener); clearLiveRun(ctx.liveScope); finalizeTraceRun(ctx.traceRunId, 'done');
+    }
+});
+
+test('Cursor image input description is not promoted to public tool-purpose metadata', () => {
+    const ctx = makeContext();
+    extractFromEvent('cursor', { type: 'tool_call', subtype: 'started', call_id: 'image-payload',
+        tool_call: { imageToolCall: { args: { description: 'PRIVATE_IMAGE_PROMPT', filePath: '/project/image.png' } } } }, ctx, 'cursor');
+    assert.equal(ctx.toolLog[0]?.description, undefined);
+});

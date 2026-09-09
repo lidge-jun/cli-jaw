@@ -1,5 +1,9 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
+import { loadLocales, t } from '../../src/core/i18n.ts';
+loadLocales(fileURLToPath(new URL('../../public/locales/', import.meta.url)));
+mock.method(globalThis, 'fetch', async () => { throw new Error('Unexpected network request in Slack boot test'); });
 
 // A boot-drained turn has no live requester. Isolated in its own file because it
 // mocks the Slack send path, and a partial mock of that module would change what
@@ -119,7 +123,8 @@ test('SQB-003: a queued turn that failed still says so', async () => {
     await new Promise(resolve => setTimeout(resolve, 20));
 
     assert.equal(sent.length, 1, `a failure must still reach the user; saw ${JSON.stringify(sent)}`);
-    assert.match(sent[0]!.text, /\[error\] boom/);
+    assert.equal(sent[0]!.text, t('slack.progress.failure'));
+    assert.doesNotMatch(sent[0]!.text, /boom/);
 });
 
 // The other half of SQB-003: while a requester IS still waiting, the failure is
@@ -177,12 +182,15 @@ test('SQB-004: forwarder delivery also deletes the leftover queue notice', async
     const deletes: Array<{ channel: string; ts: string }> = [];
     const realFetch = globalThis.fetch;
     globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
+        if (String(url).endsWith('/chat.stopStream')) {
+            return new Response(JSON.stringify({ ok: false, error: 'message_not_in_streaming_state' }));
+        }
         if (String(url).endsWith('/chat.delete')) {
             const body = JSON.parse(String(init?.body || '{}')) as { channel: string; ts: string };
             deletes.push({ channel: body.channel, ts: body.ts });
             return new Response(JSON.stringify({ ok: true }), { status: 200 });
         }
-        return realFetch(url as RequestInfo, init);
+        throw new Error('Unexpected method in Slack boot test');
     }) as typeof fetch;
 
     try {
