@@ -8,6 +8,7 @@ import { slackApi, describeSlackError, slackFailure, type SlackFetch } from './a
 import { abortableDelay } from '../messaging/outbound-lifecycle.js';
 import { buildSlackTextPayloads } from './format.js';
 import { buildSlackBlockPayloads, expectedTableShapes, type TableShape, type SlackTextPayload } from './blocks.js';
+import { boundSlackContent, expectedTableContent, type CanonicalTable, type TableContentStatus } from './table-content.js';
 import { verifySlackTables } from './table-verification.js';
 import { expectedRichFeatures } from './render-features.js';
 import { MAX_INLINE_RATE_LIMIT_MS, classifySendFailure, retryAfterMs } from '../messaging/retry.js';
@@ -80,17 +81,20 @@ export async function sendSlackText(
     token: string,
     target: RemoteTarget,
     text: string,
-    options: { fetchImpl?: SlackFetch; blocks?: unknown; signal?: AbortSignal; requireBodyDelivery?: boolean } = {},
+    options: { fetchImpl?: SlackFetch; blocks?: unknown; signal?: AbortSignal; requireBodyDelivery?: boolean; sensitiveResponse?: boolean } = {},
 ): Promise<{ ok: boolean; error?: string; status?: number; ts?: string; sent?: boolean;
     retryable?: boolean; delivery?: { verification: 'verified' | 'failed';
         expectedTables: number; verifiedTables: number; channelId: string; messageTs: string[];
-        expectedFeatures?: string[]; verifiedFeatures?: string[] } }> {
+        expectedFeatures?: string[]; verifiedFeatures?: string[]; tableContent: TableContentStatus; richContent: 'not_checked'; sourceAccuracy: 'not_checked'; comparisonVersion: 1 } }> {
     let chunks: SlackTextPayload[];
     let shapes: TableShape[][];
+    let content: CanonicalTable[][];
     try {
+        if (options.blocks != null) boundSlackContent(options.blocks);
         chunks = options.blocks != null
             ? buildSlackBlockPayloads(text, options.blocks)
             : buildSlackTextPayloads(text);
+        content = chunks.map(chunk => expectedTableContent(chunk.blocks));
         shapes = chunks.map(chunk => expectedTableShapes(chunk.blocks));
     } catch (error) {
         if (error instanceof RangeError) return slackFailure(error.message, 400);
@@ -108,7 +112,9 @@ export async function sendSlackText(
     let firstTs: string | undefined;
     const messageTs: string[] = [];
     const receipt = (verification: 'verified' | 'failed') => ({
-        verification, expectedTables, verifiedTables, channelId: target.targetId, messageTs,
+        verification, expectedTables, verifiedTables,
+        tableContent: (expectedTables ? (verifiedTables === expectedTables ? 'verified' : 'failed') : 'not_checked') as TableContentStatus,
+        richContent: 'not_checked' as const, sourceAccuracy: 'not_checked' as const, comparisonVersion: 1 as const, channelId: target.targetId, messageTs,
         ...(allFeatures.length ? { expectedFeatures: allFeatures, verifiedFeatures: [...verifiedFeatures].sort() } : {}),
     });
     // Preserve evidence of partial delivery. Retrying a whole send after a
@@ -119,6 +125,7 @@ export async function sendSlackText(
         ...(needsVerification ? { delivery: receipt('failed') } : {}),
     });
     const callOpts = {
+        ...(options.sensitiveResponse !== undefined ? { sensitiveResponse: options.sensitiveResponse } : {}),
         ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
     };
@@ -155,9 +162,9 @@ export async function sendSlackText(
         if (expected.length || expectedFeatures.length) {
             const errorPrefix = expected.length ? 'slack_table_verification_failed' : 'slack_rich_verification_failed';
             if (!ts) return { ...failure(`${errorPrefix}:missing_message_ts`), sent: true, retryable: false };
-            const checked = await verifySlackTables(token, target, ts, expected, callOpts, expectedFeatures);
-            if (!checked.ok) return failure(`${errorPrefix}:${checked.reason}`);
+            const checked = await verifySlackTables(token, target, ts, expected, callOpts, expectedFeatures, content[index]);
             verifiedTables += checked.verifiedTables;
+            if (!checked.ok) return failure(`${errorPrefix}:${checked.reason}`);
             for (const feature of checked.verifiedFeatures ?? []) verifiedFeatures.add(feature);
         }
     }

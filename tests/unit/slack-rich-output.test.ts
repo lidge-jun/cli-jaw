@@ -43,6 +43,10 @@ test('a normal reply automatically preserves all demonstrated rich features in o
     const result = await sendSlackText('xoxb-fixture', target, fixture.markdown, { fetchImpl: fake.fetchImpl });
     assert.equal(result.ok, true);
     assert.equal(result.delivery?.verification, 'verified');
+    assert.equal(result.delivery?.tableContent, 'not_checked');
+    assert.equal(result.delivery?.richContent, 'not_checked');
+    assert.equal(result.delivery?.sourceAccuracy, 'not_checked');
+    assert.equal(result.delivery?.comparisonVersion, 1);
     assert.deepEqual(result.delivery?.verifiedFeatures, features);
     assert.equal(fake.posts.length, 1);
     assert.equal(fake.reads.length, 1);
