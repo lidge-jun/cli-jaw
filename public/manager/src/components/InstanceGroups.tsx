@@ -6,7 +6,7 @@ import type {
     DashboardLifecycleAction,
     DashboardProfile,
 } from '../types';
-import { comparePinnedThenLabel } from './instance-row-status';
+import { comparePinnedThenPort } from './instance-row-status';
 import { useSidebarGroupCollapse } from '../hooks/useSidebarGroupCollapse';
 import {
     SETTLED_TAIL_INITIAL_COUNT,
@@ -82,12 +82,11 @@ function groupInstances(instances: DashboardInstance[], selectedPort: number | n
     const running = remaining.filter(instance => instance.status === 'online');
     const attention = remaining.filter(instance => instance.status === 'error');
     const settled = remaining.filter(instance => isSettledStatus(instance.status));
-    const labelOf = (instance: Pick<DashboardInstance, 'label' | 'port'>) => instance.label || String(instance.port);
-    favorites.sort((a, b) => comparePinnedThenLabel(a, b, labelOf));
-    running.sort((a, b) => comparePinnedThenLabel(a, b, labelOf));
-    attention.sort((a, b) => comparePinnedThenLabel(a, b, labelOf));
-    settled.sort((a, b) => comparePinnedThenLabel(a, b, labelOf));
-    for (const group of userGroups.values()) group.sort((a, b) => comparePinnedThenLabel(a, b, labelOf));
+    favorites.sort(comparePinnedThenPort);
+    running.sort(comparePinnedThenPort);
+    attention.sort(comparePinnedThenPort);
+    settled.sort(comparePinnedThenPort);
+    for (const group of userGroups.values()) group.sort(comparePinnedThenPort);
 
     const groups: DashboardInstanceGroup[] = [
         { id: 'active', label: 'Selected', instances: selected },

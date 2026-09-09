@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-    comparePinnedThenLabel,
+    comparePinnedThenPort,
     composeInstanceRowTitle,
     formatWorkingDurationLabel,
     resolveInstanceRowStatus,
@@ -33,11 +33,30 @@ test('composeInstanceRowTitle is native tooltip copy', () => {
     );
 });
 
-test('comparePinnedThenLabel is favorite then label then port', () => {
-    const labelOf = (row: { label?: string | null; port: number }) => row.label || String(row.port);
-    const pinnedB = { favorite: true, label: 'beta', port: 2 };
-    const pinnedA = { favorite: true, label: 'alpha', port: 1 };
-    const plain = { favorite: false, label: 'aaa', port: 3 };
-    assert.ok(comparePinnedThenLabel(pinnedA, plain, labelOf) < 0);
-    assert.ok(comparePinnedThenLabel(pinnedA, pinnedB, labelOf) < 0);
+test('comparePinnedThenPort is favorite then ascending port', () => {
+    const pinnedHighPort = { favorite: true, label: 'zulu', port: 3499 };
+    const plainLowPort = { favorite: false, label: 'aaa', port: 3457 };
+    assert.ok(comparePinnedThenPort(pinnedHighPort, plainLowPort) < 0);
+    assert.ok(comparePinnedThenPort({ favorite: true, port: 3457 }, { favorite: true, port: 3499 }) < 0);
+});
+
+test('a custom label never moves an instance out of port order', () => {
+    const rows = [
+        { favorite: false, label: null, port: 3470 },
+        { favorite: false, label: '내 작업방', port: 3457 },
+        { favorite: false, label: 'zulu', port: 3462 },
+        { favorite: false, label: null, port: 3468 },
+    ];
+    assert.deepEqual(
+        [...rows].sort(comparePinnedThenPort).map(row => row.port),
+        [3457, 3462, 3468, 3470],
+    );
+});
+
+test('label string ordering does not survive digit-length changes', () => {
+    const rows = [
+        { favorite: false, label: 'cli-jaw 34570', port: 34570 },
+        { favorite: false, label: 'cli-jaw 3458', port: 3458 },
+    ];
+    assert.deepEqual([...rows].sort(comparePinnedThenPort).map(row => row.port), [3458, 34570]);
 });
