@@ -1,5 +1,5 @@
-import { isRetiredCliSelection } from '../../../../../../../src/types/cli-engine';
-export { isRetiredCliSelection };
+import { isRetiredCliSelection, retiredRuntimeLabel } from '../../../../../../../src/types/cli-engine';
+export { isRetiredCliSelection, retiredRuntimeLabel };
 import type { RuntimeTransport } from '../../../../../../../src/shared/runtime-contract';
 
 export type CliMeta = {
@@ -49,7 +49,7 @@ export type ActiveOverride = {
 
 const CODEX_MODELS: ReadonlyArray<string> = ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex-spark', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'];
 
-export const PRIMARY_CLIS: ReadonlyArray<string> = ['pi', 'claude', 'claude-e', 'agy', 'codex', 'cursor', 'kiro-code', 'gemini'];
+export const PRIMARY_CLIS: ReadonlyArray<string> = ['pi', 'claude', 'agy', 'codex', 'cursor', 'kiro-code', 'gemini'];
 
 export const CLI_META: Record<string, CliMeta> = {
     agy: {
@@ -74,29 +74,6 @@ export const CLI_META: Record<string, CliMeta> = {
         models: ['grok-composer-2.5-fast', 'grok-4.6', 'grok-4.5', 'grok-4.3'],
         efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
         effortNote: 'Pi runs through --mode rpc. grok-composer-2.5-fast is the verified default; bare grok-composer-2.5 currently has no team access.',
-    },
-    'ai-e': {
-        label: 'AI-E',
-        defaultProvider: 'claude',
-        providers: ['claude', 'codex', 'gemini', 'grok', 'copilot', 'kiro'],
-        models: ['opus', 'sonnet', 'haiku', ...CODEX_MODELS, 'gemini-3-flash-preview', 'grok-build', 'grok-composer-2.5-fast', 'gpt-5-mini'],
-        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-        modelsByProvider: {
-            claude: ['claude-fable-5', 'claude-opus-5', 'claude-opus-4-8', 'opus', 'sonnet', 'haiku'],
-            codex: CODEX_MODELS,
-            gemini: ['gemini-3-flash-preview'],
-            grok: ['grok-build', 'grok-composer-2.5-fast'],
-            copilot: ['gpt-5-mini'],
-            kiro: ['auto', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'claude-sonnet-5', 'claude-opus-5', 'claude-sonnet-4.6', 'deepseek-3.2', 'minimax-m2.5', 'glm-5', 'qwen3-coder-next'],
-        },
-        effortsByProvider: {
-            claude: ['low', 'medium', 'high', 'xhigh', 'max'],
-            codex: ['low', 'medium', 'high', 'xhigh'],
-            gemini: [],
-            grok: [],
-            copilot: ['low', 'medium', 'high'],
-            kiro: ['low', 'medium', 'high', 'xhigh'],
-        },
     },
     claude: {
         label: 'Claude',
@@ -129,14 +106,6 @@ export const CLI_META: Record<string, CliMeta> = {
             'claude-sonnet-4-6',
             'claude-sonnet-4-6[1m]',
             'claude-haiku-4-5',
-        ],
-        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-    },
-    'claude-e': {
-        label: 'Claude E',
-        models: [
-            'opus', 'sonnet', 'haiku',
-            'claude-fable-5', 'claude-sonnet-5', 'claude-opus-5', 'claude-opus-4-8', 'claude-opus-4-7', 'claude-sonnet-4-6', 'claude-haiku-4-5',
         ],
         efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
     },
@@ -338,7 +307,7 @@ export function coerceEffortForModel(
 }
 
 export function metaFor(cli: string, registry?: Record<string, CliMeta> | null): CliMeta {
-    if (isRetiredCliSelection(cli)) return { label: 'JWC (retired)', models: [], efforts: [] };
+    if (isRetiredCliSelection(cli)) return { label: retiredRuntimeLabel(cli), models: [], efforts: [] };
     return registry?.[cli] || CLI_META[cli] || { label: cli, models: [], efforts: [] };
 }
 

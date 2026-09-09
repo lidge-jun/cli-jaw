@@ -1,4 +1,4 @@
-import { isRetiredCliSelection } from '../../../src/types/cli-engine.js';
+import { isRetiredCliSelection, retiredRuntimeChoiceLabel } from '../../../src/types/cli-engine.js';
 
 /** Keep a saved retired value visible without offering it as a new runtime. */
 export function preserveRetiredRuntimeOption(select: HTMLSelectElement, current: string): void {
@@ -10,7 +10,7 @@ export function preserveRetiredRuntimeOption(select: HTMLSelectElement, current:
         select.prepend(option);
     }
     option.disabled = true;
-    option.textContent = 'JWC (retired — choose another runtime)';
+    option.textContent = retiredRuntimeChoiceLabel(current);
     select.value = current;
     select.title = 'The saved runtime is retired and cannot execute.';
 }

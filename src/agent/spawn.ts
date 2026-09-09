@@ -1391,7 +1391,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         const st = queueCtrl.fallbackStateForScope(scopeKey).get(cli);
         if (st?.fallbackCli && st.retriesLeft <= 0) {
             const fbAvail = detectCli(st.fallbackCli)?.available;
-            if (fbAvail) {
+            if (fbAvail && !isRetiredCliSelection(st.fallbackCli)) {
                 console.log(`[jaw:fallback] ${cli} retries exhausted → direct ${st.fallbackCli}`);
                 broadcast('agent_fallback', { from: cli, to: st.fallbackCli, reason: 'retries exhausted', ...empTag }, isEmployee ? 'internal' : 'public');
                 return spawnAgent(prompt, {

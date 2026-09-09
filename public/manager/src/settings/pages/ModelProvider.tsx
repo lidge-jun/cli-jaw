@@ -40,8 +40,6 @@ export function orderModelCliKeys(keys: string[]): string[] {
     return selectableRuntimeOptions(keys).sort((a, b) => {
         if (a === 'pi') return -1;
         if (b === 'pi') return 1;
-        if (a === 'ai-e') return b === 'pi' ? 1 : -1;
-        if (b === 'ai-e') return a === 'pi' ? -1 : 1;
         return 0;
     });
 }
@@ -331,7 +329,12 @@ export default function ModelProvider({ port, client, dirty, registerSave }: Set
                 <ChipListField
                     id="model-fallbackOrder"
                     label="Fallback order"
-                    error={fallback.some(isRetiredCliSelection) ? 'A saved JWC fallback is retired. Remove it before changing this order.' : null}
+                    error={(() => {
+                        const retired = fallback.find(isRetiredCliSelection);
+                        if (!retired) return null;
+                        const name = retiredRuntimeLabel(retired).replace(' (retired)', '');
+                        return `A saved ${name} fallback is retired. Remove it before changing this order.`;
+                    })()}
                     disabled={saving || resetting}
                     value={fallback}
                     onChange={(next) => {

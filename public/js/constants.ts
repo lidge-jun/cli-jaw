@@ -51,35 +51,6 @@ const FALLBACK_CLI_REGISTRY: CliRegistry = {
             'Gemini 3.6 Flash (Medium)',
         ],
     },
-    'ai-e': {
-        label: 'AI-E',
-        defaultProvider: 'claude',
-        providers: ['claude', 'codex', 'gemini', 'grok', 'copilot', 'kiro'],
-        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-        models: [
-            'opus', 'sonnet', 'haiku',
-            'gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex-spark', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
-            'gemini-3-flash-preview',
-            'grok-build', 'grok-composer-2.5-fast',
-            'gpt-5-mini',
-        ],
-        modelsByProvider: {
-            claude: ['claude-fable-5', 'claude-opus-5', 'claude-opus-4-8', 'opus', 'sonnet', 'haiku'],
-            codex: ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex-spark', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna'],
-            gemini: ['gemini-3-flash-preview'],
-            grok: ['grok-build', 'grok-composer-2.5-fast'],
-            copilot: ['gpt-5-mini'],
-            kiro: ['auto', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'claude-sonnet-5', 'claude-opus-5', 'claude-sonnet-4.6', 'deepseek-3.2', 'minimax-m2.5', 'glm-5', 'qwen3-coder-next'],
-        },
-        effortsByProvider: {
-            claude: ['low', 'medium', 'high', 'xhigh', 'max'],
-            codex: ['low', 'medium', 'high', 'xhigh'],
-            gemini: [],
-            grok: [],
-            copilot: ['low', 'medium', 'high'],
-            kiro: ['low', 'medium', 'high', 'xhigh'],
-        },
-    },
     claude: {
         label: 'Claude',
         efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
@@ -107,22 +78,6 @@ const FALLBACK_CLI_REGISTRY: CliRegistry = {
             'claude-opus-4-6[1m]',
             'claude-sonnet-4-6',
             'claude-sonnet-4-6[1m]',
-            'claude-haiku-4-5',
-        ],
-    },
-    'claude-e': {
-        label: 'Claude E',
-        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-        models: [
-            'opus',
-            'sonnet',
-            'haiku',
-            'claude-fable-5',
-            'claude-sonnet-5',
-            'claude-opus-5',
-            'claude-opus-4-8',
-            'claude-opus-4-7',
-            'claude-sonnet-4-6',
             'claude-haiku-4-5',
         ],
     },
@@ -364,7 +319,7 @@ export function getCliMeta(cli: string): CliEntry | null {
     return CLI_REGISTRY[cli] || null;
 }
 
-export const PRIMARY_CLIS: readonly string[] = ['pi', 'claude', 'claude-e', 'agy', 'codex', 'cursor', 'kiro-code', 'gemini'];
+export const PRIMARY_CLIS: readonly string[] = ['pi', 'claude', 'agy', 'codex', 'cursor', 'kiro-code', 'gemini'];
 
 export interface RolePreset {
     value: string;

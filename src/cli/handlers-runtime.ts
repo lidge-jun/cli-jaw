@@ -353,7 +353,12 @@ export async function fallbackHandler(args: string[], ctx: CliCommandContext): P
     const L = ctx.locale || 'ko';
     const settings = await safeCall(ctx.getSettings, null) as Record<string, unknown> | null;
     if (!settings) return { ok: false, text: t('cmd.settingsLoadFail', {}, L) };
-    const available = Object.keys((settings["perCli"] as Record<string, unknown> | undefined) || {});
+    const available = Object.keys((settings["perCli"] as Record<string, unknown> | undefined) || {})
+        .filter((cli) => !isRetiredCliSelection(cli));
+    const retiredArg = args.map((a) => a.toLowerCase()).find(isRetiredCliSelection);
+    if (retiredArg) {
+        return { ok: false, text: `${retiredRuntimeDiagnostic(retiredArg)}: Select an available runtime: ${available.join(', ')}` };
+    }
 
     if (!args.length) {
         const fb = (settings["fallbackOrder"] as string[] | undefined) || [];
@@ -407,6 +412,9 @@ export async function flushHandler(args: string[], ctx: CliCommandContext): Prom
         const r = await ctx.updateSettings({ memory: mem }) as SlashResult;
         if (r?.ok === false) return r;
         return { ok: true, text: t('cmd.flush.reset', {}, L) };
+    }
+    if (isRetiredCliSelection(first)) {
+        return { ok: false, text: `${retiredRuntimeDiagnostic(first)}: Select an available runtime: ${[...CLI_KEYS].join(', ')}` };
     }
 
     const cliKeys = [...CLI_KEYS] as readonly string[];

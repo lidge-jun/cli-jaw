@@ -35,7 +35,7 @@ import {
     validateHHMM,
     validateInterval,
 } from './components/heartbeat-helpers';
-import { metaFor, selectableRuntimeOptions, isRetiredCliSelection } from './components/agent/agent-meta';
+import { metaFor, selectableRuntimeOptions, isRetiredCliSelection, retiredRuntimeLabel } from './components/agent/agent-meta';
 
 // Re-export helpers (and types) that tests import from this module.
 export {
@@ -240,7 +240,7 @@ export default function Heartbeat({ port, client, dirty, registerSave }: Setting
                     id="hb-target"
                     label="Target"
                     value={hbTarget}
-                    missingValueLabel={isRetiredCliSelection(hbTarget) ? 'JWC (retired)' : undefined}
+                    missingValueLabel={isRetiredCliSelection(hbTarget) ? retiredRuntimeLabel(hbTarget) : undefined}
                     error={isRetiredCliSelection(hbTarget) ? 'The saved target runtime is retired. Choose an available target.' : null}
                     options={targetOptions}
                     onChange={(next) => {

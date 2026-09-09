@@ -6,6 +6,7 @@ import type { EmployeeListing } from '../core/employees.js';
 import { db, clearEmployeeSession } from '../core/db.js';
 import { settings, saveSettings } from '../core/config.js';
 import { broadcast } from '../core/bus.js';
+import { isRetiredCliSelection, retiredRuntimeDiagnostic } from '../types/cli-engine.js';
 import { regenerateB } from '../prompt/builder.js';
 import { CLI_KEYS } from './registry.js';
 import { t } from '../core/i18n.js';
@@ -82,6 +83,9 @@ export async function employeeHandler(args: string[], ctx: CliCommandContext): P
         const name = args[1]?.trim();
         const cli = args[2]?.trim();
         if (!name || !cli) return { ok: false, text: t('cmd.employee.cliUsage', {}, L) };
+        if (isRetiredCliSelection(cli)) {
+            return { ok: false, text: `${retiredRuntimeDiagnostic(cli)}: Select an available runtime: ${CLI_KEYS.join(', ')}` };
+        }
         if (!CLI_KEYS.includes(cli as typeof CLI_KEYS[number])) {
             return { ok: false, text: t('cmd.employee.cliUnknown', { cli, available: CLI_KEYS.join(', ') }, L) };
         }

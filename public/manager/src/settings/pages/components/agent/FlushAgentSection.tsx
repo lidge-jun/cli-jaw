@@ -1,6 +1,6 @@
 import { SelectField } from '../../../fields';
 import { SettingsSection } from '../../page-shell';
-import { metaFor, selectableRuntimeOptions, isRetiredCliSelection, type CliMeta } from './agent-meta';
+import { metaFor, selectableRuntimeOptions, isRetiredCliSelection, retiredRuntimeLabel, type CliMeta } from './agent-meta';
 
 type FlushAgentSectionProps = {
     activeCli: string;
@@ -46,7 +46,7 @@ export function FlushAgentSection({
                         id="agent-flush-cli"
                         label="Flush CLI"
                         value={flushCli}
-                        missingValueLabel={isRetiredCliSelection(flushCli) ? 'JWC (retired)' : undefined}
+                        missingValueLabel={isRetiredCliSelection(flushCli) ? retiredRuntimeLabel(flushCli) : undefined}
                         error={isRetiredCliSelection(effectiveCli) ? 'The saved flush runtime is retired. Choose an available runtime.' : null}
                         options={[
                             { value: '', label: '(active CLI)' },
