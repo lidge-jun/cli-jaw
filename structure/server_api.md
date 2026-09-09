@@ -222,6 +222,11 @@ All trace routes set `Cache-Control: no-store` before auth/parsing. Activity dis
 `POST /api/heartbeat/:jobId/mention-watch-fresh-start` `{ since }` → 보류 해제. 빈 `since`는 `400`이다(floor 없는 watch는 도달 가능한 history를 거꾸로 훑어 이미 답한 것을 다시 답한다). workspace 검증(`auth.test`)이 유일한 await이고 그 뒤는 전부 동기다 — 검증 전에 hold와 파일을 snapshot한 뒤 await하면, 패배한 승인이 낡은 파일 사본으로 재개해 승자의 floor를 덮어쓴다(DB는 그 뒤에야 conflict를 알려 주므로 파일 손상은 이미 끝나 있다). 순서는 파일 저장(temp+rename) → 단일 트랜잭션(`pending`→`resolved` CAS → v1 archive → delete) → `startHeartbeat()`이며 교환 불가다. 사이에서 죽으면 새 floor만 저장되고 보류는 남으므로 재시도로 복구된다. 반대 순서는 옛 floor가 살아 있는 채로 보류를 풀어 backlog를 replay한다. 같은 `since`로 재시도하면 `already-resolved`, 다른 `since`면 `409`, 보류 이력이 없으면 `404`다. 일반 `PUT`의 `enabled: true`는 승인으로 읽지 않는다 — 모든 UI가 `mentionWatch`를 생략해 보내므로, 저장 클릭을 동의로 해석하면 무관한 편집이 보류를 풀어 버린다.
 
 `POST /api/channel/send`에서 `channel`은 `telegram|discord|slack|active` transport다. 대화 ID는 `chat_id` 또는 `target.targetId`에 넣는다. Slack thread를 명시할 때 `target.threadId`는 reply ts가 아닌 parent message ts다. target을 생략하면 검증된 현재 대화와 thread를 사용한다. 빈 `slack.channelIds`는 임의 explicit channel을 열지 않으며, 이미 저장·검증된 `lastActive/latestSeen`과 같은 conversation/thread만 명시적으로 재사용할 수 있다.
+새 채널 공지의 최상위 메시지는 `target.threadId: ""`로 명시한다. `threadId` 생략은 기존 활성 스레드 상속을 허용하므로 새 스레드 생성과 같지 않다. 게시된 루트의 주소를 확인한 뒤 답글의 부모 ts로 사용한다.
+
+
+Slack 표 전송은 `text` 안의 GFM 표와 명시적 `blocks`를 모두 지원한다. `blocks`는 Slack `type:text`에만 허용되며, 여러 표는 메시지를 나눈다. 표 전송 성공은 저장 메시지 재조회 후 `delivery.verification=verified`와 예상·검증 표 개수가 같을 때만 반환한다. `sent:true, retryable:false`인 검증 실패는 전체 재전송하지 말고 반환된 메시지 ID로 확인한다. Ordinary Slack replies now preserve native Markdown headings, lists, checklists, quotes, code languages, links and standalone HTTPS images. Compact replies are packed into one message. Rich sends return `expectedFeatures`/`verifiedFeatures` in the persisted verification receipt; missing features fail instead of silently degrading.
+
 
 `turn_conversation`은 인바운드 턴 프롬프트가 준 `reply_to=` 값을 그대로 돌려주는 필드다. target을 조립할 수 없을 때 생략하는 대신 이걸 echo 하면 그 턴이 답하는 대화로 배달된다 — 생략은 "가장 최근에 말한 대화"로 풀리고, 동시 턴에서는 그게 다른 대화일 수 있다 (#474). 우선순위는 `target` > `turn_conversation` > `lastActive` > `latestSeen`이며, `turn_conversation`도 동일한 allowlist 검증을 받는다. 잘못된 값은 예외 대신 없는 것으로 처리된다.
 

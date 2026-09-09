@@ -15,6 +15,7 @@ import { applyOutputPolicy } from '../core/policy-hooks.js';
 import { redactChannelSecrets } from './redact.js';
 import { log } from '../core/logger.js';
 import { recordSelfDelivery } from './turn-delivery.js';
+import { normalizeSlackBlocks, type SlackBlock } from '../slack/blocks.js';
 
 /** The one record of an outbound send attempt.
  *
@@ -98,6 +99,7 @@ export type ChannelSendRequest = {
     channel?: MessengerChannel | 'active';
     type: OutboundType;
     text?: string;
+    blocks?: SlackBlock[];
     filePath?: string;
     caption?: string;
     target?: RemoteTarget;
@@ -200,6 +202,7 @@ export function normalizeChannelSendRequest(body: Record<string, any>): ChannelS
         channel: normalizeChannel(body["channel"]),
         type: normalizeOutboundType(body["type"]),
         text: body["text"],
+        blocks: normalizeSlackBlocks(body['blocks']),
         filePath,
         caption: body["caption"],
         target: body["target"],
@@ -385,6 +388,9 @@ function authorizeExplicitTarget(target: RemoteTarget, channel: MessengerChannel
 
 export async function sendChannelOutput(req: ChannelSendRequest): Promise<{ ok: boolean; error?: string; [k: string]: unknown }> {
     const channel = resolveChannel(req);
+    if (req.blocks && (channel !== 'slack' || req.type !== 'text')) {
+        return { ok: false, status: 400, error: 'blocks_supported_only_for_slack_text' };
+    }
 
     if (!OUTBOUND_TYPES.has(req.type)) {
         return { ok: false, status: 400, error: `Invalid outbound type: ${String(req.type)}` };

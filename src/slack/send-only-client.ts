@@ -6,9 +6,11 @@ import { settings } from '../core/config.js';
 import type { RemoteTarget } from '../messaging/types.js';
 import { slackApi, describeSlackError, slackFailure, type SlackFetch } from './api.js';
 import { abortableDelay } from '../messaging/outbound-lifecycle.js';
-import { chunkSlackMessage, toMrkdwn } from './format.js';
+import { buildSlackTextPayloads } from './format.js';
+import { buildSlackBlockPayloads, expectedTableShapes, type TableShape, type SlackTextPayload } from './blocks.js';
+import { verifySlackTables } from './table-verification.js';
+import { expectedRichFeatures } from './render-features.js';
 import { MAX_INLINE_RATE_LIMIT_MS, classifySendFailure, retryAfterMs } from '../messaging/retry.js';
-import { redactOutboundPayload } from '../messaging/redact.js';
 import { log } from '../core/logger.js';
 
 export type SlackSendClientResult =
@@ -79,105 +81,86 @@ export async function sendSlackText(
     target: RemoteTarget,
     text: string,
     options: { fetchImpl?: SlackFetch; blocks?: unknown; signal?: AbortSignal; requireBodyDelivery?: boolean } = {},
-): Promise<{ ok: boolean; error?: string; status?: number; ts?: string }> {
-    const chunks = chunkSlackMessage(toMrkdwn(text));
-    if (options.requireBodyDelivery && !chunks.some(chunk => chunk.trim().length > 0)) {
+): Promise<{ ok: boolean; error?: string; status?: number; ts?: string; sent?: boolean;
+    retryable?: boolean; delivery?: { verification: 'verified' | 'failed';
+        expectedTables: number; verifiedTables: number; channelId: string; messageTs: string[];
+        expectedFeatures?: string[]; verifiedFeatures?: string[] } }> {
+    let chunks: SlackTextPayload[];
+    let shapes: TableShape[][];
+    try {
+        chunks = options.blocks != null
+            ? buildSlackBlockPayloads(text, options.blocks)
+            : buildSlackTextPayloads(text);
+        shapes = chunks.map(chunk => expectedTableShapes(chunk.blocks));
+    } catch (error) {
+        if (error instanceof RangeError) return slackFailure(error.message, 400);
+        throw error;
+    }
+    if (options.requireBodyDelivery && !chunks.some(chunk => chunk.text.trim().length > 0)) {
         return slackFailure('empty_message', 400);
     }
-    // The FIRST chunk's ts. A caller that wants to remove what it just posted —
-    // the queue notice — needs a handle, and the first message is the one the
-    // user sees, so it is the stable one to name.
+    const expectedTables = shapes.reduce((total, part) => total + part.length, 0);
+    const features = chunks.map(chunk => expectedRichFeatures(chunk.blocks));
+    const allFeatures = [...new Set(features.flat())].sort();
+    const verifiedFeatures = new Set<string>();
+    const needsVerification = expectedTables > 0 || allFeatures.length > 0;
+    let verifiedTables = 0;
     let firstTs: string | undefined;
-    // `text` is masked inside chunkSlackMessage(); `blocks` bypassed masking
-    // entirely (#408). Computed once, before the loop, so the first send and the
-    // rate-limit retry below carry the same value — masking only the first would
-    // put the original back on the wire the moment Slack throttled us.
-    const safeBlocks = options.blocks ? redactOutboundPayload(options.blocks) : undefined;
+    const messageTs: string[] = [];
+    const receipt = (verification: 'verified' | 'failed') => ({
+        verification, expectedTables, verifiedTables, channelId: target.targetId, messageTs,
+        ...(allFeatures.length ? { expectedFeatures: allFeatures, verifiedFeatures: [...verifiedFeatures].sort() } : {}),
+    });
+    // Preserve evidence of partial delivery. Retrying a whole send after a
+    // readback failure would post the same table again; callers must re-read it.
+    const failure = (error: string, status = 502) => ({
+        ...slackFailure(error, status),
+        ...(firstTs ? { ts: firstTs, sent: true, retryable: false } : {}),
+        ...(needsVerification ? { delivery: receipt('failed') } : {}),
+    });
     const callOpts = {
         ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
     };
     for (const [index, chunk] of chunks.entries()) {
-        // A shutdown abort between chunks is a cancellation, not a vendor
-        // failure — report it as its own error so no caller records a Slack
-        // rejection (or closes a notice as answered) for a send we cut short.
-        if (options.signal?.aborted) {
-            return slackFailure('slack_send_aborted', 499);
-        }
-        const result = await slackApi<{ ts?: string }>(
-            token,
-            'chat.postMessage',
-            {
-                channel: target.targetId,
-                text: chunk,
-                // thread_ts is the PARENT ts (see slack-target.resolveSlackThreadTs)
-                ...(target.threadId ? { thread_ts: target.threadId } : {}),
-                ...(index === 0 && safeBlocks ? { blocks: safeBlocks } : {}),
-            },
-            callOpts,
-        );
-        if (result.ok) {
-            if (index === 0 && result.data?.ts) firstTs = result.data.ts;
-            // Recorded PER CHUNK, at the moment the post lands.
-            //
-            // Recording once after the loop counted a send, not a post: a chunked
-            // answer whose third chunk failed put two messages on screen and
-            // recorded nothing, which is the direction that hides a duplicate.
-            // `index`/`of` keep a long answer readable as one answer.
-            recordSlackPost(target, index, chunks.length);
-        }
+        if (options.signal?.aborted) return failure('slack_send_aborted', 499);
+        const payload = {
+            channel: target.targetId, ...chunk,
+            ...(target.threadId ? { thread_ts: target.threadId } : {}),
+        };
+        let result = await slackApi<{ ts?: string }>(token, 'chat.postMessage', payload, callOpts);
         if (!result.ok) {
-            // Keep an abort recognizable end to end (#417): describeSlackError
-            // would wrap it as 'Slack API error: slack_send_aborted', and
-            // anything matching the raw code would then mislabel a cancellation.
-            if (result.error === 'slack_send_aborted') {
-                return slackFailure('slack_send_aborted', 499);
-            }
-            const classified = classifySendFailure({
-                error: result.error,
-                status: result.status,
-                retryAfterMs: result.retryAfterMs,
-            });
-            const wait = result.retryAfterMs ?? retryAfterMs({
-                error: result.error,
-                status: result.status,
-                retryAfterMs: result.retryAfterMs,
-            });
+            if (result.error === 'slack_send_aborted') return failure('slack_send_aborted', 499);
+            const classified = classifySendFailure(result);
+            const wait = result.retryAfterMs ?? retryAfterMs(result);
             if (classified === 'rate-limit' && wait > 0 && wait <= MAX_INLINE_RATE_LIMIT_MS) {
-                // Abortable: a shutdown must not sit out a rate-limit window.
                 await abortableDelay(wait, options.signal);
-                if (options.signal?.aborted) {
-                    return slackFailure('slack_send_aborted', 499);
-                }
-                const retried = await slackApi<{ ts?: string }>(
-                    token,
-                    'chat.postMessage',
-                    {
-                        channel: target.targetId,
-                        text: chunk,
-                        ...(target.threadId ? { thread_ts: target.threadId } : {}),
-                        ...(index === 0 && safeBlocks ? { blocks: safeBlocks } : {}),
-                    },
-                    callOpts,
-                );
-                if (retried.ok) {
-                    // Without this a throttled first send leaves a notice nobody
-                    // can delete: the retry is what actually created the message.
-                    if (index === 0 && retried.data?.ts) firstTs = retried.data.ts;
-                    // The retry is what put this chunk on screen, so it is the post
-                    // that has to be recorded. Missing it would make every
-                    // throttled answer partly invisible to a duplicate audit.
-                    recordSlackPost(target, index, chunks.length);
-                    continue;
-                }
-                if (retried.error === 'slack_send_aborted') {
-                    return slackFailure('slack_send_aborted', 499);
-                }
-                return slackFailure(describeSlackError(retried.error, retried.data), retried.status, retried.retryAfterMs, retried.grantedScopes);
+                if (options.signal?.aborted) return failure('slack_send_aborted', 499);
+                // Retry exactly the same redacted payload, including its blocks.
+                result = await slackApi<{ ts?: string }>(token, 'chat.postMessage', payload, callOpts);
             }
-            return slackFailure(describeSlackError(result.error, result.data), result.status, result.retryAfterMs, result.grantedScopes);
+            if (!result.ok) {
+                if (result.error === 'slack_send_aborted') return failure('slack_send_aborted', 499);
+                return { ...failure(describeSlackError(result.error, result.data), result.status),
+                    ...(result.retryAfterMs !== undefined ? { retryAfterMs: result.retryAfterMs } : {}),
+                    ...(result.grantedScopes !== undefined ? { grantedScopes: result.grantedScopes } : {}) };
+            }
+        }
+        const ts = result.data?.ts;
+        if (index === 0 && ts) firstTs = ts;
+        if (ts) messageTs.push(ts);
+        recordSlackPost(target, index, chunks.length);
+        const expected = shapes[index] ?? [];
+        const expectedFeatures = features[index] ?? [];
+        if (expected.length || expectedFeatures.length) {
+            const errorPrefix = expected.length ? 'slack_table_verification_failed' : 'slack_rich_verification_failed';
+            if (!ts) return { ...failure(`${errorPrefix}:missing_message_ts`), sent: true, retryable: false };
+            const checked = await verifySlackTables(token, target, ts, expected, callOpts, expectedFeatures);
+            if (!checked.ok) return failure(`${errorPrefix}:${checked.reason}`);
+            verifiedTables += checked.verifiedTables;
+            for (const feature of checked.verifiedFeatures ?? []) verifiedFeatures.add(feature);
         }
     }
-    // exactOptionalPropertyTypes: omit the key rather than sending undefined.
-    return firstTs ? { ok: true, ts: firstTs } : { ok: true };
+    return { ok: true, ...(firstTs ? { ts: firstTs } : {}),
+        ...(needsVerification ? { delivery: receipt('verified') } : {}) };
 }
