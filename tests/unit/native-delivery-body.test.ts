@@ -6,6 +6,7 @@ let formatted: string[] = [];
 mock.module('../../src/slack/format.ts', { namedExports: {
     toMrkdwn: (text: string) => text,
     chunkSlackMessage: () => formatted,
+    buildSlackTextPayloads: () => formatted.map(text => ({ text })),
 } });
 mock.module('../../src/discord/forwarder.ts', { namedExports: {
     chunkDiscordMessage: () => formatted,

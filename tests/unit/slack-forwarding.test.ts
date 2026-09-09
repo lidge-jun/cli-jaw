@@ -49,3 +49,48 @@ test('SFW-001: text goes first, then each image is relayed with its filename as 
         settings['workingDir'] = priorWorkingDir;
     }
 });
+
+test('ordinary agent_done prose with a self-chosen table renders richly without format flags', async () => {
+    const priorFetch = globalThis.fetch;
+    const posts: Record<string, unknown>[] = [];
+    const reads: URLSearchParams[] = [];
+    const success: unknown[] = [];
+    const table = '| 요금제 | 월 비용 | 인원 |\n| --- | --- | --- |\n| A | 20,000원 | 5명 |\n| B | 30,000원 | 10명 |';
+    let omitStoredTable = false;
+    globalThis.fetch = (async (url, init) => {
+        if (String(url).endsWith('/chat.postMessage')) {
+            posts.push(JSON.parse(String(init?.body)));
+            return new Response(JSON.stringify({ ok: true, ts: `10.${posts.length}` }));
+        }
+        assert.ok(String(url).endsWith('/conversations.replies'));
+        const params = new URLSearchParams(String(init?.body));
+        reads.push(params);
+        return new Response(JSON.stringify({ ok: true, messages: [{ ts: params.get('oldest'),
+            blocks: omitStoredTable ? [] : [{ type: 'table', rows: [
+                [{ type: 'raw_text', text: '요금제' }, { type: 'raw_text', text: '월 비용' }, { type: 'raw_text', text: '인원' }],
+                [{ type: 'raw_text', text: 'A' }, { type: 'raw_text', text: '20,000원' }, { type: 'raw_text', text: '5명' }],
+                [{ type: 'raw_text', text: 'B' }, { type: 'raw_text', text: '30,000원' }, { type: 'raw_text', text: '10명' }],
+            ] }],
+        }] }));
+    }) as typeof fetch;
+    try {
+        const forward = createSlackForwarder({
+            getToken: () => 'xoxb-fixture',
+            getLastTarget: () => ({ channel: 'slack', targetKind: 'user', peerKind: 'direct', targetId: 'D1', threadId: '9.1' }),
+            log: info => success.push(info),
+        });
+        // Only ordinary final text: no user request, blocks, table flag or skill invocation.
+        await forward('agent_done', { text: `8명이라면 B가 적합합니다.\n\n${table}\n\nA는 인원이 부족합니다.` });
+        assert.equal(posts.length, 1);
+        assert.deepEqual(posts[0]!['blocks'], [{ type: 'markdown', text: `8명이라면 B가 적합합니다.\n\n${table}\n\nA는 인원이 부족합니다.` }]);
+        assert.equal(reads.length, 1);
+        assert.equal(reads[0]!.get('ts'), '9.1');
+        assert.ok(posts.every(p => p['thread_ts'] === '9.1'));
+        assert.equal(success.length, 1);
+        omitStoredTable = true;
+        await forward('agent_done', { text: table });
+        assert.equal(success.length, 1, 'a missing stored table must not produce a successful forwarding receipt');
+    } finally {
+        globalThis.fetch = priorFetch;
+    }
+});

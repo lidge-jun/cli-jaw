@@ -92,3 +92,17 @@ test('CST-003: a configured allowlist still governs', async () => {
         .run(buildRemoteBindingKey(working));
 });
 
+test('an explicit empty thread posts to the channel root despite a last-active thread', async () => {
+    const root: RemoteTarget = { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C_ROOT', threadId: '' };
+    resolveOrCreateRemoteSession(buildRemoteBindingKey(root));
+    const seen: RemoteTarget[] = [];
+    registerSendTransport('slack', async req => { seen.push(req.target!); return { ok: true }; });
+    await withSlack([], async () => {
+        setLastActiveTarget('slack', { ...root, threadId: 'existing.1' });
+        const result = await sendChannelOutput({ channel: 'slack', type: 'text', text: 'new announcement', target: root });
+        assert.equal(result.ok, true);
+        assert.equal(seen.length, 1);
+        assert.equal(seen[0]!.threadId, '', 'a new announcement must not inherit the old thread');
+    });
+    db.prepare('DELETE FROM remote_session_bindings WHERE remote_key = ?').run(buildRemoteBindingKey(root));
+});
