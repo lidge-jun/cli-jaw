@@ -56,3 +56,13 @@ test('slackApi timeout alone aborts a stalled request', async () => {
     assert.equal(result.ok, false);
     assert.equal(seen[0]?.signal?.aborted, true);
 });
+
+test('bounded response cancels a body when cancellation races the fetch response', async () => {
+    const controller = new AbortController(); let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({ cancel() { cancelled = true; } });
+    const result = await slackApi('fixture', 'conversations.history', {}, {
+        signal: controller.signal, maxResponseBytes: 1024,
+        fetchImpl: async () => { controller.abort(); return new Response(stream); },
+    });
+    assert.equal(result.ok, false); assert.equal(cancelled, true);
+});
