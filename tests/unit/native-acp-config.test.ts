@@ -397,3 +397,40 @@ test('an unadvertised model fails with a code-only error and logs the advertised
         assert.match(logged, /\(\+1 not shown\)/);
     } finally { console.warn = original; }
 });
+
+test('a two-state toggle sharing the effort category is never an effort selector', async () => {
+    // Cursor advertises thinking as false/true beside effort under thought_level.
+    const thinking = (id = 'thinking') => select(id, 'false', [choice('false', 'Off'), choice('true', 'On')], 'thought_level', 'Thinking');
+    // With only the toggle advertised there is no effort selector at all, rather
+    // than a reasoning level written into a toggle.
+    const only = fixture([select(), thinking()]);
+    await assert.rejects(configureAcpModel(only.port, { effort: 'high' }), /acp_config_unsupported_effort/);
+    assert.deepEqual(only.writes, []);
+    // Beside a differently named effort select the toggle no longer makes it ambiguous.
+    const named = fixture([thinking(), effort('reasoning', 'thought_level')]);
+    await configureAcpModel(named.port, { effort: 'medium' });
+    assert.deepEqual(named.writes, [['reasoning', 'medium']]);
+    // A real two-choice effort ladder is untouched.
+    const ladder = fixture([select('effort', 'low', [choice('low'), choice('high')], 'thought_level')]);
+    await configureAcpModel(ladder.port, { effort: 'high' });
+    assert.deepEqual(ladder.writes, [['effort', 'high']]);
+});
+
+test('an unadvertised effort names the advertised rungs without interpolating them into the error', async () => {
+    const warnings: string[] = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => { warnings.push(args.map(String).join(' ')); };
+    try {
+        const f = fixture([select(), effort()]);
+        await assert.rejects(configureAcpModel(f.port, { effort: 'ultra' }), error => {
+            assert.equal((error as Error).message, 'acp_config_unsupported_effort');
+            return true;
+        });
+        assert.deepEqual(f.writes, []);
+        assert.equal(warnings.length, 1);
+        assert.match(warnings[0]!, /configured effort is not advertised/);
+        assert.match(warnings[0]!, /high, medium, extra-high/);
+    } finally {
+        console.warn = original;
+    }
+});

@@ -113,6 +113,15 @@ function token(value: string): string {
 function effortSelector(config: AcpSelectConfig): boolean {
     const category = token(config.category ?? '');
     if (category === 'model') return false;
+    // A two-state toggle is not a reasoning ladder. Cursor advertises `thinking`
+    // as false/true in the same category as `effort`, and an exact id only
+    // outranks it when one exists; a provider offering the toggle beside a
+    // differently named effort select would otherwise be ambiguous, and one
+    // offering only the toggle would have a reasoning level written into it.
+    if (config.options.length === 2 && config.options.every(option => {
+        const value = token(option.value);
+        return value === 'true' || value === 'false';
+    })) return false;
     if (token(config.id) === 'effort' || category === 'thoughtlevel') return true;
     if (category !== 'modeloption' && category !== 'modelconfig') return false;
     return EFFORT_SELECTOR_NAMES.has(token(config.id)) || EFFORT_SELECTOR_NAMES.has(token(config.name));
@@ -160,7 +169,13 @@ function effortChoice(config: AcpSelectConfig, effort: string): string {
         || effortValue(option.name) === normalized);
     if (matches.length > 1) throw new Error('acp_config_ambiguous_effort_value');
     const match = matches[0];
-    if (!match) throw new Error('acp_config_unsupported_effort');
+    if (!match) {
+        // Switching transport leaves an invalid effort as easily as an invalid
+        // model: the observed Cursor ACP build offers low/medium/high/max, so a
+        // stored xhigh has no spelling here and died with a bare code (#657).
+        reportAdvertised('effort', config);
+        throw new Error('acp_config_unsupported_effort');
+    }
     return match.value;
 }
 
@@ -188,12 +203,12 @@ function assertApplied(configs: ReadonlyArray<AcpSelectConfig>, kind: SelectionK
 const CLEAN_MODEL_ID = /^[A-Za-z0-9._:@-]{1,64}$/;
 const ADVERTISED_LOG_CAP = 12;
 
-function reportUnsupportedModel(config: AcpSelectConfig): void {
+function reportAdvertised(kind: SelectionKind, config: AcpSelectConfig): void {
     try {
         const clean = config.options.map(option => option.value).filter(value => CLEAN_MODEL_ID.test(value));
         const shown = clean.slice(0, ADVERTISED_LOG_CAP).join(', ');
         const omitted = config.options.length - Math.min(clean.length, ADVERTISED_LOG_CAP);
-        console.warn('[acp:config] configured model is not advertised; advertised ids:',
+        console.warn(`[acp:config] configured ${kind} is not advertised; advertised ids:`,
             shown || '(none printable)', omitted > 0 ? `(+${omitted} not shown)` : '');
     } catch { /* diagnostics never mask the configuration failure */ }
 }
@@ -225,7 +240,7 @@ export async function configureAcpModel(port: AcpConfigPort, input: {
             if (translated !== undefined && config.options.some(option => option.value === translated)) {
                 selected = translated;
             } else {
-                reportUnsupportedModel(config);
+                reportAdvertised('model', config);
                 throw new Error('acp_config_unsupported_model');
             }
         }

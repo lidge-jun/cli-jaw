@@ -631,9 +631,12 @@ export function registerSettingsRoutes(
         // recorded start failure, so the key is omitted rather than sent as null.
         res.json(Object.fromEntries(Object.entries(cached).map(([cli, row]) => {
             if (!(isSwitchableNativeCli(cli) || cli === 'codex-app' || cli === 'pi')) return [cli, row];
-            const failure = nativeStartFailure(cli);
-            return [cli, { ...row, runtimeSelection: runtimeSelectionStatus(cli, settings['perCli']?.[cli]?.transport),
-                ...(failure ? { lastStartFailure: failure } : {}) }];
+            const runtimeSelection = runtimeSelectionStatus(cli, settings['perCli']?.[cli]?.transport);
+            // Only a native run records this, so a row that is no longer native can
+            // only be showing a stale native fault — misleading exactly when someone
+            // is working out why the print transport is misbehaving.
+            const failure = runtimeSelection.transport === 'native' ? nativeStartFailure(cli) : undefined;
+            return [cli, { ...row, runtimeSelection, ...(failure ? { lastStartFailure: failure } : {}) }];
         })));
     });
 

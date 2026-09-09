@@ -88,7 +88,7 @@ import { PiProjection } from './runtime/pi-projection.js';
 import { PiRawTrace } from './runtime/pi-raw-trace.js';
 import { createPrintActivity, finishPrintActivity } from './runtime/print-activity.js';
 import { isNativeAdapterImplemented, isNativeWorkerImplemented, isSwitchableNativeCli, resolveRuntimeTransport, runtimeSessionBucket } from './runtime/selection.js';
-import { clearNativeStartFailure, recordNativeStartFailure } from './runtime/start-failure.js';
+import { clearNativeStartFailure, nativeStartFailure, recordNativeStartFailure } from './runtime/start-failure.js';
 import { asCliEventRecord, discriminate, fieldString, type CliEventRecord } from '../types/cli-events.js';
 import { isRemoteTarget, type RemoteTarget } from '../messaging/types.js';
 import { buildRemoteBindingKey } from '../messaging/session-key.js';
@@ -1898,9 +1898,20 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             text: outcome.finalText?.trim() ?? '', code: outcome.status === 'done' ? 0 : outcome.status === 'stopped' ? 130 : 1,
             runtimeOutcome: outcome, traceRunId,
         });
-        const diagnostic = () => grok ? 'Grok native runtime failed. Check the native model, effort and existing CLI login.' : facade?.lastError?.includes('config')
-            ? 'Cursor native model or effort is unsupported. Choose an advertised model/effort; Composer models may require an unset effort.'
-            : 'Cursor native runtime failed. Check the native model, effort and existing CLI login.';
+        // A runtime that never acquired a lease has no facade to ask, so the
+        // substring heuristic below could only ever produce the generic sentence
+        // for exactly the failures that need naming. The recorded start code is
+        // provider-independent by construction, so it decides the wording and is
+        // shown alongside it (#658).
+        const diagnostic = () => {
+            const code = nativeStarted ? undefined : nativeStartFailure(cli)?.code;
+            const named = code ? ` (${code})` : '';
+            if (grok) return `Grok native runtime failed.${named} Check the native model, effort and existing CLI login.`;
+            const configFault = code ? code.startsWith('acp_config_') : facade?.lastError?.includes('config');
+            return configFault
+                ? `Cursor native model or effort is unsupported.${named} Choose an advertised model/effort; Composer models may require an unset effort.`
+                : `Cursor native runtime failed.${named} Check the native model, effort and existing CLI login.`;
+        };
         const startFailedRuntime = () => {
             if (!failedStart) {
                 failedStart = new RuntimeProjection(identity);
