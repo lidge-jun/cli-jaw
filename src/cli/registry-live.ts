@@ -67,36 +67,6 @@ export async function buildLiveCliRegistry() {
         // rewrite a user's default runtime.
         registry['codex'] = { ...registry['codex'], ...codexPatch };
         registry['codex-app'] = { ...registry['codex-app'], ...codexPatch };
-        const aiE = registry['ai-e'];
-        if (aiE) {
-            const existingModelsByProvider = (aiE['modelsByProvider'] as Record<string, string[]> | undefined) || {};
-            const modelsByProvider: Record<string, string[]> = {
-                ...existingModelsByProvider,
-                codex: codexModels,
-            };
-            const existingEffortsByProvider = (aiE['effortsByProvider'] as Record<string, string[]> | undefined) || {};
-            const effortsByProvider: Record<string, string[]> = merged.length > 0
-                ? { ...existingEffortsByProvider, codex: merged }
-                : existingEffortsByProvider;
-            const providers = Array.isArray(aiE['providers']) ? aiE['providers'] as string[] : Object.keys(modelsByProvider);
-            // ai-e splits models by provider, so per-model efforts MUST be
-            // provider-scoped. A flat map collides on shared ids: `gpt-5.6-sol`
-            // exists under both codex and kiro, but Kiro only accepts
-            // low/medium/high/xhigh (args.ts KIRO_EFFORTS) while ocx advertises
-            // max/ultra for the codex route. A flat map offered `ultra` to Kiro.
-            const existingEffortsByModelByProvider =
-                (aiE['effortsByModelByProvider'] as Record<string, Record<string, string[]>> | undefined) || {};
-            const existingDefaultEffortByModelByProvider =
-                (aiE['defaultEffortByModelByProvider'] as Record<string, Record<string, string>> | undefined) || {};
-            registry['ai-e'] = {
-                ...aiE,
-                modelsByProvider,
-                effortsByProvider,
-                effortsByModelByProvider: { ...existingEffortsByModelByProvider, codex: effortsByModel },
-                defaultEffortByModelByProvider: { ...existingDefaultEffortByModelByProvider, codex: defaultEffortByModel },
-                models: providers.flatMap(provider => modelsByProvider[provider] || []),
-            };
-        }
     }
 
     if (kiroInventory?.models.length) {
@@ -153,7 +123,7 @@ export async function buildLiveCliRegistry() {
             modelAliases: claudeCatalog.aliases,
             effortsByModel: claudeEffortsByModel,
         };
-        for (const cli of ['claude', 'claude-e'] as const) {
+        for (const cli of ['claude'] as const) {
             const entry = registry[cli];
             if (!entry) continue;
             const staticDefault = entry['defaultModel'];
@@ -163,29 +133,6 @@ export async function buildLiveCliRegistry() {
                 ...(typeof staticDefault === 'string' && !claudeCatalog.models.includes(staticDefault)
                     ? { defaultModel: claudeCatalog.models[0] }
                     : {}),
-            };
-        }
-        const aiE = registry['ai-e'];
-        if (aiE) {
-            const modelsByProvider: Record<string, string[]> = {
-                ...((aiE['modelsByProvider'] as Record<string, string[]> | undefined) || {}),
-                claude: claudeCatalog.models,
-            };
-            const providers = Array.isArray(aiE['providers'])
-                ? aiE['providers'] as string[]
-                : Object.keys(modelsByProvider);
-            // Provider-scoped, never flat: `ai-e` shares model ids across providers
-            // and a flat map would offer Kiro an ultracode it cannot run.
-            const existingEffortsByModelByProvider =
-                (aiE['effortsByModelByProvider'] as Record<string, Record<string, string[]>> | undefined) || {};
-            registry['ai-e'] = {
-                ...aiE,
-                modelsByProvider,
-                effortsByModelByProvider: {
-                    ...existingEffortsByModelByProvider,
-                    claude: claudeEffortsByModel,
-                },
-                models: providers.flatMap(provider => modelsByProvider[provider] || []),
             };
         }
     }

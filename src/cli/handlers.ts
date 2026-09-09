@@ -6,7 +6,6 @@ import fs from 'fs/promises';
 import { CLI_KEYS } from './registry.js';
 import { isRetiredCliSelection, retiredRuntimeDiagnostic } from '../types/cli-engine.js';
 import { formatCliStatusLine } from './cli-status.js';
-import { resolveAiEProvider } from '../agent/args.js';
 import { t } from '../core/i18n.js';
 import { JAW_HOME } from '../core/config.js';
 import type { CliCommandContext } from './command-context.js';
@@ -173,33 +172,7 @@ export async function modelHandler(args: string[], ctx: CliCommandContext): Prom
     }
 
     const perCli = (settings["perCli"] as Record<string, Record<string, unknown>> | undefined) || {};
-    const patch: Record<string, unknown> = {};
 
-    // Auto-resolve ai-e provider when the model prefix implies a different provider
-    if (activeCli === 'ai-e') {
-        const currentProvider = ((perCli['ai-e'] || {})['provider'] as string) || 'claude';
-        const impliedProvider = resolveAiEProvider(null, nextModel);
-        if (impliedProvider !== currentProvider) {
-            patch['perCli'] = {
-                ...perCli,
-                'ai-e': { ...(perCli['ai-e'] || {}), model: nextModel, provider: impliedProvider },
-            };
-            const existingAO = (settings["activeOverrides"] as Record<string, Record<string, unknown>>) || {};
-            patch['activeOverrides'] = {
-                ...existingAO,
-                'ai-e': {
-                    ...(existingAO['ai-e'] || {}),
-                    model: nextModel,
-                },
-            };
-            const updateResult = await ctx.updateSettings(patch) as SlashResult;
-            if (updateResult?.ok === false) return updateResult;
-            return {
-                ok: true,
-                text: t('cmd.model.changed', { model: nextModel }, L) + ` (provider: ${currentProvider} → ${impliedProvider})`,
-            };
-        }
-    }
 
     const nextPerCli = {
         ...perCli,
