@@ -2,6 +2,21 @@ import type { ChildProcess } from 'node:child_process';
 import type { NativeRuntimeSession, RuntimePrompt } from './runtime/session.js';
 import type { RuntimeEvent, RuntimeTurnOutcome } from '../shared/runtime-contract.js';
 
+/**
+ * A failure message is safe to log only when it is one of this layer's own
+ * codes. Provider text and credentials never take this shape: the pattern admits
+ * a single lower-case snake_case identifier, so a space, a quote, a path or any
+ * punctuation disqualifies the whole message. A code carrying an appended detail
+ * (`acp_config_unsupported_model: ...`) contributes only its leading code.
+ */
+const SAFE_FAILURE_CODE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+){1,7}/;
+
+export function safeFailureCode(error: unknown): string {
+    const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+    const head = message.split(':')[0] ?? '';
+    const match = SAFE_FAILURE_CODE.exec(head.trim());
+    return match && match[0].length === head.trim().length ? match[0] : '';
+}
 export interface NativeRunLease {
     child: ChildProcess;
     session: NativeRuntimeSession;
@@ -197,7 +212,16 @@ export function runNativeRuntime<R>(host: NativeRunHost<R>): { done: Promise<R>;
         } finally { await finish(); }
         if (faults.length) {
             // Never log raw private causes (provider text/credentials may be in them).
-            try { console.warn('[native-runtime-run] failed stages:', faults.map(fault => fault.stage).join(', ')); }
+            // The internal codes this layer raises are the exception: they are
+            // provider-independent identifiers, so the safe-code shape below admits
+            // them and nothing else. Without this every startup failure looked
+            // identical in the log and could only be diagnosed by importing the
+            // installed session factory from a scratch script (#658).
+            try {
+                const stages = faults.map(fault => fault.stage).join(', ');
+                const codes = [...new Set(faults.map(fault => safeFailureCode(fault.error)).filter(Boolean))].join(', ');
+                console.warn('[native-runtime-run] failed stages:', codes ? `${stages} (${codes})` : stages);
+            }
             catch (error) { remember('diagnostic', error); }
         }
         if (result) return result.value;

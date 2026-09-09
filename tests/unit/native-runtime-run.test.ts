@@ -1,7 +1,7 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { ChildProcess } from 'node:child_process';
-import { NativeRunFailure, runNativeRuntime, type NativeRunHost, type NativeRunLease } from '../../src/agent/native-runtime-run.ts';
+import { NativeRunFailure, runNativeRuntime, safeFailureCode, type NativeRunHost, type NativeRunLease } from '../../src/agent/native-runtime-run.ts';
 import type { NativeRuntimeSession } from '../../src/agent/runtime/session.ts';
 import type { RuntimeEvent, RuntimeTurnOutcome } from '../../src/shared/runtime-contract.ts';
 
@@ -394,3 +394,21 @@ for (const value of [null, '', ' \n\t ', 'FINAL']) {
         assert.equal(f.reusable(), true); assert.equal(f.failed.length, 0);
     });
 }
+
+test('only this layer\'s own snake_case codes reach the failure log (#658)', () => {
+    // Internal ACP codes carry no provider text or credentials, so they are safe.
+    for (const code of ['acp_config_unsupported_model', 'acp_config_ambiguous_effort',
+        'acp_config_effort_not_applied', 'cursor_acp_invalid_cwd']) {
+        assert.equal(safeFailureCode(new Error(code)), code);
+    }
+    // A code with an appended detail contributes only its leading code.
+    assert.equal(safeFailureCode(new Error('acp_config_unsupported_model: gpt-9 is not advertised; valid ids: a, b')),
+        'acp_config_unsupported_model');
+    // Anything that could carry provider text or a credential is refused whole.
+    for (const unsafe of ['Request failed with sk-live-abcdef', 'ENOENT /Users/someone/.cursor/config',
+        'model said hello', 'Bearer xoxb-1-2', 'CamelCase_error', '', 'a_b c_d']) {
+        assert.equal(safeFailureCode(new Error(unsafe)), '');
+    }
+    assert.equal(safeFailureCode('acp_config_unsupported_model'), 'acp_config_unsupported_model');
+    assert.equal(safeFailureCode(undefined), '');
+});
