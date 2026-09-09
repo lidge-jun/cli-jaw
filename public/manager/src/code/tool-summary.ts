@@ -7,14 +7,29 @@ import type { CodeItem } from '../../../../src/code-mode/wire';
  * they can tell whether it matters. `Read src/app.ts` is legible at a glance,
  * so the body can stay collapsed until someone actually wants it.
  */
-const VERBS: Array<[RegExp, string]> = [
-    [/^(read|read_file|get_file|open_file|view|cat)$/i, 'Read'],
-    [/^(write|write_file|create_file|edit|edit_file|apply_patch|str_replace\w*|update_file)$/i, 'Edit'],
-    [/^(bash|shell|exec|exec_command|run|run_command|terminal)$/i, 'Bash'],
-    [/^(search|grep|rg|ripgrep|glob|find|codebase_search)$/i, 'Search'],
-    [/^(fetch|browser\w*|web_\w*|open_url|http)$/i, 'Open'],
-    [/^(list|ls|list_dir|list_files)$/i, 'List'],
+/**
+ * [pattern, settled, active]. The settled word is what a finished call reads as
+ * and is deliberately unchanged: it is asserted across the summary tests and is
+ * the vocabulary the transcript has always used.
+ *
+ * The active word exists because a running call and a finished one otherwise
+ * look identical once the status badge is gone. Tense carries completion, the
+ * way it does in a native transcript, instead of a chip that says "Done" on
+ * every successful row.
+ */
+const VERBS: Array<[RegExp, string, string]> = [
+    [/^(read|read_file|get_file|open_file|view|cat)$/i, 'Read', 'Reading'],
+    [/^(write|write_file|create_file|edit|edit_file|apply_patch|str_replace\w*|update_file)$/i, 'Edit', 'Editing'],
+    [/^(bash|shell|exec|exec_command|run|run_command|terminal)$/i, 'Bash', 'Running'],
+    [/^(search|grep|rg|ripgrep|glob|find|codebase_search)$/i, 'Search', 'Searching'],
+    [/^(fetch|browser\w*|web_\w*|open_url|http)$/i, 'Open', 'Opening'],
+    [/^(list|ls|list_dir|list_files)$/i, 'List', 'Listing'],
 ];
+
+/** A call that has not settled yet reads in the present tense. */
+function isActive(status: CodeItem['status']): boolean {
+    return status === 'running' || status === 'pending';
+}
 
 /** Longest-suffix workspace-relative path, so the row stays scannable. */
 export function shortenPath(value: string, workingDir: string): string {
@@ -60,12 +75,15 @@ export function summariseToolInput(input: string | undefined, workingDir: string
 }
 
 export function toolSummary(item: CodeItem, workingDir: string): string {
+    const active = isActive(item.status);
     if (item.kind === 'file_change') {
         const target = summariseToolInput(item.tool?.input, workingDir) || item.tool?.detail || '';
-        return target ? `Edit ${target}` : 'File change';
+        const verb = active ? 'Editing' : 'Edit';
+        return target ? `${verb} ${target}` : 'File change';
     }
     const name = item.tool?.name?.trim() || 'Tool';
-    const verb = VERBS.find(([pattern]) => pattern.test(name))?.[1];
+    const match = VERBS.find(([pattern]) => pattern.test(name));
+    const verb = match ? (active ? match[2] : match[1]) : undefined;
     const detail = summariseToolInput(item.tool?.input, workingDir);
     if (verb) return detail ? `${verb} ${detail}` : verb;
     // An unrecognised tool keeps its own name; renaming it would hide which

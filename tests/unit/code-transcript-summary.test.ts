@@ -34,6 +34,23 @@ test('a tool call reads as an action, not a function signature', () => {
     assert.equal(toolSummary(item({ tool: { name: 'read' } }), CWD), 'Read', 'a missing argument still names the action');
 });
 
+test('a call in flight reads in the present tense, and settling changes only the tense', () => {
+    const running = (name: string, input: string) => toolSummary(item({ status: 'running', tool: { name, input } }), CWD);
+    assert.equal(running('read', JSON.stringify({ path: '/work/repo/src/app.ts' })), 'Reading src/app.ts');
+    assert.equal(running('bash', JSON.stringify({ command: 'npm test' })), 'Running npm test');
+    assert.equal(running('rg', JSON.stringify({ pattern: 'composer' })), 'Searching composer');
+    assert.equal(running('apply_patch', JSON.stringify({ file_path: '/work/repo/a.ts' })), 'Editing a.ts');
+    assert.equal(running('browser_open', JSON.stringify({ url: 'https://example.com' })), 'Opening https://example.com');
+    assert.equal(running('ls', JSON.stringify({ path: '/work/repo/src' })), 'Listing src');
+    assert.equal(toolSummary(item({ kind: 'file_change', status: 'running', tool: { name: 'x', input: '/work/repo/a/b.ts' } }), CWD), 'Editing a/b.ts');
+    // A queued call has not run yet either, so it reads the same way.
+    assert.equal(toolSummary(item({ status: 'pending', tool: { name: 'read', input: '{}' } }), CWD), 'Reading');
+    // Tense is the only thing that moves: an unrecognised tool still keeps its
+    // own name while running, and a settled call keeps the original vocabulary.
+    assert.equal(running('github.create_pr', '{}'), 'github.create_pr');
+    assert.equal(toolSummary(item({ status: 'error', tool: { name: 'bash', input: JSON.stringify({ command: 'x' }) } }), CWD), 'Bash x');
+});
+
 test('summaries stay one short line whatever the argument shape is', () => {
     assert.equal(summariseToolInput('not json at all\nsecond line', CWD), 'not json at all');
     assert.equal(summariseToolInput('{bad json', CWD), '{bad json');

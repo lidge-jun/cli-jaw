@@ -1,5 +1,5 @@
-import { lazy, Suspense, useCallback, useRef, useState, type KeyboardEvent } from 'react';
-import type { CodeItem, CodeProviderId } from '../../../../src/code-mode/wire';
+import { lazy, Suspense, useCallback, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import type { CodeItem, CodeItemKind, CodeProviderId } from '../../../../src/code-mode/wire';
 import { useCodeTranscriptVirtualRows } from './useCodeTranscriptVirtualRows';
 import { useCodeTranscriptScroll } from './use-code-transcript-scroll';
 import { useThrottledMarkdown } from './use-throttled-markdown';
@@ -8,6 +8,42 @@ import { noteworthyStatus, toolSummary } from './tool-summary';
 import { PENDING_USER_ITEM_ID } from './pending-user-item';
 
 const MarkdownRenderer = lazy(() => import('../notes/rendering/MarkdownRenderer').then(m => ({ default: m.MarkdownRenderer })));
+
+/**
+ * Turn boundaries are bookkeeping, not conversation. A one-line answer framed by
+ * "Turn started" and "Completed" reads as a status board, and neither line tells
+ * the reader anything the answer itself does not.
+ *
+ * They stay in the store and on the wire: history replay, the failed-input
+ * recovery lookup in CodeWorkbench and the transcript-limit accounting all still
+ * see them. Only this view drops them. Failure and cancellation are kept,
+ * because those are states a reader can act on.
+ */
+const HIDDEN_KINDS: ReadonlySet<CodeItemKind> = new Set<CodeItemKind>(['turn_started', 'turn_completed']);
+
+/**
+ * What a collapsible row measures before it has been measured. Collapsed is one
+ * line and exact. Expanded is a guess and deliberately only that: the panes are
+ * capped at 200px each by `.code-tool-output` / `.code-tool-args`, so a call
+ * with both is far taller, and the real number arrives from the ResizeObserver
+ * a frame later. This only has to be closer than one line.
+ */
+const COLLAPSED_ROW_PX = 44;
+const EXPANDED_ROW_PX = 320;
+/** Same bound the scroll anchors use, for the same reason. */
+const MAX_OPEN_ROWS = 64;
+
+/**
+ * A failed call opens itself, because the reader has to see why it failed. That
+ * is a default, not a lock: once the reader has said what they want for this
+ * row, their choice wins, including closing a failure they have already read.
+ */
+function isRowOpen(chosen: ReadonlyMap<string, boolean>, sessionKey: string, item: CodeItem): boolean {
+    const choice = chosen.get(`${sessionKey}:${item.itemId}`);
+    if (choice !== undefined) return choice;
+    return item.status === 'error' && item.kind !== 'reasoning';
+}
+
 function ItemMarkdown({ item, identity, onOpenLocalFile }: { item: CodeItem; identity: string; onOpenLocalFile?: ((path: string) => void) | undefined }) {
     const text = useThrottledMarkdown(item.text ?? '', item.status !== 'running' && item.status !== 'pending', identity);
     if (!text.trim()) return <span className="code-plain-text">{text}</span>;
@@ -16,9 +52,11 @@ function ItemMarkdown({ item, identity, onOpenLocalFile }: { item: CodeItem; ide
     </Suspense>;
 }
 
-export function CodeTranscriptItem({ item, provider, sessionKey, workingDir = '', onOpenLocalFile }: {
+export function CodeTranscriptItem({ item, provider, sessionKey, workingDir = '', onOpenLocalFile, expanded, onExpandedChange }: {
     item: CodeItem; provider: CodeProviderId; sessionKey: string; workingDir?: string;
     onOpenLocalFile?: ((path: string) => void) | undefined;
+    expanded?: boolean;
+    onExpandedChange?: ((itemId: string, open: boolean) => void) | undefined;
 }) {
     const tool = item.kind === 'tool_call' || item.kind === 'file_change';
     const reasoning = item.kind === 'reasoning';
@@ -29,22 +67,39 @@ export function CodeTranscriptItem({ item, provider, sessionKey, workingDir = ''
     // states the reader can act on are worth a visible badge.
     const note = noteworthyStatus(item);
     const unsent = item.itemId === PENDING_USER_ITEM_ID;
+    // The transcript owns the disclosure, because the virtualizer unmounts rows
+    // and per-row state would be lost on scroll. Rendered standalone (tests, a
+    // future embed) it falls back to the same failure default.
+    const open = expanded ?? (item.status === 'error' && item.kind !== 'reasoning');
+    const running = item.status === 'running' || item.status === 'pending';
+    // The verb already says the call is in flight; a second badge next to
+    // "Reading src/app.ts" is the same fact twice. Keyed off the status rather
+    // than the badge text, so renaming either vocabulary cannot quietly bring
+    // the duplicate back. Failure and cancellation still get a word, because
+    // those change what to do next.
+    const toolNote = running ? null : note;
     const label = user ? 'You' : assistant ? CODE_RUNTIME_LABELS[provider] : reasoning ? 'Reasoning'
         : item.kind === 'turn_started' ? 'Turn started' : item.kind === 'session_runtime' ? 'Runtime'
             : item.kind === 'permission_request' ? 'Permission record' : item.kind === 'notice' ? 'Notice' : status;
     return <article className={`code-message code-message-${tool ? 'tool' : assistant ? 'assistant' : user ? 'user' : 'system'} is-${item.status}${unsent ? ' is-unsent' : ''}`}
         data-code-item-id={item.itemId} aria-label={`${label} · ${status}`}>
-        {tool ? <details className={`code-tool-card code-tool-${item.status}`} open={item.status === 'error'}>
+        {tool ? <details className={`code-tool-card code-tool-${item.status}`} open={open}
+            onToggle={event => onExpandedChange?.(item.itemId, event.currentTarget.open)}>
             <summary className="code-tool-summary"><span className="code-tool-chevron" aria-hidden="true">›</span>
-                <span className="code-tool-name">{toolSummary(item, workingDir)}</span>
-                {note && <span className="code-tool-status">{note}</span>}</summary>
-            {item.tool?.detail !== undefined && <p className="code-tool-text">{item.tool.detail}</p>}
-            {item.tool?.input !== undefined && <section className="code-tool-section"><span className="code-tool-section-label">Input</span><pre className="code-tool-args">{item.tool.input}</pre></section>}
-            {item.tool?.output !== undefined && <section className="code-tool-section"><span className="code-tool-section-label">Output</span><pre className="code-tool-output">{item.tool.output}</pre></section>}
-            {item.text !== undefined && <pre className="code-tool-text">{item.text}</pre>}
-        </details> : reasoning ? <details className="code-thinking">
-            <summary className="code-thinking-summary">{item.status === 'running' ? 'Thinking…' : 'Reasoning'}</summary>
-            <div className="code-thinking-text">{item.text}</div>
+                <span className={`code-tool-name${running ? ' code-tool-name-running' : ''}`}>{toolSummary(item, workingDir)}</span>
+                {toolNote && <span className="code-tool-status">{toolNote}</span>}</summary>
+            {/* Built only while open: a collapsed call's output can be megabytes,
+                and constructing it costs the same whether or not it is painted. */}
+            {open && <>
+                {item.tool?.detail !== undefined && <p className="code-tool-text">{item.tool.detail}</p>}
+                {item.tool?.input !== undefined && <section className="code-tool-section"><span className="code-tool-section-label">Input</span><pre className="code-tool-args">{item.tool.input}</pre></section>}
+                {item.tool?.output !== undefined && <section className="code-tool-section"><span className="code-tool-section-label">Output</span><pre className="code-tool-output">{item.tool.output}</pre></section>}
+                {item.text !== undefined && <pre className="code-tool-text">{item.text}</pre>}
+            </>}
+        </details> : reasoning ? <details className="code-thinking" open={open}
+            onToggle={event => onExpandedChange?.(item.itemId, event.currentTarget.open)}>
+            <summary className={`code-thinking-summary${item.status === 'running' ? ' code-tool-name-running' : ''}`}>{item.status === 'running' ? 'Thinking…' : 'Reasoning'}</summary>
+            {open && <div className="code-thinking-text">{item.text}</div>}
         </details> : <>
             <span className="code-message-role">{label}{assistant && item.phase === 'commentary' ? ' · Commentary' : ''}
                 {note && ` · ${unsent ? 'Sending' : note}`}</span>
@@ -63,21 +118,62 @@ export function CodeTranscript({ items, provider, sessionKey, workingDir, loadin
     onOpenLocalFile?: ((path: string) => void) | undefined;
 }) {
     const transcriptRef = useRef<HTMLDivElement>(null);
-    const itemsRef = useRef(items); itemsRef.current = items;
+    const visible = useMemo(() => items.filter(item => !HIDDEN_KINDS.has(item.kind)), [items]);
+    const itemsRef = useRef(visible); itemsRef.current = visible;
+    // What the reader chose, which is not the same as what is open: a failed
+    // call opens itself, so "not in the map" and "the reader closed it" have to
+    // be different states or the auto-open reopens it on the next render.
+    // Scoped by session so the reserved pending-user id cannot carry one
+    // session's disclosure into another, and bounded so a long-lived tab does
+    // not accumulate ids for sessions it will never show again.
+    const [openRows, setOpenRows] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+    // `getItemKey` is called by the virtualizer outside render, so it reads the
+    // choice through a ref; the callback identity is refreshed below so the
+    // virtualizer actually re-keys after a toggle.
+    const openRef = useRef(openRows); openRef.current = openRows;
     const [historyPending, setHistoryPending] = useState(false);
     const [historyError, setHistoryError] = useState<{ sessionKey: string; message: string } | null>(null);
     const historyGuard = useRef(false);
-    const firstId = items[0]?.itemId;
-    const getItemKey = useCallback((index: number) => `${sessionKey}:${itemsRef.current[index]?.itemId ?? index}`, [sessionKey, firstId]);
+    const firstId = visible[0]?.itemId;
+    // The disclosure is part of the key, because a measured size always beats an
+    // estimate: without it a row measured while collapsed would keep that height
+    // after it expands, and no better estimate could correct it. Opening a row
+    // gives it a key that has never been measured, so it falls back to the
+    // estimate until the ResizeObserver reports the real height. The identity
+    // that has to stay stable is the DOM node's, which comes from the React
+    // `key` on the row, and that is unchanged.
+    const getItemKey = useCallback((index: number) => {
+        const item = itemsRef.current[index];
+        if (!item) return `${sessionKey}:${index}`;
+        return `${sessionKey}:${item.itemId}${isRowOpen(openRef.current, sessionKey, item) ? ':open' : ''}`;
+    }, [sessionKey, firstId, openRows]);
     const estimateSize = useCallback((index: number) => {
         const item = itemsRef.current[index];
-        // Tool and reasoning rows are collapsed to one line, so they measure
-        // far shorter than a message of the same text length.
-        return item?.kind === 'tool_call' || item?.kind === 'file_change' || item?.kind === 'reasoning'
-            ? 44 : 64 + Math.min(420, (item?.text?.length ?? 0) / 6);
-    }, []);
-    const virtual = useCodeTranscriptVirtualRows({ count: items.length, resetKey: sessionKey, scrollElementRef: transcriptRef, getItemKey, estimateSize });
-    const { showJump, jumpToLatest } = useCodeTranscriptScroll({ items, sessionKey, transcriptRef, virtual });
+        const collapsible = item?.kind === 'tool_call' || item?.kind === 'file_change' || item?.kind === 'reasoning';
+        // A collapsible row is one line until someone opens it. Estimating an
+        // open row at one line is what makes the scrollbar disagree with the
+        // content, so the estimate has to follow the disclosure.
+        if (!collapsible) return 64 + Math.min(420, (item?.text?.length ?? 0) / 6);
+        return item && isRowOpen(openRows, sessionKey, item) ? EXPANDED_ROW_PX : COLLAPSED_ROW_PX;
+    }, [openRows, sessionKey]);
+    const virtual = useCodeTranscriptVirtualRows({ count: visible.length, resetKey: sessionKey, scrollElementRef: transcriptRef, getItemKey, estimateSize });
+    const { showJump, jumpToLatest } = useCodeTranscriptScroll({ items: visible, sessionKey, transcriptRef, virtual });
+    const setExpanded = useCallback((itemId: string, open: boolean) => {
+        const key = `${sessionKey}:${itemId}`;
+        setOpenRows(current => {
+            if (current.get(key) === open) return current;
+            const next = new Map(current);
+            next.delete(key); next.set(key, open);
+            // Same bound as the scroll anchors: remembering every row a reader
+            // ever touched is not worth an unbounded map. Re-inserting above
+            // keeps the row just acted on newest, so it is never the one evicted.
+            if (next.size > MAX_OPEN_ROWS) {
+                const oldest = next.keys().next().value;
+                if (oldest !== undefined) next.delete(oldest);
+            }
+            return next;
+        });
+    }, [sessionKey]);
     async function older() {
         if (historyGuard.current) return;
         historyGuard.current = true; setHistoryPending(true); setHistoryError(null);
@@ -103,15 +199,17 @@ export function CodeTranscript({ items, provider, sessionKey, workingDir, loadin
             {historyError?.sessionKey === sessionKey && <span className="code-action-error" role="alert">{historyError.message}</span>}
         </div>
         <div ref={transcriptRef} className="code-transcript" role="log" aria-label="Code transcript" aria-live="off" tabIndex={0} onKeyDown={keyboard}>
-            {!items.length ? <div className="code-transcript-empty"><p>{loading ? 'Loading conversation…' : 'Type a prompt below to start this conversation.'}</p>
+            {!visible.length ? <div className="code-transcript-empty"><p>{loading ? 'Loading conversation…' : 'Type a prompt below to start this conversation.'}</p>
                 <p className="code-transcript-cwd">Workspace: {workingDir || 'not set'}</p></div>
                 : <div className="code-transcript-virtual-spacer" style={{ height: virtual.totalSize }}>
                     {virtual.virtualItems.map(row => {
-                        const item = items[row.index];
+                        const item = visible[row.index];
                         return item ? <div key={row.key} ref={virtual.measureElement} className="code-transcript-virtual-row"
                             data-code-transcript-idx={row.index} style={{ transform: `translateY(${row.start}px)` }}>
                             <CodeTranscriptItem item={item} provider={provider} sessionKey={sessionKey}
-                                workingDir={workingDir} onOpenLocalFile={onOpenLocalFile} />
+                                workingDir={workingDir} onOpenLocalFile={onOpenLocalFile}
+                                expanded={isRowOpen(openRows, sessionKey, item)}
+                                onExpandedChange={setExpanded} />
                         </div> : null;
                     })}
                 </div>}
