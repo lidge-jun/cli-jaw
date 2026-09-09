@@ -415,3 +415,22 @@ test('a two-state toggle sharing the effort category is never an effort selector
     await configureAcpModel(ladder.port, { effort: 'high' });
     assert.deepEqual(ladder.writes, [['effort', 'high']]);
 });
+
+test('an unadvertised effort names the advertised rungs without interpolating them into the error', async () => {
+    const warnings: string[] = [];
+    const original = console.warn;
+    console.warn = (...args: unknown[]) => { warnings.push(args.map(String).join(' ')); };
+    try {
+        const f = fixture([select(), effort()]);
+        await assert.rejects(configureAcpModel(f.port, { effort: 'ultra' }), error => {
+            assert.equal((error as Error).message, 'acp_config_unsupported_effort');
+            return true;
+        });
+        assert.deepEqual(f.writes, []);
+        assert.equal(warnings.length, 1);
+        assert.match(warnings[0]!, /configured effort is not advertised/);
+        assert.match(warnings[0]!, /high, medium, extra-high/);
+    } finally {
+        console.warn = original;
+    }
+});
