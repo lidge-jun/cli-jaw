@@ -30,16 +30,3 @@ test('Kiro resume prompt sends only the current turn', () => {
 
     assert.equal(prompt, 'current task');
 });
-
-test('ai-e Kiro resume follows the same current-turn-only rule', () => {
-    const prompt = buildPromptForArgs({
-        cli: 'ai-e',
-        effectiveProvider: 'kiro',
-        prompt: 'next ai-e kiro turn',
-        historyBlock: '[Recent Context]\nold ai-e turn',
-        sysPrompt: 'operational rules',
-        isResume: true,
-    });
-
-    assert.equal(prompt, 'next ai-e kiro turn');
-});

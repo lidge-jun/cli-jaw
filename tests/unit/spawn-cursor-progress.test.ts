@@ -17,14 +17,9 @@ test('CP-001: cursor stream-json counts as structured progress', () => {
 
 test('CP-002: the runtimes that already counted still count', () => {
     assert.equal(streamJsonMarksProgress('grok'), true);
-    assert.equal(streamJsonMarksProgress('ai-e', 'grok'), true);
 });
 
 test('CP-003: nothing else was widened', () => {
-    // ai-e is provider-dependent: only its grok provider emits the stream-json
-    // this reads as progress.
-    assert.equal(streamJsonMarksProgress('ai-e', 'anthropic'), false);
-    assert.equal(streamJsonMarksProgress('ai-e'), false);
     assert.equal(streamJsonMarksProgress('codex'), false);
     assert.equal(streamJsonMarksProgress('claude'), false);
     assert.equal(streamJsonMarksProgress('opencode'), false);

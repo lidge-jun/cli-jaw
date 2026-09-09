@@ -14,7 +14,7 @@ import {
     type SnapshotState,
 } from './page-shell';
 import { PerCliRow, type PiRegistration } from './components/PerCliRow';
-import { metaFor, normalizeCliMetaRegistry, selectableRuntimeOptions, isRetiredCliSelection } from './components/agent/agent-meta';
+import { metaFor, normalizeCliMetaRegistry, selectableRuntimeOptions, isRetiredCliSelection, retiredRuntimeLabel } from './components/agent/agent-meta';
 import type { CliMeta, PerCliEntry } from './components/agent/agent-meta';
 import type { PiSettingsView } from './components/pi-profile';
 import { expandPatch } from './path-utils';

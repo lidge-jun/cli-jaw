@@ -50,7 +50,7 @@ test('claude assistant fallback works when stream was not seen', () => {
 
 test('claude assistant signature-only thinking is surfaced as encrypted thinking', () => {
     const ctx = createClaudeCtx();
-    const labels = extractToolLabelsForTest('claude-e', {
+    const labels = extractToolLabelsForTest('claude', {
         type: 'assistant',
         message: {
             content: [
@@ -359,27 +359,6 @@ test('claude streamed text is retained when the complete block never arrives', (
     assert.equal(ctx.fullText, 'partial ans');
     assert.equal(ctx.claudeStreamedTextStart, 0, 'anchor recorded for the open message');
 });
-
-test('claude-e stream_event text_delta passthrough never raw-appends (snapshot path stays canonical)', () => {
-    const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set(), hasClaudeStreamEvents: false };
-    // The claude-e wrapper passes stream_event lines through; the plain-claude raw
-    // appender must ignore them or the snapshot diff would double text.
-    extractFromEvent('claude-e', {
-        type: 'stream_event',
-        event: { type: 'content_block_delta', delta: { type: 'text_delta', text: 'stray delta' } },
-    }, ctx, 'test');
-    assert.equal(ctx.fullText, '', 'claude-e delta must not touch fullText');
-    assert.ok(!ctx.claudeStreamedText, 'claude-e delta must not arm the plain-claude guard');
-    assert.equal(ctx.claudeStreamedTextStart, undefined, 'no reconcile anchor for claude-e');
-
-    // The canonical snapshot then produces exactly one body.
-    extractFromEvent('claude-e', {
-        type: 'assistant',
-        message: { content: [{ type: 'text', text: 'canonical body' }] },
-    }, ctx, 'test');
-    assert.equal(ctx.fullText, 'canonical body', 'snapshot path unaffected, single body');
-});
-
 test('claude falls back to complete assistant block when no text_delta streamed', () => {
     const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set(), hasClaudeStreamEvents: false };
     // No partial stream events (e.g. --include-partial-messages absent): only the complete assistant.
@@ -440,7 +419,6 @@ test('extractFromEvent updates context for each CLI path', () => {
     }, codexCtx, 'codex-agent');
     assert.equal(codexCtx.fullText, 'done');
     assert.deepEqual(codexCtx.tokens, { input_tokens: 10, output_tokens: 20, cached_input_tokens: 0 });
-
 
     const opencodeCtx = { toolLog: [], fullText: '' };
     extractFromEvent('opencode', {
@@ -521,7 +499,6 @@ test('P2-3.6: Codex turn.completed stores cached_input_tokens', () => {
     }, ctx, 'codex');
     assert.deepEqual(ctx.tokens, { input_tokens: 100, output_tokens: 50, cached_input_tokens: 30 });
 });
-
 
 test('P2-3.10: OpenCode step_start stores model', () => {
     const ctx = { toolLog: [], fullText: '', traceLog: [] };
@@ -797,14 +774,14 @@ test('P1-2.2d: Claude allowed rate_limit_event resolves prior wait entry', () =>
 
 test('P1-2.2e: Claude allowed_warning rate_limit_event emits done warning, not wait', () => {
     const ctx = { toolLog: [], fullText: '', seenToolKeys: new Set() };
-    extractFromEvent('claude-e', {
+    extractFromEvent('claude', {
         type: 'rate_limit_event',
         rate_limit_info: {
             status: 'allowed_warning',
             rateLimitType: 'five_hour',
             resetsAt: Math.floor(Date.now() / 1000) + 1200,
         },
-    }, ctx, 'claude-e');
+    }, ctx, 'claude');
     assert.equal(ctx.toolLog.length, 1);
     assert.equal(ctx.toolLog[0].icon, '⚠️');
     assert.equal(ctx.toolLog[0].status, 'done');
@@ -857,14 +834,14 @@ test('P1-2.2g: Claude hard rate limit marks watchdog progress and extends deadli
             stop() {},
         },
     };
-    extractFromEvent('claude-e', {
+    extractFromEvent('claude', {
         type: 'rate_limit_event',
         rate_limit_info: {
             status: 'rejected',
             rateLimitType: 'five_hour',
             resetsAt: Math.floor(Date.now() / 1000) + 1200,
         },
-    }, ctx, 'claude-e');
+    }, ctx, 'claude');
 
     const extension = calls.find(call => call[0] === 'extendDeadline');
     assert.ok(calls.some(call => call[0] === 'markProgress'));
@@ -1168,51 +1145,6 @@ test('extractOutputChunk returns live assistant text for opencode final step and
         '',
     );
 });
-
-test('claude-e assistant snapshots are emitted as deltas without duplicate frontend chunks', () => {
-    const ctx = {
-        toolLog: [],
-        fullText: '',
-        traceLog: [],
-        pendingOutputChunk: '',
-        seenToolKeys: new Set(),
-        hasClaudeStreamEvents: false,
-    };
-    const first = {
-        type: 'assistant',
-        message: {
-            id: 'msg-1',
-            content: [{ type: 'text', text: 'OK, first.' }],
-        },
-    };
-    const duplicate = {
-        type: 'assistant',
-        message: {
-            id: 'msg-1',
-            content: [{ type: 'text', text: 'OK, first.' }],
-        },
-    };
-    const snapshotUpdate = {
-        type: 'assistant',
-        message: {
-            id: 'msg-1',
-            content: [{ type: 'text', text: 'OK, first. More.' }],
-        },
-    };
-
-    extractFromEvent('claude-e', first, ctx, 'claude-e');
-    assert.equal(extractOutputChunk('claude-e', first, ctx), 'OK, first.');
-    assert.equal(ctx.fullText, 'OK, first.');
-
-    extractFromEvent('claude-e', duplicate, ctx, 'claude-e');
-    assert.equal(extractOutputChunk('claude-e', duplicate, ctx), '');
-    assert.equal(ctx.fullText, 'OK, first.');
-
-    extractFromEvent('claude-e', snapshotUpdate, ctx, 'claude-e');
-    assert.equal(extractOutputChunk('claude-e', snapshotUpdate, ctx), ' More.');
-    assert.equal(ctx.fullText, 'OK, first. More.');
-});
-
 test('grok streaming-json deltas append text and capture end session id', () => {
     const ctx = { toolLog: [], fullText: '', traceLog: [], pendingOutputChunk: '', seenToolKeys: new Set() };
     extractFromEvent('grok', { type: 'thought', data: 'internal' }, ctx, 'grok');
@@ -1844,57 +1776,6 @@ test('opencode marks unresolved bash exec as done when the step finishes cleanly
     assert.equal(ctx.toolLog[0].status, 'done');
     assert.equal(ctx.toolLog[0].icon, '✅');
 });
-
-test('claude-e streaming does not duplicate output in liveRun', async () => {
-    const { beginLiveRun, getLiveRun, appendLiveRunText, clearLiveRun } = await import('../src/agent/live-run-state.ts');
-    const scope = 'unit-test-dedup-' + Date.now();
-    beginLiveRun(scope, 'claude-e');
-
-    const ctx = {
-        toolLog: [],
-        fullText: '',
-        traceLog: [],
-        pendingOutputChunk: '',
-        seenToolKeys: new Set(),
-        hasClaudeStreamEvents: false,
-        liveScope: scope,
-    };
-
-    const snapshot1 = {
-        type: 'assistant',
-        message: { id: 'msg-1', content: [{ type: 'text', text: '안녕하세요' }] },
-    };
-
-    extractFromEvent('claude-e', snapshot1, ctx, 'claude-e');
-    const chunk = extractOutputChunk('claude-e', snapshot1, ctx);
-    assert.equal(chunk, '안녕하세요');
-    if (chunk) appendLiveRunText(scope, chunk);
-
-    const liveRun = getLiveRun(scope);
-    const occurrences = liveRun.text.split('안녕하세요').length - 1;
-    assert.equal(occurrences, 1, `Expected 1 occurrence in liveRun.text but got ${occurrences}: "${liveRun.text}"`);
-    assert.equal(ctx.fullText, '안녕하세요');
-
-    clearLiveRun(scope);
-});
-
-// ─── Phase 0: Characterization tests for refactor safety ─────
-
-test('claude-e and ai-e route through the Claude adapter path', () => {
-    const ctx1 = { toolLog: [], fullText: '', traceLog: [], seenToolKeys: new Set(), hasClaudeStreamEvents: false };
-    const ctx2 = { toolLog: [], fullText: '', traceLog: [], seenToolKeys: new Set(), hasClaudeStreamEvents: false };
-    const ctx3 = { toolLog: [], fullText: '', traceLog: [], seenToolKeys: new Set(), hasClaudeStreamEvents: false };
-
-    const evt = readFixture('claude-assistant-tool.json');
-
-    const claudeLabels = extractToolLabelsForTest('claude', evt, ctx1);
-    const claudeELabels = extractToolLabelsForTest('claude-e', evt, ctx2);
-    const aiELabels = extractToolLabelsForTest('ai-e', evt, ctx3);
-
-    assert.deepEqual(claudeLabels, claudeELabels, 'claude-e must produce same labels as claude');
-    assert.deepEqual(claudeLabels, aiELabels, 'ai-e must produce same labels as claude');
-});
-
 test('events.ts facade exports exactly the 12 public symbols', () => {
     const eventsSrc = fs.readFileSync(path.join(__dirname, '../src/agent/events.ts'), 'utf8');
     const exportMatches = eventsSrc.match(/^export\s+(function|const|class|type|interface|enum)\s+(\w+)/gm) || [];
@@ -1926,13 +1807,9 @@ test('events.ts facade exports exactly the 12 public symbols', () => {
 test('args invariant: only plain claude passes --include-partial-messages', async () => {
     const { buildArgs, buildResumeArgs } = await import('../src/agent/args.ts');
     const claudeArgs = buildArgs('claude', 'claude-sonnet-5', 'medium', 'p', 's');
-    const claudeEArgs = buildArgs('claude-e', 'claude-sonnet-5', 'medium', 'p', 's');
     assert.ok(claudeArgs.includes('--include-partial-messages'), 'plain claude streams partial messages');
-    assert.ok(!claudeEArgs.includes('--include-partial-messages'), 'claude-e must not stream partial messages');
     const claudeResume = buildResumeArgs('claude', 'claude-sonnet-5', 'medium', 'sid', 'p');
-    const claudeEResume = buildResumeArgs('claude-e', 'claude-sonnet-5', 'medium', 'sid', 'p');
     assert.ok(claudeResume.includes('--include-partial-messages'), 'plain claude resume keeps the flag');
-    assert.ok(!claudeEResume.includes('--include-partial-messages'), 'claude-e resume must not gain the flag');
 });
 
 test('claude reconcile is skipped when the complete block has no text (streamed text survives)', () => {
@@ -2014,7 +1891,6 @@ test('WP4: claude tool_result converges the trace row even after RAM eviction', 
 // ctx.fullText, so narration that survives there reaches the user's final
 // answer. The live UI reads pendingOutputChunk separately and keeps everything.
 
-
 function boundaryCtx() {
     return { toolLog: [], fullText: '', seenToolKeys: new Set(), hasClaudeStreamEvents: false };
 }
@@ -2075,66 +1951,6 @@ test('claude streaming: message_start still flushes a pending thinking buffer', 
     assert.equal(ctx.toolLog.filter((t) => t.toolType === 'thinking').length, 1);
     assert.equal(ctx.toolLog[0].detail, '생각 중');
 });
-
-test('claude-e snapshot: a changed message id discards the previous narration', () => {
-    const ctx = boundaryCtx();
-    extractFromEvent('claude-e', {
-        type: 'assistant',
-        message: { id: 'msg-narration', content: [{ type: 'text', text: '관련 파일을 확인하겠습니다.' }] },
-    }, ctx, 'test');
-    assert.equal(ctx.fullText, '관련 파일을 확인하겠습니다.');
-    extractFromEvent('claude-e', {
-        type: 'assistant',
-        message: { id: 'msg-answer', content: [{ type: 'text', text: '원인은 메시지 경계 누락입니다.' }] },
-    }, ctx, 'test');
-    assert.equal(ctx.fullText, '원인은 메시지 경계 누락입니다.');
-});
-
-test('claude-e snapshot: same-id cumulative growth still appends only the delta', () => {
-    const ctx = boundaryCtx();
-    extractFromEvent('claude-e', {
-        type: 'assistant', message: { id: 'msg-1', content: [{ type: 'text', text: '원인은' }] },
-    }, ctx, 'test');
-    extractFromEvent('claude-e', {
-        type: 'assistant',
-        message: { id: 'msg-1', content: [{ type: 'text', text: '원인은 메시지 경계 누락입니다.' }] },
-    }, ctx, 'test');
-    assert.equal(ctx.fullText, '원인은 메시지 경계 누락입니다.', 'growth is continuation, not a boundary');
-});
-
-test('claude-e: consecutive ID-LESS snapshots are last-wins', () => {
-    // An anonymous stream has no id to compare, but each non-continuing snapshot
-    // is still a new message. Guarding on "a message was accumulating" (the
-    // snapshot baseline) rather than on the id keeps these covered.
-    const ctx = boundaryCtx();
-    extractFromEvent('claude-e', {
-        type: 'assistant', message: { content: [{ type: 'text', text: '확인하겠습니다.' }] },
-    }, ctx, 'test');
-    assert.equal(ctx.fullText, '확인하겠습니다.');
-    extractFromEvent('claude-e', {
-        type: 'assistant', message: { content: [{ type: 'text', text: '완료했습니다.' }] },
-    }, ctx, 'test');
-    assert.equal(ctx.fullText, '완료했습니다.');
-});
-
-test('claude-e: id → no-id → new-id keeps only the last message', () => {
-    // The regression the reviewer found: an id-less snapshot in the middle used to
-    // clear claudeILastAssistantId, so the following identified message saw no
-    // previous id and skipped its own boundary, keeping the narration.
-    const ctx = boundaryCtx();
-    extractFromEvent('claude-e', {
-        type: 'assistant', message: { id: 'm1', content: [{ type: 'text', text: '첫 서술' }] },
-    }, ctx, 'test');
-    extractFromEvent('claude-e', {
-        type: 'assistant', message: { content: [{ type: 'text', text: '중간 서술' }] },
-    }, ctx, 'test');
-    extractFromEvent('claude-e', {
-        type: 'assistant', message: { id: 'm2', content: [{ type: 'text', text: '최종 답변' }] },
-    }, ctx, 'test');
-    assert.equal(ctx.fullText, '최종 답변');
-});
-
-
 test('claude fallback (no deltas): a changed message id discards the previous narration', () => {
     const ctx = boundaryCtx();
     extractFromEvent('claude', {
@@ -2160,37 +1976,20 @@ test('claude fallback: two events of the SAME message keep both blocks', () => {
     }, ctx, 'test');
     assert.equal(ctx.fullText, '앞부분\n- 뒷부분', 'same id is continuation');
 });
-
-test('ai-e never accumulates assistant text, so it has no narration to leak', () => {
-    // ai-e is claude-LIKE for stream_event bookkeeping (isClaudeLikeCli), but the
-    // dispatch switch routes only 'claude' and 'claude-e' into handleClaudeEvent —
-    // ai-e assistant records never reach an appender. Pinned so a future dispatch
-    // change cannot silently give ai-e the unbounded-accumulation bug.
-    const ctx = boundaryCtx();
-    extractFromEvent('ai-e', {
-        type: 'assistant', message: { id: 'msg-1', content: [{ type: 'text', text: '확인하겠습니다.' }] },
-    }, ctx, 'test');
-    extractFromEvent('ai-e', {
-        type: 'assistant', message: { id: 'msg-2', content: [{ type: 'text', text: '완료했습니다.' }] },
-    }, ctx, 'test');
-    assert.equal(ctx.fullText, '', 'ai-e durable text stays empty in this adapter layer');
-});
-
 test('claude live stream keeps narration the durable answer drops', () => {
     const ctx = boundaryCtx();
-    extractFromEvent('claude-e', {
+    extractFromEvent('claude', {
         type: 'assistant', message: { id: 'm1', content: [{ type: 'text', text: '확인하겠습니다.' }] },
     }, ctx, 'test');
-    assert.equal(extractOutputChunk('claude-e', { type: 'assistant' }, ctx), '확인하겠습니다.');
-    extractFromEvent('claude-e', {
+    assert.equal(extractOutputChunk('claude', { type: 'assistant' }, ctx), '확인하겠습니다.');
+    extractFromEvent('claude', {
         type: 'assistant', message: { id: 'm2', content: [{ type: 'text', text: '완료했습니다.' }] },
     }, ctx, 'test');
-    assert.equal(extractOutputChunk('claude-e', { type: 'assistant' }, ctx), '완료했습니다.');
+    assert.equal(extractOutputChunk('claude', { type: 'assistant' }, ctx), '완료했습니다.');
     assert.equal(ctx.fullText, '완료했습니다.');
 });
 
 // ─── NARRATION-BOUNDARY-01: opencode step boundary + grok limitation ─────────
-
 
 function opencodeCtx() {
     return {

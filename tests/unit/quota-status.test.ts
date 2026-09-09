@@ -199,7 +199,7 @@ test('QS-005b: /api/quota returns every top-level CLI runtime key', () => {
         settingsRouteSrc.includes('CLI_KEYS.map((key) => [key, quotaByCli[key]'),
         '/api/quota should be keyed by CLI_KEYS instead of a hand-maintained subset',
     );
-    for (const key of ['agy', "'ai-e'", 'claude', "'claude-e'", 'codex', "'codex-app'", 'cursor', "'kiro-code'", 'grok', 'opencode', 'copilot']) {
+    for (const key of ['agy', 'claude', 'codex', "'codex-app'", 'cursor', "'kiro-code'", 'grok', 'opencode', 'copilot']) {
         assert.ok(settingsRouteSrc.includes(`${key}:`), `/api/quota should define ${key}`);
     }
 });
@@ -283,9 +283,6 @@ test('QS-005d: wrapper runtimes delegate quota to their underlying runtime', () 
     const settingsRouteSrc = readSource(
         path.join(import.meta.dirname, '../../src/routes/settings.ts'), 'utf8'
     );
-    assert.ok(settingsRouteSrc.includes('resolveAiEQuotaProvider'), 'AI-E provider should be resolved from settings');
-    assert.ok(settingsRouteSrc.includes("quotaSource: `ai-e:${aiEProvider}`"), 'AI-E should expose provider delegation metadata');
-    assert.ok(settingsRouteSrc.includes("quotaSource: 'claude-e:underlying-claude'"), 'Claude E should delegate to Claude quota');
     assert.ok(settingsRouteSrc.includes("quotaSource: 'codex-app:underlying-codex'"), 'Codex App should delegate to Codex quota');
 });
 

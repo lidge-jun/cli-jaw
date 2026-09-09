@@ -115,7 +115,7 @@ test('RID-015: live-run text is tail-capped while textLen reports the uncapped c
         await import('../../src/agent/live-run-state.ts');
     const scope = 'unit-text-cap';
     try {
-        beginLiveRun(scope, 'claude-e');
+        beginLiveRun(scope, 'claude');
         const chunk = 'x'.repeat(60_000);
         let cursor: number | null = 0;
         for (let i = 0; i < 5; i++) cursor = appendLiveRunText(scope, chunk);
@@ -139,7 +139,7 @@ test('RID-011: appendLiveRunText returns the cumulative cursor and setLiveRunTra
     const scope = 'unit-replay-meta';
     try {
         assert.equal(appendLiveRunText(scope, 'before-begin'), null, 'no live run → null cursor');
-        beginLiveRun(scope, 'claude-e');
+        beginLiveRun(scope, 'claude');
         setLiveRunTraceId(scope, 'tr_unit_replay');
         assert.equal(appendLiveRunText(scope, 'hello '), 6);
         assert.equal(appendLiveRunText(scope, 'world'), 11, 'cursor accumulates across chunks');

@@ -13,7 +13,7 @@ const read = (p: string): string => readFileSync(join(projectRoot, p), 'utf8');
 const STARTUP_SIGNATURE = 'agent exited before SessionStart';
 
 test('a startup failure with no output is still treated as transient', () => {
-    const cls = classifyExitError('claude-e', 1, STARTUP_SIGNATURE, undefined, '', false);
+    const cls = classifyExitError('claude', 1, STARTUP_SIGNATURE, undefined, '', false);
 
     assert.equal(cls.isTransientStartup, true, 'pre-work failures must stay retryable');
 });
@@ -21,7 +21,7 @@ test('a startup failure with no output is still treated as transient', () => {
 test('the same signature after output is not treated as a startup failure', () => {
     // The classification promises "before work began". Once the run produced
     // output it is past startup, and re-running it would repeat that work.
-    const cls = classifyExitError('claude-e', 1, STARTUP_SIGNATURE, undefined, '', true);
+    const cls = classifyExitError('claude', 1, STARTUP_SIGNATURE, undefined, '', true);
 
     assert.equal(cls.isTransientStartup, false, 'output means the run is past startup');
 });

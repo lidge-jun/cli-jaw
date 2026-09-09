@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { formatAgyPrintTimeout, resolveAgyAddDirectories } from '../../src/agent/args.ts';
-import { buildAiERuntimeStatusMeta, buildArgs, buildResumeArgs, resolveAiEProvider, resolveSessionBucket, shouldResumeBucketSession } from '../../src/agent/spawn.ts';
+import { buildArgs, buildResumeArgs, resolveSessionBucket, shouldResumeBucketSession } from '../../src/agent/spawn.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -124,95 +124,6 @@ test('AG-006: claude with effort includes --effort', () => {
     assert.ok(args.includes('--effort'));
     assert.ok(args.includes('high'));
 });
-
-test('AG-006a: claude-e forwards system prompt through wrapper extra args', () => {
-    const args = buildArgs('claude-e', 'sonnet', 'high', 'hi', 'system instructions', 'auto');
-    const separatorIdx = args.indexOf('--');
-    assert.ok(separatorIdx >= 0, 'claude-e must use -- before forwarded Claude args');
-    const forwarded = args.slice(separatorIdx + 1);
-    assert.ok(forwarded.includes('--append-system-prompt'));
-    assert.ok(forwarded.includes('system instructions'));
-});
-
-test('AG-006b: claude-e auto permissions auto-accept workspace trust in wrapper', () => {
-    const args = buildArgs('claude-e', 'sonnet', 'medium', 'hi', '', 'auto');
-    assert.ok(args.includes('--auto-accept-workspace-trust'));
-    assert.ok(args.includes('--dangerously-skip-permissions'));
-});
-
-test('AG-006c: claude-e resume auto permissions auto-accept workspace trust in wrapper', () => {
-    const args = buildResumeArgs('claude-e', 'sonnet', 'medium', 'sess-1', 'hi', 'auto');
-    assert.ok(args.includes('--auto-accept-workspace-trust'));
-    assert.ok(args.includes('--dangerously-skip-permissions'));
-});
-
-test('AG-006d: ai-e claude routes through explicit provider-first PTY args', () => {
-    const args = buildArgs('ai-e', 'sonnet', 'high', 'hi', 'system instructions', 'auto', { aiEProvider: 'claude' });
-    assert.deepEqual(args.slice(0, 2), ['claude', 'run']);
-    assert.ok(args.includes('--idle-timeout-ms'));
-    assert.ok(args.includes('--hard-timeout-ms'));
-    assert.ok(args.includes('--claude-bin') === false);
-    const separatorIdx = args.indexOf('--');
-    assert.ok(separatorIdx >= 0);
-    const forwarded = args.slice(separatorIdx + 1);
-    assert.ok(forwarded.includes('--model'));
-    assert.ok(forwarded.includes('sonnet'));
-    assert.ok(forwarded.includes('--append-system-prompt'));
-});
-
-test('AG-006e: ai-e codex routes through interactive mode with timeout', () => {
-    const args = buildArgs('ai-e', 'gpt-5.4', 'high', 'hi', '', 'auto', { aiEProvider: 'codex' });
-    assert.equal(args[0], 'codex');
-    assert.ok(args.includes('--timeout-ms'));
-    assert.ok(args.includes('--model'));
-    assert.ok(args.includes('gpt-5.4'));
-    assert.ok(!args.includes('--idle-timeout-ms'));
-    assert.ok(!args.includes('p'));
-    assert.equal(args.at(-1), 'hi');
-});
-
-test('AG-006f: ai-e copilot explicit provider wins over gpt model inference', () => {
-    const args = buildArgs('ai-e', 'gpt-5-mini', 'medium', 'hi', '', 'auto', { aiEProvider: 'copilot' });
-    assert.equal(args[0], 'copilot');
-    assert.ok(!args.includes('p'));
-    assert.equal(resolveAiEProvider('copilot', 'gpt-5-mini'), 'copilot');
-    assert.equal(resolveAiEProvider(undefined, 'gpt-5-mini'), 'codex');
-});
-
-test('AG-006g: ai-e resume injects resume flag for claude, codex, grok, and kiro', () => {
-    const claudeArgs = buildResumeArgs('ai-e', 'sonnet', 'medium', 'sess-1', 'hi', 'auto', { aiEProvider: 'claude' });
-    assert.deepEqual(claudeArgs.slice(0, 2), ['claude', 'run']);
-    assert.ok(claudeArgs.includes('--resume'));
-    const codexArgs = buildResumeArgs('ai-e', 'gpt-5.4', 'medium', 'sess-1', 'hi', 'auto', { aiEProvider: 'codex' });
-    assert.equal(codexArgs[0], 'codex');
-    assert.ok(codexArgs.includes('--resume'));
-    assert.ok(codexArgs.includes('sess-1'));
-    const kiroArgs = buildResumeArgs(
-        'ai-e',
-        'auto',
-        'medium',
-        '79eee8a5-7c00-4cd9-8385-c534a2f8b814',
-        'follow up',
-        'auto',
-        { aiEProvider: 'kiro' },
-    );
-    assert.deepEqual(kiroArgs.slice(0, 2), ['kiro', 'p']);
-    assert.ok(kiroArgs.includes('--resume'));
-    assert.ok(kiroArgs.includes('79eee8a5-7c00-4cd9-8385-c534a2f8b814'));
-    assert.equal(kiroArgs.at(-1), 'follow up');
-});
-
-test('AG-006g-kiro: ai-e kiro uses text output, effort, and auto provider inference', () => {
-    const args = buildArgs('ai-e', 'auto', 'high', 'hi', '', 'auto', { aiEProvider: 'kiro' });
-    assert.deepEqual(args.slice(0, 2), ['kiro', 'p']);
-    assert.ok(args.includes('--output-format'));
-    assert.ok(args.includes('text'));
-    assert.ok(args.includes('--effort'));
-    assert.ok(args.includes('high'));
-    assert.equal(resolveAiEProvider('kiro', 'auto'), 'kiro');
-    assert.equal(resolveAiEProvider(undefined, 'deepseek-3.2'), 'kiro');
-});
-
 test('AG-006g-kiro-effort: kiro-code maps xhigh to Kiro max on the wire', () => {
     const fresh = buildArgs('kiro-code', 'auto', 'xhigh', 'hi', '', 'auto');
     assert.ok(fresh.includes('--effort'));
@@ -223,81 +134,6 @@ test('AG-006g-kiro-effort: kiro-code maps xhigh to Kiro max on the wire', () => 
     assert.ok(resumed.includes('--effort'));
     assert.ok(resumed.includes('max'));
 });
-
-test('AG-006g2: ai-e non-Claude providers use p-mode argv prompt and never include AGY', () => {
-    const cases = [
-        ['codex', 'gpt-5.4'],
-        ['grok', 'grok-4'],
-        ['copilot', 'gpt-5-mini'],
-        ['kiro', 'auto'],
-    ] as const;
-    for (const [provider, model] of cases) {
-        const args = buildArgs('ai-e', model, 'medium', `prompt-${provider}`, '', 'auto', { aiEProvider: provider });
-        assert.equal(args[0], provider);
-        if (provider === 'kiro') {
-            assert.equal(args[1], 'p');
-            assert.ok(args.includes('--effort'));
-            assert.ok(args.includes('medium'));
-        } else {
-            assert.equal(args[1], '--output-format');
-        }
-        assert.equal(args.at(-1), `prompt-${provider}`);
-        assert.ok(!args.includes('run'));
-        assert.ok(!args.includes('agy'));
-        assert.ok(!args.includes('antigravity'));
-    }
-    assert.equal(resolveAiEProvider('agy', 'default'), 'claude');
-    assert.equal(resolveAiEProvider('antigravity', 'default'), 'claude');
-});
-
-test('AG-006h: ai-e spawn resolves provider before Claude model normalization', () => {
-    const spawnSrc = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
-    assert.match(spawnSrc, /resolveAiEProvider\([\s\S]*cfg\.provider[\s\S]*ao\.provider[\s\S]*requestedModel/);
-    assert.match(spawnSrc, /effectiveProvider\s*===\s*'claude'[\s\S]*migrateLegacyClaudeValue\(requestedModel\)/);
-});
-
-test('AG-006h2: ai-e spawn prefers perCli provider over stale active override provider', () => {
-    const spawnSrc = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
-    const providerBlock = spawnSrc.match(/const effectiveProvider = cli === 'ai-e'[\s\S]*?\n        : cli;/)?.[0] || '';
-    assert.match(providerBlock, /typeof cfg\.provider === 'string'/);
-    assert.match(providerBlock, /typeof ao\.provider === 'string'/);
-    assert.ok(
-        providerBlock.indexOf("typeof cfg.provider === 'string'") < providerBlock.indexOf("typeof ao.provider === 'string'"),
-        'perCli provider must override stale activeOverrides provider',
-    );
-});
-
-test('AG-006i: ai-e non-Claude PTY prompt providers support resume for codex/grok/kiro', () => {
-    const spawnSrc = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
-    const resumeSupportBlock = spawnSrc.match(/const providerSupportsResume =[\s\S]*?;/)?.[0] || '';
-    assert.match(resumeSupportBlock, /cli !== 'agy'/);
-    assert.match(resumeSupportBlock, /effectiveProvider !== 'claude'/);
-    assert.match(resumeSupportBlock, /effectiveProvider !== 'kiro'/);
-    assert.match(resumeSupportBlock, /effectiveProvider !== 'codex'/);
-    assert.match(resumeSupportBlock, /effectiveProvider !== 'grok'/);
-    assert.match(spawnSrc, /providerSupportsResume\s*&&\s*!\s*opts\._skipResume/);
-});
-
-test('AG-006j: ai-e runtime status metadata exposes provider and mode', () => {
-    assert.deepEqual(buildAiERuntimeStatusMeta('claude-e', 'claude', 'sonnet'), {});
-
-    const claudeMeta = buildAiERuntimeStatusMeta('ai-e', 'claude', 'sonnet');
-    assert.equal(claudeMeta.selector, 'ai-e');
-    assert.equal(claudeMeta.provider, 'claude');
-    assert.equal(claudeMeta.mode, 'pty');
-    assert.deepEqual(claudeMeta.runtime, {
-        cli: 'ai-e',
-        selector: 'ai-e',
-        provider: 'claude',
-        model: 'sonnet',
-        mode: 'pty',
-    });
-
-    const codexMeta = buildAiERuntimeStatusMeta('ai-e', 'codex', 'gpt-5.4');
-    assert.equal(codexMeta.provider, 'codex');
-    assert.equal(codexMeta.mode, 'pty');
-});
-
 // ─── buildArgs: codex ────────────────────────────────
 
 test('AG-007: codex auto includes bypass flag', () => {
@@ -384,13 +220,6 @@ test('AG-009j: resolveSessionBucket — codex + spark model → codex-spark buck
     assert.equal(resolveSessionBucket('codex', 'GPT-5-Spark'), 'codex-spark');
     assert.equal(resolveSessionBucket('codex', 'codex-spark-mini'), 'codex-spark');
 });
-
-test('AG-009j2: resolveSessionBucket — ai-e buckets include explicit provider', () => {
-    assert.equal(resolveSessionBucket('ai-e', 'sonnet', 'claude'), 'ai-e:claude');
-    assert.equal(resolveSessionBucket('ai-e', 'gpt-5-mini', 'copilot'), 'ai-e:copilot');
-    assert.equal(resolveSessionBucket('ai-e', 'gpt-5-mini'), 'ai-e:codex');
-});
-
 test('AG-009k: resolveSessionBucket — non-spark codex stays in codex bucket', () => {
     assert.equal(resolveSessionBucket('codex', 'gpt-5.4'), 'codex');
     assert.equal(resolveSessionBucket('codex', 'gpt-5.3-codex'), 'codex');
@@ -452,7 +281,6 @@ test('AG-009f: spark detection is case-insensitive and matches substring', () =>
     }
 });
 
-
 // ─── buildArgs: grok ─────────────────────────────────
 
 test('AG-012e: grok fresh sessions use headless prompt + streaming-json', () => {
@@ -499,26 +327,11 @@ test('AG-014: claude resume includes --resume + session id', () => {
     assert.ok(args.includes('--resume'));
     assert.ok(args.includes('sess-abc-123'));
 });
-
-test('AG-014a: claude-e resume forwards system prompt through wrapper extra args', () => {
-    const args = buildResumeArgs('claude-e', 'sonnet', 'high', 'sess-abc-123', 'next task', 'auto', {
-        sysPrompt: 'resume system instructions',
-    });
-    assert.ok(args.includes('--resume'));
-    assert.ok(args.includes('sess-abc-123'));
-    const separatorIdx = args.indexOf('--');
-    assert.ok(separatorIdx >= 0, 'claude-e must use -- before forwarded Claude args');
-    const forwarded = args.slice(separatorIdx + 1);
-    assert.ok(forwarded.includes('--append-system-prompt'));
-    assert.ok(forwarded.includes('resume system instructions'));
-});
-
 test('AG-015: codex resume includes session id', () => {
     const args = buildResumeArgs('codex', 'default', '', 'sess-123', 'continue', 'auto');
     assert.ok(args.includes('sess-123'));
     assert.ok(args.includes('resume'));
 });
-
 
 test('AG-016b: grok resume uses --resume and still omits effort/system prompt flags', () => {
     const args = buildResumeArgs('grok', 'grok-build', 'max', 'grok-session-1', 'continue', 'auto', {
@@ -599,23 +412,6 @@ test('AG-026: claude resume with fastMode injects --settings {"fastMode":true}',
     assert.notEqual(idx, -1);
     assert.equal(args[idx + 1], '{"fastMode":true}');
 });
-
-test('AG-027: claude-e with fastMode forwards --settings after the -- separator', () => {
-    const args = buildArgs('claude-e', 'sonnet', 'medium', 'hi', '', 'auto', { fastMode: true });
-    const separatorIdx = args.indexOf('--');
-    const settingsIdx = args.indexOf('--settings');
-    assert.ok(separatorIdx >= 0, 'claude-e must use -- before forwarded Claude args');
-    assert.ok(settingsIdx > separatorIdx, '--settings must be forwarded to the underlying claude binary');
-    assert.equal(args[settingsIdx + 1], '{"fastMode":true}');
-});
-
-test('AG-028: ai-e claude with fastMode forwards --settings to claude', () => {
-    const args = buildArgs('ai-e', 'sonnet', 'medium', 'hi', '', 'auto', { aiEProvider: 'claude', fastMode: true });
-    const idx = args.indexOf('--settings');
-    assert.notEqual(idx, -1);
-    assert.equal(args[idx + 1], '{"fastMode":true}');
-});
-
 test('AG-029: codex fastMode still maps to service_tier="fast" and never gets --settings', () => {
     const args = buildArgs('codex', 'gpt-5.4', 'high', 'x', '', 'auto', { fastMode: true });
     const cVals = args.reduce<string[]>((acc, v, i) => (v === '-c' ? [...acc, args[i + 1]] : acc), []);

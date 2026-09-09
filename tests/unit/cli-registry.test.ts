@@ -17,8 +17,8 @@ const __dirname = dirname(__filename);
 
 // ─── Structure validation ────────────────────────────
 
-test('CLI_KEYS contains exactly 12 known entries', () => {
-    assert.deepEqual([...CLI_KEYS].sort(), ['agy', 'ai-e', 'claude', 'claude-e', 'codex', 'codex-app', 'copilot', 'cursor', 'grok', 'kiro-code', 'opencode', 'pi']);
+test('CLI_KEYS contains exactly 10 known entries', () => {
+    assert.deepEqual([...CLI_KEYS].sort(), ['agy', 'claude', 'codex', 'codex-app', 'copilot', 'cursor', 'grok', 'kiro-code', 'opencode', 'pi']);
 });
 
 test('DEFAULT_CLI is codex-app', () => {
@@ -128,34 +128,6 @@ test('live CLI registry carries per-model Codex efforts including max and ultra'
         assert.equal(registry[key]?.['defaultEffort'], 'medium');
     }
 });
-
-// ai-e splits models by provider, so a FLAT per-model effort map collides on ids
-// shared across providers: `gpt-5.6-sol` exists under both codex and kiro, but
-// Kiro only accepts low/medium/high/xhigh (args.ts KIRO_EFFORTS) while ocx
-// advertises max/ultra for the codex route. A flat map offered Kiro `ultra`.
-test('ai-e per-model efforts are provider-scoped, never a flat colliding map', async () => {
-    // opencodex + kiro-models are already stubbed by the preceding tests in
-    // this file; node:test forbids re-mocking the same module.
-    const moduleUrl = new URL('../../src/cli/registry-live.ts', import.meta.url);
-    moduleUrl.searchParams.set('case', `scoped-${Date.now()}`);
-    const { buildLiveCliRegistry } = await import(moduleUrl.href) as typeof import('../../src/cli/registry-live.ts');
-    const registry = await buildLiveCliRegistry() as Record<string, Record<string, unknown>>;
-    const aiE = registry['ai-e'] ?? {};
-
-    // The flat keys must NOT exist on ai-e — they are what caused the collision.
-    assert.equal(aiE['effortsByModel'], undefined, 'ai-e must not carry a flat effortsByModel');
-    assert.equal(aiE['defaultEffortByModel'], undefined, 'ai-e must not carry a flat defaultEffortByModel');
-
-    const scoped = aiE['effortsByModelByProvider'] as Record<string, Record<string, string[]>>;
-    assert.ok(scoped?.['codex'], 'ai-e must scope per-model efforts under codex');
-    assert.ok(scoped['codex']?.['gpt-5.6-sol']?.includes('ultra'));
-    // kiro must get no per-model entry, so the picker falls back to its own list.
-    assert.equal(scoped['kiro'], undefined);
-
-    // codex/codex-app have no provider split, so they keep the flat map.
-    assert.ok((registry['codex']?.['effortsByModel'] as Record<string, string[]>)?.['gpt-5.6-sol']);
-});
-
 test('Antigravity registry exposes AGY as a top-level runtime, not an ai-e provider', () => {
     assert.equal(CLI_REGISTRY.agy.label, 'Antigravity');
     assert.equal(CLI_REGISTRY.agy.binary, 'agy');
@@ -169,7 +141,7 @@ test('Antigravity registry exposes AGY as a top-level runtime, not an ai-e provi
     // future generation bump from re-introducing that gap silently.
     assert.ok(CLI_REGISTRY.agy.models.includes(CLI_REGISTRY.agy.defaultModel));
     assert.equal(CLI_REGISTRY.agy.models.some((m) => m.includes('3.5 Flash')), false);
-    assert.equal(CLI_REGISTRY['ai-e'].providers.includes('agy'), false);
+    assert.equal(Object.hasOwn(CLI_REGISTRY, 'ai-e'), false);
 });
 
 test('Pi registry exposes Pi as a top-level runtime above AI-E, not an ai-e provider', () => {
@@ -178,8 +150,8 @@ test('Pi registry exposes Pi as a top-level runtime above AI-E, not an ai-e prov
     assert.equal(CLI_REGISTRY.pi.defaultProvider, 'progrok');
     assert.equal(CLI_REGISTRY.pi.defaultModel, 'grok-composer-2.5-fast');
     assert.ok(CLI_REGISTRY.pi.models.includes('grok-4.3'));
-    assert.equal(CLI_KEYS.indexOf('pi') < CLI_KEYS.indexOf('ai-e'), true);
-    assert.equal(CLI_REGISTRY['ai-e'].providers.includes('pi'), false);
+    assert.equal(CLI_KEYS.includes('pi'), true);
+    assert.equal(Object.hasOwn(CLI_REGISTRY, 'ai-e'), false);
 });
 
 test('Kiro registry exposes kiro-code as a top-level runtime', () => {
@@ -188,27 +160,20 @@ test('Kiro registry exposes kiro-code as a top-level runtime', () => {
     assert.equal(CLI_REGISTRY['kiro-code'].defaultModel, 'auto');
     assert.ok(CLI_REGISTRY['kiro-code'].models.includes('claude-sonnet-4.6'));
     assert.deepEqual(CLI_REGISTRY['kiro-code'].efforts, ['low', 'medium', 'high', 'xhigh']);
-    assert.deepEqual(CLI_REGISTRY['ai-e'].effortsByProvider?.kiro, ['low', 'medium', 'high', 'xhigh']);
-    assert.equal(CLI_REGISTRY['ai-e'].providers.includes('kiro-code'), false);
+    assert.equal(Object.hasOwn(CLI_REGISTRY, 'ai-e'), false);
 });
 
-// Both Kiro arrays are static fallbacks, and they are NOT equivalent in reach:
-// registry-live.ts replaces only `kiro-code.models` from the live kiro-cli
-// inventory, while `ai-e.modelsByProvider.kiro` stays static even when that
-// probe succeeds. A model missing from the AI-E mirror is therefore permanently
-// missing. Mirrors opencodex KIRO_MODELS (src/providers/kiro-models.ts).
+// registry-live.ts replaces kiro-code.models from the live kiro-cli inventory.
+// Mirrors opencodex KIRO_MODELS (src/providers/kiro-models.ts).
 test('Kiro catalogs carry the current opencodex model ids on both surfaces', () => {
     const required = ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'claude-opus-5'];
     const topLevel = CLI_REGISTRY['kiro-code'].models;
-    const aiEKiro = CLI_REGISTRY['ai-e'].modelsByProvider.kiro;
     for (const model of required) {
         assert.ok(topLevel.includes(model), `kiro-code.models is missing ${model}`);
-        assert.ok(aiEKiro.includes(model), `ai-e.modelsByProvider.kiro is missing ${model}`);
     }
     // `auto` must stay the first entry: it is the default and any first-entry
     // fallback must not resolve to a concrete model.
     assert.equal(topLevel[0], 'auto');
-    assert.equal(aiEKiro[0], 'auto');
     assert.equal(CLI_REGISTRY['kiro-code'].defaultModel, 'auto');
 });
 
@@ -221,47 +186,16 @@ test('Cursor registry exposes Cursor as a top-level runtime, not an ai-e provide
     assert.ok(CLI_REGISTRY.cursor.models.includes('gpt-5.1-codex-mini'));
     assert.ok(CLI_REGISTRY.cursor.efforts.includes('high-fast'));
     assert.match(CLI_REGISTRY.cursor.effortNote || '', /model IDs/);
-    assert.equal(CLI_REGISTRY['ai-e'].providers.includes('cursor'), false);
+    assert.equal(Object.hasOwn(CLI_REGISTRY, 'ai-e'), false);
 });
-
-test('ai-e registry exposes explicit provider selector metadata', () => {
-    assert.equal(CLI_REGISTRY['ai-e'].defaultProvider, 'claude');
-    assert.deepEqual(CLI_REGISTRY['ai-e'].providers, ['claude', 'codex', 'grok', 'copilot', 'kiro']);
-    assert.ok(CLI_REGISTRY['ai-e'].modelsByProvider?.kiro.includes('auto'));
-    assert.ok(CLI_REGISTRY['ai-e'].modelsByProvider?.codex.includes('gpt-5.4'));
-    assert.ok(CLI_REGISTRY['ai-e'].modelsByProvider?.copilot.includes('gpt-5-mini'));
-});
-
 test('Codex registry defaults expose only the curated inactive ocx model set', () => {
     assert.deepEqual(CODEX_MODEL_CHOICES, ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.3-codex-spark', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna']);
     assert.deepEqual(CLI_REGISTRY.codex.models, CODEX_MODEL_CHOICES);
     assert.deepEqual(CLI_REGISTRY['codex-app'].models, CODEX_MODEL_CHOICES);
-    assert.deepEqual(CLI_REGISTRY['ai-e'].modelsByProvider?.codex, CODEX_MODEL_CHOICES);
     assert.equal(CLI_REGISTRY.codex.models.includes('gpt-5.3-codex'), false);
     assert.equal(CLI_REGISTRY.codex.models.includes('gpt-5.2-codex'), false);
     assert.equal(CLI_REGISTRY.codex.models.includes('gpt-5.1-codex-mini'), false);
 });
-
-test('ai-e detection checks AI_E_BIN, local package candidates, then PATH', () => {
-    const configSrc = fs.readFileSync(join(__dirname, '../../src/core/cli-detection.ts'), 'utf8');
-    const aiEBlock = configSrc.match(/function detectAiE\(\): CliDetection \{[\s\S]*?\n\}/)?.[0] || '';
-    assert.match(aiEBlock, /process\.env\["AI_E_BIN"\]/);
-    assert.match(aiEBlock, /listCliBinaryCandidates\('ai-e'\)/);
-    assert.match(aiEBlock, /selectCompatibleHelperPath\(getAiEPackageCandidates\(\)/);
-    assert.match(configSrc, /'@bitkyc08', 'ai-e'/);
-    assert.match(configSrc, /'ai-e', 'target', 'release'/);
-    assert.match(configSrc, /'ai-e', 'target', 'debug'/);
-    assert.match(configSrc, /missing --idle-timeout-ms support/);
-    assert.ok(
-        aiEBlock.indexOf('process.env["AI_E_BIN"]') < aiEBlock.indexOf('getAiEPackageCandidates()'),
-        'AI_E_BIN must be checked before local package candidates',
-    );
-    assert.ok(
-        aiEBlock.indexOf('getAiEPackageCandidates()') < aiEBlock.indexOf("listCliBinaryCandidates('ai-e')"),
-        'local package candidates must be checked before PATH lookup',
-    );
-});
-
 test('grok registry includes build and composer models with effort disabled', () => {
     assert.equal(CLI_REGISTRY.grok.defaultModel, 'grok-build');
     assert.deepEqual(CLI_REGISTRY.grok.models, ['grok-build', 'grok-composer-2.5-fast']);
@@ -337,7 +271,6 @@ test('buildDefaultPerCli returns correct shape', () => {
         assert.equal(defaults[key].model, CLI_REGISTRY[key].defaultModel);
         assert.equal(typeof defaults[key].effort, 'string');
     }
-    assert.equal(defaults['ai-e'].provider, 'claude');
 });
 
 test('buildDefaultPerCli returns a new object each call', () => {

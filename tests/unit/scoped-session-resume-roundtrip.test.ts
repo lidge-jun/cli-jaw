@@ -109,55 +109,6 @@ test('a save that names no bucket still stays inside its own scope', () => {
         'the default session keeps the conversation it was resuming');
     assert.equal(resumeIdFor(b, 'copilot', 'default'), 'thread-of-b');
 });
-
-// ai-e keys its bucket by provider, so the round trip has to hold per provider too.
-// A write that resolves one provider and a read that resolves another loses the resume
-// silently — the conversation is still in the table, under a name nobody asks for.
-test('an ai-e session round-trips under the provider it was configured with', () => {
-    const b = scopeForChatSession('sess-b');
-
-    assert.equal(saveTurn(b, 'ai-e', 'auto', 'thread-kiro', { provider: 'kiro' }), true);
-
-    assert.equal(resumeIdFor(b, 'ai-e', 'auto', { provider: 'kiro' }), 'thread-kiro');
-    assert.equal(resumeIdFor(b, 'ai-e', 'auto', { provider: 'claude' }), null,
-        'another provider is a different conversation, not the same one');
-});
-
-// Compact and reset name a bucket without a run to ask, so they read the provider from
-// settings. They each used to do that separately and one passed nothing, which sent the
-// clear to whichever provider the model name happened to imply. One helper now answers
-// for all of them, and it has to agree with what the run itself resolved.
-test('a configured ai-e provider beats what the model name implies', () => {
-    const configured = {
-        perCli: { 'ai-e': { provider: 'kiro' } },
-        activeOverrides: {},
-    };
-    // `gpt-5.5` infers `codex`; the configuration says otherwise and wins.
-    assert.equal(aiEProviderForBucket('ai-e', 'gpt-5.5', configured), 'kiro');
-    assert.equal(aiEProviderForBucket('ai-e', 'gpt-5.5', null), 'codex',
-        'with nothing configured the model name is all there is');
-    assert.equal(aiEProviderForBucket('claude', 'gpt-5.5', configured), null,
-        'no other runtime keys its bucket by provider');
-
-    const overrideOnly = { perCli: {}, activeOverrides: { 'ai-e': { provider: 'grok' } } };
-    assert.equal(aiEProviderForBucket('ai-e', 'gpt-5.5', overrideOnly), 'grok');
-});
-
-// The point of that agreement: a save and the clear that follows must name one row.
-test('a save and a settings-driven clear name the same ai-e bucket', () => {
-    const b = scopeForChatSession('sess-b');
-    const configured = { perCli: { 'ai-e': { provider: 'kiro' } }, activeOverrides: {} };
-
-    // The run resolves its provider from the same settings and saves under it.
-    const runProvider = aiEProviderForBucket('ai-e', 'gpt-5.5', configured);
-    assert.equal(saveTurn(b, 'ai-e', 'gpt-5.5', 'thread-kiro', { provider: runProvider! }), true);
-
-    // A compact or reset asking the helper lands on that same row rather than `ai-e:codex`.
-    assert.equal(resumeIdFor(b, 'ai-e', 'gpt-5.5', { provider: runProvider }), 'thread-kiro');
-    assert.equal(resumeIdFor(b, 'ai-e', 'gpt-5.5', { provider: null }), null,
-        'the inferred provider names an empty bucket, which is what the defect looked like');
-});
-
 // codex-app multiplex folds the lane into the key. Both lane modes belong to the same
 // session, but they are different conversations, and neither may reach the other scope.
 test('codex-app multiplex lanes stay inside their own session', () => {

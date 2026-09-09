@@ -27,25 +27,6 @@ test('CSE-004: codex and codex-app both carry it', () => {
         assert.ok(entry.efforts.includes('max'), cli + ' must offer max offline');
     }
 });
-
-test('CSE-005: ai-e codex provider matches, since it forwards --effort directly', () => {
-    // A narrower list here would hide the tiers from the codex provider while the
-    // top-level runtime offered them.
-    const efforts = (CLI_REGISTRY['ai-e'] as { effortsByProvider: Record<string, string[]> })
-        .effortsByProvider['codex'];
-    assert.deepEqual(efforts, [...CODEX_EFFORT_CHOICES]);
-});
-
-test('CSE-006: other ai-e providers are unchanged', () => {
-    // Kiro takes low/medium/high/xhigh only (args.ts KIRO_EFFORTS); widening it
-    // would put an ultra on the wire that the CLI rejects.
-    const byProvider = (CLI_REGISTRY['ai-e'] as { effortsByProvider: Record<string, string[]> })
-        .effortsByProvider;
-    assert.deepEqual(byProvider['kiro'], ['low', 'medium', 'high', 'xhigh']);
-    assert.deepEqual(byProvider['copilot'], ['low', 'medium', 'high']);
-    assert.deepEqual(byProvider['grok'], []);
-});
-
 test('CSE-007: the offline fallback gives every static model the same union', async () => {
     // A degraded probe must still produce a usable picker for each model.
     resetOpenCodexModelCacheForTest();

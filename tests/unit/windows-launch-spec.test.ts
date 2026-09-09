@@ -62,7 +62,7 @@ test('WLS-004: parses plain and env-based shebangs', () => {
     assert.deepEqual(parseShebang('#!/usr/bin/env node\nx'), {
         interpreter: 'node', args: [], envDelta: {},
     });
-    // Observed in a real install: claude-e is sh, cursor-agent is bash. Assuming node
+    // Observed in a real install: some helpers are sh, cursor-agent is bash. Assuming node
     // here would launch a shell script with the wrong interpreter.
     assert.deepEqual(parseShebang('#!/usr/bin/env sh\nset -eu'), {
         interpreter: 'sh', args: [], envDelta: {},

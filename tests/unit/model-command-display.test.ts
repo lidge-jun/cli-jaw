@@ -161,38 +161,6 @@ test('MD-010: /status effort does not leak from different CLI session', async ()
     // perCli.gemini.effort is '' (empty), so final should be '-' (default), NOT 'low' from codex session
     assert.ok(!result.text.includes('low'), '/status should not leak effort from different CLI session');
 });
-
-test('MD-012: /model grok-build on ai-e auto-switches provider to grok', async () => {
-    const ctx = makeCtx({
-        cli: 'ai-e',
-        perCli: {
-            'ai-e': { model: 'sonnet', effort: 'medium', provider: 'claude' },
-            gemini: { model: 'gemini-3-flash-preview', effort: '' },
-        },
-    });
-    const result = await modelHandler(['grok-build'], ctx);
-    assert.equal(result.ok, true);
-    assert.ok(result.text.includes('grok-build'));
-    assert.ok(result.text.includes('provider:'), 'should mention provider switch');
-    assert.equal(ctx.settings.perCli['ai-e'].provider, 'grok');
-    assert.equal(ctx.settings.perCli['ai-e'].model, 'grok-build');
-    assert.equal(ctx.settings.activeOverrides?.['ai-e']?.model, 'grok-build');
-});
-
-test('MD-013: /model on ai-e stays on same provider when model matches', async () => {
-    const ctx = makeCtx({
-        cli: 'ai-e',
-        perCli: {
-            'ai-e': { model: 'grok-build', effort: '', provider: 'grok' },
-            gemini: { model: 'gemini-3-flash-preview', effort: '' },
-        },
-    });
-    const result = await modelHandler(['grok-composer-2.5-fast'], ctx);
-    assert.equal(result.ok, true);
-    assert.ok(!result.text.includes('provider:'), 'should not mention provider switch for same provider');
-    assert.equal(ctx.settings.perCli['ai-e'].model, 'grok-composer-2.5-fast');
-});
-
 test('MD-014: /model on standalone grok sets activeOverrides', async () => {
     const ctx = makeCtx({
         cli: 'grok',
@@ -206,22 +174,6 @@ test('MD-014: /model on standalone grok sets activeOverrides', async () => {
     assert.equal(ctx.settings.perCli.grok.model, 'grok-composer-2.5-fast');
     assert.equal(ctx.settings.activeOverrides?.grok?.model, 'grok-composer-2.5-fast');
 });
-
-test('MD-015: /model gpt-5.5 on ai-e switches provider from grok to codex', async () => {
-    const ctx = makeCtx({
-        cli: 'ai-e',
-        perCli: {
-            'ai-e': { model: 'grok-build', effort: '', provider: 'grok' },
-            gemini: { model: 'gemini-3-flash-preview', effort: '' },
-        },
-    });
-    const result = await modelHandler(['gpt-5.5'], ctx);
-    assert.equal(result.ok, true);
-    assert.ok(result.text.includes('provider:'));
-    assert.equal(ctx.settings.perCli['ai-e'].provider, 'codex');
-    assert.equal(ctx.settings.perCli['ai-e'].model, 'gpt-5.5');
-});
-
 test('MD-011: /status handles space-containing model names', async () => {
     const ctx = makeCtx({
         activeOverrides: {

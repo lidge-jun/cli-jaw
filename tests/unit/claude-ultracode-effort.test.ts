@@ -75,11 +75,7 @@ test('UC-008: medium stays implicit, as before', () => {
 
 const ULTRACODE_PATHS: Array<[string, string[]]> = [
     ['claude', buildArgs('claude', 'claude-opus-5', 'ultracode', 'p', '', 'auto')],
-    ['claude-e', buildArgs('claude-e', 'claude-opus-5', 'ultracode', 'p', '', 'auto')],
-    ['ai-e/claude', buildArgs('ai-e', 'claude-opus-5', 'ultracode', 'p', '', 'auto', { aiEProvider: 'claude' })],
     ['claude resume', buildResumeArgs('claude', 'claude-opus-5', 'ultracode', 's1', 'p', 'auto')],
-    ['claude-e resume', buildResumeArgs('claude-e', 'claude-opus-5', 'ultracode', 's1', 'p', 'auto')],
-    ['ai-e/claude resume', buildResumeArgs('ai-e', 'claude-opus-5', 'ultracode', 's1', 'p', 'auto', { aiEProvider: 'claude' })],
 ];
 
 for (const [label, args] of ULTRACODE_PATHS) {

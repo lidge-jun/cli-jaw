@@ -184,42 +184,6 @@ test('SF-EDGE: processQueue is triggered after mainManaged exit in both paths', 
         'CLI close should reference processQueue (direct call or handleAgentExit param)',
     );
 });
-
-test('SF-005: ai-e PTY steer uses graceful interrupt timing', () => {
-    const spawnSrc = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
-    const routeSrc = fs.readFileSync(join(__dirname, '../../src/routes/orchestrate.ts'), 'utf8');
-    const handlerSrc = fs.readFileSync(join(__dirname, '../../src/cli/handlers-runtime.ts'), 'utf8');
-
-    assert.ok(
-        spawnSrc.includes('CLAUDE_E_STEER_WAIT_MS = 30_000'),
-        'claude-e steer should wait long enough for SIGKILL escalation plus exit cleanup',
-    );
-    assert.ok(
-        spawnSrc.includes('CLAUDE_E_STEER_KILL_ESCALATION_MS = 8_000'),
-        'claude-e steer should not inherit the default 2s SIGKILL escalation',
-    );
-    assert.ok(
-        spawnSrc.includes("reason === 'steer' && isActiveAiEPtyRuntime(scopeKey)"),
-        'kill policy should be scoped to ai-e/claude-e PTY runtimes',
-    );
-    assert.ok(
-        spawnSrc.includes("return { signal: 'SIGINT', escalationMs: CLAUDE_E_STEER_KILL_ESCALATION_MS }"),
-        'claude-e steer should send SIGINT so the Rust runtime can emit interrupted and /exit',
-    );
-    assert.ok(
-        spawnSrc.includes('export function getSteerWaitMsForActiveAgent'),
-        'steer wait helper should be exported for all steer surfaces',
-    );
-    assert.ok(
-        routeSrc.includes('getSteerWaitMsForActiveAgent(scope)'),
-        'queued web steer route should use provider-specific wait timing',
-    );
-    assert.ok(
-        handlerSrc.includes('getSteerWaitMsForActiveAgent(scopeKey)'),
-        'slash steer handler should use provider-specific wait timing',
-    );
-});
-
 test('SF-006: queued web steer accepts item before background old-process wait', () => {
     const routeSrc = fs.readFileSync(join(__dirname, '../../src/routes/orchestrate.ts'), 'utf8');
     const spawnSrc = fs.readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');

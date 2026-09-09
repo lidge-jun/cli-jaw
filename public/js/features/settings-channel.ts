@@ -1,4 +1,4 @@
-import { isRetiredCliSelection } from '../../../src/types/cli-engine.js';
+import { isRetiredCliSelection, retiredRuntimeLabel } from '../../../src/types/cli-engine.js';
 // ── Active Channel & Fallback Order ──
 import { apiJson, api } from '../api.js';
 import { escapeHtml } from '../render.js';

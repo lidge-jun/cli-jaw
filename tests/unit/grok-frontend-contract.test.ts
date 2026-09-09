@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { metaFor } from '../../public/manager/src/settings/pages/components/agent/agent-meta.ts';
 
 const root = join(import.meta.dirname, '..', '..');
 const src = (path: string) => readFileSync(join(root, path), 'utf8');
@@ -66,15 +67,16 @@ test('CODEX-FE-001: provider icons keep codex original and color only codex-app'
     assert.doesNotMatch(src('public/assets/providers/copilot-color.svg'), /GitHub Copilot/);
 });
 
-test('CLAUDE-E-FE-001: frontend presents claude-e as Claude E', () => {
+test('CLAUDE-E-FE-001: frontend presents claude-e as Claude E (retired)', () => {
     const meta = src('public/manager/src/settings/pages/components/agent/agent-meta.ts');
     const constants = src('public/js/constants.ts');
     const icons = src('public/js/provider-icons.ts');
     const settingsCore = src('public/js/features/settings-core.ts');
     const cliStatus = src('public/js/features/settings-cli-status.ts');
-    assert.match(meta, /'claude-e':\s*\{[\s\S]*label:\s*'Claude E'/);
-    assert.match(constants, /'claude-e':\s*\{[\s\S]*label:\s*'Claude E'/);
+    assert.doesNotMatch(meta, /'claude-e':\s*\{/);
+    assert.doesNotMatch(constants, /'claude-e':\s*\{/);
     assert.match(icons, /'claude-e':\s*'Claude E'/);
+    assert.equal(metaFor('claude-e').label, 'Claude E (retired)');
     assert.match(settingsCore, /cliDisplayLabel\(cli\)/);
     assert.match(cliStatus, /providerLabel\(name\)/);
 });
@@ -94,7 +96,7 @@ test('GROK-FE-002: legacy settings fallback registry exposes grok-build without 
 test('LEGACY-FE-001: classic active/flush selector exposes every canonical CLI; per-CLI rows live in the unified settings frame', () => {
     const html = src('public/index.html');
     const agent = src('public/manager/src/settings/pages/Agent.tsx');
-    for (const cli of ['ai-e', 'claude', 'codex', 'codex-app', 'cursor', 'kiro-code', 'gemini', 'grok', 'opencode', 'copilot'] as const) {
+    for (const cli of ['claude', 'codex', 'codex-app', 'cursor', 'kiro-code', 'gemini', 'grok', 'opencode', 'copilot'] as const) {
         assert.match(html, new RegExp(`<option value="${cli}"`), `active/flush selector must include ${cli}`);
     }
     // The classic per-CLI settings rows were replaced by the standalone SettingsShell iframe (260908 wp4);
@@ -141,7 +143,7 @@ test('LEGACY-FE-002: fallback CLI surfaces include every canonical CLI', () => {
     const heartbeat = src('public/manager/src/settings/pages/components/heartbeat-helpers.ts');
     const status = src('public/js/features/settings-cli-status.ts');
     const freshInstallSmoke = src('scripts/fresh-install-smoke.ts');
-    for (const cli of ['ai-e', 'claude', 'claude-e', 'codex', 'codex-app', 'copilot', 'cursor', 'kiro-code', 'grok', 'opencode']) {
+    for (const cli of ['claude', 'codex', 'codex-app', 'copilot', 'cursor', 'kiro-code', 'grok', 'opencode']) {
         assert.match(employees, new RegExp(`'${cli}'`), `manager employee fallback must include ${cli}`);
         assert.match(heartbeat, new RegExp(`'${cli}'`), `manager heartbeat fallback must include ${cli}`);
         assert.match(status, new RegExp(`'${cli}'|${cli}:`), `legacy CLI status hints must include ${cli}`);

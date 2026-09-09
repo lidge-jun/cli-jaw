@@ -74,15 +74,6 @@ test('CSR-005: applyRuntimeSettingsPatch invokes cliSwitchRefresh on cli change'
     assert.match(runtimeSrc, /if\s*\(\s*cliChanged\s*\|\|\s*aiEProviderChanged\s*\)\s*\{[\s\S]*?cliSwitchRefresh[\s\S]*?\}/);
     assert.match(runtimeSrc, /await\s+cliSwitchRefresh\(\{[\s\S]*?sourceWorkDir:\s*prevWorkingDir[\s\S]*?targetWorkDir:\s*settings\.workingDir[\s\S]*?fromCli:[\s\S]*?toCli,[\s\S]*?toModel,[\s\S]*?\}\)/);
 });
-
-test('CSR-005b: ai-e provider change triggers clean session refresh', () => {
-    assert.match(runtimeSrc, /const\s+prevAiEProvider\s*=\s*selectedAiEProvider\(prevSnapshot\)/);
-    assert.match(runtimeSrc, /const\s+nextAiEProvider\s*=\s*selectedAiEProvider\(settings\)/);
-    assert.match(runtimeSrc, /const\s+aiEProviderChanged\s*=\s*prevCli\s*===\s*'ai-e'[\s\S]*?settings\.cli\s*===\s*'ai-e'[\s\S]*?prevAiEProvider\s*!==\s*nextAiEProvider/);
-    assert.match(runtimeSrc, /fromCli:\s*aiEProviderChanged\s*\?\s*`ai-e:\$\{prevAiEProvider\}`\s*:\s*prevCli/);
-    assert.match(runtimeSrc, /toProvider:\s*toCli\s*===\s*'ai-e'\s*\?\s*nextAiEProvider\s*:\s*undefined/);
-});
-
 test('CSR-006: execution edits synchronize while presentation and transport preserve distinct session sentinels', async t => {
     const config = await import('../../src/core/config.ts');
     const { applyRuntimeSettingsPatch } = await import('../../src/core/runtime-settings.ts');

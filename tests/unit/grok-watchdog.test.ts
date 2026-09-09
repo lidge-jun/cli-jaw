@@ -37,6 +37,4 @@ test('GROK-WD-001: Grok NDJSON activity marks watchdog progress before event fil
 test('GROK-WD-002: grok still counts as structured stream-json progress', async () => {
     const { streamJsonMarksProgress } = await import('../../src/agent/events/helpers.ts');
     assert.equal(streamJsonMarksProgress('grok'), true);
-    assert.equal(streamJsonMarksProgress('ai-e', 'grok'), true);
-    assert.equal(streamJsonMarksProgress('ai-e', 'anthropic'), false);
 });

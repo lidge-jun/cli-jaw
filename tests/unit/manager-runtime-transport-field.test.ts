@@ -117,7 +117,7 @@ for (const cli of eligible) {
 test('literal three-provider UI policy matches independent server selection policy', async t => {
     assert.deepEqual([...SWITCHABLE_NATIVE_CLIS].sort(), ['claude', 'cursor', 'grok']);
     const offered: string[] = [];
-    for (const cli of [...eligible, 'codex-app', 'pi', 'codex', 'jwc', 'agy', 'ai-e', 'claude-e', 'gemini', 'opencode', 'copilot', 'kiro-code', 'Cursor', 'cursor.extra', '__proto__']) {
+    for (const cli of [...eligible, 'codex-app', 'pi', 'codex', 'jwc', 'agy', 'gemini', 'opencode', 'copilot', 'kiro-code', 'Cursor', 'cursor.extra', '__proto__']) {
         const view = await mountRow(t, cli);
         const visible = Boolean(view.container.querySelector('[aria-label^="Runtime transport:"]'));
         if (visible) offered.push(cli);
@@ -205,7 +205,7 @@ test('temporary row disable keeps an existing Pi dialog and its unsubmitted draf
 
 test('Pi layout modifier is mounted only on the Pi grid, not other CLI rows', async t => {
     // Structure/routing contract only: jsdom cannot prove physical track widths.
-    for (const cli of ['pi', 'claude', 'cursor', 'grok', 'ai-e', 'codex-app', 'Pi']) {
+    for (const cli of ['pi', 'claude', 'cursor', 'grok', 'codex-app', 'Pi']) {
         const view = await mountRow(t, cli);
         const grid = view.container.querySelector('.settings-percli-grid');
         assert.ok(grid);
@@ -251,7 +251,7 @@ test('Pi layout preserves full model/provider, effort note, model edits and iner
     assert.deepEqual(view.http, []);
 });
 
-for (const cli of ['ai-e', 'pi']) {
+for (const cli of ['pi']) {
     test(`${cli}: already-open provider option is guarded and existing provider behavior resumes`, async t => {
         const view = await mountRow(t, cli);
         await view.render({
