@@ -1,0 +1,77 @@
+name: Coverage (advisory)
+
+on:
+  # Moved out of test.yml: advisory coverage cost ~12 runner-minutes on every dev
+  # push while never feeding ci-aggregate. It now runs weekly (default branch)
+  # and on manual dispatch only.
+  schedule:
+    - cron: '0 18 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-advisory-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Advisory coverage over the root+unit suite. Not part of test.yml's
+  # ci-aggregate needs — it can neither delay nor spoil release certification.
+  # tests/run.mts turns --experimental-test-coverage into run({ coverage:true }),
+  # which node:test added in 22.10; the version check makes that explicit.
+  coverage:
+    name: coverage (advisory)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Checkout public submodules
+        run: |
+          git submodule update --init skills_ref
+          git submodule update --init officecli
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install system test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ripgrep
+          rg --version
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build native modules
+        run: npm rebuild better-sqlite3
+
+      - name: Require node:test coverage support (>= 22.10)
+        run: node -e "const [a,b]=process.versions.node.split('.').map(Number); if (a<22||(a===22&&b<10)) { console.error('node '+process.versions.node+' lacks run({coverage})'); process.exit(1) }"
+
+      - name: Build TypeScript
+        run: npx tsc
+
+      - name: Run suite with coverage
+        shell: bash {0}
+        run: |
+          npx tsx --experimental-test-module-mocks --experimental-test-coverage tests/run.mts --scope root,unit 2>&1 | tee coverage.txt
+          status=${PIPESTATUS[0]}
+          grep -A3 'start of coverage report' coverage.txt | head -5 || true
+          exit $status
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: coverage-${{ github.sha }}
+          path: coverage.txt
+          if-no-files-found: warn
