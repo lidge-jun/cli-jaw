@@ -93,7 +93,7 @@ import { asCliEventRecord, discriminate, fieldString, type CliEventRecord } from
 import { isRemoteTarget, type RemoteTarget } from '../messaging/types.js';
 import { buildRemoteBindingKey } from '../messaging/session-key.js';
 import { isJawRuntimeEvent, handleJawRuntimeEvent } from './claude-e-runtime.js';
-import { isRetiredCliSelection, RETIRED_RUNTIME_DIAGNOSTIC } from '../types/cli-engine.js';
+import { isRetiredCliSelection, retiredRuntimeDiagnostic } from '../types/cli-engine.js';
 import { runBeforeSpawnChecks, type PolicyVerdict } from '../core/policy-hooks.js';
 import { appendTraceEvent, createTraceId, finalizeTraceRun, stampTraceTool, startTraceRun, updateTraceToolRow } from '../trace/store.js';
 import {
@@ -831,8 +831,9 @@ export async function steerAgent(
     const chatSessionId = meta?.chatSessionId || run?.meta.chatSessionId || getActiveChatSession();
     // This is admission for NEW input, not the already admitted run's selection.
     // A watched settings change must not inject into or stop that run's lease.
-    if (isRetiredCliSelection(resolveMainCli(meta?.cli, settings, getSession() as SessionRow | undefined))) {
-        settleOnce(meta?.requestId, 'failed', { error: RETIRED_RUNTIME_DIAGNOSTIC,
+    const steerCli = resolveMainCli(meta?.cli, settings, getSession() as SessionRow | undefined);
+    if (isRetiredCliSelection(steerCli)) {
+        settleOnce(meta?.requestId, 'failed', { error: retiredRuntimeDiagnostic(steerCli),
             scope: scopeKey, sessionId: chatSessionId });
         return 'retired';
     }
@@ -1301,10 +1302,11 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     if (mainRun) mainRun.meta.cli = cli;
 
     if (isRetiredCliSelection(cli)) {
-        const message = `${RETIRED_RUNTIME_DIAGNOSTIC}: Select an available runtime before sending another request.`;
+        const diagnostic = retiredRuntimeDiagnostic(cli);
+        const message = `${diagnostic}: Select an available runtime before sending another request.`;
         const released = mainManaged && activeMainProcesses.get(scopeKey) === mainRun
             && releaseMainRun(scopeKey, null, ownerGeneration);
-        settleOnce(opts.requestId, 'failed', { error: RETIRED_RUNTIME_DIAGNOSTIC, text: message,
+        settleOnce(opts.requestId, 'failed', { error: diagnostic, text: message,
             scope: scopeKey, sessionId: chatSessionId });
         broadcast('agent_done', {
             text: message, error: true, origin, cli, scope: scopeKey, sessionId: chatSessionId,

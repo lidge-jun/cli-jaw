@@ -4,7 +4,7 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { CLI_KEYS } from './registry.js';
-import { isRetiredCliSelection, RETIRED_RUNTIME_DIAGNOSTIC } from '../types/cli-engine.js';
+import { isRetiredCliSelection, retiredRuntimeDiagnostic } from '../types/cli-engine.js';
 import { formatCliStatusLine } from './cli-status.js';
 import { resolveAiEProvider } from '../agent/args.js';
 import { t } from '../core/i18n.js';
@@ -232,7 +232,7 @@ export async function cliHandler(args: string[], ctx: CliCommandContext): Promis
     const current = (settings["cli"] as string | undefined) || 'claude';
 
     if (!args.length && isRetiredCliSelection(current)) {
-        return { ok: false, text: `${RETIRED_RUNTIME_DIAGNOSTIC}: Select an available runtime: ${fallbackAllowed.join(', ')}` };
+        return { ok: false, text: `${retiredRuntimeDiagnostic(current)}: Select an available runtime: ${fallbackAllowed.join(', ')}` };
     }
     if (!args.length) {
         return {
@@ -243,7 +243,7 @@ export async function cliHandler(args: string[], ctx: CliCommandContext): Promis
 
     const nextCli = args[0]!.toLowerCase();
     if (isRetiredCliSelection(nextCli)) {
-        return { ok: false, text: `${RETIRED_RUNTIME_DIAGNOSTIC}: Select an available runtime: ${fallbackAllowed.join(', ')}` };
+        return { ok: false, text: `${retiredRuntimeDiagnostic(nextCli)}: Select an available runtime: ${fallbackAllowed.join(', ')}` };
     }
     if (!fallbackAllowed.some(cli => cli === nextCli)) {
         return {

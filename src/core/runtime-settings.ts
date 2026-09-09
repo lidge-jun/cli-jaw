@@ -1,4 +1,4 @@
-import { isRetiredCliSelection, RETIRED_RUNTIME_DIAGNOSTIC } from '../types/cli-engine.js';
+import { isRetiredCliSelection, retiredRuntimeDiagnostic } from '../types/cli-engine.js';
 import {
     loadUnifiedMcp, syncToAll,
     ensureWorkingDirSkillsLinks, initMcpConfig,
@@ -341,7 +341,7 @@ async function applyRuntimeSettingsPatchSerialised(
         }
         const patch = sanitized.value;
         if (isRetiredCliSelection(patch['cli']) && !isRetiredCliSelection(prevCli)) {
-            throw new Error(RETIRED_RUNTIME_DIAGNOSTIC);
+            throw new Error(retiredRuntimeDiagnostic(patch['cli']));
         }
         const presentationOnly = Object.keys(patch).length === 1 && Object.hasOwn(patch, 'presentation');
         // Preserve the older empty/sibling presentation subtree behavior separately
@@ -360,7 +360,7 @@ async function applyRuntimeSettingsPatchSerialised(
         }
         const migrated = migrateSettings(merged);
         if (isRetiredCliSelection(migrated['cli']) && !isRetiredCliSelection(prevCli)) {
-            throw new Error(RETIRED_RUNTIME_DIAGNOSTIC);
+            throw new Error(retiredRuntimeDiagnostic(migrated['cli']));
         }
         const nextShape = sanitized.persistenceShape === 'present'
             ? 'present'

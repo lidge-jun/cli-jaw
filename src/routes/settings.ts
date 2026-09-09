@@ -20,11 +20,11 @@ import { clearTemplateCache, getTemplateDir } from '../prompt/template-loader.js
 import {
     loadUnifiedMcp, saveUnifiedMcp, syncToAll, initMcpConfig,
 } from '../../lib/mcp-sync.js';
-import { CLI_REGISTRY, CLI_KEYS } from '../cli/registry.js';
 import { readClaudeCreds, readCodexTokens, fetchClaudeUsage, fetchCodexUsage, fetchGrokStatus } from './quota.js';
 import { fetchCursorUsage } from './quota-cursor-dashboard.js';
 import { fetchAgyUsage } from './quota-agy-reverse.js';
 import { fetchKiroUsage } from './quota-kiro-reverse.js';
+import { CLI_KEYS } from '../cli/registry.js';
 import { fetchOpenCodeUsage } from './quota-opencode-go-api.js';
 import { buildLiveCliRegistry } from '../cli/registry-live.js';
 import { getCachedCliStatus, getCachedCliStatusForced } from '../cli/cli-status.js';
@@ -235,13 +235,6 @@ function buildStatusOnlyQuota(meta: QuotaStatusEntry): QuotaStatusEntry {
         quotaCapable: false,
         windows: [],
     }, meta);
-}
-
-function resolveAiEQuotaProvider(): string {
-    const provider = settings["perCli"]?.["ai-e"]?.provider;
-    if (typeof provider === 'string' && provider.trim()) return provider;
-    const entry = CLI_REGISTRY["ai-e"] as Record<string, unknown>;
-    return typeof entry["defaultProvider"] === 'string' ? entry["defaultProvider"] as string : 'claude';
 }
 
 export function registerSettingsRoutes(
@@ -716,31 +709,9 @@ export function registerSettingsRoutes(
             displayTier: 'OpenCode',
             account: { type: 'opencode', tier: 'auth/status only' },
         });
-        const providerQuota: Record<string, unknown> = {
-            claude: claudeQuota,
-            codex: codexQuota,
-            grok: grokQuota,
-            copilot: copilotQuota,
-            kiro: kiroQuota,
-        };
-        const aiEProvider = resolveAiEQuotaProvider();
-        const aiEQuota = withQuotaMeta(providerQuota[aiEProvider] ?? buildStatusOnlyQuota({
-            quotaSource: 'unknown-ai-e-provider',
-            displayTier: 'AI-E',
-        }), {
-            quotaSource: `ai-e:${aiEProvider}`,
-            displayTier: `AI-E → ${aiEProvider}`,
-            delegatedProvider: aiEProvider,
-        });
         const quotaByCli: Record<string, unknown> = {
             agy: agyQuota,
-            'ai-e': aiEQuota,
             claude: claudeQuota,
-            'claude-e': withQuotaMeta(claudeQuota, {
-                quotaSource: 'claude-e:underlying-claude',
-                displayTier: 'Claude E → Claude',
-                delegatedProvider: 'claude',
-            }),
             codex: codexQuota,
             'codex-app': withQuotaMeta(codexQuota, {
                 quotaSource: 'codex-app:underlying-codex',

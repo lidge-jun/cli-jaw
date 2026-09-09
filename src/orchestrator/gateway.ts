@@ -7,7 +7,7 @@ import { isAgentBusy, enqueueMessage, killActiveAgent, messageQueue, purgeQueueO
 import { hasBlockingWorkers } from './worker-registry.js';
 import { getSession, insertMessage } from '../core/db.js';
 import { resolveMainCli, type MainSessionRecord } from '../core/main-session.js';
-import { isRetiredCliSelection, RETIRED_RUNTIME_DIAGNOSTIC } from '../types/cli-engine.js';
+import { isRetiredCliSelection, retiredRuntimeDiagnostic } from '../types/cli-engine.js';
 import { getActiveChatSession, getSessionRunPolicy, isActiveRunPolicy, resolveOrCreateRemoteSession, type ActiveRunPolicy } from '../core/chat-sessions.js';
 import { settings } from '../core/config.js';
 import { stripUndefined } from '../core/strip-undefined.js';
@@ -239,9 +239,11 @@ export function submitMessage(
 
     // Reject before recording input, steering, interrupting or enqueueing. The
     // synchronous response must not advertise a rejected admission as steered.
-    if (isRetiredCliSelection(resolveMainCli(null, settings, getSession() as MainSessionRecord | undefined))) {
-        settleOnce(requestId, 'failed', { error: RETIRED_RUNTIME_DIAGNOSTIC, scope, sessionId: chatSessionId });
-        return { action: 'rejected', reason: RETIRED_RUNTIME_DIAGNOSTIC, requestId,
+    const admissionCli = resolveMainCli(null, settings, getSession() as MainSessionRecord | undefined);
+    if (isRetiredCliSelection(admissionCli)) {
+        const diagnostic = retiredRuntimeDiagnostic(admissionCli);
+        settleOnce(requestId, 'failed', { error: diagnostic, scope, sessionId: chatSessionId });
+        return { action: 'rejected', reason: diagnostic, requestId,
             ...(sessionContext ? { sessionContext } : {}) };
     }
 

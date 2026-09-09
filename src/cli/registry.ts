@@ -80,61 +80,6 @@ export const CLI_REGISTRY = {
         effortNote: 'Pi thinking level via RPC set_thinking_level',
         models: ['grok-composer-2.5-fast', 'grok-4.6', 'grok-4.5', 'grok-4.3'],
     },
-    'ai-e': {
-        label: 'AI-E',
-        binary: 'ai-e',
-        defaultProvider: 'claude',
-        providers: ['claude', 'codex', 'grok', 'copilot', 'kiro'],
-        defaultModel: getDefaultClaudeModel(),
-        defaultEffort: 'medium',
-        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
-        models: [
-            ...getDefaultClaudeChoices(),
-            ...CODEX_MODEL_CHOICES,
-            'grok-build', 'grok-composer-2.5-fast',
-            'gpt-5-mini',
-            'claude-sonnet-4.6',
-        ],
-        modelsByProvider: {
-            claude: getDefaultClaudeChoices(),
-            codex: CODEX_MODEL_CHOICES,
-            grok: ['grok-build', 'grok-composer-2.5-fast'],
-            copilot: ['gpt-5-mini', 'claude-sonnet-4.6', 'gpt-5.4', 'gpt-5.4-mini', 'gpt-5.5'],
-            kiro: [
-                'auto',
-                'gpt-5.6-sol',
-                'gpt-5.6-terra',
-                'gpt-5.6-luna',
-                'claude-fable-5',
-                'claude-sonnet-5',
-                'claude-opus-5',
-                'claude-opus-4.8',
-                'claude-opus-4.7',
-                'claude-opus-4.6',
-                'claude-sonnet-4.6',
-                'claude-opus-4.5',
-                'claude-sonnet-4.5',
-                'claude-sonnet-4',
-                'claude-haiku-4.5',
-                'deepseek-3.2',
-                'minimax-m2.5',
-                'minimax-m2.1',
-                'glm-5',
-                'qwen3-coder-next',
-            ],
-        },
-        effortsByProvider: {
-            claude: ['low', 'medium', 'high', 'xhigh', 'max'],
-            // Kept in step with CODEX_EFFORT_CHOICES by hand because this map is
-            // provider-scoped: ai-e forwards --effort directly (args.ts), so a
-            // narrower list here would hide max/ultra from the codex provider even
-            // when the top-level codex runtime offers them.
-            codex: [...CODEX_EFFORT_CHOICES],
-            grok: [],
-            copilot: ['low', 'medium', 'high'],
-            kiro: ['low', 'medium', 'high', 'xhigh'],
-        },
-    },
     claude: {
         label: 'Claude',
         binary: 'claude',
@@ -143,15 +88,6 @@ export const CLI_REGISTRY = {
         // `ultracode` is a Claude Code session setting, not a wire effort; it is
         // normalized to xhigh plus a settings flag in src/agent/args.ts. Live
         // registry narrows it per model, since it needs xhigh support.
-        efforts: [...CLAUDE_EFFORT_CHOICES],
-        models: getDefaultClaudeChoices(),
-    },
-    'claude-e': {
-        label: 'Claude E',
-        binary: 'claude-e',
-        experimental: true,
-        defaultModel: getDefaultClaudeModel(),
-        defaultEffort: 'medium',
         efforts: [...CLAUDE_EFFORT_CHOICES],
         models: getDefaultClaudeChoices(),
     },
