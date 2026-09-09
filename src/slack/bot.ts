@@ -1,3 +1,4 @@
+import { isSlackMention } from './events.js';
 // ─── Slack Bot ───────────────────────────────────────
 // Slack transport implementation for the cli-jaw messaging runtime.
 // Mirrors src/discord/bot.ts structurally: init/shutdown lifecycle, an inbound
@@ -944,7 +945,7 @@ async function runSlackMessageEvent(
         // event, so the scope inputs are resolved here rather than re-derived.
         ...(event.ts ? { ackTs: event.ts } : {}),
         isDirect: event.channel_type === 'im',
-        isMention: event.type === 'app_mention',
+        isMention: isSlackMention(event, selfUserId),
     });
 }
 
@@ -986,7 +987,7 @@ async function buildInboundContextBlock(
         // A top-level channel message has no thread to read; the channel's own
         // recent history (ending before this event) is its context (#518 r2).
         const isTopLevelChannel = !threadTs
-            && (event.channel_type === 'channel' || event.channel_type === 'group');
+            && (event.channel_type === 'channel' || event.channel_type === 'group' || event.channel_type === 'mpim');
         // Independent lookups: serial would double the round trips inside a
         // deadline that exists to stay small.
         const [conversation, thread, channelHistory] = await Promise.all([
@@ -1209,7 +1210,7 @@ export async function handleSlackEnvelope(envelope: SlackEnvelope, approvalTrans
     const prefetchOwner = preResolvedScope
         ? getSessionOwnershipGeneration(preResolvedScope)
         : undefined;
-    if (event.type === 'app_mention' && event.channel) {
+    if (isSlackMention(event, selfUserId) && event.channel) {
         // A top-level mention starts a thread the bot will parent, so the whole
         // thread belongs to it. A mention INSIDE an existing thread is an
         // invitation into someone else's conversation, and only that (#400).
@@ -1236,7 +1237,7 @@ export async function handleSlackEnvelope(envelope: SlackEnvelope, approvalTrans
     // between this function's entry and this line, so the test-and-set is atomic
     // against a second envelope in the same tick.
     const prefetchSubject = event.thread_ts
-        ?? ((event.channel_type === 'channel' || event.channel_type === 'group') ? '' : undefined);
+        ?? ((event.channel_type === 'channel' || event.channel_type === 'group' || event.channel_type === 'mpim') ? '' : undefined);
     const prefetchToken = prefetchSubject !== undefined && prefetchOwner
         ? claimThreadPrefetch(event.channel || '', prefetchSubject, prefetchOwner)
         : 0;
@@ -1250,7 +1251,7 @@ export async function handleSlackEnvelope(envelope: SlackEnvelope, approvalTrans
         // app_mention 봉투에는 files 가 없고, 첨부를 가진 message 사본은 위
         // shouldProcessSlackEvent 에서 mention_via_app_mention 으로 드롭된다.
         // 그래서 멘션과 함께 올린 파일은 여기서 되찾지 않으면 영영 사라진다.
-        if (!hasFiles && event.type === 'app_mention' && event.channel && event.ts) {
+        if (!hasFiles && isSlackMention(event, selfUserId) && event.channel && event.ts) {
             const recoverToken = getSlackSendClient().token;
             if (recoverToken) {
                 const recovered = await recoverSlackAttachments(

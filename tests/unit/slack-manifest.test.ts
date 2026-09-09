@@ -34,7 +34,7 @@ const METHOD_SCOPE_MAP: Record<string, string | null> = {
 
 // Every envelope type the socket layer routes (HANDLED_ENVELOPE_TYPES in
 // src/slack/socket.ts) and the manifest feature that feeds it.
-const REQUIRED_BOT_EVENTS = ['app_mention', 'message.channels', 'message.groups', 'message.im'];
+const REQUIRED_BOT_EVENTS = ['app_mention', 'message.channels', 'message.groups', 'message.im', 'message.mpim'];
 
 test('manifest grants the scope behind every Web API method the transport calls', () => {
     const scopes: readonly string[] = SLACK_APP_MANIFEST.oauth_config.scopes.bot;
@@ -138,4 +138,13 @@ test('JSON output preserves the app name and serialized derived bot name', () =>
 test('YAML output round-trips to the same manifest', () => {
     const parsed = parse(slackManifestYaml());
     assert.deepEqual(parsed, JSON.parse(JSON.stringify(SLACK_APP_MANIFEST)));
+});
+
+test('MPIM manifest adds history/event without unrelated feature permissions', () => {
+    const scopes: readonly string[] = SLACK_APP_MANIFEST.oauth_config.scopes.bot;
+    const events: readonly string[] = SLACK_APP_MANIFEST.settings.event_subscriptions.bot_events;
+    assert.equal(scopes.filter(s => s === 'mpim:history').length, 1);
+    assert.equal(events.filter(e => e === 'message.mpim').length, 1);
+    assert.ok(scopes.includes('mpim:read'));
+    for (const scope of ['mpim:write', 'reactions:read', 'pins:write', 'bookmarks:write', 'canvases:write', 'lists:write', 'search:read.public']) assert.ok(!scopes.includes(scope));
 });
