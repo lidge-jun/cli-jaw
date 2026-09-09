@@ -262,7 +262,7 @@ test('duplicate queued completion during a held body send cannot reach the orpha
     assert.equal(bodyCalls().length, 1);
 });
 
-test('table readback failure remains nonretryable and cannot show successful progress', async context => {
+test('posted table finishes once when rendering readback is unavailable', async context => {
     collect = async () => ({ text: '| A | B |\n| --- | --- |\n| one | two |', data: {} });
     override = call => call.method === 'conversations.replies' ? response({ ok: true, messages: [], has_more: false }) : undefined;
     await run(context); await until(context, complete);
@@ -270,8 +270,11 @@ test('table readback failure remains nonretryable and cannot show successful pro
     const markdown = (bodyCalls()[0]!.body['blocks'] as Array<Record<string, unknown>>).find(block => block['type'] === 'markdown');
     assert.equal(markdown?.['text'], '| A | B |\n| --- | --- |\n| one | two |');
     assert.equal(calls.filter(call => call.method === 'conversations.replies').length, 1, 'stored table verification is still required');
-    assert.equal(reaction('white_check_mark').length, 0); assert.equal(reaction('x').length, 1);
-    assert.match(JSON.stringify(progressMessages()), /could not be confirmed/);
+    // Progress completion acknowledges the posted answer, not verified formatting.
+    // Readback evidence remains separate in the sender's delivery receipt.
+    assert.equal(reaction('white_check_mark').length, 1); assert.equal(reaction('x').length, 0);
+    assert.doesNotMatch(JSON.stringify(progressMessages()), /could not be confirmed/);
+    assert.equal(getQueueNoticeStore()!.listRestorable('slack').length, 0);
 });
 
 test('failed stream finalization retains a recoverable durable record', async context => {

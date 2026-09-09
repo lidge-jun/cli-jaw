@@ -276,3 +276,34 @@ test('quote expectations use redacted author display as actually sent', async ()
     const result = await publishSlackQuote(TOKEN, principal(), { source: { channel: 'C1', ts: SOURCE.ts } }, { fetchImpl });
     assert.equal(result.ok, true); assert.ok(!JSON.stringify(fake.posts).includes(secret));
 });
+
+
+for (const mode of ['unavailable', 'changed'] as const) test(`quote never verifies transport-success with ${mode} saved content`, async () => {
+    const f = fixture();
+    const fetchImpl: typeof fetch = async (url, init) => {
+        const method = String(url).split('/').at(-1);
+        const raw = String(init?.body ?? '');
+        const body = raw.startsWith('{') ? JSON.parse(raw) : Object.fromEntries(new URLSearchParams(raw));
+        if ((method === 'conversations.history' || method === 'conversations.replies') && body.channel === 'D1') {
+            if (mode === 'unavailable') return new Response(JSON.stringify({ ok: false, error: 'missing_scope' }));
+            const response = await f.fetchImpl(url, init);
+            const saved = await response.json();
+            for (const message of saved.messages) {
+                for (const block of message.blocks) {
+                    for (const element of block.elements ?? []) {
+                        if (element.type === 'rich_text_quote') element.elements = [{ type: 'text', text: 'different saved content' }];
+                    }
+                }
+            }
+            return new Response(JSON.stringify(saved));
+        }
+        return f.fetchImpl(url, init);
+    };
+    const result = await publishSlackQuote(TOKEN, principal(), { source: { channel: 'C1', ts: SOURCE.ts } }, { fetchImpl });
+    assert.equal(f.posts.length, 1, 'a successful POST must never be repeated for failed verification');
+    assert.equal(result.sent, true);
+    assert.equal(result.ok, false);
+    assert.equal(result.contentVerification, 'failed');
+    assert.equal(result.sourceVerification, 'failed');
+    assert.equal(result.messageTs.length, 1);
+});

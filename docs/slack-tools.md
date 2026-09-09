@@ -60,7 +60,7 @@ Use authenticated `GET /api/prompt?withGenerated=1` to compare the current gener
 
 ## Authorization and deployment boundary
 
-This feature remains a draft pending the operator isolation work tracked in issue #646.
+This feature remains a draft. Integration is tracked in [issue #645](https://github.com/lidge-jun/cli-jaw/issues/645); operator isolation remains blocked in [issue #646](https://github.com/lidge-jun/cli-jaw/issues/646).
 The assets are Slack credentials, source message content, and write authority. Authenticated
 Slack ingress binds an actor, workspace, destination and request to a short-lived grant;
 HTTP callers cannot supply their own actor or bot token. Current membership and disclosure
