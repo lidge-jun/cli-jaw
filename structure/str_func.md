@@ -145,13 +145,7 @@ cli-jaw/
 │   │   ├── claude-runtime-run.ts ← native Claude main adaptation to shared host/lifecycle and fallback terminal ordering (292L)
 │   │   ├── prompt-context.ts ← history/operational/partial boundaries and bounded accepted Cursor redirects (202L)
 │   │   ├── steer-input-guard.ts ← transient scoped Stop fence through fallback enqueue (33L)
-<<<<<<< HEAD
 │   │   ├── spawn.ts          ← CLI spawn + ACP/Codex App/Pi RPC/AGY/Kiro plain text/log session capture/claude-e helper 분기 + v2 SQLite session resume + 큐 + 메모리 flush + 429 retry timer + isAgentBusy/isSteerInProgress + buildHistoryBlock compact cutoff + working_dir scoping + enqueue→processQueue race fix + QueueItem persistent DB queue + makeCleanEnv PATH augment (4153L)
-||||||| 9aceb85f9
-│   │   ├── spawn.ts          ← CLI spawn + ACP/Codex App/Pi RPC/AGY/Kiro plain text/log session capture/claude-e helper 분기 + v2 SQLite session resume + 큐 + 메모리 flush + 429 retry timer + isAgentBusy/isSteerInProgress + buildHistoryBlock compact cutoff + working_dir scoping + enqueue→processQueue race fix + QueueItem persistent DB queue + makeCleanEnv PATH augment (4153L)
-=======
-│   │   ├── spawn.ts          ← CLI spawn + ACP/Codex App/Pi RPC/AGY/Kiro plain text/log session capture/claude-e helper 분기 + v2 SQLite session resume + 큐 + 메모리 flush + 429 retry timer + isAgentBusy/isSteerInProgress + buildHistoryBlock compact cutoff + working_dir scoping + enqueue→processQueue race fix + QueueItem persistent DB queue + makeCleanEnv PATH augment (4153L)
->>>>>>> cosmosjeon/codex/slack-tools-upstream
 │   │   ├── spawn/            ← spawn 서브모듈 (3 files)
 │   │   │   ├── queue.ts      ← QueueItem persistent DB queue + processQueue race fix + enqueue/dequeue + drainRecoveredQueue (부팅 시 복구 큐 기동, server.ts가 transport 준비 후 호출) + `_fromQueue` 표식 (대기자 없는 턴을 채널이 답할 수 있게) (694L)
 │   │   │   ├── resume.ts     ← session resume logic + stale resume detection (117L)
@@ -175,13 +169,7 @@ cli-jaw/
 │   │   ├── agy-capabilities.ts ← AGY `--help`/`--version` capability probe + cached optional flag support map + legacy emit-all fallback marker (124L)
 │   │   ├── agy-transcript-watcher.ts ← AGY transcript/log watcher and session-id extraction support (291L)
 │   │   ├── pi-runtime.ts     ← Pi profile 정규화 + isolated `PI_CODING_AGENT_DIR` models/settings 생성 + `pi --offline --list-models` discovery + `pi --mode rpc` JSONL parser/spawner (1118L) ✨
-<<<<<<< HEAD
 │   │   ├── lifecycle-handler.ts ← child lifecycle + fallback/retry + queue resume orchestration + clearEmployeeSession on resume failure + stale resume fresh retry + kickGoalContinuation export + clearGoalTimers + goal continuation boundary row (1402L)
-||||||| 9aceb85f9
-│   │   ├── lifecycle-handler.ts ← child lifecycle + fallback/retry + queue resume orchestration + clearEmployeeSession on resume failure + stale resume fresh retry + kickGoalContinuation export + clearGoalTimers + goal continuation boundary row (1402L)
-=======
-│   │   ├── lifecycle-handler.ts ← child lifecycle + fallback/retry + queue resume orchestration + clearEmployeeSession on resume failure + stale resume fresh retry + kickGoalContinuation export + clearGoalTimers + goal continuation boundary row (1402L)
->>>>>>> cosmosjeon/codex/slack-tools-upstream
 │   │   ├── kiro-auth.ts      ← Kiro CLI auth store reader (resolveKiroDataPath, readKiroAuthFromStore, resolveKiroProfileArn, regionFromProfileArn, listKiroConversationIdsForCwd, resolveKiroSessionIdAfterSpawn, extractKiroSessionIdFromV2Store) (314L)
 │   │   ├── kiro-models.ts    ← Kiro live model inventory (KiroModelEntry, KiroModelInventory, parseKiroModelListJson, fetchKiroModelInventory) (98L)
 │   │   ├── kiro-runtime.ts   ← Kiro plain-text stdout parser + session capture (isKiroPlainTextCli, processKiroStdoutChunk, flushKiroStdoutContext, appendKiroStdoutChunk, captureKiroSessionIdAfterExit, stripKiroAnsi, parseKiroAssistantText, isKiroStaleSessionOutput, isKiroResumeDegradedOutput, KiroStreamEvent, KiroStdoutContext) (460L)
@@ -209,13 +197,7 @@ cli-jaw/
 │   │   └── events.ts         ← legacy re-export stub → events/ 모듈 (15L)
 │   ├── messaging/            ← 통합 메시징 런타임 (33 files)
 │   │   ├── runtime.ts        ← 채널 lifecycle (init/shutdown/restart) + transport registry (333L)
-<<<<<<< HEAD
 │   │   ├── send.ts           ← 통합 아웃바운드 메시지 라우팅 (ChannelSendRequest, 다중 채널 send 지원, 턴 주소 우선순위) (527L)
-||||||| 9aceb85f9
-│   │   ├── send.ts           ← 통합 아웃바운드 메시지 라우팅 (ChannelSendRequest, 다중 채널 send 지원, 턴 주소 우선순위) (527L)
-=======
-│   │   ├── send.ts           ← 통합 아웃바운드 메시지 라우팅 (ChannelSendRequest, 다중 채널 send 지원, 턴 주소 우선순위) (527L)
->>>>>>> cosmosjeon/codex/slack-tools-upstream
 │   │   ├── turn-conversation.ts ← 턴이 답하는 대화 주소 encode/decode + 채널 매칭 (60L) ✨
 │   │   ├── turn-delivery.ts  ← 에이전트 자가 전송 claim (턴 앵커 + digest, 소비형) → dispatch 중복 게시 억제 (252L) ✨
 │   │   ├── dedupe.ts         ← 배달 중복 제거 (TTL seen-set, 미만료 항목 보존) (118L) ✨
@@ -251,25 +233,11 @@ cli-jaw/
 │   │   └── slack-target.ts   ← Slack target helper (74L)
 │   ├── orchestrator/         ← 직원 오케스트레이션 + 인터페이스 통합 (19 files)
 │   │   ├── state-machine.ts ← IPABCD 상태 머신 (I=Interview pre-plan) + broadcast(state,title) + worklog 타이틀 파싱 + employee terminology + OrcContext.workingDir + OrcContext.interview + Project root dispatch contract + Phase60 actor-aware canTransition(GateInput) form-only evidence gate + STATE_PROMPTS --attest instructions (806L)
-<<<<<<< HEAD
 │   │   ├── pipeline.ts       ← IPABCD orchestration (explicit entry only) + interview first-turn detection + plan context persistence + memorySnapshot injection + reset clears boss session + OrcContext workingDir init + Approved Plan Project root guard + remote-channel elicitation guard + bounded delayed worker replay notice + Phase60 phase_attestation strip/fallback + no-state narration warn (825L)
-||||||| 9aceb85f9
-│   │   ├── pipeline.ts       ← IPABCD orchestration (explicit entry only) + interview first-turn detection + plan context persistence + memorySnapshot injection + reset clears boss session + OrcContext workingDir init + Approved Plan Project root guard + remote-channel elicitation guard + bounded delayed worker replay notice + Phase60 phase_attestation strip/fallback + no-state narration warn (825L)
-=======
-│   │   ├── pipeline.ts       ← IPABCD orchestration (explicit entry only) + interview first-turn detection + plan context persistence + memorySnapshot injection + reset clears boss session + OrcContext workingDir init + Approved Plan Project root guard + remote-channel elicitation guard + bounded delayed worker replay notice + Phase60 phase_attestation strip/fallback + no-state narration warn (825L)
->>>>>>> cosmosjeon/codex/slack-tools-upstream
 │   │   ├── distribute.ts     ← runSingleAgent + buildPlanPrompt + parallel helpers + tiered findEmployee + employee resume diagnostics + virtual employee session-skip (475L)
 │   │   ├── parser.ts         ← triage + subtask JSON + verdict 파싱 + isResetIntent (176L)
-<<<<<<< HEAD
 │   │   ├── gateway.ts        ← submitMessage 통합 진입점 (WebUI+CLI+TG+Discord 공통) + working_dir scoped insertMessage (344L)
 │   │   ├── collect.ts        ← orchestrateAndCollect + orchestrateAndCollectData (176L)
-||||||| 9aceb85f9
-│   │   ├── gateway.ts        ← submitMessage 통합 진입점 (WebUI+CLI+TG+Discord 공통) + working_dir scoped insertMessage (344L)
-│   │   ├── collect.ts        ← orchestrateAndCollect + orchestrateAndCollectData (176L)
-=======
-│   │   ├── gateway.ts        ← submitMessage 통합 진입점 (WebUI+CLI+TG+Discord 공통) + working_dir scoped insertMessage (344L)
-│   │   ├── collect.ts        ← orchestrateAndCollect + orchestrateAndCollectData (176L)
->>>>>>> cosmosjeon/codex/slack-tools-upstream
 │   │   ├── session-work.ts   ← hasChatSessionWork — 세션 삭제 전 진행중 작업 관측 (활성 run·큐·replay는 정확 매칭, drain/retry/hold/worker/lane은 scope 단위 보수적 판정) (42L) ✨
 │   │   ├── scope.ts          ← remote binding key + channel gate + local session scope + captured execution binding; legacy findActiveScope만 default fallback (86L)
 │   │   ├── worker-monitor.ts ← Worker stall detection — activity timestamps + stall/disconnect/timeout callbacks (58L)
@@ -380,15 +348,8 @@ cli-jaw/
 │   │   ├── channel-types.ts  ← Discord channel type helpers (50L) ✨
 │   │   ├── forwarder.ts      ← Discord text chunk 포워딩 + guarded local-image attachment relay (98L)
 │   │   └── discord-file.ts   ← Discord 파일 전송 (75L)
-<<<<<<< HEAD
 │   ├── slack/                ← Slack 인터페이스 (41 files, Socket Mode + Web API, SDK 없음)
-||||||| 9aceb85f9
-│   ├── slack/                ← Slack 인터페이스 (23 files, Socket Mode + Web API, SDK 없음)
-=======
-│   ├── slack/                ← Slack 인터페이스 (38 files, Socket Mode + Web API, SDK 없음)
->>>>>>> cosmosjeon/codex/slack-tools-upstream
 │   │   ├── socket.ts         ← Socket Mode client (apps.connections.open → wss, ack-before-work, envelope dedupe TTL, hello deadline, backoff 재연결) (437L)
-<<<<<<< HEAD
 │   │   ├── bot.ts            ← Slack 봇 lifecycle + attachPort 성공 후 best-effort 자기선출/영속화 + envelope routing + orchestrate 경로 + queued-result waiter + top-level/thread 1회 context prefetch (1821L)
 │   │   ├── api.ts            ← Slack Web API fetch wrapper (HTTP 200 + ok:false를 실패로 처리, credential/URL redaction, Retry-After) (442L)
 │   │   ├── format.ts         ← CommonMark → mrkdwn 변환 + code-fence 보존 chunking (222L)
@@ -397,36 +358,11 @@ cli-jaw/
 │   │   ├── table-verification.ts ← Persisted table verification, mismatch/unavailable status (67L)
 │   │   ├── render-features.ts ← Expected and persisted rich-format feature verification (81L)
 │   │   ├── events.ts         ← fail-closed attachPort 판정 + inbound gating (self-echo/bot/subtype/allowlist/mention) + Block Kit 텍스트 추출 (305L)
-||||||| 9aceb85f9
-│   │   ├── bot.ts            ← Slack 봇 lifecycle + attachPort 성공 후 best-effort 자기선출/영속화 + envelope routing + orchestrate 경로 + queued-result waiter + top-level/thread 1회 context prefetch (1821L)
-│   │   ├── api.ts            ← Slack Web API fetch wrapper (HTTP 200 + ok:false를 실패로 처리, credential/URL redaction, Retry-After) (442L)
-│   │   ├── format.ts         ← CommonMark → mrkdwn 변환 + code-fence 보존 chunking (222L)
-│   │   ├── events.ts         ← fail-closed attachPort 판정 + inbound gating (self-echo/bot/subtype/allowlist/mention) + Block Kit 텍스트 추출 (305L)
-=======
-│   │   ├── bot.ts            ← Slack 봇 lifecycle + attachPort 성공 후 best-effort 자기선출/영속화 + envelope routing + orchestrate 경로 + queued-result waiter + top-level/thread 1회 context prefetch (1821L)
-│   │   ├── api.ts            ← Slack Web API fetch wrapper (HTTP 200 + ok:false를 실패로 처리, credential/URL redaction, Retry-After) (442L)
-│   │   ├── format.ts         ← CommonMark → mrkdwn 변환 + code-fence 보존 chunking (222L)
-│   │   ├── blocks.ts         ← Block Kit validation and per-table message splitting (143L)
-│   │   ├── table-content.ts ← Bounded ordered-cell comparison and CommonMark character references (185L)
-│   │   ├── table-verification.ts ← Persisted table verification, mismatch/unavailable status (67L)
-│   │   ├── render-features.ts ← Expected and persisted rich-format feature verification (81L)
-│   │   ├── events.ts         ← fail-closed attachPort 판정 + inbound gating (self-echo/bot/subtype/allowlist/mention) + Block Kit 텍스트 추출 (305L)
->>>>>>> cosmosjeon/codex/slack-tools-upstream
 │   │   ├── thread-tracker.ts ← 참여 스레드 영속 추적 + thread/channel owner-generation singleflight (mention/봇응답 마킹, 캡드 셋, 무멘션 스레드 연속 대화 게이트 지원) (249L)
 │   │   ├── enrichment-cache.ts ← 공용 동시성 프리미티브 (TTL/cap 캐시, 원인별 억제, 능력 잠금 단일 재탐침, in-flight 합류, 집계 취소, 세대 무효화) (424L)
-<<<<<<< HEAD
 │   │   ├── conversation.ts   ← 대화/스레드 컨텍스트 (conversations.info + replies cursor 최대 10페이지 + parent/최신 50, 참여자는 author 유도, method별 억제·시작률) (464L)
 │   │   ├── context.ts        ← 프롬프트 컨텍스트 블록 조립 (채널 id·thread_ts 무절단, 섹션별 코드포인트 예산 ~9200 총 overhead, 신뢰 경계 문구 보존) (273L)
 │   │   ├── history.ts        ← 동적 조회 (conversations.history/replies form-encoded 래퍼 + cursor 정규화 + 재시도 + 에이전트용 포맷/redact) (373L)
-||||||| 9aceb85f9
-│   │   ├── conversation.ts   ← 대화/스레드 컨텍스트 (conversations.info + replies cursor 최대 10페이지 + parent/최신 50, 참여자는 author 유도, method별 억제·시작률) (464L)
-│   │   ├── context.ts        ← 프롬프트 컨텍스트 블록 조립 (채널 id·thread_ts 무절단, 섹션별 코드포인트 예산 ~9200 총 overhead, 신뢰 경계 문구 보존) (273L)
-│   │   ├── history.ts        ← 동적 조회 (conversations.history/replies form-encoded 래퍼 + cursor 정규화 + 재시도 + 에이전트용 포맷/redact) (373L)
-=======
-│   │   ├── conversation.ts   ← 대화/스레드 컨텍스트 (conversations.info + replies cursor 최대 10페이지 + parent/최신 50, 참여자는 author 유도, method별 억제·시작률) (464L)
-│   │   ├── context.ts        ← 프롬프트 컨텍스트 블록 조립 (채널 id·thread_ts 무절단, 섹션별 코드포인트 예산 ~9200 총 overhead, 신뢰 경계 문구 보존) (273L)
-│   │   ├── history.ts        ← 동적 조회 (conversations.history/replies form-encoded 래퍼 + cursor 정규화 + 재시도 + 에이전트용 포맷/redact) (373L)
->>>>>>> cosmosjeon/codex/slack-tools-upstream
 │   │   ├── mention-watch.ts  ← 가입 채널 backward mention scan + frontier/resume/round-robin/429 stop/60-channel overflow (369L)
 │   │   ├── attachment-recovery.ts ← app_mention 봉투에 없는 첨부를 channel+ts 재조회로 복구 (oldest+inclusive+limit=1) (53L)
 │   │   ├── commands.ts       ← slash command → 공유 parseCommand/executeCommand 파이프라인 (180L)
@@ -434,27 +370,11 @@ cli-jaw/
 │   │   ├── ingress.ts        ← 세션별 ingress lane + synthetic top-level followup override + admitSlackRun 동기 실행 예약(sessionLanes) + 전역 다운로드 세마포어 + shutdown abort/drain (300L) ✨
 │   │   ├── inbound-file.ts   ← 인바운드 첨부 단일 IO owner (files.info → 인증 스트리밍 다운로드 → saveUpload, 파일/메시지 바이트 예산, 고정 error code) (280L) ✨
 │   │   ├── inbound-url.ts    ← 인바운드 다운로드 URL 검증 (Slack host allowlist + https-only hop + 사설망 거부) (44L) ✨
-<<<<<<< HEAD
 │   │   ├── send-only-client.ts ← bot-token outbound with separate transport/verification receipts (215L)
-||||||| 9aceb85f9
-│   │   ├── send-only-client.ts ← bot-token 전용 outbound + conversations.open DM 해석 (215L)
-=======
-│   │   ├── send-only-client.ts ← bot-token outbound with separate transport/verification receipts (215L)
->>>>>>> cosmosjeon/codex/slack-tools-upstream
 │   │   ├── forwarder.ts      ← agent_done 포워딩 + guarded local-image relay (filename caption) (87L)
-<<<<<<< HEAD
 │   │   ├── send-handler.ts   ← ChannelSendRequest → Slack Web API 어댑터 + 413 텍스트 다운그레이드 (93L)
 │   │   ├── manifest.ts       ← Slack 앱 표시명 검증 + bot 표시명 결정적 파생을 포함한 매니페스트 single source (`jaw slack manifest`/`setup`이 사용) (162L)
 │   │   ├── scope-status.ts   ← OAuth grant drift 단일 소유자 (auth.test의 x-oauth-scopes를 manifest 요구 집합과 대조, 미관측을 '이상 없음'과 구분, doctor·health·identity 경고가 공유) (191L) ✨
-||||||| 9aceb85f9
-│   │   ├── send-handler.ts   ← ChannelSendRequest → Slack Web API 어댑터 + 413 텍스트 다운그레이드 (93L)
-│   │   ├── manifest.ts       ← Slack 앱 표시명 검증 + bot 표시명 결정적 파생을 포함한 매니페스트 single source (`jaw slack manifest`/`setup`이 사용) (162L)
-│   │   ├── scope-status.ts   ← OAuth grant drift 단일 소유자 (auth.test의 x-oauth-scopes를 manifest 요구 집합과 대조, 미관측을 '이상 없음'과 구분, doctor·health·identity 경고가 공유) (191L) ✨
-=======
-│   │   ├── send-handler.ts   ← ChannelSendRequest → Slack Web API 어댑터 + 413 텍스트 다운그레이드 (93L)
-│   │   ├── manifest.ts       ← Slack 앱 표시명 검증 + bot 표시명 결정적 파생을 포함한 매니페스트 single source (`jaw slack manifest`/`setup`이 사용) (162L)
-│   │   ├── scope-status.ts   ← OAuth grant drift 단일 소유자 (auth.test의 x-oauth-scopes를 manifest 요구 집합과 대조, 미관측을 '이상 없음'과 구분, doctor·health·identity 경고가 공유) (191L) ✨
->>>>>>> cosmosjeon/codex/slack-tools-upstream
 │   │   ├── allowlist-audit.ts ← channelIds 변경 방향 분류 + 축소 감사 기록 (게이트 리더 기준 정규화, route·settings watcher 양쪽이 공유) (125L) ✨
 │   │   ├── hot-notify.ts     ← CLI 설정 변경 후 실행 중 서버 hot-reload 통지 (loopback PUT /api/settings → transport 재시작, version skew 감지) (41L)
 │   │   ├── progress.ts       ← native plan stream + explicit unsupported fallback, bounded IO/Retry-After and terminal receipt (326L)
@@ -464,14 +384,7 @@ cli-jaw/
 │   │   ├── progress-lifecycle.ts ← request/native identity binding, safe buffers and owned terminal teardown (202L)
 │   │   ├── progress-restore.ts ← generation-bound single-flight status recovery and abort ownership (86L)
 │   │   ├── reply-delivery.ts ← bounded start proof and atomic reply workflow claims independent of display expiry (91L)
-<<<<<<< HEAD
 │   │   ├── verified-workspace.ts ← 토큰이 실제로 가리키는 team id (auth.test 1회 + 토큰별 캐시, settings.teamId 불신, 실패 시 null로 거부) (68L) ✨
-||||||| 9aceb85f9
-│   │   ├── progress.ts       ← 실행 중 진행상황 릴레이 ("정보 수집 중…" placeholder → agent_tool 이벤트로 chat.update rate-limited 편집 → 답변 시 chat.delete, post/edit 모두 자격증명 마스킹) (326L) ✨
-│   │   ├── verified-workspace.ts ← 토큰이 실제로 가리키는 team id (auth.test 1회 + 토큰별 캐시, settings.teamId 불신, 실패 시 null로 거부) (68L) ✨
-=======
-│   │   ├── verified-workspace.ts ← 토큰이 실제로 가리키는 team id (auth.test 1회 + 토큰별 캐시, settings.teamId 불신, 실패 시 null로 거부) (68L) ✨
->>>>>>> cosmosjeon/codex/slack-tools-upstream
 │   │   └── register.ts       ← lazy transport 등록 (inbound + send) (16L)
 │   ├── browser/              ← Chrome CDP 제어 + web-ai 자동화 + adaptive-fetch
 │   │   ├── connection.ts     ← Chrome 탐지/launch/CDP 연결 + readiness polling + retry + headless + runtime diagnostics/orphan cleanup + activePort/active-tab 상태 관리 (820L)
