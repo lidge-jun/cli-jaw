@@ -31,7 +31,7 @@ export async function slackSendHandler(
     switch (req.type) {
         case 'text':
             if (!req.text) return { ok: false, error: 'empty_text', status: 400 };
-            return sendSlackText(client.token, target, req.text);
+            return sendSlackText(client.token, target, req.text, req.blocks ? { blocks: req.blocks } : {});
         case 'keyboard': {
             // Slack's inline-keyboard analogue is Block Kit, whose callbacks need
             // interactive-envelope routing this tree does not have, so

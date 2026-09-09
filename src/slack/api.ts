@@ -11,6 +11,7 @@ import { log } from '../core/logger.js';
 import { redactChannelSecrets } from '../messaging/redact.js';
 
 const SLACK_API_BASE = 'https://slack.com/api';
+const SENSITIVE_ERROR_CODES = new Set(['missing_scope', 'not_authed', 'invalid_auth', 'account_inactive', 'token_expired', 'token_revoked', 'ratelimited', 'rate_limited', 'invalid_arguments', 'invalid_action_token', 'action_token_expired', 'not_allowed_token_type', 'not_in_channel', 'channel_not_found', 'thread_not_found', 'message_not_found', 'no_permission', 'team_access_not_granted', 'already_reacted', 'no_reaction', 'not_pinned', 'already_pinned', 'bookmark_not_found', 'invalid_scheduled_message_id', 'invalid_name', 'permission_denied', 'restricted_action', 'list_not_found', 'row_not_found', 'canvas_not_found', 'invalid_input_type', 'invalid_row_id', 'invalid_date', 'time_in_past', 'time_too_far', 'restricted_too_many']);
 
 export type SlackApiResult<T = Record<string, unknown>> = {
     ok: boolean;
@@ -145,6 +146,34 @@ export function parseRetryAfterMs(headers: Pick<Headers, 'get'>): number | undef
     return Math.ceil(seconds * 1000);
 }
 
+export async function readBoundedResponse(response: Response, limit: number, signal?: AbortSignal | null): Promise<string> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 16 * 1024 * 1024) throw new Error('invalid_response_limit');
+    if (!response.body?.getReader) {
+        const text = await response.text();
+        if (Buffer.byteLength(text) > limit) throw new Error('slack_response_too_large');
+        return text;
+    }
+    const reader = response.body.getReader();
+    let cancel!: () => void;
+    const aborted = new Promise<never>((_resolve, reject) => {
+        cancel = () => { void reader.cancel().catch(() => {}); reject(new DOMException('aborted', 'AbortError')); };
+        signal?.addEventListener('abort', cancel, { once: true });
+    });
+    let size = 0;
+    const chunks: Uint8Array[] = [];
+    try {
+        if (signal?.aborted) { void reader.cancel().catch(() => {}); throw new DOMException('aborted', 'AbortError'); }
+        while (true) {
+            const part = await Promise.race([reader.read(), aborted]);
+            if (part.done) break;
+            size += part.value.byteLength;
+            if (size > limit || chunks.length >= 4096) { void reader.cancel().catch(() => {}); throw new Error('slack_response_too_large'); }
+            chunks.push(part.value);
+        }
+        return Buffer.concat(chunks, size).toString('utf8');
+    } finally { signal?.removeEventListener('abort', cancel); reader.releaseLock(); }
+}
+
 /**
  * Call a Slack Web API method.
  * `fetchImpl` is injectable so tests capture payloads without a workspace.
@@ -157,7 +186,7 @@ export async function slackApi<T = Record<string, unknown>>(
     token: string,
     method: string,
     body?: Record<string, unknown>,
-    options: { fetchImpl?: SlackFetch; form?: boolean; signal?: AbortSignal; timeoutMs?: number } = {},
+    options: { fetchImpl?: SlackFetch; form?: boolean; signal?: AbortSignal; timeoutMs?: number; sensitiveResponse?: boolean; maxResponseBytes?: number } = {},
 ): Promise<SlackApiResult<T>> {
     const doFetch = options.fetchImpl || fetch;
     const url = `${SLACK_API_BASE}/${method}`;
@@ -170,12 +199,13 @@ export async function slackApi<T = Record<string, unknown>>(
     }
     const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
     const init: RequestInit = { method: 'POST', headers };
-    if (options.signal && options.timeoutMs !== undefined) {
-        init.signal = AbortSignal.any([options.signal, AbortSignal.timeout(options.timeoutMs)]);
+    const timeoutMs = options.timeoutMs ?? (options.sensitiveResponse ? 10000 : undefined);
+    if (options.signal && timeoutMs !== undefined) {
+        init.signal = AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]);
     } else if (options.signal) {
         init.signal = options.signal;
-    } else if (options.timeoutMs !== undefined) {
-        init.signal = AbortSignal.timeout(options.timeoutMs);
+    } else if (timeoutMs !== undefined) {
+        init.signal = AbortSignal.timeout(timeoutMs);
     }
     if (options.form && body) {
         const params = new URLSearchParams();
@@ -197,7 +227,8 @@ export async function slackApi<T = Record<string, unknown>>(
         // Same defensive read as retry-after: mocks and non-standard fetch
         // implementations may not carry headers at all.
         const grantedScopes = response.headers?.get?.('x-oauth-scopes') ?? undefined;
-        const text = await response.text();
+        const responseLimit = options.maxResponseBytes ?? (options.sensitiveResponse ? 1024 * 1024 : undefined);
+        const text = responseLimit !== undefined ? await readBoundedResponse(response, responseLimit, init.signal) : await response.text();
         let parsed: Record<string, unknown> = {};
         try {
             parsed = text ? JSON.parse(text) as Record<string, unknown> : {};
@@ -212,15 +243,16 @@ export async function slackApi<T = Record<string, unknown>>(
         }
         // Slack signals application errors with HTTP 200 + ok:false.
         if (parsed['ok'] !== true) {
-            const err = typeof parsed['error'] === 'string' ? parsed['error'] : 'unknown_error';
-            log.warn('[slack:api]', redactSlackTokens(`${method} failed: ${err}`));
+            const rawError = typeof parsed['error'] === 'string' ? parsed['error'] : 'unknown_error';
+            const err = options.sensitiveResponse && !SENSITIVE_ERROR_CODES.has(rawError) ? 'slack_request_failed' : rawError;
+            if (!options.sensitiveResponse) log.warn('[slack:api]', redactSlackTokens(`${method} failed: ${err}`));
             return {
                 ok: false,
                 error: err,
                 status: response.status,
                 ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
                 ...(grantedScopes !== undefined ? { grantedScopes } : {}),
-                data: parsed as T,
+                ...(options.sensitiveResponse ? {} : { data: parsed as T }),
             };
         }
         return {
@@ -241,7 +273,7 @@ export async function slackApi<T = Record<string, unknown>>(
         // A network-level throw has no response, so there is no header to read.
         return {
             ok: false,
-            error: redactSlackTokens((error as Error).message),
+            error: options.sensitiveResponse ? 'slack_sensitive_request_failed' : redactSlackTokens((error as Error).message),
             status: 502,
         };
     }
@@ -262,7 +294,7 @@ export function stripEmojiColons(name: string): string {
 
 /** `timeoutMs` matters even though these calls are best-effort: without a bound a
  *  hung request outlives the shutdown drain that is waiting on it. */
-export type SlackCallOptions = { fetchImpl?: SlackFetch; signal?: AbortSignal; timeoutMs?: number };
+export type SlackCallOptions = { fetchImpl?: SlackFetch; signal?: AbortSignal; timeoutMs?: number; sensitiveResponse?: boolean; maxResponseBytes?: number };
 
 /** Long enough for a normal Slack round trip, short enough that a shutdown drain
  *  is not held open by one stuck cleanup call. */
@@ -270,12 +302,14 @@ export const SLACK_CLEANUP_TIMEOUT_MS = 5000;
 
 function callOptions(
     options: SlackCallOptions,
-): { fetchImpl?: SlackFetch; signal?: AbortSignal; timeoutMs?: number } {
+): SlackCallOptions {
     // exactOptionalPropertyTypes: an explicit undefined is not assignable here,
     // so absent keys rather than undefined values.
     return {
         ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
         ...(options.signal ? { signal: options.signal } : {}),
+        ...(options.sensitiveResponse !== undefined ? { sensitiveResponse: options.sensitiveResponse } : {}),
+        ...(options.maxResponseBytes !== undefined ? { maxResponseBytes: options.maxResponseBytes } : {}),
         timeoutMs: options.timeoutMs ?? SLACK_CLEANUP_TIMEOUT_MS,
     };
 }

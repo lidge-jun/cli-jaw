@@ -44,6 +44,25 @@ function makeFetch(responses: Array<Record<string, unknown> | { __raw: true; ok:
     return { impl, calls };
 }
 
+const raw = (text: string) => ({ type: 'raw_text', text });
+const rich = (text: string, style: Record<string, boolean>) => ({ type: 'rich_text', elements: [{ type: 'rich_text_section', elements: [{ type: 'text', text, style }] }] });
+// Readback fixtures are hand-specified, never derived from the outgoing blocks.
+function makeTableFetch(tables: unknown[][][], postResponses: Parameters<typeof makeFetch>[0] = [{ ok: true, ts: '2.1' }]) {
+    const posts = makeFetch(postResponses);
+    const reads: Captured[] = [];
+    let index = 0;
+    const impl = (async (url: string | URL | Request, init?: RequestInit) => {
+        if (!String(url).includes('/conversations.')) return posts.impl(url, init);
+        reads.push({ url: String(url), init });
+        const rows = tables[index++]!;
+        const params = new URLSearchParams(String(init?.body));
+        return new Response(JSON.stringify({ ok: true, messages: [{ ts: params.get('oldest'), blocks: [{ type: 'table',
+            rows,
+        }] }] }), { status: 200 });
+    }) as typeof fetch;
+    return { impl, calls: posts.calls, reads };
+}
+
 function bodyOf(call: Captured): Record<string, unknown> {
     return JSON.parse(String(call.init?.body ?? '{}')) as Record<string, unknown>;
 }
@@ -460,10 +479,100 @@ test('sendSlackText passes thread_ts when the target carries one', async () => {
     assert.equal(bodyOf(calls[0]!)['thread_ts'], '1.1');
 });
 
-test('sendSlackText converts markdown before posting', async () => {
-    const { impl, calls } = makeFetch([{ ok: true }]);
+test('sendSlackText preserves standard Markdown in rich blocks', async () => {
+    const { impl, calls } = makeFetch([{ ok: true, ts: '1.1' }, { ok: true, messages: [{ ts: '1.1', blocks: [{ type: 'rich_text', elements: [{ type: 'rich_text_section', elements: [{ type: 'text', text: 'bold', style: { bold: true } }] }] }] }] }]);
     await sendSlackText('xoxb-t', slackTargetFromId('C1'), '**bold**', { fetchImpl: impl });
-    assert.equal(bodyOf(calls[0]!)['text'], '*bold*');
+    assert.deepEqual(bodyOf(calls[0]!)['blocks'], [{ type: 'markdown', text: '**bold**' }]);
+});
+
+test('Slack Markdown tables are posted as rich blocks before mrkdwn conversion', async () => {
+    const { impl, calls } = makeTableFetch([[[raw('항목'), raw('결과')], [rich('한글', { bold: true }), { type: 'rich_text', elements: [{ type: 'rich_text_section', elements: [{ type: 'link', text: '문서', url: 'https://example.com' }] }] }]]]);
+    const table = '| 항목 | 결과 |\n| --- | --- |\n| **한글** | [문서](https://example.com) |';
+    const result = await sendSlackText('xoxb-t', slackTargetFromId('D1'), table, { fetchImpl: impl });
+    assert.equal(result.ok, true);
+    assert.equal(result.delivery?.tableContent, 'verified');
+    assert.equal(result.ts, '2.1');
+    assert.equal(calls.length, 1);
+    assert.deepEqual(bodyOf(calls[0]!)['blocks'], [{ type: 'markdown', text: table }]);
+});
+
+test('Slack table delivery preserves prose/table order, pipes and the parent thread', async () => {
+    const { impl, calls } = makeTableFetch([[[raw('이름'), raw('값')], [raw('A|B'), rich('x', { code: true })]]]);
+    const table = '| 이름 | 값 |\n| --- | --- |\n| A\\|B | `x` |';
+    const result = await sendSlackText('xoxb-t', slackTargetFromId('D1', { threadTs: '1.2' }),
+        `앞 문장\n\n${table}\n\n뒷 문장`, { fetchImpl: impl });
+    assert.equal(result.ok, true);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(bodyOf(calls[0]!)['blocks'], [{ type: 'markdown', text: `앞 문장\n\n${table}\n\n뒷 문장` }]);
+    assert.ok(calls.every(call => bodyOf(call)['thread_ts'] === '1.2'));
+});
+
+test('Slack tables in code fences remain code examples', async () => {
+    const { impl, calls } = makeFetch([{ ok: true, ts: '1.1' }, { ok: true, messages: [{ ts: '1.1', blocks: [{ type: 'rich_text', elements: [{ type: 'rich_text_preformatted', elements: [{ type: 'text', text: '| A | B |' }] }] }] }] }]);
+    const code = '```md\n| A | B |\n| --- | --- |\n| 1 | 2 |\n```';
+    await sendSlackText('xoxb-t', slackTargetFromId('D1'), code, { fetchImpl: impl });
+    assert.equal(calls.length, 2);
+    assert.deepEqual(bodyOf(calls[0]!)['blocks'], [{ type: 'markdown', text: code }]);
+    assert.match(String(bodyOf(calls[0]!)['text']), /^```md\n/);
+});
+
+test('Slack tables split at 99 data rows and repeat headers without losing data', async () => {
+    const { impl, calls } = makeTableFetch([0, 99].map(start => [[raw('번호'), raw('값')], ...Array.from({ length: start === 0 ? 99 : 6 }, (_, n) => [raw(String(start + n)), raw(`값${start + n}`)])]));
+    const header = '| 번호 | 값 |\n| --- | --- |';
+    const rows = Array.from({ length: 105 }, (_, i) => `| ${i} | 값${i} |`);
+    const result = await sendSlackText('xoxb-t', slackTargetFromId('D1'), [header, ...rows].join('\n'), { fetchImpl: impl });
+    assert.equal(result.ok, true);
+    assert.equal(result.delivery?.verifiedTables, 2);
+    assert.equal(result.delivery?.verification, 'verified');
+    assert.equal(result.delivery?.tableContent, 'verified');
+    assert.equal(calls.length, 2);
+    assert.deepEqual(calls.map(call => String(bodyOf(call)['text']).split('\n').slice(2)).flat(), rows);
+    assert.ok(calls.every(call => String(bodyOf(call)['text']).startsWith(header)));
+    assert.equal(String(bodyOf(calls[0]!)['text']).split('\n').length, 101);
+});
+
+test('Slack table character splitting keeps whole rows', async () => {
+    const { impl, calls } = makeTableFetch([0, 14].map(start => [[raw('번호'), raw('설명')], ...Array.from({ length: start === 0 ? 14 : 6 }, (_, n) => [raw(String(start + n)), raw('한'.repeat(600))])]));
+    const header = '| 번호 | 설명 |\n| --- | --- |';
+    const rows = Array.from({ length: 20 }, (_, i) => `| ${i} | ${'한'.repeat(600)} |`);
+    const result = await sendSlackText('xoxb-t', slackTargetFromId('D1'), [header, ...rows].join('\n'), { fetchImpl: impl });
+    assert.equal(result.ok, true);
+    assert.equal(result.delivery?.verifiedTables, 2);
+    assert.equal(result.delivery?.verification, 'verified');
+    assert.equal(result.delivery?.tableContent, 'verified');
+    assert.equal(calls.length, 2);
+    assert.ok(calls.every(call => String(bodyOf(call)['text']).length <= 9000));
+    assert.deepEqual(calls.map(call => String(bodyOf(call)['text']).split('\n').slice(2)).flat(), rows);
+});
+
+test('Slack rejects oversized tables before sending any preceding prose', async () => {
+    for (const table of [
+        `| ${Array.from({ length: 21 }, (_, i) => i).join(' | ')} |\n| ${Array(21).fill('---').join(' | ')} |\n| ${Array(21).fill('x').join(' | ')} |`,
+        `| A | B |\n| --- | --- |\n| 1 | ${'x'.repeat(9100)} |`,
+    ]) {
+        const { impl, calls } = makeFetch([{ ok: true }]);
+        const result = await sendSlackText('xoxb-t', slackTargetFromId('D1'), `앞 문장\n\n${table}`, { fetchImpl: impl });
+        assert.equal(result.ok, false);
+        assert.equal(result.status, 400);
+        assert.match(result.error!, /slack_table_/);
+        assert.equal(calls.length, 0);
+    }
+});
+
+test('Slack table blocks and fallback are redacted identically on rate-limit retry', async () => {
+    const { impl, calls } = makeTableFetch([[[raw('이름'), raw('값')], [raw('토큰'), raw('xoxb-test...redacted')]]], [
+        { __raw: true, ok: false, status: 429, headers: { 'retry-after': '0.001' } },
+        { ok: true, ts: '2.2' },
+    ]);
+    const secret = 'xoxb-test-only-redaction-canary';
+    const result = await sendSlackText('xoxb-t', slackTargetFromId('D1'),
+        `| 이름 | 값 |\n| --- | --- |\n| 토큰 | ${secret} |`, { fetchImpl: impl });
+    assert.equal(result.ok, true);
+    assert.equal(result.ts, '2.2');
+    assert.equal(calls.length, 2);
+    assert.deepEqual(bodyOf(calls[0]!), bodyOf(calls[1]!));
+    assert.ok(bodyOf(calls[1]!)['blocks']);
+    assert.ok(!JSON.stringify(bodyOf(calls[1]!)).includes(secret));
 });
 
 test('sendSlackText posts one call per chunk', async () => {

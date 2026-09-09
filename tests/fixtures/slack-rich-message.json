@@ -1,0 +1,255 @@
+{
+  "markdown": "# 리치 서식 검수 · 예시\n**중요한 내용**과 *기울임*, ~~완료된 항목~~, `인라인 코드`를 구분합니다.\n\n## 목록과 진행 상태\n- 상위 항목\n  - 하위 항목\n1. 첫 번째 단계\n2. 두 번째 단계\n\n- [x] 완료한 작업\n- [ ] 남은 작업\n\n> 인용한 내용입니다.\n> 두 번째 인용 줄입니다.\n\n---\n\n## 코드와 출처\n```python\nprint(\"가독성 확인\")\n```\n[Slack 공식 문서](https://docs.slack.dev/reference/block-kit/blocks/markdown-block/)",
+  "storedBlocks": [
+    {
+      "type": "header",
+      "text": {
+        "type": "plain_text",
+        "text": "리치 서식 검수 · 예시",
+        "emoji": true
+      },
+      "level": 1
+    },
+    {
+      "type": "rich_text",
+      "elements": [
+        {
+          "type": "rich_text_section",
+          "elements": [
+            {
+              "type": "text",
+              "text": "중요한 내용",
+              "style": {
+                "bold": true
+              }
+            },
+            {
+              "type": "text",
+              "text": "과 "
+            },
+            {
+              "type": "text",
+              "text": "기울임",
+              "style": {
+                "italic": true
+              }
+            },
+            {
+              "type": "text",
+              "text": ", "
+            },
+            {
+              "type": "text",
+              "text": "완료된 항목",
+              "style": {
+                "strike": true
+              }
+            },
+            {
+              "type": "text",
+              "text": ", "
+            },
+            {
+              "type": "text",
+              "text": "인라인 코드",
+              "style": {
+                "code": true
+              }
+            },
+            {
+              "type": "text",
+              "text": "를 구분합니다."
+            },
+            {
+              "type": "text",
+              "text": "\n\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "header",
+      "text": {
+        "type": "plain_text",
+        "text": "목록과 진행 상태",
+        "emoji": true
+      },
+      "level": 2
+    },
+    {
+      "type": "rich_text",
+      "elements": [
+        {
+          "type": "rich_text_list",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "상위 항목"
+                }
+              ]
+            }
+          ],
+          "style": "bullet",
+          "indent": 0
+        },
+        {
+          "type": "rich_text_list",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "하위 항목"
+                }
+              ]
+            }
+          ],
+          "style": "bullet",
+          "indent": 1
+        },
+        {
+          "type": "rich_text_list",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "첫 번째 단계"
+                }
+              ]
+            },
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "두 번째 단계"
+                }
+              ]
+            }
+          ],
+          "style": "ordered",
+          "indent": 0
+        },
+        {
+          "type": "rich_text_section",
+          "elements": [
+            {
+              "type": "text",
+              "text": "\n"
+            }
+          ]
+        },
+        {
+          "type": "rich_text_list",
+          "elements": [
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "완료한 작업",
+                  "style": {
+                    "strike": true
+                  }
+                }
+              ],
+              "checked": true
+            },
+            {
+              "type": "rich_text_section",
+              "elements": [
+                {
+                  "type": "text",
+                  "text": "남은 작업"
+                }
+              ],
+              "checked": false
+            }
+          ],
+          "style": "bullet",
+          "indent": 0,
+          "checklist": true
+        },
+        {
+          "type": "rich_text_section",
+          "elements": [
+            {
+              "type": "text",
+              "text": "\n"
+            }
+          ]
+        },
+        {
+          "type": "rich_text_quote",
+          "elements": [
+            {
+              "type": "text",
+              "text": "인용한 내용입니다."
+            },
+            {
+              "type": "text",
+              "text": "\n"
+            },
+            {
+              "type": "text",
+              "text": "두 번째 인용 줄입니다."
+            }
+          ]
+        },
+        {
+          "type": "rich_text_section",
+          "elements": [
+            {
+              "type": "text",
+              "text": "\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "divider"
+    },
+    {
+      "type": "header",
+      "text": {
+        "type": "plain_text",
+        "text": "코드와 출처",
+        "emoji": true
+      },
+      "level": 2
+    },
+    {
+      "type": "rich_text",
+      "elements": [
+        {
+          "type": "rich_text_preformatted",
+          "elements": [
+            {
+              "type": "text",
+              "text": "print(\"가독성 확인\")"
+            }
+          ],
+          "language": "python"
+        },
+        {
+          "type": "rich_text_section",
+          "elements": [
+            {
+              "type": "link",
+              "url": "https://docs.slack.dev/reference/block-kit/blocks/markdown-block/",
+              "text": "Slack 공식 문서"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

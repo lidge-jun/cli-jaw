@@ -4,6 +4,9 @@ import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { registerMessagingRoutes } from '../../src/routes/messaging.ts';
+import { registerSendTransport } from '../../src/messaging/send.ts';
+import { settings } from '../../src/core/config.ts';
+import { slackSendHandler } from '../../src/slack/send-handler.ts';
 
 async function withMessagingServer(run: (baseUrl: string) => Promise<void>): Promise<void> {
     const app = express();
@@ -21,6 +24,113 @@ async function withMessagingServer(run: (baseUrl: string) => Promise<void>): Pro
         await new Promise<void>(resolve => server.close(() => resolve()));
     }
 }
+
+test('HTTP Slack blocks reach the real adapter and require persisted table proof', async () => {
+    const savedFetch = globalThis.fetch;
+    const savedSlack = settings.slack;
+    settings.slack = { ...savedSlack, enabled: true, botToken: 'xoxb-fixture', channelIds: [] };
+    registerSendTransport('slack', slackSendHandler);
+    const table = { type: 'table', rows: [
+        [{ type: 'raw_text', text: '항목' }, { type: 'raw_text', text: '수량' }],
+        [{ type: 'raw_text', text: '위젯 A' }, { type: 'raw_number', value: 10 }],
+    ] };
+    const blocks = [
+        { type: 'header', text: { type: 'plain_text', text: '방법 A' } },
+        { type: 'markdown', text: '| 항목 | 수량 |\n| --- | --- |\n| 위젯 A | 10 |' },
+        { type: 'divider' },
+        { type: 'header', text: { type: 'plain_text', text: '방법 B' } },
+        table,
+    ];
+    const posts: Record<string, unknown>[] = [];
+    const reads: URLSearchParams[] = [];
+    let mode: 'valid' | 'missing' | 'wrong_shape' | 'unavailable' = 'valid';
+    globalThis.fetch = (async (url, init) => {
+        if (!String(url).startsWith('https://slack.com/api/')) return savedFetch(url, init);
+        if (String(url).endsWith('/chat.postMessage')) {
+            posts.push(JSON.parse(String(init?.body)));
+            return new Response(JSON.stringify({ ok: true, ts: `100.${posts.length}` }));
+        }
+        if (String(url).endsWith('/conversations.replies')) {
+            const params = new URLSearchParams(String(init?.body));
+            reads.push(params);
+            if (mode === 'unavailable') return new Response(JSON.stringify({ ok: false, error: 'missing_scope' }));
+            const stored = mode === 'missing' ? [{ type: 'rich_text', elements: [] }]
+                : [{ ...table, rows: mode === 'wrong_shape' ? table.rows.slice(0, 1) : [table.rows[0], [table.rows[1]![0], posts.length === 2 ? { type: 'raw_number', value: 10, text: '10' } : { type: 'raw_text', text: '10' }]] }];
+            return new Response(JSON.stringify({ ok: true, messages: [{ ts: params.get('oldest'), blocks: [{ type: 'header', text: { type: 'plain_text', text: '방법' } }, { type: 'divider' }, ...stored] }] }));
+        }
+        throw new Error(`Unexpected external request: ${url}`);
+    }) as typeof fetch;
+    try {
+        await withMessagingServer(async baseUrl => {
+            const request = {
+                channel: 'slack', type: 'text', text: '표 전송 테스트', blocks,
+                target: { channel: 'slack', targetKind: 'user', peerKind: 'direct', targetId: 'D_ROUTE', threadId: '99.1' },
+            };
+            const send = async (body: unknown) => {
+                const response = await fetch(`${baseUrl}/api/channel/send`, {
+                    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+                });
+                return { status: response.status, body: await response.json() };
+            };
+            const good = await send(request);
+            assert.equal(good.status, 200);
+            assert.equal(good.body.ok, true);
+            const normalizedTable = { ...table, rows: [table.rows[0], [table.rows[1]![0], { type: 'raw_number', value: 10, text: '10' }]] };
+            assert.deepEqual(posts.map(p => p['blocks']), [blocks.slice(0, 2), [...blocks.slice(2, 4), normalizedTable]]);
+            assert.deepEqual(good.body.delivery, {
+                verification: 'verified', expectedTables: 2, verifiedTables: 2,
+                tableContent: 'verified', richContent: 'not_checked', sourceAccuracy: 'not_checked', comparisonVersion: 1,
+                channelId: 'D_ROUTE', messageTs: ['100.1', '100.2'], postedChunks: 2, totalChunks: 2,
+                messages: [0, 1].map(index => ({ index, ts: `100.${index + 1}`, verification: 'verified',
+                    expectedTables: 1, verifiedTables: 1, tableContent: 'verified',
+                    expectedFeatures: index ? ['divider', 'heading'] : ['heading'],
+                    verifiedFeatures: index ? ['divider', 'heading'] : ['heading'],
+                    richContent: 'not_checked', sourceAccuracy: 'not_checked' })),
+                expectedFeatures: ['divider', 'heading'], verifiedFeatures: ['divider', 'heading'],
+            });
+            assert.ok(posts.every(p => p['thread_ts'] === '99.1'));
+            assert.equal(reads.length, 2);
+            assert.ok(reads.every(p => p.get('ts') === '99.1' && p.get('channel') === 'D_ROUTE'));
+
+            for (const failureMode of ['missing', 'wrong_shape', 'unavailable'] as const) {
+                mode = failureMode;
+                const before = posts.length;
+                const failed = await send(request);
+                assert.equal(failed.status, 200);
+                assert.equal(failed.body.ok, true);
+                assert.equal(failed.body.sent, true);
+                assert.equal(failed.body.retryable, false);
+                const status = mode === 'unavailable' ? 'unavailable' : 'failed';
+                assert.equal(failed.body.delivery.verification, status);
+                assert.equal(failed.body.delivery.tableContent, status);
+                assert.equal(failed.body.delivery.verifiedTables, 0);
+                assert.equal(failed.body.delivery.messages.length, 2);
+                for (const message of failed.body.delivery.messages) {
+                    assert.equal(message.verification, status);
+                    assert.equal(message.error, mode === 'unavailable' ? 'missing_scope' : 'table_count_or_shape_mismatch');
+                }
+                assert.equal(posts.length, before + 2, 'readback failure must not truncate or repost');
+            }
+            const before = posts.length;
+            for (const invalid of [
+                { ...request, blocks: '{}' }, { ...request, blocks: [] },
+                { ...request, blocks: [{ text: 'missing type' }] },
+                { ...request, blocks: [{ type: 'table', rows: Array(101).fill(table.rows[0]) }] },
+                { ...request, blocks: [{ type: 'table', rows: [Array(21).fill({ type: 'raw_text', text: 'x' })] }] },
+                { ...request, blocks: [{ type: 'table', rows: [[{ type: 'raw_text', text: 'x'.repeat(10001) }]] }] },
+                { ...request, blocks: [{ type: 'table', rows: [[{ type: 'raw_number', value: '10' }]] }] },
+                { ...request, type: 'keyboard' },
+                { ...request, channel: 'discord', target: { ...request.target, channel: 'discord' } },
+            ]) {
+                assert.equal((await send(invalid)).status, 400);
+            }
+            assert.equal(posts.length, before, 'invalid blocks must fail before vendor calls');
+        });
+    } finally {
+        globalThis.fetch = savedFetch;
+        settings.slack = savedSlack;
+    }
+});
 
 test('POST /api/channel/send returns the stable invalid_channel envelope with an actionable Slack hint', async () => {
     await withMessagingServer(async baseUrl => {
