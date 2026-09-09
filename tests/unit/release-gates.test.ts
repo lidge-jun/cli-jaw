@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -60,6 +61,88 @@ describe('phase22 named release gates (cli-jaw)', () => {
         const r = runGate('definitely-not-a-real-gate');
         assert.notEqual(r.status, 0);
         assert.match(r.stdout, /unknown gate/);
+    });
+
+    // The #660 merge committed 14 unresolved conflict blocks to dev and every
+    // check stayed green, because doc-drift — the only gate that reads these
+    // files' contents — returns PASS immediately when CI is set. So the scan
+    // has to be proven to run WITH CI set, and proven to actually fail.
+    function runGateOnCi(cwd: string, script: string) {
+        return spawnSync(process.execPath, [script, 'doc-drift'], {
+            cwd, encoding: 'utf8', env: { ...process.env, CI: '1' },
+        });
+    }
+
+    it('doc-drift scans for conflict markers even when CI is set', () => {
+        const r = runGateOnCi(repoRoot, gateScript);
+        assert.equal(r.status, 0, 'expected pass, got: ' + r.stdout + '\n' + r.stderr);
+        assert.match(r.stdout ?? '', /conflict-marker scan clean/);
+    });
+
+    it('doc-drift fails on a tracked conflict marker under CI', () => {
+        // The gate derives its repo root from its own path, so a copy inside a
+        // throwaway git repo scans THAT repo. That is the only way to prove the
+        // failure path without committing a marker into this one.
+        const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cli-jaw-conflict-gate-'));
+        try {
+            fs.mkdirSync(path.join(tmp, 'scripts'));
+            for (const file of ['release-gates.mjs', 'claim-audit.mjs']) {
+                fs.copyFileSync(path.join(repoRoot, 'scripts', file), path.join(tmp, 'scripts', file));
+            }
+            const git = (...args: string[]) => spawnSync('git', args, { cwd: tmp, encoding: 'utf8' });
+            git('init', '-q');
+            git('config', 'user.email', 'gate-test@example.invalid');
+            git('config', 'user.name', 'gate test');
+            fs.writeFileSync(path.join(tmp, 'doc.md'), [
+                'intro',
+                '<<<<<<< HEAD',
+                'ours',
+                '=======',
+                'theirs',
+                '>>>>>>> other-branch',
+                '',
+            ].join('\n'));
+            git('add', '-A');
+            git('commit', '-qm', 'planted');
+            const r = runGateOnCi(tmp, path.join(tmp, 'scripts', 'release-gates.mjs'));
+            assert.notEqual(r.status, 0, 'expected FAIL, got: ' + r.stdout + '\n' + r.stderr);
+            assert.match(r.stdout ?? '', /unresolved conflict marker line/);
+            assert.match(r.stdout ?? '', /doc\.md:2/);
+        } finally {
+            fs.rmSync(tmp, { recursive: true, force: true });
+        }
+    });
+
+    it('doc-drift ignores the intentional wysiwyg conflict fixtures', () => {
+        const fixture = path.join(repoRoot, 'tests/fixtures/manager-notes-wysiwyg/conflict-local-remote.input.md');
+        assert.ok(fs.existsSync(fixture), 'the excluded fixture must still exist');
+        assert.match(fs.readFileSync(fixture, 'utf8'), /^<<<<<<< /m,
+            'the fixture must still carry a marker, or the exclusion is untested');
+        const r = runGateOnCi(repoRoot, gateScript);
+        assert.equal(r.status, 0, 'fixtures must not fail the gate: ' + r.stdout);
+    });
+
+    // git grep stops at a gitlink, and a marker committed inside a submodule
+    // ships when that submodule is published. Whether this checkout has them
+    // initialised differs between a dev machine and CI, so the expectation is
+    // derived from the actual state rather than hardcoded.
+    it('doc-drift scans checked-out submodules and names the ones it could not', () => {
+        const listed = spawnSync('git', ['submodule', 'status'], { cwd: repoRoot, encoding: 'utf8' });
+        assert.equal(listed.status, 0, 'git submodule status must run');
+        const uninitialised = (listed.stdout ?? '').split('\n').filter(Boolean)
+            .map(line => line.match(/^(.)[0-9a-f]+\s+(\S+)/))
+            .filter((m): m is RegExpMatchArray => Boolean(m) && m![1] === '-')
+            .map(m => m[2]);
+        const r = runGateOnCi(repoRoot, gateScript);
+        assert.equal(r.status, 0, 'expected pass, got: ' + r.stdout + '\n' + r.stderr);
+        for (const rel of uninitialised) {
+            assert.ok((r.stdout ?? '').includes(rel),
+                'an unscanned submodule must be named, not silently counted clean: ' + rel);
+        }
+        if (uninitialised.length === 0) {
+            assert.doesNotMatch(r.stdout ?? '', /uninitialised submodule/,
+                'nothing should be reported unscanned when every submodule is checked out');
+        }
     });
 
     it('truth table mentions the four mirrored agbrowse symbols', () => {

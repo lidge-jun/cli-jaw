@@ -68,6 +68,70 @@ function readFile(rel) {
     return fs.readFileSync(path.join(repoRoot, rel), 'utf8');
 }
 
+/**
+ * Lines only a git merge conflict produces. A bare `=======` is deliberately
+ * absent: it is also a Markdown setext H1 underline, so matching it would fail
+ * this gate on ordinary prose. Every real conflict carries the anchored
+ * `<<<<<<<`/`>>>>>>>` pair, so the pair is enough to see one.
+ */
+const CONFLICT_MARKER_RE = '^(<<<<<<< |\\|\\|\\|\\|\\|\\|\\| |>>>>>>> )';
+
+/**
+ * tests/fixtures/manager-notes-wysiwyg holds canned conflict text on purpose —
+ * it is the INPUT to the notes conflict-rendering tests, not a merge leftover.
+ */
+const CONFLICT_SCAN_EXCLUDE = ':(exclude)tests/fixtures/manager-notes-wysiwyg/';
+
+/**
+ * Tracked files still carrying merge markers. `git grep` reads only tracked
+ * paths, so an untracked scratch file cannot fail the build, and `-I` skips
+ * binaries. A status other than 0 (found) or 1 (clean) means the scan did not
+ * actually run, which is reported rather than silently passed.
+ */
+function grepConflictMarkers(cwd, prefix) {
+    const r = run('git', ['grep', '-n', '-I', '-E', CONFLICT_MARKER_RE, '--', '.', CONFLICT_SCAN_EXCLUDE],
+        { timeout: 60_000, cwd });
+    if (r.status === 1) return { hits: [] };
+    if (r.status !== 0) {
+        const why = [r.stderr, r.stdout].filter(Boolean).join(' ').trim() || `status ${r.status}`;
+        return { error: `conflict-marker scan could not run in ${prefix || '.'}: ${why}` };
+    }
+    const hits = String(r.stdout || '').split('\n').filter(Boolean)
+        .map(line => (prefix ? `${prefix}/${line}` : line));
+    return { hits };
+}
+
+/**
+ * `git grep` stops at a gitlink, and a marker committed inside a submodule
+ * ships when that submodule is published — the same reason
+ * check-private-boundary.mjs enumerates submodule contents instead of trusting
+ * `ls-files`. So each CHECKED-OUT submodule is scanned in its own right. An
+ * uninitialised one holds no working tree to read; it is named in the detail
+ * rather than counted as clean, because "nothing to scan" is not "scanned and
+ * clean".
+ */
+function trackedConflictMarkers() {
+    const root = grepConflictMarkers(repoRoot, '');
+    if (root.error) return root;
+    const hits = [...root.hits];
+    const unscanned = [];
+    const listed = run('git', ['submodule', 'status'], { timeout: 30_000 });
+    if (listed.status === 0) {
+        for (const line of String(listed.stdout || '').split('\n').filter(Boolean)) {
+            // ' <sha> <path> (<describe>)', where a leading '-' means the
+            // submodule was never initialised in this checkout.
+            const parsed = line.match(/^(.)[0-9a-f]+\s+(\S+)/);
+            if (!parsed) continue;
+            const [, state, rel] = parsed;
+            if (state === '-') { unscanned.push(rel); continue; }
+            const nested = grepConflictMarkers(path.join(repoRoot, rel), rel);
+            if (nested.error) return nested;
+            hits.push(...nested.hits);
+        }
+    }
+    return { hits, unscanned };
+}
+
 const FORBIDDEN_IN_READY = [
     /external[-\s]?cdp/i,
     /remote[-\s]?cdp/i,
@@ -417,13 +481,30 @@ const GATES = {
         },
     },
     'doc-drift': {
-        description: 'structure docs match live inventory (docs:check TS extractors + legacy bash checks)',
+        description: 'no tracked file carries merge conflict markers (every run) + structure docs match live inventory (local only)',
         check() {
+            // A merge that commits its own conflict markers is the one docs
+            // failure CI has to catch, and nothing did: the #660 merge landed 14
+            // unresolved blocks on dev (README.md, AGENTS.md, CLAUDE.md,
+            // structure/str_func.md) and gate:all still went green, because the
+            // inventory steps below are skipped on CI and nothing else reads
+            // those files' contents. This scan is a string match on tracked
+            // paths — platform-neutral — so it runs before that skip.
+            const markers = trackedConflictMarkers();
+            if (markers.error) return { ok: false, detail: markers.error };
+            if (markers.hits.length) {
+                const sample = markers.hits.slice(0, 5).join('; ');
+                const more = markers.hits.length > 5 ? ` (+${markers.hits.length - 5} more)` : '';
+                return { ok: false, detail: `${markers.hits.length} unresolved conflict marker line(s): ${sample}${more}` };
+            }
+            const unscanned = markers.unscanned?.length
+                ? ` (not scanned, uninitialised submodule(s): ${markers.unscanned.join(', ')})`
+                : '';
             // CI runners produce platform-dependent file/line inventories
             // (no public/dist, different tracked-file set) that this gate
             // cannot reconcile; it stays a local/pre-release discipline gate.
             if (process.env.CI) {
-                return { ok: true, detail: 'skipped on CI (local/pre-release gate only)' };
+                return { ok: true, detail: `conflict-marker scan clean${unscanned}; inventory steps skipped on CI (local/pre-release only)` };
             }
             const steps = [
                 { name: 'docs:check', cmd: 'npm', args: ['run', 'docs:check', '--silent'], timeout: 120_000 },
@@ -435,7 +516,7 @@ const GATES = {
                     return { ok: false, detail: `${s.name} failed:\n${[r.stdout, r.stderr].filter(Boolean).join('\n').slice(-1500)}` };
                 }
             }
-            return { ok: true, detail: 'docs:check + check-doc-drift.sh clean' };
+            return { ok: true, detail: `conflict-marker scan clean${unscanned}; docs:check + check-doc-drift.sh clean` };
         },
     },
     'path-length': {
