@@ -128,3 +128,7 @@ JWC integration is retired. Keep stored `jwc` choices inert and readable; execut
 returns `retired_runtime:jwc` before fallback. Unrelated settings saves preserve
 user data. TUI uses local presentation without generated Jawcode/Bun bundles;
 package guards must reject retired payloads without cleaning user installations.
+
+- Boss user prompts include host-local civil dates and Monday–Sunday ranges via `src/agent/calendar-context.ts`; the timestamp and calendar share one clock sample. Explicit user timezone/week conventions take precedence; system-prompt caching and worker/internal prompts stay unchanged.
+
+- Optional pinned local services use `scripts/service-artifact.mjs` with an externally anchored manifest digest and an immutable package tree. Activation and registration remain explicit; keep the prior registration for rollback. See `docs/pinned-service-artifacts.md`.

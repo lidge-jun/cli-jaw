@@ -60,6 +60,7 @@ import { buildPromptForArgs, shouldBuildHistoryBlock, withHistoryPrompt, withSte
     PROMPT_HISTORY_MAX_ROWS, PROMPT_HISTORY_MAX_CHARS, appendCursorAcceptedInstruction,
     buildCursorReplacementPrompt, type CursorAcceptedContext } from './prompt-context.js';
 import { attachWatchdog, DEFAULT_WATCHDOG_ABSOLUTE_HARD_CAP_MS } from './watchdog.js';
+import { calendarContext } from './calendar-context.js';
 import {
     buildOpencodeRuntimeSnapshot,
     buildOpencodeSpawnAudit,
@@ -1567,7 +1568,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             ? '\n(need history? L1: cli-jaw chat/memory search/context | L2: cli-jaw dashboard memory search, cli-jaw dashboard chat search)'
             : '';
         const promptWithConversation = prependRemoteConversationContext(prompt, opts.target);
-        prompt = `${ts}\n${projLine}${promptWithConversation}${memoryNudge}`;
+        prompt = `${ts}\n${calendarContext(_d)}\n${projLine}${promptWithConversation}${memoryNudge}`;
     }
 
     const resumeSessionId = empSid || (isResume ? bucketSessionId : null);

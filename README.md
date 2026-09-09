@@ -932,3 +932,7 @@ Bug reports and feature ideas: [Open an issue](https://github.com/lidge-jun/cli-
 **[MIT License](LICENSE)** · Built by developers who got tired of tab-switching between AI apps.
 
 </div>
+
+Boss turns receive host-local calendar dates and Monday–Sunday week ranges to resolve relative dates; explicit timezone or week conventions take precedence.
+
+For opt-in local services that must survive global package updates, see [verified local service builds](docs/pinned-service-artifacts.md).

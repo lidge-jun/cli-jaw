@@ -99,3 +99,7 @@ and local TUI/package absence contracts in `infra.md`. Preserve stored user data
 ### Quota reader contract
 
 Native quota readers follow the OpenCodex source contract: Codex window duration/plan policy, Spark and reset-credit metadata; Claude model-scoped windows and credential-scoped cache. Missing measurements remain unknown, 429 alone never means 100%, and upstream bodies are bounded. See `docs/migration/quota-reader-parity.md`.
+
+- Boss user prompts include host-local civil dates and Monday–Sunday ranges via `src/agent/calendar-context.ts`; the timestamp and calendar share one clock sample. Explicit user timezone/week conventions take precedence; system-prompt caching and worker/internal prompts stay unchanged.
+
+- Optional pinned local services use `scripts/service-artifact.mjs` with an externally anchored manifest digest and an immutable package tree. Activation and registration remain explicit; keep the prior registration for rollback. See `../docs/pinned-service-artifacts.md`.

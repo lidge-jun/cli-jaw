@@ -444,3 +444,7 @@ saved selection and unrelated settings; report `retired_runtime:jwc` before any
 fallback or admission. Do not silently select another provider. Manager/Classic
 show the retired selection without making it selectable. TUI uses local
 `src/cli/tui/presentation.ts`; keep SDK, bundles and installer payloads absent.
+
+- Boss user prompts include host-local civil dates and Monday–Sunday ranges via `src/agent/calendar-context.ts`; the timestamp and calendar share one clock sample. Explicit user timezone/week conventions take precedence; system-prompt caching and worker/internal prompts stay unchanged.
+
+- Optional pinned local services use `scripts/service-artifact.mjs` with an externally anchored manifest digest and an immutable package tree. Activation and registration remain explicit; keep the prior registration for rollback. See `docs/pinned-service-artifacts.md`.
