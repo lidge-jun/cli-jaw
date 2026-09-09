@@ -12,9 +12,10 @@ on:
       - main
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  # Manual runs also start the advisory coverage job. publish.yml and the
-  # release scripts only accept `--event push` runs, so a dispatch never
-  # certifies a release.
+  # publish.yml and the release scripts only accept `--event push` runs, so
+  # a dispatch never certifies a release. Advisory coverage moved to its own
+  # coverage-advisory.yml (weekly schedule + dispatch), so manual runs of this
+  # workflow no longer include it.
   workflow_dispatch:
 
 concurrency:
@@ -353,70 +354,7 @@ jobs:
           find . \( -name '*.js' -o -name '*.ts' \) -not -path './node_modules/*' -not -path './skills_ref/*' -not -name '*.d.ts' \
             | xargs wc -l | sort -rn | awk '$1 > 500 && !/total/ { print "⚠️ " $0; found=1 } END { if (!found) print "✅ All files under 500 lines" }'
 
-  # Advisory coverage over the root+unit suite. Runs on dev pushes and manual
-  # dispatch only, never on preview/main or pull requests, and is not in
-  # ci-aggregate's needs — it can neither delay nor spoil release certification.
-  # tests/run.mts turns --experimental-test-coverage into run({ coverage:true }),
-  # which node:test added in 22.10; the version check makes that explicit.
-  coverage:
-    name: coverage (advisory)
-    needs: changes
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/dev')) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    continue-on-error: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          persist-credentials: false
-
-      - name: Checkout public submodules
-        run: |
-          git submodule update --init skills_ref
-          git submodule update --init officecli
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install system test dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ripgrep
-          rg --version
-
-      - name: Install dependencies
-        run: npm ci --ignore-scripts
-
-      - name: Build native modules
-        run: npm rebuild better-sqlite3
-
-      - name: Require node:test coverage support (>= 22.10)
-        run: node -e "const [a,b]=process.versions.node.split('.').map(Number); if (a<22||(a===22&&b<10)) { console.error('node '+process.versions.node+' lacks run({coverage})'); process.exit(1) }"
-
-      - name: Build TypeScript
-        run: npx tsc
-
-      - name: Run suite with coverage
-        shell: bash {0}
-        run: |
-          npx tsx --experimental-test-module-mocks --experimental-test-coverage tests/run.mts --scope root,unit 2>&1 | tee coverage.txt
-          status=${PIPESTATUS[0]}
-          grep -A3 'start of coverage report' coverage.txt | head -5 || true
-          exit $status
-
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: coverage-${{ github.sha }}
-          path: coverage.txt
-          if-no-files-found: warn
-
-  # Fast Windows unit lane on every non-draft code PR (#384). Before this, Windows tests
+ # Fast Windows unit lane on every non-draft code PR (#384). Before this, Windows tests
   # ran only in postinstall-platform.yml behind a literal paths: allowlist, so
   # a PR touching Windows behavior in unlisted files merged with zero Windows
   # CI. The file list lives in scripts/ci/windows-unit-manifest.txt and is
