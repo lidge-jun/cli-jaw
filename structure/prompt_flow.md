@@ -95,6 +95,10 @@ graph TD
 
 이전 버전에 있던 timestamp stamp(`YYMMDD-HH:MMAM/PM.`) 주입은 현재 `getSystemPrompt()`에서 제거됐다.
 
+### 메시지별 달력 컨텍스트
+
+Boss user prompt의 timestamp와 `src/agent/calendar-context.ts`는 같은 시각을 사용한다. 호스트 로컬 날짜·요일·시간대와 월요일–일요일 기준 이번 주/다음 주 범위 및 다음 월요일을 전달한다. 날짜 계산은 로컬 연·월·일을 UTC 달력으로 옮겨 DST 시간 차이를 피한다. 사용자가 지정한 시간대나 주 기준이 우선이며 worker/internal prompt와 캐시된 system prompt에는 추가하지 않는다.
+
 ### 메시지별 원격 대화 컨텍스트
 
 `src/agent/spawn.ts`는 시스템 프롬프트 캐시와 별개로 Boss user prompt를 감쌀 때 원격 대화 식별자를 주입한다. Slack-origin turn은 `src/prompt/conversation-context.ts`를 통해 `Current Slack conversation: channel_id=<id>; thread_ts=<parent ts|none>` 줄을 받는다. 이 줄은 `multiSession.enabled`와 무관하며, agent는 내부 session label을 파싱하지 않고 `/api/slack/history`, `/api/slack/members`, `/api/channel/send`의 target을 구성할 수 있다. 식별자는 제어문자와 줄바꿈을 제거하고 길이를 제한한 뒤 주입한다.
