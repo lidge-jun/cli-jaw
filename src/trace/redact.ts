@@ -1,3 +1,4 @@
+import { redactSlackToolSecrets } from '../slack/tool-context.js';
 const SECRET_KEY_RE = /(authorization|bearer|cookie|password|passwd|token|api[_-]?key|secret|credential|session[_-]?id|aws[_-]?access|jwt)/i;
 const TOKEN_PATTERNS: Array<[RegExp, string]> = [
     [/(Bearer\s+)[A-Za-z0-9._~+/-]+=*/gi, '$1[REDACTED]'],
@@ -12,7 +13,7 @@ const TOKEN_PATTERNS: Array<[RegExp, string]> = [
 ];
 
 function redactString(value: string): string {
-    let next = value;
+    let next = redactSlackToolSecrets(value);
     for (const [pattern, replacement] of TOKEN_PATTERNS) next = next.replace(pattern, replacement);
     return next;
 }

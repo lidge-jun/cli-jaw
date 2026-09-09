@@ -1,3 +1,4 @@
+import { createSlackToolSecretStream, activateSlackToolGrant, revokeSlackToolGrant, revokeSlackToolScope, redactSlackToolSecrets, SLACK_TOOL_GRANT_ENV } from '../slack/tool-context.js';
 // ─── Agent Spawn + Kill/Steer/Queue ──────────────────
 
 import fs from 'fs';
@@ -60,7 +61,6 @@ import { buildPromptForArgs, shouldBuildHistoryBlock, withHistoryPrompt, withSte
     PROMPT_HISTORY_MAX_ROWS, PROMPT_HISTORY_MAX_CHARS, appendCursorAcceptedInstruction,
     buildCursorReplacementPrompt, type CursorAcceptedContext } from './prompt-context.js';
 import { attachWatchdog, DEFAULT_WATCHDOG_ABSOLUTE_HARD_CAP_MS } from './watchdog.js';
-import { calendarContext } from './calendar-context.js';
 import {
     buildOpencodeRuntimeSnapshot,
     buildOpencodeSpawnAudit,
@@ -658,6 +658,8 @@ export function killActiveAgent(reason?: string): boolean;
 export function killActiveAgent(scopeKeyOrReason = 'user', scopedReason?: string): boolean {
     const scopeKey = scopedReason === undefined ? 'default' : scopeKeyOrReason;
     const reason = scopedReason ?? scopeKeyOrReason;
+    if (reason === 'user' || reason === 'api') revokeSlackToolScope(scopeKey);
+    else revokeSlackToolGrant(activeMainProcesses.get(scopeKey)?.meta?.requestId);
     cancelSteerInputs(scopeKey);
     const cancelledClaude = cancelClaudeScope(scopeKey, reason, reason === 'api' || reason === 'user');
     const run = activeMainProcesses.get(scopeKey);
@@ -947,15 +949,8 @@ export async function steerAgent(
     broadcast('steer_started', stripUndefined({ prompt: newPrompt, origin: source || 'web', scope: scopeKey,
         sessionId: chatSessionId, target: meta?.target, chatId: meta?.chatId, requestId: meta?.requestId,
         remoteKey: meta?.remoteKey, replyViaTarget: meta?.replyViaTarget, mode: 'kill-steer', ...slackRestart }));
-
     const { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
-    // The follow-up run answers the SAME conversation the killed turn came from,
-    // but nothing downstream can infer that: a remote caller's reply is addressed
-    // by `target`, and dropping it here left the answer with nowhere to go. The
-    // dispatch waiter is already gone (ingress returns early for a steered
-    // submission), so an unaddressed terminal is silently discarded and the
-    // channel just goes quiet after a steer.
     // Union of both contracts: the #655 steer identity (target/chatId/remoteKey/
     // replyViaTarget/_fromSteer) plus the #654 pre-kill capture (slackRestart),
     // whose mode restart is what the reply-control observer treats as a start.
@@ -963,7 +958,6 @@ export async function steerAgent(
         target: meta?.target, chatId: meta?.chatId, remoteKey: meta?.remoteKey,
         replyViaTarget: meta?.replyViaTarget, _fromSteer: true,
         ...slackRestart, _skipInsert: true, _steerContext: steerContext || undefined });
-
     const task = isResetIntent(newPrompt)
         ? orchestrateReset(steerMeta)
         : isContinueIntent(newPrompt)
@@ -975,7 +969,6 @@ export async function steerAgent(
             target: meta?.target, chatId: meta?.chatId, replyViaTarget: meta?.replyViaTarget,
             fromSteer: true, requestId: meta?.requestId, ...slackRestart }));
         settleOnce(slackRestart ? slackRestart.requestId : meta?.requestId, 'failed', { error: err.message });
-
     });
     // The follow-up was started as a new run (kill-path or idle race). The caller
     // must NOT also queue the message.
@@ -1034,6 +1027,7 @@ export function makeCleanEnv(
     // Same platform passthrough as above. This is the call that produces the
     // RETURNED PATH, so a win32/POSIX disagreement here reaches the child.
     merged["PATH"] = buildServicePath(extraPath || env["PATH"] || '', [], os.homedir(), platform);
+    for (const key of Object.keys(merged)) if (key.toUpperCase() === SLACK_TOOL_GRANT_ENV) delete merged[key];
     return merged;
 }
 
@@ -1582,7 +1576,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             ? '\n(need history? L1: cli-jaw chat/memory search/context | L2: cli-jaw dashboard memory search, cli-jaw dashboard chat search)'
             : '';
         const promptWithConversation = prependRemoteConversationContext(prompt, opts.target);
-        prompt = `${ts}\n${calendarContext(_d)}\n${projLine}${promptWithConversation}${memoryNudge}`;
+        prompt = `${ts}\n${projLine}${promptWithConversation}${memoryNudge}`;
     }
 
     const resumeSessionId = empSid || (isResume ? bucketSessionId : null);
@@ -3465,6 +3459,9 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     }
     // The snapshot has to predate the child; the helper owns that ordering (073 §2.4).
     const kiroPlainText = isKiroPlainTextCli(cli, effectiveProvider);
+    const slackToolGrant = !isEmployee && ['cursor', 'claude', 'codex', 'grok'].includes(cli)
+        ? activateSlackToolGrant(opts.requestId, scopeKey, chatSessionId) : undefined;
+    if (slackToolGrant) launchEnv[SLACK_TOOL_GRANT_ENV] = slackToolGrant;
     const { child, kiroConversationIdsBefore, kiroSpawnStartedAt } = spawnWithKiroSnapshot({
         kiroPlainText,
         isFreshMainRun: !isResume && !empSid,
@@ -3688,6 +3685,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         ctx.opencodeLastEventAt = Date.now();
     };
     const dispatchNdjsonLine = (line: string): void => {
+        line = redactSlackToolSecrets(line);
         let raw: unknown;
         try {
             raw = JSON.parse(line);
@@ -3856,13 +3854,15 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         }
     });
 
+    const slackStderr = slackToolGrant ? createSlackToolSecretStream() : undefined;
     child.stderr.on('data', (chunk) => {
         opts.lifecycle?.onActivity?.('stderr');
         clearAgyQuietCompletionTimer();
         lastOpencodeIoAt = Date.now();
         // No per-chunk trim: trimming a chunk destroys legitimate leading/trailing
         // whitespace and line boundaries that only exist across chunks (#372).
-        const text = stderrReader.write(chunk);
+        const decoded = stderrReader.write(chunk);
+        const text = slackStderr ? slackStderr(decoded) : decoded;
         if (!text) return;
         if (cli === 'agy') ctx.agyLastActivitySource = 'stderr';
         if ((kiroPlainText || cli === 'agy') && text) ctx.stallWatchdog?.markProgress();
@@ -3894,7 +3894,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 buffer += stdoutResidual;
             }
         }
-        const stderrResidual = stderrReader.end();
+        const stderrEnd = stderrReader.end();
+        const stderrResidual = slackStderr ? slackStderr(stderrEnd, true) : stderrEnd;
         if (stderrResidual && ctx.stderrBuf.length < STDERR_BUF_CAP) {
             ctx.stderrBuf = sliceWithoutSplittingSurrogate(ctx.stderrBuf + stderrResidual, STDERR_BUF_CAP);
         }

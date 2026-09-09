@@ -1,3 +1,4 @@
+import '../setup/isolated-home.ts';
 // The Slack context block: what the agent is told about WHERE it is.
 //
 // The load-bearing assertions are the ones about the channel id and thread ts —
@@ -227,4 +228,11 @@ test('the whole block stays within its cap', () => {
         roster: { names: Array.from({ length: 8 }, () => long(64)), total: 200 },
     });
     assert.ok([...block].length <= 1200, `block was ${[...block].length} code points`);
+});
+
+test('thread coverage labels fetched messages separately from Slack total', () => {
+    const block = buildSlackContextBlock({ identity: sender, conversation: channel(),
+        thread: thread({ replyCount: 900, fetchedCount: 101, retainedCount: 51, partial: true }) });
+    assert.match(block, /일부 대화 · 조회 101개 메시지 · 보존 51개 · 전체 답장 900개/);
+    assert.match(buildSlackContextBlock({ identity: sender, conversation: channel(), thread: thread() }), /일부 대화 · 조회 \?개/);
 });

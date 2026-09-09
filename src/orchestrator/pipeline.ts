@@ -349,7 +349,7 @@ export async function orchestrate(
             requestId,
             replyViaTarget,
             ...(fromQueue ? { fromQueue: true } : {}),
-            ...(settings["multiSession"]?.enabled === true ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
+            ...((settings["multiSession"]?.enabled === true || meta["_strictRequestOwnership"] === true) ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
         });
         settleOnce(requestId, 'completed', { scope });
         return;
@@ -704,6 +704,11 @@ export async function orchestrate(
         ? { traceRunId: result['traceRunId'] } : {};
     broadcast('orchestrate_done', {
         text: compatibilityText,
+        ...(!nativeOutcome && result['executionInterrupted'] === true
+            ? { executionInterrupted: true }
+            : !nativeOutcome && (result['executionFailed'] === true || result['error'] === true
+                || (Number.isFinite(result['code']) && Number.isInteger(result['code']) && result['code'] !== 0))
+                ? { executionFailed: true } : {}),
         ...nativeTags,
         ...nativeRunTag,
         origin,
@@ -722,7 +727,7 @@ export async function orchestrate(
         ...(fromQueue ? { fromQueue: true } : {}),
         ...(fromSteer ? { fromSteer: true } : {}),
         ...(nativeOutcome ? { scope, sessionId: chatSessionId }
-            : settings["multiSession"]?.enabled === true ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
+            : (settings["multiSession"]?.enabled === true || meta["_strictRequestOwnership"] === true) ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
         ...(typeof result['agyPlannerOnly'] === 'boolean' ? { agyPlannerOnly: result['agyPlannerOnly'] } : {}),
         ...(typeof result['agyCheckpointSeen'] === 'boolean' ? { agyCheckpointSeen: result['agyCheckpointSeen'] } : {}),
         ...(elicitationSpecs.length > 0 ? { elicitationSpecs } : {}),
@@ -762,7 +767,7 @@ export async function orchestrateContinue(
         requestId,
         replyViaTarget,
         ...(meta["_fromQueue"] === true ? { fromQueue: true } : {}),
-        ...(settings["multiSession"]?.enabled === true ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
+        ...((settings["multiSession"]?.enabled === true || meta["_strictRequestOwnership"] === true) ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
     });
     settleOnce(requestId, 'completed', { scope, text: 'No pending work to continue.' });
 }
@@ -804,7 +809,7 @@ export async function orchestrateReset(
             requestId,
             replyViaTarget,
             ...(meta["_fromQueue"] === true ? { fromQueue: true } : {}),
-            ...(settings["multiSession"]?.enabled === true ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
+            ...((settings["multiSession"]?.enabled === true || meta["_strictRequestOwnership"] === true) ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
         });
         settleOnce(requestId, 'completed', { scope, text: 'Reset complete.' });
         return;
@@ -819,7 +824,7 @@ export async function orchestrateReset(
         requestId,
         replyViaTarget,
         ...(meta["_fromQueue"] === true ? { fromQueue: true } : {}),
-        ...(settings["multiSession"]?.enabled === true ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
+        ...((settings["multiSession"]?.enabled === true || meta["_strictRequestOwnership"] === true) ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
     });
     settleOnce(requestId, 'completed', { scope, text: 'Reset complete.' });
 }

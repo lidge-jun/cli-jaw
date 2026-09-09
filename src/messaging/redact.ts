@@ -1,3 +1,4 @@
+import { redactSlackToolSecrets } from '../slack/tool-context.js';
 // ─── Channel Credential Redaction ────────────────────
 // One masker for every channel. Error strings cross channel boundaries — the
 // unified send path collects results from all three — so per-channel maskers
@@ -366,12 +367,13 @@ function maskQueryValues(query: string): string {
  * API response, or a chat message.
  */
 export function redactChannelSecrets(input: string): string {
-    return stripSecretsFoundInCanonicalForm(input)
+    return stripSecretsFoundInCanonicalForm(redactSlackToolSecrets(input))
         // Percent-encoded URLs never reach the URL parser below, so peel their
         // credentials off first.
         .replace(/https?%3A%2F%2F[^\s]+/gi, stripBotTokenFromPath)
         // Slack bearer tokens: xoxb-, xoxp-, xoxa-, xoxs-, xapp-.
-        .replace(/x(?:ox[bpas]|app)-[A-Za-z0-9-]+/g, (m) => `${m.slice(0, 9)}${REDACTED}`)
+        .replace(/x(?:ox[bpas]|app)-[A-Za-z0-9-]+/g, (m: string, offset: number, whole: string) =>
+            m.length <= 9 && whole.slice(offset + m.length).startsWith(REDACTED) ? m : `${m.slice(0, 9)}${REDACTED}`)
         // Discord bot tokens are three base64url segments separated by dots.
         // No word boundary and no fixed first-segment length: `\b` fails when
         // an ordinary letter abuts the token, and pinning the first segment to
@@ -415,12 +417,18 @@ export function redactChannelSecrets(input: string): string {
         // raw text, so canonical-equivalent spellings cannot slip past:
         // uppercase hosts, an explicit :443, a trailing dot, and userinfo
         // (user:pass@) all normalize before the suffix check.
-        .replace(/https?:\/\/[^\s]+/gi, (raw) => {
+        .replace(/https?:\/\/[^\s<>|"']+/gi, (match) => {
+            // Link labels and closing Markdown belong to the surrounding text,
+            // not the capability URL. Restore punctuation on every exit path.
+            let end = match.length;
+            while (end > 0 && ')]};,.!*_~`'.includes(match.charAt(end - 1))) end -= 1;
+            const suffix = match.slice(end);
+            const raw = match.slice(0, end);
             let parsed: URL;
             try {
                 parsed = new URL(raw);
             } catch {
-                return stripBotTokenFromPath(raw);
+                return stripBotTokenFromPath(raw) + suffix;
             }
             const host = parsed.hostname.toLowerCase().replace(/\.$/, '');
             const isSlack = host === 'slack.com' || host.endsWith('.slack.com')
@@ -428,10 +436,22 @@ export function redactChannelSecrets(input: string): string {
             const isTelegram = host === 'telegram.org' || host.endsWith('.telegram.org');
             const isDiscord = host === 'discord.com' || host.endsWith('.discord.com')
                 || host === 'discordapp.com' || host.endsWith('.discordapp.com');
-            // For our own hosts the whole path is capability-bearing: Slack's
+            // Only literal workspace permalinks may retain their path. Checking
+            // the spelling as well as the parsed URL rejects dot-segment and
+            // escaped-path normalization, userinfo and nondefault ports.
+            const permalink = /^https:\/\/[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.slack\.com(?::443)?\/archives\/[CGD][A-Z0-9]+\/p[0-9]+(?:\?[^#]*)?$/.test(raw);
+            const queryKeys = new Set<string>();
+            const safeQuery = permalink && [...parsed.searchParams].every(([key, value]) => {
+                if (queryKeys.has(key)) return false;
+                queryKeys.add(key);
+                return (key === 'thread_ts' && /^\d+\.\d{6}$/.test(value))
+                    || (key === 'cid' && /^[CGD][A-Z0-9]+$/.test(value));
+            });
+            if (safeQuery) return raw + suffix;
+            // For other own-host URLs the whole path is capability-bearing: Slack's
             // upload_url is an opaque path, Telegram's carries the bot token,
             // and Discord webhook URLs carry the webhook secret.
-            if (isSlack || isTelegram || isDiscord) return `https://${parsed.host}/${REDACTED}`;
+            if (isSlack || isTelegram || isDiscord) return `https://${parsed.host}/${REDACTED}${suffix}`;
             // Untrusted host: keep the URL readable, but never leave a
             // credential in it.
             //
@@ -446,8 +466,8 @@ export function redactChannelSecrets(input: string): string {
             // Query VALUES go, keys stay: a diagnostic URL stays diagnosable
             // while a signature does not survive.
             const queryAt = withoutToken.indexOf('?');
-            if (queryAt < 0) return withoutToken;
-            return withoutToken.slice(0, queryAt + 1) + maskQueryValues(withoutToken.slice(queryAt + 1));
+            if (queryAt < 0) return withoutToken + suffix;
+            return withoutToken.slice(0, queryAt + 1) + maskQueryValues(withoutToken.slice(queryAt + 1)) + suffix;
         })
         // Bot tokens outside any URL, including percent-encoded separators and
         // a Bot/BOT/bot prefix in any casing.

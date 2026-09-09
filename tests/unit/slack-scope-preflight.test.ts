@@ -1,3 +1,4 @@
+import '../setup/isolated-home.ts';
 // A token can pass auth.test and still fail the first real upload because the
 // app never got files:write. That happened live: a DOCX upload died on
 // missing_scope and the operator had to be told which scope by hand. These

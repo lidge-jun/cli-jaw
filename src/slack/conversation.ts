@@ -52,7 +52,12 @@ export type SlackThreadParticipant = {
 
 export type SlackThreadInfo = {
     threadTs: string;
-    replyCount: number;
+    /** Slack parent total; absent means unknown. */
+    replyCount?: number;
+    fetchedCount?: number;
+    retainedCount?: number;
+    partial?: boolean;
+    nextCursor?: string;
     participants: SlackThreadParticipant[];
     /** Parent message text, truncated. */
     parentText?: string;
@@ -267,7 +272,7 @@ export async function resolveConversationInfo(
 }
 
 function degradedThread(threadTs: string): SlackThreadInfo {
-    return { threadTs, replyCount: 0, participants: [], resolved: false };
+    return { threadTs, fetchedCount: 0, retainedCount: 0, partial: true, participants: [], resolved: false };
 }
 
 /**
@@ -281,13 +286,15 @@ function degradedThread(threadTs: string): SlackThreadInfo {
 export async function resolveThreadInfo(
     token: string, channel: string, threadTs: string, opts: ConversationOpts,
 ): Promise<SlackThreadInfo> {
-    if (!token || !channel || !threadTs) return degradedThread(threadTs);
+    if (!token || !channel || !threadTs || opts.signal?.aborted) return degradedThread(threadTs);
     // Symmetric with resolveConversationInfo: an install known to lack
     // mpim:history cannot page an MPIM thread; degrade without calling.
     if (kindFromPrefix(channel) === 'group_dm'
         && getSlackScopeStatus().missingCapabilities.includes('mpim:history')) {
         return degradedThread(threadTs);
     }
+    const generation = conversationCache.currentGeneration();
+    let progress = degradedThread(threadTs);
     const key = `${opts.teamId || 'unknown'}:${channel}:${threadTs}`;
     const value = await conversationCache.resolve({
         partition: 'thread',
@@ -295,36 +302,64 @@ export async function resolveThreadInfo(
         capabilityKey: capabilityKeyFor('conversations.replies'),
         ...(opts.signal ? { signal: opts.signal } : {}),
         admitStart: () => admitStartFor('conversations.replies'),
-        degraded: () => degradedThread(threadTs),
-        load: async () => {
+        degraded: () => generation === conversationCache.currentGeneration() ? progress : degradedThread(threadTs),
+        load: async ({ signal }) => {
             let cursor: string | undefined;
             let parent: SlackHistoryMessage | undefined;
-            let fetchedReplyCount = 0;
+            const seen = new Set<string>();
+            const cursors = new Set<string>();
+            let complete = false;
+            let omitted = false;
             const newestReplies: SlackHistoryMessage[] = [];
+            const snapshot = (): SlackThreadInfo => ({
+                threadTs,
+                ...(parent?.replyCount !== undefined ? { replyCount: parent.replyCount } : {}),
+                fetchedCount: seen.size,
+                retainedCount: newestReplies.length + (parent ? 1 : 0),
+                partial: true,
+                ...(cursor ? { nextCursor: cursor } : {}),
+                participants: [],
+                messages: parent ? [parent, ...newestReplies] : [...newestReplies],
+                resolved: seen.size > 0,
+            });
             for (let page = 0; page < THREAD_FETCH_MAX_PAGES; page += 1) {
+                if (signal.aborted) break;
                 const result = await fetchSlackReplies(token, channel, threadTs, {
                     limit: THREAD_FETCH_LIMIT,
                     ...(cursor ? { cursor } : {}),
                     noRetryOnRateLimit: true,
                     ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
-                    ...(opts.signal ? { signal: opts.signal } : {}),
+                    signal,
                 });
-                if (!result.ok) return { ok: false as const, error: result.error };
-                for (const message of result.messages) {
+                if (signal.aborted) break;
+                if (!result.ok) {
+                    if (!seen.size) return { ok: false as const, error: result.code || result.error };
+                    break;
+                }
+                // Keep at most 500 identifiers and 51 projected bodies, even if
+                // an upstream response ignores the requested page limit.
+                omitted ||= result.messages.length > THREAD_FETCH_LIMIT;
+                for (const message of result.messages.slice(0, THREAD_FETCH_LIMIT)) {
+                    if (message.ts.length > 32 || !/^\d+\.\d+$/.test(message.ts)) { omitted = true; continue; }
+                    if (seen.has(message.ts)) continue;
+                    seen.add(message.ts);
+                    const projected = projectThreadMessage(message);
                     if (message.ts === threadTs) {
-                        parent ??= message;
-                        continue;
+                        parent = projected;
+                    } else {
+                        newestReplies.push(projected);
+                        newestReplies.sort((a, b) => compareThreadTs(a.ts, b.ts));
+                        if (newestReplies.length > THREAD_FETCH_LIMIT) newestReplies.shift();
                     }
-                    fetchedReplyCount += 1;
-                    newestReplies.push(message);
                 }
-                if (newestReplies.length > THREAD_FETCH_LIMIT) {
-                    newestReplies.splice(0, newestReplies.length - THREAD_FETCH_LIMIT);
-                }
-                const nextCursor = result.nextCursor;
-                if (!nextCursor || nextCursor === cursor || opts.signal?.aborted) break;
-                cursor = nextCursor;
+                cursor = result.nextCursor;
+                if (cursor && cursor.length > 4096) { cursor = undefined; omitted = true; progress = snapshot(); break; }
+                progress = snapshot();
+                if (!result.hasMore) { complete = true; break; }
+                if (!cursor || cursors.has(cursor)) break;
+                cursors.add(cursor);
             }
+            if (signal.aborted) return { ok: false as const, error: 'aborted' };
             const messages = parent ? [parent, ...newestReplies] : newestReplies;
 
             const ids: string[] = [];
@@ -345,13 +380,11 @@ export async function resolveThreadInfo(
             // Cache-only name resolution: this is an inbound hot path, and an
             // unresolved participant shown by id is better than a round trip.
             const names = getCachedSlackIdentities(opts.teamId, ids);
-            // Slack's own count on the parent is authoritative. The fetched
-            // window is capped at 50, so length-1 would report a 500-reply
-            // thread as 49.
-            const replyCount = typeof parent?.replyCount === 'number' ? parent.replyCount : fetchedReplyCount;
             const info: SlackThreadInfo = {
-                threadTs,
-                replyCount,
+                ...snapshot(),
+                partial: !complete || omitted || seen.size > messages.length
+                    || messages.some(message => message.contentTruncated)
+                    || (parent?.replyCount !== undefined && parent.replyCount > seen.size - (parent ? 1 : 0)),
                 participants: ids.map(id => {
                     const userId = userIdById.get(id);
                     return {
@@ -361,20 +394,45 @@ export async function resolveThreadInfo(
                         ...(userId ? { userId } : {}),
                     };
                 }),
-                // Retain only what the prefetch renders, with bounded text: a
-                // cached thread must not pin megabytes of message bodies.
-                messages: messages.map(message => ({
-                    ...message,
-                    text: cap(message.text, PREFETCH_TEXT_MAX),
-                    ...(message.files ? { files: [] } : {}),
-                })),
+                messages,
                 resolved: true,
             };
             if (parent?.text) info.parentText = cap(parent.text, PARENT_TEXT_MAX);
             return { ok: true as const, value: info };
         },
     });
-    return value as SlackThreadInfo;
+    return opts.signal?.aborted
+        ? (generation === conversationCache.currentGeneration() ? progress : degradedThread(threadTs))
+        : value as SlackThreadInfo;
+}
+
+/** Decimal comparison avoids precision loss for adjacent Slack microseconds. */
+function compareThreadTs(a: string, b: string): number {
+    const [as = '0', af = ''] = a.split('.');
+    const [bs = '0', bf = ''] = b.split('.');
+    const seconds = BigInt(as) - BigInt(bs);
+    if (seconds !== 0n) return seconds < 0n ? -1 : 1;
+    const width = Math.max(af.length, bf.length);
+    const left = af.padEnd(width, '0');
+    const right = bf.padEnd(width, '0');
+    return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function projectThreadMessage(message: SlackHistoryMessage): SlackHistoryMessage {
+    return {
+        ts: message.ts,
+        ...(message.contentExcluded ? { contentExcluded: true } : {}),
+        ...(message.textFromBlocks ? { textFromBlocks: true } : {}),
+        ...(message.threadTs ? { threadTs: message.threadTs.slice(0, 32) } : {}),
+        ...(message.user ? { user: message.user.slice(0, 64) } : {}),
+        ...(message.botId ? { botId: message.botId.slice(0, 64) } : {}),
+        ...(message.replyCount !== undefined ? { replyCount: message.replyCount } : {}),
+        ...(message.subtype ? { subtype: message.subtype.slice(0, 64) } : {}),
+        ...(message.edited ? { edited: { ts: message.edited.ts.slice(0, 32),
+            ...(message.edited.user ? { user: message.edited.user.slice(0, 64) } : {}) } } : {}),
+        text: cap(message.text, PREFETCH_TEXT_MAX),
+        ...(message.contentTruncated || [...message.text].length > PREFETCH_TEXT_MAX ? { contentTruncated: true } : {}),
+    };
 }
 
 /** Names for ids, from cache only. Misses are simply absent. */

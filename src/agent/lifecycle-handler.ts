@@ -1,3 +1,4 @@
+import { revokeSlackToolGrant } from '../slack/tool-context.js';
 // ─── Agent Lifecycle Handler (post-exit logic) ──────
 // Extracted from spawn.ts to unify ACP + CLI exit handling.
 
@@ -333,6 +334,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
     const nativeOutcome = lifecycleRuntimeOutcome(ctx, wasKilled || wasSteer || Boolean(ctx.stallReason));
     const code = runtimeOutcomeExitCode(nativeOutcome, processCode);
     const nativeRequestId = ctx.requestId ?? opts.requestId;
+    if (mainManaged) revokeSlackToolGrant(nativeRequestId);
     const nativeTraceRunId = ctx.traceRunId;
     const effectiveProvider = params.effectiveProvider;
     const runtimeCli = lifecycleRuntimeCli(cli, effectiveProvider);

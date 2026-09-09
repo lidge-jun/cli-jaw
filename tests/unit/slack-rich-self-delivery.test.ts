@@ -56,7 +56,7 @@ for (const mode of ['unavailable', 'failed'] as const) {
         };
         const app = express();
         app.use(express.json());
-        registerMessagingRoutes(app, (_req, _res, next) => next());
+        registerMessagingRoutes(app, (_req, _res, next) => next(), { validateSlackOperator: candidate => candidate === 'fixture-operator' });
         const server = createServer(app);
         await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
         const address = server.address();
@@ -65,7 +65,7 @@ for (const mode of ['unavailable', 'failed'] as const) {
         let claimsAfterSelfSend = 0;
         collect = async () => {
             const response = await fetch(`http://127.0.0.1:${address.port}/api/channel/send`, {
-                method: 'POST', headers: { 'content-type': 'application/json' },
+                method: 'POST', headers: { 'content-type': 'application/json', 'x-jaw-slack-operator': 'fixture-operator' },
                 body: JSON.stringify({ channel: 'slack', type: 'text', text: answer, target: destination }),
             });
             apiResult = await response.json();

@@ -253,7 +253,8 @@ test('an ingress reset that refuses handoff releases the caller-owned claim', as
 
 test('the preamble is delimited and labelled with the reply count', () => {
     const out = buildThreadPreamble('[10:00] a: hi', 3);
-    assert.ok(out.startsWith('[앞선 대화 3개]'));
+    assert.ok(out.startsWith('[앞선 대화 · 일부 대화'));
+    assert.ok(out.includes('전체 답장 3개'));
     assert.ok(out.endsWith('[/앞선 대화]'));
     assert.ok(out.includes('hi'));
 });
@@ -272,4 +273,10 @@ test('the TOTAL preamble stays within its cap, delimiters included', () => {
         `preamble was ${[...out].length} code points, cap is ${PREAMBLE_TOTAL_CAP}`,
     );
     assert.ok(out.endsWith('[/앞선 대화]'), 'the closing delimiter must survive the cap');
+});
+
+test('partial prefetch exposes a bounded continuation cursor without pretending completion', () => {
+    const out = buildThreadPreamble('bounded history', 1000, { replyCount: 1000, fetchedCount: 500, retainedCount: 51, partial: true, nextCursor: 'next-page==' });
+    assert.ok(out.includes('다음 조회 cursor: "next-page=="'));
+    assert.ok(out.includes('일부 대화'));
 });

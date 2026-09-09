@@ -1,3 +1,4 @@
+import '../setup/isolated-home.ts';
 // Slack conversation context: conversations.info mapping, thread participant
 // derivation, sanitization, and the degradation contract.
 //
@@ -224,14 +225,17 @@ test('the parent message text is captured and truncated', async () => {
     assert.ok([...thread.parentText].length <= 300);
 });
 
-test('reply count excludes the parent', async () => {
+test('missing Slack total remains unknown while fetched count includes parent', async () => {
     const { impl } = makeFetch([replies([
         { ts: '100.1', user: 'U1', text: 'parent' },
         { ts: '100.2', user: 'U2', text: 'a' },
         { ts: '100.3', user: 'U3', text: 'b' },
     ])]);
     const thread = await resolveThreadInfo(TOKEN, 'C1', '100.1', { teamId: TEAM, fetchImpl: impl });
-    assert.equal(thread.replyCount, 2);
+    assert.equal(thread.replyCount, undefined);
+    assert.equal(thread.fetchedCount, 3);
+    assert.equal(thread.retainedCount, 3);
+    assert.equal(thread.partial, false);
 });
 
 test('reply count prefers the parent reply_count over the fetched window', async () => {
@@ -391,6 +395,107 @@ test('an empty channel or token degrades without calling', async () => {
     assert.equal(calls.length, 0);
     assert.equal(noChannel.resolved, false);
     assert.equal(noToken.resolved, false);
+});
+
+test('thread cache omits rich bodies and files while retaining bounded provenance', async () => {
+    const { impl } = makeFetch([{ ok: true, messages: [{ ts: '100.1', user: 'U1', text: 'x'.repeat(1000),
+        blocks: [{ type: 'section', text: { text: 'rich'.repeat(10000) } }], attachments: [{ text: 'attachment' }],
+        reactions: [{ name: 'eyes', count: 2 }], files: [{ id: 'F1', url_private_download: 'https://files.slack.com/private' }],
+        edited: { ts: '101.0' } }] }]);
+    const result = await resolveThreadInfo(TOKEN, 'C1', '100.1', { teamId: TEAM, fetchImpl: impl });
+    const message = result.messages?.[0];
+    assert.ok(message);
+    for (const key of ['blocks', 'attachments', 'reactions', 'files']) assert.equal(Object.hasOwn(message, key), false);
+    assert.ok(message.text.length <= 500);
+    assert.equal(message.edited?.ts, '101.0');
+    assert.equal(message.contentTruncated, true);
+});
+
+test('reversed pages and duplicate parent retain the numeric newest fifty unique replies', async () => {
+    const parent = { ts: '1.0', text: 'parent', reply_count: 60 };
+    const rows = Array.from({ length: 60 }, (_, i) => ({ ts: `${i + 2}.000001`, text: `r${i + 1}` }));
+    for (const reversed of [false, true]) {
+        resetSlackConversationCache();
+        const pages = [rows.slice(0, 30), rows.slice(30)];
+        if (reversed) pages.reverse();
+        const { impl } = makeFetch(pages.map((page, i) => ({ ok: true,
+            messages: [parent, ...page.reverse(), parent],
+            response_metadata: { next_cursor: i === 0 ? 'next' : '' } })));
+        const result = await resolveThreadInfo(TOKEN, 'C1', '1.0', { teamId: TEAM, fetchImpl: impl });
+        assert.equal(result.fetchedCount, 61);
+        assert.equal(result.retainedCount, 51);
+        assert.equal(result.replyCount, 60);
+        assert.equal(result.partial, true);
+        assert.equal(result.nextCursor, undefined);
+        assert.deepEqual(result.messages?.map(m => m.text), ['parent', ...Array.from({ length: 50 }, (_, i) => `r${i + 11}`)]);
+    }
+});
+
+test('cursor cycles, missing continuation, page cap and page error preserve partial evidence', async () => {
+    const first = { ok: true, messages: [{ ts: '1.0', text: 'parent', reply_count: 99 }], response_metadata: { next_cursor: 'A' } };
+    const cases = [
+        { pages: [first, { ok: true, messages: [], response_metadata: { next_cursor: 'A' } }], calls: 2, cursor: 'A' },
+        { pages: [first, { ok: true, messages: [], response_metadata: { next_cursor: 'B' } }, { ok: true, messages: [], response_metadata: { next_cursor: 'A' } }], calls: 3, cursor: 'A' },
+        { pages: [first, { ok: true, messages: [], has_more: true }], calls: 2, cursor: undefined },
+        { pages: [first, { ok: false, error: 'missing_scope' }], calls: 2, cursor: 'A' },
+        { pages: Array.from({ length: 10 }, (_, i) => ({ ...first, response_metadata: { next_cursor: `P${i}` } })), calls: 10, cursor: 'P9' },
+    ];
+    for (const spec of cases) {
+        resetSlackConversationCache();
+        const { impl, calls } = makeFetch(spec.pages);
+        const result = await resolveThreadInfo(TOKEN, 'C1', '1.0', { teamId: TEAM, fetchImpl: impl });
+        assert.equal(calls.length, spec.calls);
+        assert.equal(result.partial, true);
+        assert.equal(result.fetchedCount, 1);
+        assert.equal(result.retainedCount, 1);
+        assert.equal(result.replyCount, 99);
+        assert.equal(result.nextCursor, spec.cursor);
+        assert.equal(result.messages?.[0]?.text, 'parent');
+    }
+});
+
+test('abort during second page returns bounded first-page evidence and never a complete cache', async () => {
+    const controller = new AbortController();
+    let calls = 0;
+    const impl: typeof fetch = async () => {
+        calls++;
+        if (calls === 2) controller.abort();
+        return new Response(JSON.stringify({ ok: true, messages: [{ ts: '1.0', text: 'parent' }], response_metadata: { next_cursor: 'next' } }));
+    };
+    const result = await resolveThreadInfo(TOKEN, 'C1', '1.0', { teamId: TEAM, fetchImpl: impl, signal: controller.signal });
+    assert.equal(calls, 2);
+    assert.equal(result.partial, true);
+    assert.equal(result.fetchedCount, 1);
+    assert.equal(result.messages?.[0]?.text, 'parent');
+    assert.equal(slackConversationCacheStats().threads, 0);
+});
+
+test('ten full rich pages retain only bounded text and scalar fields', async () => {
+    const { impl } = makeFetch(Array.from({ length: 10 }, (_, page) => ({ ok: true,
+        messages: Array.from({ length: 50 }, (_, i) => ({ ts: `${page * 50 + i + 1}.0`, text: '😀'.repeat(1000),
+            blocks: [{ type: 'section', text: { text: 'rich'.repeat(1000) } }], files: [{ id: 'F1' }] })),
+        response_metadata: { next_cursor: `page${page}` } })));
+    const result = await resolveThreadInfo(TOKEN, 'C1', '1.0', { teamId: TEAM, fetchImpl: impl });
+    assert.equal(result.fetchedCount, 500);
+    assert.equal(result.retainedCount, 51);
+    assert.equal(result.partial, true);
+    assert.ok(JSON.stringify(result).length < 60000);
+    for (const message of result.messages ?? []) {
+        assert.ok([...message.text].length <= 500);
+        assert.deepEqual(Object.keys(message).sort(), ['contentTruncated', 'text', 'ts']);
+    }
+});
+
+test('numeric timestamp order preserves adjacent microseconds without float rounding', async () => {
+    const { impl } = makeFetch([replies([
+        { ts: '9999999999.000002', text: 'second' },
+        { ts: '9999999999.000001', text: 'first' },
+        { ts: '9.0', text: 'parent' },
+    ])]);
+    const result = await resolveThreadInfo(TOKEN, 'C1', '9.0', { teamId: TEAM, fetchImpl: impl });
+    assert.deepEqual(result.messages?.map(m => m.text), ['parent', 'first', 'second']);
+    assert.equal(result.fetchedCount, 3);
+    assert.equal(result.partial, false);
 });
 
 test('an MPIM missing_scope never locks plain channel lookups', async () => {

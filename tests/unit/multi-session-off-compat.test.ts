@@ -32,7 +32,7 @@ test('with sessions OFF the captured context adds no event fields', () => {
     assert.deepEqual(received, [{ marker: 'off-byte-contract' }]);
 });
 
-test('OFF preserves legacy queue grouping bytes and does not rewrite persisted v1 rows', () => {
+test('OFF preserves legacy rows and captures explicit Slack queue identity for new admissions', () => {
     const targetA = slackTargetFromId('C1', { threadTs: '171.2' });
     const targetB = slackTargetFromId('D1');
     assert.equal(groupQueueKey('slack', targetA), 'slack:slack:channel:channel:C1:thread:171.2');
@@ -77,10 +77,6 @@ test('OFF preserves legacy queue grouping bytes and does not rewrite persisted v
         front: true,
     });
     const newPayload = JSON.parse(persisted.get(newId)!) as Record<string, unknown>;
-    // Since #654 a Slack queue item keeps its conversation identity even with
-    // multiSession OFF: reply ownership needs chatSessionId/remoteKey to deliver
-    // the answer to the thread that asked. Legacy rows are still not rewritten
-    // (asserted above) and non-Slack sources still drop these fields.
     assert.deepEqual(Object.keys(newPayload), ['id', 'prompt', 'source', 'scope', 'chatSessionId', 'remoteKey', 'target', 'ts']);
     assert.equal(newPayload.scope, 'default');
     assert.equal(newPayload.schemaVersion, undefined);
@@ -88,6 +84,9 @@ test('OFF preserves legacy queue grouping bytes and does not rewrite persisted v
     assert.equal(newPayload.remoteKey, 'jaw:slack:direct:D1');
     assert.equal(newPayload.collect, undefined);
     assert.equal(newPayload.priority, undefined);
+    const webId = controller.enqueueMessage('web OFF prompt', 'web', { chatSessionId: 'ignored-web-session', remoteKey: 'ignored-web-key' });
+    const webPayload = JSON.parse(persisted.get(webId)!);
+    assert.equal(webPayload.chatSessionId, undefined); assert.equal(webPayload.remoteKey, undefined);
     assert.equal(activeSessionReads, 0);
     assert.equal(broadcasts.at(-1)?.data.scope, undefined, 'OFF queue_update must not add scope');
 });

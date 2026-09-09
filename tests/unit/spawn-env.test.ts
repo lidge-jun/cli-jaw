@@ -286,3 +286,13 @@ test('MCE-003b: the platform argument decides, not the host running the test', (
     assert.ok(win["PATH"]!.includes(String.raw`C:\Tools`));
     assert.equal(win["PATH"]!.split(';').filter((entry) => entry.startsWith('/')).length, 0);
 });
+
+test('Slack grants cannot be inherited or restored by extra environment', () => {
+    const env = makeCleanEnv({ JAW_SLACK_TURN_GRANT: 'extra' }, { PATH: '/usr/bin', JAW_SLACK_TURN_GRANT: 'inherited' });
+    assert.equal(env.JAW_SLACK_TURN_GRANT, undefined);
+});
+
+test('case variants of Slack grant variables are stripped before worker inheritance', () => {
+    const env = makeCleanEnv({ jaw_slack_turn_grant: 'extra' }, { PATH: '/usr/bin', Jaw_Slack_Turn_Grant: 'inherited' }, 'win32');
+    assert.equal(Object.keys(env).some(key => key.toUpperCase() === 'JAW_SLACK_TURN_GRANT'), false);
+});

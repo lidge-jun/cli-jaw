@@ -1,3 +1,4 @@
+import { SLACK_TOOL_GRANT_ENV } from '../slack/tool-context.js';
 // ─── CLI API Auth Helper ─────────────────────────────
 // CLI → server HTTP 호출 시 Authorization 헤더 자동 삽입
 
@@ -41,5 +42,10 @@ export async function cliFetch(url: string, init: RequestInit = {}): Promise<Res
             Object.entries(init.headers)
         ) as Record<string, string> : undefined
     );
+    const grant = process.env[SLACK_TOOL_GRANT_ENV];
+    const localBase = new URL(getServerUrl());
+    if (grant && parsed.origin === localBase.origin && (parsed.pathname.startsWith('/api/slack/') || parsed.pathname === '/api/channel/send')) {
+        headers['x-jaw-slack-grant'] = grant;
+    }
     return fetch(url, { ...init, headers });
 }

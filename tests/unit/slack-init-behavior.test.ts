@@ -19,7 +19,7 @@ const cliEntry = join(repoRoot, 'bin', 'cli-jaw.ts');
 type RunResult = { status: number; output: string; settings: Record<string, unknown> | null };
 
 function runInit(args: string[], extraEnv: Record<string, string> = {}): RunResult {
-    const home = mkdtempSync(join(homedir(), '.cljaw-test-'));
+    const home = mkdtempSync(join(process.env['CLI_JAW_TEST_HOME_ROOT'] || homedir(), '.cljaw-test-'));
     try {
         // spawnSync, not execFileSync: the latter returns ONLY stdout on a
         // successful run, which silently drops every console.warn — including
@@ -35,7 +35,7 @@ function runInit(args: string[], extraEnv: Record<string, string> = {}): RunResu
         });
         const result = spawnSync(
             process.execPath,
-            ['--import', 'tsx', cliEntry, 'init', '--non-interactive', '--working-dir', '/tmp', '--cli', 'claude', ...args],
+            ['--import', 'tsx', cliEntry, 'init', '--non-interactive', '--working-dir', home, '--cli', 'claude', ...args],
             {
                 // What this suite asserts is the settings file init writes.
                 // Installing tools is a different concern, and on a clean

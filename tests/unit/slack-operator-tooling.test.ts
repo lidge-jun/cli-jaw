@@ -181,7 +181,7 @@ test('doctor --json reports the allowlist width the gate enforces', () => {
             // warn/error, and a throwaway home has several (no db, no skills
             // dir). That says nothing about the Slack block, which is printed
             // either way — so read stdout on its own terms.
-            const run = spawnSync(repoTsx, [cliEntry, '--home', home, 'doctor', '--json'], {
+            const run = spawnSync(process.execPath, ['--import', 'tsx', cliEntry, '--home', home, 'doctor', '--json'], {
                 cwd: repoRoot, encoding: 'utf8', timeout: 60000,
                 // The Slack connection fields are env-owned when these are set,
                 // which would override the fixture and silently test nothing.
@@ -220,7 +220,6 @@ test('doctor --json reports the allowlist width the gate enforces', () => {
 });
 
 test('doctor text and JSON identify a foreign owner without exposing token material', () => {
-    const repoTsx = join(repoRoot, 'node_modules', '.bin', 'tsx');
     const cliEntry = join(repoRoot, 'bin', 'cli-jaw.ts');
     const home = mkdtempSync(join(tmpdir(), 'jaw-doctor-owner-'));
     const foreignHome = mkdtempSync(join(tmpdir(), 'jaw-doctor-foreign-'));
@@ -239,8 +238,8 @@ test('doctor text and JSON identify a foreign owner without exposing token mater
             pid: process.pid, claimedAt: new Date().toISOString(), connected: true,
         }));
         const runDoctor = (json: boolean) => spawnSync(
-            repoTsx,
-            [cliEntry, '--home', home, 'doctor', ...(json ? ['--json'] : [])],
+            process.execPath,
+            ['--import', 'tsx', cliEntry, '--home', home, 'doctor', ...(json ? ['--json'] : [])],
             {
                 cwd: repoRoot, encoding: 'utf8', timeout: 60_000,
                 env: { ...process.env, HOME: sharedHome, NO_COLOR: '1', SLACK_BOT_TOKEN: '', SLACK_APP_TOKEN: '' },

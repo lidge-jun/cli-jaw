@@ -1,3 +1,4 @@
+import { revokeSlackToolGrant } from '../slack/tool-context.js';
 /**
  * Request settlement registry (#276).
  *
@@ -81,6 +82,7 @@ export function settleOnce(
     outcome: SettleOutcome,
     detail: SettleDetail = {},
 ): boolean {
+    revokeSlackToolGrant(requestId);
     if (!requestId) return false;
     const entry = pending.get(requestId);
     if (!entry) return false;

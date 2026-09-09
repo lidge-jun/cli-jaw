@@ -15,7 +15,7 @@ import {
 } from '../core/config.js';
 import { sanitizeSettingsInput } from '../core/settings-merge.js';
 import { readCodexContextWindow } from '../core/codex-config.js';
-import { regenerateB, A2_PATH, HEARTBEAT_PATH } from '../prompt/builder.js';
+import { regenerateB, getGeneratedPromptProof, A2_PATH, HEARTBEAT_PATH } from '../prompt/builder.js';
 import { clearTemplateCache, getTemplateDir } from '../prompt/template-loader.js';
 import {
     loadUnifiedMcp, saveUnifiedMcp, syncToAll, initMcpConfig,
@@ -468,9 +468,9 @@ export function registerSettingsRoutes(
         res.json(readCodexContextWindow());
     });
 
-    app.get('/api/prompt', requireAuth, (_, res) => {
+    app.get('/api/prompt', requireAuth, (req, res) => {
         const a2 = fs.existsSync(A2_PATH) ? fs.readFileSync(A2_PATH, 'utf8') : '';
-        res.json({ content: a2 });
+        res.json({ content: a2, ...(req.query['withGenerated'] === '1' ? { generated: getGeneratedPromptProof() } : {}) });
     });
 
     app.put('/api/prompt', requireAuth, (req, res) => {

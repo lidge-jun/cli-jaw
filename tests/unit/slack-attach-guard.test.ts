@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const home = mkdtempSync(join(homedir(), '.cljaw-test-'));
+const home = mkdtempSync(join(process.env['CLI_JAW_TEST_HOME_ROOT'] || homedir(), '.cljaw-test-'));
 process.env['CLI_JAW_HOME'] = home;
 test.after(() => rmSync(home, { recursive: true, force: true }));
 

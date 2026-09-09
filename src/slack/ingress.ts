@@ -1,3 +1,5 @@
+import { settleOnce } from '../orchestrator/request-registry.js';
+import { reserveSlackToolGrant, revokeSlackToolScope, type SlackToolSource } from './tool-context.js';
 import { settings } from '../core/config.js';
 import { getActiveChatSession, resolveOrCreateRemoteSession } from '../core/chat-sessions.js';
 import { channelGateOn, scopeForChatSession } from '../orchestrator/scope.js';
@@ -223,6 +225,7 @@ export function resolveSlackScopeForTarget(target: RemoteTarget): string | null 
 }
 
 export function admitSlackRun(params: {
+    toolSource?: SlackToolSource;
     target: RemoteTarget;
     prompt: string;
     displayText: string;
@@ -240,23 +243,29 @@ export function admitSlackRun(params: {
         ? params.preResolvedScope ?? 'default'
         : scopeForChatSession(chatSessionId, remoteKey, gateEnabled);
     const result = submitMessage(params.prompt, {
+        ...(params.toolSource ? { ownedExecution: true as const, onAdmitted: (binding: { requestId: string; scope: string; chatSessionId: string }) => { if (!reserveSlackToolGrant(params.toolSource!, binding)) throw new Error('slack_tool_context_unavailable'); } } : {}),
         origin: 'slack', displayText: params.displayText, skipOrchestrate: true,
         target: params.target, chatId: params.chatId,
+        // A tool turn keeps the default steer policy: its grant is reserved at
+        // admission (gateway onAdmitted) under the same requestId the kill-steer
+        // follow-up continues with, so the follow-up spawn re-activates it.
+        // Only synthetic thread addresses still force followup. (#660 review)
         ...(params.target.threadIsSynthetic === true ? { midRunPolicy: 'followup' as const } : {}),
         ...(remoteKey ? { remoteKey } : {}), chatSessionId, scope,
     });
     const session = result.sessionContext || { scope, chatSessionId, ...(remoteKey ? { remoteKey } : {}) };
     if (result.disposition !== 'new_run') return { ...result, sessionContext: session };
-    const laneTail = sessionLanes.run(session.scope, () => params.runReply({
+    const laneTail = sessionLanes.run(session.scope, async () => { try { await params.runReply({
         scope: session.scope,
         chatSessionId: session.chatSessionId,
         requestId: result.requestId || '',
         ...(session.remoteKey ? { remoteKey: session.remoteKey } : {}),
-    }));
+    }); } finally { if (params.toolSource) settleOnce(result.requestId, 'dropped', { reason: 'slack_owned_run_closed', scope: session.scope }); } });
     return { ...result, sessionContext: session, laneTail };
 }
 
 export async function resetSlackIngress(): Promise<void> {
+    revokeSlackToolScope();
     resetting = true;
     generation += 1;
     for (const controller of controllers) controller.abort();

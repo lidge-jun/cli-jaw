@@ -63,3 +63,11 @@ test('an empty token asks Slack nothing', async () => {
     assert.equal(await verifiedSlackWorkspace('   ', { fetchImpl: impl }), null);
     assert.equal(calls(), 0);
 });
+
+test('malformed workspace metadata is not coerced into an authorization identity', async () => {
+    for (const team_id of [{ id: 'T1' }, 123, 'https://example.invalid', 'T'.repeat(1000)]) {
+        resetVerifiedSlackWorkspace();
+        const { impl } = authFetch({ ok: true, team_id, user_id: 'U1' });
+        assert.equal(await verifiedSlackWorkspace('fixture-token', { fetchImpl: impl }), null);
+    }
+});

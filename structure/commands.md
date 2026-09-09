@@ -399,3 +399,11 @@ gate:mcp-scope-frozen, gate:no-experimental-in-readme-ready-section, gate:all
 ```
 
 Use `npm run gate:all` as the broad docs/release sanity command.
+
+### Slack history pagination
+
+`jaw slack history <channel> [--thread <parent-ts>] [--limit N] [--cursor C] [--oldest TS] [--latest TS] [--inclusive] [--json]` forwards page and time bounds to the server. JSON preserves the response envelope; text includes pagination metadata. Stop on exhausted, missing or repeated cursor and report `partial`/`contentTruncated` independently.
+
+Slack-origin CLI lookups automatically use the owning print process grant. `--operator` explicitly selects the separate home-scoped operator credential; ordinary HTTP bearer authentication does not authorize Slack access. Do not use operator mode as a fallback for Slack-origin requests.
+
+`jaw slack capabilities [--operator]` reports implemented, granted, available and verified tools separately. `jaw slack tool --input-json <JSON> [--operator]` calls typed source and action tools; [operation inputs and limits](../docs/slack-tools.md) cover reactions, own-message changes, schedules, pins, bookmarks, Canvas and Lists. Example shape: `{ "operation":"quote", "invocationId":"unique-id", "source":{"channel":"C123","ts":"1700000000.123456"} }`. `search.quote` accepts query/scope bounds and returns only new Slack output receipts; read the quotes in Slack instead of trying to bypass restricted history. Raw RTS export is unavailable.

@@ -1,3 +1,7 @@
+import { randomUUID } from 'node:crypto';
+import { verifiedSlackWorkspace } from './verified-workspace.js';
+import { reserveSlackToolGrant, revokeSlackToolGrant, slackCredentialKey } from './tool-context.js';
+import { admitRequest, settleOnce } from '../orchestrator/request-registry.js';
 // ─── Slack Slash Commands ────────────────────────────
 // Payload shape: { command: '/jaw', text: '...', channel_id, channel_name,
 //                  user_id, team_id, ... }
@@ -149,11 +153,21 @@ export async function handleSlackSlashCommand(payload: Record<string, unknown>):
             const steerPrompt = await attributeSlashPrompt(payload, result.steerPrompt);
             if (result.text) await sendSlackText(token, target, result.text);
             const { orchestrateAndCollect } = await import('../orchestrator/collect.js');
-            const reply = String(await withSessionScope(sessionScope, () => orchestrateAndCollect(steerPrompt, {
+            const requestId = randomUUID();
+            const actorId = typeof payload['user_id'] === 'string' ? payload['user_id'] : '';
+            const workspace = actorId && typeof payload['team_id'] === 'string'
+                ? await verifiedSlackWorkspace(token).catch(() => null) : null;
+            const granted = workspace && workspace.teamId === payload['team_id'] && actorId
+                ? reserveSlackToolGrant({ teamId: workspace.teamId, actorId, destination: target, credentialKey: slackCredentialKey(token) },
+                    { requestId, scope, chatSessionId }) : false;
+            admitRequest(requestId, scope);
+            let reply: string;
+            try { reply = String(await withSessionScope(sessionScope, () => orchestrateAndCollect(steerPrompt, {
+                requestId, ...(granted ? { _strictRequestOwnership: true } : {}),
                 origin: 'slack', target, chatId: channelId,
                 ...(remoteKey ? { remoteKey } : {}), chatSessionId, scope, _skipInsert: true,
                 ...(result.steerContext ? { _steerContext: result.steerContext } : {}),
-            })));
+            }))); } finally { revokeSlackToolGrant(requestId); settleOnce(requestId, 'dropped', { scope, reason: 'collector_closed' }); }
             await sendSlackText(token, target, reply);
             return;
         }

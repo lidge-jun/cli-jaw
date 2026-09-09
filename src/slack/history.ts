@@ -1,3 +1,4 @@
+import { isRtsOutput, excludedRtsMessage, filterRtsOutputs } from './rts-output-store.js';
 // ─── Slack Dynamic Lookup (history / replies) ────────
 // Read-side of the Slack transport: conversations.history for a channel
 // window, conversations.replies for one thread. The agent uses this through
@@ -6,7 +7,8 @@
 // Internal customer-built apps keep Tier 3, so limit=50 defaults are safe.
 
 import { slackApi, describeSlackError, isRetryableSlackError, type SlackFetch } from './api.js';
-import type { SlackFileEvent } from './events.js';
+import { extractTextFromBlocksDetailed, type SlackFileEvent } from './events.js';
+import { redactOutboundPayload } from '../messaging/redact.js';
 import { redactChannelSecrets } from '../messaging/redact.js';
 
 export type SlackHistoryMessage = {
@@ -15,6 +17,14 @@ export type SlackHistoryMessage = {
     user?: string;
     botId?: string;
     text: string;
+    blocks?: unknown[];
+    attachments?: unknown[];
+    reactions?: Array<{ name: string; count: number; users?: string[] }>;
+    edited?: { ts: string; user?: string };
+    permalink?: string;
+    contentTruncated?: boolean;
+    contentExcluded?: boolean;
+    textFromBlocks?: boolean;
     replyCount?: number;
     subtype?: string;
     /** app_mention 첨부 복구가 소비한다 (attachment-recovery.ts). */
@@ -37,6 +47,8 @@ type RawMessage = {
     ts?: string; thread_ts?: string; user?: string; bot_id?: string;
     text?: string; reply_count?: number; subtype?: string;
     files?: SlackFileEvent[];
+    blocks?: unknown[]; attachments?: unknown[];
+    reactions?: SlackHistoryMessage['reactions']; edited?: SlackHistoryMessage['edited']; permalink?: string;
 };
 type RawHistoryData = { messages?: RawMessage[]; has_more?: boolean; response_metadata?: { next_cursor?: string } };
 
@@ -45,16 +57,104 @@ function clampLimit(limit: number | undefined): number {
     return Math.min(Math.max(Math.floor(n), 1), SLACK_HISTORY_MAX_LIMIT);
 }
 
+/** Acyclic, bounded projection before rich data reaches an agent or cache. */
+function boundedRichValue(input: unknown): { value: unknown; truncated: boolean } {
+    let remaining = 64000;
+    let nodes = 0;
+    let truncated = false;
+    const ancestors = new Set<object>();
+    const cost = (value: unknown) => Buffer.byteLength(JSON.stringify(value), 'utf8');
+    const visit = (value: unknown, depth: number): unknown => {
+        nodes += 1;
+        if (nodes > 10000 || depth > 12 || remaining < 2) { truncated = true; return undefined; }
+        if (typeof value === 'string') {
+            let result = value;
+            if (cost(result) > remaining) {
+                let low = 0, high = Math.min(value.length, remaining);
+                while (low < high) {
+                    const middle = Math.ceil((low + high) / 2);
+                    if (cost(value.slice(0, middle)) <= remaining) low = middle;
+                    else high = middle - 1;
+                }
+                result = value.slice(0, low);
+                truncated = true;
+            }
+            remaining -= cost(result);
+            return result;
+        }
+        if (value === null || typeof value === 'number' || typeof value === 'boolean') {
+            const bytes = cost(value);
+            if (bytes > remaining) { truncated = true; return undefined; }
+            remaining -= bytes;
+            return value;
+        }
+        if (!value || typeof value !== 'object') return undefined;
+        if (ancestors.has(value)) { truncated = true; return undefined; }
+        ancestors.add(value);
+        remaining -= 2;
+        const out: unknown[] | Record<string, unknown> = Array.isArray(value) ? [] : {};
+        for (const key of Object.keys(value)) {
+            nodes += 1;
+            if (nodes >= 10000 || remaining < 4) { truncated = true; break; }
+            if (['__proto__', 'constructor', 'prototype'].includes(key)) { truncated = true; continue; }
+            const overhead = Array.isArray(out) ? 1 : cost(key) + 2;
+            if (overhead + 2 > remaining) { truncated = true; continue; }
+            remaining -= overhead;
+            const item = visit((value as Record<string, unknown>)[key], depth + 1);
+            if (item !== undefined) {
+                if (Array.isArray(out)) out.push(item);
+                else out[key] = item;
+            }
+        }
+        ancestors.delete(value);
+        return out;
+    };
+    const value = visit(input, 0);
+    return { value, truncated };
+}
+
+export function slackDataForAgent(value: unknown): { value: unknown; truncated: boolean } {
+    const projected = boundedRichValue(value);
+    const redacted = boundedRichValue(redactOutboundPayload(projected.value));
+    return { value: redacted.value, truncated: projected.truncated || redacted.truncated };
+}
+
+/** Internal downloads retain their original URLs; only agent-facing copies are redacted. */
+export function slackHistoryForAgent(messages: SlackHistoryMessage[]): SlackHistoryMessage[] {
+    return messages.map(message => {
+        const { ts, text, ...optional } = message;
+        const projected = boundedRichValue({ ts, text, ...optional });
+        const redacted = boundedRichValue(redactOutboundPayload(projected.value));
+        const safe = redacted.value as Partial<SlackHistoryMessage>;
+        return { ...safe, ts: message.ts, text: safe.text ?? '',
+            ...(projected.truncated || redacted.truncated || message.contentTruncated ? { contentTruncated: true } : {}) };
+    });
+}
+
 function normalize(raw: RawMessage[]): SlackHistoryMessage[] {
     const out: SlackHistoryMessage[] = [];
     for (const m of raw) {
-        if (!m || typeof m.ts !== 'string') continue;
+        if (!m || typeof m.ts !== 'string' || m.ts.length > 32 || !/^\d+(?:\.\d+)?$/.test(m.ts) || !Number.isFinite(Number(m.ts)) || Number(m.ts) > 8640000000000) continue;
+        if (isRtsOutput(m.blocks)) { out.push(excludedRtsMessage(m.ts, m.thread_ts)); continue; }
+        const rich = boundedRichValue({
+            ...(Array.isArray(m.blocks) ? { blocks: m.blocks } : {}),
+            ...(Array.isArray(m.attachments) ? { attachments: m.attachments } : {}),
+            ...(Array.isArray(m.reactions) ? { reactions: m.reactions } : {}),
+            ...(m.edited && typeof m.edited.ts === 'string' ? { edited: { ts: m.edited.ts.slice(0, 32),
+                ...(typeof m.edited.user === 'string' ? { user: m.edited.user.slice(0, 64) } : {}) } } : {}),
+            ...(typeof m.permalink === 'string' ? { permalink: m.permalink } : {}),
+        });
+        const fields = rich.value as Partial<SlackHistoryMessage>;
+        const extracted = extractTextFromBlocksDetailed([...(fields.blocks ?? []), ...(fields.attachments ?? [])], 40000);
         out.push({
+            ...fields,
+            ...(!(typeof m.text === 'string' && m.text.length) && extracted.text ? { textFromBlocks: true } : {}),
+            ...(rich.truncated || extracted.truncated ? { contentTruncated: true } : {}),
             ts: m.ts,
             ...(m.thread_ts ? { threadTs: m.thread_ts } : {}),
             ...(m.user ? { user: m.user } : {}),
             ...(m.bot_id ? { botId: m.bot_id } : {}),
-            text: typeof m.text === 'string' ? m.text : '',
+            text: typeof m.text === 'string' && m.text.length ? m.text : extracted.text,
             ...(typeof m.reply_count === 'number' ? { replyCount: m.reply_count } : {}),
             ...(m.subtype ? { subtype: m.subtype } : {}),
             ...(Array.isArray(m.files) && m.files.length ? { files: m.files } : {}),
@@ -66,6 +166,9 @@ function normalize(raw: RawMessage[]): SlackHistoryMessage[] {
 export type SlackHistoryOpts = {
     limit?: number;
     cursor?: string;
+    oldest?: string;
+    latest?: string;
+    inclusive?: boolean;
     fetchImpl?: SlackFetch;
     /** Cancels the request, the retry wait, and any further attempt. */
     signal?: AbortSignal;
@@ -78,6 +181,7 @@ export type SlackHistoryOpts = {
      * window can be applied.
      */
     noRetryOnRateLimit?: boolean;
+    sensitiveResponse?: boolean;
 };
 
 /**
@@ -116,6 +220,7 @@ async function callWithRetry(
     // both ride the form path for one consistent contract.
     const callOpts = {
         form: true as const,
+        ...(opts.sensitiveResponse ? { sensitiveResponse: true } : {}),
         ...(opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {}),
         ...(opts.signal ? { signal: opts.signal } : {}),
     };
@@ -149,8 +254,8 @@ async function callWithRetry(
     const nextCursor = result.data?.response_metadata?.next_cursor?.trim();
     return {
         ok: true,
-        messages: normalize(result.data?.messages ?? []),
-        hasMore: result.data?.has_more === true,
+        messages: await filterRtsOutputs(token, String(body['channel'] ?? ''), normalize(result.data?.messages ?? []), opts.signal, opts.fetchImpl),
+        hasMore: result.data?.has_more === true || Boolean(nextCursor),
         ...(nextCursor ? { nextCursor } : {}),
     };
 }
@@ -194,6 +299,9 @@ export function fetchSlackReplies(
         ts: threadTs,
         limit: clampLimit(opts.limit),
         ...(opts.cursor ? { cursor: opts.cursor } : {}),
+        ...(opts.oldest ? { oldest: opts.oldest } : {}),
+        ...(opts.latest ? { latest: opts.latest } : {}),
+        ...(opts.inclusive && (opts.oldest || opts.latest) ? { inclusive: true } : {}),
     }, opts);
 }
 
@@ -209,11 +317,11 @@ const FORMAT_CHAR_CAP = 12000;
  * the channel-secret redactor so a token pasted INTO a Slack message can
  * never round-trip back into an agent prompt or terminal.
  */
-export function formatHistoryForAgent(
+export function formatHistoryForAgentDetailed(
     messages: SlackHistoryMessage[],
     selfUserId?: string | null,
     names?: ReadonlyMap<string, string>,
-): string {
+): { text: string; truncated: boolean } {
     const chronological = [...messages].sort((a, b) => Number(a.ts) - Number(b.ts));
     const lines: string[] = [];
     for (const m of chronological) {
@@ -229,13 +337,20 @@ export function formatHistoryForAgent(
                 ? (resolvedName ? `${resolvedName} (bot:${m.botId})` : `bot:${m.botId}`)
                 : 'unknown');
         const suffix = m.replyCount ? ` [${m.replyCount} replies]` : '';
-        lines.push(`[${when}] ${who}: ${m.text}${suffix}`);
+        lines.push(`[${when}] [UTC ts=${m.ts}] ${who}: ${m.text}${suffix}${m.permalink ? ` ${m.permalink}` : ''}`);
     }
     // Keep the NEWEST lines when the history overflows. Slicing from the front
     // dropped the most recent messages, which are the ones a follow-up question
     // refers to; whole lines only, since half a timestamp is worse than a
     // missing message (#518).
-    return keepNewestLines(redactChannelSecrets(lines.join('\n')), FORMAT_CHAR_CAP);
+    const full = redactChannelSecrets(lines.join('\n'));
+    return { text: keepNewestLines(full, FORMAT_CHAR_CAP), truncated: full.length > FORMAT_CHAR_CAP };
+}
+
+export function formatHistoryForAgent(
+    messages: SlackHistoryMessage[], selfUserId?: string | null, names?: ReadonlyMap<string, string>,
+): string {
+    return formatHistoryForAgentDetailed(messages, selfUserId, names).text;
 }
 
 /** Trim to a character bound from the FRONT, dropping whole lines. */
@@ -247,7 +362,10 @@ function keepNewestLines(text: string, max: number): string {
     for (let i = lines.length - 1; i >= 0; i--) {
         const line = lines[i] as string;
         const cost = size === 0 ? line.length : line.length + 1;
-        if (size + cost > max) break;
+        if (size + cost > max) {
+            if (!kept.length) kept.push(line.slice(0, Math.max(0, max - 24)) + ' [content truncated]');
+            break;
+        }
         kept.push(line);
         size += cost;
     }

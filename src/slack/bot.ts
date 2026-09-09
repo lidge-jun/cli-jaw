@@ -1,3 +1,6 @@
+import { verifiedSlackWorkspace } from './verified-workspace.js';
+import { slackCredentialKey, type SlackToolSource } from './tool-context.js';
+import { isSlackMention } from './events.js';
 // ─── Slack Bot ───────────────────────────────────────
 // Slack transport implementation for the cli-jaw messaging runtime.
 // Mirrors src/discord/bot.ts structurally: init/shutdown lifecycle, an inbound
@@ -790,6 +793,7 @@ async function slackOrchestrate(
     displayMsg: string,
     signal: AbortSignal,
     dedupe: {
+        toolSource?: SlackToolSource;
         eventKey?: string;
         reservationGeneration?: number;
         preResolvedScope?: string | null;
@@ -832,6 +836,7 @@ async function slackOrchestrate(
     try {
         result = admitSlackRun({
         target, prompt, displayText: displayMsg, chatId,
+        ...(dedupe.toolSource ? { toolSource: dedupe.toolSource } : {}),
         ...(dedupe.preResolvedScope !== undefined
             ? { preResolvedScope: dedupe.preResolvedScope } : {}),
         runReply: async (ctx: SlackRunContext) => {
@@ -874,6 +879,7 @@ async function slackOrchestrate(
                     { scope: ctx.scope, chatSessionId: ctx.chatSessionId },
                     () => orchestrateAndCollectData(prompt, {
                         origin: 'slack', target, chatId, requestId: ctx.requestId,
+                        ...(dedupe.toolSource ? { _strictRequestOwnership: true } : {}),
                         ...(ctx.remoteKey ? { remoteKey: ctx.remoteKey } : {}),
                         chatSessionId: ctx.chatSessionId, scope: ctx.scope, _skipInsert: true,
                     }),
@@ -882,7 +888,7 @@ async function slackOrchestrate(
                 if (!current()) return;
                 // A turn retired by a steer has no answer of its own: the follow-up
                 // run owns it and the reply tracker delivers it. Posting the no-response
-                // placeholder here is the "응답 없음" the user saw right after steering (#655).
+                // placeholder here is what the user saw right after steering (#655).
                 if (resultData['superseded'] === true && !String(collected.text ?? '').trim()) {
                     log.info(`[slack:out:superseded] ${target.targetId}: retired by steer`);
                     await settleAck('success');
@@ -985,6 +991,7 @@ export async function processSlackMessageEvent(
     text: string,
     signal: AbortSignal,
     opts: {
+        socketTeamId?: string;
         prefetchToken?: number;
         prefetchOwner?: SessionOwnerToken;
         preResolvedScope?: string | null;
@@ -1020,6 +1027,7 @@ async function runSlackMessageEvent(
     text: string,
     signal: AbortSignal,
     opts: {
+        socketTeamId?: string;
         prefetchToken?: number;
         prefetchOwner?: SessionOwnerToken;
         preResolvedScope?: string | null;
@@ -1073,7 +1081,14 @@ async function runSlackMessageEvent(
         // the message, and the conversation is already obvious in Slack's own UI.
         displayText = buildSenderDisplay(identity, displayText);
     }
+    const sourceToken = getSlackSendClient().token;
+    const workspace = sourceToken && opts.socketTeamId ? await verifiedSlackWorkspace(sourceToken).catch(() => null) : null;
+    if (signal.aborted) return;
+    const toolSource: SlackToolSource | undefined = workspace && workspace.teamId === opts.socketTeamId && event.user && sourceToken
+        ? { teamId: workspace.teamId, actorId: event.user, destination: target, credentialKey: slackCredentialKey(sourceToken),
+            ...(typeof event.action_token === 'string' ? { actionToken: event.action_token } : {}) } : undefined;
     await slackOrchestrate(target, prompt, displayText, signal, {
+        ...(toolSource ? { toolSource } : {}),
         ...(opts.eventKey ? { eventKey: opts.eventKey } : {}),
         ...(opts.reservationGeneration !== undefined
             ? { reservationGeneration: opts.reservationGeneration } : {}),
@@ -1083,7 +1098,7 @@ async function runSlackMessageEvent(
         ...(event.ts ? { ackTs: event.ts } : {}),
         ...(event.user ? { recipientUserId: event.user } : {}),
         isDirect: event.channel_type === 'im',
-        isMention: event.type === 'app_mention',
+        isMention: isSlackMention(event, selfUserId),
     });
 }
 
@@ -1125,7 +1140,7 @@ async function buildInboundContextBlock(
         // A top-level channel message has no thread to read; the channel's own
         // recent history (ending before this event) is its context (#518 r2).
         const isTopLevelChannel = !threadTs
-            && (event.channel_type === 'channel' || event.channel_type === 'group');
+            && (event.channel_type === 'channel' || event.channel_type === 'group' || event.channel_type === 'mpim');
         // Independent lookups: serial would double the round trips inside a
         // deadline that exists to stay small.
         const [conversation, thread, channelHistory] = await Promise.all([
@@ -1159,6 +1174,7 @@ async function buildInboundContextBlock(
         const preamble = buildThreadPreamble(
             formatHistoryForAgent(prior, selfUserId, cachedNameMap(teamId, authorIds)),
             thread?.replyCount ?? prior.length,
+            thread,
         );
         if (!preamble) return block;
         // History is actually going into the prompt: the claim is spent.
@@ -1283,6 +1299,11 @@ export async function handleSlackEnvelope(envelope: SlackEnvelope, approvalTrans
             : '';
         const parsed = parseApprovalCallbackData(actionId);
         if (!parsed) {
+            const token = getSlackSendClient().token;
+            if (token) {
+                const { consumeSlackInteractionCallback } = await import('./actions-interactions.js');
+                await consumeSlackInteractionCallback(payload, token);
+            }
             log.info('[slack:interactive] received (not an approval action)');
             return;
         }
@@ -1348,7 +1369,7 @@ export async function handleSlackEnvelope(envelope: SlackEnvelope, approvalTrans
     const prefetchOwner = preResolvedScope
         ? getSessionOwnershipGeneration(preResolvedScope)
         : undefined;
-    if (event.type === 'app_mention' && event.channel) {
+    if (isSlackMention(event, selfUserId) && event.channel) {
         // A top-level mention starts a thread the bot will parent, so the whole
         // thread belongs to it. A mention INSIDE an existing thread is an
         // invitation into someone else's conversation, and only that (#400).
@@ -1375,7 +1396,7 @@ export async function handleSlackEnvelope(envelope: SlackEnvelope, approvalTrans
     // between this function's entry and this line, so the test-and-set is atomic
     // against a second envelope in the same tick.
     const prefetchSubject = event.thread_ts
-        ?? ((event.channel_type === 'channel' || event.channel_type === 'group') ? '' : undefined);
+        ?? ((event.channel_type === 'channel' || event.channel_type === 'group' || event.channel_type === 'mpim') ? '' : undefined);
     const prefetchToken = prefetchSubject !== undefined && prefetchOwner
         ? claimThreadPrefetch(event.channel || '', prefetchSubject, prefetchOwner)
         : 0;
@@ -1389,7 +1410,10 @@ export async function handleSlackEnvelope(envelope: SlackEnvelope, approvalTrans
         // app_mention 봉투에는 files 가 없고, 첨부를 가진 message 사본은 위
         // shouldProcessSlackEvent 에서 mention_via_app_mention 으로 드롭된다.
         // 그래서 멘션과 함께 올린 파일은 여기서 되찾지 않으면 영영 사라진다.
-        if (!hasFiles && event.type === 'app_mention' && event.channel && event.ts) {
+        // app_mention envelopes drop files, so they need the history recovery.
+        // A message.mpim mention already carries its files inline; when it has
+        // none there is no twin envelope to recover from, only a wasted call.
+        if (!hasFiles && event.type === 'app_mention' && isSlackMention(event, selfUserId) && event.channel && event.ts) {
             const recoverToken = getSlackSendClient().token;
             if (recoverToken) {
                 const recovered = await recoverSlackAttachments(
@@ -1419,6 +1443,7 @@ export async function handleSlackEnvelope(envelope: SlackEnvelope, approvalTrans
 
         prefetchHandedOff = enqueueSlackIngress(slackIngressLaneKey(target), signal =>
             processSlackMessageEvent(event, target, text, signal, {
+                ...(typeof envelope.payload?.['team_id'] === 'string' ? { socketTeamId: envelope.payload['team_id'] } : {}),
                 prefetchToken,
                 ...(prefetchOwner ? { prefetchOwner } : {}),
                 preResolvedScope,

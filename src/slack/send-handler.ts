@@ -1,3 +1,4 @@
+import { slackCredentialKey } from './tool-context.js';
 // ─── Slack Send Handler ──────────────────────────────
 // Adapts the channel-agnostic ChannelSendRequest to Slack's Web API.
 
@@ -16,6 +17,9 @@ export async function slackSendHandler(
     if (!client.token) {
         return { ok: false, error: client.reason ?? 'slack_unavailable', status: client.status ?? 503 };
     }
+    if (req.slackCredentialKey && slackCredentialKey(client.token) !== req.slackCredentialKey) return { ok: false, error: 'slack_credential_changed', status: 409, retryable: false };
+    if (req.signal?.aborted) return { ok: false, error: 'slack_send_aborted', status: 499, retryable: false };
+    const signalOpt = req.signal ? { signal: req.signal } : {};
     let target = req.target;
     if (!target) return { ok: false, error: 'slack_target_missing', status: 400 };
 
@@ -31,7 +35,7 @@ export async function slackSendHandler(
     switch (req.type) {
         case 'text':
             if (!req.text) return { ok: false, error: 'empty_text', status: 400 };
-            return sendSlackText(client.token, target, req.text, req.blocks ? { blocks: req.blocks } : {});
+            return sendSlackText(client.token, target, req.text, { ...signalOpt, ...(req.blocks ? { blocks: req.blocks } : {}) });
         case 'keyboard': {
             // Slack's inline-keyboard analogue is Block Kit, whose callbacks need
             // interactive-envelope routing this tree does not have, so
@@ -52,7 +56,7 @@ export async function slackSendHandler(
                 };
             }
             if (!req.text) return { ok: false, error: 'empty_text', status: 400 };
-            const result = await sendSlackText(client.token, target, req.text);
+            const result = await sendSlackText(client.token, target, req.text, signalOpt);
             return result.ok
                 ? { ...result, downgraded: { operation: 'interactiveActions', to: 'text' } }
                 : result;
@@ -62,12 +66,12 @@ export async function slackSendHandler(
         case 'voice': {
             if (!req.filePath) return { ok: false, error: 'missing_file_path', status: 400 };
             try {
-                return await sendSlackFile(client.token, target, req.filePath, req.caption ? { caption: req.caption } : {});
+                return await sendSlackFile(client.token, target, req.filePath, { ...signalOpt, ...(req.caption ? { caption: req.caption } : {}) });
             } catch (error) {
                 // validateSlackFileSize throws 413 BEFORE any upload call. After
                 // caption promotion (messaging/send.ts) the answer text lives only
                 // in req.caption, so an oversized file used to take the whole
-                // answer down with it — three 50 MiB+ refusals on suji, each with
+                // answer down with it — three 50 MiB+ refusals in the observed upload path, each with
                 // a full answer attached (#517 round 2). Deliver the words.
                 const status = (error as { statusCode?: number }).statusCode;
                 const body = (req.caption ?? req.text ?? '').trim();
@@ -77,7 +81,7 @@ export async function slackSendHandler(
                 // (gate:redaction-sinks).
                 log.warn('[slack:send] file exceeds transport limit — delivering caption as text', logErrorText(error));
                 const operation: ChannelOperation = req.type === 'voice' ? 'voice' : 'fileUpload';
-                const fallback = await sendSlackText(client.token, target, body);
+                const fallback = await sendSlackText(client.token, target, body, signalOpt);
                 return fallback.ok
                     ? { ...fallback, downgraded: { operation, to: 'text' } }
                     : fallback;

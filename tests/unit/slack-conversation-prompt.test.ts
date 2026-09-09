@@ -54,3 +54,14 @@ test('non-Slack prompts are unchanged and context values cannot inject a new pro
     );
     assert.equal(injected.split('\n').length, 2, 'the context block stays one line plus the prompt');
 });
+
+test('preamble distinguishes fetched messages from total replies and preserves bounded framing', async () => {
+    const { buildThreadPreamble, PREAMBLE_TOTAL_CAP } = await import('../../src/slack/context.ts');
+    const text = buildThreadPreamble('old'.repeat(5000) + 'NEWEST', 900,
+        { replyCount: 900, fetchedCount: 101, retainedCount: 51, partial: true });
+    assert.match(text, /일부 대화 · 조회 101개 메시지 · 보존 51개 · 전체 답장 900개/);
+    assert.ok(text.endsWith('NEWEST\n[/앞선 대화]'));
+    assert.ok([...text].length <= PREAMBLE_TOTAL_CAP);
+    assert.match(buildThreadPreamble('hello', 9), /일부 대화 · 조회 \?개/);
+    assert.match(buildThreadPreamble('hello', 1, { replyCount: 1, fetchedCount: 2, retainedCount: 2, partial: false }), /조회 완료/);
+});
