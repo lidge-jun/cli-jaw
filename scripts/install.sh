@@ -489,11 +489,6 @@ install_cli_jaw() {
     unset CLI_JAW_REQUIRE_CLI_TOOLS 2>/dev/null || true
     unset npm_config_jaw_require_cli_tools 2>/dev/null || true
   fi
-  if ! command -v cargo &>/dev/null; then
-    export CLAUDE_E_SKIP_BUILD="${CLAUDE_E_SKIP_BUILD:-1}"
-    warn "Rust Cargo not found — skipping optional claude-e native helper build"
-    warn "Install Rust later and reinstall claude-e if you need the Claude E runtime"
-  fi
   eval "$pkg_cmd"
 
   hash -r 2>/dev/null || true

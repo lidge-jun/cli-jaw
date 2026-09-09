@@ -25,16 +25,6 @@ export function checkPackedFiles(files, manifest) {
 export function checkDefaultInstall(manifest, lock, label = 'root') {
   assertRetiredManifestAbsent(manifest, `${label}/package.json`);
   assertRetiredManifestAbsent(lock, `${label}/package-lock.json`);
-  // ai-e remains an on-demand provider, never a default installation.
-  for (const pkg of [manifest, ...Object.values(lock.packages || {})]) {
-    assert.notEqual(pkg.name, '@bitkyc08/ai-e', 'ai-e must not be installed by default');
-    for (const field of ['dependencies', 'optionalDependencies']) {
-      assert.equal(pkg[field]?.['@bitkyc08/ai-e'], undefined, 'ai-e must remain an on-demand provider');
-    }
-  }
-  for (const file of Object.keys(lock.packages || {})) {
-    assert.ok(!file.replaceAll('\\', '/').endsWith('node_modules/@bitkyc08/ai-e'), 'ai-e must not be in the default install tree');
-  }
 }
 
 // Exercise the real entrypoint in an owned home. Any attempted child process,
@@ -119,7 +109,7 @@ function main() {
   checkDefaultInstall(manifest, read('package-lock.json'));
   checkDefaultInstall(read('electron/package.json'), read('electron/package-lock.json'), 'electron');
   if (args[0] === '--source-only') {
-    console.log('[retired-runtime-package:source-only] PASS root/electron manifests and locks; ai-e remains on demand');
+    console.log('[retired-runtime-package:source-only] PASS root/electron manifests and locks');
     console.log('[retired-runtime-package:source-only] packed NOT RUN; CLI NOT RUN; staged NOT RUN');
     return;
   }
@@ -139,7 +129,7 @@ function main() {
   assert.equal(entries.length, 1, 'expected one npm package');
   checkPackedFiles(entries[0].files, manifest);
   checkRetiredCommand(join(repoRoot, 'dist/bin/cli-jaw.js'));
-  console.log('[retired-runtime-package] PASS manifest, lock, packed files and retired CLI; ai-e remains on demand');
+  console.log('[retired-runtime-package] PASS manifest, lock, packed files and retired CLI');
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) main();

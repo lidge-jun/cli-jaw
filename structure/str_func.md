@@ -590,10 +590,6 @@ cli-jaw/
 │       ├── main/lib/qa-session.ts ← isolated QA profile paths before lock and sessions (12L)
 │       ├── main/lib/         ← 19 top-level helpers plus subdirectories (jaw-spawn 448L, tray-manager 199L, qa-session, install-cli, terminal, navigation-policy, app-metrics, health-check, deep-link, permissions, path-security, quit-progress, etc.)
 │       └── preload/          ← preload scripts (index 126L + metrics 68L)
-├── native/
-│   └── claude-e/             ← Claude E native helper source (Rust, builds `jaw-claude-i` compatibility binary; 11 src files, 1934L)
-│       ├── Cargo.toml        ← Rust package/dependency/test profile
-│       └── src/              ← main.rs(467L) + args/child/hook/protocol/transcript/config/terminal/cleanup/normalize/sanitize
 ├── bin/
 │   ├── cli-jaw.ts            ← 29개 root dynamic import branch + grouped user-facing 서브커맨드 라우팅 + --home flag (359L)
 │   ├── _http-client.ts       ← shared HTTP client helper (35L) ✨

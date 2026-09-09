@@ -22,23 +22,7 @@ interface ProviderSpec {
     scriptPackages?: string[];
 }
 
-const PROVIDERS: Record<string, ProviderSpec> = {
-    'ai-e': {
-        name: 'ai-e',
-        package: '@bitkyc08/ai-e@latest',
-        binary: 'ai-e',
-        description: 'AI-E multi-provider PTY runtime helper',
-    },
-    'claude-e': {
-        name: 'claude-e',
-        package: 'claude-e@latest',
-        binary: 'claude-e',
-        description: 'Claude E native exec runtime (builds from source — needs Rust cargo)',
-        // claude-e's postinstall runs `cargo build`; without approval npm >= 12
-        // skips it and the install would be a no-op shell.
-        scriptPackages: ['claude-e'],
-    },
-};
+const PROVIDERS: Record<string, ProviderSpec> = {};
 
 const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
@@ -54,7 +38,6 @@ function npmSupportsAllowScripts(): boolean {
 }
 
 function usage(): string {
-    const names = Object.keys(PROVIDERS).join(', ');
     return `
   jaw provider — on-demand provider runtime helper
 
@@ -64,17 +47,18 @@ function usage(): string {
     jaw provider doctor <name>  [--json]
     jaw provider list           [--json]
 
-  Available providers: ${names}
+  Available providers: none
+
+  ai-e and claude-e are retired. This command remains so existing scripts
+  and \`jaw --help\` keep a stable entrypoint. Install is rejected; saved
+  home settings are not rewritten.
 
   Examples:
-    jaw provider install ai-e
-    jaw provider doctor ai-e
-    jaw provider clean ai-e
     jaw provider list
 
   Notes:
-    - Installs into an external prefix: ~/.cli-jaw/providers/<name>/
-    - The binary is detected via PATH or the provider prefix automatically.
+    - Former installs lived in ~/.cli-jaw/providers/<name>/
+    - This command does not delete those directories.
 `;
 }
 
@@ -88,11 +72,11 @@ function fail(message: string, json = false): never {
 }
 
 function resolveProvider(name: string | undefined, json = false): ProviderSpec {
-    if (!name || !PROVIDERS[name]) {
-        const available = Object.keys(PROVIDERS).join(', ');
-        fail(`Unknown provider: ${name || '(none)'}. Available: ${available}`, json);
+    if (name === 'ai-e' || name === 'claude-e') {
+        fail(`${name} is retired. On-demand install is no longer available. Available: none`, json);
     }
-    return PROVIDERS[name];
+    const available = Object.keys(PROVIDERS).join(', ') || 'none';
+    fail(`Unknown provider: ${name || '(none)'}. Available: ${available}`, json);
 }
 
 function defaultPrefix(providerName: string): string {
@@ -210,6 +194,10 @@ function runList(values: Record<string, unknown>): void {
     }));
     if (json) {
         console.log(JSON.stringify({ ok: true, providers: entries }, null, 2));
+        return;
+    }
+    if (entries.length === 0) {
+        console.log('  No on-demand providers remain. ai-e and claude-e are retired.');
         return;
     }
     for (const entry of entries) {
