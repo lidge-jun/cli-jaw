@@ -704,11 +704,6 @@ export async function orchestrate(
         ? { traceRunId: result['traceRunId'] } : {};
     broadcast('orchestrate_done', {
         text: compatibilityText,
-        ...(!nativeOutcome && result['executionInterrupted'] === true
-            ? { executionInterrupted: true }
-            : !nativeOutcome && (result['executionFailed'] === true || result['error'] === true
-                || (Number.isFinite(result['code']) && Number.isInteger(result['code']) && result['code'] !== 0))
-                ? { executionFailed: true } : {}),
         ...nativeTags,
         ...nativeRunTag,
         origin,

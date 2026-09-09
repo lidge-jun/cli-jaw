@@ -1,3 +1,4 @@
+import { calendarContext } from './calendar-context.js';
 import { createSlackToolSecretStream, activateSlackToolGrant, revokeSlackToolGrant, revokeSlackToolScope, redactSlackToolSecrets, SLACK_TOOL_GRANT_ENV } from '../slack/tool-context.js';
 // ─── Agent Spawn + Kill/Steer/Queue ──────────────────
 
@@ -1576,7 +1577,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             ? '\n(need history? L1: cli-jaw chat/memory search/context | L2: cli-jaw dashboard memory search, cli-jaw dashboard chat search)'
             : '';
         const promptWithConversation = prependRemoteConversationContext(prompt, opts.target);
-        prompt = `${ts}\n${projLine}${promptWithConversation}${memoryNudge}`;
+        prompt = `${ts}\n${calendarContext(_d)}\n${projLine}${promptWithConversation}${memoryNudge}`;
     }
 
     const resumeSessionId = empSid || (isResume ? bucketSessionId : null);
