@@ -5,7 +5,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { log } from '../../src/core/logger.ts';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-const home = mkdtempSync(join(homedir(), '.cljaw-test-'));
+const home = mkdtempSync(join(process.env['CLI_JAW_TEST_HOME_ROOT'] || homedir(), '.cljaw-test-'));
 process.env['CLI_JAW_HOME'] = home;
 test.after(() => rmSync(home, { recursive: true, force: true }));
 
@@ -447,11 +447,10 @@ test('q: stale generation callback cannot release the newer lease', async () => 
 });
 
 test('l real lifecycle: late hello loses a replaced presence claim', async t => {
-    const sharedHome = mkdtempSync(join(homedir(), '.cljaw-shared-'));
-    const homeA = mkdtempSync(join(homedir(), '.cljaw-home-a-'));
-    const homeB = mkdtempSync(join(homedir(), '.cljaw-home-b-'));
+    const sharedHome = mkdtempSync(join(process.env['CLI_JAW_TEST_HOME_ROOT'] || homedir(), '.cljaw-shared-'));
+    const homeA = mkdtempSync(join(process.env['CLI_JAW_TEST_HOME_ROOT'] || homedir(), '.cljaw-home-a-'));
+    const homeB = mkdtempSync(join(process.env['CLI_JAW_TEST_HOME_ROOT'] || homedir(), '.cljaw-home-b-'));
     const entry = join(import.meta.dirname!, '..', 'fixtures', 'slack-two-home-lifecycle.ts');
-    const tsx = join(import.meta.dirname!, '..', '..', 'node_modules', '.bin', 'tsx');
     const children: ChildProcessWithoutNullStreams[] = [];
     const exited = new Map<ChildProcessWithoutNullStreams, Promise<void>>();
     const rmQuiet = (path: string) => {
@@ -470,7 +469,7 @@ test('l real lifecycle: late hello loses a replaced presence claim', async t => 
     });
 
     const start = (childHome: string, port: string, initialHello: boolean) => {
-        const child = spawn(tsx, ['--experimental-test-module-mocks', entry], {
+        const child = spawn(process.execPath, ['--import', 'tsx', '--experimental-test-module-mocks', entry], {
             env: {
                 ...process.env,
                 HOME: sharedHome,

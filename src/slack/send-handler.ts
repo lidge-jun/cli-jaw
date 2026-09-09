@@ -71,7 +71,7 @@ export async function slackSendHandler(
                 // validateSlackFileSize throws 413 BEFORE any upload call. After
                 // caption promotion (messaging/send.ts) the answer text lives only
                 // in req.caption, so an oversized file used to take the whole
-                // answer down with it — three 50 MiB+ refusals on suji, each with
+                // answer down with it — three 50 MiB+ refusals in the observed upload path, each with
                 // a full answer attached (#517 round 2). Deliver the words.
                 const status = (error as { statusCode?: number }).statusCode;
                 const body = (req.caption ?? req.text ?? '').trim();

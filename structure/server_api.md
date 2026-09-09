@@ -537,3 +537,20 @@ relates to a KNOWN target, which needs a resolved element to compare against,
 so `--no-occlusion-check` has no meaning for a coordinate click. Running it
 there would always return "unknown" and refuse nothing, which is worse than not
 running it: a guard that cannot fire still looks like a guard.
+
+
+### Typed Slack tools
+
+`PUT /api/prompt` accepts the complete A2 `content` string and triggers B/working-directory AGENTS regeneration. Preserve existing A2 instructions and verify both output files separately. The builder's unchanged-content optimization requires both persisted outputs to match and commits its hash only after successful writes; AGENTS write errors retain the existing logging contract.
+
+Authenticated `GET /api/prompt?withGenerated=1` adds a versioned `generated` proof computed from one current `getSystemPrompt({forDisk:true})` result: expected SHA-256/UTF-8 byte length, B/AGENTS match booleans and matched/mismatched/missing/unreadable states. It does not regenerate files or return their private bodies. Missing files are false, unreadable or generation failure is unknown; the default GET remains `{content}`. The proof is an observation, not a lock against subsequent edits. A2 raw text and generated output must be verified separately because disk rendering can transform its Working Directory line.
+
+`POST /api/slack/tools` accepts registered source operations (`message`, `permalink`, `quote`, `search.info`, `search.quote`) and typed actions for reactions, own-message edits/deletion, schedules, pins, bookmarks, Canvas and Lists. See [operation inputs and limits](../docs/slack-tools.md). No arbitrary method proxy is accepted. `GET /api/slack/tools/capabilities` requires ordinary instance authentication and returns unavailable capabilities when no valid turn/operator principal is supplied and separates implemented, observed granted scopes, base availability, and real verified receipts. Action mutations persist bounded invocation receipts, capture credential/actor/destination ownership, pace per workspace/method, and preserve known IDs on uncertain completion. Request disconnects cancel further dispatch; accepted writes are never assumed undone.
+
+Source operations use `{source:{channel,ts,threadTs?}}`. Quote publications require `invocationId`; `excerpt` must occur in the fresh source, while `summary` is explicitly labelled and proves references only. The server rereads source content/version and membership before publication, then verifies the posted quote and permalink. Source proof is at observation time, not an atomic snapshot of future Slack edits.
+
+`search.quote` requires a real captured action token and an initialized privacy store. Input includes `query`, optional `channelTypes` (default public_channel), maxQuotes1..5, maxPages1..3, before/after timestamps and sort controls. It processes RTS results only within the server request, publishes permitted excerpts in Slack, and returns only new-output delivery receipts and partial/query-scope metadata. Raw RTS bodies, original pointers and cursors never enter CLI output or a result cache. `search.info` reports semantic availability without assuming a workspace plan.
+
+RTS output IDs are recorded as our own publication provenance. A server-owned block marker and durable output-ID filter exclude those responses from ordinary history/message lookup and subsequent thread context. An uncertain publication retains an invocation-specific destination hold; held history returns restricted placeholders, not source text. The store contains output addresses/holds and safe operator quote receipts, never original RTS source bodies. No-ID delivery reports `sent:"unknown"`; verified known posts report true. Failure receipts remain non-retryable and preserve known new-message IDs.
+
+The same-account operator isolation boundary remains unresolved (issue #646). See the threat model and supported print-only authorization transports in [Slack tools](../docs/slack-tools.md#authorization-and-deployment-boundary).
