@@ -375,3 +375,28 @@ test('sidebar and drawer group mounts have unique local targets through disclosu
     assert.equal(selected.mock.callCount(), 0);
     assert.equal(lifecycle.mock.callCount(), 0);
 });
+
+test('groups order rows by ascending port even when custom labels are set', async t => {
+    const values = [
+        instance(3470, { label: null }),
+        instance(3457, { label: '내 작업방' }),
+        instance(3462, { label: 'zulu' }),
+        instance(3468, { label: null }),
+        instance(3459, { label: 'aaa', favorite: true }),
+    ];
+    const selected = t.mock.fn();
+    const view = await mount(t, navigator(createElement(InstanceGroups, {
+        instances: values, selectedPort: null, lifecycleBusyPort: null,
+        getLabel: value => value.label || String(value.port), formatUptime: () => '1m',
+        onSelect: selected, onLifecycle: () => {}, onPreview: () => {}, onMarkActivitySeen: () => {},
+        onInstanceLabelSave: async () => {},
+    }), selected));
+    const portsIn = (label: string) => Array.from(
+        controlledTarget(view.container, view.get(`[aria-label="${label} instances"] .instance-group-toggle`))
+            .querySelectorAll<HTMLElement>('[data-instance-port]'),
+    ).map(el => Number(el.dataset['instancePort']));
+    assert.deepEqual(portsIn('Running'), [3457, 3462, 3468, 3470], 'a custom label must not move a row out of port order');
+    assert.deepEqual(portsIn('Pinned'), [3459], 'favorites keep their own section');
+    assert.equal(selected.mock.callCount(), 0);
+});
+

@@ -36,13 +36,10 @@ export function composeInstanceRowTitle(instance: Pick<DashboardInstance, 'port'
     ].join(' · ');
 }
 
-export function comparePinnedThenLabel<T extends Pick<DashboardInstance, 'favorite' | 'label' | 'port'>>(
+export function comparePinnedThenPort<T extends Pick<DashboardInstance, 'favorite' | 'port'>>(
     a: T,
     b: T,
-    labelOf: (instance: T) => string,
 ): number {
     const fav = Number(Boolean(b.favorite)) - Number(Boolean(a.favorite));
-    if (fav !== 0) return fav;
-    const byLabel = labelOf(a).localeCompare(labelOf(b), undefined, { sensitivity: 'base' });
-    return byLabel !== 0 ? byLabel : a.port - b.port;
+    return fav !== 0 ? fav : a.port - b.port;
 }
