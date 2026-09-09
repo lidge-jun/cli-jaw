@@ -9,7 +9,7 @@ import { abortableDelay } from '../messaging/outbound-lifecycle.js';
 import { buildSlackTextPayloads } from './format.js';
 import { buildSlackBlockPayloads, expectedTableShapes, type TableShape, type SlackTextPayload } from './blocks.js';
 import { boundSlackContent, expectedTableContent, type CanonicalTable, type TableContentStatus } from './table-content.js';
-import { verifySlackTables } from './table-verification.js';
+import { verifySlackTables, type VerificationStatus } from './table-verification.js';
 import { expectedRichFeatures } from './render-features.js';
 import { MAX_INLINE_RATE_LIMIT_MS, classifySendFailure, retryAfterMs } from '../messaging/retry.js';
 import { log } from '../core/logger.js';
@@ -77,15 +77,26 @@ function recordSlackPost(target: RemoteTarget, index: number, of: number): void 
     });
 }
 
+export type SlackMessageVerification = {
+    index: number; ts?: string; verification: VerificationStatus | 'not_checked';
+    expectedTables: number; verifiedTables: number; tableContent: TableContentStatus;
+    expectedFeatures: string[]; verifiedFeatures: string[]; error?: string;
+    richContent: 'not_checked'; sourceAccuracy: 'not_checked';
+};
+export type SlackDeliveryReceipt = {
+    verification: VerificationStatus; expectedTables: number; verifiedTables: number;
+    channelId: string; messageTs: string[]; postedChunks: number; totalChunks: number;
+    messages: SlackMessageVerification[]; expectedFeatures?: string[]; verifiedFeatures?: string[];
+    tableContent: TableContentStatus; richContent: 'not_checked'; sourceAccuracy: 'not_checked'; comparisonVersion: 1;
+};
+
 export async function sendSlackText(
     token: string,
     target: RemoteTarget,
     text: string,
     options: { fetchImpl?: SlackFetch; blocks?: unknown; signal?: AbortSignal; requireBodyDelivery?: boolean; sensitiveResponse?: boolean } = {},
 ): Promise<{ ok: boolean; error?: string; status?: number; ts?: string; sent?: boolean;
-    retryable?: boolean; delivery?: { verification: 'verified' | 'failed';
-        expectedTables: number; verifiedTables: number; channelId: string; messageTs: string[];
-        expectedFeatures?: string[]; verifiedFeatures?: string[]; tableContent: TableContentStatus; richContent: 'not_checked'; sourceAccuracy: 'not_checked'; comparisonVersion: 1 } }> {
+    retryable?: boolean; delivery?: SlackDeliveryReceipt }> {
     let chunks: SlackTextPayload[];
     let shapes: TableShape[][];
     let content: CanonicalTable[][];
@@ -111,18 +122,25 @@ export async function sendSlackText(
     let verifiedTables = 0;
     let firstTs: string | undefined;
     const messageTs: string[] = [];
-    const receipt = (verification: 'verified' | 'failed') => ({
-        verification, expectedTables, verifiedTables,
-        tableContent: (expectedTables ? (verifiedTables === expectedTables ? 'verified' : 'failed') : 'not_checked') as TableContentStatus,
-        richContent: 'not_checked' as const, sourceAccuracy: 'not_checked' as const, comparisonVersion: 1 as const, channelId: target.targetId, messageTs,
+    const messages: SlackMessageVerification[] = [];
+    let postedChunks = 0;
+    const receipt = (): SlackDeliveryReceipt => ({
+        verification: messages.some(m => m.verification === 'failed') ? 'failed'
+            : postedChunks < chunks.length || messages.some(m => m.verification === 'unavailable') ? 'unavailable' : 'verified',
+        expectedTables, verifiedTables,
+        tableContent: !expectedTables ? 'not_checked' : messages.some(m => m.tableContent === 'failed') ? 'failed'
+            : verifiedTables === expectedTables ? 'verified' : 'unavailable',
+        richContent: 'not_checked', sourceAccuracy: 'not_checked', comparisonVersion: 1,
+        channelId: target.targetId, messageTs, postedChunks, totalChunks: chunks.length, messages,
         ...(allFeatures.length ? { expectedFeatures: allFeatures, verifiedFeatures: [...verifiedFeatures].sort() } : {}),
     });
-    // Preserve evidence of partial delivery. Retrying a whole send after a
-    // readback failure would post the same table again; callers must re-read it.
+    // A failed POST remains a transport failure. Preserve earlier posts without
+    // authorizing a whole-answer retry or claiming unsent chunks were delivered.
     const failure = (error: string, status = 502) => ({
         ...slackFailure(error, status),
-        ...(firstTs ? { ts: firstTs, sent: true, retryable: false } : {}),
-        ...(needsVerification ? { delivery: receipt('failed') } : {}),
+        ...(firstTs ? { ts: firstTs } : {}),
+        ...(postedChunks ? { sent: true, retryable: false } : {}),
+        ...(needsVerification || postedChunks ? { delivery: receipt() } : {}),
     });
     const callOpts = {
         ...(options.sensitiveResponse !== undefined ? { sensitiveResponse: options.sensitiveResponse } : {}),
@@ -156,18 +174,31 @@ export async function sendSlackText(
         const ts = result.data?.ts;
         if (index === 0 && ts) firstTs = ts;
         if (ts) messageTs.push(ts);
+        postedChunks++;
         recordSlackPost(target, index, chunks.length);
         const expected = shapes[index] ?? [];
         const expectedFeatures = features[index] ?? [];
+        const message: SlackMessageVerification = {
+            index, ...(ts ? { ts } : {}), verification: 'not_checked',
+            expectedTables: expected.length, verifiedTables: 0, tableContent: 'not_checked',
+            expectedFeatures, verifiedFeatures: [], richContent: 'not_checked', sourceAccuracy: 'not_checked',
+        };
+        messages.push(message);
         if (expected.length || expectedFeatures.length) {
-            const errorPrefix = expected.length ? 'slack_table_verification_failed' : 'slack_rich_verification_failed';
-            if (!ts) return { ...failure(`${errorPrefix}:missing_message_ts`), sent: true, retryable: false };
-            const checked = await verifySlackTables(token, target, ts, expected, callOpts, expectedFeatures, content[index]);
+            const checked = ts
+                ? await verifySlackTables(token, target, ts, expected, callOpts, expectedFeatures, content[index])
+                : { verification: 'unavailable' as const, verifiedTables: 0,
+                    tableContent: expected.length ? 'unavailable' as const : 'not_checked' as const,
+                    reason: 'missing_message_ts', verifiedFeatures: [] };
+            message.verification = checked.verification;
+            message.tableContent = checked.tableContent;
+            message.verifiedTables = checked.verifiedTables;
+            message.verifiedFeatures = checked.verifiedFeatures ?? [];
+            if (checked.reason) message.error = checked.reason;
             verifiedTables += checked.verifiedTables;
-            if (!checked.ok) return failure(`${errorPrefix}:${checked.reason}`);
             for (const feature of checked.verifiedFeatures ?? []) verifiedFeatures.add(feature);
         }
     }
     return { ok: true, ...(firstTs ? { ts: firstTs } : {}),
-        ...(needsVerification ? { delivery: receipt('verified') } : {}) };
+        ...(needsVerification ? { sent: true, retryable: false, delivery: receipt() } : {}) };
 }

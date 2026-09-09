@@ -80,7 +80,12 @@ test('HTTP Slack blocks reach the real adapter and require persisted table proof
             assert.deepEqual(good.body.delivery, {
                 verification: 'verified', expectedTables: 2, verifiedTables: 2,
                 tableContent: 'verified', richContent: 'not_checked', sourceAccuracy: 'not_checked', comparisonVersion: 1,
-                channelId: 'D_ROUTE', messageTs: ['100.1', '100.2'],
+                channelId: 'D_ROUTE', messageTs: ['100.1', '100.2'], postedChunks: 2, totalChunks: 2,
+                messages: [0, 1].map(index => ({ index, ts: `100.${index + 1}`, verification: 'verified',
+                    expectedTables: 1, verifiedTables: 1, tableContent: 'verified',
+                    expectedFeatures: index ? ['divider', 'heading'] : ['heading'],
+                    verifiedFeatures: index ? ['divider', 'heading'] : ['heading'],
+                    richContent: 'not_checked', sourceAccuracy: 'not_checked' })),
                 expectedFeatures: ['divider', 'heading'], verifiedFeatures: ['divider', 'heading'],
             });
             assert.ok(posts.every(p => p['thread_ts'] === '99.1'));
@@ -91,13 +96,20 @@ test('HTTP Slack blocks reach the real adapter and require persisted table proof
                 mode = failureMode;
                 const before = posts.length;
                 const failed = await send(request);
-                assert.equal(failed.status, 502);
-                assert.equal(failed.body.ok, false);
+                assert.equal(failed.status, 200);
+                assert.equal(failed.body.ok, true);
                 assert.equal(failed.body.sent, true);
                 assert.equal(failed.body.retryable, false);
-                assert.match(failed.body.error, /slack_table_verification_failed/);
-                assert.equal(failed.body.delivery.verification, 'failed');
-                assert.equal(posts.length, before + 1, 'readback failure must stop; never repost or send remaining tables');
+                const status = mode === 'unavailable' ? 'unavailable' : 'failed';
+                assert.equal(failed.body.delivery.verification, status);
+                assert.equal(failed.body.delivery.tableContent, status);
+                assert.equal(failed.body.delivery.verifiedTables, 0);
+                assert.equal(failed.body.delivery.messages.length, 2);
+                for (const message of failed.body.delivery.messages) {
+                    assert.equal(message.verification, status);
+                    assert.equal(message.error, mode === 'unavailable' ? 'missing_scope' : 'table_count_or_shape_mismatch');
+                }
+                assert.equal(posts.length, before + 2, 'readback failure must not truncate or repost');
             }
             const before = posts.length;
             for (const invalid of [

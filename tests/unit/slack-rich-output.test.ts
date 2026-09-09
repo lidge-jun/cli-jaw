@@ -74,11 +74,13 @@ for (const feature of ['heading', 'quote', 'divider', 'language:python', 'bold',
     test(`a stored message missing ${feature} is not a successful rich delivery`, async () => {
         const fake = vendor(alter(fixture.storedBlocks, feature));
         const result = await sendSlackText('xoxb-fixture', target, fixture.markdown, { fetchImpl: fake.fetchImpl });
-        assert.equal(result.ok, false);
+        assert.equal(result.ok, true);
+        assert.equal(result.delivery?.verification, 'failed');
+        assert.equal(result.delivery?.messages[0]?.verification, 'failed');
         assert.equal(result.sent, true);
         assert.equal(result.retryable, false);
-        assert.match(result.error!, /missing_rich_features/);
-        assert.ok(result.error!.includes(feature));
+        assert.match(result.delivery!.messages[0]!.error!, /missing_rich_features/);
+        assert.ok(result.delivery!.messages[0]!.error!.includes(feature));
         assert.equal(fake.posts.length, 1, 'verification failure must never repost');
     });
 }
