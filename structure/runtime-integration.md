@@ -145,6 +145,14 @@ The internal session now maps parent streamed text, tool input/output, provider-
 
 The main adapter now uses this session through the existing shared runtime store, native host and lifecycle. `runtime-pool-contract.ts` owns type-only provider ports; the Claude adapter cannot import back into its pool owner. Prepared config/canonical cwd/environment and captured ownership govern reuse; failed physical disposal retains a fence until safe release. SDK candidates defer final publication until the host claims an immutable result and lifecycle supplies its terminal. Input remains blocked through pending/finishing state. A Stop before claim changes an unclaimed candidate; after claim the established final can survive a stopped lifecycle status, as in the common outcome contract. Error/unfinished partial is never promoted.
 
+The internal Claude pool also accepts `lifetime:'request'`: each acquisition gets
+a fresh physical query while retaining its explicit resume ID. Only `forceNew`
+clears resume. Request leases expose `retireOnFinish` for the native host, which
+awaits retirement after application settlement and before releasing the lease.
+Plain release also fences a request query immediately. Failed or timed-out close
+never authorizes reuse; the existing SDK cleanup owner retains its fence. The
+default pooled lifetime and its idle reuse remain unchanged.
+
 Stop hard-closes the query, and the existing default steer policy resumes with interrupted context after MESSAGE persistence and exit-settle. Explicit followup/collect queues; there is no native-input hook. No-start failure and Stop-before-acquisition use one cached fallback projection, started before compatibility completion and closed once. Exceptional trace finalization updates only a still-running header, preserving a prior lifecycle's status/timestamp/error.
 
 Current-message partial text still resets on a new assistant message. Interruption

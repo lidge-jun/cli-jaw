@@ -30,6 +30,7 @@ export interface RuntimeLease<R extends ManagedRuntime, S> {
     runtime: R;
     sessionId: S;
     reused: boolean;
+    readonly retireOnFinish?: boolean;
     release(): void;
     cancel(): Promise<void>;
 }

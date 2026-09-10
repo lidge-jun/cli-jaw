@@ -18,6 +18,7 @@ export interface ClaudeAcquireOptions {
     canAcquire(): boolean;
     binding: Binding;
     promptTimeoutMs: number; closeTimeoutMs?: number; forceNew?: boolean;
+    lifetime?: 'pooled' | 'request';
     waitMs?: number; signal?: AbortSignal;
     createSession?: (options: ClaudeSessionOptions) => Promise<ClaudeSdkSession>;
 }
@@ -105,7 +106,8 @@ export function retireClaudePoolEntry(access: RuntimePoolAccess, key: string, va
     return entry.claude.retirement;
 }
 
-function makeLease(access: RuntimePoolAccess, key: string, entry: Ready, binding: Binding, reused: boolean): ClaudeLease {
+function makeLease(access: RuntimePoolAccess, key: string, entry: Ready, binding: Binding, reused: boolean,
+    requestLifetime = false): ClaudeLease {
     const token = Symbol('claude-lease'), { session, child, holder } = entry.claude;
     entry.leaseOwner = token; entry.busy = true; entry.lastUsedAt = Date.now();
     holder.current = { ...binding };
@@ -114,6 +116,7 @@ function makeLease(access: RuntimePoolAccess, key: string, entry: Ready, binding
     const retire = (reason = error('lease retired')) => released || !owns()
         ? Promise.resolve() : retireClaudePoolEntry(access, key, entry, reason);
     return { runtime: entry.runtime, session, child, sessionId: session.nativeSessionId, reused,
+        ...(requestLifetime ? { retireOnFinish: true } : {}),
         retire,
         async cancel() {
             if (released || !owns()) return;
@@ -127,8 +130,9 @@ function makeLease(access: RuntimePoolAccess, key: string, entry: Ready, binding
             delete entry.leaseOwner; delete holder.current;
             entry.busy = false; entry.lastUsedAt = Date.now(); entry.sessionId = session.nativeSessionId;
             if (entry.claude.retirement) { removeClosed(access, key, entry); access.wake(entry); return; }
-            if (entry.dead || !session.alive || !session.idle) {
-                void retireClaudePoolEntry(access, key, entry, error('released before idle')); return;
+            if (requestLifetime || entry.dead || !session.alive || !session.idle) {
+                void retireClaudePoolEntry(access, key, entry,
+                    error(requestLifetime ? 'request released' : 'released before idle')); return;
             }
             access.wake(entry);
         },
@@ -151,7 +155,7 @@ function install(access: RuntimePoolAccess, key: string, creating: Creating, ses
         access.wake(entry);
     });
     access.wake(creating);
-    return makeLease(access, key, entry, opts.binding, false);
+    return makeLease(access, key, entry, opts.binding, false, opts.lifetime === 'request');
 }
 
 async function create(access: RuntimePoolAccess, key: string, creating: Creating, opts: ClaudeAcquireOptions,
@@ -257,6 +261,7 @@ async function borrow(access: RuntimePoolAccess, key: string, entry: Ready, opts
 }
 
 function snapshot(input: ClaudeAcquireOptions): ClaudeAcquireOptions {
+    if (input.lifetime !== undefined && input.lifetime !== 'pooled' && input.lifetime !== 'request') throw error('invalid lifetime');
     timeout(input.waitMs ?? 60_000); timeout(input.promptTimeoutMs); timeout(input.closeTimeoutMs ?? 5000);
     for (const value of [input.scopeKey, input.chatSessionId, ...(input.workerId === undefined ? [] : [input.workerId])]) {
         if (typeof value !== 'string' || !value || value.length > 4096 || value.includes('\0')) throw error('invalid identity');
@@ -280,12 +285,13 @@ function snapshot(input: ClaudeAcquireOptions): ClaudeAcquireOptions {
     else if (input.storedSessionId) prepared.resumeSessionId = input.storedSessionId;
     return { ...input, prepared, persistenceOwner: Object.freeze({ ...input.persistenceOwner }), binding: { ...input.binding } };
 }
-function configKey(opts: ClaudeAcquireOptions, scope: string): string {
+function configKey(opts: ClaudeAcquireOptions, scope: string, requestNonce?: string): string {
     const { resumeSessionId: _resume, ...prepared } = opts.prepared;
     const sorted = (value: object) => Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
     const canonical = sorted({ ...prepared, env: sorted(prepared.env) });
     return createHmac('sha256', privateKey).update(JSON.stringify([scope, opts.chatSessionId,
-        canonical, opts.promptTimeoutMs, opts.closeTimeoutMs ?? 5000])).digest('hex');
+        canonical, opts.promptTimeoutMs, opts.closeTimeoutMs ?? 5000,
+        ...(requestNonce === undefined ? [] : ['request', requestNonce])])).digest('hex');
 }
 
 async function acquire(access: RuntimePoolAccess, input: ClaudeAcquireOptions): Promise<ClaudeLease> {
@@ -300,7 +306,7 @@ async function acquire(access: RuntimePoolAccess, input: ClaudeAcquireOptions): 
     };
     check();
     const scope = JSON.stringify([opts.scopeKey, opts.workerId === undefined ? ['main'] : ['worker', opts.workerId]]);
-    const key = configKey(opts, scope), { store } = access;
+    const key = configKey(opts, scope, opts.lifetime === 'request' ? randomBytes(32).toString('hex') : undefined), { store } = access;
     const forced = new Set(opts.forceNew ? [...(store.scopeIndex.get(scope) ?? [])].map(k => store.entries.get(k)) : []);
     for (;;) {
         check();

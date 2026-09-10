@@ -52,6 +52,23 @@ test('request retirement policy is captured when acquiring the lease', async () 
     assert.equal(f.log.filter(value => value === 'retire').length, 1);
 });
 
+test('request retirement timeout preserves the answer without treating timeout as physical close', async t => {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    const f = fixture(), entered = deferred<void>(), retirement = deferred<void>();
+    Object.assign(f.lease, { retireOnFinish: true });
+    f.hooks.retire = () => { entered.resolve(); return retirement.promise; };
+    const run = runNativeRuntime(f.host); await entered.promise;
+    assert.equal(f.log.includes('release'), false);
+    t.mock.timers.tick(6_000);
+    assert.deepEqual(await run.done, { answer: 'FINAL', origin: 'settle' });
+    assert.equal(f.reusable(), false);
+    assert.equal(f.failed.length, 1);
+    for (const stage of ['send', 'settle', 'retire', 'release', 'finalized']) {
+        assert.equal(f.log.filter(value => value === stage).length, 1, stage);
+    }
+    retirement.reject(new Error('late close failure')); await Promise.resolve();
+});
+
 function fixture() {
     const log: string[] = [];
     const settled: Array<{ lease: NativeRunLease | null; outcome: RuntimeTurnOutcome; diagnostic: string | null }> = [];
