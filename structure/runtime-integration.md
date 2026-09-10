@@ -219,6 +219,22 @@ Grok completion extensions do not own completion: id-less `_x.ai/session/prompt_
 
 ## Resident Runtime Pool (`src/agent/runtime-pool.ts`)
 
+Cursor and Grok acquisitions accept `lifetime:'request'` independently of native
+session resume. A request gets a unique physical-process key within the existing
+scope lane, waits for its current borrower, and retires on release. Captured
+options and environment precede admission callbacks. Ordinary pooled reuse is
+unchanged; `forceNew` alone clears resume.
+
+ACP creation retains its scope entry after cancellation, deadline or replacement
+until the factory proves no child remains. A late returned candidate must close
+or produce an observed exit from that exact child before another acquisition can
+proceed. Explicit startup-cleanup failures without a returned child handle retain
+the entry: timeout, a new generation and `forceNew` cannot clear unknown physical
+ownership. There is no automatic recovery for that no-handle case. Cursor's
+constructor-failure path also waits for bounded physical reap before reporting a
+normal factory rejection. These guarantees concern owned processes, not escaped
+descendants or isolation from the host OS account.
+
 ### Grok native main and replacement
 
 Grok1.0.13 uses a dedicated `agent --no-leader --always-approve stdio` child only for literal auto. Safe/custom policies fail before spawn or prompt preparation because restrictive native enforcement is unverified. Existing advertised cached_token or xai.api_key authentication is selected without login. Legacy advertised model metadata resolves the grok-build alias and exact reasoningEfforts.value; unavailable choices fail explicitly. Usage comes only from the observed result _meta.usage, preserving absent versus zero values.

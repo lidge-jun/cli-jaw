@@ -212,8 +212,10 @@ test('aborted late creation closes only its own session and cannot delete a new 
     } });
     const rejected = assert.rejects(pending, /aborted/);
     await started.promise; controller.abort(); await rejected; assert.equal(signal?.aborted, true);
-    const replacement = await acquireGrokRuntime(f.options);
-    gate.resolve(old as unknown as AcpSession); await checkpoint();
+    const replacing = acquireGrokRuntime(f.options);
+    await checkpoint(); assert.equal(f.creations.length, 0);
+    gate.resolve(old as unknown as AcpSession);
+    const replacement = await replacing; await checkpoint();
     assert.equal(old.closeCalls, 1); assert.equal(old.retireCalls, 1);
     await dispatch(replacement); replacement.release();
     const reused = await acquireGrokRuntime(f.options); assert.equal(reused.session, replacement.session); reused.release();

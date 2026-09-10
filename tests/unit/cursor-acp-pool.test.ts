@@ -5,7 +5,7 @@ import { PassThrough, Writable } from 'node:stream';
 import type { spawn } from 'node:child_process';
 import { createCursorSession, type CursorSessionOptions } from '../../src/agent/runtime/acp/cursor-session.ts';
 import type { AcpSession } from '../../src/agent/runtime/acp/session.ts';
-import { acquireCursorRuntime, poolStats, type CursorAcquireOptions } from '../../src/agent/runtime-pool.ts';
+import { acquireCursorRuntime, acquireGrokRuntime, poolStats, type CursorAcquireOptions } from '../../src/agent/runtime-pool.ts';
 
 type Wire = Record<string, any>;
 function factoryFixture(t: TestContext) {
@@ -110,6 +110,31 @@ test('unsupported requested configuration retires startup without a prompt or fa
     assert.equal(f.kills, 1);
     assert.equal(f.wire.some(x => x['method'] === 'session/prompt'), false);
 });
+
+for (const timeout of [false, true]) {
+    test(`constructor failure ${timeout ? 'reports unknown cleanup on timeout' : 'waits for the captured child exit'}`, async t => {
+        const f = factoryFixture(t), stdout = f.child.stdout;
+        t.mock.timers.enable({ apis: ['setTimeout'] });
+        // Missing stdio makes the real AcpSession constructor throw after spawn.
+        f.duringSpawn(() => { Object.assign(f.child, { stdout: null }); });
+        let settled = false;
+        const pending = createCursorSession({ ...f.options,
+            ownedProcessOptions: { terminateTree: () => {} } });
+        void pending.then(() => { settled = true; }, () => { settled = true; });
+        const rejected = assert.rejects(pending, timeout ? /cursor_acp_startup_cleanup_failed/ : /acp_stdio_unavailable/);
+        Object.assign(f.child, { stdout });
+        await new Promise<void>(resolve => setImmediate(resolve));
+        assert.equal(settled, false); assert.equal(f.wire.length, 0);
+        const exitListeners = f.child.listenerCount('exit'), closeListeners = f.child.listenerCount('close');
+        if (timeout) t.mock.timers.tick(6000); else f.exit();
+        await rejected;
+        if (timeout) {
+            assert.equal(f.child.exitCode, null);
+            assert.equal(f.child.listenerCount('exit'), exitListeners - 1);
+            assert.equal(f.child.listenerCount('close'), closeListeners - 1);
+        }
+    });
+}
 test('factory loads an explicit native ID and detaches acquisition abort after success', { timeout: 5000 }, async t => {
     const f = factoryFixture(t); const controller = new AbortController();
     const session = await createCursorSession({ ...f.options, resumeSessionId: 'stored-native', signal: controller.signal });
@@ -234,8 +259,11 @@ test('startup expiry aborts the creating child and late completion cannot remove
     const rejected = assert.rejects(pending, /timed out/);
     await started.promise; now = 20; t.mock.timers.tick(20); await rejected;
     assert.equal(signal?.aborted, true); assert.equal(old.retirements, 1);
-    const replacement = await acquireCursorRuntime(f.options);
+    const replacing = acquireCursorRuntime(f.options);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(f.creations.length, 0);
     release(old as unknown as AcpSession);
+    const replacement = await replacing;
     await new Promise<void>(resolve => setImmediate(resolve));
     assert.equal(replacement.runtime.alive, true); replacement.release();
     const reused = await acquireCursorRuntime(f.options); assert.equal(reused.session, replacement.session); reused.release();
@@ -250,9 +278,11 @@ test('force-new creation replacement and caller abort close only the captured at
     } });
     const rejected = assert.rejects(pending, /replaced|aborted/);
     await started.promise;
-    const replacement = await acquireCursorRuntime({ ...f.options, forceNew: true });
+    const replacing = acquireCursorRuntime({ ...f.options, forceNew: true });
     controller.abort(); await rejected;
-    release(old as unknown as AcpSession); await new Promise<void>(resolve => setImmediate(resolve));
+    assert.equal(f.creations.length, 0);
+    release(old as unknown as AcpSession);
+    const replacement = await replacing; await new Promise<void>(resolve => setImmediate(resolve));
     assert.equal(old.retirements, 1); assert.equal(replacement.runtime.alive, true); replacement.release();
 });
 test('busy acquisition abort removes its waiter without cancelling the current lease', async t => {
@@ -322,7 +352,7 @@ test('a backpressured real-session refusal between release and borrow cannot be 
     assert.equal(children[0]!.kills, 1);
     second.release(); await second.session.close();
 });
-test('a new generation supersedes held creation without inheriting its wait', { timeout: 5000 }, async t => {
+test('a new generation aborts held creation but waits for its physical cleanup', { timeout: 5000 }, async t => {
     const f = poolFixture(t), started = deferred();
     let release!: (session: AcpSession) => void;
     const old = new PoolSession(); f.sessions.push(old);
@@ -332,9 +362,10 @@ test('a new generation supersedes held creation without inheriting its wait', { 
     } });
     const rejected = assert.rejects(pending, /replaced|invalidated|superseded|timed out/);
     await started.promise; f.invalidate();
-    const next = await acquireCursorRuntime({ ...f.options, persistenceOwner: { global: 1, scope: 0 } });
-    await rejected;
-    release(old as unknown as AcpSession); await new Promise<void>(resolve => setImmediate(resolve));
+    const replacing = acquireCursorRuntime({ ...f.options, persistenceOwner: { global: 1, scope: 0 } });
+    await rejected; assert.equal(f.creations.length, 0);
+    release(old as unknown as AcpSession);
+    const next = await replacing; await new Promise<void>(resolve => setImmediate(resolve));
     assert.equal(old.retirements, 1); assert.equal(next.runtime.alive, true); next.release();
 });
 function deferred() {
@@ -342,3 +373,76 @@ function deferred() {
     const promise = new Promise<void>(yes => { resolve = yes; });
     return { promise, resolve };
 }
+
+for (const [engine, acquire] of [['cursor', acquireCursorRuntime], ['grok', acquireGrokRuntime]] as const) {
+    test(`${engine} request grants A B and absent never inherit a previous child environment`, async t => {
+        const f = poolFixture(t); f.options.key.permissions = 'auto';
+        let previous: AcpSession | undefined;
+        for (const grant of ['fixture-A', 'fixture-B', undefined]) {
+            const env = grant === undefined ? {} : { JAW_SLACK_TURN_GRANT: grant };
+            const request = { ...f.options, lifetime: 'request' as const, storedSessionId: 'same', env };
+            const pending = acquire(request);
+            env.JAW_SLACK_TURN_GRANT = 'mutated';
+            const lease = await pending;
+            assert.notEqual(lease.session, previous); assert.equal(lease.reused, false);
+            assert.equal(f.creations.at(-1)!.env.JAW_SLACK_TURN_GRANT, grant);
+            Object.assign(request, { lifetime: 'pooled' });
+            lease.release(); assert.equal(lease.runtime.alive, false); previous = lease.session;
+        }
+    });
+    test(`${engine} request lifetime never reuses a child and retains resume independently of forceNew`, async t => {
+        const f = poolFixture(t);
+        f.options.key.permissions = 'auto'; f.options.storedSessionId = 'stored-session';
+        const pooled = await acquire(f.options); pooled.release();
+        const request = { ...f.options, lifetime: 'request' as const, storedSessionId: 'stored-session',
+            env: { JAW_SLACK_TURN_GRANT: 'fixture-grant' } };
+        const a = await acquire(request);
+        assert.equal(a.reused, false); assert.notEqual(a.session, pooled.session);
+        assert.equal(a.retireOnFinish, true); assert.equal(a.sessionId, pooled.sessionId);
+        assert.equal(f.creations[1]!.resumeSessionId, 'stored-session');
+        a.release();
+        assert.equal(a.runtime.alive, false, 'release fences request child synchronously');
+        const b = await acquire(request);
+        assert.equal(b.reused, false); assert.notEqual(a.session, b.session);
+        assert.equal(f.creations[2]!.resumeSessionId, 'stored-session'); b.release();
+        const fresh = await acquire({ ...request, forceNew: true });
+        assert.equal(f.creations[3]!.resumeSessionId, undefined); fresh.release();
+        const ordinary = await acquire({ ...f.options, lifetime: 'pooled' }); ordinary.release();
+        const again = await acquire(f.options);
+        assert.equal(again.session, ordinary.session); assert.equal(again.reused, true); again.release();
+    });
+
+    test(`${engine} captures request environment, key and owner before admission callbacks`, async t => {
+        const f = poolFixture(t);
+        f.options.key.permissions = 'auto'; f.options.env = { PRIVATE_KEY: 'original' };
+        const originalOwner = { ...f.options.persistenceOwner }, originalKey = { ...f.options.key };
+        f.options.isCurrentOwner = owner => {
+            assert.deepEqual(owner, originalOwner);
+            f.options.key.model = 'changed'; f.options.key.scopeKey = 'changed-scope';
+            f.options.env.PRIVATE_KEY = 'changed'; f.options.persistenceOwner.global = 90;
+            return true;
+        };
+        const a = await acquire(f.options);
+        assert.equal(f.creations[0]!.env.PRIVATE_KEY, 'original');
+        assert.equal(f.creations[0]!.model, originalKey.model);
+        a.release();
+    });
+
+    test(`${engine} invalid lifetime rejects before admission or retirement`, async t => {
+        const f = poolFixture(t); f.options.key.permissions = 'auto';
+        const first = await acquire(f.options); first.release();
+        let admissions = 0;
+        await assert.rejects(acquire({ ...f.options, lifetime: 'invalid' as 'request', forceNew: true,
+            canAcquire: () => { admissions++; return true; } }), /invalid lifetime/);
+        assert.equal(admissions, 0); assert.equal(first.runtime.alive, true);
+        assert.equal(f.creations.length, 1);
+    });
+}
+
+test('Cursor captures permission tokens before an admission callback mutates their source array', async t => {
+    const f = poolFixture(t), permissions = ['read'];
+    f.options.key.permissions = permissions;
+    f.options.canAcquire = () => { permissions.push('write'); return true; };
+    const lease = await acquireCursorRuntime(f.options);
+    assert.deepEqual(f.creations[0]!.permissions, ['read']); lease.release();
+});
