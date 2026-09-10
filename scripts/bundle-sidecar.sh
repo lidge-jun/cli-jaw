@@ -103,9 +103,6 @@ const sourceHash = (base = project) => {
     else fail('Unsupported source entry');
   };
   for (const name of sourceNames(base)) walk(name);
-  // Optional native executables are inputs too, never rebuilt by this script.
-  for (const name of ['native/claude-e/target/release/jaw-claude-i', 'native/jaw-claude-i/target/release/jaw-claude-i'])
-    if (exists(path.join(base, name))) walk(name);
   return hash.digest('hex');
 };
 const preflight = () => {
@@ -150,13 +147,6 @@ if (op === 'preflight') {
       recursive: true, dereference: false, verbatimSymlinks: true,
       filter: p => p !== path.join(project, 'public/dist'),
     });
-    for (const name of ['native/claude-e/target/release/jaw-claude-i', 'native/jaw-claude-i/target/release/jaw-claude-i']) {
-      if (!exists(path.join(project, name))) continue;
-      fs.mkdirSync(path.dirname(path.join(build, 'source', name)), { recursive: true });
-      fs.cpSync(path.join(project, name), path.join(build, 'source', name), {
-        dereference: false, verbatimSymlinks: true,
-      });
-    }
     if (sourceHash() !== state.sourceSha256 || sourceHash(path.join(build, 'source')) !== state.sourceSha256)
       fail('Source changed during snapshot');
   } else {
@@ -395,20 +385,6 @@ echo "Verifying better-sqlite3 opens with bundled Node..."
     exit 1
   }
 }
-
-NATIVE_BIN="$SOURCE_ROOT/native/claude-e/target/release/jaw-claude-i"
-LEGACY_NATIVE_BIN="$SOURCE_ROOT/native/jaw-claude-i/target/release/jaw-claude-i"
-if [ -f "$NATIVE_BIN" ]; then
-  echo "Copying jaw-claude-i..."
-  cp "$NATIVE_BIN" "$SIDECAR_DIR/bin/jaw-claude-i"
-  chmod +x "$SIDECAR_DIR/bin/jaw-claude-i"
-elif [ -f "$LEGACY_NATIVE_BIN" ]; then
-  echo "Copying jaw-claude-i from legacy native path..."
-  cp "$LEGACY_NATIVE_BIN" "$SIDECAR_DIR/bin/jaw-claude-i"
-  chmod +x "$SIDECAR_DIR/bin/jaw-claude-i"
-else
-  echo "WARN: jaw-claude-i not found, skipping (optional)"
-fi
 
 echo "Creating CLI shims..."
 if [[ "$PLATFORM" == "win32" ]]; then

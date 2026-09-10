@@ -32,18 +32,6 @@ run_version() {
   ok "$name works: $resolved"
 }
 
-run_optional_version() {
-  local name="$1"
-  if command -v "$name" >/dev/null 2>&1 && "$name" --version >/dev/null 2>&1; then
-    ok "$name works: $(command -v "$name")"
-    return 0
-  fi
-  if [ "${CLI_JAW_REQUIRE_OPTIONAL_RUNTIMES:-0}" = "1" ] || [ "${CLI_JAW_REQUIRE_OPTIONAL_RUNTIMES:-}" = "true" ]; then
-    fail "$name optional runtime is missing or not runnable"
-  fi
-  ok "$name optional runtime not available; continuing"
-}
-
 path_contains() {
   local needle="$1"
   case ":${PATH:-}:" in
@@ -83,8 +71,6 @@ ok "node version is >=22: $(node --version)"
 run_version npm
 run_version jaw
 run_version cli-jaw
-run_optional_version ai-e
-run_optional_version claude-e
 
 if command -v npm >/dev/null 2>&1; then
   npm_prefix="$(npm prefix -g 2>/dev/null || true)"

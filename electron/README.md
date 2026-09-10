@@ -65,14 +65,14 @@ npm run sidecar:bundle
 - copies `dist/`, `public/`, `package.json`, and lockfile into
   `electron/sidecar/server`,
 - installs production dependencies with scripts disabled from the copied lockfile,
-- excludes retired JWC, `jawcode`, `@jawcode-dev`, `@oven`, and `bun` payloads;
-  saved JWC selections require an explicit supported runtime choice, and Code
+- excludes retired JWC, `jawcode`, `@jawcode-dev`, `@oven`, `bun`,
+  `claude-e`, `claude-exec`, `@bitkyc08/ai-e`, and `jaw-claude-i` payloads;
+  saved retired selections require an explicit supported runtime choice, and Code
   sessions use the native Codex, Claude, Cursor or Grok adapter,
 - prunes frontend-only packages,
 - rebuilds `better-sqlite3`,
 - creates `bin/jaw` or `bin/jaw.cmd` to launch `dist/bin/cli-jaw.js`,
-- verifies the staging sidecar contains no bundled JWC payload,
-- optionally copies the native `jaw-claude-i` helper when available.
+- verifies the staging sidecar contains no bundled retired runtime payload.
 
 `electron/src/main/lib/jaw-spawn.ts` searches the bundled sidecar first in
 packaged apps, then falls back to `JAW_BIN` and the global `jaw` binary.

@@ -359,16 +359,6 @@ test('S-026b4: install.sh treats Node and npm as one required toolchain', () => 
         'success output should include both node and npm versions');
 });
 
-test('S-026c: install.sh skips optional claude-e build when Cargo is absent', () => {
-    const installCode = readFileSync(
-        join(projectRoot, 'scripts', 'install.sh'),
-        'utf8'
-    );
-    assert.ok(installCode.includes('command -v cargo'), 'install.sh should check for Cargo before npm install');
-    assert.ok(installCode.includes('CLAUDE_E_SKIP_BUILD'), 'install.sh should skip claude-e native build without Cargo');
-    assert.ok(installCode.includes('optional claude-e native helper'), 'install.sh should explain the optional helper skip');
-});
-
 test('S-026c2: install.sh repairs partial installs instead of skipping latest cli-jaw', () => {
     const installCode = readFileSync(
         join(projectRoot, 'scripts', 'install.sh'),
@@ -389,11 +379,11 @@ test('S-026d: claude-e is not bundled — its postinstall needs cargo and npm >=
     // Its postinstall runs `cargo build` (exit 1 without a Rust toolchain) and
     // npm 12 blocks unreviewed dependency lifecycle scripts, so bundling it
     // only produced warnings and half-installs. Runtime detection is PATH-based
-    // (src/core/cli-detection.ts); install path is `jaw provider install`.
+    // (src/core/cli-detection.ts); the runtime is retired; the package must stay out of the default install.
     const pkg = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8'));
     const lock = JSON.parse(readFileSync(join(projectRoot, 'package-lock.json'), 'utf8'));
     assert.equal(pkg.dependencies?.['claude-e'], undefined, 'claude-e must not be a hard dependency');
-    assert.equal(pkg.optionalDependencies?.['claude-e'], undefined, 'claude-e must not be bundled — use jaw provider install');
+    assert.equal(pkg.optionalDependencies?.['claude-e'], undefined, 'claude-e must not be bundled');
     assert.equal(lock.packages?.['']?.optionalDependencies?.['claude-e'], undefined, 'lockfile root must not carry claude-e');
 });
 
@@ -401,7 +391,7 @@ test('S-026e: ai-e is not bundled — use jaw provider install ai-e', () => {
     const pkg = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8'));
     const lock = JSON.parse(readFileSync(join(projectRoot, 'package-lock.json'), 'utf8'));
     assert.equal(pkg.dependencies?.['@bitkyc08/ai-e'], undefined, 'ai-e must not be a hard dependency');
-    assert.equal(pkg.optionalDependencies?.['@bitkyc08/ai-e'], undefined, 'ai-e must not be an optional dependency — use jaw provider install');
+    assert.equal(pkg.optionalDependencies?.['@bitkyc08/ai-e'], undefined, 'ai-e must not be an optional dependency');
     assert.equal(lock.packages?.['']?.dependencies?.['@bitkyc08/ai-e'], undefined, 'lockfile root must not have ai-e in dependencies');
     assert.equal(lock.packages?.['']?.optionalDependencies?.['@bitkyc08/ai-e'], undefined, 'lockfile root must not have ai-e in optionalDependencies');
     assert.equal(lock.packages?.['node_modules/@bitkyc08/ai-e'], undefined, 'lockfile must not include ai-e in the install tree');

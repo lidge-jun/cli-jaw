@@ -35,6 +35,17 @@ const forbidden = [
     'dist/src/agent/jwc-runtime.js',
     'dist/bin/commands/jwc.js',
     'electron/sidecar/jawcode/packages/jwc/package.json',
+    'node_modules/claude-e/package.json',
+    'node_modules/claude-exec/package.json',
+    'node_modules/@bitkyc08/ai-e/package.json',
+    'node_modules/kept/node_modules/@bitkyc08/ai-e/package.json',
+    'node_modules/kept/node_modules/.bin/claude-e',
+    'node_modules/kept/node_modules/.bin/jaw-claude-i',
+    'bin/jaw-claude-i',
+    'bin/jaw-claude-i.exe',
+    'bin/claude-e',
+    'bin/claude-exec',
+    'jaw-claude-i',
 ];
 const manifest = { name: 'cli-jaw', bin: { jaw: 'dist/bin/cli-jaw.js' },
     dependencies: { 'better-sqlite3': '13.0.2' }, optionalDependencies: { '@anthropic-ai/claude-agent-sdk': '0.3.261' } };
@@ -155,13 +166,21 @@ test('package and lock manifests reject scoped packages, aliases and nested decl
     assert.throws(() => checkPackedFiles(packed(required), { ...manifest, bin: { jwc: 'runtime.js' } }), /jwc shim/);
 });
 
-test('ai-e stays excluded from default hard, optional and nested installs', () => {
-    for (const field of ['dependencies', 'optionalDependencies']) {
-        assert.throws(() => checkDefaultInstall({ [field]: { '@bitkyc08/ai-e': '*' } }, { packages: {} }), /ai-e/);
+test('retired claude-e / claude-exec / @bitkyc08/ai-e installs are rejected and other @bitkyc08 packages are not', () => {
+    for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies', 'devDependencies']) {
+        for (const name of ['claude-e', 'claude-exec', '@bitkyc08/ai-e']) {
+            assert.throws(() => checkDefaultInstall({ ...manifest, [field]: { [name]: '1.0.0' } }, { packages: { '': manifest } }), /retired dependency/);
+        }
+        assert.doesNotThrow(() => checkDefaultInstall({ ...manifest, [field]: { '@bitkyc08/other': '1.0.0' } }, { packages: { '': manifest } }));
     }
     assert.throws(() => checkDefaultInstall(manifest, { packages: {
-        'node_modules/kept/node_modules/@bitkyc08/ai-e': { version: '1.0.0' },
-    } }), /ai-e/);
+        '': manifest, 'node_modules/kept/node_modules/@bitkyc08/ai-e': { version: '1.0.0' },
+    } }), /retired/);
+    assert.doesNotThrow(() => checkDefaultInstall(manifest, { packages: {
+        '': manifest, 'node_modules/kept/node_modules/@bitkyc08/other': { version: '1.0.0' },
+    } }));
+    assert.throws(() => checkDefaultInstall({ name: '@bitkyc08/ai-e' }, { packages: {} }), /retired package/);
+    assert.doesNotThrow(() => checkDefaultInstall({ name: '@bitkyc08/other' }, { packages: {} }));
 });
 
 test('empty package inventories and missing packed CLI or manifest fail', () => {

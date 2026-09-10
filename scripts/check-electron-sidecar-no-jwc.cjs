@@ -3,7 +3,8 @@ const { existsSync, readdirSync, readFileSync, readlinkSync, realpathSync, statS
 const { isAbsolute, join, relative, resolve, sep } = require('node:path');
 
 function retiredPackage(name) {
-  return /^(?:jawcode|jwc|bun)$/.test(name)
+  return /^(?:jawcode|jwc|bun|claude-e|claude-exec)$/.test(name)
+    || name === '@bitkyc08/ai-e'
     || /^@(?:jawcode(?:-[^/]+)?|gajae(?:-[^/]+)?|oven)(?:\/|$)/.test(name);
 }
 
@@ -13,12 +14,19 @@ function retiredPayloadReason(file) {
   const parts = normalized.split('/');
   // Package names are meaningful only directly below node_modules. A normal
   // package may ship a Bun adapter (for example hono/dist/adapter/bun).
-  if (parts.some((part, index) => part === 'node_modules' && retiredPackage(parts[index + 1] || ''))) {
+  const atNodeModules = (index) => {
+    if (parts[index] !== 'node_modules') return false;
+    const first = parts[index + 1] || '';
+    if (retiredPackage(first)) return true;
+    if (first.startsWith('@')) return retiredPackage(first + '/' + (parts[index + 2] || ''));
+    return false;
+  };
+  if (parts.some((_, index) => atNodeModules(index))) {
     return 'retired package or scope';
   }
   if (/(?:^|\/)electron\/sidecar\/jawcode(?:\/|$)/.test(normalized)) return 'retired vendored runtime';
-  if (/^(?:bin\/)?(?:bun|jwc)(?:\.(?:cmd|ps1|exe|js))?$/.test(normalized)
-      || /(?:^|\/)node_modules\/\.bin\/(?:bun|jwc)(?:\.(?:cmd|ps1|exe|js))?$/.test(normalized)) {
+  if (/^(?:bin\/)?(?:bun|jwc|jaw-claude-i|claude-e|claude-exec)(?:\.(?:cmd|ps1|exe|js))?$/.test(normalized)
+      || /(?:^|\/)node_modules\/\.bin\/(?:bun|jwc|jaw-claude-i|claude-e|claude-exec)(?:\.(?:cmd|ps1|exe|js))?$/.test(normalized)) {
     return 'retired runtime executable';
   }
   if (/(?:^|\/)src\/lib\/tui(?:\/|$)/.test(normalized)) return 'retired TUI assets';
