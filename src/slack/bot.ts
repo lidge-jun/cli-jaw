@@ -1,6 +1,6 @@
 import { verifiedSlackWorkspace } from './verified-workspace.js';
 import { slackCredentialKey, type SlackToolSource } from './tool-context.js';
-import { isSlackMention, matchesTrustedBotTrigger } from './events.js';
+import { isSlackMention, matchesTrustedBotTrigger, readTrustedBotTriggers } from './events.js';
 // ─── Slack Bot ───────────────────────────────────────
 // Slack transport implementation for the cli-jaw messaging runtime.
 // Mirrors src/discord/bot.ts structurally: init/shutdown lifecycle, an inbound
@@ -1565,6 +1565,18 @@ async function runSlackInit(ctx?: TransportInitContext): Promise<TransportStartO
         // indistinguishable (#478).
         const emit = gap.level === 'warn' ? log.warn : log.info;
         emit(`[slack:scopes] ${gap.text}`);
+    }
+    // A trusted-trigger list that fails validation is refused whole and in
+    // silence, which reads exactly like a bot that never posted. Say it once at
+    // boot so a typo is a visible mistake instead of a trigger that vanished.
+    const declaredTriggers = Array.isArray(sc.trustedBotTriggers) ? sc.trustedBotTriggers.length : 0;
+    if (declaredTriggers > 0) {
+        const usable = readTrustedBotTriggers(sc.trustedBotTriggers).length;
+        if (usable === 0) {
+            log.warn(`[slack:triggers] ${declaredTriggers} trusted bot trigger(s) configured but the list is invalid, so none of them can start a turn — every rule needs exactly channelId (C/G), botId (B), userId (U/W) and an uppercase textMarker`);
+        } else {
+            log.info(`[slack:triggers] ${usable} trusted bot trigger(s) active`);
+        }
     }
     if (auth.data?.team_id && !sc.teamId) sc.teamId = auth.data.team_id;
     // The team id namespaces every ingress dedup key, and `slackEventKey`
