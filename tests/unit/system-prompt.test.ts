@@ -55,11 +55,24 @@ test('system prompt mentions jaw doctor for Discord diagnosis', () => {
         'should reference jaw doctor for status checks');
 });
 
-// ─── Channel-generic delivery ────────────────────────
+// ─── Explicit delivery destination ───────────────────
 
-test('employee prompt describes channel-generic delivery', () => {
-    assert.ok(empSrc.includes('active channel'),
-        'should mention active channel for channel-generic delivery');
+test('employee prompt requires an explicit delivery destination', () => {
+    // The employee prompt used to hand workers an active-channel fallback. Full
+    // local access removed it, because a send whose destination was dropped lands
+    // in whatever conversation happened to be last. Assert the replacement
+    // contract on the rendered prompt rather than on a template substring.
+    const employeePrompt = getEmployeePromptV2(
+        { id: 1, name: 'Audit', role: 'reviewer', cli: 'agy' },
+        'backend',
+        2,
+    );
+    assert.ok(employeePrompt.includes('Keep the exact destination named in the assignment'),
+        'employee prompt should forbid dropping the assigned destination');
+    assert.ok(employeePrompt.includes('require an explicit `target`, `chat_id`, or `turn_conversation`'),
+        'employee prompt should name the fields a full-local send must carry');
+    assert.ok(!employeePrompt.includes('the active channel is used'),
+        'employee prompt must not offer an active-channel fallback');
 });
 
 // ─── Skill metadata matching ─────────────────────────
