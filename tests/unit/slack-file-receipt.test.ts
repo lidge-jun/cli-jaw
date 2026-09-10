@@ -10,6 +10,7 @@ import { slackTargetFromId } from '../../src/messaging/slack-target.ts';
 for (const [name, complete, status, expected] of [
     ['ack', { ok: true, files: [{ id: 'F123' }] }, 200, 'completed'],
     ['wrong file', { ok: true, files: [{ id: 'F999' }] }, 200, 'unknown'],
+    ['completion without files echo', { ok: true }, 200, 'unknown'],
     ['HTTP failure despite JSON ok', { ok: true }, 503, 'unknown'],
     ['explicit refusal', { ok: false, error: 'missing_scope', needed: 'files:write' }, 200, 'failed'],
     ['invalid JSON', null, 200, 'unknown'],

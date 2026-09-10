@@ -619,7 +619,8 @@ test('sendSlackFile performs the three-step external upload in order', async () 
     const { impl, calls } = makeFetch([
         { ok: true, upload_url: 'https://files.slack.com/upload/abc', file_id: 'F1' },
         { __raw: true, ok: true, status: 200 },
-        { ok: true },
+        // The completion has to echo the reserved id back; a bare ok is now unconfirmed.
+        { ok: true, files: [{ id: 'F1' }] },
     ]);
     const result = await sendSlackFile('xoxb-t', slackTargetFromId('C1'), tempFile(), { fetchImpl: impl });
     assert.equal(result.ok, true);

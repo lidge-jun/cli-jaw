@@ -136,9 +136,12 @@ export async function sendSlackFile(
             ...(complete.retryAfterMs !== undefined ? { retryAfterMs: complete.retryAfterMs } : {}) };
     }
     const files = complete.data?.['files'];
-    if (files !== undefined && (!Array.isArray(files) || !files.length
+    // A completion reply without a files[] echo proves nothing about the file
+    // reaching the channel: an intermediary that answers {"ok":true} would be
+    // reported as a delivered upload. Confirmation requires the reserved id back.
+    if (!Array.isArray(files) || !files.length
         || !files.every(row => row && typeof row === 'object' && typeof row.id === 'string' && /^F[A-Z0-9]{1,100}$/.test(row.id))
-        || !files.some(row => row.id === fileId))) return failure('slack_file_completion_unconfirmed', 502, 'unknown');
+        || !files.some(row => row.id === fileId)) return failure('slack_file_completion_unconfirmed', 502, 'unknown');
     const upload = { ...receipt('completed'), stage: 'completion' as const, state: 'completed' as const, fileId: reservedId };
     if (signal.aborted) return { ok: false, sent: true, retryable: false, upload, error: 'slack_send_aborted', status: 499 };
     return { ok: true, sent: true, retryable: false, upload };
