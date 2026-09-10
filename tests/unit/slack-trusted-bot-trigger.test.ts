@@ -145,3 +145,13 @@ test('a settings write beside the rules leaves them intact', () => {
     assert.deepEqual(merged['slack'].trustedBotTriggers, [RULE]);
     assert.equal(merged['slack'].allowBots, true);
 });
+
+test('an invalid list is distinguishable from an absent one', () => {
+    // The boot warning in slack/bot.ts is built on exactly this difference:
+    // rules were declared, and none of them survived validation.
+    const declared = [{ ...RULE, botId: 'not-a-bot-id' }];
+    assert.equal(Array.isArray(declared) && declared.length > 0, true);
+    assert.deepEqual(readTrustedBotTriggers(declared), []);
+    assert.deepEqual(readTrustedBotTriggers(undefined), []);
+    assert.equal(readTrustedBotTriggers([RULE]).length, 1);
+});
