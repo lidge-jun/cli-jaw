@@ -63,8 +63,9 @@ Use authenticated `GET /api/prompt?withGenerated=1` to compare the current gener
 Ordinary final replies are sent by the server. An agent attaching a local file uses
 the authenticated Jaw tool route, which also requires that request's Slack grant.
 A connected bot and `files:write` therefore do not by themselves authorize an agent
-file send. `slack_turn_grant_required` identifies a missing or invalid Jaw request
-credential; it is separate from Slack refusing an operation for a missing scope.
+file send. `slack_turn_grant_required` means the request credential is missing;
+`slack_turn_grant_invalid` means a supplied credential is no longer valid. Both
+are separate from Slack refusing an operation for a missing scope.
 
 Inspect `jaw slack capabilities` from the agent's runtime and check both transport
 support and current availability. Use a supported request path and the exact
