@@ -58,6 +58,21 @@ On startup, the prompt builder appends a versioned Slack tool anchor to a user-e
 Use authenticated `GET /api/prompt?withGenerated=1` to compare the current generated expectation with both disk outputs. Require `generated.bMatches` and `generated.agentsMatches` to be true and independently compare the reported expected hash/byte length with the files. Keep A2's exact round-trip check separate from generated output, which can transform path notation.
 
 
+## When replies work but attachments fail
+
+Ordinary final replies are sent by the server. An agent attaching a local file uses
+the authenticated Jaw tool route, which also requires that request's Slack grant.
+A connected bot and `files:write` therefore do not by themselves authorize an agent
+file send. `slack_turn_grant_required` identifies a missing or invalid Jaw request
+credential; it is separate from Slack refusing an operation for a missing scope.
+
+Inspect `jaw slack capabilities` from the agent's runtime and check both transport
+support and current availability. Use a supported request path and the exact
+conversation and parent thread supplied to that request. Do not drop an explicit
+destination, retry against the last-active conversation, or switch to operator mode
+to bypass an agent-tool refusal. Preserve any returned delivery receipt before
+deciding whether a failed request could already have posted something.
+
 ## Authorization and deployment boundary
 
 This ships under an explicitly accepted deployment model, recorded in [issue #646](https://github.com/lidge-jun/cli-jaw/issues/646)
