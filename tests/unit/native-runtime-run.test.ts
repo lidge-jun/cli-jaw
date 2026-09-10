@@ -18,6 +18,40 @@ const event: RuntimeEvent = { version: 1, runId: 'run-a', sessionId: 'chat-a', s
     turnId: 'turn-a', seq: 1, kind: 'turn-start', provider: 'fixture' };
 type Result = { answer: string | null; origin: 'settle' | 'failed' };
 
+test('request lease waits for physical retirement after settlement and before release', async () => {
+    const f = fixture(), entered = deferred<void>(), closed = deferred<void>();
+    Object.assign(f.lease, { retireOnFinish: true });
+    f.hooks.retire = () => { entered.resolve(); return closed.promise; };
+    const run = runNativeRuntime(f.host);
+    try {
+        assert.equal(await Promise.race([entered.promise.then(() => 'retiring'), run.done.then(() => 'finished')]), 'retiring');
+        assert.ok(f.log.indexOf('settle') < f.log.indexOf('retire'));
+        assert.equal(f.log.includes('release'), false);
+        closed.resolve();
+        assert.deepEqual(await run.done, { answer: 'FINAL', origin: 'settle' });
+        assert.ok(f.log.indexOf('retire') < f.log.indexOf('release'));
+        assert.equal(f.failed.length, 0);
+    } finally { closed.resolve(); await run.done; }
+});
+
+test('request retirement failure preserves the settled answer and reports cleanup once', async () => {
+    const f = fixture(); Object.assign(f.lease, { retireOnFinish: true });
+    f.hooks.retire = async () => { throw new Error('physical close failed'); };
+    assert.deepEqual(await runNativeRuntime(f.host).done, { answer: 'FINAL', origin: 'settle' });
+    assert.equal(f.reusable(), false);
+    assert.equal(f.failed.length, 1);
+    for (const stage of ['send', 'settle', 'retire', 'release', 'finalized']) {
+        assert.equal(f.log.filter(value => value === stage).length, 1, stage);
+    }
+});
+
+test('request retirement policy is captured when acquiring the lease', async () => {
+    const f = fixture(); Object.assign(f.lease, { retireOnFinish: true });
+    f.hooks.send = async () => { Object.assign(f.lease, { retireOnFinish: false }); return final; };
+    await runNativeRuntime(f.host).done;
+    assert.equal(f.log.filter(value => value === 'retire').length, 1);
+});
+
 function fixture() {
     const log: string[] = [];
     const settled: Array<{ lease: NativeRunLease | null; outcome: RuntimeTurnOutcome; diagnostic: string | null }> = [];
