@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { resolveHomePath } from '../../src/core/path-expand.js';
+import { slackTargetFromId } from '../../src/messaging/slack-target.js';
 import { SLACK_OPERATOR_TOKEN_FILE } from '../../src/slack/operator-auth.js';
 /**
  * cli-jaw slack — Slack app manifest + guided setup.
@@ -60,6 +62,9 @@ if (shouldShowHelp(process.argv)) printAndExit(`
                           the running server. Flags: --thread <ts>, --limit N,
                           --cursor C, --oldest TS, --latest TS, --inclusive, --json.
                           CLI attaches this turn's grant; bot credentials stay server-side.
+    send <channel>       Upload one file: --file <path> [--thread <parent-ts>]
+                          [--caption <text>] [--json] [--operator].
+                          Explicit destination; returns an upload receipt, never retries.
     capabilities         Show implemented, granted, available and verified tools.
     tool --input-json J   Typed source, reaction, message, schedule, pin, bookmark,
                           Canvas, List and interaction operations; see capabilities for availability.
@@ -111,7 +116,8 @@ if (shouldShowHelp(process.argv)) printAndExit(`
 
 const sub = process.argv[3] || 'setup';
 
-const { values, positionals } = parseArgs({
+const { values, positionals, tokens } = parseArgs({
+    tokens: true,
     args: process.argv.slice(4),
     options: {
         'bot-token': { type: 'string' },
@@ -132,6 +138,8 @@ const { values, positionals } = parseArgs({
         'inclusive': { type: 'boolean', default: false },
         'operator': { type: 'boolean', default: false },
         'input-json': { type: 'string' },
+        'file': { type: 'string' },
+        'caption': { type: 'string' },
         'limit': { type: 'string' },
         'json': { type: 'boolean', default: false },
         'include-bots': { type: 'boolean', default: false },
@@ -148,6 +156,8 @@ if (sub === 'manifest') {
     process.stdout.write(values['url'] ? `${slackManifestCreateUrl()}\n` : slackManifestYaml());
 } else if (sub === 'setup') {
     await runSetup();
+} else if (sub === 'send') {
+    await runSlackSend();
 } else if (sub === 'tool') {
     await runSlackTool();
 } else if (sub === 'capabilities') {
@@ -165,7 +175,7 @@ if (sub === 'manifest') {
 } else if (sub === 'users') {
     await runRoster('users');
 } else {
-    console.error(`  ❌ Unknown slack subcommand "${sub}". Expected: manifest | setup | history | members | users | tool | capabilities`);
+    console.error(`  ❌ Unknown slack subcommand "${sub}". Expected: manifest | setup | history | send | members | users | tool | capabilities`);
     process.exitCode = 1;
 }
 
@@ -486,4 +496,48 @@ async function runSlackTool(): Promise<void> {
         console.log(JSON.stringify(body, null, 2));
         if (!response.ok || body.ok !== true) process.exitCode = 1;
     } catch { console.error('Slack tool request failed; check JSON, server availability and explicit operator credentials.'); process.exitCode = 1; }
+}
+
+async function runSlackSend(): Promise<void> {
+    let attempted = false;
+    const emit = (body: Record<string, unknown>, success: boolean) => {
+        console.log(JSON.stringify(body, null, values.json ? 2 : undefined));
+        if (!success) process.exitCode = 1;
+    };
+    try {
+        const allowed = new Set(['file', 'caption', 'thread', 'json', 'operator']);
+        const channel = positionals[0];
+        if (tokens.some(token => token.kind === 'option' && !allowed.has(token.name))
+            || positionals.length !== 1 || !channel || !/^[CGD][A-Z0-9]{1,99}$/.test(channel)
+            || !values.file?.trim() || (values.thread && !/^\d{1,20}\.\d{1,10}$/.test(values.thread))) {
+            emit({ ok: false, error: 'slack_file_send_arguments_invalid', sent: false, retryable: false }, false);
+            return;
+        }
+        loadSettings();
+        const options = slackLookupHeaders();
+        const target = { ...slackTargetFromId(channel), threadId: values.thread || '' };
+        const payload = { channel: 'slack', type: 'document', target,
+            file_path: resolveHomePath(values.file), ...(values.caption !== undefined ? { caption: values.caption } : {}) };
+        attempted = true;
+        const response = await cliFetch(`${getServerUrl()}/api/channel/send`, { method: 'POST',
+            headers: { ...options.headers, 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(125_000) });
+        const parsed: unknown = await response.json();
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('invalid_response');
+        const body = parsed as Record<string, unknown>;
+        const upload = body['upload'] && typeof body['upload'] === 'object' && !Array.isArray(body['upload'])
+            ? body['upload'] as Record<string, unknown> : {};
+        const completed = response.ok && body['ok'] === true && body['sent'] === true
+            && upload['stage'] === 'completion' && upload['state'] === 'completed'
+            && upload['verification'] === 'not_checked' && typeof upload['fileId'] === 'string'
+            && /^F[A-Z0-9]{1,100}$/.test(upload['fileId']) && upload['channelId'] === channel
+            && (upload['threadTs'] ?? '') === (values.thread || '');
+        if (completed) { emit(body, true); return; }
+        if (body['ok'] === false) { emit(body, false); return; }
+        emit({ ...body, ok: false, error: 'slack_file_delivery_unconfirmed',
+            sent: body['sent'] === true ? true : 'unknown', retryable: false }, false);
+    } catch {
+        emit({ ok: false, error: attempted ? 'slack_file_delivery_unconfirmed' : 'slack_file_send_unavailable',
+            sent: attempted ? 'unknown' : false, retryable: false }, false);
+    }
 }

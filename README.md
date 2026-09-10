@@ -953,3 +953,5 @@ Bug reports and feature ideas: [Open an issue](https://github.com/lidge-jun/cli-
 Boss turns receive host-local calendar dates and Monday–Sunday week ranges to resolve relative dates; explicit timezone or week conventions take precedence.
 
 For opt-in local services that must survive global package updates, see [verified local service builds](docs/pinned-service-artifacts.md).
+
+Send a Slack attachment with `jaw slack send C123 --file ./report.pdf --caption "Report" --json` (add `--thread <parent-ts>` for a reply). Inspect the upload receipt; failed uploads do not silently become text-only messages.

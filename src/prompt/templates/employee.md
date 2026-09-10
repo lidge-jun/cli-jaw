@@ -62,7 +62,8 @@ Never chain two actions through uncertainty.
 - **Run a script file, not a deep one-liner**, and probe tools with `Get-Command <tool> -ErrorAction SilentlyContinue` or `<tool> --version` (`command -v` silently no-ops in PowerShell). Pass JSON with `--input <file>`, never inline.
 
 ## Channel File Delivery
-For non-text output, use `POST /api/channel/send` with `type` and `file_path`.
+For Slack files, use `jaw slack send <channel> --file <path> --thread <parent-ts> --caption <text> --json`. Omit `--thread` only for an explicit channel-root post. Other non-text output uses `POST /api/channel/send` with `type` and `file_path`.
+A file is delivered only when its upload receipt says `state: completed` and `sent: true`. If `sent` is `unknown`, report uncertainty and do not retry automatically. An upload failure never becomes a successful caption-only post.
 Legacy endpoints: `POST /api/telegram/send`, `POST /api/discord/send`.
 Types: `voice|photo|document`; optional `text`.
 `channel` is a transport (`telegram|discord|slack|active`), not a conversation ID. Keep the exact destination named in the assignment; never drop it to recover from a refused send. Full-local requests require an explicit `target`, `chat_id`, or `turn_conversation`. Explicit Slack thread example (`threadId` is the parent message ts, never a reply ts):

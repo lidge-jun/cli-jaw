@@ -162,3 +162,11 @@ Transport success is separate from rendered-content verification: `ok:true` from
 send transport means all posts succeeded, not that rich content was verified. Source quote
 receipts use their own exact saved-block readback. Action receipts use their operation's
 readback and retain `partial` or `unknown` when it cannot prove the requested result.
+
+### Slack file upload receipts
+
+`jaw slack send C123 --file ./report.pdf --thread 1712345678.123456 --caption "Report" --json` sends one file to an explicit conversation. Omit `--thread` for a channel-root post. `--operator` is explicit; normal CLI calls use existing instance/turn headers and the full-local policy. The command never infers a destination, retries a POST, or substitutes text for a failed upload.
+
+The `upload` receipt records `stage` (`validation`, `reservation`, `upload`, `completion`), `state` (`failed`, `unknown`, `completed`), requested `channelId`/optional `threadTs`, and a known `fileId`. `verification: not_checked` means no content or visual readback was performed. Only a successful HTTP and Slack completion acknowledgement yields `ok: true, sent: true`. A reservation or accepted bytes alone do not prove delivery. If the completion reply is lost or contradictory, `sent: unknown, retryable: false` preserves that uncertainty. A later cancellation cannot erase an acknowledged send.
+
+Files must be regular, nonempty and at most 50 MiB. The three-stage request has a shared 120-second cancellation bound. An oversize file with a caption returns a failure and posts nothing. CLI success requires a matching completed receipt; legacy bare success or caption-only responses exit nonzero as unconfirmed.

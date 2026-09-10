@@ -525,3 +525,5 @@ Mounted at `/api/dashboard/telegram-hub` (`loopbackOnly` middleware).
 - `GET /api/heartbeat`는 현재 `heartbeat.json`을 반환한다
 - `PUT /api/heartbeat`는 schedule 검증 후 저장하고 `startHeartbeat()`를 다시 호출한다
 - `watchHeartbeatFile()`는 `heartbeat.json` 파일 변경을 debounce 후 자동 재로드한다
+
+Slack file CLI uses an explicit conversation and completion-only upload receipts (`sent: boolean|unknown`, no auto retry or caption fallback); cancellation preserves known/unknown delivery. Sync commands/API/Slack docs.
