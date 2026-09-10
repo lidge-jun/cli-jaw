@@ -51,6 +51,12 @@ export type SlackGateConfig = {
     /** true = threads also require a mention (multi-bot escape hatch). */
     threadRequireMention: boolean;
     /**
+     * Operator-declared allowances for other bots, straight from settings.json.
+     * Deliberately `unknown`: nothing validates that file on read, so the shape
+     * is proven here rather than assumed by every caller.
+     */
+    trustedBotTriggers?: unknown;
+    /**
      * How the bot is in this thread, injected so this module stays IO-free.
      * `owned` = the bot's own message parents the thread; `joined` = it was
      * pulled into a conversation already in progress; null = not in it.
@@ -84,6 +90,75 @@ export function isSlackMention(event: SlackMessageEvent, selfUserId: string | nu
 
 export function mentionsUser(text: string, userId: string): boolean {
     return new RegExp(`<@${userId}(?:\\|[^>]*)?>`).test(text);
+}
+
+/** One other bot, in one conversation, saying one agreed word. */
+export type TrustedBotTrigger = {
+    channelId: string;
+    botId: string;
+    userId: string;
+    textMarker: string;
+};
+
+const TRUSTED_TRIGGER_KEYS = ['channelId', 'botId', 'userId', 'textMarker'] as const;
+const TRUSTED_TRIGGER_PATTERNS: Record<(typeof TRUSTED_TRIGGER_KEYS)[number], RegExp> = {
+    channelId: /^[CG][A-Z0-9]{2,}$/,
+    botId: /^B[A-Z0-9]{2,}$/,
+    userId: /^[UW][A-Z0-9]{2,}$/,
+    textMarker: /^[A-Z][A-Z0-9_]{2,63}$/,
+};
+const TRUSTED_TRIGGER_MAX = 16;
+
+/**
+ * Read the allowance list, or read nothing at all.
+ *
+ * One malformed rule refuses the whole list. A typo in an inbound-authorization
+ * setting has to fail closed: the alternative is a list that half-applies, where
+ * the operator sees their rule in the file and cannot tell which half is live.
+ */
+export function readTrustedBotTriggers(value: unknown): TrustedBotTrigger[] {
+    if (!Array.isArray(value) || value.length === 0 || value.length > TRUSTED_TRIGGER_MAX) return [];
+    const rules: TrustedBotTrigger[] = [];
+    for (const raw of value) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
+        const row = raw as Record<string, unknown>;
+        if (Object.keys(row).length !== TRUSTED_TRIGGER_KEYS.length) return [];
+        for (const key of TRUSTED_TRIGGER_KEYS) {
+            const field = row[key];
+            if (typeof field !== 'string' || !TRUSTED_TRIGGER_PATTERNS[key].test(field)) return [];
+        }
+        rules.push({
+            channelId: row['channelId'] as string,
+            botId: row['botId'] as string,
+            userId: row['userId'] as string,
+            textMarker: row['textMarker'] as string,
+        });
+    }
+    return rules;
+}
+
+/**
+ * Does this event carry an allowance to start a turn even though a bot sent it?
+ *
+ * Everything a rule names must line up at once: the text mentions this instance,
+ * the payload carries a live bot identity that agrees with itself, and some rule
+ * matches its channel, bot id, sender id and marker word. Nothing here widens
+ * who may be answered — it only lets a named trigger past the bot refusals.
+ */
+export function matchesTrustedBotTrigger(event: SlackMessageEvent, config: SlackGateConfig): boolean {
+    const rules = readTrustedBotTriggers(config.trustedBotTriggers);
+    if (rules.length === 0 || !config.selfUserId) return false;
+    if (!mentionsUser(event.text || '', config.selfUserId)) return false;
+    const botId = event.bot_id || event.bot_profile?.id;
+    const userId = event.user || event.bot_profile?.user_id;
+    if (!botId || !userId || userId === config.selfUserId || event.bot_profile?.deleted === true) return false;
+    // A payload that disagrees with itself names no one, so it matches no rule.
+    if ((event.bot_id && event.bot_profile?.id && event.bot_id !== event.bot_profile.id)
+        || (event.user && event.bot_profile?.user_id && event.user !== event.bot_profile.user_id)) return false;
+    // Whole words only: REELBRAIN_MEDIA_V1X must never satisfy REELBRAIN_MEDIA_V1.
+    const words = new Set((event.text || '').split(/\s+/));
+    return rules.some(rule => rule.channelId === event.channel
+        && rule.botId === botId && rule.userId === userId && words.has(rule.textMarker));
 }
 
 /**
@@ -180,7 +255,11 @@ export function shouldProcessSlackEvent(
     config: SlackGateConfig,
     envelopeType: string,
 ): SlackGateDecision {
-    if (event.subtype && IGNORED_SUBTYPES.has(event.subtype)) {
+    // Computed once: three refusals below ask the same question, and re-deriving
+    // it would let the answer drift between them.
+    const trustedTrigger = matchesTrustedBotTrigger(event, config);
+    if (event.subtype && IGNORED_SUBTYPES.has(event.subtype)
+        && !(event.subtype === 'bot_message' && trustedTrigger)) {
         return { process: false, reason: `subtype_${event.subtype}` };
     }
     // Self-echo: our own posts arrive back as message events. Without this the
@@ -191,7 +270,7 @@ export function shouldProcessSlackEvent(
     // `bot_id` alone is not the whole bot signal: a granular-permission app can
     // send `bot_profile` without it, and that payload used to walk straight past
     // allowBots:false into an agent run (audit 002 §R2-6).
-    if ((event.bot_id || event.bot_profile) && !config.allowBots) {
+    if ((event.bot_id || event.bot_profile) && !config.allowBots && !trustedTrigger) {
         return { process: false, reason: 'bot_message' };
     }
     if (!event.channel) {
@@ -209,7 +288,10 @@ export function shouldProcessSlackEvent(
     // "❌ duplicate". The app_mention copy is the canonical path; DMs never
     // produce app_mention envelopes, so they are unaffected.
     // MPIM message events must stand alone; do not wait for an app_mention twin.
-    if (!dm && event.channel_type !== 'mpim' && event.type !== 'app_mention' && config.selfUserId
+    // A trusted trigger keeps its message envelope: the app_mention twin is not
+    // guaranteed for a bot post, and the duplicate claim in slack/bot.ts already
+    // collapses the pair by (team, channel, ts) when both do arrive.
+    if (!trustedTrigger && !dm && event.channel_type !== 'mpim' && event.type !== 'app_mention' && config.selfUserId
         && mentionsUser(event.text || '', config.selfUserId)) {
         return { process: false, reason: 'mention_via_app_mention' };
     }

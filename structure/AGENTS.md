@@ -116,3 +116,5 @@ Native quota readers follow the OpenCodex source contract: Codex window duration
 
 
 Slack file CLI uses an explicit conversation and completion-only upload receipts (`sent: boolean|unknown`, no auto retry or caption fallback); cancellation preserves known/unknown delivery. Sync commands/API/Slack docs.
+
+Slack `trustedBotTriggers` lets one named bot start a turn here: a fully validated rule plus a self-mention opens exactly the `bot_message` subtype, `allowBots` and `mention_via_app_mention` refusals, and nothing else. One malformed rule voids the whole list, and `isSlackMention` stays narrow because it also decides thread ownership. See `structure/infra.md` §`src/slack/`.

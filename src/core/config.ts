@@ -311,6 +311,9 @@ function createDefaultSettings() {
             channelIds: [] as string[],
             forwardAll: true,
             allowBots: false,
+            // Named other bots that may start a turn here. Empty means none, and
+            // the inbound gate validates every rule before trusting any of them.
+            trustedBotTriggers: [] as { channelId: string; botId: string; userId: string; textMarker: string }[],
             // Slack bots typically live in shared team channels, where
             // answering every message is antisocial. DMs bypass this gate.
             mentionOnly: true,

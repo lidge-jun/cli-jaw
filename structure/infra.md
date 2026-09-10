@@ -1241,6 +1241,14 @@ Channel narrowing helpers and slash-command registration.
 
 top-level 채널은 현재 event ts 직전의 `conversations.history`를 세션 소유 세대당 한 번 프롬프트 preamble에 주입한다. thread는 `conversations.replies` cursor를 최대 10페이지 따라가며 parent + 최신 50 replies만 보존한다. 합성 top-level reply 주소는 채널 session identity를 공유하되 `midRunPolicy: followup`으로 진행 중인 다른 사용자의 turn을 steer/kill하지 않는다.
 
+### trusted bot triggers (`events.ts`)
+
+`slack.trustedBotTriggers`는 다른 봇 하나가 이 인스턴스의 턴을 시작할 수 있게 하는 운영자 선언 목록이다. 규칙은 `{channelId, botId, userId, textMarker}` 네 키뿐이며 각각 `^[CG][A-Z0-9]{2,}$`, `^B[A-Z0-9]{2,}$`, `^[UW][A-Z0-9]{2,}$`, `^[A-Z][A-Z0-9_]{2,63}$`를 만족해야 한다. 목록은 최대 16개이고 **하나라도 어긋나면 전체가 무효**다 — 인바운드 권한 설정의 오타는 절반만 살아 있는 상태보다 닫히는 쪽이 낫다.
+
+매칭은 이벤트가 자기 자신을 멘션하고, `bot_id`/`bot_profile.id`와 `user`/`bot_profile.user_id`가 서로 모순되지 않으며, 삭제된 프로필이 아니고, 어떤 규칙이 채널·봇·발신자·마커 단어와 정확히 맞을 때만 성립한다. 마커는 공백 단위 단어 비교라 `REELBRAIN_MEDIA_V1X`가 `REELBRAIN_MEDIA_V1`을 만족시키지 않는다.
+
+일치는 정확히 세 거부만 연다: `bot_message` subtype 무시, `allowBots:false` 거부, 그리고 `mention_via_app_mention` 중복 제거. self-echo, 채널 누락, 대화 허용목록, `mentionOnly`, empty-event 검사는 그대로다. 중복 제거를 열어도 실행은 한 번인데, `bot.ts`가 dispatch 전에 `slackEventKey(teamId, channel, ts)`를 선점하므로 같은 글의 `app_mention`/`message` 두 봉투가 하나로 접힌다. `isSlackMention()` 자체는 넓히지 않는다 — 그 함수는 thread 참여 소유권도 정하기 때문에, 넓히면 #400이 고친 과잉 응답이 되돌아온다.
+
 ### mention-watch.ts (345L)
 
 `scanSlackMentions()`는 봇이 가입한 명시적 채널에서 특정 사용자가 태그된 새 메시지를 찾는다. 봇 토큰으로 쓸 수 없는 user-token 전용 `search.messages` 대신 `conversations.history`를 newest에서 과거 방향으로 읽는다. 커서는 처리가 끝난 메시지까지만 전진하고, 끝내지 못한 backward walk는 `resume_before`에서 이어간다. 채널 시작점을 tick마다 회전해 hot channel의 독점을 막고, 429가 오면 wrapper 재시도 없이 그 tick을 멈춘다. 한 tick의 채널 상한은 60이며 초과분은 `overflowChannels`로 반환한다.

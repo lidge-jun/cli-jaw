@@ -1,6 +1,6 @@
 import { verifiedSlackWorkspace } from './verified-workspace.js';
 import { slackCredentialKey, type SlackToolSource } from './tool-context.js';
-import { isSlackMention } from './events.js';
+import { isSlackMention, matchesTrustedBotTrigger } from './events.js';
 // ─── Slack Bot ───────────────────────────────────────
 // Slack transport implementation for the cli-jaw messaging runtime.
 // Mirrors src/discord/bot.ts structurally: init/shutdown lifecycle, an inbound
@@ -409,6 +409,8 @@ function gateConfig() {
         allowBots: Boolean(sc.allowBots),
         mentionOnly: sc.mentionOnly !== false,
         channelIds: readSlackAllowlist(sc.channelIds),
+        // Validated inside the gate, not here: this module does not own the shape.
+        trustedBotTriggers: sc.trustedBotTriggers,
         // Thread continuation defaults ON (threadRequireMention=false):
         // once mentioned, a thread keeps flowing without re-mention.
         threadRequireMention: sc.threadRequireMention === true,
@@ -1098,7 +1100,9 @@ async function runSlackMessageEvent(
         ...(event.ts ? { ackTs: event.ts } : {}),
         ...(event.user ? { recipientUserId: event.user } : {}),
         isDirect: event.channel_type === 'im',
-        isMention: isSlackMention(event, selfUserId),
+        // A trusted bot trigger is addressed to this instance as surely as a
+        // human mention, and `isSlackMention` deliberately stays narrow.
+        isMention: isSlackMention(event, selfUserId) || matchesTrustedBotTrigger(event, gateConfig()),
     });
 }
 
@@ -1369,7 +1373,7 @@ export async function handleSlackEnvelope(envelope: SlackEnvelope, approvalTrans
     const prefetchOwner = preResolvedScope
         ? getSessionOwnershipGeneration(preResolvedScope)
         : undefined;
-    if (isSlackMention(event, selfUserId) && event.channel) {
+    if ((isSlackMention(event, selfUserId) || matchesTrustedBotTrigger(event, gateConfig())) && event.channel) {
         // A top-level mention starts a thread the bot will parent, so the whole
         // thread belongs to it. A mention INSIDE an existing thread is an
         // invitation into someone else's conversation, and only that (#400).
