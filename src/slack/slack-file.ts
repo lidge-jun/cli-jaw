@@ -119,7 +119,7 @@ export async function sendSlackFile(
         if (!upload.ok) return failure(`Slack upload failed (${upload.status})`, upload.status);
     } catch (error) {
         return signal.aborted || (error as Error)?.name === 'AbortError'
-            ? failure('slack_send_aborted', 499) : failure(redactSlackTokens((error as Error).message));
+            ? failure('slack_send_aborted', 499) : failure('slack_file_upload_failed');
     }
     stage = 'completion';
     if (signal.aborted) return failure('slack_send_aborted', 499);

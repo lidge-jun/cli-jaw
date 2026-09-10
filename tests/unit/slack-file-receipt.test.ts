@@ -1,7 +1,7 @@
 import '../setup/isolated-home.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { sendSlackFile } from '../../src/slack/slack-file.ts';
@@ -61,4 +61,18 @@ test('lost completion reply retains reserved id without leaking capability URL o
     };
     const result = await sendSlackFile('xoxb-test', slackTargetFromId('C1'), file, { fetchImpl });
     assert.equal(result.sent, 'unknown'); assert.equal(result.upload.fileId, 'F123'); assert.equal(result.ok, false); assert.equal(calls, 3);
+});
+
+
+test('file removed after reservation does not disclose its local path', async t => {
+    const dir = mkdtempSync(join(tmpdir(), 'jaw-file-read-failure-')); t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const file = join(dir, 'private-name.txt'); writeFileSync(file, 'fixture'); let calls = 0;
+    const fetchImpl: typeof fetch = async () => {
+        calls++; unlinkSync(file);
+        return new Response(JSON.stringify({ ok: true, upload_url: 'https://files.slack.com/upload/test', file_id: 'F123' }));
+    };
+    const result = await sendSlackFile('xoxb-test', slackTargetFromId('C1'), file, { fetchImpl });
+    assert.equal(result.ok, false); assert.equal(result.sent, false); assert.equal(result.upload.stage, 'upload');
+    assert.equal(calls, 1); assert.equal(result.upload.fileId, 'F123');
+    assert.ok(!JSON.stringify(result).includes(dir)); assert.ok(!JSON.stringify(result).includes('private-name.txt'));
 });
