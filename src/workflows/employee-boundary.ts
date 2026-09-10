@@ -1,13 +1,18 @@
-// Shared assertions for Boss-only dispatch and employee boundaries.
+// Shared assertions for authorized dispatch and employee boundaries.
 // Does NOT import provider SDKs.
 
 import type { OrcStateName } from '../orchestrator/state-machine.js';
 import { hasImplementationDelegation } from './handoff.js';
 
-export function assertBossOnlyDispatch(isBoss: boolean): void {
-    if (!isBoss) {
-        throw new Error('Only the Boss agent can dispatch jaw employees');
+export function assertAuthorizedDispatcher(authorized: boolean): void {
+    if (!authorized) {
+        throw new Error('Only an authorized dispatcher can dispatch jaw employees');
     }
+}
+
+/** @deprecated Use assertAuthorizedDispatcher. Kept for existing callers. */
+export function assertBossOnlyDispatch(isBoss: boolean): void {
+    assertAuthorizedDispatcher(isBoss);
 }
 
 export function assertNoImplementationDelegation(phase: OrcStateName, taskBody: string, allowWrite = false): void {
@@ -26,13 +31,13 @@ export function assertReadOnlyAudit(phase: OrcStateName, taskBody: string, allow
 }
 
 export function validateDispatchTask(opts: {
-    isBoss: boolean;
+    authorized: boolean;
     phase: OrcStateName;
     taskBody: string;
     allowWrite?: boolean;
 }): { ok: boolean; error?: string } {
     try {
-        assertBossOnlyDispatch(opts.isBoss);
+        assertAuthorizedDispatcher(opts.authorized);
         assertNoImplementationDelegation(opts.phase, opts.taskBody, opts.allowWrite);
         assertReadOnlyAudit(opts.phase, opts.taskBody, opts.allowWrite);
         return { ok: true };

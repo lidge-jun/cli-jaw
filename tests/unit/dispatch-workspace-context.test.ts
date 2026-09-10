@@ -68,13 +68,13 @@ test('runSingleAgent injects workspace context before task instruction and env',
     assert.ok(distributeSrc.includes("{ settings, normalizeProjectDirs } from '../core/config.js'"));
     assert.ok(distributeSrc.includes("import { buildWorkspaceContextBlock } from './workspace-context.js';"));
     assert.ok(distributeSrc.includes('const workspaceBlock = buildWorkspaceContextBlock({'));
-    assert.ok(distributeSrc.includes('workingDir: settings.workingDir || null'));
+    assert.ok(distributeSrc.includes('workingDir,'));
     assert.ok(distributeSrc.includes('task: text(ap.task)'));
     assert.ok(distributeSrc.includes('const taskPrompt = `${workspaceBlock}'));
     assert.ok(distributeSrc.includes('## Task Instruction [${phaseLabel}]'));
     assert.ok(distributeSrc.indexOf('const taskPrompt = `${workspaceBlock}') <
         distributeSrc.indexOf('## Task Instruction [${phaseLabel}]'));
     assert.ok(distributeSrc.includes('workspaceContext: workspaceBlock'));
-    assert.ok(distributeSrc.includes('JAW_WORKSPACE_ROOT: effectiveDirs?.[0] || settings.workingDir ||'));
+    assert.ok(distributeSrc.includes('JAW_WORKSPACE_ROOT: effectiveDirs?.[0] || workingDir ||'));
     assert.ok(distributeSrc.includes('JAW_WORKLOG_PATH: worklogPath ||'));
 });

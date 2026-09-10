@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
+import { isFullAccessRequest } from '../../src/http/full-access.ts';
 import { createManagerApiJsonParser } from '../../src/routes/code-body-parser.js';
 import http, { type IncomingMessage, type Server } from 'node:http';
 import {
@@ -47,9 +48,10 @@ function closeServer(server: Server): Promise<void> {
 function requestText(
     port: number,
     path: string,
+    headers: http.OutgoingHttpHeaders = {},
 ): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> {
     return new Promise((resolve, reject) => {
-        const req = http.get({ host: '127.0.0.1', port, path }, (res) => {
+        const req = http.get({ host: '127.0.0.1', port, path, headers }, (res) => {
             const chunks: string[] = [];
             res.setEncoding('utf8');
             res.on('data', chunk => chunks.push(String(chunk)));
@@ -150,6 +152,7 @@ test('dashboard proxy leaves relative location unchanged', () => {
 test('dashboard proxy rewrites upstream headers without synthesizing origin or referer', () => {
     assert.deepEqual(rewriteUpstreamRequestHeaders({ host: 'localhost:24576' }, 3457), {
         host: '127.0.0.1:3457',
+        'x-jaw-proxy-hop': '1',
     });
 
     const headers = rewriteUpstreamRequestHeaders({
@@ -161,6 +164,35 @@ test('dashboard proxy rewrites upstream headers without synthesizing origin or r
     assert.equal(headers.host, '127.0.0.1:3457');
     assert.equal(headers.origin, 'http://127.0.0.1:3457');
     assert.equal(headers.referer, 'http://127.0.0.1:3457/manager');
+});
+
+test('generic proxy marks the hop and cannot manufacture direct-local full authority', async () => {
+    const workerApp = express();
+    workerApp.get('/api/probe', (req, res) => res.json({ full: isFullAccessRequest(req, 'auto') }));
+    const worker = http.createServer(workerApp);
+    const workerPort = await listen(worker);
+    const managerApp = express();
+    const manager = http.createServer(managerApp);
+    installDashboardProxy(managerApp, manager, { from: workerPort, count: 1 });
+    const managerPort = await listen(manager);
+    try {
+        assert.deepEqual(JSON.parse((await requestText(workerPort, '/api/probe')).body), { full: true });
+        const ordinaryProxy = await requestText(managerPort, `/i/${workerPort}/api/probe`, {
+            origin: `http://127.0.0.1:${managerPort}`, 'sec-fetch-site': 'same-origin',
+        });
+        assert.deepEqual(JSON.parse(ordinaryProxy.body), { full: false });
+        const proxied = await requestText(managerPort, `/i/${workerPort}/api/probe`, {
+            origin: `http://127.0.0.1:${managerPort}`,
+            'sec-fetch-site': 'same-origin',
+            'x-jaw-proxy-hop': 'caller-value',
+        });
+        assert.equal(proxied.status, 200);
+        assert.deepEqual(JSON.parse(proxied.body), { full: false });
+        assert.equal(rewriteUpstreamRequestHeaders({ 'x-jaw-proxy-hop': 'caller-value' }, workerPort)['x-jaw-proxy-hop'], '1');
+    } finally {
+        worker.closeAllConnections(); manager.closeAllConnections();
+        await Promise.all([closeServer(worker), closeServer(manager)]);
+    }
 });
 
 test('dashboard proxy exposes websocket upgrade routing contract', () => {

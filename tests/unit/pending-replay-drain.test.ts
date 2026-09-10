@@ -10,6 +10,34 @@ import {
     listPendingWorkerResults,
 } from '../../src/orchestrator/worker-registry.js';
 import { drainPendingReplays } from '../../src/orchestrator/pipeline.js';
+import { buildClaimReplayMeta, type DispatchAssignment } from '../../src/orchestrator/dispatch-admission.js';
+
+// The Boss channel binding used to be assembled inline in routes/orchestrate.ts.
+// It now comes from buildClaimReplayMeta in the dispatch admission module, so
+// these tests exercise that function instead of matching the route's source.
+function claimMetaFor(overrides: Record<string, unknown> = {}) {
+    return buildClaimReplayMeta({
+        origin: 'web',
+        scopeKey: 'scope-1',
+        chatSessionId: 'chat-1',
+        parentRequestId: 'req-1',
+        allowWrite: false,
+        noDescendants: false,
+        fullAccess: false,
+        permissions: null,
+        workingDir: '/tmp/project',
+        projectDirs: null,
+        scope: null,
+        replayMeta: {
+            target: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C1' },
+            chatId: 'C1',
+            replyViaTarget: true,
+            remoteKey: 'remote-1',
+            ...(overrides['replayMeta'] as Record<string, unknown> | undefined),
+        },
+        ...overrides,
+    } as unknown as DispatchAssignment);
+}
 
 const srcRoot = new URL('../../src/', import.meta.url).pathname;
 
@@ -85,12 +113,14 @@ test('PRD-010: drainPendingReplays uses per-slot meta over fallback', () => {
     assert.match(body, /\.\.\.fallbackMeta[\s\S]*slotMeta\.origin/, 'slot origin must override fallback');
 });
 
-test('PRD-011: dispatch route captures Boss main meta at claimWorker', () => {
+test('PRD-011: dispatch claim meta carries the Boss channel binding', () => {
+    const meta = claimMetaFor();
+    assert.equal(meta.chatSessionId, 'chat-1', 'must capture the Boss chat session');
+    assert.equal(meta.scopeId, 'scope-1', 'must capture the dispatch scope');
+    assert.equal(meta.requestId, 'req-1', 'must capture the parent request');
+    assert.equal(meta.remoteKey, 'remote-1', 'must capture the Boss remote binding key when present');
+    assert.equal(meta.target?.targetId, 'C1', 'must capture the Boss delivery target');
     const src = fs.readFileSync(join(srcRoot, 'routes/orchestrate.ts'), 'utf8');
-    const claimBlock = src.slice(src.indexOf('let slot;') - 700, src.indexOf('claimWorker(emp, task'));
-    assert.match(claimBlock, /getCurrentMainMeta\(dispatchScope\)/, 'must query current Boss main meta by dispatch scope');
-    assert.match(claimBlock, /chatSessionId:\s*bossMeta\.chatSessionId/, 'must capture the Boss chat session');
-    assert.match(claimBlock, /bossMeta\.remoteKey/, 'must capture the Boss remote binding key when present');
     const call = src.slice(src.indexOf('claimWorker(emp, task'), src.indexOf('claimWorker(emp, task') + 120);
     assert.match(call, /replayMeta/, 'claimWorker call must pass replayMeta');
 });
@@ -99,12 +129,11 @@ test('PRD-013: replyViaTarget is preserved from spawn main meta into replay drai
     const workerSrc = fs.readFileSync(join(srcRoot, 'orchestrator/worker-registry.ts'), 'utf8');
     const spawnSrc = fs.readFileSync(join(srcRoot, 'agent/spawn.ts'), 'utf8');
     const pipelineSrc = fs.readFileSync(join(srcRoot, 'orchestrator/pipeline.ts'), 'utf8');
-    const routeSrc = fs.readFileSync(join(srcRoot, 'routes/orchestrate.ts'), 'utf8');
     assert.match(workerSrc, /replyViaTarget\?:\s*boolean/, 'WorkerReplayMeta should carry replyViaTarget');
     assert.match(spawnSrc, /replyViaTarget\?:\s*boolean/, 'SpawnOpts/MainSessionMeta should carry replyViaTarget');
     assert.match(spawnSrc, /replyViaTarget:\s*opts\.replyViaTarget/, 'setCurrentMainMeta should capture replyViaTarget from SpawnOpts');
     assert.match(pipelineSrc, /replyViaTarget,[\s\S]*_skipInsert/, 'pipeline spawn options should pass replyViaTarget');
-    assert.match(routeSrc, /replyViaTarget:\s*bossMeta\.replyViaTarget/, 'dispatch replayMeta should capture replyViaTarget');
+    assert.equal(claimMetaFor().replyViaTarget, true, 'dispatch replay meta should capture replyViaTarget');
     assert.match(pipelineSrc, /slotMeta\.replyViaTarget === true \|\| fallbackMeta\["replyViaTarget"\] === true/, 'drain should preserve replyViaTarget');
 });
 

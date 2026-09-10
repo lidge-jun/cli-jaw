@@ -141,11 +141,11 @@ export function resolveOrCreateRemoteSession(remoteKey: string): string {
     })();
 }
 
-export function createChatSession(label?: string): { id: string; seq: number } {
+export function createChatSession(label?: string, options: { activate?: boolean } = {}): { id: string; seq: number } {
     const id = randomUUID().slice(0, 8);
     const seq = getNextSeq();
     insertStmt.run(id, seq, label || null, defaultRunPolicy());
-    setActiveChatSession(id);
+    if (options.activate !== false) setActiveChatSession(id);
     broadcast('session_created', { id, seq, label: label || null }, 'public');
     return { id, seq };
 }

@@ -163,3 +163,18 @@ test('no dispatch path calls process.exit() after the response body is read', ()
         + 'mid-teardown, the documented UV_HANDLE_CLOSING candidate in #276',
     );
 });
+
+test('dispatch CLI consults /api/orchestrate/access and does not exit on employee mode', () => {
+    assert.ok(dispatchSrc.includes("/api/orchestrate/access"));
+    assert.ok(dispatchSrc.includes('readDispatchPath'));
+    assert.ok(!dispatchSrc.includes('jaw employee sessions cannot dispatch other employees'));
+    assert.ok(dispatchSrc.includes("JAW_ASSIGNMENT_ALLOW_DISPATCH"));
+    assert.ok(dispatchSrc.includes('x-jaw-employee-mode'));
+});
+
+test('dispatch CLI omits mutable unless --mutable or --read-only is passed', () => {
+    assert.ok(dispatchSrc.includes('assignmentBodyFields'));
+    assert.ok(dispatchSrc.includes('wantMutable ? { mutable: true }'));
+    assert.ok(dispatchSrc.includes('wantReadOnly ? { mutable: false }'));
+    assert.equal(dispatchSrc.includes('const mutable = process.argv.includes'), false);
+});

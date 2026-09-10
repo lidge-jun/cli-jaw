@@ -2,15 +2,25 @@ import { slackApi, type SlackFetch } from './api.js';
 import { verifiedSlackWorkspace } from './verified-workspace.js';
 import { resolveSlackToolGrant, slackCredentialKey, type SlackToolGrant } from './tool-context.js';
 
-export type SlackToolPrincipal = { kind: 'operator' } | { kind: 'turn'; grant: SlackToolGrant };
+export type SlackToolPrincipal = { kind: 'operator'; source?: 'full-local'; context?: SlackToolGrant }
+    | { kind: 'turn'; grant: SlackToolGrant };
 export type SlackOperatorValidator = (candidate: string) => boolean;
 export function slackToolDenied(code: string, statusCode = 403): Error {
     return Object.assign(new Error(code), { statusCode, code });
 }
-export function resolveSlackToolPrincipal(headers: Record<string, unknown>, operator: SlackOperatorValidator): SlackToolPrincipal {
+export function slackToolContext(principal: SlackToolPrincipal | null | undefined): SlackToolGrant | undefined {
+    if (!principal) return undefined;
+    return principal.kind === 'turn' ? principal.grant : principal.context;
+}
+
+export function resolveSlackToolPrincipal(headers: Record<string, unknown>, operator: SlackOperatorValidator,
+    policy: { isFullAccess?: boolean } = {}): SlackToolPrincipal {
     const grantHeader = headers['x-jaw-slack-grant'];
+    const grant = typeof grantHeader === 'string' ? resolveSlackToolGrant(grantHeader) : null;
+    if (policy.isFullAccess === true) {
+        return grant ? { kind: 'operator', source: 'full-local', context: grant } : { kind: 'operator', source: 'full-local' };
+    }
     if (typeof grantHeader === 'string') {
-        const grant = resolveSlackToolGrant(grantHeader);
         if (!grant) throw slackToolDenied('slack_turn_grant_invalid', 401);
         return { kind: 'turn', grant };
     }

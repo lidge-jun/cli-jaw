@@ -195,6 +195,7 @@ The check enumerates submodule contents and fails on what it finds there, becaus
 
 ### Architecture Docs Sync
 
+- Auto (`permissions:auto`) grants qualified direct-local Jaw API authority across supported runtimes, independently of per-turn secrets. Keep actual/effective loopback, exact browser origin, proxy provenance, explicit outbound destinations and server-only resource options. Safe/custom keep existing scoped/operator paths; full API authority is instance-wide, distinct from provider Safe and task scope. Preserve no-descendant/read-only assignments, captured worker context and honest capability/receipt evidence. See `docs/slack-tools.md` and `structure/server_api.md`.
 - Slack group DMs use `message.mpim` and optional `mpim:history`; exact `channel_type: mpim` mentions retain channel allowlist and thread policy, never the one-to-one DM bypass. An install without `mpim:history` receives no group-DM traffic at all; that gap is reported in `missingCapabilities` and logged as a reception limitation rather than failing credential validation. An absent scope header is unknown and a present empty header is a known empty grant. Keep `structure/telegram.md` and the validation API docs synchronized.
 
 - Slack Socket Mode app-token ownership is coordinated across homes by a connected, fresh, live-PID claim; uncertainty fails open, conflicts disable inbound only, and the runtime notice/activation epoch must remain generation-bound. See `structure/telegram.md` and `structure/server_api.md`.

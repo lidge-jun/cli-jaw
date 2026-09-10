@@ -174,6 +174,18 @@ runTest('scoped and global Stop fence pending redirects before synchronous Claud
     }
 });
 
+runTest('main metadata retains the actual Safe override for dispatch consumers', async () => {
+    const opts = { ...options(), permissions: 'safe' };
+    let observed = false;
+    beforeFactory = async input => {
+        assert.equal(input.prepared.permissions, 'safe');
+        assert.equal(activeMainProcesses.get(opts.scopeKey)?.meta?.permissions, 'safe');
+        observed = true;
+    };
+    const result = await spawnAgent('captured permission fixture', opts).promise;
+    assert.equal(result.code, 0); assert.equal(observed, true);
+});
+
 runTest('main two turns use the public factory once and deliver full lifecycle results with final-only messages', async () => {
     const opts = options(), events: Array<{ type: string; data: Record<string, any> }> = [];
     const off = subscribe(event => events.push({ type: event.event, data: event.data }));

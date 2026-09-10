@@ -6,6 +6,7 @@ import { readSource } from './source-normalize.js';
 
 const projectRoot = join(import.meta.dirname, '../..');
 const serverSrc = readSource(join(projectRoot, 'server.ts'), 'utf8');
+const admissionSrc = readSource(join(projectRoot, 'src/orchestrator/dispatch-admission.ts'), 'utf8');
 const orchestrateSrc = readSource(join(projectRoot, 'src/routes/orchestrate.ts'), 'utf8');
 
 test('dispatch route clears pending replay only after response is flushed (phase 7)', () => {
@@ -13,7 +14,7 @@ test('dispatch route clears pending replay only after response is flushed (phase
     assert.ok(routeStart >= 0, 'dispatch route should exist');
 
     // Window must cover both POST dispatch body + GET result polling route.
-    const routeBlock = orchestrateSrc.slice(routeStart, routeStart + 14000);
+    const routeBlock = orchestrateSrc.slice(routeStart, orchestrateSrc.indexOf("app.post('/api/orchestrate/dispatch/batch'", routeStart));
     const finishIdx = routeBlock.search(/finishWorker\(slot\.agentId,\s*(?:String\()?result\.text \|\| ''/);
     const finishHookIdx = routeBlock.indexOf("res.on('finish', () => markWorkerReplayed(slot.agentId))", finishIdx);
     const responseIdx = routeBlock.indexOf('res.json({', finishHookIdx);
@@ -88,7 +89,7 @@ test('dispatch route maps PABCD phase from state-machine', () => {
 
     // Phase map must exist in dispatch route
     assert.ok(
-        routeBlock.includes('PABCD_PHASE_MAP'),
+        admissionSrc.includes('PABCD_PHASE_MAP') && routeBlock.includes('finishAssignment(prepared.ctx, req.body || {})'),
         'dispatch route should contain PABCD_PHASE_MAP for phase auto-mapping',
     );
     // Must call getState to read current orchestration phase
@@ -98,7 +99,7 @@ test('dispatch route maps PABCD phase from state-machine', () => {
     );
     // Must call resolveOrcScope for proper scope resolution
     assert.ok(
-        routeBlock.includes('resolveOrcScope('),
+        admissionSrc.includes('resolveOrcScope(') && routeBlock.includes('prepareDispatchContext(req, isFullAccess)'),
         'dispatch route should call resolveOrcScope() for scope resolution',
     );
     // resolvedPhase must be used in ap object (not hardcoded 3)
@@ -119,7 +120,7 @@ test('dispatch route accepts optional phase override in request body', () => {
     );
     // resolvedPhase should fallback: explicit phase → PABCD map → default 3
     assert.ok(
-        routeBlock.includes('phase ??'),
+        admissionSrc.includes('bodyPhase ?? PABCD_PHASE_MAP[ctx.orcState] ?? 3'),
         'dispatch route should use nullish coalescing for phase fallback',
     );
 });
@@ -127,7 +128,9 @@ test('dispatch route accepts optional phase override in request body', () => {
 test('batch dispatch route returns safe run summaries instead of full employee text', () => {
     const batchStart = orchestrateSrc.indexOf("app.post('/api/orchestrate/dispatch/batch'");
     assert.ok(batchStart >= 0, 'batch dispatch route should exist');
-    const batchBlock = orchestrateSrc.slice(batchStart, batchStart + 9000);
+    const batchEnd = orchestrateSrc.indexOf("app.get('/api/orchestrate/worker-runs'", batchStart);
+    assert.ok(batchEnd > batchStart, 'batch route end must be found');
+    const batchBlock = orchestrateSrc.slice(batchStart, batchEnd);
 
     assert.ok(batchBlock.includes('runId: slot.runId'), 'batch summaries must include runId');
     assert.ok(batchBlock.includes('preview: previewText(text, 600)'), 'batch summaries must include bounded preview');
@@ -195,11 +198,11 @@ test('dispatch mutable scope validation uses projectDirs before Jaw workingDir',
         'single dispatch should validate mutable scope against the resolved project root',
     );
     assert.ok(
-        orchestrateSrc.includes('postDispatchDiffCheck(dispatchProjectRoot, scope)'),
+        orchestrateSrc.includes('postDispatchDiffCheck(dispatchProjectRoot, scope,'),
         'single dispatch post-check should use the same project root as preflight',
     );
     assert.ok(
-        orchestrateSrc.includes('normalizeScope(resolveDispatchProjectRoot(dispatchCtx), scope)'),
+        orchestrateSrc.includes('normalizeScope(resolveDispatchProjectRoot({ projectDirs: prepared.ctx.projectDirs, workingDir: prepared.ctx.workingDir }), scope)'),
         'batch dispatch should validate mutable scope against the resolved project root',
     );
     assert.ok(
@@ -269,7 +272,7 @@ test('dispatch route auto-injects full ctx.plan without truncation or file refer
 
     // Must still guard on ctx.plan existing.
     assert.ok(
-        routeBlock.includes('dispatchCtx?.plan'),
+        routeBlock.includes('const injectedPlan = assignment.plan') && routeBlock.includes('if (injectedPlan)'),
         'dispatch route must still guard the prepend on dispatchCtx?.plan',
     );
 });

@@ -3,7 +3,7 @@
 
 import { settings } from '../core/config.js';
 import { stripUndefined } from '../core/strip-undefined.js';
-import { assertSendFilePath } from '../security/path-guards.js';
+import { assertSendFilePath, hostPathEnvironment } from '../security/path-guards.js';
 import { isRemoteTarget, type MessengerChannel, type OutboundType, type RemoteTarget } from './types.js';
 import { getLastActiveTarget, getLatestSeenTarget, clearTargetState, getHomeChannel } from './runtime.js';
 import { slackTargetFromId, slackPeerKind } from './slack-target.js';
@@ -96,6 +96,8 @@ function slackAllowlist(): { ids: string[]; malformed: boolean } {
 // ─── Request Model ──────────────────────────────────
 
 export type ChannelSendRequest = {
+    /** Server-created resource authority; never accepted from HTTP JSON. */
+    fullAccess?: boolean;
     /** Server-owned cancellation; never accepted from HTTP JSON. */
     signal?: AbortSignal;
     /** Captured server credential identity, never read from HTTP JSON. */
@@ -196,13 +198,15 @@ function normalizeChannel(value: unknown): MessengerChannel | 'active' {
     return channel as MessengerChannel | 'active';
 }
 
-export function normalizeChannelSendRequest(body: Record<string, any>): ChannelSendRequest {
+export function normalizeChannelSendRequest(body: Record<string, any>, internal: { fullAccess?: boolean } = {}): ChannelSendRequest {
     const rawPath = body["file_path"] || body["filePath"];
     let filePath: string | undefined;
     if (rawPath) {
-        filePath = assertSendFilePath(String(rawPath), settings["workingDir"] || undefined, settings["projectDirs"] || null);
+        filePath = assertSendFilePath(String(rawPath), settings["workingDir"] || undefined, settings["projectDirs"] || null,
+            hostPathEnvironment, { fullAccess: internal.fullAccess === true });
     }
     return stripUndefined({
+        ...(internal.fullAccess === true ? { fullAccess: true } : {}),
         channel: normalizeChannel(body["channel"]),
         type: normalizeOutboundType(body["type"]),
         text: body["text"],
@@ -283,10 +287,11 @@ function getConfiguredFallbackTarget(channel: MessengerChannel): RemoteTarget | 
 export function validateTarget(
     target: RemoteTarget,
     channel: MessengerChannel,
-    options: { requireConfiguredAllowlist?: boolean } = {},
+    options: { requireConfiguredAllowlist?: boolean; fullAccess?: boolean } = {},
 ): boolean {
     if (!isRemoteTarget(target)) return false;
     if (target.channel !== channel) return false;
+    if (options.fullAccess === true) return true;
     if (channel === 'discord') {
         const allowed = settings["discord"]?.channelIds;
         if (allowed?.length) {
@@ -332,8 +337,8 @@ export function targetFromChatId(channel: MessengerChannel, chatId: string | num
     }
 }
 
-export function validateExplicitChatId(channel: MessengerChannel, chatId: string | number): boolean {
-    return validateTarget(targetFromChatId(channel, chatId), channel, { requireConfiguredAllowlist: true });
+export function validateExplicitChatId(channel: MessengerChannel, chatId: string | number, options: { fullAccess?: boolean } = {}): boolean {
+    return validateTarget(targetFromChatId(channel, chatId), channel, { requireConfiguredAllowlist: true, ...options });
 }
 
 function sameSlackDestination(explicit: RemoteTarget, known: RemoteTarget): boolean {
@@ -363,8 +368,9 @@ function isRemoteBoundConversation(target: RemoteTarget): boolean {
     }
 }
 
-function authorizeExplicitTarget(target: RemoteTarget, channel: MessengerChannel): RemoteTarget | null {
+function authorizeExplicitTarget(target: RemoteTarget, channel: MessengerChannel, fullAccess = false): RemoteTarget | null {
     if (!isRemoteTarget(target) || target.channel !== channel) return null;
+    if (fullAccess) return target;
     if (validateTarget(target, channel, { requireConfiguredAllowlist: true })) return target;
     // Same reading again: an unreadable allowlist is a configured one for this
     // purpose, so the vouching path below stays closed rather than standing in
@@ -401,12 +407,29 @@ export async function sendChannelOutput(req: ChannelSendRequest): Promise<{ ok: 
         return { ok: false, status: 400, error: `Invalid outbound type: ${String(req.type)}` };
     }
 
+    if (req.fullAccess === true) {
+        if (req.target != null && !isRemoteTarget(req.target)) {
+            return { ok: false, status: 400, error: 'invalid_outbound_target' };
+        }
+        if (req.chatId != null && (typeof req.chatId !== 'string' && typeof req.chatId !== 'number'
+            || typeof req.chatId === 'number' && !Number.isFinite(req.chatId))) {
+            return { ok: false, status: 400, error: 'invalid_chat_id' };
+        }
+        const echoed = turnConversationForChannel(req.turnTarget, channel);
+        if (!req.target && !(req.chatId != null && String(req.chatId).trim())) {
+            if (!echoed) return { ok: false, status: 400, code: 'full_access_destination_required',
+                error: 'Full-local send requires an explicit target, chat_id, or turn_conversation; active-conversation defaults are not used.' };
+            req = { ...req, target: echoed };
+        }
+        req = { ...req, allowActiveFallback: false };
+    }
+
     if (req.chatId != null && String(req.chatId).trim()) {
         const explicitTarget = targetFromChatId(channel, req.chatId);
         if (req.target && (req.target.targetId !== explicitTarget.targetId || req.target.channel !== explicitTarget.channel)) {
             return { ok: false, status: 400, error: 'chatId and target refer to different destinations' };
         }
-        const authorized = authorizeExplicitTarget(req.target || explicitTarget, channel);
+        const authorized = authorizeExplicitTarget(req.target || explicitTarget, channel, req.fullAccess === true);
         if (!authorized) {
             return { ok: false, status: 403, error: `Explicit ${channel} chatId is not configured or the current active conversation` };
         }
@@ -415,7 +438,7 @@ export async function sendChannelOutput(req: ChannelSendRequest): Promise<{ ok: 
 
     // Validate explicit target (shape + allowlist)
     if (req.target) {
-        const authorized = authorizeExplicitTarget(req.target, channel);
+        const authorized = authorizeExplicitTarget(req.target, channel, req.fullAccess === true);
         if (!authorized) {
             return { ok: false, status: 403, error: `Invalid or disallowed target for ${channel}: ${req.target.targetId || '(empty)'}` };
         }

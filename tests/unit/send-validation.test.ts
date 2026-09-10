@@ -703,3 +703,29 @@ test('conversational sends are untouched by the new preference', async () => {
         // otherwise this would be testing the allowlist, not the preference.
     }, ['C_CONFIGURED', 'C_CURRENT']);
 });
+
+
+test('validateTarget fullAccess admits a well-shaped unlisted destination and rejects malformed', async () => {
+    const { settings } = await import('../../src/core/config.js');
+    const { validateTarget, validateExplicitChatId } = await import('../../src/messaging/send.js');
+    const previousSlack = settings.slack;
+    const previousTelegram = settings.telegram;
+    const previousDiscord = settings.discord;
+    try {
+        settings.slack = { ...(settings.slack || {}), channelIds: ['CALLOW'] };
+        settings.telegram = { ...(settings.telegram || {}), allowedChatIds: [111] };
+        settings.discord = { ...(settings.discord || {}), channelIds: ['111'] };
+        const withFull = { fullAccess: true } as { requireConfiguredAllowlist?: boolean; fullAccess?: boolean };
+        assert.equal(validateTarget({ channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'CUNLISTED' }, 'slack', withFull), true);
+        assert.equal(validateExplicitChatId('slack', 'CUNLISTED', withFull as never), true);
+        assert.equal(validateExplicitChatId('slack', 'CUNLISTED'), false);
+        assert.equal(validateTarget({ channel: 'telegram', targetKind: 'user', peerKind: 'direct', targetId: '999001' }, 'telegram', withFull), true);
+        assert.equal(validateTarget({ channel: 'discord', targetKind: 'channel', peerKind: 'channel', targetId: '888001' }, 'discord', withFull), true);
+        assert.equal(validateTarget({ channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: '' }, 'slack', withFull), false);
+        assert.equal(validateTarget({ channel: 'discord', targetKind: 'channel', peerKind: 'channel', targetId: '888001' }, 'slack', withFull), false);
+    } finally {
+        settings.slack = previousSlack;
+        settings.telegram = previousTelegram;
+        settings.discord = previousDiscord;
+    }
+});

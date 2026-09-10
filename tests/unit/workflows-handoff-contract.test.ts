@@ -2,6 +2,7 @@ import { readSource } from './source-normalize.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
+import { assertAuthorizedDispatcher, validateDispatchTask } from '../../src/workflows/employee-boundary.ts';
 
 const __dirname = import.meta.dirname;
 const projectRoot = join(__dirname, '../..');
@@ -36,8 +37,16 @@ test('WH-006: implementation delegation detection exists', () => {
     assert.ok(handoffSrc.includes('IMPL_DELEGATION_PATTERN'), 'must detect implementation patterns via regex');
 });
 
-test('WH-007: employee boundary prevents non-Boss dispatch', () => {
-    assert.ok(boundSrc.includes('Only the Boss'), 'must block non-Boss dispatch');
+test('WH-007: employee boundary rejects an unauthorized dispatcher', () => {
+    // Behaviour, not source text: the refusal message moved from 'Only the Boss'
+    // to 'Only an authorized dispatcher' when dispatch stopped being Boss-only,
+    // and a string match would have to be rewritten on every such rename.
+    assert.throws(() => assertAuthorizedDispatcher(false), /authorized dispatcher/);
+    assert.doesNotThrow(() => assertAuthorizedDispatcher(true));
+    const denied = validateDispatchTask({ authorized: false, phase: 'P', taskBody: 'read the plan' });
+    assert.equal(denied.ok, false, 'unauthorized dispatch must be refused');
+    assert.match(denied.error ?? '', /authorized dispatcher/);
+    assert.equal(validateDispatchTask({ authorized: true, phase: 'P', taskBody: 'read the plan' }).ok, true);
 });
 
 test('WH-008: employee boundary blocks B-phase implementation delegation', () => {

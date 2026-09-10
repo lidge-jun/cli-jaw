@@ -1,7 +1,7 @@
 import type { SlackCallOptions } from './api.js';
 import { searchSlackContext, type SlackSearchPage, type SlackSearchChannelType, type SlackContextSearch } from './search.js';
 import { publishSlackQuote, runSlackQuoteInvocation } from './quote.js';
-import { slackToolDenied, withSlackToolAccess, type SlackToolPrincipal } from './tool-access.js';
+import { slackToolContext, slackToolDenied, withSlackToolAccess, type SlackToolPrincipal } from './tool-access.js';
 import { getRtsOutputStore } from './rts-output-store.js';
 
 export type SlackSearchQuoteInput = Omit<SlackContextSearch, 'cursor' | 'limit'> & { invocationId: string; maxQuotes?: number; maxPages?: number };
@@ -9,9 +9,13 @@ export type SlackSearchQuoteReceipt = { ok: boolean; sent: boolean | 'unknown'; 
 /** RTS data never leaves this request-local server pipeline as an agent tool result. */
 export async function searchAndQuoteSlack(token: string, principal: SlackToolPrincipal, input: SlackSearchQuoteInput,
     options: SlackCallOptions & { currentCredential?: () => string | null } = {}): Promise<SlackSearchQuoteReceipt> {
-    if (principal.kind !== 'turn' || !principal.grant.actionToken) throw slackToolDenied('slack_action_token_unavailable', 409);
+    const grant = slackToolContext(principal);
+    if (!grant?.actionToken) throw slackToolDenied('slack_action_token_unavailable', 409);
+    // Protected search retains the complete contextual turn workflow, even when
+    // ordinary tools were authorized independently as a full local operator.
+    const scoped: SlackToolPrincipal = { kind: 'turn', grant };
     if (!getRtsOutputStore()) throw slackToolDenied('slack_rts_privacy_unavailable', 503);
-    return runSlackQuoteInvocation(token, principal, input.invocationId, input, () => withSlackToolAccess<SlackSearchQuoteReceipt>(token, principal, undefined, async () => {
+    return runSlackQuoteInvocation(token, scoped, input.invocationId, input, () => withSlackToolAccess<SlackSearchQuoteReceipt>(token, scoped, undefined, async () => {
         const messageTs: string[] = [];
         const cursors = new Set<string>();
         const seen = new Set<string>();
@@ -21,7 +25,7 @@ export async function searchAndQuoteSlack(token: string, principal: SlackToolPri
         let found = false;
         for (let page = 0; page < (input.maxPages ?? 3); page++) {
             let result: SlackSearchPage;
-            try { result = await searchSlackContext(token, principal.grant, { query: input.query, limit: 20, ...(input.channelTypes ? { channelTypes: input.channelTypes } : {}),
+            try { result = await searchSlackContext(token, grant, { query: input.query, limit: 20, ...(input.channelTypes ? { channelTypes: input.channelTypes } : {}),
                 ...(cursor ? { cursor } : {}), ...(input.before !== undefined ? { before: input.before } : {}),
                 ...(input.after !== undefined ? { after: input.after } : {}), ...(input.sort ? { sort: input.sort } : {}),
                 ...(input.sortDir ? { sortDir: input.sortDir } : {}) }, options); }
@@ -35,7 +39,7 @@ export async function searchAndQuoteSlack(token: string, principal: SlackToolPri
                 seen.add(key);
                 if (messageTs.length >= (input.maxQuotes ?? 3)) { partial = true; break; }
                 try {
-                    const receipt = await publishSlackQuote(token, principal, { source: { channel: source.channel, ts: source.ts,
+                    const receipt = await publishSlackQuote(token, scoped, { source: { channel: source.channel, ts: source.ts,
                         ...(source.threadTs ? { threadTs: source.threadTs } : {}) }, expectedAuthorId: source.authorId },
                     { ...options, sensitiveResponse: true }, `${input.invocationId}:${seen.size}`);
                     messageTs.push(...receipt.messageTs);

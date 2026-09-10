@@ -129,3 +129,38 @@ for (const event of ['aborted', 'close', 'finished-close'] as const) {
         assert.equal(f.calls.filter(method => method === 'reactions.get').length, 1);
     });
 }
+
+
+test('GET capabilities with isFullAccess does not keep the print-only limitation', async t => {
+    resetVerifiedSlackWorkspace();
+    const previous = settings.slack; const originalFetch = globalThis.fetch;
+    settings.slack = { ...previous, enabled: true, botToken: TOKEN };
+    const db = new Database(':memory:'); const store = new SlackActionStore(db);
+    globalThis.fetch = async url => {
+        const method = String(url).split('/').at(-1)!;
+        return new globalThis.Response(JSON.stringify({ ok: true, ...(method === 'auth.test' ? { team_id: 'T1', user_id: 'UBOT' } : {}) }),
+            { headers: { 'x-oauth-scopes': 'chat:write,reactions:read,search:read.public,im:read,users:read' } });
+    };
+    const runtime = new SlackActionRuntime({ getToken: () => TOKEN, store, fetchImpl: globalThis.fetch, evidenceSource: 'fixture' });
+    const handlers = new Map<string, Handler>();
+    const capture = (verb: string) => (path: string, ...fns: Handler[]) => { handlers.set(verb + ' ' + path, fns.at(-1)!); };
+    type Register = typeof registerSlackToolRoutes & ((
+        app: never, auth: never, op: (value: string) => boolean,
+        actions?: { runtime: SlackActionRuntime; store: SlackActionStore; inboundReady(): boolean },
+        options?: { isFullAccess?: () => boolean },
+    ) => void);
+    (registerSlackToolRoutes as Register)({ post: capture('POST'), get: capture('GET') } as never,
+        ((_req: unknown, _res: unknown, next: () => void) => next()) as never,
+        () => false,
+        { runtime, store, inboundReady: () => false },
+        { isFullAccess: () => true });
+    t.after(() => { settings.slack = previous; globalThis.fetch = originalFetch; db.close(); resetVerifiedSlackWorkspace(); });
+    const req = new Request({}, {});
+    const res = new Response();
+    await handlers.get('GET /api/slack/tools/capabilities')!(req, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.authorization.pooledNative, true);
+    assert.match(String(res.body.authorization.limitation), /Trusted local Auto|action token/i);
+    const quote = (res.body.capabilities as Array<{ operation: string; reason?: string }>).find(item => item.operation === 'search.quote');
+    assert.equal(quote?.reason, 'action_token_unavailable');
+});

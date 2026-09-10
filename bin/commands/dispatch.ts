@@ -30,8 +30,13 @@ if (shouldShowHelp(process.argv)) printAndExit(`
     --task-file <path>  Read the task instruction from a file (recommended for
                         multi-line briefs — no shell quoting; max 1MB)
     --task-tags <csv>   Methodology overlays forwarded as task_tags (e.g. "tdd,security")
-    --mutable           Allow employee to write/modify files (default: read-only)
-    --scope <path>      Restrict writes to a subdirectory (optional, requires --mutable)
+    --mutable           Allow employee to write/modify files
+    --read-only         Force a read-only assignment
+    --no-descendants    Forbid nested Jaw dispatch from this worker
+    --scope-key <id>    Parent scope (requires --chat-session-id and --request-id)
+    --chat-session-id <id> Parent chat session
+    --request-id <id>   Parent run ID
+    --scope <path>      Restrict writes to a subdirectory
     --async             Do not wait for the result: print runId + recovery commands
                         and exit. Recommended for work that may exceed 2 minutes —
                         omitting it blocks up to 10 minutes while polling.
@@ -54,8 +59,9 @@ if (shouldShowHelp(process.argv)) printAndExit(`
 
 loadSettings();
 
-if (process.env["JAW_EMPLOYEE_MODE"] === '1') {
-    console.error('❌ jaw employee sessions cannot dispatch other employees. Complete the assigned task directly.');
+const employeeMode = process.env["JAW_EMPLOYEE_MODE"] === '1';
+if (employeeMode && process.env["JAW_ASSIGNMENT_ALLOW_DISPATCH"] === '0') {
+    console.error('❌ this assignment does not authorize descendants.');
     process.exit(2);
 }
 
@@ -82,8 +88,66 @@ const inlineTask = getFlag('--task');
 const taskFile = getFlag('--task-file');
 const taskTags = parseTaskTagsFlag(getFlag('--task-tags'));
 const isAsync = process.argv.includes('--async');
-const mutable = process.argv.includes('--mutable');
+const wantMutable = process.argv.includes('--mutable');
+const wantReadOnly = process.argv.includes('--read-only');
+const noDescendants = process.argv.includes('--no-descendants');
+if (wantMutable && wantReadOnly) {
+    console.error('❌ Pass either --mutable or --read-only, not both.');
+    process.exit(1);
+}
 const scope = getFlag('--scope');
+
+function dispatchHeaders(extra: Record<string, string> = {}): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...extra };
+    if (bossToken) headers['X-Jaw-Boss-Token'] = bossToken;
+    if (employeeMode) headers['x-jaw-employee-mode'] = '1';
+    return headers;
+}
+
+function assignmentSelectorFields(): Record<string, string> {
+    const explicit = ['--scope-key', '--chat-session-id', '--request-id'].some(flag => process.argv.includes(flag));
+    if (explicit) return { scopeKey: getFlag('--scope-key') || '', chatSessionId: getFlag('--chat-session-id') || '', requestId: getFlag('--request-id') || '' };
+    if (!employeeMode) return {};
+    const scopeKey = process.env['JAW_ASSIGNMENT_SCOPE_KEY'];
+    const chatSessionId = process.env['JAW_ASSIGNMENT_CHAT_SESSION_ID'];
+    const requestId = process.env['JAW_ASSIGNMENT_PARENT_REQUEST_ID'];
+    return {
+        ...(scopeKey ? { scopeKey } : {}),
+        ...(chatSessionId ? { chatSessionId } : {}),
+        ...(requestId ? { requestId } : {}),
+    };
+}
+
+function assignmentBodyFields(): Record<string, unknown> {
+    return {
+        ...(wantMutable ? { mutable: true } : {}),
+        ...(wantReadOnly ? { mutable: false } : {}),
+        ...(noDescendants ? { noDescendants: true } : {}),
+        ...(scope ? { scope } : {}),
+        ...assignmentSelectorFields(),
+    };
+}
+
+async function readDispatchPath(baseUrl: string): Promise<'direct' | 'boss' | 'approval' | 'legacy'> {
+    let res: Response;
+    try {
+        res = await cliFetch(`${baseUrl}/api/orchestrate/access`, { headers: dispatchHeaders() });
+    } catch {
+        throw new Error('dispatch_access_discovery_failed: transport');
+    }
+    if (res.status === 404) return 'legacy';
+    if (!res.ok) throw new Error(`dispatch_access_discovery_failed: HTTP ${res.status}`);
+    let raw: unknown;
+    try { raw = JSON.parse(await res.text()); }
+    catch { throw new Error('dispatch_access_discovery_failed: malformed response'); }
+    if (!raw || typeof raw !== 'object' || !('dispatch' in raw)
+        || !raw.dispatch || typeof raw.dispatch !== 'object' || !('path' in raw.dispatch)) {
+        throw new Error('dispatch_access_discovery_failed: invalid path');
+    }
+    const path = raw.dispatch.path;
+    if (path === 'direct' || path === 'boss' || path === 'approval') return path;
+    throw new Error('dispatch_access_discovery_failed: invalid path');
+}
 const quiet = process.argv.includes('--quiet');
 const json = process.argv.includes('--json');
 const isBatch = process.argv.includes('--batch');
@@ -136,17 +200,22 @@ if (isBatch) batchRun: {
         process.exitCode = 1;
         break batchRun;
     }
-    const BASE = getServerUrl();
-    await getCliAuthToken();
+    await getCliAuthToken(PORT);
     if (!json && !quiet) console.log(`🚀 Batch dispatching ${batchAgents.length} agents...`);
     try {
+        const dispatchPath = await readDispatchPath(BASE);
+        if (dispatchPath === 'approval') {
+            console.error('❌ Operator approval is single-dispatch only.');
+            process.exitCode = 1;
+            break batchRun;
+        }
         const res = await cliFetch(`${BASE}/api/orchestrate/dispatch/batch`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Jaw-Boss-Token': bossToken },
+            headers: dispatchHeaders(),
             // --async sends wait:false → server pre-claims slots, answers 202
             // with runIds, and executes detached (results via worker status/read
             // or the boss's pending-replay drain).
-            body: JSON.stringify({ agents: batchAgents, ...(isAsync ? { wait: false } : {}) }),
+            body: JSON.stringify({ agents: batchAgents, ...assignmentSelectorFields(), ...(noDescendants ? { noDescendants: true } : {}), ...(isAsync ? { wait: false } : {}) }),
         });
         const { body, nonJsonError } = await readJsonResponse<BatchDispatchBody>(res, 'batch dispatch endpoint');
         if (nonJsonError || !body.ok) {
@@ -492,12 +561,14 @@ await getCliAuthToken(PORT);
 dispatchRun: {
 try {
     if (!json && !quiet) console.log(`🚀 Dispatching to ${targetName}...`);
+    const dispatchPath = await readDispatchPath(BASE);
+    const useApproval = dispatchPath === 'approval' || (dispatchPath === 'legacy' && !bossToken);
 
-    if (!bossToken) {
+    if (useApproval) {
         const pendingResponse = await cliFetch(`${BASE}/api/orchestrate/dispatch/pending`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: dispatchHeaders(),
             body: JSON.stringify({
-                ...(agent ? { agent } : { virtual }), task, mutable, scope,
+                ...(agent ? { agent } : { virtual }), task, ...assignmentBodyFields(),
                 ...(taskTags.length ? { task_tags: taskTags } : {}), ...(role ? { role } : {}),
                 ...(cli ? { cli } : {}), ...(model ? { model } : {}), wait: false,
             }),
@@ -555,15 +626,11 @@ try {
         try {
             res = await cliFetch(`${BASE}/api/orchestrate/dispatch`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Jaw-Boss-Token': bossToken,
-                },
+                headers: dispatchHeaders(),
                 body: JSON.stringify({
                     ...(agent ? { agent } : { virtual }),
                     task,
-                    mutable,
-                    scope,
+                    ...assignmentBodyFields(),
                     ...(taskTags.length ? { task_tags: taskTags } : {}),
                     ...(role ? { role } : {}),
                     ...(cli ? { cli } : {}),

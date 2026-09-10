@@ -14,7 +14,7 @@ import { saveUpload } from '../agent/spawn.js';
 import { submitMessage } from '../orchestrator/gateway.js';
 import { getTelegramSendClient, getLatestTelegramChatId } from '../telegram/bot.js';
 import { validateFileSize, sendTelegramFile } from '../telegram/telegram-file.js';
-import { assertSendFilePath } from '../security/path-guards.js';
+import { assertSendFilePath, hostPathEnvironment } from '../security/path-guards.js';
 import { decodeFilenameSafe } from '../security/decode.js';
 import { sendChannelOutput, normalizeChannelSendRequest, validateExplicitChatId } from '../messaging/send.js';
 import { recordSelfDelivery } from '../messaging/turn-delivery.js';
@@ -148,15 +148,16 @@ function resolveOpenTarget(rawPath: string): OpenTarget {
 }
 
 export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddleware,
-    options: { validateSlackOperator?: SlackOperatorValidator } = {}): void {
-    const principalFor = (req: Request) => {
+    options: { validateSlackOperator?: SlackOperatorValidator; isFullAccess?: (req: Request) => boolean } = {}): void {
+    const fullFor = (req: Request) => options.isFullAccess?.(req) === true;
+    const principalFor = (req: Request, full: boolean) => {
         for (const input of [req.body, req.query]) if (input && typeof input === 'object'
             && ['requesterId', 'actorId', 'actionToken', 'botToken'].some(key => Object.hasOwn(input, key))) throw slackToolDenied('slack_caller_identity_forbidden', 400);
-        return resolveSlackToolPrincipal(req.headers, options.validateSlackOperator ?? (() => false));
+        return resolveSlackToolPrincipal(req.headers, options.validateSlackOperator ?? (() => false), { isFullAccess: full });
     };
     const lookup = async <T>(req: Request, res: Response, token: string, channel: string | undefined,
         operation: (signal?: AbortSignal) => Promise<T>): Promise<T | undefined> => {
-        try { return await withSlackToolAccess(token, principalFor(req), channel, async signal => {
+        try { return await withSlackToolAccess(token, principalFor(req, fullFor(req)), channel, async signal => {
             if (getSlackSendClient().token !== token) throw slackToolDenied('slack_credential_changed', 409);
             const result = await operation(signal);
             if (getSlackSendClient().token !== token) throw slackToolDenied('slack_credential_changed', 409);
@@ -164,10 +165,10 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
         }); }
         catch (error) { res.status(httpStatus(error, 403)).json({ ok: false, error: userErrorText(error), code: httpCode(error) }); return undefined; }
     };
-    const sendSlackAware = async (req: Request, request: ReturnType<typeof normalizeChannelSendRequest>) => {
+    const sendSlackAware = async (req: Request, request: ReturnType<typeof normalizeChannelSendRequest>, full: boolean) => {
         const channel = request.target?.channel ?? (request.channel && request.channel !== 'active' ? request.channel : getHomeChannel());
         if (channel !== 'slack') return sendChannelOutput({ ...request, fromAgentSurface: true });
-        const principal = principalFor(req);
+        const principal = principalFor(req, full);
         const client = getSlackSendClient();
         if (!client.token) throw slackToolDenied('slack_unavailable', 503);
         if (principal.kind === 'turn') {
@@ -285,6 +286,7 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
     // Telegram direct send
     app.post('/api/telegram/send', requireAuth, async (req, res) => {
         try {
+            const full = fullFor(req);
             const sendClient = getTelegramSendClient();
             if (!sendClient.client) {
                 res.status(sendClient.status ?? 503).json({ ok: false, error: sendClient.reason ?? 'Telegram not configured' });
@@ -298,14 +300,24 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
                 return;
             }
 
-            const chatId = resolveTelegramChatId(req.body || {});
+            const explicitChatId = req.body?.chat_id ?? req.body?.chatId;
+            if (full && (explicitChatId == null || !String(explicitChatId).trim())) {
+                res.status(400).json({ ok: false, code: 'full_access_destination_required',
+                    error: 'Full-local Telegram send requires an explicit chat_id; active-conversation defaults are not used.' });
+                return;
+            }
+            if (full && (typeof explicitChatId !== 'string' && typeof explicitChatId !== 'number'
+                || typeof explicitChatId === 'number' && !Number.isFinite(explicitChatId))) {
+                res.status(400).json({ ok: false, error: 'invalid_chat_id' }); return;
+            }
+            const chatId = full ? explicitChatId as string | number : resolveTelegramChatId(req.body || {});
             if (!chatId) {
                 res.status(400).json({ error: 'chat_id required (or send a Telegram message first)' });
                 return;
             }
-            const explicitChatId = req.body?.chat_id ?? req.body?.chatId;
-            if (explicitChatId != null && String(explicitChatId).trim() && !validateExplicitChatId('telegram', explicitChatId as string | number)) {
-                res.status(403).json({ error: 'chat_id is not in the configured Telegram allowlist' });
+            if (explicitChatId != null && String(explicitChatId).trim()
+                && !validateExplicitChatId('telegram', explicitChatId as string | number, { fullAccess: full })) {
+                res.status(403).json({ error: full ? 'invalid_chat_id' : 'chat_id is not in the configured Telegram allowlist' });
                 return;
             }
 
@@ -340,7 +352,8 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
                 res.status(400).json({ error: 'file_path required for non-text types' });
                 return;
             }
-            const safePath = assertSendFilePath(filePath, settings["workingDir"] || undefined, settings["projectDirs"] || null);
+            const safePath = assertSendFilePath(filePath, settings["workingDir"] || undefined, settings["projectDirs"] || null,
+                hostPathEnvironment, { fullAccess: full });
             if (!fs.existsSync(safePath)) {
                 res.status(400).json({ error: `file not found: ${safePath}` });
                 return;
@@ -405,7 +418,8 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
             // `fromAgentSurface` is set HERE rather than inside the normalizer:
             // it is a fact about how the send arrived, not about its body, and
             // an agent must not be able to claim it by putting a field in JSON.
-            const result = await sendSlackAware(req, normalizeChannelSendRequest(req.body));
+            const full = fullFor(req);
+            const result = await sendSlackAware(req, normalizeChannelSendRequest(req.body, { fullAccess: full }), full);
             if (!result.ok) {
                 res.status(sendResultHttpStatus(result)).json(result);
                 return;
@@ -424,8 +438,9 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
 
     app.post('/api/discord/send', requireAuth, async (req, res) => {
         try {
+            const full = fullFor(req);
             const result = await sendChannelOutput({
-                ...normalizeChannelSendRequest(req.body),
+                ...normalizeChannelSendRequest(req.body, { fullAccess: full }),
                 channel: 'discord',
                 fromAgentSurface: true,
             });
@@ -445,7 +460,8 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
 
     app.post('/api/slack/send', requireAuth, async (req, res) => {
         try {
-            const result = await sendSlackAware(req, { ...normalizeChannelSendRequest(req.body), channel: 'slack' });
+            const full = fullFor(req);
+            const result = await sendSlackAware(req, { ...normalizeChannelSendRequest(req.body, { fullAccess: full }), channel: 'slack' }, full);
             if (!result.ok) {
                 res.status(sendResultHttpStatus(result)).json(result);
                 return;
@@ -500,9 +516,9 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
             : fetchSlackHistory(client.token!, channel, { ...opts, ...(signal ? { signal } : {}) }));
         if (!result) return;
         if (!result.ok) {
-            // describeSlackError prose only (missing_scope names the scope);
-            // never the raw upstream payload.
-            res.status(502).json({ ok: false, error: result.error });
+            // Keep the provider code separate from Jaw authorization failures;
+            // never return the raw upstream payload.
+            res.status(502).json({ ok: false, error: result.error, ...(result.code ? { code: result.code } : {}) });
             return;
         }
         const messages = slackHistoryForAgent(result.messages);

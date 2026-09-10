@@ -2,7 +2,7 @@
 // src/security/path-guards.js 가 생성되면 통과
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assertSkillId, assertFilename, safeResolveUnder, assertSendFilePath, sendFileAllowedRoots } from '../../src/security/path-guards.ts';
+import { assertSkillId, assertFilename, safeResolveUnder, assertSendFilePath, sendFileAllowedRoots, hostPathEnvironment } from '../../src/security/path-guards.ts';
 import { expandHomePath } from '../../src/core/path-expand.ts';
 import path from 'node:path';
 import os from 'node:os';
@@ -358,5 +358,35 @@ test('PG-028: a malformed projectDirs entry is skipped, not thrown on', () => {
         assert.doesNotThrow(() => sendFileAllowedRoots(7 as unknown as string, null));
     } finally {
         fs.rmSync(good, { recursive: true, force: true });
+    }
+});
+
+
+test('fullAccess admits a resolvable regular file outside configured roots', () => {
+    const previousCliHome = process.env.CLI_JAW_HOME;
+    const previousJawHome = process.env.JAW_HOME;
+    const testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-send-path-full-home-'));
+    const tmpFile = path.join(os.tmpdir(), 'jaw-send-path-full-' + Date.now() + '.txt');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-send-path-full-dir-'));
+    try {
+        fs.writeFileSync(tmpFile, 'ok');
+        process.env.CLI_JAW_HOME = testHome;
+        delete process.env.JAW_HOME;
+        const assertPath = assertSendFilePath as typeof assertSendFilePath & ((
+            filePath: string, workingDir?: string, projectDirs?: string[] | null,
+            env?: typeof hostPathEnvironment, options?: { fullAccess?: boolean },
+        ) => string);
+        assert.equal(assertPath(tmpFile, undefined, null, hostPathEnvironment, { fullAccess: true }), fs.realpathSync.native(tmpFile));
+        assert.throws(() => assertPath(dir, undefined, null, hostPathEnvironment, { fullAccess: true }), /path_not_regular_file/);
+        assert.throws(() => assertPath(path.join(os.tmpdir(), 'missing-full-access-file.txt'), undefined, null, hostPathEnvironment, { fullAccess: true }), /path_not_resolvable/);
+        assert.throws(() => assertSendFilePath(tmpFile), /path_not_allowed/);
+    } finally {
+        if (previousCliHome == null) delete process.env.CLI_JAW_HOME;
+        else process.env.CLI_JAW_HOME = previousCliHome;
+        if (previousJawHome == null) delete process.env.JAW_HOME;
+        else process.env.JAW_HOME = previousJawHome;
+        fs.rmSync(testHome, { recursive: true, force: true });
+        fs.rmSync(tmpFile, { force: true });
+        fs.rmSync(dir, { recursive: true, force: true });
     }
 });

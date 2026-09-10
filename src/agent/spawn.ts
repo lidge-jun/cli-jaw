@@ -203,6 +203,7 @@ function registerActiveProcess(agentLabel: string, child: ChildProcess): void {
 // replayed to the correct scope instead of defaulting to 'system'.
 export interface MainSessionMeta {
     origin: string;
+    permissions?: string | string[];
     target?: RemoteTarget;
     chatId?: string | number;
     requestId?: string;
@@ -1164,7 +1165,7 @@ interface SpawnOpts {
     cli?: string;
     model?: string;
     effort?: string;
-    permissions?: string;
+    permissions?: string | string[];
     memorySnapshot?: string;
     workspaceContext?: string;
     env?: Record<string, string>;
@@ -1294,7 +1295,10 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     // saved-session reads, bootstrap consumption, or worker isolation.
     const runtimeTransport = isSwitchableNativeCli(cli)
         ? resolveRuntimeTransport(settings['perCli']?.[cli]?.transport) : 'print';
-    const permissions = opts.permissions || settings['permissions'] || session.permissions || 'auto';
+    const selectedPermissions = opts.permissions || settings['permissions'] || session.permissions || 'auto';
+    const permissions = Array.isArray(selectedPermissions) ? [...selectedPermissions] : selectedPermissions;
+    const capturedPermissions: string | string[] | undefined = typeof permissions === 'string'
+        || (Array.isArray(permissions) && permissions.every(value => typeof value === 'string')) ? permissions : undefined;
     const unavailableNative = runtimeTransport === 'native'
         && (!isNativeAdapterImplemented(cli) || (isEmployee && !isNativeWorkerImplemented(cli)));
     const restrictiveNative = runtimeTransport === 'native' && (cli === 'cursor' || cli === 'grok') && permissions !== 'auto';
@@ -1340,6 +1344,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         setCurrentMainMeta(scopeKey, stripUndefined({
             origin,
             cli,
+            permissions: capturedPermissions,
             target: opts.target,
             chatId: opts.chatId,
             requestId: opts.requestId,
@@ -1386,6 +1391,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     if (mainManaged) {
         setCurrentMainMeta(scopeKey, stripUndefined({
             origin,
+            permissions: capturedPermissions,
             target: opts.target,
             chatId: opts.chatId,
             requestId: opts.requestId,

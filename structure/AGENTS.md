@@ -2,6 +2,7 @@
 
 # structure/ — Sync Guide
 
+- Auto (`permissions:auto`) grants qualified direct-local Jaw API authority across supported runtimes, independently of per-turn secrets. Keep actual/effective loopback, exact browser origin, proxy provenance, explicit outbound destinations and server-only resource options. Safe/custom keep existing scoped/operator paths; full API authority is instance-wide, distinct from provider Safe and task scope. Preserve no-descendant/read-only assignments, captured worker context and honest capability/receipt evidence. See `../docs/slack-tools.md` and `server_api.md`.
 - Slack group DMs use `message.mpim`, which requires `mpim:history` — without it group DMs do not arrive at all; existing IM/channel installs keep working and merely report the optional capability gap. Exact `channel_type: mpim` mentions retain channel allowlist and thread policy, never the one-to-one DM bypass. an absent scope header is unknown and a present empty header is a known empty grant. Keep `telegram.md` and the validation API docs synchronized.
 
 - Native Code: synchronize `runtime-integration.md`, `server_api.md`, `INDEX.md` and root guides for `src/code-mode/` and `/api/code`. Code uses separate per-backend storage and direct native adapters; preserve append/status replay, complete active snapshots, byte budgets, early resource registration and physical-exit proof. Interruption must seal callbacks before owner-checked accepted-buffer persistence; both hosts use `src/routes/code-body-parser.ts` for Code envelope/decoded limits.

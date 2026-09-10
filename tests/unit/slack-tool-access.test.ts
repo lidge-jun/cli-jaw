@@ -172,3 +172,80 @@ test('documented DM metadata requires actor workspace and exact two-person membe
         else { await assert.rejects(result, /workspace_unverified/); assert.equal(calls, 0); }
     }
 });
+
+
+test('full-first principal: Auto local ignores stale grant and keeps explicit operator without source', () => {
+    assert.throws(() => resolveSlackToolPrincipal({}, () => false), /grant_required/);
+    assert.throws(() => resolveSlackToolPrincipal({ 'x-jaw-slack-grant': 'not-a-grant' }, () => false), /grant_invalid/);
+    const { secret, value } = grant('full-first');
+    const turn = resolveSlackToolPrincipal({ 'x-jaw-slack-grant': secret }, () => false);
+    assert.equal(turn.kind, 'turn');
+    const fullNone = resolveSlackToolPrincipal({}, () => false, { isFullAccess: true });
+    assert.ok(fullNone.kind === 'operator');
+    assert.equal(fullNone.source, 'full-local');
+    assert.equal(fullNone.context, undefined);
+    const fullStale = resolveSlackToolPrincipal({ 'x-jaw-slack-grant': 'not-a-grant' }, () => false, { isFullAccess: true });
+    assert.ok(fullStale.kind === 'operator');
+    assert.equal(fullStale.source, 'full-local');
+    assert.equal(fullStale.context, undefined);
+    const fullValid = resolveSlackToolPrincipal({ 'x-jaw-slack-grant': secret }, () => false, { isFullAccess: true });
+    assert.ok(fullValid.kind === 'operator');
+    assert.equal(fullValid.source, 'full-local');
+    assert.equal(fullValid.context, value);
+    const explicit = resolveSlackToolPrincipal({ 'x-jaw-slack-operator': 'op' }, candidate => candidate === 'op');
+    assert.ok(explicit.kind === 'operator');
+    assert.deepEqual(explicit, { kind: 'operator' });
+    assert.equal(explicit.source, undefined);
+});
+
+test('headerless history is admitted only when isFullAccess is true, once per request', async t => {
+    const { settings } = await import('../../src/core/config.ts');
+    const { registerMessagingRoutes } = await import('../../src/routes/messaging.ts');
+    const oldSlack = settings.slack;
+    settings.slack = { ...oldSlack, enabled: true, botToken: token };
+    t.after(() => { settings.slack = oldSlack; });
+    const oldFetch = globalThis.fetch;
+    let slackCalls = 0;
+    globalThis.fetch = async (url) => {
+        if (String(url).includes('slack.com/api/')) {
+            slackCalls += 1;
+            const method = String(url).split('/').at(-1);
+            const data = method === 'auth.test' ? { team_id: 'T1', user_id: 'UBOT' }
+                : method === 'conversations.replies' || method === 'conversations.history'
+                    ? { messages: [{ ts: '1700000000.000001', user: 'U1', text: 'early-root' }], has_more: false, response_metadata: { next_cursor: '' } }
+                    : method === 'conversations.info' ? { channel: { id: 'C192TEST', is_shared: false, is_ext_shared: false, context_team_id: 'T1' } }
+                    : { members: ['U1', 'UBOT'], response_metadata: { next_cursor: '' } };
+            return new Response(JSON.stringify({ ok: true, ...data }));
+        }
+        throw new Error('unexpected ' + url);
+    };
+    t.after(() => { globalThis.fetch = oldFetch; });
+    const handlers = new Map<string, (req: unknown, res: unknown) => Promise<void>>();
+    const register = (path: string, ...fns: Array<(req: unknown, res: unknown) => Promise<void>>) => { handlers.set(path, fns.at(-1)!); };
+    let flag = true;
+    let invocations = 0;
+    const isFullAccess = () => { invocations += 1; return flag; };
+    registerMessagingRoutes({ get: register, post: register, use() {} } as never, ((_req: unknown, _res: unknown, next: () => void) => next()) as never,
+        { validateSlackOperator: () => false, isFullAccess });
+    const fakeRes = () => {
+        const res = { statusCode: 200, payload: {} as Record<string, unknown>, status(code: number) { this.statusCode = code; return this; }, json(body: Record<string, unknown>) { this.payload = body; } };
+        return res;
+    };
+    const history = handlers.get('/api/slack/history')!;
+    const first = fakeRes();
+    await history({ query: { channel: 'C192TEST' }, headers: {}, body: { fullAccess: true } }, first);
+    assert.equal(first.statusCode, 200, 'headerless full must reach Slack');
+    assert.equal(invocations, 1);
+    assert.ok(slackCalls > 0);
+    slackCalls = 0; invocations = 0; flag = false;
+    const denied = fakeRes();
+    await history({ query: { channel: 'C192TEST' }, headers: { 'x-jaw-internal': '1' }, body: { fullAccess: true } }, denied);
+    assert.equal(denied.statusCode, 401);
+    assert.equal(slackCalls, 0);
+    const { secret } = grant('other-channel');
+    flag = true; invocations = 0; slackCalls = 0;
+    const granted = fakeRes();
+    await history({ query: { channel: 'C192TEST' }, headers: { 'x-jaw-slack-grant': secret }, body: {} }, granted);
+    assert.equal(granted.statusCode, 200);
+    assert.equal(invocations, 1);
+});

@@ -6,6 +6,7 @@ import { getSlackConnectionState } from './src/slack/bot.js';
 import { SlackInteractionStore, configureSlackInteractionStore, isSlackInteractionReady } from './src/slack/interaction-store.js';
 import { configureRtsOutputStore, RtsOutputStore } from './src/slack/rts-output-store.js';
 import { initializeSlackOperatorAuth } from './src/slack/operator-auth.js';
+import { isFullAccessRequest } from './src/http/full-access.js';
 // ─── cli-jaw Server (glue + routes) ─────────────────
 // All business logic lives in src/ modules.
 
@@ -255,6 +256,7 @@ type RemoteAccessSettings = {
 
 const remoteAccess = (settings["network"]?.remoteAccess || {}) as RemoteAccessSettings;
 const app = express();
+const isFullAccess = (req: express.Request) => isFullAccessRequest(req, settings['permissions']);
 if (remoteAccess.mode === 'reverse-proxy' && remoteAccess.trustProxies && remoteAccess.trustForwardedFor) {
     app.set('trust proxy', 'loopback');
 }
@@ -386,7 +388,7 @@ registerEmployeeRoutes(app, requireAuth);
 registerHeartbeatRoutes(app, requireAuth);
 registerSkillRoutes(app, requireAuth, makeWebCommandCtx);
 registerJawMemoryRoutes(app, requireAuth);
-registerOrchestrateRoutes(app, requireAuth);
+registerOrchestrateRoutes(app, requireAuth, { isFullAccess });
 registerGoalRoutes(app, requireAuth);
 registerTaskRoutes(app, requireAuth);
 registerBgtaskRoutes(app, requireAuth);
@@ -418,7 +420,7 @@ catch { configureRtsOutputStore(null); log.error('[slack:privacy] output store u
 let validateSlackOperator: (candidate: string) => boolean = () => false;
 try { validateSlackOperator = initializeSlackOperatorAuth(JAW_HOME); }
 catch { log.error('[slack:operator] operator credential unavailable; operator access disabled'); }
-registerMessagingRoutes(app, requireAuth, { validateSlackOperator });
+registerMessagingRoutes(app, requireAuth, { validateSlackOperator, isFullAccess });
 let slackActionStore: SlackActionStore | undefined;
 try { slackActionStore = new SlackActionStore(db); }
 catch { log.error('[slack:actions] action store unavailable; typed actions disabled'); }
@@ -432,7 +434,7 @@ registerSlackToolRoutes(app, requireAuth, validateSlackOperator, slackActionStor
     store: slackActionStore,
     runtime: new SlackActionRuntime({ getToken: () => getSlackSendClient().token, store: slackActionStore, evidenceSource: 'slack_api', inboundReady: slackInteractionInboundReady }),
     inboundReady: slackInteractionInboundReady,
-} : undefined);
+} : undefined, { isFullAccess });
 registerAvatarRoutes(app, requireAuth);
 registerTraceRoutes(app, requireAuth);
 registerLinkPreviewRoutes(app, requireAuth);
