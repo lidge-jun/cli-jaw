@@ -619,7 +619,8 @@ test('sendSlackFile performs the three-step external upload in order', async () 
     const { impl, calls } = makeFetch([
         { ok: true, upload_url: 'https://files.slack.com/upload/abc', file_id: 'F1' },
         { __raw: true, ok: true, status: 200 },
-        { ok: true },
+        // The completion has to echo the reserved id back; a bare ok is now unconfirmed.
+        { ok: true, files: [{ id: 'F1' }] },
     ]);
     const result = await sendSlackFile('xoxb-t', slackTargetFromId('C1'), tempFile(), { fetchImpl: impl });
     assert.equal(result.ok, true);
@@ -983,7 +984,7 @@ test('SOR-004: the filename is masked everywhere it reaches Slack', async () => 
 
 // ─── #517 round 2: oversized file → caption-as-text downgrade ──────
 
-test('SO-413: an oversized file send delivers its caption as text instead of losing the answer', async () => {
+test('SO-413: an oversized file preserves failure and never sends its caption alone', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'slack-huge-'));
     const path = join(dir, 'huge.bin');
     const fh = openSync(path, 'w'); ftruncateSync(fh, 50 * 1024 * 1024 + 1); closeSync(fh); // sparse
@@ -998,10 +999,11 @@ test('SO-413: an oversized file send delivers its caption as text instead of los
     try {
         const result = await withSlack({ enabled: true, botToken: 'xoxb-t' }, () =>
             slackSendHandler({ type: 'photo', filePath: path, caption: 'the answer body', target: slackTargetFromId('C1') }));
-        assert.equal(result.ok, true);
-        assert.deepEqual(result['downgraded'], { operation: 'fileUpload', to: 'text' });
-        assert.equal(seen.length, 1, 'zero upload calls, one chat.postMessage');
-        assert.ok(seen[0]!.includes('chat.postMessage') && seen[0]!.includes('the answer body'));
+        assert.equal(result.ok, false);
+        assert.equal(result['status'], 413);
+        assert.equal(result['sent'], false);
+        assert.equal(result['downgraded'], undefined);
+        assert.equal(seen.length, 0, 'failed file must not become an unrelated text post');
     } finally {
         globalThis.fetch = priorFetch;
     }
@@ -1012,9 +1014,9 @@ test('SO-413b: an oversized file with no text still refuses (nothing to downgrad
     const path = join(dir, 'huge.bin');
     const fh = openSync(path, 'w'); ftruncateSync(fh, 50 * 1024 * 1024 + 1); closeSync(fh);
     await withSlack({ enabled: true, botToken: 'xoxb-t' }, async () => {
-        await assert.rejects(
-            () => slackSendHandler({ type: 'document', filePath: path, target: slackTargetFromId('C1') }),
-            (e: { statusCode?: number }) => e.statusCode === 413,
-        );
+        const result = await slackSendHandler({ type: 'document', filePath: path, target: slackTargetFromId('C1') });
+        assert.equal(result.ok, false);
+        assert.equal(result['status'], 413);
+        assert.equal(result['sent'], false);
     });
 });

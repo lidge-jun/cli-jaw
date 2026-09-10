@@ -577,3 +577,11 @@ Source operations use `{source:{channel,ts,threadTs?}}`. Quote publications requ
 RTS output IDs are recorded as our own publication provenance. A server-owned block marker and durable output-ID filter exclude those responses from ordinary history/message lookup and subsequent thread context. An uncertain publication retains an invocation-specific destination hold; held history returns restricted placeholders, not source text. The store contains output addresses/holds and safe operator quote receipts, never original RTS source bodies. No-ID delivery reports `sent:"unknown"`; verified known posts report true. Failure receipts remain non-retryable and preserve known new-message IDs.
 
 The same-account operator isolation boundary remains unresolved (issue #646). Full-local is an instance-wide operator policy, not a per-run Safe sandbox. See the full/local versus scoped credential paths in [Slack tools](../docs/slack-tools.md#authorization-and-deployment-boundary).
+
+### Slack file upload receipts
+
+`jaw slack send C123 --file ./report.pdf --thread 1712345678.123456 --caption "Report" --json` sends one file to an explicit conversation. Omit `--thread` for a channel-root post. `--operator` is explicit; normal CLI calls use existing instance/turn headers and the full-local policy. The command never infers a destination, retries a POST, or substitutes text for a failed upload.
+
+The `upload` receipt records `stage` (`validation`, `reservation`, `upload`, `completion`), `state` (`failed`, `unknown`, `completed`), requested `channelId`/optional `threadTs`, and a known `fileId`. `verification: not_checked` means no content or visual readback was performed. Only a successful HTTP and Slack completion acknowledgement yields `ok: true, sent: true`. A reservation or accepted bytes alone do not prove delivery. If the completion reply is lost or contradictory, `sent: unknown, retryable: false` preserves that uncertainty. A later cancellation cannot erase an acknowledged send.
+
+Files must be regular, nonempty and at most 50 MiB. The three-stage request has a shared 120-second cancellation bound. An oversize file with a caption returns a failure and posts nothing. CLI success requires a matching completed receipt; legacy bare success or caption-only responses exit nonzero as unconfirmed.

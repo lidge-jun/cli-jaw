@@ -6,10 +6,10 @@
 //   3. files.completeUploadExternal -> attaches file to a conversation
 // Source: docs.slack.dev/changelog/2024-04-a-better-way-to-upload-files-is-here-to-stay
 
-import { readFile, stat } from 'node:fs/promises';
+import { open, stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 import type { RemoteTarget } from '../messaging/types.js';
-import { slackApi, describeSlackError, redactSlackTokens, slackFailure, type SlackFetch } from './api.js';
+import { slackApi, describeSlackError, redactSlackTokens, type SlackFetch } from './api.js';
 import { redactOutboundText } from '../messaging/redact.js';
 
 // Slack's per-file ceiling is 1 GB, but a chat transport has no business
@@ -26,92 +26,123 @@ export function validateSlackFileSize(size: number) {
     }
 }
 
+export type SlackFileUploadReceipt = {
+    stage: 'validation' | 'reservation' | 'upload' | 'completion';
+    state: 'failed' | 'unknown' | 'completed';
+    channelId: string;
+    threadTs?: string;
+    fileId?: string;
+    verification: 'not_checked';
+};
+export type SlackFileSendResult = {
+    retryable: false;
+    error?: string;
+    status?: number;
+    grantedScopes?: string;
+    retryAfterMs?: number;
+} & ({
+    ok: true; sent: true;
+    upload: SlackFileUploadReceipt & { stage: 'completion'; state: 'completed'; fileId: string };
+} | {
+    ok: false; sent: boolean | 'unknown'; upload: SlackFileUploadReceipt;
+});
+
 export async function sendSlackFile(
-    token: string,
-    target: RemoteTarget,
-    filePath: string,
+    token: string, target: RemoteTarget, filePath: string,
     options: { caption?: string; fetchImpl?: SlackFetch; signal?: AbortSignal } = {},
-): Promise<{ ok: boolean; error?: string; status?: number }> {
+): Promise<SlackFileSendResult> {
     const doFetch = options.fetchImpl || fetch;
-    const signalOpt = options.signal ? { signal: options.signal } : {};
-    // An already-aborted send must reach zero network calls. Handing the signal to
-    // slackApi is not enough: it only helps once the request is in flight, and the
-    // FIRST call here reserves an upload slot on Slack's side. A reservation nobody
-    // completes is state we left behind, one per shutdown. sendSlackText has had
-    // this guard since #417; the file path never got one (#464).
-    if (options.signal?.aborted) {
-        return slackFailure('slack_send_aborted', 499);
-    }
+    const deadline = AbortSignal.timeout(120_000);
+    const signal = options.signal ? AbortSignal.any([options.signal, deadline]) : deadline;
+    let stage: SlackFileUploadReceipt['stage'] = 'validation';
+    let fileId: string | undefined;
+    const receipt = (state: SlackFileUploadReceipt['state']): SlackFileUploadReceipt => ({
+        stage, state, channelId: target.targetId,
+        ...(target.threadId ? { threadTs: target.threadId } : {}),
+        ...(fileId ? { fileId } : {}), verification: 'not_checked',
+    });
+    const failure = (error: string, status = 502, state: 'failed' | 'unknown' = 'failed'): SlackFileSendResult => ({
+        ok: false, sent: stage === 'completion' && state === 'unknown' ? 'unknown' : false,
+        retryable: false, error: redactSlackTokens(error), status, upload: receipt(state),
+    });
+    if (signal.aborted) return failure('slack_send_aborted', 499);
     let fileStat;
-    try {
-        fileStat = await stat(filePath);
-    } catch {
-        return { ok: false, error: `File not found: ${filePath}`, status: 400 };
-    }
-    validateSlackFileSize(fileStat.size);
-    if (fileStat.size === 0) {
-        // Slack rejects a zero-length reservation with `missing_argument`,
-        // which reads as a client bug. Fail locally with something actionable.
-        return slackFailure('Cannot upload an empty file to Slack', 400);
-    }
-    const filename = basename(filePath);
-    // The filename is attacker-or-agent-chosen text that lands in the channel as
-    // the file's title and upload name. The caption beside it was masked and
-    // this was not, so a credential-shaped basename went out verbatim (#408).
-    const safeFilename = redactOutboundText(filename);
-
-    // Step 1 — reserve an upload URL (POST, form-encoded per Slack docs).
-    const reserve = await slackApi<{ upload_url?: string; file_id?: string }>(
-        token,
-        'files.getUploadURLExternal',
-        { filename: safeFilename, length: fileStat.size },
-        { fetchImpl: doFetch, form: true, ...signalOpt },
-    );
+    try { fileStat = await stat(filePath); }
+    catch { return failure('File not found', 400); }
+    if (!fileStat.isFile()) return failure('slack_file_not_regular', 400);
+    try { validateSlackFileSize(fileStat.size); }
+    catch { return failure('File exceeds Slack transport limit (max 50 MiB)', 413); }
+    if (fileStat.size === 0) return failure('Cannot upload an empty file to Slack', 400);
+    const safeFilename = redactOutboundText(basename(filePath));
+    stage = 'reservation';
+    if (signal.aborted) return failure('slack_send_aborted', 499);
+    const reserve = await slackApi<{ upload_url?: string; file_id?: string }>(token,
+        'files.getUploadURLExternal', { filename: safeFilename, length: fileStat.size },
+        { fetchImpl: doFetch, form: true, signal, maxResponseBytes: 1024 * 1024 });
     const uploadUrl = reserve.data?.upload_url;
-    const fileId = reserve.data?.file_id;
-    if (!reserve.ok || !uploadUrl || !fileId) {
-        return slackFailure(describeSlackError(reserve.error || 'upload_url_missing', reserve.data), reserve.status, undefined, reserve.grantedScopes);
+    const reservedId = reserve.data?.file_id;
+    if (!reserve.ok || !reserve.status || reserve.status < 200 || reserve.status >= 300) {
+        return { ...failure(describeSlackError(reserve.error || 'upload_url_missing', reserve.data), reserve.status),
+            ...(reserve.grantedScopes !== undefined ? { grantedScopes: reserve.grantedScopes } : {}),
+            ...(reserve.retryAfterMs !== undefined ? { retryAfterMs: reserve.retryAfterMs } : {}) };
     }
-
-    // Step 2 — POST the bytes to the returned URL.
+    if (typeof reservedId !== 'string' || !/^F[A-Z0-9]{1,100}$/.test(reservedId)
+        || typeof uploadUrl !== 'string') return failure('slack_upload_reservation_invalid');
     try {
-        const buffer = await readFile(filePath);
+        const url = new URL(uploadUrl);
+        if (url.protocol !== 'https:' || url.username || url.password) return failure('slack_upload_url_invalid');
+    } catch { return failure('slack_upload_url_invalid'); }
+    fileId = reservedId;
+    stage = 'upload';
+    try {
+        if (signal.aborted) return failure('slack_send_aborted', 499);
+        const handle = await open(filePath, 'r');
+        let buffer: Buffer;
+        try {
+            const current = await handle.stat();
+            if (!current.isFile() || current.size !== fileStat.size) return failure('slack_file_changed', 409);
+            buffer = Buffer.alloc(fileStat.size + 1);
+            let offset = 0;
+            while (offset < buffer.length) {
+                if (signal.aborted) return failure('slack_send_aborted', 499);
+                const read = await handle.read(buffer, offset, buffer.length - offset, offset);
+                if (!read.bytesRead) break;
+                offset += read.bytesRead;
+            }
+            if (offset !== fileStat.size) return failure('slack_file_changed', 409);
+            buffer = buffer.subarray(0, offset);
+        } finally { await handle.close(); }
+        if (signal.aborted) return failure('slack_send_aborted', 499);
         const form = new FormData();
         form.append('file', new Blob([new Uint8Array(buffer)]), safeFilename);
-        // The raw presigned-URL POST is the long pole of the three steps (#417):
-        // it carries the file bytes, so it is the one a shutdown most needs to
-        // be able to abort.
-        const upload = await doFetch(uploadUrl, { method: 'POST', body: form, ...signalOpt });
-        if (!upload.ok) {
-            return { ok: false, error: `Slack upload failed (${upload.status})`, status: upload.status };
-        }
+        const upload = await doFetch(uploadUrl, { method: 'POST', body: form, signal });
+        if (!upload.ok) return failure(`Slack upload failed (${upload.status})`, upload.status);
     } catch (error) {
-        // Abort during the byte upload is a cancellation, not a vendor failure (#417).
-        if (options.signal?.aborted || (error as Error)?.name === 'AbortError') {
-            return slackFailure('slack_send_aborted', 499);
-        }
-        // The presigned upload URL is a temporary capability: a thrown fetch
-        // error routinely embeds it, and this string reaches both API responses
-        // and the image-relay log.
-        return slackFailure(redactSlackTokens((error as Error).message), 502);
+        return signal.aborted || (error as Error)?.name === 'AbortError'
+            ? failure('slack_send_aborted', 499) : failure('slack_file_upload_failed');
     }
-
-    // Step 3 — attach it to the conversation (thread-aware).
-    const complete = await slackApi(
-        token,
-        'files.completeUploadExternal',
-        {
-            files: [{ id: fileId, title: safeFilename }],
-            channel_id: target.targetId,
-            ...(target.threadId ? { thread_ts: target.threadId } : {}),
-            ...(options.caption?.trim() ? { initial_comment: redactOutboundText(options.caption.trim()) } : {}),
-        },
-        { fetchImpl: doFetch, ...signalOpt },
-    );
-    if (!complete.ok) {
-        // File uploads are where a missing files:write scope actually bites,
-        // so pass the payload through for the needed-scope detail.
-        return slackFailure(describeSlackError(complete.error, complete.data), complete.status, undefined, complete.grantedScopes);
+    stage = 'completion';
+    if (signal.aborted) return failure('slack_send_aborted', 499);
+    const complete = await slackApi(token, 'files.completeUploadExternal', {
+        files: [{ id: fileId, title: safeFilename }], channel_id: target.targetId,
+        ...(target.threadId ? { thread_ts: target.threadId } : {}),
+        ...(options.caption?.trim() ? { initial_comment: redactOutboundText(options.caption.trim()) } : {}),
+    }, { fetchImpl: doFetch, signal, maxResponseBytes: 1024 * 1024 });
+    const httpOk = complete.status !== undefined && complete.status >= 200 && complete.status < 300;
+    if (!complete.ok || !httpOk) {
+        const knownRefusal = httpOk && complete.data?.['ok'] === false && typeof complete.data?.['error'] === 'string';
+        return { ...failure(describeSlackError(complete.error, complete.data), complete.status, knownRefusal ? 'failed' : 'unknown'),
+            ...(complete.grantedScopes !== undefined ? { grantedScopes: complete.grantedScopes } : {}),
+            ...(complete.retryAfterMs !== undefined ? { retryAfterMs: complete.retryAfterMs } : {}) };
     }
-    return { ok: true };
+    const files = complete.data?.['files'];
+    // A completion reply without a files[] echo proves nothing about the file
+    // reaching the channel: an intermediary that answers {"ok":true} would be
+    // reported as a delivered upload. Confirmation requires the reserved id back.
+    if (!Array.isArray(files) || !files.length
+        || !files.every(row => row && typeof row === 'object' && typeof row.id === 'string' && /^F[A-Z0-9]{1,100}$/.test(row.id))
+        || !files.some(row => row.id === fileId)) return failure('slack_file_completion_unconfirmed', 502, 'unknown');
+    const upload = { ...receipt('completed'), stage: 'completion' as const, state: 'completed' as const, fileId: reservedId };
+    if (signal.aborted) return { ok: false, sent: true, retryable: false, upload, error: 'slack_send_aborted', status: 499 };
+    return { ok: true, sent: true, retryable: false, upload };
 }

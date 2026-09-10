@@ -527,3 +527,33 @@ test('full-local send rejects malformed chat_id and target before echo or coerci
         assert.notEqual((await response.json() as { error?: string }).error, 'invalid_chat_id');
     });
 });
+
+test('post-dispatch grant cancellation preserves unknown file delivery', async () => {
+    const savedFetch = globalThis.fetch, savedSlack = settings.slack;
+    const token = 'xoxb-cancel-unknown';
+    settings.slack = { ...savedSlack, enabled: true, botToken: token, channelIds: ['CUNKNOWN'] };
+    const destination = { channel: 'slack' as const, targetKind: 'channel' as const, peerKind: 'channel' as const, targetId: 'CUNKNOWN' };
+    assert.ok(reserveSlackToolGrant({ teamId: 'T1', actorId: 'U1', destination, credentialKey: slackCredentialKey(token) },
+        { requestId: 'file-unknown', scope: 'file-unknown-scope', chatSessionId: 'file-chat' }));
+    const secret = activateSlackToolGrant('file-unknown', 'file-unknown-scope', 'file-chat')!;
+    globalThis.fetch = async (url, init) => {
+        if (!String(url).startsWith('https://slack.com/api/')) return savedFetch(url, init);
+        const method = String(url).split('/').at(-1);
+        if (method === 'auth.test') return new Response(JSON.stringify({ ok: true, team_id: 'T1', user_id: 'UBOT' }));
+        if (method === 'conversations.info') return new Response(JSON.stringify({ ok: true, channel: { id: 'CUNKNOWN', is_shared: false, is_ext_shared: false, context_team_id: 'T1' } }));
+        return new Response(JSON.stringify({ ok: true, members: ['U1', 'UBOT'], response_metadata: { next_cursor: '' } }));
+    };
+    registerSendTransport('slack', async () => {
+        revokeSlackToolScope('file-unknown-scope');
+        return { ok: false, sent: 'unknown', retryable: false, upload: { fileId: 'FUNKNOWN', stage: 'completion', state: 'unknown' } };
+    });
+    try {
+        await withMessagingServer(async base => {
+            const response = await fetch(base + '/api/channel/send', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-jaw-slack-grant': secret },
+                body: JSON.stringify({ channel: 'slack', type: 'text', text: 'fixture', target: destination }) });
+            const body = await response.json() as { sent?: unknown; error?: string; upload?: { fileId?: string } };
+            assert.equal(response.status, 409, JSON.stringify(body)); assert.equal(body.sent, 'unknown');
+            assert.equal(body.error, 'slack_grant_cancelled_after_dispatch'); assert.equal(body.upload?.fileId, 'FUNKNOWN');
+        });
+    } finally { globalThis.fetch = savedFetch; settings.slack = savedSlack; registerSendTransport('slack', slackSendHandler); revokeSlackToolScope('file-unknown-scope'); }
+});

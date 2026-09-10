@@ -114,3 +114,5 @@ Native quota readers follow the OpenCodex source contract: Codex window duration
 
 
 
+
+Slack file CLI uses an explicit conversation and completion-only upload receipts (`sent: boolean|unknown`, no auto retry or caption fallback); cancellation preserves known/unknown delivery. Sync commands/API/Slack docs.

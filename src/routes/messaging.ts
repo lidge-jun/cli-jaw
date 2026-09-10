@@ -187,7 +187,7 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
         }
         return withSlackToolAccess(client.token, principal, principal.kind === 'turn' ? principal.grant.destination.targetId : undefined,
             signal => sendChannelOutput({ ...request, slackCredentialKey: slackCredentialKey(client.token!), ...(signal ? { signal } : {}), fromAgentSurface: true }), undefined,
-            result => ({ ...result, ok: false, error: 'slack_grant_cancelled_after_dispatch', sent: result.ok || result['sent'] === true, retryable: false, status: 409 }));
+            result => ({ ...result, ok: false, error: 'slack_grant_cancelled_after_dispatch', sent: result['sent'] === 'unknown' ? 'unknown' : result.ok || result['sent'] === true, retryable: false, status: 409 }));
     };
     app.post('/api/upload', requireAuth, express.raw({ type: '*/*', limit: '20mb' }), (req, res) => {
         try {
