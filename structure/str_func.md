@@ -38,7 +38,7 @@ cli-jaw/
 │   └── mime-detect.ts        ← MIME 타입 감지 헬퍼 (67L)
 ├── src/
 │   ├── core/                 ← 의존 0 인프라 계층 (31 files, 3847L)
-│   │   ├── config.ts         ← JAW_HOME, settings, APP_VERSION + migrateSettings legacy Claude model normalization + avatar settings deep merge + default `settings.pi` + corrupt settings backup + CLI 탐지 re-export hub (1545L)
+│   │   ├── config.ts         ← JAW_HOME, settings, APP_VERSION + migrateSettings legacy Claude model normalization + avatar settings deep merge + default `settings.pi` + corrupt settings backup + CLI 탐지 re-export hub (1548L)
 │   │   ├── cli-detection.ts  ← CLI 탐지 + `pi` npm-exec fallback + `kiro-code`(`kiro-cli` binary) 탐지 + local package release/debug candidates (57L)
 │   │   ├── compact.ts        ← compact 헬퍼 (COMPACT_MARKER_CONTENT, managed summary builder, cutoff logic, harvestGitGrep + harvestChatGrep 1KB/1KB budget split) (782L)
 │   │   ├── instance.ts       ← 인스턴스 ID, node/jaw 경로, 유닛명 sanitize (61L)
@@ -349,14 +349,14 @@ cli-jaw/
 │   │   └── discord-file.ts   ← Discord 파일 전송 (75L)
 │   ├── slack/                ← Slack 인터페이스 (41 files, Socket Mode + Web API, SDK 없음)
 │   │   ├── socket.ts         ← Socket Mode client (apps.connections.open → wss, ack-before-work, envelope dedupe TTL, hello deadline, backoff 재연결) (437L)
-│   │   ├── bot.ts            ← Slack 봇 lifecycle + attachPort 성공 후 best-effort 자기선출/영속화 + envelope routing + orchestrate 경로 + queued-result waiter + top-level/thread 1회 context prefetch (1821L)
+│   │   ├── bot.ts            ← Slack 봇 lifecycle + attachPort 성공 후 best-effort 자기선출/영속화 + envelope routing + orchestrate 경로 + queued-result waiter + top-level/thread 1회 context prefetch (1825L)
 │   │   ├── api.ts            ← Slack Web API fetch wrapper (HTTP 200 + ok:false를 실패로 처리, credential/URL redaction, Retry-After) (442L)
 │   │   ├── format.ts         ← CommonMark → mrkdwn 변환 + code-fence 보존 chunking (222L)
 │   │   ├── blocks.ts         ← Block Kit validation and per-table message splitting (143L)
 │   │   ├── table-content.ts ← Bounded ordered-cell comparison and CommonMark character references (185L)
 │   │   ├── table-verification.ts ← Persisted table verification, mismatch/unavailable status (67L)
 │   │   ├── render-features.ts ← Expected and persisted rich-format feature verification (81L)
-│   │   ├── events.ts         ← fail-closed attachPort 판정 + inbound gating (self-echo/bot/subtype/allowlist/mention) + Block Kit 텍스트 추출 (305L)
+│   │   ├── events.ts         ← fail-closed attachPort 판정 + inbound gating (self-echo/bot/subtype/allowlist/mention) + Block Kit 텍스트 추출 (387L)
 │   │   ├── thread-tracker.ts ← 참여 스레드 영속 추적 + thread/channel owner-generation singleflight (mention/봇응답 마킹, 캡드 셋, 무멘션 스레드 연속 대화 게이트 지원) (249L)
 │   │   ├── enrichment-cache.ts ← 공용 동시성 프리미티브 (TTL/cap 캐시, 원인별 억제, 능력 잠금 단일 재탐침, in-flight 합류, 집계 취소, 세대 무효화) (424L)
 │   │   ├── conversation.ts   ← 대화/스레드 컨텍스트 (conversations.info + replies cursor 최대 10페이지 + parent/최신 50, 참여자는 author 유도, method별 억제·시작률) (464L)
@@ -365,7 +365,7 @@ cli-jaw/
 │   │   ├── mention-watch.ts  ← 가입 채널 backward mention scan + frontier/resume/round-robin/429 stop/60-channel overflow (369L)
 │   │   ├── attachment-recovery.ts ← app_mention 봉투에 없는 첨부를 channel+ts 재조회로 복구 (oldest+inclusive+limit=1) (53L)
 │   │   ├── commands.ts       ← slash command → 공유 parseCommand/executeCommand 파이프라인 (180L)
-│   │   ├── slack-file.ts     ← files.getUploadURLExternal → upload → completeUploadExternal 3단계 업로드 (파일명·캡션 모두 아웃바운드 마스킹) (145L)
+│   │   ├── slack-file.ts     ← files.getUploadURLExternal → upload → completeUploadExternal 3단계 업로드 (파일명·캡션 모두 아웃바운드 마스킹) (148L)
 │   │   ├── ingress.ts        ← 세션별 ingress lane + synthetic top-level followup override + admitSlackRun 동기 실행 예약(sessionLanes) + 전역 다운로드 세마포어 + shutdown abort/drain (300L) ✨
 │   │   ├── inbound-file.ts   ← 인바운드 첨부 단일 IO owner (files.info → 인증 스트리밍 다운로드 → saveUpload, 파일/메시지 바이트 예산, 고정 error code) (280L) ✨
 │   │   ├── inbound-url.ts    ← 인바운드 다운로드 URL 검증 (Slack host allowlist + https-only hop + 사설망 거부) (44L) ✨
