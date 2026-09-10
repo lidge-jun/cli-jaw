@@ -59,7 +59,6 @@ and print/native session buckets remain under their existing owners. See
 | `src/agent/alert-escalation.ts` | 86L | alert escalation event helper |
 | `src/agent/session-persistence.ts` | 78L | main session persistence gate |
 | `src/agent/live-run-state.ts` | 108L | active run snapshot / hydrate helper |
-| `src/agent/claude-e-runtime.ts` | 46L | `jaw_runtime` helper event → legacy `agent:claude-e:*` runtime broadcast 변환 |
 | `src/agent/error-classifier.ts` | 52L | stderr/result 기반 에러 분류 helper |
 | `src/agent/tool-timeout.ts` | 33L | tool inactivity timeout helper |
 | `src/agent/agy-runtime.ts` | 175L | AGY timeout stdout/close-text 판별 + 최종 planner 기준 timeout suffix 정규화 + session id 추출 + intermediate planner(`my_tool_call_analysis:`) 최종답 차단 (#251) |
@@ -81,7 +80,7 @@ and print/native session buckets remain under their existing owners. See
 | `events/helpers.ts` | 322L | syncLiveTools, emitAgentTool, pushTrace, buildPreview, `appendAssistantRawText` (plain `claude` text_delta), `resolveSpawnOutputText` |
 | `events/tool-labels.ts` | 343L | tool label extraction + summarizeToolInput |
 | `events/grok.ts` | 344L | Grok streaming-json text/thought/end/error + duplicate suppression |
-| `events/claude.ts` | 264L | Claude/claude-e complete-message parsing + `text_delta` live path + rate limit handling |
+| `events/claude.ts` | 264L | Claude complete-message parsing + `text_delta` live path + rate limit handling |
 | `events/codex.ts` | 96L | Codex NDJSON event adapter |
 | `events/cursor.ts` | 196L | Cursor stream-json event adapter |
 | `events/acp.ts` | 219L | ACP `session/update` / subagent lifecycle mapping |
@@ -134,11 +133,10 @@ and print/native session buckets remain under their existing owners. See
 - Quota는 `quota-kiro-reverse.ts` (CodeWhisperer GetUsageLimits) 경로.
 - Session ID는 stdout regex 또는 v2 sqlite store에서 추출 (`kiro-auth.ts`).
 - Resume 인자는 런타임별로 분리된다. Native `kiro-code`는 resume turn에서 `kiro-cli chat --no-interactive --resume-id <sessionId> ...`를 사용한다.
-- `ai-e`의 Kiro provider branch는 `ai-e kiro p ... --resume <sessionId>`를 사용한다. 이 path는 native `kiro-code`의 `--resume-id`와 혼동하면 안 된다.
 
 ### Pi RPC branch
 
-- `pi`는 top-level runtime이며 `ai-e` provider가 아니다.
+- `pi`는 top-level runtime이다.
 - `src/agent/pi-runtime.ts`가 `settings.pi` profile을 정규화하고, `JAW_HOME/pi/runtime/<profileId>` 아래 `models.json` + `settings.json`을 생성한다.
 - 실행은 `pi --mode rpc --no-session --no-context-files --provider <profileId> --model <model> --api-key <key>` 형태다.
 - binary resolution은 `PI_CODING_AGENT_BIN` → PATH `pi` → `npm exec --yes --package @earendil-works/pi-coding-agent pi --` 순서이며, npm fallback은 shell string이 아니라 command/baseArgs tuple로 spawn된다.
@@ -151,12 +149,11 @@ and print/native session buckets remain under their existing owners. See
 | --- | --- | --- |
 | `pi` | `pi --mode rpc` | isolated `PI_CODING_AGENT_DIR`, profile/model from `settings.pi`, npm-exec fallback |
 | `claude` | stdin에 `withHistoryPrompt()` + `stream-json` | `text_delta` → `appendAssistantRawText` → live `agent_output`; `claudeStreamedText` prevents duplicate on complete `assistant` |
-| `claude-e` | `claude-e run --jsonl --output-format stream-json --idle-timeout-ms 600000 --hard-timeout-ms 3600000` | `jaw_runtime` 이벤트 가로채기, resume `--resume <sessionId>` |
 | `agy` | `agy -p <prompt> [--model <id>] --print-timeout 10m --log-file <tmp>` | plain text stdout; optional flags are emitted only when `agy-capabilities.ts` detects support (`--model` observed in AGY 1.0.12); session id from stdout/log; resume `--conversation <id>` |
 | `cursor` | `cursor-agent -p --trust --output-format stream-json --model <resolvedModelId>` | effort는 full model id로 해석, `runtimeModel` session bucket |
 | `kiro-code` | `kiro-cli chat --no-interactive [--resume-id <id>]` | fresh: operational context + `withHistoryPrompt()`; resume: current prompt only |
 | `codex` | stdin에 `[User Message]` 블록 (fresh only) | — |
-| `grok` | `-p`, optional `-m`, `--output-format streaming-json`, `--no-alt-screen` | trace backfill on exit, `ai-e` alias |
+| `grok` | `-p`, optional `-m`, `--output-format streaming-json`, `--no-alt-screen` | trace backfill on exit |
 | `opencode` | diagnostics + raw event buffer | — |
 
 ### Session persistence / resume classifier
@@ -164,7 +161,7 @@ and print/native session buckets remain under their existing owners. See
 - `persistMainSession()`는 `forceNew`, `employeeSessionId`, `!sessionId`, `isFallback`, 비정상 exit를 모두 차단.
 - 저장: `cli`, `sessionId`, `model`, `permissions`, `workingDir`, `effort`.
 - `shouldInvalidateResumeSession()`는 `code === 0`이면 무조건 false, 실패 시 generic + CLI별 matcher 검사.
-- Resume 무효화: `claude`, `claude-e`, `agy`, `codex`, `cursor`, `grok`, `opencode`, `copilot`, `kiro-code` 각각 분기.
+- Resume 무효화: `claude`, `agy`, `codex`, `cursor`, `grok`, `opencode`, `copilot`, `kiro-code` 각각 분기.
 - AGY guarded native resume (#261): 기본은 native resume OFF(DB history 유지). `perCli.agy.nativeResume: "guarded"` opt-in 시 `canGuardedAgyResume()`(`src/agent/spawn/resume.ts`) 전 가드 통과에서만 `--conversation` 재개 — capability probe, TTL 72h, model+cwd identity, `session_buckets.last_run_clean=1`(plannerOnly/checkpointSeen false), fresh-bootstrap 아님. stale conversation 출력 감지 시 bucket clear 후 fresh 경로로 1회 재시도. replay stripping은 무조건 유지.
 
 ---

@@ -190,7 +190,7 @@ external SDK or falls through to a chat prompt. Choose an available runtime with
 
 - 값이 없으면 현재 상태 조회.
 - 값이 있으면 `settings.perCli[activeCli].model` 또는 `settings.cli`를 갱신한다.
-- `/model` 인자 completion은 기본 registry 모델을 쓰되, ocx가 active이고 `healthz`가 ok이면 `~/.opencodex/runtime-port.json`의 포트에서 `/v1/models`를 읽어 Codex/Codex App/AI-E codex provider 모델 목록을 routed 모델까지 확장한다. ocx inactive/헬스 실패/모델 조회 실패 시 Codex 기본 4개(`gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex-spark`)만 보여준다.
+- `/model` 인자 completion은 기본 registry 모델을 쓰되, ocx가 active이고 `healthz`가 ok이면 `~/.opencodex/runtime-port.json`의 포트에서 `/v1/models`를 읽어 Codex/Codex App 모델 목록을 routed 모델까지 확장한다. ocx inactive/헬스 실패/모델 조회 실패 시 Codex 기본 4개(`gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex-spark`)만 보여준다.
 
 ### `/fallback [cli1 cli2...|off]`
 
@@ -289,7 +289,7 @@ external SDK or falls through to a chat prompt. Choose an available runtime with
 
 `src/cli/registry.ts` (224L)
 
-현재 CLI registry는 13개 top-level runtime을 갖는다.
+현재 CLI registry는 10개 top-level runtime을 갖는다.
 Codex 기본 registry는 ocx inactive fallback용 모델만 보유하며, live surface는 `src/cli/registry-live.ts`와 `src/cli/opencodex-models.ts`가 ocx `/v1/models`를 병합한다.
 모델 목록뿐 아니라 **모델별 reasoning effort**도 함께 병합되어 `effortsByModel`/`defaultEffortByModel`로 노출되며, `max`/`ultra`는 이를 지원하는 모델에서만 선택할 수 있다.
 
@@ -297,9 +297,7 @@ Codex 기본 registry는 ocx inactive fallback용 모델만 보유하며, live s
 | --- | --- | --- |
 | `pi` | `grok-composer-2.5-fast` | `medium` |
 | `agy` | *(TUI-managed)* | `''` |
-| `ai-e` | `sonnet` | `medium` |
 | `claude` | `sonnet` | `medium` |
-| `claude-e` | `sonnet` | `medium` |
 | `codex` | `gpt-5.5` | `medium` |
 | `codex-app` | `gpt-5.5` | `medium` |
 | `cursor` | `composer-2.5` | `medium-fast` |

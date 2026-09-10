@@ -32,8 +32,6 @@ graph TD
     HIST["historyBlock<br/>spawn.ts"] --> SPAWN
     SPAWN --> CLAUDE["Claude"]
     SPAWN --> AGY["Antigravity<br/>agy"]
-    SPAWN --> AIE["AI-E<br/>provider wrapper"]
-    SPAWN --> CLAUDEI["Claude E<br/>claude-e"]
     SPAWN --> CODEX["Codex"]
     SPAWN --> CODEXAPP["Codex App<br/>app-server"]
     SPAWN --> CURSOR["Cursor<br/>cursor-agent"]
@@ -350,8 +348,6 @@ delegation rules 블록은 prompt 끝에 항상 붙는다.
 | --- | --- | --- |
 | Claude | `buildArgs(..., sysPrompt)` + `stream-json`/`text_delta` | stdin에 `withHistoryPrompt(prompt, historyBlock)`; live `agent_output` via `appendAssistantRawText()` |
 | AGY (`agy`) | 별도 system prompt flag 없음 | fresh run: `agy -p <prompt>` with capability-probed optional `--model` when supported; `--print-timeout 10m`, `--log-file`; resume `agy --conversation <sessionId> -p <prompt>` |
-| AI-E (`ai-e`) | 선택 provider의 adapter를 따른다 | provider별 args로 위임하되 AGY는 provider 목록에 포함하지 않는다 |
-| Claude E (`claude-e`) | helper 뒤의 Claude CLI에 args로 `--model`/`--effort`/permission 전달 | fresh run은 stdin에 `withHistoryPrompt(prompt, historyBlock)`, resume run은 `claude-e --resume <sessionId>` + 현재 prompt. legacy bucket/event namespace는 `claude-i` |
 | Codex | `{workDir}/AGENTS.md` 자동 로드 | 새 세션일 때만 stdin에 `[User Message]` 블록 |
 | Codex App | app-server thread config | JSON-RPC `turn/start`로 prompt 전달 |
 | Cursor | project-root `AGENTS.md` / `CLAUDE.md` 자동 로드 | fresh run은 args 레벨 prompt (`withHistoryPrompt`)를 `cursor-agent -p --trust --output-format stream-json`으로 전달하고, resume은 `--resume <chatId>` + 현재 prompt |

@@ -28,8 +28,7 @@ Last-Event-ID: &lt;last-seen-id&gt;</code></pre>
 <tr><td><code>goal_done_rejected</code></td><td><code>{reason}</code></td><td>목표 완료 요청 거부</td></tr>
 <tr><td><code>goal_pause_detected</code></td><td><code>{reason}</code></td><td>목표 일시정지 감지</td></tr>
 <tr><td><code>goal_pause_gate_pending</code></td><td><code>{reason}</code></td><td>첫 감사 pause armed; 자동 goal continuation 억제</td></tr>
-<tr><td><code>session_switched</code></td><td><code>{sessionId}</code></td><td>활성 세션 전환</td></tr>
-<tr><td><code>agent:claude-e:*</code></td><td><code>{event}</code></td><td>Claude employee 런타임 이벤트 네임스페이스</td></tr></table>
+<tr><td><code>session_switched</code></td><td><code>{sessionId}</code></td><td>활성 세션 전환</td></tr></table>
 <h2>Provider NDJSON 스트림</h2>
 <p>메시지 전송과 명령 실행은 REST 요청으로 시작되며, provider 출력은 줄바꿈으로 구분된 JSON 이벤트로 스트리밍됩니다. 정규화된 이벤트는 <code>src/core/bus.ts</code>를 거쳐 public 이벤트는 SSE event bus로 publish되고, collector/forwarder용 internal listener에도 fan-out됩니다.</p>
 <pre><code>POST /api/message

@@ -1,6 +1,6 @@
 # cli-jaw
 
-System-level AI agent with full computer control via CLI wrapping (pi, agy, ai-e, claude, claude-e, codex, codex-app, cursor, kiro-code, gemini, grok, opencode, copilot).
+System-level AI agent with full computer control via CLI wrapping (pi, agy, claude, codex, codex-app, cursor, kiro-code, gemini, grok, opencode, copilot).
 
 Native Code API: `/api/code` is composed by `src/code-mode/host.ts` and `src/routes/code-native.ts`. Keep per-backend storage, captured turn ownership, full snapshots/compact replay, byte limits, native approval capabilities, and observed process-exit proof aligned with `structure/runtime-integration.md` and `server_api.md`. It uses direct native adapters rather than Jaw orchestration or its runtime pools.
 
@@ -445,11 +445,13 @@ git tag backup/feat-hwpx-pre-rebase-$(date +%y%m%d-%H%M) feat/hwpx
 
 ### Retired runtime boundary
 
-JWC is a recognized stored tombstone, never an executable CLI key. Preserve the
-saved selection and unrelated settings; report `retired_runtime:jwc` before any
-fallback or admission. Do not silently select another provider. Manager/Classic
-show the retired selection without making it selectable. TUI uses local
-`src/cli/tui/presentation.ts`; keep SDK, bundles and installer payloads absent.
+JWC, Claude E (`claude-e`) and AI-E (`ai-e`) are recognized stored tombstones,
+never executable CLI keys. Preserve the saved selection and unrelated settings;
+report `retired_runtime:jwc`, `retired_runtime:claude-e` or
+`retired_runtime:ai-e` before any fallback or admission. Do not silently select
+another provider. Manager/Classic show the retired selection without making it
+selectable. TUI uses local `src/cli/tui/presentation.ts`; keep SDK, helper
+crates, bundles and installer payloads absent.
 
 - Boss user prompts include host-local civil dates and Monday–Sunday ranges via `src/agent/calendar-context.ts`; the timestamp and calendar share one clock sample. Explicit user timezone/week conventions take precedence; system-prompt caching and worker/internal prompts stay unchanged.
 

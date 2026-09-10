@@ -2,7 +2,7 @@
 
 # CLI-JAW
 
-### あなた専用の AI エージェント。2 行でインストール。11 個の AI ランタイムをひとつのダッシュボードに。
+### あなた専用の AI エージェント。2 行でインストール。10 個の AI ランタイムをひとつのダッシュボードに。
 
 [![npm](https://img.shields.io/npm/v/cli-jaw)](https://npmjs.com/package/cli-jaw)
 [![Version](https://img.shields.io/badge/v2.2.3-GA-brightgreen)](https://github.com/lidge-jun/cli-jaw/releases)
@@ -117,7 +117,7 @@ docker compose up -d       # → http://localhost:3457
 
 ## CLI-JAW とは
 
-CLI-JAW は、すでに使っている AI コーディング CLI — Pi、Antigravity、AI-E、Claude、Claude E、Codex、Codex App、Cursor、Gemini、Grok、Kiro、OpenCode、Copilot — を**ひとつのアシスタント、ひとつのメモリ、ひとつのダッシュボード**に統合するオープンソースプラットフォームです。
+CLI-JAW は、すでに使っている AI コーディング CLI — Pi、Antigravity、Claude、Codex、Codex App、Cursor、Gemini、Grok、Kiro、OpenCode、Copilot — を**ひとつのアシスタント、ひとつのメモリ、ひとつのダッシュボード**に統合するオープンソースプラットフォームです。
 
 メイン CLI（Boss）が他の CLI を「Employee（従業員）」として呼び出します。アプリを切り替える必要はなく、ひとつの場所から指示できます。
 
@@ -275,8 +275,6 @@ Employee は「Frontend は CSS、Backend は API」用。サブエージェン�
 |---|---|---|---|
 | **Pi** | `grok-composer-2.5-fast` | Settings profile API key、local proxy、または `PI_CODING_AGENT_BIN` | isolated `PI_CODING_AGENT_DIR` で local/API endpoint を接続する first-class `pi --mode rpc` runtime |
 | **Claude** | `claude-opus-4-8` | `claude auth login` | Claude Pro サブスクリプション以上 |
-| **Claude E** | `claude-opus-4-8` | underlying `claude auth login` | Claude Pro サブスクリプション以上。6月のサブスク付与枠では推奨 runtime |
-| **AI-E** | provider-selected | 選択 provider の認証 | マルチ provider runtime wrapper |
 | **Antigravity** | AGY-selected | `agy` 実行時に確認 | `agy -p` 実験的 AGY print-mode runtime。任意の `--model` は capability probe 後、対応時のみ使用（AGY 1.0.12 で確認）。`--conversation` で resume。個別 effort flag はなし |
 | **Codex** | `gpt-5.5` | `codex login` | ChatGPT Pro サブスクリプション以上 |
 | **Codex App** | `gpt-5.5` | `codex login` | ChatGPT Pro サブスクリプション以上 |
@@ -286,9 +284,9 @@ Employee は「Frontend は CSS、Backend は API」用。サブエージェン�
 | **OpenCode** | `opencode-go/kimi-k2.6` | `opencode` | 無料モデルあり |
 | **Copilot** | `claude-sonnet-4.6` | `copilot login` | 無料枠あり |
 
-GPT 5.5 と Claude Opus 4.8 は Pro 以上のサブスクリプションで利用できます。6月からサブスクに含まれる Claude 利用枠を使う場合は、`claude-e` runtime を選択してください。
+GPT 5.5 と Claude Opus 4.8 は Pro 以上のサブスクリプションで利用できます。6月からサブスクに含まれる Claude 利用枠を使う場合は、`claude` runtime を選択してください。
 
-クォータ/ステータスパネルは registry と同じ runtime キーセットを維持します。Wrapper runtime（`ai-e`, `claude-e`, `codex-app`）は underlying provider に委譲し、Pi/AGY/Cursor/Grok/OpenCode のように CLI が quota window を公開しない場合は auth/status-only として表示します。
+クォータ/ステータスパネルは registry と同じ runtime キーセットを維持します。Wrapper runtime（`codex-app`）は underlying provider に委譲し、Pi/AGY/Cursor/Grok/OpenCode のように CLI が quota window を公開しない場合は auth/status-only として表示します。
 
 **フォールバックチェーン**：あるエンジンがレートリミットされると、次のエンジンが自動で引き継ぎます。`/fallback [cli1 cli2...]` で設定。
 
@@ -507,7 +505,7 @@ bash structure/check-doc-drift.sh
 
 | | CLI-JAW 2.0 | Hermes Agent | Claude Code |
 |---|---|---|---|
-| **モデルアクセス** | Pi、Antigravity、AI-E、Claude、Claude E、Codex、Codex App、Cursor、Gemini、Grok、Kiro、OpenCode、Copilot — ベンダー/ネイティブ認証経由 | API キー（OpenRouter 200+、Nous Portal） | Anthropic のみ |
+| **モデルアクセス** | Pi、Antigravity、Claude、Codex、Codex App、Cursor、Gemini、Grok、Kiro、OpenCode、Copilot — ベンダー/ネイティブ認証経由 | API キー（OpenRouter 200+、Nous Portal） | Anthropic のみ |
 | **コストモデル** | 契約済みの月額サブスクリプション | トークン単位の API 課金 | Anthropic サブスクリプション |
 | **メイン UI** | マネージャーダッシュボード + Web アプリ + Mac アプリ + ターミナル UI | ターミナルのみ | CLI + IDE プラグイン |
 | **ダッシュボード** | マルチインスタンスマネージャー、カンバン、ノートワークスペース | なし | なし |

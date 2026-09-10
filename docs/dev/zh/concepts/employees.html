@@ -66,21 +66,19 @@
 <main class="docs-main">
 
 <h1>Employee 系统</h1>
-<p class="lead">Boss 代理将任务分派给 CLI employee -- 即其他并行执行工作的 AI 运行时。CLI-JAW 支持 12 种运行时，并管理 employee 会话、隔离和结果收集。</p>
+<p class="lead">Boss 代理将任务分派给 CLI employee -- 即其他并行执行工作的 AI 运行时。CLI-JAW 支持 10 种运行时，并管理 employee 会话、隔离和结果收集。</p>
 
 <h2>工作原理</h2>
 <p>你的主代理（即 "boss"）可以使用 <code>jaw dispatch</code> 命令将特定任务委派给 employee 代理。每个 employee 在独立的临时工作目录中运行，并注入上下文文件。</p>
 <pre><code>jaw dispatch --agent "Frontend" --task "Implement the login page"</code></pre>
 <p>Boss 提示词包含委派规则，引导代理使用 <code>cli-jaw dispatch</code> 来执行 employee 工作，同时允许 CLI 原生子代理（Task/Agent 工具）用于内部并行化。</p>
 
-<h2>12 种 CLI 运行时</h2>
-<p>CLI-JAW 的注册表（<code>src/cli/registry.ts</code>）定义了 12 种顶级运行时。每个 employee 可以分配任意运行时。</p>
+<h2>10 种 CLI 运行时</h2>
+<p>CLI-JAW 的注册表（<code>src/cli/registry.ts</code>）定义了 10 种顶级运行时。每个 employee 可以分配任意运行时。</p>
 <table>
 <tr><th>运行时</th><th>二进制文件</th><th>默认模型</th><th>默认 Effort</th></tr>
 <tr><td>agy</td><td><code>agy</code></td><td>gemini-3.5-flash</td><td>-</td></tr>
-<tr><td>ai-e</td><td><code>ai-e</code></td><td>claude-opus-4-8</td><td>medium</td></tr>
 <tr><td>claude</td><td><code>claude</code></td><td>claude-opus-4-8</td><td>medium</td></tr>
-<tr><td>claude-e</td><td><code>claude-e</code></td><td>claude-opus-4-8</td><td>medium</td></tr>
 <tr><td>codex</td><td><code>codex</code></td><td>gpt-5.5</td><td>medium</td></tr>
 <tr><td>codex-app</td><td><code>codex</code></td><td>gpt-5.5</td><td>medium</td></tr>
 <tr><td>cursor</td><td><code>cursor-agent</code></td><td>composer-2.5</td><td>medium-fast</td></tr>

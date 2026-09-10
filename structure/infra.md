@@ -74,11 +74,7 @@ Activity persistence uses the existing SQLite trace tables: nullable `trace_runs
 | `test:fresh-install` | `tsx scripts/fresh-install-smoke.ts` |
 | `test:install-risk` | `node scripts/install-risk-gate.mjs` |
 | `check:cli-bin-links` | `node scripts/check-cli-bin-links.cjs` |
-| `test:claude-e` | `cargo test --manifest-path native/claude-e/Cargo.toml` |
-| `test:claude-exec` | compatibility alias for `test:claude-e` |
 | `build` | `bash scripts/atomic-build.sh` — staged `dist/bin/cli-jaw.js` 실행권한을 보장한 뒤 atomic swap |
-| `build:claude-e` | `cargo build --release --manifest-path native/claude-e/Cargo.toml` |
-| `build:claude-exec` | compatibility alias for `build:claude-e` |
 | `postbuild` | `node scripts/link-current-nvm-bin.cjs` — non-NVM Node에서는 링크를 skip하되 `dist/bin/cli-jaw.js` chmod repair는 먼저 수행 |
 | `build:frontend` | `vite build --config vite.config.ts` |
 | `qa:manager-frontend` | `npm run build:frontend && npm run typecheck:frontend` |
@@ -917,7 +913,7 @@ Start-Process powershell.exe -ArgumentList '-NoProfile', '-EncodedCommand', $enc
 
 | Export | 역할 |
 | --- | --- |
-| `CLI_REGISTRY` | 12개 CLI 정의 (`pi`, `agy`, `ai-e`, `claude`, `claude-e`, `codex`, `codex-app`, `cursor`, `grok`, `kiro-code`, `opencode`, `copilot`; `label`, `binary`, `defaultModel`, `defaultEffort`, `efforts`, `models`, optional `effortNote`/provider metadata) |
+| `CLI_REGISTRY` | 10개 CLI 정의 (`pi`, `agy`, `claude`, `codex`, `codex-app`, `cursor`, `grok`, `kiro-code`, `opencode`, `copilot`; 나머지는 동일) |
 | `CLI_KEYS` | `Object.keys(CLI_REGISTRY)` — 순서 보장 배열 |
 | `DEFAULT_CLI` | 기본 CLI (`claude` 우선, 없으면 첫 항목) |
 | `buildDefaultPerCli()` | registry에서 기본 `perCli` 객체 빌드 |
@@ -966,9 +962,7 @@ CLI → 서버 API 호출 시 인증 토큰을 관리하는 경량 헬퍼. 포�
 | --- | --- | --- |
 | `pi` | `grok-composer-2.5-fast` | Pi RPC runtime with isolated profile/model registration |
 | `agy` | AGY-selected | print-mode runtime; `--model` is capability-gated (observed in AGY 1.1.4); no separate effort flag. Model values must be the tier-bearing label form that `agy --model` accepts on its own, e.g. `Gemini 3.6 Flash (Medium)`. A bare tier-less slug such as `gemini-3.5-flash` is rejected (`requires --effort`) because cli-jaw never sends `--effort` for AGY. Note `agy models` prints effort-suffixed slugs (`gemini-3.6-flash-medium`), which is a different form — do not copy that output into the registry |
-| `ai-e` | `sonnet` | AI-E wrapper runtime |
 | `claude` | `claude-opus-4-8` | canonical choices include `opus`, `sonnet`, `sonnet[1m]`, `haiku`; pinned full IDs include `claude-opus-5`/`claude-opus-5[1m]`; legacy aliases normalize |
-| `claude-e` | `claude-opus-4-8` | helper-backed Claude E runtime |
 | `codex` | `gpt-5.5` | inactive ocx fallback shows only `gpt-5.5`, `gpt-5.4`, `gpt-5.4-mini`, `gpt-5.3-codex-spark`; when ocx health is ok, `/model` completions and `/api/cli-registry` expand from ocx `/v1/models` including routed models |
 | `codex-app` | `gpt-5.5` | Codex app-server runtime using the same inactive fallback / active ocx model choices as `codex` |
 | `cursor` | `composer-2.5` | uses `cursor-agent --model <resolvedModelId>`; effort resolves into model ids such as `composer-2.5-fast`, `gpt-5.5-medium-fast`, `claude-opus-5-xhigh`, or `claude-opus-4-7-thinking-high-fast` |
@@ -1358,7 +1352,7 @@ module-level policy로 `browser start` mode 정규화 + agent/debug/manual launc
 | `safeMoveToBackup(pathToMove)` | 충돌 디렉토리 백업 이동 |
 | `ensureSkillsSymlinks(workingDir, opts)` | 스킬 심링크 + 보호 결과 반환 |
 
-Antigravity MCP sync is an existing config target at `~/.gemini/antigravity/mcp_config.json` via `lib/mcp/format-converters.ts`. It remains separate from the AGY runtime registry key `agy`; adding AGY runtime support does not make `ai-e.providers` include `agy`.
+Antigravity MCP sync is an existing config target at `~/.gemini/antigravity/mcp_config.json` via `lib/mcp/format-converters.ts`. It remains separate from the AGY runtime registry key `agy`; adding AGY runtime support does not register `agy` as a wrapper provider.
 
 ### symlink 보호 정책
 
@@ -1409,7 +1403,7 @@ Copilot 할당량 조회 + 인증 토큰 관리. env → file cache → `gh auth
 | `settings.ts` | settings/prompt/heartbeat-md/MCP/registry/status/quota/copilot |
 | `messaging.ts` | upload/file-open/voice/telegram/channel/discord send |
 | `browser.ts` | browser runtime endpoints |
-| `quota.ts` | `/api/quota` helper readers imported by `settings.ts` (direct provider usage where supported, wrapper runtime delegation for `ai-e`/`claude-e`/`codex-app`, reverse-engineered AGY Gem/Cla windows when `antigravity-usage --json` is available, and status-only metadata for Cursor/Grok/OpenCode or CLIs without quota windows) |
+| `quota.ts` | `/api/quota` helper readers imported by `settings.ts` (direct provider usage where supported, wrapper runtime delegation for `codex-app`, reverse-engineered AGY Gem/Cla windows when `antigravity-usage --json` is available, and status-only metadata for Cursor/Grok/OpenCode or CLIs without quota windows) |
 
 핵심 포인트:
 - `server.ts`는 `register*Routes(app, requireAuth, ...)` 호출만 남기고 635L 글루 레이어로 유지된다. 현재 mutation endpoint는 모두 `requireAuth` 미들웨어를 거쳐 인증 없는 상태 변경을 차단한다.
