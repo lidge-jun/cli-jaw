@@ -410,9 +410,9 @@ than no command.
 
 | 단계 | 실행 | 검증되는 SHA |
 | --- | --- | --- |
-| 1. preview 릴리스 | `bash scripts/release-preview.sh [--major\|--minor\|--patch\|<X.Y.Z>]` | the `origin/preview` head just pushed, re-read with `git ls-remote` and compared before dispatch (`scripts/release-preview.sh:212-218`) |
-| 2. 인증 (certification) | `.github/workflows/test.yml` push run on `preview` | the same preview SHA; promotion refuses to start without a successful run for it (`scripts/promote-to-main.sh:25-35`) |
-| 3. 승격 (promotion) | `bash scripts/promote-to-main.sh [<preview-sha>]` | the live `origin/preview` head; an explicit argument must equal it (`scripts/promote-to-main.sh:10-15`) |
+| 1. preview 릴리스 | `bash scripts/release-preview.sh [--major\|--minor\|--patch\|<X.Y.Z>]` | the `origin/preview` head just pushed, re-read with `git ls-remote` and compared before dispatch (`scripts/release-preview.sh:356-362`) |
+| 2. 인증 (certification) | `.github/workflows/test.yml` push run on `preview` | the same preview SHA; promotion refuses to start without a successful run for it (`scripts/promote-to-main.sh:28-38`) |
+| 3. 승격 (promotion) | `bash scripts/promote-to-main.sh [<preview-sha>]` | the live `origin/preview` head; an explicit argument must equal it (`scripts/promote-to-main.sh:13-18`) |
 | 4. stable publish | `.github/workflows/publish.yml`, `workflow_dispatch` only (`publish.yml:3-4`) | `expected-sha` must equal the checked-out `GITHUB_SHA` (`publish.yml:54-65`) |
 
 **1 — preview.** `release-preview.sh` bumps `package.json` to
@@ -425,7 +425,7 @@ gh workflow run publish.yml --ref preview \
   -f version="$VERSION" -f tag=preview -f expected-sha="$RELEASE_SHA" -f dry-run=false
 ```
 
-(`scripts/release-preview.sh:220-221`.) Note it does **not** pass
+(`scripts/release-preview.sh:365-366`.) Note it does **not** pass
 `create-github-release`, so that input defaults to `false` (`publish.yml:27-31`);
 the GitHub *pre*release is created by the script itself (`:242-256`), not by the
 workflow.
@@ -457,7 +457,7 @@ gh workflow run publish.yml \
   -f create-github-release=true
 ```
 
-(`scripts/promote-to-main.sh:167-173`.)
+(`scripts/promote-to-main.sh:175-181`.)
 
 #### 승격된 SHA는 인증된 SHA와 문자 그대로 같다
 
