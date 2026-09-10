@@ -1007,7 +1007,16 @@ It defines phase contracts, dispatch pitfalls (delegation trap, context drift, p
 
 // ─── Employee Prompt (orchestration-free) ────────────
 
-export function getEmployeePrompt(emp: { name: string; role?: string; id?: string | number }) {
+type EmployeeExecutionPolicy = {
+    mutable?: boolean;
+    scope?: string | null;
+    fullAccess?: boolean;
+    allowDispatch?: boolean;
+    noDescendants?: boolean;
+    permissions?: string | string[];
+};
+
+export function getEmployeePrompt(emp: { name: string; role?: string; id?: string | number }, policy: EmployeeExecutionPolicy = {}) {
     const vars: Record<string, string> = {
         EMP_NAME: emp.name,
         EMP_ROLE: emp.role || 'general developer',
@@ -1037,7 +1046,44 @@ export function getEmployeePrompt(emp: { name: string; role?: string; id?: strin
         }
     } catch { /* skills not ready */ }
 
-    return renderTemplate(loadTemplate('employee.md'), vars);
+    // Change stock policy before inserting role/skill text, so supplied task text
+    // cannot accidentally match a stock-rule replacement.
+    let template = loadTemplate('employee.md');
+    if (policy.mutable) {
+        vars['EMP_WRITE_POLICY'] = `- ✅ You are authorized to create or modify files${policy.scope ? ` inside \`${policy.scope}\`` : ''}.${policy.fullAccess
+            ? ' Respect the explicit task scope and instructions.' : ' Protected paths (.git, .env, settings.json) remain blocked.'}`;
+        template = template.replace(
+            '- File writes are blocked unless the Boss explicitly grants `--mutable`.',
+            '{{EMP_WRITE_POLICY}}',
+        );
+    }
+    const dispatchAllowed = policy.fullAccess === true && policy.allowDispatch === true && policy.noDescendants !== true;
+    const noDescendants = policy.noDescendants === true || (policy.fullAccess === true && !dispatchAllowed);
+    if (policy.fullAccess) {
+        if (!policy.mutable) template = template.replace(
+            '- File writes are blocked unless the Boss explicitly grants `--mutable`.',
+            '- File writes are blocked by this assignment\'s read-only scope.',
+        );
+        template = template.replace(
+            '- You are an executor, not a planner. Do NOT run `cli-jaw dispatch`, call dispatch APIs, or output subtask JSON.',
+            '- Execute this assignment and use permitted tools. Do not output subtask JSON or claim human approval.',
+        ).replace(
+            '- You were dispatched by jaw\'s orchestrator (the Boss). Complete your assigned task and report results.',
+            '- You were admitted as a Jaw worker for this assignment. Complete it and report results.',
+        ).replace(/^- You must NEVER re-dispatch jaw employees\..*$/m,
+            dispatchAllowed ? '- Jaw dispatch is available for this assignment; the server rechecks every request.'
+                : '- This assignment does not authorize descendants or delegation.');
+        if (dispatchAllowed) template = template.replace(/^- If your task is too large,.*$/m,
+            '- Pass explicit task scope and constraints to any delegated work; retain the returned run IDs.');
+        const providerMode = policy.permissions === 'auto' || policy.permissions === 'safe'
+            ? policy.permissions : policy.permissions === undefined ? 'configured' : 'custom';
+        template += `\n\n## Jaw API Access\n- This Auto instance permits qualified direct local Jaw tool requests without copying a grant or operator credential. The server rechecks new requests.\n- Provider approval mode: ${providerMode}. Provider policy and task restrictions remain separate from API access.\n- Use explicit destinations for channel sends; do not substitute the last-active conversation.\n`;
+    }
+    if (noDescendants) {
+        template = template.replace(/^- You CAN use your CLI's sub-agent features.*$/m,
+            '- Do not create child agents, use Task/Agent tools, or dispatch more workers for this assignment.');
+    }
+    return renderTemplate(template, vars);
 }
 
 // ─── Employee Prompt v2 (orchestration phase-aware) ──
@@ -1086,27 +1132,17 @@ export function getEmployeePromptV2(
     emp: { name: string; role?: string; id?: string | number; cli?: string },
     role: string,
     currentPhase: number | string,
-    opts?: { mutable?: boolean; scope?: string | null; taskTags?: string[] },
+    opts?: EmployeeExecutionPolicy & { taskTags?: string[] },
 ) {
     const phase = Number(currentPhase);
     const taskTags = normalizeTaskTags(opts?.taskTags);
     const mcpSummary = getEmployeeMcpToolSummary();
     const mcpHash = mcpSummary ? createHash('md5').update(mcpSummary).digest('hex').slice(0, 8) : '';
-    const cacheKey = `${emp.id || emp.name}:${emp.cli || ''}:${role}:${phase}:${settings["workingDir"] || '~'}:${opts?.mutable ? 'mut' : 'ro'}:${opts?.scope || ''}:${taskTags.join(',')}:${mcpHash}`;
+    const policyKey = JSON.stringify([opts?.fullAccess === true, opts?.allowDispatch === true, opts?.noDescendants === true, opts?.permissions ?? null]);
+    const cacheKey = `${emp.id || emp.name}:${emp.cli || ''}:${role}:${phase}:${settings["workingDir"] || '~'}:${opts?.mutable ? 'mut' : 'ro'}:${opts?.scope || ''}:${taskTags.join(',')}:${mcpHash}:${policyKey}`;
     if (promptCache.has(cacheKey)) return promptCache.get(cacheKey);
 
-    let prompt = getEmployeePrompt(emp);
-
-    // --mutable: override the hard read-only block in employee.md
-    if (opts?.mutable) {
-        prompt = prompt.replace(
-            // Must track employee.md. The previous pattern named a sentence that
-            // template no longer contains, so the replace silently matched nothing
-            // and --mutable left the prompt still saying writes were blocked (#442).
-            /- File writes are blocked unless the Boss explicitly grants `--mutable`\./,
-            `- ✅ You are authorized to create or modify files${opts.scope ? ` inside \`${opts.scope}\`` : ''}. Protected paths (.git, .env, settings.json) remain blocked.`,
-        );
-    }
+    let prompt = getEmployeePrompt(emp, opts);
 
     // Static-employee system prompt patch (Control etc.) injected near the top
     // so role-specific guidance downstream can still override style/tone.
@@ -1223,9 +1259,15 @@ export function getEmployeePromptV2(
 
     prompt += `\n\n## Delegation Rules`;
     prompt += `\n- Execute the assigned task directly in this employee session.`;
-    prompt += `\n- You CAN use CLI sub-agents (Task/Agent tool) for parallel work: research, file reads, code analysis. This is encouraged.`;
-    prompt += `\nWhen spawning a sub-agent, include: "Do NOT use Agent, subagent, or delegation tools. Do all work directly."`;
-    prompt += `\n- ⛔ Do NOT run \`cli-jaw dispatch\` or any equivalent delegation command from this session.`;
+    if (opts?.fullAccess && opts.allowDispatch && !opts.noDescendants) {
+        prompt += `\n- You may use Jaw dispatch and available native delegation tools within this assignment's scope. Pass explicit read-only and descendant constraints to children.`;
+    } else if (opts?.noDescendants || opts?.fullAccess) {
+        prompt += `\n- This assignment forbids child agents, native Task/Agent tools, and further Jaw dispatch.`;
+    } else {
+        prompt += `\n- You CAN use CLI sub-agents (Task/Agent tool) for parallel work: research, file reads, code analysis. This is encouraged.`;
+        prompt += `\nWhen spawning a sub-agent, include: "Do NOT use Agent, subagent, or delegation tools. Do all work directly."`;
+        prompt += `\n- ⛔ Do NOT run \`cli-jaw dispatch\` or any equivalent delegation command from this session.`;
+    }
     prompt += `\n- ⛔ Do NOT output jaw dispatch JSON or subtask JSON.`;
     prompt += `\n- ⛔ Do NOT describe Boss/employee orchestration structure in your answer.`;
 
