@@ -34,11 +34,20 @@ function channelSendExamples(source: string): Array<Record<string, any>> {
 
 async function exercisePromptExamples(promptPath: string) {
     const source = fs.readFileSync(promptPath, 'utf8');
+    // The Boss prompt still documents a target-less send that stays in the
+    // current conversation. The employee prompt deliberately dropped it: a
+    // worker whose destination is dropped posts into whatever conversation was
+    // last active, which is the failure full local access exists to close.
+    const workerPrompt = path.basename(promptPath) === 'employee.md';
     const examples = channelSendExamples(source);
     const explicit = examples.find(value => value.channel === 'slack' && value.target?.targetId && value.target?.threadId);
     const implicit = examples.find(value => value.type && value.target == null && value.chat_id == null && value.chatId == null);
     assert.ok(explicit, `${path.basename(promptPath)} needs an executable Slack target/thread JSON example`);
-    assert.ok(implicit, `${path.basename(promptPath)} needs an executable current-conversation JSON example`);
+    if (workerPrompt) {
+        assert.ok(!implicit, `${path.basename(promptPath)} must not offer a target-less channel-send example`);
+    } else {
+        assert.ok(implicit, `${path.basename(promptPath)} needs an executable current-conversation JSON example`);
+    }
 
     const { settings } = await import('../../src/core/config.js');
     const { normalizeChannelSendRequest, registerSendTransport, sendChannelOutput } = await import('../../src/messaging/send.js');
@@ -71,18 +80,20 @@ async function exercisePromptExamples(promptPath: string) {
         assert.equal(sent.at(-1)?.target?.targetId, explicit.target.targetId);
         assert.equal(sent.at(-1)?.target?.threadId, explicit.target.threadId);
 
-        const current = {
-            channel: 'slack' as const,
-            targetKind: 'channel' as const,
-            peerKind: 'channel' as const,
-            targetId: 'C_CURRENT',
-            threadId: '1710000000.000100',
-        };
-        settings.slack = { ...(settings.slack || {}), channelIds: [] };
-        setLastActiveTarget('slack', current);
-        const implicitResult = await sendChannelOutput(normalizeChannelSendRequest(executable(implicit)));
-        assert.equal(implicitResult.ok, true);
-        assert.deepEqual(sent.at(-1)?.target, current, 'omitting target must preserve the inbound parent thread');
+        if (!workerPrompt && implicit) {
+            const current = {
+                channel: 'slack' as const,
+                targetKind: 'channel' as const,
+                peerKind: 'channel' as const,
+                targetId: 'C_CURRENT',
+                threadId: '1710000000.000100',
+            };
+            settings.slack = { ...(settings.slack || {}), channelIds: [] };
+            setLastActiveTarget('slack', current);
+            const implicitResult = await sendChannelOutput(normalizeChannelSendRequest(executable(implicit)));
+            assert.equal(implicitResult.ok, true);
+            assert.deepEqual(sent.at(-1)?.target, current, 'omitting target must preserve the inbound parent thread');
+        }
     } finally {
         clearTargetState();
         settings.slack = previousSlack;
