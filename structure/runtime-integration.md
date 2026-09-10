@@ -145,6 +145,14 @@ The internal session now maps parent streamed text, tool input/output, provider-
 
 The main adapter now uses this session through the existing shared runtime store, native host and lifecycle. `runtime-pool-contract.ts` owns type-only provider ports; the Claude adapter cannot import back into its pool owner. Prepared config/canonical cwd/environment and captured ownership govern reuse; failed physical disposal retains a fence until safe release. SDK candidates defer final publication until the host claims an immutable result and lifecycle supplies its terminal. Input remains blocked through pending/finishing state. A Stop before claim changes an unclaimed candidate; after claim the established final can survive a stopped lifecycle status, as in the common outcome contract. Error/unfinished partial is never promoted.
 
+The internal Claude pool also accepts `lifetime:'request'`: each acquisition gets
+a fresh physical query while retaining its explicit resume ID. Only `forceNew`
+clears resume. Request leases expose `retireOnFinish` for the native host, which
+awaits retirement after application settlement and before releasing the lease.
+Plain release also fences a request query immediately. Failed or timed-out close
+never authorizes reuse; the existing SDK cleanup owner retains its fence. The
+default pooled lifetime and its idle reuse remain unchanged.
+
 Stop hard-closes the query, and the existing default steer policy resumes with interrupted context after MESSAGE persistence and exit-settle. Explicit followup/collect queues; there is no native-input hook. No-start failure and Stop-before-acquisition use one cached fallback projection, started before compatibility completion and closed once. Exceptional trace finalization updates only a still-running header, preserving a prior lifecycle's status/timestamp/error.
 
 Current-message partial text still resets on a new assistant message. Interruption
@@ -210,6 +218,22 @@ The passive `grok-events.ts` mapper reads only aggregate `_meta.usage` from the 
 Grok completion extensions do not own completion: id-less `_x.ai/session/prompt_complete` remains ignored, while unsupported question/plan/filesystem requests receive the common fixed protocol error. The original prompt result and callback/notification drain still gate cancellation and reuse. Captured tool updates reuse the common projector; no extra completion accumulator or native question capability is introduced.
 
 ## Resident Runtime Pool (`src/agent/runtime-pool.ts`)
+
+Cursor and Grok acquisitions accept `lifetime:'request'` independently of native
+session resume. A request gets a unique physical-process key within the existing
+scope lane, waits for its current borrower, and retires on release. Captured
+options and environment precede admission callbacks. Ordinary pooled reuse is
+unchanged; `forceNew` alone clears resume.
+
+ACP creation retains its scope entry after cancellation, deadline or replacement
+until the factory proves no child remains. A late returned candidate must close
+or produce an observed exit from that exact child before another acquisition can
+proceed. Explicit startup-cleanup failures without a returned child handle retain
+the entry: timeout, a new generation and `forceNew` cannot clear unknown physical
+ownership. There is no automatic recovery for that no-handle case. Cursor's
+constructor-failure path also waits for bounded physical reap before reporting a
+normal factory rejection. These guarantees concern owned processes, not escaped
+descendants or isolation from the host OS account.
 
 ### Grok native main and replacement
 

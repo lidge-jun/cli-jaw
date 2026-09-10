@@ -23,6 +23,8 @@ export interface NativeRunLease {
     release(): void;
     /** Quarantine this exact lease synchronously, before awaiting physical close. */
     retire(reason: Error): Promise<void>;
+    /** Request-scoped children must close before this lease becomes available again. */
+    readonly retireOnFinish?: boolean;
 }
 
 export interface NativeRunHost<R> {
@@ -68,6 +70,7 @@ export function runNativeRuntime<R>(host: NativeRunHost<R>): { done: Promise<R>;
     const turnId = host.turnId;
     const prompt = host.prompt;
     let lease: NativeRunLease | null = null;
+    let retireOnFinish = false;
     let cleanup: (() => void) | undefined;
     let cancellation: Promise<void> | null = null;
     let cancelOpen = true;
@@ -121,6 +124,7 @@ export function runNativeRuntime<R>(host: NativeRunHost<R>): { done: Promise<R>;
     async function infer(): Promise<void> {
         if (stopped()) return;
         lease = await host.acquire(controller.signal);
+        retireOnFinish = lease.retireOnFinish === true;
         if (stopped()) return;
         const session = lease.session;
         if (!session.claimTurnOutcome || !session.finalizeTurn) {
@@ -165,7 +169,8 @@ export function runNativeRuntime<R>(host: NativeRunHost<R>): { done: Promise<R>;
     async function retire(): Promise<void> {
         if (!lease || retired) return;
         retired = true;
-        try { await bounded(lease.retire(failure()), RETIRE_MS, 'retire'); }
+        const reason = faults.length ? failure() : new Error('native_request_lease_finished');
+        try { await bounded(lease.retire(reason), RETIRE_MS, 'retire'); }
         catch (error) { remember('retire', error); }
     }
 
@@ -186,7 +191,8 @@ export function runNativeRuntime<R>(host: NativeRunHost<R>): { done: Promise<R>;
                     // failed may finish pending canonical state; keep the lease
                     // held until that application work has been observed too.
                     if (faults.length) await reportFailure();
-                    if (faults.length) await retire();
+                    if (faults.length || retireOnFinish) await retire();
+                    if (faults.length) await reportFailure();
                 } finally {
                     try { if (lease) await bounded(lease.release(), HOST_CLEANUP_MS, 'release'); }
                     catch (error) { remember('release', error); await retire(); await reportFailure(); }

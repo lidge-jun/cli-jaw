@@ -22,6 +22,19 @@ export interface CursorSessionOptions extends Omit<AcpSessionOptions, 'clientMet
     launchDeps?: ResolveDeps;
 }
 
+const STARTUP_REAP_TIMEOUT_MS = 6_000;
+
+/** Constructor failure leaves the factory, not AcpSession, owning physical reap. */
+async function reapStartupChild(child: ChildProcessWithoutNullStreams): Promise<void> {
+    if (child.exitCode !== null || child.signalCode !== null) return;
+    await new Promise<void>((resolve, reject) => {
+        const cleanup = () => { clearTimeout(timer); child.off('exit', exited); child.off('close', exited); };
+        const exited = () => { cleanup(); resolve(); };
+        const timer = setTimeout(() => { cleanup(); reject(new Error('cursor_acp_startup_cleanup_failed')); }, STARTUP_REAP_TIMEOUT_MS);
+        child.once('exit', exited); child.once('close', exited);
+    });
+}
+
 /** Existing login only. Every failed or aborted startup owns and retires its own child. */
 export async function createCursorSession(options: CursorSessionOptions): Promise<AcpSession> {
     validateAcpSessionOptions(options);
@@ -79,7 +92,8 @@ export async function createCursorSession(options: CursorSessionOptions): Promis
             catch { throw new Error('cursor_acp_startup_cleanup_failed'); }
         } else {
             owned.terminate('startup-failed');
-            child.stdin?.destroy(); child.stdout?.destroy(); child.stderr?.destroy();
+            try { await reapStartupChild(child); }
+            finally { child.stdin?.destroy(); child.stdout?.destroy(); child.stderr?.destroy(); }
         }
         throw error;
     } finally { options.signal?.removeEventListener('abort', abort); }

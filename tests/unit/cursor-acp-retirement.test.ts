@@ -223,3 +223,36 @@ test('ownership invalidation during a retirement wait cannot launch after close 
     await old.closeStarted.promise; f.reset(); old.closeGate.resolve(); await rejected;
     assert.equal(f.sessions.length, 1); assert.equal(old.dispatched, 0);
 });
+
+test('request acquisition waits for active owner and request release keeps physical retirement fence', { timeout: 5000 }, async t => {
+    const f = fixture(t), a = await acquireCursorRuntime(f.options), old = f.sessions[0]!;
+    const request = { ...f.options, lifetime: 'request' as const };
+    const pending = acquireCursorRuntime(request);
+    await checkpoint(); assert.equal(old.retireCalls, 0); assert.equal(old.closeCalls, 0);
+    a.release(); await checkpoint(); assert.equal(old.closeCalls, 1);
+    assert.equal(f.sessions.length, 1);
+    old.closeGate.resolve(); const b = await pending, current = f.sessions[1]!;
+    b.release(); b.release();
+    assert.equal(current.closeCalls, 1); assert.equal(current.alive, false);
+    let admitted = false;
+    const next = acquireCursorRuntime(request).then(lease => { admitted = true; return lease; });
+    await checkpoint(); assert.equal(admitted, false); assert.equal(f.sessions.length, 2);
+    current.closeGate.resolve(); const c = await next;
+    assert.notEqual(c.session, b.session); c.release();
+});
+
+test('request release failure remains fenced across waiter cancellation until captured exit', { timeout: 5000 }, async t => {
+    const f = fixture(t), request = { ...f.options, lifetime: 'request' as const };
+    const a = await acquireCursorRuntime(request), old = f.sessions[0]!;
+    a.release();
+    assert.equal(old.closeCalls, 1);
+    old.closeGate.reject(new Error('reap failed')); await checkpoint();
+    const controller = new AbortController();
+    const cancelled = assert.rejects(acquireCursorRuntime({ ...request, signal: controller.signal }), /aborted/);
+    controller.abort(); await cancelled;
+    let admitted = false;
+    const next = acquireCursorRuntime(request).then(lease => { admitted = true; return lease; });
+    await checkpoint(); assert.equal(admitted, false); assert.equal(old.closeCalls, 1);
+    old.exit(); const b = await next;
+    await a.retire(); a.release(); assert.equal(b.runtime.alive, true); b.release();
+});

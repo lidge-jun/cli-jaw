@@ -92,6 +92,89 @@ async function drain(access: RuntimePoolAccess) {
     }
 }
 
+test('request lifetime keeps resume, rotates private identity and retires on plain release', async t => {
+    const { access } = accessFixture(); t.after(() => drain(access));
+    const captured: ClaudeSessionOptions[] = [], sessions: ReturnType<typeof fakeSession>[] = [];
+    const base = options({ createSession: async input => {
+        captured.push(input); const f = fakeSession(); f.state.sid = 'stored-session'; sessions.push(f); return f.session;
+    } });
+    const pooled = await acquire(access, base); pooled.release();
+    const request = { ...base, lifetime: 'request' as const, storedSessionId: 'stored-session' };
+    const a = await acquire(access, request);
+    const keyA = [...access.store.entries.keys()][0]!;
+    assert.equal(a.reused, false); assert.notEqual(a.child, pooled.child);
+    assert.equal(a.retireOnFinish, true);
+    assert.equal(captured[1]!.prepared.resumeSessionId, 'stored-session');
+    a.release();
+    assert.equal([...access.store.entries.values()][0]!.state, 'ready');
+    assert.equal(( [...access.store.entries.values()][0]! as { dead: boolean }).dead, true);
+    const b = await acquire(access, request);
+    const keyB = [...access.store.entries.keys()][0]!;
+    assert.notEqual(keyA, keyB); assert.match(keyA, /^[a-f0-9]{64}$/); assert.match(keyB, /^[a-f0-9]{64}$/);
+    assert.notEqual(a.child, b.child); assert.equal(b.reused, false);
+    assert.equal(captured[2]!.prepared.resumeSessionId, 'stored-session'); b.release();
+    const fresh = await acquire(access, { ...request, forceNew: true });
+    assert.equal(captured[3]!.prepared.resumeSessionId, undefined); fresh.release();
+    const ordinary = await acquire(access, { ...base, lifetime: 'pooled' });
+    assert.equal(ordinary.retireOnFinish, undefined); ordinary.release();
+    const again = await acquire(access, base);
+    assert.equal(again.child, ordinary.child); assert.equal(again.reused, true); again.release();
+    assert.equal(sessions[1]!.state.closes, 1); assert.equal(sessions[2]!.state.closes, 1);
+});
+
+test('request leases capture environment and lifetime without contaminating the next child', async t => {
+    const { access } = accessFixture(); t.after(() => drain(access));
+    const captured: ClaudeSessionOptions[] = [];
+    const sessions: ReturnType<typeof fakeSession>[] = [];
+    for (const grant of ['request-a', 'request-b', undefined]) {
+        const input = options({ lifetime: 'request', createSession: async config => {
+            captured.push(config); const f = fakeSession(); sessions.push(f); return f.session;
+        } });
+        if (grant !== undefined) input.prepared.env['JAW_SLACK_TURN_GRANT'] = grant;
+        input.canAcquire = () => {
+            input.prepared.env['JAW_SLACK_TURN_GRANT'] = 'mutated';
+            input.lifetime = 'pooled';
+            return true;
+        };
+        const lease = await acquire(access, input);
+        assert.equal(lease.retireOnFinish, true);
+        assert.equal(captured.at(-1)!.prepared.env['JAW_SLACK_TURN_GRANT'], grant);
+        lease.release();
+        assert.equal([...access.store.entries.values()][0]!.state, 'ready');
+        await sessions.at(-1)!.closed.promise;
+    }
+    assert.equal(new Set(sessions.map(f => f.child)).size, 3);
+    assert.deepEqual(sessions.map(f => f.state.closes), [1, 1, 1]);
+});
+
+test('request lifetime validates before callbacks and cannot retire a healthy pooled child', async t => {
+    const { access } = accessFixture(); t.after(() => drain(access));
+    const f = fakeSession(), base = options({ createSession: async () => f.session });
+    const one = await acquire(access, base); one.release(); let admissions = 0;
+    await assert.rejects(acquire(access, { ...base, lifetime: 'invalid' as 'request', forceNew: true,
+        canAcquire: () => { admissions++; return true; } }), /invalid lifetime/);
+    assert.equal(admissions, 0); assert.equal(f.state.closes, 0);
+});
+
+test('request waits for active borrower then plain release waits for observed close', { timeout: 5000 }, async t => {
+    const { access, waited } = accessFixture();
+    const sessions: ReturnType<typeof fakeSession>[] = [];
+    const close = deferred(); t.after(() => { close.resolve(); return drain(access); });
+    const base = options({ createSession: async () => { const f = fakeSession(); sessions.push(f); return f.session; } });
+    const one = await acquire(access, base);
+    const pending = acquire(access, { ...base, lifetime: 'request' });
+    await waited.promise; assert.equal(sessions[0]!.state.closes, 0); one.release();
+    const two = await pending;
+    assert.notEqual(two.child, one.child);
+    sessions[1]!.state.close = () => close.promise;
+    two.release(); await sessions[1]!.closed.promise;
+    let admitted = false;
+    const next = acquire(access, { ...base, lifetime: 'request' }).then(lease => { admitted = true; return lease; });
+    await new Promise<void>(resolve => setImmediate(resolve)); assert.equal(admitted, false);
+    close.resolve(); const three = await next;
+    assert.notEqual(three.child, two.child); three.release();
+});
+
 test('stable callbacks capture on send, retain passive binding until next send, and match current SID', async t => {
     const { access } = accessFixture(); t.after(() => drain(access));
     const f = fakeSession(); let captured!: ClaudeSessionOptions, creates = 0;
