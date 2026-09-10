@@ -170,3 +170,32 @@ readback and retain `partial` or `unknown` when it cannot prove the requested re
 The `upload` receipt records `stage` (`validation`, `reservation`, `upload`, `completion`), `state` (`failed`, `unknown`, `completed`), requested `channelId`/optional `threadTs`, and a known `fileId`. `verification: not_checked` means no content or visual readback was performed. Only a successful HTTP and Slack completion acknowledgement yields `ok: true, sent: true`. A reservation or accepted bytes alone do not prove delivery. If the completion reply is lost or contradictory, `sent: unknown, retryable: false` preserves that uncertainty. A later cancellation cannot erase an acknowledged send.
 
 Files must be regular, nonempty and at most 50 MiB. The three-stage request has a shared 120-second cancellation bound. An oversize file with a caption returns a failure and posts nothing. CLI success requires a matching completed receipt; legacy bare success or caption-only responses exit nonzero as unconfirmed.
+
+### Letting one other bot start a turn
+
+Inbound gating refuses bot messages: the `bot_message` subtype is ignored, `allowBots: false`
+refuses anything carrying `bot_id` or `bot_profile`, and a channel message that mentions the app
+defers to its `app_mention` twin. Turning `allowBots` on to admit one scheduled trigger admits
+every bot in every allowed conversation, which is rarely what an operator wants.
+
+`slack.trustedBotTriggers` names the exception instead. Each rule is exactly four fields:
+
+```json
+"trustedBotTriggers": [
+  { "channelId": "C0123ABCD", "botId": "B0123ABCD", "userId": "U0123ABCD", "textMarker": "DAILY_UPLOAD_V1" }
+]
+```
+
+`channelId` is a channel or private group, `botId` is the sending app's `bot_id`, `userId` is the
+bot user it posts as, and `textMarker` is an uppercase word the trigger message must contain. Read
+the first two from a real message the trigger bot posted rather than guessing: a stale id means the
+trigger silently never fires.
+
+A post is admitted only when it mentions this app, its bot identity is internally consistent and
+not deleted, and one rule matches the channel, bot, sender and marker as a whole word. That opens
+exactly the three refusals above. The conversation allowlist, self-echo protection, `mentionOnly`
+and the empty-event check still apply, so a rule cannot reach a conversation `channelIds` excludes.
+
+The list validates as a whole: one malformed rule disables every rule, and at most 16 are read. A
+typo therefore fails closed instead of leaving half the list live. Copying the marker text does not
+help anyone else — Slack attests `bot_id` and `user`, so only the named app satisfies its rule.
