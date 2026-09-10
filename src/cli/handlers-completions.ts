@@ -7,7 +7,7 @@ import { t } from '../core/i18n.js';
 import type { CompletionCtx, SlashChoice } from './types.js';
 
 const DEFAULT_CLI_CHOICES = [...CLI_KEYS];
-const MODEL_LABEL_SKIP_CLIS = new Set(['ai-e']);
+const MODEL_LABEL_SKIP_CLIS = new Set<string>();
 
 function toChoiceKey(value: unknown) {
     return String(value || '').trim().toLowerCase();

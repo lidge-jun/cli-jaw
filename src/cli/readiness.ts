@@ -54,11 +54,6 @@ export function getCliReadiness(dependencies: ReadinessDependencies = DEFAULT_DE
                 source = 'installed; auth checked by agy at run time';
                 break;
             }
-            case 'ai-e': {
-                authenticated = true; // ai-e delegates auth to its selected provider runtime.
-                source = 'provider-delegated';
-                break;
-            }
             case 'pi': {
                 authenticated = true; // Pi profiles validate endpoint/key during Settings registration.
                 source = info?.rejected?.some((entry: any) => String(entry.reason || '').includes('npm-exec'))
@@ -125,19 +120,6 @@ export function getCliReadiness(dependencies: ReadinessDependencies = DEFAULT_DE
                     : `app-server unavailable: ${capability.reason}; auth: ${authSource}`;
                 break;
             }
-            case 'claude-e': {
-                const claudeInfo = (detected as Record<string, any>)['claude'];
-                if (!claudeInfo?.available) {
-                    authenticated = false;
-                    source = 'underlying claude missing';
-                    break;
-                }
-                const claudeCreds = dependencies.readClaudeCreds();
-                authenticated = !!claudeCreds?.token;
-                if (claudeCreds?.source === 'cloud-provider-env') authenticated = true;
-                source = claudeCreds?.source ?? 'none';
-                break;
-            }
             case 'opencode': {
                 authenticated = true; // opencode has no separate auth
                 source = 'installed';
@@ -151,7 +133,7 @@ export function getCliReadiness(dependencies: ReadinessDependencies = DEFAULT_DE
     return results;
 }
 
-export const DEFAULT_READINESS_ORDER: readonly CliEngine[] = ['codex-app', 'pi', 'claude', 'claude-e', 'agy', 'codex', 'cursor', 'kiro-code', 'copilot', 'grok', 'opencode', 'ai-e'];
+export const DEFAULT_READINESS_ORDER: readonly CliEngine[] = ['codex-app', 'pi', 'claude', 'agy', 'codex', 'cursor', 'kiro-code', 'copilot', 'grok', 'opencode'];
 
 export function pickFirstReadyCli(
     order: readonly CliEngine[] = DEFAULT_READINESS_ORDER,

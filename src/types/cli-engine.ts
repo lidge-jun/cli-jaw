@@ -17,9 +17,7 @@
 
 export type ExecutableCliEngine =
     | 'agy'
-    | 'ai-e'
     | 'claude'
-    | 'claude-e'
     | 'codex'
     | 'codex-app'
     | 'copilot'
@@ -30,15 +28,45 @@ export type ExecutableCliEngine =
     | 'pi';
 
 /** Historical selections stay readable but never become execution candidates. */
-export type RetiredCliSelection = 'jwc';
+export type RetiredCliSelection = 'ai-e' | 'claude-e' | 'jwc';
 export type StoredCliSelection = ExecutableCliEngine | RetiredCliSelection;
 export type CliEngine = ExecutableCliEngine;
 
+export const RETIRED_CLI_SELECTIONS = [
+    'ai-e',
+    'claude-e',
+    'jwc',
+] as const satisfies readonly RetiredCliSelection[];
+
 export function isRetiredCliSelection(value: unknown): value is RetiredCliSelection {
-    return value === 'jwc';
+    return typeof value === 'string' && (RETIRED_CLI_SELECTIONS as readonly string[]).includes(value);
 }
 
 export const RETIRED_RUNTIME_DIAGNOSTIC = 'retired_runtime:jwc' as const;
+
+/**
+ * Diagnostic code for a stored retired runtime. `jwc` keeps the original
+ * literal so every existing contract that pins it stays byte-identical.
+ */
+export function retiredRuntimeDiagnostic(value: RetiredCliSelection): string {
+    return value === 'jwc' ? RETIRED_RUNTIME_DIAGNOSTIC : `retired_runtime:${value}`;
+}
+
+const RETIRED_RUNTIME_NAMES: Readonly<Record<RetiredCliSelection, string>> = {
+    'ai-e': 'AI-E',
+    'claude-e': 'Claude E',
+    jwc: 'JWC',
+};
+
+/** Short label for a saved retired runtime, e.g. `JWC (retired)`. */
+export function retiredRuntimeLabel(value: RetiredCliSelection): string {
+    return `${RETIRED_RUNTIME_NAMES[value]} (retired)`;
+}
+
+/** Selector label that also tells the reader what to do next. */
+export function retiredRuntimeChoiceLabel(value: RetiredCliSelection): string {
+    return `${RETIRED_RUNTIME_NAMES[value]} (retired — choose another runtime)`;
+}
 
 /**
  * Runtime list of all engines, derived from the type via a `satisfies`
@@ -49,9 +77,7 @@ export const RETIRED_RUNTIME_DIAGNOSTIC = 'retired_runtime:jwc' as const;
  */
 export const CLI_ENGINES = [
     'agy',
-    'ai-e',
     'claude',
-    'claude-e',
     'codex',
     'codex-app',
     'copilot',

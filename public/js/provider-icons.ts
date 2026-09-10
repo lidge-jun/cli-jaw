@@ -26,7 +26,7 @@ import slackSvg from '../assets/providers/slack.svg?raw';
 import telegramSvg from '../assets/providers/telegram.svg?raw';
 import opencodeSvg from '../assets/providers/opencode.svg?raw';
 
-export type ProviderSlug = 'ai-e' | 'claude' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'copilot' | 'cursor' | 'kiro-code' | 'codex' | 'codex-app' | 'opencode' | 'discord' | 'telegram' | 'slack';
+export type ProviderSlug = 'claude' | 'openai' | 'gemini' | 'antigravity' | 'grok' | 'copilot' | 'cursor' | 'kiro-code' | 'codex' | 'codex-app' | 'opencode' | 'discord' | 'telegram' | 'slack';
 
 interface ProviderIcon {
     color: string;
@@ -37,7 +37,6 @@ interface ProviderIcon {
 const openaiColorSvg = openaiSvg.replace('fill="currentColor"', 'fill="#10A37F"');
 
 const PROVIDER_ICONS: Record<ProviderSlug, ProviderIcon> = {
-    'ai-e':    { color: openaiColorSvg, mono: openaiSvg, label: 'AI-E' },
     claude:   { color: claudeSvg,  mono: claudeMonoSvg,  label: 'Claude' },
     openai:   { color: openaiColorSvg, mono: openaiSvg,  label: 'OpenAI' },
     gemini:   { color: geminiSvg,  mono: geminiMonoSvg,   label: 'Gemini' },
@@ -67,7 +66,6 @@ const PROVIDER_LABEL_ALIASES: Record<string, string> = {
 
 function resolveProviderSlug(slug: string): ProviderSlug | null {
     const normalized = slug.toLowerCase().replace(/[-_\s]/g, '');
-    if (normalized === 'aie') return 'ai-e';
     if (normalized === 'claude' || normalized.startsWith('claude')) return 'claude';
     if (normalized === 'gemini' || normalized.startsWith('gemini')) return 'gemini';
     if (normalized === 'antigravity' || normalized === 'agy' || normalized === 'googleantigravity') return 'antigravity';

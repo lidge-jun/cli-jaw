@@ -284,9 +284,7 @@ function renderCliStatus(data: { cliStatus: Record<string, CliStatusInfo> | null
 
     const AUTH_HINTS: Record<string, { install: string; auth: string }> = {
         agy: { install: 'curl -fsSL https://antigravity.google/cli/install.sh | bash', auth: 'agy runtime auth, antigravity-usage login, or ~/.gemini oauth for quota' },
-        'ai-e': { install: 'Install AI-E helper', auth: 'delegates to selected AI-E provider' },
         claude: { install: 'npm i -g @anthropic-ai/claude-code', auth: 'claude auth' },
-        'claude-e': { install: 'Install claude-e helper', auth: 'claude auth' },
         codex: { install: 'npm i -g @openai/codex', auth: 'codex login' },
         'codex-app': { install: 'npm i -g @openai/codex', auth: 'codex login' },
         cursor: { install: 'curl https://cursor.com/install -fsS | bash', auth: 'cursor-agent login, CURSOR_API_KEY, or CURSOR_SESSION_TOKEN for quota' },

@@ -1,6 +1,6 @@
 // ─── Config: paths, settings, CLI detection ──────────
 
-import { isCliEngine, isRetiredCliSelection, RETIRED_RUNTIME_DIAGNOSTIC } from '../types/cli-engine.js';
+import { isCliEngine, isRetiredCliSelection, retiredRuntimeDiagnostic } from '../types/cli-engine.js';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
@@ -25,7 +25,7 @@ import {
     sanitizeSettingsInput,
     type SettingsPersistenceShape,
 } from './settings-merge.js';
-export { detectAllCli, detectCli, getClaudeExecHelperCandidates, getClaudeIHelperCandidates } from './cli-detection.js';
+export { detectAllCli, detectCli } from './cli-detection.js';
 
 // ─── Version (single source of truth: package.json) ──
 import { dirname } from 'path';
@@ -1322,8 +1322,9 @@ function writeSettingsRaw(raw: string): void {
 
 export function commitCandidate(candidate: SettingsStateCandidate): void {
     // Recompute on every load/save/watch commit; this is not a persisted marker.
-    candidate.value['runtimeSelectionDiagnostic'] = isRetiredCliSelection(candidate.value['cli'])
-        ? RETIRED_RUNTIME_DIAGNOSTIC : null;
+    const storedCli = candidate.value['cli'];
+    candidate.value['runtimeSelectionDiagnostic'] = isRetiredCliSelection(storedCli)
+        ? retiredRuntimeDiagnostic(storedCli) : null;
     settings = candidate.value;
     settingsPersistenceShape = candidate.shape;
 }

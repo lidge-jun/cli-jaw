@@ -219,16 +219,6 @@ exit 0
 if [ "$1" = "--version" ]; then echo "cli-jaw v2.0.6"; exit 0; fi
 exit 0
 `);
-    writeExecutable(bin, 'ai-e', `
-#!/usr/bin/env bash
-if [ "$1" = "--version" ]; then echo "ai-e v2.0.6"; exit 0; fi
-exit 0
-`);
-    writeExecutable(bin, 'claude-e', `
-#!/usr/bin/env bash
-if [ "$1" = "--version" ]; then echo "claude-e v2.0.6"; exit 0; fi
-exit 0
-`);
     writeExecutable(bin, 'zsh', `
 #!/usr/bin/env bash
 if [ "$1" = "-lc" ] || [ "$1" = "-ic" ]; then

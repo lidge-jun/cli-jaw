@@ -85,21 +85,6 @@ test('Claude text deltas reconcile by replacement; the next stream message reset
     assert.equal(observed.nextMessage.mock.callCount(), 1);
     assert.equal(ctx.fullText, 'Bye');
 });
-
-test('claude-e cumulative snapshots replace, reject duplicate/shorter snapshots and reset on ID change', () => {
-    const { ctx, observed, accept } = fixture('claude-e');
-    accept(assistant('m1', 'A'));
-    accept(assistant('m1', 'AB'));
-    accept(assistant('m1', 'AB'));
-    accept(assistant('m1', 'A'));
-    accept(assistant('m2', 'Answer'));
-    assert.deepEqual(observed.message.mock.calls.map(c => c.arguments), [
-        ['A', 'replace', 'unknown'], ['AB', 'replace', 'unknown'], ['Answer', 'replace', 'unknown'],
-    ]);
-    assert.equal(observed.nextMessage.mock.callCount(), 1);
-    assert.equal(ctx.fullText, 'Answer');
-});
-
 test('Claude thinking deltas are observed once and synthetic flush cards add no tool observation', () => {
     const { observed, accept } = fixture('claude');
     accept({ type: 'stream_event', event: { type: 'content_block_start', content_block: { type: 'thinking' } } });

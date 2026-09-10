@@ -1,6 +1,6 @@
 import { SelectField, TextField } from '../../../fields';
 import { SettingsSection } from '../../page-shell';
-import { metaFor, orderRuntimeCliOptions, PRIMARY_CLIS, isRetiredCliSelection, type CliMeta } from './agent-meta';
+import { metaFor, orderRuntimeCliOptions, PRIMARY_CLIS, isRetiredCliSelection, retiredRuntimeLabel, type CliMeta } from './agent-meta';
 
 type RuntimeHeaderProps = {
     cli: string;
@@ -53,7 +53,7 @@ export function RuntimeHeader({
                     id="agent-cli"
                     label="Active CLI"
                     value={cli}
-                    missingValueLabel={retired ? 'JWC (retired)' : undefined}
+                    missingValueLabel={isRetiredCliSelection(cli) ? retiredRuntimeLabel(cli) : undefined}
                     error={retired ? 'This runtime is retired. Select an available runtime to continue.' : null}
                     options={orderedCliOptions.map((value) => ({ value, label: metaFor(value, cliMeta).label || value }))}
                     collapsedAfter={orderedPrimaryCliCount}

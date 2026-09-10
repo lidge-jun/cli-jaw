@@ -1,5 +1,5 @@
 import { SelectField, TextField } from '../../../fields';
-import { metaFor, optionList, selectableRuntimeOptions, isRetiredCliSelection, type CliMeta } from './agent-meta';
+import { metaFor, optionList, selectableRuntimeOptions, isRetiredCliSelection, retiredRuntimeLabel, type CliMeta } from './agent-meta';
 import {
     isStaticEmployee,
     runtimeEmployeeError,
@@ -49,7 +49,7 @@ export function RuntimeEmployeeRow({
                     id={`runtime-employee-${employee.id}-cli`}
                     label="CLI"
                     value={employee.cli}
-                    missingValueLabel={retired ? 'JWC (retired)' : undefined}
+                    missingValueLabel={isRetiredCliSelection(employee.cli) ? retiredRuntimeLabel(employee.cli) : undefined}
                     error={retired ? 'This saved runtime cannot execute. Choose an available runtime.' : null}
                     disabled={locked}
                     options={cliChoices.map((value) => ({ value, label: metaFor(value, cliMeta).label || value }))}

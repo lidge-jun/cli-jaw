@@ -86,7 +86,7 @@ test('worker_run events use the existing worker topic replay path', () => {
 });
 
 test('isPublicSseTopic excludes internal trace topic and includes public topics', () => {
-    // trace is internal-only (agent:claude-e:* diagnostics) — must never be public.
+    // trace is internal-only (agent trace diagnostics) — must never be public.
     assert.equal(isPublicSseTopic('trace'), false);
     // representative public topics stay public.
     assert.equal(isPublicSseTopic('system'), true);

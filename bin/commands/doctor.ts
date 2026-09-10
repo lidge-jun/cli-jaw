@@ -194,74 +194,6 @@ function verifyOfficeCli(): { status: 'ok' | 'info' | 'warn'; detail: string } {
     }
 }
 
-function readBinaryVersion(candidate: string, args: string[] = ['--version']): string {
-    return execFileSync(candidate, args, {
-        encoding: 'utf8',
-        stdio: 'pipe',
-        timeout: 5000,
-    }).trim();
-}
-
-function verifyClaudeInteractive() {
-    const helper = findBinaryPath('claude-e') || findBinaryPath('claude-exec') || findBinaryPath('jaw-claude-i');
-    if (!helper) {
-        throw new Error('WARN: runtime missing — install with `jaw provider install claude-e` (needs Rust cargo) or build with `npm run build:claude-exec`');
-    }
-
-    let helperVersion = 'unknown';
-    try {
-        helperVersion = readBinaryVersion(helper);
-    } catch (e: unknown) {
-        const message = (e as Error).message || String(e);
-        throw new Error(`WARN: runtime found but not runnable (${helper}) — ${message}`);
-    }
-
-    const claude = findBinaryPath('claude');
-    if (!claude) {
-        throw new Error(`WARN: runtime=${helper} version=${helperVersion}; underlying claude missing`);
-    }
-
-    let claudeVersion = 'unknown';
-    try {
-        claudeVersion = readBinaryVersion(claude);
-    } catch {
-        claudeVersion = 'version check failed';
-    }
-
-    return `runtime=${helper} version=${helperVersion}; claude=${claude} version=${claudeVersion}; provider=claude-e`;
-}
-
-function verifyAiE() {
-    const helper = findBinaryPath('ai-e');
-    if (!helper) {
-        throw new Error(`WARN: runtime missing — install \`ai-e\` on PATH or set AI_E_BIN${rejectedCliDetail('ai-e')}`);
-    }
-
-    let helperVersion = 'unknown';
-    try {
-        helperVersion = readBinaryVersion(helper);
-    } catch (e: unknown) {
-        const message = (e as Error).message || String(e);
-        throw new Error(`WARN: runtime found but not runnable (${helper}) — ${message}`);
-    }
-
-    try {
-        const help = execFileSync(helper, ['--help'], {
-            encoding: 'utf8',
-            stdio: 'pipe',
-            timeout: 5000,
-        });
-        if (!/ai-e <provider>/.test(help) || !/codex/.test(help) || !/copilot/.test(help)) {
-            throw new Error('provider-first help shape missing');
-        }
-    } catch (e: unknown) {
-        const message = (e as Error).message || String(e);
-        throw new Error(`WARN: contract check failed (${helper}) — ${message}`);
-    }
-
-    return `runtime=${helper} version=${helperVersion}; providers=claude,codex,gemini,grok,copilot`;
-}
-
 /** Detect headless server (no display, no desktop environment). */
 function isHeadless(): boolean {
     if (process.platform !== 'linux') return false;
@@ -385,14 +317,6 @@ check('heartbeat.json', () => {
 
 // 5. CLI tools
 for (const cli of CLI_KEYS) {
-    if (cli === 'claude-e') {
-        check('CLI: claude-e', verifyClaudeInteractive);
-        continue;
-    }
-    if (cli === 'ai-e') {
-        check('CLI: ai-e', verifyAiE);
-        continue;
-    }
     check(`CLI: ${cli}`, () => {
         const found = findBinaryPath(cli);
         const skipped = rejectedCliDetail(cli);

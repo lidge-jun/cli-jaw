@@ -70,12 +70,9 @@ test('frontend Kiro fallback exposes gateway effort choices', () => {
 test('frontend Kiro fallbacks stay in parity with the backend Kiro catalogs', () => {
     const required = ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'claude-opus-5'];
     const kiro = getCliMeta('kiro-code');
-    const aiE = getCliMeta('ai-e');
     assert.ok(kiro, 'kiro metadata missing');
-    assert.ok(aiE, 'ai-e metadata missing');
     for (const model of required) {
         assert.ok(kiro.models.includes(model), `web kiro-code fallback is missing ${model}`);
-        assert.ok(aiE.modelsByProvider?.kiro?.includes(model), `web ai-e kiro fallback is missing ${model}`);
     }
     for (const model of kiro.models) {
         assert.ok(
@@ -88,33 +85,8 @@ test('frontend Kiro fallbacks stay in parity with the backend Kiro catalogs', ()
 test('frontend Codex fallback shows only inactive ocx default models', () => {
     const codex = getCliMeta('codex');
     const codexApp = getCliMeta('codex-app');
-    const aiE = getCliMeta('ai-e');
     assert.ok(codex, 'codex metadata missing');
     assert.ok(codexApp, 'codex-app metadata missing');
-    assert.ok(aiE, 'ai-e metadata missing');
     assert.deepEqual(codex.models, DEFAULT_CODEX_MODELS);
     assert.deepEqual(codexApp.models, DEFAULT_CODEX_MODELS);
-    assert.deepEqual(aiE.modelsByProvider?.codex, DEFAULT_CODEX_MODELS);
-});
-
-// The web fallback is what the picker renders when GET /api/cli-registry fails
-// (see loadCliRegistry in public/js/constants.ts), so a model that exists only
-// in the backend registry silently disappears offline. 260725: the AI-E
-// provider=claude fallback drifted exactly this way when claude-opus-5 landed,
-// and the Codex-only assertion above did not catch it.
-test('frontend AI-E claude fallback stays in parity with the backend registry', () => {
-    const aiE = getCliMeta('ai-e');
-    assert.ok(aiE, 'ai-e metadata missing');
-    const backend = CLI_REGISTRY['ai-e'].modelsByProvider.claude;
-    const fallback = aiE.modelsByProvider?.claude ?? [];
-    for (const model of fallback) {
-        assert.ok(
-            backend.includes(model),
-            `web fallback lists ${model} for provider=claude but the backend registry does not`,
-        );
-    }
-    // Pinned full IDs the fallback must expose; aliases resolve server-side.
-    for (const model of ['claude-opus-5', 'claude-opus-4-8', 'claude-fable-5']) {
-        assert.ok(fallback.includes(model), `web fallback is missing ${model} for provider=claude`);
-    }
 });

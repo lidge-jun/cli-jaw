@@ -92,7 +92,7 @@ export async function compactHandler(args: string[], ctx: CliCommandContext): Pr
     const trace = `${BOOTSTRAP_TRACE_PREFIX}\n${bootstrap}`;
 
     const { insertMessageWithTrace, clearSessionBucket, clearSessionBucketsByPrefix } = await import('../core/db.js');
-    const { aiEProviderForBucket, resolveSessionBucket } = await import('../agent/args.js');
+    const { resolveSessionBucket } = await import('../agent/args.js');
     const {
         clearBossSessionOnly,
         setPendingBootstrapPrompt,
@@ -112,11 +112,7 @@ export async function compactHandler(args: string[], ctx: CliCommandContext): Pr
     // arrange when a non-default scope had no bucket of its own.
     //
     const isCodexApp = activeCli === 'codex-app';
-    // ai-e keys its bucket by provider, and a null here would make the bucket infer one
-    // from the model name instead. When the configured provider and that inference
-    // disagree, the clear lands on a bucket the conversation never used.
-    const aiEProvider = aiEProviderForBucket(activeCli, model, settings);
-    const base = resolveSessionBucket(activeCli, model, aiEProvider);
+    const base = resolveSessionBucket(activeCli, model);
     // Always the scoped form, including the default scope. Letting default resolve to the
     // bare name looks harmless until the prefix clear below runs: `claude` plus `claude:%`
     // deletes every other session's bucket for this runtime. Default's own legacy bare row

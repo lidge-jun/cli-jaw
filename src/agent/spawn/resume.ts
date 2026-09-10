@@ -26,7 +26,7 @@ export function shouldResumeBucketSession(
     bucketResumeKey?: string | null,
     bucketUpdatedAt?: string | number | null,
     nowMs: number = Date.now(),
-    effectiveProvider?: string | null,
+    _effectiveProvider?: string | null,
 ): boolean {
     if (cli === 'copilot' && bucketModel) {
         return normalizeModelForCli(cli, requestedModel) === normalizeModelForCli(cli, bucketModel);
@@ -35,7 +35,7 @@ export function shouldResumeBucketSession(
         if (!bucketModel) return false;
         return normalizeModelForCli(cli, requestedModel) === normalizeModelForCli(cli, bucketModel);
     }
-    if (cli === 'kiro-code' || (cli === 'ai-e' && effectiveProvider === 'kiro')) {
+    if (cli === 'kiro-code') {
         if (!bucketModel) return false;
         return normalizeModelForCli('kiro-code', requestedModel) === normalizeModelForCli('kiro-code', bucketModel);
     }
@@ -96,7 +96,7 @@ export function shouldClearHighTurnSessionBucket(cli: string, turns: number): bo
 
 /** AGY owns compaction for its native conversation and does not need refresh-by-turn. */
 export function shouldUseTurnCountRefresh(cli: string): boolean {
-    return cli !== 'claude' && cli !== 'claude-e' && cli !== 'agy';
+    return cli !== 'claude' && cli !== 'agy';
 }
 
 

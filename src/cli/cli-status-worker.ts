@@ -249,10 +249,9 @@ async function probeCodexApp(binary: string): Promise<CapabilityResult> {
     return result.ok ? { ready: true } : { ready: false, reason: `app-server ${result.reason}` };
 }
 
-async function authForCli(cli: string, path: string | null, detected: Record<string, { available?: boolean }>): Promise<AuthResult> {
+async function authForCli(cli: string, path: string | null, _detected: Record<string, { available?: boolean }>): Promise<AuthResult> {
     switch (cli) {
         case 'agy': return { authenticated: true, source: 'installed; auth checked by agy at run time' };
-        case 'ai-e': return { authenticated: true, source: 'provider-delegated' };
         case 'pi': return { authenticated: true, source: 'profile auth validated at registration' };
         case 'claude': {
             const creds = readClaudeCreds();
@@ -282,11 +281,6 @@ async function authForCli(cli: string, path: string | null, detected: Record<str
         case 'copilot': {
             const authenticated = hasCopilotAuthSync();
             return { authenticated, source: authenticated ? 'local-auth-chain' : 'none' };
-        }
-        case 'claude-e': {
-            if (!detected['claude']?.available) return { authenticated: false, source: 'underlying claude missing' };
-            const creds = readClaudeCreds();
-            return { authenticated: Boolean(creds?.token) || creds?.source === 'cloud-provider-env', source: creds?.source ?? 'none' };
         }
         case 'opencode': return { authenticated: true, source: 'installed' };
         default: return { authenticated: false, source: 'none' };

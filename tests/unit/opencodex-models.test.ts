@@ -223,10 +223,7 @@ test('applyCodexModelsToChoices keeps inactive ocx Codex defaults at seven model
     const choices = applyCodexModelsToChoices(buildModelChoicesByCli(), CODEX_MODEL_CHOICES);
     assert.deepEqual(choices.codex, CODEX_MODEL_CHOICES);
     assert.deepEqual(choices['codex-app'], CODEX_MODEL_CHOICES);
-    assert.deepEqual(
-        choices['ai-e'].filter((model) => CODEX_MODEL_CHOICES.includes(model)),
-        CODEX_MODEL_CHOICES,
-    );
+    assert.equal(Object.hasOwn(choices, 'ai-e'), false);
 });
 
 test('applyCodexModelsToChoices expands Codex choices with active ocx routed models', () => {
@@ -244,9 +241,7 @@ test('applyCodexModelsToChoices expands Codex choices with active ocx routed mod
     const choices = applyCodexModelsToChoices(buildModelChoicesByCli(), activeModels);
     assert.deepEqual(choices.codex, activeModels);
     assert.deepEqual(choices['codex-app'], activeModels);
-    for (const model of activeModels) {
-        assert.ok(choices['ai-e'].includes(model), `ai-e choices should include ${model}`);
-    }
+    assert.equal(Object.hasOwn(choices, 'ai-e'), false);
 });
 
 test('resolveCliDefaultModel keeps inactive ocx Codex default at first fallback model', async () => {

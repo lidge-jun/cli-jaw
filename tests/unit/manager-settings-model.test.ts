@@ -142,36 +142,18 @@ test('Model defaults imports canonical CLI metadata from agent-meta', () => {
     assert.equal(PRIMARY_CLIS.includes('jwc'), false);
     assert.equal(jwcMeta.label, 'JWC (retired)');
     assert.deepEqual(jwcMeta.models, []);
-    // metaFor() falls back to the static CLI_META when runtime metadata is
-    // unavailable, so the manager AI-E claude list must not drift behind the
-    // backend registry (260725: claude-opus-5 was missing here).
-    const aiEClaudeFallback = metaFor('ai-e').modelsByProvider?.claude ?? [];
-    for (const model of aiEClaudeFallback) {
-        assert.equal(
-            CLI_REGISTRY['ai-e'].modelsByProvider.claude.includes(model),
-            true,
-            `manager fallback lists ${model} for provider=claude but the backend registry does not`,
-        );
-    }
-    for (const model of ['claude-opus-5', 'claude-opus-4-8', 'claude-fable-5']) {
-        assert.equal(aiEClaudeFallback.includes(model), true, `manager fallback is missing ${model}`);
-    }
-    // Manager Kiro fallbacks: same drift risk as the claude ones above.
     const kiroRequired = ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'claude-opus-5'];
     const managerKiro = metaFor('kiro-code').models;
-    const managerAiEKiro = metaFor('ai-e').modelsByProvider?.kiro ?? [];
     for (const model of kiroRequired) {
         assert.equal(managerKiro.includes(model), true, `manager kiro-code fallback is missing ${model}`);
-        assert.equal(managerAiEKiro.includes(model), true, `manager ai-e kiro fallback is missing ${model}`);
     }
     assert.equal(managerKiro[0], 'auto');
-    assert.equal(managerAiEKiro[0], 'auto');
     assert.deepEqual(jwcMeta.efforts, []);
     assert.equal(Object.hasOwn(CLI_REGISTRY, 'jwc'), false);
-    assert.equal(PRIMARY_CLIS.indexOf('claude-e') < PRIMARY_CLIS.indexOf('agy'), true);
+    assert.equal(PRIMARY_CLIS.includes('claude-e'), false);
     assert.deepEqual(
         orderRuntimeCliOptions(['gemini', 'jwc', 'claude-e', 'agy', 'custom-cli']),
-        ['claude-e', 'agy', 'gemini', 'custom-cli'],
+        ['agy', 'gemini', 'custom-cli'],
     );
     const runtimeHeaderSource = readFileSync(
         join(__dirname, '../../public/manager/src/settings/pages/components/agent/RuntimeHeader.tsx'),
@@ -225,7 +207,7 @@ test('Manager live CLI metadata overrides static Codex model fallback', () => {
 });
 
 test('Pi model defaults render first and use discovered models for dropdown options', () => {
-    assert.deepEqual(orderModelCliKeys(['agy', 'jwc', 'ai-e', 'claude', 'pi']), ['pi', 'ai-e', 'agy', 'claude']);
+    assert.deepEqual(orderModelCliKeys(['agy', 'jwc', 'ai-e', 'claude', 'pi']), ['pi', 'agy', 'claude']);
     assert.deepEqual(piModelOptions({
         defaultProfileId: 'progrok',
         profiles: [{ id: 'progrok', label: 'Progrok', mode: 'basic', endpoint: 'http://127.0.0.1:18645/v1', model: 'grok-composer-2.5-fast' }],

@@ -12,12 +12,11 @@ import {
     extractKiroSessionIdFromStore,
     finalizeKiroFullText,
     flushKiroStdoutContext,
-    isKiroPlainTextCli,
     isKiroResumeDegradedOutput,
+    isKiroPlainTextCli,
     isKiroStaleSessionOutput,
     parseKiroAssistantText,
     parseKiroSessionIdFromStdout,
-    parseAiESessionIdFromStderr,
     processKiroStdoutChunk,
     resolveKiroSessionIdAfterSpawn,
     resolveKiroSpawnIdentity,
@@ -268,16 +267,8 @@ test('resolveKiroSessionIdAfterSpawn prefers set-diff over latest row', () => {
     const resolved = resolveKiroSessionIdAfterSpawn(cwd, before, 0, dataPath);
     assert.equal(resolved, 'brand-new');
 });
-
-test('parseAiESessionIdFromStderr reads ai-e session footer', () => {
-    const raw = 'ai-e: kiro provider timed out\n[ai-e] session: 79eee8a5-7c00-4cd9-8385-c534a2f8b814\n[ai-e] resume: ai-e kiro --resume 79eee8a5-7c00-4cd9-8385-c534a2f8b814 "next"';
-    assert.equal(parseAiESessionIdFromStderr(raw), '79eee8a5-7c00-4cd9-8385-c534a2f8b814');
-});
-
-test('isKiroPlainTextCli includes ai-e kiro provider', () => {
+test('isKiroPlainTextCli includes kiro-code', () => {
     assert.equal(isKiroPlainTextCli('kiro-code'), true);
-    assert.equal(isKiroPlainTextCli('ai-e', 'kiro'), true);
-    assert.equal(isKiroPlainTextCli('ai-e', 'codex'), false);
 });
 
 test('parseKiroSessionIdFromStdout reads TUI session hint lines', () => {

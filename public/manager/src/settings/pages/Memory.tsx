@@ -35,7 +35,7 @@ import {
     type MemoryBlock,
     type MemoryEntry,
 } from './components/memory-helpers';
-import { metaFor, selectableRuntimeOptions, isRetiredCliSelection } from './components/agent/agent-meta';
+import { metaFor, selectableRuntimeOptions, isRetiredCliSelection, retiredRuntimeLabel } from './components/agent/agent-meta';
 
 // Re-export pure helpers for unit tests (Heartbeat pattern).
 export {
@@ -274,7 +274,7 @@ export default function Memory({ port, client, dirty, registerSave }: SettingsPa
                     id="memory-cli"
                     label="Flush CLI"
                     value={cli}
-                    missingValueLabel={isRetiredCliSelection(cli) ? 'JWC (retired)' : undefined}
+                    missingValueLabel={isRetiredCliSelection(cli) ? retiredRuntimeLabel(cli) : undefined}
                     error={isRetiredCliSelection(cli) ? 'The saved runtime is retired. Choose an available runtime.' : null}
                     options={cliOptions}
                     onChange={(next) => {

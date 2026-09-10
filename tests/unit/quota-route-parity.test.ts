@@ -59,12 +59,8 @@ test('quota HTTP route preserves contracts, isolates failure, and starts Grok co
         await t.test('success keyset, zero window, and wrappers retain provider mapping', async () => {
             const result = await capture('success');
             assert.deepEqual(Object.keys(result), CLI_KEYS);
-            assert.deepEqual(result['claude-e']?.windows, result['claude']?.windows);
             assert.deepEqual(result['codex-app']?.windows, result['codex']?.windows);
             assert.equal(result['codex-app']?.delegatedProvider, 'codex');
-            const provider = result['ai-e']?.delegatedProvider;
-            assert.ok(provider);
-            assert.deepEqual(result['ai-e']?.windows, result[provider]?.windows);
             assert.deepEqual(result['claude']?.windows, [{ label: 'claude', percent: 0, resetsAt: null }]);
         });
         await t.test('one rejected provider does not hide successful peers or change keyset', async () => {

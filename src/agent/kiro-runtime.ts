@@ -130,12 +130,8 @@ export function captureKiroSessionIdAfterExit(args: {
         return { id: args.resumeSessionId.trim(), source: 'resume-carry' };
     }
 
-    const fromStderr = parseAiESessionIdFromStderr(args.stderr);
-    if (fromStderr) return { id: fromStderr, source: 'stderr' };
-
     // What this process told us beats what we inferred from a store other processes are
-    // writing to, so stdout moves ahead of the shared-store paths for the same reason
-    // stderr is already first.
+    // writing to, so stdout moves ahead of the shared-store paths.
     const fromStdout = parseKiroSessionIdFromStdout(args.stdout);
     if (fromStdout) return { id: fromStdout, source: 'stdout' };
 
@@ -159,17 +155,8 @@ export function captureKiroSessionIdAfterExit(args: {
     return { id: null, source: null };
 }
 
-export function parseAiESessionIdFromStderr(text: string): string | null {
-    for (const line of text.split(/\r?\n/)) {
-        // Match UUID format (grok, kiro) or codex timestamp-uuid format
-        const match = /\[ai-e\]\s+session:\s*(\S+)/i.exec(line);
-        if (match?.[1]) return match[1];
-    }
-    return null;
-}
-
-export function isKiroPlainTextCli(cli: string, effectiveProvider?: string | null): boolean {
-    return cli === 'kiro-code' || (cli === 'ai-e' && effectiveProvider === 'kiro');
+export function isKiroPlainTextCli(cli: string, _effectiveProvider?: string | null): boolean {
+    return cli === 'kiro-code';
 }
 
 /**

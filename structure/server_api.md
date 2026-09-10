@@ -407,8 +407,6 @@ Slack text sends preserve Markdown and explicit Block Kit `blocks`, splitting mu
 | `steer_rejected` | in-band steer 가 거부됨 — `reason: 'turn-not-steerable'` (review/compact 중 등). payload `{ prompt, origin, scope, sessionId, reason, requestId? }` (`src/agent/spawn.ts`, #533) |
 | `steer_context_lost` | kill-steer 에서 중단된 턴의 부분 출력을 salvage 하지 못함. payload `{ origin, scope, sessionId, requestId? }`. Web UI(`public/js/ws.ts`)가 경고 배너로 표시 (#533) |
 | `agent_added` / `agent_updated` / `agent_deleted` | employee CRUD 반영 |
-| `agent:claude-e:runtime_started` / `agent:claude-e:spawned` / `agent:claude-e:session` / `agent:claude-e:prompt_injected` | Claude E native helper start/session/prompt lifecycle bridge |
-| `agent:claude-e:stop` / `agent:claude-e:stop_failure` / `agent:claude-e:interrupted` / `agent:claude-e:cleanup` / `agent:claude-e:error` | Claude E native helper stop/error lifecycle bridge |
 | `settings_change` | project/workspace settings 변경 신호 |
 | `memory_status` | memory sidebar / runtime 상태 갱신 신호 |
 | `system_notice` | compact refresh 같은 시스템 공지 |

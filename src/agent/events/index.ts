@@ -32,8 +32,7 @@ import { extractToolLabels } from './tool-labels.js';
 
 export function extractSessionId(cli: string, event: CliEventRecord): string | null {
     switch (cli) {
-        case 'claude':
-        case 'claude-e': return event.type === 'system' ? event.session_id ?? null : null;
+        case 'claude': return event.type === 'system' ? event.session_id ?? null : null;
         case 'codex': return event.type === 'thread.started' ? event.thread_id ?? null : null;
         case 'cursor': return event.session_id ?? event.sessionId ?? null;
         case 'grok': return event.type === 'end' ? event.sessionId ?? null : null;
@@ -68,11 +67,10 @@ export function extractOutputChunk(cli: string, event: CliEventRecord, ctx?: Spa
         }
         return '';
     }
-    // claude / claude-e: pendingOutputChunk holds live assistant-text deltas.
-    //  - claude:   text_delta stream events (extractFromEvent) append here
-    //  - claude-e: snapshot assistant records are diffed to deltas in handleClaudeEvent
-    // Drain it so the append-only frontend streams text without duplication.
-    if (cli === 'claude' || cli === 'claude-e') {
+    // claude: pendingOutputChunk holds live assistant-text deltas from
+    // text_delta stream events (extractFromEvent). Drain it so the append-only
+    // frontend streams text without duplication.
+    if (cli === 'claude') {
         if (ctx?.pendingOutputChunk) {
             const chunk = ctx.pendingOutputChunk;
             ctx.pendingOutputChunk = '';
@@ -165,15 +163,12 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
             return;
         }
 
-        // Stream visible assistant text deltas live (the response prose). This is what
-        // makes plain `claude` stream like claude-e; without it the text only surfaces
-        // in the final complete `assistant` event as one dump. Use the RAW appender
-        // (not appendAssistantTextSegment) — the segment formatter injects "\n- " bullets
-        // between segments and would corrupt mid-token deltas. Set per-message
-        // claudeStreamedText so handleClaudeEvent skips the duplicate complete-block
-        // append (and resets it) without false-skipping a tool-only turn.
-        // Scoped to plain `claude`: the claude-e wrapper passes stream_event lines
-        // through, and a raw-appended claude-e delta would corrupt its snapshot path.
+        // Stream visible assistant text deltas live (the response prose). Without it
+        // the text only surfaces in the final complete `assistant` event as one dump.
+        // Use the RAW appender (not appendAssistantTextSegment) — the segment formatter
+        // injects "\n- " bullets between segments and would corrupt mid-token deltas.
+        // Set per-message claudeStreamedText so handleClaudeEvent skips the duplicate
+        // complete-block append (and resets it) without false-skipping a tool-only turn.
         // claudeStreamedTextStart anchors the complete-block reconcile that restores
         // segment boundaries between tool-separated messages (handleClaudeEvent).
         if (cli === 'claude' && inner?.type === 'content_block_delta' && inner.delta?.type === 'text_delta') {
@@ -384,8 +379,7 @@ export function extractFromEvent(cli: string, event: CliEventRecord, ctx: SpawnC
 
     switch (cli) {
         case 'claude':
-        case 'claude-e':
-            handleClaudeEvent(event, ctx, cli, agentLabel, empTag);
+            handleClaudeEvent(event, ctx, agentLabel, empTag);
             break;
         case 'codex':
             handleCodexEvent(event, ctx, agentLabel, empTag);

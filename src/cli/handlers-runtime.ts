@@ -8,7 +8,7 @@ import { t } from '../core/i18n.js';
 import { detectCli, settings } from '../core/config.js';
 import { getSession } from '../core/db.js';
 import { resolveMainCli, type MainSessionRecord } from '../core/main-session.js';
-import { isRetiredCliSelection, RETIRED_RUNTIME_DIAGNOSTIC } from '../types/cli-engine.js';
+import { isRetiredCliSelection, retiredRuntimeDiagnostic } from '../types/cli-engine.js';
 import type { CliCommandContext } from './command-context.js';
 import type { SlashResult } from './types.js';
 import { beginSteerInput } from '../agent/steer-input-guard.js';
@@ -239,8 +239,9 @@ export async function steerHandler(args: string[], ctx: CliCommandContext): Prom
     if (!prompt) {
         return { ok: false, type: 'error', text: t('cmd.steer.noPrompt', {}, L) };
     }
-    if (isRetiredCliSelection(resolveMainCli(null, settings, getSession() as MainSessionRecord | undefined))) {
-        return { ok: false, type: 'error', text: RETIRED_RUNTIME_DIAGNOSTIC };
+    const steerMainCli = resolveMainCli(null, settings, getSession() as MainSessionRecord | undefined);
+    if (isRetiredCliSelection(steerMainCli)) {
+        return { ok: false, type: 'error', text: retiredRuntimeDiagnostic(steerMainCli) };
     }
     const { currentSessionScope } = await import('../core/session-context.js');
     const scopeKey = currentSessionScope()?.scope ?? 'default';
@@ -257,7 +258,11 @@ export async function steerHandler(args: string[], ctx: CliCommandContext): Prom
         const inputGuard = beginSteerInput(scopeKey);
         try {
             const outcome = await steerAgent(scopeKey, prompt, iface, sessionScopeMeta());
-            if (outcome === 'retired') return { ok: false, type: 'error', text: RETIRED_RUNTIME_DIAGNOSTIC };
+            if (outcome === 'retired') {
+                const retiredCli = resolveMainCli(null, settings, getSession() as MainSessionRecord | undefined);
+                return { ok: false, type: 'error',
+                    text: isRetiredCliSelection(retiredCli) ? retiredRuntimeDiagnostic(retiredCli) : 'retired_runtime' };
+            }
             if (outcome === 'steered' || outcome === 'new-run') {
                 return { ok: true, type: 'steer', text: t('cmd.steer.started', {}, L) };
             }
@@ -348,7 +353,12 @@ export async function fallbackHandler(args: string[], ctx: CliCommandContext): P
     const L = ctx.locale || 'ko';
     const settings = await safeCall(ctx.getSettings, null) as Record<string, unknown> | null;
     if (!settings) return { ok: false, text: t('cmd.settingsLoadFail', {}, L) };
-    const available = Object.keys((settings["perCli"] as Record<string, unknown> | undefined) || {});
+    const available = Object.keys((settings["perCli"] as Record<string, unknown> | undefined) || {})
+        .filter((cli) => !isRetiredCliSelection(cli));
+    const retiredArg = args.map((a) => a.toLowerCase()).find(isRetiredCliSelection);
+    if (retiredArg) {
+        return { ok: false, text: `${retiredRuntimeDiagnostic(retiredArg)}: Select an available runtime: ${available.join(', ')}` };
+    }
 
     if (!args.length) {
         const fb = (settings["fallbackOrder"] as string[] | undefined) || [];
@@ -403,6 +413,9 @@ export async function flushHandler(args: string[], ctx: CliCommandContext): Prom
         if (r?.ok === false) return r;
         return { ok: true, text: t('cmd.flush.reset', {}, L) };
     }
+    if (isRetiredCliSelection(first)) {
+        return { ok: false, text: `${retiredRuntimeDiagnostic(first)}: Select an available runtime: ${[...CLI_KEYS].join(', ')}` };
+    }
 
     const cliKeys = [...CLI_KEYS] as readonly string[];
     let newCli: string;
@@ -446,7 +459,6 @@ export async function flushHandler(args: string[], ctx: CliCommandContext): Prom
             const matchedClis: string[] = [];
             const modelChoicesByCli = applyCodexModelsToChoices(buildModelChoicesByCli(), await resolveOpenCodexCodexModels());
             for (const [cli, models] of Object.entries(modelChoicesByCli)) {
-                if (cli === 'ai-e') continue;
                 if ((models as string[]).some(m => m.toLowerCase() === modelKey)) {
                     matchedClis.push(cli);
                 }

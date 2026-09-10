@@ -12,12 +12,17 @@ let stopBeforeReturn = false;
 let mainGate: Promise<void> | undefined, exitGate: Promise<void> | undefined;
 let mainEntered: (() => void) | undefined, exitEntered: (() => void) | undefined;
 const record = (name: string, args: unknown[]) => { calls.push({ name, args }); };
+let retiredCliOverride: string | null = null;
 test.mock.module('../../src/agent/spawn.js', { namedExports: {
     isAgentBusy: (scope: string) => { record('busy', [scope]); return busy; },
     canSteerAgent: (scope: string) => { record('capable', [scope]); return capable; },
     steerAgent: async (...args: unknown[]) => {
         record('steer', args); if (outcome instanceof Error) throw outcome;
         if (stopBeforeReturn) cancelSteerInputs(String(args[0]));
+        if (outcome === 'retired' && retiredCliOverride) {
+            const { settings } = await import('../../src/core/config.ts');
+            settings.cli = retiredCliOverride;
+        }
         return outcome;
     },
     killActiveAgent: (...args: unknown[]) => { record('kill', args); return true; },
@@ -30,12 +35,14 @@ test.mock.module('../../src/orchestrator/gateway.js', { namedExports: {
     submitMessage: (...args: unknown[]) => { record('submit', args); return { action: 'started' }; },
 } });
 const { steerHandler } = await import('../../src/cli/handlers-runtime.ts');
+const config = await import('../../src/core/config.ts');
+const originalCli = config.settings.cli;
 const binding = { scope: 'slash-native-scope', chatSessionId: 'slash-native-chat' };
 const ctx: CliCommandContext = { interface: 'web', locale: 'en' };
 const invoke = (args = ['use', 'new', 'instruction'], context = ctx) =>
     withSessionScope(binding, () => steerHandler(args, context));
 test.beforeEach(() => {
-    calls.length = 0; busy = true; capable = true; outcome = 'steered'; stopBeforeReturn = false;
+    calls.length = 0; busy = true; capable = true; outcome = 'steered'; stopBeforeReturn = false; retiredCliOverride = null; config.settings.cli = originalCli;
     mainGate = undefined; exitGate = undefined; mainEntered = undefined; exitEntered = undefined;
 });
 
@@ -71,6 +78,7 @@ test('actual slash handler acknowledges a cancelled redirect without follow-up s
 
 test('actual slash handler treats a retired producer result as failure without follow-up or kill', async () => {
     outcome = 'retired';
+    retiredCliOverride = 'jwc';
     const result = await invoke();
     assert.equal(result.ok, false);
     assert.equal(result.type, 'error');

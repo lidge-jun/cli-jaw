@@ -173,9 +173,9 @@ test('only native Cursor gains operational rules; print/Kiro/Grok helper outputs
     const common = { prompt: 'CURRENT', historyBlock: 'OLD', sysPrompt: 'RULES', isResume: false };
     for (const isResume of [false, true]) {
         for (const runtimeTransport of [undefined, 'print', 'native'] as const) {
-            for (const cli of ['cursor', 'grok', 'kiro-code', 'ai-e']) {
-                const effectiveProvider = cli === 'ai-e' ? 'kiro' : undefined;
-                const kiro = cli === 'kiro-code' || cli === 'ai-e';
+            for (const cli of ['cursor', 'grok', 'kiro-code']) {
+                const effectiveProvider = undefined;
+                const kiro = cli === 'kiro-code';
                 const nativeCursor = cli === 'cursor' && runtimeTransport === 'native';
                 const expected = (kiro && isResume) ? 'CURRENT'
                     : kiro || nativeCursor ? operational(history('CURRENT', 'OLD')) : history('CURRENT', 'OLD');

@@ -1,4 +1,4 @@
-import { isRetiredCliSelection, RETIRED_RUNTIME_DIAGNOSTIC } from '../types/cli-engine.js';
+import { isRetiredCliSelection, retiredRuntimeDiagnostic } from '../types/cli-engine.js';
 import {
     loadUnifiedMcp, syncToAll,
     ensureWorkingDirSkillsLinks, initMcpConfig,
@@ -17,7 +17,6 @@ import { mergeSettingsPatch, sanitizeSettingsInput } from './settings-merge.js';
 import { regenerateB } from '../prompt/builder.js';
 import { restartMessagingRuntime, initActiveMessagingRuntime } from '../messaging/runtime.js';
 import { beginRuntimeSettingsMutation } from './runtime-settings-gate.js';
-import { resolveAiEProvider } from '../agent/args.js';
 import { log } from './logger.js';
 import { MAX_DISPATCH_APPROVAL_TTL_SECONDS } from './dispatch-approval.js';
 import { isRuntimeTransport, isSwitchableNativeCli } from '../agent/runtime/selection.js';
@@ -214,15 +213,6 @@ function selectedModelForCli(cli: string, currentSettings: Record<string, unknow
         || 'default';
 }
 
-function selectedAiEProvider(currentSettings: Record<string, unknown>): string {
-    const activeOverrides = asRecord(currentSettings["activeOverrides"]);
-    const perCli = asRecord(currentSettings["perCli"]);
-    const ao = asRecord(activeOverrides['ai-e']);
-    const pc = asRecord(perCli['ai-e']);
-    const explicitProvider = stringField(pc, 'provider') || stringField(ao, 'provider') || undefined;
-    return resolveAiEProvider(explicitProvider, selectedModelForCli('ai-e', currentSettings));
-}
-
 function transportConfigFingerprint(channel: 'telegram' | 'discord' | 'slack', snapshot: Record<string, unknown>): string {
     const block = asRecord(snapshot[channel]);
     if (channel === 'telegram') {
@@ -327,7 +317,6 @@ async function applyRuntimeSettingsPatchSerialised(
     const prevSnapshot = prevCandidate.value;
     const prevCli = prevSnapshot["cli"];
     const prevWorkingDir = prevSnapshot["workingDir"];
-    const prevAiEProvider = selectedAiEProvider(prevSnapshot);
     let candidateCommitted = false;
     let rollbackHandled = false;
 
@@ -341,7 +330,7 @@ async function applyRuntimeSettingsPatchSerialised(
         }
         const patch = sanitized.value;
         if (isRetiredCliSelection(patch['cli']) && !isRetiredCliSelection(prevCli)) {
-            throw new Error(RETIRED_RUNTIME_DIAGNOSTIC);
+            throw new Error(retiredRuntimeDiagnostic(patch['cli']));
         }
         const presentationOnly = Object.keys(patch).length === 1 && Object.hasOwn(patch, 'presentation');
         // Preserve the older empty/sibling presentation subtree behavior separately
@@ -360,7 +349,7 @@ async function applyRuntimeSettingsPatchSerialised(
         }
         const migrated = migrateSettings(merged);
         if (isRetiredCliSelection(migrated['cli']) && !isRetiredCliSelection(prevCli)) {
-            throw new Error(RETIRED_RUNTIME_DIAGNOSTIC);
+            throw new Error(retiredRuntimeDiagnostic(migrated['cli']));
         }
         const nextShape = sanitized.persistenceShape === 'present'
             ? 'present'
@@ -384,11 +373,7 @@ async function applyRuntimeSettingsPatchSerialised(
         // we revert settings; the original session row is preserved because nothing
         // touched it on this branch (no syncMainSessionToSettings call).
         const cliChanged = !!(prevCli && settings["cli"] && prevCli !== settings["cli"]);
-        const nextAiEProvider = selectedAiEProvider(settings);
-        const aiEProviderChanged = prevCli === 'ai-e'
-            && settings["cli"] === 'ai-e'
-            && prevAiEProvider !== nextAiEProvider;
-        if (cliChanged || aiEProviderChanged) {
+        if (cliChanged) {
             const toCli = settings["cli"];
             const toModel = selectedModelForCli(toCli, settings);
             try {
@@ -397,10 +382,9 @@ async function applyRuntimeSettingsPatchSerialised(
                 await cliSwitchRefresh({
                     sourceWorkDir: prevWorkingDir || '',
                     targetWorkDir: settings["workingDir"] || '',
-                    fromCli: aiEProviderChanged ? `ai-e:${prevAiEProvider}` : prevCli,
+                    fromCli: prevCli,
                     toCli,
                     toModel,
-                    toProvider: toCli === 'ai-e' ? nextAiEProvider : undefined,
                 });
             } catch (e: unknown) {
                 console.error('[runtime-settings] cli switch refresh failed, rolling back:', (e as Error).message);

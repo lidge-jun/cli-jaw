@@ -167,11 +167,6 @@ export function applyCodexModelsToChoices(
     const models = dedupeModels([...codexModels]);
     choicesByCli['codex'] = [...models];
     choicesByCli['codex-app'] = [...models];
-    const aiE = choicesByCli['ai-e'];
-    if (aiE) {
-        const nonCodex = aiE.filter((model) => !CODEX_MODEL_CHOICES.includes(model));
-        choicesByCli['ai-e'] = dedupeModels([...nonCodex, ...models]);
-    }
     return choicesByCli;
 }
 

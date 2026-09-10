@@ -11,8 +11,8 @@ type QuotaSetupHint = {
     links?: { label: string; url: string }[];
 };
 
-export const QUOTA_HIDDEN_CLIS = new Set(['ai-e', 'codex-app']);
-export const SIDEBAR_HIDDEN_CLIS = new Set(['ai-e', 'claude-e', 'pi', 'gemini']);
+export const QUOTA_HIDDEN_CLIS = new Set(['codex-app']);
+export const SIDEBAR_HIDDEN_CLIS = new Set(['pi', 'gemini']);
 export const QUOTA_CUSTOM_MSG: Record<string, string> = {};
 
 export const QUOTA_SETUP_HINTS: Record<string, QuotaSetupHint> = {

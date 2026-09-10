@@ -20,7 +20,6 @@ import { publish as ssePublish } from '../core/event-bus.js';
 // exists precisely to guarantee the caller hears something.
 import { settleOnce } from '../orchestrator/request-registry.js';
 import { settings, UPLOADS_DIR, detectCli, getProjectDirs } from '../core/config.js';
-import { migrateLegacyClaudeValue } from '../cli/claude-models.js';
 import { stripUndefined } from '../core/strip-undefined.js';
 import {
     clearEmployeeSession, getSession, insertMessage, getRecentMessages,
@@ -92,8 +91,7 @@ import { clearNativeStartFailure, nativeStartFailure, recordNativeStartFailure }
 import { asCliEventRecord, discriminate, fieldString, type CliEventRecord } from '../types/cli-events.js';
 import { isRemoteTarget, type RemoteTarget } from '../messaging/types.js';
 import { buildRemoteBindingKey } from '../messaging/session-key.js';
-import { isJawRuntimeEvent, handleJawRuntimeEvent } from './claude-e-runtime.js';
-import { isRetiredCliSelection, RETIRED_RUNTIME_DIAGNOSTIC } from '../types/cli-engine.js';
+import { isRetiredCliSelection, retiredRuntimeDiagnostic } from '../types/cli-engine.js';
 import { runBeforeSpawnChecks, type PolicyVerdict } from '../core/policy-hooks.js';
 import { appendTraceEvent, createTraceId, finalizeTraceRun, stampTraceTool, startTraceRun, updateTraceToolRow } from '../trace/store.js';
 import {
@@ -130,7 +128,6 @@ import {
     flushKiroStdoutContext,
     isKiroPlainTextCli,
     isKiroStaleSessionOutput,
-    parseAiESessionIdFromStderr,
     processKiroStdoutChunk,
     spawnWithKiroSnapshot,
     type KiroStreamEvent,
@@ -282,24 +279,6 @@ export function releaseMainRun(
     return true;
 }
 
-export function buildAiERuntimeStatusMeta(cli: string, provider: string, model: string): Record<string, unknown> {
-    if (cli !== 'ai-e') return {};
-    const mode = 'pty';
-    return {
-        selector: 'ai-e',
-        provider,
-        effectiveProvider: provider,
-        model,
-        mode,
-        runtime: {
-            cli,
-            selector: 'ai-e',
-            provider,
-            model,
-            mode,
-        },
-    };
-}
 
 interface SessionRow {
     cli?: string;
@@ -549,8 +528,6 @@ const killReasons = new Map<number, string>();
  *  case where the exit handler has not finished writing (#523). */
 const DEFAULT_STEER_WAIT_MS = 10_000;
 const DEFAULT_KILL_ESCALATION_MS = 2_000;
-const CLAUDE_E_STEER_WAIT_MS = 30_000;
-const CLAUDE_E_STEER_KILL_ESCALATION_MS = 8_000;
 const DEFAULT_CODEX_APP_TURN_IDLE_MS = 300_000;
 const DEFAULT_CODEX_APP_TURN_ABS_MS = 2 * 60 * 60_000;
 const DEFAULT_CODEX_APP_ACQUIRE_WAIT_MS = 60_000;
@@ -566,20 +543,12 @@ function getActiveMainCli(scopeKey: string): string | null {
     return typeof cli === 'string' ? cli : null;
 }
 
-function isActiveAiEPtyRuntime(scopeKey: string): boolean {
-    const cli = getActiveMainCli(scopeKey);
-    return cli === 'claude-e' || cli === 'ai-e';
-}
-
-function getKillPolicy(scopeKey: string, reason: string): { signal: NodeJS.Signals; escalationMs: number } {
-    if (reason === 'steer' && isActiveAiEPtyRuntime(scopeKey)) {
-        return { signal: 'SIGINT', escalationMs: CLAUDE_E_STEER_KILL_ESCALATION_MS };
-    }
+function getKillPolicy(_scopeKey: string, _reason: string): { signal: NodeJS.Signals; escalationMs: number } {
     return { signal: 'SIGTERM', escalationMs: DEFAULT_KILL_ESCALATION_MS };
 }
 
-export function getSteerWaitMsForActiveAgent(scopeKey = 'default'): number {
-    return isActiveAiEPtyRuntime(scopeKey) ? CLAUDE_E_STEER_WAIT_MS : DEFAULT_STEER_WAIT_MS;
+export function getSteerWaitMsForActiveAgent(_scopeKey = 'default'): number {
+    return DEFAULT_STEER_WAIT_MS;
 }
 
 /** Get kill reason for a process (by PID), consuming it */
@@ -831,8 +800,9 @@ export async function steerAgent(
     const chatSessionId = meta?.chatSessionId || run?.meta.chatSessionId || getActiveChatSession();
     // This is admission for NEW input, not the already admitted run's selection.
     // A watched settings change must not inject into or stop that run's lease.
-    if (isRetiredCliSelection(resolveMainCli(meta?.cli, settings, getSession() as SessionRow | undefined))) {
-        settleOnce(meta?.requestId, 'failed', { error: RETIRED_RUNTIME_DIAGNOSTIC,
+    const steerCli = resolveMainCli(meta?.cli, settings, getSession() as SessionRow | undefined);
+    if (isRetiredCliSelection(steerCli)) {
+        settleOnce(meta?.requestId, 'failed', { error: retiredRuntimeDiagnostic(steerCli),
             scope: scopeKey, sessionId: chatSessionId });
         return 'retired';
     }
@@ -1115,8 +1085,8 @@ function getRecentAssistantContentsForAgyResume(workingDir: string | null | unde
         .map((msg) => String(msg.content || '').trim());
 }
 
-import { buildArgs, buildResumeArgs, formatAgyPrintTimeout, resolveAiEProvider, resolveScopedSessionBucket, resolveSessionBucket } from './args.js';
-export { buildArgs, buildResumeArgs, resolveAiEProvider, resolveSessionBucket };
+import { buildArgs, buildResumeArgs, formatAgyPrintTimeout, resolveScopedSessionBucket, resolveSessionBucket } from './args.js';
+export { buildArgs, buildResumeArgs, resolveSessionBucket };
 
 const warnedAgyCapabilityFallbacks = new Set<string>();
 
@@ -1301,10 +1271,11 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     if (mainRun) mainRun.meta.cli = cli;
 
     if (isRetiredCliSelection(cli)) {
-        const message = `${RETIRED_RUNTIME_DIAGNOSTIC}: Select an available runtime before sending another request.`;
+        const diagnostic = retiredRuntimeDiagnostic(cli);
+        const message = `${diagnostic}: Select an available runtime before sending another request.`;
         const released = mainManaged && activeMainProcesses.get(scopeKey) === mainRun
             && releaseMainRun(scopeKey, null, ownerGeneration);
-        settleOnce(opts.requestId, 'failed', { error: RETIRED_RUNTIME_DIAGNOSTIC, text: message,
+        settleOnce(opts.requestId, 'failed', { error: diagnostic, text: message,
             scope: scopeKey, sessionId: chatSessionId });
         broadcast('agent_done', {
             text: message, error: true, origin, cli, scope: scopeKey, sessionId: chatSessionId,
@@ -1389,7 +1360,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         const st = queueCtrl.fallbackStateForScope(scopeKey).get(cli);
         if (st?.fallbackCli && st.retriesLeft <= 0) {
             const fbAvail = detectCli(st.fallbackCli)?.available;
-            if (fbAvail) {
+            if (fbAvail && !isRetiredCliSelection(st.fallbackCli)) {
                 console.log(`[jaw:fallback] ${cli} retries exhausted → direct ${st.fallbackCli}`);
                 broadcast('agent_fallback', { from: cli, to: st.fallbackCli, reason: 'retries exhausted', ...empTag }, isEmployee ? 'internal' : 'public');
                 return spawnAgent(prompt, {
@@ -1406,19 +1377,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     const ao = settings["activeOverrides"]?.[cli] || {};
     const requestedModel = opts.model || ao.model || cfg.model || 'default';
     const effort = opts.effort ?? ao.effort ?? cfg.effort ?? '';
-    const effectiveProvider = cli === 'ai-e'
-        ? resolveAiEProvider(
-            typeof cfg.provider === 'string'
-                ? cfg.provider
-                : typeof ao.provider === 'string'
-                    ? ao.provider
-                    : undefined,
-            requestedModel,
-        )
-        : cli;
-    const model = cli === 'ai-e' && effectiveProvider === 'claude'
-        ? migrateLegacyClaudeValue(requestedModel)
-        : requestedModel;
+    const effectiveProvider = cli;
+    const model = requestedModel;
     const runtimeModel = cli === 'cursor' && runtimeTransport !== 'native' ? resolveCursorModelVariant(model, effort)
         : cli === 'grok' && runtimeTransport === 'native' && model === 'default' ? 'grok-build' : model;
     const codexMultiplexMain = cli === 'codex-app' && mainManaged && !opts.agentId
@@ -1458,7 +1418,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     const currentBucket = runtimeSessionBucket(resolveScopedSessionBucket(
         cli, runtimeModel, effectiveProvider, scopeKey, effort, 'fallback', codexMultiplexMain,
     ), runtimeTransport);
-    const envDefaultsCli = cli === 'ai-e' ? effectiveProvider : cli;
+    const envDefaultsCli = cli;
     const cliEnv = applyCliEnvDefaults(envDefaultsCli, opts.env);
     const spawnEnv = makeCleanEnv(cliEnv);
     const bucketRow = currentBucket ? getSessionBucket.get(currentBucket) as SessionBucketRow | undefined : null;
@@ -1481,7 +1441,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     // AGY native resume can replay prior stdout and continue stale mid-turn planner
     // state. cli-jaw defaults to DB history; guarded native resume is explicit opt-in.
     const providerSupportsResume = cli !== 'agy'
-        ? !(cli === 'ai-e' && effectiveProvider !== 'claude' && effectiveProvider !== 'kiro' && effectiveProvider !== 'codex' && effectiveProvider !== 'grok')
+        ? true
         : agyResumeDecision.ok;
     const canResumeBucketSession = !bucketSessionId || shouldResumeBucketSession(
         cli,
@@ -1496,7 +1456,6 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     const isResume = empSid
         ? true
         : (providerSupportsResume && !opts._skipResume && !forceNew && !!bucketSessionId && canResumeBucketSession);
-    const runtimeStatusMeta = buildAiERuntimeStatusMeta(cli, effectiveProvider, runtimeModel);
 
     // ─── Bootstrap compact 1-shot injection (Phase 52: bucket-aware) ───
     // Vendor-agnostic: compact handler reset session_id and stored bootstrap in DB.
@@ -1614,9 +1573,6 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     const agyResumeReplayPrefixes = cli === 'agy' && isResume
         ? getRecentAssistantContentsForAgyResume(settings["workingDir"], chatSessionId)
         : [];
-    const claudeBin = (cli === 'claude-e' || (cli === 'ai-e' && effectiveProvider === 'claude'))
-        ? detectCli('claude').path
-        : null;
     const agyLogFile = cli === 'agy'
         ? join(os.tmpdir(), `jaw-agy-${agentId || 'main'}-${Date.now()}-${crypto.randomUUID()}.log`)
         : null;
@@ -1642,8 +1598,6 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         sysPrompt,
         includeDirectories,
         workingDir: settings["workingDir"],
-        aiEProvider: effectiveProvider,
-        ...(claudeBin ? { claudeBin } : {}),
         ...(agyLogFile ? { agyLogFile } : {}),
         ...(agyPrintTimeout ? { agyPrintTimeout } : {}),
         ...(agyCapabilities ? { agyCapabilities } : {}),
@@ -1771,7 +1725,6 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         console.log(`[jaw:${agentLabel}] Spawning: copilot --acp --model ${model} [${permissions}]`);
     } else {
         console.log(`[jaw:${agentLabel}] Spawning: ${cli} ${args.join(' ').slice(0, 120)}...`);
-        if (cli === 'claude-e') console.log(`[jaw:${agentLabel}:args] ${JSON.stringify(args)}`);
     }
 
 
@@ -3496,7 +3449,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     });
     if (mainManaged) mainRun!.process = child;
     else registerActiveProcess(agentLabel, child);
-    if (!opts.internal) broadcast('agent_status', { running: true, agentId: agentLabel, cli, ...runtimeStatusMeta, ...empTag });
+    if (!opts.internal) broadcast('agent_status', { running: true, agentId: agentLabel, cli, ...empTag });
     if (mainManaged && !opts.internal) beginLiveRun(liveScope, cli);
 
     // The turn settles on 'close', which waits for every stdio stream to close.
@@ -3556,8 +3509,6 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
 
     if (cli === 'claude') {
         child.stdin.write(withSteerContext(isResume ? prompt : withHistoryPrompt(prompt, historyBlock), opts.steerContext));
-    } else if (cli === 'claude-e' || (cli === 'ai-e' && effectiveProvider === 'claude')) {
-        child.stdin.write(withSteerContext(isResume ? prompt : withHistoryPrompt(prompt, historyBlock), opts.steerContext));
     } else if (cli === 'codex' && !isResume) {
         const codexStdin = historyBlock
             ? `${historyBlock}\n\n[User Message]\n${prompt}`
@@ -3570,7 +3521,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     }
     child.stdin.end();
 
-    if (!opts.internal) broadcast('agent_status', { status: 'running', cli, agentId: agentLabel, ...runtimeStatusMeta, ...empTag }, traceAudience);
+    if (!opts.internal) broadcast('agent_status', { status: 'running', cli, agentId: agentLabel, ...empTag }, traceAudience);
 
     const traceRunId = startTraceRun({ cli, model: runtimeModel, workingDir: settings["workingDir"] || null, agentLabel, audience: traceAudience, sessionId: chatSessionId, scopeKey });
     if (mainManaged && !opts.internal) setLiveRunTraceId(liveScope, traceRunId);
@@ -3726,25 +3677,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         if (streamJsonMarksProgress(cli, ctx.effectiveProvider)) {
             ctx.stallWatchdog?.markProgress();
         }
-        // claude-e / ai-e Claude: intercept jaw_runtime events BEFORE discriminator
-        if ((cli === 'claude-e' || cli === 'ai-e') && isJawRuntimeEvent(raw)) {
-            const rtEvt = raw as Record<string, unknown>;
-            handleJawRuntimeEvent(rtEvt, agentLabel);
-            // Extract sessionId from session_started or interrupted
-            const evtName = rtEvt['event'];
-            if ((evtName === 'session_started' || evtName === 'interrupted') && typeof rtEvt['sessionId'] === 'string') {
-                ctx.sessionId = rtEvt['sessionId'] as string;
-            }
-            if (evtName === 'error' && typeof rtEvt['message'] === 'string') {
-                const message = `[jaw:${cli}:error] ${rtEvt['message']}`;
-                if (ctx.stderrBuf.length < 4000) ctx.stderrBuf = ctx.stderrBuf ? `${ctx.stderrBuf}\n${message}` : message;
-                pushTrace(ctx, message);
-            }
-            return;
-        }
-        const dispatchCli = cli === 'ai-e'
-            ? (ctx.effectiveProvider === 'claude' ? 'claude-e' : (ctx.effectiveProvider || 'ai-e'))
-            : cli;
+        const dispatchCli = cli;
         const event = discriminate(dispatchCli, raw);
         if (!event) {
             const type = fieldString(asCliEventRecord(raw).type, '<no-type>');
@@ -4012,14 +3945,6 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 .sort((a, b) => b.length - a.length)[0];
             if (best) ctx.fullText = best;
             else if (parsed) ctx.fullText = parsed;
-        }
-        // ai-e codex/grok: capture session ID from stderr footer
-        if (cli === 'ai-e' && !kiroPlainText && effectiveProvider !== 'claude' && !ctx.sessionId) {
-            const fromStderr = parseAiESessionIdFromStderr(ctx.stderrBuf);
-            if (fromStderr) {
-                ctx.sessionId = fromStderr;
-                console.log(`[jaw:ai-e:${effectiveProvider}] session capture id=${fromStderr.slice(0, 16)}...`);
-            }
         }
         let agyCloseTimedOut = false;
         let agyTimeoutMessage = '';

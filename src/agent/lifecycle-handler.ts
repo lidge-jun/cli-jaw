@@ -9,6 +9,7 @@ import { clearEmployeeSession, insertMessage, insertMessageWithTrace, insertMess
 import { getActiveChatSession } from '../core/chat-sessions.js';
 import { persistMainSession, type SessionOwnerToken } from './session-persistence.js';
 import { resolveSessionBucket } from './args.js';
+import { isRetiredCliSelection } from '../types/cli-engine.js';
 import { buildContinuationPrompt, type SmokeDetectionResult } from './smoke-detector.js';
 import { shouldInvalidateResumeSession } from './resume-classifier.js';
 import { classifyExitError, shouldAnnounceStallTruncation, STALL_TRUNCATION_NOTICE } from './error-classifier.js';
@@ -220,9 +221,21 @@ export function setMainMetaHandler(fn: (scopeKey: string, meta: MainSessionMetaR
     _setCurrentMainMeta = fn;
 }
 
-function lifecycleRuntimeCli(cli: string, provider?: string): string {
-    if (cli !== 'ai-e') return cli;
-    return provider === 'claude' ? 'claude-e' : (provider || cli);
+/**
+ * A saved fallback order can name a retired runtime whose binary is still on
+ * PATH. Availability alone would stop the search on that dead name, so the
+ * retirement check has to run before detection.
+ */
+export function isLiveFallbackCandidate(
+    fc: string,
+    currentCli: string,
+    detect: (name: string) => { available: boolean },
+    coolingDown: (name: string) => boolean,
+): boolean {
+    return fc !== currentCli
+        && !isRetiredCliSelection(fc)
+        && detect(fc).available
+        && !coolingDown(fc);
 }
 
 /** Compatibility delivery alone collapses whitespace; canonical data stays exact. */
@@ -337,7 +350,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
     if (mainManaged) revokeSlackToolGrant(nativeRequestId);
     const nativeTraceRunId = ctx.traceRunId;
     const effectiveProvider = params.effectiveProvider;
-    const runtimeCli = lifecycleRuntimeCli(cli, effectiveProvider);
+    const runtimeCli = cli;
     const effortVal = cfg.effort || effortDefault;
     // Every runtime now has a bucket of its own keyed by scope (073 §2.1), so the guard
     // 072 put here is gone: instead of refusing to touch shared state, each session
@@ -932,7 +945,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
         // ─── Stall kills: do NOT retry — escalate immediately ───
         if (isStall) {
             if (mainManaged && !opts.internal) {
-                const canNativeResume = cli === 'claude' || cli === 'claude-e';
+                const canNativeResume = cli === 'claude';
                 if (!canNativeResume) {
                     try {
                         const { autoCompactRefresh } = await import('../core/compact.js');
@@ -1009,12 +1022,10 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                 // Skip a runtime that just told us it was out of capacity: the
                 // whole point of falling back is to reach one that can answer.
                 //
-                // `fc` is a REGISTRY name from settings while cooldowns are keyed
-                // by RUNTIME name, and `ai-e` maps to `claude-e`. Comparing the
-                // two key spaces directly would make the skip a silent no-op for
-                // exactly the aliased runtime, so the name is mapped first.
-                .find((fc: string) => fc !== cli && detectCli(fc).available
-                    && !isRuntimeCoolingDown(lifecycleRuntimeCli(fc, settings["perCli"]?.[fc]?.provider)));
+                // A saved order can still name a retired runtime, and its binary
+                // may even remain on PATH. Skipping it here is what lets the next
+                // live candidate answer instead of the turn dying on a dead name.
+                .find((fc: string) => isLiveFallbackCandidate(fc, cli, detectCli, isRuntimeCoolingDown));
             if (fallbackCli) {
                 const st = fallbackState.get(cli);
                 if (st) {

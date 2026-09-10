@@ -61,7 +61,7 @@ export function classifyExitError(
     // fallback away from a request that Claude may still complete.
     const isClaudeRateLimit = rawIs429 && isClaudeLikeCli(cli);
     const is429 = rawIs429 && !isClaudeRateLimit;
-    // Wrapper CLIs (e.g. claude-e) exit BEFORE the session starts on transient
+    // Wrapper CLIs that exit before SessionStart on transient
     // upstream blips (rate-limit / 5xx) and mask the real reason as a generic
     // "exited before SessionStart" — cli-jaw never sees the child 429. Treat that
     // pre-session signature as a retryable transient. (#219)

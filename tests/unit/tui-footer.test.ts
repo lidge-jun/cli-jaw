@@ -93,7 +93,7 @@ test('renderStatusBar clips optional details under narrow width', () => {
 test('renderStatusBar keeps emoji-heavy working rows within terminal width', () => {
     const row = withColumns(72, () => renderStatusBar({
         model: 'claude-opus-4-6',
-        engine: 'Claude E',
+        engine: 'Claude',
         engineAccent: ACCENT,
         state: 'working…',
         elapsed: '1.9s',

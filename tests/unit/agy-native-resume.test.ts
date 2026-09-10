@@ -75,5 +75,4 @@ test('AGY-NR-005: generic high-turn policies preserve AGY native conversations',
     assert.equal(shouldClearHighTurnSessionBucket('codex', 15), false);
     assert.equal(shouldUseTurnCountRefresh('codex'), true);
     assert.equal(shouldUseTurnCountRefresh('claude'), false);
-    assert.equal(shouldUseTurnCountRefresh('claude-e'), false);
 });
