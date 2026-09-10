@@ -54,15 +54,18 @@ export function isProtectedPath(filePath: string): boolean {
 
 export function postDispatchDiffCheck(
     projectRoot: string, allowedScope?: string,
+    opts?: { allowProtectedPaths?: boolean },
 ): { ok: boolean; modifiedOutside: string[] } {
     if (!allowedScope) return { ok: true, modifiedOutside: [] };
 
     const modifiedFiles = listGitChangedFiles(projectRoot);
+    const allowProtectedPaths = opts?.allowProtectedPaths === true;
 
     const absoluteAllowedScope = path.resolve(projectRoot, allowedScope);
     const outsideFiles = modifiedFiles.filter(file => {
         const absFile = path.resolve(projectRoot, file);
-        return !isPathWithin(absFile, absoluteAllowedScope) || isProtectedPath(file);
+        if (!isPathWithin(absFile, absoluteAllowedScope)) return true;
+        return !allowProtectedPaths && isProtectedPath(file);
     });
 
     return {

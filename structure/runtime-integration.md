@@ -219,6 +219,14 @@ Grok completion extensions do not own completion: id-less `_x.ai/session/prompt_
 
 ## Resident Runtime Pool (`src/agent/runtime-pool.ts`)
 
+Jaw tool authorization is separate from these native pools. Qualified direct
+local calls to an Auto instance use full-local API authority without a per-turn
+secret, so ordinary tool access survives native reuse, print resume and steer.
+Provider approval mode remains independently captured; a Safe provider session
+inside an Auto instance is not an HTTP sandbox. Scoped grants remain the existing
+restricted path, including provider-bound RTS context. Full authority does not
+create missing runtime adapters or provider/account permissions.
+
 Cursor and Grok acquisitions accept `lifetime:'request'` independently of native
 session resume. A request gets a unique physical-process key within the existing
 scope lane, waits for its current borrower, and retires on release. Captured

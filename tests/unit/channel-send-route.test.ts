@@ -7,12 +7,19 @@ import { registerMessagingRoutes } from '../../src/routes/messaging.ts';
 import { registerSendTransport } from '../../src/messaging/send.ts';
 import { settings } from '../../src/core/config.ts';
 import { slackSendHandler } from '../../src/slack/send-handler.ts';
+import { encodeTurnConversation } from '../../src/messaging/turn-conversation.ts';
+import { setLastActiveTarget, clearTargetState } from '../../src/messaging/runtime.ts';
+import { getTelegramSendClient, invalidateTelegramSendClient } from '../../src/telegram/bot.ts';
+import { reserveSlackToolGrant, activateSlackToolGrant, revokeSlackToolScope, slackCredentialKey } from '../../src/slack/tool-context.ts';
 
-async function withMessagingServer(run: (baseUrl: string) => Promise<void>): Promise<void> {
+type MessagingOptions = Parameters<typeof registerMessagingRoutes>[2] & {
+    isFullAccess?: (req: Request) => boolean;
+};
+async function withMessagingServer(run: (baseUrl: string) => Promise<void>, options: MessagingOptions = {}): Promise<void> {
     const app = express();
     app.use(express.json());
     const passAuth = (_req: Request, _res: Response, next: NextFunction) => next();
-    registerMessagingRoutes(app, passAuth, { validateSlackOperator: candidate => candidate === 'fixture-operator' });
+    registerMessagingRoutes(app, passAuth, { validateSlackOperator: candidate => candidate === 'fixture-operator', ...options } as MessagingOptions);
     const server: Server = createServer(app);
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
@@ -298,4 +305,225 @@ test('every send route surfaces a refused path the same way', async () => {
         fs.rmSync(testHome, { recursive: true, force: true });
         fs.rmSync(outside, { recursive: true, force: true });
     }
+});
+
+
+test('full-local send: all four aliases lift explicit dest/root and refuse missing address', async t => {
+    const previousCliHome = process.env.CLI_JAW_HOME;
+    const testHome = fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-full-send-home-'));
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'jaw-full-send-out-'));
+    const filePath = path.join(outside, 'report.png');
+    fs.writeFileSync(filePath, 'x');
+    process.env.CLI_JAW_HOME = testHome;
+    const prevSlack = settings.slack;
+    const prevTelegram = settings.telegram;
+    const prevDiscord = settings.discord;
+    const prevMessaging = settings.messaging;
+    settings.slack = { ...prevSlack, enabled: true, botToken: 'xoxb-full-send', channelIds: ['CALLOW'] };
+    settings.discord = { ...prevDiscord, enabled: true, channelIds: ['111'] };
+    settings.telegram = { ...prevTelegram, enabled: true, token: '123456:ABC-FULLSEND', allowedChatIds: [111] };
+    settings.messaging = { ...prevMessaging, homeChannel: 'slack', enabledChannels: ['slack', 'telegram', 'discord'] };
+    invalidateTelegramSendClient();
+    const tg = getTelegramSendClient().client;
+    assert.ok(tg);
+    const tgCalls: Array<string | number> = [];
+    (tg.api as { sendMessage: typeof tg.api.sendMessage }).sendMessage = (async (chatId: string | number) => {
+        tgCalls.push(chatId);
+        return { ok: true, message_id: 1 };
+    }) as typeof tg.api.sendMessage;
+    const seen: Array<{ route?: string; channel?: string; targetId?: string; filePath?: string }> = [];
+    registerSendTransport('slack', async req => { seen.push({ channel: 'slack', targetId: req.target?.targetId, filePath: req.filePath }); return { ok: true }; });
+    registerSendTransport('discord', async req => { seen.push({ channel: 'discord', targetId: req.target?.targetId, filePath: req.filePath }); return { ok: true }; });
+    registerSendTransport('telegram', async req => { seen.push({ channel: 'telegram', targetId: req.target?.targetId, filePath: req.filePath }); return { ok: true }; });
+    setLastActiveTarget('slack', { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'CLAST' });
+    t.after(() => {
+        if (previousCliHome == null) delete process.env.CLI_JAW_HOME;
+        else process.env.CLI_JAW_HOME = previousCliHome;
+        settings.slack = prevSlack;
+        settings.telegram = prevTelegram;
+        settings.discord = prevDiscord;
+        settings.messaging = prevMessaging;
+        clearTargetState();
+        invalidateTelegramSendClient();
+        revokeSlackToolScope();
+        fs.rmSync(testHome, { recursive: true, force: true });
+        fs.rmSync(outside, { recursive: true, force: true });
+    });
+
+    await withMessagingServer(async baseUrl => {
+        const json = async (route: string, body: unknown, extra: Record<string, string> = {}) => {
+            const response = await fetch(baseUrl + route, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', ...extra },
+                body: JSON.stringify(body),
+            });
+            return { status: response.status, body: await response.json() as Record<string, unknown> };
+        };
+
+        seen.length = 0;
+        const slackFile = await json('/api/slack/send', {
+            type: 'photo', filePath,
+            target: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'CUNLISTED' },
+        });
+        assert.equal(slackFile.status, 200, JSON.stringify(slackFile.body));
+        assert.equal(seen.at(-1)?.targetId, 'CUNLISTED');
+        assert.ok(seen.at(-1)?.filePath);
+
+        seen.length = 0;
+        const discordFile = await json('/api/discord/send', {
+            type: 'photo', filePath,
+            target: { channel: 'discord', targetKind: 'channel', peerKind: 'channel', targetId: '888001' },
+        });
+        assert.equal(discordFile.status, 200, JSON.stringify(discordFile.body));
+        assert.equal(seen.at(-1)?.targetId, '888001');
+
+        seen.length = 0;
+        const channelFile = await json('/api/channel/send', {
+            channel: 'slack', type: 'photo', filePath,
+            target: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'CUNLISTED' },
+        });
+        assert.equal(channelFile.status, 200, JSON.stringify(channelFile.body));
+        assert.equal(seen.at(-1)?.targetId, 'CUNLISTED');
+
+        tgCalls.length = 0;
+        const telegramOk = await json('/api/telegram/send', { type: 'text', text: 'hello', chat_id: 999001 });
+        assert.equal(telegramOk.status, 200, JSON.stringify(telegramOk.body));
+        assert.equal(String(tgCalls.at(-1)), '999001');
+
+        seen.length = 0;
+        const missing = await json('/api/channel/send', { channel: 'slack', type: 'text', text: 'no dest' });
+        assert.equal(missing.status, 400);
+        assert.equal(missing.body.code, 'full_access_destination_required');
+        assert.equal(seen.length, 0);
+
+        const telegramMissing = await json('/api/telegram/send', { type: 'text', text: 'no dest' });
+        assert.equal(telegramMissing.status, 400);
+        assert.equal(telegramMissing.body.code, 'full_access_destination_required');
+
+        const discordMissing = await json('/api/discord/send', { type: 'text', text: 'no dest' });
+        assert.equal(discordMissing.status, 400);
+        assert.equal(discordMissing.body.code, 'full_access_destination_required');
+
+        const turn = encodeTurnConversation({ channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'CTURN' });
+        seen.length = 0;
+        const viaTurn = await json('/api/channel/send', { channel: 'slack', type: 'text', text: 'echo', turn_conversation: turn });
+        assert.equal(viaTurn.status, 200, JSON.stringify(viaTurn.body));
+        assert.equal(seen.at(-1)?.targetId, 'CTURN');
+
+        const cross = encodeTurnConversation({ channel: 'discord', targetKind: 'channel', peerKind: 'channel', targetId: '888001' });
+        const crossSend = await json('/api/channel/send', { channel: 'slack', type: 'text', text: 'echo', turn_conversation: cross });
+        assert.equal(crossSend.status, 400);
+        assert.equal(crossSend.body.code, 'full_access_destination_required');
+
+        const dest = { channel: 'slack' as const, targetKind: 'channel' as const, peerKind: 'direct' as const, targetId: 'DGRANT1', threadId: '1.0' };
+        assert.ok(reserveSlackToolGrant({ teamId: 'T1', actorId: 'U1', destination: dest, credentialKey: slackCredentialKey('xoxb-full-send') },
+            { requestId: 'send-grant', scope: 'scope', chatSessionId: 'chat' }));
+        const secret = activateSlackToolGrant('send-grant', 'scope', 'chat')!;
+        seen.length = 0;
+        const grantOnly = await json('/api/channel/send', { channel: 'slack', type: 'text', text: 'from grant' }, { 'x-jaw-slack-grant': secret });
+        assert.equal(grantOnly.status, 400);
+        assert.equal(grantOnly.body.code, 'full_access_destination_required');
+        assert.equal(seen.some(item => item.targetId === 'DGRANT1'), false);
+        seen.length = 0;
+        const grantPlus = await json('/api/channel/send', {
+            channel: 'slack', type: 'text', text: 'explicit',
+            target: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'CUNLISTED' },
+        }, { 'x-jaw-slack-grant': secret });
+        assert.equal(grantPlus.status, 200, JSON.stringify(grantPlus.body));
+        assert.equal(seen.at(-1)?.targetId, 'CUNLISTED');
+    }, { isFullAccess: () => true });
+
+    await withMessagingServer(async baseUrl => {
+        const response = await fetch(baseUrl + '/api/channel/send', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                channel: 'slack', type: 'photo', filePath, fullAccess: true,
+                target: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'CUNLISTED' },
+            }),
+        });
+        const body = await response.json() as { code?: string };
+        assert.equal(response.status, 403);
+        assert.equal(body.code, 'path_not_allowed');
+    });
+});
+
+
+test('full-local send rejects malformed chat_id and target before echo or coercion', async t => {
+    const seen: string[] = [];
+    registerSendTransport('slack', async req => { seen.push(req.target?.targetId ?? ''); return { ok: true }; });
+    registerSendTransport('discord', async req => { seen.push(req.target?.targetId ?? ''); return { ok: true }; });
+    registerSendTransport('telegram', async req => { seen.push(req.target?.targetId ?? ''); return { ok: true }; });
+    const prevSlack = settings.slack;
+    const prevTelegram = settings.telegram;
+    const prevMessaging = settings.messaging;
+    settings.slack = { ...prevSlack, enabled: true, botToken: 'xoxb-full-shape', channelIds: ['CALLOW'] };
+    settings.telegram = { ...prevTelegram, enabled: true, token: '123456:ABC-SHAPE', allowedChatIds: [123] };
+    settings.messaging = { ...prevMessaging, homeChannel: 'slack', enabledChannels: ['slack', 'telegram', 'discord'] };
+    invalidateTelegramSendClient();
+    const tg = getTelegramSendClient().client;
+    assert.ok(tg);
+    const tgCalls: Array<string | number> = [];
+    (tg.api as { sendMessage: typeof tg.api.sendMessage }).sendMessage = (async (chatId: string | number) => {
+        tgCalls.push(chatId);
+        return { ok: true, message_id: 1 };
+    }) as typeof tg.api.sendMessage;
+    setLastActiveTarget('slack', { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'CLAST' });
+    t.after(() => {
+        settings.slack = prevSlack;
+        settings.telegram = prevTelegram;
+        settings.messaging = prevMessaging;
+        clearTargetState();
+        invalidateTelegramSendClient();
+    });
+    const echo = encodeTurnConversation({ channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'CTURN' });
+    await withMessagingServer(async baseUrl => {
+        const json = async (route: string, body: unknown) => {
+            const response = await fetch(baseUrl + route, {
+                method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+            });
+            return { status: response.status, body: await response.json() as Record<string, unknown> };
+        };
+        for (const chatId of [[123], { id: 123 }, false] as const) {
+            seen.length = 0; tgCalls.length = 0;
+            const channelSend = await json('/api/channel/send', { channel: 'slack', type: 'text', text: 'nope', chat_id: chatId, turn_conversation: echo });
+            assert.equal(channelSend.status, 400, JSON.stringify({ chatId, channelSend }));
+            assert.equal(channelSend.body.error, 'invalid_chat_id');
+            assert.equal(seen.length, 0);
+            const telegramSend = await json('/api/telegram/send', { type: 'text', text: 'nope', chat_id: chatId });
+            assert.equal(telegramSend.status, 400, JSON.stringify({ chatId, telegramSend }));
+            assert.equal(telegramSend.body.error, 'invalid_chat_id');
+            assert.equal(tgCalls.length, 0);
+        }
+        seen.length = 0;
+        const emptyTarget = await json('/api/channel/send', { channel: 'slack', type: 'text', text: 'nope', target: '', turn_conversation: echo });
+        assert.equal(emptyTarget.status, 400);
+        assert.equal(emptyTarget.body.error, 'invalid_outbound_target');
+        assert.equal(seen.length, 0);
+        const objectTarget = await json('/api/channel/send', { channel: 'slack', type: 'text', text: 'nope', target: { id: 'CTURN' }, turn_conversation: echo });
+        assert.equal(objectTarget.status, 400);
+        assert.ok(['invalid_outbound_target', 'channel_target_mismatch'].includes(String(objectTarget.body.error ?? objectTarget.body.code)), JSON.stringify(objectTarget.body));
+        assert.equal(seen.length, 0);
+        seen.length = 0;
+        const validNumber = await json('/api/telegram/send', { type: 'text', text: 'ok', chat_id: 999001 });
+        assert.equal(validNumber.status, 200, JSON.stringify(validNumber.body));
+        assert.equal(String(tgCalls.at(-1)), '999001');
+        seen.length = 0;
+        const validString = await json('/api/channel/send', {
+            channel: 'slack', type: 'text', text: 'ok',
+            target: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'CUNLISTED' },
+        });
+        assert.equal(validString.status, 200, JSON.stringify(validString.body));
+        assert.equal(seen.at(-1), 'CUNLISTED');
+    }, { isFullAccess: () => true });
+
+    seen.length = 0;
+    await withMessagingServer(async baseUrl => {
+        const response = await fetch(baseUrl + '/api/channel/send', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-jaw-slack-operator': 'fixture-operator' },
+            body: JSON.stringify({ channel: 'slack', type: 'text', text: 'coerced', chat_id: [123] }),
+        });
+        assert.notEqual((await response.json() as { error?: string }).error, 'invalid_chat_id');
+    });
 });

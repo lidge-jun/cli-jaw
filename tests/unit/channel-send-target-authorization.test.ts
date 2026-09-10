@@ -106,3 +106,62 @@ test('an explicit empty thread posts to the channel root despite a last-active t
     });
     db.prepare('DELETE FROM remote_session_bindings WHERE remote_key = ?').run(buildRemoteBindingKey(root));
 });
+
+
+test('fullAccess sendChannelOutput requires explicit address and ignores last-active', async () => {
+    const seen: string[] = [];
+    registerSendTransport('slack', async req => { seen.push(req.target?.targetId ?? ''); return { ok: true }; });
+    await withSlack(['CALLOW'], async () => {
+        setLastActiveTarget('slack', { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'CLAST' });
+        const missing = await sendChannelOutput({ channel: 'slack', type: 'text', text: 'no dest', fullAccess: true } as Parameters<typeof sendChannelOutput>[0] & { fullAccess?: boolean });
+        assert.equal(missing.ok, false);
+        assert.equal(missing.status, 400);
+        assert.equal(missing.code, 'full_access_destination_required');
+        assert.equal(seen.length, 0);
+        const ok = await sendChannelOutput({
+            channel: 'slack', type: 'text', text: 'explicit', fullAccess: true,
+            target: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'CUNLISTED' },
+        } as Parameters<typeof sendChannelOutput>[0] & { fullAccess?: boolean });
+        assert.equal(ok.ok, true);
+        assert.equal(seen.at(-1), 'CUNLISTED');
+    });
+});
+
+
+test('fullAccess sendChannelOutput rejects malformed chatId/target before turn echo', async () => {
+    const seen: string[] = [];
+    registerSendTransport('slack', async req => { seen.push(req.target?.targetId ?? ''); return { ok: true }; });
+    const echo = { channel: 'slack' as const, targetKind: 'channel' as const, peerKind: 'channel' as const, targetId: 'CTURN' };
+    await withSlack(['CALLOW'], async () => {
+        setLastActiveTarget('slack', { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'CLAST' });
+        for (const chatId of [[123], { id: 123 }, false, Number.NaN, Number.POSITIVE_INFINITY] as const) {
+            seen.length = 0;
+            const result = await sendChannelOutput({
+                channel: 'slack', type: 'text', text: 'nope', fullAccess: true, chatId, turnTarget: echo,
+            } as Parameters<typeof sendChannelOutput>[0]);
+            assert.equal(result.ok, false, JSON.stringify({ chatId, result }));
+            assert.equal(result.status, 400);
+            assert.equal(result.error, 'invalid_chat_id');
+            assert.equal(seen.length, 0);
+        }
+        seen.length = 0;
+        const emptyTarget = await sendChannelOutput({
+            channel: 'slack', type: 'text', text: 'nope', fullAccess: true, target: '' as never, turnTarget: echo,
+        });
+        assert.equal(emptyTarget.ok, false);
+        assert.equal(emptyTarget.status, 400);
+        assert.equal(emptyTarget.error, 'invalid_outbound_target');
+        assert.equal(seen.length, 0);
+        seen.length = 0;
+        const viaTurn = await sendChannelOutput({
+            channel: 'slack', type: 'text', text: 'echo', fullAccess: true, turnTarget: echo,
+        });
+        assert.equal(viaTurn.ok, true, JSON.stringify(viaTurn));
+        assert.equal(seen.at(-1), 'CTURN');
+        seen.length = 0;
+        const coerced = await sendChannelOutput({
+            channel: 'slack', type: 'text', text: 'legacy', chatId: [123],
+        } as Parameters<typeof sendChannelOutput>[0]);
+        assert.notEqual(coerced.error, 'invalid_chat_id');
+    });
+});

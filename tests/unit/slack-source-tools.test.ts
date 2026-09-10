@@ -5,7 +5,7 @@ import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { configureRtsOutputStore, RtsOutputStore } from '../../src/slack/rts-output-store.ts';
+import { configureRtsOutputStore, getRtsOutputStore, RtsOutputStore } from '../../src/slack/rts-output-store.ts';
 import { reserveSlackToolGrant, activateSlackToolGrant, resolveSlackToolGrant, revokeSlackToolScope, slackCredentialKey } from '../../src/slack/tool-context.ts';
 import { resetVerifiedSlackWorkspace } from '../../src/slack/verified-workspace.ts';
 import { searchAndQuoteSlack } from '../../src/slack/search-quote.ts';
@@ -306,4 +306,86 @@ for (const mode of ['unavailable', 'changed'] as const) test(`quote never verifi
     assert.equal(result.contentVerification, 'failed');
     assert.equal(result.sourceVerification, 'failed');
     assert.equal(result.messageTs.length, 1);
+});
+
+
+test('full-local search.quote reuses the turn workflow and keeps the RTS canary out of the receipt', async t => {
+    const db = new Database(':memory:'); configureRtsOutputStore(new RtsOutputStore(db));
+    t.after(() => { configureRtsOutputStore(undefined); db.close(); });
+    const fake = fixture();
+    const turn = principal();
+    const full = { kind: 'operator' as const, source: 'full-local' as const, context: turn.grant };
+    const result = await searchAndQuoteSlack(TOKEN, full as typeof turn, { query: 'find prior statement', invocationId: 'full-search' }, { fetchImpl: fake.fetchImpl });
+    assert.equal(result.ok, true, JSON.stringify(result));
+    assert.equal(fake.posts.length, 1);
+    assert.ok(JSON.stringify(fake.posts).includes(CANARY));
+    assert.ok(!JSON.stringify(result).includes(CANARY));
+    assert.ok(fake.methods.includes('assistant.search.context'));
+    assert.ok(fake.methods.includes('conversations.members'));
+});
+
+test('operator without action-token context cannot search.quote', async () => {
+    const fake = fixture();
+    await assert.rejects(searchAndQuoteSlack(TOKEN, { kind: 'operator' }, { query: 'find', invocationId: 'no-ctx' }, { fetchImpl: fake.fetchImpl }), /action_token/);
+    await assert.rejects(searchAndQuoteSlack(TOKEN, { kind: 'operator', source: 'full-local' } as never, { query: 'find', invocationId: 'no-ctx-full' }, { fetchImpl: fake.fetchImpl }), /action_token/);
+    assert.equal(fake.methods.includes('assistant.search.context'), false);
+});
+
+test('HTTP search.quote under full without a grant is action_token_unavailable, with a grant it stays private', async t => {
+    const { settings } = await import('../../src/core/config.ts');
+    const { registerSlackToolRoutes } = await import('../../src/routes/slack-tools.ts');
+    const previous = settings.slack; const originalFetch = globalThis.fetch;
+    const db = new Database(':memory:'); configureRtsOutputStore(new RtsOutputStore(db));
+    t.after(() => { settings.slack = previous; globalThis.fetch = originalFetch; configureRtsOutputStore(undefined); db.close(); });
+    settings.slack = { ...previous, enabled: true, botToken: TOKEN };
+    const fake = fixture(); globalThis.fetch = fake.fetchImpl; principal();
+    let handler!: (req: unknown, res: unknown) => Promise<void>;
+    type Register = typeof registerSlackToolRoutes & ((app: never, auth: never, op: (s: string) => boolean, actions?: undefined, options?: { isFullAccess?: () => boolean }) => void);
+    (registerSlackToolRoutes as Register)({ post: (_path: string, ...handlers: Array<typeof handler>) => { handler = handlers.at(-1)!; } } as never,
+        ((_req: unknown, _res: unknown, next: () => void) => next()) as never, () => false, undefined, { isFullAccess: () => true });
+    let status = 200; let payload: Record<string, unknown> = {};
+    const res = { status(value: number) { status = value; return res; }, json(value: Record<string, unknown>) { payload = value; } };
+    await handler({ headers: {}, body: { operation: 'search.quote', invocationId: 'http-full', query: 'find' } }, res);
+    assert.equal(status, 409);
+    assert.match(String(payload.error ?? ''), /action_token/);
+    await handler({ headers: { 'x-jaw-slack-grant': grantedHeader }, body: { operation: 'search.quote', invocationId: 'http-full-grant', query: 'find' } }, res);
+    assert.equal(status, 200);
+    assert.ok(!JSON.stringify(payload).includes(CANARY));
+});
+
+test('ordinary quote under full-local still requires an explicit destination', async () => {
+    const turn = principal();
+    const full = { kind: 'operator' as const, source: 'full-local' as const, context: turn.grant };
+    await assert.rejects(publishSlackQuote(TOKEN, full as typeof turn, { source: { channel: 'C1', ts: SOURCE.ts } }), /destination_required/);
+    const fake = fixture();
+    const posted = await publishSlackQuote(TOKEN, full as typeof turn, {
+        source: { channel: 'C1', ts: SOURCE.ts },
+        destination: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'CEXPLICIT' },
+    }, { fetchImpl: fake.fetchImpl });
+    assert.equal(posted.ok, true);
+    assert.equal((fake.posts[0] as { channel?: string } | undefined)?.channel, 'CEXPLICIT');
+});
+
+test('full-local search.quote with a valid action token still needs a privacy store', async () => {
+    const turn = principal();
+    assert.ok(turn.kind === 'turn');
+    const full: { kind: 'operator'; source: 'full-local'; context: typeof turn.grant } = {
+        kind: 'operator', source: 'full-local', context: turn.grant,
+    };
+    const previous = getRtsOutputStore();
+    try {
+        configureRtsOutputStore(null);
+        const fake = fixture();
+        await assert.rejects(
+            searchAndQuoteSlack(TOKEN, full, { query: 'find', invocationId: 'full-no-store' }, { fetchImpl: fake.fetchImpl }),
+            (error: unknown) => {
+                assert.equal((error as { code?: string }).code, 'slack_rts_privacy_unavailable');
+                return true;
+            },
+        );
+        assert.equal(fake.methods.length, 0);
+        assert.equal(fake.methods.includes('assistant.search.context'), false);
+    } finally {
+        configureRtsOutputStore(previous ?? undefined);
+    }
 });

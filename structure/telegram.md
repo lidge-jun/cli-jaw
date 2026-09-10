@@ -18,6 +18,10 @@ Slack Socket Mode의 app-level token은 사용자 공용 `~/.cli-jaw-shared/slac
 
 ---
 
+## Full local tool authority
+
+Auto instances authorize qualified direct-local Jaw API calls without manually copied tool credentials. Slack history and typed tools share that policy with explicit file/channel sends and full dispatch. It is independent of native reuse or print resume. Full sends must keep an explicit destination; inbound allowlists, provider scopes, source/privacy exclusions and truthful receipts remain. Safe/custom and forwarded/proxy requests retain the existing scoped/operator path. See [full-local API semantics](../docs/slack-tools.md#full-local-api-access).
+
 ## 공통 메시징 레이어
 
 ### Slack group DMs and scope observations

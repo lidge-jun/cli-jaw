@@ -7,7 +7,7 @@ import { slackActions } from '../../src/slack/actions.ts';
 import { SlackActionStore } from '../../src/slack/action-store.ts';
 import { SlackActionRuntime } from '../../src/slack/action-runtime.ts';
 import { SlackActionRateLimiter } from '../../src/slack/action-rate.ts';
-import { configureRtsOutputStore, RtsOutputStore } from '../../src/slack/rts-output-store.ts';
+import { configureRtsOutputStore, getRtsOutputStore, RtsOutputStore } from '../../src/slack/rts-output-store.ts';
 import { resetVerifiedSlackWorkspace } from '../../src/slack/verified-workspace.ts';
 import { reserveSlackToolGrant, activateSlackToolGrant, resolveSlackToolGrant, revokeSlackToolScope, slackCredentialKey } from '../../src/slack/tool-context.ts';
 import type { SlackToolPrincipal } from '../../src/slack/tool-access.ts';
@@ -167,4 +167,58 @@ test('catalog explicitly reports unavailable turn authorization and pooled nativ
     assert.deepEqual(catalog.authorization.supportedPrintClis, ['cursor', 'claude', 'codex', 'grok']);
     assert.equal(entry(catalog, 'message').available, false);
     assert.equal(entry(catalog, 'message').reason, 'turn_authorization_unavailable');
+});
+
+
+test('full-local source is distinct from an explicit operator credential', async t => {
+    const f = fixture(t, 'search:read.public,chat:write,im:read,users:read,reactions:read');
+    const explicit = await f.catalog({ kind: 'operator' });
+    assert.equal(explicit.authorization.pooledNative, false);
+    assert.match(explicit.authorization.limitation, /print-process grant/i);
+    assert.equal(entry(explicit, 'search.quote').reason, 'action_token_unavailable');
+    const full = await f.catalog({ kind: 'operator', source: 'full-local' } as SlackToolPrincipal);
+    assert.equal(full.authorization.pooledNative, true);
+    assert.equal(full.authorization.otherClis, true);
+    assert.match(full.authorization.limitation, /Trusted local Auto|action token/i);
+    assert.equal(entry(full, 'message').available, true);
+    assert.equal(entry(full, 'search.quote').reason, 'action_token_unavailable');
+    const ready = f.turn('action-fixture');
+    const quoted = await f.catalog({ kind: 'operator', source: 'full-local', context: ready.kind === 'turn' ? ready.grant : undefined } as SlackToolPrincipal);
+    assert.equal(entry(quoted, 'search.quote').available, true);
+    const stale = ready.kind === 'turn' ? { ...ready.grant, expiresAt: Date.now() - 1 } : ready;
+    const staleCatalog = await f.catalog({ kind: 'operator', source: 'full-local', context: stale } as SlackToolPrincipal);
+    assert.equal(entry(staleCatalog, 'search.quote').available, false);
+    assert.equal(entry(staleCatalog, 'search.quote').reason, 'turn_grant_stale');
+    assert.equal(entry(staleCatalog, 'message').available, true);
+});
+
+test('full-local search.quote is unavailable when DM scopes are missing', async t => {
+    const f = fixture(t, 'search:read.public,chat:write,im:read');
+    const turn = f.turn('action-fixture');
+    const catalog = await f.catalog({ kind: 'operator', source: 'full-local', context: turn.kind === 'turn' ? turn.grant : undefined } as SlackToolPrincipal);
+    assert.equal(entry(catalog, 'search.quote').available, false);
+    assert.equal(entry(catalog, 'search.quote').reason, 'missing_scope');
+});
+
+test('full-local search.quote with a valid action token still needs a privacy store', async t => {
+    const f = fixture(t, 'search:read.public,chat:write,im:read,users:read');
+    const turn = f.turn('action-fixture');
+    assert.ok(turn.kind === 'turn');
+    const principal: SlackToolPrincipal = { kind: 'operator', source: 'full-local', context: turn.grant };
+    const ready = entry(await f.catalog(principal), 'search.quote');
+    assert.equal(ready.available, true);
+    assert.equal(ready.reason, null);
+    const previous = getRtsOutputStore();
+    try {
+        configureRtsOutputStore(null);
+        const blocked = entry(await f.catalog(principal), 'search.quote');
+        assert.equal(blocked.available, false);
+        assert.equal(blocked.reason, 'privacy_store_unavailable');
+        assert.notEqual(blocked.reason, 'action_token_unavailable');
+        assert.notEqual(blocked.reason, 'missing_scope');
+        assert.notEqual(blocked.reason, 'turn_grant_stale');
+        assert.equal(entry(await f.catalog(principal), 'message').available, true);
+    } finally {
+        configureRtsOutputStore(previous ?? undefined);
+    }
 });

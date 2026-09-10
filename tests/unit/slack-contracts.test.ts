@@ -346,3 +346,12 @@ test('getVisibleCommands slack is non-empty and includes steer', async () => {
     // would not have reached.
     assert.ok(names.includes('steer'), 'slack catalog is missing steer');
 });
+
+
+test('validateTarget fullAccess admits an unlisted channel id', () => {
+    withSlackSettings({ enabled: true, channelIds: ['C123'] }, () => {
+        const withFull = { fullAccess: true } as { requireConfiguredAllowlist?: boolean; fullAccess?: boolean };
+        assert.equal(validateTarget(slackTargetFromId('C999'), 'slack', withFull), true);
+        assert.equal(validateTarget(slackTargetFromId('C999'), 'slack'), false);
+    });
+});

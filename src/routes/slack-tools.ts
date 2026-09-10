@@ -74,11 +74,13 @@ function parseTask(raw: unknown): Task {
     return result;
 }
 export function registerSlackToolRoutes(app: Express, requireAuth: AuthMiddleware, validateOperator: SlackOperatorValidator,
-    actions?: { runtime: SlackActionRuntime; store: SlackActionStore; inboundReady(): boolean }): void {
+    actions?: { runtime: SlackActionRuntime; store: SlackActionStore; inboundReady(): boolean },
+    options: { isFullAccess?: (req: Request) => boolean } = {}): void {
     if (actions) app.get('/api/slack/tools/capabilities', requireAuth, async (req, res) => {
         try {
-            const principal = req.headers['x-jaw-slack-grant'] !== undefined || req.headers['x-jaw-slack-operator'] !== undefined
-                ? resolveSlackToolPrincipal(req.headers, validateOperator) : null;
+            const full = options.isFullAccess?.(req) === true;
+            const principal = full || req.headers['x-jaw-slack-grant'] !== undefined || req.headers['x-jaw-slack-operator'] !== undefined
+                ? resolveSlackToolPrincipal(req.headers, validateOperator, { isFullAccess: full }) : null;
             res.json(await slackToolCapabilities(getSlackSendClient().token, slackActions, principal, actions.store, { inboundReady: actions.inboundReady() }));
         } catch (error) {
             res.status(httpStatus(error, 502)).json({ ok: false, error: httpCode(error) ?? 'slack_tool_failed', retryable: false });
@@ -86,10 +88,11 @@ export function registerSlackToolRoutes(app: Express, requireAuth: AuthMiddlewar
     });
     app.post('/api/slack/tools', requireAuth, async (req: Request, res) => {
         try {
+            const full = options.isFullAccess?.(req) === true;
             const raw = record(req.body);
             const action = slackAction(raw['operation']);
             const task = action ? undefined : parseTask(raw);
-            const principal = resolveSlackToolPrincipal(req.headers, validateOperator);
+            const principal = resolveSlackToolPrincipal(req.headers, validateOperator, { isFullAccess: full });
             if (action) {
                 if (!actions) throw slackToolDenied('slack_action_store_unavailable', 503);
                 const controller = new AbortController();

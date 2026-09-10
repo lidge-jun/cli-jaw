@@ -433,6 +433,8 @@ Manager → Model defaults offers explicit native opt-in and print reversal for 
 
 Permission selectors display **Auto (YOLO)** for the stored `auto` policy. Automatic approval, permission bypass and **Safe** support vary by runtime and transport; explicit questions may still require an answer. YOLO is a display label here, not an additional policy choice.
 
+Auto also enables [full local Jaw API access](docs/slack-tools.md#full-local-api-access): qualified direct-local tools need no manually copied grant or operator token, including Slack history and native/worker callers. Full sends require an explicit destination. Safe/custom policies and forwarded/proxy callers retain their existing credential path. This is instance-wide local-operator authority; provider permissions, task scope and actual account capabilities remain separate.
+
 Claude native uses the optional pinned Agent SDK: main turns reuse a sequential session, while each worker assignment owns a fresh query and instruction directory. Stop closes the query; the default mid-run steer policy uses kill/resume with interrupted context, while follow-up mode queues. Native supports Auto (YOLO) / Safe permissions, live approvals/questions, validated image input and foreground child activity. Deny/unknown profiles (including the output-only memory extractor) require print compatibility; background SDK tasks remain unavailable. An unavailable SDK fails the explicit native request without falling back to print.
 
 Claude main steering waits for its own interrupted run, not a surviving worker in the same scope. Shutdown still includes workers. A completed answer is separate from physical cleanup; pending or failed cleanup remains tracked within the existing bounded waits.

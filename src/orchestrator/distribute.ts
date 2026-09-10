@@ -220,6 +220,28 @@ function formatEmployeeFailure(emp: EmployeeLike, r: AgentRunResult): string {
     return parts.join('\n');
 }
 
+function isolationBlock(fullAccess: boolean, allowDispatch: boolean, noDescendants: boolean): string {
+    if (fullAccess && allowDispatch && !noDescendants) {
+        return `## Assignment Contract
+Jaw dispatch is available for this assignment; the server rechecks every request.
+Pass explicit scopeKey, chatSessionId, and requestId. Do not output subtask JSON or claim human approval.`;
+    }
+    if (noDescendants || fullAccess) {
+        return `## Isolation Requirements (hard blocks)
+This assignment does not authorize descendants or further Jaw dispatch.
+The server will reject unauthorized dispatch. Do not use Task/Agent tools to spawn hidden children.
+Do not output subtask JSON.`;
+    }
+    return `## Isolation Requirements (hard blocks)
+You are an isolated employee session. The server will reject (HTTP 403) any of the following:
+- cli-jaw dispatch ...
+- curl / direct POST to /api/orchestrate/dispatch
+Additionally you MUST NOT:
+- Use your CLI Task / Agent / Subagent tool — it creates a hidden sub-agent outside jaw visibility and conflicts with phase accounting.
+- Output subtask JSON or reference the dev-code-reviewer skill as a delegation target. You are the single reviewer for this task.
+If the task seems to require parallel work, stop, write needs boss follow-up: <reason> in your output, and return. The boss will re-dispatch at the next phase.`;
+}
+
 // ─── Per-Agent Execution ─────────────────────────────
 
 export async function runSingleAgent(
@@ -234,7 +256,6 @@ export async function runSingleAgent(
     const currentPhase = phaseNumber(ap["currentPhase"]);
     const currentPhaseIdx = phaseNumber(ap["currentPhaseIdx"]);
     const phaseProfile = phaseProfileOf(ap);
-    const instruction = PHASE_INSTRUCTIONS[currentPhase];
     const phaseLabel = PHASES[currentPhase];
     const promptEmployee: { name: string; role?: string; id?: string | number; cli?: string } = {
         name: text(emp.name),
@@ -244,11 +265,28 @@ export async function runSingleAgent(
     if (empRole) promptEmployee.role = empRole;
     if (typeof emp.id === 'string' || typeof emp.id === 'number') promptEmployee.id = emp.id;
     if (empCli) promptEmployee.cli = empCli;
-    const sysPrompt = getEmployeePromptV2(promptEmployee, text(ap["role"]), currentPhase, {
+    const fullAccess = ap["fullAccess"] === true || meta["fullAccess"] === true;
+    const allowDispatch = ap["allowDispatch"] === true || meta["allowDispatch"] === true;
+    const noDescendants = ap["noDescendants"] === true || meta["noDescendants"] === true;
+    const rawPermissions = meta["permissions"] ?? ap["permissions"] ?? settings["permissions"];
+    const capturedPermissions = typeof rawPermissions === 'string' ? rawPermissions
+        : Array.isArray(rawPermissions) && rawPermissions.every((value): value is string => typeof value === 'string')
+            ? [...rawPermissions] : undefined;
+    const instruction = fullAccess && allowDispatch && !noDescendants
+        ? `${PHASES[currentPhase]}: complete the assigned work within its scope. Available Jaw and native tools may be used. ${ap["mutable"] === true ? 'Writes are authorized within the assigned scope.' : 'Read-only assignment: report findings; do not modify files.'}`
+        : PHASE_INSTRUCTIONS[currentPhase];
+    const promptPolicy = {
         mutable: ap["mutable"] === true,
         scope: typeof ap["scope"] === 'string' ? ap["scope"] : null,
         taskTags: normalizeTaskTags(ap["task_tags"]),
-    });
+        fullAccess,
+        allowDispatch,
+        noDescendants,
+        ...(typeof capturedPermissions === 'string' || Array.isArray(capturedPermissions)
+            ? { permissions: capturedPermissions }
+            : {}),
+    };
+    const sysPrompt = getEmployeePromptV2(promptEmployee, text(ap["role"]), currentPhase, promptPolicy);
 
     const executionContext = ap["parallel"]
         ? buildParallelContext(ap, parallelPeers)
@@ -260,17 +298,18 @@ export async function runSingleAgent(
         .join('→');
 
     const worklogPath = String(worklog?.["path"] || '').trim();
+    const hasCapturedWorkspace = Object.hasOwn(meta, 'workingDir');
+    const workingDir = hasCapturedWorkspace
+        ? (typeof meta["workingDir"] === 'string' ? meta["workingDir"] : null)
+        : settings["workingDir"] || null;
     const serverDirs = (settings["projectDirs"] as string[] | null) || null;
-    const ctxSupplied = Array.isArray(meta?.["projectDirs"]);
-    const rawCtxDirs = normalizeProjectDirs(meta?.["projectDirs"]);
-    const ctxProjectDirs = rawCtxDirs && serverDirs
-        ? rawCtxDirs.filter(d => serverDirs.includes(d))
-        : null;
-    const effectiveDirs = ctxSupplied
-        ? (ctxProjectDirs && ctxProjectDirs.length > 0 ? ctxProjectDirs : null)
-        : serverDirs;
+    const ctxSupplied = Array.isArray(meta["projectDirs"]);
+    const rawCtxDirs = normalizeProjectDirs(meta["projectDirs"]);
+    const effectiveDirs = hasCapturedWorkspace
+        ? (Array.isArray(meta["projectDirs"]) ? meta["projectDirs"].filter((d): d is string => typeof d === 'string') : null)
+        : ctxSupplied ? (rawCtxDirs?.filter(d => serverDirs?.includes(d)) || null) : serverDirs;
     const workspaceBlock = buildWorkspaceContextBlock({
-        workingDir: settings["workingDir"] || null,
+        workingDir,
         projectDirs: effectiveDirs,
         worklogPath,
         employeeName: text(emp["name"]),
@@ -290,14 +329,7 @@ If you want to review prior execution context or record your progress, the workl
 ## Task Instruction [${phaseLabel}]
 ${text(ap["task"])}
 
-## ⛔ Isolation Requirements (hard blocks)
-You are an isolated employee session. The server will reject (HTTP 403) any of the following:
-- \`cli-jaw dispatch ...\`
-- \`curl\` / direct POST to \`/api/orchestrate/dispatch\`
-Additionally you MUST NOT:
-- Use your CLI's Task / Agent / Subagent tool — it creates a hidden sub-agent outside jaw's visibility and conflicts with phase accounting.
-- Output subtask JSON or reference the \`dev-code-reviewer\` skill as a delegation target. You are the single reviewer for this task.
-If the task seems to require parallel work, stop, write \`needs boss follow-up: <reason>\` in your output, and return. The boss will re-dispatch at the next phase.
+${isolationBlock(fullAccess, allowDispatch, noDescendants)}
 
 ## Current Phase: ${ap["currentPhase"]} (${phaseLabel})
 ${instruction}
@@ -371,6 +403,7 @@ ${worklogBlock}`.trim();
 
     const empOutputLenFromDb = canResume && typeof empSession?.["output_len"] === 'number'
         ? empSession["output_len"] as number : 0;
+    const assignmentPermissions = capturedPermissions;
     const { promise } = spawnAgent(taskPrompt, {
         agentId: empId, cli: text(emp["cli"]), model: text(emp["model"]),
         forceNew: !canResume,
@@ -378,11 +411,21 @@ ${worklogBlock}`.trim();
         sysPrompt: sysPrompt,
         workspaceContext: workspaceBlock,
         origin: text(meta["origin"], 'web'),
+        ...(typeof meta["scopeKey"] === 'string' ? { scopeKey: meta["scopeKey"] } : {}),
+        ...(typeof meta["chatSessionId"] === 'string' ? { chatSessionId: meta["chatSessionId"] } : {}),
+        ...(typeof meta["requestId"] === 'string' ? { requestId: meta["requestId"] } : {}),
+        ...(assignmentPermissions !== undefined ? { permissions: assignmentPermissions } : {}),
         env: {
             JAW_EMPLOYEE_MODE: '1',
             JAW_EMPLOYEE_NAME: String(emp["name"] || ''),
             JAW_EMPLOYEE_ROLE: String(ap["role"] || emp["role"] || ''),
-            JAW_WORKSPACE_ROOT: effectiveDirs?.[0] || settings["workingDir"] || '',
+            JAW_ASSIGNMENT_SCOPE_KEY: typeof meta["scopeKey"] === 'string' ? meta["scopeKey"] : '',
+            JAW_ASSIGNMENT_CHAT_SESSION_ID: typeof meta["chatSessionId"] === 'string' ? meta["chatSessionId"] : '',
+            JAW_ASSIGNMENT_PARENT_REQUEST_ID: typeof meta["requestId"] === 'string' ? meta["requestId"] : '',
+            JAW_ASSIGNMENT_ALLOW_DISPATCH: allowDispatch ? '1' : '0',
+            JAW_ASSIGNMENT_MUTABLE: ap["mutable"] === true ? '1' : '0',
+            ...(assignmentPermissions !== undefined ? { JAW_ASSIGNMENT_PERMISSIONS: Array.isArray(assignmentPermissions) ? JSON.stringify(assignmentPermissions) : String(assignmentPermissions) } : {}),
+            JAW_WORKSPACE_ROOT: effectiveDirs?.[0] || workingDir || '',
             ...(effectiveDirs && effectiveDirs.length > 0 ? (() => {
                 const val = JSON.stringify(effectiveDirs);
                 if (val.length > 8192) {

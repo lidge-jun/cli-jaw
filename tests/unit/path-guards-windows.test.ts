@@ -266,3 +266,24 @@ test('existing call signatures keep working without an env argument', () => {
     const base = path.resolve('.');
     assert.strictEqual(safeResolveUnder(base, 'a.md'), path.join(base, 'a.md'));
 });
+
+
+test('fullAccess skips Windows root containment after realpath for a regular file', () => {
+    const env = {
+        ...win32Env(['C:\\tmp\\a.md', 'C:\\work']),
+        isFile: () => true,
+    };
+    const assertPath = assertSendFilePath as typeof assertSendFilePath & ((
+        filePath: string, workingDir?: string, projectDirs?: string[] | null,
+        env?: PathEnvironment, options?: { fullAccess?: boolean },
+    ) => string);
+    assert.strictEqual(assertPath('C:\\tmp\\a.md', 'C:\\work', null, env, { fullAccess: true }), 'C:\\tmp\\a.md');
+    assert.strictEqual(
+        codeOf(() => assertSendFilePath('C:\\tmp\\a.md', 'C:\\work', null, env)),
+        'path_not_allowed',
+    );
+    assert.strictEqual(
+        codeOf(() => assertPath('C:\\work\\a.md:hidden', 'C:\\work', null, env, { fullAccess: true })),
+        'path_stream_denied',
+    );
+});

@@ -2,7 +2,42 @@
 
 Use `jaw slack capabilities` to inspect registered operations and observed bot scopes. `implemented` describes server support, `granted` is the current scope observation (or unknown), `available` describes base prerequisites, and `verified` records a successful real operation under that credential. `conditionalScopes` lists conversation-dependent permissions; known requester-DM access and mutation readback scopes are included in `requiredScopes`. Resource access, workspace plan, and conversation restrictions are checked separately on each call. Parent-agent connectors do not provide tools to this bot.
 
-Call `jaw slack tool --input-json '<JSON>'`. The server accepts explicit operations; it does not accept arbitrary Slack API methods. Supported fresh print-process Slack turns receive an expiring per-turn grant. Local operators may explicitly use `--operator` with their instance's separate operator credential.
+Call `jaw slack tool --input-json '<JSON>'`. The server accepts explicit operations; it does not accept arbitrary Slack API methods. Auto/full local access needs no manually copied tool credential. Outside that path, supported fresh print-process Slack turns use an expiring grant, and operators may explicitly use `--operator` with the separate instance credential.
+
+## Full local API access
+
+The instance's stored `permissions:"auto"` policy enables full authority for
+qualified direct local Jaw API requests. This includes history, source/action
+tools and explicit channel/file sends, independently of print, native reuse,
+resume, steer or worker role. Ordinary browser, memory, settings, skill, task and
+goal APIs keep their existing instance authentication. Full dispatch uses the
+same server policy while preserving task constraints and worker ownership.
+
+Both the socket peer and effective peer must be loopback. Existing authentication,
+Host and Origin checks still run; automatic promotion additionally requires a
+valid local Host, exact Origin when present, and absent/same-origin/none fetch
+metadata. Forwarded and generic Manager-proxy requests are not promoted merely
+because their final hop reaches localhost. Explicit scoped/operator credentials
+remain available on those paths. Full mode does not read or create an operator
+token for headerless calls.
+
+Full-local sends require an explicit `target`, `chat_id`, or `turn_conversation`.
+They may use any valid destination accepted by the connected provider and any
+resolvable regular file accessible to the OS account. They do not use the
+last-active destination or change inbound allowlists. Invalid paths, file limits,
+provider scopes, resource integrity and privacy exclusions still apply.
+
+Full authority is independent of a stale automatically attached grant. A valid
+grant supplies context only for the protected `search.quote` workflow, which
+retains its existing turn, token, expiry, membership and privacy checks.
+Capabilities report `authorization.mode` and keep authorization separate from
+provider availability and verified results.
+
+Safe/custom instance policies receive no automatic promotion. Each new HTTP
+request is checked again; already-admitted requests may finish. This is an
+instance-wide local-operator policy, not a per-process sandbox: a Safe provider
+session inside an Auto instance can still access the same local APIs. Explicit
+read-only and no-descendant task instructions remain binding.
 
 All actions below take `operation` and `channel`. Mutations also require a unique `invocationId`. Repeating an identical completed invocation returns its saved receipt; conflicting, pending, or uncertain invocations cannot be sent again automatically.
 
@@ -61,9 +96,9 @@ Use authenticated `GET /api/prompt?withGenerated=1` to compare the current gener
 ## When replies work but attachments fail
 
 Ordinary final replies are sent by the server. An agent attaching a local file uses
-the authenticated Jaw tool route, which also requires that request's Slack grant.
-A connected bot and `files:write` therefore do not by themselves authorize an agent
-file send. `slack_turn_grant_required` means the request credential is missing;
+the authenticated Jaw tool route. Outside qualified local Auto, this requires a
+scoped grant or explicit operator credential. A connected bot and `files:write`
+do not by themselves establish that authority. `slack_turn_grant_required` means the request credential is missing;
 `slack_turn_grant_invalid` means a supplied credential is no longer valid. Both
 are separate from Slack refusing an operation for a missing scope.
 
@@ -73,6 +108,9 @@ conversation and parent thread supplied to that request. Do not drop an explicit
 destination, retry against the last-active conversation, or switch to operator mode
 to bypass an agent-tool refusal. Preserve any returned delivery receipt before
 deciding whether a failed request could already have posted something.
+If a direct local Auto request still requires a grant, check the loaded server
+build and whether the request crossed a proxy; a Slack scope or plan change does
+not repair a Jaw authorization failure.
 
 ## Authorization and deployment boundary
 
@@ -84,8 +122,8 @@ remote users must not reach bot authority, must not enable these tools until the
 in #646 lands.
 The assets are Slack credentials, source message content, and write authority. Authenticated
 Slack ingress binds an actor, workspace, destination and request to a short-lived grant;
-HTTP callers cannot supply their own actor or bot token. Current membership and disclosure
-checks constrain supported tool calls. Source search output stays server-side and durable
+HTTP callers cannot supply their own actor or bot token. Scoped grants enforce membership and disclosure
+checks; qualified local Auto uses the operator authority described above. Source search output stays server-side and durable
 publication holds prevent its contents from returning through history after uncertain sends.
 
 These are HTTP workflow controls, not a sandbox. An agent with arbitrary shell or filesystem
@@ -95,12 +133,12 @@ model therefore assumes trusted local operators and does not protect against a c
 same-account agent. Do not deploy this as a security boundary for untrusted remote users
 until operator credentials and execution are isolated from agent-readable storage.
 
-Only fresh main print processes for Cursor, Claude, Codex and Grok receive tool grants.
-Pooled native adapters, Codex App, Pi, other CLI transports and workers have no supported
-tool authorization. The authenticated capability catalog remains readable without a turn
-grant and reports `available:false` with `turn_authorization_unavailable`; its `authorization`
-object explicitly reports `pooledNative:false`. Ordinary final replies use the server's
-existing delivery path. Never fall back to operator mode from an unavailable agent tool.
+Scoped grant delivery remains limited to fresh main print processes for Cursor,
+Claude, Codex and Grok. That limitation does not apply to qualified local Auto
+requests, including native and worker callers. Without full-local or an explicit
+credential, the catalog remains readable but reports `turn_authorization_unavailable`.
+Ordinary final replies keep their server delivery path. Do not copy an operator
+secret to evade a refusal on a non-full request.
 
 Turn-created posts and schedules inherit the captured destination thread. A caller cannot
 select another thread. Channel-level resource tools are in-conversation rather than in-thread:

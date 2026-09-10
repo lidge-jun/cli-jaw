@@ -36,6 +36,13 @@ export interface WorkerReplayMeta {
     scopeId?: string;
     chatSessionId?: string;
     remoteKey?: string;
+    mutable?: boolean;
+    permissions?: string | string[];
+    noDescendants?: boolean;
+    fullAccess?: boolean;
+    workingDir?: string | null;
+    projectDirs?: string[] | null;
+    scope?: string | null;
 }
 
 export interface WorkerSlot {
@@ -88,6 +95,13 @@ export function claimWorker(emp: WorkerEmployeeRef, task: string, replayMeta?: W
     if (existing && existing.state === 'running') {
         throw new WorkerBusyError(existing);
     }
+    const capturedMeta = replayMeta && Object.keys(replayMeta).length
+        ? {
+            ...replayMeta,
+            ...(Array.isArray(replayMeta.projectDirs) ? { projectDirs: [...replayMeta.projectDirs] } : {}),
+            ...(Array.isArray(replayMeta.permissions) ? { permissions: [...replayMeta.permissions] } : {}),
+        }
+        : undefined;
     const slot: WorkerSlot = stripUndefined({
         runId: createWorkerRunId(emp.id),
         agentId: emp.id,
@@ -106,7 +120,7 @@ export function claimWorker(emp: WorkerEmployeeRef, task: string, replayMeta?: W
         tools: [],
         progressUpdatedAt: null,
         attention: null,
-        replayMeta: replayMeta && Object.keys(replayMeta).length ? { ...replayMeta } : undefined,
+        replayMeta: capturedMeta,
     });
     workers.set(emp.id, slot);
     createWorkerRunRecord({

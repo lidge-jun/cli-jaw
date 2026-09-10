@@ -46,6 +46,8 @@ export interface PathEnvironment {
     readonly realpath: (p: string) => string | null;
     /** Expands `~` and resolves to absolute, using `impl` semantics. */
     readonly resolveHome: (p: string) => string;
+    /** Regular-file check for server-authorized unrestricted relay paths. */
+    readonly isFile?: (canonical: string) => boolean;
 }
 
 function defaultRealpath(p: string): string | null {
@@ -53,11 +55,17 @@ function defaultRealpath(p: string): string | null {
     catch { return null; }
 }
 
+function defaultIsFile(p: string): boolean {
+    try { return fs.statSync(p).isFile(); }
+    catch { return false; }
+}
+
 export const hostPathEnvironment: PathEnvironment = {
     impl: path,
     windows: process.platform === 'win32',
     realpath: defaultRealpath,
     resolveHome: resolveHomePath,
+    isFile: defaultIsFile,
 };
 
 /**
@@ -254,6 +262,7 @@ export function assertSendFilePath(
     workingDir?: string,
     projectDirs?: string[] | null,
     env: PathEnvironment = hostPathEnvironment,
+    options: { fullAccess?: boolean } = {},
 ): string {
     // Reject stream/trim forms before any filesystem call: `a.md:hidden`
     // resolves and realpaths cleanly, so a later check would already be too late.
@@ -263,6 +272,10 @@ export function assertSendFilePath(
     const resolved = p.resolve(filePath);
     const canonical = env.realpath(resolved);
     if (!canonical) throw forbidden('path_not_resolvable');
+    if (options.fullAccess === true) {
+        if (!(env.isFile ?? defaultIsFile)(canonical)) throw forbidden('path_not_regular_file');
+        return canonical;
+    }
 
     // Computed once and used for both the verdict and the explanation. Two calls
     // would let a symlink or a directory change between them, so the refusal

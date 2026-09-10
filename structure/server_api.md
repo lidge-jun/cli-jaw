@@ -187,7 +187,7 @@ Cursor/Grok activation and Activity controls are separate from this API foundati
 | Heartbeat | `GET/PUT /api/heartbeat` `GET /api/heartbeat/:jobId/mention-watch-hold` `POST /api/heartbeat/:jobId/mention-watch-fresh-start` |
 | Browser | `POST /api/browser/start` `POST /api/browser/stop` `GET /api/browser/status` `GET /api/browser/doctor` `POST /api/browser/cleanup-runtimes` `GET /api/browser/snapshot` `POST /api/browser/screenshot` `POST /api/browser/act` `POST /api/browser/vision-click` `POST /api/browser/navigate` `POST /api/browser/reload` `POST /api/browser/resize` `GET /api/browser/tabs` `GET /api/browser/active-tab` `POST /api/browser/tab-switch` `POST /api/browser/tab-new` `POST /api/browser/tab-close` `POST /api/browser/tab-cleanup` `POST /api/browser/evaluate` `GET /api/browser/text` `GET /api/browser/dom` `GET /api/browser/console` `GET /api/browser/network` `POST /api/browser/fetch` `POST /api/browser/wait-for-selector` `POST /api/browser/wait-for-text` `POST /api/browser/web-ai/render` `POST /api/browser/web-ai/context-dry-run` `POST /api/browser/web-ai/context-render` `GET /api/browser/web-ai/status` `POST /api/browser/web-ai/send` `GET /api/browser/web-ai/poll` `GET /api/browser/web-ai/watch` `GET /api/browser/web-ai/watchers` `GET /api/browser/web-ai/sessions` `POST /api/browser/web-ai/sessions/prune` `GET /api/browser/web-ai/notifications` `GET /api/browser/web-ai/capabilities` `POST /api/browser/web-ai/query` `POST /api/browser/web-ai/code` `POST /api/browser/web-ai/code-extract` `POST /api/browser/web-ai/stop` `GET /api/browser/web-ai/diagnose` |
 | Code Mode | `GET /api/code/models` `GET /api/code/sessions` `GET /api/code/sessions/:id` `GET /api/code/sessions/:id/events` `GET /api/code/sessions/:id/items` `POST /api/code/sessions` `PATCH /api/code/sessions/:id` `POST /api/code/sessions/:id/prompt` `POST /api/code/sessions/:id/cancel` `POST /api/code/sessions/:id/attach` `POST /api/code/permissions/:id` `GET /api/code/git-info` `POST /api/code/workspace/pick` |
-| Orchestrate | `POST /api/orchestrate/reset` `GET /api/orchestrate/state` `GET /api/orchestrate/workers` `GET /api/orchestrate/worker-progress` `GET /api/orchestrate/worker-progress/:agentId` (also accepts a current/recent `runId`) `GET /api/orchestrate/worker-runs` `GET /api/orchestrate/worker-runs/:runId` `GET /api/orchestrate/worker-runs/:runId/events` `GET /api/orchestrate/worker-runs/:runId/output` `GET /api/orchestrate/snapshot` `DELETE /api/orchestrate/queue/:id` `POST /api/orchestrate/queue/:id/hold` `DELETE /api/orchestrate/queue/:id/hold` `POST /api/orchestrate/queue/:id/steer` `POST /api/orchestrate/dispatch/pending` `GET /api/orchestrate/dispatch/pending/:jti` `POST /api/orchestrate/dispatch` `POST /api/orchestrate/dispatch/batch` `GET /api/orchestrate/worker/:agentId/result` (also accepts a current `runId`) `PUT /api/orchestrate/state` |
+| Orchestrate | `POST /api/orchestrate/reset` `GET /api/orchestrate/state` `GET /api/orchestrate/workers` `GET /api/orchestrate/worker-progress` `GET /api/orchestrate/worker-progress/:agentId` (also accepts a current/recent `runId`) `GET /api/orchestrate/worker-runs` `GET /api/orchestrate/worker-runs/:runId` `GET /api/orchestrate/worker-runs/:runId/events` `GET /api/orchestrate/worker-runs/:runId/output` `GET /api/orchestrate/snapshot` `DELETE /api/orchestrate/queue/:id` `POST /api/orchestrate/queue/:id/hold` `DELETE /api/orchestrate/queue/:id/hold` `POST /api/orchestrate/queue/:id/steer` `GET /api/orchestrate/access` `POST /api/orchestrate/dispatch/pending` `GET /api/orchestrate/dispatch/pending/:jti` `POST /api/orchestrate/dispatch` `POST /api/orchestrate/dispatch/batch` `GET /api/orchestrate/worker/:agentId/result` (also accepts a current `runId`) `PUT /api/orchestrate/state` |
 | Background Tasks | `GET/POST /api/bgtask` `GET/DELETE /api/bgtask/:id` |
 | Goal | `GET /api/goal` `GET /api/goal/history` `POST /api/goal` |
 | Goal Run | `GET /api/goal-run` `GET /api/goal-run/preflight` `POST /api/goal-run` |
@@ -209,7 +209,7 @@ All trace routes set `Cache-Control: no-store` before auth/parsing. Activity dis
 | Dashboard Schedule | `GET /api/dashboard/schedule/work` `POST /api/dashboard/schedule/work` `PATCH /api/dashboard/schedule/work/:id` `DELETE /api/dashboard/schedule/work/:id` `POST /api/dashboard/schedule/work/:id/dispatch` |
 | i18n | `GET /api/i18n/languages` `GET /api/i18n/:lang` |
 
-> AST 추출기가 현재 인식하는 범위는 총 244개 route handler다. 이 추출 범위의 API 엔드포인트는 243개이고 `/` 엔트리는 1개다. 전체 API 총수는 아니다. `registerNativeCodeRoutes()` 내부의 `router.*`와 `app.use(prefix, router)` 연결은 아직 집계하지 못한다. 별도로 동작하는 native Code 핸들러 11개는 아래 [Native Code API](#native-code-api) 표에 명시하며, 이전 경로의 410 응답 핸들러도 추출 집계에서 빠져 있다. Browser API 43개는 `src/routes/browser.ts`, Jaw CEO 20개는 `src/routes/jaw-ceo.ts`에서 등록된다.
+> AST 추출기가 현재 인식하는 범위는 총 245개 route handler다. 이 추출 범위의 API 엔드포인트는 244개이고 `/` 엔트리는 1개다. 전체 API 총수는 아니다. `registerNativeCodeRoutes()` 내부의 `router.*`와 `app.use(prefix, router)` 연결은 아직 집계하지 못한다. 별도로 동작하는 native Code 핸들러 11개는 아래 [Native Code API](#native-code-api) 표에 명시하며, 이전 경로의 410 응답 핸들러도 추출 집계에서 빠져 있다. Browser API 43개는 `src/routes/browser.ts`, Jaw CEO 20개는 `src/routes/jaw-ceo.ts`에서 등록된다.
 
 `PUT /api/heartbeat`의 job은 `mentionWatch: { channel: "slack", userId: "U...", channelIds: ["C..."], maxHits?, since? }`를 선택적으로 받는다. `channelIds`는 비어 있지 않아야 하고 저장 시 `slack.channelIds` allowlist의 부분집합이어야 하며, 실행 tick 직전 현재 allowlist와 다시 교집합한다. job id가 같은 기존 값에 대해 필드가 없으면 상속하고, `null`이면 삭제하며, 잘못된 값은 `400 invalid heartbeat mention watch`다. 파일 로드 정규화에서 잘못된 `mentionWatch`는 해당 job을 `enabled: false`로 내린다. 기본 운영값은 비활성이고, 설정된 watch는 별도 daemon이 아니라 기존 `runHeartbeatJob`에서 실행된다.
 
@@ -295,6 +295,13 @@ Slack text sends preserve Markdown and explicit Block Kit `blocks`, splitting mu
 - agent `pause` 첫 번째 audited 시도는 `409`와 `pauseGate:{ armed:true, reason:"pause_gate_pending" }`를 반환한다. 두 번째 audited 시도는 goal을 `paused`로 전환하고, productive `update`는 pending gate를 해제한다.
 - `resume` action은 이미 active이면 `{ alreadyActive:true }`를 반환하고, paused goal을 resume하면 `kickGoalContinuation()`을 즉시 트리거한다.
 
+### `/api/orchestrate/access`
+
+`GET` uses ordinary instance authentication and returns the captured permissions,
+full-local qualification and `dispatch.path` (`direct`, `boss`, or `approval`).
+It grants nothing by itself; dispatch POSTs recheck. Qualification is computed
+once per request. No credentials are returned.
+
 ### `/api/orchestrate/dispatch/pending`
 
 - `POST`는 일반 `requireAuth` 클라이언트가 action-scoped dispatch를 제출하는 전용 경로다. 응답은 `202 { jti, digest, expiresAt }`이며 bearer나 boss token을 반환하지 않는다.
@@ -304,15 +311,16 @@ Slack text sends preserve Markdown and explicit Block Kit `blocks`, splitting mu
 
 ### `/api/orchestrate/dispatch`
 
-- boss-scoped `x-jaw-boss-token`이 필수다. employee spawn 환경에서는 이 토큰이 제거되므로 직원이 다시 dispatch하는 흐름은 서버에서 `403`으로 막힌다.
+- Qualified direct-local Auto authority or the existing Boss credential permits dispatch. Known worker calls require a complete, current `scopeKey` / `chatSessionId` / `requestId` tuple. Explicit stale/invalid tuples fail; they never fall back to an unrelated active context. Without a selected parent or valid legacy Boss context, a local operator gets an independent `local:<chat>` binding even when multi-session is off; creating it does not activate that chat.
+- Captured permissions and task constraints follow the assignment into worker metadata and launch options. `mutable:false` and `noDescendants:true` remain effective; full authority is separate from provider Safe and is never inferred from body/metadata. Single and batch validate task scope before worker admission. The Boss token remains excluded from worker environments.
 - body는 정확히 하나의 target을 받는다: `{ agent, task }` 또는 `{ virtual, task, role?, cli?, model? }`.
 - `virtual` target은 `src/core/employees.ts`의 `security`/`testing` 프리셋 또는 자유 role 문자열로 `SyntheticEmployeeRow`를 만들고, DB employee row로 저장하지 않는다.
 - virtual dispatch에서 `cli`/`model`이 생략되면 현재 CLI와 `src/cli/registry.ts`의 registry default model을 사용한다.
-- 현재 plan이 있으면 dispatch body 상단에 `## Approved Plan`으로 자동 주입된다.
+- A plan from the validated selected parent or legacy Boss context may be injected as `## Approved Plan`; independent dispatch never borrows the active web plan.
 - `wait:false` async dispatch `202`, `worker_busy` `409`, and result polling payloads include both stable `agentId` and per-dispatch `runId`. The `agentId` remains the same-employee concurrency guard; `runId` identifies a specific worker run in memory progress history.
 - `GET /api/orchestrate/worker-runs*` exposes durable worker-run safe metadata/events and bounded raw output reads. List/get/events are safe-only and include both native `status` plus shared `statusCategory` (`running|succeeded|failed|cancelled|orphaned`) for comparison with background tasks; `/output` is the only raw-text worker-run route and requires explicit `runId` plus offset/limit. `jaw worker read <runId>` is the CLI consumer of that explicit raw-output route; `worker status/watch` remain safe-summary surfaces.
 - `GET/POST /api/bgtask` and `GET/DELETE /api/bgtask/:id` keep the existing background-task schema and add `statusCategory` to public task payloads. `statusCategory` is additive; bgtask storage and worker-run storage remain separate and no bgtask migration is performed.
-- `POST /api/orchestrate/dispatch/batch`는 같은 boss token으로 여러 직원/virtual task를 병렬 dispatch한다. 각 entry는 `agent` 또는 `virtual` 중 하나를 가진다. 응답은 full worker text를 기본 포함하지 않고 `{ agent, ok, runId, status, preview, recoveryCommand, outputBytes, error? }` 형태의 safe summary metadata를 반환한다. raw output은 `runId`로 `/api/orchestrate/worker-runs/:runId/output` 또는 `jaw worker read <runId>`에서 명시적으로 읽는다. 구버전 manager가 이 route 없이 HTML 404를 반환하면 `jaw dispatch --batch`는 JSON parse 예외 대신 stale/missing route 진단을 출력한다.
+- `POST /api/orchestrate/dispatch/batch` uses the same full-local-or-Boss admission policy for multiple worker/virtual tasks. 각 entry는 `agent` 또는 `virtual` 중 하나를 가진다. 응답은 full worker text를 기본 포함하지 않고 `{ agent, ok, runId, status, preview, recoveryCommand, outputBytes, error? }` 형태의 safe summary metadata를 반환한다. raw output은 `runId`로 `/api/orchestrate/worker-runs/:runId/output` 또는 `jaw worker read <runId>`에서 명시적으로 읽는다. 구버전 manager가 이 route 없이 HTML 404를 반환하면 `jaw dispatch --batch`는 JSON parse 예외 대신 stale/missing route 진단을 출력한다.
 
 ### `/api/jaw-ceo/*`
 
@@ -545,6 +553,17 @@ running it: a guard that cannot fire still looks like a guard.
 
 ### Typed Slack tools
 
+Worker `permissions:"auto"` enables full-local authority through the shared HTTP
+classifier after ordinary authentication. Both actual/effective peers must be
+loopback, with a valid local Host, exact Origin when present, permitted fetch
+metadata, and no forwarding/proxy marker. Safe/custom and proxy/remote requests
+retain scoped/operator credentials. Full-first resolution ignores stale grant
+headers for authority; valid context is retained only for protected RTS search.
+`authorization.mode` identifies full-local/turn/operator/unavailable, independently
+of implemented, granted, available and verified status. Full sends require explicit
+destinations and use server-created file-root/target options, never JSON privilege
+flags. See [full-local semantics](../docs/slack-tools.md#full-local-api-access).
+
 `PUT /api/prompt` accepts the complete A2 `content` string and triggers B/working-directory AGENTS regeneration. Preserve existing A2 instructions and verify both output files separately. The builder's unchanged-content optimization requires both persisted outputs to match and commits its hash only after successful writes; AGENTS write errors retain the existing logging contract.
 
 Authenticated `GET /api/prompt?withGenerated=1` adds a versioned `generated` proof computed from one current `getSystemPrompt({forDisk:true})` result: expected SHA-256/UTF-8 byte length, B/AGENTS match booleans and matched/mismatched/missing/unreadable states. It does not regenerate files or return their private bodies. Missing files are false, unreadable or generation failure is unknown; the default GET remains `{content}`. The proof is an observation, not a lock against subsequent edits. A2 raw text and generated output must be verified separately because disk rendering can transform its Working Directory line.
@@ -557,4 +576,4 @@ Source operations use `{source:{channel,ts,threadTs?}}`. Quote publications requ
 
 RTS output IDs are recorded as our own publication provenance. A server-owned block marker and durable output-ID filter exclude those responses from ordinary history/message lookup and subsequent thread context. An uncertain publication retains an invocation-specific destination hold; held history returns restricted placeholders, not source text. The store contains output addresses/holds and safe operator quote receipts, never original RTS source bodies. No-ID delivery reports `sent:"unknown"`; verified known posts report true. Failure receipts remain non-retryable and preserve known new-message IDs.
 
-The same-account operator isolation boundary remains unresolved (issue #646). See the threat model and supported print-only authorization transports in [Slack tools](../docs/slack-tools.md#authorization-and-deployment-boundary).
+The same-account operator isolation boundary remains unresolved (issue #646). Full-local is an instance-wide operator policy, not a per-run Safe sandbox. See the full/local versus scoped credential paths in [Slack tools](../docs/slack-tools.md#authorization-and-deployment-boundary).

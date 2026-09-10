@@ -65,3 +65,22 @@ test('postDispatchDiffCheck reports untracked files outside allowed scope', () =
         fs.rmSync(root, { recursive: true, force: true });
     }
 });
+
+test('postDispatchDiffCheck can ignore protected files inside the explicit directory scope', () => {
+    const root = makeTempRoot();
+    try {
+        execSync('git init --quiet', { cwd: root });
+        fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+        fs.writeFileSync(path.join(root, 'src', '.env'), 'SECRET=1\n');
+        fs.writeFileSync(path.join(root, 'outside.env'), 'NO=1\n');
+        const blocked = postDispatchDiffCheck(root, 'src');
+        assert.equal(blocked.ok, false);
+        assert.ok(blocked.modifiedOutside.includes('src/.env'));
+        const allowed = postDispatchDiffCheck(root, 'src', { allowProtectedPaths: true });
+        assert.equal(allowed.ok, false);
+        assert.deepEqual(allowed.modifiedOutside, ['outside.env']);
+        assert.ok(!allowed.modifiedOutside.includes('src/.env'));
+    } finally {
+        fs.rmSync(root, { recursive: true, force: true });
+    }
+});
