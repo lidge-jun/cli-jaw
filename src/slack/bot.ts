@@ -75,6 +75,9 @@ import type { SlackProgressOutcome } from './progress.js';
 import { createSlackForwarder, relaySlackImages } from './forwarder.js';
 import { nextDeliverySeq, wasSelfDelivered } from '../messaging/turn-delivery.js';
 import { shouldSkipForwarding } from '../messaging/forwarder-origin.js';
+import { requiresNativeBodyDelivery } from '../messaging/native-body.js';
+import { createQueueNoticeRecorder } from '../messaging/queue-notice-record.js';
+import { admitTargetReply } from '../messaging/target-reply-guard.js';
 import { handleSlackSlashCommand } from './commands.js';
 import { logErrorText, redactOutboundText } from '../messaging/redact.js';
 import { downloadAndSaveSlackFiles, type FailedSlackFile } from './inbound-file.js';
@@ -207,34 +210,11 @@ function hasPendingQueueWaiter(requestId: string): boolean {
 }
 
 // ─── Durable notice records (#418) ──────────────────
-// The handles above are process-local; these three wrap the store that outlives
-// the process. Every one of them is best-effort by contract: a durable write is a
-// convenience for the NEXT boot, and letting it throw here would fail the turn the
-// user is actually waiting on.
-
-function reserveSlackNoticeRecord(requestId: string, target: RemoteTarget): void {
-    try {
-        getQueueNoticeStore()?.reserve({ requestId, channel: 'slack', target });
-    } catch (e) {
-        log.info('[slack:queue-notice] reserve failed', logErrorText(e));
-    }
-}
-
-function attachSlackNoticeRecord(requestId: string, ts: string): void {
-    try {
-        getQueueNoticeStore()?.attachMessageId(requestId, ts);
-    } catch (e) {
-        log.info('[slack:queue-notice] attach failed', logErrorText(e));
-    }
-}
-
-function closeSlackNoticeRecord(requestId: string): void {
-    try {
-        getQueueNoticeStore()?.close(requestId);
-    } catch (e) {
-        log.info('[slack:queue-notice] close failed', logErrorText(e));
-    }
-}
+// The handles above are process-local; this wraps the store that outlives the
+// process. Best-effort by contract: a durable write is a convenience for the
+// NEXT boot, and letting it throw here would fail the turn the user is actually
+// waiting on. The contract is shared with the other two bots (#699).
+const slackNoticeRecord = createQueueNoticeRecorder('slack', '[slack:queue-notice]');
 
 /**
  * Close a queue notice as ANSWERED from a path that never held the live handle.
@@ -258,7 +238,7 @@ async function closeSlackNoticeAsAnsweredByRequestId(
         if (record.messageId) {
             await createSlackNoticeTransport(token, record.target.targetId, record.messageId).delete(signal);
         }
-        if (current()) closeSlackNoticeRecord(requestId);
+        if (current()) slackNoticeRecord.close(requestId);
     } catch (e) {
         log.info('[slack:queue-notice] answered-close failed', logErrorText(e));
     }
@@ -447,11 +427,6 @@ function buildSlackTarget(event: SlackMessageEvent): RemoteTarget {
  * carried through the queue rather than on whoever spoke most recently.
  */
 let targetReplyForwarderInstalled = false;
-
-function requiresNativeBodyDelivery(data: Record<string, unknown>): boolean {
-    return (data['runtimeFinality'] === 'present' || data['runtimeFinality'] === 'absent')
-        && (data['runtimeStatus'] === 'done' || data['runtimeStatus'] === 'error' || data['runtimeStatus'] === 'stopped');
-}
 
 function bodyProgressOutcome(
     data: Record<string, unknown>, delivered: boolean,
@@ -685,14 +660,14 @@ function trackSlackReply(options: SlackReplyOptions): void {
             });
         }, true);
     }
-    reserveSlackNoticeRecord(requestId, target);
+    slackNoticeRecord.reserve(requestId, target);
     display = createSlackProgressLifecycle({
         token, target, requestId, scope: session.scope, sessionId: session.chatSessionId, locale,
         ...(options.workingDir ? { workingDir: options.workingDir } : {}),
         ...(recipientUserId ? { recipientUserId } : {}),
         registerTeardown: registerSlackProgressTeardown,
-        onPosted: ts => attachSlackNoticeRecord(requestId, ts),
-        onTerminalConfirmed: () => closeSlackNoticeRecord(requestId),
+        onPosted: ts => slackNoticeRecord.attach(requestId, ts),
+        onTerminalConfirmed: () => slackNoticeRecord.close(requestId),
         onExecutionOutcome: outcome => { executionOutcome = outcome; },
         onActivity: () => { if (started) resetTimer(); },
         onSeal: () => { shutdownSealed = true; void settleAck('failure'); void endTracking(executionOutcome ?? 'expired'); },
@@ -717,7 +692,6 @@ function installSlackTargetReplyForwarder(): void {
     targetReplyForwarderInstalled = true;
     addBroadcastListener((type, data) => {
         observeSlackReplyControl(type, data);
-        if (slackStopping || type !== 'orchestrate_done' || data["origin"] !== 'slack') return;
         // Only captured queued/restart delivery authority can use this fallback.
         // Ordinary direct turns retain their awaiting dispatch owner.
         //
@@ -727,20 +701,26 @@ function installSlackTargetReplyForwarder(): void {
         // A steered turn is the same shape of orphan as a queued one: ingress
         // returns early unless the disposition is new_run, so a mid-run steer leaves
         // NO waiter for the follow-up answer (#655). Accept all three identities.
-        if (data["fromQueue"] !== true && data["fromSteer"] !== true && data["replyViaTarget"] !== true) return;
-        const rawTarget = data['target'];
-        if (!isRemoteTarget(rawTarget) || rawTarget.channel !== 'slack') return;
-        const target = { ...rawTarget };
-        // A live requester is already listening for this exact result; posting
-        // here too would double-post it.
-        if (data["requestId"] && hasPendingQueueWaiter(String(data["requestId"]))) return;
+        //
+        // `observeSlackReplyControl` above stays OUTSIDE this admission: it acts on
+        // steer/queue control events, not on `orchestrate_done`, and folding it in
+        // would silence boot/orphan start proof and steer tracking.
+        const admitted = admitTargetReply(type, data, {
+            channel: 'slack',
+            event: 'orchestrate_done',
+            accept: ['fromQueue', 'fromSteer', 'replyViaTarget'],
+            hasPendingWaiter: hasPendingQueueWaiter,
+            stopping: () => slackStopping,
+        });
+        if (!admitted) return;
+        const { target } = admitted;
         const token = getSlackSendClient().token;
         if (!token) return;
         const generation = lifecycleGeneration;
-        const requireBodyDelivery = requiresNativeBodyDelivery(data);
+        const requireBodyDelivery = admitted.requireBodyDelivery;
         const text = data['error'] === true && !requireBodyDelivery
             ? t('slack.progress.failure', {}, currentLocale()) : String(data['text'] ?? '');
-        const requestId = typeof data['requestId'] === 'string' ? data['requestId'] : '';
+        const requestId = admitted.requestId;
         const scope = slackReplyDelivery.scope(requestId, target)
             ?? (typeof data['scope'] === 'string' ? data['scope'] : 'default');
         void slackReplyDelivery.deliver(requestId, target, anchor => sessionLanes.runDetachedTurn(scope, async () => {
@@ -845,14 +825,14 @@ async function slackOrchestrate(
             let resultData: Record<string, unknown> = {};
             const current = () => !shutdownSealed && !slackStopping && !signal.aborted && generation === lifecycleGeneration;
             if (!current()) return;
-            if (ctx.requestId) reserveSlackNoticeRecord(ctx.requestId, target);
+            if (ctx.requestId) slackNoticeRecord.reserve(ctx.requestId, target);
             const display = createSlackProgressLifecycle({
                 token, target, requestId: ctx.requestId, scope: ctx.scope, sessionId: ctx.chatSessionId, locale,
                 ...(workingDir ? { workingDir } : {}),
                 ...(dedupe.recipientUserId ? { recipientUserId: dedupe.recipientUserId } : {}),
                 registerTeardown: registerSlackProgressTeardown,
-                onPosted: ts => attachSlackNoticeRecord(ctx.requestId, ts),
-                onTerminalConfirmed: () => closeSlackNoticeRecord(ctx.requestId),
+                onPosted: ts => slackNoticeRecord.attach(ctx.requestId, ts),
+                onTerminalConfirmed: () => slackNoticeRecord.close(ctx.requestId),
                 onExecutionOutcome: outcome => { executionOutcome = outcome; },
                 onSeal: () => { shutdownSealed = true; void settleAck('failure'); },
             });

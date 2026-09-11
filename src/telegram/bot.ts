@@ -43,6 +43,9 @@ import type { InboundEnvelope } from '../messaging/types.js';
 import { registerSendTransport, sendChannelOutput } from '../messaging/send.js';
 import { nextDeliverySeq, pendingDeliveryAnchor, wasSelfDelivered } from '../messaging/turn-delivery.js';
 import { shouldSkipForwarding } from '../messaging/forwarder-origin.js';
+import { requiresNativeBodyDelivery } from '../messaging/native-body.js';
+import { createQueueNoticeRecorder } from '../messaging/queue-notice-record.js';
+import { admitTargetReply } from '../messaging/target-reply-guard.js';
 import type { RemoteTarget } from '../messaging/types.js';
 import type { ChannelSendRequest } from '../messaging/send.js';
 import {
@@ -204,26 +207,27 @@ function attachTelegramForwarder(bot: Bot) {
 // Private request identity, never accepted from a send payload or saved settings.
 const nativeBodyRequests = new WeakSet<ChannelSendRequest>();
 
-function requiresNativeBodyDelivery(data: Record<string, unknown>): boolean {
-    return (data['runtimeFinality'] === 'present' || data['runtimeFinality'] === 'absent')
-        && (data['runtimeStatus'] === 'done' || data['runtimeStatus'] === 'error' || data['runtimeStatus'] === 'stopped');
-}
-
 function installTelegramTargetReplyForwarder(): void {
     if (targetReplyForwarderInstalled) return;
     targetReplyForwarderInstalled = true;
     addBroadcastListener((type, data) => {
-        if (type !== 'orchestrate_done' || data["origin"] !== 'telegram' || data["replyViaTarget"] !== true) return;
-        if (!data["text"]) return;
-        const target = data["target"] as RemoteTarget | undefined;
-        if (!target || target.channel !== 'telegram') return;
+        // Telegram admits ONLY hub-forwarded replies: its own queued and direct
+        // turns are answered by the dispatch path that is still awaiting them.
+        const admitted = admitTargetReply(type, data, {
+            channel: 'telegram',
+            event: 'orchestrate_done',
+            accept: ['replyViaTarget'],
+            requireText: true,
+        });
+        if (!admitted) return;
+        const { target } = admitted;
         const request: ChannelSendRequest = {
             channel: 'telegram',
             type: 'text',
-            text: String(data["text"]),
+            text: admitted.text,
             target,
         };
-        if (requiresNativeBodyDelivery(data)) {
+        if (admitted.requireBodyDelivery) {
             if (!request.text?.trim()) return;
             nativeBodyRequests.add(request);
         }
@@ -284,33 +288,11 @@ async function disposeTelegramRuntime(poller: { stop(): Promise<void> } | null):
 }
 
 // ─── Durable notice records (#418) ──────────────────
-// The registry above is process-local; these wrap the store that outlives the
+// The registry above is process-local; this wraps the store that outlives the
 // process. Best-effort by contract: a durable write is a convenience for the NEXT
-// boot, so letting it throw would fail the turn the user is waiting on.
-
-function reserveTelegramNoticeRecord(requestId: string, target: RemoteTarget): void {
-    try {
-        getQueueNoticeStore()?.reserve({ requestId, channel: 'telegram', target });
-    } catch (e) {
-        log.info('[tg:queue-notice] reserve failed', logErrorText(e));
-    }
-}
-
-function attachTelegramNoticeRecord(requestId: string, messageId: string): void {
-    try {
-        getQueueNoticeStore()?.attachMessageId(requestId, messageId);
-    } catch (e) {
-        log.info('[tg:queue-notice] attach failed', logErrorText(e));
-    }
-}
-
-function closeTelegramNoticeRecord(requestId: string): void {
-    try {
-        getQueueNoticeStore()?.close(requestId);
-    } catch (e) {
-        log.info('[tg:queue-notice] close failed', logErrorText(e));
-    }
-}
+// boot, so letting it throw would fail the turn the user is waiting on. The
+// contract is shared with the other two bots (#699).
+const telegramNoticeRecord = createQueueNoticeRecorder('telegram', '[tg:queue-notice]');
 
 /**
  * Rewrite notices left behind by a previous run.
@@ -901,7 +883,7 @@ async function _initTelegramInner(): Promise<TransportStartOutcome> {
                     ]);
                     // Closed in-process, so the durable record has nothing left to
                     // restore on the next boot.
-                    if (requestId) closeTelegramNoticeRecord(requestId);
+                    if (requestId) telegramNoticeRecord.close(requestId);
                     unregister();
                     reject(reason);
                 });
@@ -923,7 +905,7 @@ async function _initTelegramInner(): Promise<TransportStartOutcome> {
                                 notice.close('expired'),
                                 ackHandle?.settle('failure') ?? Promise.resolve(),
                             ]);
-                            if (requestId) closeTelegramNoticeRecord(requestId);
+                            if (requestId) telegramNoticeRecord.close(requestId);
                             unregister();
                             resolve();
                             return;
@@ -956,7 +938,7 @@ async function _initTelegramInner(): Promise<TransportStartOutcome> {
                                     notice.close('expired'),
                                     ackHandle?.settle('failure') ?? Promise.resolve(),
                                 ]);
-                                if (requestId) closeTelegramNoticeRecord(requestId);
+                                if (requestId) telegramNoticeRecord.close(requestId);
                                 unregister();
                                 reject(new Error('telegram_send_aborted'));
                                 return;
@@ -968,7 +950,7 @@ async function _initTelegramInner(): Promise<TransportStartOutcome> {
                                 notice.close('expired'),
                                 ackHandle?.settle('failure') ?? Promise.resolve(),
                             ]);
-                            if (requestId) closeTelegramNoticeRecord(requestId);
+                            if (requestId) telegramNoticeRecord.close(requestId);
                             unregister();
                             reject(error);
                             return;
@@ -978,7 +960,7 @@ async function _initTelegramInner(): Promise<TransportStartOutcome> {
                             notice.close('answered'),
                             ackHandle?.settle('success') ?? Promise.resolve(),
                         ]);
-                        if (requestId) closeTelegramNoticeRecord(requestId);
+                        if (requestId) telegramNoticeRecord.close(requestId);
                         unregister();
                         resolve();
                         {
@@ -1009,12 +991,12 @@ async function _initTelegramInner(): Promise<TransportStartOutcome> {
                 // Reserved BEFORE the post: a record with no id restores to
                 // nothing, while a posted message with no record is unreachable
                 // forever (#418).
-                if (requestId) reserveTelegramNoticeRecord(requestId, responseTarget);
+                if (requestId) telegramNoticeRecord.reserve(requestId, responseTarget);
                 const posted = await ctx.reply(t('tg.queued', { count: result.pending }, currentLocale()));
                 // The exported factory, not an inline object: tests drive the same
                 // binding production uses.
                 notice.bind(createTelegramNoticeTransport(ctx.api, chat.id, posted.message_id));
-                if (requestId) attachTelegramNoticeRecord(requestId, String(posted.message_id));
+                if (requestId) telegramNoticeRecord.attach(requestId, String(posted.message_id));
                 await finalDelivery;
             } catch (error) {
                 // A failed notice post means no handle will ever arrive; without
@@ -1023,7 +1005,7 @@ async function _initTelegramInner(): Promise<TransportStartOutcome> {
                 notice.abandon();
                 // The reservation describes a message that was never posted, or a
                 // turn that just ended; either way the next boot must not hunt it.
-                if (requestId) closeTelegramNoticeRecord(requestId);
+                if (requestId) telegramNoticeRecord.close(requestId);
                 finalDeliveryControl.cancel?.(error);
                 await finalDelivery.catch(() => { });
                 telegramFinalDeliveryFailures.add(ctx.update.update_id);
