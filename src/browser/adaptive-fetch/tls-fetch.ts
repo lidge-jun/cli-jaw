@@ -42,7 +42,7 @@ export interface TlsFetchResult {
 export type TlsExecFile = (
     binary: string,
     args: string[],
-    options: { timeout: number; maxBuffer: number },
+    options: { timeout: number; maxBuffer: number; signal?: AbortSignal },
 ) => Promise<{ stdout: string }>;
 
 export interface TlsFetchOptions {
@@ -51,6 +51,12 @@ export interface TlsFetchOptions {
     proxy?: string;
     redirectLimit?: number;
     resolveHost?: ResolveHost;
+    /**
+     * #693: the scheduler's overall-deadline signal. curl-impersonate used to
+     * outlive the deadline by its own --max-time budget plus five seconds,
+     * because the deadline only ever reached the HTTP fetch paths.
+     */
+    signal?: AbortSignal;
     /** Injected for tests; production goes through the detected curl binary. */
     execFileImpl?: TlsExecFile;
 }
@@ -59,6 +65,9 @@ export async function tlsFetch(
     rawUrl: string,
     options?: TlsFetchOptions,
 ): Promise<TlsFetchResult | null> {
+    // #693: the overall deadline may already have fired before this fallback is
+    // reached; do not spawn curl-impersonate at all in that case.
+    if (options?.signal?.aborted) return null;
     const execFileFn: TlsExecFile = options?.execFileImpl
         || ((binary, args, opts) => execFileAsync(binary, args, opts) as Promise<{ stdout: string }>);
     const binary = options?.execFileImpl ? 'curl-impersonate-chrome' : await detectCurlImpersonate();
@@ -74,6 +83,8 @@ export async function tlsFetch(
         // checked, and only the FIRST response's Location was ever inspected.
         // Each hop is now issued separately and cleared before it is issued.
         for (let redirects = 0; redirects <= redirectLimit; redirects += 1) {
+            // #693: a redirect chain must not keep issuing hops past the deadline.
+            if (options?.signal?.aborted) return null;
             await assertPublicResolvedHost(current, options?.resolveHost, { sensitiveQuery: 'allow' });
             const profile = selectProfile(current);
             const args = [
@@ -85,7 +96,12 @@ export async function tlsFetch(
             ];
             if (options?.proxy) args.push('--proxy', options.proxy);
             args.push(current);
-            const { stdout } = await execFileFn(binary, args, { timeout: (timeout + 5) * 1000, maxBuffer: 10_000_000 });
+            const { stdout } = await execFileFn(binary, args, {
+                timeout: (timeout + 5) * 1000,
+                maxBuffer: 10_000_000,
+                // #693: kill curl-impersonate when the overall deadline fires.
+                ...(options?.signal ? { signal: options.signal } : {}),
+            });
 
             const sep = stdout.indexOf('\r\n\r\n');
             const headerText = sep > 0 ? stdout.slice(0, sep) : '';

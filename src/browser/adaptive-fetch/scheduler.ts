@@ -26,6 +26,9 @@ import { shouldTryUserSession, navigateInUserSession } from './browser-session.j
 import { humanResolve } from './human-loop.js';
 import { bm25Filter } from './bm25-filter.js';
 
+type TlsFetchFn = typeof tlsFetch;
+type YtdlpMetadataFn = typeof ytdlpMetadata;
+
 export async function executeAdaptiveFetch(
     options: AdaptiveFetchOptions,
     deps: Record<string, unknown> = {},
@@ -56,10 +59,10 @@ export async function executeAdaptiveFetch(
     // actually aborted at the deadline — not merely skipped before the next
     // stage. The signal flows through fetchOpt into every HTTP fetch path
     // (direct/discovered/jina) and is combined with each request's own timeout.
-    // Known gap (#693): the two subprocess readers are NOT on that signal.
-    // tlsFetch and ytdlpMetadata take no AbortSignal and rely on their own
-    // execFile timeouts, so the deadline can expire while curl-impersonate or
-    // yt-dlp is still running. Read "every HTTP fetch path" literally.
+    // #693 extended it past the HTTP paths: tlsFetch and ytdlpMetadata/
+    // ytdlpSubtitles take the same signal, refuse to spawn once it is aborted,
+    // and hand it to execFile, so curl-impersonate and yt-dlp are killed at the
+    // deadline instead of outliving it on their own timeout budget.
     const deadlineController = new AbortController();
     const deadlineTimer = setTimeout(
         () => deadlineController.abort(new Error('overall-deadline-exceeded')),
@@ -129,9 +132,12 @@ async function runDirectFetchStage(ctx: StageContext): Promise<void> {
             try {
                 const ytdlpOpts = {
                     timeoutMs: ctx.options.timeoutMs,
+                    // #693: the overall deadline now reaches the subprocess.
+                    signal: ctx.signal,
                     ...(ctx.deps['resolveHost'] ? { resolveHost: ctx.deps['resolveHost'] as ResolveHost } : {}),
                 };
-                const meta = await ytdlpMetadata(candidate.url, ytdlpOpts);
+                const ytdlpMetadataFn = (ctx.deps['ytdlpMetadataImpl'] as YtdlpMetadataFn | undefined) || ytdlpMetadata;
+                const meta = await ytdlpMetadataFn(candidate.url, ytdlpOpts);
                 if (meta) {
                     const subs = await ytdlpSubtitles(candidate.url, 'en', ytdlpOpts);
                     const text = formatYtdlpEvidence(meta, subs);
@@ -189,10 +195,16 @@ async function runDirectFetchStage(ctx: StageContext): Promise<void> {
         }
 
         if (candidate.source === 'fetch' && !fetched['ok'] && (fetched['status'] === 403 || fetched['status'] === 429 || ctx.challenge)) {
-            const tlsOpts: TlsFetchOptions = { timeoutMs: ctx.options.timeoutMs, maxBytes: ctx.options.maxBytes };
+            const tlsOpts: TlsFetchOptions = {
+                timeoutMs: ctx.options.timeoutMs,
+                maxBytes: ctx.options.maxBytes,
+                // #693: the overall deadline now reaches the subprocess.
+                signal: ctx.signal,
+            };
             if (ctx.options.proxy) tlsOpts.proxy = ctx.options.proxy;
             if (ctx.deps['resolveHost']) tlsOpts.resolveHost = ctx.deps['resolveHost'] as ResolveHost;
-            const tlsResult = await tlsFetch(candidate.url, tlsOpts);
+            const tlsFetchFn = (ctx.deps['tlsFetchImpl'] as TlsFetchFn | undefined) || tlsFetch;
+            const tlsResult = await tlsFetchFn(candidate.url, tlsOpts);
             if (tlsResult?.ok) {
                 appendAttempt(ctx.trace, { source: 'tls-fetch', verdict: 'ok', url: candidate.url, status: tlsResult.status, reason: `tls-profile:${tlsResult.profile}` });
                 fetched = { ok: true, status: tlsResult.status, finalUrl: candidate.url, contentType: tlsResult.headers['content-type'] || '', text: tlsResult.body, headers: tlsResult.headers, evidence: [`tls-fetch:${tlsResult.profile}`], warnings: [] };
