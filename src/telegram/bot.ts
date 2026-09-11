@@ -491,7 +491,14 @@ async function telegramSendHandler(req: ChannelSendRequest): Promise<TransportSe
                 return { ok: false, error: j['ok'] === false ? String(j['error'] || 'hub outbound failed')
                     : 'telegram_hub_body_delivery_unconfirmed', status: 502 };
             }
-            return j['ok'] ? { ok: true, via: 'hub', type: req.type } : { ok: false, error: String(j['error'] || 'hub outbound failed'), status: 502 };
+            // The hub reports an unconfirmed file upload the same way a local
+            // send does. Forwarding that word is what lets sendChannelOutput
+            // still claim the caption, instead of the dispatch path posting it a
+            // second time next to a file that probably did arrive.
+            const hubConfirmation = j['confirmation'] === 'unconfirmed' || j['confirmation'] === 'confirmed'
+                ? { confirmation: j['confirmation'] } : {};
+            return j['ok'] ? { ok: true, via: 'hub', type: req.type, ...hubConfirmation }
+                : { ok: false, error: String(j['error'] || 'hub outbound failed'), status: 502, ...hubConfirmation };
         } catch (e) {
             return { ok: false, error: (e as Error).message, status: 502 };
         }

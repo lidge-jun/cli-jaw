@@ -1002,7 +1002,9 @@ export async function discordSendHandler(req: ChannelSendRequest): Promise<Trans
         };
         const fileResult = await sendDiscordFile(discordClient, target, filePath, stripUndefined({ caption: req.caption }));
         if (!fileResult.ok) return fileResult;
-        return { ok: true, channel_id: channelId, type: req.type, ...deliverySent(fileResult.platformMessageId ?? null) };
+        return { ok: true, channel_id: channelId, type: req.type,
+            ...(fileResult.confirmation ? { confirmation: fileResult.confirmation } : {}),
+            ...deliverySent(fileResult.platformMessageId ?? null) };
     }
 
     const sendClient = getDiscordSendClient();
@@ -1023,7 +1025,9 @@ export async function discordSendHandler(req: ChannelSendRequest): Promise<Trans
     if (!filePath) return { ok: false, error: 'file_path required for non-text types' };
     const fileResult = await sendDiscordFileRest(sendClient.token, String(channelId), filePath, req.caption);
     if (!fileResult.ok) return fileResult;
-    return { ok: true, channel_id: channelId, type: req.type, ...deliverySent(fileResult.platformMessageId) };
+    return { ok: true, channel_id: channelId, type: req.type,
+        ...(fileResult.confirmation ? { confirmation: fileResult.confirmation } : {}),
+        ...deliverySent(fileResult.platformMessageId) };
 }
 
 // Transport registration moved to ./register.js (lazy loader) so importing

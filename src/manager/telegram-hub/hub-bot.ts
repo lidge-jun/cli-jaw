@@ -513,7 +513,13 @@ export async function sendToTopic(
         }
         const { sendTelegramFile } = await import('../../telegram/telegram-file.js');
         const r = await sendTelegramFile(hubBot, chatId, payload.filePath!, payload.type, stripUndefined({ caption: payload.caption, threadId: message_thread_id }));
-        return stripUndefined({ ok: r.ok, error: r.error ? userErrorText(r.error) : undefined });
+        // `confirmation` rides along for one reason: the member instance gates
+        // its caption self-delivery claim on it, and folding this result down to
+        // { ok, error } made an unconfirmed upload indistinguishable from a
+        // refusal — so the member posted the caption again beside a file that
+        // had most likely arrived. Nothing else about hub routing changes here.
+        return stripUndefined({ ok: r.ok, error: r.error ? userErrorText(r.error) : undefined,
+            confirmation: r.confirmation });
     } catch (e: unknown) {
         console.error('[tg:hub:outbound]', logErrorText(e));
         return { ok: false, error: userErrorText(e),

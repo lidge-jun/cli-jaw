@@ -45,6 +45,7 @@ function telegramTargetForClaim(chatId: string | number, threadId?: number): Rem
 }
 import { validateChannelCredentials } from '../messaging/channel-validate.js';
 import { sendResultHttpStatus } from '../messaging/send-result.js';
+import { isUnconfirmedSend } from '../messaging/file-receipt.js';
 import { getSlackSendClient } from '../slack/send-only-client.js';
 import { getSlackSelfUserId } from '../slack/bot.js';
 import { fetchSlackHistory, fetchSlackReplies, formatHistoryForAgentDetailed, slackHistoryForAgent } from '../slack/history.js';
@@ -364,28 +365,38 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
             const caption = req.body?.caption ? String(req.body.caption) : undefined;
             const result = await sendTelegramFile(sendClient.client, chatId, safePath, type, stripUndefined({ caption, threadId: messageThreadId }));
 
-            if (!result.ok) {
-                const sc = result.statusCode || 502;
-                res.status(sc).json({
-                    error: result.error, attempts: result.attempts,
-                    ...(result.retryAfter != null && { retry_after: result.retryAfter }),
-                });
-                return;
-            }
             // The FILE is never claimed: whether those bytes reached the user
             // cannot be proven from a path later (see messaging/turn-delivery.ts).
             // The caption is different — Telegram renders it as the message text
             // under the upload, so the user can see it, and an answer equal to it
             // would otherwise be posted a second time. Same rule the canonical
             // route follows for file sends.
-            if (caption) {
+            //
+            // An UNCONFIRMED upload is claimed too. Telegram took the bytes and
+            // would not name the message it made, so the caption may well be on
+            // screen; gating the claim on `ok` alone is exactly what let the
+            // dispatch path post the same words a second time beside a file that
+            // had most likely arrived. A hard refusal (400, 413, auth) still
+            // claims nothing, because it delivered nothing.
+            const unconfirmed = isUnconfirmedSend(result);
+            if (caption && (result.ok || unconfirmed)) {
                 recordSelfDelivery({
                     target: telegramTargetForClaim(chatId, messageThreadId),
                     channel: 'telegram',
                     text: caption,
                 });
             }
-            res.json({ ok: true, chat_id: chatId, type, attempts: result.attempts });
+            if (!result.ok) {
+                const sc = result.statusCode || 502;
+                res.status(sc).json({
+                    error: result.error, attempts: result.attempts,
+                    ...(result.confirmation ? { confirmation: result.confirmation } : {}),
+                    ...(result.retryAfter != null && { retry_after: result.retryAfter }),
+                });
+                return;
+            }
+            res.json({ ok: true, chat_id: chatId, type, attempts: result.attempts,
+                ...(result.confirmation ? { confirmation: result.confirmation } : {}) });
         } catch (e: unknown) {
             log.error('[telegram:send]', logErrorText(e));
             const statusCode = httpStatus(e, 500);
