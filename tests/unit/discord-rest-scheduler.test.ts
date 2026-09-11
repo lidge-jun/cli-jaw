@@ -589,7 +589,13 @@ test('send-only multipart retries build distinct FormData, Blob, and boundaries'
         forms.push(init.body);
         return forms.length === 1
             ? rateResponse({ retryAfter: '0.001' })
-            : new Response(null, { status: 204 });
+            // A real Create Message answers with the created message object.
+            // This case is about multipart retry mechanics, so it needs a
+            // SUCCESSFUL second attempt; 204 no longer is one for a file send
+            // (#700), and standing in with it would test the wrong thing.
+            : new Response(JSON.stringify({ id: '900001' }), {
+                status: 200, headers: { 'content-type': 'application/json' },
+            });
     }) as typeof fetch;
     try {
         const result = await sendDiscordFileRest('token', 'channel', filePath, 'caption');
@@ -605,6 +611,31 @@ test('send-only multipart retries build distinct FormData, Blob, and boundaries'
         assert.match(firstType ?? '', /^multipart\/form-data; boundary=/);
         assert.match(secondType ?? '', /^multipart\/form-data; boundary=/);
         assert.notEqual(firstType, secondType);
+    } finally {
+        invalidateDiscordSendClient();
+        globalThis.fetch = realFetch;
+        await rm(directory, { recursive: true, force: true });
+    }
+});
+
+test('a file POST answered with 204 is unconfirmed, not a delivered upload', async () => {
+    // 204 IS the documented success for the reaction, delete and unpin routes
+    // this same scheduler serves, so the scheduler still reports ok. Create
+    // Message is documented to return the created message object, so an empty
+    // body there did not come from Discord — and the FILE SEND is where that
+    // verdict is made (#700).
+    invalidateDiscordSendClient();
+    const directory = await mkdtemp(join(tmpdir(), 'cli-jaw-discord-rest-'));
+    const filePath = join(directory, 'sample.bin');
+    await writeFile(filePath, Buffer.from('body'));
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(null, { status: 204 })) as typeof fetch;
+    try {
+        const result = await sendDiscordFileRest('token', 'channel', filePath, 'caption');
+        assert.equal(result.ok, false);
+        assert.equal(result.confirmation, 'unconfirmed');
+        assert.equal(result.error, 'discord_file_send_unconfirmed');
+        assert.equal(result.status, 502);
     } finally {
         invalidateDiscordSendClient();
         globalThis.fetch = realFetch;
