@@ -284,8 +284,16 @@ test('SEC-449j: server.ts hands the guard to every registrar that needs it', () 
     assert.match(src, /registerSystemRoutes\(app, requireAuth,/);
     assert.match(src, /registerInstanceRoutes\(app, requireAuth\)/);
     assert.match(src, /registerI18nRoutes\(app, requireAuth,/);
-    assert.doesNotMatch(read('src/routes/i18n.ts'), /_requireAuth/,
-        'i18n must apply the guard it receives, not discard it');
+    // Signature-shaped, not a file-wide search: i18n's own comment mentions the
+    // discarded `_requireAuth` parameter this replaced, and prose should not
+    // decide whether the guard is wired.
+    assert.match(read('src/routes/i18n.ts'),
+        /export function registerI18nRoutes\([^)]*requireAuth: AuthMiddleware/,
+        'i18n must take the guard as a used parameter, not discard it as _requireAuth');
+    assert.match(read('src/routes/instance.ts'),
+        /export function registerInstanceRoutes\([^)]*requireAuth: AuthMiddleware/);
+    assert.match(read('src/routes/system.ts'),
+        /export function registerSystemRoutes\([^)]*requireAuth: AuthMiddleware/);
 });
 
 test('SEC-449k: the token route keeps its own loopback check', () => {
