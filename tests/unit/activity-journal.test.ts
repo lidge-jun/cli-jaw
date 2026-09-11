@@ -20,6 +20,7 @@ import { createChatSession, deleteChatSession, forkChatSession } from '../../src
 import { withSessionScope } from '../../src/core/session-context.js';
 import type { ToolEntry } from '../../src/types/agent.js';
 import { RuntimeProjection } from '../../src/agent/runtime/projection.js';
+import type { RuntimeEvent } from '../../src/shared/runtime-contract.js';
 
 const traceSettings = structuredClone(settings.trace);
 beforeEach(() => { db.prepare('DELETE FROM trace_runs').run(); settings.trace = structuredClone(traceSettings); });
@@ -65,6 +66,23 @@ test('real journal loss supersedes preview loss and cannot resume recording', ()
     assert.equal(text(c, 'x'.repeat(33000)), null);
     assert.equal(page(c)?.loss, 'event_limit');
     assert.equal(text(c, 'cannot resume'), null);
+});
+
+test('an injected in-memory recorder cannot mutate a real journal sharing its identity', t => {
+    t.mock.method(console, 'warn', () => {});
+    const c = started(); const before = readActivityControl(c.runId);
+    const recorded: RuntimeEvent[] = [];
+    const projection = new RuntimeProjection(c, (owner, body) => {
+        const event = { ...owner, version: 1 as const, seq: recorded.length + 1, ...body };
+        recorded.push(event); return event;
+    }, () => {});
+    projection.start('fixture');
+    projection.text('message', 'large', 'x'.repeat(4000), 'replace');
+    projection.report('capacity');
+    projection.close({ kind: 'turn-end', status: 'done', finalText: 'In-memory final.' });
+    assert.equal(recorded.at(-1)?.kind, 'turn-end');
+    assert.deepEqual(readActivityControl(c.runId), before);
+    assert.equal(count(c.runId), 1);
 });
 
 test('committed noncontiguous sequence, immutable events and latest tool snapshots coexist', () => {

@@ -5,7 +5,7 @@ import type { RuntimeEvent } from '../../src/shared/runtime-contract.ts';
 // Pure lookup tests inject their recorder; reaching a default writer is a bug.
 let defaultWrites = 0;
 mock.module('../../src/trace/activity-journal.js', { namedExports: {
-    markActivityFailure: () => {},
+    markActivityFailure: () => { defaultWrites++; throw new Error('Injected recorder reached the default loss writer'); },
     appendActivityBody: () => { defaultWrites++; throw new Error('Unexpected default journal write'); },
 } });
 test.after(() => assert.equal(defaultWrites, 0));

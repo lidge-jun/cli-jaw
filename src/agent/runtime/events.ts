@@ -12,6 +12,10 @@ export interface RuntimeEventContext {
     parentItemId?: string;
     audience: 'public' | 'internal';
 }
+/** Loss metadata belongs to the same journal as the default event recorder. */
+export function recordRuntimeProjectionLoss(context: RuntimeEventContext): void {
+    markActivityFailure(context, 'projection_degraded');
+}
 export function recordRuntimeEvent(context: RuntimeEventContext, body: RuntimeEventBody): RuntimeEvent | null {
     try {
         const identity: RuntimeEventIdentity = {

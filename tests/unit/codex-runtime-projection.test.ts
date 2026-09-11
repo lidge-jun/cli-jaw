@@ -2,7 +2,7 @@ import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 // Recorders are injected here; module loading must not initialize shared SQLite.
 let unexpectedDefaultWrites = 0;
-mock.module('../../src/trace/activity-journal.js', { namedExports: { markActivityFailure: () => {}, appendActivityBody: () => {
+mock.module('../../src/trace/activity-journal.js', { namedExports: { markActivityFailure: () => { unexpectedDefaultWrites++; throw new Error('Injected recorder reached the default loss writer'); }, appendActivityBody: () => {
     unexpectedDefaultWrites++; throw new Error('Pure projection test reached the default trace writer');
 } } });
 test.after(() => assert.equal(unexpectedDefaultWrites, 0));

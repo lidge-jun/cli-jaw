@@ -3,7 +3,7 @@ import type { Options, SDKMessage, SDKUserMessage } from '@anthropic-ai/claude-a
 import type { RuntimeCapabilities, RuntimeEvent, RuntimeEventBody } from '../../shared/runtime-contract.js';
 import { parseRuntimeEvent } from '../../shared/runtime-event-parse.js';
 import { FULLTEXT_MAX_CHARS } from '../events/fulltext-bound.js';
-import { recordRuntimeEvent, type RuntimeEventContext } from './events.js';
+import { recordRuntimeEvent, recordRuntimeProjectionLoss, type RuntimeEventContext } from './events.js';
 import type { NativeRuntimeSession, RuntimePrompt, RuntimeTurnResult, RuntimeInputAcceptance } from './session.js';
 import { runtimeRequests, type RuntimeRequests } from './requests.js';
 import { createClaudeInput } from './claude-sdk-input.js';
@@ -37,6 +37,7 @@ export interface ClaudeSessionOptions {
     onSessionCreated?(session: ClaudeSdkSession): void;
     queryFactory?(input: { prompt: AsyncIterable<SDKUserMessage>; options: Options }): ClaudeQuery;
     record?(context: RuntimeEventContext, body: RuntimeEventBody): RuntimeEvent | null;
+    recordLoss?: typeof recordRuntimeProjectionLoss;
     transcript?(context: RuntimeEventContext): RuntimeTranscriptObserver;
     resolveTranscriptParent?(context: RuntimeEventContext, nativeToolRef: string): string | null;
 }
@@ -142,7 +143,8 @@ export class ClaudeSdkSession implements NativeRuntimeSession {
         let resolve!: (value: RuntimeTurnResult) => void;
         const result = new Promise<RuntimeTurnResult>(yes => { resolve = yes; });
         const projection = new RuntimeProjection(context, (_context, body) => this.recordEvent(turn, body),
-            undefined, this.options.transcript?.(context));
+            undefined, this.options.transcript?.(context), this.options.recordLoss
+                ?? ((this.options.record ?? recordRuntimeEvent) === recordRuntimeEvent ? recordRuntimeProjectionLoss : undefined));
         const turn: Turn = { context, onEvent, resolve, mapper: new ClaudeSdkEvents(projection), uuid: randomUUID(), offered: false,
             passiveFinalizing: false, terminalChildRecording: false,
             owner: { context, projection, isCurrent: () => this.current(context), isActive: () => this.turn === turn && !this.closing,

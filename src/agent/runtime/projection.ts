@@ -3,8 +3,7 @@ import { publish } from '../../core/event-bus.js';
 import { redactRuntimeContent } from '../../trace/runtime-body-codec.js';
 import { FULLTEXT_MAX_CHARS } from '../events/fulltext-bound.js';
 import type { RuntimeEvent, RuntimeEventBody, RuntimePhase } from '../../shared/runtime-contract.js';
-import { recordRuntimeEvent, type RuntimeEventContext } from './events.js';
-import { markActivityFailure } from '../../trace/activity-journal.js';
+import { recordRuntimeEvent, recordRuntimeProjectionLoss, type RuntimeEventContext } from './events.js';
 
 export type RuntimeEnd = Extract<RuntimeEventBody, { kind: 'turn-end' }>;
 type Tool = Extract<RuntimeEventBody, { kind: 'tool' }>;
@@ -48,11 +47,14 @@ export class RuntimeProjection {
             console.warn('[runtime:projection]', reason, context.runId);
         },
         private readonly observer?: RuntimeTranscriptObserver,
+        private readonly recordLoss: typeof recordRuntimeProjectionLoss | undefined =
+            record === recordRuntimeEvent ? recordRuntimeProjectionLoss : undefined,
     ) {}
 
     report(reason: Notice): void {
         if (!this.notices.has(reason) && (reason === 'capacity' || reason === 'truncated')) {
-            markActivityFailure(this.context, 'projection_degraded');
+            try { this.recordLoss?.(this.context); }
+            catch { this.report('persistence'); }
         }
         if (reason === 'persistence') {
             if (this.recordingFailed) return;

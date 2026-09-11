@@ -81,6 +81,16 @@ test('real protocol fixture keeps commentary/tools separate from the full termin
     assert.equal((f.events.at(-1) as Extract<RuntimeEvent, { kind: 'turn-end' }>).finalText, 'application final');
     assert.equal(f.runtime.idle, true);
 });
+
+test('an injected ACP recorder uses only its explicitly injected loss recorder', async t => {
+    const losses: Array<{ runId: string; scope: string }> = [];
+    const f = await fixture(t, { recordLoss: context => { losses.push({ runId: context.runId, scope: context.scope }); } });
+    f.onPrompt(message => { f.update('x'.repeat(4000)); f.reply(message.id, { stopReason: 'end_turn' }); });
+    const result = await f.run();
+    assert.equal(result.status, 'done');
+    assert.equal(result.finalText?.length, 4000);
+    assert.deepEqual(losses, [{ runId: 'run-1', scope: 'scope' }]);
+});
 for (const text of [null, '', ' \n\t ', 'x'.repeat(50_000)]) test(`absent/empty/full answer is independent of preview length: ${text === null ? 'null' : text.length}`, async t => {
     const f = await fixture(t);
     f.onPrompt(message => { if (text !== null) f.update(text); f.reply(message.id, { stopReason: 'end_turn' }); });
