@@ -322,8 +322,12 @@ interface CopilotSpawnContext extends SpawnContext {
     thinkingBuf: string;
 }
 
-import { hasChildExited, killProcessTree, killProcessTreeIfAlive, ownProcess } from './spawn/process-kill.js';
+import { hasChildExited, ownProcess } from './spawn/process-kill.js';
 import { DUP_REGISTRATION_KILL_REASON, isLifecycleSteerReason } from './spawn/kill-reason.js';
+import {
+    armExitSettle, captureExitSettler, settleCapturedExit, settleExit, waitForExitSettled,
+    type ExitSettler,
+} from './spawn/exit-settle.js';
 import { releaseChildOutputAfterExit } from './spawn/exit-drain.js';
 import { clampPendingLine } from './spawn/line-buffer.js';
 import { appendBoundedFullText } from './events/fulltext-bound.js';
@@ -416,23 +420,20 @@ export function killAgentById(agentId: string): boolean {
     if (!proc) return false;
     try {
         if (cancelOwnedPiProcess(proc, 'user')) return true;
-        if (proc.pid) {
-            killProcessTree(proc.pid, 'SIGTERM');
-        } else {
-            proc.kill('SIGTERM');
-        }
-        setTimeout(() => {
-            try {
-                if (proc.pid) {
-                    killProcessTreeIfAlive(proc);
-                } else if (proc.exitCode === null && proc.signalCode === null) {
-                    proc.kill('SIGKILL');
-                }
-            } catch { /* already dead */ }
+        // Same owner as killActiveAgent. The hand-rolled version here escalated on a
+        // bare 3s timer with no liveness re-check, so a CLI that traps SIGTERM either
+        // survived or, worse, the delayed SIGKILL landed on a recycled PID. Worker
+        // stop (orchestrator/distribute.ts, orchestrator/pipeline.ts) reaches this
+        // path, which is why it had different lifetime rules from main stop.
+        ownProcess(proc).terminate('cancel');
+        // Stdio teardown stays on its own timer: it must happen even when the owner
+        // short-circuits because the child had already exited.
+        const teardown = setTimeout(() => {
             proc.stdin?.destroy();
             proc.stdout?.destroy();
             proc.stderr?.destroy();
-        }, 3_000);
+        }, DEFAULT_KILL_ESCALATION_MS);
+        teardown.unref?.();
         return true;
     } catch {
         return false;
@@ -543,12 +544,25 @@ function getActiveMainCli(scopeKey: string): string | null {
     return typeof cli === 'string' ? cli : null;
 }
 
-function getKillPolicy(_scopeKey: string, _reason: string): { signal: NodeJS.Signals; escalationMs: number } {
-    return { signal: 'SIGTERM', escalationMs: DEFAULT_KILL_ESCALATION_MS };
+/**
+ * Read this scope's `agentTimeout` block, global keys overlaid by per-CLI keys.
+ *
+ * `settings` is a live binding from core/config, so this reflects a settings edit made
+ * after the turn started — which is what a steer wants: it is deciding how long to wait
+ * right now, not how long the run was configured to take when it was spawned.
+ */
+function scopedAgentTimeoutCfg(scopeKey: string): Record<string, unknown> {
+    const cli = getActiveMainCli(scopeKey);
+    const raw = (settings as Record<string, unknown>)['agentTimeout'];
+    const global = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+    const perCli = cli && global[cli] && typeof global[cli] === 'object'
+        ? global[cli] as Record<string, unknown> : {};
+    return { ...global, ...perCli };
 }
 
-export function getSteerWaitMsForActiveAgent(_scopeKey = 'default'): number {
-    return DEFAULT_STEER_WAIT_MS;
+export function getSteerWaitMsForActiveAgent(scopeKey = 'default'): number {
+    const configured = scopedAgentTimeoutCfg(scopeKey)['steerWaitMs'];
+    return typeof configured === 'number' && configured > 0 ? configured : DEFAULT_STEER_WAIT_MS;
 }
 
 /** Get kill reason for a process (by PID), consuming it */
@@ -559,47 +573,10 @@ function consumeKillReason(pid: number | undefined): string | null {
     return reason;
 }
 
-// ─── Steer exit-settle barrier ─────────────────────
-// killActiveAgent removes the scope's activeMainProcesses entry synchronously,
-// so waitForProcessEnd() resolves immediately on a steer kill — long before the
-// exit handler has written the interrupted partial output to the messages table.
-// A follow-up spawn could then read history without the salvage row. The barrier
-// is armed at kill time (never at exit-handler entry — that is already too late)
-// and settled by the exit handler's completion, success or failure.
-const exitSettlers = new Map<string, { promise: Promise<void>; resolve: () => void }>();
-
-/** Arm the barrier. Idempotent: a repeated steer keeps the first arm. */
-export function armExitSettle(scopeKey: string): void {
-    if (exitSettlers.has(scopeKey)) return;
-    let resolve!: () => void;
-    const promise = new Promise<void>(r => { resolve = r; });
-    exitSettlers.set(scopeKey, { promise, resolve });
-}
-
-/** Settle the barrier; a no-op when no steer kill armed it. */
-export function settleExit(scopeKey: string): void {
-    const entry = exitSettlers.get(scopeKey);
-    if (!entry) return;
-    exitSettlers.delete(scopeKey);
-    entry.resolve();
-}
-
-/**
- * Await the armed exit handler's completion, bounded. A timeout releases the
- * waiter and drops the arm — a wedged exit handler must not hang the steer.
- */
-export function waitForExitSettled(scopeKey: string, timeoutMs = 5000): Promise<void> {
-    const entry = exitSettlers.get(scopeKey);
-    if (!entry) return Promise.resolve();
-    // The timer is NOT unref'd and is always cleared: an unref'd timer can vanish
-    // with a drained event loop (test runner), leaving the waiter pending forever.
-    let timer: NodeJS.Timeout;
-    const timeout = new Promise<void>(r => { timer = setTimeout(r, timeoutMs); });
-    return Promise.race([entry.promise, timeout]).then(() => {
-        clearTimeout(timer);
-        if (exitSettlers.get(scopeKey) === entry) exitSettlers.delete(scopeKey);
-    });
-}
+// The steer exit-settle barrier moved to ./spawn/exit-settle.js so it can be imported
+// without this module behind it. Re-exported here because every caller — the HTTP
+// route, the CLI slash handler and eleven test files — imports it from spawn.
+export { armExitSettle, settleExit, waitForExitSettled };
 
 /**
  * Fix A: 사용자 stop은 메모리 큐 + DB persisted_queue + frontend pending row를
@@ -661,19 +638,20 @@ export function killActiveAgent(scopeKeyOrReason = 'user', scopedReason?: string
         if (reason === 'api' || reason === 'user' || reason === 'steer' || reason === 'interrupt') activeMainProcesses.delete(scopeKey);
         return hadTimer || cancelledPendingMain || cancelledClaude;
     }
-    const policy = getKillPolicy(scopeKey, reason);
-    console.log(`[jaw:kill] reason=${reason} scope=${scopeKey} cli=${getActiveMainCli(scopeKey) || 'unknown'} signal=${policy.signal} escalationMs=${policy.escalationMs}`);
+    console.log(`[jaw:kill] reason=${reason} scope=${scopeKey} cli=${getActiveMainCli(scopeKey) || 'unknown'} signal=SIGTERM escalationMs=${DEFAULT_KILL_ESCALATION_MS}`);
     if (activeProcess.pid) killReasons.set(activeProcess.pid, reason);
     if (reason === 'steer' || reason === 'interrupt') armExitSettle(scopeKey);
     const proc = activeProcess;
-    // One owner runs the whole termination: tree walk with the policy signal,
-    // then escalation after policy.escalationMs that re-checks the ORIGINAL
-    // child. The previous escalation guarded on `!proc.killed`, which only
-    // records that a signal was delivered — a CLI that traps SIGTERM stays
-    // alive with killed set, and was therefore never escalated.
-    ownProcess(proc, {
-        policy: () => ({ initialSignal: policy.signal, graceMs: policy.escalationMs }),
-    }).terminate(reason === 'steer' ? 'steer' : 'cancel');
+    // One owner runs the whole termination: tree walk, then escalation after the
+    // grace that re-checks the ORIGINAL child. The previous escalation guarded on
+    // `!proc.killed`, which only records that a signal was delivered — a CLI that
+    // traps SIGTERM stays alive with killed set, and was therefore never escalated.
+    //
+    // No policy override: the owner is memoized on child identity and the FIRST call
+    // wins, so a policy passed here would be honoured for a main run and silently
+    // dropped for a worker that registerActiveProcess already owns. Taking the
+    // default keeps one rule for both.
+    ownProcess(proc).terminate(reason === 'steer' ? 'steer' : 'cancel');
     // Immediately sever stdio to stop late output from reaching broadcast handlers
     proc.stdout?.removeAllListeners('data');
     proc.stderr?.removeAllListeners('data');
@@ -683,7 +661,7 @@ export function killActiveAgent(scopeKeyOrReason = 'user', scopedReason?: string
         proc.stdin?.destroy();
         proc.stdout?.destroy();
         proc.stderr?.destroy();
-    }, policy.escalationMs);
+    }, DEFAULT_KILL_ESCALATION_MS);
     teardown.unref?.();
     // Fix C1: 사용자 stop/steer 시 해당 scope busy가 즉시 false가 되도록 참조를 동기 해제.
     // 실제 child 종료는 위 setTimeout SIGKILL이 백그라운드에서 마무리.
@@ -1739,7 +1717,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             if (claudeEmployeeTmpDir) cleanupEmployeeTmpDir(claudeEmployeeTmpDir, '', agentLabel);
         };
         const capturedRun = mainRun;
-        let capturedExit: (typeof exitSettlers extends Map<string, infer T> ? T : never) | undefined;
+        let capturedExit: ExitSettler | undefined;
         const ownedRun = () => isCurrentSessionOwner(persistenceOwner, scopeKey)
             && (!mainManaged || activeMainProcesses.get(scopeKey) === capturedRun);
         let attachedCancel: ((reason: string) => void) | undefined;
@@ -1762,7 +1740,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 activity: identity => opts.lifecycle?.onActivity?.('native-runtime', identity),
                 exited: code => opts.lifecycle?.onExit?.(code),
                 cancelling: reason => {
-                    if (reason === 'steer' || reason === 'interrupt') { armExitSettle(scopeKey); capturedExit ??= exitSettlers.get(scopeKey); }
+                    if (reason === 'steer' || reason === 'interrupt') { armExitSettle(scopeKey); capturedExit ??= captureExitSettler(scopeKey); }
                 },
                 exit: { cli, model: runtimeModel, effectiveProvider, agentLabel, mainManaged, origin, resumeKey, prompt, opts,
                     cfg: { ...cfg, effort }, ownerGeneration, persistenceOwner, forceNew, empSid, isResume, effortDefault: effort,
@@ -1789,7 +1767,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                         if (!mainManaged && activeProcesses.get(agentLabel) === child) activeProcesses.delete(agentLabel);
                         if (cleanupSafe) cleanupClaudeWorker();
                     } finally {
-                        if (capturedExit && exitSettlers.get(scopeKey) === capturedExit) { exitSettlers.delete(scopeKey); capturedExit.resolve(); }
+                        settleCapturedExit(scopeKey, capturedExit);
                         if (mainManaged && (queued || !activeMainProcesses.has(scopeKey))) void processQueue(scopeKey);
                     }
                 },
@@ -1827,7 +1805,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         let failedStart: RuntimeProjection | null = null;
         let nativeStarted = false, runtimeEnded = false, finalizeFailed = false, finalized = false;
         let stopReason: string | null = null, queueRequested = false;
-        let capturedExit: (typeof exitSettlers extends Map<string, infer T> ? T : never) | undefined;
+        let capturedExit: ExitSettler | undefined;
         let selectedResult: SpawnPromiseResult | undefined;
         const ownsRun = () => !finalized && activeMainProcesses.get(scopeKey) === capturedRun
             && isCurrentSessionOwner(persistenceOwner, scopeKey);
@@ -1926,7 +1904,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             stopReason ??= reason;
             if (reason === 'steer' || reason === 'interrupt') {
                 armExitSettle(scopeKey);
-                capturedExit ??= exitSettlers.get(scopeKey);
+                capturedExit ??= captureExitSettler(scopeKey);
             }
             nativeRun.cancel(reason);
         };
@@ -2065,9 +2043,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                     // Projection/listener/cleanup failure must not leave our durable
                     // row running or rewrite a lifecycle that already selected a result.
                     if (ctx.runtimeOutcome) closeFailedTrace(ctx.runtimeOutcome);
-                    if (capturedExit && exitSettlers.get(scopeKey) === capturedExit) {
-                        exitSettlers.delete(scopeKey); capturedExit.resolve();
-                    }
+                    settleCapturedExit(scopeKey, capturedExit);
                     // Exceptional settlement can release the slot before lifecycle requests its normal wake.
                     if (queueRequested || !activeMainProcesses.has(scopeKey)) void processQueue(scopeKey);
                 }
@@ -2431,12 +2407,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
 
     // ─── Pi RPC branch ─────────────────────────────
     if (cli === 'pi') {
-        let piExit = exitSettlers.get(scopeKey);
-        const settlePiExit = () => {
-            if (!piExit || exitSettlers.get(scopeKey) !== piExit) return;
-            exitSettlers.delete(scopeKey);
-            piExit.resolve();
-        };
+        let piExit = captureExitSettler(scopeKey);
+        const settlePiExit = () => { settleCapturedExit(scopeKey, piExit); };
         const pi = normalizePiSettings(settings["pi"]);
         const profileId = cfg.provider || pi.defaultProfileId;
         const profile = pi.profiles.find((entry) => entry.id === profileId) || pi.profiles[0];
@@ -2568,13 +2540,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 if (cleanupDone) return Promise.resolve();
                 if (!lease) {
                     if (cancelOwnedPiProcess(child)) return Promise.resolve();
-                    if (child.pid) {
-                        const pid = child.pid;
-                        killProcessTree(pid, 'SIGTERM');
-                        setTimeout(() => {
-                            killProcessTreeIfAlive(child, pid);
-                        }, 5_000);
-                    } else child.kill('SIGTERM');
+                    ownProcess(child).terminate('cancel');
                     return Promise.resolve();
                 }
                 leaseCancel ??= lease.cancel();
@@ -2582,7 +2548,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             };
             const cancelHook = (reason: string) => {
                 if (cleanupDone) return;
-                if (reason === 'steer' || reason === 'interrupt') piExit = exitSettlers.get(scopeKey);
+                if (reason === 'steer' || reason === 'interrupt') piExit = captureExitSettler(scopeKey);
                 void requestCancel();
             };
             if (lease && mainRun) mainRun.cancelTurn = cancelHook;
@@ -3585,10 +3551,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             console.log(`[jaw:agy] output quiet for ${quietCompletionDelayMs}ms — completing print run`);
             killReasons.set(child.pid, AGY_COMPLETE_KILL_REASON);
             try {
-                killProcessTree(child.pid, 'SIGTERM');
-                setTimeout(() => {
-                    killProcessTreeIfAlive(child);
-                }, DEFAULT_KILL_ESCALATION_MS);
+                ownProcess(child).terminate('completion');
             } catch (e) {
                 console.warn('[jaw:agy] quiet completion kill failed:', (e as Error).message);
             }
@@ -3616,12 +3579,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             ctx.stderrBuf = ctx.stderrBuf ? `${ctx.stderrBuf}\n${agyWatchdogContext}` : agyWatchdogContext;
             pushTrace(ctx, agyWatchdogContext);
         }
-        if (child.pid) {
-            killProcessTree(child.pid, 'SIGTERM');
-            setTimeout(() => {
-                killProcessTreeIfAlive(child);
-            }, 5_000);
-        }
+        ownProcess(child).terminate('stall');
     }, watchdogConfig);
     ctx.stallWatchdog = stallWatchdog;
 
@@ -3737,7 +3695,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             if (agyResumeDecision.ok && !agyGuardedStaleDetected && isAgyStaleSessionOutput(text)) {
                 agyGuardedStaleDetected = true;
                 console.log('[jaw:agy] stale guarded resume output detected — terminating for fresh retry');
-                if (child.pid) killProcessTree(child.pid, 'SIGTERM');
+                ownProcess(child).terminate('cancel');
                 return;
             }
             if (!ctx.sessionId) ctx.sessionId = extractAgyConversationId(ctx.fullText);
