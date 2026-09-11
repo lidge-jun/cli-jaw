@@ -379,9 +379,11 @@ function authorizeExplicitTarget(target: RemoteTarget, channel: MessengerChannel
     // for a list nobody can parse (#406).
     if (channel !== 'slack' || slackAllowlist().ids.length) return null;
     for (const known of [getLastActiveTarget('slack'), getLatestSeenTarget('slack')]) {
-        if (known && sameSlackDestination(target, known)) {
-            return target.threadId == null && known.threadId != null ? known : target;
-        }
+        // Vouching decides WHETHER this send is allowed, never WHERE it goes.
+        // Returning `known` here rewrote an explicitly addressed channel-root
+        // send into whichever thread had spoken most recently — a caller that
+        // named its destination correctly still had it moved (#745).
+        if (known && sameSlackDestination(target, known)) return target;
     }
     // With no configured allowlist, the two slots above are the only conversations
     // this process can vouch for — and both hold whatever spoke MOST RECENTLY. So an

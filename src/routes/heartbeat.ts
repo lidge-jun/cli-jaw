@@ -3,6 +3,7 @@ import type { AuthMiddleware } from './types.js';
 import { loadHeartbeatFile, saveHeartbeatFile, isHeartbeatDestination, isHeartbeatMentionWatch, settings } from '../core/config.js';
 import type { HeartbeatDestination, HeartbeatMentionWatch, HeartbeatJob } from '../core/config.js';
 import { startHeartbeat } from '../memory/heartbeat.js';
+import { isCompleteHeartbeatDestination, resolveHeartbeatBinding } from '../memory/heartbeat-destination.js';
 import { validateHeartbeatScheduleInput } from '../memory/heartbeat-schedule.js';
 import { approveLegacyFreshStart, quarantineState, detectLegacyMentionWatch, isQuarantined } from '../memory/legacy-mention-watch-quarantine.js';
 import { verifiedSlackWorkspace } from '../slack/verified-workspace.js';
@@ -33,7 +34,23 @@ export function resolveHeartbeatDestination(
     const raw = job['destination'];
     if (raw === null) return { ok: true, destination: undefined };
     if (!isHeartbeatDestination(raw)) return { ok: false, error: 'invalid heartbeat destination' };
+    // A supplied destination must say WHERE, not just which room. Inheritance
+    // above keeps existing half-filled jobs loadable; this rejects writing a new
+    // one, so the gap closes as jobs are edited instead of being re-saved
+    // forever with no thread (#745).
+    if (!isCompleteHeartbeatDestination(raw)) {
+        return { ok: false, error: 'heartbeat destination needs a threadId, or scope:"channel_root" to post at the conversation root' };
+    }
     return { ok: true, destination: raw };
+}
+
+/** Surface a stored destination a tick will refuse, so an operator can see the
+ *  hold instead of waiting for a report that never arrives. Mention-watch jobs
+ *  answer the thread they find and need no destination of their own. */
+function heldForDestination(job: HeartbeatJob): (HeartbeatJob & { held: string }) | null {
+    if (job.mentionWatch) return null;
+    const binding = resolveHeartbeatBinding(job.destination);
+    return binding.state === 'held' ? { ...job, held: binding.reason } : null;
 }
 
 /** Resolve the mention-watch a PUT should persist.
@@ -102,7 +119,7 @@ export function registerHeartbeatRoutes(app: Express, requireAuth: AuthMiddlewar
             ...file,
             jobs: file.jobs.map(job => (job.mentionWatch && job.id && isQuarantined(job.id)
                 ? { ...job, held: 'unmigrated_mention_watch_ledger' as const }
-                : job)),
+                : heldForDestination(job) ?? job)),
         });
     });
 
