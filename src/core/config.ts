@@ -25,6 +25,7 @@ import { SETUP_STATE_FILE } from './install-integrity.js';
 import {
     sanitizeSettingsInput,
     mergeSettingsLayer,
+    SETTINGS_MERGE_SPEC,
     type SettingsPersistenceShape,
 } from './settings-merge.js';
 export { detectAllCli, detectCli } from './cli-detection.js';
@@ -941,6 +942,25 @@ export function applyEnvOverrides(s: Record<string, any>) {
 /** Mutable settings object — shared across all modules via ESM live binding */
 export let settings: Record<string, any> = createDefaultSettings();
 
+/** A stored block that is null or an array is a corrupt document, not an instruction.
+ *
+ *  The hand-rolled boot merge this replaced wrote `...(raw.telegram || {})` for
+ *  every nested block, so a `"telegram": null` in settings.json quietly fell back
+ *  to defaults. Carrying the null through the shared layer instead would replace
+ *  the block with null and then let the normalizers below rebuild only part of it
+ *  — a telegram block holding nothing but `ack`, with the bot token gone.
+ *  Dropping the key restores the old meaning.
+ *
+ *  Only keys the merge spec names are dropped. A top-level scalar is a real value,
+ *  and an API patch keeps its own semantics: there, an explicit null IS a write. */
+function dropCorruptBlocks(raw: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = { ...raw };
+    for (const key of Object.keys(SETTINGS_MERGE_SPEC)) {
+        if (key in out && !isPlainRecord(out[key])) delete out[key];
+    }
+    return out;
+}
+
 /** Runtime defaults for keys whose fallback used to be re-typed at each call site.
  *
  *  The schema said multiSession.maxConcurrent was 2 while the lane allocator used
@@ -1163,7 +1183,7 @@ export function loadSettings() {
         const layered = mergeSettingsLayer(
             { ...defaults, multiSession: multiSessionBaseline },
             {
-                ...raw,
+                ...dropCorruptBlocks(raw),
                 ...(sourceVersion === 1 ? { cli: legacyCli } : {}),
                 perCli: mergedPerCli,
             },
@@ -1174,20 +1194,20 @@ export function loadSettings() {
         // forced value rather than a merged one. Each reads the stored document
         // directly, because the layer above has already folded the key in.
         layered['telegram'] = {
-            ...layered['telegram'],
+            ...(isPlainRecord(layered['telegram']) ? layered['telegram'] : {}),
             ack: mergeAckSettings(defaults.telegram.ack, raw.telegram?.ack),
         };
         layered['discord'] = {
-            ...layered['discord'],
+            ...(isPlainRecord(layered['discord']) ? layered['discord'] : {}),
             ack: mergeAckSettings(defaults.discord.ack, raw.discord?.ack),
         };
         layered['slack'] = {
-            ...layered['slack'],
+            ...(isPlainRecord(layered['slack']) ? layered['slack'] : {}),
             ack: mergeAckSettings(defaults.slack.ack, raw.slack?.ack),
             autoJoin: mergeSlackAutoJoin(defaults.slack.autoJoin, raw.slack?.autoJoin),
         };
         layered['search'] = {
-            ...layered['search'],
+            ...(isPlainRecord(layered['search']) ? layered['search'] : {}),
             engine: raw.search?.engine === 'fts5' ? 'fts5' : 'like',
         };
         const merged = migrateSettings(layered, sourceVersion);

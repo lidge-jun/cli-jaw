@@ -100,3 +100,41 @@ test('BM-005: a partial messaging document keeps the other channel cursors', asy
     assert.equal(settings['messaging'].latestSeen.telegram, null);
 });
 
+
+test('BM-006: a stored block of null falls back to defaults instead of losing siblings', async () => {
+    // The hand-rolled boot merge wrote ...(raw.telegram || {}), so a null block
+    // meant "corrupt, use defaults". Carrying the null through the shared layer
+    // would replace the block and let the ack normalizer rebuild only part of it,
+    // leaving a telegram block with an ack and no token.
+    const settings = await loadInHome(v4Document({ telegram: null, memory: null }));
+    assert.ok(settings['telegram'], 'telegram must not stay null');
+    assert.equal(settings['telegram'].enabled, false);
+    assert.equal(settings['telegram'].token, '');
+    assert.ok(settings['telegram'].ack, 'the ack normalizer still runs');
+    assert.equal(typeof settings['memory'].flushEvery, 'number');
+});
+
+test('BM-007: one answer to what the default is', async () => {
+    // The schema said multiSession.maxConcurrent was 2 while the lane allocator
+    // used ?? 1. Reading the schema was not enough, because the literal at the
+    // call site won. These resolvers are the single answer.
+    const config = await import('../../src/core/config.ts?home=resolver-probe');
+    assert.equal(config.resolveMaxConcurrent({}), config.DEFAULT_SETTINGS.multiSession.maxConcurrent);
+    assert.equal(config.resolveFlushEvery({}), config.DEFAULT_SETTINGS.memory.flushEvery);
+    assert.equal(config.resolveMemoryRetentionDays({}), config.DEFAULT_SETTINGS.memory.retentionDays);
+
+    // An explicit valid value still wins.
+    assert.equal(config.resolveMaxConcurrent({ multiSession: { maxConcurrent: 7 } }), 7);
+    assert.equal(config.resolveFlushEvery({ memory: { flushEvery: 3 } }), 3);
+
+    // A value that is not a positive integer is repaired to the default rather
+    // than to a second opinion about what the default is.
+    for (const bad of [0, -1, 1.5, Number.NaN, null, '3', undefined]) {
+        assert.equal(
+            config.resolveMaxConcurrent({ multiSession: { maxConcurrent: bad } }),
+            config.DEFAULT_SETTINGS.multiSession.maxConcurrent,
+            'invalid maxConcurrent ' + String(bad) + ' must resolve to the schema default',
+        );
+    }
+});
+
