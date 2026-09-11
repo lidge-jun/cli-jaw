@@ -20,28 +20,10 @@ import {
     slackConversationCacheStats,
 } from '../../src/slack/conversation.ts';
 import { primeSlackIdentityCache, resetSlackIdentityCache } from '../../src/slack/identity.ts';
+import { makeSlackFetch } from '../helpers/slack-fetch.mts';
 
 const TOKEN = 'xoxb-not-a-real-token-000';
 const TEAM = 'T0TEST';
-
-function makeFetch(responses: Array<Record<string, unknown>>) {
-    const calls: Array<{ body: Record<string, unknown> }> = [];
-    let i = 0;
-    const impl = (async (_url: string | URL | Request, init?: RequestInit) => {
-        const params = new URLSearchParams(String(init?.body ?? ''));
-        const body: Record<string, unknown> = {};
-        for (const [k, v] of params) body[k] = v;
-        calls.push({ body });
-        const spec = responses[Math.min(i, responses.length - 1)];
-        i++;
-        return {
-            ok: true, status: 200,
-            text: async () => JSON.stringify(spec ?? { ok: true }),
-        } as unknown as Response;
-    // justified: the harness implements only the Response surface slackApi reads
-    }) as unknown as typeof fetch;
-    return { impl, calls };
-}
 
 test.beforeEach(() => {
     resetSlackConversationCache();
@@ -52,7 +34,7 @@ test.beforeEach(() => {
 // ─── conversations.info mapping ─────────────────────
 
 test('a public channel maps name, kind, topic, and member count', async () => {
-    const { impl, calls } = makeFetch([{
+    const { impl, calls } = makeSlackFetch([{
         ok: true,
         channel: {
             id: 'C1', name: 'eng-platform', is_channel: true,
@@ -78,7 +60,7 @@ test('private, dm and mpim conversations are classified distinctly', async () =>
     for (const [channel, expected] of cases) {
         resetSlackConversationCache();
         resetConversationRateLimitForTest();
-        const { impl } = makeFetch([{ ok: true, channel }]);
+        const { impl } = makeSlackFetch([{ ok: true, channel }]);
         const info = await resolveConversationInfo(
             TOKEN, String(channel['id']), { teamId: TEAM, fetchImpl: impl },
         );
@@ -87,7 +69,7 @@ test('private, dm and mpim conversations are classified distinctly', async () =>
 });
 
 test('an unresolved conversation falls back to the id and its prefix', async () => {
-    const { impl } = makeFetch([{ ok: false, error: 'channel_not_found' }]);
+    const { impl } = makeSlackFetch([{ ok: false, error: 'channel_not_found' }]);
     const info = await resolveConversationInfo(TOKEN, 'C404', { teamId: TEAM, fetchImpl: impl });
     assert.equal(info.resolved, false);
     assert.equal(info.name, 'C404', 'the id stands in for the name');
@@ -95,18 +77,18 @@ test('an unresolved conversation falls back to the id and its prefix', async () 
 });
 
 test('a missing scope degrades without throwing', async () => {
-    const { impl } = makeFetch([{ ok: false, error: 'missing_scope', needed: 'channels:read' }]);
+    const { impl } = makeSlackFetch([{ ok: false, error: 'missing_scope', needed: 'channels:read' }]);
     const info = await resolveConversationInfo(TOKEN, 'C1', { teamId: TEAM, fetchImpl: impl });
     assert.equal(info.resolved, false);
     assert.equal(info.id, 'C1');
 });
 
 test('a channel-scoped permission error does not blind other channels', async () => {
-    const denied = makeFetch([{ ok: false, error: 'no_permission' }]);
+    const denied = makeSlackFetch([{ ok: false, error: 'no_permission' }]);
     await resolveConversationInfo(TOKEN, 'CPRIVATE', { teamId: TEAM, fetchImpl: denied.impl });
 
     resetConversationRateLimitForTest();
-    const other = makeFetch([{ ok: true, channel: { id: 'COPEN', name: 'general', is_channel: true } }]);
+    const other = makeSlackFetch([{ ok: true, channel: { id: 'COPEN', name: 'general', is_channel: true } }]);
     const info = await resolveConversationInfo(TOKEN, 'COPEN', { teamId: TEAM, fetchImpl: other.impl });
     // A workspace-wide capability lock here would be the outage the lock exists
     // to prevent.
@@ -115,7 +97,7 @@ test('a channel-scoped permission error does not blind other channels', async ()
 });
 
 test('a channel name or topic cannot forge a prompt line', async () => {
-    const { impl } = makeFetch([{
+    const { impl } = makeSlackFetch([{
         ok: true,
         channel: {
             id: 'C1', name: 'ops', is_channel: true,
@@ -128,7 +110,7 @@ test('a channel name or topic cannot forge a prompt line', async () => {
 });
 
 test('an empty topic is omitted rather than stored blank', async () => {
-    const { impl } = makeFetch([{
+    const { impl } = makeSlackFetch([{
         ok: true, channel: { id: 'C1', name: 'ops', is_channel: true, topic: { value: '   ' } },
     }]);
     const info = await resolveConversationInfo(TOKEN, 'C1', { teamId: TEAM, fetchImpl: impl });
@@ -136,7 +118,7 @@ test('an empty topic is omitted rather than stored blank', async () => {
 });
 
 test('a successful lookup is cached', async () => {
-    const { impl, calls } = makeFetch([{ ok: true, channel: { id: 'C1', name: 'ops', is_channel: true } }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true, channel: { id: 'C1', name: 'ops', is_channel: true } }]);
     await resolveConversationInfo(TOKEN, 'C1', { teamId: TEAM, fetchImpl: impl });
     await resolveConversationInfo(TOKEN, 'C1', { teamId: TEAM, fetchImpl: impl });
     assert.equal(calls.length, 1);
@@ -148,7 +130,7 @@ test('a successful lookup is cached', async () => {
 const replies = (messages: Array<Record<string, unknown>>) => ({ ok: true, messages });
 
 test('participants come from message authors, not reply_users', async () => {
-    const { impl } = makeFetch([{
+    const { impl } = makeSlackFetch([{
         ok: true,
         // reply_users names a bot that never authored anything in this thread.
         reply_users: ['B999'],
@@ -163,7 +145,7 @@ test('participants come from message authors, not reply_users', async () => {
 });
 
 test('a bot marker wins over user on a dual-marker message', async () => {
-    const { impl } = makeFetch([replies([
+    const { impl } = makeSlackFetch([replies([
         { ts: '100.1', user: 'U1', text: 'parent' },
         { ts: '100.2', user: 'U9', bot_id: 'B1', text: 'from an app' },
     ])]);
@@ -175,7 +157,7 @@ test('a bot marker wins over user on a dual-marker message', async () => {
 });
 
 test('a bot-only thread still reports participants', async () => {
-    const { impl } = makeFetch([replies([
+    const { impl } = makeSlackFetch([replies([
         { ts: '100.1', bot_id: 'B1', text: 'alert' },
         { ts: '100.2', bot_id: 'B2', text: 'ack' },
     ])]);
@@ -185,7 +167,7 @@ test('a bot-only thread still reports participants', async () => {
 });
 
 test('a message with no author is skipped rather than inventing a participant', async () => {
-    const { impl } = makeFetch([replies([
+    const { impl } = makeSlackFetch([replies([
         { ts: '100.1', user: 'U1', text: 'parent' },
         { ts: '100.2', subtype: 'channel_join', text: 'joined' },
     ])]);
@@ -197,7 +179,7 @@ test('participants are de-duplicated and bounded', async () => {
     const messages = Array.from({ length: 40 }, (_, i) => ({
         ts: `100.${i}`, user: `U${i % 20}`, text: 'x',
     }));
-    const { impl } = makeFetch([replies(messages)]);
+    const { impl } = makeSlackFetch([replies(messages)]);
     const thread = await resolveThreadInfo(TOKEN, 'C1', '100.0', { teamId: TEAM, fetchImpl: impl });
     assert.ok(thread.participants.length <= 12, 'the cap bounds the prompt cost');
     assert.equal(new Set(thread.participants.map(p => p.id)).size, thread.participants.length);
@@ -205,7 +187,7 @@ test('participants are de-duplicated and bounded', async () => {
 
 test('cached identity names are used; misses show the raw id', async () => {
     primeSlackIdentityCache(TEAM, [{ id: 'U1', profile: { display_name: '김병준' } }]);
-    const { impl } = makeFetch([replies([
+    const { impl } = makeSlackFetch([replies([
         { ts: '100.1', user: 'U1', text: 'parent' },
         { ts: '100.2', user: 'U2', text: 'reply' },
     ])]);
@@ -216,7 +198,7 @@ test('cached identity names are used; misses show the raw id', async () => {
 
 test('the parent message text is captured and truncated', async () => {
     const long = 'x'.repeat(500);
-    const { impl } = makeFetch([replies([
+    const { impl } = makeSlackFetch([replies([
         { ts: '100.1', user: 'U1', text: long },
         { ts: '100.2', user: 'U2', text: 'reply' },
     ])]);
@@ -226,7 +208,7 @@ test('the parent message text is captured and truncated', async () => {
 });
 
 test('missing Slack total remains unknown while fetched count includes parent', async () => {
-    const { impl } = makeFetch([replies([
+    const { impl } = makeSlackFetch([replies([
         { ts: '100.1', user: 'U1', text: 'parent' },
         { ts: '100.2', user: 'U2', text: 'a' },
         { ts: '100.3', user: 'U3', text: 'b' },
@@ -241,7 +223,7 @@ test('missing Slack total remains unknown while fetched count includes parent', 
 test('reply count prefers the parent reply_count over the fetched window', async () => {
     // The window is capped at 50, so counting messages would report a
     // 500-reply thread as 49. Slack's own count on the parent is authoritative.
-    const { impl } = makeFetch([replies([
+    const { impl } = makeSlackFetch([replies([
         { ts: '100.1', user: 'U1', text: 'parent', reply_count: 500 },
         { ts: '100.2', user: 'U2', text: 'a' },
         { ts: '100.3', user: 'U3', text: 'b' },
@@ -252,7 +234,7 @@ test('reply count prefers the parent reply_count over the fetched window', async
 
 test('retained prefetch text is bounded per message', async () => {
     const huge = 'x'.repeat(40_000);
-    const { impl } = makeFetch([replies([
+    const { impl } = makeSlackFetch([replies([
         { ts: '100.1', user: 'U1', text: 'parent' },
         { ts: '100.2', user: 'U2', text: huge },
     ])]);
@@ -263,28 +245,28 @@ test('retained prefetch text is bounded per message', async () => {
 });
 
 test('conversations.info and conversations.replies do not share a start slot', async () => {
-    const info = makeFetch([{ ok: true, channel: { id: 'C1', name: 'ops', is_channel: true } }]);
+    const info = makeSlackFetch([{ ok: true, channel: { id: 'C1', name: 'ops', is_channel: true } }]);
     await resolveConversationInfo(TOKEN, 'C1', { teamId: TEAM, fetchImpl: info.impl });
     // No rate-limit reset: a shared clock would decline this immediately, which
     // is exactly the starvation the per-method split prevents.
-    const thread = makeFetch([replies([{ ts: '100.1', user: 'U1', text: 'parent' }])]);
+    const thread = makeSlackFetch([replies([{ ts: '100.1', user: 'U1', text: 'parent' }])]);
     const result = await resolveThreadInfo(TOKEN, 'C1', '100.1', { teamId: TEAM, fetchImpl: thread.impl });
     assert.equal(thread.calls.length, 1, 'the thread lookup has its own budget');
     assert.equal(result.resolved, true);
 });
 
 test('a missing scope on conversations.info does not lock conversations.replies', async () => {
-    const denied = makeFetch([{ ok: false, error: 'missing_scope', needed: 'channels:read' }]);
+    const denied = makeSlackFetch([{ ok: false, error: 'missing_scope', needed: 'channels:read' }]);
     await resolveConversationInfo(TOKEN, 'C1', { teamId: TEAM, fetchImpl: denied.impl });
     // Different methods need different scopes; one must not lock the other out.
-    const thread = makeFetch([replies([{ ts: '100.1', user: 'U1', text: 'parent' }])]);
+    const thread = makeSlackFetch([replies([{ ts: '100.1', user: 'U1', text: 'parent' }])]);
     const result = await resolveThreadInfo(TOKEN, 'C1', '100.1', { teamId: TEAM, fetchImpl: thread.impl });
     assert.equal(thread.calls.length, 1);
     assert.equal(result.resolved, true);
 });
 
 test('a failed thread lookup degrades to an empty participant list', async () => {
-    const { impl } = makeFetch([{ ok: false, error: 'thread_not_found' }]);
+    const { impl } = makeSlackFetch([{ ok: false, error: 'thread_not_found' }]);
     const thread = await resolveThreadInfo(TOKEN, 'C1', '100.1', { teamId: TEAM, fetchImpl: impl });
     assert.equal(thread.resolved, false);
     assert.deepEqual(thread.participants, []);
@@ -296,7 +278,7 @@ test('pagination retains the parent plus the newest 50 replies', async () => {
         ({ ts: `100.${String(i + 2).padStart(3, '0')}`, user: 'U1', text: `reply-${i + 1}` }));
     const second = Array.from({ length: 11 }, (_, i) =>
         ({ ts: `101.${String(i).padStart(3, '0')}`, user: 'U2', text: `reply-${i + 50}` }));
-    const { impl, calls } = makeFetch([
+    const { impl, calls } = makeSlackFetch([
         { ok: true, messages: [{ ts: '100.1', user: 'U0', text: 'parent', reply_count: 60 }, ...first], response_metadata: { next_cursor: 'page-2' } },
         { ok: true, messages: second, response_metadata: { next_cursor: '' } },
     ]);
@@ -313,14 +295,14 @@ test('thread pagination stops after ten pages even if Slack repeats a cursor cha
         ok: true, messages: i === 0 ? [{ ts: '100.1', user: 'U0', text: 'parent' }] : [],
         response_metadata: { next_cursor: `page-${i + 2}` },
     }));
-    const { impl, calls } = makeFetch(responses);
+    const { impl, calls } = makeSlackFetch(responses);
     const thread = await resolveThreadInfo(TOKEN, 'C1', '100.1', { teamId: TEAM, fetchImpl: impl });
     assert.equal(thread.resolved, true);
     assert.equal(calls.length, 10);
 });
 
 test('raw messages are retained for the first-entry prefetch', async () => {
-    const { impl } = makeFetch([replies([
+    const { impl } = makeSlackFetch([replies([
         { ts: '100.1', user: 'U1', text: 'parent' },
         { ts: '100.2', user: 'U2', text: 'reply' },
     ])]);
@@ -338,7 +320,7 @@ test('cachedNameMap omits ids that are not cached', () => {
 });
 
 test('resetting the cache forces the next lookup to call again', async () => {
-    const { impl, calls } = makeFetch([{ ok: true, channel: { id: 'C1', name: 'ops', is_channel: true } }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true, channel: { id: 'C1', name: 'ops', is_channel: true } }]);
     await resolveConversationInfo(TOKEN, 'C1', { teamId: TEAM, fetchImpl: impl });
     resetSlackConversationCache();
     await resolveConversationInfo(TOKEN, 'C1', { teamId: TEAM, fetchImpl: impl });
@@ -346,7 +328,7 @@ test('resetting the cache forces the next lookup to call again', async () => {
 });
 
 test('a workspace switch does not serve the previous team name', async () => {
-    const { impl } = makeFetch([
+    const { impl } = makeSlackFetch([
         { ok: true, channel: { id: 'C1', name: 'old-team', is_channel: true } },
         { ok: true, channel: { id: 'C1', name: 'new-team', is_channel: true } },
     ]);
@@ -358,7 +340,7 @@ test('a workspace switch does not serve the previous team name', async () => {
 });
 
 test('an already-aborted caller costs no API call', async () => {
-    const { impl, calls } = makeFetch([{ ok: true, channel: { id: 'C1', name: 'ops' } }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true, channel: { id: 'C1', name: 'ops' } }]);
     const controller = new AbortController();
     controller.abort();
     const info = await resolveConversationInfo(
@@ -369,10 +351,10 @@ test('an already-aborted caller costs no API call', async () => {
 });
 
 test('the start-rate gate declines rather than queueing', async () => {
-    const first = makeFetch([{ ok: true, channel: { id: 'C1', name: 'ops', is_channel: true } }]);
+    const first = makeSlackFetch([{ ok: true, channel: { id: 'C1', name: 'ops', is_channel: true } }]);
     await resolveConversationInfo(TOKEN, 'C1', { teamId: TEAM, fetchImpl: first.impl });
     // No reset here: the next distinct channel hits the 1.2s gate.
-    const second = makeFetch([{ ok: true, channel: { id: 'C2', name: 'other', is_channel: true } }]);
+    const second = makeSlackFetch([{ ok: true, channel: { id: 'C2', name: 'other', is_channel: true } }]);
     const info = await resolveConversationInfo(TOKEN, 'C2', { teamId: TEAM, fetchImpl: second.impl });
     assert.equal(second.calls.length, 0, 'a declined start must not call Slack');
     assert.equal(info.resolved, false, 'and must degrade immediately, not wait');
@@ -389,7 +371,7 @@ test('the top-level history prefetch borrows the same per-method clock', () => {
 });
 
 test('an empty channel or token degrades without calling', async () => {
-    const { impl, calls } = makeFetch([{ ok: true }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true }]);
     const noChannel = await resolveConversationInfo(TOKEN, '', { teamId: TEAM, fetchImpl: impl });
     const noToken = await resolveConversationInfo('', 'C1', { teamId: TEAM, fetchImpl: impl });
     assert.equal(calls.length, 0);
@@ -398,7 +380,7 @@ test('an empty channel or token degrades without calling', async () => {
 });
 
 test('thread cache omits rich bodies and files while retaining bounded provenance', async () => {
-    const { impl } = makeFetch([{ ok: true, messages: [{ ts: '100.1', user: 'U1', text: 'x'.repeat(1000),
+    const { impl } = makeSlackFetch([{ ok: true, messages: [{ ts: '100.1', user: 'U1', text: 'x'.repeat(1000),
         blocks: [{ type: 'section', text: { text: 'rich'.repeat(10000) } }], attachments: [{ text: 'attachment' }],
         reactions: [{ name: 'eyes', count: 2 }], files: [{ id: 'F1', url_private_download: 'https://files.slack.com/private' }],
         edited: { ts: '101.0' } }] }]);
@@ -418,7 +400,7 @@ test('reversed pages and duplicate parent retain the numeric newest fifty unique
         resetSlackConversationCache();
         const pages = [rows.slice(0, 30), rows.slice(30)];
         if (reversed) pages.reverse();
-        const { impl } = makeFetch(pages.map((page, i) => ({ ok: true,
+        const { impl } = makeSlackFetch(pages.map((page, i) => ({ ok: true,
             messages: [parent, ...page.reverse(), parent],
             response_metadata: { next_cursor: i === 0 ? 'next' : '' } })));
         const result = await resolveThreadInfo(TOKEN, 'C1', '1.0', { teamId: TEAM, fetchImpl: impl });
@@ -442,7 +424,7 @@ test('cursor cycles, missing continuation, page cap and page error preserve part
     ];
     for (const spec of cases) {
         resetSlackConversationCache();
-        const { impl, calls } = makeFetch(spec.pages);
+        const { impl, calls } = makeSlackFetch(spec.pages);
         const result = await resolveThreadInfo(TOKEN, 'C1', '1.0', { teamId: TEAM, fetchImpl: impl });
         assert.equal(calls.length, spec.calls);
         assert.equal(result.partial, true);
@@ -471,7 +453,7 @@ test('abort during second page returns bounded first-page evidence and never a c
 });
 
 test('ten full rich pages retain only bounded text and scalar fields', async () => {
-    const { impl } = makeFetch(Array.from({ length: 10 }, (_, page) => ({ ok: true,
+    const { impl } = makeSlackFetch(Array.from({ length: 10 }, (_, page) => ({ ok: true,
         messages: Array.from({ length: 50 }, (_, i) => ({ ts: `${page * 50 + i + 1}.0`, text: '😀'.repeat(1000),
             blocks: [{ type: 'section', text: { text: 'rich'.repeat(1000) } }], files: [{ id: 'F1' }] })),
         response_metadata: { next_cursor: `page${page}` } })));
@@ -487,7 +469,7 @@ test('ten full rich pages retain only bounded text and scalar fields', async () 
 });
 
 test('numeric timestamp order preserves adjacent microseconds without float rounding', async () => {
-    const { impl } = makeFetch([replies([
+    const { impl } = makeSlackFetch([replies([
         { ts: '9999999999.000002', text: 'second' },
         { ts: '9999999999.000001', text: 'first' },
         { ts: '9.0', text: 'parent' },
@@ -501,13 +483,13 @@ test('numeric timestamp order preserves adjacent microseconds without float roun
 test('an MPIM missing_scope never locks plain channel lookups', async () => {
     // needed: mpim:read proves only the MPIM grant is absent; the method-wide
     // capability lock would blind every channel/DM name lookup for 30 minutes.
-    const mpim = makeFetch([{ ok: false, error: 'missing_scope', needed: 'mpim:read' }]);
+    const mpim = makeSlackFetch([{ ok: false, error: 'missing_scope', needed: 'mpim:read' }]);
     const info = await resolveConversationInfo(TOKEN, 'G1MPIM', { teamId: TEAM, fetchImpl: mpim.impl });
     assert.equal(info.resolved, false);
     assert.equal(info.kind, 'group_dm');
 
     resetConversationRateLimitForTest();
-    const other = makeFetch([{ ok: true, channel: { id: 'COPEN', name: 'general', is_channel: true } }]);
+    const other = makeSlackFetch([{ ok: true, channel: { id: 'COPEN', name: 'general', is_channel: true } }]);
     const after = await resolveConversationInfo(TOKEN, 'COPEN', { teamId: TEAM, fetchImpl: other.impl });
     assert.equal(after.resolved, true);
     assert.equal(after.name, 'general');

@@ -30,7 +30,10 @@ function diff(d: InstanceDiff): void {
     publish('worker', 'instance-status-changed', { ...d } as unknown as Record<string, unknown>);
 }
 
-function makeFetch(latest: Record<string, unknown> | null) {
+// Not a Slack stub: this one answers the Manager's own /api/events hydration
+// over `json()`. tests/helpers/slack-fetch.mts is the Slack contract; the name
+// stays distinct so the two are not mistaken for the same harness.
+function makeEventsFetch(latest: Record<string, unknown> | null) {
     const calls: string[] = [];
     const fetchImpl = async (url: string) => {
         calls.push(url);
@@ -42,7 +45,7 @@ function makeFetch(latest: Record<string, unknown> | null) {
 function freshBridge(latest: Record<string, unknown> | null) {
     stopWorkerEventBridge();
     FakeEventSource.instances = [];
-    const { calls, fetchImpl } = makeFetch(latest);
+    const { calls, fetchImpl } = makeEventsFetch(latest);
     startWorkerEventBridge({
         fetchImpl: fetchImpl as never,
         EventSourceImpl: FakeEventSource as never,

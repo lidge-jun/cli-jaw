@@ -21,29 +21,10 @@ import {
 } from '../../src/slack/identity.ts';
 import { resolveSenderIdentity } from '../../src/slack/identity.ts';
 import { settings } from '../../src/core/config.ts';
+import { makeSlackFetch } from '../helpers/slack-fetch.mts';
 
 const TOKEN = 'xoxb-not-a-real-token-000';
 const TEAM = 'T0TEST';
-
-function makeFetch(responses: Array<Record<string, unknown>>) {
-    const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
-    let i = 0;
-    const impl = (async (url: string | URL | Request, init?: RequestInit) => {
-        const params = new URLSearchParams(String(init?.body ?? ''));
-        const body: Record<string, unknown> = {};
-        for (const [k, v] of params) body[k] = v;
-        calls.push({ url: String(url), body });
-        const spec = responses[Math.min(i, responses.length - 1)];
-        i++;
-        return {
-            ok: true,
-            status: 200,
-            text: async () => JSON.stringify(spec ?? { ok: true }),
-        } as unknown as Response;
-    // justified: the harness implements only the Response surface slackApi reads
-    }) as unknown as typeof fetch;
-    return { impl, calls };
-}
 
 const userOk = (over: Record<string, unknown> = {}) => ({
     ok: true,
@@ -139,7 +120,7 @@ test('identityFromEvent reads a plain human message', () => {
 
 test('resolves a user and caches it', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch([userOk()]);
+    const { impl, calls } = makeSlackFetch([userOk()]);
     const first = await resolveSlackIdentity(TOKEN, { userId: 'U1' }, { teamId: TEAM, fetchImpl: impl });
     assert.equal(first.name, 'Jun');
     assert.equal(first.resolved, true);
@@ -151,7 +132,7 @@ test('resolves a user and caches it', async () => {
 
 test('a different workspace does not reuse the cached name', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch([
+    const { impl, calls } = makeSlackFetch([
         userOk(),
         { ok: true, user: { id: 'U1', profile: { display_name: 'Other' } } },
     ]);
@@ -164,7 +145,7 @@ test('a different workspace does not reuse the cached name', async () => {
 
 test('missing_scope degrades to the id and never throws', async () => {
     resetSlackIdentityCache();
-    const { impl } = makeFetch([{ ok: false, error: 'missing_scope', needed: 'users:read' }]);
+    const { impl } = makeSlackFetch([{ ok: false, error: 'missing_scope', needed: 'users:read' }]);
     const identity = await resolveSlackIdentity(TOKEN, { userId: 'U1' }, { teamId: TEAM, fetchImpl: impl });
     assert.equal(identity.resolved, false);
     assert.equal(identity.name, 'U1');
@@ -172,7 +153,7 @@ test('missing_scope degrades to the id and never throws', async () => {
 
 test('a repeated missing_scope stops calling the API', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch([{ ok: false, error: 'missing_scope', needed: 'users:read' }]);
+    const { impl, calls } = makeSlackFetch([{ ok: false, error: 'missing_scope', needed: 'users:read' }]);
     await resolveSlackIdentity(TOKEN, { userId: 'U1' }, { teamId: TEAM, fetchImpl: impl });
     await resolveSlackIdentity(TOKEN, { userId: 'U2' }, { teamId: TEAM, fetchImpl: impl });
     await resolveSlackIdentity(TOKEN, { userId: 'U3' }, { teamId: TEAM, fetchImpl: impl });
@@ -181,7 +162,7 @@ test('a repeated missing_scope stops calling the API', async () => {
 
 test('resetting the cache lifts the capability lockout', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch([{ ok: false, error: 'missing_scope' }]);
+    const { impl, calls } = makeSlackFetch([{ ok: false, error: 'missing_scope' }]);
     await resolveSlackIdentity(TOKEN, { userId: 'U1' }, { teamId: TEAM, fetchImpl: impl });
     assert.equal(calls.length, 1);
     resetSlackIdentityCache();
@@ -191,7 +172,7 @@ test('resetting the cache lifts the capability lockout', async () => {
 
 test('user_not_found is negatively cached', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch([{ ok: false, error: 'user_not_found' }]);
+    const { impl, calls } = makeSlackFetch([{ ok: false, error: 'user_not_found' }]);
     const a = await resolveSlackIdentity(TOKEN, { userId: 'U404' }, { teamId: TEAM, fetchImpl: impl });
     const b = await resolveSlackIdentity(TOKEN, { userId: 'U404' }, { teamId: TEAM, fetchImpl: impl });
     assert.equal(a.resolved, false);
@@ -209,7 +190,7 @@ test('a transport failure degrades without throwing', async () => {
 
 test('a bot inline name resolves without any API call', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch([{ ok: true }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true }]);
     const identity = await resolveSlackIdentity(
         TOKEN, { botId: 'B1', inlineName: 'Ledger' }, { teamId: TEAM, fetchImpl: impl },
     );
@@ -220,7 +201,7 @@ test('a bot inline name resolves without any API call', async () => {
 
 test('a bare bot id resolves through bots.info', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch([{ ok: true, bot: { id: 'B1', name: 'Ledger' } }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true, bot: { id: 'B1', name: 'Ledger' } }]);
     const identity = await resolveSlackIdentity(TOKEN, { botId: 'B1' }, { teamId: TEAM, fetchImpl: impl });
     assert.equal(identity.name, 'Ledger');
     assert.ok(calls[0]!.url.endsWith('/bots.info'));
@@ -228,7 +209,7 @@ test('a bare bot id resolves through bots.info', async () => {
 
 test('a human inline hint never bypasses id resolution', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch([userOk()]);
+    const { impl, calls } = makeSlackFetch([userOk()]);
     const identity = await resolveSlackIdentity(
         TOKEN, { userId: 'U1', inlineName: 'spoofed' }, { teamId: TEAM, fetchImpl: impl },
     );
@@ -238,7 +219,7 @@ test('a human inline hint never bypasses id resolution', async () => {
 
 test('a human inline hint is used only after degradation, still unresolved', async () => {
     resetSlackIdentityCache();
-    const { impl } = makeFetch([{ ok: false, error: 'user_not_found' }]);
+    const { impl } = makeSlackFetch([{ ok: false, error: 'user_not_found' }]);
     const identity = await resolveSlackIdentity(
         TOKEN, { userId: 'U1', inlineName: 'Jun[x]' }, { teamId: TEAM, fetchImpl: impl },
     );
@@ -248,7 +229,7 @@ test('a human inline hint is used only after degradation, still unresolved', asy
 
 test('concurrent lookups of the same id share one request', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch([userOk()]);
+    const { impl, calls } = makeSlackFetch([userOk()]);
     const [a, b] = await Promise.all([
         resolveSlackIdentity(TOKEN, { userId: 'U1' }, { teamId: TEAM, fetchImpl: impl }),
         resolveSlackIdentity(TOKEN, { userId: 'U1' }, { teamId: TEAM, fetchImpl: impl }),
@@ -261,7 +242,7 @@ test('concurrent lookups of the same id share one request', async () => {
 test('one caller aborting does not cancel the other waiter', async () => {
     resetSlackIdentityCache();
     const controller = new AbortController();
-    const { impl } = makeFetch([userOk()]);
+    const { impl } = makeSlackFetch([userOk()]);
     const aborted = resolveSlackIdentity(
         TOKEN, { userId: 'U1' }, { teamId: TEAM, fetchImpl: impl, signal: controller.signal },
     );
@@ -277,7 +258,7 @@ test('an already-aborted signal returns without dispatching a request', async ()
     resetSlackIdentityCache();
     const controller = new AbortController();
     controller.abort();
-    const { impl, calls } = makeFetch([userOk()]);
+    const { impl, calls } = makeSlackFetch([userOk()]);
     const identity = await resolveSlackIdentity(
         TOKEN, { userId: 'U1' }, { teamId: TEAM, fetchImpl: impl, signal: controller.signal },
     );
@@ -287,7 +268,7 @@ test('an already-aborted signal returns without dispatching a request', async ()
 
 test('a cached name expires once its TTL passes', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch([userOk(), { ok: true, user: { id: 'U1', profile: { display_name: 'Later' } } }]);
+    const { impl, calls } = makeSlackFetch([userOk(), { ok: true, user: { id: 'U1', profile: { display_name: 'Later' } } }]);
     const slack = (globalThis as Record<string, any>);
     const first = await resolveSlackIdentity(TOKEN, { userId: 'U1' }, { teamId: TEAM, fetchImpl: impl });
     assert.equal(first.name, 'Jun');
@@ -314,7 +295,7 @@ test('primeSlackIdentityCache warms lookups so later reads cost nothing', async 
     assert.equal(cached.get('U1')?.name, '김병준');
     assert.equal(cached.size, 2, 'a miss must simply be absent');
 
-    const { impl, calls } = makeFetch([userOk()]);
+    const { impl, calls } = makeSlackFetch([userOk()]);
     await resolveSlackIdentity(TOKEN, { userId: 'U1' }, { teamId: TEAM, fetchImpl: impl });
     assert.equal(calls.length, 0, 'the warmed entry must serve the lookup');
 });
@@ -332,7 +313,7 @@ test('primed names are sanitized on the exposed fields too', () => {
 
 test('batch resolution bounds the top-up and reports partial', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch([{ ok: true, user: { id: 'U', profile: { display_name: 'X' } } }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true, user: { id: 'U', profile: { display_name: 'X' } } }]);
     const refs = Array.from({ length: 8 }, (_, i) => ({ userId: `U${i}` }));
     const batch = await resolveSlackIdentities(TOKEN, refs, {
         teamId: TEAM, fetchImpl: impl, topUpLimit: 3, minIntervalMs: 0,
@@ -450,7 +431,7 @@ test('a lookup issued before a reset cannot re-latch missing_scope afterwards', 
     release!();
     await inFlight;                      // the stale result lands after the reset
 
-    const { impl, calls } = makeFetch([userOk()]);
+    const { impl, calls } = makeSlackFetch([userOk()]);
     const after = await resolveSlackIdentity(TOKEN, { userId: 'U1' }, { teamId: 'T_NEW', fetchImpl: impl });
     assert.equal(calls.length, 1, 'the new token must still be allowed to call Slack');
     assert.equal(after.resolved, true);
@@ -480,7 +461,7 @@ test('only one probe is admitted when the capability lock lapses', async () => {
     // Letting every concurrent caller through on expiry would restore exactly the
     // per-message API storm the lock exists to prevent.
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch([{ ok: false, error: 'missing_scope' }]);
+    const { impl, calls } = makeSlackFetch([{ ok: false, error: 'missing_scope' }]);
     await resolveSlackIdentity(TOKEN, { userId: 'U1' }, { teamId: TEAM, fetchImpl: impl });
     assert.equal(calls.length, 1);
 
@@ -496,11 +477,11 @@ test('the negative cache evicts by expiry, not by insertion accident', async () 
     // trimTo used to read `expiresAt` off a bare timestamp, so the sort compared
     // undefined and eviction order was arbitrary.
     resetSlackIdentityCache();
-    const { impl } = makeFetch([{ ok: false, error: 'user_not_found' }]);
+    const { impl } = makeSlackFetch([{ ok: false, error: 'user_not_found' }]);
     await resolveSlackIdentity(TOKEN, { userId: 'UGONE' }, { teamId: TEAM, fetchImpl: impl });
     assert.equal(slackIdentityCacheStats().negative, 1);
 
-    const { impl: impl2, calls: calls2 } = makeFetch([userOk()]);
+    const { impl: impl2, calls: calls2 } = makeSlackFetch([userOk()]);
     await resolveSlackIdentity(TOKEN, { userId: 'UGONE' }, { teamId: TEAM, fetchImpl: impl2 });
     assert.equal(calls2.length, 0, 'the negative entry still suppresses the repeat lookup');
 });

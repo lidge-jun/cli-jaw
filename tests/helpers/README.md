@@ -10,6 +10,7 @@ not a scope. Files here are imported or spawned by a test that is.
 | File | Shape | Driven by |
 | --- | --- | --- |
 | `jaw-server.mts` | Spawns an isolated product server with its own home, settings and port; probes readiness, captures the child's output, and fails closed under `CI` | `tests/integration/slack-inbound-turn.test.ts`, `agent-lifecycle-real-child.test.ts`, `graceful-shutdown.test.ts` |
+| `slack-fetch.mts` | The one Slack fetch stub: sequential or method-keyed response queues, parsed request bodies, and specs for a Slack error, a 429 with `retry-after`, or a transport-level response with an empty body | the six `tests/unit/slack-*.test.ts` files and `slack-fetch-harness.test.ts` |
 | `slack-fixture.mts` | A scripted Slack: Web API over HTTP plus Socket Mode over a real websocket, recording every call | `tests/integration/slack-inbound-turn.test.ts` |
 | `slack-api-preload.mjs` | `--import` preload that redirects a server child's Slack traffic at the fixture through `globalThis.fetch` | the same test, via `NODE_OPTIONS` |
 | `code-fake-providers.mts` | Injectable Code providers that never spawn a runtime, with per-instance open/send counters | `tests/integration/code-native-api.test.ts` |
