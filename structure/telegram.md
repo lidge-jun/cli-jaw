@@ -24,6 +24,31 @@ Auto instances authorize qualified direct-local Jaw API calls without manually c
 
 ## 공통 메시징 레이어
 
+### Request-scoped destination (#742/#745)
+
+A completion event carries the conversation it belongs to. `src/messaging/run-pin.ts`
+captures `origin`, `requestId`, `scope`, `sessionId`, `remoteKey` and the admitted
+`target` once, at spawn; every `agent_done` spreads that block. `resolveForwarderTarget`
+in `src/messaging/forwarder-origin.ts` reads the destination off the event and returns
+null when it is missing or names another channel — null means do not send, never
+"fall back to something". The Slack, Discord and Telegram forwarders take no
+`getLastTarget`/`getLastChatId` option, so the last-active lookup cannot return.
+
+Consequence: a web or CLI turn is no longer mirrored into a chat room. Its answer is
+on the surface that asked for it. Mirroring guessed a room from a global slot that any
+concurrent conversation could move, which is how a web run's internal ticket summary
+reached a Slack thread that had asked something else (#742).
+
+Heartbeat destinations follow the same rule through
+`src/memory/heartbeat-destination.ts`: `resolveHeartbeatBinding` returns `bound` or
+`held`. Slack needs a non-empty `threadId` or an explicit `scope: "channel_root"`; an
+absent destination is `unbound_destination` and sends nothing. `GET /api/heartbeat`
+surfaces the hold and `PUT` refuses to write a new incomplete Slack destination while
+still inheriting an existing one. `authorizeExplicitTarget` in `src/messaging/send.ts`
+vouches for a send without rewriting its address: it no longer returns the last-active
+target's thread for an explicitly addressed channel-root post.
+
+
 ### Slack group DMs and scope observations
 
 The manifest subscribes to [`message.mpim`](https://docs.slack.dev/reference/events/message.mpim/)
