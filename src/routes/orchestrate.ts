@@ -206,7 +206,7 @@ async function resolveDispatchEntry(
     input: Record<string, unknown>,
     options: {
         assignment: DispatchAssignment;
-        parentScope: string | null;
+        parentScope: string | null | undefined;
         projectRoot: string;
         task: string;
         emps: readonly EmployeeRow[];
