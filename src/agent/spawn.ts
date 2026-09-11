@@ -324,6 +324,7 @@ interface CopilotSpawnContext extends SpawnContext {
 
 import { hasChildExited, ownProcess } from './spawn/process-kill.js';
 import { DUP_REGISTRATION_KILL_REASON, isLifecycleSteerReason } from './spawn/kill-reason.js';
+import { buildSteerStartedEvent } from './spawn/steer-event.js';
 import {
     armExitSettle, captureExitSettler, settleCapturedExit, settleExit, waitForExitSettled,
     type ExitSettler,
@@ -815,10 +816,10 @@ export async function steerAgent(
                 attempted = true; // A partial recording failure must never retry this input.
                 insertMessage.run('user', newPrompt, source, '', workingDir, chatSessionId);
                 broadcast('new_message', { role: 'user', content: newPrompt, source, scope: scopeKey, sessionId: chatSessionId });
-                broadcast('steer_started', stripUndefined({ prompt: newPrompt, origin: source || 'web', scope: scopeKey,
-                    sessionId: chatSessionId, target: capturedMeta.target, chatId: capturedMeta.chatId,
-                    requestId: capturedMeta.requestId, remoteKey: capturedMeta.remoteKey, replyViaTarget: capturedMeta.replyViaTarget,
-                    mode: 'cancel-reprompt', localDispatch: true }));
+                broadcast('steer_started', buildSteerStartedEvent({
+                    prompt: newPrompt, source, scopeKey, chatSessionId, meta: capturedMeta,
+                    mode: 'cancel-reprompt', extra: { localDispatch: true },
+                }));
                 settleOnce(capturedMeta.requestId, 'steered');
             });
         } finally { inputCancelled = inputGuard.isCancelled(); inputGuard.release(); }
@@ -854,7 +855,9 @@ export async function steerAgent(
         }
         insertMessage.run('user', newPrompt, source, '', settings["workingDir"] || null, chatSessionId);
         broadcast('new_message', { role: 'user', content: newPrompt, source, scope: scopeKey, sessionId: chatSessionId });
-        broadcast('steer_started', stripUndefined({ prompt: newPrompt, origin: source || 'web', scope: scopeKey, sessionId: chatSessionId, target: meta?.target, chatId: meta?.chatId, requestId: meta?.requestId, remoteKey: meta?.remoteKey, replyViaTarget: meta?.replyViaTarget, mode: 'native-input' }));
+        broadcast('steer_started', buildSteerStartedEvent({
+            prompt: newPrompt, source, scopeKey, chatSessionId, meta, mode: 'native-input',
+        }));
         settleOnce(meta?.requestId, 'steered');
         return 'steered';
     }
@@ -895,9 +898,9 @@ export async function steerAgent(
     }
     insertMessage.run('user', newPrompt, source, '', settings["workingDir"] || null, chatSessionId);
     broadcast('new_message', { role: 'user', content: newPrompt, source, scope: scopeKey, sessionId: chatSessionId });
-    broadcast('steer_started', stripUndefined({ prompt: newPrompt, origin: source || 'web', scope: scopeKey,
-        sessionId: chatSessionId, target: meta?.target, chatId: meta?.chatId, requestId: meta?.requestId,
-        remoteKey: meta?.remoteKey, replyViaTarget: meta?.replyViaTarget, mode: 'kill-steer', ...slackRestart }));
+    broadcast('steer_started', buildSteerStartedEvent({
+        prompt: newPrompt, source, scopeKey, chatSessionId, meta, mode: 'kill-steer', extra: slackRestart,
+    }));
     const { orchestrate, orchestrateContinue, orchestrateReset, isContinueIntent, isResetIntent } = await import('../orchestrator/pipeline.js');
     const origin = source || 'web';
     // Union of both contracts: the #655 steer identity (target/chatId/remoteKey/
