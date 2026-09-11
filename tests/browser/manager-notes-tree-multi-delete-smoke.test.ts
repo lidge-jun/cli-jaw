@@ -1,18 +1,9 @@
 import assert from 'node:assert/strict';
-import { after, test } from 'node:test';
-import { chromium, type Browser, type Page } from 'playwright-core';
+import { test } from 'node:test';
+import { type Page } from 'playwright-core';
 import { cleanupDashboardNotes } from './manager-notes-cleanup';
 import { withManagerBrowserLock } from './manager-browser-test-lock';
-
-const MANAGER_URL = process.env.MANAGER_DASHBOARD_URL || 'http://127.0.0.1:24576/';
-const browsers: Browser[] = [];
-
-async function pageForManager(): Promise<Page> {
-    const browser = await chromium.launch({ headless: true });
-    browsers.push(browser);
-    const context = await browser.newContext();
-    return await context.newPage();
-}
+import { MANAGER_URL, pageApiStatus, pageForManager } from './manager-notes-page';
 
 async function seedNote(page: Page, notePath: string): Promise<void> {
     await page.evaluate(async ({ notePath }) => {
@@ -24,17 +15,6 @@ async function seedNote(page: Page, notePath: string): Promise<void> {
         });
     }, { notePath });
 }
-
-async function pageApiStatus(page: Page, path: string): Promise<number> {
-    return await page.evaluate(async (notePath) => {
-        const response = await fetch(`/api/dashboard/notes/file?path=${encodeURIComponent(notePath)}`);
-        return response.status;
-    }, path);
-}
-
-after(async () => {
-    await Promise.allSettled(browsers.map(browser => browser.close()));
-});
 
 test('notes tree multi-select Delete trashes every selected entry in one keystroke', async () => await withManagerBrowserLock(async () => {
     const page = await pageForManager();
