@@ -16,6 +16,20 @@ let lastMeta: Record<string, unknown> = {};
 const NO_RESPONSE = 'tg.noResponse';
 const STOPPED = 'tg.stopped';
 
+// A native terminal must match the run's identity or the collector ignores it
+// on purpose, so a payload that forgets these fields does not fail — it hangs.
+// Bounding the wait turns that into a readable assertion instead of an
+// eight-minute shard timeout.
+const NATIVE_IDENTITY = { origin: 'slack', scope: 'default', sessionId: 'default' };
+async function settled<T>(pending: Promise<T>, label: string): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const guard = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`collector never settled: ${label}`)), 5_000);
+    });
+    try { return await Promise.race([pending, guard]); }
+    finally { clearTimeout(timer); }
+}
+
 // ─── Why the empty terminal was empty (#673) ──────────
 // "No response" read as a failure for every empty terminal, including runs that
 // were stopped part-way and runs that finished with nothing to say. Two of
@@ -26,9 +40,9 @@ test('a native run that was stopped says so, instead of reporting no response', 
     const pending = orchestrateAndCollectData('질문', {
         origin: 'slack', requestId: 'req-stopped', scope: 'default', chatSessionId: 'default',
     });
-    broadcast('orchestrate_done', { ...lastMeta, text: '', runtimeFinality: 'absent', runtimeStatus: 'stopped' });
+    broadcast('orchestrate_done', { ...lastMeta, ...NATIVE_IDENTITY, text: '', runtimeFinality: 'absent', runtimeStatus: 'stopped' });
 
-    const result = await pending;
+    const result = await settled(pending, 'native stopped');
     assert.equal(result.text, STOPPED);
     assert.notEqual(result.text, NO_RESPONSE);
 });
@@ -40,7 +54,7 @@ test('a legacy interrupted run says so too', async () => {
     });
     broadcast('orchestrate_done', { ...lastMeta, text: '', executionInterrupted: true });
 
-    const result = await pending;
+    const result = await settled(pending, 'legacy interrupted');
     assert.equal(result.text, STOPPED);
 });
 
@@ -51,9 +65,9 @@ test('a native run that finished with nothing to say keeps the no-response copy'
     const pending = orchestrateAndCollectData('질문', {
         origin: 'slack', requestId: 'req-done-empty', scope: 'default', chatSessionId: 'default',
     });
-    broadcast('orchestrate_done', { ...lastMeta, text: '', runtimeFinality: 'absent', runtimeStatus: 'done' });
+    broadcast('orchestrate_done', { ...lastMeta, ...NATIVE_IDENTITY, text: '', runtimeFinality: 'absent', runtimeStatus: 'done' });
 
-    const result = await pending;
+    const result = await settled(pending, 'native done empty');
     assert.equal(result.text, NO_RESPONSE);
 });
 
@@ -65,9 +79,9 @@ test('a steer still wins over the stopped copy, because the follow-up owns the a
         origin: 'slack', requestId: 'req-steered-stop', scope: 'default', chatSessionId: 'default',
     });
     broadcast('steer_started', { origin: 'slack', scope: 'default', sessionId: 'default', requestId: 'req-next' });
-    broadcast('orchestrate_done', { ...lastMeta, text: '', runtimeFinality: 'absent', runtimeStatus: 'stopped' });
+    broadcast('orchestrate_done', { ...lastMeta, ...NATIVE_IDENTITY, text: '', runtimeFinality: 'absent', runtimeStatus: 'stopped' });
 
-    const result = await pending;
+    const result = await settled(pending, 'steer beats stopped');
     assert.equal(result.text, '');
     assert.equal(result.data['superseded'], true);
 });
