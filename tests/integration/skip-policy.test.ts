@@ -14,7 +14,10 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { SKIP_POLICY, findSkippingFiles, type SkipPolicy } from '../helpers/skip-policy.mts';
+import { TESTS_ROOT } from '../helpers/skip-policy.mts';
 
 const POLICIES: SkipPolicy[] = ['ci-required', 'local-skip-allowed', 'opt-in-isolated', 'platform'];
 
@@ -52,14 +55,34 @@ test('SKIP-POLICY-003: every entry carries a reason and a known policy', () => {
     }
 });
 
-test('SKIP-POLICY-004: the two files that fail closed under CI still do', () => {
-    // These are the anchors of the whole classification. api-smoke has always
-    // failed closed; graceful-shutdown is the one #689 was opened about, and if
-    // its CI branch is ever removed the table would still claim ci-required
-    // while the file green-skips again.
+test('SKIP-POLICY-004: the two anchor files really do fail closed under CI', () => {
+    // These two are the anchors of the whole classification. api-smoke has
+    // always failed closed; graceful-shutdown is the one #689 was opened about.
+    //
+    // Asserting only that the TABLE says ci-required would be circular: if the
+    // CI branch were removed from either file the table would keep claiming it
+    // while the file green-skipped again, which is the exact failure this
+    // registry exists to prevent. So these two are also read.
+    //
+    // This is deliberately NOT applied to every ci-required entry. Proximity in
+    // a text scan is not reachability, and a false red across forty files would
+    // be blamed on this test rather than on the skip. Two named files whose
+    // fail-closed branch is the subject of the issue are worth the exactness.
     for (const file of ['tests/integration/api-smoke.test.ts', 'tests/integration/graceful-shutdown.test.ts']) {
         const entry = SKIP_POLICY.find(candidate => candidate.file === file);
         assert.ok(entry, file + ' must be recorded');
         assert.equal(entry.policy, 'ci-required', file + ' is the pattern the table is measured against');
+
+        const source = readFileSync(join(TESTS_ROOT, '..', file), 'utf8');
+        assert.match(
+            source,
+            /process\.env(?:\.CI|\['CI'\]|\["CI"\])/,
+            file + ' is recorded as ci-required but no longer looks at process.env.CI',
+        );
+        assert.match(
+            source,
+            /assert\.fail\(|throw new Error\(/,
+            file + ' is recorded as ci-required but has no failure path; a ci-required file must fail rather than skip when its dependency is missing',
+        );
     }
 });
