@@ -37,6 +37,7 @@ import { shouldSkipForwarding } from '../messaging/forwarder-origin.js';
 import { sendDiscordFile } from './discord-file.js';
 import { getDiscordSendClient, sendDiscordFileRest, sendDiscordTextRest } from './send-only-client.js';
 import { invalidateDiscordSendClient } from './send-only-client.js';
+import { deliverySent, type TransportSendResult } from '../messaging/delivery-outcome.js';
 import { OutboundSendRegistry } from '../messaging/outbound-lifecycle.js';
 import type { Attachment, Interaction, Message } from 'discord.js';
 import { asSendable, asThreadLike, asTypingChannel } from './channel-types.js';
@@ -980,7 +981,7 @@ export async function shutdownDiscord() {
 
 // ─── Send Handler ───────────────────────────────────
 
-export async function discordSendHandler(req: ChannelSendRequest): Promise<{ ok: boolean; error?: string; [k: string]: unknown }> {
+export async function discordSendHandler(req: ChannelSendRequest): Promise<TransportSendResult> {
     const channelId = req.chatId || req.target?.threadId || req.target?.targetId
         || (Array.from(discordActiveChannelIds).at(-1))
         || settings["discord"]?.channelIds?.[0];
@@ -998,14 +999,15 @@ export async function discordSendHandler(req: ChannelSendRequest): Promise<{ ok:
                 const restToken = discordClient.token;
                 if (!restToken) return { ok: false, error: 'Discord client token unavailable' };
                 const outbound = discordOutboundRegistry.start();
+                let restResult;
                 try {
-                    const sendResult = await sendDiscordTextRest(restToken, String(channelId), text, { signal: outbound.signal,
+                    restResult = await sendDiscordTextRest(restToken, String(channelId), text, { signal: outbound.signal,
                         ...(nativeBodyRequests.has(req) ? { requireBodyDelivery: true } : {}) });
-                    if (!sendResult.ok) return { ok: false, error: sendResult.error || 'send failed' };
+                    if (!restResult.ok) return { ok: false, error: restResult.error || 'send failed' };
                 } finally {
                     outbound.done();
                 }
-                return { ok: true, channel_id: channelId, type: 'text' };
+                return { ok: true, channel_id: channelId, type: 'text', ...deliverySent(restResult.platformMessageId) };
             } catch (e) {
                 return { ok: false, error: (e as Error).message };
             }
@@ -1021,7 +1023,7 @@ export async function discordSendHandler(req: ChannelSendRequest): Promise<{ ok:
         };
         const fileResult = await sendDiscordFile(discordClient, target, filePath, stripUndefined({ caption: req.caption }));
         if (!fileResult.ok) return fileResult;
-        return { ok: true, channel_id: channelId, type: req.type };
+        return { ok: true, channel_id: channelId, type: req.type, ...deliverySent(fileResult.platformMessageId ?? null) };
     }
 
     const sendClient = getDiscordSendClient();
@@ -1035,14 +1037,14 @@ export async function discordSendHandler(req: ChannelSendRequest): Promise<{ ok:
         const result = await sendDiscordTextRest(sendClient.token, String(channelId), text,
             nativeBodyRequests.has(req) ? { requireBodyDelivery: true } : undefined);
         if (!result.ok) return result;
-        return { ok: true, channel_id: channelId, type: 'text' };
+        return { ok: true, channel_id: channelId, type: 'text', ...deliverySent(result.platformMessageId) };
     }
 
     const filePath = req.filePath;
     if (!filePath) return { ok: false, error: 'file_path required for non-text types' };
     const fileResult = await sendDiscordFileRest(sendClient.token, String(channelId), filePath, req.caption);
     if (!fileResult.ok) return fileResult;
-    return { ok: true, channel_id: channelId, type: req.type };
+    return { ok: true, channel_id: channelId, type: req.type, ...deliverySent(fileResult.platformMessageId) };
 }
 
 // Transport registration moved to ./register.js (lazy loader) so importing

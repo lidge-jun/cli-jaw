@@ -33,16 +33,19 @@ import { abortableDelay } from '../messaging/outbound-lifecycle.js';
  * when it should not: a long rate limit or an ambiguous failure is the
  * caller's to report, not to paper over with another send.
  */
-async function attemptSend(send: () => Promise<unknown>, signal?: AbortSignal): Promise<boolean> {
+async function attemptSend(
+    send: () => Promise<unknown>,
+    signal?: AbortSignal,
+): Promise<{ fallback: boolean; value?: unknown }> {
     try {
-        await send();
-        return false;
+        const value = await send();
+        return { fallback: false, value };
     } catch (err: unknown) {
         // A lifecycle abort is a cancellation, not a vendor failure: no
         // fallback leg, no retry — surface it to the caller as-is (#417).
         if (signal?.aborted) throw err;
         const kind = classifySendFailure(err);
-        if (kind === 'format') return true;
+        if (kind === 'format') return { fallback: true };
         if (kind !== 'rate-limit') throw err;
 
         const wait = retryAfterMs(err);
@@ -54,10 +57,10 @@ async function attemptSend(send: () => Promise<unknown>, signal?: AbortSignal): 
         // Retry the SAME form, once: waiting is what the server asked for, and
         // switching format would add load rather than remove it.
         try {
-            await send();
-            return false;
+            const value = await send();
+            return { fallback: false, value };
         } catch (retryErr: unknown) {
-            if (classifySendFailure(retryErr) === 'format') return true;
+            if (classifySendFailure(retryErr) === 'format') return { fallback: true };
             throw retryErr;
         }
     }
@@ -69,7 +72,9 @@ export interface RichSendOpts {
     /** Private native completion guard; not a Bot API option. */
     requireBodyDelivery?: boolean;
     /** Private receipt observer; never forwarded to the Bot API. */
-    onBodyDelivered?: () => void;
+    /** Receives the vendor message id when one is available. Declared optional so
+     *  existing zero-argument observers stay assignable. */
+    onBodyDelivered?: (platformMessageId?: string) => void;
     /** Invalidates a receipt when the legacy final-format failure is swallowed. */
     onBodyDeliveryFailed?: () => void;
     message_thread_id?: number;
@@ -291,15 +296,26 @@ function requireTelegramBody(chunks: readonly string[], opts: RichSendOpts | und
     }
 }
 
-function observeBodyDelivery(body: string, opts: RichSendOpts | undefined): void {
+function observeBodyDelivery(body: string, opts: RichSendOpts | undefined, delivered?: unknown): void {
     if (!body.trim() || opts?.signal?.aborted || !opts?.onBodyDelivered) return;
-    notifyBodyObserver(opts.onBodyDelivered);
+    notifyBodyObserver(opts.onBodyDelivered, telegramMessageId(delivered));
 }
 
-function notifyBodyObserver(observer: (() => void) | undefined): void {
+/** grammY answers a send with the created Message; its id is a number on the
+ *  wire and a string on the common receipt. */
+function telegramMessageId(value: unknown): string | undefined {
+    if (!value || typeof value !== 'object') return undefined;
+    const id = (value as { message_id?: unknown }).message_id;
+    return typeof id === 'number' || typeof id === 'string' ? String(id) : undefined;
+}
+
+function notifyBodyObserver(
+    observer: ((platformMessageId?: string) => void) | undefined,
+    platformMessageId?: string,
+): void {
     if (!observer) return;
     // Receipt instrumentation cannot turn an accepted send into a retry/failure.
-    try { void Promise.resolve(observer()).catch(() => {}); }
+    try { void Promise.resolve(platformMessageId === undefined ? observer() : observer(platformMessageId)).catch(() => {}); }
     catch { /* Observer failure never changes the legacy delivery outcome. */ }
 }
 
@@ -343,9 +359,9 @@ export async function sendTelegramMarkdown(
     for (let i = 0; i < chunks.length; i += 1) {
         if (opts?.signal?.aborted) return ABORTED;
         const withPrefix = i === 0 ? `${prefix}${chunks[i]}` : chunks[i]!;
-        let needsFallback: boolean;
+        let attempted: { fallback: boolean; value?: unknown };
         try {
-            needsFallback = await attemptSend(() =>
+            attempted = await attemptSend(() =>
                 // grammY's declared AbortSignal is the abort-controller shim type;
                 // the reaction path (reactions.ts) uses the same `as never` cast.
                 api.sendRichMessage!(chatId, { markdown: withPrefix }, richOpts(opts), opts?.signal as never), opts?.signal);
@@ -356,10 +372,10 @@ export async function sendTelegramMarkdown(
             if (opts?.signal?.aborted) return ABORTED;
             throw err;
         }
-        if (needsFallback) {
+        if (attempted.fallback) {
             const fallback = await sendHtmlFallback(api, chatId, chunks[i]!, opts, i === 0 ? prefix : '');
             if (!fallback.ok) return fallback;
-        } else observeBodyDelivery(withPrefix, opts);
+        } else observeBodyDelivery(withPrefix, opts, attempted.value);
     }
     return OK;
 }
@@ -385,21 +401,21 @@ async function sendHtmlFallback(
         if (opts?.signal?.aborted) return ABORTED;
         const withPrefix = i === 0 ? `${safePrefix}${chunks[i]}` : chunks[i]!;
         try {
-            const needsPlain = await attemptSend(
+            const htmlAttempt = await attemptSend(
                 () => api.sendMessage(chatId, withPrefix, htmlOpts, opts?.signal as never), opts?.signal);
-            if (needsPlain) {
+            if (htmlAttempt.fallback) {
                 const plain = withPrefix.replace(/<[^>]+>/g, '');
                 requireTelegramBody([plain], opts);
                 let plainFailure: unknown;
-                const plainFailedFormat = await attemptSend(async () => {
+                const plainAttempt = await attemptSend(async () => {
                     try { return await api.sendMessage(chatId, plain, plainOpts, opts?.signal as never); }
                     catch (error) { plainFailure = error; throw error; }
                 }, opts?.signal);
-                if (plainFailedFormat) {
+                if (plainAttempt.fallback) {
                     notifyBodyObserver(opts?.onBodyDeliveryFailed);
                     if (opts?.requireBodyDelivery) throw plainFailure;
-                } else observeBodyDelivery(plain, opts);
-            } else observeBodyDelivery(withPrefix, opts);
+                } else observeBodyDelivery(plain, opts, plainAttempt.value);
+            } else observeBodyDelivery(withPrefix, opts, htmlAttempt.value);
         } catch (err: unknown) {
             if (opts?.signal?.aborted) return ABORTED;
             throw err;

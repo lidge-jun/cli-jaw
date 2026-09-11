@@ -4,6 +4,7 @@ import { stripUndefined } from '../core/strip-undefined.js';
 import { log } from '../core/logger.js';
 import { redactOutboundText, logErrorText, userErrorText } from '../messaging/redact.js';
 import { abortableDelay } from '../messaging/outbound-lifecycle.js';
+import { deliveryFailed, deliverySent, type LiveDeliveryFields } from '../messaging/delivery-outcome.js';
 
 interface TelegramApiErrorLike {
     error_code?: number;
@@ -97,7 +98,8 @@ export async function sendTelegramFile(
     filePath: string,
     type: string,
     opts?: { caption?: string; threadId?: number; signal?: AbortSignal },
-): Promise<{ ok: boolean; attempts: number; error?: string; retryAfter?: number; statusCode?: number }> {
+): Promise<{ ok: boolean; attempts: number; error?: string; retryAfter?: number; statusCode?: number }
+    & Partial<LiveDeliveryFields>> {
     // Validate here, not at the call sites. The Hub's outbound relay calls this
     // transport directly and skipped the check, which is how an empty document
     // still reached the API after the guard was added.
@@ -121,20 +123,23 @@ export async function sendTelegramFile(
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         try {
             const file = new InputFile(filePath);
+            let sentMessage: unknown;
             switch (type) {
                 case 'voice':
-                    await bot.api.sendVoice(chatId, file, stripUndefined({ caption, message_thread_id }), opts?.signal as never);
+                    sentMessage = await bot.api.sendVoice(chatId, file, stripUndefined({ caption, message_thread_id }), opts?.signal as never);
                     break;
                 case 'photo':
-                    await bot.api.sendPhoto(chatId, file, stripUndefined({ caption, message_thread_id }), opts?.signal as never);
+                    sentMessage = await bot.api.sendPhoto(chatId, file, stripUndefined({ caption, message_thread_id }), opts?.signal as never);
                     break;
                 case 'document':
-                    await bot.api.sendDocument(chatId, file, stripUndefined({ caption, message_thread_id }), opts?.signal as never);
+                    sentMessage = await bot.api.sendDocument(chatId, file, stripUndefined({ caption, message_thread_id }), opts?.signal as never);
                     break;
                 default:
-                    return { ok: false, attempts: attempt, error: `unsupported type: ${type}`, statusCode: 400 };
+                    return { ok: false, attempts: attempt, error: `unsupported type: ${type}`, statusCode: 400, ...deliveryFailed(null) };
             }
-            return { ok: true, attempts: attempt };
+            const rawId = (sentMessage as { message_id?: unknown } | undefined)?.message_id;
+            return { ok: true, attempts: attempt,
+                ...deliverySent(typeof rawId === 'number' || typeof rawId === 'string' ? String(rawId) : null) };
         } catch (err: unknown) {
             const e = asTgErr(err);
             const transient = isTransient(err);

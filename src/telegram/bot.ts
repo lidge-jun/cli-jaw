@@ -89,6 +89,7 @@ import {
 } from './elicitation-buttons.js';
 import { redactOutboundPayload, redactOutboundText, logErrorText, userErrorText } from '../messaging/redact.js';
 import { sendWithRetryPolicy } from '../messaging/retry.js';
+import { deliveryFailed, deliverySent, type TransportSendResult } from '../messaging/delivery-outcome.js';
 import { handleApprovalCommand, handleApprovalCallback, registerProductionTransport, type DispatchApprovalTransport } from '../core/dispatch-approval-ingress.js';
 import { parseApprovalCallbackData } from '../messaging/approval-presentation.js';
 
@@ -486,7 +487,7 @@ function telegramPayloadDigest(update: Record<string, unknown>): string {
     return createHash('sha256').update(JSON.stringify(update)).digest('hex');
 }
 
-async function telegramSendHandler(req: ChannelSendRequest): Promise<{ ok: boolean; error?: string; [k: string]: unknown }> {
+async function telegramSendHandler(req: ChannelSendRequest): Promise<TransportSendResult> {
     // P2b: hub-member mode — this instance's own bot is disabled; relay outbound through the
     // dashboard hub (it owns the single forum-group bot token). hubCallbackUrl is SSRF-guarded.
     const hub = settings["telegramHub"];
@@ -537,11 +538,17 @@ async function telegramSendHandler(req: ChannelSendRequest): Promise<{ ok: boole
         // Scoped for shutdown cancellation (#417).
         const outbound = telegramOutboundRegistry.start();
         let sendResult;
+        // The markdown helper's return shape is pinned by an existing suite, so
+        // the id travels out through the body observer instead (#687).
+        let platformMessageId: string | null = null;
         try {
             sendResult = await sendTelegramMarkdown(bot.api, chatId, text, stripUndefined({
                 ...(nativeBodyRequests.has(req) ? { requireBodyDelivery: true } : {}),
                 message_thread_id: messageThreadId,
                 signal: outbound.signal,
+                onBodyDelivered: (id?: string) => {
+                    if (id && platformMessageId === null) platformMessageId = id;
+                },
             }));
         } finally {
             outbound.done();
@@ -549,23 +556,31 @@ async function telegramSendHandler(req: ChannelSendRequest): Promise<{ ok: boole
         // Previously the abort threw past this return, so the handler answered
         // 500 with a raw message. A cancelled send is a 499, and it is not ok.
         if (!sendResult.ok) {
-            return { ok: false, error: 'telegram_send_aborted', status: 499, chat_id: chatId, type: 'text' };
+            return { ok: false, error: 'telegram_send_aborted', status: 499, chat_id: chatId, type: 'text',
+                ...deliveryFailed(platformMessageId) };
         }
-        return { ok: true, chat_id: chatId, type: 'text' };
+        return { ok: true, chat_id: chatId, type: 'text', ...deliverySent(platformMessageId) };
     }
 
     if (req.type === 'keyboard') {
         const text = req.text?.trim();
         if (!text || !req.reply_markup) return { ok: false, error: 'text and reply_markup required for keyboard type' };
+        // sendWithRetryPolicy discards the vendor return and is shared with other
+        // callers, so capture the id inside the thunk rather than change it.
+        let platformMessageId: string | null = null;
         const sent = await sendWithRetryPolicy(
-            () => bot.api.sendMessage(chatId, redactOutboundText(text), stripUndefined({
-                message_thread_id: messageThreadId,
-                reply_markup: redactOutboundPayload(req.reply_markup) as import("@grammyjs/types").InlineKeyboardMarkup,
-            })),
+            async () => {
+                const sentMessage = await bot.api.sendMessage(chatId, redactOutboundText(text), stripUndefined({
+                    message_thread_id: messageThreadId,
+                    reply_markup: redactOutboundPayload(req.reply_markup) as import("@grammyjs/types").InlineKeyboardMarkup,
+                }));
+                const id = (sentMessage as { message_id?: unknown } | undefined)?.message_id;
+                if (typeof id === 'number' || typeof id === 'string') platformMessageId = String(id);
+            },
             (err) => log.warn('[tg:keyboard] send failed:', logErrorText(err)),
         );
-        if (!sent) return { ok: false, error: 'keyboard send failed' };
-        return { ok: true, chat_id: chatId, type: 'keyboard' };
+        if (!sent) return { ok: false, error: 'keyboard send failed', ...deliveryFailed(null) };
+        return { ok: true, chat_id: chatId, type: 'keyboard', ...deliverySent(platformMessageId) };
     }
 
     // File types

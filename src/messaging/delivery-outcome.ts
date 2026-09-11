@@ -21,6 +21,70 @@ export interface DeliveryFailure {
 
 export type DeliveryStatus = 'sent' | 'failed' | 'unsupported';
 
+/** How far a send got, as reported by a LIVE transport.
+ *
+ *  Separate from `DeliveryReceipt` on purpose. That type is the ChannelAdapter
+ *  port, which no production class implements, and its `status` is this string
+ *  enum. On a live send result `status` is already the HTTP code — read by
+ *  `sendResultHttpStatus` and mapped onto the response by the channel route — so
+ *  reusing it here would silently turn a real 403 or 429 into a 502. Hence
+ *  `deliveryStatus`. */
+export type DeliveryVerification = 'verified' | 'failed' | 'unavailable';
+
+export type LiveDeliveryFields = {
+    deliveryStatus: DeliveryStatus;
+    /** Null when the transport issued no id, or issued one this code cannot see. */
+    platformMessageId: string | null;
+    /** True when the transport cannot prove whether the send reached the vendor. */
+    ambiguous: boolean;
+    /** Slack posts before it can verify rendering, so `ok` and `verified` are not
+     *  the same claim. Absent on transports that never check. */
+    verification?: DeliveryVerification;
+};
+
+/** The live send-registry bag. Every delivery field is OPTIONAL here: a refusal
+ *  that never reached a vendor (no channel configured, empty text, cancelled)
+ *  has no receipt to give, and pretending otherwise would be a lie the type
+ *  system cannot catch. Leaves that DID dispatch always fill them in. */
+export type TransportSendResult = {
+    ok: boolean;
+    error?: string;
+    /** HTTP status. Never a delivery classification. */
+    status?: number;
+    deliveryStatus?: DeliveryStatus;
+    platformMessageId?: string | null;
+    ambiguous?: boolean;
+    verification?: DeliveryVerification;
+    [k: string]: unknown;
+};
+
+export function deliverySent(
+    platformMessageId: string | null,
+    extra?: { ambiguous?: boolean; verification?: DeliveryVerification },
+): LiveDeliveryFields {
+    const fields: LiveDeliveryFields = {
+        deliveryStatus: 'sent',
+        platformMessageId,
+        // No id means we cannot point at what we sent, which is exactly the
+        // condition `ambiguous` exists to report.
+        ambiguous: extra?.ambiguous ?? platformMessageId === null,
+    };
+    // exactOptionalPropertyTypes: copy only when present, never assign undefined.
+    if (extra?.verification) fields.verification = extra.verification;
+    return fields;
+}
+
+export function deliveryFailed(
+    platformMessageId: string | null,
+    extra?: { ambiguous?: boolean },
+): LiveDeliveryFields {
+    return {
+        deliveryStatus: 'failed',
+        platformMessageId,
+        ambiguous: extra?.ambiguous ?? false,
+    };
+}
+
 /** The single outbound result shape. `platformMessageId` is nullable rather than
  *  optional so a caller cannot confuse "this transport issued no id" with "the
  *  field was left off". A sent receipt always carries one. */
@@ -102,6 +166,10 @@ function failure(kind: DeliveryFailureKind, input: DeliveryErrorInput): Delivery
     };
 }
 
+/** TEST-ONLY classifier. No production Telegram send or file path imports this:
+ *  the live text path throws vendor errors rather than mapping them, and the
+ *  file path reports `statusCode`. Kept because `tests/unit/delivery-outcome.test.ts`
+ *  pins the classification table, not because anything ships through it (#687). */
 export const telegramDeliveryError: DeliveryErrorMapper = (err) => {
     const kind = classifySendFailure(err);
     const record = err && typeof err === 'object'
@@ -116,6 +184,10 @@ export const telegramDeliveryError: DeliveryErrorMapper = (err) => {
     };
 };
 
+/** TEST-ONLY classifier. Live Slack failures are built by `slackFailure` with an
+ *  HTTP `status` in `src/slack/send-only-client.ts`, so nothing in production
+ *  reaches this mapper. Kept for the classification table in
+ *  `tests/unit/delivery-outcome.test.ts` (#687). */
 export const slackDeliveryError: DeliveryErrorMapper = (err) => {
     const input = errorInput(err, 'slack');
     const code = input.code;
@@ -134,6 +206,8 @@ export const slackDeliveryError: DeliveryErrorMapper = (err) => {
     return failure(input.dispatched === false ? 'transient' : 'ambiguous', input);
 };
 
+/** The one LIVE mapper: used by `src/discord/send-only-client.ts` and
+ *  `src/discord/rest-scheduler.ts`. */
 export const discordDeliveryError: DeliveryErrorMapper = (err) => {
     const input = errorInput(err, 'discord');
     if (input.status === 401) return failure('auth', input);

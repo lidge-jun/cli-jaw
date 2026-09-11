@@ -46,9 +46,19 @@ type VendorLog = { calls: string[] };
 /**
  * A reference adapter driven entirely by the real capability declaration. It stands
  * in for the vendor transport, not for the contract: the declaration, the refusal
- * rule and the receipt shape under test are the shipped ones. Wiring the three live
- * transports into this port is the next migration step; until then this proves the
- * contract itself holds and that every declared capability has a reachable method.
+ * rule and the receipt shape under test are the shipped ones.
+ *
+ * NOT CONNECTED TO THE LIVE TRANSPORTS, and that is deliberate rather than
+ * pending. Slack, Discord and Telegram do not implement `ChannelAdapter` at all:
+ * they register `TransportSendFn` handlers through `registerSendTransport`, whose
+ * results carry `deliveryStatus` / `platformMessageId` / `ambiguous` (and Slack's
+ * `verification`) from `src/messaging/delivery-outcome.ts`. `DeliveryReceipt.status`
+ * asserted below is the ADAPTER PORT's string enum; on a live send result `status`
+ * is the HTTP code, which is why the live classification uses a different key.
+ *
+ * So this suite proves the port's contract holds and that every declared
+ * capability has a reachable method. It does not prove anything about
+ * `sendSlackText`, `sendDiscordTextRest` or `sendTelegramMarkdown` (#687).
  */
 function referenceAdapter(channel: MessengerChannel, vendor: VendorLog): ChannelAdapter {
     const capabilities: ChannelCapabilities = capabilitiesFor(channel);

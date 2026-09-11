@@ -10,7 +10,9 @@ import {
 } from './rest-scheduler.js';
 import {
     discordDeliveryError,
+    deliverySent,
     type DeliveryFailure,
+    type LiveDeliveryFields,
 } from '../messaging/delivery-outcome.js';
 
 export type DiscordSendClientResult =
@@ -37,8 +39,27 @@ export function getDiscordSendClient(): DiscordSendClientResult {
 }
 
 export type DiscordRestSendResult =
-    | { ok: true; failure?: never; error?: never; status?: never }
+    | ({ ok: true; failure?: never; error?: never; status?: never } & LiveDeliveryFields)
     | { ok: false; failure: DeliveryFailure; error: string; status?: number };
+
+/** Discord answers a message POST with the created message as JSON. The id was
+ *  being thrown away by a parse that returned undefined, so nothing downstream
+ *  could say WHICH message had been sent (#687).
+ *
+ *  Parse failures are swallowed rather than raised: a 204, an empty body or a
+ *  shape we do not recognise still means the message was posted, and letting
+ *  the scheduler turn that into ok:false would invent a transport failure out
+ *  of a successful send. */
+async function parseDiscordMessageId(response: Response): Promise<string | null> {
+    try {
+        const body: unknown = await response.json();
+        if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+        const id = (body as { id?: unknown }).id;
+        return typeof id === 'string' && id.length > 0 ? id : null;
+    } catch {
+        return null;
+    }
+}
 
 function schedulerFor(token: string): DiscordRestScheduler {
     if (cachedScheduler?.token === token) return cachedScheduler.scheduler;
@@ -49,7 +70,7 @@ function schedulerFor(token: string): DiscordRestScheduler {
 }
 
 function sendResult<T>(result: DiscordRestResult<T>): DiscordRestSendResult {
-    if (result.ok) return { ok: true };
+    if (result.ok) return { ok: true, ...deliverySent(typeof result.value === 'string' ? result.value : null) };
     return {
         ok: false,
         failure: result.failure,
@@ -83,6 +104,7 @@ export async function sendDiscordTextRest(
         return { ok: false, status: 400, error: 'discord_empty_message',
             failure: { kind: 'format', retryAfterMs: 0, code: 'empty_message', message: 'discord_empty_message' } };
     }
+    let firstId: string | null = null;
     for (const [index, chunk] of chunks.entries()) {
         // A shutdown abort between chunks is a cancellation, not a vendor
         // failure (#417).
@@ -106,11 +128,13 @@ export async function sendDiscordTextRest(
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
             }),
-            parse: async () => undefined,
+            parse: parseDiscordMessageId,
         });
         if (!result.ok) return sendResult(result);
+        // First chunk wins, the same rule Slack uses for firstTs.
+        if (index === 0 && typeof result.value === 'string') firstId = result.value;
     }
-    return { ok: true };
+    return { ok: true, ...deliverySent(firstId) };
 }
 
 export async function openDiscordDm(token: string, userId: string, fetchImpl?: typeof fetch): Promise<{ ok: true; channelId: string } | { ok: false; error: string }> {
@@ -142,13 +166,15 @@ export async function sendDiscordDm(
     if (!fetchImpl) return sendDiscordTextRest(token, dm.channelId, text, extra);
     const scheduler = new DiscordRestScheduler({ token, fetchImpl });
     const chunks = chunkDiscordMessage(text);
+    let firstId: string | null = null;
     for (const [index, chunk] of chunks.entries()) {
         const body: Record<string, unknown> = { content: chunk };
         if (index === 0 && extra?.components) body['components'] = extra.components;
-        const result = await scheduler.schedule({ method: 'POST', path: `/channels/${encodeURIComponent(dm.channelId)}/messages`, routeKey: 'POST:/channels/:channel/messages', majorKey: dm.channelId, makeInit: () => ({ headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), parse: async () => undefined });
+        const result = await scheduler.schedule({ method: 'POST', path: `/channels/${encodeURIComponent(dm.channelId)}/messages`, routeKey: 'POST:/channels/:channel/messages', majorKey: dm.channelId, makeInit: () => ({ headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), parse: parseDiscordMessageId });
         if (!result.ok) return sendResult(result);
+        if (index === 0 && typeof result.value === 'string') firstId = result.value;
     }
-    return { ok: true };
+    return { ok: true, ...deliverySent(firstId) };
 }
 
 export async function sendDiscordFileRest(
@@ -184,7 +210,7 @@ export async function sendDiscordFileRest(
                 }
                 return { body: form };
             },
-            parse: async () => undefined,
+            parse: parseDiscordMessageId,
         });
         return sendResult(result);
     } catch (error) {

@@ -12,6 +12,13 @@ test('same-size wrong cell fails without reposting', async () => {
     const result = await sendSlackText('fixture', { channel: 'slack', targetId: 'D1', targetKind: 'user', peerKind: 'direct' }, '| H |\n| --- |\n| X |', { fetchImpl });
     assert.equal(result.ok, true);
     assert.equal(result.delivery?.verification, 'failed');
+    // #687: posted is not verified. The common receipt says the send happened
+    // AND that rendering could not be confirmed, instead of hiding the second
+    // half behind ok:true where every caller ignored it.
+    assert.equal(result.deliveryStatus, 'sent');
+    assert.equal(result.verification, 'failed');
+    assert.equal(result.platformMessageId, '1.1');
+    assert.equal(result.ambiguous, false);
     assert.match(result.delivery!.messages[0]!.error!, /table_content_mismatch:0:1:0/);
     assert.equal(result.sent, true);
     assert.equal(result.retryable, false);
