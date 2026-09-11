@@ -571,7 +571,10 @@ test('BWCOMP-008: ChatGPT reasoning effort is exposed through CLI and typed inpu
     assert.match(cliSrc, /'reasoning-effort': \{ type: 'string' \}/);
     assert.match(cliSrc, /reasoningEffort: values\.effort \|\| values\['reasoning-effort'\]/);
     assert.match(cliSrc, /reasoning effort requires --model/);
-    assert.match(cliSrc, /modelKey = String\(model \|\| ''\)/);
+    // This used to pin the local modelKey lowercasing, which existed only to feed
+    // a second copy of the model table. The effort gate now normalizes through
+    // the runtime, so the assertion follows that instead of the deleted line.
+    assert.match(cliSrc, /normalizedModel = normalizeChatGptModelChoice\(String\(model \|\| ''\)\)/);
     assert.match(typesSrc, /reasoningEffort\?: string/);
 });
 
