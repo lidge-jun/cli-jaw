@@ -679,3 +679,79 @@ test('ranking a listing never strips the figure off the row the owner just read'
     await f.controller.selectSession('a');
     assert.equal(meter(f.controller), 1234);
 });
+
+// --- #703: a spent clientTurnKey is a report, not an admission ---
+// The server consumes a key once. After a restart seals the turn, the same key
+// returns HTTP 200 with the stored status and starts nothing, and the orphaned
+// turn's own user_message stays in history.
+
+test('a duplicate receipt for a spent key does not close the send, and Retry then carries a key the server can admit', async t => {
+    const f = fixture(t); await f.controller.refresh(); await f.controller.selectSession('a');
+    const pending = deferred<Response>();
+    f.intercept(call => call.path.endsWith('/prompt') ? pending.promise : undefined);
+    f.controller.setInput('original message');
+    const sending = f.controller.send();
+    pending.reject(new TypeError('connection dropped'));
+    await sending;
+    const first = String(f.posts()[0]!.body['clientTurnKey']);
+    assert.equal(f.controller.getModel().operation.kind, 'unknown-send');
+    f.intercept(call => call.path.endsWith('/prompt')
+        ? response({ ok: true, turnId: 't', clientTurnKey: call.body['clientTurnKey'], sequence: 3, status: 'failed' }) : undefined);
+    await f.controller.retrySameSend();
+    assert.equal(f.controller.getModel().operation.kind, 'unknown-send', 'a failed duplicate is not an admission');
+    assert.match(f.controller.getModel().operation.error!, /not resent/);
+    assert.equal(f.controller.getModel().retryText, 'original message', 'the message is kept');
+    f.intercept(call => call.path.endsWith('/prompt')
+        ? response({ ok: true, turnId: 'second', clientTurnKey: call.body['clientTurnKey'], sequence: 4, status: 'accepted' }) : undefined);
+    await f.controller.retrySameSend();
+    assert.notEqual(f.posts()[2]!.body['clientTurnKey'], first, 'the spent key is retired');
+    assert.equal(f.posts()[2]!.body['text'], 'original message');
+    assert.equal(f.controller.getModel().operation.kind, 'idle');
+});
+
+test('an orphaned turn does not acknowledge itself through its own transcript', async t => {
+    const f = fixture(t); await f.controller.refresh(); await f.controller.selectSession('a');
+    const pending = deferred<Response>();
+    f.intercept(call => call.path.endsWith('/prompt') ? pending.promise : undefined);
+    f.controller.setInput('original message');
+    const sending = f.controller.send();
+    const key = String(f.posts()[0]!.body['clientTurnKey']);
+    pending.reject(new TypeError('old page disposed'));
+    await sending;
+    assert.equal(f.controller.getModel().operation.kind, 'unknown-send');
+    // recoverInterrupted() seals the turn: the user message stays in history and a
+    // turn_failed lands beside it. Matching the key alone would read that as success.
+    const sent: CodeItem = { itemId: 't:user', firstSequence: 4, turnId: 't', kind: 'user_message', status: 'done',
+        text: 'original message', clientTurnKey: key, createdAt: 1, updatedAt: 1 };
+    const terminal: CodeItem = { itemId: 't:terminal', firstSequence: 5, turnId: 't', kind: 'turn_failed', status: 'done',
+        createdAt: 1, updatedAt: 1 };
+    f.snapshots.set('a', snap(session('a', { sequence: 5, status: 'failed', error: { code: 'orphaned_turn',
+        message: 'Code turn interrupted by server restart', at: 1, recoverable: true } }), [sent, terminal]));
+    f.intercept(() => undefined);
+    await f.controller.refresh();
+    assert.equal(f.controller.getModel().operation.kind, 'unknown-send', 'the settled turn is not an acknowledgement');
+    assert.match(f.controller.getModel().operation.error!, /not resent/);
+    assert.equal(f.controller.getModel().retryText, 'original message');
+    assert.equal(f.posts().length, 1, 'nothing was resent automatically');
+});
+
+test('a user message whose turn actually ran still acknowledges the send', async t => {
+    const f = fixture(t); await f.controller.refresh(); await f.controller.selectSession('a');
+    const pending = deferred<Response>();
+    f.intercept(call => call.path.endsWith('/prompt') ? pending.promise : undefined);
+    f.controller.setInput('original message');
+    const sending = f.controller.send();
+    const key = String(f.posts()[0]!.body['clientTurnKey']);
+    const sent: CodeItem = { itemId: 't:user', firstSequence: 4, turnId: 't', kind: 'user_message', status: 'done',
+        text: 'original message', clientTurnKey: key, createdAt: 1, updatedAt: 1 };
+    const finished: CodeItem = { itemId: 't:terminal', firstSequence: 5, turnId: 't', kind: 'turn_completed', status: 'done',
+        createdAt: 1, updatedAt: 1 };
+    f.snapshots.set('a', snap(session('a', { sequence: 5 }), [sent, finished]));
+    pending.reject(new TypeError('response lost'));
+    await sending;
+    f.intercept(() => undefined);
+    await f.controller.refresh();
+    assert.equal(f.controller.getModel().operation.kind, 'idle', 'a turn that ran is a real acknowledgement');
+    assert.equal(f.controller.getModel().retryText, null);
+    assert.equal(f.posts().length, 1);
+});
