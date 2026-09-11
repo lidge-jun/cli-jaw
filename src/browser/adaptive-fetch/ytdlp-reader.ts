@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { validateFetchUrl } from './safety.js';
+import { assertPublicResolvedHost, DEFAULT_REDIRECT_LIMIT, validateFetchUrl } from './safety.js';
+
+import type { ResolveHost } from './safety.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -34,10 +36,26 @@ export interface YtdlpMetadata {
     automatic_captions?: Record<string, Array<{ ext: string; url: string }>>;
 }
 
+export interface YtdlpOptions {
+    timeoutMs?: number;
+    fetchImpl?: typeof fetch;
+    resolveHost?: ResolveHost;
+}
+
 export async function ytdlpMetadata(
     url: string,
-    options?: { timeoutMs?: number },
+    options?: YtdlpOptions,
 ): Promise<YtdlpMetadata | null> {
+    // The binary follows its own redirects and fetches related resources, so
+    // the only place we can still refuse is before it is handed the URL.
+    // This runs ahead of binary detection so the refusal does not depend on
+    // yt-dlp being installed.
+    try {
+        validateFetchUrl(url, { allowPrivateNetwork: false });
+        await assertPublicResolvedHost(url, options?.resolveHost, { sensitiveQuery: 'allow' });
+    } catch {
+        return null;
+    }
     const binary = await detectYtdlp();
     if (!binary) return null;
     const timeout = Math.ceil((options?.timeoutMs || 30_000) / 1000);
@@ -56,7 +74,7 @@ export async function ytdlpMetadata(
 export async function ytdlpSubtitles(
     url: string,
     lang = 'en',
-    options?: { timeoutMs?: number; fetchImpl?: typeof fetch },
+    options?: YtdlpOptions,
 ): Promise<string | null> {
     const meta = await ytdlpMetadata(url, options);
     if (!meta) return null;
@@ -65,11 +83,25 @@ export async function ytdlpSubtitles(
     const vttEntry = captions.find(e => e.ext === 'vtt') || captions[0];
     if (!vttEntry?.url) return null;
     try {
-        validateFetchUrl(vttEntry.url);
         const fetchFn = options?.fetchImpl || fetch;
-        const response = await fetchFn(vttEntry.url, { signal: AbortSignal.timeout(15_000) });
-        if (!response.ok) return null;
-        return extractSubtitleText(await response.text());
+        // The caption CDN redirects, and fetch follows by default, so a hop
+        // into a private address used to be reached without any check.
+        let current = validateFetchUrl(vttEntry.url, { allowPrivateNetwork: false }).href;
+        for (let redirects = 0; redirects <= DEFAULT_REDIRECT_LIMIT; redirects += 1) {
+            await assertPublicResolvedHost(current, options?.resolveHost, { sensitiveQuery: 'allow' });
+            const response = await fetchFn(current, {
+                redirect: 'manual',
+                signal: AbortSignal.timeout(15_000),
+            });
+            const location = response.headers.get('location');
+            if (response.status >= 300 && response.status < 400 && location) {
+                current = validateFetchUrl(new URL(location, current).href, { allowPrivateNetwork: false }).href;
+                continue;
+            }
+            if (!response.ok) return null;
+            return extractSubtitleText(await response.text());
+        }
+        return null;
     } catch {
         return null;
     }

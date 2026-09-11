@@ -202,7 +202,11 @@ async function handlePreview(req: Request, res: ExpressResponse, options: LinkPr
             maxBytes: PREVIEW_MAX_HTML_BYTES,
             redirectLimit: PREVIEW_REDIRECT_LIMIT,
             allowPrivateNetwork: false,
-            beforeFetch: url => assertPublicResolvedHost(url, options.resolveHost),
+            // fetchTextCandidate now runs assertPublicResolvedHost itself on
+            // every hop and defaults to the strict sensitive-query rule, so
+            // handing it the resolver replaces the old beforeFetch hook rather
+            // than doubling the DNS lookup per hop.
+            ...(options.resolveHost ? { resolveHost: options.resolveHost } : {}),
         });
         if (!fetched.ok || !isHtmlLike(fetched.contentType, fetched.text)) {
             setCached(previewCache, cacheKey, null, NEGATIVE_CACHE_TTL_MS);

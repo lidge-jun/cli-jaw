@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { validateFetchUrl } from './safety.js';
+import { assertPublicResolvedHost, DEFAULT_REDIRECT_LIMIT, validateFetchUrl } from './safety.js';
+
+import type { ResolveHost } from './safety.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -37,48 +39,73 @@ export interface TlsFetchResult {
     profile: TlsProfile;
 }
 
+export type TlsExecFile = (
+    binary: string,
+    args: string[],
+    options: { timeout: number; maxBuffer: number },
+) => Promise<{ stdout: string }>;
+
+export interface TlsFetchOptions {
+    timeoutMs?: number;
+    maxBytes?: number;
+    proxy?: string;
+    redirectLimit?: number;
+    resolveHost?: ResolveHost;
+    /** Injected for tests; production goes through the detected curl binary. */
+    execFileImpl?: TlsExecFile;
+}
+
 export async function tlsFetch(
     rawUrl: string,
-    options?: { timeoutMs?: number; maxBytes?: number; proxy?: string },
+    options?: TlsFetchOptions,
 ): Promise<TlsFetchResult | null> {
-    const binary = await detectCurlImpersonate();
+    const execFileFn: TlsExecFile = options?.execFileImpl
+        || ((binary, args, opts) => execFileAsync(binary, args, opts) as Promise<{ stdout: string }>);
+    const binary = options?.execFileImpl ? 'curl-impersonate-chrome' : await detectCurlImpersonate();
     if (!binary) return null;
 
-    const safeUrl = validateFetchUrl(rawUrl);
-    const profile = selectProfile(safeUrl.href);
+    let current = validateFetchUrl(rawUrl).href;
     const timeout = Math.ceil((options?.timeoutMs || 15_000) / 1000);
+    const redirectLimit = Number(options?.redirectLimit ?? DEFAULT_REDIRECT_LIMIT);
 
     try {
-        const args = [
-            '--impersonate', profile,
-            '--max-time', String(timeout),
-            '--max-filesize', String(options?.maxBytes || 5_000_000),
-            '-L', '-s',
-            '-i',
-        ];
-        if (options?.proxy) args.push('--proxy', options.proxy);
-        args.push(safeUrl.href);
-        const { stdout } = await execFileAsync(binary, args, { timeout: (timeout + 5) * 1000, maxBuffer: 10_000_000 });
+        // curl used to follow the whole chain itself with -L, which meant the
+        // private hop was already fetched by the time the final URL was
+        // checked, and only the FIRST response's Location was ever inspected.
+        // Each hop is now issued separately and cleared before it is issued.
+        for (let redirects = 0; redirects <= redirectLimit; redirects += 1) {
+            await assertPublicResolvedHost(current, options?.resolveHost, { sensitiveQuery: 'allow' });
+            const profile = selectProfile(current);
+            const args = [
+                '--impersonate', profile,
+                '--max-time', String(timeout),
+                '--max-filesize', String(options?.maxBytes || 5_000_000),
+                '-s',
+                '-i',
+            ];
+            if (options?.proxy) args.push('--proxy', options.proxy);
+            args.push(current);
+            const { stdout } = await execFileFn(binary, args, { timeout: (timeout + 5) * 1000, maxBuffer: 10_000_000 });
 
-        const sep = stdout.indexOf('\r\n\r\n');
-        const headerText = sep > 0 ? stdout.slice(0, sep) : '';
-        const body = sep > 0 ? stdout.slice(sep + 4) : stdout;
-        const statusMatch = headerText.match(/HTTP\/\S+\s+(\d+)/);
-        const status = statusMatch ? Number(statusMatch[1]) : 200;
-        const headers: Record<string, string> = {};
-        for (const line of headerText.split('\r\n').slice(1)) {
-            const idx = line.indexOf(':');
-            if (idx > 0) headers[line.slice(0, idx).toLowerCase().trim()] = line.slice(idx + 1).trim();
+            const sep = stdout.indexOf('\r\n\r\n');
+            const headerText = sep > 0 ? stdout.slice(0, sep) : '';
+            const body = sep > 0 ? stdout.slice(sep + 4) : stdout;
+            const statusMatch = headerText.match(/HTTP\/\S+\s+(\d+)/);
+            const status = statusMatch ? Number(statusMatch[1]) : 200;
+            const headers: Record<string, string> = {};
+            for (const line of headerText.split('\r\n').slice(1)) {
+                const idx = line.indexOf(':');
+                if (idx > 0) headers[line.slice(0, idx).toLowerCase().trim()] = line.slice(idx + 1).trim();
+            }
+
+            const location = extractFinalUrl(headerText);
+            if (status >= 300 && status < 400 && location) {
+                current = validateFetchUrl(new URL(location, current).href, { allowPrivateNetwork: false }).href;
+                continue;
+            }
+            return { ok: status >= 200 && status < 400, status, headers, body, profile };
         }
-
-        const finalUrl = extractFinalUrl(headerText) || safeUrl.href;
-        try {
-            validateFetchUrl(finalUrl, { allowPrivateNetwork: false });
-        } catch {
-            return null;
-        }
-
-        return { ok: status >= 200 && status < 400, status, headers, body, profile };
+        return null;
     } catch {
         return null;
     }

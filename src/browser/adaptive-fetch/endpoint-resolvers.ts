@@ -1,5 +1,7 @@
 // Mirrored from agbrowse adaptive-fetch v2; keep runtime behavior aligned while cli-jaw mirror remains experimental.
 
+import net from 'node:net';
+
 import type { CandidateUrl } from './types.js';
 
 export function resolvePublicEndpointCandidates(rawUrl: string | URL): CandidateUrl[] {
@@ -156,6 +158,16 @@ function blueskyCandidates(url: URL): CandidateUrl[] {
 }
 
 function mastodonCandidates(url: URL): CandidateUrl[] {
+    // The candidate reuses the hostname the caller already supplied and the
+    // scheduler fetches that same host directly anyway, so this resolver does
+    // not widen SSRF reach -- the per-hop DNS guard in the fetch lane is what
+    // contains it. A known-instance allowlist was considered and rejected: it
+    // would block most of the fediverse while still admitting any hostname that
+    // happens to end in an allowed suffix. What is worth refusing here is a
+    // shape no real instance has, so an IP literal or a single-label host does
+    // not get an API candidate synthesised for it.
+    if (net.isIP(url.hostname) !== 0) return [];
+    if (!url.hostname.includes('.')) return [];
     const parts = url.pathname.split('/').filter(Boolean);
     const statusMatch = parts.length >= 2 && parts[0]!.startsWith('@') && /^\d+$/.test(parts[1]!);
     if (statusMatch) {
