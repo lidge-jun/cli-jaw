@@ -15,7 +15,7 @@
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:net';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { resolveTsxSpawn } from '../../src/core/tsx-spawn.ts';
 
@@ -81,17 +81,24 @@ export type StartOptions = {
  * boots a Telegram install and the Slack transport never starts.
  *
  * Declaring v4 in turn obliges the document to carry a valid multiSession block
- * and the multiSessionDefaultMigration key (assertCurrentSchemaSessionShape);
- * null is an accepted value for the latter, but the key must exist. Keeping
- * this in one place means a schema bump is one edit, not one per test.
+ * and the multiSessionDefaultMigration key (assertCurrentSchemaSessionShape),
+ * AND a valid messaging gateway block (assertCurrentSchemaMessagingShape). Miss
+ * any of them and loadSettings throws, latches persistence, and serves LEGACY
+ * defaults instead — multiSession off, one lane — while the server still boots
+ * and answers every request. That failure is invisible unless something looks
+ * for it, which is what assertSettingsAccepted below is for.
+ *
+ * Keeping this in one place means a schema bump is one edit, not one per test.
  */
 export function withSettingsSchema(settings: Record<string, unknown>): Record<string, unknown> {
     const multiSession = (settings['multiSession'] ?? {}) as Record<string, unknown>;
+    const messaging = (settings['messaging'] ?? {}) as Record<string, unknown>;
     return {
         settingsSchemaVersion: 4,
         multiSessionDefaultMigration: null,
         ...settings,
         multiSession: { enabled: true, maxConcurrent: 4, ...multiSession },
+        messaging: { enabledChannels: [], homeChannel: 'telegram', ...messaging },
     };
 }
 
@@ -146,6 +153,25 @@ export async function waitForServer(server: JawServer, timeoutMs = 45_000): Prom
         const res = await fetch(server.base + '/api/session', { signal: AbortSignal.timeout(2000) });
         return res.ok;
     }, timeoutMs);
+    assertSettingsAccepted(server);
+}
+
+/**
+ * A rejected settings document does not stop the boot. loadSettings copies the
+ * file to settings.json.corrupt-<ts>.bak, latches persistence and carries on
+ * with legacy defaults, so a fixture that gets its schema wrong yields a server
+ * that runs with settings nobody asked for — one lane instead of four, an
+ * inbound channel that never starts — and every assertion downstream measures
+ * the wrong thing. The backup file is the cheapest honest signal that happened.
+ */
+export function assertSettingsAccepted(server: JawServer): void {
+    const rejected = readdirSync(server.home).filter(name => name.includes('settings.json.corrupt-'));
+    if (rejected.length === 0) return;
+    throw new Error(
+        'the server rejected the fixture settings and fell back to defaults (' + rejected.join(', ') + ').\n'
+        + 'A v4 document must carry multiSession, multiSessionDefaultMigration and messaging; see withSettingsSchema.\n'
+        + server.output(),
+    );
 }
 
 /**
