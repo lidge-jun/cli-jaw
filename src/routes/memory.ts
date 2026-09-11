@@ -142,7 +142,9 @@ export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware):
 
     app.get('/api/memory-files/:filename', requireAuth, (req, res) => {
         try {
-            const name = assertFilename(req.params.filename);
+            // Same index-signature widening as the DELETE sibling below, which
+            // already reads String(req.params["filename"]).
+            const name = assertFilename(String(req.params['filename'] ?? ''));
             const fp = safeResolveUnder(memoryModule.MEMORY_DIR, name);
             if (!fs.existsSync(fp)) {
                 res.status(404).json({ error: 'not found' });

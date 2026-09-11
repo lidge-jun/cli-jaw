@@ -21,7 +21,10 @@ export function registerI18nRoutes(app: Express, requireAuth: AuthMiddleware, pr
     });
 
     app.get('/api/i18n/:lang', requireAuth, (req, res) => {
-        const raw = req.params.lang.replace(/[^a-z-]/gi, '');
+        // Bracket access with a String() coercion: once a middleware argument is
+        // present Express resolves a handler overload whose params carry an index
+        // signature, so req.params.lang is string | string[] | undefined here.
+        const raw = String(req.params['lang'] ?? '').replace(/[^a-z-]/gi, '');
         const lang = normalizeLocale(raw, '');
         if (!lang) {
             res.status(404).json({ error: 'locale not found' });
