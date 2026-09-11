@@ -10,37 +10,12 @@ import {
     SLACK_HISTORY_MAX_LIMIT,
     type SlackHistoryMessage,
 } from '../../src/slack/history.ts';
-
-// ─── fetch capture harness (slack-outbound.test.ts pattern) ──
-
-type Captured = { url: string; body: Record<string, unknown> };
-
-function makeFetch(responses: Array<Record<string, unknown>>) {
-    const calls: Captured[] = [];
-    let i = 0;
-    const impl = (async (url: string | URL | Request, init?: RequestInit) => {
-        // history.ts sends form-encoded bodies (conversations.replies rejects
-        // JSON with invalid_arguments — see history.ts callWithRetry).
-        const params = new URLSearchParams(String(init?.body ?? ''));
-        const body: Record<string, unknown> = {};
-        for (const [k, v] of params) body[k] = /^\d+$/.test(v) ? Number(v) : v;
-        calls.push({ url: String(url), body });
-        const spec = responses[Math.min(i, responses.length - 1)];
-        i++;
-        return {
-            ok: true,
-            status: 200,
-            text: async () => JSON.stringify(spec ?? { ok: true }),
-        } as unknown as Response;
-    // justified: the harness implements only the Response surface slackApi reads
-    }) as unknown as typeof fetch;
-    return { impl, calls };
-}
+import { makeSlackFetch } from '../helpers/slack-fetch.mts';
 
 const TOKEN = 'xoxb-not-a-real-token-000';
 
 test('fetchSlackHistory normalizes messages and hasMore', async () => {
-    const { impl, calls } = makeFetch([{
+    const { impl, calls } = makeSlackFetch([{
         ok: true,
         has_more: true,
         messages: [
@@ -62,7 +37,7 @@ test('fetchSlackHistory normalizes messages and hasMore', async () => {
 });
 
 test('fetchSlackReplies passes the thread ts and clamps the limit', async () => {
-    const { impl, calls } = makeFetch([{ ok: true, messages: [{ ts: '1.0', user: 'U1', text: 'parent' }] }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true, messages: [{ ts: '1.0', user: 'U1', text: 'parent' }] }]);
     const result = await fetchSlackReplies(TOKEN, 'C1', '1.0', { limit: 9999, fetchImpl: impl });
     assert.ok(result.ok);
     assert.ok(calls[0]!.url.endsWith('/conversations.replies'));
@@ -71,7 +46,7 @@ test('fetchSlackReplies passes the thread ts and clamps the limit', async () => 
 });
 
 test('limit clamps low end to 1', async () => {
-    const { impl, calls } = makeFetch([{ ok: true, messages: [] }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true, messages: [] }]);
     await fetchSlackHistory(TOKEN, 'C1', { limit: 0, fetchImpl: impl });
     // 0 is falsy → default 50, negative clamps to 1
     assert.equal(calls[0]!.body['limit'], 50);
@@ -80,7 +55,7 @@ test('limit clamps low end to 1', async () => {
 });
 
 test('missing_scope surfaces the needed scope and never the token', async () => {
-    const { impl } = makeFetch([{ ok: false, error: 'missing_scope', needed: 'mpim:history' }]);
+    const { impl } = makeSlackFetch([{ ok: false, error: 'missing_scope', needed: 'mpim:history' }]);
     const result = await fetchSlackHistory(TOKEN, 'G-mpim', { fetchImpl: impl });
     assert.ok(!result.ok);
     assert.match(result.error, /mpim:history/);
@@ -88,7 +63,7 @@ test('missing_scope surfaces the needed scope and never the token', async () => 
 });
 
 test('ratelimited retries once and succeeds (activation: retry path fires)', async () => {
-    const { impl, calls } = makeFetch([
+    const { impl, calls } = makeSlackFetch([
         { ok: false, error: 'ratelimited' },
         { ok: true, messages: [{ ts: '1.0', user: 'U1', text: 'after retry' }] },
     ]);
@@ -101,7 +76,7 @@ test('ratelimited retries once and succeeds (activation: retry path fires)', asy
 });
 
 test('non-retryable errors do not retry', async () => {
-    const { impl, calls } = makeFetch([{ ok: false, error: 'channel_not_found' }]);
+    const { impl, calls } = makeSlackFetch([{ ok: false, error: 'channel_not_found' }]);
     const result = await fetchSlackHistory(TOKEN, 'CBAD', { fetchImpl: impl });
     assert.ok(!result.ok);
     assert.equal(calls.length, 1);
@@ -142,7 +117,7 @@ test('a token pasted into a Slack message is redacted from formatted output', ()
 });
 
 test('fetchSlackReplies forwards and returns the pagination cursor', async () => {
-    const { impl, calls } = makeFetch([{
+    const { impl, calls } = makeSlackFetch([{
         ok: true, messages: [], response_metadata: { next_cursor: 'cursor-next' },
     }]);
     const result = await fetchSlackReplies(TOKEN, 'C1', '1.0', {
@@ -184,7 +159,7 @@ test('GET /api/slack/history rejects a missing channel and reports slack-off', a
 
 test('history rich payload and cursor-only continuation survive normalization', async () => {
     const blocks = [{ type: 'table', rows: [[{ type: 'raw_text', text: 'Item' }], [{ type: 'raw_text', text: 'Value' }]] }];
-    const { impl } = makeFetch([{ ok: true, messages: [{ ts: '2.0', blocks, reactions: [{ name: 'eyes', count: 2 }], edited: { ts: '3.0' } }], response_metadata: { next_cursor: 'next' } }]);
+    const { impl } = makeSlackFetch([{ ok: true, messages: [{ ts: '2.0', blocks, reactions: [{ name: 'eyes', count: 2 }], edited: { ts: '3.0' } }], response_metadata: { next_cursor: 'next' } }]);
     const result = await fetchSlackHistory(TOKEN, 'C1', { fetchImpl: impl });
     assert.ok(result.ok);
     assert.equal(result.hasMore, true);
@@ -194,7 +169,7 @@ test('history rich payload and cursor-only continuation survive normalization', 
 });
 
 test('replies forwards time bounds and inclusive', async () => {
-    const { impl, calls } = makeFetch([{ ok: true, messages: [] }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true, messages: [] }]);
     await fetchSlackReplies(TOKEN, 'C1', '1.0', { oldest: '2.0', latest: '3.0', inclusive: true, fetchImpl: impl });
     assert.equal(calls[0]?.body.oldest, '2.0');
     assert.equal(calls[0]?.body.latest, '3.0');
@@ -266,7 +241,7 @@ test('HTTP history forwards pagination and rejects malformed options before Slac
 
 test('normalized oversized blocks cannot evict ts/text from agent output', async () => {
     const { slackHistoryForAgent, formatHistoryForAgentDetailed } = await import('../../src/slack/history.ts');
-    const { impl } = makeFetch([{ ok: true, messages: [{ ts: '1.0', text: 'required body', blocks: [{ text: 'x'.repeat(64000) }] }] }]);
+    const { impl } = makeSlackFetch([{ ok: true, messages: [{ ts: '1.0', text: 'required body', blocks: [{ text: 'x'.repeat(64000) }] }] }]);
     const fetched = await fetchSlackHistory(TOKEN, 'C1', { fetchImpl: impl });
     assert.ok(fetched.ok);
     const messages = slackHistoryForAgent(fetched.messages);

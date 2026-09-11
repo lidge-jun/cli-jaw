@@ -1,7 +1,6 @@
 import '../setup/isolated-home.ts';
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer, type Server } from 'node:http';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,21 +9,13 @@ import { db } from '../../src/core/db.ts';
 import { settings } from '../../src/core/config.ts';
 import { registerMessageRoutes } from '../../src/routes/messages.ts';
 import { registerSessionPageRoute, registerStaticRoutes } from '../../src/routes/static.ts';
+import { withServer as withHttpServer } from '../helpers/with-server.mts';
 
 function noAuth(_req: Request, _res: Response, next: NextFunction): void { next(); }
 
-async function withServer(app: express.Express, fn: (baseUrl: string) => Promise<void>): Promise<void> {
-    const server: Server = createServer(app);
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    try {
-        await fn(`http://127.0.0.1:${address.port}`);
-    } finally {
-        server.closeAllConnections();
-        await new Promise<void>(resolve => server.close(() => resolve()));
-    }
-}
+// Each test builds its own app, so the app arrives per call rather than once.
+const withServer = (app: express.Express, fn: (baseUrl: string) => Promise<void>): Promise<void> =>
+    withHttpServer(fn, { app });
 
 afterEach(() => {
     db.prepare("DELETE FROM messages WHERE session_id IN ('hub-a', 'hub-b')").run();

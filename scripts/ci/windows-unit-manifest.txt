@@ -18,3 +18,9 @@ tests/unit/claude-sdk-control.test.ts
 tests/unit/claude-sdk-core-hardening.test.ts
 tests/unit/claude-sdk-deferred-core.test.ts
 
+# Schema migration only runs against a home that already exists, so every
+# fresh-CLI_JAW_HOME CI run skips it everywhere else. These two build an old
+# home and walk the source tree by path, which is where Windows separators and
+# the better-sqlite3 prebuild actually differ (#691).
+tests/unit/db-schema-migration.test.ts
+tests/unit/db-legacy-mention-watch-surface.test.ts

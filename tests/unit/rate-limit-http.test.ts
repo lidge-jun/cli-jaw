@@ -1,12 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer, type Server } from 'node:http';
-import express from 'express';
 import {
     createRateLimiter,
     createRateLimitMiddleware,
     type RateLimitConfig,
 } from '../../src/core/rate-limit.ts';
+import { withServer as withHttpServer } from '../helpers/with-server.mts';
 
 function testBudgets(browserPoll = 2): RateLimitConfig['budgets'] {
     return {
@@ -18,34 +17,22 @@ function testBudgets(browserPoll = 2): RateLimitConfig['budgets'] {
     };
 }
 
-async function withServer(
-    browserPoll: number,
-    fn: (baseUrl: string) => Promise<void>,
-): Promise<void> {
-    const app = express();
-    const limiter = createRateLimiter({ budgets: testBudgets(browserPoll) });
-    app.use(createRateLimitMiddleware({
-        authToken: 'secret',
-        lanAllowed: () => false,
-        isPrivateIp: () => false,
-        limiter,
-    }));
-    app.all('/api/*path', (_req, res) => res.json({ ok: true }));
-    app.get('/outside', (_req, res) => res.json({ ok: true }));
-    const server: Server = createServer(app);
-    await new Promise<void>((resolve, reject) => {
-        server.once('error', reject);
-        server.listen(0, '127.0.0.1', () => resolve());
+// The budget is per call, so the middleware is built here; the shared helper
+// owns listen (including the 'error' listener) and close.
+const withServer = (browserPoll: number, fn: (baseUrl: string) => Promise<void>): Promise<void> =>
+    withHttpServer(fn, {
+        setup: app => {
+            const limiter = createRateLimiter({ budgets: testBudgets(browserPoll) });
+            app.use(createRateLimitMiddleware({
+                authToken: 'secret',
+                lanAllowed: () => false,
+                isPrivateIp: () => false,
+                limiter,
+            }));
+            app.all('/api/*path', (_req, res) => res.json({ ok: true }));
+            app.get('/outside', (_req, res) => res.json({ ok: true }));
+        },
     });
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    try {
-        await fn(`http://127.0.0.1:${address.port}`);
-    } finally {
-        server.closeAllConnections();
-        await new Promise<void>(resolve => server.close(() => resolve()));
-    }
-}
 
 async function exhaustBrowser(baseUrl: string): Promise<Response> {
     assert.equal((await fetch(`${baseUrl}/api/status`)).status, 200);

@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createServer, type Server } from 'node:http';
-import express, { type NextFunction, type Request, type Response } from 'express';
+import { type NextFunction, type Request, type Response } from 'express';
 import { registerLinkPreviewRoutes } from '../../src/routes/link-preview.ts';
+import { withServer as withHttpServer } from '../helpers/with-server.mts';
 
 const realFetch = globalThis.fetch.bind(globalThis);
 const publicResolveHost = async () => [{ address: '93.184.216.34', family: 4 }];
@@ -13,22 +13,12 @@ function noAuth(_req: Request, _res: Response, next: NextFunction): void {
     next();
 }
 
-async function withServer(
+// Host resolution differs per call. Closing now destroys open connections too,
+// which this file did not do before.
+const withServer = (
     fn: (baseUrl: string) => Promise<void>,
     options: Parameters<typeof registerLinkPreviewRoutes>[2] = { resolveHost: publicResolveHost },
-): Promise<void> {
-    const app = express();
-    registerLinkPreviewRoutes(app, noAuth, options);
-    const server: Server = createServer(app);
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    try {
-        await fn(`http://127.0.0.1:${address.port}`);
-    } finally {
-        await new Promise<void>(resolve => server.close(() => resolve()));
-    }
-}
+): Promise<void> => withHttpServer(fn, { setup: app => registerLinkPreviewRoutes(app, noAuth, options) });
 
 function installFetchMock(handler: (url: string, init?: RequestInit) => Response | Promise<Response>): void {
     Object.defineProperty(globalThis, 'fetch', {

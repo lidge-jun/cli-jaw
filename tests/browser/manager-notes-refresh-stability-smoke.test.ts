@@ -1,20 +1,10 @@
 import assert from 'node:assert/strict';
-import { after, test } from 'node:test';
-import { chromium, type Browser } from 'playwright-core';
+import { test } from 'node:test';
 import { withManagerBrowserLock } from './manager-browser-test-lock';
-
-const MANAGER_URL = process.env.MANAGER_DASHBOARD_URL || 'http://127.0.0.1:24576/';
-const browsers: Browser[] = [];
-
-after(async () => {
-    await Promise.allSettled(browsers.map(browser => browser.close()));
-});
+import { MANAGER_URL, pageForManager } from './manager-notes-page';
 
 test('notes sidebar does not refetch tree/index on every render while active', async () => await withManagerBrowserLock(async () => {
-    const browser = await chromium.launch({ headless: true });
-    browsers.push(browser);
-    const context = await browser.newContext();
-    const page = await context.newPage();
+    const page = await pageForManager();
 
     await page.goto(MANAGER_URL, { waitUntil: 'domcontentloaded' });
     await page.evaluate(async () => {

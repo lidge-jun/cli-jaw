@@ -4,8 +4,8 @@ import { settings } from '../../src/core/config.js';
 import { dispatchApprovalStore } from '../../src/core/dispatch-approval.js';
 import { createTestTransport } from '../../src/core/dispatch-approval-ingress.js';
 import { handleDiscordMessage } from '../../src/discord/bot.js';
+import { pendingDispatchApproval as pending } from './helpers/dispatch-approval.ts';
 
-function pending() { return dispatchApprovalStore.create({ target: { kind: 'agent', name: 'A' }, projectRoot: '/r', task: 't', mutable: false, scope: null, fanOutCap: 1 }); }
 function message(id: string, text: string, bot = false): any { return { id: `m-${Math.random()}`, author: { id, bot }, content: text, channelId: 'dm', attachments: { size: 0 }, guild: null }; }
 test('Discord gateway handler accepts only allowlisted non-self human on trusted transport', async () => {
     settings['dispatchApproval'] = { operators: { slack: [], telegram: [], discord: ['D1'] }, ttlSeconds: 120 };

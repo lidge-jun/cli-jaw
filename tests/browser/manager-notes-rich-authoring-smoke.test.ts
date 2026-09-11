@@ -1,21 +1,12 @@
 import assert from 'node:assert/strict';
-import { after, test, type TestContext } from 'node:test';
-import { chromium, type Browser, type Locator, type Page } from 'playwright-core';
+import { test, type TestContext } from 'node:test';
+import { type Locator, type Page } from 'playwright-core';
 import { cleanupDashboardNotes } from './manager-notes-cleanup';
 import { withManagerBrowserLock } from './manager-browser-test-lock';
-
-const MANAGER_URL = process.env.MANAGER_DASHBOARD_URL || 'http://127.0.0.1:24576/';
-const browsers: Browser[] = [];
+import { MANAGER_URL, pageForManager } from './manager-notes-page';
 
 function serialTest(name: string, fn: (t: TestContext) => unknown | Promise<unknown>): void {
     test(name, { concurrency: false }, async t => await withManagerBrowserLock(async () => await fn(t)));
-}
-
-async function pageForManager(): Promise<Page> {
-    const browser = await chromium.launch({ headless: true });
-    browsers.push(browser);
-    const context = await browser.newContext();
-    return await context.newPage();
 }
 
 async function seedRichNote(page: Page, notePath: string): Promise<void> {
@@ -170,10 +161,6 @@ async function waitForSavedContent(
     assert.ok(predicate(latest), `${message}\nLatest content:\n${latest}`);
     return latest;
 }
-
-after(async () => {
-    await Promise.allSettled(browsers.map(browser => browser.close()));
-});
 
 serialTest('notes WYSIWYG authoring keeps the primary toolbar compact', async () => {
     const page = await pageForManager();

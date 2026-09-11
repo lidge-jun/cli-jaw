@@ -12,41 +12,17 @@ import {
     formatRosterForAgent,
 } from '../../src/slack/roster.ts';
 import { getCachedSlackIdentities, resetSlackIdentityCache } from '../../src/slack/identity.ts';
+import { makeSlackFetch } from '../helpers/slack-fetch.mts';
 
 const TOKEN = 'xoxb-not-a-real-token-000';
 const TEAM = 'T0TEST';
-
-type Call = { method: string; body: Record<string, string> };
-
-/** Route scripted responses by Slack method so page order stays readable. */
-function makeFetch(script: Record<string, Array<Record<string, unknown>>>) {
-    const calls: Call[] = [];
-    const cursors: Record<string, number> = {};
-    const impl = (async (url: string | URL | Request, init?: RequestInit) => {
-        const method = String(url).split('/').pop() || '';
-        const params = new URLSearchParams(String(init?.body ?? ''));
-        const body: Record<string, string> = {};
-        for (const [k, v] of params) body[k] = v;
-        calls.push({ method, body });
-        const queue = script[method] ?? [{ ok: true }];
-        const index = Math.min(cursors[method] ?? 0, queue.length - 1);
-        cursors[method] = (cursors[method] ?? 0) + 1;
-        return {
-            ok: true,
-            status: 200,
-            text: async () => JSON.stringify(queue[index]),
-        } as unknown as Response;
-    // justified: the harness implements only the Response surface slackApi reads
-    }) as unknown as typeof fetch;
-    return { impl, calls };
-}
 
 const user = (id: string, name: string, over: Record<string, unknown> = {}) =>
     ({ id, profile: { display_name: name }, ...over });
 
 test('channel members resolve to names through one users.list join', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch({
+    const { impl, calls } = makeSlackFetch({
         'conversations.members': [{ ok: true, members: ['U1', 'U2'] }],
         'users.list': [{ ok: true, members: [user('U1', '김병준'), user('U2', 'Ada')] }],
     });
@@ -60,13 +36,13 @@ test('channel members resolve to names through one users.list join', async () =>
 
 test('members already in the identity cache cost no call at all', async () => {
     resetSlackIdentityCache();
-    const warm = makeFetch({
+    const warm = makeSlackFetch({
         'conversations.members': [{ ok: true, members: ['U1'] }],
         'users.list': [{ ok: true, members: [user('U1', 'Jun')] }],
     });
     await fetchSlackChannelMembers(TOKEN, 'C1', { teamId: TEAM, fetchImpl: warm.impl });
 
-    const second = makeFetch({ 'conversations.members': [{ ok: true, members: ['U1'] }] });
+    const second = makeSlackFetch({ 'conversations.members': [{ ok: true, members: ['U1'] }] });
     const result = await fetchSlackChannelMembers(TOKEN, 'C1', { teamId: TEAM, fetchImpl: second.impl });
     assert.ok(result.ok);
     assert.equal(result.members[0]!.name, 'Jun');
@@ -75,7 +51,7 @@ test('members already in the identity cache cost no call at all', async () => {
 
 test('membership pagination follows the cursor', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch({
+    const { impl, calls } = makeSlackFetch({
         'conversations.members': [
             { ok: true, members: ['U1'], response_metadata: { next_cursor: 'c2' } },
             { ok: true, members: ['U2'] },
@@ -92,7 +68,7 @@ test('membership pagination follows the cursor', async () => {
 
 test('membership walk stops at its page ceiling and says so', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch({
+    const { impl, calls } = makeSlackFetch({
         // Always another cursor: without a cap this walks forever.
         'conversations.members': [{ ok: true, members: ['U1'], response_metadata: { next_cursor: 'more' } }],
         'users.list': [{ ok: true, members: [user('U1', 'A')] }],
@@ -105,7 +81,7 @@ test('membership walk stops at its page ceiling and says so', async () => {
 
 test('the users.list join is bounded even when the target never appears', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch({
+    const { impl, calls } = makeSlackFetch({
         'conversations.members': [{ ok: true, members: ['U_MISSING'] }],
         // Endless directory that never contains the member being looked for.
         'users.list': [{ ok: true, members: [user('UX', 'X')], response_metadata: { next_cursor: 'more' } }],
@@ -119,7 +95,7 @@ test('the users.list join is bounded even when the target never appears', async 
 
 test('an unresolved member is listed rather than silently dropped', async () => {
     resetSlackIdentityCache();
-    const { impl } = makeFetch({
+    const { impl } = makeSlackFetch({
         'conversations.members': [{ ok: true, members: ['U1', 'U_GHOST'] }],
         'users.list': [{ ok: true, members: [user('U1', 'Jun')] }],
         'users.info': [{ ok: false, error: 'user_not_found' }],
@@ -132,7 +108,7 @@ test('an unresolved member is listed rather than silently dropped', async () => 
 
 test('missing_scope surfaces as operator prose, not a raw error code', async () => {
     resetSlackIdentityCache();
-    const { impl } = makeFetch({
+    const { impl } = makeSlackFetch({
         'conversations.members': [{ ok: false, error: 'missing_scope', needed: 'channels:read' }],
     });
     const result = await fetchSlackChannelMembers(TOKEN, 'C1', { teamId: TEAM, fetchImpl: impl });
@@ -142,7 +118,7 @@ test('missing_scope surfaces as operator prose, not a raw error code', async () 
 
 test('workspace users always send a limit', async () => {
     resetSlackIdentityCache();
-    const { impl, calls } = makeFetch({
+    const { impl, calls } = makeSlackFetch({
         'users.list': [{ ok: true, members: [user('U1', 'Jun')] }],
         'team.info': [{ ok: true, team: { name: 'Acme' } }],
     });
@@ -161,7 +137,7 @@ test('bots and deactivated accounts are excluded unless asked for', async () => 
         user('U3', 'Gone', { deleted: true }),
     ];
     const plain = await fetchSlackWorkspaceUsers(TOKEN, {
-        teamId: TEAM, fetchImpl: makeFetch({ 'users.list': [{ ok: true, members: directory }] }).impl,
+        teamId: TEAM, fetchImpl: makeSlackFetch({ 'users.list': [{ ok: true, members: directory }] }).impl,
     });
     assert.ok(plain.ok);
     assert.deepEqual(plain.members.map(m => m.id), ['U1']);
@@ -169,7 +145,7 @@ test('bots and deactivated accounts are excluded unless asked for', async () => 
     resetSlackIdentityCache();
     const full = await fetchSlackWorkspaceUsers(TOKEN, {
         teamId: TEAM, includeBots: true, includeDeleted: true,
-        fetchImpl: makeFetch({ 'users.list': [{ ok: true, members: directory }] }).impl,
+        fetchImpl: makeSlackFetch({ 'users.list': [{ ok: true, members: directory }] }).impl,
     });
     assert.ok(full.ok);
     assert.deepEqual(full.members.map(m => m.id), ['U1', 'U2', 'U3']);
@@ -177,14 +153,14 @@ test('bots and deactivated accounts are excluded unless asked for', async () => 
 
 test('a workspace read warms the identity cache for later inbound messages', async () => {
     resetSlackIdentityCache();
-    const { impl } = makeFetch({ 'users.list': [{ ok: true, members: [user('U1', '김병준')] }] });
+    const { impl } = makeSlackFetch({ 'users.list': [{ ok: true, members: [user('U1', '김병준')] }] });
     await fetchSlackWorkspaceUsers(TOKEN, { teamId: TEAM, fetchImpl: impl });
     assert.equal(getCachedSlackIdentities(TEAM, ['U1']).get('U1')?.name, '김병준');
 });
 
 test('a missing team:read scope does not fail the roster', async () => {
     resetSlackIdentityCache();
-    const { impl } = makeFetch({
+    const { impl } = makeSlackFetch({
         'users.list': [{ ok: true, members: [user('U1', 'Jun')] }],
         'team.info': [{ ok: false, error: 'missing_scope', needed: 'team:read' }],
     });

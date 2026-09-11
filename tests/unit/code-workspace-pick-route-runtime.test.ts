@@ -1,7 +1,8 @@
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
-import express, { type NextFunction, type Request, type Response } from 'express';
+import { type NextFunction, type Request, type Response } from 'express';
 import { resolve } from 'node:path';
+import { serverHarness } from '../helpers/with-server.mts';
 
 // Slice 210a reinforcement (pre-220): the source-string contract in
 // code-workspace-pick-route-contract.test.ts locks the PickResult -> HTTP map
@@ -32,19 +33,9 @@ const { registerCodeRoutes } = await import('../../src/routes/code.ts');
 
 const noAuth = (_req: Request, _res: Response, next: NextFunction) => next();
 
-async function withServer(fn: (baseUrl: string) => Promise<void>): Promise<void> {
-    const app = express();
-    app.use(express.json());
-    registerCodeRoutes(app, noAuth);
-    const server = app.listen(0);
-    try {
-        const address = server.address();
-        assert.ok(address && typeof address === 'object');
-        await fn(`http://127.0.0.1:${address.port}`);
-    } finally {
-        await new Promise<void>(r => server.close(() => r()));
-    }
-}
+// Was `app.listen(0)` with no host and no wait for 'listening'; the shared
+// helper binds loopback and awaits it, which is how these tests already connect.
+const withServer = serverHarness({ json: true, setup: app => registerCodeRoutes(app, noAuth) });
 
 test('picked status returns 200 with the chosen path and no settings mutation fields', async () => {
     pick.next = async () => ({ status: 'picked', path: '/tmp/chosen-workspace' });

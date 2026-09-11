@@ -1,13 +1,13 @@
 import '../setup/isolated-home.ts';
 import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
-import express, { type NextFunction, type Request, type Response } from 'express';
+import { type NextFunction, type Request, type Response } from 'express';
 import { createChatSession, deleteChatSession, forkChatSession, setActiveChatSession } from '../../src/core/chat-sessions.js';
 import { db, insertMessageWithTraceRun } from '../../src/core/db.js';
 import { appendTraceEvent, finalizeTraceRun, getTraceRun, linkTraceRunToMessage, startTraceRun } from '../../src/trace/store.js';
 import { recordRuntimeEvent, type RuntimeEventContext } from '../../src/agent/runtime/events.js';
 import type { RuntimeEventBody } from '../../src/shared/runtime-contract.js';
+import { withServer as withHttpServer } from '../helpers/with-server.mts';
 
 // Keep real SQLite ownership/replay; inject only a repository failure at its public seam.
 const journal = await import('../../src/trace/activity-journal.js');
@@ -38,28 +38,19 @@ async function readResponse(base: string, path: string, status = 200) {
     return body;
 }
 
-async function withServer(
+// The callback is a prefixed `get`, and the session reset has to run after the
+// server is closed — which is exactly the shared helper's `after` hook.
+const withServer = (
     fn: (get: (path: string, status?: number) => ReturnType<typeof readResponse>) => Promise<void>,
     auth: Auth = (_req, _res, next) => next(),
-): Promise<void> {
-    const app = express();
-    app.set('query parser', 'extended');
-    registerTraceRoutes(app, auth);
-    const server = createServer(app);
-    await new Promise<void>((resolve, reject) => {
-        server.once('error', reject);
-        server.listen(0, '127.0.0.1', resolve);
-    });
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    try {
-        await fn((path, status = 200) => readResponse(`http://127.0.0.1:${address.port}/api/traces`, path, status));
-    } finally {
-        server.closeAllConnections();
-        await new Promise<void>(resolve => server.close(() => resolve()));
-        setActiveChatSession('default');
-    }
-}
+): Promise<void> => withHttpServer(
+    baseUrl => fn((path, status = 200) => readResponse(`${baseUrl}/api/traces`, path, status)),
+    {
+        queryParser: 'extended',
+        setup: app => registerTraceRoutes(app, auth),
+        after: () => setActiveChatSession('default'),
+    },
+);
 
 function ownedRun(sessionId = createChatSession('activity-route-owner').id, audience: 'public' | 'internal' = 'public') {
     const scope = `mention-watch:route:${sessionId}`;

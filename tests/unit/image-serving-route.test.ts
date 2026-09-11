@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createServer, type Server } from 'node:http';
-import express, { type RequestHandler } from 'express';
+import { type RequestHandler } from 'express';
 import { registerStaticRoutes } from '../../src/routes/static.ts';
 import { settings } from '../../src/core/config.ts';
 import { errorHandler } from '../../src/http/error-middleware.ts';
+import { withServer as withHttpServer } from '../helpers/with-server.mts';
 
 const MIME_CASES = new Map([
     ['image.png', 'image/png'],
@@ -21,24 +21,20 @@ const MIME_CASES = new Map([
     ['video.ogg', 'video/ogg'],
 ]);
 
-async function withServer(run: (baseUrl: string, authCalls: () => number) => Promise<void>): Promise<void> {
-    const app = express();
+// The auth counter is owned here because the callback reports it; the shared
+// helper still owns listen and close.
+function withServer(run: (baseUrl: string, authCalls: () => number) => Promise<void>): Promise<void> {
     let calls = 0;
     const requireAuth: RequestHandler = (_req, _res, next) => {
         calls += 1;
         next();
     };
-    registerStaticRoutes(app, requireAuth, { projectRoot: path.resolve(import.meta.dirname, '../..') });
-    app.use(errorHandler);
-    const server: Server = createServer(app);
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    try {
-        await run(`http://127.0.0.1:${address.port}`, () => calls);
-    } finally {
-        await new Promise<void>(resolve => server.close(() => resolve()));
-    }
+    return withHttpServer(baseUrl => run(baseUrl, () => calls), {
+        setup: app => {
+            registerStaticRoutes(app, requireAuth, { projectRoot: path.resolve(import.meta.dirname, '../..') });
+            app.use(errorHandler);
+        },
+    });
 }
 
 test('GET /api/image enforces roots, media types, headers, and status mapping', async () => {

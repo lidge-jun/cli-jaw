@@ -4,8 +4,8 @@ import { settings } from '../../src/core/config.js';
 import { dispatchApprovalStore } from '../../src/core/dispatch-approval.js';
 import { createTestTransport } from '../../src/core/dispatch-approval-ingress.js';
 import { handleTelegramUpdate, setTelegramBotUserIdForTest } from '../../src/telegram/bot.js';
+import { pendingDispatchApproval as pending } from './helpers/dispatch-approval.ts';
 
-function pending() { return dispatchApprovalStore.create({ target: { kind: 'agent', name: 'A' }, projectRoot: '/r', task: 't', mutable: false, scope: null, fanOutCap: 1 }); }
 test('Telegram polling handler accepts only allowlisted human on trusted transport', () => {
     settings['dispatchApproval'] = { operators: { slack: [], telegram: [42], discord: [] }, ttlSeconds: 120 };
     const transport = createTestTransport('telegram');

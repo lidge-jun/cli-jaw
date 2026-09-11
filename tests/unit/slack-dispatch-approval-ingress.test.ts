@@ -4,8 +4,8 @@ import { settings } from '../../src/core/config.js';
 import { dispatchApprovalStore } from '../../src/core/dispatch-approval.js';
 import { createTestTransport } from '../../src/core/dispatch-approval-ingress.js';
 import { handleSlackEnvelope, setSlackSelfUserIdForTest } from '../../src/slack/bot.js';
+import { pendingDispatchApproval as pending } from './helpers/dispatch-approval.ts';
 
-function pending() { return dispatchApprovalStore.create({ target: { kind: 'agent', name: 'A' }, projectRoot: '/r', task: 't', mutable: false, scope: null, fanOutCap: 1 }); }
 test('Slack socket envelope accepts only allowlisted human on trusted transport', async () => {
     settings['dispatchApproval'] = { operators: { slack: ['U1'], telegram: [], discord: [] }, ttlSeconds: 120 };
     const transport = createTestTransport('slack');

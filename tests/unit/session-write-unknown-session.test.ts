@@ -1,33 +1,24 @@
 import '../setup/isolated-home.ts';
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer, type Server } from 'node:http';
-import express, { type NextFunction, type Request, type Response } from 'express';
+import { type NextFunction, type Request, type Response } from 'express';
 import { registerAgentControlRoutes } from '../../src/routes/agent-control.ts';
 import { registerCommandRoutes } from '../../src/routes/command.ts';
 import { db } from '../../src/core/db.ts';
 import { settings } from '../../src/core/config.ts';
 import { createChatSession, resolveOrCreateRemoteSession, setActiveChatSession } from '../../src/core/chat-sessions.ts';
 import { addBroadcastListener, clearAllBroadcastListeners } from '../../src/core/bus.ts';
+import { serverHarness } from '../helpers/with-server.mts';
 
 function noAuth(_req: Request, _res: Response, next: NextFunction): void { next(); }
 
-async function withServer(fn: (baseUrl: string) => Promise<void>): Promise<void> {
-    const app = express();
-    app.use(express.json());
-    registerAgentControlRoutes(app, noAuth);
-    registerCommandRoutes(app, noAuth);
-    const server: Server = createServer(app);
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    try {
-        await fn(`http://127.0.0.1:${address.port}`);
-    } finally {
-        server.closeAllConnections();
-        await new Promise<void>(resolve => server.close(() => resolve()));
-    }
-}
+const withServer = serverHarness({
+    json: true,
+    setup: app => {
+        registerAgentControlRoutes(app, noAuth);
+        registerCommandRoutes(app, noAuth);
+    },
+});
 
 function post(baseUrl: string, path: string, body?: unknown): Promise<globalThis.Response> {
     return fetch(`${baseUrl}${path}`, {

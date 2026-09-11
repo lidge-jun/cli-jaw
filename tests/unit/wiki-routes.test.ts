@@ -1,8 +1,7 @@
 import '../setup/isolated-home.ts';
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer, type Server } from 'node:http';
-import express, { type NextFunction, type Request, type Response } from 'express';
+import { type NextFunction, type Request, type Response } from 'express';
 import { mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +9,7 @@ import { registerWikiRoutes } from '../../src/routes/wiki.ts';
 import {
     DEFAULT_WIKI_CONFIG, normalizeWikiConfig, readWikiConfig, wikiProviderHealth, writeWikiConfig,
 } from '../../src/wiki/config.ts';
+import { withServer as withHttpServer } from '../helpers/with-server.mts';
 
 function tempRoot(): string {
     return join(mkdtempSync(join(tmpdir(), 'jaw-wiki-route-')), 'vault');
@@ -22,26 +22,17 @@ type ServerOptions = {
     providerHealth?: typeof wikiProviderHealth;
 };
 
-async function withServer(fn: (baseUrl: string) => Promise<void>, options: ServerOptions = {}): Promise<void> {
-    const app = express();
-    app.use(express.json());
-    const auth = options.auth ?? ((_q: Request, _s: Response, next: NextFunction) => next());
-    registerWikiRoutes(app, auth, {
-        forbiddenRoots: () => options.forbiddenRoots ?? [],
-        ...(options.scaffold ? { scaffold: options.scaffold } : {}),
-        ...(options.providerHealth ? { providerHealth: options.providerHealth } : {}),
+// Options arrive per call, so this only assembles the app; listen and close
+// belong to the shared helper.
+const withServer = (fn: (baseUrl: string) => Promise<void>, options: ServerOptions = {}): Promise<void> =>
+    withHttpServer(fn, {
+        json: true,
+        setup: app => registerWikiRoutes(app, options.auth ?? ((_q: Request, _s: Response, next: NextFunction) => next()), {
+            forbiddenRoots: () => options.forbiddenRoots ?? [],
+            ...(options.scaffold ? { scaffold: options.scaffold } : {}),
+            ...(options.providerHealth ? { providerHealth: options.providerHealth } : {}),
+        }),
     });
-    const server: Server = createServer(app);
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    try {
-        await fn(`http://127.0.0.1:${address.port}`);
-    } finally {
-        server.closeAllConnections();
-        await new Promise<void>(resolve => server.close(() => resolve()));
-    }
-}
 
 const post = (baseUrl: string, path: string, body: unknown) => fetch(`${baseUrl}${path}`, {
     method: 'POST',

@@ -13,42 +13,17 @@ import { toMrkdwn, chunkSlackMessage } from '../../src/slack/format.ts';
 import { sendSlackText, resolveSlackDmChannel } from '../../src/slack/send-only-client.ts';
 import { sendSlackFile, validateSlackFileSize } from '../../src/slack/slack-file.ts';
 import { slackTargetFromId } from '../../src/messaging/slack-target.ts';
+import { makeSlackFetch, slackRaw, type SlackFetchSpec } from '../helpers/slack-fetch.mts';
 
-// ─── fetch capture harness ──────────────────────────
+// ─── local composers over the shared harness ────────
 
 type Captured = { url: string; init: RequestInit | undefined };
-
-function makeFetch(responses: Array<Record<string, unknown> | { __raw: true; ok: boolean; status: number; headers?: Record<string, string> }>) {
-    const calls: Captured[] = [];
-    let i = 0;
-    const impl = (async (url: string | URL | Request, init?: RequestInit) => {
-        calls.push({ url: String(url), init });
-        const spec = responses[Math.min(i, responses.length - 1)];
-        i++;
-        if (spec && '__raw' in spec) {
-            const headers = new Headers(spec.headers ?? {});
-            return { ok: spec.ok, status: spec.status, headers, text: async () => '' } as unknown as Response;
-        }
-        const record = (spec ?? { ok: true }) as Record<string, unknown>;
-        const headers = new Headers((record['__headers'] as Record<string, string> | undefined) ?? {});
-        const body = { ...record };
-        delete body['__headers'];
-        return {
-            ok: true,
-            status: typeof record['__status'] === 'number' ? record['__status'] : 200,
-            headers,
-            text: async () => JSON.stringify(body),
-        } as unknown as Response;
-    // justified: the capture harness implements only the Response surface these modules read
-    }) as unknown as typeof fetch;
-    return { impl, calls };
-}
 
 const raw = (text: string) => ({ type: 'raw_text', text });
 const rich = (text: string, style: Record<string, boolean>) => ({ type: 'rich_text', elements: [{ type: 'rich_text_section', elements: [{ type: 'text', text, style }] }] });
 // Readback fixtures are hand-specified, never derived from the outgoing blocks.
-function makeTableFetch(tables: unknown[][][], postResponses: Parameters<typeof makeFetch>[0] = [{ ok: true, ts: '2.1' }]) {
-    const posts = makeFetch(postResponses);
+function makeTableFetch(tables: unknown[][][], postResponses: SlackFetchSpec[] = [{ ok: true, ts: '2.1' }]) {
+    const posts = makeSlackFetch(postResponses);
     const reads: Captured[] = [];
     let index = 0;
     const impl = (async (url: string | URL | Request, init?: RequestInit) => {
@@ -77,14 +52,14 @@ function headerOf(call: Captured, name: string): string | undefined {
 test('slackApi treats HTTP 200 with ok:false as failure', async () => {
     // Slack signals application errors with a 200. Checking response.ok alone
     // silently swallows every auth, scope, and argument failure.
-    const { impl } = makeFetch([{ ok: false, error: 'not_in_channel' }]);
+    const { impl } = makeSlackFetch([{ ok: false, error: 'not_in_channel' }]);
     const result = await slackApi('xoxb-t', 'chat.postMessage', { channel: 'C1' }, { fetchImpl: impl });
     assert.equal(result.ok, false);
     assert.equal(result.error, 'not_in_channel');
 });
 
 test('slackApi sends a bearer token and JSON body by default', async () => {
-    const { impl, calls } = makeFetch([{ ok: true }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true }]);
     await slackApi('xoxb-secret', 'chat.postMessage', { channel: 'C1' }, { fetchImpl: impl });
     assert.equal(calls[0]!.init?.method, 'POST');
     assert.equal(headerOf(calls[0]!, 'Authorization'), 'Bearer xoxb-secret');
@@ -95,7 +70,7 @@ test('slackApi sends a bearer token and JSON body by default', async () => {
 test('slackApi form mode POSTs urlencoded, never GET', async () => {
     // files.getUploadURLExternal takes form-encoded args. An earlier draft sent
     // it as GET, which is not Slack's documented contract.
-    const { impl, calls } = makeFetch([{ ok: true }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true }]);
     await slackApi('xoxb-t', 'files.getUploadURLExternal', { filename: 'a.txt', length: 12 }, { fetchImpl: impl, form: true });
     assert.equal(calls[0]!.init?.method, 'POST');
     assert.match(String(headerOf(calls[0]!, 'Content-Type')), /x-www-form-urlencoded/);
@@ -464,7 +439,7 @@ test('chunkSlackMessage terminates on fenced input (loop-progress guard)', () =>
 // ─── outbound text ──────────────────────────────────
 
 test('sendSlackText omits thread_ts for a non-threaded target', () => {
-    const { impl, calls } = makeFetch([{ ok: true }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true }]);
     return sendSlackText('xoxb-t', slackTargetFromId('C1'), 'hi', { fetchImpl: impl }).then(() => {
         const body = bodyOf(calls[0]!);
         assert.equal(body['channel'], 'C1');
@@ -474,13 +449,13 @@ test('sendSlackText omits thread_ts for a non-threaded target', () => {
 });
 
 test('sendSlackText passes thread_ts when the target carries one', async () => {
-    const { impl, calls } = makeFetch([{ ok: true }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true }]);
     await sendSlackText('xoxb-t', slackTargetFromId('C1', { threadTs: '1.1' }), 'hi', { fetchImpl: impl });
     assert.equal(bodyOf(calls[0]!)['thread_ts'], '1.1');
 });
 
 test('sendSlackText preserves standard Markdown in rich blocks', async () => {
-    const { impl, calls } = makeFetch([{ ok: true, ts: '1.1' }, { ok: true, messages: [{ ts: '1.1', blocks: [{ type: 'rich_text', elements: [{ type: 'rich_text_section', elements: [{ type: 'text', text: 'bold', style: { bold: true } }] }] }] }] }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true, ts: '1.1' }, { ok: true, messages: [{ ts: '1.1', blocks: [{ type: 'rich_text', elements: [{ type: 'rich_text_section', elements: [{ type: 'text', text: 'bold', style: { bold: true } }] }] }] }] }]);
     await sendSlackText('xoxb-t', slackTargetFromId('C1'), '**bold**', { fetchImpl: impl });
     assert.deepEqual(bodyOf(calls[0]!)['blocks'], [{ type: 'markdown', text: '**bold**' }]);
 });
@@ -508,7 +483,7 @@ test('Slack table delivery preserves prose/table order, pipes and the parent thr
 });
 
 test('Slack tables in code fences remain code examples', async () => {
-    const { impl, calls } = makeFetch([{ ok: true, ts: '1.1' }, { ok: true, messages: [{ ts: '1.1', blocks: [{ type: 'rich_text', elements: [{ type: 'rich_text_preformatted', elements: [{ type: 'text', text: '| A | B |' }] }] }] }] }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true, ts: '1.1' }, { ok: true, messages: [{ ts: '1.1', blocks: [{ type: 'rich_text', elements: [{ type: 'rich_text_preformatted', elements: [{ type: 'text', text: '| A | B |' }] }] }] }] }]);
     const code = '```md\n| A | B |\n| --- | --- |\n| 1 | 2 |\n```';
     await sendSlackText('xoxb-t', slackTargetFromId('D1'), code, { fetchImpl: impl });
     assert.equal(calls.length, 2);
@@ -550,7 +525,7 @@ test('Slack rejects oversized tables before sending any preceding prose', async 
         `| ${Array.from({ length: 21 }, (_, i) => i).join(' | ')} |\n| ${Array(21).fill('---').join(' | ')} |\n| ${Array(21).fill('x').join(' | ')} |`,
         `| A | B |\n| --- | --- |\n| 1 | ${'x'.repeat(9100)} |`,
     ]) {
-        const { impl, calls } = makeFetch([{ ok: true }]);
+        const { impl, calls } = makeSlackFetch([{ ok: true }]);
         const result = await sendSlackText('xoxb-t', slackTargetFromId('D1'), `앞 문장\n\n${table}`, { fetchImpl: impl });
         assert.equal(result.ok, false);
         assert.equal(result.status, 400);
@@ -561,7 +536,7 @@ test('Slack rejects oversized tables before sending any preceding prose', async 
 
 test('Slack table blocks and fallback are redacted identically on rate-limit retry', async () => {
     const { impl, calls } = makeTableFetch([[[raw('이름'), raw('값')], [raw('토큰'), raw('xoxb-test...redacted')]]], [
-        { __raw: true, ok: false, status: 429, headers: { 'retry-after': '0.001' } },
+        slackRaw({ ok: false, status: 429, headers: { 'retry-after': '0.001' } }),
         { ok: true, ts: '2.2' },
     ]);
     const secret = 'xoxb-test-only-redaction-canary';
@@ -576,14 +551,14 @@ test('Slack table blocks and fallback are redacted identically on rate-limit ret
 });
 
 test('sendSlackText posts one call per chunk', async () => {
-    const { impl, calls } = makeFetch([{ ok: true }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true }]);
     const long = Array.from({ length: 300 }, (_, i) => `line ${i} ${'x'.repeat(30)}`).join('\n');
     await sendSlackText('xoxb-t', slackTargetFromId('C1'), long, { fetchImpl: impl });
     assert.ok(calls.length > 1, `expected multiple posts, got ${calls.length}`);
 });
 
 test('sendSlackText surfaces a mapped error message', async () => {
-    const { impl } = makeFetch([{ ok: false, error: 'missing_scope' }]);
+    const { impl } = makeSlackFetch([{ ok: false, error: 'missing_scope' }]);
     const result = await sendSlackText('xoxb-t', slackTargetFromId('C1'), 'hi', { fetchImpl: impl });
     assert.equal(result.ok, false);
     assert.match(String(result.error), /scope/i);
@@ -592,7 +567,7 @@ test('sendSlackText surfaces a mapped error message', async () => {
 // ─── DM open ────────────────────────────────────────
 
 test('resolveSlackDmChannel opens a DM for a user id', async () => {
-    const { impl, calls } = makeFetch([{ ok: true, channel: { id: 'D999' } }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true, channel: { id: 'D999' } }]);
     const result = await resolveSlackDmChannel('xoxb-t', 'U123', impl);
     assert.equal(result.channelId, 'D999');
     assert.match(calls[0]!.url, /conversations\.open/);
@@ -600,7 +575,7 @@ test('resolveSlackDmChannel opens a DM for a user id', async () => {
 });
 
 test('resolveSlackDmChannel passes a D-id straight through', async () => {
-    const { impl, calls } = makeFetch([{ ok: true }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true }]);
     const result = await resolveSlackDmChannel('xoxb-t', 'D555', impl);
     assert.equal(result.channelId, 'D555');
     assert.equal(calls.length, 0, 'an existing DM id must not cost an API call');
@@ -616,9 +591,9 @@ function tempFile(contents = 'hello'): string {
 }
 
 test('sendSlackFile performs the three-step external upload in order', async () => {
-    const { impl, calls } = makeFetch([
+    const { impl, calls } = makeSlackFetch([
         { ok: true, upload_url: 'https://files.slack.com/upload/abc', file_id: 'F1' },
-        { __raw: true, ok: true, status: 200 },
+        slackRaw({ ok: true, status: 200 }),
         // The completion has to echo the reserved id back; a bare ok is now unconfirmed.
         { ok: true, files: [{ id: 'F1' }] },
     ]);
@@ -632,9 +607,9 @@ test('sendSlackFile performs the three-step external upload in order', async () 
 
 test('sendSlackFile does not send the bot token to the upload URL', async () => {
     // Step 2 is not a Slack API method: no Authorization header belongs there.
-    const { impl, calls } = makeFetch([
+    const { impl, calls } = makeSlackFetch([
         { ok: true, upload_url: 'https://files.slack.com/upload/abc', file_id: 'F1' },
-        { __raw: true, ok: true, status: 200 },
+        slackRaw({ ok: true, status: 200 }),
         { ok: true },
     ]);
     await sendSlackFile('xoxb-t', slackTargetFromId('C1'), tempFile(), { fetchImpl: impl });
@@ -642,9 +617,9 @@ test('sendSlackFile does not send the bot token to the upload URL', async () => 
 });
 
 test('sendSlackFile threads the completion call', async () => {
-    const { impl, calls } = makeFetch([
+    const { impl, calls } = makeSlackFetch([
         { ok: true, upload_url: 'https://u', file_id: 'F1' },
-        { __raw: true, ok: true, status: 200 },
+        slackRaw({ ok: true, status: 200 }),
         { ok: true },
     ]);
     await sendSlackFile('xoxb-t', slackTargetFromId('C1', { threadTs: '1.1' }), tempFile(), {
@@ -657,7 +632,7 @@ test('sendSlackFile threads the completion call', async () => {
 });
 
 test('sendSlackFile fails cleanly when the URL reservation fails', async () => {
-    const { impl, calls } = makeFetch([{ ok: false, error: 'missing_scope' }]);
+    const { impl, calls } = makeSlackFetch([{ ok: false, error: 'missing_scope' }]);
     const result = await sendSlackFile('xoxb-t', slackTargetFromId('C1'), tempFile(), { fetchImpl: impl });
     assert.equal(result.ok, false);
     assert.match(String(result.error), /scope/i);
@@ -665,7 +640,7 @@ test('sendSlackFile fails cleanly when the URL reservation fails', async () => {
 });
 
 test('sendSlackFile reports a missing file without calling the API', async () => {
-    const { impl, calls } = makeFetch([{ ok: true }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true }]);
     const result = await sendSlackFile('xoxb-t', slackTargetFromId('C1'), '/nope/missing.txt', { fetchImpl: impl });
     assert.equal(result.ok, false);
     assert.match(String(result.error), /not found/i);
@@ -683,7 +658,7 @@ test('validateSlackFileSize rejects oversize uploads with a 413', () => {
 test('sendSlackFile rejects an empty file locally', async () => {
     // Slack answers a zero-length reservation with `missing_argument`, which
     // reads as a client bug; fail with something the operator can act on.
-    const { impl, calls } = makeFetch([{ ok: true }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true }]);
     const result = await sendSlackFile('xoxb-t', slackTargetFromId('C1'), tempFile(''), { fetchImpl: impl });
     assert.equal(result.ok, false);
     assert.match(String(result.error), /empty file/i);
@@ -831,7 +806,7 @@ test('slackSendHandler posts the text of an opted-in keyboard downgrade and reco
 });
 
 test('blocks ride on the first sendSlackText chunk', async () => {
-    const { impl, calls } = makeFetch([{ ok: true }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true }]);
     const blocks = [{ type: 'actions', elements: [{ type: 'button', text: { type: 'plain_text', text: 'Approve' }, action_id: 'appr:x' }] }];
     await sendSlackText('xoxb-t', slackTargetFromId('C1'), 'hi', { fetchImpl: impl, blocks });
     const body = bodyOf(calls[0]!);
@@ -840,7 +815,7 @@ test('blocks ride on the first sendSlackText chunk', async () => {
 });
 
 test('a short Slack rate limit retries the same chunk once', async () => {
-    const { impl, calls } = makeFetch([
+    const { impl, calls } = makeSlackFetch([
         { ok: false, error: 'ratelimited', __headers: { 'retry-after': '0.01' }, __status: 429 },
         { ok: true },
     ]);
@@ -852,7 +827,7 @@ test('a short Slack rate limit retries the same chunk once', async () => {
 });
 
 test('a long Slack rate limit is not waited out and is not retried', async () => {
-    const { impl, calls } = makeFetch([
+    const { impl, calls } = makeSlackFetch([
         { ok: false, error: 'ratelimited', __headers: { 'retry-after': '120' }, __status: 429 },
     ]);
     const started = Date.now();
@@ -863,7 +838,7 @@ test('a long Slack rate limit is not waited out and is not retried', async () =>
 });
 
 test('not_in_channel is not retried', async () => {
-    const { impl, calls } = makeFetch([{ ok: false, error: 'not_in_channel' }]);
+    const { impl, calls } = makeSlackFetch([{ ok: false, error: 'not_in_channel' }]);
     const result = await sendSlackText('xoxb-t', slackTargetFromId('C1'), 'hi', { fetchImpl: impl });
     assert.equal(result.ok, false);
     assert.equal(calls.length, 1);
@@ -880,7 +855,7 @@ test('not_in_channel is not retried', async () => {
 const FAKE_APP_TOKEN = `xapp-1-A01234567-${'1'.repeat(13)}-${'b'.repeat(64)}`;
 
 test('SOR-001: blocks are masked, including values nested inside them', async () => {
-    const { impl, calls } = makeFetch([{ ok: true }]);
+    const { impl, calls } = makeSlackFetch([{ ok: true }]);
     await sendSlackText('xoxb-t', slackTargetFromId('C1'), 'hi', {
         fetchImpl: impl,
         blocks: [{
@@ -897,7 +872,7 @@ test('SOR-001: blocks are masked, including values nested inside them', async ()
 test('SOR-002: the rate-limit retry sends the masked blocks too', async () => {
     // The leak had two exits. This is the second one: throttle the first send
     // and check what actually goes out on the retry.
-    const { impl, calls } = makeFetch([
+    const { impl, calls } = makeSlackFetch([
         // 0.01s, matching the existing inline-retry test: a wait of exactly 0
         // does not qualify for the inline retry, so the second send never
         // happens and the assertion below would be vacuous.
@@ -925,9 +900,9 @@ test('SOR-003: the paths that already masked still do', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'jaw-slack-redact-'));
     const filePath = join(dir, 'note.txt');
     writeFileSync(filePath, 'x');
-    const { impl, calls } = makeFetch([
+    const { impl, calls } = makeSlackFetch([
         { ok: true, upload_url: 'https://files.slack.com/upload', file_id: 'F1' },
-        { __raw: true, ok: true, status: 200 },
+        slackRaw({ ok: true, status: 200 }),
         { ok: true, files: [{ id: 'F1' }] },
     ]);
     await sendSlackFile('xoxb-t', slackTargetFromId('C1'), filePath, {
@@ -946,9 +921,9 @@ test('SOR-004: the filename is masked everywhere it reaches Slack', async () => 
     const dir = mkdtempSync(join(tmpdir(), 'jaw-slack-redact-name-'));
     const filePath = join(dir, `${FAKE_APP_TOKEN}.txt`);
     writeFileSync(filePath, 'x');
-    const { impl, calls } = makeFetch([
+    const { impl, calls } = makeSlackFetch([
         { ok: true, upload_url: 'https://files.slack.com/upload', file_id: 'F1' },
-        { __raw: true, ok: true, status: 200 },
+        slackRaw({ ok: true, status: 200 }),
         { ok: true, files: [{ id: 'F1' }] },
     ]);
 
