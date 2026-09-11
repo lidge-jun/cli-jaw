@@ -14,6 +14,63 @@ let lastMeta: Record<string, unknown> = {};
 // The locale table is not loaded in this harness, so `t()` yields the raw key.
 // Asserting on the key keeps the test about WHICH string is chosen, not its wording.
 const NO_RESPONSE = 'tg.noResponse';
+const STOPPED = 'tg.stopped';
+
+// ─── Why the empty terminal was empty (#673) ──────────
+// "No response" read as a failure for every empty terminal, including runs that
+// were stopped part-way and runs that finished with nothing to say. Two of
+// those are separable from the payload the collector already receives.
+
+test('a native run that was stopped says so, instead of reporting no response', async () => {
+    const { orchestrateAndCollectData } = await import('../../src/orchestrator/collect.ts');
+    const pending = orchestrateAndCollectData('질문', {
+        origin: 'slack', requestId: 'req-stopped', scope: 'default', chatSessionId: 'default',
+    });
+    broadcast('orchestrate_done', { ...lastMeta, text: '', runtimeFinality: 'absent', runtimeStatus: 'stopped' });
+
+    const result = await pending;
+    assert.equal(result.text, STOPPED);
+    assert.notEqual(result.text, NO_RESPONSE);
+});
+
+test('a legacy interrupted run says so too', async () => {
+    const { orchestrateAndCollectData } = await import('../../src/orchestrator/collect.ts');
+    const pending = orchestrateAndCollectData('질문', {
+        origin: 'slack', requestId: 'req-interrupted', scope: 'default', chatSessionId: 'default',
+    });
+    broadcast('orchestrate_done', { ...lastMeta, text: '', executionInterrupted: true });
+
+    const result = await pending;
+    assert.equal(result.text, STOPPED);
+});
+
+test('a native run that finished with nothing to say keeps the no-response copy', async () => {
+    // runtimeStatus 'done' is a completed run, not a stopped one. Only the
+    // stopped bucket changes wording.
+    const { orchestrateAndCollectData } = await import('../../src/orchestrator/collect.ts');
+    const pending = orchestrateAndCollectData('질문', {
+        origin: 'slack', requestId: 'req-done-empty', scope: 'default', chatSessionId: 'default',
+    });
+    broadcast('orchestrate_done', { ...lastMeta, text: '', runtimeFinality: 'absent', runtimeStatus: 'done' });
+
+    const result = await pending;
+    assert.equal(result.text, NO_RESPONSE);
+});
+
+test('a steer still wins over the stopped copy, because the follow-up owns the answer', async () => {
+    // A steer kill also lands as runtimeStatus 'stopped'. The retired turn must
+    // stay silent rather than announce that it was stopped (#655).
+    const { orchestrateAndCollectData } = await import('../../src/orchestrator/collect.ts');
+    const pending = orchestrateAndCollectData('질문', {
+        origin: 'slack', requestId: 'req-steered-stop', scope: 'default', chatSessionId: 'default',
+    });
+    broadcast('steer_started', { origin: 'slack', scope: 'default', sessionId: 'default', requestId: 'req-next' });
+    broadcast('orchestrate_done', { ...lastMeta, text: '', runtimeFinality: 'absent', runtimeStatus: 'stopped' });
+
+    const result = await pending;
+    assert.equal(result.text, '');
+    assert.equal(result.data['superseded'], true);
+});
 
 test.mock.module('../../src/orchestrator/pipeline.ts', {
     namedExports: {

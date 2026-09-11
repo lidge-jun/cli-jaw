@@ -29,6 +29,55 @@ test('projectors and every snapshot field exclude private label/detail/key canar
     }
 });
 
+// ─── Long-running requests (#673) ─────────────────────
+// Elapsed seconds alone read the same at 30s and 500s, so an investigation that
+// is running perfectly well looks indistinguishable from a hang.
+
+test('SPA-673a: the card stays unchanged below the threshold', () => {
+    const { model, at } = fixture('en');
+    at(1000 + 299_000);
+    const snapshot = model.snapshot();
+    assert.ok(!snapshot.details.includes('still in progress'), snapshot.details);
+    assert.ok(!snapshot.text.includes('still in progress'));
+});
+
+test('SPA-673b: past the threshold the card says so in words', () => {
+    const { model, at } = fixture('en');
+    at(1000 + 300_000);
+    const snapshot = model.snapshot();
+    assert.match(snapshot.details, /Running for 5 min — still in progress/);
+});
+
+test('SPA-673c: the long-running line is added, never swapped for the phase description', () => {
+    // QUIET_MS flips running to waiting after 20s of tool silence. That is a
+    // different axis from "this is taking a while", and both are true here.
+    // Overwriting the description would hide the quiet notice exactly when it
+    // matters most.
+    const { model, at } = fixture('en');
+    at(1000 + 400_000);
+    const snapshot = model.snapshot();
+    assert.ok(snapshot.details.startsWith('Waiting for the next update'), snapshot.details);
+    assert.match(snapshot.details, /Running for 6 min/);
+});
+
+test('SPA-673d: a finished card does not claim to still be running', () => {
+    const { model, at } = fixture('en');
+    at(1000 + 400_000);
+    model.finish('complete');
+    at(1000 + 900_000);
+    assert.ok(!model.snapshot().details.includes('still in progress'));
+});
+
+test('SPA-673e: every locale carries the long-running copy', () => {
+    for (const locale of ['ko', 'en', 'ja', 'zh']) {
+        const { model, at } = fixture(locale);
+        at(1000 + 300_000);
+        const snapshot = model.snapshot();
+        assert.ok(!snapshot.details.includes('slack.progress.longRunning'), locale);
+        assert.ok(snapshot.details.includes('5'), locale);
+    }
+});
+
 test('exact known aliases classify while decorated names remain generic', () => {
     for (const [label, expected] of [['Read', 'read'], ['read_file', 'read'], ['Write', 'write'], ['Edit', 'write'], ['apply_patch', 'write'], ['Grep', 'search'], ['Glob', 'search'], ['List', 'search'], ['Search', 'search'], ['WebSearch', 'search'], ['WebFetch', 'web'], ['Bash', 'command'], ['shell', 'command'], ['exec_command', 'command'], ['external_tool', 'external'], ['Read /secret', 'tool'], ['mcp__secret__tool', 'tool'], ['constructor', 'tool'], ['__proto__', 'tool']]) {
         assert.equal(projectSlackPrintTool({ label })?.category, expected, label);

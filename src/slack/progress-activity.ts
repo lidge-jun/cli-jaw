@@ -27,6 +27,10 @@ const MAX_RECENT = 6;
 const MAX_FIELD = 256;
 const MAX_DETAILS = 256;
 const QUIET_MS = 20_000;
+// Wall clock, not idle time. Deliberately below the watchdog's 600s default so
+// the card can say "this is taking a while" while the run is still perfectly
+// healthy — the point is to stop a long investigation LOOKING like a hang.
+const LONG_RUNNING_SECONDS = 300;
 const MAX_SECONDS = 999_999_999;
 const categories = new Set(['read', 'write', 'search', 'web', 'command', 'external', 'tool']);
 const statuses = new Set(['in_progress', 'complete', 'error', 'stopped', 'observed']);
@@ -194,6 +198,18 @@ export function createSlackActivity(now: () => number, locale: string, initialPh
             const elapsed = copy('elapsed', { seconds: seconds(createdAt) });
             const age = copy('lastActivity', { seconds: seconds(lastActivityAt) });
             const lines = [description, elapsed, age];
+            // Elapsed alone reads the same at 30s and 500s: a number the eye
+            // skips. Past the threshold the card says so in words.
+            //
+            // An EXTRA line, never a replacement for `description`. That one is
+            // the tool-activity axis — QUIET_MS flips running to waiting after
+            // 20s of silence — and "taking a while" is a different axis. Both
+            // can be true at once, and overwriting would hide the quiet notice
+            // exactly when it matters most.
+            const elapsedSeconds = seconds(createdAt);
+            if (!terminal && elapsedSeconds >= LONG_RUNNING_SECONDS) {
+                lines.push(copy('longRunning', { minutes: Math.floor(elapsedSeconds / 60) }));
+            }
             const summary = lines.join('\n').slice(0, MAX_DETAILS);
             for (const { title: row } of activities) {
                 if ([...lines, row].join('\n').length <= MAX_DETAILS) lines.push(row);
