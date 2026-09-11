@@ -25,6 +25,7 @@ export const CHATGPT_MODEL_SELECTOR_OBSERVATION: FrontendCapabilityObservation =
         'Model label text must be filtered from response capture.',
         '2026-04-30 headed UI moved the visible model opener to the composer pill; top data-testid opener may be absent.',
         'Thinking/Pro effort controls are runtime selectors; Pro can appear as a Heavy composer pill in the headed UI.',
+        '2026-09-11 live signed-in chatgpt.com: NO element with a data-testid starting "model-switcher" exists at all (the filtered query returned []), and model-switcher-dropdown-button was absent. The composer pill opened a radix menu whose rows are role=menuitemradio with data-testid null: "Latest" (aria-checked=true), "GPT-5.6 Sol", "GPT-5.5", plus a role=menuitem aria-label="Power" reasoning-effort slider reading "Extra High". The testIds table below is therefore fallback-only on this account and the visible-label path carries the selection.',
     ],
 };
 
@@ -80,7 +81,11 @@ export const GEMINI_MODEL_PICKER_OBSERVATION: FrontendCapabilityObservation = {
     activationPath: ['click Open mode picker', 'choose Flash-Lite|Flash|Pro menuitem', 'verify picker label'],
     activeStateSignals: ['mode picker button text equals selected mode'],
     mutationRisk: 'medium',
-    notes: ['Observed separately from Deep Think in headed 30_browser on 2026-04-29.', 'Deep Think remains a Tools menu capability.'],
+    notes: [
+        'Observed separately from Deep Think in headed 30_browser on 2026-04-29.',
+        'Deep Think remains a Tools menu capability.',
+        '2026-09-11 live signed-in gemini.google.com: bard-mode-menu-button still resolves, but aria-label="Open mode picker" does not — the ko-KR opener reads "모드 선택 도구 열기, 현재 Flash 모드 사용 중". Mode rows are now gem-menu-item with OPAQUE HASH ids: bard-mode-option-fbb127bbb056c959 ("3.6 Flash"), bard-mode-option-5bf011840784117a ("3.6 사고 모델"), bard-mode-option-9d8ca3786ebdfbea ("3.1 Pro"). The semantic bard-mode-option-fast|thinking|pro ids no longer exist, so label matching under the [data-test-id^="bard-mode-option-"] prefix is the live path. No Flash-Lite row was present, and which choice "3.6 사고 모델" maps to was NOT established — do not guess it.',
+    ],
 };
 
 export const GEMINI_IMAGE_GENERATION_OBSERVATION: FrontendCapabilityObservation = {
