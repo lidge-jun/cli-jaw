@@ -145,7 +145,19 @@ export function orchestrateAndCollectData(
                 runtimeActive = false;
                 removeBroadcastListener(handler);
                 const terminalText = typeof data['text'] === 'string' && data['text'].trim() ? data['text'] : '';
-                const fallback = superseded ? '' : t('tg.noResponse', {}, locale);
+                // An empty terminal has more than one cause, and "no response"
+                // reads as a failure for all of them. Two are separable here:
+                // a run that was stopped before it finished (native
+                // `runtimeStatus: 'stopped'`, or the legacy
+                // `executionInterrupted` flag) versus a run that finished and
+                // simply had nothing to say.
+                //
+                // `stopped` stays ONE bucket on purpose. A watchdog timeout, a
+                // user Stop and a native steer-kill are pressed into the same
+                // status by `lifecycleRuntimeOutcome`, so splitting them here
+                // would mean inventing a distinction the payload does not carry.
+                const stopped = data['runtimeStatus'] === 'stopped' || data['executionInterrupted'] === true;
+                const fallback = superseded ? '' : t(stopped ? 'tg.stopped' : 'tg.noResponse', {}, locale);
                 resolve({ text: native
                     ? terminalText || ownTerminalDiagnostic || fallback
                     : data["text"] || collected || fallback,

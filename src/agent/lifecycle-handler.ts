@@ -690,7 +690,18 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                 }
             }
             const failed = nativeOutcome.status !== 'done';
-            const errorKind = failed ? classifyExitError(runtimeCli, code ?? 1, ctx.stderrBuf).errorKind : undefined;
+            // `ctx.stallReason` is what makes the classifier say "stall" instead
+            // of "abnormal exit", and the print paths have always passed it. The
+            // native path did not, so a watchdog kill on a native runtime was
+            // reported to the user as a crash. The ACTION footer that
+            // messaging/error-block.ts builds from `errorKind` is the visible
+            // difference: "the runtime stopped responding; sending the same
+            // request again starts a new session" versus "the runtime exited
+            // abnormally; check the logs if it repeats". Only the first is true
+            // of a timeout.
+            const errorKind = failed
+                ? classifyExitError(runtimeCli, code ?? 1, ctx.stderrBuf, ctx.stallReason).errorKind
+                : undefined;
             // Even absent/empty finals must terminate existing UI/collectors.
             // Only compatibility text collapses whitespace; never the outcome.
             handoffRuntimeOutcome(ctx, { ...nativeOutcome, finalText: finalContent });
