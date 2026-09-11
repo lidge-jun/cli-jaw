@@ -1027,7 +1027,7 @@ Virtual employees are not written to `employees` or `employee_sessions`. `src/co
 
 ---
 
-## src/messaging/ — shared messaging runtime (24 files)
+## src/messaging/ — shared messaging runtime (44 files)
 
 ### ack-reaction.ts / queue-notice.ts
 
@@ -1110,6 +1110,25 @@ choke point로 모았다.
 | `hydrateTargetsFromSettings()` | persisted `settings.messaging` 복원 |
 
 ### send.ts (147L)
+
+파일 전송은 `ok`(벤더가 바이트를 받았다)와 `confirmation`(벤더가 무엇을 만들었는지 말했다)을
+분리한다. 어휘는 `file-receipt.ts` 가 갖고, `confirmation` 은 반드시 **최상위 필드**다 —
+`sendChannelOutput` 이 `isUnconfirmedSend(sanitized)` 로 그걸 읽어, unconfirmed 전송에도
+caption 자기배달 청구를 남기기 때문이다. 중첩된 영수증에 숨기면 그 예외가 발동하지 않고
+디스패치 경로가 같은 caption 을 한 번 더 게시한다. 확정 실패(400/413/auth)는 이 예외를
+빌리지 못한다 — 아무것도 배달하지 않았으므로 턴의 진짜 답변이 나가야 한다.
+
+세 채널의 미확인 기준은 벤더 문서에서 왔다. Slack 은 `files[]` echo 가 없는 completion,
+Telegram 은 `message_id` 가 0 이거나 없는 응답(0 은 "아직 실제로 전송되지 않았다"는
+벤더 정의), Discord 는 Create Message 가 message id 를 돌려주지 않은 경우다.
+**Discord 의 거절은 `sendDiscordFileRest` 안에만 둔다** — 같은 `DiscordRestScheduler` 가
+reaction/delete/unpin 도 나르고 거기서는 204 가 문서화된 정상 성공이다. 상태 코드는
+`FILE_UNCONFIRMED_STATUS`(502)이고 4xx 가 아니다: 요청에 잘못된 것이 없고, 에이전트가
+재시도해야 할 일도 아니다(이미 도착했을 수 있다).
+
+`confirmation` 은 중간 계층이 벗기면 의미가 없다. Telegram Hub 릴레이(`sendToTopic` →
+허브 라우트 → 멤버 핸들러)와 legacy `/api/telegram/send` 가 그 필드를 통과시키는 이유가
+이것뿐이다 (#700).
 
 | Export | 역할 |
 | --- | --- |
