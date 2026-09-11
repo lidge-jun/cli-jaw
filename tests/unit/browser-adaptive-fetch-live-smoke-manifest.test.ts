@@ -9,7 +9,7 @@ import { validateFetchUrl } from '../../src/browser/adaptive-fetch/safety.js';
 
 test('live smoke manifest is default-off data with public known URLs only', () => {
     const manifest = getLiveSmokeManifest();
-    assert.equal(LIVE_SMOKE_MANIFEST_VERSION, 2);
+    assert.equal(LIVE_SMOKE_MANIFEST_VERSION, 3);
     assert.ok(manifest.length >= 4);
     for (const entry of manifest) {
         const parsed = validateFetchUrl(entry.url, { allowPrivateNetwork: false });
@@ -97,4 +97,3 @@ test('#694-D every public-endpoint evidence names a label the entry expects', ()
         }
     }
 });
-

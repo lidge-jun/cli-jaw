@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { resolvePublicEndpointCandidates } from '../../src/browser/adaptive-fetch/endpoint-resolvers.js';
+import { resolvePublicEndpointCandidates, DIRECT_CONTENT_LABELS, YTDLP_LABELS } from '../../src/browser/adaptive-fetch/endpoint-resolvers.js';
+import { normalizePublicEndpointResult, hasPublicEndpointNormalizer } from '../../src/browser/adaptive-fetch/public-endpoint-normalizers.js';
 
 test('adaptive fetch resolves core public endpoint shapes', () => {
     assert.deepEqual(resolvePublicEndpointCandidates('https://example.com/article'), []);
@@ -131,4 +132,111 @@ test('#694-F the resolver source carries no frozen calendar constant', () => {
     assert.equal(/endTime=\d/.test(source), false, 'the query must not carry a literal end date');
     assert.match(source, /startTime=\$\{start\}/);
     assert.match(source, /endTime=\$\{end\}/);
+});
+
+// #694: "23 platforms supported" was only ever a claim. Four labels reached no
+// normalizer at all, and three of those pointed at endpoints that do not
+// answer. These make the claim answerable by a test.
+
+const PLATFORM_URLS = [
+    'https://github.com/org/repo',
+    'https://github.com/org/repo/blob/main/README.md',
+    'https://www.reddit.com/r/test/comments/abc/title/',
+    'https://news.ycombinator.com/item?id=123',
+    'https://en.wikipedia.org/wiki/Node.js',
+    'https://www.npmjs.com/package/cli-jaw',
+    'https://pypi.org/project/requests/',
+    'https://arxiv.org/abs/2301.00001',
+    'https://bsky.app/profile/alice.bsky.social',
+    'https://bsky.app/profile/alice.bsky.social/post/abc123',
+    'https://mastodon.social/@user/123456',
+    'https://mastodon.social/@user',
+    'https://stackoverflow.com/questions/1',
+    'https://dev.to/author/some-article',
+    'https://doi.org/10.1000/xyz123',
+    'https://openlibrary.org/works/OL1W',
+    'https://openlibrary.org/books/OL1M',
+    'https://web.archive.org/web/20200101000000/https://example.com/',
+    'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    'https://x.com/user/status/123',
+    'https://www.v2ex.com/t/123',
+    'https://lobste.rs/s/abc/title',
+    'https://blog.naver.com/someone/12345',
+    'https://n.news.naver.com/mnews/article/001/0014567890',
+    'https://finance.naver.com/item/main.naver?code=005930',
+];
+
+test('#694b-A every label the resolver can emit is accounted for', () => {
+    const seen = new Set<string>();
+    for (const url of PLATFORM_URLS) {
+        const candidates = resolvePublicEndpointCandidates(url);
+        assert.ok(candidates.length > 0, `${url} resolved to no candidate at all`);
+        for (const candidate of candidates) seen.add(candidate.label);
+    }
+    assert.ok(seen.size >= 20, `expected the resolver to cover at least 20 labels, saw ${seen.size}`);
+
+    for (const label of seen) {
+        const accounted = hasPublicEndpointNormalizer(label)
+            || (DIRECT_CONTENT_LABELS as readonly string[]).includes(label)
+            || (YTDLP_LABELS as readonly string[]).includes(label);
+        assert.ok(
+            accounted,
+            `"${label}" is produced by the resolver but has no normalizer, is not declared direct content, and is not the yt-dlp label — it would fall through to raw text while looking supported`,
+        );
+    }
+});
+
+test('#694b-B the three unanswerable oEmbed endpoints are gone', () => {
+    // Checked live on 2026-09-11: medium 403 (Cloudflare), substack 404 on both
+    // substack.com and the publication host, linkedin 404.
+    for (const url of [
+        'https://medium.com/@user/test-post-abc123',
+        'https://bot-eat-brain.substack.com/p/some-post',
+        'https://www.linkedin.com/posts/someone-activity-123',
+        'https://www.linkedin.com/pulse/some-article',
+    ]) {
+        const labels = resolvePublicEndpointCandidates(url).map(candidate => candidate.label);
+        for (const dead of ['medium-oembed', 'substack-oembed', 'linkedin-oembed']) {
+            assert.equal(labels.includes(dead), false, `${url} still synthesises ${dead}`);
+        }
+    }
+});
+
+test('#694b-C naver finance is normalized from its non-JSON array response', () => {
+    // The live shape: a single-quoted header row and double-quoted data rows,
+    // which JSON.parse refuses outright.
+    const raw = [
+        "[['날짜', '시가', '고가', '저가', '종가', '거래량', '외국인소진율'],",
+        '["20240911", 65100, 65500, 64200, 64900, 35809707, 55.2],',
+        '["20240912", 66000, 66600, 65200, 66300, 35884106, 55.11],',
+        '["20240913", 65000, 65500, 64300, 64400, 25045135, 54.9]]',
+    ].join('\n');
+    assert.throws(() => JSON.parse(raw), 'the fixture must be the real non-JSON shape');
+
+    const normalized = normalizePublicEndpointResult({
+        ok: true,
+        status: 200,
+        finalUrl: 'https://api.finance.naver.com/siseJson.naver?symbol=005930',
+        contentType: 'text/plain',
+        text: raw,
+        evidence: [],
+        warnings: [],
+    }, { label: 'naver-finance-json', source: 'public_endpoint' });
+
+    assert.ok(normalized, 'naver-finance-json must normalize');
+    assert.ok(normalized!.evidence.includes('public-endpoint:naver-finance-json'));
+    assert.equal(normalized!.metadata['sessions'], 3);
+    assert.equal(normalized!.metadata['latestDate'], '20240913');
+    assert.equal(normalized!.metadata['latestClose'], 64400);
+    assert.match(normalized!.text, /Close: 64400/);
+});
+
+test('#694b-D a garbled naver payload is refused rather than half-parsed', () => {
+    for (const raw of ['', 'not an array', "[['날짜']]", '[]']) {
+        const normalized = normalizePublicEndpointResult({
+            ok: true, status: 200, finalUrl: 'https://api.finance.naver.com/siseJson.naver?symbol=005930',
+            contentType: 'text/plain', text: raw, evidence: [], warnings: [],
+        }, { label: 'naver-finance-json', source: 'public_endpoint' });
+        assert.equal(normalized, null, `"${raw.slice(0, 20)}" must not normalize`);
+    }
 });

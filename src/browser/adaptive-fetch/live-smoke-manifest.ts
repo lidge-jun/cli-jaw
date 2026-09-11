@@ -7,7 +7,7 @@ export interface LiveSmokeManifestEntry {
     reason: string;
 }
 
-export const LIVE_SMOKE_MANIFEST_VERSION = 2;
+export const LIVE_SMOKE_MANIFEST_VERSION = 3;
 
 export const LIVE_SMOKE_MANIFEST: LiveSmokeManifestEntry[] = [
     {
@@ -75,14 +75,6 @@ export const LIVE_SMOKE_MANIFEST: LiveSmokeManifestEntry[] = [
         expectedEvidence: ['public-endpoint:wikipedia-summary-api'],
         browserMode: 'auto',
         reason: 'Wikipedia REST API reader drift check',
-    },
-    {
-        id: 'medium-oembed',
-        url: 'https://medium.com/@user/test-post-abc123',
-        expectedLabels: ['medium-oembed', 'direct-fetch'],
-        expectedEvidence: ['public-endpoint:medium-oembed'],
-        browserMode: 'auto',
-        reason: 'Medium oembed public endpoint drift check',
     },
     {
         id: 'youtube-oembed',
