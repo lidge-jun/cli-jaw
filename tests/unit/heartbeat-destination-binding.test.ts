@@ -5,6 +5,7 @@ import {
     resolveHeartbeatBinding,
     isCompleteHeartbeatDestination,
     heartbeatHoldMessage,
+    verifyHeartbeatThreadBindingLive,
 } from '../../src/memory/heartbeat-destination.ts';
 
 // HDB — a scheduled report goes to the conversation an operator named, or it
@@ -71,9 +72,105 @@ test('HDB-007 non-Slack transports keep their conversation-level contract', () =
 });
 
 test('HDB-008 every hold reason explains itself without leaking anything', () => {
-    for (const reason of ['unbound_destination', 'incomplete_destination', 'malformed_destination'] as const) {
+    for (const reason of ['unbound_destination', 'incomplete_destination', 'malformed_destination',
+        'thread_channel_mismatch', 'stale_thread', 'live_lookup_failed',
+        'slack_grant_unavailable'] as const) {
         const message = heartbeatHoldMessage(reason);
         assert.ok(message.length > 0);
         assert.equal(/xox[bp]-|token|secret/i.test(message), false);
     }
+});
+
+function replies(payload: Record<string, unknown>, inspect?: (body: URLSearchParams) => void) {
+    return (async (_url: string | URL | Request, init?: RequestInit) => {
+        const body = new URLSearchParams(String(init?.body ?? ''));
+        inspect?.(body);
+        return new Response(JSON.stringify(payload), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+        });
+    }) as typeof fetch;
+}
+
+const threaded = {
+    channel: 'slack' as const,
+    targetId: 'C_REPORTS',
+    threadId: '1787616871.254919',
+};
+
+test('HDB-L01 live verification accepts only the configured parent in the configured channel', async () => {
+    let calls = 0;
+    const result = await verifyHeartbeatThreadBindingLive(threaded, {
+        token: 'xoxb-fixture',
+        fetchImpl: replies({
+            ok: true,
+            messages: [{ ts: threaded.threadId, text: 'parent' }],
+            has_more: false,
+        }, body => {
+            calls++;
+            assert.equal(body.get('channel'), threaded.targetId);
+            assert.equal(body.get('ts'), threaded.threadId);
+            assert.equal(body.get('limit'), '1');
+        }),
+    });
+    assert.equal(result.state, 'bound');
+    assert.equal(calls, 1);
+});
+
+test('HDB-L02 a different or empty parent fails closed as a channel-thread mismatch', async () => {
+    for (const messages of [[], [{ ts: '1787616871.999999', text: 'other' }]]) {
+        const result = await verifyHeartbeatThreadBindingLive(threaded, {
+            token: 'xoxb-fixture',
+            fetchImpl: replies({ ok: true, messages, has_more: false }),
+        });
+        assert.deepEqual(result, { state: 'held', reason: 'thread_channel_mismatch' });
+    }
+});
+
+test('HDB-L03 Slack error classes become stable hold reasons without retry', async () => {
+    const cases = [
+        ['message_not_found', 'stale_thread'],
+        ['thread_not_found', 'stale_thread'],
+        ['channel_not_found', 'thread_channel_mismatch'],
+        ['not_in_channel', 'thread_channel_mismatch'],
+        ['missing_scope', 'live_lookup_failed'],
+        ['no_permission', 'live_lookup_failed'],
+        ['ratelimited', 'live_lookup_failed'],
+        ['invalid_auth', 'live_lookup_failed'],
+        ['internal_error', 'live_lookup_failed'],
+    ] as const;
+    for (const [code, reason] of cases) {
+        let calls = 0;
+        const result = await verifyHeartbeatThreadBindingLive(threaded, {
+            token: 'xoxb-fixture',
+            fetchImpl: replies({ ok: false, error: code }, () => { calls++; }),
+        });
+        assert.deepEqual(result, { state: 'held', reason }, code);
+        assert.equal(calls, 1, code + ' must not retry inside a heartbeat tick');
+    }
+});
+
+test('HDB-L04 missing credentials and transport exceptions fail this tick closed', async () => {
+    assert.deepEqual(await verifyHeartbeatThreadBindingLive(threaded, { token: '' }),
+        { state: 'held', reason: 'live_lookup_failed' });
+    assert.deepEqual(await verifyHeartbeatThreadBindingLive(threaded, {
+        token: 'xoxb-fixture',
+        fetchImpl: (async () => { throw new Error('network down'); }) as typeof fetch,
+    }), { state: 'held', reason: 'live_lookup_failed' });
+});
+
+test('HDB-L05 channel_root and non-Slack destinations require no Slack read', async () => {
+    let calls = 0;
+    const fetchImpl = (async () => { calls++; throw new Error('must not fetch'); }) as typeof fetch;
+    for (const destination of [
+        { channel: 'slack', targetId: 'C_REPORTS', scope: 'channel_root' },
+        { channel: 'telegram', targetId: '123' },
+        { channel: 'discord', targetId: '456' },
+    ]) {
+        assert.equal((await verifyHeartbeatThreadBindingLive(destination, {
+            token: '',
+            fetchImpl,
+        })).state, 'bound');
+    }
+    assert.equal(calls, 0);
 });

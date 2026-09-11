@@ -4,7 +4,17 @@ import type { RemoteTarget } from '../messaging/types.js';
 export const SLACK_TOOL_GRANT_ENV = 'JAW_SLACK_TURN_GRANT';
 const GRANT_TTL_MS = 15 * 60_000;
 const GRANT_CAP = 128;
-export type SlackToolSource = { teamId: string; actorId: string; destination: RemoteTarget; credentialKey: string; actionToken?: string };
+export type SlackToolSource = {
+    teamId: string;
+    actorId: string;
+    destination: RemoteTarget;
+    credentialKey: string;
+    actionToken?: string;
+    /** Server-owned scheduled work keeps its destination constraint even under
+     *  full-local Auto authority. Ordinary interactive turn grants omit this:
+     *  Auto remains instance-wide for the trusted operator (#745). */
+    enforceDestination?: boolean;
+};
 export type SlackToolGrant = Readonly<SlackToolSource & { requestId: string; scope: string; chatSessionId: string; expiresAt: number; signal: AbortSignal }>;
 type Entry = { grant: SlackToolGrant; secret: string; active: boolean; controller: AbortController; timer: ReturnType<typeof setTimeout> };
 const requests = new Map<string, Entry>();
@@ -54,6 +64,22 @@ export function revokeSlackToolGrant(requestId: string | undefined | null): void
 
 export function revokeSlackToolScope(scope?: string): void {
     for (const [id, entry] of requests) if (scope === undefined || entry.grant.scope === scope) revokeSlackToolGrant(id);
+}
+
+/** True while server-owned scheduled work holds Slack to one destination.
+ *
+ * Native/pool and employee runtimes cannot receive a fresh per-turn environment
+ * variable. Their headerless Auto calls are therefore refused while this guard
+ * is active; a print child can present the matching grant and proceed. The
+ * reservation disappears through the same revoke lifecycle as its secret. */
+export function hasActiveEnforcedSlackDestination(): boolean {
+    const now = Date.now();
+    for (const entry of requests.values()) {
+        if (entry.grant.enforceDestination === true
+            && entry.grant.expiresAt > now
+            && !entry.controller.signal.aborted) return true;
+    }
+    return false;
 }
 
 export function redactSlackToolSecrets(text: string): string {

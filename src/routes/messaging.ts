@@ -1,6 +1,6 @@
-import { slackCredentialKey } from '../slack/tool-context.js';
+import { hasActiveEnforcedSlackDestination, slackCredentialKey } from '../slack/tool-context.js';
 import type { Express, Request, Response } from 'express';
-import { resolveSlackToolPrincipal, withSlackToolAccess, slackToolDenied, type SlackOperatorValidator } from '../slack/tool-access.js';
+import { resolveSlackToolPrincipal, slackToolContext, withSlackToolAccess, slackToolDenied, type SlackOperatorValidator } from '../slack/tool-access.js';
 import { getHomeChannel } from '../messaging/runtime.js';
 import type { AuthMiddleware } from './types.js';
 import { httpStatus, httpCode, httpDetail } from './_http-error.js';
@@ -172,7 +172,15 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
         const principal = principalFor(req, full);
         const client = getSlackSendClient();
         if (!client.token) throw slackToolDenied('slack_unavailable', 503);
-        if (principal.kind === 'turn') {
+        const scopedGrant = slackToolContext(principal);
+        if (hasActiveEnforcedSlackDestination() && scopedGrant?.enforceDestination !== true) {
+            // Native/pool and employee processes cannot receive a new per-turn
+            // environment header. While scheduled work owns an enforced
+            // destination, a headerless full-local call is ambiguous and must
+            // not be allowed to choose another Slack conversation (#745).
+            throw slackToolDenied('slack_enforced_destination_grant_required', 409);
+        }
+        if (principal.kind === 'turn' || scopedGrant?.enforceDestination === true) {
             if (request.filePath) {
                 const inside = (root: string) => {
                     const rel = relative(fs.realpathSync(root), request.filePath!);
@@ -180,7 +188,7 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
                 };
                 if (inside(JAW_HOME) && (!fs.existsSync(UPLOADS_DIR) || !inside(UPLOADS_DIR))) throw slackToolDenied('slack_private_home_file_denied');
             }
-            const destination = principal.grant.destination;
+            const destination = scopedGrant!.destination;
             const candidate = request.target ?? request.turnTarget;
             if ((candidate && (candidate.targetId !== destination.targetId || (candidate.threadId ?? '') !== (destination.threadId ?? '')))
                 || (request.chatId !== undefined && String(request.chatId) !== destination.targetId)) throw slackToolDenied('slack_destination_mismatch');
@@ -430,7 +438,23 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
             // it is a fact about how the send arrived, not about its body, and
             // an agent must not be able to claim it by putting a field in JSON.
             const full = fullFor(req);
-            const result = await sendSlackAware(req, normalizeChannelSendRequest(req.body, { fullAccess: full }), full);
+            // A server-owned scheduled turn carries an enforced grant even when
+            // the instance runs Auto/full-local. Let that grant supply the
+            // destination before the full-access normalizer rejects an omitted
+            // address; sendSlackAware then pins or rejects any supplied address.
+            const preflightGrant = full && req.body?.channel === 'slack'
+                ? slackToolContext(principalFor(req, full))
+                : undefined;
+            const enforcedDestination = preflightGrant?.enforceDestination === true
+                ? preflightGrant.destination
+                : undefined;
+            const result = await sendSlackAware(
+                req,
+                normalizeChannelSendRequest(enforcedDestination && req.body?.target === undefined
+                    ? { ...req.body, target: enforcedDestination }
+                    : req.body, { fullAccess: full }),
+                full,
+            );
             if (!result.ok) {
                 res.status(sendResultHttpStatus(result)).json(result);
                 return;

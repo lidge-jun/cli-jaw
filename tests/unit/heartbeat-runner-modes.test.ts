@@ -1,5 +1,8 @@
 import { test, mock } from 'node:test';
 import assert from 'node:assert/strict';
+import { settings } from '../../src/core/config.ts';
+import { hasActiveEnforcedSlackDestination } from '../../src/slack/tool-context.ts';
+import { resetVerifiedSlackWorkspace } from '../../src/slack/verified-workspace.ts';
 
 const collectUrl = new URL('../../src/orchestrator/collect.ts', import.meta.url).href;
 const sendUrl = new URL('../../src/messaging/send.ts', import.meta.url).href;
@@ -17,6 +20,7 @@ const [realSend, realDb, realState, realSpawn, realRegistry, realDistribute] = a
 let collectCalls = 0;
 let plannerOnly = false;
 let employeeBusy = false;
+let collectObserver = () => {};
 const sent: string[] = [];
 const sentRequests: Array<Record<string, any>> = [];
 const anchors: unknown[][] = [];
@@ -24,6 +28,7 @@ const employee = { id: 'emp-1', name: 'reviewer', cli: 'codex', model: null, rol
 
 mock.module(collectUrl, { namedExports: {
     orchestrateAndCollectData: async () => {
+        collectObserver();
         collectCalls++;
         return { text: 'status: ok\nsummary: main complete', data: { agyPlannerOnly: plannerOnly } };
     },
@@ -56,7 +61,22 @@ mock.module(registryUrl, { namedExports: {
 } });
 mock.module(distributeUrl, { namedExports: { ...realDistribute, runSingleAgent: async () => ({ text: 'status: ok\nsummary: employee complete', tools: [] }) } });
 
-const { decideHeartbeatReport, runHeartbeatJob, runHeartbeatScript } = await import('../../src/memory/heartbeat.js');
+const {
+    decideHeartbeatReport,
+    getHeartbeatLiveDestinationHold,
+    runHeartbeatJob,
+    runHeartbeatScript,
+} = await import('../../src/memory/heartbeat.js');
+const { resolveHeartbeatBinding } = await import('../../src/memory/heartbeat-destination.js');
+const defaultDestination = { channel: 'slack' as const, targetId: 'C_REPORTS', scope: 'channel_root' as const };
+function runJob(job: Record<string, unknown>) {
+    return runHeartbeatJob({ destination: defaultDestination, ...job }, {
+        // Runner tests own orchestration/report policy. Live Slack membership is
+        // exercised directly in heartbeat-destination-binding.test.ts.
+        verifyDestination: async destination => resolveHeartbeatBinding(destination),
+        reserveDestinationGrant: async () => () => {},
+    });
+}
 type Status = 'ok' | 'warning' | 'failed';
 const report = (status: Status, userVisible = false) => ({ status, changed: false, recordRequired: false, userVisible, summary: 's', evidence: '', nextAction: '', raw: 's' });
 
@@ -76,19 +96,74 @@ test('anomaly_only sends an ok report explicitly marked user-visible', () => {
 
 test('planner-only main heartbeat retries exactly once even when every result is planner-only', async () => {
     collectCalls = 0; plannerOnly = true;
-    await runHeartbeatJob({ id: 'retry', name: 'retry', enabled: true, schedule: { minutes: 5 }, prompt: 'check' });
+    await runJob({ id: 'retry', name: 'retry', enabled: true, schedule: { minutes: 5 }, prompt: 'check' });
     assert.equal(collectCalls, 2);
+    plannerOnly = false;
+});
+
+test('production default verifies, reserves, activates the guard during collection, and releases it', async t => {
+    const previousSlack = settings.slack;
+    collectCalls = 0;
+    sentRequests.length = 0;
+    resetVerifiedSlackWorkspace();
+    settings.slack = { ...previousSlack, enabled: true, botToken: 'xoxb-fixture' };
+    const threadId = '1787616871.254919';
+    let replyCalls = 0;
+    let authCalls = 0;
+    t.mock.method(globalThis, 'fetch', async (input: string | URL | Request) => {
+        const url = String(input);
+        if (url.includes('/api/conversations.replies')) {
+            replyCalls++;
+            return new Response(JSON.stringify({
+                ok: true,
+                messages: [{ ts: threadId, text: 'parent' }],
+                has_more: false,
+            }), { headers: { 'content-type': 'application/json' } });
+        }
+        if (url.includes('/api/auth.test')) {
+            authCalls++;
+            return new Response(JSON.stringify({
+                ok: true,
+                team_id: 'T1FIXTURE',
+                user_id: 'U1FIXTURE',
+            }), { headers: { 'content-type': 'application/json' } });
+        }
+        throw new Error('unexpected Slack method: ' + url);
+    });
+    collectObserver = () => {
+        assert.equal(hasActiveEnforcedSlackDestination(), true,
+            'native/headerless agent calls are guarded for the whole collection');
+    };
+    try {
+        await runHeartbeatJob({
+            id: 'default-path',
+            name: 'default-path',
+            enabled: true,
+            schedule: { minutes: 5 },
+            prompt: 'check',
+            destination: { channel: 'slack', targetId: 'C1REPORTS', threadId },
+        });
+    } finally {
+        collectObserver = () => {};
+        settings.slack = previousSlack;
+        resetVerifiedSlackWorkspace();
+    }
+    assert.equal(replyCalls, 1);
+    assert.equal(authCalls, 1);
+    assert.equal(collectCalls, 1);
+    assert.equal(hasActiveEnforcedSlackDestination(), false, 'grant is released after collection');
+    assert.equal(sentRequests[0]?.['target']?.threadId, threadId);
 });
 
 test('non-planner main heartbeat runs once', async () => {
     collectCalls = 0; plannerOnly = false;
-    await runHeartbeatJob({ id: 'once', name: 'once', enabled: true, schedule: { minutes: 5 }, prompt: 'check' });
+    await runJob({ id: 'once', name: 'once', enabled: true, schedule: { minutes: 5 }, prompt: 'check' });
     assert.equal(collectCalls, 1);
 });
 
 test('busy employee produces warning delivery without running employee', async () => {
     employeeBusy = true; sent.length = 0;
-    await runHeartbeatJob({ id: 'busy', name: 'busy', runner: 'employee', employee: employee.name,
+    await runJob({ id: 'busy', name: 'busy', runner: 'employee', employee: employee.name,
         reportPolicy: 'anomaly_only', schedule: { minutes: 5 }, prompt: 'check',
         destination: { channel: 'slack', targetId: 'C_REPORTS', threadId: '1787616871.254919' } });
     employeeBusy = false;
@@ -123,7 +198,7 @@ test('script runner configures the audited timeout and output bound', async () =
 
 test('a job with a destination sends there and forbids the active fallback', async () => {
     sent.length = 0; sentRequests.length = 0;
-    await runHeartbeatJob({
+    await runJob({
         id: 'pinned', name: 'pinned', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
         destination: { channel: 'slack', targetId: 'C_REPORTS', threadId: '1787616871.254919' },
     });
@@ -139,7 +214,7 @@ test('a job with a destination sends there and forbids the active fallback', asy
 
 test('a destination that opts into the conversation root posts there', async () => {
     sent.length = 0; sentRequests.length = 0;
-    await runHeartbeatJob({
+    await runJob({
         id: 'root', name: 'root', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
         destination: { channel: 'slack', targetId: 'C_REPORTS', scope: 'channel_root' },
     });
@@ -153,7 +228,7 @@ test('a Slack destination with no thread and no root opt-in is held', async () =
     // Guessing the root put scheduled reports at the bottom of channels their
     // operator had pointed at a specific thread (#745).
     sent.length = 0; sentRequests.length = 0;
-    await runHeartbeatJob({
+    await runJob({
         id: 'incomplete', name: 'incomplete', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
         destination: { channel: 'slack', targetId: 'C_REPORTS' },
     });
@@ -163,7 +238,7 @@ test('a Slack destination with no thread and no root opt-in is held', async () =
 
 test('an empty-string thread is not a thread', async () => {
     sent.length = 0; sentRequests.length = 0;
-    await runHeartbeatJob({
+    await runJob({
         id: 'blank-thread', name: 'blank-thread', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
         destination: { channel: 'slack', targetId: 'C_REPORTS', threadId: '' },
     });
@@ -173,7 +248,7 @@ test('an empty-string thread is not a thread', async () => {
 
 test('the derived target carries the kinds the operator never types', async () => {
     sent.length = 0; sentRequests.length = 0;
-    await runHeartbeatJob({
+    await runJob({
         id: 'kinds', name: 'kinds', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
         destination: { channel: 'slack', targetId: 'C_REPORTS', scope: 'channel_root' },
     });
@@ -195,12 +270,107 @@ test('a job without a destination delivers nowhere', async () => {
     assert.equal(sentRequests.length, 0);
 });
 
+test('a live thread mismatch stops before model work and before send', async () => {
+    collectCalls = 0; sent.length = 0; sentRequests.length = 0;
+    await runHeartbeatJob({
+        id: 'mismatch', name: 'mismatch', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
+        destination: { channel: 'slack', targetId: 'C_REPORTS', threadId: '1787616871.254919' },
+    }, {
+        verifyDestination: async () => ({ state: 'held', reason: 'thread_channel_mismatch' }),
+        reserveDestinationGrant: async () => () => {},
+    });
+    assert.equal(collectCalls, 0, 'an unverified destination spends no model turn');
+    assert.equal(sentRequests.length, 0, 'an unverified destination sends nowhere');
+    assert.equal(getHeartbeatLiveDestinationHold({
+        id: 'mismatch',
+        destination: { channel: 'slack', targetId: 'C_REPORTS', threadId: '1787616871.254919' },
+    }), 'thread_channel_mismatch', 'GET/UI can surface the live hold');
+    assert.equal(getHeartbeatLiveDestinationHold({
+        id: 'mismatch',
+        destination: { channel: 'slack', targetId: 'C_REPORTS', threadId: '1787616871.999999' },
+    }), null, 'editing the destination invalidates the old live hold immediately');
+});
+
+test('a Slack main job reserves and releases destination-bound tool authority around its turn', async () => {
+    collectCalls = 0; sentRequests.length = 0;
+    let reserved = 0;
+    let released = 0;
+    const destination = { channel: 'slack' as const, targetId: 'C_REPORTS', threadId: '1787616871.254919' };
+    const binding = resolveHeartbeatBinding(destination);
+    assert.equal(binding.state, 'bound');
+    await runHeartbeatJob({
+        id: 'grant', name: 'grant', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
+        destination,
+    }, {
+        verifyDestination: async () => binding,
+        reserveDestinationGrant: async (actual, requestId) => {
+            reserved++;
+            assert.equal(actual.state, 'bound');
+            assert.equal(actual.target.targetId, destination.targetId);
+            assert.ok(requestId);
+            return () => { released++; };
+        },
+    });
+    assert.equal(collectCalls, 1);
+    assert.equal(reserved, 1);
+    assert.equal(released, 1);
+    assert.equal(sentRequests[0]?.['target']?.threadId, destination.threadId);
+});
+
+test('planner-only retry receives a fresh destination grant and releases both', async () => {
+    collectCalls = 0; plannerOnly = true;
+    const requestIds = new Set<string>();
+    let released = 0;
+    await runHeartbeatJob({
+        id: 'grant-retry', name: 'grant-retry', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
+        destination: { channel: 'slack', targetId: 'C_REPORTS', scope: 'channel_root' },
+    }, {
+        verifyDestination: async destination => resolveHeartbeatBinding(destination),
+        reserveDestinationGrant: async (_binding, requestId) => {
+            requestIds.add(requestId);
+            return () => { released++; };
+        },
+    });
+    plannerOnly = false;
+    assert.equal(collectCalls, 2);
+    assert.equal(requestIds.size, 2);
+    assert.equal(released, 2);
+});
+
+for (const runner of ['employee', 'script'] as const) {
+    test(`${runner} runner is covered by the same destination guard`, async () => {
+        let reserved = 0;
+        let released = 0;
+        await runHeartbeatJob({
+            id: 'guard-' + runner,
+            name: 'guard-' + runner,
+            enabled: true,
+            runner,
+            ...(runner === 'employee' ? { employee: employee.name } : {
+                command: [process.execPath, '-e',
+                    "console.log('status: ok\\nchanged: no\\nsummary: script complete')"],
+            }),
+            schedule: { minutes: 5 },
+            prompt: 'check',
+            destination: { channel: 'slack', targetId: 'C_REPORTS', scope: 'channel_root' },
+        }, {
+            verifyDestination: async destination => resolveHeartbeatBinding(destination),
+            reserveDestinationGrant: async () => {
+                reserved++;
+                return () => { released++; };
+            },
+        });
+        assert.equal(reserved, 1);
+        assert.equal(released, 1);
+    });
+}
+
 test('a malformed destination is refused, not redirected to the active channel', async () => {
     // A job that named a destination has stated an intent. When that intent
     // cannot be resolved, delivering to whoever spoke last is the original bug
     // wearing a different hat — the report still lands in an unrelated place.
     sent.length = 0; sentRequests.length = 0;
-    await runHeartbeatJob({
+    await runJob({
         id: 'bad', name: 'bad', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
         destination: { channel: 'slack' },
     });
@@ -210,7 +380,7 @@ test('a malformed destination is refused, not redirected to the active channel',
 
 test('a destination naming an unknown transport is refused too', async () => {
     sent.length = 0; sentRequests.length = 0;
-    await runHeartbeatJob({
+    await runJob({
         id: 'bad-channel', name: 'bad-channel', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
         destination: { channel: 'irc', targetId: 'C_X' },
     });
@@ -220,19 +390,19 @@ test('a destination naming an unknown transport is refused too', async () => {
 
 test('a scheduled run survives a malformed destination without throwing', async () => {
     // Refusing to deliver must not take the heartbeat loop down with it.
-    await runHeartbeatJob({
+    await runJob({
         id: 'bad-survives', name: 'bad-survives', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
         destination: { targetId: 'C_X' },
     });
     sent.length = 0; sentRequests.length = 0;
-    await runHeartbeatJob({ id: 'after', name: 'after', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
+    await runJob({ id: 'after', name: 'after', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
         destination: { channel: 'slack', targetId: 'C_REPORTS', threadId: '1787616871.254919' } });
     assert.equal(sentRequests.length, 1, 'the next job still runs');
 });
 
 test('the anchor records where the report actually went', async () => {
     anchors.length = 0;
-    await runHeartbeatJob({
+    await runJob({
         id: 'anchored', name: 'anchored', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
         destination: { channel: 'slack', targetId: 'C_REPORTS', scope: 'channel_root' },
     });
@@ -252,7 +422,7 @@ test('an employee heartbeat consumes its own worker replay', async () => {
     // arrive.
     const { hasPendingWorkerReplays } = await import('../../src/orchestrator/worker-registry.js');
 
-    await runHeartbeatJob({
+    await runJob({
         id: 'emp', name: 'emp', runner: 'employee', employee: employee.name,
         enabled: true, schedule: { minutes: 5 }, prompt: 'check',
     });

@@ -14,11 +14,17 @@
 import { isHeartbeatDestination, type HeartbeatDestination } from '../core/config.js';
 import { targetFromChatId } from '../messaging/send.js';
 import type { RemoteTarget } from '../messaging/types.js';
+import { fetchSlackReplies } from '../slack/history.js';
+import type { SlackFetch } from '../slack/api.js';
 
 export type HeartbeatHoldReason =
     | 'unbound_destination'
     | 'incomplete_destination'
-    | 'malformed_destination';
+    | 'malformed_destination'
+    | 'thread_channel_mismatch'
+    | 'stale_thread'
+    | 'live_lookup_failed'
+    | 'slack_grant_unavailable';
 
 export type HeartbeatBinding =
     | { state: 'bound'; target: RemoteTarget }
@@ -70,5 +76,67 @@ export function heartbeatHoldMessage(reason: HeartbeatHoldReason): string {
             return 'destination names a channel but no thread — add a thread, or set scope:"channel_root" to post to the channel itself';
         case 'malformed_destination':
             return 'destination is malformed';
+        case 'thread_channel_mismatch':
+            return 'the configured Slack thread does not belong to the configured channel';
+        case 'stale_thread':
+            return 'the configured Slack thread no longer exists';
+        case 'live_lookup_failed':
+            return 'the configured Slack thread could not be verified for this tick';
+        case 'slack_grant_unavailable':
+            return 'destination-bound Slack authority could not be reserved for this tick';
+    }
+}
+
+export type HeartbeatThreadVerificationOptions = {
+    token: string;
+    fetchImpl?: SlackFetch;
+    signal?: AbortSignal;
+};
+
+const STALE_THREAD_CODES = new Set(['thread_not_found', 'message_not_found']);
+const MISMATCH_CODES = new Set(['channel_not_found', 'not_in_channel']);
+
+/**
+ * Prove a threaded Slack destination still names a parent in that channel.
+ *
+ * The check deliberately has no positive cache. A success from the previous
+ * tick says nothing about a thread that was deleted or a bot removed from its
+ * channel before this one. A 429 is not retried here either: the heartbeat owns
+ * a future tick, so waiting and issuing a second read only spends more shared
+ * Slack budget. Every uncertain result fails this tick closed.
+ */
+export async function verifyHeartbeatThreadBindingLive(
+    destination: unknown,
+    options: HeartbeatThreadVerificationOptions,
+): Promise<HeartbeatBinding> {
+    const binding = resolveHeartbeatBinding(destination);
+    if (binding.state === 'held') return binding;
+    const { target } = binding;
+    if (target.channel !== 'slack' || !target.threadId) return binding;
+    if (!options.token.trim()) return { state: 'held', reason: 'live_lookup_failed' };
+
+    try {
+        const result = await fetchSlackReplies(options.token, target.targetId, target.threadId, {
+            limit: 1,
+            noRetry: true,
+            noRetryOnRateLimit: true,
+            sensitiveResponse: true,
+            ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+            ...(options.signal ? { signal: options.signal } : {}),
+        });
+        if (!result.ok) {
+            if (result.code && STALE_THREAD_CODES.has(result.code)) {
+                return { state: 'held', reason: 'stale_thread' };
+            }
+            if (result.code && MISMATCH_CODES.has(result.code)) {
+                return { state: 'held', reason: 'thread_channel_mismatch' };
+            }
+            return { state: 'held', reason: 'live_lookup_failed' };
+        }
+        return result.messages[0]?.ts === target.threadId
+            ? binding
+            : { state: 'held', reason: 'thread_channel_mismatch' };
+    } catch {
+        return { state: 'held', reason: 'live_lookup_failed' };
     }
 }

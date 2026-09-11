@@ -48,6 +48,26 @@ still inheriting an existing one. `authorizeExplicitTarget` in `src/messaging/se
 vouches for a send without rewriting its address: it no longer returns the last-active
 target's thread for an explicitly addressed channel-root post.
 
+Threaded Slack heartbeat jobs also prove the pair live before any main, employee or
+script runner starts. `verifyHeartbeatThreadBindingLive` reads
+`conversations.replies(channel, threadId, limit=1)`; the first row must be the
+configured parent ts. A missing/stale parent, a channel or permission mismatch, rate
+limit, missing credential, malformed response or transport failure holds that tick
+before inference and before send. The live reason is retained for `GET /api/heartbeat`
+and the UI while the enabled timer remains armed to recover on a later tick; editing the
+destination invalidates the old reason immediately. The read is not retried and positive
+results are not cached. `channel_root` and non-Slack destinations need no Slack read. Mention-watch is
+separate: its destination is the hit thread it just discovered.
+
+Every Slack heartbeat runner reserves a server-owned tool grant for the same target.
+The grant carries `enforceDestination: true`. A print child presents it, so
+`POST /api/channel/send` supplies an omitted destination and rejects a different one
+even under Auto/full-local authority. Native/pool, employee and script processes cannot
+receive a fresh per-turn environment header; while the reservation is active their
+headerless Slack send is refused, and the server remains the sole final sender.
+Interactive turn grants omit this flag; their existing Auto contract remains
+instance-wide outside the scheduled reservation window.
+
 
 ### Slack group DMs and scope observations
 
