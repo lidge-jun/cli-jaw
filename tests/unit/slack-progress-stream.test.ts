@@ -291,6 +291,49 @@ test('a stream closed after five minutes continues editing its own status throug
     assert.equal(h.clock.timers.size, 0);
 });
 
+test('SPS-744: an expired stream whose message is gone stops instead of retrying forever', async () => {
+    // The live incident: the stream expired, the card fell back to chat.update,
+    // and the message was no longer there. Nothing promoted that to "stop", so
+    // the idle loop re-dirtied the snapshot every 3.2s and sent the same doomed
+    // update 47 times across two and a half minutes (#744).
+    const h = harness(c => c.method === 'chat.appendStream'
+        ? { payload: { ok: false, error: 'message_not_in_streaming_state' } }
+        : c.method === 'chat.update'
+            ? { payload: { ok: false, error: 'message_not_found' } }
+            : ok());
+    const p = await startSlackProgress(h.token, target, '', h.options);
+    await p.ready();
+    await h.clock.advance(60000);
+    const afterFirstMinute = h.calls.filter(c => c.method === 'chat.update').length;
+    assert.equal(afterFirstMinute, 1, 'one edit discovers the message is gone');
+
+    for (let minute = 0; minute < 5; minute++) await h.clock.advance(60000);
+    assert.equal(h.calls.filter(c => c.method === 'chat.update').length, afterFirstMinute,
+        'a gone message is never edited again');
+    assert.equal(h.calls.filter(c => c.method === 'chat.postMessage').length, 0,
+        'a dead card is not replaced by a second one');
+    assert.equal(h.clock.timers.size, 0, 'the idle loop is stopped, not merely skipped');
+
+    const before = h.calls.length;
+    await p.finish('complete', { bodyDelivered: true });
+    assert.equal(h.calls.length, before, 'finalizing spends no request on a message known to be gone');
+    assert.equal(p.terminalConfirmed(), true);
+});
+
+test('SPS-744: three consecutive failed edits stop the live loop', async () => {
+    // Not every failure names itself. A transport rejecting the same request over
+    // and over is the same storm wearing a different error string.
+    const h = harness(c => c.method === 'chat.appendStream' || c.method === 'chat.update'
+        ? { payload: { ok: false, error: 'internal_error' } } : ok());
+    const p = await startSlackProgress(h.token, target, '', h.options);
+    await p.ready();
+    for (let minute = 0; minute < 5; minute++) await h.clock.advance(60000);
+    const attempts = h.calls.filter(c => c.method === 'chat.appendStream' || c.method === 'chat.update').length;
+    assert.ok(attempts <= 3, `live edits bounded, saw ${attempts}`);
+    assert.equal(h.clock.timers.size, 0);
+    await p.finish('complete', { bodyDelivered: true });
+});
+
 test('stream closure first discovered at finalization updates the same message once', async () => {
     const h = harness(c => c.method === 'chat.stopStream'
         ? { payload: { ok: false, error: 'message_not_in_streaming_state' } } : ok());
