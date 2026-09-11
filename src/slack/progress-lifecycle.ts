@@ -95,7 +95,6 @@ export function createSlackProgressLifecycle(input: SlackProgressLifecycleOption
     function markUnavailable(): void {
         if (activityUnavailable || !acceptingTools || detached) return;
         activityUnavailable = true;
-        pendingPhase = 'unavailable';
         current?.phase('unavailable');
     }
     function bind(identity: Readonly<RuntimeLivenessIdentity>): void {
@@ -208,6 +207,7 @@ export function createSlackProgressLifecycle(input: SlackProgressLifecycleOption
                 onPosted: ts => notify(() => config.onPosted(ts)),
             }).then(active => {
                 current = active;
+                if (activityUnavailable) active.phase('unavailable');
                 for (const entry of pending) active.projectedTool(entry);
                 pending = [];
                 if (pendingPhase) active.phase(pendingPhase);

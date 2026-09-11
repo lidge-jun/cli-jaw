@@ -6,9 +6,11 @@ import { notifyRuntimeLiveness } from '../../src/agent/runtime/liveness.ts';
 
 const phases: string[] = [];
 const starts: Array<{ workflowResponse?: boolean }> = [];
+let startGate: Promise<void> | undefined;
 mock.module('../../src/slack/progress.ts', { namedExports: {
     startSlackProgress: async (_token: string, _target: unknown, _text: string, options: { workflowResponse?: boolean }) => {
         starts.push(options);
+        if (startGate) await startGate;
         return {
         projectedTool() {}, phase(value: string) { phases.push(value); },
         async finish() {}, async ready() { return { mode: 'none', ts: null }; },
@@ -20,6 +22,25 @@ const { createSlackProgressLifecycle } = await import('../../src/slack/progress-
 const identity = { requestId: 'example-request', runId: 'example-run', scope: 'example-scope', sessionId: 'example-session', origin: 'slack' as const };
 const gap = (overrides: Record<string, unknown> = {}) => publish('agent', 'agent_runtime_gap', {
     runId: identity.runId, scope: identity.scope, sessionId: identity.sessionId, reason: 'projection_degraded', ...overrides,
+});
+
+test('a delayed card receives the latched gap before a newer delivering phase', async t => {
+    phases.length = 0;
+    let release!: () => void;
+    startGate = new Promise<void>(resolve => { release = resolve; });
+    const lifecycle = createSlackProgressLifecycle({ token: 'fake-token',
+        target: { channel: 'slack', targetId: 'C0EXAMPLE', targetKind: 'channel', peerKind: 'channel' },
+        requestId: identity.requestId, scope: identity.scope, sessionId: identity.sessionId, locale: 'en',
+        registerTeardown: () => () => {}, onPosted() {}, onTerminalConfirmed() {},
+    });
+    t.after(async () => { release(); startGate = undefined; await lifecycle.finish('complete'); });
+    lifecycle.start({ initialPhase: 'running' });
+    notifyRuntimeLiveness(identity);
+    gap(); lifecycle.phase('delivering');
+    assert.deepEqual(phases, [], 'card creation is still held');
+    release();
+    await lifecycle.finish('complete', { bodyDelivered: true });
+    assert.deepEqual(phases, ['unavailable', 'delivering']);
 });
 
 for (const beforeBinding of [false, true]) test(`scoped persistence gap is visible without activity or success evidence; beforeBinding=${beforeBinding}`, async t => {
