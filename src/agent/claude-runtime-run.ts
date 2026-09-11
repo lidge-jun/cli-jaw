@@ -19,6 +19,7 @@ import { beginLiveRun, setLiveRunTraceId, getLiveRun, clearLiveRun } from './liv
 import { syncLiveTools } from './events/helpers.js';
 import { getWorkerSlot, updateWorkerTools } from '../orchestrator/worker-registry.js';
 import { attachWatchdog } from './watchdog.js';
+import { isLifecycleSteerReason } from './spawn/kill-reason.js';
 import { detectSmokeResponse } from './smoke-detector.js';
 import { clearNativeStartFailure, recordNativeStartFailure } from './runtime/start-failure.js';
 
@@ -250,7 +251,7 @@ export function startClaudeNativeRun(input: ClaudeNativeRunOptions): { child: nu
             // fallback must be known before lifecycle publishes the compatibility end.
             ensureFallbackStarted();
             await handleAgentExit({ ...base, ctx, code, onRuntimeEnd: end, wasKilled: !!reason,
-                wasSteer: reason === 'steer' || reason === 'interrupt' || reason === 'dup-registration',
+                wasSteer: isLifecycleSteerReason(reason),
                 smokeResult: detectSmokeResponse(outcome.finalText ?? '', ctx.toolLog, code, 'claude'), costLine: '',
                 childProcess: lease?.child ?? null, resolve: value => { selected ??= value; },
                 processQueue: () => { queueRequested = true; } });

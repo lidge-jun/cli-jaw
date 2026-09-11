@@ -3,6 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import {
+    isLifecycleSteerReason,
+    STEER_KILL_REASON,
+    INTERRUPT_KILL_REASON,
+    DUP_REGISTRATION_KILL_REASON,
+} from '../../src/agent/spawn/kill-reason.ts';
+import { shouldAnnounceStallTruncation } from '../../src/agent/error-classifier.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -29,70 +36,63 @@ test('SI-002: killActiveAgent defaults reason to "user"', () => {
     );
 });
 
-// ─── SI-003: ACP exit handler tags content with ⏹️ [interrupted] ───
+// ─── SI-003: the lifecycle steer class, stated once ───
+//
+// These replace six source-grep assertions that pinned the literal `'steer'` inside
+// each runtime's exit handler. Those greps did not describe a behaviour, and they
+// actively froze the bug in #681: an adapter that accepted only `'steer'` satisfied
+// them, so the incomplete classification passed review for months.
 
-test('SI-003: ACP exit handler adds interrupted prefix to fullText when wasSteer', () => {
-    const acpExitIdx = spawnSrc.indexOf("acp.on('exit'");
-    assert.ok(acpExitIdx > 0, 'ACP exit handler should exist');
+test('SI-003: isLifecycleSteerReason accepts exactly the intentional-stop reasons', () => {
+    for (const reason of [STEER_KILL_REASON, INTERRUPT_KILL_REASON, DUP_REGISTRATION_KILL_REASON]) {
+        assert.equal(isLifecycleSteerReason(reason), true, `${reason} is an intentional stop`);
+    }
+});
 
-    const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 7000);
+test('SI-004: isLifecycleSteerReason rejects failures, shutdowns and absent reasons', () => {
+    // 'agy-complete' matters most: a quiet-output completion is a normal finish, and
+    // classifying it as a steer would suppress the answer the run just produced.
+    for (const reason of ['user', 'api', 'shutdown', 'planned-restart', 'agy-complete', '', null, undefined]) {
+        assert.equal(isLifecycleSteerReason(reason), false, `${String(reason)} is not an intentional stop`);
+    }
+});
 
-    assert.ok(
-        acpExitBlock.includes("acpKillReason === 'steer'"),
-        'ACP exit should check acpKillReason === steer',
-    );
-    assert.ok(
-        acpExitBlock.includes('⏹️ [interrupted]'),
-        'ACP exit should tag content with ⏹️ [interrupted]',
+test('SI-005: every intentional stop suppresses the stall truncation notice', () => {
+    // wasSteer is what tells the reader "you stopped this", so a runtime that
+    // misclassifies an interrupt would also apologise for a timeout that never
+    // happened (#405).
+    for (const reason of [STEER_KILL_REASON, INTERRUPT_KILL_REASON, DUP_REGISTRATION_KILL_REASON]) {
+        assert.equal(
+            shouldAnnounceStallTruncation({
+                stallReason: 'idle 90s', wasSteer: isLifecycleSteerReason(reason),
+                mainManaged: true, internal: false,
+            }),
+            false,
+            `${reason} must not produce a timeout notice`,
+        );
+    }
+    assert.equal(
+        shouldAnnounceStallTruncation({
+            stallReason: 'idle 90s', wasSteer: isLifecycleSteerReason('user'),
+            mainManaged: true, internal: false,
+        }),
+        true,
+        'a real stall still announces truncation',
     );
 });
 
-// ─── SI-004: ACP exit handler also tags trace ───
-
-test('SI-004: ACP exit handler adds interrupted prefix to traceText when wasSteer', () => {
-    const acpExitIdx = spawnSrc.indexOf("acp.on('exit'");
-    const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 7000);
-
-    assert.ok(
-        acpExitBlock.includes("traceText = `⏹️ [interrupted]"),
-        'ACP exit should tag traceText with interrupted prefix',
+test('SI-006: no runtime exit path re-derives the steer class from a literal', () => {
+    // The one assertion here that still reads source, and deliberately negative: it
+    // cannot be satisfied by a comment and it pins no string that must exist. It only
+    // says that the seven exit handlers delegate instead of each keeping their own set.
+    const literalClassification = /wasSteer(?::|\s*=)\s*[^;\n]*===\s*['"]/g;
+    const offenders = spawnSrc.match(literalClassification) ?? [];
+    assert.deepEqual(
+        offenders, [],
+        `every wasSteer must come from isLifecycleSteerReason; found: ${offenders.join(' | ')}`,
     );
-});
-
-// ─── SI-005: ACP exit handler suppresses fallback when wasSteer ───
-
-test('SI-005: ACP exit handler suppresses fallback on steer kill', () => {
-    const acpExitIdx = spawnSrc.indexOf("acp.on('exit'");
-    const acpExitBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 7000);
-
-    assert.ok(
-        acpExitBlock.includes('wasSteer'),
-        'ACP exit fallback should reference wasSteer',
-    );
-});
-
-// ─── SI-006: Standard CLI close handler has same interrupted logic ───
-
-test('SI-006: Standard CLI close handler tags interrupted output', () => {
-    const cliCloseIdx = spawnSrc.indexOf("child.on('close'");
-    assert.ok(cliCloseIdx > 0, 'Standard CLI close handler should exist');
-
-    // Window must span the whole close handler; the agy close-path finalization
-    // (finalizeAgyFallbackText) sits before the steer tagging and grew the handler.
-    const cliCloseBlock = spawnSrc.slice(cliCloseIdx, cliCloseIdx + 14000);
-
-    assert.ok(
-        cliCloseBlock.includes("stdKillReason === 'steer'") || cliCloseBlock.includes('wasSteer'),
-        'CLI close should check killReason for steer',
-    );
-    assert.ok(
-        cliCloseBlock.includes('⏹️ [interrupted]'),
-        'CLI close should tag content with ⏹️ [interrupted]',
-    );
-    assert.ok(
-        cliCloseBlock.includes('!wasKilled'),
-        'CLI close fallback should be guarded by !wasKilled',
-    );
+    const helperUses = spawnSrc.match(/wasSteer(?::|\s*=)\s*isLifecycleSteerReason\(/g) ?? [];
+    assert.equal(helperUses.length, 6, 'all six spawn.ts exit paths classify through the helper');
 });
 
 // ─── SI-007: killReason is consumed after exit ───
@@ -109,27 +109,18 @@ test('SI-007: killReason is consumed (set to null) after mainManaged exit', () =
     assert.ok(stdConsume, 'CLI exit should consume kill reason');
 });
 
-// ─── Structural: both exit paths are symmetric ───
+// ─── Structural: the salvage prefix is emitted once, by the shared handler ───
 
-test('SI-STRUCT: ACP and CLI exit handlers have symmetric steer logic', () => {
-    const acpExitIdx = spawnSrc.indexOf("acp.on('exit'");
-    const cliCloseIdx = spawnSrc.indexOf("child.on('close'");
-
-    assert.ok(acpExitIdx > 0, 'ACP exit should exist');
-    assert.ok(cliCloseIdx > 0, 'CLI close should exist');
-    assert.ok(acpExitIdx < cliCloseIdx, 'ACP exit should come before CLI close in source');
-
-    const acpBlock = spawnSrc.slice(acpExitIdx, acpExitIdx + 7000);
-    const cliBlock = spawnSrc.slice(cliCloseIdx, cliCloseIdx + 14000);
-
-    for (const pattern of [
-        'wasSteer',
-        '⏹️ [interrupted]',
-        'wasSteer && mainManaged && !opts.internal',
-    ]) {
-        assert.ok(acpBlock.includes(pattern), `ACP exit should contain: ${pattern}`);
-        assert.ok(cliBlock.includes(pattern), `CLI close should contain: ${pattern}`);
-    }
+test('SI-STRUCT: the interrupted prefix lives in lifecycle-handler, not per adapter', () => {
+    // Previously each adapter block was required to contain its own copy of the
+    // prefix logic. It never did: the matches were the explanatory comments. The
+    // real emitter is shared, which is why one classifier is enough.
+    const lifecycleSrc = fs.readFileSync(join(__dirname, '../../src/agent/lifecycle-handler.ts'), 'utf8');
+    assert.ok(
+        lifecycleSrc.includes('wasSteer && mainManaged && !opts.internal'),
+        'the shared exit handler gates the salvage prefix on wasSteer',
+    );
+    assert.ok(lifecycleSrc.includes('⏹️ [interrupted]'), 'the shared exit handler owns the prefix');
 });
 
 // ─── steerAgent exports and flow ───

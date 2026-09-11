@@ -145,8 +145,6 @@ export function hasActiveAgent(agentId: string): boolean {
     return activeProcesses.has(agentId) || hasClaudeWorker(agentId);
 }
 
-/** Kill reason recorded when a duplicate registration reaps the previous child. */
-const DUP_REGISTRATION_KILL_REASON = 'dup-registration';
 /** Grace before escalating that kill to SIGKILL, matching the sibling kill paths. */
 const DUP_REGISTRATION_KILL_GRACE_MS = 2_000;
 
@@ -325,6 +323,7 @@ interface CopilotSpawnContext extends SpawnContext {
 }
 
 import { hasChildExited, killProcessTree, killProcessTreeIfAlive, ownProcess } from './spawn/process-kill.js';
+import { DUP_REGISTRATION_KILL_REASON, isLifecycleSteerReason } from './spawn/kill-reason.js';
 import { releaseChildOutputAfterExit } from './spawn/exit-drain.js';
 import { clampPendingLine } from './spawn/line-buffer.js';
 import { appendBoundedFullText } from './events/fulltext-bound.js';
@@ -2024,7 +2023,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 if (lease) ctx.sessionId = lease.session.nativeSessionId || null;
                 const recordedReason = consumeKillReason(lease?.child.pid);
                 const killReason = stopReason || recordedReason;
-                const wasKilled = Boolean(killReason), wasSteer = killReason === 'steer' || killReason === 'interrupt' || killReason === DUP_REGISTRATION_KILL_REASON;
+                const wasKilled = Boolean(killReason), wasSteer = isLifecycleSteerReason(killReason);
                 const code = outcome.status === 'done' ? 0 : outcome.status === 'stopped' ? 130 : 1;
                 handoffRuntimeOutcome(ctx, outcome);
                 try { opts.lifecycle?.onExit?.(code); } catch { console.warn(`[runtime:${cli}] exit observer failed`); }
@@ -2392,7 +2391,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 console.warn(`[acp:unexpected-exit] code=${code} signal=${signal} sessionId=${ctx.sessionId || 'none'}`);
             }
             const wasKilled = !!acpKillReason;
-            const wasSteer = acpKillReason === 'steer';
+            const wasSteer = isLifecycleSteerReason(acpKillReason);
             flushThinking();  // Flush any remaining thinking buffer
 
             const smokeResult = detectSmokeResponse(ctx.fullText, ctx.toolLog, code, cli);
@@ -2642,10 +2641,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 try { opts.lifecycle?.onExit?.(result.code); }
                 catch { console.warn('[jaw:pi] exit observer failed'); }
                 const wasKilled = !!killReason;
-                // 'dup-registration' behaves like a steer for cleanup purposes: a
-                // replacement child already owns this label, so the stale exit handler
-                // must not delete the new child's map entry.
-                const wasSteer = killReason === 'steer' || killReason === DUP_REGISTRATION_KILL_REASON;
+                const wasSteer = isLifecycleSteerReason(killReason);
                 const smokeResult = detectSmokeResponse(ctx.fullText, ctx.toolLog, result.code, cli);
                 return handleAgentExit({
                     onRuntimeEnd: (end) => { activity.close(end); },
@@ -2674,7 +2670,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 if (failedOutcome !== undefined) handoffRuntimeOutcome(ctx, failedOutcome);
                 const killReason = consumeKillReason(child.pid);
                 const wasKilled = !!killReason;
-                const wasSteer = killReason === 'steer' || killReason === DUP_REGISTRATION_KILL_REASON;
+                const wasSteer = isLifecycleSteerReason(killReason);
                 stopWatchdog();
                 if (ctx.stderrBuf.length < 4000) ctx.stderrBuf += err.message;
                 console.error('[jaw:pi] runtime failed:', err.message);
@@ -3163,8 +3159,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 console.warn(`[codex-app:unexpected-exit] code=${processExit.value.code} signal=${processExit.value.signal} threadId=${ctx.sessionId || 'none'}`);
             }
             const wasKilled = !!killReason;
-            // See above: a dup-registration kill must not clobber the replacement.
-            const wasSteer = killReason === 'steer' || killReason === DUP_REGISTRATION_KILL_REASON;
+            const wasSteer = isLifecycleSteerReason(killReason);
             flushCodexAppThinking();
             const smokeResult = detectSmokeResponse(ctx.fullText, ctx.toolLog, exitCode, cli);
             await handleAgentExit({
@@ -3879,7 +3874,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         const stdKillReason = consumeKillReason(child.pid);
         const agyCompletedByQuietOutput = cli === 'agy' && stdKillReason === AGY_COMPLETE_KILL_REASON;
         const wasKilled = !!stdKillReason && !agyCompletedByQuietOutput;
-        const wasSteer = stdKillReason === 'steer';
+        const wasSteer = isLifecycleSteerReason(stdKillReason);
 
         if (cli === 'agy' && !ctx.sessionId) ctx.sessionId = extractAgyConversationId(ctx.fullText);
         if (cli === 'agy' && agyLogFile && !ctx.sessionId) {
