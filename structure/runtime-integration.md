@@ -37,6 +37,26 @@ native finality. The final selected print result may add `executionFailed:true` 
 failure/progress ACK classification, independently of successful body delivery.
 Collector timeout/exception provenance remains separate from native finality.
 
+### Why an empty terminal cannot name its own cause
+
+`lifecycle-handler.ts` builds the native outcome with
+`lifecycleRuntimeOutcome(ctx, wasKilled || wasSteer || Boolean(ctx.stallReason))`,
+and `runtime/outcome.ts` overwrites the status to `'stopped'` whenever that flag
+is set. A watchdog timeout, a user Stop and a native steer-kill therefore arrive
+downstream as the same `runtimeStatus`, with nothing left to tell them apart.
+
+`src/orchestrator/collect.ts` splits the empty-terminal fallback as far as that
+allows: a native `runtimeStatus: 'stopped'`, or the legacy
+`executionInterrupted` flag when no native outcome exists, yields `tg.stopped`;
+every other empty terminal keeps `tg.noResponse`. A steer still wins over both,
+because `superseded` blanks the fallback entirely — the follow-up run owns that
+answer (#655).
+
+`stopped` is deliberately ONE bucket. Splitting it in the collector would mean
+inventing a distinction the payload does not carry; carrying a real cause needs a
+new field on `orchestrate_done` from `pipeline.ts`. Do not add three strings here
+and imply the runtime told us which one it was.
+
 ## Transport selection and session identity
 
 ### Independent display preference
