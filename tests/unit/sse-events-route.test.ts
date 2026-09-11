@@ -1,31 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer, type Server } from 'node:http';
-import express, { type NextFunction, type Request, type Response } from 'express';
+import { type NextFunction, type Request, type Response } from 'express';
 import { registerEventsRoutes, getSseMetrics, exceedsBackpressureLimit, SSE_MAX_BUFFER_BYTES } from '../../src/routes/events.ts';
 import { broadcast } from '../../src/core/bus.ts';
 import { publish, currentSeq } from '../../src/core/event-bus.ts';
+import { serverHarness } from '../helpers/with-server.mts';
 
 function noAuth(_req: Request, _res: Response, next: NextFunction): void {
     next();
 }
 
-async function withServer(fn: (baseUrl: string) => Promise<void>): Promise<void> {
-    const app = express();
-    registerEventsRoutes(app, noAuth);
-    const server: Server = createServer(app);
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    try {
-        await fn(`http://127.0.0.1:${address.port}`);
-    } finally {
-        // Aborted SSE sockets linger server-side until the next heartbeat
-        // write fails — force-destroy them so close() resolves immediately.
-        server.closeAllConnections();
-        await new Promise<void>(resolve => server.close(() => resolve()));
-    }
-}
+// The shared helper always destroys open connections before closing, which is
+// what this suite needs: an aborted SSE socket lingers server-side until the
+// next heartbeat write fails.
+const withServer = serverHarness({ setup: app => registerEventsRoutes(app, noAuth) });
 
 /** Read from an SSE response body until pred matches or timeout. */
 async function readUntil(

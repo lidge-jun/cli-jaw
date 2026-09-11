@@ -1,7 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import express from 'express';
-import http from 'node:http';
 import {
     CLI_JAW_ELECTRON_HEADER,
     createElectronMetricsRouter,
@@ -9,6 +7,7 @@ import {
     validateMetricsSnapshot,
     type MetricsSnapshot,
 } from '../../src/manager/routes/electron-metrics.js';
+import { withServer as withHttpServer } from '../helpers/with-server.mts';
 
 function sampleSnapshot(overrides: Partial<MetricsSnapshot> = {}): MetricsSnapshot {
     return {
@@ -24,29 +23,16 @@ function sampleSnapshot(overrides: Partial<MetricsSnapshot> = {}): MetricsSnapsh
     };
 }
 
-async function withServer(
-    fn: (baseUrl: string) => Promise<void>,
-    storeTtlMs?: number,
-): Promise<void> {
-    const app = express();
-    app.use(express.json({ limit: '64kb' }));
-    const store = createElectronMetricsStore(storeTtlMs);
-    app.use(
-        '/api/dashboard/electron-metrics',
-        createElectronMetricsRouter({ store }),
-    );
-    const server = http.createServer(app);
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-    try {
-        const address = server.address();
-        assert.ok(address && typeof address === 'object');
-        await fn(`http://127.0.0.1:${address.port}`);
-    } finally {
-        await new Promise<void>((resolve, reject) => {
-            server.close((err) => (err ? reject(err) : resolve()));
-        });
-    }
-}
+// The store TTL differs per call. Closing now destroys open connections first,
+// so close() no longer has to wait one out.
+const withServer = (fn: (baseUrl: string) => Promise<void>, storeTtlMs?: number): Promise<void> =>
+    withHttpServer(fn, {
+        json: { limit: '64kb' },
+        setup: app => {
+            const store = createElectronMetricsStore(storeTtlMs);
+            app.use('/api/dashboard/electron-metrics', createElectronMetricsRouter({ store }));
+        },
+    });
 
 test('GET without electron header reports not-in-electron', async () => {
     await withServer(async (baseUrl) => {

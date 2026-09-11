@@ -1,14 +1,14 @@
 import '../setup/isolated-home.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
-import express, { type Request, type Response, type NextFunction } from 'express';
+import { type Request, type Response, type NextFunction } from 'express';
 import * as database from '../../src/core/db.ts';
 import { createChatSession, deleteChatSession, forkChatSession, setActiveChatSession } from '../../src/core/chat-sessions.ts';
 import { startTraceRun, getTraceRun } from '../../src/trace/store.ts';
 import { recordRuntimeEvent } from '../../src/agent/runtime/events.ts';
 import { registerMessageRoutes } from '../../src/routes/messages.ts';
 import { registerTraceRoutes } from '../../src/routes/traces.ts';
+import { withServer as withHttpServer } from '../helpers/with-server.mts';
 
 // Independent expected limit from241's public wire contract, not from the DUT.
 const CAP = 16 * 1024 * 1024;
@@ -28,30 +28,26 @@ function fixture() {
     return { sessionId, runId, insert, path: `/api/messages/by-trace/${runId}?session=${sessionId}` };
 }
 
-async function withServer(
+// Same shape as activity-routes: a custom `get` and a session reset that has to
+// run after close.
+const withServer = (
     fn: (get: (path: string, status?: number) => Promise<{ body: ApiBody; text: string }>) => Promise<void>,
     auth: Auth = (_req, _res, next) => next(),
-) {
-    const app = express(); app.set('query parser', 'extended');
-    registerMessageRoutes(app, auth); registerTraceRoutes(app, auth);
-    const server = createServer(app);
-    await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-    const address = server.address(); assert.ok(address && typeof address === 'object');
-    try {
-        await fn(async (path, status = 200) => {
-            const response = await fetch(`http://127.0.0.1:${address.port}${path}`, { signal: AbortSignal.timeout(5000) });
-            const text = await response.text();
-            assert.equal(response.status, status, `${path}: ${text.slice(0, 180)}`);
-            assert.equal(response.headers.get('cache-control'), 'no-store', path);
-            assert.ok(Buffer.byteLength(text) <= CAP, 'actual response body obeys byte cap');
-            return { body: JSON.parse(text), text };
-        });
-    } finally {
-        server.closeAllConnections();
-        await new Promise<void>(resolve => server.close(() => resolve()));
-        setActiveChatSession('default');
-    }
-}
+): Promise<void> => withHttpServer(
+    baseUrl => fn(async (path, status = 200) => {
+        const response = await fetch(`${baseUrl}${path}`, { signal: AbortSignal.timeout(5000) });
+        const text = await response.text();
+        assert.equal(response.status, status, `${path}: ${text.slice(0, 180)}`);
+        assert.equal(response.headers.get('cache-control'), 'no-store', path);
+        assert.ok(Buffer.byteLength(text) <= CAP, 'actual response body obeys byte cap');
+        return { body: JSON.parse(text) as ApiBody, text };
+    }),
+    {
+        queryParser: 'extended',
+        setup: app => { registerMessageRoutes(app, auth); registerTraceRoutes(app, auth); },
+        after: () => setActiveChatSession('default'),
+    },
+);
 
 test('unique saved answer is exact despite canonical redaction and missing reverse trace link', { timeout: 10000 }, async () => {
     const f = fixture();

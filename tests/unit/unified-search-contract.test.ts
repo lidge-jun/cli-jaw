@@ -1,9 +1,8 @@
 import '../setup/isolated-home.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
-import express, { type NextFunction, type Request, type Response } from 'express';
+import { type NextFunction, type Request, type Response } from 'express';
 import { registerSearchRoutes } from '../../src/routes/search.ts';
 import { SearchCoordinator } from '../../src/search/coordinator.ts';
 import {
@@ -20,6 +19,7 @@ import type {
     SearchQuery,
     SearchResultEnvelope,
 } from '../../src/search/contract.ts';
+import { withServer as withHttpServer } from '../helpers/with-server.mts';
 
 type SearchImplementation = (
     query: SearchQuery,
@@ -72,23 +72,9 @@ function testAuth(req: Request, res: Response, next: NextFunction): void {
     else res.status(401).json({ error: 'Unauthorized' });
 }
 
-async function withServer(
-    coordinator: SearchCoordinator,
-    fn: (baseUrl: string) => Promise<void>,
-): Promise<void> {
-    const app = express();
-    registerSearchRoutes(app, testAuth, coordinator);
-    const server: Server = createServer(app);
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    try {
-        await fn(`http://127.0.0.1:${address.port}`);
-    } finally {
-        server.closeAllConnections();
-        await new Promise<void>(resolve => server.close(() => resolve()));
-    }
-}
+// The coordinator differs per call, so only registration lives here.
+const withServer = (coordinator: SearchCoordinator, fn: (baseUrl: string) => Promise<void>): Promise<void> =>
+    withHttpServer(fn, { setup: app => registerSearchRoutes(app, testAuth, coordinator) });
 
 async function json(response: Response | globalThis.Response): Promise<Record<string, any>> {
     return await response.json() as Record<string, any>;

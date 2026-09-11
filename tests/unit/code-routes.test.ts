@@ -1,12 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import express from 'express';
-import { once } from 'node:events';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { registerCodeRoutes } from '../../src/routes/code.ts';
+import { serverHarness } from '../helpers/with-server.mts';
 
 function git(cwd: string, args: string[]): string {
     const env = { ...process.env };
@@ -14,17 +13,9 @@ function git(cwd: string, args: string[]): string {
     return execFileSync('git', ['-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false',
         '-c', 'user.name=Fixture', '-c', 'user.email=fixture@localhost', ...args], { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 }
-async function withServer(run: (url: string) => Promise<void>): Promise<void> {
-    const app = express();
-    app.use(express.json());
-    registerCodeRoutes(app, (_req, _res, next) => next());
-    const server = app.listen(0, '127.0.0.1');
-    await once(server, 'listening');
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    try { await run(`http://127.0.0.1:${address.port}`); }
-    finally { await new Promise<void>(resolve => { server.close(() => resolve()); server.closeAllConnections(); }); }
-}
+// The local copy closed before destroying connections; the shared helper
+// destroys first, which is the order the rest of the route tests use.
+const withServer = serverHarness({ json: true, setup: app => registerCodeRoutes(app, (_req, _res, next) => next()) });
 
 test('workspace metadata validates absolute directories and reports non-repositories honestly', async t => {
     const folder = mkdtempSync(join(tmpdir(), 'code-git-empty-'));

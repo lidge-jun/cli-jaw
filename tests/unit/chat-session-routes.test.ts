@@ -1,9 +1,8 @@
 import '../setup/isolated-home.ts';
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
-import express, { type NextFunction, type Request, type Response } from 'express';
+import { type NextFunction, type Request, type Response } from 'express';
 import { registerChatSessionRoutes } from '../../src/routes/chat-sessions.ts';
 import { db } from '../../src/core/db.ts';
 import { addBroadcastListener, clearAllBroadcastListeners } from '../../src/core/bus.ts';
@@ -21,6 +20,7 @@ import { createQueueController } from '../../src/agent/spawn/queue.ts';
 import { SessionLanes, sessionLanes } from '../../src/orchestrator/session-lanes.ts';
 import { scopeForChatSession } from '../../src/orchestrator/scope.ts';
 import { claimWorker, clearAllWorkers } from '../../src/orchestrator/worker-registry.ts';
+import { serverHarness } from '../helpers/with-server.mts';
 
 const IDS = ['route-delete', 'route-active', 'route-queued', 'route-hold', 'route-worker', 'route-lane', 'route-remote'];
 
@@ -29,21 +29,7 @@ function testAuth(req: Request, res: Response, next: NextFunction): void {
     else res.status(401).json({ error: 'Unauthorized' });
 }
 
-async function withServer(fn: (baseUrl: string) => Promise<void>): Promise<void> {
-    const app = express();
-    app.use(express.json());
-    registerChatSessionRoutes(app, testAuth);
-    const server: Server = createServer(app);
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    try {
-        await fn(`http://127.0.0.1:${address.port}`);
-    } finally {
-        server.closeAllConnections();
-        await new Promise<void>(resolve => server.close(() => resolve()));
-    }
-}
+const withServer = serverHarness({ json: true, setup: app => registerChatSessionRoutes(app, testAuth) });
 
 function insertSession(id: string, seq: number): void {
     db.prepare('INSERT INTO chat_sessions (id, seq, label) VALUES (?, ?, ?)').run(id, seq, id);

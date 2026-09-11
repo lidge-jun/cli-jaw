@@ -1,27 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createServer, type Server } from 'node:http';
-import express, { type NextFunction, type Request, type Response } from 'express';
+import { type NextFunction, type Request, type Response } from 'express';
 import { registerTraceRoutes } from '../../src/routes/traces.ts';
 import { appendTraceEvent, startTraceRun } from '../../src/trace/store.ts';
+import { serverHarness } from '../helpers/with-server.mts';
 
 function noAuth(_req: Request, _res: Response, next: NextFunction): void {
     next();
 }
 
-async function withServer(fn: (baseUrl: string) => Promise<void>): Promise<void> {
-    const app = express();
-    registerTraceRoutes(app, noAuth);
-    const server: Server = createServer(app);
-    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
-    const address = server.address();
-    assert.ok(address && typeof address === 'object');
-    try {
-        await fn(`http://127.0.0.1:${address.port}`);
-    } finally {
-        await new Promise<void>(resolve => server.close(() => resolve()));
-    }
-}
+const withServer = serverHarness({ setup: app => registerTraceRoutes(app, noAuth) });
 
 test('trace routes expose public traces with bounded event pages', async () => {
     const runId = startTraceRun({ cli: 'codex', audience: 'public' });
