@@ -27,11 +27,25 @@ export function resolvePublicEndpointCandidates(rawUrl: string | URL): Candidate
         ...naverBlogCandidates(url),
         ...naverNewsCandidates(url),
         ...naverFinanceCandidates(url),
-        ...mediumCandidates(url),
-        ...substackCandidates(url),
-        ...linkedinCandidates(url),
     ];
 }
+
+/**
+ * #694: labels whose candidate already is the content rather than a structured
+ * API response — raw file bytes, or a cleaner rendition of the same page. They
+ * are meant to flow through the ordinary text and extraction path, so having no
+ * normalizer is the design for them rather than a gap in coverage.
+ */
+export const DIRECT_CONTENT_LABELS = [
+    // The raw file itself; there is nothing to structure.
+    'github-raw',
+    // Naver's mobile hosts render the same article with far less chrome.
+    'naver-blog-mobile',
+    'naver-news-mobile',
+] as const;
+
+/** #694: the one label handed to the yt-dlp reader rather than to a fetch. */
+export const YTDLP_LABELS = ['youtube-ytdlp'] as const;
 
 function githubCandidates(url: URL): CandidateUrl[] {
     if (url.hostname !== 'github.com') return [];
@@ -376,30 +390,11 @@ function seoulTwoYearsBack(epochMs: number): string {
     return seoulYyyymmdd(rolled - SEOUL_OFFSET_MS);
 }
 
-function mediumCandidates(url: URL): CandidateUrl[] {
-    if (!/(^|\.)medium\.com$/i.test(url.hostname)) return [];
-    return [{
-        label: 'medium-oembed',
-        url: `https://medium.com/oembed?url=${encodeURIComponent(url.href)}`,
-        source: 'public_endpoint',
-    }];
-}
-
-function substackCandidates(url: URL): CandidateUrl[] {
-    if (!/(^|\.)substack\.com$/i.test(url.hostname)) return [];
-    return [{
-        label: 'substack-oembed',
-        url: `https://substack.com/oembed?url=${encodeURIComponent(url.href)}`,
-        source: 'public_endpoint',
-    }];
-}
-
-function linkedinCandidates(url: URL): CandidateUrl[] {
-    if (!/(^|\.)linkedin\.com$/i.test(url.hostname)) return [];
-    if (!url.pathname.startsWith('/posts/') && !url.pathname.startsWith('/pulse/')) return [];
-    return [{
-        label: 'linkedin-oembed',
-        url: `https://www.linkedin.com/oembed?url=${encodeURIComponent(url.href)}&format=json`,
-        source: 'public_endpoint',
-    }];
-}
+// #694: medium / substack / linkedin oEmbed candidates were removed. None of
+// the three endpoints answers: checked live on 2026-09-11, medium.com/oembed
+// returns 403 from Cloudflare even with browser headers, and both
+// substack.com/oembed and the publication-host variant, and
+// linkedin.com/oembed, return 404. They also had no normalizer, so a candidate
+// that did answer would have fallen through to raw text anyway. Synthesising a
+// URL that is always refused only costs a request and a misleading "supported"
+// entry in the manifest.

@@ -66,6 +66,10 @@ export function normalizePublicEndpointResult(
 }
 
 function buildByLabel(label: string, rawText: string, json: Json | null) {
+    // #694: the predicate is authoritative. A branch added below without a
+    // matching entry there returns null here, so the fixture test covering that
+    // label fails rather than the branch quietly never running.
+    if (!hasPublicEndpointNormalizer(label)) return null;
     if (label === 'github-repo-api') return githubRepo(json);
     if (label.startsWith('npm-registry')) return npmRegistry(json);
     if (label === 'pypi-json') return pypi(json);
@@ -85,7 +89,88 @@ function buildByLabel(label: string, rawText: string, json: Json | null) {
     if (label === 'lobsters-story-json') return lobsters(json);
     if (label === 'reddit-json') return reddit(json);
     if (label === 'rss-atom-discovered') return rssAtom(rawText, json);
+    if (label === 'naver-finance-json') return naverFinance(rawText);
     return null;
+}
+
+const NORMALIZER_LABELS = new Set([
+    'github-repo-api',
+    'pypi-json',
+    'hacker-news-item-api',
+    'hacker-news-algolia-item-api',
+    'wikipedia-summary-api',
+    'arxiv-api',
+    'crossref-work-api',
+    'wayback-cdx-api',
+    'stackexchange-question-api',
+    'devto-article-api',
+    'youtube-oembed',
+    'x-twitter-oembed',
+    'oembed-discovered',
+    'v2ex-topic-api',
+    'lobsters-story-json',
+    'reddit-json',
+    'rss-atom-discovered',
+    'naver-finance-json',
+]);
+
+const NORMALIZER_PREFIXES = ['npm-registry', 'openlibrary-', 'bluesky-', 'mastodon-'];
+
+/**
+ * #694: whether a resolver label has a structured normalizer at all. The
+ * manifest claimed platform support for four labels that fell straight through
+ * to raw text; this makes that question answerable by a test instead of by
+ * reading the dispatch.
+ */
+export function hasPublicEndpointNormalizer(label: string): boolean {
+    if (NORMALIZER_LABELS.has(label)) return true;
+    return NORMALIZER_PREFIXES.some(prefix => label.startsWith(prefix));
+}
+
+/**
+ * Naver's siseJson endpoint answers with a JavaScript array literal, not JSON:
+ * the header row is single-quoted while the data rows are double-quoted, so
+ * JSON.parse refuses it outright. Verified against a live response on
+ * 2026-09-11.
+ */
+function naverFinance(rawText: string) {
+    const rows = parseNaverSiseRows(rawText);
+    const header = rows[0];
+    const candles = rows.slice(1).filter(row => row.length >= 5 && /^\d{8}$/.test(String(row[0])));
+    if (!header || candles.length === 0) return null;
+
+    const latest = candles[candles.length - 1]!;
+    const first = candles[0]!;
+    const close = Number(latest[4]);
+    const open = Number(latest[1]);
+    const change = Number.isFinite(close) && Number.isFinite(open) ? close - open : null;
+
+    return built('naver-finance', `Naver Finance ${String(latest[0])}`, [
+        `Sessions: ${candles.length} (${String(first[0])} to ${String(latest[0])})`,
+        line('Latest date', latest[0]),
+        line('Open', latest[1]),
+        line('High', latest[2]),
+        line('Low', latest[3]),
+        line('Close', latest[4]),
+        line('Volume', latest[5]),
+        change == null ? null : `Change from open: ${change}`,
+    ], {
+        sessions: candles.length,
+        firstDate: String(first[0]),
+        latestDate: String(latest[0]),
+        latestClose: Number.isFinite(close) ? close : null,
+        columns: header.map(cell => String(cell)),
+    });
+}
+
+function parseNaverSiseRows(rawText: string): unknown[][] {
+    const trimmed = rawText.trim();
+    if (!trimmed.startsWith('[')) return [];
+    // Only the quoting differs from JSON. The payload is numbers and ASCII
+    // dates plus a Korean header row, none of which contains an apostrophe.
+    const parsed = parseJson(trimmed.replace(/'/g, '"'));
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((row): row is unknown[] => Array.isArray(row));
 }
 
 function githubRepo(json: Json | null) {
@@ -378,7 +463,7 @@ function parseJson(raw: string): Json | null {
 }
 
 function isKnownPublicEndpointLabel(label: string): boolean {
-    return /^(github-|reddit-|hacker-news-|wikipedia-|npm-|pypi-|arxiv-|bluesky-|mastodon-|stackexchange-|devto-|crossref-|openlibrary-|wayback-|youtube-|x-twitter-|v2ex-|lobsters-|rss-|oembed-)/.test(label);
+    return /^(github-|reddit-|hacker-news-|wikipedia-|npm-|pypi-|arxiv-|bluesky-|mastodon-|stackexchange-|devto-|crossref-|openlibrary-|wayback-|youtube-|x-twitter-|v2ex-|lobsters-|rss-|oembed-|naver-)/.test(label);
 }
 
 function asObject(value: unknown): Record<string, unknown> {
