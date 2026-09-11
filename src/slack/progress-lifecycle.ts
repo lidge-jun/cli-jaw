@@ -5,6 +5,7 @@ import { subscribeRuntimeLiveness } from '../agent/runtime/liveness.js';
 import { projectSlackPrintTool, projectSlackRuntimeTool, type SlackActivityTool } from './progress-activity.js';
 import { startSlackProgress, type SlackProgressHandle, type SlackProgressOutcome, type SlackProgressPhase } from './progress.js';
 import type { RemoteTarget } from '../messaging/types.js';
+import { matchesRunPin } from '../messaging/run-pin.js';
 import type { RuntimeLivenessIdentity } from '../shared/runtime-contract.js';
 
 export type SlackProgressFinishOptions = { reason?: 'merged' | 'removed'; bodyDelivered?: boolean };
@@ -58,10 +59,12 @@ export function createSlackProgressLifecycle(input: SlackProgressLifecycleOption
     let unsubscribeEvents = () => {};
     const enabled = Boolean(config.requestId && config.scope && config.sessionId);
     const notify = (fn: () => void) => { try { fn(); } catch { log.warn('[slack:progress] observer callback failed'); } };
-    const matches = (data: Record<string, unknown>): boolean => data['requestId'] === config.requestId
-        && (data['scope'] === undefined || data['scope'] === config.scope)
-        && (data['sessionId'] === undefined || data['sessionId'] === config.sessionId)
-        && (data['origin'] === undefined || data['origin'] === 'slack');
+    const matches = (data: Record<string, unknown>): boolean => matchesRunPin({
+        requestId: config.requestId,
+        origin: 'slack',
+        scope: config.scope,
+        sessionId: config.sessionId,
+    }, data);
     function clearNativeBuffer(): void {
         nativePending = [];
         pendingGaps.clear();

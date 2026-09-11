@@ -9,6 +9,7 @@ import { sessionLanes, type SessionLanes } from '../../orchestrator/session-lane
 import { scopeForChatSession } from '../../orchestrator/scope.js';
 import { settleOnce } from '../../orchestrator/request-registry.js';
 import { readSlackWorkflowMetadata, type SlackWorkflowMetadata } from '../../slack/workflow.js';
+import { runPinFields } from '../../messaging/run-pin.js';
 
 type QueueItem = {
     slackWorkflow?: SlackWorkflowMetadata;
@@ -452,7 +453,14 @@ export function createQueueController(
         console.log(`[queue] +1 (${messageQueue.length} pending)`);
         deps.broadcast('queue_update', {
             ...queueUpdatePayload(item.scope),
-            ...(item.requestId ? { requestId: item.requestId, origin: item.source || 'web' } : {}),
+            ...(item.requestId ? runPinFields({
+                requestId: item.requestId,
+                origin: item.source || 'web',
+                scope: item.scope,
+                sessionId: item.chatSessionId,
+                remoteKey: item.remoteKey,
+                target: item.target,
+            }) : {}),
         });
         void processQueue(item.scope);
         return item.id;
@@ -519,7 +527,10 @@ export function createQueueController(
                 return;
             }
             const collectedItems = multiSessionEnabled && item!.collect
-                ? messageQueue.filter(candidate => normalizeScope(candidate.scope) === itemScope && candidate.collect === true && !scheduledItemIds.has(candidate.id))
+                ? messageQueue.filter(candidate => normalizeScope(candidate.scope) === itemScope
+                    && candidate.collect === true
+                    && candidate.remoteKey === item!.remoteKey
+                    && !scheduledItemIds.has(candidate.id))
                 : [];
             const runItems = [item!, ...collectedItems];
             const runIds = new Set(runItems.map(candidate => candidate.id));
@@ -585,6 +596,7 @@ export function createQueueController(
             // turns with the same duplicate to prevent.
             if (requestId) deps.broadcast('queued_run_started', stripUndefined({
                 requestId, origin, scope: item.scope, target, sessionId: effectiveSessionId,
+                remoteKey: item.remoteKey,
                 slackWorkflow: item.slackWorkflow,
             }));
             deps.broadcast('queue_update', queueUpdatePayload(item.scope));
@@ -614,7 +626,11 @@ export function createQueueController(
                 } catch (err: unknown) {
                     const msg = (err as Error).message;
                     console.error('[queue:orchestrate]', msg);
-                    deps.broadcast('orchestrate_done', { text: `[error] ${msg}`, error: true, origin, chatId, target, requestId, replyViaTarget, fromQueue: true, ...(eventScope || {}) });
+                    deps.broadcast('orchestrate_done', {
+                        ...runPinFields({ requestId, origin, scope: item.scope, sessionId: effectiveSessionId,
+                            remoteKey: item.remoteKey, target }),
+                        text: `[error] ${msg}`, error: true, chatId, replyViaTarget, fromQueue: true,
+                    });
                     // The pipeline threw before reaching its own settle site, so
                     // this is the last place that can answer the caller.
                     settleOnce(requestId, 'failed', { error: msg });
@@ -625,8 +641,12 @@ export function createQueueController(
             if (!inserted) {
                 messageQueue.unshift(...runItems);
             } else {
-                deps.broadcast('orchestrate_done', { text: `[error] setup failed: ${(setupErr as Error).message}`, error: true, origin, chatId, target, requestId, replyViaTarget, fromQueue: true,
-                    ...(multiSessionEnabled ? { scope: item.scope, sessionId: effectiveSessionId } : {}) });
+                deps.broadcast('orchestrate_done', {
+                    ...runPinFields({ requestId, origin, scope: item.scope, sessionId: effectiveSessionId,
+                        remoteKey: item.remoteKey, target }),
+                    text: `[error] setup failed: ${(setupErr as Error).message}`, error: true,
+                    chatId, replyViaTarget, fromQueue: true,
+                });
                 // Re-queued items settle on their eventual run; these do not get
                 // another chance, so answer the caller here.
                 settleOnce(requestId, 'failed', { error: `setup failed: ${(setupErr as Error).message}` });

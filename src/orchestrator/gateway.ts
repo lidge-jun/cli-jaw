@@ -3,7 +3,7 @@
 // Replaces duplicated intent/queue/orchestrate logic in server.ts + bot.ts.
 
 import { randomUUID } from 'node:crypto';
-import { isAgentBusy, enqueueMessage, killActiveAgent, messageQueue, purgeQueueOnStop, steerAgent } from '../agent/spawn.js';
+import { getCurrentMainMeta, isAgentBusy, enqueueMessage, killActiveAgent, messageQueue, purgeQueueOnStop, steerAgent } from '../agent/spawn.js';
 import { hasBlockingWorkers } from './worker-registry.js';
 import { getSession, insertMessage } from '../core/db.js';
 import { resolveMainCli, type MainSessionRecord } from '../core/main-session.js';
@@ -25,6 +25,7 @@ import { sessionLanes } from './session-lanes.js';
 import { admitRequest, settleOnce } from './request-registry.js';
 import { beginSteerInput } from '../agent/steer-input-guard.js';
 import type { SlackWorkflowMetadata } from '../slack/workflow.js';
+import { sameRunConversation } from '../messaging/run-pin.js';
 
 export type SubmitResult = {
     action: 'started' | 'queued' | 'rejected';
@@ -102,6 +103,17 @@ function applyMidRunPolicy(
     };
 
     if (policy === 'steer') {
+        const owner = getCurrentMainMeta(ctx.scopeKey);
+        if (owner && !sameRunConversation(
+            { origin: owner.origin, remoteKey: owner.remoteKey },
+            { origin: ctx.meta.origin, remoteKey: ctx.remoteKey },
+        )) {
+            // Steer changes the turn that is already running. A different
+            // remoteKey is a different conversation, so applying its text to
+            // this owner would also hand it the owner's progress and terminal
+            // delivery. Queue it as its own follow-up instead (#743).
+            return queue();
+        }
         // 'steer' means the message steers the agent — never a silent queue.
         // A steerable Codex App turn receives in-band input. Native Cursor/Grok
         // use their cancel-reprompt hooks; other runtimes take the kill-steer
@@ -171,7 +183,8 @@ export function __resetSubmitDedupForTest(): void {
 function runDetached(
     task: Promise<unknown>,
     label: string,
-    meta: { origin: RuntimeOrigin; target?: RemoteTarget; chatId?: string | number; requestId?: string; replyViaTarget?: boolean; eventScope?: { scope: string; sessionId: string } },
+    meta: { origin: RuntimeOrigin; target?: RemoteTarget; chatId?: string | number; requestId?: string;
+        remoteKey?: string; replyViaTarget?: boolean; eventScope?: { scope: string; sessionId: string } },
 ) {
     task.catch((err: unknown) => {
         const msg = (err as Error)?.message || String(err);
@@ -182,6 +195,7 @@ function runDetached(
             target: meta.target,
             chatId: meta.chatId,
             requestId: meta.requestId,
+            ...(meta.remoteKey ? { remoteKey: meta.remoteKey } : {}),
             replyViaTarget: meta.replyViaTarget,
             ...meta.eventScope,
             error: true,
@@ -231,7 +245,12 @@ export function submitMessage(
     // Admit the request the moment its id exists. Every exit below then settles
     // through settleOnce(), so a caller holding this id always hears exactly one
     // terminal event — including on paths that never emit orchestrate_done.
-    admitRequest(requestId, scope);
+    admitRequest(requestId, scope, Date.now(), {
+        origin: meta.origin,
+        sessionId: chatSessionId,
+        ...(remoteKey ? { remoteKey } : {}),
+        ...(meta.target ? { target: meta.target } : {}),
+    });
     try { meta.onAdmitted?.({ requestId, scope, chatSessionId }); }
     catch { settleOnce(requestId, 'failed', { error: 'slack_tool_context_unavailable' }); return { action: 'rejected', reason: 'slack_tool_context_unavailable', requestId }; }
     // OFF-mode byte-compat: only expose resolved identity when multi-session is on —
@@ -239,7 +258,9 @@ export function submitMessage(
     const sessionContext = multiSessionEnabled
         ? { scope, chatSessionId, ...(remoteKey ? { remoteKey } : {}) }
         : undefined;
-    const eventScope = multiSessionEnabled ? { scope, sessionId: chatSessionId } : undefined;
+    const eventScope = multiSessionEnabled || meta.origin === 'slack'
+        ? { scope, sessionId: chatSessionId }
+        : undefined;
 
     // Reject before recording input, steering, interrupting or enqueueing. The
     // synchronous response must not advertise a rejected admission as steered.

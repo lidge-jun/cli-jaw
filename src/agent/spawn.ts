@@ -91,7 +91,7 @@ import { clearNativeStartFailure, nativeStartFailure, recordNativeStartFailure }
 import { asCliEventRecord, discriminate, fieldString, type CliEventRecord } from '../types/cli-events.js';
 import { isRemoteTarget, type RemoteTarget } from '../messaging/types.js';
 import { buildRemoteBindingKey } from '../messaging/session-key.js';
-import { runPinFields } from '../messaging/run-pin.js';
+import { runPinFields, sameRunConversation } from '../messaging/run-pin.js';
 import { isRetiredCliSelection, retiredRuntimeDiagnostic } from '../types/cli-engine.js';
 import { runBeforeSpawnChecks, type PolicyVerdict } from '../core/policy-hooks.js';
 import { appendTraceEvent, createTraceId, finalizeTraceRun, stampTraceTool, startTraceRun, updateTraceToolRow } from '../trace/store.js';
@@ -864,6 +864,17 @@ export async function steerAgent(
         }
         broadcast('steer_rejected', stripUndefined({ prompt: newPrompt, origin: source || 'web', scope: scopeKey,
             sessionId: chatSessionId, reason: outcome.reason, requestId: capturedMeta.requestId }));
+        return 'fallback-queue';
+    }
+    if (run && !sameRunConversation(
+        { origin: run.meta.origin, remoteKey: run.meta.remoteKey },
+        { origin: source, remoteKey: meta?.remoteKey },
+    )) {
+        // In-band and kill-steer mutate the turn already owned by `run`.
+        // Different remote keys are different conversations, even when a legacy
+        // scope collapse put them in the same process slot. Let the caller queue
+        // a separate follow-up instead of giving this run another user's input
+        // and delivery address (#743).
         return 'fallback-queue';
     }
     if (typeof run?.steerTurnInBand === 'function') {

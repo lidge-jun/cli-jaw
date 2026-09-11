@@ -16,6 +16,7 @@ import { settings } from '../core/config.js';
 import { getActiveChatSession } from '../core/chat-sessions.js';
 import { currentSessionScope } from '../core/session-context.js';
 import { resolveExecutionBinding } from './scope.js';
+import { matchesRunPin } from '../messaging/run-pin.js';
 
 export interface CollectedOrchestrateResult {
     text: string;
@@ -51,6 +52,16 @@ export function orchestrateAndCollectData(
         const runMeta = { ...meta, ...binding, origin: meta['origin'] || 'web',
             _onRuntimeActivity: onRuntimeActivity };
         const requestId = meta['requestId'] || undefined;
+        const strictTerminalPin = runMeta.origin === 'slack' && requestId
+            ? {
+                requestId,
+                origin: 'slack',
+                scope: binding.scope,
+                sessionId: binding.chatSessionId,
+                remoteKey: meta['remoteKey'],
+                target: meta['target'],
+            }
+            : null;
         let collected = '';
         let ownTerminalDiagnostic = '';
         let nativeSeen = false;
@@ -136,6 +147,7 @@ export function orchestrateAndCollectData(
                 superseded = true;
             }
             if (type === 'orchestrate_done') {
+                if (strictTerminalPin && !matchesRunPin(strictTerminalPin, data)) return;
                 // Filter by requestId (strongest), then origin, then chatId
                 if (meta?.["requestId"] && data?.["requestId"] && data["requestId"] !== meta["requestId"]) return;
                 if (meta?.["origin"] && data?.["origin"] && data["origin"] !== meta["origin"]) return;

@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { broadcast } from '../core/bus.js';
 import { readSlackWorkflowMetadata, isWorkflowReplyUnconfirmed } from '../slack/workflow.js';
 import { settings } from '../core/config.js';
+import { stripUndefined } from '../core/strip-undefined.js';
 import {
     clearAllEmployeeSessions,
     getRecentMessagesLite,
@@ -286,6 +287,28 @@ export async function drainPendingReplays(
 
 // ─── orchestrate (PABCD sole entry point) ───────────
 
+/** Identity a terminal exposes to its request owner.
+ *
+ * Slack always needs scope/session/remoteKey even with multi-session disabled:
+ * its reply waiter is conversation-scoped and must fail closed on an event that
+ * cannot name its owner (#743). Other legacy web/CLI terminals keep their
+ * existing compact shape unless multi-session or strict ownership asks for the
+ * same fields. */
+function terminalEventIdentity(
+    meta: Record<string, any>,
+    origin: string,
+    scope: string,
+    sessionId: string,
+): Record<string, unknown> {
+    const scoped = origin === 'slack'
+        || settings["multiSession"]?.enabled === true
+        || meta["_strictRequestOwnership"] === true;
+    return stripUndefined({
+        ...(scoped ? { scope, sessionId } : {}),
+        remoteKey: meta["remoteKey"],
+    });
+}
+
 export async function orchestrate(
     prompt: string,
     meta: Record<string, any> = {},
@@ -350,7 +373,7 @@ export async function orchestrate(
             requestId,
             replyViaTarget,
             ...(fromQueue ? { fromQueue: true } : {}),
-            ...((settings["multiSession"]?.enabled === true || meta["_strictRequestOwnership"] === true) ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
+            ...terminalEventIdentity(meta, origin, scope, meta["chatSessionId"] || getActiveChatSession()),
         });
         settleOnce(requestId, 'completed', { scope });
         return;
@@ -726,8 +749,8 @@ export async function orchestrate(
                 ? { executionFailed: true } : {}),
         ...(fromQueue ? { fromQueue: true } : {}),
         ...(fromSteer ? { fromSteer: true } : {}),
-        ...(nativeOutcome ? { scope, sessionId: chatSessionId }
-            : (settings["multiSession"]?.enabled === true || meta["_strictRequestOwnership"] === true) ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
+        ...(nativeOutcome ? { scope, sessionId: chatSessionId, ...(meta["remoteKey"] ? { remoteKey: meta["remoteKey"] } : {}) }
+            : terminalEventIdentity(meta, origin, scope, meta["chatSessionId"] || getActiveChatSession())),
         ...(typeof result['agyPlannerOnly'] === 'boolean' ? { agyPlannerOnly: result['agyPlannerOnly'] } : {}),
         ...(typeof result['agyCheckpointSeen'] === 'boolean' ? { agyCheckpointSeen: result['agyCheckpointSeen'] } : {}),
         ...(elicitationSpecs.length > 0 ? { elicitationSpecs } : {}),
@@ -768,7 +791,7 @@ export async function orchestrateContinue(
         requestId,
         replyViaTarget,
         ...(meta["_fromQueue"] === true ? { fromQueue: true } : {}),
-        ...((settings["multiSession"]?.enabled === true || meta["_strictRequestOwnership"] === true) ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
+        ...terminalEventIdentity(meta, origin, scope, meta["chatSessionId"] || getActiveChatSession()),
     });
     settleOnce(requestId, 'completed', { scope, text: 'No pending work to continue.' });
 }
@@ -810,7 +833,7 @@ export async function orchestrateReset(
             requestId,
             replyViaTarget,
             ...(meta["_fromQueue"] === true ? { fromQueue: true } : {}),
-            ...((settings["multiSession"]?.enabled === true || meta["_strictRequestOwnership"] === true) ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
+            ...terminalEventIdentity(meta, origin, scope, meta["chatSessionId"] || getActiveChatSession()),
         });
         settleOnce(requestId, 'completed', { scope, text: 'Reset complete.' });
         return;
@@ -825,7 +848,7 @@ export async function orchestrateReset(
         requestId,
         replyViaTarget,
         ...(meta["_fromQueue"] === true ? { fromQueue: true } : {}),
-        ...((settings["multiSession"]?.enabled === true || meta["_strictRequestOwnership"] === true) ? { scope, sessionId: meta["chatSessionId"] || getActiveChatSession() } : {}),
+        ...terminalEventIdentity(meta, origin, scope, meta["chatSessionId"] || getActiveChatSession()),
     });
     settleOnce(requestId, 'completed', { scope, text: 'Reset complete.' });
 }

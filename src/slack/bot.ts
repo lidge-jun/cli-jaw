@@ -24,6 +24,7 @@ import {
 } from '../messaging/runtime.js';
 import { slackTargetFromId, resolveSlackThreadPlacement } from '../messaging/slack-target.js';
 import { isRemoteTarget, type RemoteTarget } from '../messaging/types.js';
+import { matchesRunPin } from '../messaging/run-pin.js';
 import { sessionLanes } from '../orchestrator/session-lanes.js';
 import { createSlackReplyDeliveryLedger } from './reply-delivery.js';
 import { buildMediaPromptMany } from '../agent/spawn.js';
@@ -459,16 +460,14 @@ const SLACK_PENDING_STEER_MAX = 256;
 const SLACK_PENDING_STEER_TTL_MS = 300_000;
 
 function matchesSlackReply(options: SlackReplyOptions, data: Record<string, unknown>): boolean {
-    const target = data['target'];
-    return data['requestId'] === options.requestId
-        && (data['scope'] === undefined || data['scope'] === options.session.scope)
-        && (data['sessionId'] === undefined || data['sessionId'] === options.session.chatSessionId)
-        && (data['origin'] === undefined || data['origin'] === 'slack')
-        && (data['remoteKey'] === undefined || data['remoteKey'] === options.session.remoteKey)
-        && (target === undefined || (isRemoteTarget(target) && target.channel === 'slack'
-            && target.targetId === options.target.targetId && target.threadId === options.target.threadId
-            && target.guildId === options.target.guildId && target.targetKind === options.target.targetKind
-            && target.peerKind === options.target.peerKind && target.parentTargetId === options.target.parentTargetId));
+    return matchesRunPin({
+        requestId: options.requestId,
+        origin: 'slack',
+        scope: options.session.scope,
+        sessionId: options.session.chatSessionId,
+        remoteKey: options.session.remoteKey,
+        target: options.target,
+    }, data);
 }
 
 function rememberPendingSteer(options: SlackReplyOptions): void {

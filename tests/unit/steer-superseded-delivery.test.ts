@@ -10,7 +10,6 @@ import { broadcast } from '../../src/core/bus.ts';
 //   1. the killed turn must not resolve to the placeholder, and
 //   2. the follow-up terminal must be marked so the standing forwarder delivers it.
 
-let lastMeta: Record<string, unknown> = {};
 // The locale table is not loaded in this harness, so `t()` yields the raw key.
 // Asserting on the key keeps the test about WHICH string is chosen, not its wording.
 const NO_RESPONSE = 'tg.noResponse';
@@ -20,7 +19,12 @@ const STOPPED = 'tg.stopped';
 // on purpose, so a payload that forgets these fields does not fail — it hangs.
 // Bounding the wait turns that into a readable assertion instead of an
 // eight-minute shard timeout.
-const NATIVE_IDENTITY = { origin: 'slack', scope: 'default', sessionId: 'default' };
+const terminalPin = (requestId: string) => ({
+    requestId,
+    origin: 'slack',
+    scope: 'default',
+    sessionId: 'default',
+});
 async function settled<T>(pending: Promise<T>, label: string): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const guard = new Promise<never>((_, reject) => {
@@ -40,7 +44,7 @@ test('a native run that was stopped says so, instead of reporting no response', 
     const pending = orchestrateAndCollectData('질문', {
         origin: 'slack', requestId: 'req-stopped', scope: 'default', chatSessionId: 'default',
     });
-    broadcast('orchestrate_done', { ...lastMeta, ...NATIVE_IDENTITY, text: '', runtimeFinality: 'absent', runtimeStatus: 'stopped' });
+    broadcast('orchestrate_done', { ...terminalPin('req-stopped'), text: '', runtimeFinality: 'absent', runtimeStatus: 'stopped' });
 
     const result = await settled(pending, 'native stopped');
     assert.equal(result.text, STOPPED);
@@ -52,7 +56,7 @@ test('a legacy interrupted run says so too', async () => {
     const pending = orchestrateAndCollectData('질문', {
         origin: 'slack', requestId: 'req-interrupted', scope: 'default', chatSessionId: 'default',
     });
-    broadcast('orchestrate_done', { ...lastMeta, text: '', executionInterrupted: true });
+    broadcast('orchestrate_done', { ...terminalPin('req-interrupted'), text: '', executionInterrupted: true });
 
     const result = await settled(pending, 'legacy interrupted');
     assert.equal(result.text, STOPPED);
@@ -65,7 +69,7 @@ test('a native run that finished with nothing to say keeps the no-response copy'
     const pending = orchestrateAndCollectData('질문', {
         origin: 'slack', requestId: 'req-done-empty', scope: 'default', chatSessionId: 'default',
     });
-    broadcast('orchestrate_done', { ...lastMeta, ...NATIVE_IDENTITY, text: '', runtimeFinality: 'absent', runtimeStatus: 'done' });
+    broadcast('orchestrate_done', { ...terminalPin('req-done-empty'), text: '', runtimeFinality: 'absent', runtimeStatus: 'done' });
 
     const result = await settled(pending, 'native done empty');
     assert.equal(result.text, NO_RESPONSE);
@@ -79,7 +83,7 @@ test('a steer still wins over the stopped copy, because the follow-up owns the a
         origin: 'slack', requestId: 'req-steered-stop', scope: 'default', chatSessionId: 'default',
     });
     broadcast('steer_started', { origin: 'slack', scope: 'default', sessionId: 'default', requestId: 'req-next' });
-    broadcast('orchestrate_done', { ...lastMeta, ...NATIVE_IDENTITY, text: '', runtimeFinality: 'absent', runtimeStatus: 'stopped' });
+    broadcast('orchestrate_done', { ...terminalPin('req-steered-stop'), text: '', runtimeFinality: 'absent', runtimeStatus: 'stopped' });
 
     const result = await settled(pending, 'steer beats stopped');
     assert.equal(result.text, '');
@@ -92,9 +96,7 @@ test.mock.module('../../src/orchestrator/pipeline.ts', {
         isResetIntent: () => false,
         orchestrateContinue: () => undefined,
         orchestrateReset: () => undefined,
-        orchestrate: (_prompt: string, meta: Record<string, unknown>) => {
-            lastMeta = meta;
-        },
+        orchestrate: (_prompt: string, _meta: Record<string, unknown>) => undefined,
     },
 });
 
@@ -106,7 +108,7 @@ test('a turn retired by a steer resolves empty, never the no-response placeholde
     // A LATER request steers this scope: the running process is killed, so its
     // terminal carries no text.
     broadcast('steer_started', { origin: 'slack', scope: 'default', sessionId: 'default', requestId: 'req-steer' });
-    broadcast('orchestrate_done', { ...lastMeta, text: '' });
+    broadcast('orchestrate_done', { ...terminalPin('req-original'), text: '' });
 
     const result = await pending;
     assert.equal(result.text, '', 'a superseded turn must produce no user-visible text');
@@ -119,7 +121,7 @@ test('an ordinary empty terminal still reports no response', async () => {
     const pending = orchestrateAndCollectData('원본 질문', {
         origin: 'slack', requestId: 'req-plain', scope: 'default', chatSessionId: 'default',
     });
-    broadcast('orchestrate_done', { ...lastMeta, text: '' });
+    broadcast('orchestrate_done', { ...terminalPin('req-plain'), text: '' });
 
     const result = await pending;
     assert.equal(result.text, NO_RESPONSE, 'a genuinely empty turn keeps its existing diagnostic');
@@ -132,7 +134,7 @@ test("another scope's steer does not retire this turn", async () => {
         origin: 'slack', requestId: 'req-scoped', scope: 'default', chatSessionId: 'default',
     });
     broadcast('steer_started', { origin: 'slack', scope: 'other-scope', sessionId: 'other', requestId: 'req-elsewhere' });
-    broadcast('orchestrate_done', { ...lastMeta, text: '' });
+    broadcast('orchestrate_done', { ...terminalPin('req-scoped'), text: '' });
 
     const result = await pending;
     assert.equal(result.text, NO_RESPONSE);
