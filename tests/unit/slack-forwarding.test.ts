@@ -34,11 +34,9 @@ test('SFW-001: text goes first, then each image is relayed with its filename as 
     globalThis.fetch = fakeFetch(log);
     settings['workingDir'] = dir;
     try {
-        const forward = createSlackForwarder({
-            getToken: () => 'xoxb-t',
-            getLastTarget: () => ({ channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C1' }),
-        });
-        await forward('agent_done', { text: `done\n![chart](${img})` });
+        const forward = createSlackForwarder({ getToken: () => 'xoxb-t' });
+        await forward('agent_done', { text: `done\n![chart](${img})`,
+            target: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C1' } });
         assert.match(log[0]!.url, /chat\.postMessage/, 'the answer text is posted first');
         const complete = log.find((l) => /completeUploadExternal/.test(l.url));
         assert.ok(complete, 'the image was relayed');
@@ -74,13 +72,13 @@ test('ordinary agent_done prose with a self-chosen table renders richly without 
         }] }));
     }) as typeof fetch;
     try {
+        const dm = { channel: 'slack', targetKind: 'user', peerKind: 'direct', targetId: 'D1', threadId: '9.1' } as const;
         const forward = createSlackForwarder({
             getToken: () => 'xoxb-fixture',
-            getLastTarget: () => ({ channel: 'slack', targetKind: 'user', peerKind: 'direct', targetId: 'D1', threadId: '9.1' }),
             log: info => success.push(info),
         });
         // Only ordinary final text: no user request, blocks, table flag or skill invocation.
-        await forward('agent_done', { text: `8명이라면 B가 적합합니다.\n\n${table}\n\nA는 인원이 부족합니다.` });
+        await forward('agent_done', { text: `8명이라면 B가 적합합니다.\n\n${table}\n\nA는 인원이 부족합니다.`, target: dm });
         assert.equal(posts.length, 1);
         assert.deepEqual(posts[0]!['blocks'], [{ type: 'markdown', text: `8명이라면 B가 적합합니다.\n\n${table}\n\nA는 인원이 부족합니다.` }]);
         assert.equal(reads.length, 1);
@@ -88,7 +86,7 @@ test('ordinary agent_done prose with a self-chosen table renders richly without 
         assert.ok(posts.every(p => p['thread_ts'] === '9.1'));
         assert.equal(success.length, 1);
         omitStoredTable = true;
-        await forward('agent_done', { text: table });
+        await forward('agent_done', { text: table, target: dm });
         assert.equal(success.length, 2, 'forwarding reports transport success independently of rendering verification');
         assert.equal(posts.length, 2, 'a verification mismatch never reposts the message');
         assert.equal(reads.length, 2, 'both posted messages still undergo verification');

@@ -15,6 +15,10 @@ test.mock.module('../../src/agent/runtime/events.js', {
             runtimeEvents.push(event);
             return event;
         },
+        // A partial namedExports replaces the whole module, so every symbol the
+        // real projection imports has to be present here or the import throws
+        // before a single assertion runs.
+        recordRuntimeProjectionLoss: () => undefined,
     },
 });
 

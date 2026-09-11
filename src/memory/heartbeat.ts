@@ -13,9 +13,10 @@ import { hasPendingWorkerReplays } from '../orchestrator/worker-registry.js';
 import { broadcast } from '../core/bus.js';
 import { sendChannelOutput, targetFromChatId } from '../messaging/send.js';
 import { nextDeliverySeq, wasSelfDelivered } from '../messaging/turn-delivery.js';
-import { isHeartbeatDestination, isHeartbeatMentionWatch } from '../core/config.js';
-import type { HeartbeatDestination, HeartbeatMentionWatch } from '../core/config.js';
+import { isHeartbeatMentionWatch } from '../core/config.js';
+import type { HeartbeatMentionWatch } from '../core/config.js';
 import { runMentionWatchTick } from './heartbeat-mention-watch.js';
+import { resolveHeartbeatBinding, heartbeatHoldMessage, type HeartbeatBinding } from './heartbeat-destination.js';
 import { watchNamespace } from './mention-watch-ledger.js';
 import { detectLegacyMentionWatch, isQuarantined } from './legacy-mention-watch-quarantine.js';
 import { verifiedSlackWorkspace } from '../slack/verified-workspace.js';
@@ -77,25 +78,19 @@ export function isHeartbeatQuietOutput(result: string, extraMarkers: string[] = 
     return ['[SILENT]', ...extraMarkers].some(marker => marker.length > 0 && result.includes(marker));
 }
 
-/** Turn a stored destination into a send target.
+/** Turn a stored destination into the one target this job may use.
  *
- *  The stored shape carries only what an operator can reasonably know: which
- *  transport, which conversation, and optionally which thread. `targetKind` and
- *  `peerKind` are derived from the id — Slack's C/D/G prefixes decide them — so
- *  `targetFromChatId` owns that mapping rather than the heartbeat file.
+ *  `targetKind` and `peerKind` are derived from the id — Slack's C/D/G prefixes
+ *  decide them — so `targetFromChatId` owns that mapping rather than the
+ *  heartbeat file.
  *
- *  `pinned` distinguishes the two ways this returns no target, because they must
- *  not be delivered the same way. A job that never named a destination keeps the
- *  legacy active-channel path. A job that DID name one but wrote it wrong has
- *  stated an intent the resolver cannot satisfy — falling back there would send
- *  a report meant for one channel to whoever spoke last, which is the failure
- *  this whole change exists to stop (#437). */
-export function heartbeatTarget(destination: unknown): { pinned: boolean; target: RemoteTarget | null } {
-    if (destination === undefined || destination === null) return { pinned: false, target: null };
-    if (!isHeartbeatDestination(destination)) return { pinned: true, target: null };
-    const dest = destination as HeartbeatDestination;
-    const target = targetFromChatId(dest.channel, dest.targetId);
-    return { pinned: true, target: dest.threadId ? { ...target, threadId: dest.threadId } : target };
+ *  There is no longer a "no destination, send anyway" outcome. #437 closed the
+ *  case where a malformed destination fell back to the active channel but left
+ *  the absent one open, and an absent destination is the same failure wearing
+ *  less: a report meant for somewhere specific delivered to whoever spoke last
+ *  (#745). Every way of not naming a conversation now holds the send. */
+export function heartbeatTarget(destination: unknown): HeartbeatBinding {
+    return resolveHeartbeatBinding(destination);
 }
 
 function pendingSnapshot(reason?: HeartbeatPendingReason, policy?: HeartbeatPendingPolicy) {
@@ -245,9 +240,12 @@ async function runMentionWatchJob(job: Record<string, any>, watch: HeartbeatMent
         log.error(`[heartbeat:${job["name"]}] mention watch needs Slack enabled with a bot token`);
         return false;
     }
-    const { pinned, target } = heartbeatTarget(job["destination"]);
-    if (pinned && !target) {
-        log.error(`[heartbeat:${job["name"]}] malformed destination — mention watch not run`);
+    // A mention watch answers the thread it found, so it needs no destination of
+    // its own. A destination that IS stored still has to be readable: a broken
+    // one means the operator meant something this code cannot honour.
+    const binding = heartbeatTarget(job["destination"]);
+    if (binding.state === 'held' && binding.reason !== 'unbound_destination') {
+        log.error(`[heartbeat:${job["name"]}] refuse: ${binding.reason} — mention watch not run`);
         return false;
     }
 
@@ -548,26 +546,20 @@ export async function runHeartbeatJob(job: Record<string, any>) {
 
         log.info(`[heartbeat:${job["name"]}] response: ${result.slice(0, 80)}`);
 
-        // A job with a destination goes THERE and nowhere else. Without one the
-        // send falls back to whichever conversation spoke to the bot most
-        // recently, which is not a property of this job at all — that is how two
-        // scheduled reports landed in an unrelated design thread (#437). Jobs
-        // with no destination keep the legacy behaviour on purpose: defaulting
-        // them to "do not send" would silence every existing install.
-        const { pinned, target } = heartbeatTarget(job["destination"]);
-        if (pinned && !target) {
-            // Stated an intent we cannot honour. Refusing is the point: delivering
-            // to the active channel would put this report wherever the last
-            // conversation happened to be.
-            log.error(`[heartbeat:${job["name"]}] malformed destination — not delivered`);
+        // A job goes to the conversation it names and nowhere else. The
+        // active-channel fallback that used to stand in for a missing
+        // destination is gone: it delivered to whoever spoke to the bot most
+        // recently, which is not a property of this job at all (#437, #745).
+        const binding = heartbeatTarget(job["destination"]);
+        if (binding.state === 'held') {
+            log.error(`[heartbeat:${job["name"]}] refuse: ${binding.reason} — ${heartbeatHoldMessage(binding.reason)}`);
         }
         const sendResult = !decision.send
             ? { ok: true as const }
-            : pinned
-                ? (target
-                    ? await sendChannelOutput({ channel: target.channel, type: 'text', text: formatted, target, allowActiveFallback: false })
-                    : { ok: false as const, error: 'invalid heartbeat destination' })
-                : await sendChannelOutput({ channel: 'active', type: 'text', text: formatted });
+            : binding.state === 'bound'
+                ? await sendChannelOutput({ channel: binding.target.channel, type: 'text', text: formatted,
+                    target: binding.target, allowActiveFallback: false })
+                : { ok: false as const, error: `heartbeat destination held: ${binding.reason}` };
         if (!sendResult.ok) {
             log.error(`[heartbeat:${job["name"]}] send failed: ${sendResult.error}`);
         }
@@ -577,7 +569,9 @@ export async function runHeartbeatJob(job: Record<string, any>) {
             const now = Date.now();
             try {
                 insertHeartbeatAnchor.run(
-                    job["id"], job["name"], settings["workingDir"], target?.channel ?? 'active', target?.targetId ?? null,
+                    job["id"], job["name"], settings["workingDir"],
+                    binding.state === 'bound' ? binding.target.channel : 'active',
+                    binding.state === 'bound' ? binding.target.targetId : null,
                     job["prompt"], decision.delivered ? formatted : `[quiet] ${formatted}`, now, decision.delivered ? now : null,
                 );
             } catch (e) {

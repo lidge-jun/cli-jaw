@@ -95,10 +95,10 @@ test('Discord forwarder sends text before a guarded local image attachment', asy
     try {
         const forward = createDiscordForwarder({
             client: client as never,
-            getLastTarget: () => target,
         });
         await forward('agent_done', {
             origin: 'web',
+            target,
             text: `ready\n![generated](${imagePath})`,
         });
         assert.equal(sent.length, 2);

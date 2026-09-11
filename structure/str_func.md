@@ -38,7 +38,7 @@ cli-jaw/
 │   └── mime-detect.ts        ← MIME 타입 감지 헬퍼 (67L)
 ├── src/
 │   ├── core/                 ← 의존 0 인프라 계층 (31 files, 3847L)
-│   │   ├── config.ts         ← JAW_HOME, settings, APP_VERSION + migrateSettings legacy Claude model normalization + avatar settings deep merge + default `settings.pi` + corrupt settings backup + CLI 탐지 re-export hub (1571L)
+│   │   ├── config.ts         ← JAW_HOME, settings, APP_VERSION + migrateSettings legacy Claude model normalization + avatar settings deep merge + default `settings.pi` + corrupt settings backup + CLI 탐지 re-export hub (1576L)
 │   │   ├── cli-detection.ts  ← CLI 탐지 + `pi` npm-exec fallback + `kiro-code`(`kiro-cli` binary) 탐지 + local package release/debug candidates (57L)
 │   │   ├── compact.ts        ← compact 헬퍼 (COMPACT_MARKER_CONTENT, managed summary builder, cutoff logic, harvestGitGrep + harvestChatGrep 1KB/1KB budget split) (782L)
 │   │   ├── instance.ts       ← 인스턴스 ID, node/jaw 경로, 유닛명 sanitize (61L)
@@ -142,10 +142,10 @@ cli-jaw/
 │   │   ├── merge-tool-log.ts ← exact run/item latest merge with terminal precedence and omission preservation (78L)
 │   │   ├── runtime-pool-contract.ts ← type-only shared store/lease/provider access contract (49L)
 │   │   ├── claude-runtime-pool.ts ← Claude acquisition and physical/logical retirement over shared stores (358L)
-│   │   ├── claude-runtime-run.ts ← native Claude main adaptation to shared host/lifecycle and fallback terminal ordering (293L)
+│   │   ├── claude-runtime-run.ts ← native Claude main adaptation to shared host/lifecycle and fallback terminal ordering (295L)
 │   │   ├── prompt-context.ts ← history/operational/partial boundaries and bounded accepted Cursor redirects (201L)
 │   │   ├── steer-input-guard.ts ← transient scoped Stop fence through fallback enqueue (33L)
-│   │   ├── spawn.ts          ← CLI spawn + ACP/Codex App/Pi RPC/AGY/Kiro plain text/log session capture + v2 SQLite session resume + 큐 + 메모리 flush + 429 retry timer + isAgentBusy/isSteerInProgress + buildHistoryBlock compact cutoff + working_dir scoping + enqueue→processQueue race fix + QueueItem persistent DB queue + makeCleanEnv PATH augment (4093L)
+│   │   ├── spawn.ts          ← CLI spawn + ACP/Codex App/Pi RPC/AGY/Kiro plain text/log session capture + v2 SQLite session resume + 큐 + 메모리 flush + 429 retry timer + isAgentBusy/isSteerInProgress + buildHistoryBlock compact cutoff + working_dir scoping + enqueue→processQueue race fix + QueueItem persistent DB queue + makeCleanEnv PATH augment (4096L)
 │   │   ├── spawn/            ← spawn 서브모듈 (3 files)
 │   │   │   ├── queue.ts      ← QueueItem persistent DB queue + processQueue race fix + enqueue/dequeue + drainRecoveredQueue (부팅 시 복구 큐 기동, server.ts가 transport 준비 후 호출) + `_fromQueue` 표식 (대기자 없는 턴을 채널이 답할 수 있게) (703L)
 │   │   │   ├── resume.ts     ← session resume logic + stale resume detection (117L)
@@ -169,7 +169,7 @@ cli-jaw/
 │   │   ├── agy-capabilities.ts ← AGY `--help`/`--version` capability probe + cached optional flag support map + legacy emit-all fallback marker (124L)
 │   │   ├── agy-transcript-watcher.ts ← AGY transcript/log watcher and session-id extraction support (291L)
 │   │   ├── pi-runtime.ts     ← Pi profile 정규화 + isolated `PI_CODING_AGENT_DIR` models/settings 생성 + `pi --offline --list-models` discovery + `pi --mode rpc` JSONL parser/spawner (단일 launch/reader/writer 소유자) (1149L) ✨
-│   │   ├── lifecycle-handler.ts ← child lifecycle + fallback/retry + queue resume orchestration + clearEmployeeSession on resume failure + stale resume fresh retry + kickGoalContinuation export + clearGoalTimers + goal continuation boundary row (1424L)
+│   │   ├── lifecycle-handler.ts ← child lifecycle + fallback/retry + queue resume orchestration + clearEmployeeSession on resume failure + stale resume fresh retry + kickGoalContinuation export + clearGoalTimers + goal continuation boundary row (1434L)
 │   │   ├── kiro-auth.ts      ← Kiro CLI auth store reader (resolveKiroDataPath, readKiroAuthFromStore, resolveKiroProfileArn, regionFromProfileArn, listKiroConversationIdsForCwd, resolveKiroSessionIdAfterSpawn, extractKiroSessionIdFromV2Store) (314L)
 │   │   ├── kiro-models.ts    ← Kiro live model inventory (KiroModelEntry, KiroModelInventory, parseKiroModelListJson, fetchKiroModelInventory) (98L)
 │   │   ├── kiro-runtime.ts   ← Kiro plain-text stdout parser + session capture (isKiroPlainTextCli, processKiroStdoutChunk, flushKiroStdoutContext, appendKiroStdoutChunk, captureKiroSessionIdAfterExit, stripKiroAnsi, parseKiroAssistantText, isKiroStaleSessionOutput, isKiroResumeDegradedOutput, KiroStreamEvent, KiroStdoutContext) (447L)
@@ -196,7 +196,7 @@ cli-jaw/
 │   │   └── events.ts         ← legacy re-export stub → events/ 모듈 (15L)
 │   ├── messaging/            ← 통합 메시징 런타임 (33 files)
 │   │   ├── runtime.ts        ← 채널 lifecycle (init/shutdown/restart) + transport registry (333L)
-│   │   ├── send.ts           ← 통합 아웃바운드 메시지 라우팅 (ChannelSendRequest, 다중 채널 send 지원, 턴 주소 우선순위) (562L)
+│   │   ├── send.ts           ← 통합 아웃바운드 메시지 라우팅 (ChannelSendRequest, 다중 채널 send 지원, 턴 주소 우선순위) (564L)
 │   │   ├── turn-conversation.ts ← 턴이 답하는 대화 주소 encode/decode + 채널 매칭 (60L) ✨
 │   │   ├── turn-delivery.ts  ← 에이전트 자가 전송 claim (턴 앵커 + digest, 소비형) → dispatch 중복 게시 억제 (252L) ✨
 │   │   ├── dedupe.ts         ← 배달 중복 제거 (TTL seen-set, 미만료 항목 보존) (118L) ✨
@@ -224,7 +224,7 @@ cli-jaw/
 │   │   ├── inbound-envelope.ts ← InboundEnvelope normalizers (229L)
 │   │   ├── ack-reaction.ts   ← inbound ACK reaction lifecycle (serialized transitions + per-channel defaults + nested ack merge) (269L)
 │   │   ├── queue-notice.ts   ← queue-notice lifecycle (deferred close + bind race drain + bounded shutdown registry) (208L)
-│   │   ├── forwarder-origin.ts ← channel forwarder 공통 origin 필터 (own channel + producer-owned heartbeat skip) (39L)
+│   │   ├── forwarder-origin.ts ← channel forwarder 공통 origin 필터 (own channel + producer-owned heartbeat skip) (80L)
 │   │   ├── native-body.ts    ← native runtime terminal 태그 술어 + 배달 정책 래퍼 (3봇+collector 공유) (32L) ✨
 │   │   ├── file-receipt.ts   ← 파일 전송 confirmation 어휘 (confirmed|unconfirmed) + 채널별 unconfirmed 에러코드 (53L) ✨
 │   │   ├── queue-notice-record.ts ← durable notice 기록 best-effort 래퍼 factory (channel+logPrefix) (59L) ✨
@@ -318,7 +318,7 @@ cli-jaw/
 │   ├── memory/               ← 데이터 영속화 + advanced memory runtime (17 files)
 │   │   ├── advanced.ts       ← Advanced Memory re-export stub (1L)
 │   │   ├── bootstrap.ts      ← legacy memory/bootstrap import + structured root 초기화 (588L)
-│   │   ├── heartbeat.ts      ← Heartbeat 잡 스케줄 + cron/every timer orchestration + minute-slot dedupe + fs.watch (659L)
+│   │   ├── heartbeat.ts      ← Heartbeat 잡 스케줄 + cron/every timer orchestration + minute-slot dedupe + fs.watch (653L)
 │   │   ├── heartbeat-schedule.ts ← Heartbeat schedule normalize + cron validate/match + timezone validate + immediate cron loop helper (410L)
 │   │   ├── heartbeat-mention-watch.ts ← Slack mention 항목 loop + busy yield + server-owned thread send + WatchNamespace 경유 ledger 접근 (249L)
 │   │   ├── mention-watch-ledger.ts ← v2 ledger 단일 접근 경로 (WatchNamespace = job+workspace+user, 모든 SQL이 3파트 predicate 유지, A/B 대칭 테스트가 최종 보증) (104L) ✨
@@ -336,15 +336,15 @@ cli-jaw/
 │   ├── telegram/             ← Telegram 인터페이스 (11 files)
 │   │   ├── reactions.ts     ← ACK reaction transport + ReactionTypeEmoji allowlist + notice transport (186L)
 │   │   ├── ipv4-fetch.ts    ← IPv4 fetch factory that honours init.signal (destroys on abort) (106L)
-│   │   ├── bot.ts            ← Telegram 봇 + forwarder lifecycle + origin 필터링 + channel-origin text/image reply + elicitation callback + voice 핸들러 등록 (1422L)
+│   │   ├── bot.ts            ← Telegram 봇 + forwarder lifecycle + origin 필터링 + channel-origin text/image reply + elicitation callback + voice 핸들러 등록 (1417L)
 │   │   ├── voice.ts          ← 음성 메시지 → guarded download → STT → tgOrchestrate 파이프라인 (43L)
-│   │   ├── forwarder.ts      ← text 전송 뒤 guarded local-image photo relay + escape/chunk/createForwarder (247L)
+│   │   ├── forwarder.ts      ← text 전송 뒤 guarded local-image photo relay + escape/chunk/createForwarder (245L)
 │   │   ├── rich-message.ts   ← Bot API 10.1 rich-first send (sendTelegramMarkdown, 32k chunk, HTML/plaintext fallback) (425L)
 │   │   ├── elicitation-buttons.ts ← single_select elicitation → inline keyboard + pending store + callback codec (110L)
 │   │   ├── hub-callback.ts   ← hub-member callback URL SSRF guard (19L)
 │   │   └── telegram-file.ts  ← Telegram 파일 전송 + 재시도 + 사이즈 검증 (231L)
 │   ├── discord/              ← Discord 인터페이스 (8 files)
-│   │   ├── bot.ts            ← Discord 봇 + transport 등록 + message/attachment 핸들러 + channel-origin image relay (1034L)
+│   │   ├── bot.ts            ← Discord 봇 + transport 등록 + message/attachment 핸들러 + channel-origin image relay (1032L)
 │   │   ├── reactions.ts   ← ACK reaction transport + cancellable notice REST (122L)
 │   │   ├── commands.ts       ← Discord slash command 등록 + 핸들러 (153L)
 │   │   ├── send-only-client.ts ← Discord send-only client (webhook/DM fallback) (257L) ✨
@@ -353,7 +353,7 @@ cli-jaw/
 │   │   └── discord-file.ts   ← Discord 파일 전송 (107L)
 │   ├── slack/                ← Slack 인터페이스 (41 files, Socket Mode + Web API, SDK 없음)
 │   │   ├── socket.ts         ← Socket Mode client (apps.connections.open → wss, ack-before-work, envelope dedupe TTL, hello deadline, backoff 재연결) (437L)
-│   │   ├── bot.ts            ← Slack 봇 lifecycle + attachPort 성공 후 best-effort 자기선출/영속화 + envelope routing + orchestrate 경로 + queued-result waiter + top-level/thread 1회 context prefetch (1937L)
+│   │   ├── bot.ts            ← Slack 봇 lifecycle + attachPort 성공 후 best-effort 자기선출/영속화 + envelope routing + orchestrate 경로 + queued-result waiter + top-level/thread 1회 context prefetch (1936L)
 │   │   ├── api.ts            ← Slack Web API fetch wrapper (HTTP 200 + ok:false를 실패로 처리, credential/URL redaction, Retry-After) (442L)
 │   │   ├── format.ts         ← CommonMark → mrkdwn 변환 + code-fence 보존 chunking (222L)
 │   │   ├── blocks.ts         ← Block Kit validation and per-table message splitting (143L)
@@ -374,7 +374,7 @@ cli-jaw/
 │   │   ├── inbound-file.ts   ← 인바운드 첨부 단일 IO owner (files.info → 인증 스트리밍 다운로드 → saveUpload, 파일/메시지 바이트 예산, 고정 error code) (280L) ✨
 │   │   ├── inbound-url.ts    ← 인바운드 다운로드 URL 검증 (Slack host allowlist + https-only hop + 사설망 거부) (44L) ✨
 │   │   ├── send-only-client.ts ← bot-token outbound with separate transport/verification receipts (228L)
-│   │   ├── forwarder.ts      ← agent_done 포워딩 + guarded local-image relay (filename caption) (87L)
+│   │   ├── forwarder.ts      ← agent_done 포워딩 + guarded local-image relay (filename caption) (89L)
 │   │   ├── send-handler.ts   ← ChannelSendRequest → Slack Web API 어댑터 + 413 텍스트 다운그레이드 (70L)
 │   │   ├── manifest.ts       ← Slack 앱 표시명 검증 + bot 표시명 결정적 파생을 포함한 매니페스트 single source (`jaw slack manifest`/`setup`이 사용) (162L)
 │   │   ├── scope-status.ts   ← OAuth grant drift 단일 소유자 (auth.test의 x-oauth-scopes를 manifest 요구 집합과 대조, 미관측을 '이상 없음'과 구분, doctor·health·identity 경고가 공유) (191L) ✨
@@ -426,7 +426,7 @@ cli-jaw/
 │   │   ├── types.ts          ← `AuthMiddleware` shared type (3L)
 │   │   ├── static.ts         ← root/uploads/widgets + guarded local image/video `/api/image` 서빙 (160L)
 │   │   ├── employees.ts      ← employee CRUD 라우트 (123L)
-│   │   ├── heartbeat.ts      ← heartbeat read/write 라우트 (305L)
+│   │   ├── heartbeat.ts      ← heartbeat read/write 라우트 (322L)
 │   │   ├── skills.ts         ← skill list/enable/disable/reset 라우트 (90L)
 │   │   ├── jaw-memory.ts     ← jaw memory search/read/list/save/init/reflect/flush/soul/soul-activate/bootstrap 라우트 (362L)
 │   │   ├── jaw-ceo.ts        ← Jaw CEO channel/session support routes (321L) ✨

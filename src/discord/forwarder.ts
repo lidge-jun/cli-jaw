@@ -12,6 +12,7 @@ import { asSendable } from './channel-types.js';
 import { sendDiscordFile } from './discord-file.js';
 import { redactOutboundText, logErrorText } from '../messaging/redact.js';
 import { renderAgentErrorBlock } from '../messaging/error-block.js';
+import { resolveForwarderTarget } from '../messaging/forwarder-origin.js';
 
 export async function relayDiscordImages(
     client: Client,
@@ -65,7 +66,6 @@ export function chunkDiscordMessage(text: string, limit = DISCORD_MESSAGE_LIMIT)
 
 export function createDiscordForwarder(opts: {
     client: Client;
-    getLastTarget: () => RemoteTarget | null;
     shouldSkip?: (data: Record<string, unknown>) => boolean;
     log?: (info: { channelId: string; preview: string }) => void;
     prefix?: string;
@@ -78,7 +78,7 @@ export function createDiscordForwarder(opts: {
         const errorBlock = data["error"] ? renderAgentErrorBlock(data) : null;
         if (data["error"] && !errorBlock) return;
         if (opts.shouldSkip?.(data)) return;
-        const target = opts.getLastTarget();
+        const target = resolveForwarderTarget(data, 'discord');
         if (!target?.targetId || !opts.client) return;
         try {
             const channel = await opts.client.channels.fetch(target.targetId);

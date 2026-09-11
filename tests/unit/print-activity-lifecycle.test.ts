@@ -36,7 +36,7 @@ function fixture() {
     setSpawnAgent(() => { respawns++; return { promise: Promise.resolve({ text: 'unexpected retry', code: 0 }) }; });
     const params: ExitHandlerParams = {
         ctx, code: 0, cli: 'codex', model: 'fixture', resumeKey: null, agentLabel: 'fixture', mainManaged: true,
-        origin: 'web', prompt: 'fixture', opts: { _skipSessionPersist: true, _isSmokeContinuation: true }, cfg: {},
+        origin: 'web', prompt: 'fixture', opts: { _skipSessionPersist: true, _isSmokeContinuation: true, target: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C-fixture' } }, cfg: {},
         ownerGeneration: 1, persistenceOwner: { global: 0, scope: 0 }, forceNew: false, empSid: null,
         isResume: false, wasKilled: false, wasSteer: false,
         smokeResult: { isSmoke: false, confidence: 'low', matchedPattern: null, reason: '' },
@@ -61,8 +61,7 @@ for (const fault of ['none', 'append', 'terminal', 'link', 'finalize'] as const)
         t.mock.method(console, 'log', () => {}); t.mock.method(console, 'warn', () => {}); t.mock.method(console, 'error', () => {});
         const events: BusEvent[] = [], legacy: Array<{ type: string; data: Record<string, unknown> }> = [];
         const pending: Promise<void>[] = [];
-        const forward = createSlackForwarder({ getToken: () => 'fixture-token',
-            getLastTarget: () => ({ channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C-fixture' }) });
+        const forward = createSlackForwarder({ getToken: () => 'fixture-token' });
         const listener = (type: string, data: Record<string, unknown>) => { legacy.push({ type, data }); pending.push(forward(type, data)); };
         addBroadcastListener(listener); const unsubscribe = subscribe(e => events.push(e));
         const f = fixture();

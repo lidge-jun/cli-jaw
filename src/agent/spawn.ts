@@ -91,6 +91,7 @@ import { clearNativeStartFailure, nativeStartFailure, recordNativeStartFailure }
 import { asCliEventRecord, discriminate, fieldString, type CliEventRecord } from '../types/cli-events.js';
 import { isRemoteTarget, type RemoteTarget } from '../messaging/types.js';
 import { buildRemoteBindingKey } from '../messaging/session-key.js';
+import { runPinFields } from '../messaging/run-pin.js';
 import { isRetiredCliSelection, retiredRuntimeDiagnostic } from '../types/cli-engine.js';
 import { runBeforeSpawnChecks, type PolicyVerdict } from '../core/policy-hooks.js';
 import { appendTraceEvent, createTraceId, finalizeTraceRun, stampTraceTool, startTraceRun, updateTraceToolRow } from '../trace/store.js';
@@ -1220,6 +1221,11 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     const scopeKey = binding.scope, chatSessionId = binding.chatSessionId;
     opts = stripUndefined({ ...opts, scopeKey, chatSessionId,
         ...(opts.remoteKey ? { remoteKey: opts.remoteKey } : {}) });
+    // Captured once, at admission. Every terminal event this run emits carries
+    // it, so a forwarder never has to guess the destination from global state
+    // and a waiter can tell someone else's completion from its own (#742/#743).
+    const runPin = runPinFields({ origin, requestId: opts.requestId, scope: scopeKey,
+        sessionId: chatSessionId, remoteKey: opts.remoteKey, target: opts.target });
 
     let mainRun = mainManaged ? activeMainProcesses.get(scopeKey) : undefined;
     if (mainManaged && mainRun && !opts._settingsGateWaited) {
@@ -1289,8 +1295,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         settleOnce(opts.requestId, 'failed', { error: diagnostic, text: message,
             scope: scopeKey, sessionId: chatSessionId });
         broadcast('agent_done', {
-            text: message, error: true, origin, cli, scope: scopeKey, sessionId: chatSessionId,
-            ...(opts.requestId ? { requestId: opts.requestId } : {}), ...empTag,
+            ...runPin, text: message, error: true, cli, ...empTag,
         }, isEmployee ? 'internal' : 'public');
         try { opts.lifecycle?.onExit?.(78); } catch { console.warn('[runtime] retirement exit observer failed'); }
         resolve!({ text: message, code: 78 });
@@ -1325,8 +1330,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         const released = mainManaged && activeMainProcesses.get(scopeKey) === mainRun
             && releaseMainRun(scopeKey, null, ownerGeneration);
         broadcast('agent_done', {
-            text: message, error: true, origin, cli, scope: scopeKey, sessionId: chatSessionId,
-            ...(opts.requestId ? { requestId: opts.requestId } : {}), ...empTag,
+            ...runPin, text: message, error: true, cli, ...empTag,
         }, isEmployee ? 'internal' : 'public');
         resolve!({ text: message, code: 78 });
         if (released) void processQueue(scopeKey);
@@ -1726,7 +1730,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         const msg = formatCliUnavailableMessage(cli, detected);
         console.error(`[jaw:${agentLabel}] ${msg}`);
         if (mainManaged) clearLiveRun(liveScope);
-        broadcast('agent_done', { text: `❌ ${msg}`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
+        broadcast('agent_done', { ...runPin, text: `❌ ${msg}`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
         resolve!({ text: '', code: 127 });
         if (mainManaged) {
             releaseMainRun(scopeKey, null, ownerGeneration);
@@ -1808,7 +1812,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             if (capturedRun && activeMainProcesses.get(scopeKey) === capturedRun) releaseMainRun(scopeKey, null, ownerGeneration);
             cleanupClaudeWorker();
             const text = 'Claude native runtime could not be admitted.';
-            broadcast('agent_done', { text, error: true, origin, cli, scope: scopeKey, sessionId: chatSessionId, ...empTag }, traceAudience);
+            broadcast('agent_done', { ...runPin, text, error: true, cli, ...empTag }, traceAudience);
             if (mainManaged && !activeMainProcesses.has(scopeKey)) void processQueue(scopeKey);
             return { child: null, promise: Promise.resolve({ text, code: 1 }) };
         }
@@ -1917,8 +1921,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 if (!nativeStarted && !runtimeEnded) startFailedRuntime();
                 if (!ctx.runtimeTerminalAttempted) {
                     ctx.runtimeTerminalAttempted = true;
-                    broadcast('agent_done', { traceRunId, scope: scopeKey, sessionId: chatSessionId, origin, cli,
-                        ...(opts.requestId ? { requestId: opts.requestId } : {}),
+                    broadcast('agent_done', { ...runPin, traceRunId, cli,
                         text: selected.status === 'stopped' ? '' : `❌ ${diagnostic()}`, error: true,
                         runtimeStatus: selected.status, runtimeFinality: selected.finalText === null ? 'absent' : 'present',
                     }, traceAudience);
@@ -2144,7 +2147,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             } else {
                 activeProcesses.delete(agentLabel);
             }
-            broadcast('agent_done', { text: `❌ ${msg}`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
+            broadcast('agent_done', { ...runPin, text: `❌ ${msg}`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
             finishPrintActivity(ctx, { kind: 'turn-end', status: 'error', finalText: null, error: msg });
             resolve!({ text: '', code: 1 });
             if (mainManaged) void processQueue(scopeKey);
@@ -2792,7 +2795,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 clearLiveRun(liveScope);
                 try {
                     broadcast('agent_status', { running: false, agentId: agentLabel });
-                    broadcast('agent_done', { text: `❌ Pi RPC acquire failed: ${err.message}`, error: true, origin }, 'public');
+                    broadcast('agent_done', { ...runPin, text: `❌ Pi RPC acquire failed: ${err.message}`, error: true, origin }, 'public');
                 } catch { console.warn('[jaw:pi] acquisition diagnostic delivery failed'); }
                 releaseMainRun(scopeKey, null, ownerGeneration);
             }
@@ -3369,7 +3372,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             if (ownsRun) {
                 clearLiveRun(liveScope);
                 broadcast('agent_status', { running: false, agentId: agentLabel });
-                broadcast('agent_done', { text: `❌ Codex AppServer acquire failed: ${err.message}`, error: true, origin }, 'public');
+                broadcast('agent_done', { ...runPin, text: `❌ Codex AppServer acquire failed: ${err.message}`, error: true, origin }, 'public');
                 releaseMainRun(scopeKey, null, ownerGeneration);
             }
             resolve!({ text: '', code: 1 });
@@ -3430,7 +3433,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             // later request for this scope would be rejected as "already running".
             console.error(`[jaw:${agentLabel}] ${decision.reason}`);
             if (mainManaged) clearLiveRun(liveScope);
-            broadcast('agent_done', { text: `❌ ${decision.reason}`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
+            broadcast('agent_done', { ...runPin, text: `❌ ${decision.reason}`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
             resolve!({ text: '', code: 126 });
             if (mainManaged) {
                 releaseMainRun(scopeKey, null, ownerGeneration);
@@ -3512,7 +3515,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
         } else {
             activeProcesses.delete(agentLabel);
         }
-        broadcast('agent_done', { text: `❌ ${msg}`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
+        broadcast('agent_done', { ...runPin, text: `❌ ${msg}`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
         finishPrintActivity(ctx, { kind: 'turn-end', status: 'error', finalText: null, error: msg });
         resolve!({ text: '', code: 127 });
         if (mainManaged) void processQueue(scopeKey);

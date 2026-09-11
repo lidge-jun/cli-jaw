@@ -86,10 +86,26 @@ test('an explicit null clears the destination', () => {
 
 test('a supplied destination replaces the stored one', () => {
     const result = resolveHeartbeatDestination(
-        { destination: { channel: 'slack', targetId: 'C_NEW' } },
-        { channel: 'slack', targetId: 'C_OLD' },
+        { destination: { channel: 'slack', targetId: 'C_NEW', threadId: '1787616871.254919' } },
+        { channel: 'slack', targetId: 'C_OLD', threadId: '1787616871.111111' },
     );
-    assert.deepEqual(result, { ok: true, destination: { channel: 'slack', targetId: 'C_NEW' } });
+    assert.deepEqual(result, { ok: true,
+        destination: { channel: 'slack', targetId: 'C_NEW', threadId: '1787616871.254919' } });
+});
+
+test('a supplied Slack destination with no thread is rejected', () => {
+    // Inheritance keeps an existing half-filled job loadable, but writing one is
+    // how the gap would live forever: the UI cannot show the field, so every
+    // Save would re-commit "channel, no thread" (#745).
+    const result = resolveHeartbeatDestination(
+        { destination: { channel: 'slack', targetId: 'C_NEW' } }, undefined);
+    assert.equal(result.ok, false);
+});
+
+test('an explicit channel_root scope is an acceptable Slack destination', () => {
+    const destination = { channel: 'slack' as const, targetId: 'C_NEW', scope: 'channel_root' as const };
+    assert.deepEqual(resolveHeartbeatDestination({ destination }, undefined),
+        { ok: true, destination });
 });
 
 test('a malformed destination is rejected rather than half-applied', () => {
@@ -114,4 +130,3 @@ test('a destination written directly to the file survives load', () => {
         saveHeartbeatFile({ jobs: [] });
     }
 });
-

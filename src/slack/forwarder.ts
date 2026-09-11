@@ -13,6 +13,7 @@ import { sendSlackFile } from './slack-file.js';
 import { sendSlackText } from './send-only-client.js';
 import { logErrorText } from '../messaging/redact.js';
 import { renderAgentErrorBlock } from '../messaging/error-block.js';
+import { resolveForwarderTarget } from '../messaging/forwarder-origin.js';
 
 export async function relaySlackImages(
     token: string,
@@ -52,7 +53,6 @@ export async function relaySlackImages(
 
 export function createSlackForwarder(opts: {
     getToken: () => string | null;
-    getLastTarget: () => RemoteTarget | null;
     shouldSkip?: (data: Record<string, unknown>) => boolean;
     log?: (info: { channelId: string; preview: string }) => void;
     prefix?: string;
@@ -67,7 +67,9 @@ export function createSlackForwarder(opts: {
         const errorBlock = data["error"] ? renderAgentErrorBlock(data) : null;
         if (data["error"] && !errorBlock) return;
         if (opts.shouldSkip?.(data)) return;
-        const target = opts.getLastTarget();
+        // The run's own destination, or nothing. No last-active fallback: that
+        // slot belongs to whoever spoke most recently, not to this run (#742).
+        const target = resolveForwarderTarget(data, 'slack');
         const token = opts.getToken();
         if (!target?.targetId || !token) return;
         try {

@@ -1463,6 +1463,10 @@ export interface HeartbeatDestination {
     channel: 'telegram' | 'discord' | 'slack';
     targetId: string;
     threadId?: string;
+    /** Opt in to posting at the conversation root instead of inside a thread.
+     *  Written explicitly so a job that simply has not been given a thread yet
+     *  is distinguishable from one whose audience really is the channel (#745). */
+    scope?: 'channel_root';
 }
 
 /** Channels one mention-watch job may cover.
@@ -1501,6 +1505,7 @@ export function isHeartbeatDestination(value: unknown): value is HeartbeatDestin
     if (d['channel'] !== 'telegram' && d['channel'] !== 'discord' && d['channel'] !== 'slack') return false;
     if (typeof d['targetId'] !== 'string' || !d['targetId'].trim()) return false;
     if (d['threadId'] !== undefined && typeof d['threadId'] !== 'string') return false;
+    if (d['scope'] !== undefined && d['scope'] !== 'channel_root') return false;
     return true;
 }
 export interface HeartbeatFile { jobs: HeartbeatJob[] }

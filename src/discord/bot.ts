@@ -12,7 +12,6 @@ import { saveUpload, buildMediaPromptMany } from '../agent/spawn.js';
 import {
     setLastActiveTarget,
     setLatestSeenTarget,
-    getLastActiveTarget,
     transportStarted,
     transportNotStarted,
     type TransportStartOutcome,
@@ -692,7 +691,6 @@ async function installDiscordGeneration(
     if (settings["discord"]?.forwardAll !== false) {
         const forwarder = createDiscordForwarder({
             client,
-            getLastTarget: () => getLastActiveTarget('discord'),
             shouldSkip: (data) => shouldSkipForwarding(data, 'discord'),
             log: ({ channelId, preview }) => {
                 log.info(`[discord:forward] → ${channelId}: ${preview}...`);

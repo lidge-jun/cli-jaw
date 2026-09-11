@@ -88,7 +88,9 @@ test('non-planner main heartbeat runs once', async () => {
 
 test('busy employee produces warning delivery without running employee', async () => {
     employeeBusy = true; sent.length = 0;
-    await runHeartbeatJob({ id: 'busy', name: 'busy', runner: 'employee', employee: employee.name, reportPolicy: 'anomaly_only', schedule: { minutes: 5 }, prompt: 'check' });
+    await runHeartbeatJob({ id: 'busy', name: 'busy', runner: 'employee', employee: employee.name,
+        reportPolicy: 'anomaly_only', schedule: { minutes: 5 }, prompt: 'check',
+        destination: { channel: 'slack', targetId: 'C_REPORTS', threadId: '1787616871.254919' } });
     employeeBusy = false;
     assert.equal(sent.length, 1);
     assert.match(sent[0]!, /\[warning\].*skipped: employee busy/);
@@ -135,22 +137,45 @@ test('a job with a destination sends there and forbids the active fallback', asy
         'a pinned job must not be re-routed by whoever spoke last');
 });
 
-test('a destination without a thread posts to the conversation root', async () => {
+test('a destination that opts into the conversation root posts there', async () => {
     sent.length = 0; sentRequests.length = 0;
     await runHeartbeatJob({
         id: 'root', name: 'root', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
-        destination: { channel: 'slack', targetId: 'C_REPORTS' },
+        destination: { channel: 'slack', targetId: 'C_REPORTS', scope: 'channel_root' },
     });
 
     assert.equal(sentRequests[0]?.['target']?.targetId, 'C_REPORTS');
     assert.equal(sentRequests[0]?.['target']?.threadId, undefined);
 });
 
+test('a Slack destination with no thread and no root opt-in is held', async () => {
+    // "Channel but no thread" is indistinguishable from a form nobody finished.
+    // Guessing the root put scheduled reports at the bottom of channels their
+    // operator had pointed at a specific thread (#745).
+    sent.length = 0; sentRequests.length = 0;
+    await runHeartbeatJob({
+        id: 'incomplete', name: 'incomplete', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
+        destination: { channel: 'slack', targetId: 'C_REPORTS' },
+    });
+
+    assert.equal(sentRequests.length, 0, 'an unfinished destination delivers nowhere');
+});
+
+test('an empty-string thread is not a thread', async () => {
+    sent.length = 0; sentRequests.length = 0;
+    await runHeartbeatJob({
+        id: 'blank-thread', name: 'blank-thread', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
+        destination: { channel: 'slack', targetId: 'C_REPORTS', threadId: '' },
+    });
+
+    assert.equal(sentRequests.length, 0, 'a blank ts used to pass validation then read as falsy at send time');
+});
+
 test('the derived target carries the kinds the operator never types', async () => {
     sent.length = 0; sentRequests.length = 0;
     await runHeartbeatJob({
         id: 'kinds', name: 'kinds', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
-        destination: { channel: 'slack', targetId: 'C_REPORTS' },
+        destination: { channel: 'slack', targetId: 'C_REPORTS', scope: 'channel_root' },
     });
 
     // Stored form is three fields; targetKind/peerKind come from the id prefix.
@@ -158,15 +183,16 @@ test('the derived target carries the kinds the operator never types', async () =
     assert.equal(sentRequests[0]?.['target']?.peerKind, 'channel');
 });
 
-test('a job without a destination keeps the legacy active-channel behaviour', async () => {
+test('a job without a destination delivers nowhere', async () => {
+    // This used to fall through to the active channel. That path is why a
+    // scheduled report could arrive in a conversation that had never asked for
+    // it: "active" is whoever spoke to the bot last, which is not a property of
+    // the job at all (#437, #745). Silence with a logged reason is the honest
+    // answer to an unconfigured destination.
     sent.length = 0; sentRequests.length = 0;
     await runHeartbeatJob({ id: 'legacy', name: 'legacy', enabled: true, schedule: { minutes: 5 }, prompt: 'check' });
 
-    assert.equal(sentRequests.length, 1);
-    assert.equal(sentRequests[0]?.['channel'], 'active');
-    assert.equal(sentRequests[0]?.['target'], undefined);
-    assert.equal(sentRequests[0]?.['allowActiveFallback'], undefined,
-        'existing installs must not start failing to deliver');
+    assert.equal(sentRequests.length, 0);
 });
 
 test('a malformed destination is refused, not redirected to the active channel', async () => {
@@ -199,7 +225,8 @@ test('a scheduled run survives a malformed destination without throwing', async 
         destination: { targetId: 'C_X' },
     });
     sent.length = 0; sentRequests.length = 0;
-    await runHeartbeatJob({ id: 'after', name: 'after', enabled: true, schedule: { minutes: 5 }, prompt: 'check' });
+    await runHeartbeatJob({ id: 'after', name: 'after', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
+        destination: { channel: 'slack', targetId: 'C_REPORTS', threadId: '1787616871.254919' } });
     assert.equal(sentRequests.length, 1, 'the next job still runs');
 });
 
@@ -207,7 +234,7 @@ test('the anchor records where the report actually went', async () => {
     anchors.length = 0;
     await runHeartbeatJob({
         id: 'anchored', name: 'anchored', enabled: true, schedule: { minutes: 5 }, prompt: 'check',
-        destination: { channel: 'slack', targetId: 'C_REPORTS' },
+        destination: { channel: 'slack', targetId: 'C_REPORTS', scope: 'channel_root' },
     });
 
     // Routing and the record must not disagree: 'active' here would attribute the
@@ -233,4 +260,3 @@ test('an employee heartbeat consumes its own worker replay', async () => {
     assert.equal(hasPendingWorkerReplays('default'), false,
         'a heartbeat must not leave the default scope blocked on a replay');
 });
-

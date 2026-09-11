@@ -429,6 +429,7 @@ test('a job with no hold carries no held marker', async () => {
     const jobId = 'not_held_listed';
     saveHeartbeatFile({ jobs: [{
         id: jobId, name: jobId, enabled: true, schedule: { kind: 'every', minutes: 10 }, prompt: 'x',
+        destination: { channel: 'slack', targetId: 'C_REPORTS', threadId: '1787616871.254919' },
     }] });
     await withHeartbeatServer(async baseUrl => {
         const response = await fetch(baseUrl + '/api/heartbeat');

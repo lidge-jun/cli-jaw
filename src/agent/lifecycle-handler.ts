@@ -28,6 +28,7 @@ import type { RuntimeEventBody, RuntimeTransport, RuntimeTurnOutcome } from '../
 import { handoffRuntimeOutcome, lifecycleRuntimeOutcome, runtimeOutcomeExitCode } from './runtime/outcome.js';
 import type { ToolEntry } from '../types/agent.js';
 import type { RemoteTarget } from '../messaging/types.js';
+import { runPinFields } from '../messaging/run-pin.js';
 import { resolveSpawnOutputText } from './events/helpers.js';
 import { isKiroPlainTextCli, isKiroResumeDegradedOutput } from './kiro-runtime.js';
 import {
@@ -163,6 +164,9 @@ type LifecycleSpawnOptions = {
     scopeKey?: string;
     chatSessionId?: string;
     remoteKey?: string;
+    /** Destination captured when the run was admitted. Survives `...opts`
+     *  through fallback and retry respawns so the pin cannot be lost. */
+    target?: RemoteTarget;
     cli?: string;
     model?: string;
     _heartbeatAnchorId?: number;
@@ -348,6 +352,11 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
     const code = runtimeOutcomeExitCode(nativeOutcome, processCode);
     const nativeRequestId = ctx.requestId ?? opts.requestId;
     if (mainManaged) revokeSlackToolGrant(nativeRequestId);
+    // This run's identity and destination, carried on every terminal event it
+    // emits below. See src/messaging/run-pin.ts for why it is carried and not
+    // looked up (#742/#743).
+    const donePin = runPinFields({ origin, requestId: nativeRequestId, scope: scopeKey,
+        sessionId: chatSessionId, remoteKey: opts.remoteKey, target: opts.target });
     const nativeTraceRunId = ctx.traceRunId;
     const effectiveProvider = params.effectiveProvider;
     const runtimeCli = cli;
@@ -438,7 +447,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
             ...opts, _isSmokeContinuation: true, _skipInsert: true,
         });
         contPromise.then((r) => resolve(r)).catch(() => {
-            broadcast('agent_done', { ...runTag(ctx),
+            broadcast('agent_done', { ...runTag(ctx), ...donePin,
                 text: `❌ Smoke continuation failed. Original: ${ctx.fullText.slice(0, 200)}`,
                 error: true, origin,
                 ...empTag,
@@ -646,7 +655,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
             _skipInsert: true,
         });
         retryP.then(resolve).catch(() => {
-            broadcast('agent_done', { ...runTag(ctx),
+            broadcast('agent_done', { ...runTag(ctx), ...donePin,
                 text: '❌ kiro stale resume and fresh retry failed',
                 error: true,
                 origin,
@@ -707,6 +716,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
             handoffRuntimeOutcome(ctx, { ...nativeOutcome, finalText: finalContent });
             ctx.runtimeTerminalAttempted = true;
             broadcast('agent_done', {
+                ...donePin,
                 ...(nativeTraceRunId ? { traceRunId: nativeTraceRunId } : {}),
                 text: runtimeCompatibilityText(finalContent),
                 runtimeFinality: finalContent === null ? 'absent' : 'present',
@@ -818,7 +828,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                 try { linkTraceRunToMessage(ctx.traceRunId, messageId); }
                 catch { console.warn('[trace] print link failed'); }
             }
-            broadcast('agent_done', { ...runTag(ctx), text: finalContent, toolLog: sanitizedToolLog, origin, ...empTag, ...(wasSteer ? { steered: true } : {}) });
+            broadcast('agent_done', { ...runTag(ctx), ...donePin, text: finalContent, toolLog: sanitizedToolLog, origin, ...empTag, ...(wasSteer ? { steered: true } : {}) });
 
             if (opts._heartbeatAnchorId) {
                 try {
@@ -868,7 +878,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
             // Classified like the retry-exhausted site below: a watchdog kill is
             // the one failure the channel MUST show, and the forwarder gate
             // drops anything without errorKind (#519 round 2).
-            { ...runTag(ctx), text: `❌ ${errMsg}`, error: true, errorKind, cli: runtimeCli, origin, ...empTag },
+            { ...runTag(ctx), ...donePin, text: `❌ ${errMsg}`, error: true, errorKind, cli: runtimeCli, origin, ...empTag },
             isEmployee ? 'internal' : 'public',
         );
         finalizeRun('error', errMsg);
@@ -946,7 +956,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                 _skipInsert: true,
             }) as { promise: Promise<{ text: string; code: number }> };
             retryP.then(resolve).catch(() => {
-                broadcast('agent_done', { ...runTag(ctx), text: `❌ ${errMsg} (fresh-session retry failed)`, error: true, origin, ...empTag, ...(wasSteer ? { steered: true } : {}) }, isEmployee ? 'internal' : 'public');
+                broadcast('agent_done', { ...runTag(ctx), ...donePin, text: `❌ ${errMsg} (fresh-session retry failed)`, error: true, origin, ...empTag, ...(wasSteer ? { steered: true } : {}) }, isEmployee ? 'internal' : 'public');
                 resolve({ text: '', code: 1 });
                 if (mainManaged && !opts.internal) processQueue(scopeKey);
             });
@@ -969,7 +979,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                 }
                 insertMessage.run('assistant', `⏱️ ${errMsg}`, cli, model, settings["workingDir"] || null, chatSessionId);
             }
-            broadcast('agent_done', { ...runTag(ctx), text: `❌ ${errMsg}`, error: true, errorKind, cli: runtimeCli, origin, ...empTag, ...(wasSteer ? { steered: true } : {}) }, isEmployee ? 'internal' : 'public');
+            broadcast('agent_done', { ...runTag(ctx), ...donePin, text: `❌ ${errMsg}`, error: true, errorKind, cli: runtimeCli, origin, ...empTag, ...(wasSteer ? { steered: true } : {}) }, isEmployee ? 'internal' : 'public');
             finalizeRun('error', errMsg);
             resolve({ text: '', code: 1 });
             if (mainManaged && !opts.internal) processQueue(scopeKey);
@@ -1006,7 +1016,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                     ...opts, _retryAttempt: mainAttempt + 1, _skipInsert: true,
                 });
                 retryP.then((r) => resolve(r)).catch(() => {
-                    broadcast('agent_done', { ...runTag(ctx), text: `❌ ${errMsg} (재시도 실패, attempt ${mainAttempt + 1})`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
+                    broadcast('agent_done', { ...runTag(ctx), ...donePin, text: `❌ ${errMsg} (재시도 실패, attempt ${mainAttempt + 1})`, error: true, origin, ...empTag }, isEmployee ? 'internal' : 'public');
                     resolve({ text: '', code: 1 });
                     if (mainManaged && !opts.internal) processQueue(scopeKey);
                 });
@@ -1063,7 +1073,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                     ...opts, cli: fallbackCli, _isFallback: true, _skipInsert: true,
                 });
                 retryP.then((r) => resolve(r)).catch(() => {
-                    broadcast('agent_done', { ...runTag(ctx),
+                    broadcast('agent_done', { ...runTag(ctx), ...donePin,
                         text: `❌ Fallback (${fallbackCli}) failed`, error: true, origin,
                         ...empTag,
                     }, isEmployee ? 'internal' : 'public');
@@ -1073,10 +1083,10 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                 return;
             }
         }
-        // The `{ ...runTag(ctx),` opening stays on this line: RID-001 in
+        // The `{ ...runTag(ctx), ...donePin,` opening stays on this line: RID-001 in
         // tests/unit/web-sse-replay-idempotency.test.ts matches that exact shape
         // to prove every agent_done carries its trace run id.
-        broadcast('agent_done', { ...runTag(ctx),
+        broadcast('agent_done', { ...runTag(ctx), ...donePin,
             text: `❌ ${errMsg}`,
             error: true,
             // Classified here so a forwarder never re-parses Korean prose to
@@ -1125,7 +1135,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
             retryP.then((r) => resolve(r)).catch((retryErr: Error) => {
                 const retryMessage = retryErr?.message ? `; retry=${retryErr.message}` : '';
                 const diagnostic = `${cls.message} (fresh employee session retry failed${retryMessage})`;
-                broadcast('agent_done', { ...runTag(ctx), text: `❌ ${diagnostic}`, error: true, origin, isEmployee: true }, 'internal');
+                broadcast('agent_done', { ...runTag(ctx), ...donePin, text: `❌ ${diagnostic}`, error: true, origin, isEmployee: true }, 'internal');
                 resolve({ text: '', code: 1, diagnostic });
             });
             return;
@@ -1154,7 +1164,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                     ...opts, _retryAttempt: empAttempt + 1, _skipInsert: true, _skipResume: true,
                 });
                 retryP.then((r) => resolve(r)).catch(() => {
-                    broadcast('agent_done', { ...runTag(ctx), text: `❌ ${cls.message} (재시도 실패, attempt ${empAttempt + 1})`, error: true, origin, isEmployee: true }, 'internal');
+                    broadcast('agent_done', { ...runTag(ctx), ...donePin, text: `❌ ${cls.message} (재시도 실패, attempt ${empAttempt + 1})`, error: true, origin, isEmployee: true }, 'internal');
                     resolve({ text: '', code: 1, diagnostic: cls.message });
                 });
             }, empDelayMs));
@@ -1198,7 +1208,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
             _skipSessionPersist: true,
         });
         retryP.then(resolve).catch(() => {
-            broadcast('agent_done', { ...runTag(ctx),
+            broadcast('agent_done', { ...runTag(ctx), ...donePin,
                 text: '❌ kiro resume empty and fresh retry failed',
                 error: true,
                 origin,

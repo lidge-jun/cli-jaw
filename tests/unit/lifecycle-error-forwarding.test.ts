@@ -14,7 +14,7 @@ function stallParams(overrides: Partial<ExitHandlerParams> = {}): ExitHandlerPar
     return {
         ctx: { fullText: '', sessionId: null, toolLog: [], traceLog: [], stderrBuf: '', stallReason: 'absolute timeout 2045s' },
         code: 124, cli: 'codex', model: 'test', resumeKey: null, agentLabel: 'Boss', mainManaged: true,
-        origin: 'web', prompt: 'test', opts: {}, cfg: {}, ownerGeneration: 1,
+        origin: 'web', prompt: 'test', opts: { target: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C1' } }, cfg: {}, ownerGeneration: 1,
         persistenceOwner: { global: 0, scope: 0 }, forceNew: false, empSid: null, isResume: false,
         wasKilled: true, wasSteer: false, smokeResult: { isSmoke: false, confidence: 'low', matchedPattern: null, reason: '' },
         effortDefault: 'medium', costLine: '', resolve: () => {}, activeProcesses: new Map(), scopeKey: 'lef-test',
@@ -36,10 +36,7 @@ async function runStall(overrides: Partial<ExitHandlerParams> = {}) {
     }) as typeof fetch;
     const seen: Record<string, unknown>[] = [];
     const capture = (type: string, data: Record<string, unknown>) => { if (type === 'agent_done') seen.push(data); };
-    const forward = createSlackForwarder({
-        getToken: () => 'xoxb-test',
-        getLastTarget: () => ({ channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C1' }),
-    });
+    const forward = createSlackForwarder({ getToken: () => 'xoxb-test' });
     const pending: Promise<void>[] = [];
     const forwardListener = (type: string, data: Record<string, unknown>) => { pending.push(forward(type, data)); };
     addBroadcastListener(capture);
@@ -72,7 +69,7 @@ test('LEF-001: a watchdog kill (wasKilled + stallReason) reaches Slack as a clas
 for (const finalText of [null, '', ' \n\t ']) {
     test('native empty compatibility terminal closes once without passive Slack send: ' + JSON.stringify(finalText), async () => {
         const { payloads, payload, fetches, ends, result } = await runStall({
-            code: 0, wasKilled: false, opts: { _skipSessionPersist: true },
+            code: 0, wasKilled: false, opts: { _skipSessionPersist: true, target: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C1' } },
             ctx: { fullText: 'DO NOT DELIVER PARTIAL', liveOutputText: 'DO NOT DELIVER LIVE',
                 requestId: 'native-request', sessionId: 'provider-session', toolLog: [], traceLog: [], stderrBuf: '',
                 runtimeOutcome: { status: 'done', finalText, partialText: 'DO NOT DELIVER PARTIAL' } },
@@ -93,7 +90,7 @@ for (const finalText of [null, '', ' \n\t ']) {
 
 test('throwing legacy terminal observer does not duplicate or suppress existing final delivery', async () => {
     const { payload, fetches, ends, result } = await runStall({
-        code: 0, wasKilled: false, costLine: '\nCOST', opts: { _skipSessionPersist: true },
+        code: 0, wasKilled: false, costLine: '\nCOST', opts: { _skipSessionPersist: true, target: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C1' } },
         ctx: { fullText: '<think>hidden</think>answer', sessionId: null, toolLog: [], traceLog: [], stderrBuf: '' },
         onRuntimeEnd: () => { throw new Error('projection unavailable'); },
     });
