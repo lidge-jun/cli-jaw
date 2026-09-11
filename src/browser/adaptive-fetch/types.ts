@@ -1,5 +1,7 @@
 // Shared type definitions for adaptive-fetch module.
 
+import type { ResolveHost, SensitiveQueryPolicy } from './safety.js';
+
 export type AdaptiveFetchVerdict = 'strong_ok' | 'weak_ok' | 'blocked' | 'auth_required' | 'challenge' | 'paywall' | 'browser_required' | 'unsupported' | 'error';
 export type AdaptiveFetchSource = 'public_endpoint' | 'fetch' | 'reader' | 'metadata' | 'third_party_reader' | 'browser' | 'browser_user' | 'human_resolved' | 'network_api' | 'validation';
 export type BrowserMode = 'auto' | 'never' | 'required';
@@ -37,6 +39,10 @@ export interface FetchTextCandidateOptions {
     allowPrivateNetwork?: boolean;
     fetchImpl?: typeof fetch;
     beforeFetch?: (url: string) => Promise<void> | void;
+    /** Injected for tests; production callers fall through to DNS. */
+    resolveHost?: ResolveHost;
+    /** Omitted means 'reject' — the per-hop guard fails closed. */
+    sensitiveQuery?: SensitiveQueryPolicy;
     identity?: string;
     proxy?: string;
     signal?: AbortSignal;
@@ -50,6 +56,7 @@ export interface BrowserCandidateOptions {
     allowPrivateNetwork?: boolean;
     challengeInfo?: ChallengeInfo | null;
     signal?: AbortSignal;
+    resolveHost?: ResolveHost;
 }
 
 export interface FetchAttempt {

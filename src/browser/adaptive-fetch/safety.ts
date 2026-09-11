@@ -120,7 +120,15 @@ export function isPrivateHostname(hostname: string): boolean {
 export type ResolvedAddress = { address: string; family: number };
 export type ResolveHost = (hostname: string) => Promise<ResolvedAddress[]>;
 
-async function defaultResolveHost(hostname: string): Promise<ResolvedAddress[]> {
+/**
+ * 'reject' keeps the third-party-reader rule that a target carrying token-like
+ * query material is refused outright. 'allow' is for a direct fetch to the
+ * target host itself, where a signed URL legitimately carries its own token.
+ * Omitting the option means 'reject', so a caller that forgets fails closed.
+ */
+export type SensitiveQueryPolicy = 'allow' | 'reject';
+
+export async function defaultResolveHost(hostname: string): Promise<ResolvedAddress[]> {
     const literal = net.isIP(hostname);
     if (literal) return [{ address: hostname, family: literal }];
     return await lookup(hostname, { all: true, verbatim: true });
@@ -129,8 +137,11 @@ async function defaultResolveHost(hostname: string): Promise<ResolvedAddress[]> 
 export async function assertPublicResolvedHost(
     url: string | URL,
     resolveHost: ResolveHost = defaultResolveHost,
+    options: { sensitiveQuery?: SensitiveQueryPolicy } = {},
 ): Promise<void> {
-    const parsed = validateThirdPartyReaderTarget(url);
+    const parsed = options.sensitiveQuery === 'allow'
+        ? validateFetchUrl(String(url), { allowPrivateNetwork: false })
+        : validateThirdPartyReaderTarget(url);
     const addresses = await resolveHost(parsed.hostname);
     if (addresses.length === 0) {
         throw new AdaptiveFetchInputError('target host could not be resolved', {
