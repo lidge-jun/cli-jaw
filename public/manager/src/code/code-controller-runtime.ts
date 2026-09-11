@@ -275,7 +275,7 @@ export class CodeController {
      */
     private requireNewKey(draft: CodeDraft): void {
         if (!draft.retry) return;
-        draft.retry = { ...draft.retry, key: crypto.randomUUID() };
+        draft.retry = { ...draft.retry, key: crypto.randomUUID(), resend: true };
         draft.operation = { kind: 'unknown-send', error: 'The original attempt ended on the server without running. The message was not resent; Retry will submit it as a new message.' };
     }
     private makeModel(): CodeControllerModel {
@@ -307,6 +307,7 @@ export class CodeController {
             error: [operation.error ?? detail?.error ?? this.indexError ?? this.catalogError ?? this.gitError ?? session?.error?.message, persistenceWarning].filter(Boolean).join(' ') || null,
             operation: { ...operation, error: operation.error && persistenceWarning ? `${operation.error} ${persistenceWarning}` : operation.error }, retryText: draft.retry?.text ?? null,
             canRetrySameSend: !!id && operation.kind === 'unknown-send' && !!draft.retry && synced && session?.archivedAt === null,
+            resendRequired: !!draft.retry?.resend,
             permissionOperations: { ...draft.permissionOperations }, hasMoreSessions: this.moreSessions,
             hasOlderHistory: detail?.hasOlder ?? false, filter: this.filter,
             creationUnknown: id === null && draft.createUnknown, startAnotherSession: this.startAnotherSession,

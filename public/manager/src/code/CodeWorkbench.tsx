@@ -66,12 +66,19 @@ export function CodeWorkbench({ controller: c, endpointKey, onOpenLocalFile }: P
             <p>Your draft and choices are kept. Press Send when you are ready to create another session.</p>
             <button type="button" onClick={c.startAnotherSession}>Start another session</button>
         </section>}
-        {unknownSend && <section className="code-recovery-strip" aria-label="Unconfirmed send">
-            <strong>Send outcome not confirmed</strong>
-            <p>Retry uses the original request. It may submit it if the server has not already accepted it.</p>
+        {unknownSend && <section className="code-recovery-strip"
+            aria-label={c.resendRequired ? 'Send not started' : 'Unconfirmed send'}>
+            <strong>{c.resendRequired ? 'Send did not start' : 'Send outcome not confirmed'}</strong>
+            {/* Once the server has spent the key, acceptance is no longer unknown,
+                so this must stop offering the weaker, hedged explanation. */}
+            <p>{c.resendRequired
+                ? 'The original attempt ended on the server without running. Retry sends this as a new message.'
+                : 'Retry uses the original request. It may submit it if the server has not already accepted it.'}</p>
             <pre className="code-retry-preview" aria-label="Original prompt">{c.retryText}</pre>
             <button type="button" disabled={!c.canRetrySameSend || retrying === sessionKey} onClick={() => void retry()}>
-                {retrying === sessionKey ? 'Retrying original send…' : 'Retry same send'}</button>
+                {retrying === sessionKey
+                    ? (c.resendRequired ? 'Sending as a new message…' : 'Retrying original send…')
+                    : (c.resendRequired ? 'Send as a new message' : 'Retry same send')}</button>
         </section>}
         {archived ? <section className="code-recovery-strip"><span>Archived · Read-only history</span>
             <button type="button" disabled={!c.synced || c.pending} onClick={() => { const id = c.selectedId; if (id) perform(() => c.archive(id, false)); }}>Restore session</button>
