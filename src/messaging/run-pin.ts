@@ -15,7 +15,7 @@
 // Both are the same mistake in different clothes: inferring a run's context
 // from process-global state instead of carrying it. A pin is carried.
 
-import type { RemoteTarget } from './types.js';
+import { isRemoteTarget, type RemoteTarget } from './types.js';
 
 export interface RunPin {
     origin?: string | undefined;
@@ -41,7 +41,7 @@ export function runPinFields(pin: RunPin): Record<string, unknown> {
     if (pin.scope) fields['scope'] = pin.scope;
     if (pin.sessionId) fields['sessionId'] = pin.sessionId;
     if (pin.remoteKey) fields['remoteKey'] = pin.remoteKey;
-    if (pin.target && typeof pin.target.targetId === 'string' && pin.target.targetId) {
+    if (isRemoteTarget(pin.target)) {
         fields['target'] = { ...pin.target };
     }
     return fields;
@@ -62,4 +62,36 @@ export function hasRunIdentity(data: Record<string, unknown>): boolean {
 export function sameRunConversation(a: RunPin, b: RunPin): boolean {
     if (a.remoteKey || b.remoteKey) return a.remoteKey === b.remoteKey;
     return (a.origin ?? '') === (b.origin ?? '');
+}
+
+function sameTarget(expected: RemoteTarget, actual: unknown): boolean {
+    return isRemoteTarget(actual)
+        && actual.channel === expected.channel
+        && actual.targetKind === expected.targetKind
+        && actual.peerKind === expected.peerKind
+        && actual.targetId === expected.targetId
+        && actual.threadId === expected.threadId
+        && actual.guildId === expected.guildId
+        && actual.parentTargetId === expected.parentTargetId;
+}
+
+/**
+ * Match a terminal/control event to the run waiting for it.
+ *
+ * requestId, origin, scope and sessionId are the minimum identity. Treating an
+ * absent field as agreement is the bug: an old print terminal omitted all four
+ * except origin, and a newly installed Slack waiter could adopt it (#743).
+ * Remote conversation and destination become mandatory when the waiter owns
+ * them. This lets local/web runs keep their smaller identity while remote runs
+ * fail closed on the extra fields that separate one conversation from another.
+ */
+export function matchesRunPin(expected: RunPin, actual: Record<string, unknown>): boolean {
+    if (!expected.requestId || !expected.origin || !expected.scope || !expected.sessionId) return false;
+    if (actual['requestId'] !== expected.requestId
+        || actual['origin'] !== expected.origin
+        || actual['scope'] !== expected.scope
+        || actual['sessionId'] !== expected.sessionId) return false;
+    if (expected.remoteKey !== undefined && actual['remoteKey'] !== expected.remoteKey) return false;
+    if (expected.target !== undefined && !sameTarget(expected.target, actual['target'])) return false;
+    return true;
 }

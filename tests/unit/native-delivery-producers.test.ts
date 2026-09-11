@@ -337,7 +337,8 @@ for (const channel of ['slack', 'discord', 'telegram']) {
         const pending = run(channel);
         await drain();
         operations.length = 0; optionsSeen.length = 0;
-        broadcast('orchestrate_done', { origin: channel, requestId: activeRequest, text: ' \n',
+        broadcast('orchestrate_done', { origin: channel, requestId: activeRequest,
+            scope: 'default', sessionId: 'default', text: ' \n',
             runtimeFinality: 'present', runtimeStatus: 'done', fromQueue: true, target: target(channel) });
         await pending; await drain();
         assert.equal(optionsSeen.length, 0);
@@ -362,6 +363,7 @@ for (const channel of ['slack', 'discord', 'telegram']) {
             const pending = run(channel); await drain();
             operations.length = 0; optionsSeen.length = 0;
             broadcast('orchestrate_done', { origin: channel, requestId: activeRequest,
+                scope: 'default', sessionId: 'default',
                 text: 'queued answer', fromQueue: true, target: target(channel), ...tags });
             await pending; await drain();
             return [...operations];
@@ -381,6 +383,7 @@ for (const channel of ['slack', 'discord', 'telegram']) {
         const pending = run(channel); await drain();
         operations.length = 0; optionsSeen.length = 0; eraseBody = true;
         broadcast('orchestrate_done', { origin: channel, requestId: activeRequest,
+            scope: 'default', sessionId: 'default',
             text: 'format removes this', fromQueue: true, target: target(channel),
             runtimeFinality: 'absent', runtimeStatus: 'error' });
         if (channel === 'telegram') await assert.rejects(pending, /empty_message/);

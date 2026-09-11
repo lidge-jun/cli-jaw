@@ -162,7 +162,7 @@ test('the direct path and the queued tracker deliver through the same helper', a
     await pending;
     operations.length = 0;
     broadcast('orchestrate_done', {
-        origin: 'slack', requestId: activeRequest, text: 'answer',
+        origin: 'slack', requestId: activeRequest, scope: 'default', sessionId: 'default', text: 'answer',
         fromQueue: true, target: target(),
     });
     await drain();

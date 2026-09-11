@@ -129,18 +129,23 @@ type FakeRun = {
     starting: boolean;
     steering: boolean;
     ownerGeneration: number;
-    meta: { origin: string; cli: string; chatSessionId?: string };
+    meta: { origin: string; cli: string; chatSessionId?: string; remoteKey?: string };
     steerTurnInBand?: (text: string) => Promise<'steered' | 'unavailable' | 'rejected'>;
 };
 
-function installFakeCodexAppRun(scope: string, outcome: 'steered' | 'unavailable' | 'rejected'): { calls: string[] } {
+function installFakeCodexAppRun(
+    scope: string,
+    outcome: 'steered' | 'unavailable' | 'rejected',
+    remoteKey?: string,
+): { calls: string[] } {
     const calls: string[] = [];
     const run: FakeRun = {
         process: null,
         starting: false,
         steering: false,
         ownerGeneration: 0,
-        meta: { origin: 'web', cli: 'codex-app', chatSessionId: 'cs-spawn' },
+        meta: { origin: remoteKey ? 'slack' : 'web', cli: 'codex-app', chatSessionId: 'cs-spawn',
+            ...(remoteKey ? { remoteKey } : {}) },
         steerTurnInBand: async (text: string) => { calls.push(text); return outcome; },
     };
     activeMainProcesses.set(scope, run as never);
@@ -160,7 +165,7 @@ test('CS-007: canSteerAgent is true while a codex-app steer hook is installed', 
 test('CS-008: steerAgent routes in-band for codex-app and inserts the user row once accepted', async () => {
     const { calls } = installFakeCodexAppRun('cs008', 'steered');
     try {
-        const outcome = await steerAgent('cs008', 'remember the context', 'test', { chatSessionId: 'cs-spawn' });
+        const outcome = await steerAgent('cs008', 'remember the context', 'web', { chatSessionId: 'cs-spawn' });
         assert.equal(outcome, 'steered');
         assert.deepEqual(calls, ['remember the context']);
         const rows = getRecentMessagesAll.all('cs-spawn', 5) as Array<{ role: string; content: string }>;
@@ -191,5 +196,19 @@ test('CS-010: raced steer (turn ended) falls back to queue', async () => {
         assert.equal(outcome, 'fallback-queue');
     } finally {
         activeMainProcesses.delete('cs010');
+    }
+});
+
+test('CS-011: another remote conversation cannot steer the active turn', async () => {
+    const { calls } = installFakeCodexAppRun('cs011', 'steered', 'jaw:slack:channel:C_A:thread:1.1');
+    try {
+        const outcome = await steerAgent('cs011', 'belongs to B', 'slack', {
+            chatSessionId: 'cs-spawn',
+            remoteKey: 'jaw:slack:channel:C_B:thread:2.2',
+        });
+        assert.equal(outcome, 'fallback-queue');
+        assert.deepEqual(calls, [], 'foreign input never reaches the active turn');
+    } finally {
+        activeMainProcesses.delete('cs011');
     }
 });

@@ -11,6 +11,8 @@ const queued: unknown[][] = [];
 const steered: unknown[][] = [];
 test.mock.module('../../src/agent/spawn.js', { namedExports: {
     isAgentBusy: () => true, messageQueue: [], purgeQueueOnStop: () => {},
+    getCurrentMainMeta: () => null,
+    hasActiveMainReplacement: () => false,
     canSteerAgent: () => assert.fail('gateway must delegate capability choice, not pre-queue'),
     killActiveAgent: () => assert.fail('gateway must delegate steer interruption to steerAgent'),
     enqueueMessage: (...args: unknown[]) => { queued.push(args); return 'fixture-queued'; },

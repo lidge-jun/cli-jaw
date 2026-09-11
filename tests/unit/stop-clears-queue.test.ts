@@ -174,7 +174,7 @@ test('Fix C3: non-stop kill reasons do not clear main live-run snapshots', async
 
 test('Fix B2: enqueueMessage returns the queue id and gateway threads it into SubmitResult.queuedId', () => {
     const enqueueIdx = queueSrc.indexOf('function enqueueMessage');
-    const enqueue = queueSrc.slice(enqueueIdx, enqueueIdx + 1800);
+    const enqueue = queueSrc.slice(enqueueIdx, enqueueIdx + 2600);
     assert.ok(/\): string \{/.test(enqueue), 'enqueueMessage must declare string return type');
     assert.ok(/return item\.id/.test(enqueue), 'enqueueMessage must return the queue item id');
 

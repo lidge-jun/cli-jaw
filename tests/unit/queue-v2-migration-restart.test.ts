@@ -180,15 +180,19 @@ test('v2 restart preserves A/B capture and ignores a later global session switch
     );
 });
 
-test('collect merges only not-yet-started items from the same scope', async () => {
+test('collect merges only not-yet-started items from the same scope and remote conversation', async () => {
     db.prepare("INSERT INTO chat_sessions (id, seq, label) VALUES ('queue-v2-collect-a', 811, 'A')").run();
     db.prepare("INSERT INTO chat_sessions (id, seq, label) VALUES ('queue-v2-collect-b', 812, 'B')").run();
     const blocked = new Set(['A', 'B']);
     const runs: Array<{ prompt: string; meta: Record<string, unknown> }> = [];
     const controller = makeController({ busy: scope => blocked.has(scope), runs });
 
-    controller.enqueueMessage('queue-v2-collect-a2', 'web', { scope: 'A', chatSessionId: 'queue-v2-collect-a', collect: true });
-    controller.enqueueMessage('queue-v2-collect-a3', 'web', { scope: 'A', chatSessionId: 'queue-v2-collect-a', collect: true });
+    controller.enqueueMessage('queue-v2-collect-a2', 'slack', { scope: 'A', chatSessionId: 'queue-v2-collect-a',
+        remoteKey: 'jaw:slack:channel:C_A:thread:1.1', collect: true });
+    controller.enqueueMessage('queue-v2-collect-a3', 'slack', { scope: 'A', chatSessionId: 'queue-v2-collect-a',
+        remoteKey: 'jaw:slack:channel:C_A:thread:1.1', collect: true });
+    controller.enqueueMessage('queue-v2-collect-a-foreign', 'slack', { scope: 'A', chatSessionId: 'queue-v2-collect-a',
+        remoteKey: 'jaw:slack:channel:C_FOREIGN:thread:2.2', collect: true });
     controller.enqueueMessage('queue-v2-collect-b1', 'web', { scope: 'B', chatSessionId: 'queue-v2-collect-b', collect: true });
     blocked.clear();
 
@@ -200,10 +204,12 @@ test('collect merges only not-yet-started items from the same scope', async () =
     assert.deepEqual(runs.map(run => ({ prompt: run.prompt, scope: run.meta.scope })), [
         { prompt: 'queue-v2-collect-a2\n\nqueue-v2-collect-a3', scope: 'A' },
         { prompt: 'queue-v2-collect-b1', scope: 'B' },
+        { prompt: 'queue-v2-collect-a-foreign', scope: 'A' },
     ]);
     const rows = db.prepare("SELECT content, session_id FROM messages WHERE content LIKE 'queue-v2-collect-%' ORDER BY session_id").all();
     assert.deepEqual(rows, [
         { content: 'queue-v2-collect-a2\n\nqueue-v2-collect-a3', session_id: 'queue-v2-collect-a' },
+        { content: 'queue-v2-collect-a-foreign', session_id: 'queue-v2-collect-a' },
         { content: 'queue-v2-collect-b1', session_id: 'queue-v2-collect-b' },
     ]);
 });

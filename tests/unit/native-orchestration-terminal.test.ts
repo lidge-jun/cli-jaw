@@ -209,13 +209,16 @@ for (const finalText of ['', ' \n\t']) {
     test(`native ${JSON.stringify(finalText)} gets existing direct noResponse but queued completion remains empty`, async () => {
         const result = await orchestrateAndCollectData('native task', {
             ...options({ text: finalText, code: 0, runtimeOutcome: { status: 'done', finalText, partialText: 'not final' } }),
-            _fromQueue: true, replyViaTarget: true, target: { channel: 'slack', targetId: 'C-test' },
+            _fromQueue: true, replyViaTarget: true,
+            target: { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C-test' },
         }, 'en');
         assert.equal(result.text, t('tg.noResponse', {}, 'en'));
         assert.equal(result.data['text'], '');
         assert.equal(result.data['fromQueue'], true);
         assert.equal(result.data['replyViaTarget'], true);
-        assert.deepEqual(result.data['target'], { channel: 'slack', targetId: 'C-test' });
+        assert.deepEqual(result.data['target'], {
+            channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C-test',
+        });
         assert.equal(result.data['runtimeFinality'], 'present');
         assert.equal(result.data['runtimeStatus'], 'done');
     });

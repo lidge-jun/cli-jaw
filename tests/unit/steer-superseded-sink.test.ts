@@ -59,7 +59,7 @@ test('SS-001: a turn retired by a real kill-steer event hands the sink nothing',
         prompt: 'replacement question', source: 'slack', scopeKey: 'default',
         chatSessionId: 'default', meta: { requestId: 'req-steer' }, mode: 'kill-steer',
     }));
-    broadcast('orchestrate_done', { ...lastMeta, text: '' });
+    broadcast('orchestrate_done', { ...lastMeta, sessionId: lastMeta['chatSessionId'], text: '' });
 
     const result = await pending;
     sink.send(result.text);
@@ -76,7 +76,7 @@ test('SS-002: the same sink DOES receive a genuinely empty turn', async () => {
     const pending = orchestrateAndCollectData('original question', {
         origin: 'slack', requestId: 'req-plain', scope: 'default', chatSessionId: 'default',
     });
-    broadcast('orchestrate_done', { ...lastMeta, text: '' });
+    broadcast('orchestrate_done', { ...lastMeta, sessionId: lastMeta['chatSessionId'], text: '' });
 
     const result = await pending;
     sink.send(result.text);

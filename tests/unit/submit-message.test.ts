@@ -214,3 +214,16 @@ test('SM-019: collect and interrupt remain queued without disposition', () => {
     assert.ok(queueReturn);
     assert.doesNotMatch(queueReturn, /disposition/);
 });
+
+test('SM-020: a steer policy queues input from another remote conversation', () => {
+    const policy = gatewaySrc.slice(
+        gatewaySrc.indexOf('function applyMidRunPolicy'),
+        gatewaySrc.indexOf('// ── 5s dedup window'),
+    );
+    const steer = policy.slice(policy.indexOf("if (policy === 'steer')"));
+    const guard = steer.indexOf('sameRunConversation(');
+    const dispatch = steer.indexOf('steerAgent(');
+    assert.ok(guard >= 0 && dispatch > guard,
+        'cross-conversation guard must run before any steer input is dispatched');
+    assert.match(steer.slice(guard, dispatch), /return queue\(\)/);
+});

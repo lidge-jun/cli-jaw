@@ -160,7 +160,12 @@ export async function handleSlackSlashCommand(payload: Record<string, unknown>):
             const granted = workspace && workspace.teamId === payload['team_id'] && actorId
                 ? reserveSlackToolGrant({ teamId: workspace.teamId, actorId, destination: target, credentialKey: slackCredentialKey(token) },
                     { requestId, scope, chatSessionId }) : false;
-            admitRequest(requestId, scope);
+            admitRequest(requestId, scope, Date.now(), {
+                origin: 'slack',
+                sessionId: chatSessionId,
+                ...(remoteKey ? { remoteKey } : {}),
+                target,
+            });
             let reply: string;
             try { reply = String(await withSessionScope(sessionScope, () => orchestrateAndCollect(steerPrompt, {
                 requestId, ...(granted ? { _strictRequestOwnership: true } : {}),

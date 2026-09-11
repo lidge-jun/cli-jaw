@@ -9,6 +9,7 @@ import {
     settleOnce,
     sweepStaleRequests,
 } from '../../src/orchestrator/request-registry.ts';
+import { addBroadcastListener, removeBroadcastListener } from '../../src/core/bus.ts';
 
 // #276 prerequisite. POST /api/message always returned a requestId, but that id
 // could not tell a caller when the request was DONE: an accepted mid-run steer
@@ -19,6 +20,43 @@ import {
 // by asserting nothing is left pending.
 
 test.beforeEach(() => { resetRequestRegistryForTest(); });
+
+test('a settlement carries the immutable run pin captured at admission', () => {
+    const target = {
+        channel: 'slack' as const,
+        targetKind: 'channel' as const,
+        peerKind: 'channel' as const,
+        targetId: 'C_PIN',
+        threadId: '1.1',
+    };
+    const seen: Record<string, unknown>[] = [];
+    const listener = (type: string, data: Record<string, unknown>) => {
+        if (type === 'request_settled') seen.push(data);
+    };
+    addBroadcastListener(listener);
+    try {
+        admitRequest('pinned', 'scope-pin', 100, {
+            origin: 'slack',
+            sessionId: 'session-pin',
+            remoteKey: 'jaw:slack:channel:C_PIN:thread:1.1',
+            target,
+        });
+        // Mutation after admission cannot rewrite the settlement address.
+        target.targetId = 'C_MUTATED';
+        settleOnce('pinned', 'completed');
+    } finally {
+        removeBroadcastListener(listener);
+    }
+    assert.deepEqual(seen, [{
+        requestId: 'pinned',
+        origin: 'slack',
+        scope: 'scope-pin',
+        sessionId: 'session-pin',
+        remoteKey: 'jaw:slack:channel:C_PIN:thread:1.1',
+        target: { ...target, targetId: 'C_PIN' },
+        outcome: 'completed',
+    }]);
+});
 
 test('settleOnce is idempotent — a request cannot settle twice', () => {
     admitRequest('r1', 'default');

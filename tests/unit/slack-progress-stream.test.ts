@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { loadLocales } from '../../src/core/i18n.ts';
 import { startSlackProgress } from '../../src/slack/progress.ts';
 import type { RemoteTarget } from '../../src/messaging/types.ts';
+import { __resetMessagingMetricsForTests, snapshotMetrics } from '../../src/messaging/metrics.ts';
 loadLocales(fileURLToPath(new URL('../../public/locales', import.meta.url)));
 
 async function settle() { for (let i = 0; i < 20; i++) await Promise.resolve(); }
@@ -292,6 +293,7 @@ test('a stream closed after five minutes continues editing its own status throug
 });
 
 test('SPS-744: an expired stream whose message is gone stops instead of retrying forever', async () => {
+    __resetMessagingMetricsForTests();
     // The live incident: the stream expired, the card fell back to chat.update,
     // and the message was no longer there. Nothing promoted that to "stop", so
     // the idle loop re-dirtied the snapshot every 3.2s and sent the same doomed
@@ -318,6 +320,12 @@ test('SPS-744: an expired stream whose message is gone stops instead of retrying
     await p.finish('complete', { bodyDelivered: true });
     assert.equal(h.calls.length, before, 'finalizing spends no request on a message known to be gone');
     assert.equal(p.terminalConfirmed(), true);
+    assert.deepEqual(snapshotMetrics().counters.filter(row =>
+        row.name === 'slack.progress.stream_state_lost'), [{
+        name: 'slack.progress.stream_state_lost',
+        labels: { channel: 'slack', result: 'message_not_found' },
+        value: 1,
+    }], 'one lost card produces one metric, not one per idle tick');
 });
 
 test('SPS-744: three consecutive failed edits stop the live loop', async () => {

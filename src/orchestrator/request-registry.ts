@@ -28,6 +28,7 @@ import { revokeSlackToolGrant } from '../slack/tool-context.js';
  */
 import { broadcast } from '../core/bus.js';
 import type { RuntimeTurnOutcome } from '../shared/runtime-contract.js';
+import { runPinFields, type RunPin } from '../messaging/run-pin.js';
 
 export type SettleOutcome =
     /** Ran to completion; `text` carries the answer. */
@@ -45,7 +46,7 @@ export type SettleOutcome =
     /** Accepted but deliberately not orchestrated. */
     | 'skipped';
 
-export interface SettleDetail {
+export interface SettleDetail extends Omit<RunPin, 'requestId'> {
     text?: string;
     error?: string;
     mergedInto?: string;
@@ -60,14 +61,31 @@ interface PendingRequest {
     requestId: string;
     scope: string;
     admittedAt: number;
+    origin?: string;
+    sessionId?: string;
+    remoteKey?: string;
+    target?: RunPin['target'];
 }
 
 const pending = new Map<string, PendingRequest>();
 
 /** Called where the requestId is minted, before any work is dispatched. */
-export function admitRequest(requestId: string, scope = 'default', now = Date.now()): void {
+export function admitRequest(
+    requestId: string,
+    scope = 'default',
+    now = Date.now(),
+    pin: Omit<RunPin, 'requestId' | 'scope'> = {},
+): void {
     if (!requestId) return;
-    pending.set(requestId, { requestId, scope, admittedAt: now });
+    pending.set(requestId, {
+        requestId,
+        scope,
+        admittedAt: now,
+        ...(pin.origin ? { origin: pin.origin } : {}),
+        ...(pin.sessionId ? { sessionId: pin.sessionId } : {}),
+        ...(pin.remoteKey ? { remoteKey: pin.remoteKey } : {}),
+        ...(pin.target ? { target: { ...pin.target } } : {}),
+    });
 }
 
 /**
@@ -93,14 +111,19 @@ export function settleOnce(
     // applies exactly as it does to orchestrate_done — this is not a wider
     // audience for the same content.
     broadcast('request_settled', {
-        requestId,
+        ...runPinFields({
+            requestId,
+            origin: detail.origin ?? entry.origin,
+            scope: detail.scope ?? entry.scope,
+            sessionId: detail.sessionId ?? entry.sessionId,
+            remoteKey: detail.remoteKey ?? entry.remoteKey,
+            target: detail.target ?? entry.target,
+        }),
         outcome,
-        scope: detail.scope ?? entry.scope,
         ...(detail.text !== undefined ? { text: detail.text } : {}),
         ...(detail.error !== undefined ? { error: detail.error } : {}),
         ...(detail.mergedInto !== undefined ? { mergedInto: detail.mergedInto } : {}),
         ...(detail.reason !== undefined ? { reason: detail.reason } : {}),
-        ...(detail.sessionId !== undefined ? { sessionId: detail.sessionId } : {}),
         ...(detail.runtimeFinality !== undefined ? { runtimeFinality: detail.runtimeFinality } : {}),
         ...(detail.runtimeStatus !== undefined ? { runtimeStatus: detail.runtimeStatus } : {}),
     });
