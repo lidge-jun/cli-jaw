@@ -950,6 +950,7 @@
   "slack.progress.complete": "Work observation ended",
   "slack.progress.workflowComplete": "Workflow response ended; production outcome is not verified.",
   "slack.progress.unavailable": "Activity updates unavailable. Execution may continue.",
+  "slack.progress.lastRuntime": "Last runtime signal: {seconds}s ago",
   "slack.progress.error": "Request failed",
   "slack.progress.cancelled": "Request cancelled",
   "slack.progress.expired": "Progress tracking ended. Execution may continue.",

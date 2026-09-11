@@ -48,6 +48,7 @@ export function createSlackProgressLifecycle(input: SlackProgressLifecycleOption
     let nativePending: NativePending[] = [];
     const pendingGaps = new Map<string, number>();
     let activityUnavailable = false;
+    let lastRuntimeAt: number | undefined;
     let boundRun: string | null = null;
     let lastNativeSeq = 0;
     let knownOutcome: 'error' | 'cancelled' | undefined;
@@ -102,6 +103,10 @@ export function createSlackProgressLifecycle(input: SlackProgressLifecycleOption
             || identity.scope !== config.scope || identity.sessionId !== config.sessionId
             || !identityField(identity.runId) || (boundRun && boundRun !== identity.runId)) return;
         notify(() => config.onActivity?.());
+        if (acceptingTools) {
+            lastRuntimeAt = Date.now();
+            current?.runtimeLiveness(lastRuntimeAt);
+        }
         if (!acceptingTools || boundRun) return;
         boundRun = identity.runId;
         const gapAt = pendingGaps.get(boundRun);
@@ -208,6 +213,7 @@ export function createSlackProgressLifecycle(input: SlackProgressLifecycleOption
             }).then(active => {
                 current = active;
                 if (activityUnavailable) active.phase('unavailable');
+                if (lastRuntimeAt !== undefined) active.runtimeLiveness(lastRuntimeAt);
                 for (const entry of pending) active.projectedTool(entry);
                 pending = [];
                 if (pendingPhase) active.phase(pendingPhase);

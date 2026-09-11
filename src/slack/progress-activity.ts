@@ -106,6 +106,7 @@ const ended = (value: SlackActivityTool['status']): boolean =>
 
 export function createSlackActivity(now: () => number, locale: string, initialPhase: 'queued' | 'running' = 'running', workflowResponse = false): {
     tool(entry: SlackActivityTool): boolean;
+    runtimeLiveness(at: number): boolean;
     phase(value: SlackProgressPhase): boolean;
     finish(outcome: SlackProgressOutcome, reason?: 'merged' | 'removed', bodyDelivered?: boolean): void;
     snapshot(): SlackActivitySnapshot;
@@ -120,6 +121,7 @@ export function createSlackActivity(now: () => number, locale: string, initialPh
     };
     const createdAt = time();
     let lastActivityAt = createdAt;
+    let lastRuntimeAt: number | undefined;
     let currentPhase: SlackProgressPhase = initialPhase === 'queued' ? 'queued' : 'running';
     let terminal: SlackProgressOutcome | undefined;
     let terminalReason: 'merged' | 'removed' | undefined;
@@ -132,6 +134,12 @@ export function createSlackActivity(now: () => number, locale: string, initialPh
     let observationAt = createdAt;
 
     return {
+        runtimeLiveness(at) {
+            if (terminal || !Number.isFinite(at) || at < 0 || at > time()
+                || (lastRuntimeAt !== undefined && at <= lastRuntimeAt)) return false;
+            lastRuntimeAt = at;
+            return true;
+        },
         tool(entry) {
             if (terminal || currentPhase === 'delivering' || !entry
                 || !categories.has(entry.category) || !statuses.has(entry.status)) return false;
@@ -200,6 +208,7 @@ export function createSlackActivity(now: () => number, locale: string, initialPh
             const elapsed = copy('elapsed', { seconds: seconds(createdAt) });
             const age = copy('lastActivity', { seconds: seconds(lastActivityAt) });
             const lines = [description, elapsed, age];
+            if (lastRuntimeAt !== undefined) lines.push(copy('lastRuntime', { seconds: seconds(lastRuntimeAt) }));
             if (activityUnavailable && (terminal || phase !== 'unavailable')) lines.push(copy('unavailable'));
             // Elapsed alone reads the same at 30s and 500s: a number the eye
             // skips. Past the threshold the card says so in words.

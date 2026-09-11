@@ -272,6 +272,61 @@ test('server-ended stream disables future appends without fabricating runtime ca
     await p.finish('complete', { bodyDelivered: true });
 });
 
+test('a stream closed after five minutes continues editing its own status through a long job', async () => {
+    const h = harness(c => c.method === 'chat.appendStream' && c.at - h.calls[0]!.at >= 300000
+        ? { payload: { ok: false, error: 'message_not_in_streaming_state' } } : ok());
+    const p = await startSlackProgress(h.token, target, '', h.options);
+    await p.ready();
+    for (let minute = 0; minute < 19; minute++) await h.clock.advance(60000);
+    const updates = h.calls.filter(c => c.method === 'chat.update');
+    assert.ok(updates.length > 0);
+    assert.match(String(updates.at(-1)!.body['text']), /Elapsed: 11\d\ds/);
+    assert.ok(updates.every(c => c.body['ts'] === '111.222'));
+    assert.equal(h.calls.filter(c => c.method === 'chat.startStream').length, 1);
+    assert.equal(h.calls.filter(c => c.method === 'chat.postMessage').length, 0);
+    assert.equal(h.calls.filter(c => c.method === 'chat.stopStream').length, 0, 'live job was not finalized');
+    await p.finish('complete', { bodyDelivered: true });
+    assert.equal(p.terminalConfirmed(), true);
+    assert.match(String(h.calls.at(-1)!.body['text']), /Answer delivered/);
+    assert.equal(h.clock.timers.size, 0);
+});
+
+test('stream closure first discovered at finalization updates the same message once', async () => {
+    const h = harness(c => c.method === 'chat.stopStream'
+        ? { payload: { ok: false, error: 'message_not_in_streaming_state' } } : ok());
+    const p = await startSlackProgress(h.token, target, '', h.options);
+    await p.ready(); await p.finish('complete', { bodyDelivered: true });
+    assert.deepEqual(h.calls.map(c => c.method), ['chat.startStream', 'chat.stopStream', 'chat.update']);
+    assert.equal(h.calls[2]!.body['ts'], '111.222');
+    assert.equal(p.terminalConfirmed(), true);
+});
+
+test('cancellation during an expiring append cannot resurrect a fallback card', async () => {
+    const gate = deferred<Reply>();
+    const h = harness(c => c.method === 'chat.appendStream' ? gate.promise : ok());
+    const controller = new AbortController();
+    const p = await startSlackProgress(h.token, target, '', { ...h.options, signal: controller.signal });
+    await p.ready(); await h.clock.advance(1000);
+    assert.equal(h.calls.filter(c => c.method === 'chat.appendStream').length, 1);
+    controller.abort();
+    gate.resolve({ payload: { ok: false, error: 'message_not_in_streaming_state' } });
+    await p.finish('cancelled'); await h.clock.advance(60000);
+    assert.equal(h.calls.filter(c => c.method === 'chat.update').length, 0);
+    assert.equal(h.calls.filter(c => c.method === 'chat.startStream').length, 1);
+    assert.equal(h.calls.filter(c => c.method === 'chat.postMessage').length, 0);
+    assert.equal(h.clock.timers.size, 0);
+});
+
+test('an unsuccessful closed-stream final edit remains unconfirmed without reposting', async () => {
+    const h = harness(c => c.method === 'chat.stopStream'
+        ? { payload: { ok: false, error: 'message_not_in_streaming_state' } }
+        : c.method === 'chat.update' ? { payload: { ok: false, error: 'cant_update_message' } } : ok());
+    const p = await startSlackProgress(h.token, target, '', h.options);
+    await p.ready(); await p.finish('complete', { bodyDelivered: true });
+    assert.equal(p.terminalConfirmed(), false);
+    assert.deepEqual(h.calls.map(c => c.method), ['chat.startStream', 'chat.stopStream', 'chat.update']);
+});
+
 test('the finish deadline aborts an unresponsive terminal request and keeps its receipt unconfirmed', async () => {
     const gate = deferred<Reply>();
     const h = harness(c => c.method === 'chat.stopStream' ? gate.promise : ok());

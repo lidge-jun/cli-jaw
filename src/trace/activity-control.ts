@@ -1,12 +1,12 @@
 import { db } from '../core/db.js';
 
 export const ACTIVITY_CONTROL_TYPE = 'runtime.control.v1';
-export type ActivityLoss = 'event_limit' | 'run_limit' | 'global_limit' | 'storage_error' | 'retention';
+export type ActivityLoss = 'event_limit' | 'run_limit' | 'global_limit' | 'storage_error' | 'retention' | 'projection_degraded';
 export type ActivityControl = {
     version: 1; count: number; bytes: number; lastSeq: number; closed: boolean; loss: ActivityLoss | null;
 };
 const CONTROL_BYTES = 2048;
-const losses = new Set<ActivityLoss>(['event_limit', 'run_limit', 'global_limit', 'storage_error', 'retention']);
+const losses = new Set<ActivityLoss>(['event_limit', 'run_limit', 'global_limit', 'storage_error', 'retention', 'projection_degraded']);
 const read = db.prepare(`SELECT seq,
     CASE WHEN length(CAST(raw_json AS BLOB)) <= ${CONTROL_BYTES} THEN raw_json ELSE NULL END AS raw_json
     FROM trace_events WHERE run_id = ? AND source = 'system' AND event_type = 'runtime.control.v1'`);
@@ -40,7 +40,9 @@ export function markActivityLoss(runId: string, loss: ActivityLoss): void {
     try {
         db.transaction(() => {
             const current = readActivityControl(runId);
-            if (current && !current.state.loss) writeActivityControl(runId, current.seq, { ...current.state, loss });
+            if (current && (!current.state.loss || (current.state.loss === 'projection_degraded' && loss !== 'projection_degraded'))) {
+                writeActivityControl(runId, current.seq, { ...current.state, loss });
+            }
         }).immediate();
     } catch { console.warn('[activity] loss_metadata_unavailable'); }
 }

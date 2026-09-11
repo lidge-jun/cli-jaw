@@ -77,6 +77,10 @@ observed filename without inventing a running state. Presentation events never s
 
 Persistence gaps use the same private run/session/scope binding before showing an activity-unavailable notice. Prebinding gap candidates are bounded and expire for binding after 30 seconds. A gap never counts as tool activity, renews the run deadline, changes the model outcome or leaks stored content. The notice remains visible through final delivery. Captured workflows use neutral response-ended wording: a response and its delivery receipt do not certify production success. General-chat outcome wording, ACKs and native final values remain unchanged; business status comes from the production system, never from parsing model prose.
 
+Projection truncation/capacity also emits that gap. Exact private runtime I/O signals show their own last-seen age, independently of last tool activity and stored preview rows. Display timers never manufacture liveness. A running observer has no five-minute lifetime; queued-start and pending-steer bounds remain separate from the running idle deadline.
+
+When Slack definitively returns `message_not_in_streaming_state`, status updates switch to `chat.update` on the same owned channel/timestamp. No new stream/message is posted; fallback pacing, shared Retry-After and bounded request deadlines remain in force. A terminal-only discovery makes one same-message edit within the existing finish deadline. `stopped_by_user` remains distinct, and cancellation prevents late fallback resurrection. This follows Slack's [documented timestamp fallback](https://docs.slack.dev/tools/python-slack-sdk/reference/web/chat_stream.html). API success confirms an accepted status edit, not visual readback or production-task success; final answer delivery keeps its separate owner.
+
 `progress.ts` streams a native plan containing a summary, at most six recent
 observation slots and an optional delivery card. Only replaceable task titles
 and statuses are updated: Slack task details append, so they are not a snapshot

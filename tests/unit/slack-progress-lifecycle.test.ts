@@ -182,6 +182,34 @@ test('direct synchronous tool is observed and final progress follows the real bo
     assert.equal(getQueueNoticeStore()!.listRestorable('slack').length, 0);
 });
 
+test('an expired Slack stream keeps a long direct job observable and its final body is delivered once', async context => {
+    const output = deferred<Collected>({ text: 'final answer', data: {} });
+    collect = () => output.promise;
+    const began = Date.now();
+    override = call => {
+        if (call.method === 'chat.appendStream' && Date.now() - began >= 300000) {
+            const message = saved.get(String(call.body['ts']));
+            if (message) message.streaming_state = 'completed';
+            return response({ ok: false, error: 'message_not_in_streaming_state' });
+        }
+        return undefined;
+    };
+    const admission = await run(context);
+    for (let minute = 0; minute < 19; minute++) {
+        notifyRuntimeLiveness({ runId: 'example-long-run', sessionId: String(admission['chatSessionId']),
+            scope: String(admission['scope']), origin: 'slack', requestId: String(admission['requestId']) });
+        await tick(context, 60000); await tick(context, 3200);
+    }
+    assert.equal(bodyCalls().length, 0);
+    assert.equal(reaction('x').length, 0); assert.equal(reaction('white_check_mark').length, 0);
+    assert.ok(calls.some(call => call.method === 'chat.update'));
+    assert.equal(calls.filter(call => call.method === 'chat.startStream').length, 1);
+    output.resolve({ text: 'final answer', data: {} });
+    await until(context, () => bodyCalls().length === 1 && reaction('white_check_mark').length === 1);
+    await tick(context, 10000);
+    assert.equal(bodyCalls().length, 1); assert.equal(reaction('x').length, 0);
+});
+
 test('a deferred progress start cannot prevent body delivery; late receipt is closed once', async context => {
     const start = deferred(response({ ok: false, error: 'internal_error' }));
     override = call => call.method === 'chat.startStream' ? start.promise : undefined;

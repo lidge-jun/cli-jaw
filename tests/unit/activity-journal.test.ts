@@ -19,6 +19,7 @@ import { addBroadcastListener, removeBroadcastListener, broadcast } from '../../
 import { createChatSession, deleteChatSession, forkChatSession } from '../../src/core/chat-sessions.js';
 import { withSessionScope } from '../../src/core/session-context.js';
 import type { ToolEntry } from '../../src/types/agent.js';
+import { RuntimeProjection } from '../../src/agent/runtime/projection.js';
 
 const traceSettings = structuredClone(settings.trace);
 beforeEach(() => { db.prepare('DELETE FROM trace_runs').run(); settings.trace = structuredClone(traceSettings); });
@@ -39,6 +40,32 @@ const text = (context: RuntimeEventContext, value = 'hello') => recordRuntimeEve
 const page = (c: RuntimeEventContext, after = 0, through?: number, limit = 40) =>
     readActivityPage({ runId: c.runId, sessionId: c.sessionId, after, ...(through === undefined ? {} : { through }), limit });
 const count = (runId: string) => (db.prepare("SELECT COUNT(*) AS n FROM trace_events WHERE run_id=? AND source='runtime'").get(runId) as { n: number }).n;
+
+test('preview loss is retained as incomplete while later events and the actual terminal remain recordable', t => {
+    t.mock.method(console, 'warn', () => {});
+    const c = run(); const projection = new RuntimeProjection(c);
+    projection.start('fixture');
+    projection.text('message', 'large', 'x'.repeat(4000), 'replace');
+    assert.equal(readActivityControl(c.runId)?.state.loss, 'projection_degraded');
+    assert.equal(page(c)?.incomplete, true);
+    projection.tool('later', { name: 'Read', status: 'done' });
+    assert.equal(page(c)?.events.at(-1)?.kind, 'tool');
+    projection.close({ kind: 'turn-end', status: 'done', finalText: 'Actual final.' });
+    finalizeTraceRun(c.runId, 'done');
+    assert.equal(page(c)?.events.at(-1)?.kind, 'turn-end');
+    assert.equal(page(c)?.loss, 'projection_degraded');
+    assert.equal(getTraceRun(c.runId)?.status, 'done');
+});
+
+test('real journal loss supersedes preview loss and cannot resume recording', () => {
+    const c = started();
+    const projection = new RuntimeProjection(c);
+    projection.report('truncated');
+    assert.equal(page(c)?.loss, 'projection_degraded');
+    assert.equal(text(c, 'x'.repeat(33000)), null);
+    assert.equal(page(c)?.loss, 'event_limit');
+    assert.equal(text(c, 'cannot resume'), null);
+});
 
 test('committed noncontiguous sequence, immutable events and latest tool snapshots coexist', () => {
     const c = started();

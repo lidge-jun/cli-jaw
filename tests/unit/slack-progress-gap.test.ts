@@ -12,7 +12,7 @@ mock.module('../../src/slack/progress.ts', { namedExports: {
         starts.push(options);
         if (startGate) await startGate;
         return {
-        projectedTool() {}, phase(value: string) { phases.push(value); },
+        projectedTool() {}, runtimeLiveness() {}, phase(value: string) { phases.push(value); },
         async finish() {}, async ready() { return { mode: 'none', ts: null }; },
         abort() {}, terminalConfirmed() { return false; },
         };

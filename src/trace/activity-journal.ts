@@ -79,7 +79,9 @@ const append = db.transaction((input: AppendInput): TracePointer | null => {
         current = { seq: pointer.traceSeq, state };
     }
     const c = current.state;
-    if (c.closed || c.loss) return null;
+    // Limited previews remain incomplete but can still carry later observations
+    // and a real terminal. Integrity/storage loss still seals all later appends.
+    if (c.closed || (c.loss && c.loss !== 'projection_degraded')) return null;
     const bytes = Buffer.byteLength(stringifyTraceValue(input.raw));
     const configuredRows = settings['trace']?.maxRows ?? 50_000;
     const loss: ActivityLoss | null = bytes > RUNTIME_BODY_BYTES ? 'event_limit'

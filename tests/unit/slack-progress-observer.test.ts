@@ -6,16 +6,22 @@ import { broadcast } from '../../src/core/bus.ts';
 import { publish } from '../../src/core/event-bus.ts';
 import { notifyRuntimeLiveness } from '../../src/agent/runtime/liveness.ts';
 import { createSlackProgressLifecycle } from '../../src/slack/progress-lifecycle.ts';
+import { RuntimeProjection } from '../../src/agent/runtime/projection.ts';
 loadLocales(fileURLToPath(new URL('../../public/locales/', import.meta.url)));
 async function settle() { for (let i = 0; i < 30; i++) await Promise.resolve(); }
 type Call = { method: string; body: Record<string, unknown> };
 let serial = 0;
-function fixture(context: TestContext, options: { workingDir?: string } = {}) {
+function fixture(context: TestContext, options: { workingDir?: string; closeStreamAfterMs?: number } = {}) {
     context.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: Date.now() });
     const calls: Call[] = [];
+    const began = Date.now();
     context.mock.method(globalThis, 'fetch', async (url: string | URL, init?: RequestInit) => {
         assert.ok(String(url).startsWith('https://slack.com/api/chat.'), 'unexpected network is rejected');
         calls.push({ method: String(url).split('/').at(-1)!, body: JSON.parse(String(init?.body)) });
+        if (String(url).endsWith('/chat.appendStream') && options.closeStreamAfterMs !== undefined
+            && Date.now() - began >= options.closeStreamAfterMs) {
+            return new Response(JSON.stringify({ ok: false, error: 'message_not_in_streaming_state' }));
+        }
         return new Response(JSON.stringify({ ok: true, ts: '100.2' }));
     });
     const identity = { requestId: `observer-${++serial}`, scope: 'scope', sessionId: 'session', origin: 'slack', runId: 'run-own' };
@@ -57,6 +63,52 @@ test('print activity requires the captured request and rejects conflicting scope
     assert.ok(f.titles().some(title => title.includes('Read')));
     assert.ok(f.titles().every(title => !title.includes('File editing')));
     assert.doesNotMatch(JSON.stringify(f.calls), /PRIVATE_CANARY|private\/source/);
+});
+
+test('bounded projection plus an expired five-minute stream retains live status through minute nineteen', async context => {
+    const f = fixture(context, { closeStreamAfterMs: 300000 });
+    await f.tick();
+    notifyRuntimeLiveness(f.identity);
+    let records = 0;
+    const projection = new RuntimeProjection({ runId: f.identity.runId, sessionId: f.identity.sessionId,
+        scope: f.identity.scope, turnId: 'example-turn', audience: 'public' }, (owner, body) => {
+        const event = { ...owner, version: 1 as const, seq: ++records, ...body };
+        publish('agent', 'agent_runtime', event);
+        return event;
+    }, () => {});
+    projection.start('fixture');
+    for (let i = 0; i < 250; i++) projection.text('message', `item-${i}`, 'x'.repeat(4000), 'replace');
+    const cappedRecords = records;
+    projection.tool('after-cap', { name: 'Write', status: 'running', input: 'PRIVATE_INPUT_CANARY' });
+    assert.equal(records, cappedRecords, 'preview capacity can stop detail without stopping execution');
+    assert.equal(projection.diagnostics().recordingFailed, false);
+    for (let minute = 0; minute < 19; minute++) {
+        await f.tick(60000);
+        notifyRuntimeLiveness(f.identity);
+        await f.tick(3200);
+    }
+    assert.equal(f.registered.size, 1, 'no five-minute observer expiration');
+    assert.equal(f.outcomes.length, 0, 'projection/stream exhaustion is not execution failure');
+    assert.equal(f.calls.filter(call => call.method === 'chat.startStream').length, 1);
+    assert.equal(f.calls.filter(call => call.method === 'chat.postMessage').length, 0);
+    assert.equal(f.calls.filter(call => call.method === 'chat.stopStream').length, 0);
+    const updates = f.calls.filter(call => call.method === 'chat.update');
+    assert.ok(updates.length > 0);
+    const latest = String(updates.at(-1)!.body['text']);
+    assert.match(latest, /Activity updates unavailable/);
+    assert.match(latest, /Last runtime signal: [0-3]s ago/);
+    assert.match(latest, /Last activity: 1\d{3}s ago/);
+    assert.doesNotMatch(JSON.stringify(f.calls), /PRIVATE_INPUT_CANARY|example-turn|item-249/);
+    const activities = f.activity();
+    notifyRuntimeLiveness({ ...f.identity, requestId: 'foreign-request' });
+    assert.equal(f.activity(), activities);
+    projection.close({ kind: 'turn-end', status: 'done', finalText: 'Final answer remains separate.' });
+    await f.life.finish('complete', { bodyDelivered: true });
+    assert.equal(f.closed(), 1);
+    assert.match(String(f.calls.at(-1)!.body['text']), /Answer delivered/);
+    const finalCount = f.calls.length;
+    notifyRuntimeLiveness(f.identity); await f.tick(60000);
+    assert.equal(f.calls.length, finalCount);
 });
 
 test('native tool buffering grants no ownership before exact private liveness binding', async context => {

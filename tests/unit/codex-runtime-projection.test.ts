@@ -93,6 +93,28 @@ test('same provider item across scopes stays isolated and preview caps hold', ()
     assert.ok(tools(a.events).every(e => (e.output?.length ?? 0) <= 3000));
 });
 
+test('preview truncation and capacity publish one compatible gap without ending the live turn', () => {
+    const gaps: Record<string, unknown>[] = [];
+    const events: RuntimeEvent[] = [];
+    const context = { runId: 'bounded-live', sessionId: 'example-session', scope: 'example-scope', turnId: 'example-turn', audience: 'public' as const };
+    const stop = subscribe(e => { if (e.event === 'agent_runtime_gap' && e.data['runId'] === context.runId) gaps.push(e.data); });
+    try {
+        const p = new RuntimeProjection(context, (owner, body) => {
+            const event = { ...owner, version: 1 as const, seq: events.length + 1, ...body }; events.push(event); return event;
+        }, () => {});
+        p.start('fixture');
+        for (let i = 0; i < 250; i++) p.text('message', `message-${i}`, 'x'.repeat(4000), 'replace');
+        assert.equal(p.diagnostics().truncated, true);
+        assert.equal(p.diagnostics().recordingFailed, false);
+        assert.ok(p.diagnostics().previewChars <= 24000 && p.diagnostics().items <= 160);
+        assert.deepEqual(gaps, [{ runId: context.runId, sessionId: context.sessionId, scope: context.scope, reason: 'projection_degraded' }]);
+        assert.equal(events.some(e => e.kind === 'turn-end'), false);
+        p.close({ kind: 'turn-end', status: 'done', finalText: 'Final delivery remains authoritative.' });
+        assert.equal(events.at(-1)?.kind, 'turn-end');
+        assert.equal(gaps.length, 1);
+    } finally { stop(); }
+});
+
 test('first persistence failure latches off every later canonical write, including final', () => {
     let attempts = 0;
     const p = new RuntimeProjection({ runId: 'r', sessionId: 's', scope: 'q', turnId: 't', audience: 'internal' },

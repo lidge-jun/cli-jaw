@@ -4,6 +4,7 @@ import { redactRuntimeContent } from '../../trace/runtime-body-codec.js';
 import { FULLTEXT_MAX_CHARS } from '../events/fulltext-bound.js';
 import type { RuntimeEvent, RuntimeEventBody, RuntimePhase } from '../../shared/runtime-contract.js';
 import { recordRuntimeEvent, type RuntimeEventContext } from './events.js';
+import { markActivityFailure } from '../../trace/activity-journal.js';
 
 export type RuntimeEnd = Extract<RuntimeEventBody, { kind: 'turn-end' }>;
 type Tool = Extract<RuntimeEventBody, { kind: 'tool' }>;
@@ -35,6 +36,7 @@ export class RuntimeProjection {
     private ended = false;
     private closingTranscript = false;
     private recordingFailed = false;
+    private gapReported = false;
     private nextItem = 0;
     private total = 0;
     private lastSeq: number | null = null;
@@ -49,18 +51,25 @@ export class RuntimeProjection {
     ) {}
 
     report(reason: Notice): void {
+        if (!this.notices.has(reason) && (reason === 'capacity' || reason === 'truncated')) {
+            markActivityFailure(this.context, 'projection_degraded');
+        }
         if (reason === 'persistence') {
             if (this.recordingFailed) return;
             // Latch before publication: even a reentrant subscriber cannot write.
             this.recordingFailed = true;
             this.sources.clear();
             this.sourceChars = 0;
-            if (this.context.audience === 'public') {
-                try { publish('agent', 'agent_runtime_gap', {
-                    runId: this.context.runId, sessionId: this.context.sessionId,
-                    scope: this.context.scope, reason: 'projection_degraded',
-                }); } catch { console.warn('[runtime:projection] gap delivery failed'); }
-            }
+        }
+        // Preview limits are not runtime failures. Report incomplete observation
+        // without stopping liveness, terminal recording or provider execution.
+        if (!this.gapReported && ['persistence', 'capacity', 'truncated'].includes(reason)
+            && this.context.audience === 'public') {
+            this.gapReported = true;
+            try { publish('agent', 'agent_runtime_gap', {
+                runId: this.context.runId, sessionId: this.context.sessionId,
+                scope: this.context.scope, reason: 'projection_degraded',
+            }); } catch { console.warn('[runtime:projection] gap delivery failed'); }
         }
         if (this.notices.has(reason)) return;
         this.notices.add(reason);

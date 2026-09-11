@@ -34,6 +34,7 @@ export type SlackProgressHandle = {
     update(text: string): void;
     tool(data: Record<string, unknown>): void;
     projectedTool(entry: SlackActivityTool): void;
+    runtimeLiveness(at: number): void;
     phase(value: SlackProgressPhase): void;
     finish(outcome?: SlackProgressOutcome, options?: { reason?: 'merged' | 'removed'; bodyDelivered?: boolean }): Promise<void>;
     ready(): Promise<Ready>;
@@ -126,6 +127,16 @@ export async function startSlackProgress(
     let idleTimer: ReturnType<typeof setTimeout> | null = null;
     let inFlight: Promise<void> | null = null;
     let terminal: Promise<void> | null = null;
+
+    function useMessageUpdates(): void {
+        if (state.mode !== 'native') return;
+        // Slack may expire a stream while the job continues. Keep its known
+        // message identity; edit that message, never post a replacement.
+        state = { mode: 'fallback', ts: state.ts };
+        lastSignature = '';
+        lastSnapshot = null;
+        dirty = true;
+    }
 
     const clearScheduled = () => {
         if (timer) clearTimer(timer);
@@ -226,7 +237,8 @@ export async function startSlackProgress(
         if (!response.attempted) { dirty = true; return; }
         if (response.result.ok) { lastSignature = signature; lastSnapshot = snapshot; }
         if (response.result.status === 429 || response.result.error === 'ratelimited' || response.result.error === 'rate_limited') dirty = true;
-        if (response.result.error === 'stopped_by_user' || response.result.error === 'message_not_in_streaming_state') {
+        if (method === 'chat.appendStream' && response.result.error === 'message_not_in_streaming_state') useMessageUpdates();
+        if (response.result.error === 'stopped_by_user') {
             remoteEnded = true;
             clearScheduled();
         }
@@ -291,8 +303,9 @@ export async function startSlackProgress(
         },
         tool(data) { const entry = projectSlackPrintTool(data, workingDir); if (entry) projectedTool(entry); },
         projectedTool,
+        runtimeLiveness(at) { if (!closed && model.runtimeLiveness(at)) { dirty = true; schedule(); } },
         phase(value) { if (!closed && model.phase(value)) { dirty = true; schedule(); } },
-        ready: () => ready,
+        ready: async () => { await ready; return state; },
         ts: () => state.ts,
         terminalConfirmed: () => confirmed,
         abort: abortProgress,
@@ -310,10 +323,16 @@ export async function startSlackProgress(
                     await inFlight;
                     if (!state.ts || controller.signal.aborted) return;
                     const snapshot = model.snapshot();
-                    const response = await call(state.mode === 'native' ? 'chat.stopStream' : 'chat.update', {
+                    let response = await call(state.mode === 'native' ? 'chat.stopStream' : 'chat.update', {
                         channel: address.targetId, ts: state.ts,
                         ...(state.mode === 'native' ? { chunks: chunks(snapshot) } : fallbackBody(snapshot)),
                     }, deadline);
+                    if (state.mode === 'native' && response.result.error === 'message_not_in_streaming_state') {
+                        useMessageUpdates();
+                        response = await call('chat.update', {
+                            channel: address.targetId, ts: state.ts, ...fallbackBody(snapshot),
+                        }, deadline);
+                    }
                     confirmed = response.result.ok || response.result.error === 'message_not_found';
                 } catch { log.warn('[slack:progress] terminal update failed'); }
                 finally {
