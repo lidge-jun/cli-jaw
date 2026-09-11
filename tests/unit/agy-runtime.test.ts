@@ -140,11 +140,16 @@ test('AGY-RT-007: AGY stdout strips ANSI before persistence and sanitized trace 
 test('AGY-RT-008: AGY print timeout is a hard cap while cli-jaw watchdog owns progress timeout', () => {
     const spawnSrc = readFileSync(join(__dirname, '../../src/agent/spawn.ts'), 'utf8');
     const timeoutBlock = spawnSrc.slice(
-        spawnSrc.indexOf("const rawTimeoutCfg = (settings as Record<string, unknown>)['agentTimeout'];"),
+        // Re-anchored in #682: settings.agentTimeout is now parsed once, by
+        // mergeAgentTimeoutCfg, so this block starts at the single merged result
+        // rather than at a raw read this runtime happened to own.
+        spawnSrc.indexOf('const mergedTimeoutCfg = mergeAgentTimeoutCfg(cli);'),
         spawnSrc.indexOf('const argOptions = {'),
     );
     const watchdogBlock = spawnSrc.slice(
-        spawnSrc.indexOf('const rawAgentTimeoutCfg = (settings as Record<string, unknown>)["agentTimeout"];'),
+        // Same reason: the print watchdog reads the shared merge, so the block starts
+        // where it maps that merge onto watchdog config.
+        spawnSrc.indexOf('const watchdogConfig: { firstProgressMs?: number;'),
         spawnSrc.indexOf('const stallWatchdog = attachWatchdog'),
     );
 
