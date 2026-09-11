@@ -127,132 +127,119 @@ export function sanitizeSettingsInput(
     };
 }
 
+/** Which nested groups survive a PARTIAL document or patch, and how deep.
+ *
+ *  One table, read by both ingresses: the boot merge in config.loadSettings and
+ *  the API/watch merge below. They used to be two hand-maintained lists that
+ *  drifted — boot replaced heartbeat/stt/presentation wholesale while the API
+ *  merged them, and the API replaced avatar wholesale while boot merged it — so
+ *  which sibling keys a partial write destroyed depended on which door it came
+ *  through. A key absent from this table is REPLACED wholesale, deliberately:
+ *  arrays like messaging.enabledChannels and employees must not be union-merged.
+ *
+ *  This table is merge policy only. Normalization (ack, slack.autoJoin,
+ *  search.engine) runs AFTER a layer and is not expressible here: those rules
+ *  repair a value rather than combine two of them. */
+export type NestedMergeRule =
+    | { kind: 'perEntry' }
+    | { kind: 'shallow' }
+    | { kind: 'nested'; children: readonly string[] };
+
+export const SETTINGS_MERGE_SPEC: Readonly<Record<string, NestedMergeRule>> = {
+    perCli: { kind: 'perEntry' },
+    activeOverrides: { kind: 'perEntry' },
+    telegram: { kind: 'nested', children: ['ack'] },
+    discord: { kind: 'nested', children: ['ack'] },
+    slack: { kind: 'nested', children: ['ack', 'autoJoin'] },
+    dispatchApproval: { kind: 'nested', children: ['operators'] },
+    network: { kind: 'nested', children: ['remoteAccess'] },
+    runtime: { kind: 'nested', children: ['codexApp'] },
+    multiSession: { kind: 'nested', children: ['channels'] },
+    avatar: { kind: 'nested', children: ['agent', 'user'] },
+    messaging: { kind: 'nested', children: ['latestSeen', 'lastActive'] },
+    heartbeat: { kind: 'shallow' },
+    telegramHub: { kind: 'shallow' },
+    memory: { kind: 'shallow' },
+    stt: { kind: 'shallow' },
+    jawCeo: { kind: 'shallow' },
+    pi: { kind: 'shallow' },
+    tui: { kind: 'shallow' },
+    wiki: { kind: 'shallow' },
+    code: { kind: 'shallow' },
+    search: { kind: 'shallow' },
+    trace: { kind: 'shallow' },
+    presentation: { kind: 'shallow' },
+};
+
+/** Lay the incoming document over the base per SETTINGS_MERGE_SPEC, mutating neither. */
+export function mergeSettingsLayer(
+    base: Record<string, any>,
+    incoming: Record<string, any>,
+): Record<string, any> {
+    const result: Record<string, any> = { ...base };
+    for (const [key, value] of Object.entries(incoming)) {
+        const rule = SETTINGS_MERGE_SPEC[key];
+        // A scalar, an array or an explicit null replaces the block. Only an
+        // object can be merged into one, and only a named key is merged at all.
+        if (!rule || !isPlainRecord(value)) {
+            result[key] = value;
+            continue;
+        }
+        const current = isPlainRecord(base[key]) ? base[key] : {};
+        if (rule.kind === 'perEntry') {
+            const merged: Record<string, any> = { ...current };
+            for (const [entry, cfg] of Object.entries(value)) {
+                merged[entry] = isPlainRecord(cfg) && isPlainRecord(merged[entry])
+                    ? { ...merged[entry], ...cfg }
+                    : cfg;
+            }
+            result[key] = merged;
+            continue;
+        }
+        const merged: Record<string, any> = { ...current, ...value };
+        if (rule.kind === 'nested') {
+            for (const child of rule.children) {
+                if (!isPlainRecord(value[child])) continue;
+                const childBase = isPlainRecord(current[child]) ? current[child] : {};
+                merged[child] = { ...childBase, ...value[child] };
+            }
+        }
+        result[key] = merged;
+    }
+    return result;
+}
+
 /**
  * settings 객체에 patch를 deep merge
- * perCli와 activeOverrides는 CLI별로 개별 merge (기존 effort/model 보존)
  * @param {object} current - 현재 settings
  * @param {object} patch - 적용할 패치
  * @returns {object} 새 settings (current를 직접 변경하지 않음)
  */
 export function mergeSettingsPatch(current: Record<string, any>, patch: Record<string, any>) {
-    const result = structuredClone(current);
-    const remaining = { ...patch };
+    const result = mergeSettingsLayer(structuredClone(current), patch);
 
-    // Deep merge perCli at per-CLI level
-    if (remaining["perCli"] && typeof remaining["perCli"] === 'object') {
-        result["perCli"] = result["perCli"] || {};
-        for (const [cli, cfg] of Object.entries(remaining["perCli"]) as [string, Record<string, any>][]) {
-            result["perCli"][cli] = { ...result["perCli"][cli], ...cfg };
-        }
-        delete remaining["perCli"];
-    }
-
-    // Deep merge activeOverrides at per-CLI level
-    if (remaining["activeOverrides"] && typeof remaining["activeOverrides"] === 'object') {
-        result["activeOverrides"] = result["activeOverrides"] || {};
-        for (const [cli, cfg] of Object.entries(remaining["activeOverrides"]) as [string, Record<string, any>][]) {
-            result["activeOverrides"][cli] = { ...result["activeOverrides"][cli], ...cfg };
-        }
-        delete remaining["activeOverrides"];
-    }
-
-    // Deep merge nested objects. A key missing from this list is REPLACED wholesale by a
-    // partial patch, so `{wiki:{promptDigest:true}}` would silently drop the root and the
-    // enabled flag along with it.
-    if (remaining["dispatchApproval"]?.operators && typeof remaining["dispatchApproval"].operators === 'object') {
-        result["dispatchApproval"] = result["dispatchApproval"] || {};
-        remaining["dispatchApproval"] = { ...remaining["dispatchApproval"] };
-        result["dispatchApproval"].operators = {
-            ...(result["dispatchApproval"].operators || {}),
-            ...remaining["dispatchApproval"].operators,
-        };
-        delete remaining["dispatchApproval"].operators;
-    }
-
-    for (const key of ['heartbeat', 'telegram', 'telegramHub', 'discord', 'slack', 'dispatchApproval', 'memory', 'stt', 'jawCeo', 'pi', 'tui', 'messaging', 'network', 'wiki', 'presentation']) {
-        if (remaining[key] && typeof remaining[key] === 'object') {
-            result[key] = { ...result[key], ...remaining[key] };
-            delete remaining[key];
-        }
-    }
-
-    // The loop above merges channel objects one level deep, so a patch carrying
-    // only {ack:{enabled:true}} would drop scope, emoji and removeAfterReply.
-    // Reads `patch` rather than `remaining` because the loop already deleted the
-    // key. Shares mergeAckSettings with the boot merge in config.ts so the three
-    // ingresses (boot/api/watch) cannot diverge.
+    // Normalization, not merging. ack.emoji is a third level the spec does not
+    // reach, and slack.autoJoin has to be REPAIRED rather than combined: its
+    // budget reaches a loop that joins real channels, so {autoJoin:null} and
+    // {autoJoin:'yes'} must not survive to disk, where the next boot would read
+    // them as absent and quietly restore default-on. Reads the original patch
+    // because the layer above has already consumed the key.
     for (const key of ['telegram', 'discord', 'slack']) {
         const patchChannel = patch[key];
-        if (!patchChannel || typeof patchChannel !== 'object') continue;
-        const patchAck = (patchChannel as Record<string, any>)["ack"];
+        if (!isPlainRecord(patchChannel)) continue;
         const currentChannel = current[key] as Record<string, any> | undefined;
-        if (patchAck && typeof patchAck === 'object' && !Array.isArray(patchAck)) {
+        const patchAck = patchChannel['ack'];
+        if (isPlainRecord(patchAck)) {
+            result[key] = { ...result[key], ack: mergeAckSettings(currentChannel?.['ack'], patchAck) };
+        }
+        // Any mention of autoJoin is repaired, including a malformed one.
+        if (key === 'slack' && 'autoJoin' in patchChannel) {
             result[key] = {
                 ...result[key],
-                ack: mergeAckSettings(currentChannel?.["ack"], patchAck),
+                autoJoin: mergeSlackAutoJoin(currentChannel?.['autoJoin'], patchChannel['autoJoin']),
             };
         }
-        // slack.autoJoin is the same nested-group case, and its budget reaches
-        // a loop that joins real channels — so this path normalizes as well as
-        // merges. A PUT carrying {autoJoin:{enabled:false}} must not erase
-        // maxJoinsPerRun, and {maxJoinsPerRun:-1} must not reach the runner.
-        if (key === 'slack') {
-            const slackPatch = patchChannel as Record<string, unknown>;
-            const patchAutoJoin = slackPatch["autoJoin"];
-            // Any mention of the key is repaired, including a malformed one.
-            // Testing for a well-formed object would let {autoJoin:null} and
-            // {autoJoin:'yes'} through the one-level spread above and survive
-            // to disk, where the next boot reads them as "absent" and quietly
-            // restores default-on. A patch that names the key gets a valid
-            // block or nothing.
-            if ('autoJoin' in slackPatch) {
-                result[key] = {
-                    ...result[key],
-                    autoJoin: mergeSlackAutoJoin(currentChannel?.["autoJoin"], patchAutoJoin),
-                };
-            }
-        }
     }
-
-
-    // Deep merge nested network.remoteAccess
-    if (remaining["network"]?.remoteAccess && typeof remaining["network"].remoteAccess === 'object') {
-        result["network"] = result["network"] || {};
-        result["network"].remoteAccess = { ...result["network"].remoteAccess, ...remaining["network"].remoteAccess };
-        delete remaining["network"].remoteAccess;
-    }
-
-    // runtime.codexApp is a two-level merge boundary: a multiplex-only patch
-    // must preserve both other runtime blocks and codexApp-owned siblings.
-    if (isPlainRecord(remaining["runtime"])) {
-        const runtimePatch = remaining["runtime"];
-        result["runtime"] = { ...(result["runtime"] || {}), ...runtimePatch };
-        if (isPlainRecord(runtimePatch["codexApp"])) {
-            result["runtime"].codexApp = {
-                ...(current["runtime"]?.codexApp || {}),
-                ...runtimePatch["codexApp"],
-            };
-        }
-        delete remaining["runtime"];
-    }
-
-    // multiSession.channels is the same shape of boundary. An enabled-only patch must
-    // keep midRunPolicy and the channel gates, and a single-channel patch must keep the
-    // other two channels — which is exactly what a per-channel session gate will send.
-    if (isPlainRecord(remaining["multiSession"])) {
-        const sessionPatch = remaining["multiSession"];
-        result["multiSession"] = { ...(result["multiSession"] || {}), ...sessionPatch };
-        if (isPlainRecord(sessionPatch["channels"])) {
-            result["multiSession"].channels = {
-                ...(current["multiSession"]?.channels || {}),
-                ...sessionPatch["channels"],
-            };
-        }
-        delete remaining["multiSession"];
-    }
-
-    // Top-level scalar fields
-    Object.assign(result, remaining);
 
     return result;
 }
