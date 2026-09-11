@@ -2,7 +2,7 @@
 // Extracted from server.ts in Phase 2.
 
 import type { RequestHandler, Router } from 'express';
-import { ok } from '../http/response.js';
+import { ok, fail } from '../http/response.js';
 import {
     getActiveChatSession, listChatSessions, createChatSession,
     setActiveChatSession, getChatSessionBySeq, getChatSessionById,
@@ -12,13 +12,18 @@ import { hasChatSessionWork } from '../orchestrator/session-work.js';
 
 export function registerChatSessionRoutes(app: Router, requireAuth: RequestHandler): void {
     app.get('/api/chat-sessions', requireAuth, (_req, res) => {
-        ok(res, { sessions: listChatSessions(), active: getActiveChatSession() });
+        ok(res, { sessions: listChatSessions(), active: getActiveChatSession(), capabilities: { createInactive: true } });
     });
 
     app.post('/api/chat-sessions', requireAuth, (req, res) => {
+        const activate = req.body?.activate;
+        if (activate !== undefined && typeof activate !== 'boolean') {
+            fail(res, 400, 'invalid_activate');
+            return;
+        }
         const label = typeof req.body?.label === 'string' ? req.body.label.trim() || undefined : undefined;
-        const session = createChatSession(label);
-        ok(res, session);
+        const session = createChatSession(label, { activate: activate !== false });
+        ok(res, activate === false ? { ...session, activated: false } : session);
     });
 
     app.post('/api/chat-sessions/:id/switch', requireAuth, (req, res): void => {

@@ -44,7 +44,7 @@ Live `/api/orchestrate/snapshot` tool hydration now reads up to400 newest durabl
 | `src/routes/messages.ts` | 187L | 5 | message list/count/search/latest and exact saved Activity answer |
 | `src/routes/command.ts` | 259L | 4 | slash command execution, command palette, normal message submit, Telegram elicitation callback relay |
 | `src/routes/instance.ts` | 53L | 3 | instance lock GET/POST/DELETE |
-| `src/routes/chat-sessions.ts` | 60L | 4 | session list/create/switch/delete (전 route requireAuth) |
+| `src/routes/chat-sessions.ts` | 65L | 4 | session list/create/switch/delete (전 route requireAuth) |
 | `src/routes/search.ts` | 95L | 1 | `/api/search` 통합 검색 (requireAuth, corpus 검증, cursor 400) |
 | `src/routes/wiki.ts` | 150L | 3 | 옵트인 위키 status/enable/configure (requireAuth, root 충돌 400, scaffold 실패 시 disabled 유지, 040) |
 | `src/routes/task.ts` | 59L | 2 | agent-native task list/action API |
@@ -157,8 +157,8 @@ Cursor/Grok activation and Activity controls are separate from this API foundati
 | `GET` | `/api/instance/lock` | 인스턴스 잠금 상태 조회 |
 | `POST` | `/api/instance/lock` | 인스턴스 잠금 (stopAll 보호) |
 | `DELETE` | `/api/instance/lock` | 인스턴스 잠금 해제 |
-| `GET` | `/api/chat-sessions` | 채팅 세션 목록 |
-| `POST` | `/api/chat-sessions` | 새 채팅 세션 생성 |
+| `GET` | `/api/chat-sessions` | 채팅 세션 목록. `data.capabilities.createInactive: true` advertises inactive creation. |
+| `POST` | `/api/chat-sessions` | 새 채팅 세션 생성. Optional `activate: boolean` defaults to `true`; `false` preserves the active session and emits no switch event, returning `data: { id, seq, activated: false }`. Default/`true` retains `{ id, seq }`. Invalid flag types return `400 invalid_activate` before mutation. |
 | `POST` | `/api/chat-sessions/:id/switch` | 활성 세션 전환 |
 | `DELETE` | `/api/chat-sessions/:id` | 세션 삭제 — `'default'` 400, 진행 중/원격 바인딩 409, 성공 시 메시지 동시 삭제 (071) |
 | `GET` | `/api/search` | 통합 검색 — `corpus=chat\|memory\|wiki\|all`, 세션 횡단 기본 + `sessionFilter`, cursor 페이지네이션 (031) |

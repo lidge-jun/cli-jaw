@@ -76,6 +76,58 @@ test('every chat-session route applies auth while loopback/LAN bypass semantics 
     assert.match(serverSource, /registerChatSessionRoutes\(app, requireAuth\)/);
 });
 
+test('inactive creation is advertised and preserves active session and switch events', async () => {
+    const events: Array<{ type: string; data: Record<string, unknown> }> = [];
+    addBroadcastListener((type, data) => events.push({ type, data }));
+    await withServer(async baseUrl => {
+        const before = await (await fetch(`${baseUrl}/api/chat-sessions`)).json();
+        assert.equal(before.data.capabilities.createInactive, true);
+        const response = await fetch(`${baseUrl}/api/chat-sessions`, { method: 'POST',
+            headers: { 'content-type': 'application/json' }, body: JSON.stringify({ label: 'inactive fixture', activate: false }) });
+        assert.equal(response.status, 200);
+        const result = await response.json(); IDS.push(result.data.id);
+        assert.equal(result.data.activated, false);
+        const after = await (await fetch(`${baseUrl}/api/chat-sessions`)).json();
+        assert.equal(after.data.active, before.data.active);
+        assert.ok(after.data.sessions.some((session: { id: string }) => session.id === result.data.id));
+        assert.deepEqual(events.map(event => event.type), ['session_created']);
+        assert.equal(events[0]?.data.id, result.data.id);
+    });
+});
+
+for (const body of [{ label: 'default fixture' }, { label: 'explicit fixture', activate: true }]) {
+    test(`creation activates with the original response shape: ${JSON.stringify(body)}`, async () => {
+        const events: string[] = []; addBroadcastListener(type => events.push(type));
+        await withServer(async baseUrl => {
+            const response = await fetch(`${baseUrl}/api/chat-sessions`, { method: 'POST',
+                headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+            assert.equal(response.status, 200);
+            const result = await response.json(); IDS.push(result.data.id);
+            assert.deepEqual(Object.keys(result.data).sort(), ['id', 'seq']);
+            const listed = await (await fetch(`${baseUrl}/api/chat-sessions`)).json();
+            assert.equal(listed.data.active, result.data.id);
+            assert.deepEqual(events, ['session_switched', 'session_created']);
+        });
+    });
+}
+
+test('malformed activation flags return 400 before session or event mutation', async () => {
+    const events: string[] = []; addBroadcastListener(type => events.push(type));
+    await withServer(async baseUrl => {
+        const before = db.prepare('SELECT * FROM chat_sessions ORDER BY seq').all();
+        const active = db.prepare("SELECT active_chat_session FROM session WHERE id='default'").get();
+        for (const activate of [null, 'false', 'true', 0, 1, [], {}]) {
+            const response = await fetch(`${baseUrl}/api/chat-sessions`, { method: 'POST',
+                headers: { 'content-type': 'application/json' }, body: JSON.stringify({ label: 'invalid fixture', activate }) });
+            assert.equal(response.status, 400);
+            assert.equal((await response.json()).error, 'invalid_activate');
+        }
+        assert.deepEqual(db.prepare('SELECT * FROM chat_sessions ORDER BY seq').all(), before);
+        assert.deepEqual(db.prepare("SELECT active_chat_session FROM session WHERE id='default'").get(), active);
+        assert.deepEqual(events, []);
+    });
+});
+
 test('DELETE removes a local session and its messages atomically and broadcasts deleted id plus seq', async () => {
     settings.multiSession.enabled = true;
     insertSession('route-delete', 930);
