@@ -135,7 +135,9 @@ function done(index: number, extra: RecordData = {}): RecordData {
     const admission = admissions[index]!;
     const session = admission.result.sessionContext!;
     return { origin: 'slack', requestId: admission.result.requestId, scope: session.scope,
-        sessionId: session.chatSessionId, target, fromQueue: true, text: 'queued answer', ...extra };
+        sessionId: session.chatSessionId, target,
+        ...(session.remoteKey ? { remoteKey: session.remoteKey } : {}),
+        fromQueue: true, text: 'queued answer', ...extra };
 }
 
 test.beforeEach(async context => {
