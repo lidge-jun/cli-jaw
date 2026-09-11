@@ -182,7 +182,7 @@ test('normalizeChannelSendRequest gives Slack-shaped channel values an actionabl
     );
 });
 
-test('empty Slack allowlist permits the exact last-active chatId and preserves its current thread', async () => {
+test('empty Slack allowlist permits the exact last-active chatId without moving it into that thread', async () => {
     await withIsolatedSlack(async capture => {
         const { sendChannelOutput } = await import('../../src/messaging/send.js');
         const { setLastActiveTarget } = await import('../../src/messaging/runtime.js');
@@ -192,11 +192,15 @@ test('empty Slack allowlist permits the exact last-active chatId and preserves i
 
         assert.equal(result.ok, true);
         assert.equal(capture.requests.length, 1);
-        assert.deepEqual(capture.requests[0]?.target, slackTarget());
+        // The last-active slot is evidence the bot belongs in this conversation,
+        // which is all it is asked for here. It used to also supply the address:
+        // a caller that named the channel had its post moved into whichever
+        // thread had spoken most recently (#745). Vouching is not addressing.
+        assert.deepEqual(capture.requests[0]?.target, slackTarget('C_CURRENT', ''));
     });
 });
 
-test('empty Slack allowlist permits the exact last-active object target and preserves an omitted thread', async () => {
+test('empty Slack allowlist permits the exact last-active object target and keeps its omitted thread omitted', async () => {
     await withIsolatedSlack(async capture => {
         const { sendChannelOutput } = await import('../../src/messaging/send.js');
         const { setLastActiveTarget } = await import('../../src/messaging/runtime.js');
@@ -210,7 +214,7 @@ test('empty Slack allowlist permits the exact last-active object target and pres
         });
 
         assert.equal(result.ok, true);
-        assert.deepEqual(capture.requests[0]?.target, slackTarget());
+        assert.deepEqual(capture.requests[0]?.target, slackTarget('C_CURRENT', ''));
     });
 });
 
@@ -240,7 +244,7 @@ test('latest-seen Slack target authorizes the same explicit chat when last-activ
         const result = await sendChannelOutput({ channel: 'slack', type: 'text', chatId: 'C_CURRENT' });
 
         assert.equal(result.ok, true);
-        assert.deepEqual(capture.requests[0]?.target, slackTarget());
+        assert.deepEqual(capture.requests[0]?.target, slackTarget('C_CURRENT', ''));
     });
 });
 

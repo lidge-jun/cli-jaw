@@ -52,6 +52,13 @@ function createBotSpy({ failHtmlOnce = false } = {}) {
     };
 }
 
+/** The destination a run was admitted with. Forwarders read it off the event
+ *  rather than asking the transport who spoke most recently (#742). */
+function tgTarget(targetId, threadId) {
+    return { channel: 'telegram', targetKind: 'channel', peerKind: 'group',
+        targetId: String(targetId), ...(threadId ? { threadId } : {}) };
+}
+
 function flush() {
     return new Promise((resolve) => setImmediate(resolve));
 }
@@ -60,16 +67,15 @@ test('forwarder skips telegram-origin responses', async () => {
     const { bot, sent } = createBotSpy();
     const forward = createTelegramForwarder({
         bot,
-        getLastChatId: () => 123,
         shouldSkip: (data) => data.origin === 'telegram',
     });
 
-    forward('agent_done', { text: 'A', origin: 'telegram' });
-    forward('agent_done', { text: 'B', origin: 'web' });
+    forward('agent_done', { text: 'A', origin: 'telegram', target: tgTarget(123) });
+    forward('agent_done', { text: 'B', origin: 'web', target: tgTarget(123) });
     await flush();
 
     assert.equal(sent.length, 1);
-    assert.equal(sent[0].chatId, 123);
+    assert.equal(sent[0].chatId, '123');
     assert.equal(sent[0].opts?.parse_mode, 'HTML');
     assert.equal(sent[0].text, '📡 B');
 });
@@ -78,10 +84,9 @@ test('forwarder skips error responses', async () => {
     const { bot, sent } = createBotSpy();
     const forward = createTelegramForwarder({
         bot,
-        getLastChatId: () => 123,
     });
 
-    forward('agent_done', { text: 'error text', error: true, origin: 'web' });
+    forward('agent_done', { text: 'error text', error: true, origin: 'web', target: tgTarget(123) });
     await flush();
     assert.equal(sent.length, 0);
 });
@@ -90,13 +95,13 @@ test('forwarder sends watchdog stall diagnostics even when marked error', async 
     const { bot, sent } = createBotSpy();
     const forward = createTelegramForwarder({
         bot,
-        getLastChatId: () => 123,
     });
 
     forward('agent_done', {
         text: '❌ ⏱️ 응답 없음 — unsafe AGY run_command broad home search',
         error: true,
         origin: 'web',
+        target: tgTarget(123),
     });
     await flush();
 
@@ -109,10 +114,9 @@ test('forwarder falls back to plain text when HTML send fails', async () => {
     const { bot, sent } = createBotSpy({ failHtmlOnce: true });
     const forward = createTelegramForwarder({
         bot,
-        getLastChatId: () => 777,
     });
 
-    forward('agent_done', { text: '**bold** <tag>', origin: 'web' });
+    forward('agent_done', { text: '**bold** <tag>', origin: 'web', target: tgTarget(777) });
     await flush();
 
     assert.equal(sent.length, 2);
@@ -127,14 +131,13 @@ test('forwarder handles mixed origin/error events deterministically', async () =
     const { bot, sent } = createBotSpy();
     const forward = createTelegramForwarder({
         bot,
-        getLastChatId: () => 456,
         shouldSkip: (data) => data.origin === 'telegram',
     });
 
-    forward('agent_done', { text: 'skip telegram', origin: 'telegram' });
-    forward('agent_done', { text: 'ok web', origin: 'web' });
-    forward('agent_done', { text: 'skip error', origin: 'web', error: true });
-    forward('agent_done', { text: 'ok cli', origin: 'cli' });
+    forward('agent_done', { text: 'skip telegram', origin: 'telegram', target: tgTarget(456) });
+    forward('agent_done', { text: 'ok web', origin: 'web', target: tgTarget(456) });
+    forward('agent_done', { text: 'skip error', origin: 'web', error: true, target: tgTarget(456) });
+    forward('agent_done', { text: 'ok cli', origin: 'cli', target: tgTarget(456) });
     await flush();
 
     assert.equal(sent.length, 2);
@@ -146,16 +149,15 @@ test('forwarder chunks long messages into multiple sends', async () => {
     const { bot, sent } = createBotSpy();
     const forward = createTelegramForwarder({
         bot,
-        getLastChatId: () => 999,
     });
     const longText = `**head**\n${'x'.repeat(5000)}`;
 
-    forward('agent_done', { text: longText, origin: 'web' });
+    forward('agent_done', { text: longText, origin: 'web', target: tgTarget(999) });
     await flush();
 
     assert.equal(sent.length >= 2, true);
     assert.equal(sent.every((msg) => msg.opts?.parse_mode === 'HTML'), true);
-    assert.equal(sent.every((msg) => msg.chatId === 999), true);
+    assert.equal(sent.every((msg) => msg.chatId === '999'), true);
     assert.equal(sent[0].text.startsWith('📡 '), true);
 });
 
@@ -163,10 +165,10 @@ test('forwarder does nothing when type is not agent_done or chatId is missing', 
     const { bot, sent } = createBotSpy();
     const forward = createTelegramForwarder({
         bot,
-        getLastChatId: () => null,
     });
 
-    forward('agent_tool', { text: 'tool message', origin: 'web' });
+    forward('agent_tool', { text: 'tool message', origin: 'web', target: tgTarget(123) });
+    // No destination on the event: nothing to forward to.
     forward('agent_done', { text: 'done', origin: 'web' });
     await flush();
 
@@ -182,20 +184,13 @@ test('image relay activation: agent_done broadcast sends text then sendPhoto', {
     const { bot, photos, events, photoSent } = createBotSpy();
     const forward = createTelegramForwarder({
         bot,
-        getLastChatId: () => 123,
-        getLastTarget: () => ({
-            channel: 'telegram',
-            targetKind: 'channel',
-            peerKind: 'group',
-            targetId: '123',
-            threadId: '42',
-        }),
     });
     addBroadcastListener(forward);
     try {
         broadcast('agent_done', {
             origin: 'web',
             text: `ready\n![generated](${imagePath})`,
+            target: tgTarget(123, '42'),
         });
         await photoSent;
         assert.deepEqual(events, ['text', 'photo']);
@@ -214,11 +209,12 @@ test('image relay guard skips and logs a path outside allowed roots', async () =
     fs.writeFileSync(imagePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
     const { bot, sent, photos } = createBotSpy();
     const before = drainLogRing().length;
-    const forward = createTelegramForwarder({ bot, getLastChatId: () => 123 });
+    const forward = createTelegramForwarder({ bot });
     try {
         const returnValue = forward('agent_done', {
             origin: 'web',
             text: `ready\n![denied](${imagePath})`,
+            target: tgTarget(123),
         });
         assert.equal(returnValue, undefined, 'forwarder keeps a synchronous listener signature');
         await flush();
