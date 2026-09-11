@@ -14,6 +14,7 @@ import { getRemoteBoundSessionId } from '../core/chat-sessions.js';
 import { applyOutputPolicy } from '../core/policy-hooks.js';
 import { redactChannelSecrets } from './redact.js';
 import { type TransportSendResult } from './delivery-outcome.js';
+import { isUnconfirmedSend } from './file-receipt.js';
 import { log } from '../core/logger.js';
 import { recordSelfDelivery } from './turn-delivery.js';
 import { normalizeSlackBlocks, type SlackBlock } from '../slack/blocks.js';
@@ -521,7 +522,13 @@ export async function sendChannelOutput(req: ChannelSendRequest): Promise<{ ok: 
     const sanitized = result.ok === false && typeof result.error === 'string'
         ? { ...result, error: redactChannelSecrets(result.error) }
         : result;
-    stampOutboundSend(channel, sanitized.ok !== false, {
+    // An unconfirmed file send is not an outbound failure and not a proven
+    // success: the vendor took the bytes but would not name what it made. It is
+    // counted as dispatched here, because the alternative — counting it as a
+    // failed send — would report a channel as broken every time an intermediary
+    // answered with an empty body.
+    const unconfirmed = isUnconfirmedSend(sanitized);
+    stampOutboundSend(channel, sanitized.ok !== false || unconfirmed, {
         targetId: req.target?.targetId,
         type: typeof req.type === 'string' ? req.type : undefined,
         viaAgent: req.fromAgentSurface === true,
@@ -529,7 +536,11 @@ export async function sendChannelOutput(req: ChannelSendRequest): Promise<{ ok: 
     // Only a send that actually reached the user can excuse skipping the
     // dispatch post, and only `req.target` is the resolved destination — the
     // caller's target may have been absent and filled in by the chain above.
-    if (req.fromAgentSurface && sanitized.ok !== false) {
+    // `unconfirmed` is admitted here and a hard refusal is not, which is the
+    // whole distinction: a 400, a 413 or an auth failure put nothing on screen,
+    // so the turn's own answer still has to be posted. An unconfirmed upload may
+    // already be visible, and posting the same caption again is the louder bug.
+    if (req.fromAgentSurface && (sanitized.ok !== false || unconfirmed)) {
         // Only what the transport ACTUALLY put on screen may be claimed. A
         // `photo`/`document`/`voice` send carries the file and the CAPTION, and
         // reading `req.caption` here is what keeps that true: the promotion above

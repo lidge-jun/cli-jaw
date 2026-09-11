@@ -196,7 +196,7 @@ cli-jaw/
 │   │   └── events.ts         ← legacy re-export stub → events/ 모듈 (15L)
 │   ├── messaging/            ← 통합 메시징 런타임 (33 files)
 │   │   ├── runtime.ts        ← 채널 lifecycle (init/shutdown/restart) + transport registry (333L)
-│   │   ├── send.ts           ← 통합 아웃바운드 메시지 라우팅 (ChannelSendRequest, 다중 채널 send 지원, 턴 주소 우선순위) (551L)
+│   │   ├── send.ts           ← 통합 아웃바운드 메시지 라우팅 (ChannelSendRequest, 다중 채널 send 지원, 턴 주소 우선순위) (562L)
 │   │   ├── turn-conversation.ts ← 턴이 답하는 대화 주소 encode/decode + 채널 매칭 (60L) ✨
 │   │   ├── turn-delivery.ts  ← 에이전트 자가 전송 claim (턴 앵커 + digest, 소비형) → dispatch 중복 게시 억제 (252L) ✨
 │   │   ├── dedupe.ts         ← 배달 중복 제거 (TTL seen-set, 미만료 항목 보존) (118L) ✨
@@ -226,6 +226,7 @@ cli-jaw/
 │   │   ├── queue-notice.ts   ← queue-notice lifecycle (deferred close + bind race drain + bounded shutdown registry) (208L)
 │   │   ├── forwarder-origin.ts ← channel forwarder 공통 origin 필터 (own channel + producer-owned heartbeat skip) (39L)
 │   │   ├── native-body.ts    ← native runtime terminal 태그 술어 + 배달 정책 래퍼 (3봇+collector 공유) (32L) ✨
+│   │   ├── file-receipt.ts   ← 파일 전송 confirmation 어휘 (confirmed|unconfirmed) + 채널별 unconfirmed 에러코드 (49L) ✨
 │   │   ├── queue-notice-record.ts ← durable notice 기록 best-effort 래퍼 factory (channel+logPrefix) (59L) ✨
 │   │   ├── target-reply-guard.ts ← standing target-reply 공통 admission (accept identity 데이터화 + 주소 검증) (102L) ✨
 │   │   ├── channel-adapter.ts ← ChannelAdapter contract (130L)
@@ -335,21 +336,21 @@ cli-jaw/
 │   ├── telegram/             ← Telegram 인터페이스 (11 files)
 │   │   ├── reactions.ts     ← ACK reaction transport + ReactionTypeEmoji allowlist + notice transport (186L)
 │   │   ├── ipv4-fetch.ts    ← IPv4 fetch factory that honours init.signal (destroys on abort) (106L)
-│   │   ├── bot.ts            ← Telegram 봇 + forwarder lifecycle + origin 필터링 + channel-origin text/image reply + elicitation callback + voice 핸들러 등록 (1415L)
+│   │   ├── bot.ts            ← Telegram 봇 + forwarder lifecycle + origin 필터링 + channel-origin text/image reply + elicitation callback + voice 핸들러 등록 (1422L)
 │   │   ├── voice.ts          ← 음성 메시지 → guarded download → STT → tgOrchestrate 파이프라인 (43L)
 │   │   ├── forwarder.ts      ← text 전송 뒤 guarded local-image photo relay + escape/chunk/createForwarder (247L)
 │   │   ├── rich-message.ts   ← Bot API 10.1 rich-first send (sendTelegramMarkdown, 32k chunk, HTML/plaintext fallback) (425L)
 │   │   ├── elicitation-buttons.ts ← single_select elicitation → inline keyboard + pending store + callback codec (110L)
 │   │   ├── hub-callback.ts   ← hub-member callback URL SSRF guard (19L)
-│   │   └── telegram-file.ts  ← Telegram 파일 전송 + 재시도 + 사이즈 검증 (192L)
+│   │   └── telegram-file.ts  ← Telegram 파일 전송 + 재시도 + 사이즈 검증 (231L)
 │   ├── discord/              ← Discord 인터페이스 (8 files)
-│   │   ├── bot.ts            ← Discord 봇 + transport 등록 + message/attachment 핸들러 + channel-origin image relay (1030L)
+│   │   ├── bot.ts            ← Discord 봇 + transport 등록 + message/attachment 핸들러 + channel-origin image relay (1034L)
 │   │   ├── reactions.ts   ← ACK reaction transport + cancellable notice REST (122L)
 │   │   ├── commands.ts       ← Discord slash command 등록 + 핸들러 (153L)
-│   │   ├── send-only-client.ts ← Discord send-only client (webhook/DM fallback) (232L) ✨
+│   │   ├── send-only-client.ts ← Discord send-only client (webhook/DM fallback) (257L) ✨
 │   │   ├── channel-types.ts  ← Discord channel type helpers (50L) ✨
 │   │   ├── forwarder.ts      ← Discord text chunk 포워딩 + guarded local-image attachment relay (98L)
-│   │   └── discord-file.ts   ← Discord 파일 전송 (80L)
+│   │   └── discord-file.ts   ← Discord 파일 전송 (107L)
 │   ├── slack/                ← Slack 인터페이스 (41 files, Socket Mode + Web API, SDK 없음)
 │   │   ├── socket.ts         ← Socket Mode client (apps.connections.open → wss, ack-before-work, envelope dedupe TTL, hello deadline, backoff 재연결) (437L)
 │   │   ├── bot.ts            ← Slack 봇 lifecycle + attachPort 성공 후 best-effort 자기선출/영속화 + envelope routing + orchestrate 경로 + queued-result waiter + top-level/thread 1회 context prefetch (1898L)
@@ -368,7 +369,7 @@ cli-jaw/
 │   │   ├── mention-watch.ts  ← 가입 채널 backward mention scan + frontier/resume/round-robin/429 stop/60-channel overflow (369L)
 │   │   ├── attachment-recovery.ts ← app_mention 봉투에 없는 첨부를 channel+ts 재조회로 복구 (oldest+inclusive+limit=1) (53L)
 │   │   ├── commands.ts       ← slash command → 공유 parseCommand/executeCommand 파이프라인 (180L)
-│   │   ├── slack-file.ts     ← files.getUploadURLExternal → upload → completeUploadExternal 3단계 업로드 (파일명·캡션 모두 아웃바운드 마스킹) (148L)
+│   │   ├── slack-file.ts     ← files.getUploadURLExternal → upload → completeUploadExternal 3단계 업로드 (파일명·캡션 모두 아웃바운드 마스킹) (158L)
 │   │   ├── ingress.ts        ← 세션별 ingress lane + synthetic top-level followup override + admitSlackRun 동기 실행 예약(sessionLanes) + 전역 다운로드 세마포어 + shutdown abort/drain (300L) ✨
 │   │   ├── inbound-file.ts   ← 인바운드 첨부 단일 IO owner (files.info → 인증 스트리밍 다운로드 → saveUpload, 파일/메시지 바이트 예산, 고정 error code) (280L) ✨
 │   │   ├── inbound-url.ts    ← 인바운드 다운로드 URL 검증 (Slack host allowlist + https-only hop + 사설망 거부) (44L) ✨
@@ -433,7 +434,7 @@ cli-jaw/
 │   │   ├── orchestrate.ts    ← IPABCD reset/state/workers/worker-runs/snapshot/queue cancel/queue steer async accept/dispatch/virtual dispatch/batch safe summary/worker result/state PUT 라우트 + Phase60 boss-token actor distinction + --attest body gate + single-use pendingAttestation null-clear (1328L)
 │   │   ├── memory.ts         ← memory status/KV/files/settings 라우트 (193L)
 │   │   ├── settings.ts       ← settings/prompt/project pick/git summary/heartbeat-md/MCP/registry/status/quota/copilot + Pi profile register/model discovery 라우트 + CLI_KEYS 기반 quota parity/status-only metadata (738L)
-│   │   ├── messaging.ts      ← upload/file-open/voice/telegram/channel/discord send 라우트 (601L)
+│   │   ├── messaging.ts      ← upload/file-open/voice/telegram/channel/discord send 라우트 (612L)
 │   │   ├── avatar.ts         ← Agent/User 아바타 이미지 업로드/서빙/삭제 + settings.json 메타 저장 + safeResolveUnder 경로 보호 (147L)
 │   │   ├── quota.ts          ← Copilot/Claude/Codex/Grok/OpenCode quota helper readers + Grok weekly credits + credential-scoped Claude cache (634L)
 │   │   ├── quota-native-window.ts ← Codex duration-aware and Claude model-scoped quota parsers (122L)

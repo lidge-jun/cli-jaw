@@ -108,8 +108,15 @@ export function createDashboardTelegramHubRouter(): Router {
         const caption = typeof b.caption === 'string' ? b.caption.slice(0, 1024) : undefined;
         const reply_markup = type === 'keyboard' && b.reply_markup && typeof b.reply_markup === 'object' ? b.reply_markup : undefined;
         const r = await sendToTopic(chatId, threadId, stripUndefined({ type, text, filePath, caption, reply_markup }));
+        // `confirmation` rides through for the same reason `bodyDelivered` does:
+        // the member instance reads it to decide whether an unconfirmed file
+        // upload may still claim its caption. Dropping it here made an
+        // unconfirmed send indistinguishable from a refusal, so the member
+        // posted the caption a second time beside a file that had most likely
+        // arrived.
         res.status(r.ok ? 200 : 502).json(stripUndefined({ ok: r.ok, error: r.error,
-            ...(typeof r.bodyDelivered === 'boolean' ? { bodyDelivered: r.bodyDelivered } : {}) }));
+            ...(typeof r.bodyDelivered === 'boolean' ? { bodyDelivered: r.bodyDelivered } : {}),
+            ...(r.confirmation ? { confirmation: r.confirmation } : {}) }));
     });
 
     return router;

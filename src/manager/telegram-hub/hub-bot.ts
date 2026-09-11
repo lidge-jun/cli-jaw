@@ -15,6 +15,7 @@ import { downloadTelegramFile, buildMediaPrompt, TELEGRAM_DOWNLOAD_LIMITS } from
 import { saveUpload } from '../../agent/spawn.js';
 import { redactOutboundPayload, redactOutboundText, logErrorText, userErrorText } from '../../messaging/redact.js';
 import { sendWithRetryPolicy } from '../../messaging/retry.js';
+import type { FileConfirmation } from '../../messaging/file-receipt.js';
 import { internalFetch } from '../internal-fetch.js';
 
 let hubBot: Bot | null = null;
@@ -481,7 +482,12 @@ export async function sendToTopic(
     chatId: string,
     threadId: string,
     payload: { type: string; text?: string; filePath?: string; caption?: string; reply_markup?: unknown },
-): Promise<{ ok: boolean; error?: string; bodyDelivered?: boolean }> {
+): Promise<{
+    ok: boolean; error?: string; bodyDelivered?: boolean;
+    /** File sends only. Forwarded so the member instance can tell an
+     *  unconfirmed upload from a refusal (#700). */
+    confirmation?: FileConfirmation;
+}> {
     stopTopicTyping(chatId, threadId);
     if (!hubBot) return { ok: false, error: 'hub bot not running' };
     const message_thread_id = Number(threadId) > 1 ? Number(threadId) : undefined;
@@ -513,7 +519,13 @@ export async function sendToTopic(
         }
         const { sendTelegramFile } = await import('../../telegram/telegram-file.js');
         const r = await sendTelegramFile(hubBot, chatId, payload.filePath!, payload.type, stripUndefined({ caption: payload.caption, threadId: message_thread_id }));
-        return stripUndefined({ ok: r.ok, error: r.error ? userErrorText(r.error) : undefined });
+        // `confirmation` rides along for one reason: the member instance gates
+        // its caption self-delivery claim on it, and folding this result down to
+        // { ok, error } made an unconfirmed upload indistinguishable from a
+        // refusal — so the member posted the caption again beside a file that
+        // had most likely arrived. Nothing else about hub routing changes here.
+        return stripUndefined({ ok: r.ok, error: r.error ? userErrorText(r.error) : undefined,
+            confirmation: r.confirmation });
     } catch (e: unknown) {
         console.error('[tg:hub:outbound]', logErrorText(e));
         return { ok: false, error: userErrorText(e),

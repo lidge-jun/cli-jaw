@@ -20,8 +20,14 @@ const tgt = (threadId?: string) =>
 
 function botSpy() {
     const calls: Array<{ method: string; opts: Record<string, unknown> }> = [];
+    // Telegram answers a file send with the created Message. Returning nothing
+    // made the spy a worse imitation of the vendor than it looks: since #700 a
+    // reply with no usable message_id is an UNCONFIRMED send, so these cases
+    // would fail on their fixture rather than on their subject, which is
+    // whether message_thread_id rides along.
     const mk = (method: string) => async (_chatId: unknown, _file: unknown, opts: Record<string, unknown>) => {
         calls.push({ method, opts });
+        return { message_id: 4242 };
     };
     return { calls, api: { sendVoice: mk('sendVoice'), sendPhoto: mk('sendPhoto'), sendDocument: mk('sendDocument') } };
 }
