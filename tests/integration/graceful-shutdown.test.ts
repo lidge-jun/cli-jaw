@@ -5,15 +5,28 @@ import fs from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { findFreePort } from '../helpers/jaw-server.mts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..', '..');
 const CLI_ENTRY = join(ROOT, 'dist', 'bin', 'cli-jaw.js');
 const HAS_DIST = fs.existsSync(CLI_ENTRY);
+const IN_CI = !!process.env['CI'];
 
-function pickPort(seed = 0) {
-    const base = 46800 + seed * 100;
-    return base + Math.floor(Math.random() * 80);
+/**
+ * A missing dist is a developer-box fact and a broken job under CI: the
+ * integration workflow runs npm run build before this suite precisely so that
+ * dist/bin/cli-jaw.js and the assets it loads exist. Skipping there would turn
+ * a failed build into a green run, which is the same shape as the #661 loss.
+ * This is the api-smoke.test.ts rule applied to the file that needed it most.
+ */
+function requireDist(t: { skip(reason: string): void }): boolean {
+    if (HAS_DIST) return true;
+    if (IN_CI) {
+        assert.fail('dist/bin/cli-jaw.js is missing under CI — the integration job runs "npm run build" before this suite, so this is a broken job, not a missing local build');
+    }
+    t.skip('dist not built; run npm run build to exercise shutdown locally');
+    return false;
 }
 
 async function sleep(ms: number) {
@@ -22,7 +35,10 @@ async function sleep(ms: number) {
 
 async function isHealthy(port: number) {
     try {
-        const res = await fetch(`http://localhost:${port}/api/health`);
+        // Bounded. Without a timeout a half-open socket parks this fetch
+        // indefinitely and the 30s waitForHealth loop never gets to iterate —
+        // a fail-closed test that hangs is not an improvement on a green skip.
+        const res = await fetch(`http://localhost:${port}/api/health`, { signal: AbortSignal.timeout(2000) });
         return res.ok;
     } catch {
         return false;
@@ -56,7 +72,10 @@ async function runSignalCase(
     signalTarget: 'parent' | 'group' = 'parent',
 ) {
     const home = fs.mkdtempSync(join(tmpdir(), `jaw-shutdown-it-${seed}-`));
-    const port = pickPort(seed);
+    // A probed free port, not a random one in a fixed band: files run
+    // concurrently under process isolation, so two cases could pick the same
+    // number and the loser would look like a server that refused to boot.
+    const port = await findFreePort();
     const child = spawn(
         process.execPath,
         [CLI_ENTRY, '--home', home, 'serve', '--port', String(port), '--no-open'],
@@ -69,10 +88,19 @@ async function runSignalCase(
     try {
         try {
             await waitForHealth(port);
-        } catch {
-            // Server failed to start — skip test (CI may lack native modules)
+        } catch (error) {
             child.kill('SIGKILL');
             fs.rmSync(home, { recursive: true, force: true });
+            // Under CI the server not booting IS the finding. The stderr was
+            // already being captured here and then thrown away, which is why
+            // every past occurrence read as an environment quirk rather than as
+            // the failure it is.
+            if (IN_CI) {
+                throw new Error(
+                    `serve failed to become healthy on port ${port} under CI (${(error as Error).message}).\n`
+                    + `child stderr:\n${stderr || '(empty)'}`,
+                );
+            }
             return 'skipped';
         }
         const startedAt = Date.now();
@@ -98,12 +126,16 @@ async function runSignalCase(
     return 'ok';
 }
 
-test('GSI-001: serve exits within timeout on SIGTERM and closes port', { skip: !HAS_DIST && 'dist not built' }, async (t) => {
+test('GSI-001: serve exits within timeout on SIGTERM and closes port', async (t) => {
+    if (!requireDist(t)) return;
     const result = await runSignalCase('SIGTERM', 1);
-    if (result === 'skipped') t.skip('server failed to start (CI environment)');
+    // Unreachable under CI: runSignalCase throws there instead of reporting a
+    // sentinel, so this branch is a developer-box affordance only.
+    if (result === 'skipped') t.skip('server failed to start locally');
 });
 
-test('GSI-002: serve exits within timeout on SIGINT and closes port', { skip: !HAS_DIST && 'dist not built' }, async (t) => {
+test('GSI-002: serve exits within timeout on SIGINT and closes port', async (t) => {
+    if (!requireDist(t)) return;
     const result = await runSignalCase('SIGINT', 2, 'group');
-    if (result === 'skipped') t.skip('server failed to start (CI environment)');
+    if (result === 'skipped') t.skip('server failed to start locally');
 });
