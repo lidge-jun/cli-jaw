@@ -11,10 +11,21 @@ const { armExitSettle, captureExitSettler, settleCapturedExit, waitForExitSettle
 const { killAgentById, activeProcesses } = await import('../../src/agent/spawn.ts');
 
 /** A child that catches SIGTERM and keeps running — the case `ChildProcess.killed` hides. */
-function spawnTermTrappingChild(): ChildProcess {
-    return spawn(process.execPath, ['-e',
-        "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);",
+async function spawnTermTrappingChild(): Promise<ChildProcess> {
+    const child = spawn(process.execPath, ['-e',
+        "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000); process.stdout.write('READY');",
     ]);
+    // Waiting on the 'spawn' event is not enough: it fires before node has evaluated
+    // -e, so a SIGTERM sent immediately after would arrive while the default handler
+    // is still installed and the child would die on the first signal — proving nothing.
+    await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('trap fixture never reported ready')), 10_000);
+        child.stdout!.on('data', (chunk: Buffer) => {
+            if (chunk.toString().includes('READY')) { clearTimeout(timer); resolve(); }
+        });
+        child.once('error', err => { clearTimeout(timer); reject(err); });
+    });
+    return child;
 }
 
 // ─── KP-001 ───
@@ -25,9 +36,8 @@ function spawnTermTrappingChild(): ChildProcess {
 // worker stop while main stop escalated correctly (#683).
 
 test('KP-001: killAgentById escalates a SIGTERM-trapping worker to SIGKILL', { timeout: 15_000 }, async () => {
-    const child = spawnTermTrappingChild();
-    await once(child, 'spawn');
-    const agentId = 'kp-001-trap';
+        const child = await spawnTermTrappingChild();
+        const agentId = 'kp-001-trap';
     activeProcesses.set(agentId, child);
     try {
         assert.equal(killAgentById(agentId), true, 'the worker kill port must accept a live child');
