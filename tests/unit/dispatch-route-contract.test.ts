@@ -161,8 +161,8 @@ test('dispatch route resolves virtual employees through shared dispatch target h
         'virtual employee defaults must use the ocx-aware model resolver',
     );
     assert.ok(
-        orchestrateSrc.includes('await resolveDispatchTarget(req.body || {}, emps)'),
-        'single dispatch route must await async target resolution',
+        orchestrateSrc.includes('const target = await resolveDispatchTarget(input, emps)'),
+        'target resolution must stay async inside the shared admission helper',
     );
     assert.ok(
         orchestrateSrc.includes('staticSpec: Awaited<ReturnType<typeof resolveDispatchableEmployee>> | null'),
@@ -175,7 +175,7 @@ test('batch dispatch route accepts virtual employees', () => {
     assert.ok(batchStart >= 0, 'batch dispatch route should exist');
     const batchBlock = orchestrateSrc.slice(batchStart, batchStart + 8000);
 
-    assert.ok(batchBlock.includes('await resolveDispatchTarget(item || {}, emps)'), 'batch route should use shared target resolver');
+    assert.ok(batchBlock.includes('await resolveDispatchEntry(item || {}, {'), 'batch route should resolve its target through the shared admission helper');
     assert.ok(batchBlock.includes('agentName: target.targetName'), 'batch results should label resolved target name');
     assert.ok(batchBlock.includes('emp: target.emp'), 'batch entries should execute resolved virtual/static/db row');
 });
@@ -194,16 +194,16 @@ test('dispatch mutable scope validation uses projectDirs before Jaw workingDir',
         'dispatch route should fall back to persisted projectDirs for scope sandboxing',
     );
     assert.ok(
-        orchestrateSrc.includes('normalizeScope(dispatchProjectRoot, scope)'),
-        'single dispatch should validate mutable scope against the resolved project root',
+        orchestrateSrc.includes('normalizeScope(projectRoot, scope)'),
+        'the shared admission helper should validate mutable scope against the resolved project root',
     );
     assert.ok(
         orchestrateSrc.includes('postDispatchDiffCheck(dispatchProjectRoot, scope,'),
         'single dispatch post-check should use the same project root as preflight',
     );
     assert.ok(
-        orchestrateSrc.includes('normalizeScope(resolveDispatchProjectRoot({ projectDirs: prepared.ctx.projectDirs, workingDir: prepared.ctx.workingDir }), scope)'),
-        'batch dispatch should validate mutable scope against the resolved project root',
+        orchestrateSrc.includes('projectRoot: resolveDispatchProjectRoot({ projectDirs: assignment.projectDirs, workingDir: assignment.workingDir })'),
+        'batch dispatch should validate mutable scope against the per-assignment project root, like the single route',
     );
     assert.ok(
         !orchestrateSrc.includes('normalizeScope(settings["workingDir"] || process.cwd(), scope)'),
@@ -264,16 +264,21 @@ test('dispatch route auto-injects full ctx.plan without truncation or file refer
         'dispatch route must not truncate ctx.plan to 3000 chars after Phase 56.1',
     );
 
-    // New inline prepend header must be present.
+    // The header now comes from the shared builder both routes call (#690), so
+    // the route asserts the call rather than owning a second copy of the bytes.
     assert.ok(
-        routeBlock.includes('## Approved Plan'),
-        'dispatch route must prepend "## Approved Plan" header when ctx.plan exists',
+        routeBlock.includes('buildApprovedPlanTask(String(task), injectedPlan)'),
+        'dispatch route must build the prepended plan through the shared builder',
+    );
+    assert.ok(
+        !routeBlock.includes('## Approved Plan'),
+        'the wrapper text must live in buildApprovedPlanTask, not inline in the route',
     );
 
     // Must still guard on ctx.plan existing.
     assert.ok(
-        routeBlock.includes('const injectedPlan = assignment.plan') && routeBlock.includes('if (injectedPlan)'),
-        'dispatch route must still guard the prepend on dispatchCtx?.plan',
+        routeBlock.includes('const injectedPlan = assignment.plan'),
+        'dispatch route must still guard the prepend on the assignment plan',
     );
 });
 
