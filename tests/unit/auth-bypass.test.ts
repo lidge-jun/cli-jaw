@@ -5,6 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { join } from 'node:path';
+import { DEFAULT_SETTINGS } from '../../src/core/config.ts';
+import { SETTINGS_MERGE_SPEC, mergeSettingsLayer, mergeSettingsPatch } from '../../src/core/settings-merge.ts';
 
 const projectRoot = join(import.meta.dirname, '../..');
 const serverSrc = readSource(join(projectRoot, 'server.ts'), 'utf8');
@@ -75,23 +77,40 @@ test('AB-006: 403 responses include LAN hint', () => {
         'LAN_HINT should reference both bindHost and lanBypass');
 });
 
-test('AB-007: settings.network defaults include bindHost + lanBypass', () => {
-    const configSrc = readSource(join(projectRoot, 'src/core/config.ts'), 'utf8');
-    assert.ok(configSrc.includes("bindHost: '127.0.0.1'"),
-        'createDefaultSettings must set network.bindHost default');
-    assert.ok(/lanBypass:\s*false/.test(configSrc),
-        'createDefaultSettings must set network.lanBypass=false default');
-    assert.ok(configSrc.includes('network: { ...defaults.network, ...(raw.network || {}) }'),
-        'loadSettings must deep-merge the network block');
+// AB-007/AB-008 used to grep src for the literal spread expressions that
+// implemented the merge. That asserted the shape of one implementation rather
+// than the property it was there for, so any refactor broke them while a genuine
+// sibling-clobbering regression could slip past. They now exercise the merge.
+test('AB-007: a partial network document keeps bindHost and lanBypass', () => {
+    assert.equal(DEFAULT_SETTINGS.network.bindHost, '127.0.0.1');
+    assert.equal(DEFAULT_SETTINGS.network.lanBypass, false);
+
+    // What #108 was about: a stored document naming only one remoteAccess field
+    // must not take the rest of the network block down with it.
+    const merged = mergeSettingsLayer(DEFAULT_SETTINGS, { network: { remoteAccess: { mode: 'lan' } } });
+    assert.equal(merged['network'].bindHost, '127.0.0.1');
+    assert.equal(merged['network'].lanBypass, false);
+    assert.equal(merged['network'].remoteAccess.mode, 'lan');
+    assert.equal(merged['network'].remoteAccess.trustProxies, false);
+    assert.equal(merged['network'].remoteAccess.trustForwardedFor, false);
 });
 
-test('AB-008: settings-merge includes network in nested merge list', () => {
-    const mergeSrc = readSource(join(projectRoot, 'src/core/settings-merge.ts'), 'utf8');
-    const arrayIdx = mergeSrc.indexOf("['heartbeat', 'telegram'");
-    assert.ok(arrayIdx >= 0, 'nested merge array should exist');
-    const arrayLine = mergeSrc.slice(arrayIdx, mergeSrc.indexOf(']', arrayIdx) + 1);
-    assert.ok(arrayLine.includes("'network'"),
-        'settings-merge nested array must include network');
+test('AB-008: the API ingress merges network at both levels', () => {
+    const rule = SETTINGS_MERGE_SPEC['network'];
+    assert.ok(rule, 'network must be a declared nested merge key');
+    assert.equal(rule.kind, 'nested');
+    assert.ok(rule.kind === 'nested' && rule.children.includes('remoteAccess'));
+
+    // The spec alone proves nothing if the merge does not read it, so assert the
+    // behaviour too: a declared-but-unused table would pass the check above.
+    const patched = mergeSettingsPatch(
+        { network: { bindHost: '0.0.0.0', lanBypass: true, remoteAccess: { mode: 'off', trustProxies: true } } },
+        { network: { remoteAccess: { mode: 'lan' } } },
+    );
+    assert.equal(patched['network'].bindHost, '0.0.0.0');
+    assert.equal(patched['network'].lanBypass, true);
+    assert.equal(patched['network'].remoteAccess.mode, 'lan');
+    assert.equal(patched['network'].remoteAccess.trustProxies, true);
 });
 
 // ─── Security Hardening (PR#2) ─────────────────────────

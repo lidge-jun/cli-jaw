@@ -2,7 +2,7 @@
 // src/settings-merge.js 가 생성되면 통과 (server.js에서 로직 추출 예정)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mergeSettingsPatch, sanitizeSettingsInput } from '../../src/core/settings-merge.ts';
+import { mergeSettingsPatch, sanitizeSettingsInput, mergeSettingsLayer, SETTINGS_MERGE_SPEC } from '../../src/core/settings-merge.ts';
 
 // ─── perCli deep merge ──────────────────────────────
 
@@ -146,3 +146,71 @@ test('SM-014: a patch without multiSession does not invent one', () => {
     assert.equal('multiSession' in out.value, false);
     assert.deepEqual(out.invalidPaths, []);
 });
+
+// ─── one merge policy for both ingresses (#696) ─────
+//
+// Before this, the boot merge and the API merge each carried their own list of
+// nested keys, and the lists disagreed. Which sibling keys a partial write
+// destroyed therefore depended on which door it came through.
+
+test('SM-014: a partial network.remoteAccess patch keeps its siblings', () => {
+    const current = { network: { bindHost: '0.0.0.0', lanBypass: true,
+        remoteAccess: { mode: 'off', trustProxies: true, trustForwardedFor: false, publicOriginHint: 'x' } } };
+    const next = mergeSettingsPatch(current, { network: { remoteAccess: { mode: 'lan' } } });
+    assert.deepEqual(next.network.remoteAccess,
+        { mode: 'lan', trustProxies: true, trustForwardedFor: false, publicOriginHint: 'x' });
+    assert.equal(next.network.bindHost, '0.0.0.0');
+});
+
+test('SM-015: a partial avatar patch keeps the other side', () => {
+    // The API ingress used to replace avatar wholesale while boot merged it.
+    const current = { avatar: { agent: { imagePath: 'a', scale: 2 }, user: { imagePath: 'u' } } };
+    const next = mergeSettingsPatch(current, { avatar: { agent: { imagePath: 'b' } } });
+    assert.deepEqual(next.avatar.agent, { imagePath: 'b', scale: 2 });
+    assert.deepEqual(next.avatar.user, { imagePath: 'u' });
+});
+
+test('SM-016: a partial messaging.latestSeen patch keeps other channel cursors', () => {
+    const current = { messaging: { enabledChannels: ['slack'], homeChannel: 'slack',
+        latestSeen: { slack: null, telegram: '111', discord: '222' } } };
+    const next = mergeSettingsPatch(current, { messaging: { latestSeen: { slack: '999' } } });
+    assert.deepEqual(next.messaging.latestSeen, { slack: '999', telegram: '111', discord: '222' });
+    assert.deepEqual(next.messaging.enabledChannels, ['slack']);
+});
+
+test('SM-017: a key outside the spec is replaced wholesale, on purpose', () => {
+    // Arrays must not be union-merged, and that is why the contract is a
+    // declared list rather than a recursive deep merge.
+    const next = mergeSettingsPatch(
+        { employees: [{ id: 'a' }, { id: 'b' }], messaging: { enabledChannels: ['slack', 'telegram'] } },
+        { employees: [{ id: 'c' }], messaging: { enabledChannels: ['discord'] } },
+    );
+    assert.deepEqual(next.employees, [{ id: 'c' }]);
+    assert.deepEqual(next.messaging.enabledChannels, ['discord']);
+});
+
+test('SM-018: the layer does not mutate either input', () => {
+    const base = { network: { bindHost: '127.0.0.1', remoteAccess: { mode: 'off' } } };
+    const incoming = { network: { remoteAccess: { mode: 'lan' } } };
+    const next = mergeSettingsLayer(base, incoming);
+    assert.equal(base.network.remoteAccess.mode, 'off');
+    assert.deepEqual(incoming, { network: { remoteAccess: { mode: 'lan' } } });
+    assert.equal(next['network'].remoteAccess.mode, 'lan');
+});
+
+test('SM-019: an explicit null or array replaces the block rather than merging', () => {
+    const current = { heartbeat: { enabled: true, every: '30m' } };
+    assert.equal(mergeSettingsPatch(current, { heartbeat: null }).heartbeat, null);
+    assert.deepEqual(mergeSettingsPatch(current, { heartbeat: [] }).heartbeat, []);
+});
+
+test('SM-020: the spec names every key both ingresses rely on', () => {
+    for (const key of ['network', 'runtime', 'multiSession', 'avatar', 'messaging',
+        'heartbeat', 'stt', 'presentation', 'telegram', 'discord', 'slack', 'dispatchApproval']) {
+        assert.ok(SETTINGS_MERGE_SPEC[key], key + ' must be declared in SETTINGS_MERGE_SPEC');
+    }
+    assert.equal(SETTINGS_MERGE_SPEC['perCli']?.kind, 'perEntry');
+    assert.equal(SETTINGS_MERGE_SPEC['employees'], undefined,
+        'employees is an array and must stay a wholesale replacement');
+});
+
