@@ -105,5 +105,11 @@ test('BWAG-011: the menu-open probe accepts any Grok 4.x, not one pinned release
     }
     assert.equal(pattern.test('Settings'), false);
     assert.equal(/Grok 4\\./.test(String(pattern)), false, 'the probe must not pin a major or minor version');
-    assert.equal(grokModelSrc.includes('^Grok 4\\.\\d'), false, 'no inline pinned probe should remain');
+    // Check the code rather than the prose: an earlier version of this asserted
+    // the pinned spelling was absent from the whole file and tripped on the
+    // comment that explains why it was removed.
+    const inlineHasText = grokModelSrc.match(/hasText:\s*\/[^/]*\//g) || [];
+    assert.equal(inlineHasText.length, 0, `menu probes should use the derived pattern, found ${inlineHasText.join(', ')}`);
+    const derivedUses = grokModelSrc.match(/hasText:\s*GROK_MENU_LABEL_PATTERN/g) || [];
+    assert.ok(derivedUses.length >= 4, `expected every probe to use the derived pattern, found ${derivedUses.length}`);
 });

@@ -73,7 +73,7 @@ export function grokModelLabels(choice: GrokModelChoice): readonly string[] {
 /**
  * Recognises an open model menu from its labels with the version left generic.
  *
- * The four probes used to spell '^Grok 4\.\d' inline, so the day the web UI
+ * The four probes each spelled the major and minor inline, so the day the web UI
  * shipped a different major an open menu stopped reading as open. Deriving one
  * pattern from the labels means a new release needs no probe edit, and the 2026-09-11
  * observation that no Grok 4.x row existed at all is exactly that failure mode.
