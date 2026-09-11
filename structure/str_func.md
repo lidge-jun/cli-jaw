@@ -623,7 +623,7 @@ cli-jaw/
 │       ├── service.ts        ← 크로스 플랫폼 서비스 관리 (systemd/launchd/docker, 289L)
 │       ├── orchestrate.ts    ← IPABCD 상태 제어 CLI (jaw orchestrate [I|P|A|B|C|D|reset]) + Phase60 --attest evidence arg + x-jaw-boss-token header attach (185L)
 │       ├── browser.ts        ← 브라우저 CLI (primitive + tab/debug + web-ai delegator, 876L)
-│       ├── browser-web-ai.ts ← `jaw browser web-ai` ChatGPT/Gemini/Grok 자동화 helper (452L)
+│       ├── browser-web-ai.ts ← `jaw browser web-ai` ChatGPT/Gemini/Grok 자동화 helper (471L)
 │       ├── dashboard.ts      ← `jaw dashboard serve` + dashboard memory delegation (290L)
 │       ├── dashboard-memory.ts ← `jaw dashboard memory` L2 federation CLI helper (210L)
 │       ├── dashboard-chat.ts ← `jaw dashboard chat search` L2 federation CLI helper (110L)
