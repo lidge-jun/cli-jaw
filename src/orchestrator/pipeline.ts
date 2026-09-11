@@ -8,6 +8,7 @@ import { broadcast } from '../core/bus.js';
 import { readSlackWorkflowMetadata, isWorkflowReplyUnconfirmed } from '../slack/workflow.js';
 import { settings } from '../core/config.js';
 import { stripUndefined } from '../core/strip-undefined.js';
+import { isRemoteTarget } from '../messaging/types.js';
 import {
     clearAllEmployeeSessions,
     getRecentMessagesLite,
@@ -73,7 +74,11 @@ function captureExecutionMeta(meta: Record<string, unknown> & { remoteKey?: stri
         activeChatSessionId: getActiveChatSession(),
         multiSessionEnabled: settings['multiSession']?.enabled === true,
     });
-    return { ...meta, ...binding };
+    return {
+        ...meta,
+        ...(isRemoteTarget(meta['target']) ? { target: { ...meta['target'] } } : {}),
+        ...binding,
+    };
 }
 
 function runtimeActivityLifecycle(meta: Record<string, unknown>) {

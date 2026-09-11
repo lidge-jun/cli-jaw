@@ -3,7 +3,7 @@
 // Replaces duplicated intent/queue/orchestrate logic in server.ts + bot.ts.
 
 import { randomUUID } from 'node:crypto';
-import { getCurrentMainMeta, isAgentBusy, enqueueMessage, killActiveAgent, messageQueue, purgeQueueOnStop, steerAgent } from '../agent/spawn.js';
+import { getCurrentMainMeta, hasActiveMainReplacement, isAgentBusy, enqueueMessage, killActiveAgent, messageQueue, purgeQueueOnStop, steerAgent } from '../agent/spawn.js';
 import { hasBlockingWorkers } from './worker-registry.js';
 import { getSession, insertMessage } from '../core/db.js';
 import { resolveMainCli, type MainSessionRecord } from '../core/main-session.js';
@@ -19,7 +19,7 @@ import {
 } from './pipeline.js';
 import { getState } from './state-machine.js';
 import { channelGateOn, resolveOrcScope } from './scope.js';
-import type { RuntimeOrigin, RemoteTarget } from '../messaging/types.js';
+import { isRemoteTarget, type RuntimeOrigin, type RemoteTarget } from '../messaging/types.js';
 import { buildRemoteBindingKey, normalizedThreadId, type SessionScope } from '../messaging/session-key.js';
 import { sessionLanes } from './session-lanes.js';
 import { admitRequest, settleOnce } from './request-registry.js';
@@ -105,14 +105,24 @@ function applyMidRunPolicy(
     if (policy === 'steer') {
         const owner = getCurrentMainMeta(ctx.scopeKey);
         if (owner && !sameRunConversation(
-            { origin: owner.origin, remoteKey: owner.remoteKey },
-            { origin: ctx.meta.origin, remoteKey: ctx.remoteKey },
+            { origin: owner.origin, remoteKey: owner.remoteKey
+                ?? (isRemoteTarget(owner.target) ? buildRemoteBindingKey(owner.target) : undefined) },
+            { origin: ctx.meta.origin, remoteKey: ctx.remoteKey
+                ?? (isRemoteTarget(ctx.meta.target) ? buildRemoteBindingKey(ctx.meta.target) : undefined) },
         )) {
+            // Native replacement validates every owner dimension and returns a
+            // typed failure. Queueing here would preserve the owner's
+            // scope/session/target while swapping only remoteKey, which stores
+            // another conversation's prompt in the owner's transcript.
+            if (hasActiveMainReplacement(ctx.scopeKey)) {
+                // Fall through to steerAgent; its immutable owner check rejects.
+            } else {
             // Steer changes the turn that is already running. A different
             // remoteKey is a different conversation, so applying its text to
             // this owner would also hand it the owner's progress and terminal
             // delivery. Queue it as its own follow-up instead (#743).
-            return queue();
+                return queue();
+            }
         }
         // 'steer' means the message steers the agent — never a silent queue.
         // A steerable Codex App turn receives in-band input. Native Cursor/Grok

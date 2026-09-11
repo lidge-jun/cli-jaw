@@ -295,10 +295,7 @@ test('real CLI steer propagates fatal dispatch without its follow-up queue path'
 });
 
 for (const conflict of ['chat', 'remoteKey', 'target', 'guild', 'targetKind'] as const) {
-    test(conflict === 'remoteKey'
-        ? 'gateway queues a foreign remoteKey as its own turn before replacement dispatch'
-        : `gateway rejects foreign ${conflict} before replacement dispatch, row insertion or queueing`,
-    { timeout: 5000 }, async t => {
+    test(`gateway rejects foreign ${conflict} before replacement dispatch, row insertion or queueing`, { timeout: 5000 }, async t => {
         const { submitMessage } = await import('../../src/orchestrator/gateway.ts');
         const target: RemoteTarget = { channel: 'slack', peerKind: 'channel', targetKind: 'channel',
             targetId: 'COWNER', threadId: '1.001', guildId: 'TOWNER' };
@@ -316,25 +313,14 @@ for (const conflict of ['chat', 'remoteKey', 'target', 'guild', 'targetKind'] as
                 remoteKey: conflict === 'remoteKey' ? 'jaw:slack:channel:CFOREIGN' : opts.remoteKey, target: suppliedTarget });
             await new Promise(resolve => setImmediate(resolve));
             const settled = events.filter(e => e.type === 'request_settled' && e.data['requestId'] === submitted.requestId);
-            if (conflict === 'remoteKey') {
-                // Another conversation is valid work, just not a steer of this
-                // owner. It waits as its own turn instead of being failed or
-                // injected into the run currently on the wire (#743).
-                assert.equal(submitted.action, 'queued');
-                assert.equal(settled.length, 0);
-                assert.equal(messageQueue.some(item => item.id === submitted.queuedId
-                    && item.remoteKey === 'jaw:slack:channel:CFOREIGN'), true);
-            } else {
-                assert.equal(settled.length, 1); assert.equal(settled[0]!.data['outcome'], 'failed');
-                assert.equal(settled[0]!.data['error'], 'native_replacement_owner_mismatch');
-            }
+            assert.equal(settled.length, 1); assert.equal(settled[0]!.data['outcome'], 'failed');
+            assert.equal(settled[0]!.data['error'], 'native_replacement_owner_mismatch');
             assert.equal(hook.mock.callCount(), 0);
             assert.deepEqual(db.prepare('SELECT COUNT(*) AS n FROM messages').get(), before);
-            assert.equal(messageQueue.some(item => item.scope === opts.scopeKey), conflict === 'remoteKey');
+            assert.equal(messageQueue.some(item => item.scope === opts.scopeKey), false);
             assert.equal(wire().filter(e => e['method'] === 'session/prompt').length, 1);
             assert.equal(wire().some(e => e['method'] === 'session/cancel'), false);
             assert.equal(events.some(e => e.type === 'steer_started' || e.type === 'steer_rejected' || e.type === 'new_message'), false);
-            if (conflict === 'remoteKey' && submitted.queuedId) removeQueuedMessage(submitted.queuedId);
         } finally { off(); killActiveAgent(opts.scopeKey, 'user'); await run.promise; }
     });
 }

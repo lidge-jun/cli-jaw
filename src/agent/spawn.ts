@@ -798,6 +798,12 @@ export function canSteerAgent(scopeKey: string): boolean {
     return typeof run?.steerTurnInBand === 'function' || typeof run?.replaceTurn === 'function';
 }
 
+/** Native replacement owns a stricter mismatch contract than queue fallback:
+ * malformed cross-conversation metadata must fail before it is persisted. */
+export function hasActiveMainReplacement(scopeKey: string): boolean {
+    return typeof activeMainProcesses.get(scopeKey)?.replaceTurn === 'function';
+}
+
 export type SteerOutcome = 'steered' | 'fallback-queue' | 'new-run' | 'cancelled' | 'retired';
 
 export async function steerAgent(
@@ -867,8 +873,10 @@ export async function steerAgent(
         return 'fallback-queue';
     }
     if (run && !sameRunConversation(
-        { origin: run.meta.origin, remoteKey: run.meta.remoteKey },
-        { origin: source, remoteKey: meta?.remoteKey },
+        { origin: run.meta.origin, remoteKey: run.meta.remoteKey
+            ?? (isRemoteTarget(run.meta.target) ? buildRemoteBindingKey(run.meta.target) : undefined) },
+        { origin: source, remoteKey: meta?.remoteKey
+            ?? (isRemoteTarget(meta?.target) ? buildRemoteBindingKey(meta.target) : undefined) },
     )) {
         // In-band and kill-steer mutate the turn already owned by `run`.
         // Different remote keys are different conversations, even when a legacy

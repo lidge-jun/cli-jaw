@@ -17,6 +17,7 @@ import { getActiveChatSession } from '../core/chat-sessions.js';
 import { currentSessionScope } from '../core/session-context.js';
 import { resolveExecutionBinding } from './scope.js';
 import { matchesRunPin } from '../messaging/run-pin.js';
+import { isRemoteTarget } from '../messaging/types.js';
 
 export interface CollectedOrchestrateResult {
     text: string;
@@ -59,7 +60,7 @@ export function orchestrateAndCollectData(
                 scope: binding.scope,
                 sessionId: binding.chatSessionId,
                 remoteKey: meta['remoteKey'],
-                target: meta['target'],
+                target: isRemoteTarget(meta['target']) ? { ...meta['target'] } : undefined,
             }
             : null;
         let collected = '';
@@ -142,7 +143,9 @@ export function orchestrateAndCollectData(
             // must differ — a steer carrying our own id is not a supersession.
             if (type === 'steer_started'
                 && data['scope'] === binding.scope
-                && (data['sessionId'] === undefined || data['sessionId'] === binding.chatSessionId)
+                && data['sessionId'] === binding.chatSessionId
+                && data['origin'] === runMeta.origin
+                && (meta['remoteKey'] === undefined || data['remoteKey'] === meta['remoteKey'])
                 && (!requestId || data['requestId'] !== requestId)) {
                 superseded = true;
             }

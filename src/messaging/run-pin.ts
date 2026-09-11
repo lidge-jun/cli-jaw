@@ -41,7 +41,7 @@ export function runPinFields(pin: RunPin): Record<string, unknown> {
     if (pin.scope) fields['scope'] = pin.scope;
     if (pin.sessionId) fields['sessionId'] = pin.sessionId;
     if (pin.remoteKey) fields['remoteKey'] = pin.remoteKey;
-    if (pin.target && typeof pin.target.targetId === 'string' && pin.target.targetId) {
+    if (isRemoteTarget(pin.target)) {
         fields['target'] = { ...pin.target };
     }
     return fields;
