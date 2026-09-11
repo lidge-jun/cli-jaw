@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { settings } from '../core/config.js';
+import { resolveMaxConcurrent } from '../core/config.js';
 
 type MainJob = { start(): void };
 
@@ -98,5 +98,5 @@ export class SessionLanes {
 }
 
 export const sessionLanes = new SessionLanes(
-    () => settings["multiSession"]?.maxConcurrent ?? 1,
+    () => resolveMaxConcurrent(),
 );
