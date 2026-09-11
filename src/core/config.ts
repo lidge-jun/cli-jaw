@@ -24,6 +24,8 @@ import type { TrustedBotTrigger } from '../slack/events.js';
 import { SETUP_STATE_FILE } from './install-integrity.js';
 import {
     sanitizeSettingsInput,
+    mergeSettingsLayer,
+    SETTINGS_MERGE_SPEC,
     type SettingsPersistenceShape,
 } from './settings-merge.js';
 export { detectAllCli, detectCli } from './cli-detection.js';
@@ -770,10 +772,9 @@ export function migrateSettings(s: Record<string, any>, sourceVersion = readSett
             if (s["multiSession"].channels.slack === undefined) s["multiSession"].channels.slack = true;
         }
     }
-    const maxConcurrent = Number(s["multiSession"].maxConcurrent);
-    s["multiSession"].maxConcurrent = Number.isInteger(maxConcurrent) && maxConcurrent > 0
-        ? maxConcurrent
-        : 1;
+    // Repairing an invalid value means falling back to THE default, not to a
+    // second opinion about what the default is (#696).
+    s["multiSession"].maxConcurrent = resolveMaxConcurrent(s as Record<string, unknown>);
     if (!['steer', 'followup', 'collect', 'interrupt'].includes(s["multiSession"].midRunPolicy)) {
         s["multiSession"].midRunPolicy = 'steer';
     }
@@ -940,6 +941,60 @@ export function applyEnvOverrides(s: Record<string, any>) {
 
 /** Mutable settings object — shared across all modules via ESM live binding */
 export let settings: Record<string, any> = createDefaultSettings();
+
+/** A stored block that is null or an array is a corrupt document, not an instruction.
+ *
+ *  The hand-rolled boot merge this replaced wrote `...(raw.telegram || {})` for
+ *  every nested block, so a `"telegram": null` in settings.json quietly fell back
+ *  to defaults. Carrying the null through the shared layer instead would replace
+ *  the block with null and then let the normalizers below rebuild only part of it
+ *  — a telegram block holding nothing but `ack`, with the bot token gone.
+ *  Dropping the key restores the old meaning.
+ *
+ *  Only keys the merge spec names are dropped. A top-level scalar is a real value,
+ *  and an API patch keeps its own semantics: there, an explicit null IS a write. */
+function dropCorruptBlocks(raw: Record<string, unknown>): Record<string, unknown> {
+    const out: Record<string, unknown> = { ...raw };
+    for (const key of Object.keys(SETTINGS_MERGE_SPEC)) {
+        if (key in out && !isPlainRecord(out[key])) delete out[key];
+    }
+    return out;
+}
+
+/** Runtime defaults for keys whose fallback used to be re-typed at each call site.
+ *
+ *  The schema said multiSession.maxConcurrent was 2 while the lane allocator used
+ *  ?? 1, and memory.flushEvery was declared 10 and then re-declared 10 in four
+ *  other files. Changing the schema alone did nothing in the first case, because
+ *  the literal at the call site won. These resolvers exist so there is exactly one
+ *  answer to "what is the default", and it is the one in DEFAULT_SETTINGS. */
+function resolvePositiveInt(value: unknown, fallback: number): number {
+    return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : fallback;
+}
+
+export function resolveFlushEvery(source: Record<string, unknown> = settings): number {
+    const memory = source['memory'];
+    return resolvePositiveInt(
+        isPlainRecord(memory) ? memory['flushEvery'] : undefined,
+        DEFAULT_SETTINGS.memory.flushEvery,
+    );
+}
+
+export function resolveMemoryRetentionDays(source: Record<string, unknown> = settings): number {
+    const memory = source['memory'];
+    return resolvePositiveInt(
+        isPlainRecord(memory) ? memory['retentionDays'] : undefined,
+        DEFAULT_SETTINGS.memory.retentionDays,
+    );
+}
+
+export function resolveMaxConcurrent(source: Record<string, unknown> = settings): number {
+    const multiSession = source['multiSession'];
+    return resolvePositiveInt(
+        isPlainRecord(multiSession) ? multiSession['maxConcurrent'] : undefined,
+        DEFAULT_SETTINGS.multiSession.maxConcurrent,
+    );
+}
 let settingsPersistenceShape: SettingsPersistenceShape = 'absent';
 
 export type SettingsStateCandidate = {
@@ -1119,76 +1174,43 @@ export function loadSettings() {
                 mergedPerCli[cli] = { ...(mergedPerCli[cli] || {}), ...cfg };
             }
         }
-        const merged = migrateSettings({
-            ...defaults,
-            ...raw,
-            ...(sourceVersion === 1 ? { cli: legacyCli } : {}),
-            perCli: mergedPerCli,
-            tui: { ...defaults.tui, ...(raw.tui || {}) },
-            // The channel spreads are one level deep, which is right for flat
-            // credential fields and wrong for the nested ack group: a stored file
-            // carrying only {ack:{enabled:true}} would drop the rest. Merged here
-            // rather than repaired later so migrateSettings below sees a complete
-            // ack object.
-            telegram: { ...defaults.telegram, ...(raw.telegram || {}),
-                ack: mergeAckSettings(defaults.telegram.ack, raw.telegram?.ack) },
-            discord: { ...defaults.discord, ...(raw.discord || {}),
-                ack: mergeAckSettings(defaults.discord.ack, raw.discord?.ack) },
-            slack: { ...defaults.slack, ...(raw.slack || {}),
-                ack: mergeAckSettings(defaults.slack.ack, raw.slack?.ack),
-                // Same one-level-deep problem as ack: a stored
-                // {autoJoin:{enabled:false}} would erase maxJoinsPerRun and
-                // exclude. Normalizes too — the budget reaches a loop that
-                // mutates a live workspace, so NaN must not survive here.
-                autoJoin: mergeSlackAutoJoin(defaults.slack.autoJoin, raw.slack?.autoJoin) },
-            dispatchApproval: {
-                ...defaults.dispatchApproval,
-                ...(raw.dispatchApproval || {}),
-                operators: { ...defaults.dispatchApproval.operators, ...(raw.dispatchApproval?.operators || {}) },
+        // One merge implementation, shared with the API and file-watch ingress.
+        // Boot used to hand-roll its own nested spreads, and the two lists drifted:
+        // a partial {heartbeat:{enabled:true}} lost every sibling here but kept them
+        // over the API, while a partial {avatar:{agent:...}} was the other way round.
+        // Which keys a partial document destroyed depended on which door it arrived
+        // through, which is not a property anyone chose.
+        const layered = mergeSettingsLayer(
+            { ...defaults, multiSession: multiSessionBaseline },
+            {
+                ...dropCorruptBlocks(raw),
+                ...(sourceVersion === 1 ? { cli: legacyCli } : {}),
+                perCli: mergedPerCli,
             },
-            memory: { ...defaults.memory, ...(raw.memory || {}) },
-            search: {
-                ...defaults.search,
-                ...(raw.search || {}),
-                engine: raw.search?.engine === 'fts5' ? 'fts5' : 'like',
-            },
-            trace: { ...defaults.trace, ...(raw.trace || {}) },
-            avatar: {
-                agent: { ...defaults.avatar.agent, ...(raw.avatar?.agent || {}) },
-                user: { ...defaults.avatar.user, ...(raw.avatar?.user || {}) },
-            },
-           messaging: {
-               // Spread the stored block FIRST. This object is rebuilt field by field,
-               // so anything not named here is dropped — and `enabledChannels` /
-               // `homeChannel` were not named. A v4 document therefore lost its gateway
-               // on every load, and migrateSettings then refilled it from the legacy
-               // `channel` key, which v4 had already deleted, so the fallback landed on
-               // telegram. The result was silent and self-inflicted: a Slack install
-               // read as telegram, no transport started, and the rewritten file made
-               // the corruption permanent on the next boot.
-               ...(raw.messaging || {}),
-               latestSeen: { ...defaults.messaging.latestSeen, ...(raw.messaging?.latestSeen || {}) },
-               lastActive: { ...defaults.messaging.lastActive, ...(raw.messaging?.lastActive || {}) },
-           },
-            jawCeo: { ...defaults.jawCeo, ...(raw.jawCeo || {}) },
-            pi: { ...defaults.pi, ...(raw.pi || {}) },
-            network: { ...defaults.network, ...(raw.network || {}) },
-            runtime: {
-                ...defaults.runtime,
-                ...(raw.runtime || {}),
-                codexApp: {
-                    ...defaults.runtime.codexApp,
-                    ...(raw.runtime?.codexApp || {}),
-                },
-            },
-            code: { ...defaults.code, ...(raw.code || {}) },
-            multiSession: {
-                ...multiSessionBaseline,
-                ...(raw.multiSession || {}),
-                channels: { ...multiSessionBaseline.channels, ...(raw.multiSession?.channels || {}) },
-            },
-            wiki: { ...defaults.wiki, ...(raw.wiki || {}) },
-        }, sourceVersion);
+        ) as Record<string, any>;
+        // Everything below is normalization, and the merge must not swallow it.
+        // ack is a third level the spec does not reach; slack.autoJoin repairs a
+        // budget that reaches a loop joining real channels; search.engine is a
+        // forced value rather than a merged one. Each reads the stored document
+        // directly, because the layer above has already folded the key in.
+        layered['telegram'] = {
+            ...(isPlainRecord(layered['telegram']) ? layered['telegram'] : {}),
+            ack: mergeAckSettings(defaults.telegram.ack, raw.telegram?.ack),
+        };
+        layered['discord'] = {
+            ...(isPlainRecord(layered['discord']) ? layered['discord'] : {}),
+            ack: mergeAckSettings(defaults.discord.ack, raw.discord?.ack),
+        };
+        layered['slack'] = {
+            ...(isPlainRecord(layered['slack']) ? layered['slack'] : {}),
+            ack: mergeAckSettings(defaults.slack.ack, raw.slack?.ack),
+            autoJoin: mergeSlackAutoJoin(defaults.slack.autoJoin, raw.slack?.autoJoin),
+        };
+        layered['search'] = {
+            ...(isPlainRecord(layered['search']) ? layered['search'] : {}),
+            engine: raw.search?.engine === 'fts5' ? 'fts5' : 'like',
+        };
+        const merged = migrateSettings(layered, sourceVersion);
         // #64 safety: auto-correct stale workingDir (e.g. copied instance)
         // but allow valid paths to persist (dynamic project targeting)
         // Any document below the current schema was rewritten by the migration above, so
