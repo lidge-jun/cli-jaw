@@ -163,6 +163,17 @@ test('SLACK-INT: a mention crosses from socket envelope to posted reply', { time
         await fixture.emitUntilAcked(envelope('E3', '<@UBOT> second STUB_MODI:echo:three', '1735689602.000100'));
         writeFileSync(join(stubDir, 'release-s1'), '');
 
+        // The second mention must actually have produced a turn. Without this a
+        // steer that silently DROPPED the follow-up would still satisfy the wait
+        // below, because releasing the first held child produces a reply on its
+        // own — the test would be measuring the release, not the steer.
+        await waitFor(
+            'a child for the steering mention',
+            () => stubRecords(stubDir).some(record => String(record['prompt']).includes('STUB_MODI:echo:three')),
+            60_000,
+            () => 'stub prompts seen: ' + JSON.stringify(stubRecords(stubDir).map(r => String(r['prompt']).slice(-60))),
+        );
+
         await waitFor(
             'a reply after the steer',
             () => postedTexts(fixture).slice(before).some(text => text.includes('stub reply')),
