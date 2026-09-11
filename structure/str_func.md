@@ -82,7 +82,7 @@ cli-jaw/
 │   │   └── providers/        ← direct native adapters and capabilities
 │   │       ├── catalog.ts ← model/capability descriptions (129L)
 │   │       ├── live-models.ts ← last-known opencodex catalog, refreshed in background (93L)
-│   │       ├── codex-app.ts ← Codex app-server adapter (326L)
+│   │       ├── codex-app.ts ← Codex app-server adapter (405L)
 │   │       ├── claude.ts ← Claude native adapter (93L)
 │   │       ├── acp.ts ← shared ACP resource ownership (134L)
 │   │       ├── cursor.ts ← Cursor native adapter (21L)

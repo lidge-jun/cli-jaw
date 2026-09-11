@@ -29,6 +29,26 @@ const policy: Record<CodeOpenOptions['permissionMode'], Pick<CodexThreadOptions,
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object'
     && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
+/**
+ * An empty granted profile is the native runtime's decline, not a no-op.
+ *
+ * codex-rs short-circuits an empty profile and records no grant
+ * (core/src/session/mod.rs:3118-3141), the TUI's Deny button emits exactly this
+ * payload (tui/src/bottom_pane/approval_overlay.rs:1968-2002), and analytics
+ * scores it Denied (analytics/src/reducer.rs:3095-3096). Verified against
+ * codex-rs 095da4b7e8b70b01afb5c6131ef926dcb8c0d85d.
+ */
+const PERMISSIONS_DENY = { permissions: {}, scope: 'turn' };
+const PERMISSION_REASON_MAX = 200;
+
+/** What the model asked for, in the words the person approving it needs. */
+function permissionLabel(requested: Record<string, unknown>, reason: unknown): string {
+    const asked = Object.keys(requested).map(key => key === 'fileSystem' ? 'file system' : key).join(' and ');
+    const why = typeof reason === 'string' && reason.trim()
+        ? `: ${reason.trim().slice(0, PERMISSION_REASON_MAX)}` : '';
+    return `Grant ${asked || 'additional'} access for this turn${why}`;
+}
+
 class CodeCodexSession implements CodeProviderSession {
     private readonly client: CodexAppClient;
     private readonly scope: string;
@@ -194,6 +214,9 @@ class CodeCodexSession implements CodeProviderSession {
 
     private async approval(method: string, params: Record<string, unknown>, _rpcId: number | string,
         signal: AbortSignal): Promise<Record<string, unknown> | undefined> {
+        // Each method answers in its own vocabulary. A command decline is not a
+        // valid PermissionsRequestApprovalResponse, so they cannot share a body.
+        if (method === 'item/permissions/requestApproval') return this.approvePermissions(params, signal);
         if (method !== 'item/commandExecution/requestApproval' && method !== 'item/fileChange/requestApproval') return undefined;
         const decline = { decision: 'decline' };
         const turn = this.active;
@@ -230,6 +253,62 @@ class CodeCodexSession implements CodeProviderSession {
                 requestType: 'approval', view: request.view })) request.cancel();
             const answer = await request.answer;
             return current() ? answer : decline;
+        } finally {
+            signal.removeEventListener('abort', abort);
+            request.cancel();
+            this.options.record(turn.context, { kind: 'request-settled', requestId: request.requestId });
+        }
+    }
+
+    /**
+     * Structured permission requests, which ask mode promised the user would see.
+     *
+     * These were previously unhandled here, so the client answered them with its
+     * own fallback and the request never reached the queue. That fallback is the
+     * canonical decline, so nothing was over-granted — but ask mode silently
+     * refused network and MCP requests while telling the user it would show them.
+     */
+    private async approvePermissions(params: Record<string, unknown>,
+        signal: AbortSignal): Promise<Record<string, unknown>> {
+        const requested = object(params['permissions']);
+        const turn = this.active;
+        // An empty ask cannot be granted into anything, so it declines before the queue.
+        if (!turn || this.options.permissionMode === 'read-only' || Object.keys(requested).length === 0) return PERMISSIONS_DENY;
+        const nativeTurn = this.client.getActiveTurnId(this.scope);
+        const requestedItem = params['itemId'];
+        // A permissions request names the tool item that asked, whose native type
+        // this protocol does not fix, so ownership is "this turn has seen it and it
+        // has not settled" rather than a command/file type literal.
+        const current = () => this.active === turn && this.alive && !this.exited && !this.closing && !turn.cancelled && !signal.aborted
+            && turn.context.isCurrent() && !!turn.nativeTurn && this.client.getActiveTurnId(this.scope) === turn.nativeTurn
+            && typeof requestedItem === 'string' && turn.items.has(requestedItem) && turn.items.get(requestedItem) !== 'completed';
+        if (!nativeTurn || turn.nativeTurn !== nativeTurn || !current()
+            || params['threadId'] !== this.nativeId || params['turnId'] !== nativeTurn) return PERMISSIONS_DENY;
+        // Core intersects a grant with what was requested, so echoing the request
+        // grants exactly what was asked and cannot widen it.
+        const grant = { permissions: requested, scope: 'turn' };
+        if (this.options.permissionMode === 'auto') return grant;
+        const accept = randomUUID(), reject = randomUUID();
+        const request = this.options.registry.open({ ...turn.context, requestType: 'approval',
+            view: { title: 'Approve additional permissions',
+                fields: [{ id: randomUUID(), label: permissionLabel(requested, params['reason']), multiSelect: false,
+                    allowFreeform: false, options: [{ id: accept, label: 'Allow once' }, { id: reject, label: 'Decline' }] }] },
+            cancelled: PERMISSIONS_DENY, isCurrent: current,
+            validate(value) {
+                const answer = object(value);
+                if (Object.keys(answer).length !== 1 || !Object.hasOwn(answer, 'optionId')
+                    || (answer['optionId'] !== accept && answer['optionId'] !== reject)) throw new Error('invalid_option');
+                return answer['optionId'] === accept ? grant : PERMISSIONS_DENY;
+            },
+        });
+        const abort = () => request.cancel();
+        signal.addEventListener('abort', abort, { once: true });
+        try {
+            if (!current()) request.cancel();
+            else if (!this.options.record(turn.context, { kind: 'request', requestId: request.requestId,
+                requestType: 'approval', view: request.view })) request.cancel();
+            const answer = await request.answer;
+            return current() ? answer : PERMISSIONS_DENY;
         } finally {
             signal.removeEventListener('abort', abort);
             request.cancel();

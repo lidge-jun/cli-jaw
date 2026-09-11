@@ -308,10 +308,13 @@ for (const mismatch of [{ threadId: 'foreign' }, { turnId: 'previous' }, { itemI
     });
 }
 
-test('Codex read-only and structured permission grants never open approval handles', async t => {
+test('Codex read-only declines both plain approvals and structured permission requests explicitly', async t => {
     const f = await asking('read-only'); t.after(() => f.session.close());
     assert.deepEqual(await f.client.request(), { decision: 'decline' });
-    assert.equal(await f.client.request({ permissions: { network: true } }, 'item/permissions/requestApproval'), undefined);
+    // An empty granted profile is the runtime's decline, so read-only answers it
+    // here rather than leaving the client fallback to speak for an unhandled method.
+    assert.deepEqual(await f.client.request({ permissions: { network: true } }, 'item/permissions/requestApproval'),
+        { permissions: {}, scope: 'turn' });
     assert.equal(f.registry.list('code-session').length, 0);
     f.client.finish(); await f.turn;
 });
@@ -951,4 +954,76 @@ test('all four reject aborted startup and public audience before native construc
         await assert.rejects(provider.open(publicOwner.options), /invalid_owner/);
     }
     assert.equal(jawEffects, 0);
+});
+
+// --- #704: structured permission requests reach the queue in ask mode ---
+// { permissions: {}, scope: 'turn' } is the runtime's canonical decline, verified
+// against codex-rs 095da4b7e: core records no grant for an empty profile
+// (core/src/session/mod.rs:3118-3141) and the TUI Deny button emits exactly this
+// (tui/src/bottom_pane/approval_overlay.rs:1968-2002). So the old fallback was
+// fail-closed - but ask mode never showed the request it promised to show.
+const PERMISSIONS = 'item/permissions/requestApproval';
+const asked = { network: { enabled: true } };
+async function askingPermissions(mode: CodeOpenOptions['permissionMode'] = 'ask', type = 'mcpToolCall') {
+    const f = await codexFixture({ permissionMode: mode }, client => {
+        client.script = c => c.notification('item/started', { item: { id: 'native-tool', type } });
+    });
+    const turn = f.session.send('prompt');
+    return { ...f, turn };
+}
+
+test('ask surfaces a structured permission request and answers only what the user chose', async t => {
+    const f = await askingPermissions(); t.after(() => f.session.close());
+    const answer = f.client.request({ permissions: asked, reason: 'fetch the changelog' }, PERMISSIONS);
+    const pending = f.registry.list('code-session')[0]!;
+    assert.ok(pending, 'the request is queued with the same turn ownership as command and file approvals');
+    assert.equal(pending.view.title, 'Approve additional permissions');
+    assert.match(pending.view.fields[0]!.label, /network/);
+    assert.match(pending.view.fields[0]!.label, /fetch the changelog/);
+    const handles = pending.view.fields[0]!.options;
+    assert.deepEqual(handles.map(h => h.label), ['Allow once', 'Decline']);
+    f.registry.respond(pending.requestId, f.context(), { optionId: handles[0]!.id });
+    // Echoing the request grants exactly what was asked; core intersects it anyway.
+    assert.deepEqual(await answer, { permissions: asked, scope: 'turn' });
+    assert.equal(f.registry.list('code-session').length, 0);
+    f.client.finish(); await f.turn;
+});
+
+test('declining a structured permission request answers the runtime decline', async t => {
+    const f = await askingPermissions(); t.after(() => f.session.close());
+    const answer = f.client.request({ permissions: asked }, PERMISSIONS);
+    const pending = f.registry.list('code-session')[0]!;
+    const handles = pending.view.fields[0]!.options;
+    f.registry.respond(pending.requestId, f.context(), { optionId: handles[1]!.id });
+    assert.deepEqual(await answer, { permissions: {}, scope: 'turn' });
+    f.client.finish(); await f.turn;
+});
+
+test('auto grants the requested profile without a handle, and denies an empty ask', async t => {
+    const f = await askingPermissions('auto'); t.after(() => f.session.close());
+    assert.deepEqual(await f.client.request({ permissions: asked }, PERMISSIONS), { permissions: asked, scope: 'turn' });
+    assert.equal(f.registry.list('code-session').length, 0, 'auto keeps its labelled behaviour');
+    // Nothing was asked for, so there is nothing to grant.
+    assert.deepEqual(await f.client.request({ permissions: {} }, PERMISSIONS), { permissions: {}, scope: 'turn' });
+    assert.deepEqual(await f.client.request({}, PERMISSIONS), { permissions: {}, scope: 'turn' });
+    assert.equal(f.registry.list('code-session').length, 0);
+    f.client.finish(); await f.turn;
+});
+
+for (const mismatch of [{ threadId: 'foreign' }, { turnId: 'previous' }, { itemId: 'unknown' }, { threadId: undefined }]) {
+    test(`Codex denies an unverified permission request ${JSON.stringify(mismatch)}`, async t => {
+        const f = await askingPermissions('auto'); t.after(() => f.session.close());
+        assert.deepEqual(await f.client.request({ permissions: asked, ...mismatch }, PERMISSIONS),
+            { permissions: {}, scope: 'turn' });
+        assert.equal(f.registry.list('code-session').length, 0);
+        f.client.finish(); await f.turn;
+    });
+}
+
+test('a settled item can no longer carry a permission request', async t => {
+    const f = await askingPermissions(); t.after(() => f.session.close());
+    f.client.notification('item/completed', { item: { id: 'native-tool', type: 'mcpToolCall', status: 'completed' } });
+    assert.deepEqual(await f.client.request({ permissions: asked }, PERMISSIONS), { permissions: {}, scope: 'turn' });
+    assert.equal(f.registry.list('code-session').length, 0);
+    f.client.finish(); await f.turn;
 });
