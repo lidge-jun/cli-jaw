@@ -18,7 +18,7 @@ import { orchestrateAndCollectData } from '../orchestrator/collect.js';
 import { isResetIntent } from '../orchestrator/pipeline.js';
 import { isContinueIntent } from '../orchestrator/parser.js';
 import {
-    setLastActiveTarget, setLatestSeenTarget, getLastActiveTarget,
+    setLastActiveTarget, setLatestSeenTarget,
     revokeMessagingTransport, startMessagingTransport,
     transportStarted, transportNotStarted, type TransportInitContext, type TransportStartOutcome,
 } from '../messaging/runtime.js';
@@ -1821,7 +1821,6 @@ async function runSlackInit(ctx?: TransportInitContext): Promise<TransportStartO
 
     forwarderHandler = createSlackForwarder({
         getToken: () => getSlackSendClient().token,
-        getLastTarget: () => getLastActiveTarget('slack'),
         shouldSkip: (data) => shouldSkipForwarding(data, 'slack'),
     });
     addBroadcastListener(forwarderHandler);

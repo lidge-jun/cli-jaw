@@ -76,11 +76,9 @@ async function sinks(t: TestContext, exercise: (h: {
         return { message_id: 1 };
     } } } as unknown as Parameters<typeof createTelegramForwarder>[0]['bot'];
     const forwarders = {
-        slack: createSlackForwarder({ getToken: () => 'fixture-token', getLastTarget: () => ({
-            channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C-fixture' }) }),
-        discord: createDiscordForwarder({ client: discord, getLastTarget: () => ({
-            channel: 'discord', targetKind: 'channel', peerKind: 'channel', targetId: 'D-fixture' }) }),
-        telegram: createTelegramForwarder({ bot: telegram, getLastChatId: () => 'T-fixture', prefix: '' }),
+        slack: createSlackForwarder({ getToken: () => 'fixture-token' }),
+        discord: createDiscordForwarder({ client: discord }),
+        telegram: createTelegramForwarder({ bot: telegram, prefix: '' }),
     };
     const observers: BroadcastListener[] = [(type) => { legacy.push(type); }];
     for (const channel of ['slack', 'discord', 'telegram'] as const) {
@@ -105,17 +103,27 @@ async function sinks(t: TestContext, exercise: (h: {
                 assert.deepEqual(fetches, []); assert.deepEqual(sends, []);
             },
             legacyFinal: async replay => {
+                // A run with no remote destination has nowhere to be forwarded.
+                // It used to be posted to whichever conversation each channel had
+                // most recently spoken to, which put an unrelated run's answer in
+                // a stranger's thread (#742). Now it reaches no channel at all.
                 broadcast('agent_done', { origin: 'web', text: FINAL });
                 await drain();
                 replay?.();
                 await drain();
                 assert.deepEqual(legacy, ['agent_done']);
                 assert.deepEqual(invocations, ['slack', 'discord', 'telegram']);
+                assert.deepEqual(fetches, []);
+                assert.deepEqual(sends, []);
+
+                // The same final, pinned to the Slack conversation that asked for
+                // it, lands there and ONLY there. Discord and Telegram see the
+                // event and decline it because it is not addressed to them.
+                broadcast('agent_done', { origin: 'web', text: FINAL, target: {
+                    channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'C-fixture' } });
+                await drain();
                 assert.deepEqual(fetches, ['https://slack.com/api/chat.postMessage']);
-                assert.equal(sends.length, 3);
-                for (const channel of ['slack', 'discord', 'telegram']) {
-                    assert.deepEqual(sends.filter(send => send.channel === channel), [{ channel, text: FINAL }]);
-                }
+                assert.deepEqual(sends, [{ channel: 'slack', text: FINAL }]);
                 assert.equal(JSON.stringify(sends).includes(CANARY), false);
             },
         });

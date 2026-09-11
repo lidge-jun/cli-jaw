@@ -9,6 +9,7 @@ import { acquireClaudeRuntime } from './runtime-pool.js';
 import { ClaudeAcquireFailure } from './claude-runtime-pool.js';
 import { handleAgentExit, type ExitHandlerParams } from './lifecycle-handler.js';
 import { handoffRuntimeOutcome } from './runtime/outcome.js';
+import { runPinFields } from '../messaging/run-pin.js';
 import { RuntimeProjection, type RuntimeEnd } from './runtime/projection.js';
 import { recordRuntimeEvent } from './runtime/events.js';
 import { reserveClaudeRun } from './runtime/claude-run-controls.js';
@@ -118,9 +119,10 @@ export function startClaudeNativeRun(input: ClaudeNativeRunOptions): { child: nu
             ensureFallbackStarted();
             if (!ctx.runtimeTerminalAttempted && !selected) {
                 ctx.runtimeTerminalAttempted = true;
-                broadcast('agent_done', { traceRunId, scope: base.scopeKey, sessionId: base.chatSessionId, origin: base.origin,
-                    cli: 'claude', ...(worker ? { isEmployee: true } : {}),
-                    ...(base.opts.requestId ? { requestId: base.opts.requestId } : {}),
+                broadcast('agent_done', { ...runPinFields({ origin: base.origin, requestId: base.opts.requestId,
+                        scope: base.scopeKey, sessionId: base.chatSessionId,
+                        remoteKey: base.opts.remoteKey, target: base.opts.target }),
+                    traceRunId, cli: 'claude', ...(worker ? { isEmployee: true } : {}),
                     text: final.status === 'stopped' ? '' : `❌ ${diagnostic()}`, error: true,
                     runtimeStatus: final.status, runtimeFinality: final.finalText === null ? 'absent' : 'present' }, input.audience);
             }

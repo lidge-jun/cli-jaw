@@ -28,7 +28,7 @@ import { applyRuntimeSettingsPatch } from '../core/runtime-settings.js';
 import { resetEmployeeSessions, seedDefaultEmployees } from '../core/employees.js';
 import { handleVoice } from './voice.js';
 import {
-    getLastActiveTarget, registerTransport, setLastActiveTarget, setLatestSeenTarget,
+    registerTransport, setLastActiveTarget, setLatestSeenTarget,
     transportNotStarted, transportStarted, type TransportStartOutcome,
 } from '../messaging/runtime.js';
 import {
@@ -159,11 +159,6 @@ const telegramForwarderLifecycle = createForwarderLifecycle({
     removeListener: removeBroadcastListener,
     buildForwarder: ({ bot }: Record<string, unknown>) => createTelegramForwarder({
         bot: bot as Bot,
-        getLastChatId: () => {
-            const chatIds = Array.from(telegramActiveChatIds);
-            return chatIds.length ? (chatIds[chatIds.length - 1] ?? null) : null;
-        },
-        getLastTarget: () => getLastActiveTarget('telegram'),
         // Own origin: handled by tgOrchestrate already. Producer-owned origins
         // (heartbeat) deliver to their own destination — see forwarder-origin.ts.
         shouldSkip: (data: Record<string, unknown>) => shouldSkipForwarding(data, 'telegram'),

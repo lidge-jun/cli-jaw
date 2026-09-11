@@ -109,6 +109,7 @@ import { stripUndefined } from '../core/strip-undefined.js';
 import { extractLocalImagePaths } from '../messaging/extract-images.js';
 import { threadIdNumber } from '../messaging/thread-target.js';
 import type { RemoteTarget } from '../messaging/types.js';
+import { resolveForwarderTarget } from '../messaging/forwarder-origin.js';
 import { assertSendFilePath } from '../security/path-guards.js';
 import { sendTelegramMarkdown } from './rich-message.js';
 import { sendTelegramFile, validateFileSize } from './telegram-file.js';
@@ -123,8 +124,6 @@ interface ForwarderLifecycleOptions {
 
 interface TelegramForwarderOptions {
     bot: Bot;
-    getLastChatId: () => string | number | null | undefined;
-    getLastTarget?: () => RemoteTarget | null;
     shouldSkip?: (data: Record<string, unknown>) => boolean;
     log?: (info: { chatId: string | number; preview: string }) => void;
     prefix?: string;
@@ -202,8 +201,6 @@ export function createForwarderLifecycle({
  */
 export function createTelegramForwarder({
     bot,
-    getLastChatId,
-    getLastTarget,
     shouldSkip = (_data: Record<string, unknown>) => false,
     log = (_info: { chatId: string | number; preview: string }) => { },
     prefix = '📡 ',
@@ -215,10 +212,11 @@ export function createTelegramForwarder({
                 if (data["error"] && !isUserSafeWatchdogDiagnostic(String(data["text"]))) return;
                 if (shouldSkip(data)) return;
 
-                const candidateTarget = getLastTarget?.() ?? null;
-                const target = candidateTarget?.channel === 'telegram' ? candidateTarget : null;
-                const chatId = target?.targetId
-                    ?? (typeof getLastChatId === 'function' ? getLastChatId() : null);
+                // The run's own destination only. `getLastTarget`/`getLastChatId`
+                // answer "who spoke here most recently", which a concurrent
+                // conversation moves out from under a running turn (#742).
+                const target = resolveForwarderTarget(data, 'telegram');
+                const chatId = target?.targetId ?? null;
                 if (!chatId) return;
 
                 const text = String(data["text"]);
