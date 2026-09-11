@@ -10,14 +10,14 @@ import express, { type NextFunction, type Request, type Response } from 'express
 
 import { registerHeartbeatRoutes } from '../../src/routes/heartbeat.ts';
 import { loadHeartbeatFile, saveHeartbeatFile, settings } from '../../src/core/config.ts';
-import { insertMentionWatchSeen, upsertMentionWatchCursor, findMentionWatchSeen, commitLegacyFreshStart } from '../../src/core/db.ts';
+import { legacyMentionWatchV1Fixture, commitLegacyFreshStart } from '../../src/core/db.ts';
 import { detectLegacyMentionWatch, isQuarantined, quarantineState } from '../../src/memory/legacy-mention-watch-quarantine.ts';
 import { startHeartbeat, stopHeartbeat, getHeartbeatRuntimeState } from '../../src/memory/heartbeat.ts';
 import { resetVerifiedSlackWorkspace } from '../../src/slack/verified-workspace.ts';
 
 /** Present in the v1 table, which is what a losing claim must not have erased. */
 const legacySeenExists = (jobId: string, channelId: string, ts: string): boolean =>
-    findMentionWatchSeen.get(jobId, channelId, ts) !== undefined;
+    legacyMentionWatchV1Fixture.hasSeen.get(jobId, channelId, ts) !== undefined;
 
 const WORKSPACE = 'T_TESTWS';
 
@@ -62,8 +62,8 @@ async function withHeartbeatServer(run: (baseUrl: string) => Promise<void>): Pro
 
 /** A job holding a v1 ledger, which is what an unmigrated install looks like. */
 function seedHeldJob(jobId: string, since = '900.000100') {
-    insertMentionWatchSeen.run(jobId, 'C_LEGACY', since, Date.now());
-    upsertMentionWatchCursor.run(jobId, 'C_LEGACY', since, Date.now());
+    legacyMentionWatchV1Fixture.insertSeen.run(jobId, 'C_LEGACY', since, Date.now());
+    legacyMentionWatchV1Fixture.upsertCursor.run(jobId, 'C_LEGACY', since, Date.now());
     saveHeartbeatFile({ jobs: [{
         id: jobId, name: jobId, enabled: true, schedule: { kind: 'every', minutes: 10 }, prompt: 'answer',
         mentionWatch: { channel: 'slack', userId: 'U_SUJI', channelIds: ['C_LEGACY'], since },
@@ -264,12 +264,12 @@ test('a losing claim leaves the v1 rows alone', () => {
     // return does not roll better-sqlite3 back, so doing the destructive half
     // first would commit it for an approval that reported failure.
     const jobId = 'hold_cas_loser';
-    insertMentionWatchSeen.run(jobId, 'C_LEGACY', '900.000100', Date.now());
+    legacyMentionWatchV1Fixture.insertSeen.run(jobId, 'C_LEGACY', '900.000100', Date.now());
     detectLegacyMentionWatch(Date.now());
     assert.equal(commitLegacyFreshStart(jobId, 'first', 1), true);
 
     // Re-seed, then lose the claim: the row must survive.
-    insertMentionWatchSeen.run(jobId, 'C_SECOND', '950.000100', Date.now());
+    legacyMentionWatchV1Fixture.insertSeen.run(jobId, 'C_SECOND', '950.000100', Date.now());
     assert.equal(commitLegacyFreshStart(jobId, 'second', 2), false);
     assert.equal(legacySeenExists(jobId, 'C_SECOND', '950.000100'), true);
 });
