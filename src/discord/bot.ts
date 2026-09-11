@@ -34,6 +34,9 @@ import { handleDiscordSlashCommand, registerDiscordSlashCommands } from './comma
 import { createDiscordForwarder, relayDiscordImages } from './forwarder.js';
 import { nextDeliverySeq, pendingDeliveryAnchor, wasSelfDelivered } from '../messaging/turn-delivery.js';
 import { shouldSkipForwarding } from '../messaging/forwarder-origin.js';
+import { requiresNativeBodyDelivery } from '../messaging/native-body.js';
+import { createQueueNoticeRecorder } from '../messaging/queue-notice-record.js';
+import { admitTargetReply } from '../messaging/target-reply-guard.js';
 import { sendDiscordFile } from './discord-file.js';
 import { getDiscordSendClient, sendDiscordFileRest, sendDiscordTextRest } from './send-only-client.js';
 import { invalidateDiscordSendClient } from './send-only-client.js';
@@ -153,26 +156,24 @@ let targetReplyForwarderInstalled = false;
 // Identity-local option: survives the existing router without adding an HTTP field.
 const nativeBodyRequests = new WeakSet<ChannelSendRequest>();
 
-function requiresNativeBodyDelivery(data: Record<string, unknown>): boolean {
-    return (data['runtimeFinality'] === 'present' || data['runtimeFinality'] === 'absent')
-        && (data['runtimeStatus'] === 'done' || data['runtimeStatus'] === 'error' || data['runtimeStatus'] === 'stopped');
-}
-
 function installDiscordTargetReplyForwarder(): void {
     if (targetReplyForwarderInstalled) return;
     targetReplyForwarderInstalled = true;
     addBroadcastListener((type, data) => {
-        if (type !== 'orchestrate_done' || data["origin"] !== 'discord' || !data["text"]) return;
         // Queued turns only: an ordinary reply is posted by the dispatch path
         // that is still awaiting it, and answering here too would double-post.
         // Errors included: after a restart nothing else will show them.
-        if (data["fromQueue"] !== true) return;
-        const target = data["target"] as RemoteTarget | undefined;
-        if (!target || target.channel !== 'discord' || !target.targetId) return;
-        if (data["requestId"] && pendingQueueRequestIds.has(String(data["requestId"]))) return;
-        const text = String(data['text']);
+        const admitted = admitTargetReply(type, data, {
+            channel: 'discord',
+            event: 'orchestrate_done',
+            accept: ['fromQueue'],
+            requireText: true,
+            hasPendingWaiter: requestId => pendingQueueRequestIds.has(requestId),
+        });
+        if (!admitted) return;
+        const { target, text } = admitted;
         const request: ChannelSendRequest = { channel: 'discord', type: 'text', text, target };
-        if (requiresNativeBodyDelivery(data)) {
+        if (admitted.requireBodyDelivery) {
             if (!text.trim()) return;
             nativeBodyRequests.add(request);
         }
@@ -263,33 +264,11 @@ const discordOutboundRegistry = new OutboundSendRegistry();
 const DISCORD_NOTICE_DRAIN_MS = DISCORD_REACTION_TIMEOUT_MS * 2 + 3000;
 
 // ─── Durable notice records (#418) ──────────────────
-// The registry above is process-local; these wrap the store that outlives the
+// The registry above is process-local; this wraps the store that outlives the
 // process. Best-effort by contract: a durable write is a convenience for the NEXT
-// boot, so letting it throw would fail the turn the user is waiting on.
-
-function reserveDiscordNoticeRecord(requestId: string, target: RemoteTarget): void {
-    try {
-        getQueueNoticeStore()?.reserve({ requestId, channel: 'discord', target });
-    } catch (e) {
-        log.info('[discord:queue-notice] reserve failed', logErrorText(e));
-    }
-}
-
-function attachDiscordNoticeRecord(requestId: string, messageId: string): void {
-    try {
-        getQueueNoticeStore()?.attachMessageId(requestId, messageId);
-    } catch (e) {
-        log.info('[discord:queue-notice] attach failed', logErrorText(e));
-    }
-}
-
-function closeDiscordNoticeRecord(requestId: string): void {
-    try {
-        getQueueNoticeStore()?.close(requestId);
-    } catch (e) {
-        log.info('[discord:queue-notice] close failed', logErrorText(e));
-    }
-}
+// boot, so letting it throw would fail the turn the user is waiting on. The
+// contract is shared with the other two bots (#699).
+const discordNoticeRecord = createQueueNoticeRecorder('discord', '[discord:queue-notice]');
 
 /**
  * Close a queue notice as ANSWERED from the standing forwarder, which never
@@ -325,7 +304,7 @@ async function closeDiscordNoticeAsAnsweredByRequestId(requestId: string): Promi
                 if (code !== 10008 && code !== 404) throw e;
             }
         }
-        closeDiscordNoticeRecord(requestId);
+        discordNoticeRecord.close(requestId);
     } catch (e) {
         log.info('[discord:queue-notice] answered-close failed', logErrorText(e));
     }
@@ -433,7 +412,7 @@ async function dcOrchestrate(msg: Message, prompt: string, displayMsg: string) {
                 ]);
                 // Closed in-process, so the durable record has nothing left to
                 // restore on the next boot.
-                if (requestId) closeDiscordNoticeRecord(requestId);
+                if (requestId) discordNoticeRecord.close(requestId);
             } finally {
                 // Centralized here: every terminal path routes through a claim, so
                 // unregistering in one place is what makes "exactly once" true.
@@ -472,7 +451,7 @@ async function dcOrchestrate(msg: Message, prompt: string, displayMsg: string) {
                         notice.close('expired'),
                         ack?.settle('failure') ?? Promise.resolve(),
                     ]);
-                    if (requestId) closeDiscordNoticeRecord(requestId);
+                    if (requestId) discordNoticeRecord.close(requestId);
                     return;
                 }
                 const channel = asSendable(msg.channel);
@@ -517,7 +496,7 @@ async function dcOrchestrate(msg: Message, prompt: string, displayMsg: string) {
                     notice.close(delivered ? 'answered' : 'expired'),
                     ack?.settle(delivered ? 'success' : 'failure') ?? Promise.resolve(),
                 ]);
-                if (requestId) closeDiscordNoticeRecord(requestId);
+                if (requestId) discordNoticeRecord.close(requestId);
                 {
                     const relayScope = discordOutboundRegistry.start();
                     await relayDiscordImages(msg.client, target, body, {
@@ -542,7 +521,7 @@ async function dcOrchestrate(msg: Message, prompt: string, displayMsg: string) {
         void ack?.to('running', { wasQueued: true });
         // Reserved BEFORE the post: a record with no id restores to nothing, while
         // a posted message with no record is unreachable forever (#418).
-        if (requestId) reserveDiscordNoticeRecord(requestId, target);
+        if (requestId) discordNoticeRecord.reserve(requestId, target);
         const posted = await msg.reply(
             t('tg.queued', { count: result.pending }, currentLocale()),
         ).catch((e: unknown) => {
@@ -551,13 +530,13 @@ async function dcOrchestrate(msg: Message, prompt: string, displayMsg: string) {
         });
         if (posted) {
             notice.bind(createDiscordNoticeTransport(posted));
-            if (requestId) attachDiscordNoticeRecord(requestId, posted.id);
+            if (requestId) discordNoticeRecord.attach(requestId, posted.id);
         } else {
             // No handle will ever arrive, so a deferred close would wait for a
             // bind that cannot happen and the drain would burn its deadline.
             notice.abandon();
             // The reservation describes a message that does not exist.
-            if (requestId) closeDiscordNoticeRecord(requestId);
+            if (requestId) discordNoticeRecord.close(requestId);
             // Then close the turn out properly: abandoning the notice alone would
             // leave the listener, the request-id claim, the timer and the running
             // reaction alive until the 5-minute timeout or shutdown.

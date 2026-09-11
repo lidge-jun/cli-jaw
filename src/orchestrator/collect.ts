@@ -10,6 +10,7 @@ import {
 } from './pipeline.js';
 import { t } from '../core/i18n.js';
 import { isRenderableError } from '../messaging/error-block.js';
+import { hasNativeRuntimeTags } from '../messaging/native-body.js';
 import type { RuntimeLivenessIdentity, RuntimeTurnOutcome } from '../shared/runtime-contract.js';
 import { settings } from '../core/config.js';
 import { getActiveChatSession } from '../core/chat-sessions.js';
@@ -99,8 +100,10 @@ export function orchestrateAndCollectData(
         const handler = (type: string, data: Record<string, any>) => {
             if (settled) return;
             if (meta['_strictRequestOwnership'] === true && !matchesNativeIdentity(data)) return;
-            const native = (data['runtimeFinality'] === 'present' || data['runtimeFinality'] === 'absent')
-                && (data['runtimeStatus'] === 'done' || data['runtimeStatus'] === 'error' || data['runtimeStatus'] === 'stopped');
+            // Same observation the delivery layer makes, through the neutral
+            // predicate rather than the delivery-named one: this listener uses
+            // it to ignore a foreign native terminal, not to choose a transport.
+            const native = hasNativeRuntimeTags(data);
             // A mismatched native terminal must not remove this request's
             // listener, extend its timeout, or contaminate its diagnostic.
             if (native && !matchesNativeIdentity(data)) return;
