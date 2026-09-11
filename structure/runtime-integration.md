@@ -380,6 +380,35 @@ These controls are not an arbitrary-process sandbox or aggregate pool/server
 shutdown certificate. Opaque wrappers and escaped descendants remain explicit
 limits; version output never enters Activity, MESSAGE or channel delivery.
 
+### Two stop ports, by definition rather than by drift
+
+Pi has two stop ports and that is deliberate. A pooled boss turn stops through
+`cancelTurn` → `requestCancel` → `lease.cancel()` → `cancelLease`
+(`runtime-pool.ts`), which writes an in-band RPC `abort` when the probed
+`abortEffective` capability allows it and otherwise kills the session. Ending the
+turn there must not end the child, because the pool reuses that session. A
+one-shot employee stops through `cancelOwnedPiProcess` → `cancelPiExecution` →
+the execution's own cancellation port, which signals the child through the
+cleanup owner. For a one-shot the turn IS the process, so ending the child is
+the stop. `spawnPersistentPiRpc` therefore installs no process-cancellation
+symbol and `spawnPiRpc` writes no `abort` frame.
+
+The abort-versus-kill decision itself is not duplicated: `cancelLease` is generic
+over `ManagedRuntime` and shared by every pooled runtime, with the Pi wrapper
+supplying only `interrupt` and `kill`. Every employee-reaching stop path tries the
+Pi cancellation port before any generic terminate, and no in-flight pooled turn
+reaches a generic terminate at all, because `cancelTurn` is installed before the
+run's process handle.
+
+An audit has read this pair as duplication (#701). It is not. Collapsing it would
+mean either routing employees through the pool, which costs them their isolated
+cwd and session, or giving a one-shot an in-band abort that must still be
+followed by the same teardown. Routing pooled Pi through `runNativeRuntime` would
+make it worse rather than better: that runner cancels through `session.cancel()`
+rather than `lease.cancel()`, so it would remove Pi from the shared `cancelLease`
+policy described above. Bringing Pi into the native runtime family is tracked
+separately as #738, and is a different goal from unifying cancellation.
+
 ## Native Code sessions
 
 `src/code-mode/` owns the `/api/code` API. The host composes an
