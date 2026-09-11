@@ -13,6 +13,7 @@ import { decodeTurnConversation, turnConversationForChannel } from './turn-conve
 import { getRemoteBoundSessionId } from '../core/chat-sessions.js';
 import { applyOutputPolicy } from '../core/policy-hooks.js';
 import { redactChannelSecrets } from './redact.js';
+import { type TransportSendResult } from './delivery-outcome.js';
 import { log } from '../core/logger.js';
 import { recordSelfDelivery } from './turn-delivery.js';
 import { normalizeSlackBlocks, type SlackBlock } from '../slack/blocks.js';
@@ -147,7 +148,7 @@ export type ChannelSendRequest = {
 
 // ─── Transport Send Registry ────────────────────────
 
-type TransportSendFn = (req: ChannelSendRequest) => Promise<{ ok: boolean; error?: string; [k: string]: unknown }>;
+type TransportSendFn = (req: ChannelSendRequest) => Promise<TransportSendResult>;
 
 const sendFns = new Map<MessengerChannel, TransportSendFn>();
 const OUTBOUND_TYPES = new Set<OutboundType>(['text', 'voice', 'photo', 'document', 'keyboard']);

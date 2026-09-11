@@ -12,6 +12,7 @@ import { boundSlackContent, expectedTableContent, type CanonicalTable, type Tabl
 import { verifySlackTables, type VerificationStatus } from './table-verification.js';
 import { expectedRichFeatures } from './render-features.js';
 import { MAX_INLINE_RATE_LIMIT_MS, classifySendFailure, retryAfterMs } from '../messaging/retry.js';
+import { deliveryFailed, deliverySent, type LiveDeliveryFields } from '../messaging/delivery-outcome.js';
 import { log } from '../core/logger.js';
 
 export type SlackSendClientResult =
@@ -97,7 +98,7 @@ export async function sendSlackText(
     options: { fetchImpl?: SlackFetch; blocks?: unknown; signal?: AbortSignal; requireBodyDelivery?: boolean; sensitiveResponse?: boolean;
         onPosted?: (info: { ts?: string; messageTs: string[]; postedChunks: number; totalChunks: number }) => void | Promise<void> } = {},
 ): Promise<{ ok: boolean; error?: string; status?: number; ts?: string; sent?: boolean;
-    retryable?: boolean; delivery?: SlackDeliveryReceipt }> {
+    retryable?: boolean; delivery?: SlackDeliveryReceipt } & Partial<LiveDeliveryFields>> {
     let chunks: SlackTextPayload[];
     let shapes: TableShape[][];
     let content: CanonicalTable[][];
@@ -109,11 +110,12 @@ export async function sendSlackText(
         content = chunks.map(chunk => expectedTableContent(chunk.blocks));
         shapes = chunks.map(chunk => expectedTableShapes(chunk.blocks));
     } catch (error) {
-        if (error instanceof RangeError) return slackFailure(error.message, 400);
+        // Nothing was dispatched, so there is no receipt to give.
+        if (error instanceof RangeError) return { ...slackFailure(error.message, 400), ...deliveryFailed(null) };
         throw error;
     }
     if (options.requireBodyDelivery && !chunks.some(chunk => chunk.text.trim().length > 0)) {
-        return slackFailure('empty_message', 400);
+        return { ...slackFailure('empty_message', 400), ...deliveryFailed(null) };
     }
     const expectedTables = shapes.reduce((total, part) => total + part.length, 0);
     const features = chunks.map(chunk => expectedRichFeatures(chunk.blocks));
@@ -139,6 +141,9 @@ export async function sendSlackText(
     // authorizing a whole-answer retry or claiming unsent chunks were delivered.
     const failure = (error: string, status = 502) => ({
         ...slackFailure(error, status),
+        // Chunks already posted keep their id; the ones that did not are a known
+        // non-delivery, not a vendor-unknown outcome.
+        ...deliveryFailed(firstTs ?? null),
         ...(firstTs ? { ts: firstTs } : {}),
         ...(postedChunks ? { sent: true, retryable: false } : {}),
         ...(needsVerification || postedChunks ? { delivery: receipt() } : {}),
@@ -210,6 +215,14 @@ export async function sendSlackText(
         verifiedTables += checked.verifiedTables;
         for (const feature of checked.verifiedFeatures ?? []) verifiedFeatures.add(feature);
     }
+    const delivered = needsVerification ? receipt() : undefined;
+    // Posted is not verified. Slack can accept every chunk and still fail table
+    // readback, so the common receipt reports 'sent' with the verification state
+    // beside it rather than collapsing both into ok (#687).
     return { ok: true, ...(firstTs ? { ts: firstTs } : {}),
-        ...(needsVerification ? { sent: true, retryable: false, delivery: receipt() } : {}) };
+        ...deliverySent(firstTs ?? null, {
+            ambiguous: firstTs === undefined,
+            ...(delivered ? { verification: delivered.verification } : {}),
+        }),
+        ...(delivered ? { sent: true, retryable: false, delivery: delivered } : {}) };
 }

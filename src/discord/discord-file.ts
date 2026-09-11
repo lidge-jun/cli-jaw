@@ -10,6 +10,7 @@ import type { RemoteTarget } from '../messaging/types.js';
 import { asSendable } from './channel-types.js';
 import { redactOutboundText, userErrorText } from '../messaging/redact.js';
 import { sendDiscordFileRest } from './send-only-client.js';
+import { deliverySent, type LiveDeliveryFields } from '../messaging/delivery-outcome.js';
 
 export const DISCORD_LIMITS = {
     document: 10 * 1024 * 1024,
@@ -39,7 +40,7 @@ export async function sendDiscordFile(
     target: RemoteTarget,
     filePath: string,
     options?: { caption?: string; replyTo?: string; signal?: AbortSignal },
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: boolean; error?: string } & Partial<LiveDeliveryFields>> {
     let fileStat;
     try {
         fileStat = await stat(filePath);
@@ -55,7 +56,9 @@ export async function sendDiscordFile(
     if (client.token) {
         const rest = await sendDiscordFileRest(client.token, resolvedId, filePath,
             options?.caption, options?.signal ? { signal: options.signal } : {});
-        return rest.ok ? { ok: true } : { ok: false, error: rest.error };
+        return rest.ok
+            ? { ok: true, ...deliverySent(rest.platformMessageId) }
+            : { ok: false, error: rest.error };
     }
     const channel = await client.channels.fetch(resolvedId);
     const sendable = asSendable(channel);
@@ -68,7 +71,9 @@ export async function sendDiscordFile(
             content: redactOutboundText(options?.caption || ''),
             files: [{ attachment: filePath, name: basename(filePath) }],
         });
-        return { ok: true };
+        // The gateway fallback has no REST response to read an id from, which is
+        // what ambiguous reports.
+        return { ok: true, ...deliverySent(null) };
     } catch (e) {
         return { ok: false, error: `Discord file send failed: ${userErrorText(e)}` };
     }
