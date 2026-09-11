@@ -36,16 +36,30 @@ export interface YtdlpMetadata {
     automatic_captions?: Record<string, Array<{ ext: string; url: string }>>;
 }
 
+export type YtdlpExecFile = (
+    binary: string,
+    args: string[],
+    options: { timeout: number; maxBuffer: number; signal?: AbortSignal },
+) => Promise<{ stdout: string }>;
+
 export interface YtdlpOptions {
     timeoutMs?: number;
     fetchImpl?: typeof fetch;
     resolveHost?: ResolveHost;
+    /** #693: the scheduler's overall-deadline signal. */
+    signal?: AbortSignal;
+    /** Injected for tests; production goes through the detected yt-dlp binary. */
+    execFileImpl?: YtdlpExecFile;
 }
 
 export async function ytdlpMetadata(
     url: string,
     options?: YtdlpOptions,
 ): Promise<YtdlpMetadata | null> {
+    // #693: the overall deadline may already have fired; yt-dlp must not be
+    // spawned at all in that case. This sits ahead of the URL guard because an
+    // expired deadline makes the call moot either way; the guard is unchanged.
+    if (options?.signal?.aborted) return null;
     // The binary follows its own redirects and fetches related resources, so
     // the only place we can still refuse is before it is handed the URL.
     // This runs ahead of binary detection so the refusal does not depend on
@@ -56,15 +70,22 @@ export async function ytdlpMetadata(
     } catch {
         return null;
     }
-    const binary = await detectYtdlp();
+    const execFileFn: YtdlpExecFile = options?.execFileImpl
+        || ((binary, args, opts) => execFileAsync(binary, args, opts) as Promise<{ stdout: string }>);
+    const binary = options?.execFileImpl ? 'yt-dlp' : await detectYtdlp();
     if (!binary) return null;
     const timeout = Math.ceil((options?.timeoutMs || 30_000) / 1000);
     try {
-        const { stdout } = await execFileAsync(binary, [
+        const { stdout } = await execFileFn(binary, [
             '--dump-json', '--no-download', '--no-warnings',
             '--socket-timeout', String(timeout),
             url,
-        ], { timeout: (timeout + 10) * 1000, maxBuffer: 10_000_000 });
+        ], {
+            timeout: (timeout + 10) * 1000,
+            maxBuffer: 10_000_000,
+            // #693: kill yt-dlp when the overall deadline fires.
+            ...(options?.signal ? { signal: options.signal } : {}),
+        });
         return JSON.parse(stdout) as YtdlpMetadata;
     } catch {
         return null;
@@ -76,6 +97,9 @@ export async function ytdlpSubtitles(
     lang = 'en',
     options?: YtdlpOptions,
 ): Promise<string | null> {
+    // #693: same bail as ytdlpMetadata; the caption fetch is a second network
+    // round trip that used to run past an expired deadline.
+    if (options?.signal?.aborted) return null;
     const meta = await ytdlpMetadata(url, options);
     if (!meta) return null;
     const captions = meta.automatic_captions?.[lang] || meta.subtitles?.[lang];
@@ -91,7 +115,11 @@ export async function ytdlpSubtitles(
             await assertPublicResolvedHost(current, options?.resolveHost, { sensitiveQuery: 'allow' });
             const response = await fetchFn(current, {
                 redirect: 'manual',
-                signal: AbortSignal.timeout(15_000),
+                // #693: the caption fetch had only its own 15s budget, which
+                // could outlive a much shorter overall deadline.
+                signal: options?.signal
+                    ? AbortSignal.any([options.signal, AbortSignal.timeout(15_000)])
+                    : AbortSignal.timeout(15_000),
             });
             const location = response.headers.get('location');
             if (response.status >= 300 && response.status < 400 && location) {
