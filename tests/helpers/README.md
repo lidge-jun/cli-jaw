@@ -9,12 +9,18 @@ not a scope. Files here are imported or spawned by a test that is.
 
 | File | Shape | Driven by |
 | --- | --- | --- |
+| `jaw-server.mts` | Spawns an isolated product server with its own home, settings and port; probes readiness, captures the child's output, and fails closed under `CI` | `tests/integration/slack-inbound-turn.test.ts`, `agent-lifecycle-real-child.test.ts`, `graceful-shutdown.test.ts` |
+| `slack-fixture.mts` | A scripted Slack: Web API over HTTP plus Socket Mode over a real websocket, recording every call | `tests/integration/slack-inbound-turn.test.ts` |
+| `slack-api-preload.mjs` | `--import` preload that redirects a server child's Slack traffic at the fixture through `globalThis.fetch` | the same test, via `NODE_OPTIONS` |
+| `code-fake-providers.mts` | Injectable Code providers that never spawn a runtime, with per-instance open/send counters | `tests/integration/code-native-api.test.ts` |
+| `code-host-child.mts` | A child Code host that can crash itself mid-turn, so recovery has a real orphan to seal | `tests/integration/code-native-api.test.ts` |
+| `skip-policy.mts` | The registry of every test file that skips, with a reason and a CI policy, plus the detector both it and its test use | `tests/integration/skip-policy.test.ts` |
 | `code-native-qa-server.mjs` | Supervises a built Manager with mocked Code providers, plus a `/__qa` control surface | `tests/browser/code-native-workbench.test.ts`, `tests/browser/retired-runtime-settings.test.ts` |
 | `hosted-manager-qa.mjs` | Hosted Manager + Playwright QA driver | the `workflow_dispatch`-only Hosted Manager QA job |
 
-Both need a build and a browser, which is why they sit outside the PR-admission
-path. A helper that an `integration` test depends on must not: that job runs on
-every code PR and feeds `ci-aggregate`.
+The last two need a build and a browser, which is why they sit outside the
+PR-admission path. A helper that an `integration` test depends on must not: that
+job runs on every code PR and feeds `ci-aggregate`.
 
 ## Rules for a new helper
 
