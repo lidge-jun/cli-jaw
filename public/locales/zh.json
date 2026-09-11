@@ -973,5 +973,7 @@
   "slack.progress.status.unconfirmed": "完成未确认",
   "slack.progress.deliveryComplete": "答复已发送",
   "slack.progress.deliveryFailed": "无法确认答复已发送",
-  "slack.progress.deliveryUnconfirmed": "答复发送情况未确认"
+  "slack.progress.deliveryUnconfirmed": "答复发送情况未确认",
+  "slack.workflow.unavailable": "由于无法验证该自动化的发送方与请求信息，或指定的已启用技能，因此未予执行。请检查配置。",
+  "slack.workflow.unconfirmed": "已注册的工作流未返回实质性结果。相关工作可能已经开始，请在重试前查看其记录。"
 }
