@@ -24,6 +24,8 @@ Native Code interruption seals callbacks before persisting accepted buffered con
 
 ## Current Runtime Notes
 
+- File sends across Slack, Telegram and Discord share one confirmation vocabulary. A send the vendor will not name is refused rather than reported as delivered (Slack keeps its `files[]` echo requirement, Telegram requires `message_id` > 0, Discord requires a readable Create Message body): those are `ok:false` with `confirmation: 'unconfirmed'`, replacing the older `ok:true, ambiguous:true` no consumer read. Anything forwarding a file result must preserve `confirmation`, or the caption posts twice. See `structure/infra.md` and `structure/telegram.md`.
+
 The Classic permission selector offers Auto (YOLO) / Safe choices, stored as literal `auto` / `safe`. Server startup preserves the saved policy; never reintroduce the obsolete safe-to-auto coercion. Existing runtime-specific policy support and settings invalidation still apply.
 
 - Linux `/api/file/open` acknowledges asynchronous `xdg-open` launch, not desktop application success. Keep detached/ignored-stdio dispatch and launch-error handling; never wait synchronously for the opener. See `structure/server_api.md`.
