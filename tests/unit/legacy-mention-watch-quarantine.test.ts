@@ -10,12 +10,12 @@ import {
     quarantineState,
     approveLegacyFreshStart,
 } from '../../src/memory/legacy-mention-watch-quarantine.ts';
-import { insertMentionWatchSeen, upsertMentionWatchCursor, getLegacyQuarantine } from '../../src/core/db.ts';
+import { legacyMentionWatchV1Fixture, getLegacyQuarantine } from '../../src/core/db.ts';
 
 /** Write a v1 row, which is what an unmigrated ledger looks like. */
 function seedLegacy(jobId: string, channelId = 'C_LEGACY', ts = '900.000100') {
-    insertMentionWatchSeen.run(jobId, channelId, ts, Date.now());
-    upsertMentionWatchCursor.run(jobId, channelId, ts, Date.now());
+    legacyMentionWatchV1Fixture.insertSeen.run(jobId, channelId, ts, Date.now());
+    legacyMentionWatchV1Fixture.upsertCursor.run(jobId, channelId, ts, Date.now());
 }
 
 test('a job with v1 rows is held', () => {

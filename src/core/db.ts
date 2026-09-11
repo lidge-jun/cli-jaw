@@ -31,15 +31,47 @@ db.pragma('journal_mode = WAL');
 db.pragma('busy_timeout = 5000');
 db.pragma('foreign_keys = ON');
 
-db.exec(`
+// ─── Schema: one baseline + versioned migration steps ────
+//
+// `PRAGMA user_version` is the schema version. Everything a CURRENT database
+// must contain lives in the two baseline strings below; MIGRATIONS carries what
+// an EXISTING database still needs to reach that shape. The two have to agree,
+// and `assertSchemaComplete` is what makes disagreement loud: a column added
+// to the baseline without a matching migration step fails there BY NAME, instead
+// of killing the process at the first `db.prepare` further down (#691).
+//
+// Tables and indexes are separate on purpose. `CREATE TABLE IF NOT EXISTS` is a
+// no-op on a database that already has the table, so an index over a column that
+// only a migration adds would raise `no such column` on exactly the old homes
+// this exists to open — and it would do so BEFORE the step that adds the column.
+// Every index therefore runs after the migration steps, not with the tables.
+
+export const SCHEMA_VERSION = 1;
+
+/** A database this binary cannot safely open. Never a `db.prepare` crash. */
+export class SchemaMigrationError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'SchemaMigrationError';
+    }
+}
+
+const BASELINE_TABLES_SQL = `
     CREATE TABLE IF NOT EXISTS session (
         id          TEXT PRIMARY KEY DEFAULT 'default',
+        -- This SQL default is NOT the product default and has not been for some
+        -- time: the runtime resolves settings.cli -> session.active_cli ->
+        -- DEFAULT_CLI (src/core/main-session.ts), and DEFAULT_CLI is codex-app.
+        -- Changing the literal here would only split fresh databases from existing
+        -- ones, since ALTER cannot restate a default on a column that already
+        -- exists. Tracked with the other schema/call-site default drift in #696.
         active_cli  TEXT DEFAULT 'claude',
         session_id  TEXT,
         model       TEXT DEFAULT 'default',
         permissions TEXT DEFAULT 'auto',
         working_dir TEXT DEFAULT '~',
         effort      TEXT DEFAULT 'medium',
+        active_chat_session TEXT DEFAULT 'default',
         updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     INSERT OR IGNORE INTO session (id) VALUES ('default');
@@ -51,11 +83,14 @@ db.exec(`
         cli         TEXT,
         model       TEXT,
         trace       TEXT DEFAULT NULL,
+        tool_log    TEXT DEFAULT NULL,
+        working_dir TEXT DEFAULT NULL,
+        trace_run_id TEXT DEFAULT NULL,
+        session_id  TEXT DEFAULT 'default',
         cost_usd    REAL,
         duration_ms INTEGER,
         created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
 
     CREATE TABLE IF NOT EXISTS memory (
         id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,6 +116,7 @@ db.exec(`
         session_id  TEXT,
         cli         TEXT,
         model       TEXT DEFAULT '',
+        output_len  INTEGER DEFAULT 0,
         created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -110,8 +146,6 @@ db.exec(`
         last_seen_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (chat_session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
     );
-    CREATE INDEX IF NOT EXISTS idx_remote_bindings_chat_session
-        ON remote_session_bindings(chat_session_id);
 
     CREATE TABLE IF NOT EXISTS queued_messages (
         id         TEXT PRIMARY KEY,
@@ -139,6 +173,11 @@ db.exec(`
         session_id  TEXT NOT NULL,
         model       TEXT NOT NULL,
         resume_key  TEXT DEFAULT NULL,
+        output_len  INTEGER DEFAULT 0,
+        memory_snapshot TEXT DEFAULT NULL,
+        last_run_clean INTEGER DEFAULT NULL,
+        last_run_cwd TEXT DEFAULT NULL,
+        last_run_meta TEXT DEFAULT NULL,
         updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -171,8 +210,6 @@ db.exec(`
         seen_at    INTEGER NOT NULL,
         PRIMARY KEY (job_id, channel_id, message_ts)
     );
-    CREATE INDEX IF NOT EXISTS idx_mention_watch_seen_job
-        ON mention_watch_seen (job_id, seen_at);
 
     CREATE TABLE IF NOT EXISTS mention_watch_cursor (
         job_id        TEXT NOT NULL,
@@ -223,8 +260,6 @@ db.exec(`
         seen_at      INTEGER NOT NULL,
         PRIMARY KEY (job_id, workspace_id, user_id, channel_id, message_ts)
     );
-    CREATE INDEX IF NOT EXISTS idx_mention_watch_seen_v2_ns
-        ON mention_watch_seen_v2 (job_id, workspace_id, user_id, seen_at);
 
     CREATE TABLE IF NOT EXISTS mention_watch_cursor_v2 (
         job_id        TEXT NOT NULL,
@@ -278,8 +313,6 @@ db.exec(`
         payload     TEXT NOT NULL,
         archived_at INTEGER NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_legacy_mention_watch_archive_job
-        ON legacy_mention_watch_archive (job_id, table_name);
 
     CREATE TABLE IF NOT EXISTS heartbeat_events (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -305,7 +338,6 @@ db.exec(`
         source      TEXT,
         created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE INDEX IF NOT EXISTS idx_jaw_ceo_transcript_at ON jaw_ceo_transcript(at);
 
     CREATE TABLE IF NOT EXISTS trace_runs (
         id TEXT PRIMARY KEY,
@@ -323,10 +355,10 @@ db.exec(`
         started_at INTEGER NOT NULL,
         finished_at INTEGER,
         last_event_at INTEGER,
-        error TEXT
+        error TEXT,
+        session_id TEXT,
+        scope_key TEXT
     );
-    CREATE INDEX IF NOT EXISTS idx_trace_runs_message ON trace_runs(message_id);
-    CREATE INDEX IF NOT EXISTS idx_trace_runs_started ON trace_runs(started_at);
 
     CREATE TABLE IF NOT EXISTS trace_events (
         run_id TEXT NOT NULL,
@@ -342,52 +374,196 @@ db.exec(`
         PRIMARY KEY (run_id, seq),
         FOREIGN KEY (run_id) REFERENCES trace_runs(id) ON DELETE CASCADE
     );
-    CREATE INDEX IF NOT EXISTS idx_trace_events_run_seq ON trace_events(run_id, seq);
-`);
+    CREATE TABLE IF NOT EXISTS background_tasks (
+        id            TEXT PRIMARY KEY,
+        kind          TEXT NOT NULL,
+        spec          TEXT NOT NULL,
+        status        TEXT NOT NULL,
+        pid           INTEGER,
+        origin_meta   TEXT,
+        result        TEXT,
+        created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+        started_at    DATETIME,
+        deadline_at   DATETIME,
+        completed_at  DATETIME,
+        notified_at   DATETIME
+    );
+`;
 
-// Additive owner metadata: legacy rows remain readable without invented scopes.
-const traceRunCols = new Set((db.prepare('PRAGMA table_info(trace_runs)').all() as { name: string }[]).map(c => c.name));
-if (!traceRunCols.has('session_id')) db.exec('ALTER TABLE trace_runs ADD COLUMN session_id TEXT');
-if (!traceRunCols.has('scope_key')) db.exec('ALTER TABLE trace_runs ADD COLUMN scope_key TEXT');
-db.exec(`
+const BASELINE_INDEXES_SQL = `
+    CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at);
+    CREATE INDEX IF NOT EXISTS idx_remote_bindings_chat_session
+        ON remote_session_bindings(chat_session_id);
+    CREATE INDEX IF NOT EXISTS idx_mention_watch_seen_job
+        ON mention_watch_seen (job_id, seen_at);
+    CREATE INDEX IF NOT EXISTS idx_mention_watch_seen_v2_ns
+        ON mention_watch_seen_v2 (job_id, workspace_id, user_id, seen_at);
+    CREATE INDEX IF NOT EXISTS idx_legacy_mention_watch_archive_job
+        ON legacy_mention_watch_archive (job_id, table_name);
+    CREATE INDEX IF NOT EXISTS idx_jaw_ceo_transcript_at ON jaw_ceo_transcript(at);
+    CREATE INDEX IF NOT EXISTS idx_trace_runs_message ON trace_runs(message_id);
+    CREATE INDEX IF NOT EXISTS idx_trace_runs_started ON trace_runs(started_at);
+    CREATE INDEX IF NOT EXISTS idx_trace_events_run_seq ON trace_events(run_id, seq);
+    CREATE INDEX IF NOT EXISTS idx_background_tasks_status ON background_tasks(status);
+
+    -- Indexes over columns that only a migration step adds to an older database.
+    -- They are the reason indexes run after MIGRATIONS rather than with the tables.
+    CREATE INDEX IF NOT EXISTS idx_messages_wd ON messages(working_dir);
+    CREATE INDEX IF NOT EXISTS idx_messages_trace_run ON messages(trace_run_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
     CREATE INDEX IF NOT EXISTS idx_trace_runs_session ON trace_runs(session_id, id);
+
     CREATE INDEX IF NOT EXISTS idx_trace_runtime ON trace_events(run_id, seq) WHERE source = 'runtime';
     CREATE UNIQUE INDEX IF NOT EXISTS idx_trace_runtime_control ON trace_events(run_id)
         WHERE source = 'system' AND event_type = 'runtime.control.v1';
-`);
+`;
 
-// Lightweight migration for existing DBs created before `trace` column existed.
-const messageCols = db.prepare('PRAGMA table_info(messages)').all();
-if (!(messageCols as Record<string, unknown>[]).some(c => c["name"] === 'trace')) {
-    db.exec('ALTER TABLE messages ADD COLUMN trace TEXT DEFAULT NULL');
+type MigrationStep = {
+    version: number;
+    describe: string;
+    apply(database: Database.Database): void;
+};
+
+function tableColumns(database: Database.Database, table: string): Set<string> {
+    const rows = database.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    return new Set(rows.map(row => row.name));
 }
-// Migration: add tool_log column for structured ProcessBlock data
-if (!(messageCols as Record<string, unknown>[]).some(c => c["name"] === 'tool_log')) {
-    db.exec('ALTER TABLE messages ADD COLUMN tool_log TEXT DEFAULT NULL');
+
+/** Additive and idempotent, so a step interrupted halfway simply reruns. */
+function addColumnIfMissing(
+    database: Database.Database,
+    table: string,
+    column: string,
+    ddl: string,
+): void {
+    if (tableColumns(database, table).has(column)) return;
+    database.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
 }
+
+const MIGRATIONS: readonly MigrationStep[] = [
+    {
+        version: 1,
+        describe: 'adopt the columns that predate user_version',
+        apply(database) {
+            // Every column here also exists in BASELINE_TABLES_SQL. A fresh database
+            // gets it from CREATE; a database made before the column existed gets it
+            // here. Both paths must end at the same shape, which is what the
+            // fresh-vs-migrated parity test asserts.
+            addColumnIfMissing(database, 'trace_runs', 'session_id', 'session_id TEXT');
+            addColumnIfMissing(database, 'trace_runs', 'scope_key', 'scope_key TEXT');
+            addColumnIfMissing(database, 'messages', 'trace', 'trace TEXT DEFAULT NULL');
+            addColumnIfMissing(database, 'messages', 'tool_log', 'tool_log TEXT DEFAULT NULL');
+            addColumnIfMissing(database, 'messages', 'working_dir', 'working_dir TEXT DEFAULT NULL');
+            addColumnIfMissing(database, 'messages', 'trace_run_id', 'trace_run_id TEXT DEFAULT NULL');
+            addColumnIfMissing(database, 'messages', 'session_id', "session_id TEXT DEFAULT 'default'");
+            addColumnIfMissing(database, 'session', 'active_chat_session', "active_chat_session TEXT DEFAULT 'default'");
+            addColumnIfMissing(database, 'chat_sessions', 'active_run_policy', 'active_run_policy TEXT DEFAULT NULL');
+            addColumnIfMissing(database, 'chat_sessions', 'generation', 'generation INTEGER NOT NULL DEFAULT 0');
+            addColumnIfMissing(database, 'employee_sessions', 'model', "model TEXT DEFAULT ''");
+            addColumnIfMissing(database, 'employee_sessions', 'output_len', 'output_len INTEGER DEFAULT 0');
+            addColumnIfMissing(database, 'session_buckets', 'resume_key', 'resume_key TEXT DEFAULT NULL');
+            addColumnIfMissing(database, 'session_buckets', 'output_len', 'output_len INTEGER DEFAULT 0');
+            // Frozen task snapshot per resume chain (#prompt-cache): regenerated only
+            // on fresh spawns, reused byte-identical across resume turns so the system
+            // prompt prefix stays cacheable. Dies with the bucket row on any clear.
+            addColumnIfMissing(database, 'session_buckets', 'memory_snapshot', 'memory_snapshot TEXT DEFAULT NULL');
+            addColumnIfMissing(database, 'session_buckets', 'last_run_clean', 'last_run_clean INTEGER DEFAULT NULL');
+            addColumnIfMissing(database, 'session_buckets', 'last_run_cwd', 'last_run_cwd TEXT DEFAULT NULL');
+            addColumnIfMissing(database, 'session_buckets', 'last_run_meta', 'last_run_meta TEXT DEFAULT NULL');
+            addColumnIfMissing(database, 'mention_watch_cursor', 'resume_before', 'resume_before TEXT DEFAULT NULL');
+            // Only the original message link can establish a historical owner. Forked
+            // copies also carry trace_run_id, so backfilling from that column would
+            // steal ownership.
+            database.exec(`UPDATE trace_runs SET session_id = (SELECT session_id FROM messages WHERE id = trace_runs.message_id)
+                WHERE session_id IS NULL AND message_id IS NOT NULL`);
+        },
+    },
+];
+
+/** The shape a current database must have, read off the baseline itself.
+ *
+ *  Derived rather than hand-listed: a second hand-written list of expected
+ *  columns is one more place to forget the column you just added, which is the
+ *  defect this whole mechanism exists to catch. */
+function baselineShape(): { columns: Map<string, Set<string>>; indexes: Set<string> } {
+    const probe = new Database(':memory:');
+    try {
+        probe.exec(BASELINE_TABLES_SQL);
+        probe.exec(BASELINE_INDEXES_SQL);
+        const columns = new Map<string, Set<string>>();
+        const tableRows = probe.prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+        ).all() as { name: string }[];
+        for (const row of tableRows) columns.set(row.name, tableColumns(probe, row.name));
+        const indexRows = probe.prepare(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'",
+        ).all() as { name: string }[];
+        return { columns, indexes: new Set(indexRows.map(row => row.name)) };
+    } finally {
+        probe.close();
+    }
+}
+
+/** Expected is a SUBSET of actual, never an equality.
+ *
+ *  The live database legitimately carries more than the baseline: migrateSearchFts
+ *  adds the FTS5 virtual tables and their shadow tables, and db-maintenance keeps
+ *  its own bookkeeping. Only a MISSING object is a problem. */
+export function assertSchemaComplete(database: Database.Database): void {
+    const expected = baselineShape();
+    const missing: string[] = [];
+    for (const [table, wanted] of expected.columns) {
+        const actual = tableColumns(database, table);
+        if (actual.size === 0) { missing.push(`table:${table}`); continue; }
+        for (const column of wanted) if (!actual.has(column)) missing.push(`${table}.${column}`);
+    }
+    const actualIndexes = new Set((database.prepare(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'",
+    ).all() as { name: string }[]).map(row => row.name));
+    for (const name of expected.indexes) if (!actualIndexes.has(name)) missing.push(`index:${name}`);
+    if (missing.length === 0) return;
+    throw new SchemaMigrationError(
+        `database schema is incomplete at ${DB_PATH}: missing ${missing.join(', ')}. `
+        + 'This means the baseline schema in src/core/db.ts gained something that no '
+        + 'MIGRATIONS step adds to an existing database. Add the step (and bump '
+        + 'SCHEMA_VERSION) rather than relying on CREATE TABLE, which is a no-op here.',
+    );
+}
+
+/** Bring `database` to SCHEMA_VERSION, or refuse to open it with a reason. */
+export function applySchema(database: Database.Database): void {
+    database.exec(BASELINE_TABLES_SQL);
+    const found = Number(database.pragma('user_version', { simple: true }) ?? 0);
+    if (found > SCHEMA_VERSION) {
+        throw new SchemaMigrationError(
+            `database at ${DB_PATH} was written by a newer cli-jaw (schema v${found}, `
+            + `this build understands v${SCHEMA_VERSION}). Upgrade cli-jaw instead of `
+            + 'downgrading the database; migrating backwards would drop data.',
+        );
+    }
+    // Skipped entirely once the database is current, so an ordinary boot never
+    // takes a write lock. When work IS due, BEGIN IMMEDIATE serializes it: two
+    // processes starting on the same old home would otherwise both read version 0
+    // and both run ALTER, and the loser died with 'duplicate column name'. The
+    // version is re-read inside the lock, so the loser now sees the winner's work.
+    if (found !== SCHEMA_VERSION) {
+        database.transaction(() => {
+            const from = Number(database.pragma('user_version', { simple: true }) ?? 0);
+            if (from > SCHEMA_VERSION) return;
+            for (const step of MIGRATIONS) if (step.version > from) step.apply(database);
+            database.pragma(`user_version = ${SCHEMA_VERSION}`);
+        }).immediate();
+    }
+    database.exec(BASELINE_INDEXES_SQL);
+    assertSchemaComplete(database);
+}
+
+applySchema(db);
+
 const migratedToolLogs = migrateOversizedToolLogs(db);
 if (migratedToolLogs > 0) {
     console.log(`[db:migrate] sanitized ${migratedToolLogs} oversized tool_log row(s)`);
 }
-// Migration: add working_dir column for project-scoped message isolation
-if (!(messageCols as Record<string, unknown>[]).some(c => c["name"] === 'working_dir')) {
-    db.exec('ALTER TABLE messages ADD COLUMN working_dir TEXT DEFAULT NULL');
-}
-if (!(messageCols as Record<string, unknown>[]).some(c => c["name"] === 'trace_run_id')) {
-    db.exec('ALTER TABLE messages ADD COLUMN trace_run_id TEXT DEFAULT NULL');
-}
-db.exec('CREATE INDEX IF NOT EXISTS idx_messages_wd ON messages(working_dir)');
-db.exec('CREATE INDEX IF NOT EXISTS idx_messages_trace_run ON messages(trace_run_id)');
-
-// Migration: add session_id column for multi-session message isolation
-if (!(messageCols as Record<string, unknown>[]).some(c => c["name"] === 'session_id')) {
-    db.exec("ALTER TABLE messages ADD COLUMN session_id TEXT DEFAULT 'default'");
-}
-db.exec('CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id)');
-// Only the original message link can establish a historical owner. Forked copies
-// also carry trace_run_id, so backfilling from that column would steal ownership.
-db.exec(`UPDATE trace_runs SET session_id = (SELECT session_id FROM messages WHERE id = trace_runs.message_id)
-    WHERE session_id IS NULL AND message_id IS NOT NULL`);
 
 const SEARCH_FTS_SQL = `
 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
@@ -487,53 +663,6 @@ export function migrateSearchFts(database: Database.Database): boolean {
 
 const searchFtsReady = migrateSearchFts(db);
 
-// Migration: add active_chat_session to session table
-const sessionCols = db.prepare('PRAGMA table_info(session)').all();
-if (!(sessionCols as Record<string, unknown>[]).some(c => c["name"] === 'active_chat_session')) {
-    db.exec("ALTER TABLE session ADD COLUMN active_chat_session TEXT DEFAULT 'default'");
-}
-
-const chatSessionCols = db.prepare('PRAGMA table_info(chat_sessions)').all();
-if (!(chatSessionCols as Record<string, unknown>[]).some(c => c["name"] === 'active_run_policy')) {
-    db.exec('ALTER TABLE chat_sessions ADD COLUMN active_run_policy TEXT DEFAULT NULL');
-}
-if (!(chatSessionCols as Record<string, unknown>[]).some(c => c["name"] === 'generation')) {
-    db.exec('ALTER TABLE chat_sessions ADD COLUMN generation INTEGER NOT NULL DEFAULT 0');
-}
-
-const employeeSessionCols = db.prepare('PRAGMA table_info(employee_sessions)').all();
-if (!(employeeSessionCols as Record<string, unknown>[]).some(c => c["name"] === 'model')) {
-    db.exec("ALTER TABLE employee_sessions ADD COLUMN model TEXT DEFAULT ''");
-}
-if (!(employeeSessionCols as Record<string, unknown>[]).some(c => c["name"] === 'output_len')) {
-    db.exec('ALTER TABLE employee_sessions ADD COLUMN output_len INTEGER DEFAULT 0');
-}
-
-const sessionBucketCols = db.prepare('PRAGMA table_info(session_buckets)').all();
-if (!(sessionBucketCols as Record<string, unknown>[]).some(c => c["name"] === 'resume_key')) {
-    db.exec('ALTER TABLE session_buckets ADD COLUMN resume_key TEXT DEFAULT NULL');
-}
-if (!(sessionBucketCols as Record<string, unknown>[]).some(c => c["name"] === 'output_len')) {
-    db.exec('ALTER TABLE session_buckets ADD COLUMN output_len INTEGER DEFAULT 0');
-}
-// Frozen task snapshot per resume chain (#prompt-cache): regenerated only on
-// fresh spawns, reused byte-identical across resume turns so the system
-// prompt prefix stays cacheable. Dies with the bucket row on any clear.
-if (!(sessionBucketCols as Record<string, unknown>[]).some(c => c["name"] === 'memory_snapshot')) {
-    db.exec('ALTER TABLE session_buckets ADD COLUMN memory_snapshot TEXT DEFAULT NULL');
-}
-if (!(sessionBucketCols as Record<string, unknown>[]).some(c => c["name"] === 'last_run_clean')) db.exec('ALTER TABLE session_buckets ADD COLUMN last_run_clean INTEGER DEFAULT NULL');
-if (!(sessionBucketCols as Record<string, unknown>[]).some(c => c["name"] === 'last_run_cwd')) db.exec('ALTER TABLE session_buckets ADD COLUMN last_run_cwd TEXT DEFAULT NULL');
-if (!(sessionBucketCols as Record<string, unknown>[]).some(c => c["name"] === 'last_run_meta')) db.exec('ALTER TABLE session_buckets ADD COLUMN last_run_meta TEXT DEFAULT NULL');
-
-// `CREATE TABLE IF NOT EXISTS` above is a no-op on a database that already has
-// the table, so a column added later needs its own migration or the prepared
-// statement below fails at import time — which takes the whole process down.
-const mentionWatchCursorCols = db.prepare('PRAGMA table_info(mention_watch_cursor)').all();
-if (!(mentionWatchCursorCols as Record<string, unknown>[]).some(c => c["name"] === 'resume_before')) {
-    db.exec('ALTER TABLE mention_watch_cursor ADD COLUMN resume_before TEXT DEFAULT NULL');
-}
-
 // ─── Prepared Statements ─────────────────────────────
 
 export const getSession = () => db.prepare('SELECT * FROM session WHERE id = ?').get('default');
@@ -543,24 +672,8 @@ export const updateSession = db.prepare(`
 `);
 // Background runtime hook tasks (src/bgtask/) — registration is durable so
 // server restarts can recover watchers and re-deliver unsent notifications.
-// Prepared statements live in src/bgtask/registry.ts (module-local).
-db.exec(`
-    CREATE TABLE IF NOT EXISTS background_tasks (
-        id            TEXT PRIMARY KEY,
-        kind          TEXT NOT NULL,
-        spec          TEXT NOT NULL,
-        status        TEXT NOT NULL,
-        pid           INTEGER,
-        origin_meta   TEXT,
-        result        TEXT,
-        created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-        started_at    DATETIME,
-        deadline_at   DATETIME,
-        completed_at  DATETIME,
-        notified_at   DATETIME
-    );
-    CREATE INDEX IF NOT EXISTS idx_background_tasks_status ON background_tasks(status);
-`);
+// Prepared statements live in src/bgtask/registry.ts (module-local); the table
+// itself is part of BASELINE_TABLES_SQL above.
 
 export const insertMessage = db.prepare('INSERT INTO messages (role, content, cli, model, trace, working_dir, session_id) VALUES (?, ?, ?, ?, NULL, ?, ?)');
 export const insertMessageWithTrace = db.prepare('INSERT INTO messages (role, content, cli, model, trace, tool_log, working_dir, session_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
@@ -898,45 +1011,29 @@ export const insertSlackEventDedup = db.prepare('INSERT OR REPLACE INTO slack_ev
 export const sweepSlackEventDedup = db.prepare('DELETE FROM slack_event_dedup WHERE expires_at <= ?');
 export const clearSlackEventDedup = db.prepare('DELETE FROM slack_event_dedup');
 
-// ─── Mention watch (heartbeat) ───────────────────
-export const findMentionWatchSeen = db.prepare(
-    'SELECT 1 FROM mention_watch_seen WHERE job_id = ? AND channel_id = ? AND message_ts = ?');
-export const insertMentionWatchSeen = db.prepare(
-    'INSERT OR IGNORE INTO mention_watch_seen (job_id, channel_id, message_ts, seen_at) VALUES (?, ?, ?, ?)');
-/** Drop receipts the cursor has already passed.
- *
- *  Bounded by the CURSOR, not by row count. A count-based prune deletes the
- *  oldest rows regardless of position, and the cursor legitimately sits behind
- *  them: it stops at the first mention still awaiting an answer, while later
- *  mentions in the same window may already be answered and recorded. Pruning
- *  those would make the next scan — which re-reads from the stalled cursor —
- *  answer them a second time.
- *
- *  A row at or below the cursor is unreachable instead: the next scan asks Slack
- *  for messages strictly after it, so its receipt can never be consulted again.
- *  Compared numerically because a Slack ts is a decimal string and its string
- *  order breaks across digit counts. */
-export const pruneMentionWatchSeen = db.prepare(
-    'DELETE FROM mention_watch_seen WHERE job_id = ? AND channel_id = ? '
-    + 'AND CAST(message_ts AS REAL) <= CAST(? AS REAL)');
-export const getMentionWatchCursor = db.prepare(
-    'SELECT last_ts, resume_before FROM mention_watch_cursor WHERE job_id = ? AND channel_id = ?');
-/** Move the frontier. `resume_before` is left alone: the two advance on
-    different conditions, and folding them into one write would clear a pending
-    descent every time a cursor moved. */
-export const upsertMentionWatchCursor = db.prepare(
-    'INSERT INTO mention_watch_cursor (job_id, channel_id, last_ts, updated_at) VALUES (?, ?, ?, ?) '
-    + 'ON CONFLICT(job_id, channel_id) DO UPDATE SET last_ts = excluded.last_ts, updated_at = excluded.updated_at');
-/** Store where an unfinished backward walk stopped, so the next tick descends
-    from there instead of re-reading the newest windows. */
-export const setMentionWatchResumeBefore = db.prepare(
-    'INSERT INTO mention_watch_cursor (job_id, channel_id, last_ts, resume_before, updated_at) '
-    + "VALUES (?, ?, COALESCE((SELECT last_ts FROM mention_watch_cursor WHERE job_id = ? AND channel_id = ?), ''), ?, ?) "
-    + 'ON CONFLICT(job_id, channel_id) DO UPDATE SET resume_before = excluded.resume_before, updated_at = excluded.updated_at');
-export const getMentionWatchRotation = db.prepare(
-    'SELECT last_channel_id FROM mention_watch_rotation WHERE job_id = ?');
-export const upsertMentionWatchRotation = db.prepare(
-    'INSERT OR REPLACE INTO mention_watch_rotation (job_id, last_channel_id, updated_at) VALUES (?, ?, ?)');
+// ─── Mention watch v1: quarantine surface only ────
+//
+// Nothing in src/ writes a v1 row. The scanner writes the namespaced v2 ledger
+// through src/memory/mention-watch-ledger.ts, and the only v1 reader left is
+// src/memory/legacy-mention-watch-quarantine.ts, which holds such a job until an
+// operator restarts it with a fresh floor.
+//
+// What remains here exists so a TEST can build a home that predates the v2 key —
+// there is no other way to produce one now. Production code must not import it:
+// a v1 write is the workspace-less row shape that fb07276b0 removed, and writing
+// one re-creates the misattribution the v2 key exists to prevent. The v1
+// read/prune/rotation statements that had no caller at all are gone.
+export const legacyMentionWatchV1Fixture = {
+    insertSeen: db.prepare(
+        'INSERT OR IGNORE INTO mention_watch_seen (job_id, channel_id, message_ts, seen_at) VALUES (?, ?, ?, ?)'),
+    upsertCursor: db.prepare(
+        'INSERT INTO mention_watch_cursor (job_id, channel_id, last_ts, updated_at) VALUES (?, ?, ?, ?) '
+        + 'ON CONFLICT(job_id, channel_id) DO UPDATE SET last_ts = excluded.last_ts, updated_at = excluded.updated_at'),
+    insertRotation: db.prepare(
+        'INSERT OR REPLACE INTO mention_watch_rotation (job_id, last_channel_id, updated_at) VALUES (?, ?, ?)'),
+    hasSeen: db.prepare(
+        'SELECT 1 FROM mention_watch_seen WHERE job_id = ? AND channel_id = ? AND message_ts = ?'),
+} as const;
 // ─── Mention watch v2: namespace-scoped ───────────
 // Reached only through src/memory/mention-watch-ledger.ts, which requires a
 // WatchNamespace. Every predicate below names all three parts of it.
@@ -1059,15 +1156,11 @@ export const commitLegacyFreshStart = db.transaction((
     return true;
 });
 
-const deleteMentionWatchSeenForJob = db.prepare('DELETE FROM mention_watch_seen WHERE job_id = ?');
-const deleteMentionWatchCursorForJob = db.prepare('DELETE FROM mention_watch_cursor WHERE job_id = ?');
-const deleteMentionWatchRotationForJob = db.prepare('DELETE FROM mention_watch_rotation WHERE job_id = ?');
-/** Disabling or renaming a job should not leave its bookkeeping behind. */
-export const clearMentionWatchState = db.transaction((jobId: string): void => {
-    deleteMentionWatchSeenForJob.run(jobId);
-    deleteMentionWatchCursorForJob.run(jobId);
-    deleteMentionWatchRotationForJob.run(jobId);
-});
+// `clearMentionWatchState` used to live here: a v1-only delete with no archive and
+// no caller anywhere in the repository. Releasing a held job goes through
+// `commitLegacyFreshStart` above, which archives before it deletes and claims the
+// quarantine row first. A second, quieter path to the same tables was a way to
+// lose the record of what a job had already answered.
 
 type QueuedMessageMigrationPayload = Record<string, unknown> & {
     schemaVersion?: number;
