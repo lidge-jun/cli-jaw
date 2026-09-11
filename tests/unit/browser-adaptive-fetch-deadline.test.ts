@@ -234,44 +234,12 @@ test('#693-F the overall deadline returns while the tls fallback is hung', { tim
     }
 });
 
-test('#693-G the overall deadline returns while the yt-dlp reader is hung', { timeout: 15_000 }, async () => {
-    const keepAlive = setTimeout(() => {}, 12_000);
-    try {
-        const oembedFetch = (async () => new Response(JSON.stringify({ title: 'x', author_name: 'y' }), {
-            status: 200,
-            headers: { 'content-type': 'application/json' },
-        })) as unknown as typeof fetch;
-
-        const seen = { signal: null as AbortSignal | null };
-        const hangingYtdlp = ((_url: string, opts: { signal?: AbortSignal }) => {
-            seen.signal = opts.signal ?? null;
-            return new Promise(resolve => {
-                const signal = opts.signal;
-                if (!signal) return;
-                if (signal.aborted) { resolve(null); return; }
-                signal.addEventListener('abort', () => resolve(null), { once: true });
-            });
-        }) as unknown as typeof ytdlpMetadata;
-
-        const start = Date.now();
-        const result = await executeAdaptiveFetch(
-            {
-                url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-                overallTimeoutMs: 500,
-                browserMode: 'never',
-                // Without this the youtube-ytdlp candidate is never resolved.
-                publicEndpoints: true,
-            } as AdaptiveFetchOptions,
-            { fetch: oembedFetch, resolveHost: publicResolveHost, ytdlpMetadataImpl: hangingYtdlp },
-        );
-        const elapsed = Date.now() - start;
-
-        assert.ok(seen.signal, 'the scheduler must hand its deadline signal to the yt-dlp reader');
-        assert.equal(seen.signal?.aborted, true, 'that signal must be aborted at the overall deadline');
-        assert.ok(elapsed < 5_000, `executeAdaptiveFetch returned promptly (was ${elapsed}ms)`);
-        assert.ok(result && typeof result === 'object', 'a final result is still produced');
-    } finally {
-        clearTimeout(keepAlive);
-    }
-});
-
+// #693-G (an executeAdaptiveFetch-level proof for the yt-dlp reader) is
+// deliberately absent. The scheduler's 'ytdlp' branch is unreachable today:
+// runDirectFetchStage rewrites every resolved candidate to source
+// 'public_endpoint' (scheduler.ts:117-120), so the source === 'ytdlp' test at
+// scheduler.ts:131 never matches the youtube-ytdlp candidate the resolver
+// produces. The reader is wired to the deadline signal all the same, and
+// #693-C / #693-D prove that wiring at the function level. Making the branch
+// reachable would switch a dormant subprocess reader back on, which is a
+// behaviour change this deadline fix has no business making.
